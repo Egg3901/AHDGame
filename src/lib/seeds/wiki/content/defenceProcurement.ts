@@ -31,6 +31,22 @@ Every award is checked for whether the minister writing it has a stake in the co
 
 A self-dealt award is not blocked. It is disclosed publicly, on the order book, in plain language: who awarded it, what stake they hold, how many lots, and what it's worth. The minister also takes a favorability hit that scales with how much of the country's procurement tranche the contract represents: a token order to a company you own costs almost nothing, but routing a large share of the quarter's whole budget to yourself is a real political event. The penalty is capped, so no single award ends a career outright, but it is designed to make a big self-dealt contract genuinely costly to sign.
 
+## Tearing up a contract
+
+A contract can be cancelled by the minister who holds the defence seat, and how much that costs depends entirely on which of three things it is.
+
+**Withdrawing an offer.** An award starts as an offer and does nothing until the supplying CEO accepts it. Until they do, the minister can withdraw it for nothing: no fee, no disclosure, and the lots go straight back into the window's tranche. Nobody was promised anything.
+
+**Terminating for cause.** If a plant misses three delivery turns in a row for a reason of its own making, the contract can be torn up for free and the tranche is handed back. The three supplier-side reasons are: the plant produced nothing, the supplier is no longer eligible to be paid from the appropriation, or input prices overtook the struck price and the supplier cannot fund the loss. A buyer running out of appropriation is NOT one of them: underfunding your own defence budget does not earn you a free cancellation.
+
+**Terminating for convenience.** Anything else. The supplier accepted, the plant is working, and the minister has decided the order should stop. Three things follow:
+
+- **A break fee.** The supplier is paid its margin on every lot it was ordered to build and now will not. This comes out of the defence appropriation, and it comes out immediately. If the appropriation cannot cover the fee, the termination is refused: a minister does not get to walk away and leave the company holding the bill.
+- **The tranche stays spent.** The cancelled lots are NOT returned to the contracting window. Cancelling an order does not create room to award a new one this quarter, to anyone, including yourself.
+- **Public disclosure and a political price.** The cancellation goes on the wire with the minister's name on it, and they take a favorability hit that scales with how much of the quarter's procurement the order was. If the minister holds an interest in a different domestic defence supplier, one that competes for the same work, the wire says so and the penalty doubles.
+
+The break fee is always less than what delivering the rest of the order would have cost, so getting out of a contract the country genuinely does not need is still the cheaper option. What it is not is free, and it is no longer invisible.
+
 ## The turn spend cap
 
 The window cap limits how much a country can OBLIGATE across a quarter. It does not, by itself, limit how fast an already-obligated contract PAYS OUT. A large committed contract could otherwise be delivered in one or two turns, moving an entire quarter's defence appropriation into one corporation's cash balance in a single tick.
@@ -47,6 +63,8 @@ Because the per-turn cap is three times the steady rate and a window is twelve t
 
 - If you hold the defence seat, plan contracts against the quarterly tranche, not against however much cash the treasury happens to be holding.
 - Awarding to your own corporation is legal but public and costly. Small orders are close to free politically; large ones are not.
+- Cancelling a rival's contract is legal too, and it now costs you money, tranche room, and standing. Check the quoted break fee on the cancel button before you confirm it.
+- If you supply defence contracts, an order that gets torn up mid-build pays you the margin you were promised on the rest of it. You will be notified, and the reason is on your order book.
 - Deliveries on a large contract will spread across several turns even after the contract is signed. That is the spend cap working as designed, not a bug.
 - State industry in a command economy can absorb a whole window's tranche where private suppliers cannot; this is intentional, not an oversight.
 

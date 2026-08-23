@@ -12,6 +12,7 @@ import {
   scoresForResponses,
   scoresForGlobalResponse,
   selectGlobalResponseOutcome,
+  visibleGlobalResponses,
 } from "./globalResponse";
 import { VIETNAM_DEF } from "./defs/vietnam";
 import { allLivingConflictDefs } from "./registry";
@@ -155,6 +156,36 @@ describe("global response module", () => {
     ).toBe("talks");
     expect(selectGlobalResponseOutcome(outcomes, "stale", { escalation: 5 }).outcomeId).toBe("war");
     expect(selectGlobalResponseOutcome(outcomes, "stale", {}).outcomeId).toBe("stale");
+  });
+
+  it("keeps covert responses private until they are exposed", () => {
+    const covert = {
+      countryId: "RU",
+      characterId: new ObjectId(),
+      characterName: "A",
+      nodeId: "response",
+      optionId: "covert_supply",
+      optionLabel: "Covert Supply",
+      effects: [],
+      responseScores: { escalation: 2 },
+      visibility: "covert" as const,
+      campaignCommitment: { kind: "covert" as const, scale: 5 },
+      respondedAt: new Date(),
+    };
+
+    expect(visibleGlobalResponses([covert], "RU")[0]).toMatchObject({
+      optionId: "covert_supply",
+      optionLabel: "Covert Supply",
+    });
+    expect(visibleGlobalResponses([covert], "US")[0]).toMatchObject({
+      optionId: "undisclosed",
+      optionLabel: "Undisclosed action",
+      responseScores: undefined,
+      campaignCommitment: undefined,
+    });
+    expect(visibleGlobalResponses([{ ...covert, revealedAt: new Date() }], "US")[0].optionId).toBe(
+      "covert_supply"
+    );
   });
 });
 

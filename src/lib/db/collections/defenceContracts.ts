@@ -4,6 +4,7 @@ import type { UnitDomain } from "@/lib/db/types/militaryUnit";
 import type { DefenceContract, DefenceCarryReason } from "@/lib/db/types/defenceContract";
 import { releaseDefenceContractLots } from "./defenceProcurementAllocations";
 import { releaseEncumbrance } from "./defenseAppropriation";
+import { SUPPLIER_FAULT_REASONS } from "@/lib/military/defenceTermination";
 
 function contracts(db: Db) {
   return db.collection<DefenceContract>("defenceContracts");
@@ -255,25 +256,91 @@ export async function stampDeliveryCarry(
       ...(reason ? {} : { $unset: { carryReason: "" } }),
     }
   );
+  await stampSupplierFaultStreak(db, contractId, reason, turn);
+}
+
+/**
+ * Keep the supplier-fault streak that decides whether a termination is free.
+ *
+ * Written here rather than by the sweep because the streak has to follow the SAME reason the
+ * order book shows: a contract that reports "the plant produced nothing" for four turns and a
+ * contract whose streak says two would be two different answers to one question.
+ *
+ * The increment is guarded on the turn, not blind, because one delivery turn legitimately
+ * stamps a contract more than once (the sweep re-stamps after recording lots). A blind `$inc`
+ * would let a single bad turn count twice and hand a minister a free cancellation a turn early.
+ * Anything that is not the supplier's fault clears the streak outright.
+ */
+async function stampSupplierFaultStreak(
+  db: Db,
+  contractId: ObjectId,
+  reason?: DefenceCarryReason,
+  turn?: number
+): Promise<void> {
+  if (!reason || !SUPPLIER_FAULT_REASONS.has(reason)) {
+    await contracts(db).updateOne(
+      { _id: contractId, status: "active", supplierFaultTurns: { $gt: 0 } },
+      { $set: { supplierFaultTurns: 0 }, $unset: { supplierFaultThroughTurn: "" } }
+    );
+    return;
+  }
+  if (turn == null) return;
+  await contracts(db).updateOne(
+    {
+      _id: contractId,
+      status: "active",
+      $or: [
+        { supplierFaultThroughTurn: { $exists: false } },
+        { supplierFaultThroughTurn: { $lt: turn } },
+      ],
+    },
+    { $inc: { supplierFaultTurns: 1 }, $set: { supplierFaultThroughTurn: turn } }
+  );
 }
 
 /**
  * Cancel a contract the buyer no longer wants — a live order or an offer the supplier has
  * not answered. Idempotent: cancelling a closed one is a no-op, not an error.
+ *
+ * Returns the contract AS IT STOOD at the moment the status flipped, or null when there was
+ * nothing live to cancel. The caller needs that snapshot rather than its own earlier read:
+ * a delivery landing between the two would otherwise have the buyer paying a break fee on
+ * lots the supplier had already been paid for.
+ *
+ * `releaseQuota` decides whether the contracting window gets its room back. An offer nobody
+ * accepted, and an order torn up because the plant was not building, hand the quota back:
+ * nothing was consumed. A contract torn up for CONVENIENCE does not, and that is the guard
+ * that closes the loop players reported - cancel a rival, free the quota, re-award it to
+ * yourself inside the same window. The tranche was spent when the minister signed it.
  */
-export async function cancelContract(db: Db, contractId: ObjectId): Promise<boolean> {
+export async function cancelContract(
+  db: Db,
+  contractId: ObjectId,
+  options?: {
+    releaseQuota?: boolean;
+    termination?: DefenceContract["termination"];
+  }
+): Promise<DefenceContract | null> {
   const contract = await contracts(db).findOne({ _id: contractId });
-  if (!contract || !["pending", "active"].includes(contract.status)) return false;
+  if (!contract || !["pending", "active"].includes(contract.status)) return null;
   const res = await contracts(db).updateOne(
-    { _id: contractId, status: { $in: ["pending", "active"] } },
-    { $set: { status: "cancelled", updatedAt: new Date() } }
+    // Guarded on the delivered count as well as the status: the snapshot this returns is what
+    // the caller prices a break fee against, so it has to be the state that was cancelled.
+    { _id: contractId, status: contract.status, lotsDelivered: contract.lotsDelivered },
+    {
+      $set: {
+        status: "cancelled",
+        updatedAt: new Date(),
+        ...(options?.termination ? { termination: options.termination } : {}),
+      },
+    }
   );
-  if (res.modifiedCount === 0) return false;
+  if (res.modifiedCount === 0) return null;
   // Money first: a withdrawn order must stop holding the appropriation immediately, even if
   // the window quota release below fails. The reverse order would leave the country unable to
   // re-spend budget on an order that no longer exists.
   await releaseContractEncumbrance(db, contractId);
-  if (contract.allocationWindowId && contract.allocatedLots) {
+  if (options?.releaseQuota !== false && contract.allocationWindowId && contract.allocatedLots) {
     const undelivered = Math.max(0, contract.allocatedLots - contract.lotsDelivered);
     await releaseDefenceContractLots(
       db,
@@ -282,7 +349,7 @@ export async function cancelContract(db: Db, contractId: ObjectId): Promise<bool
       undelivered * contract.pricePerLot
     );
   }
-  return true;
+  return contract;
 }
 
 /**

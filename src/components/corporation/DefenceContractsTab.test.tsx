@@ -80,7 +80,7 @@ describe("DefenceContractsTab", () => {
         contracts: [contract({ status: "cancelled", projectedLotsPerTurn: 0 })],
       }),
     });
-    expect(screen.getByText("withdrawn")).toBeTruthy();
+    expect(screen.getByText("terminated")).toBeTruthy();
     expect(screen.queryByText(/will not advance until that changes/)).toBeNull();
   });
 

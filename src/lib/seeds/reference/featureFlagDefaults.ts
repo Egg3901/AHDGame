@@ -91,11 +91,9 @@ export const DEFAULT_GAME_STATE_FLAGS = {
   // runtime; default on for fresh worlds so the full feature set ships.
   intOrgAlignmentEnabled: true,
   nppCorpStrategyEnabled: true,
-  // Living-conflict engine (generic phased conflicts/pandemics with per-role
-  // responses and an event broadcast bus). Unproven and not yet wired into the
-  // turn loop, so it ships OFF for every world, new and existing, until it has
-  // been validated and an admin opts a world in.
-  livingConflictsEnabled: false,
+  // Release 1.3 living-conflict campaigns. The engine is in the turn loop and
+  // fresh worlds start on the persistent global-response system.
+  livingConflictsEnabled: true,
 } as const satisfies Partial<GameState>;
 
 export type DefaultGameStateFlagKey = keyof typeof DEFAULT_GAME_STATE_FLAGS;

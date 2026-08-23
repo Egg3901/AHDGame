@@ -906,10 +906,8 @@ export async function runRegionDerivedStage(
 
   // Historical nuclear programmes for the capable powers, era-aware by seed
   // year. Runs once here (the single post-regions stage every seed path
-  // reaches) so it cannot be clobbered: nuclearPrograms is not in
-  // RESET_DROP_COLLECTIONS and no other seeder writes the collection. Inert
-  // data when the Cold War subsystem is off; skips countries whose doc
-  // already has adopted nodes, so live player progress is never overwritten.
+  // reaches). Reset drops the runtime collection first; ordinary re-seeds skip
+  // countries whose doc already has adopted nodes, so live progress wins.
   const { resolveWorldSeedYear: resolveNuclearSeedYear } = await import("@/lib/era/context");
   const { seedNuclearPrograms } = await import("./seedNuclearPrograms");
   const nuclearYear = await resolveNuclearSeedYear(db, preset);

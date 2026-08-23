@@ -77,6 +77,8 @@ The legacy creator is always available regardless of the flag state. The flag on
 
 ## Chained and multi-country crises
 
+Release 1.3 moves authored international chains onto the persistent Global Response campaign engine. See [Global Response Crises](/wiki/global-response-crises) for campaign stages, country memory, capacity requirements, consequence tracks, global tension, and nuclear buildup.
+
 Some historical crisis families continue across several decisions instead of ending after one node. A chain records its family and current stage, so later crises can advance, hold, or reduce the same shared situation.
 
 Vietnam is the first full chained family. Between 1955 and 1975 it can progress from advisors through materiel support, a naval incident, an air campaign, a ground commitment, and a prolonged war. The United States and Soviet Union receive separate country-scoped decisions. One government's response does not close the other government's decision.

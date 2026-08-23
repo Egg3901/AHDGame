@@ -7,6 +7,7 @@ import { leanColor, sevStyle, type Conflict } from "./conflicts";
 import { CW_ROUTES } from "./routes";
 import { ClassificationStrip } from "./ClassificationStrip";
 import { WorldBlocMap } from "./WorldBlocMap";
+import { ColdWarHelp } from "./TensionHeader";
 
 const mono = "'IBM Plex Mono',monospace";
 const serif = "Lora,Georgia,serif";
@@ -177,9 +178,17 @@ export function GlobalConflictsBoard({ year, conflicts }: { year: number; confli
                 minWidth: 92,
               }}
             >
-              <span style={{ font: `600 9px ${mono}`, letterSpacing: ".14em", color: "#6b6b7a" }}>
-                ACTIVE
-              </span>
+              <div
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
+              >
+                <span style={{ font: `600 9px ${mono}`, letterSpacing: ".14em", color: "#6b6b7a" }}>
+                  ACTIVE
+                </span>
+                <ColdWarHelp label="Active conflicts">
+                  Live military conflict records currently shown on this page. Political crisis
+                  response windows are counted separately in the world-tension floor.
+                </ColdWarHelp>
+              </div>
               <div
                 style={{
                   marginTop: 6,
@@ -205,9 +214,17 @@ export function GlobalConflictsBoard({ year, conflicts }: { year: number; confli
                 minWidth: 104,
               }}
             >
-              <span style={{ font: `600 9px ${mono}`, letterSpacing: ".14em", color: "#c98a52" }}>
-                CRITICAL
-              </span>
+              <div
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
+              >
+                <span style={{ font: `600 9px ${mono}`, letterSpacing: ".14em", color: "#c98a52" }}>
+                  CRITICAL
+                </span>
+                <ColdWarHelp label="Critical fronts">
+                  Active conflicts whose live severity is HIGH. Severity comes from the conflict
+                  engine, not directly from world tension.
+                </ColdWarHelp>
+              </div>
               <div
                 style={{
                   marginTop: 6,
@@ -229,7 +246,9 @@ export function GlobalConflictsBoard({ year, conflicts }: { year: number; confli
 
         {/* map */}
         <div
+          data-theater-map
           style={{
+            display: conflicts.length === 0 ? "none" : undefined,
             margin: "0 24px",
             border: "1px solid #2a2a3d",
             background: "#0f0f17",
@@ -247,8 +266,21 @@ export function GlobalConflictsBoard({ year, conflicts }: { year: number; confli
               gap: 8,
             }}
           >
-            <span style={{ font: `600 10px ${mono}`, letterSpacing: ".16em", color: "#6b6b7a" }}>
+            <span
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
+                font: `600 10px ${mono}`,
+                letterSpacing: ".16em",
+                color: "#6b6b7a",
+              }}
+            >
               THEATER MAP · FLASHPOINTS &amp; PROXY WARS
+              <ColdWarHelp label="Theater map">
+                Pin size represents conflict intensity from 0 to 100. Pin color represents bloc
+                backing. A pulsing ring means the conflict is escalating.
+              </ColdWarHelp>
             </span>
             <div style={{ display: "flex", gap: 14, font: `500 9px ${mono}`, color: "#7a7a8c" }}>
               <LegendDot color="#3b82f6" label="WEST-BACKED" />
@@ -309,6 +341,7 @@ export function GlobalConflictsBoard({ year, conflicts }: { year: number; confli
                 <div
                   key={k.id}
                   data-pin={k.id}
+                  title={`${k.name}: intensity ${Math.round(k.intensity)}/100, ${k.sev.toLowerCase()}`}
                   onClick={() => {
                     setSelected(k.id);
                     setHover(k.id);
@@ -514,6 +547,7 @@ export function GlobalConflictsBoard({ year, conflicts }: { year: number; confli
                         </div>
                       </div>
                       <span
+                        title={`${c.sev}: conflict severity derived from the live conflict record`}
                         style={{
                           font: `600 8.5px ${mono}`,
                           padding: "3px 9px",
@@ -558,6 +592,7 @@ export function GlobalConflictsBoard({ year, conflicts }: { year: number; confli
                     {c.lean != null && (
                       <div
                         data-lean-bar
+                        title={`Bloc balance: ${Math.round(c.lean)}% toward the eastern-backed side. This is derived from territorial control, not world tension.`}
                         style={{
                           position: "relative",
                           height: 9,

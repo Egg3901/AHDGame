@@ -36,18 +36,24 @@ export function DeclareWarPanel({
   const [error, setError] = useState<string | null>(null);
   const [filed, setFiled] = useState(false);
   const [truces, setTruces] = useState<Record<string, number>>({});
+  const [alliance, setAlliance] = useState<string | null>(null);
+  const [allies, setAllies] = useState<Set<string>>(() => new Set());
 
   // Stated up front rather than left to the refusal. A player picking a country they
-  // signed peace with 30 turns ago should see the bar in the picker, not after
-  // committing to a declaration.
+  // signed peace with 30 turns ago — or one that sits beside them in NATO — should see
+  // the bar in the picker, not after committing to a declaration.
   useEffect(() => {
     let live = true;
-    void fetchJson<{ truces?: Array<{ other: string; expiresTurn: number }> }>(
-      `/api/country/${countryCode}/executive/truces`,
-      { feature: "declare-war-truces" }
-    )
+    void fetchJson<{
+      truces?: Array<{ other: string; expiresTurn: number }>;
+      alliance?: string | null;
+      allies?: string[];
+    }>(`/api/country/${countryCode}/executive/truces`, { feature: "declare-war-truces" })
       .then((body) => {
-        if (!live || !body?.truces) return;
+        if (!live || !body) return;
+        setAlliance(body.alliance ?? null);
+        setAllies(new Set(body.allies ?? []));
+        if (!body.truces) return;
         setTruces(Object.fromEntries(body.truces.map((t) => [t.other, t.expiresTurn])));
       })
       .catch((err: unknown) => {
@@ -68,7 +74,8 @@ export function DeclareWarPanel({
   const targets = enabled.filter((c) => c !== countryId);
   const selectedGoal = WAR_GOALS.find((g) => g.id === goal);
   const trucedUntil = target ? truces[target] : undefined;
-  const ready = !!target && !!goal && !busy && trucedUntil === undefined;
+  const targetIsAlly = !!target && allies.has(target);
+  const ready = !!target && !!goal && !busy && trucedUntil === undefined && !targetIsAlly;
 
   async function submit() {
     if (!ready) return;
@@ -115,8 +122,9 @@ export function DeclareWarPanel({
             of government and the defence minister may file one, and only once every{" "}
             {WAR_DECLARATION_COOLDOWN_TURNS} turns. You cannot open a second war against a country
             you are already fighting — including one facing you on the other side of a war someone
-            else started. Filing costs {BILL_PROPOSE_ACTION_COST} action points, like any other
-            bill, refunded if the legislature passes it.
+            else started, and you cannot declare war on a fellow member of your own alliance. Filing
+            costs {BILL_PROPOSE_ACTION_COST} action points, like any other bill, refunded if the
+            legislature passes it.
           </p>
 
           <div className="flex flex-wrap gap-2">
@@ -131,9 +139,13 @@ export function DeclareWarPanel({
                 {targets.length === 0 ? "Loading countries…" : "Select a country…"}
               </option>
               {targets.map((c) => (
-                <option key={c} value={c} disabled={truces[c] !== undefined}>
+                <option key={c} value={c} disabled={truces[c] !== undefined || allies.has(c)}>
                   {COUNTRY_CONFIGS[c].name}
-                  {truces[c] !== undefined ? ` — truce until turn ${truces[c]}` : ""}
+                  {allies.has(c)
+                    ? ` (ally${alliance ? `, ${alliance}` : ""})`
+                    : truces[c] !== undefined
+                      ? ` (truce until turn ${truces[c]})`
+                      : ""}
                 </option>
               ))}
             </select>
@@ -159,6 +171,14 @@ export function DeclareWarPanel({
           </div>
 
           {selectedGoal && <p className="mt-2 text-[11px] text-muted">{selectedGoal.blurb}</p>}
+
+          {targetIsAlly && (
+            <p className="mt-2 text-[11px] text-warning">
+              {alliance
+                ? `You and that country are both members of the ${alliance}. You cannot declare war on an ally. Withdraw from the alliance first.`
+                : "You and that country belong to the same alliance bloc. You cannot declare war on an ally."}
+            </p>
+          )}
 
           {trucedUntil !== undefined && (
             <p className="mt-2 text-[11px] text-warning">

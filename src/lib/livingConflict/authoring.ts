@@ -22,12 +22,17 @@ export function responseOpt(
   description: string,
   responseScores: Record<string, number>,
   effects: CrisisEffect[] = [],
-  treasuryCostPctGdp?: number
+  treasuryCostPctGdp?: number,
+  depth: Pick<
+    CrisisDecisionOption,
+    "campaignRequirement" | "campaignCommitment" | "responseVisibility"
+  > = {}
 ): CrisisDecisionOption {
   return {
     ...opt(optionId, label, description, effects),
     responseScores,
     ...(treasuryCostPctGdp !== undefined ? { treasuryCostPctGdp } : {}),
+    ...depth,
   };
 }
 
