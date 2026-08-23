@@ -143,6 +143,7 @@ export const defect: Defect = {
   severity: "P1",
   codeFix: {
     issue: 1171,
+    pr: 705,
     mergedTo: "development",
     requiredCommit: "b347e708565217e908e3168923ed085c54dfe83f",
   },
