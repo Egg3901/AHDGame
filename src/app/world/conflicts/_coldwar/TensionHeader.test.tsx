@@ -28,6 +28,17 @@ function setup(over: Partial<React.ComponentProps<typeof TensionHeader>> = {}) {
       defcon={4}
       events={events}
       powers={powers}
+      pressures={{
+        baseline: 12,
+        escalation: 4,
+        activeCrises: 6,
+        arsenal: 5.9,
+        floor: 27.9,
+        escalationLevel: 1,
+        activeCrisisCount: 2,
+        totalWarheads: 24,
+      }}
+      dials={{ source: "tension", procurementMultiplier: 1.15, detenteGoodwillPenalty: 6 }}
       {...over}
     />
   );
@@ -37,14 +48,26 @@ describe("TensionHeader", () => {
   it("shows the tension reading with its band and DEFCON", () => {
     setup();
     expect(screen.getByText("43")).toBeTruthy();
-    expect(screen.getByText("ELEVATED")).toBeTruthy();
+    expect(screen.getAllByText("ELEVATED").length).toBeGreaterThan(0);
     expect(screen.getByText("DEFCON 4")).toBeTruthy();
   });
 
-  it("draws the gauge at the tension value", () => {
+  it("marks the tension value on a labeled five-band scale", () => {
     const { container } = setup();
-    const gauge = container.querySelector("[data-tension-gauge]") as HTMLElement;
-    expect(gauge?.style.width).toBe("42.5%");
+    const marker = container.querySelector("[data-tension-marker]") as HTMLElement;
+    expect(marker?.style.left).toBe("42.5%");
+    expect(screen.getByText("DETENTE")).toBeTruthy();
+    expect(screen.getByText("BRINK")).toBeTruthy();
+  });
+
+  it("explains the standing pressure and current strategic effects", () => {
+    setup();
+    expect(screen.getByText("WHAT HOLDS THE FLOOR AT 27.9")).toBeTruthy();
+    expect(screen.getByText("rung 1")).toBeTruthy();
+    expect(screen.getByText("2 open")).toBeTruthy();
+    expect(screen.getAllByText("24 warheads").length).toBeGreaterThan(0);
+    expect(screen.getByText("x1.15")).toBeTruthy();
+    expect(screen.getByText("-6")).toBeTruthy();
   });
 
   it("lists recent developments with turn and signed delta, spikes and relief apart", () => {
@@ -68,13 +91,13 @@ describe("TensionHeader", () => {
 
   it("says the wire is quiet with nothing on the ledger", () => {
     setup({ events: [] });
-    expect(screen.getByText(/wire is quiet/i)).toBeTruthy();
+    expect(screen.getByText(/pressure floor shown above/i)).toBeTruthy();
   });
 
   it("names each nuclear power with its stockpile and best device tier", () => {
     setup();
     expect(screen.getByText("United States")).toBeTruthy();
-    expect(screen.getByText("24")).toBeTruthy();
+    expect(screen.getAllByText("24 warheads").length).toBe(2);
     expect(screen.getByText("FISSION DEVICE")).toBeTruthy();
   });
 
@@ -87,5 +110,6 @@ describe("TensionHeader", () => {
     setup({ powers: [] });
     expect(screen.queryByText("PRE-TEST")).toBeNull();
     expect(screen.queryByText("United States")).toBeNull();
+    expect(screen.getByText(/No declared nuclear programme/i)).toBeTruthy();
   });
 });

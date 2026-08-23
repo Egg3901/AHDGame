@@ -146,7 +146,7 @@ describe("living-conflict engine", () => {
     it("suppresses authored response beats outside their campaign stages", () => {
       const def: LivingConflictDef = {
         key: "staged",
-        type: "war",
+        type: "proxy_war",
         name: "Staged",
         participants: { belligerents: [], neighbors: [], blocMembers: [], bystanders: [] },
         roleResolver: () => "bystander",

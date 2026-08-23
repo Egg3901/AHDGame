@@ -42,6 +42,13 @@ function fakeDb() {
   const db = {
     collection(name: string) {
       return {
+        find(query: Record<string, unknown> = {}) {
+          return {
+            async toArray() {
+              return rows(name).filter((row) => matches(row, query));
+            },
+          };
+        },
         async findOne(query: Record<string, unknown>) {
           return rows(name).find((row) => matches(row, query)) ?? null;
         },
@@ -120,18 +127,38 @@ describe("living-conflict turn integration", () => {
     const crises = (stores.get("crises") ?? []) as unknown as Crisis[];
     const keys = crises.map((crisis) => crisis.globalResponse?.conflictKey);
     expect(keys).toEqual(
-      expect.arrayContaining([
-        "vietnam",
-        "berlin",
-        "congo",
-        "suez_aftermath",
-        "oil_disruption",
-        "nuclear_incident",
-      ])
+      expect.arrayContaining(["vietnam", "berlin", "congo", "suez_aftermath", "oil_disruption"])
     );
+    expect(keys).not.toContain("nuclear_incident");
     expect(crises.every((crisis) => crisis.interactionDefinition?.decisionTree.length === 1)).toBe(
       true
     );
+  });
+
+  it("opens the nuclear alert only after two countries field credible arsenals", async () => {
+    const { db, stores } = fakeDb();
+    stores.set("nuclearPrograms", [
+      {
+        _id: "US",
+        adopted: { "device-fission": 1, "delivery-bombers": 1 },
+        warheads: 4,
+        productionRate: 0,
+        updatedAt: new Date(),
+      },
+      {
+        _id: "RU",
+        adopted: { "device-fission": 1, "delivery-bombers": 1 },
+        warheads: 4,
+        productionRate: 0,
+        updatedAt: new Date(),
+      },
+    ]);
+
+    await processLivingConflictsTurn(db, 241, 1960, true);
+    const keys = ((stores.get("crises") ?? []) as unknown as Crisis[]).map(
+      (crisis) => crisis.globalResponse?.conflictKey
+    );
+    expect(keys).toContain("nuclear_incident");
   });
 
   it("opens the next consultation on the exact turn the prior window expires", async () => {

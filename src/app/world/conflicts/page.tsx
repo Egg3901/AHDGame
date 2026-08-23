@@ -8,7 +8,7 @@ import { toConflictView } from "./_coldwar/conflictView";
 import { VietnamEscalationPanel } from "./_coldwar/VietnamEscalationPanel";
 import { getVietnamEscalationSummary, VIETNAM_RUNGS } from "@/lib/crises/vietnamEscalation";
 import { TensionHeader, type NuclearPowerView } from "./_coldwar/TensionHeader";
-import { getColdWarTension, tensionBand } from "@/lib/coldwar/tension";
+import { getColdWarTension, tensionBand, tensionPressureBreakdown } from "@/lib/coldwar/tension";
 import { getColdWarDials } from "@/lib/coldwar/dials";
 import { listNuclearPrograms } from "@/lib/db/collections/nuclearPrograms";
 import { NUCLEAR_NODES } from "@/lib/military/nuclearProgram";
@@ -35,12 +35,20 @@ export default async function ConflictsPage() {
     toConflictView(d, { startingYear, casualties: casualties[d._id] ?? 0, preIterationTurns })
   );
 
-  const [vietnam, tension, dials, programs] = await Promise.all([
+  const [vietnam, tension, dials, programs, activeCrisisCount] = await Promise.all([
     getVietnamEscalationSummary(db),
     getColdWarTension(db),
     getColdWarDials(db),
     listNuclearPrograms(db),
+    db.collection("crises").countDocuments({ status: "active" }),
   ]);
+
+  const totalWarheads = programs.reduce((sum, program) => sum + Math.max(0, program.warheads), 0);
+  const pressureBreakdown = tensionPressureBreakdown({
+    escalationLevel: vietnam.level,
+    activeCrises: activeCrisisCount,
+    totalWarheads,
+  });
 
   // Who holds the bomb: any programme with a stockpile or an adopted node.
   // A country that never opened one has no document and never appears.
@@ -69,6 +77,13 @@ export default async function ConflictsPage() {
           defcon={dials.defcon}
           events={tension.events.map((e) => ({ turn: e.turn, label: e.label, delta: e.delta }))}
           powers={powers}
+          pressures={{
+            ...pressureBreakdown,
+            escalationLevel: vietnam.level,
+            activeCrisisCount,
+            totalWarheads,
+          }}
+          dials={dials}
         />
         {/* Vietnam is one driver among several now, so its ladder folds into a
             secondary strip under the headline rather than leading the page. */}
