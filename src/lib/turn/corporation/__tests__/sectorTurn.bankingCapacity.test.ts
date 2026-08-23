@@ -64,6 +64,7 @@ function makeEnv(privateBankingEnabled: boolean): SectorTurnEnv {
     market: buildMarketContext("plants", { rampTurns: 0 }),
     wageIndexByState: new Map(),
     automationIndexByState: new Map(),
+    labourDemandByState: new Map(),
     pendingStrikeEvents: [],
     pendingCapacityBindingEvents: [],
     sectorOps: [],

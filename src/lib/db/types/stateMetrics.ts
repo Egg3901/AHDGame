@@ -90,6 +90,16 @@ export interface StateMetrics {
      * headcount, so excluded from approval scoring.
      */
     laborForce?: StateMetricValue;
+    /**
+     * Phase 1 labour market telemetry. `labourDemand` is the sum of every
+     * corporate sector's revenue-implied headcount in this state (jobs wanted);
+     * `labourTightness` is that over `laborForce` (1.0 = the corporate sector
+     * wants exactly the whole labour force, above 1 = oversubscribed). Written
+     * by the corporation turn, absent when supply is unknown. Read-only
+     * measurement: no mechanic prices off either field yet.
+     */
+    labourDemand?: StateMetricValue;
+    labourTightness?: StateMetricValue;
     // Uniform extended metric fields
     propertyValueIndex?: StateMetricValue;
     commercialValueIndex?: StateMetricValue;

@@ -113,6 +113,7 @@ import {
 } from "@/lib/crises/disasterMarginPenalty";
 import { resolveSectorGrowthPolicy } from "./sectorGrowthPolicy";
 import { resolveSectorLabourEconomics, resolveSectorLabourProductionEffects } from "./sectorLabour";
+import { accumulateLabourDemand } from "@/lib/labour/labourMarket";
 import { computeSectorOutputUnits } from "./sectorOutputUnits";
 import { demandThrottleFactor } from "./demandThrottle";
 import { advanceSectorInventory } from "@/lib/corporations/sectorInventory";
@@ -159,6 +160,7 @@ export function processSector(
     market,
     wageIndexByState,
     automationIndexByState,
+    labourDemandByState,
     pendingStrikeEvents,
     pendingCapacityBindingEvents,
     sectorOps,
@@ -1250,6 +1252,12 @@ export function processSector(
     politicalBoard?.["education.adultSkills"] ??
     null;
   const computedWorkers = calculateWorkers(newRevenue, rawSkill);
+  // Phase 1 labour market telemetry. Accumulated HERE rather than inside
+  // resolveSectorLabourEconomics because that function early-returns when
+  // `labour.wagesEnabled` is off, and how many jobs a sector wants is a fact
+  // about the sector, not about whether the wage system is switched on.
+  // Measurement only: nothing reads this back into the economy yet.
+  accumulateLabourDemand(labourDemandByState, sector.stateId, computedWorkers);
 
   const grossMaintenance = hourlyRevenue * (1 - effectiveMargin / 100);
   const {

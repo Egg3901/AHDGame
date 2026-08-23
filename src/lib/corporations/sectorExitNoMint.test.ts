@@ -251,6 +251,7 @@ function runTurn(sector: CorporateSector, currentTurn: number) {
     market: buildMarketContext("plants"),
     wageIndexByState: new Map(),
     automationIndexByState: new Map(),
+    labourDemandByState: new Map(),
     pendingStrikeEvents: [],
     pendingCapacityBindingEvents: [],
     sectorOps: [],

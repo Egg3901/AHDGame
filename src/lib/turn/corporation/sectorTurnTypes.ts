@@ -4,6 +4,7 @@ import type {
   LabourContext,
   WageIndexAccumulator,
 } from "@/lib/labour/laborCost";
+import type { LabourDemandByState } from "@/lib/labour/labourMarket";
 import type { CorporationLookups, SectorCalculationsResult, SectorUpdateOp } from "./types";
 
 /** Read-only turn inputs plus collectors owned by processSectors. */
@@ -19,6 +20,13 @@ export interface SectorTurnEnv {
   market: MarketContext;
   wageIndexByState: Map<string, WageIndexAccumulator>;
   automationIndexByState: Map<string, AutomationIndexAccumulator>;
+  /**
+   * Phase 1 labour market telemetry: per-state sum of every sector's
+   * revenue-implied headcount. Accumulated unconditionally (not behind
+   * `labour.wagesEnabled`) because desired headcount exists whether or not the
+   * wage system is on. Read-only measurement, nothing prices off it yet.
+   */
+  labourDemandByState: LabourDemandByState;
   pendingStrikeEvents: SectorCalculationsResult["strikeEvents"];
   pendingCapacityBindingEvents: SectorCalculationsResult["capacityBindingEvents"];
   sectorOps: SectorUpdateOp[];

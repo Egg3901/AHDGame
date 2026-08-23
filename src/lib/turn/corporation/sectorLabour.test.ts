@@ -115,6 +115,7 @@ describe("resolveSectorLabourEconomics", () => {
       techLaborCostMultiplier: 1,
       wageIndexByState: new Map(),
       automationIndexByState: new Map(),
+      labourDemandByState: new Map(),
       pendingStrikeEvents: [],
     };
   }

@@ -128,6 +128,7 @@ function makeEnv(mode: "capital" | "plants", currentTurn: number): SectorTurnEnv
     market: buildMarketContext(mode),
     wageIndexByState: new Map(),
     automationIndexByState: new Map(),
+    labourDemandByState: new Map(),
     pendingStrikeEvents: [],
     pendingCapacityBindingEvents: [],
     sectorOps: [],
