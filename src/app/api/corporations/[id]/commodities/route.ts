@@ -8,7 +8,17 @@ import { computeCorpCommodityFlows } from "@/lib/corporations/corpCommodityFlows
 import { computeCorpMarketShare } from "@/lib/corporations/corpMarketShare";
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildMarketContext } from "@/lib/market/marketContext";
-import type { CorporateSector, State } from "@/lib/db/types";
+import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
+import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
+import {
+  fxRateForSectorHostFromMap,
+  resolveSectorHostCurrencyCode,
+} from "@/lib/currency/corporationCapital";
+import { COUNTRY_CURRENCY_MAP, eraRateForCurrency } from "@/lib/constants/currencies";
+import type { CurrencyCode } from "@/lib/constants/currencies";
+import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
+import type { CorporateSector, ExchangeRate, State } from "@/lib/db/types";
+import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { CommodityFlow } from "@/lib/db/types/commodityFlow";
 import type { CommodityType } from "@/lib/constants/commodities";
@@ -18,6 +28,27 @@ import type { SupplyAgreement } from "@/lib/db/types/supplyAgreement";
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
+
+/** Sector fields the flow derivation reads. Mirrors the world supply ledger. */
+type CommoditySector = Pick<
+  CorporateSector,
+  | "_id"
+  | "sectorType"
+  | "stateId"
+  | "countryId"
+  | "revenue"
+  | "strategyId"
+  | "transitionFromStrategyId"
+  | "transitionStartTurn"
+  | "producedUnits"
+  | "capitalStock"
+  | "mothballed"
+  | "productionPolicyLevel"
+  | "embargoSuspended"
+  | "embargoExportExposure"
+  | "militaryDivertedFraction"
+  | "militaryDivertedTurn"
+>;
 
 // GET /api/corporations/[id]/commodities — Per-turn commodity output/consumption,
 // regional breakdown, and by-industry market share for a corporation.
@@ -66,83 +97,102 @@ export async function GET(request: Request, { params }: RouteParams) {
     const sectors = await db
       .collection<CorporateSector>("corporateSectors")
       .find({ corporationId: corporation._id })
-      .project<
-        Pick<
-          CorporateSector,
-          | "_id"
-          | "sectorType"
-          | "stateId"
-          | "revenue"
-          | "strategyId"
-          | "transitionFromStrategyId"
-          | "transitionStartTurn"
-        >
-      >({
+      .project<CommoditySector>({
         sectorType: 1,
         stateId: 1,
+        countryId: 1,
         revenue: 1,
         strategyId: 1,
         transitionFromStrategyId: 1,
         transitionStartTurn: 1,
+        // Plants tier: measured production is what actually reaches the market,
+        // and the nameplate legs below need the policy/embargo/diversion chain.
+        producedUnits: 1,
+        capitalStock: 1,
+        mothballed: 1,
+        productionPolicyLevel: 1,
+        embargoSuspended: 1,
+        embargoExportExposure: 1,
+        militaryDivertedFraction: 1,
+        militaryDivertedTurn: 1,
         _id: 1,
       })
       .toArray();
 
     const stateIds = [...new Set(sectors.map((s) => s.stateId))];
 
-    const [gameState, states, latestFlows, marketShare, gameConfig, supplyAgreements] =
-      await Promise.all([
-        db
-          .collection<GameState>("gameState")
-          .findOne({ _id: "current" }, { projection: { currentTurn: 1 } }),
-        db
-          .collection<State>("states")
-          .find({ _id: { $in: stateIds } })
-          .project<{ _id: string; name: string; region: string }>({ _id: 1, name: 1, region: 1 })
-          .toArray(),
-        // Latest global flow ledger row per commodity (market context).
-        db
-          .collection<CommodityFlow>("commodityFlows")
-          .aggregate<CommodityFlow>([
-            { $sort: { turn: -1 } },
-            { $group: { _id: "$commodity", doc: { $first: "$$ROOT" } } },
-            { $replaceRoot: { newRoot: "$doc" } },
-          ])
-          .toArray(),
-        computeCorpMarketShare(db, corporation, sectors),
-        db.collection<GameConfig>("gameConfig").findOne(
-          { _id: "default" },
-          {
-            projection: {
-              brandLoyaltyEnabled: 1,
-              brandLoyaltySliceEnabled: 1,
-              sectorQualityEnabled: 1,
-              supplyAgreementsEnabled: 1,
-              marketSystemMode: 1,
-            },
-          }
-        ),
-        canViewPrivateSupply
-          ? db
-              .collection<SupplyAgreement>("supplyAgreements")
-              .find({
-                buyerCorpId: corporation._id,
-                status: { $in: ["active", "cancelling"] },
-              })
-              .project<
-                Pick<
-                  SupplyAgreement,
-                  "commodity" | "volumeCap" | "lastDeliveryTurn" | "lastDeliveredUnits"
-                >
-              >({
-                commodity: 1,
-                volumeCap: 1,
-                lastDeliveryTurn: 1,
-                lastDeliveredUnits: 1,
-              })
-              .toArray()
-          : Promise.resolve([]),
-      ]);
+    const [
+      gameState,
+      states,
+      latestFlows,
+      marketShare,
+      gameConfig,
+      exchangeRateDocs,
+      stateResourceCapacityDocs,
+      worldPreset,
+      supplyAgreements,
+    ] = await Promise.all([
+      db
+        .collection<GameState>("gameState")
+        .findOne({ _id: "current" }, { projection: { currentTurn: 1, currentYear: 1 } }),
+      db
+        .collection<State>("states")
+        .find({ _id: { $in: stateIds } })
+        .project<{ _id: string; name: string; region: string }>({ _id: 1, name: 1, region: 1 })
+        .toArray(),
+      // Latest global flow ledger row per commodity (market context).
+      db
+        .collection<CommodityFlow>("commodityFlows")
+        .aggregate<CommodityFlow>([
+          { $sort: { turn: -1 } },
+          { $group: { _id: "$commodity", doc: { $first: "$$ROOT" } } },
+          { $replaceRoot: { newRoot: "$doc" } },
+        ])
+        .toArray(),
+      computeCorpMarketShare(db, corporation, sectors),
+      db.collection<GameConfig>("gameConfig").findOne(
+        { _id: "default" },
+        {
+          projection: {
+            brandLoyaltyEnabled: 1,
+            brandLoyaltySliceEnabled: 1,
+            sectorQualityEnabled: 1,
+            supplyAgreementsEnabled: 1,
+            marketSystemMode: 1,
+            commandEconomyEnabled: 1,
+          },
+        }
+      ),
+      db
+        .collection<ExchangeRate>("exchangeRates")
+        .find({}, { projection: { currencyCode: 1, rate: 1 } })
+        .toArray(),
+      db
+        .collection<StateResourceCapacity>("stateResourceCapacity")
+        .find({ stateId: { $in: stateIds } }, { projection: { stateId: 1, resources: 1 } })
+        .toArray(),
+      loadWorldPreset(db),
+      canViewPrivateSupply
+        ? db
+            .collection<SupplyAgreement>("supplyAgreements")
+            .find({
+              buyerCorpId: corporation._id,
+              status: { $in: ["active", "cancelling"] },
+            })
+            .project<
+              Pick<
+                SupplyAgreement,
+                "commodity" | "volumeCap" | "lastDeliveryTurn" | "lastDeliveredUnits"
+              >
+            >({
+              commodity: 1,
+              volumeCap: 1,
+              lastDeliveryTurn: 1,
+              lastDeliveredUnits: 1,
+            })
+            .toArray()
+        : Promise.resolve([]),
+    ]);
 
     const currentTurn = gameState?.currentTurn ?? 0;
     const stateInfoById = new Map(
@@ -188,12 +238,50 @@ export async function GET(request: Request, { params }: RouteParams) {
       });
     }
 
+    // Revenue is booked in each sector's HOST currency; every nameplate leg in
+    // the derivation runs in ₳, the basis COMMODITY_BASE_PRICES use. Normalize
+    // here the way the world supply ledger does (commodityPriceTurn) — without
+    // it a franc-denominated sector reports its FX rate as output (#1177).
+    const fxByCurrency = new Map<CurrencyCode, number>(
+      exchangeRateDocs.map((r) => [r.currencyCode as CurrencyCode, r.rate])
+    );
+    // Some command-economy currencies are deliberately not player-traded and
+    // have no exchangeRates row, but their sectors still book revenue in local
+    // units. Falling back to 1.0 inflates them 13.5x to 27x, so fill only the
+    // absent ones from the authored preset — exactly what the turn path does
+    // in `buildLookups`. Live rates are never overwritten.
+    for (const code of Object.values(COUNTRY_CURRENCY_MAP) as CurrencyCode[]) {
+      if (fxByCurrency.has(code)) continue;
+      const authoredRate = eraRateForCurrency(code, worldPreset);
+      if (authoredRate !== undefined) fxByCurrency.set(code, authoredRate);
+    }
+    const flowSectors = sectors.map((sector) => ({
+      ...sector,
+      revenueAnchor: readCorpEconomicAnchor(
+        sector.revenue,
+        resolveSectorHostCurrencyCode(sector, corporation),
+        fxRateForSectorHostFromMap(sector, corporation, fxByCurrency)
+      ),
+      capacityUnits: sector.capitalStock ?? null,
+    }));
+    const stateResourcesByState = new Map(
+      stateResourceCapacityDocs.map((doc) => [doc.stateId, doc.resources])
+    );
+
     const { commodities, regions } = computeCorpCommodityFlows(
-      sectors,
+      flowSectors,
       currentTurn,
       latestFlowByCommodity,
       stateInfoById,
-      privateSupplyByCommodity
+      privateSupplyByCommodity,
+      {
+        plantsEnabled: marketAtLeast(mode, "plants"),
+        isNatcorp: !!corporation.countryOwnerId,
+        eraUnitScale: getEraUnitScale(worldPreset),
+        stateResourcesByState,
+        currentYear: gameState?.currentYear,
+        commandEconomyEnabled: gameConfig?.commandEconomyEnabled === true,
+      }
     );
 
     return NextResponse.json(

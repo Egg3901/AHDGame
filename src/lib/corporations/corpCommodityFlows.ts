@@ -1,18 +1,27 @@
 /**
  * Corporation-level commodity flows for the Commodities tab.
  *
- * There is no persisted per-corp per-commodity quantity — the turn engine keeps
- * only per-sector revenue and global (per-commodity) flow ledger rows. So we
- * recompute a corp's physical output/consumption exactly the way the sector
- * detail page does: `units = sector.revenue × effectiveRate / basePrice`
- * (see `src/lib/corporations/queries/sectorDetail.ts`), summed across all the
- * corp's sectors and grouped by home state for the regional breakdown.
+ * This mirrors the world supply ledger (`computeRawSupplyDemand` in
+ * `src/lib/constants/commodities.ts`) leg for leg, because the tab's whole job
+ * is to tell a CEO what their corporation actually puts on the market. Any
+ * derivation of its own drifts from the number every other surface reports.
+ *
+ * Under the plants tier a sector has already MEASURED what it made, so real
+ * output is `plantsSupplyScaledUnits(producedUnits) × commodityMixWeight` — the
+ * same canonical chain the ledger, the clearing offer and the supply-agreement
+ * capacity check use. The revenue nameplate (`revenue × rate / basePrice`) is
+ * only the fallback for a sector that has never run a plants turn, and the sole
+ * path for extraction, which carries its own deposit-capacity rationing that
+ * `producedUnits` would double-count.
+ *
+ * Revenue arrives in the sector's HOST currency. Every nameplate leg therefore
+ * runs on `revenueAnchor` (₳), never `revenue` — dividing francs by an ₳ base
+ * price reports a French sector at its FX rate, not its output (ticket #1177).
  *
  * Global market context (price, stock, cover, spoilage) is read from the latest
  * `commodityFlows` ledger row per commodity — that data is only global, so it is
  * surfaced as market context, not attributed to the corp.
  */
-
 import type { CorporateSector } from "@/lib/db/types";
 import type { CommodityFlow } from "@/lib/db/types/commodityFlow";
 import {
@@ -21,11 +30,23 @@ import {
   COMMODITY_ICONS,
   COMMODITY_LABELS,
   COMMODITY_UNITS,
+  NATCORP_COMMODITY_MULTIPLIER,
+  commodityMixWeight,
   dollarsToUnits,
+  embargoSupplyFactorFor,
+  plantsSupplyScaledUnits,
 } from "@/lib/constants/commodities";
-import type { CommodityType } from "@/lib/constants/commodities";
+import type { CommodityType, ExtractableResource } from "@/lib/constants/commodities";
 import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import {
+  applyPlannedEconomyOutputMix,
+  getEffectiveStrategyRates,
+  plannedEconomyMediaSupplyFactor,
+} from "@/lib/constants/sectorStrategies";
+import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
+import { freshMilitaryDiversion } from "@/lib/military/arsenal";
+import { applyExtractionResourceCapacityToSupply } from "@/lib/corporations/extractionResourceSupply";
+import { getInputMultiplier, getOutputMultiplier } from "@/lib/utils/productionPolicy";
 
 /** Market context for one commodity, from the latest global flow ledger row. */
 export interface CommodityMarketContext {
@@ -99,7 +120,7 @@ export interface CorpCommodityFlowsResult {
   regions: CorpCommodityRegion[];
 }
 
-type FlowSector = Pick<
+export type FlowSector = Pick<
   CorporateSector,
   | "sectorType"
   | "stateId"
@@ -107,7 +128,212 @@ type FlowSector = Pick<
   | "strategyId"
   | "transitionFromStrategyId"
   | "transitionStartTurn"
-> & { _id?: CorporateSector["_id"] };
+> & {
+  _id?: CorporateSector["_id"];
+  /**
+   * `revenue` normalized to ₳ at the sector's HOST-state rate. Every nameplate
+   * leg runs on this; `revenue` itself is host currency and is only the
+   * fallback for callers with no FX table loaded.
+   */
+  revenueAnchor?: number | null;
+  /** Units the plant physically made last turn. Absent before its first plants turn. */
+  producedUnits?: number | null;
+  /** Nameplate capacity (`capitalStock`), the denominator of plant utilization. */
+  capacityUnits?: number | null;
+  mothballed?: boolean | null;
+  productionPolicyLevel?: number | null;
+  embargoSuspended?: boolean | null;
+  embargoExportExposure?: number | null;
+  /** Share of output taken by a state arsenal — it never reaches the market. */
+  militaryDivertedFraction?: number | null;
+  /** Turn the diversion was booked. Older than one turn means the contract ended. */
+  militaryDivertedTurn?: number | null;
+  /** Host country, for the planned-economy output remap. */
+  countryId?: string | null;
+};
+
+/** World context the flow derivation needs beyond the sectors themselves. */
+export interface CorpCommodityFlowContext {
+  /** `marketSystemMode >= "plants"` — measured production replaces the nameplate. */
+  plantsEnabled?: boolean;
+  /** State-owned corp: carries `NATCORP_COMMODITY_MULTIPLIER`. */
+  isNatcorp?: boolean;
+  /** Era unit basis (`getEraUnitScale`); 1 on every modern preset. */
+  eraUnitScale?: number;
+  /** `gameState.currentYear` — with the flag below, resolves planned economies. */
+  currentYear?: number | null;
+  /** `gameConfig.commandEconomyEnabled`. */
+  commandEconomyEnabled?: boolean | null;
+  /**
+   * stateId → the state's extractable deposits. An absent key means "no
+   * capacity document" (legacy/uncapped); `null` means a document with no
+   * resources, i.e. zero capacity for all of them.
+   */
+  stateResourcesByState?: ReadonlyMap<
+    string,
+    Partial<Record<ExtractableResource, number>> | null | undefined
+  >;
+}
+
+/**
+ * One sector's per-commodity physical supply and demand, mirroring the world
+ * supply ledger's chain leg for leg. Shared by the Commodities tab and the
+ * corporation history snapshot so the two cannot report different output.
+ *
+ * Returns empty maps for a mothballed plant — it is cold: it supplies nothing
+ * and buys nothing.
+ */
+export function computeSectorCommodityUnits(
+  sector: FlowSector,
+  currentTurn: number,
+  context: CorpCommodityFlowContext = {}
+): {
+  supply: Map<CommodityType, number>;
+  demand: Map<CommodityType, number>;
+  inMix: Set<CommodityType>;
+} {
+  const supply = new Map<CommodityType, number>();
+  const demand = new Map<CommodityType, number>();
+  /** Commodities in this sector's output mix, whatever it actually made. */
+  const inMix = new Set<CommodityType>();
+  const plantsEnabled = context.plantsEnabled === true;
+  const isNatcorp = context.isNatcorp === true;
+  const eraUnitScale =
+    typeof context.eraUnitScale === "number" &&
+    Number.isFinite(context.eraUnitScale) &&
+    context.eraUnitScale > 0
+      ? context.eraUnitScale
+      : 1;
+  const clamp01 = (n: number): number => Math.max(0, Math.min(1, n));
+
+  // D12: a mothballed plant is cold — it supplies nothing and buys nothing.
+  if (plantsEnabled && sector.mothballed === true) return { supply, demand, inMix };
+
+  const rates = getEffectiveStrategyRates(
+    sector.sectorType,
+    sector.strategyId ?? "standard",
+    sector.transitionFromStrategyId,
+    sector.transitionStartTurn,
+    currentTurn
+  );
+  const plannedEconomy = isPlannedEconomy(
+    sector.countryId,
+    context.currentYear,
+    context.commandEconomyEnabled
+  );
+  // Order matters, and matches the ledger and the clearing offer: the
+  // planned-economy remap runs FIRST because it can swap the commodity
+  // entirely (a command economy's media makes state information, not sold
+  // advertising), then the capacity filter culls what the state cannot
+  // extract. A sector cannot supply a resource its state has no reserves of;
+  // the turn engine, the world ledger and the sector page all filter on that,
+  // and without it the corp surfaces invent output it could never have made.
+  const supplyRates = applyExtractionResourceCapacityToSupply(
+    sector.sectorType,
+    applyPlannedEconomyOutputMix(sector.sectorType, rates.supply, plannedEconomy),
+    context.stateResourcesByState?.get(sector.stateId ?? "")
+  );
+
+  const isExtraction = sector.sectorType === "extraction";
+  const revenueAnchor =
+    typeof sector.revenueAnchor === "number" && Number.isFinite(sector.revenueAnchor)
+      ? sector.revenueAnchor
+      : sector.revenue;
+  const natcorpScale = isNatcorp ? NATCORP_COMMODITY_MULTIPLIER : 1;
+  // Output sold to a state arsenal never reaches the market. Read through
+  // `freshMilitaryDiversion` — the field is not cleared when a contract ends,
+  // so a raw read keeps shaving output off forever while the world market
+  // books the sector in full.
+  const militaryRetained =
+    1 -
+    clamp01(
+      freshMilitaryDiversion(
+        {
+          militaryDivertedFraction: sector.militaryDivertedFraction ?? undefined,
+          militaryDivertedTurn: sector.militaryDivertedTurn ?? undefined,
+        },
+        currentTurn
+      )
+    );
+  const policyLevel = sector.productionPolicyLevel ?? 0;
+
+  // Plants: real production replaces the nameplate. Extraction is excluded on
+  // purpose — its supply already carries the deposit-capacity rationing that
+  // `producedUnits` also contains, and mixing the two double-counts it.
+  //
+  // EXTRACTION IS THE ONE FAMILY THIS SURFACE CANNOT MATCH THE LEDGER ON, and
+  // that is deliberate. The ledger's extraction leg also carries
+  // `extractionRealizedFraction`, `extractionOutputScaleFor` and the per-sector
+  // deposit-capacity multipliers. The first is never persisted (the ledger
+  // computes it in-memory each turn, see commodityPriceTurn), and the last
+  // needs every extraction sector in the state plus the live contract book —
+  // a turn pass, not something a display route can re-run without becoming a
+  // second source of truth that drifts.
+  //
+  // So extraction stays on the nameplate plus the state-capacity filter, which
+  // is EXACTLY what the sector page reports. Do not "finish" this by adding
+  // only the cheap leg: a partial chain matches neither surface, and the
+  // comparison players actually make is this tab against their sector pages.
+  const plantsSupplyUnits =
+    plantsEnabled && !isExtraction
+      ? plantsSupplyScaledUnits({
+          producedUnits: sector.producedUnits,
+          isNatcorp,
+          // Mirrors the ledger and the clearing offer: the embargo haircut
+          // times the media supply derate. Media is derated in EVERY economy
+          // (a market media sector puts a tenth of its output on the
+          // advertising book), so omitting it overstated media tenfold.
+          embargoSupplyFactor:
+            embargoSupplyFactorFor(sector) *
+            plannedEconomyMediaSupplyFactor(sector.sectorType, plannedEconomy),
+        })
+      : null;
+  // Utilization scales INPUT demand: a plant running at 60% of nameplate
+  // consumes ~60% of its inputs rather than 100%.
+  const plantsUtilization =
+    plantsEnabled &&
+    typeof sector.producedUnits === "number" &&
+    typeof sector.capacityUnits === "number" &&
+    sector.capacityUnits > 0
+      ? clamp01(sector.producedUnits / sector.capacityUnits)
+      : 1;
+
+  for (const [commodity, rate] of Object.entries(supplyRates) as [CommodityType, number][]) {
+    if (!rate || rate <= 0) continue;
+    const basePrice = COMMODITY_BASE_PRICES[commodity];
+    if (!(basePrice > 0)) continue;
+    // The sector CAN make this, which is what the CEO pricing links are for.
+    // Recorded before the quantity, so an idle plant is still reachable.
+    inMix.add(commodity);
+    const units =
+      plantsSupplyUnits != null
+        ? plantsSupplyUnits *
+          commodityMixWeight(supplyRates, COMMODITY_BASE_PRICES, commodity) *
+          militaryRetained
+        : dollarsToUnits(revenueAnchor * rate, basePrice) *
+          eraUnitScale *
+          natcorpScale *
+          getOutputMultiplier(policyLevel) *
+          militaryRetained;
+    if (!(units > 0)) continue;
+    supply.set(commodity, (supply.get(commodity) ?? 0) + units);
+  }
+  for (const [commodity, rate] of Object.entries(rates.demand) as [CommodityType, number][]) {
+    if (!rate || rate <= 0) continue;
+    const basePrice = COMMODITY_BASE_PRICES[commodity];
+    if (!(basePrice > 0)) continue;
+    const units =
+      dollarsToUnits(revenueAnchor * rate, basePrice) *
+      eraUnitScale *
+      natcorpScale *
+      getInputMultiplier(policyLevel) *
+      plantsUtilization;
+    if (!(units > 0)) continue;
+    demand.set(commodity, (demand.get(commodity) ?? 0) + units);
+  }
+
+  return { supply, demand, inMix };
+}
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
@@ -120,7 +346,8 @@ export function computeCorpCommodityFlows(
   currentTurn: number,
   latestFlowByCommodity: ReadonlyMap<CommodityType, CommodityFlow>,
   stateInfoById: ReadonlyMap<string, { name: string; region: string | null }>,
-  privateSupplyByCommodity: ReadonlyMap<CommodityType, CorpPrivateSupplySnapshot> = new Map()
+  privateSupplyByCommodity: ReadonlyMap<CommodityType, CorpPrivateSupplySnapshot> = new Map(),
+  context: CorpCommodityFlowContext = {}
 ): CorpCommodityFlowsResult {
   // commodity → { output, consumption } across the whole corp.
   const totals = new Map<CommodityType, { output: number; consumption: number }>();
@@ -144,28 +371,13 @@ export function computeCorpCommodityFlows(
   };
 
   for (const sector of sectors) {
-    const rates = getEffectiveStrategyRates(
-      sector.sectorType,
-      sector.strategyId ?? "standard",
-      sector.transitionFromStrategyId,
-      sector.transitionStartTurn,
-      currentTurn
-    );
-    const stateMap =
-      byState.get(sector.stateId) ??
-      new Map<CommodityType, { output: number; consumption: number }>();
-    byState.set(sector.stateId, stateMap);
+    const { supply, demand, inMix } = computeSectorCommodityUnits(sector, currentTurn, context);
+    if (supply.size === 0 && demand.size === 0 && inMix.size === 0) continue;
 
-    for (const [commodity, rate] of Object.entries(rates.supply) as [CommodityType, number][]) {
-      if (!rate || rate <= 0) continue;
-      const basePrice = COMMODITY_BASE_PRICES[commodity];
-      if (!(basePrice > 0)) continue;
-      const units = dollarsToUnits(sector.revenue * rate, basePrice);
-      bump(totals, commodity, "output", units);
-      bump(stateMap, commodity, "output", units);
-      if (sector._id) {
+    if (sector._id) {
+      const sectorId = sector._id.toString();
+      for (const commodity of inMix) {
         const list = outputSectorsByCommodity.get(commodity) ?? [];
-        const sectorId = sector._id.toString();
         if (!list.some((s) => s.sectorId === sectorId)) {
           list.push({
             sectorId,
@@ -175,11 +387,17 @@ export function computeCorpCommodityFlows(
         }
       }
     }
-    for (const [commodity, rate] of Object.entries(rates.demand) as [CommodityType, number][]) {
-      if (!rate || rate <= 0) continue;
-      const basePrice = COMMODITY_BASE_PRICES[commodity];
-      if (!(basePrice > 0)) continue;
-      const units = dollarsToUnits(sector.revenue * rate, basePrice);
+
+    const stateMap =
+      byState.get(sector.stateId) ??
+      new Map<CommodityType, { output: number; consumption: number }>();
+    byState.set(sector.stateId, stateMap);
+
+    for (const [commodity, units] of supply) {
+      bump(totals, commodity, "output", units);
+      bump(stateMap, commodity, "output", units);
+    }
+    for (const [commodity, units] of demand) {
       bump(totals, commodity, "consumption", units);
       bump(stateMap, commodity, "consumption", units);
     }

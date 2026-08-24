@@ -1709,7 +1709,14 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       makeSeededRng(`marketCapCandle:${turn}${CORP_TURN_RNG_SALT}`),
       lookups.sectorsByCorp,
       dividendIncomeReceivedByCorpId,
-      dividendTaxPaidByCountry
+      dividendTaxPaidByCountry,
+      {
+        plantsEnabled: market.plantsEnabled,
+        eraUnitScale: lookups.eraUnitScale,
+        stateResourcesByState: lookups.stateResourceCapacityByState,
+        currentYear,
+        commandEconomyEnabled,
+      }
     );
   }
   mark("snapshotMarketCap");
