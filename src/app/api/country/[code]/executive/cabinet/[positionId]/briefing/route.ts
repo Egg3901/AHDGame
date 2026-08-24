@@ -12,6 +12,11 @@ import { getAuthUserWithCharacter } from "@/lib/auth";
 import { handleRouteError } from "@/lib/api/errors";
 import { getCabinetMechanics, getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { resolveDepartment, resolveSeatName } from "@/lib/cabinet/rosterEra";
+import {
+  resolveCabinetOfficeVisibility,
+  cabinetOfficeViewerTitles,
+  cabinetOfficeRealmPhrase,
+} from "@/lib/cabinet/officeVisibility";
 import { resolveGameYear } from "@/lib/era/era";
 import { getMinisterialOrders } from "@/lib/constants/cabinetOrders";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -177,15 +182,69 @@ export async function GET(_request: Request, { params }: RouteParams) {
         ])
       : [null, null];
 
-    // Determine if current user can perform actions
-    const isHolder = !!(
-      user &&
-      member &&
-      member.characterId &&
-      member.characterId.toString() === user.character?._id?.toString()
-    );
-    const isAdmin = !!user?.isAdmin;
-    const canAct = isHolder || isAdmin;
+    // The letterhead. Shared by the full briefing and the withheld one so the two
+    // cannot drift into disagreeing about what a seat is called.
+    const buildPositionView = () => ({
+      id: mechanics.positionId,
+      name: positionDef ? resolveSeatName(positionDef, liveYear) : null,
+      department: resolveDepartment(mechanics, liveYear),
+      sealImage: mechanics.sealImage ?? null,
+      singleRegionFocus: mechanics.singleRegionFocus ?? null,
+    });
+
+    // `includeActions` is false on a withheld office: the seat and its holder are
+    // public, but how much of their turn a minister has left to spend is not.
+    const buildMemberView = ({ includeActions }: { includeActions: boolean }) =>
+      member
+        ? {
+            characterId: member.characterId?.toString() ?? null,
+            isNPP: member.isNPP ?? false,
+            nppId: member.nppId?.toString() ?? null,
+            sequentialId: holderChar?.sequentialId ?? null,
+            characterName: member.characterName,
+            avatarUrl: holderChar?.avatarUrl ?? null,
+            borderKey: holderChar?.borderKey ?? null,
+            tintColor: holderChar?.tintColor ?? null,
+            party: member.party ?? null,
+            partyName: partyDoc?.name ?? null,
+            partyColor: partyDoc?.color ?? null,
+            partyLogoUrl: partyDoc?.logoUrl ?? null,
+            ...(includeActions ? { ministerialActions: member.ministerialActions ?? 2 } : {}),
+            bannerImageUrl: member.bannerImageUrl ?? null,
+          }
+        : null;
+
+    // Who may read this office, and who may work it. Everything below this point
+    // is departmental record: the force it fields, the money it holds, the orders
+    // it has standing. Resolve the gate BEFORE any of it is assembled.
+    const { canView, canAct } = await resolveCabinetOfficeVisibility(db, {
+      countryId,
+      holderCharacterId: member?.characterId ?? null,
+      viewerCharacterId: user?.character?._id ?? null,
+      // Keyed by user, not character: a reigning monarch is an imperial character.
+      viewerUserId: user?.userId ?? null,
+      isAdmin: !!user?.isAdmin,
+      // Already loaded here, so the resolver does not re-read it.
+      preset: gameState?.preset,
+    });
+
+    // The seat, its department and its holder are roster facts, published on the
+    // cabinet list and on the holder's character page. Withholding them here would
+    // only make the page look broken. Everything else stops at this return, which
+    // also skips the aggregation below rather than computing it and dropping it.
+    if (!canView) {
+      return NextResponse.json({
+        canView: false,
+        canAct: false,
+        liveYear,
+        position: buildPositionView(),
+        member: buildMemberView({ includeActions: false }),
+        restriction: {
+          allowedTitles: cabinetOfficeViewerTitles(countryId, gameState?.preset),
+          countryName: cabinetOfficeRealmPhrase(countryId, gameState?.preset),
+        },
+      });
+    }
 
     // Fetch metrics based on position config
     const regionIds = mechanics.singleRegionFocus ? [mechanics.singleRegionFocus] : undefined;
@@ -634,13 +693,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
       // roster chrome (e.g. the position rail) filters with this via the pure
       // rosterEra helpers.
       liveYear,
-      position: {
-        id: mechanics.positionId,
-        name: positionDef ? resolveSeatName(positionDef, liveYear) : null,
-        department: resolveDepartment(mechanics, liveYear),
-        sealImage: mechanics.sealImage ?? null,
-        singleRegionFocus: mechanics.singleRegionFocus ?? null,
-      },
+      canView: true,
+      position: buildPositionView(),
       mechanics: {
         tierSetting: mechanics.tierSetting ?? null,
         tierSettings: mechanics.tierSettings ?? null,
@@ -650,24 +704,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         emergency: mechanics.emergency ?? null,
       },
       orders: getMinisterialOrders(countryId, positionId),
-      member: member
-        ? {
-            characterId: member.characterId?.toString() ?? null,
-            isNPP: member.isNPP ?? false,
-            nppId: member.nppId?.toString() ?? null,
-            sequentialId: holderChar?.sequentialId ?? null,
-            characterName: member.characterName,
-            avatarUrl: holderChar?.avatarUrl ?? null,
-            borderKey: holderChar?.borderKey ?? null,
-            tintColor: holderChar?.tintColor ?? null,
-            party: member.party ?? null,
-            partyName: partyDoc?.name ?? null,
-            partyColor: partyDoc?.color ?? null,
-            partyLogoUrl: partyDoc?.logoUrl ?? null,
-            ministerialActions: member.ministerialActions ?? 2,
-            bannerImageUrl: member.bannerImageUrl ?? null,
-          }
-        : null,
+      member: buildMemberView({ includeActions: true }),
       currentSettings: setting
         ? {
             tierSetting: setting.tierSetting ?? null,

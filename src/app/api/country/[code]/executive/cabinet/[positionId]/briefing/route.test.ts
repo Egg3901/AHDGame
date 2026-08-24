@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getAuthUserWithCharacter: vi.fn() }));
+vi.mock("@/lib/api/headOfGovernment", () => ({
+  getHeadOfGovernmentCharacterId: vi.fn(async () => null),
+}));
 
 const { getDb } = await import("@/lib/mongodb");
 const { getAuthUserWithCharacter } = await import("@/lib/auth");
+const { getHeadOfGovernmentCharacterId } = await import("@/lib/api/headOfGovernment");
 
 describe("GET /api/country/[code]/executive/cabinet/[positionId]/briefing", () => {
   let db: MockDb;
@@ -15,7 +19,10 @@ describe("GET /api/country/[code]/executive/cabinet/[positionId]/briefing", () =
     vi.clearAllMocks();
     db = createMockDb();
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
-    vi.mocked(getAuthUserWithCharacter).mockResolvedValue(null);
+    // These cases are about how the briefing SOURCES its numbers, not about who
+    // may read them. Sign in as an admin so the visibility gate is satisfied and
+    // each test keeps its own subject.
+    vi.mocked(getAuthUserWithCharacter).mockResolvedValue({ isAdmin: true } as never);
   });
 
   it("prefers the national metrics document over regional averaging for national metrics", async () => {
@@ -366,5 +373,202 @@ describe("GET /api/country/[code]/executive/cabinet/[positionId]/briefing", () =
     // No budget document ⇒ no appropriation and nothing charged, never a guess.
     expect(json.forceSummary.appropriation).toBe(0);
     expect(json.forceSummary.appropriationUpkeep).toBe(0);
+  });
+});
+
+describe("GET briefing — cabinet office visibility", () => {
+  let db: MockDb;
+  const HOLDER = new ObjectId();
+  const HEAD_OF_GOVERNMENT = new ObjectId();
+  const OUTSIDER = new ObjectId();
+
+  /** Seat the defence office, or leave it vacant when passed null. */
+  function seedSeat(holderCharacterId: ObjectId | null) {
+    db.collection("cabinetMembers");
+    db.collection("cabinetSettings");
+    db.collection("states");
+    db.collectionMocks.cabinetSettings.findOne.mockResolvedValue(null);
+    db.collectionMocks.cabinetMembers.findOne.mockResolvedValue(
+      holderCharacterId
+        ? {
+            countryId: "US",
+            positionId: "secretary_of_defense",
+            characterId: holderCharacterId,
+            characterName: "Jordan Ashton",
+            ministerialActions: 2,
+          }
+        : null
+    );
+    db.collectionMocks.states.find.mockReturnValue({
+      project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+    } as never);
+  }
+
+  function signInAs(characterId: ObjectId | null, opts?: { isAdmin?: boolean }) {
+    vi.mocked(getAuthUserWithCharacter).mockResolvedValue(
+      characterId
+        ? ({
+            isAdmin: opts?.isAdmin ?? false,
+            hasCharacter: true,
+            character: { _id: characterId },
+          } as never)
+        : null
+    );
+  }
+
+  async function getDefenceBriefing() {
+    const { GET } =
+      await import("@/app/api/country/[code]/executive/cabinet/[positionId]/briefing/route");
+    return GET(
+      new Request(
+        "http://localhost/api/country/us/executive/cabinet/secretary_of_defense/briefing"
+      ),
+      { params: Promise.resolve({ code: "us", positionId: "secretary_of_defense" }) }
+    );
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    vi.mocked(getHeadOfGovernmentCharacterId).mockResolvedValue(HEAD_OF_GOVERNMENT);
+    seedSeat(HOLDER);
+  });
+
+  it("withholds the force summary from a player who does not hold the seat", async () => {
+    signInAs(OUTSIDER);
+
+    const json = (await (await getDefenceBriefing()).json()) as Record<string, unknown>;
+
+    expect(json.canView).toBe(false);
+    expect(json).not.toHaveProperty("forceSummary");
+    expect(json).not.toHaveProperty("units");
+    expect(json).not.toHaveProperty("nationalMetrics");
+    expect(json).not.toHaveProperty("regionData");
+    expect(json).not.toHaveProperty("orders");
+  });
+
+  it("withholds the office from a signed-out visitor", async () => {
+    signInAs(null);
+
+    const json = (await (await getDefenceBriefing()).json()) as Record<string, unknown>;
+
+    expect(json.canView).toBe(false);
+    expect(json).not.toHaveProperty("forceSummary");
+  });
+
+  it("keeps the letterhead readable on a withheld office", async () => {
+    signInAs(OUTSIDER);
+
+    const json = (await (await getDefenceBriefing()).json()) as {
+      position: { id: string; department: string };
+      member: { characterName: string } | null;
+    };
+
+    expect(json.position.id).toBe("secretary_of_defense");
+    expect(json.position.department).toBeTruthy();
+    expect(json.member?.characterName).toBe("Jordan Ashton");
+  });
+
+  it("does not leak how many actions the minister has left", async () => {
+    signInAs(OUTSIDER);
+
+    const json = (await (await getDefenceBriefing()).json()) as {
+      member: Record<string, unknown> | null;
+    };
+
+    expect(json.member).not.toHaveProperty("ministerialActions");
+  });
+
+  it("names the offices that may view a withheld seat", async () => {
+    signInAs(OUTSIDER);
+
+    const json = (await (await getDefenceBriefing()).json()) as {
+      restriction: { allowedTitles: string[]; countryName: string };
+    };
+
+    // The realm phrase, not the bare name: the notice reads "the President of
+    // the United States", and `name` alone would drop the article.
+    expect(json.restriction.allowedTitles).toEqual(["President"]);
+    expect(json.restriction.countryName).toBe("the United States");
+  });
+
+  it("serves the full briefing to the seated officeholder", async () => {
+    signInAs(HOLDER);
+
+    const json = (await (await getDefenceBriefing()).json()) as Record<string, unknown>;
+
+    expect(json.canView).toBe(true);
+    expect(json.canAct).toBe(true);
+    expect(json).toHaveProperty("forceSummary");
+    expect(json).toHaveProperty("nationalMetrics");
+  });
+
+  it("serves the office to the head of government without granting the levers", async () => {
+    signInAs(HEAD_OF_GOVERNMENT);
+
+    const json = (await (await getDefenceBriefing()).json()) as Record<string, unknown>;
+
+    expect(json.canView).toBe(true);
+    expect(json.canAct).toBe(false);
+    expect(json).toHaveProperty("forceSummary");
+  });
+
+  it("keeps a vacant seat readable to the head of government", async () => {
+    seedSeat(null);
+    signInAs(HEAD_OF_GOVERNMENT);
+
+    const json = (await (await getDefenceBriefing()).json()) as Record<string, unknown>;
+
+    expect(json.canView).toBe(true);
+    expect(json.member).toBeNull();
+  });
+
+  it("withholds a vacant seat from everybody else", async () => {
+    seedSeat(null);
+    signInAs(OUTSIDER);
+
+    const json = (await (await getDefenceBriefing()).json()) as Record<string, unknown>;
+
+    expect(json.canView).toBe(false);
+    expect(json).not.toHaveProperty("forceSummary");
+  });
+
+  // The route hands the resolver a viewerUserId, which a crowned head of state is
+  // recognised by. The field is optional, so dropping the wire would typecheck
+  // cleanly and silently shut every monarch out of their own government.
+  it("serves a monarchy's office to the reigning monarch", async () => {
+    const monarchUserId = new ObjectId().toString();
+    db.collection("cabinetMembers");
+    db.collection("cabinetSettings");
+    db.collection("states");
+    db.collection("imperialCharacters");
+    db.collectionMocks.cabinetSettings.findOne.mockResolvedValue(null);
+    db.collectionMocks.cabinetMembers.findOne.mockResolvedValue({
+      countryId: "UK",
+      positionId: "defence_secretary",
+      characterId: HOLDER,
+      characterName: "Jordan Ashton",
+    });
+    db.collectionMocks.states.find.mockReturnValue({
+      project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+    } as never);
+    db.collectionMocks.imperialCharacters.findOne.mockResolvedValue({ _id: new ObjectId() });
+    vi.mocked(getAuthUserWithCharacter).mockResolvedValue({
+      userId: monarchUserId,
+      isAdmin: false,
+      hasCharacter: false,
+    } as never);
+
+    const { GET } =
+      await import("@/app/api/country/[code]/executive/cabinet/[positionId]/briefing/route");
+    const response = await GET(
+      new Request("http://localhost/api/country/uk/executive/cabinet/defence_secretary/briefing"),
+      { params: Promise.resolve({ code: "uk", positionId: "defence_secretary" }) }
+    );
+    const json = (await response.json()) as Record<string, unknown>;
+
+    expect(json.canView).toBe(true);
+    expect(json.canAct).toBe(false);
   });
 });

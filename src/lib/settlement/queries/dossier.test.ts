@@ -3,7 +3,7 @@ import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockCollection, type MockDb } from "@/lib/test-utils/mockDb";
 import {
   HUNDREDTHS,
-  PERSONAL_NET_CAP,
+  personalNetCapFor,
   LADDER_UNLOCK_TURNS,
   SETTLEMENT_INSTITUTIONS,
   SETTLEMENT_SEATS,
@@ -194,8 +194,8 @@ describe("loadGermanQuestionDossier", () => {
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
     const laender = view!.institutions.find((i) => i.id === "laender")!;
     const aid = laender.plays.find((p) => p.id === "aid")!;
-    expect(aid.costLabel).toContain("45,000,000");
-    expect(aid.costLabel).toContain("1 AP");
+    expect(aid.payments[0].costLabel).toContain("45,000,000");
+    expect(aid.payments[0].costLabel).toContain("1 AP");
   });
 
   it("offers personal plays to a viewer with no seat, and no seat plays", async () => {
@@ -302,14 +302,19 @@ describe("loadGermanQuestionDossier", () => {
     // stamps claim: the card reports what the tick will enforce, and the wire
     // is the side that reports what was already written.
     expect(view!.openFloor.capped).toBe(true);
-    // One decimal, like every other aggregate on the board: 0.75 displays 0.8.
-    // The per-institution meter keeps two, where the cap needs the precision.
-    expect(view!.openFloor.netPoints).toBe(0.8);
+    // One decimal, like every other aggregate on the board; the per-institution
+    // meter keeps two, where the ceiling needs the precision. Forty distinct
+    // characters earn a bigger pool than the eight-person reference.
+    expect(view!.openFloor.netPoints).toBe(
+      Math.round((personalNetCapFor(40) / HUNDREDTHS) * 10) / 10
+    );
   });
 
   it("carries per-institution cap usage below the cap", async () => {
-    // Two letters at basePoints 100: 2 x 100 x 0.25 = 50 hundredths asked for,
-    // under the 75 cap, so usage reads uncapped and equals the ask.
+    // Two letters at basePoints 60: 2 x 60 x 0.25 = 30 hundredths asked for,
+    // under the 38 a two-person crowd earns, so usage reads uncapped and equals
+    // the ask. The magnitude is sized against personalNetCapFor(2) rather than
+    // a flat number, because the ceiling now moves with turnout.
     prime(db, "settlementPlays").find.mockReturnValue(
       cursor(
         Array.from({ length: 2 }, () => ({
@@ -321,7 +326,7 @@ describe("loadGermanQuestionDossier", () => {
           playId: "letter",
           targetInstitutionId: "bundestag",
           direction: -1,
-          basePoints: 100,
+          basePoints: 60,
           appliedPoints: null,
           turn: 412,
           resolvedTurn: null,
@@ -331,9 +336,9 @@ describe("loadGermanQuestionDossier", () => {
     const { loadGermanQuestionDossier } = await import("./dossier");
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
     expect(view!.institutions.find((i) => i.id === "bundestag")!.personalCap).toEqual({
-      rawPoints: -0.5,
-      netPoints: -0.5,
-      capPoints: PERSONAL_NET_CAP / HUNDREDTHS,
+      rawPoints: -0.3,
+      netPoints: -0.3,
+      capPoints: personalNetCapFor(2) / HUNDREDTHS,
       maxed: false,
     });
     // Reachable but untouched this turn: the meter sits at zero rather than
@@ -341,20 +346,24 @@ describe("loadGermanQuestionDossier", () => {
     expect(view!.institutions.find((i) => i.id === "street")!.personalCap).toEqual({
       rawPoints: 0,
       netPoints: 0,
-      capPoints: PERSONAL_NET_CAP / HUNDREDTHS,
+      // Nobody has acted here, so the meter quotes what the FIRST person to
+      // act would earn. A true zero-crowd ceiling of 0.00 would read as "the
+      // floor can never move this".
+      capPoints: personalNetCapFor(1) / HUNDREDTHS,
       maxed: false,
     });
     // The personal tier has no lever here; a meter would imply a limit that
     // never applies.
     expect(view!.institutions.find((i) => i.id === "laender")!.personalCap).toBeNull();
     expect(view!.institutions.find((i) => i.id === "garrison")!.personalCap).toBeNull();
-    expect(view!.openFloor.netPoints).toBe(-0.5);
+    expect(view!.openFloor.netPoints).toBe(-0.3);
   });
 
   it("projects a still-pending batch onto the cap as MAXED", async () => {
     // Nothing is stamped yet mid-turn: appliedPoints are null. The projection
     // has to read the ceiling the tick will enforce, not zero. Four rallies:
-    // 4 x 200 x 0.25 = 200 hundredths asked for, past the 75 cap.
+    // 4 x 200 x 0.25 = 200 hundredths asked for, past the 53 a four-person
+    // crowd earns.
     prime(db, "settlementPlays").find.mockReturnValue(
       cursor(
         Array.from({ length: 4 }, () => ({
@@ -377,23 +386,26 @@ describe("loadGermanQuestionDossier", () => {
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
     expect(view!.institutions.find((i) => i.id === "street")!.personalCap).toMatchObject({
       rawPoints: 2,
-      netPoints: PERSONAL_NET_CAP / HUNDREDTHS,
+      netPoints: personalNetCapFor(4) / HUNDREDTHS,
       maxed: true,
     });
     expect(view!.openFloor.capped).toBe(true);
-    // One-decimal aggregate display: the 0.75 cap reads 0.8 here, while the
-    // card's own meter keeps both decimals.
-    expect(view!.openFloor.netPoints).toBe(0.8);
+    // One decimal on the aggregate, where the card's own meter keeps two: four
+    // participants earn 53 hundredths, which reads 0.5 here. Derived rather
+    // than frozen, so retuning the reference turnout moves this with it.
+    expect(view!.openFloor.netPoints).toBe(
+      Math.round((personalNetCapFor(4) / HUNDREDTHS) * 10) / 10
+    );
   });
 
   it("marks an institution AT the cap as maxed without claiming a throttle", async () => {
-    // Three letters: 3 x 100 x 0.25 = exactly the 75-hundredth cap. Nothing
-    // was scaled away, so `capped` stays strict — but the category sits at its
-    // ceiling and further plays cannot add movement, which is what `maxed`
-    // reports.
+    // Two letters at 76: 2 x 76 x 0.25 = 38, exactly the ceiling a two-person
+    // crowd earns. Nothing was scaled away, so `capped` stays strict — but the
+    // category sits at its ceiling and further plays cannot add movement,
+    // which is what `maxed` reports.
     prime(db, "settlementPlays").find.mockReturnValue(
       cursor(
-        Array.from({ length: 3 }, () => ({
+        Array.from({ length: 2 }, () => ({
           _id: new ObjectId(),
           crisisId: CRISIS_ID,
           actor: "personal",
@@ -402,7 +414,7 @@ describe("loadGermanQuestionDossier", () => {
           playId: "letter",
           targetInstitutionId: "bundestag",
           direction: 1,
-          basePoints: 100,
+          basePoints: 76,
           appliedPoints: null,
           turn: 412,
           resolvedTurn: null,
@@ -412,8 +424,8 @@ describe("loadGermanQuestionDossier", () => {
     const { loadGermanQuestionDossier } = await import("./dossier");
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
     expect(view!.institutions.find((i) => i.id === "bundestag")!.personalCap).toMatchObject({
-      rawPoints: 0.75,
-      netPoints: 0.75,
+      rawPoints: personalNetCapFor(2) / HUNDREDTHS,
+      netPoints: personalNetCapFor(2) / HUNDREDTHS,
       maxed: true,
     });
     expect(view!.openFloor.capped).toBe(false);
@@ -482,7 +494,19 @@ describe("loadGermanQuestionDossier", () => {
       actionsBankCap: 9,
       canAct: true,
     });
-    expect(view!.viewer.seat!.treasuryLabel).toContain("310,000,000");
+    expect(view!.viewer.seat!.treasuryLabel).toBe("M310,000,000 treasury");
+  });
+
+  it("labels a negative treasury as national debt, without a stray minus sign", async () => {
+    // Delegations borrow routinely now, so a seat in the red is the normal
+    // case. `formatLocalFunds` puts the sign after the symbol, which read as
+    // "M-500,000,000 treasury".
+    prime(db, "federalBudget").findOne.mockResolvedValue({ treasuryBalance: -500_000_000 });
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+
+    expect(view!.viewer.seat!.treasuryLabel).toBe("M500,000,000 national debt");
+    expect(view!.viewer.seat!.treasuryLabel).not.toContain("-");
   });
 
   it("denies escalation to a non-authority seat and explains why", async () => {
@@ -652,17 +676,20 @@ describe("loadGermanQuestionDossier", () => {
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
     const street = view!.institutions.find((i) => i.id === "street")!;
     const rally = street.plays.find((p) => p.id === "rally")!;
-    expect(rally.affordable).toBe(false);
-    expect(rally.blockedReason).toBe("funds");
+    expect(rally.payments[0].affordable).toBe(false);
+    expect(rally.payments[0].blockedReason).toBe("funds");
     // A free personal play is still offered.
     const oped = street.plays.find((p) => p.id === "oped")!;
-    expect(oped.affordable).toBe(true);
+    expect(oped.payments[0].affordable).toBe(true);
   });
 
   it("exposes the GDR's settlement-level play outside the institution cards", async () => {
     const { loadGermanQuestionDossier } = await import("./dossier");
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
     expect(view!.settlementPlays.map((p) => p.id)).toEqual(["referendum"]);
+    // The settlement-level list goes through the same builder, so it carries
+    // both routes too — it is rendered by the same card component.
+    expect(view!.settlementPlays[0].payments.map((p) => p.mode)).toEqual(["funds", "capital"]);
   });
   it("carries the source design's rule defaults for a crisis with no rules block", async () => {
     const { loadGermanQuestionDossier } = await import("./dossier");
@@ -769,7 +796,10 @@ describe("loadGermanQuestionDossier", () => {
     expect(floor[0].text).toContain("+6.0");
     expect(floor[0].text).toContain("capped");
     expect(view!.openFloor.rawPoints).toBe(20);
-    expect(view!.openFloor.capPoints).toBe(PERSONAL_NET_CAP / HUNDREDTHS);
+    // The ceiling is the one THIS crowd earned, not a constant: forty distinct
+    // characters on the street, so the pool is bigger than the eight-person
+    // reference it is anchored to.
+    expect(view!.openFloor.capPoints).toBe(personalNetCapFor(40) / HUNDREDTHS);
   });
 
   it("stands the ladder down for every seat when escalation is off", async () => {
@@ -783,5 +813,218 @@ describe("loadGermanQuestionDossier", () => {
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
     expect(view!.viewer.seat).toMatchObject({ canEscalate: false, canArmNow: false });
     expect(view!.viewer.seat!.escalateGate).toContain("switched off");
+  });
+
+  describe("per-character play limit", () => {
+    const personalDoc = (over: Record<string, unknown> = {}) => ({
+      // Distinct per row: the projection keys stamps by _id, so sharing one
+      // would make several rows read the same projected share.
+      _id: new ObjectId(),
+      actor: "personal",
+      seatId: null,
+      characterId,
+      playId: "letter",
+      targetInstitutionId: "bundestag",
+      basePoints: 13,
+      direction: 1,
+      appliedPoints: null,
+      turn: 412,
+      ...over,
+    });
+
+    it("disables a play this character has already used this turn", async () => {
+      prime(db, "settlementPlays").find.mockReturnValue(cursor([personalDoc()]));
+      const { loadGermanQuestionDossier } = await import("./dossier");
+      const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+      const bundestag = view!.institutions.find((i) => i.id === "bundestag")!;
+      const letter = bundestag.plays.find((p) => p.id === "letter")!;
+
+      expect(letter.payments[0].affordable).toBe(false);
+      expect(letter.payments[0].blockedReason).toBe("used");
+    });
+
+    it("leaves a play this character has not used alone", async () => {
+      prime(db, "settlementPlays").find.mockReturnValue(cursor([personalDoc()]));
+      const { loadGermanQuestionDossier } = await import("./dossier");
+      const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+      const street = view!.institutions.find((i) => i.id === "street")!;
+      expect(street.plays.find((p) => p.id === "oped")!.payments[0].affordable).toBe(true);
+    });
+
+    it("does not count another character's use against this one", async () => {
+      prime(db, "settlementPlays").find.mockReturnValue(
+        cursor([personalDoc({ characterId: new ObjectId() })])
+      );
+      const { loadGermanQuestionDossier } = await import("./dossier");
+      const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+      const bundestag = view!.institutions.find((i) => i.id === "bundestag")!;
+      expect(bundestag.plays.find((p) => p.id === "letter")!.payments[0].affordable).toBe(true);
+    });
+
+    it("names the allowance ahead of a money shortfall", async () => {
+      // A play you have already used is unavailable for a reason no amount of
+      // money fixes. Naming funds instead would send a player off to solve the
+      // wrong problem.
+      prime(db, "characters").findOne.mockResolvedValue({
+        _id: characterId,
+        actions: 4,
+        funds: 0,
+        countryId: "DD",
+      });
+      prime(db, "settlementPlays").find.mockReturnValue(cursor([personalDoc()]));
+      const { loadGermanQuestionDossier } = await import("./dossier");
+      const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+      const bundestag = view!.institutions.find((i) => i.id === "bundestag")!;
+      expect(bundestag.plays.find((p) => p.id === "letter")!.payments[0].blockedReason).toBe(
+        "used"
+      );
+    });
+  });
+
+  describe("open floor projection", () => {
+    it("projects what the floor will actually get, not a null-shaped zero", async () => {
+      // `appliedPoints` is null until the turn resolves, so summing it reported
+      // every unresolved turn as "scaled to +0.0" and made the panel claim a
+      // scaling that had not happened.
+      prime(db, "settlementPlays").find.mockReturnValue(
+        cursor([
+          {
+            _id: new ObjectId(),
+            actor: "personal",
+            seatId: null,
+            characterId: new ObjectId(),
+            playId: "oped",
+            targetInstitutionId: "street",
+            basePoints: 60,
+            direction: 1,
+            appliedPoints: null,
+            turn: 412,
+          },
+          {
+            _id: new ObjectId(),
+            actor: "personal",
+            seatId: null,
+            characterId: new ObjectId(),
+            playId: "oped",
+            targetInstitutionId: "street",
+            basePoints: 60,
+            direction: 1,
+            appliedPoints: null,
+            turn: 412,
+          },
+        ])
+      );
+      const { loadGermanQuestionDossier } = await import("./dossier");
+      const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+
+      // Two characters at 15 hundredths each, against a two-person pool of 38.
+      expect(view!.openFloor.netPoints).toBeCloseTo(0.3, 1);
+      expect(view!.openFloor.capped).toBe(false);
+    });
+
+    it("reports the ceiling this turn's turnout actually earned", async () => {
+      prime(db, "settlementPlays").find.mockReturnValue(
+        cursor(
+          Array.from({ length: 8 }, () => ({
+            _id: new ObjectId(),
+            actor: "personal",
+            seatId: null,
+            characterId: new ObjectId(),
+            playId: "rally",
+            targetInstitutionId: "street",
+            basePoints: 200,
+            direction: 1,
+            appliedPoints: null,
+            turn: 412,
+          }))
+        )
+      );
+      const { loadGermanQuestionDossier } = await import("./dossier");
+      const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+
+      // Eight participants is the reference turnout, so the pool is the base:
+      // 75 hundredths, which the panel then renders as 0.8.
+      expect(view!.openFloor.capPoints).toBeCloseTo(0.75, 2);
+      expect(view!.openFloor.capped).toBe(true);
+    });
+  });
+
+  describe("payment routes", () => {
+    const playOn = async (institutionId: string, playId: string) => {
+      const { loadGermanQuestionDossier } = await import("./dossier");
+      const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+      return view!.institutions
+        .find((i) => i.id === institutionId)!
+        .plays.find((p) => p.id === playId)!;
+    };
+
+    it("offers both payment routes on a treasury-funded seat play", async () => {
+      const border = await playOn("street", "border");
+      expect(border.payments.map((p) => p.mode)).toEqual(["funds", "capital"]);
+      // border: 14 base capital + round(8.0 points x k=4) = 46
+      expect(border.payments[1].costLabel).toContain("46 capital");
+    });
+
+    it("offers one route on a play the treasury never pays for", async () => {
+      // `terms` is capital-only already. A second button would be the same
+      // thing at a worse price.
+      const terms = await playOn("bundestag", "terms");
+      expect(terms.payments).toHaveLength(1);
+      expect(terms.payments[0].mode).toBe("funds");
+    });
+
+    it("offers one route on a personal play", async () => {
+      const letter = await playOn("bundestag", "letter");
+      expect(letter.payments).toHaveLength(1);
+      expect(letter.payments[0].mode).toBe("funds");
+    });
+
+    it("names the borrowing when the cash route would run into debt", async () => {
+      // Spending into debt is allowed now, so the cash button is ALWAYS live.
+      // This note is the only thing left telling a player they are taking a
+      // loan rather than spending savings.
+      prime(db, "federalBudget").findOne.mockResolvedValue({ treasuryBalance: 2_000_000 });
+      const border = await playOn("street", "border");
+
+      expect(border.payments[0].affordable).toBe(true);
+      // ℳ12M against a ℳ2M balance: ℳ10M of it is new debt.
+      expect(border.payments[0].debtNote).toContain("10,000,000");
+      expect(border.payments[1].debtNote).toBeNull();
+    });
+
+    it("leaves the debt note off when the treasury covers the play", async () => {
+      const border = await playOn("street", "border");
+      expect(border.payments[0].debtNote).toBeNull();
+    });
+
+    it("counts only the NEW debt when the treasury is already negative", async () => {
+      // `treasuryBalance` is signed, so `fundsCost - balance` would count the
+      // debt a country already carries as though this play created it: at
+      // -ℳ500M a ℳ12M play would read as adding ℳ512M. It adds ℳ12M.
+      prime(db, "federalBudget").findOne.mockResolvedValue({ treasuryBalance: -500_000_000 });
+      const border = await playOn("street", "border");
+
+      expect(border.payments[0].debtNote).toContain("12");
+      expect(border.payments[0].debtNote).not.toContain("512");
+    });
+
+    it("gates the capital route on capital alone, never on the treasury", async () => {
+      // A seat deep in debt still has a live capital button. That is the whole
+      // point of the route. `aid` prices at 16 capital, inside the seat's 30;
+      // `border` at 46 would be refused for want of capital and prove nothing
+      // about the treasury.
+      prime(db, "federalBudget").findOne.mockResolvedValue({ treasuryBalance: -900_000_000 });
+      const aid = await playOn("laender", "aid");
+      expect(aid.payments[1].affordable).toBe(true);
+      expect(aid.payments[1].blockedReason).toBeNull();
+    });
+
+    it("still refuses a capital route the seat cannot afford in capital", async () => {
+      // The route removes the treasury as a gate, not capital. `border` prices
+      // at 46 against a 30-point bank.
+      const border = await playOn("street", "border");
+      expect(border.payments[1].affordable).toBe(false);
+      expect(border.payments[1].blockedReason).toBe("capital");
+    });
   });
 });

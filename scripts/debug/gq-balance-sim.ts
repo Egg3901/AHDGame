@@ -28,7 +28,9 @@ import {
   SETTLEMENT_INSTITUTIONS,
   SETTLEMENT_PLAYS,
   TOTAL_INSTITUTION_WEIGHT,
+  getPlay,
   getSeat,
+  personalNetCapFor,
   seatActionBankCap,
   type SettlementPlayDef,
   type SettlementSeatKey,
@@ -40,6 +42,7 @@ import { driftSeedFor, rollInstitutionDrift } from "../../src/lib/settlement/dri
 import { resolvePlayBatch } from "../../src/lib/settlement/resolvePlays";
 import { nextHeat, outcomeFor } from "../../src/lib/settlement/outcome";
 import { makeSeededRng } from "../../src/lib/events/substrate/rng";
+import { capitalPriceFor } from "../../src/lib/settlement/capitalPrice";
 
 /**
  * 480 turns — ten in-game years at 48 turns to the year.
@@ -70,7 +73,16 @@ interface SeatRuntime {
   capital: number;
   /** Unspent action points carried forward, when banking is enabled. */
   bankedAp: number;
+  /**
+   * Signed national cash position, seeded from OPENING_TREASURY. GOES NEGATIVE:
+   * that is national debt, exactly as the shipped `commitPlay` allows. A floor,
+   * not an economy — no national income is modelled here, because that figure
+   * lives in the budget engine and a copy would go stale.
+   */
+  treasury: number;
   spent: number;
+  /** Plays bought with political capital because cash would have borrowed. */
+  capitalRouteCount: number;
   committed: number;
   playCount: number;
   playsUsed: Set<string>;
@@ -103,6 +115,19 @@ interface Scenario {
   apOverride?: Partial<Record<SettlementSeatKey, number>>;
   /** What-if: reprice play magnitudes (playId → hundredths). */
   magnitudeOverride?: Record<string, number>;
+  /**
+   * Seats refuse to run the treasury negative, buying with political capital
+   * instead once cash runs short.
+   *
+   * OFF by default, because borrowing without limit is what the game actually
+   * permits: `commitPlay` has no balance guard and `spendFromTreasury` books
+   * the shortfall as national debt. Turning it on models a POLICY, not a rule —
+   * a delegation that will not indebt its country — and it is the only way to
+   * see the capital payment route exercised, since this sim models none of
+   * debt's consequences (interest, credit rating, debt-to-GDP) and so an
+   * in-sim borrower is strictly better off than one who pays capital.
+   */
+  noBorrow?: boolean;
 }
 
 /**
@@ -163,13 +188,15 @@ function planSeatTurn(
   prefersCoercive: boolean,
   institutions: readonly SettlementInstitutionState[],
   apPerTurn: number,
-  catalogue: SettlementPlayDef[]
+  catalogue: SettlementPlayDef[],
+  noBorrow: boolean
 ): { plays: SettlementPlayDef[]; apLeft: number } {
   const def = getSeat(seat.id)!;
   // AP is a BANK, exactly as the shipped `accrue` treats it: this turn's grant
   // on top of whatever went unspent.
   let ap = apPerTurn + seat.bankedAp;
   let capital = seat.capital;
+  let treasury = seat.treasury;
   const chosen: SettlementPlayDef[] = [];
   const direction = directionOf(seat.id);
 
@@ -177,10 +204,27 @@ function planSeatTurn(
   // few points of headroom on the same institution.
   const projected = institutions.map((i) => ({ ...i }));
 
+  /**
+   * Price a play the way this seat's policy would buy it.
+   *
+   * Under `noBorrow` a play the cash on hand cannot cover switches to the
+   * political-capital route. Without it the seat simply borrows, which is what
+   * the shipped command allows, and the treasury goes negative.
+   *
+   * Repriced INSIDE the loop, because three plays in one turn can take the
+   * treasury through zero. Returning a repriced def rather than a wrapper lets
+   * the whole save-rather-than-settle algorithm below run unchanged on
+   * `capitalCost`.
+   */
+  const priced = (p: SettlementPlayDef): SettlementPlayDef =>
+    noBorrow && p.fundsCost > 0 && p.fundsCost > treasury
+      ? { ...p, capitalCost: capitalPriceFor(p), fundsCost: 0 }
+      : p;
+
   for (;;) {
-    const reachable = catalogue.filter(
-      (p) => p.actionCost <= ap && headroom(projected, p.target, direction) > 50
-    );
+    const reachable = catalogue
+      .filter((p) => p.actionCost <= ap && headroom(projected, p.target, direction) > 50)
+      .map(priced);
     const affordable = reachable.filter((p) => p.capitalCost <= capital);
     if (affordable.length === 0) break;
 
@@ -212,6 +256,7 @@ function planSeatTurn(
       const freePick = free[0];
       chosen.push(freePick);
       ap -= freePick.actionCost;
+      treasury -= freePick.fundsCost;
       const appliedFree = Math.round((freePick.magnitude * def.multiplierPct) / 100) * direction;
       if (freePick.target === null) {
         for (const q of projected) q.position += appliedFree;
@@ -224,6 +269,7 @@ function planSeatTurn(
     chosen.push(pick);
     ap -= pick.actionCost;
     capital -= pick.capitalCost;
+    treasury -= pick.fundsCost;
 
     const applied = Math.round((pick.magnitude * def.multiplierPct) / 100) * direction;
     if (pick.target === null) {
@@ -292,7 +338,9 @@ function run(scenario: Scenario): Result {
       id: key,
       capital: OPENING_CAPITAL[key],
       bankedAp: 0,
+      treasury: OPENING_TREASURY[key].amount,
       spent: 0,
+      capitalRouteCount: 0,
       committed: 0,
       playCount: 0,
       playsUsed: new Set(),
@@ -339,12 +387,21 @@ function run(scenario: Scenario): Result {
         coercive.has(key),
         institutions,
         apPerTurn,
-        repricedCatalogue(key, scenario.magnitudeOverride)
+        repricedCatalogue(key, scenario.magnitudeOverride),
+        scenario.noBorrow ?? false
       );
       for (const def of plays) {
         docs.push(toPlayDoc(def, key, directionOf(key), turn));
         seat.capital -= def.capitalCost;
+        // Signed: this is allowed to go negative, and that is national debt.
+        seat.treasury -= def.fundsCost;
         seat.spent += def.fundsCost;
+        // `planSeatTurn` zeroes `fundsCost` on a play it rerouted to capital,
+        // so a play the catalogue charges money for that arrives here free was
+        // bought with political capital instead.
+        if (def.fundsCost === 0 && (getPlay(def.id)?.fundsCost ?? 0) > 0) {
+          seat.capitalRouteCount++;
+        }
         seat.playCount++;
         seat.playsUsed.add(def.id);
         seat.playTally.set(def.id, (seat.playTally.get(def.id) ?? 0) + 1);
@@ -510,6 +567,26 @@ const SCENARIOS: Scenario[] = [
     active: ["US", "UK", "RU", "DD"],
     coercive: ["US", "RU", "DD"],
   },
+
+  // ── The capital payment route. ────────────────────────────────────────────
+  //
+  //    These are the ONLY runs where it is exercised. Everywhere else the seats
+  //    borrow, because this sim models no consequence of debt and so an in-sim
+  //    borrower is strictly better off than one who spends political capital.
+  //    Read them against A and B, which are the same seats with the same effort
+  //    and the borrowing left on.
+  {
+    name: "E. Western coalition, debt-averse",
+    blurb: "As A, but US and UK buy with political capital rather than borrow.",
+    active: ["US", "UK"],
+    noBorrow: true,
+  },
+  {
+    name: "F. Eastern coalition, debt-averse",
+    blurb: "As B, but the GDR and Moscow buy with political capital rather than borrow.",
+    active: ["DD", "RU"],
+    noBorrow: true,
+  },
 ];
 
 const pts = (h: number) => (h / HUNDREDTHS).toFixed(1);
@@ -541,9 +618,16 @@ for (const scenario of selected) {
       (r.armedTurns ? `, armed for ${r.armedTurns} turns` : ", never armed")
   );
   if (scenario.personalCount) {
+    // The ceiling is no longer a constant, so the raw peak alone no longer says
+    // whether the cap bit. Print what this turnout actually earned. Plays cycle
+    // through the personal catalogue, so roughly two thirds of them land on the
+    // street and the rest on the Bundestag — the street's crowd, and therefore
+    // its pool, is the larger of the two.
+    const streetCrowd = Math.round((scenario.personalCount * 2) / 3);
     console.log(
       `   public: peak raw ${pts(r.personalRawPeak)} on one institution, ` +
-        `capped on ${r.personalCappedTurns}/${r.turns} turns`
+        `capped on ${r.personalCappedTurns}/${r.turns} turns` +
+        `  (~${streetCrowd} on the street earn a pool of ${pts(personalNetCapFor(streetCrowd))})`
     );
   }
   for (const seat of r.seats) {
@@ -563,6 +647,17 @@ for (const scenario of selected) {
         `  capital left ${String(seat.capital).padStart(2)}` +
         `  spend/turn ${(seat.spent / r.turns / 1e6).toFixed(1).padStart(6)}M` +
         `  exhausts ${open.label} in ${burnTurns} turns`
+    );
+    // The treasury is signed, so a negative close IS the national debt this
+    // seat ran up over the game. Nothing brakes it, which is the finding to
+    // watch, not a bug.
+    const close = seat.treasury;
+    const capitalShare =
+      seat.playCount > 0 ? Math.round((seat.capitalRouteCount / seat.playCount) * 100) : 0;
+    console.log(
+      `       closes ${close < 0 ? "IN DEBT " : "in hand "}` +
+        `${(Math.abs(close) / 1e6).toFixed(1).padStart(8)}M` +
+        `   capital route ${String(seat.capitalRouteCount).padStart(4)}/${seat.playCount} plays (${capitalShare}%)`
     );
     if (unreachable.length > 0) {
       console.log(

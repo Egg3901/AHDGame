@@ -23,23 +23,33 @@ interface PlayButtonProps {
 const REASON_COPY: Record<string, string> = {
   actions: "No action points left this turn.",
   capital: "Not enough capital banked.",
-  funds: "The treasury cannot cover this.",
+  // Reachable from the PERSONAL tier only. A delegation is never short of
+  // money: a nation spends into debt, so `canSeatAfford` does not consult the
+  // treasury at all.
+  funds: "Not enough campaign funds.",
   "no-direction": "Your country belongs to neither bloc.",
+  // Names WHEN it comes back. A dead button with no stated horizon reads as
+  // permanently broken rather than as an allowance that refills.
+  used: "You have already used this play this turn. It resets next turn.",
 };
+
+const copyFor = (reason: string | null) => (reason ? (REASON_COPY[reason] ?? reason) : null);
 
 export function PlayButton({ play, onCommitted }: PlayButtonProps) {
   const actor = play.actor;
-  const [pending, setPending] = useState(false);
+  // The MODE in flight rather than a flag, so one route's spinner does not
+  // freeze the other.
+  const [pending, setPending] = useState<"funds" | "capital" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const commit = async (direction?: 1 | -1) => {
-    setPending(true);
+  const commit = async (payment: "funds" | "capital", direction?: 1 | -1) => {
+    setPending(payment);
     setError(null);
     try {
       const res = await fetch("/api/world/german-question/play", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ actor, playId: play.id, direction }),
+        body: JSON.stringify({ actor, playId: play.id, direction, payment }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -50,13 +60,21 @@ export function PlayButton({ play, onCommitted }: PlayButtonProps) {
     } catch {
       setError("The play could not be sent. Check your connection and try again.");
     } finally {
-      setPending(false);
+      setPending(null);
     }
   };
 
-  const disabled = pending || !play.affordable;
-  const blockedCopy = play.blockedReason
-    ? (REASON_COPY[play.blockedReason] ?? play.blockedReason)
+  // A personal play has exactly one route; its two buttons choose a SIDE, not a
+  // budget.
+  const personalRoute = play.payments[0];
+  // Only when EVERY route is blocked. With two routes, one being unaffordable
+  // is not a reason the play is unavailable — it is a reason to use the other
+  // one, and a standalone "Not enough capital banked" under a live treasury
+  // button reads as though the whole play were dead. Each button carries its
+  // own reason in its title.
+  const allBlocked = play.payments.every((p) => !p.affordable);
+  const blockedCopy = allBlocked
+    ? copyFor(play.payments.find((p) => p.blockedReason)?.blockedReason ?? null)
     : null;
   const swingTone = play.effectivePoints >= 0 ? "text-error" : "text-info";
   const tagTone = play.danger ? "text-warning" : "text-muted";
@@ -65,12 +83,22 @@ export function PlayButton({ play, onCommitted }: PlayButtonProps) {
     <div className="flex flex-col gap-1">
       <div
         className={`flex w-full items-center gap-2.5 rounded-md border border-card-border bg-foreground/[0.02] px-3 py-2.5 ${
-          disabled ? "opacity-55" : ""
+          allBlocked ? "opacity-55" : ""
         }`}
       >
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="truncate text-body-sm font-semibold text-foreground">{play.name}</span>
-          <span className="font-mono text-body-xs text-muted">{play.costLabel}</span>
+          {/*
+            One price line per route. The label prefix only appears when there
+            is a choice to make; on a single-route play it would be noise.
+          */}
+          {play.payments.map((p) => (
+            <span key={p.mode} className="font-mono text-body-xs text-muted">
+              {play.payments.length > 1 ? `${p.label}: ` : ""}
+              {p.costLabel}
+              {p.debtNote ? <span className="text-warning"> · {p.debtNote}</span> : null}
+            </span>
+          ))}
         </span>
         <span className="flex shrink-0 flex-col items-end gap-0.5 text-right">
           <span className={`font-mono text-body-sm font-bold ${swingTone}`}>
@@ -91,8 +119,8 @@ export function PlayButton({ play, onCommitted }: PlayButtonProps) {
             <>
               <button
                 type="button"
-                disabled={disabled}
-                onClick={() => void commit(-1)}
+                disabled={pending !== null || !personalRoute?.affordable}
+                onClick={() => void commit("funds", -1)}
                 className="min-h-11 min-w-16 rounded border border-info/40 px-3 font-mono text-body-xs text-info hover:bg-info/10 disabled:cursor-not-allowed disabled:opacity-50"
                 title={blockedCopy ?? "Push toward NATO"}
               >
@@ -100,8 +128,8 @@ export function PlayButton({ play, onCommitted }: PlayButtonProps) {
               </button>
               <button
                 type="button"
-                disabled={disabled}
-                onClick={() => void commit(1)}
+                disabled={pending !== null || !personalRoute?.affordable}
+                onClick={() => void commit("funds", 1)}
                 className="min-h-11 min-w-16 rounded border border-error/40 px-3 font-mono text-body-xs text-error hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-50"
                 title={blockedCopy ?? "Push toward reunification"}
               >
@@ -109,22 +137,23 @@ export function PlayButton({ play, onCommitted }: PlayButtonProps) {
               </button>
             </>
           ) : (
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => void commit()}
-              className="min-h-11 rounded border border-gold/40 px-3 font-mono text-body-xs text-gold hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
-              title={blockedCopy ?? play.detail}
-            >
-              {pending ? "COMMITTING…" : "COMMIT"}
-            </button>
+            play.payments.map((p) => (
+              <button
+                key={p.mode}
+                type="button"
+                disabled={pending !== null || !p.affordable}
+                onClick={() => void commit(p.mode)}
+                className="min-h-11 rounded border border-gold/40 px-3 font-mono text-body-xs text-gold hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
+                title={copyFor(p.blockedReason) ?? p.debtNote ?? play.detail}
+              >
+                {pending === p.mode ? "…" : play.payments.length > 1 ? p.label : "COMMIT"}
+              </button>
+            ))
           )}
         </span>
       </div>
 
-      {blockedCopy && !play.affordable && (
-        <p className="pl-1 font-mono text-body-xs text-muted">{blockedCopy}</p>
-      )}
+      {blockedCopy && <p className="pl-1 font-mono text-body-xs text-muted">{blockedCopy}</p>}
       {error && (
         <p role="alert" className="pl-1 font-mono text-body-xs text-error">
           {error}

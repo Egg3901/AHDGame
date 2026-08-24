@@ -87,13 +87,16 @@ describe("launchGovernmentProspect", () => {
     expect(treasury.spendFromTreasury).not.toHaveBeenCalled();
   });
 
-  it("rejects a national survey the treasury cannot cover", async () => {
+  it("funds a national survey even when the treasury is already in debt", async () => {
+    // Same defect the German Question carried, inherited from this file: a
+    // negative `treasuryBalance` IS the national debt, so `balance < cost`
+    // refused every survey for an indebted country. `spendFromTreasury` is built
+    // to borrow — it splits the spend into fromSurplus and addedToDebt.
     vi.mocked(issuerAuth.isNationalIssuer).mockResolvedValue(true);
-    db.collectionMocks.federalBudget.findOne.mockResolvedValue({ treasuryBalance: 100_000 });
+    db.collectionMocks.federalBudget.findOne.mockResolvedValue({ treasuryBalance: -1_000_000 });
     const res = await run(db, "national");
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.status).toBe(402);
-    expect(treasury.spendFromTreasury).not.toHaveBeenCalled();
+    expect(res.ok).toBe(true);
+    expect(treasury.spendFromTreasury).toHaveBeenCalledWith(expect.anything(), "US", 500_000);
   });
 
   it("commissions a state survey by spending an action point and booking the cost", async () => {

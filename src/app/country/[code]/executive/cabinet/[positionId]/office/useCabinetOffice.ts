@@ -37,7 +37,8 @@ export interface CabinetOfficeData {
     characterId: string;
     characterName: string;
     party: string | null;
-    ministerialActions: number;
+    /** Absent on a withheld office: the server does not send it to outsiders. */
+    ministerialActions?: number;
     bannerImageUrl: string | null;
   } | null;
   currentSettings: {
@@ -82,6 +83,22 @@ export interface CabinetOfficeData {
     chancellorAllocationPercent: number | null;
   }>;
   canAct: boolean;
+  /**
+   * Whether the viewer may read this office at all — the seated holder, their
+   * country's head of government or head of state, or an admin.
+   *
+   * The server is the enforcement point: a withheld office arrives as a
+   * letterhead plus `restriction`, with every departmental field absent. Checked
+   * as `=== false` so a payload from a pre-gate server mid-deploy renders the
+   * way it does today rather than blacking out every office at once.
+   */
+  canView?: boolean;
+  /** Present only on a withheld office; names who may read it instead. */
+  restriction?: {
+    /** Bare office titles, head of government first. */
+    allowedTitles: string[];
+    countryName: string;
+  };
   /**
    * gameConfig.prospectingEnabled — gates the Treasury-tab "Fund Geological
    * Survey" action. Assumed attached to this response following the same
