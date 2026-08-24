@@ -77,6 +77,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         partyId,
         election,
         now: new Date(),
+        partyAbbreviation: party.abbreviation ?? null,
       }));
 
     if (!slate) {

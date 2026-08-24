@@ -347,6 +347,193 @@ describe("materializeSlateAssignmentsFromTemplate", () => {
     expect(clonedRows[0].respondedAt).toBeNull();
   });
 
+  it("does not carry template rows into a region the party cannot contest (ticket #1181)", async () => {
+    // A pre-rule LON slate for Plaid Cymru must not resurrect onto a fresh LON
+    // race — the filing pass would just withdraw those rows every cycle.
+    const previousElectionId = new ObjectId();
+    const currentElectionId = new ObjectId();
+    const welshNpp = makeNpp({ homeState: "LON", countryId: "UK", party: "4" });
+
+    const previousSlate: RecruitmentSlate = {
+      _id: new ObjectId(),
+      countryId: "UK",
+      partyId: "4",
+      electionId: previousElectionId,
+      state: "LON",
+      electionType: "commons",
+      priority: "none",
+      archivedAt: new Date(),
+      createdBy: null,
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+      updatedAt: new Date("2026-01-02T00:00:00Z"),
+    };
+
+    const db = buildDb({
+      recruitmentSlates: [previousSlate],
+      slateCandidates: [
+        {
+          _id: new ObjectId(),
+          slateId: previousSlate._id,
+          electionId: previousElectionId,
+          partyId: "4",
+          countryId: "UK",
+          candidateType: "npp",
+          candidateId: welshNpp._id,
+          candidateName: welshNpp.name,
+          homeState: welshNpp.homeState,
+          status: "filed",
+          fitScore: 80,
+          refusalReason: null,
+          autoFilled: false,
+          invitedAt: new Date(),
+          respondedAt: new Date(),
+          filedAt: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as SlateCandidate,
+      ],
+      elections: [
+        {
+          _id: previousElectionId,
+          countryId: "UK",
+          electionType: "commons",
+          state: "LON",
+          cycle: 5,
+          status: "resolved",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as Election,
+        {
+          _id: currentElectionId,
+          countryId: "UK",
+          electionType: "commons",
+          state: "LON",
+          cycle: 6,
+          status: "active",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as Election,
+      ],
+      npps: [welshNpp],
+      characters: [],
+    });
+
+    await materializeSlateAssignmentsFromTemplate({
+      db,
+      countryId: "UK",
+      partyId: "4",
+      election: {
+        _id: currentElectionId,
+        countryId: "UK",
+        electionType: "commons",
+        state: "LON",
+        cycle: 6,
+      } as Election,
+      now: new Date("2026-04-27T12:00:00Z"),
+      partyAbbreviation: "PC",
+    });
+
+    const clonedRows = (await (db.collection("slateCandidates") as ReturnType<Db["collection"]>)
+      .find({
+        electionId: currentElectionId,
+      })
+      .toArray()) as SlateCandidate[];
+    expect(clonedRows).toHaveLength(0);
+  });
+
+  it("carries template rows into a region the party can contest when the abbreviation is supplied", async () => {
+    const previousElectionId = new ObjectId();
+    const currentElectionId = new ObjectId();
+    const welshNpp = makeNpp({ homeState: "WAL", countryId: "UK", party: "4" });
+
+    const previousSlate: RecruitmentSlate = {
+      _id: new ObjectId(),
+      countryId: "UK",
+      partyId: "4",
+      electionId: previousElectionId,
+      state: "WAL",
+      electionType: "commons",
+      priority: "none",
+      archivedAt: new Date(),
+      createdBy: null,
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+      updatedAt: new Date("2026-01-02T00:00:00Z"),
+    };
+
+    const db = buildDb({
+      recruitmentSlates: [previousSlate],
+      slateCandidates: [
+        {
+          _id: new ObjectId(),
+          slateId: previousSlate._id,
+          electionId: previousElectionId,
+          partyId: "4",
+          countryId: "UK",
+          candidateType: "npp",
+          candidateId: welshNpp._id,
+          candidateName: welshNpp.name,
+          homeState: welshNpp.homeState,
+          status: "filed",
+          fitScore: 80,
+          refusalReason: null,
+          autoFilled: false,
+          invitedAt: new Date(),
+          respondedAt: new Date(),
+          filedAt: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as SlateCandidate,
+      ],
+      elections: [
+        {
+          _id: previousElectionId,
+          countryId: "UK",
+          electionType: "commons",
+          state: "WAL",
+          cycle: 5,
+          status: "resolved",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as Election,
+        {
+          _id: currentElectionId,
+          countryId: "UK",
+          electionType: "commons",
+          state: "WAL",
+          cycle: 6,
+          status: "active",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as Election,
+      ],
+      npps: [welshNpp],
+      characters: [],
+    });
+
+    await materializeSlateAssignmentsFromTemplate({
+      db,
+      countryId: "UK",
+      partyId: "4",
+      election: {
+        _id: currentElectionId,
+        countryId: "UK",
+        electionType: "commons",
+        state: "WAL",
+        cycle: 6,
+      } as Election,
+      now: new Date("2026-04-27T12:00:00Z"),
+      partyAbbreviation: "PC",
+    });
+
+    const clonedRows = (await (db.collection("slateCandidates") as ReturnType<Db["collection"]>)
+      .find({
+        electionId: currentElectionId,
+      })
+      .toArray()) as SlateCandidate[];
+    expect(clonedRows).toHaveLength(1);
+    expect(clonedRows[0].status).toBe("invited");
+  });
+
   it("does not carry senate-class slate assignments across different classes", async () => {
     const classOneElectionId = new ObjectId();
     const classThreeElectionId = new ObjectId();

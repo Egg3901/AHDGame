@@ -164,6 +164,7 @@ export async function syncPersistentSlateAssignments(ctx: NPPContext): Promise<n
       election,
       now,
       knownEmptySlate: existing,
+      partyAbbreviation: party.abbreviation ?? null,
     });
     if (slate) materialized += 1;
   }
@@ -440,6 +441,34 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
         filed += 1;
         continue;
       }
+
+      const activeSamePartyNpps = (candidatesByElection.get(election._id.toString()) ?? []).filter(
+        (candidate) =>
+          candidate.party === row.partyId &&
+          candidate.status === "active" &&
+          candidate.isNPP === true
+      );
+      const activeIncumbents = activeSamePartyNpps.filter((candidate) =>
+        candidate.nppId ? isIncumbentForElection(ctx, candidate.nppId.toString(), election) : false
+      );
+      const activeChallengers = activeSamePartyNpps.length - activeIncumbents.length;
+
+      // Slate may create one same-party challenger alongside a defending
+      // incumbent, but should not keep stacking extra same-party Slate NPPs once
+      // that challenger slot is already occupied.
+      //
+      // This capacity check MUST run before the move below withdraws the NPP's
+      // existing candidacy in another race — otherwise a skipped row still
+      // pulls the NPP out of the race they hold, leaving them running nowhere
+      // (ticket #1181).
+      if (
+        activeChallengers > 0 ||
+        (activeIncumbents.length === 0 && activeSamePartyNpps.length > 0)
+      ) {
+        queueSkipped(row);
+        continue;
+      }
+
       if (activeCandidacy && activeCandidacy.electionId.toString() !== election._id.toString()) {
         // Slate assignments are chair-issued reassignment orders. When an NPP is
         // already filed elsewhere, the next filing pass moves them out of the
@@ -465,28 +494,6 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
           oldCandidate.withdrawnAt = now;
         }
         ctx.nppCandidacies.delete(row.candidateId.toString());
-      }
-
-      const activeSamePartyNpps = (candidatesByElection.get(election._id.toString()) ?? []).filter(
-        (candidate) =>
-          candidate.party === row.partyId &&
-          candidate.status === "active" &&
-          candidate.isNPP === true
-      );
-      const activeIncumbents = activeSamePartyNpps.filter((candidate) =>
-        candidate.nppId ? isIncumbentForElection(ctx, candidate.nppId.toString(), election) : false
-      );
-      const activeChallengers = activeSamePartyNpps.length - activeIncumbents.length;
-
-      // Slate may create one same-party challenger alongside a defending
-      // incumbent, but should not keep stacking extra same-party Slate NPPs once
-      // that challenger slot is already occupied.
-      if (
-        activeChallengers > 0 ||
-        (activeIncumbents.length === 0 && activeSamePartyNpps.length > 0)
-      ) {
-        queueSkipped(row);
-        continue;
       }
 
       const candidateDoc: Omit<ElectionCandidate, "_id"> = {

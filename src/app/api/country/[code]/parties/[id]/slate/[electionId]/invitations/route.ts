@@ -14,6 +14,7 @@ import { computeSlateAssignmentScore, isNppSlateCompliant } from "@/lib/slateAss
 import type { Character, Election, NPP, SlateCandidate } from "@/lib/db/types";
 import { getSlateAcceptanceStatBonus, resolveSlateAuthority } from "@/lib/slateAuthority";
 import { getPartyNppControlStatus } from "@/lib/parties/antiAbuseGuards";
+import { canPartyContestState } from "@/lib/parties/regionalContest";
 import { findBlockingActiveCandidacy } from "@/lib/elections/activeCandidacy";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { isPrimaryClosed } from "@/lib/elections/electionDeadlineFilters";
@@ -91,6 +92,24 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (election.electionType === "president") {
       return NextResponse.json(
         { error: "Presidential races do not use the slate assignment board." },
+        { status: 400 }
+      );
+    }
+    // Regional parties (SNP, Plaid Cymru, DUP, Sinn Fein, UUP) only contest
+    // their home nation. The filing pass enforces this at turn time
+    // (fileAcceptedSlateRows), which silently flipped accepted rows to
+    // withdrawn — invisible on the slate board (ticket #1181). Reject the
+    // assignment up front so the chair sees why instead.
+    if (
+      election.state &&
+      !canPartyContestState({
+        countryId,
+        abbreviation: party.abbreviation,
+        stateId: election.state,
+      })
+    ) {
+      return NextResponse.json(
+        { error: `${party.name} only contests elections in its home nation.` },
         { status: 400 }
       );
     }

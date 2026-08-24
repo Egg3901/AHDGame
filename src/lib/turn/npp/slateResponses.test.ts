@@ -970,6 +970,101 @@ describe("fileAcceptedSlateRows", () => {
     expect(candidatesByElection.get(electionId.toString())).toHaveLength(1);
   });
 
+  it("keeps the NPP's existing candidacy when the slate row is skipped for slot capacity (ticket #1181)", async () => {
+    // Chair moves an NPP into a race whose challenger slot is already taken.
+    // The row is skipped, but the NPP must NOT be pulled out of the race they
+    // currently hold — previously the move ran before the capacity check,
+    // leaving them running nowhere.
+    const electionId = new ObjectId();
+    const oldElectionId = new ObjectId();
+    const election: Election = {
+      _id: electionId,
+      electionType: "house",
+      state: "US_CA",
+      countryId: "US",
+      cycle: 1,
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Election;
+
+    const slatedNpp = makeNPP({ name: "Slated Challenger" });
+    const activeChallenger = makeNPP({ name: "Active Slate Challenger" });
+
+    const candidateRow: SlateCandidate = {
+      _id: new ObjectId(),
+      slateId: new ObjectId(),
+      electionId,
+      partyId: "1",
+      countryId: "US",
+      candidateType: "npp",
+      candidateId: slatedNpp._id,
+      candidateName: slatedNpp.name,
+      homeState: slatedNpp.homeState,
+      status: "accepted",
+      fitScore: 90,
+      refusalReason: null,
+      autoFilled: false,
+      invitedAt: new Date(),
+      respondedAt: new Date(),
+      filedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const heldCandidacy: ElectionCandidate = {
+      _id: new ObjectId(),
+      electionId: oldElectionId,
+      characterId: slatedNpp._id,
+      characterName: slatedNpp.name,
+      party: "1",
+      status: "active",
+      isNPP: true,
+      nppId: slatedNpp._id,
+      enteredAt: new Date(),
+    };
+
+    const slotChallenger: ElectionCandidate = {
+      _id: new ObjectId(),
+      electionId,
+      characterId: activeChallenger._id,
+      characterName: activeChallenger.name,
+      party: "1",
+      status: "active",
+      isNPP: true,
+      nppId: activeChallenger._id,
+      enteredAt: new Date(),
+    };
+
+    const inserted: ElectionCandidate[] = [heldCandidacy, slotChallenger];
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: [candidateRow],
+      nppRelationships: [],
+      elections: [election],
+      electionCandidates: inserted,
+    });
+
+    const candidatesByElection = new Map<string, ElectionCandidate[]>([
+      [electionId.toString(), [slotChallenger]],
+      [oldElectionId.toString(), [heldCandidacy]],
+    ]);
+    const summary = await fileAcceptedSlateRows(
+      makeCtx(db, [slatedNpp, activeChallenger], {
+        candidatesByElection,
+        nppCandidacies: new Set([slatedNpp._id.toString(), activeChallenger._id.toString()]),
+      })
+    );
+
+    // Row still terminates as withdrawn (capacity rule), but the NPP's live
+    // candidacy elsewhere is untouched.
+    expect(summary.filed).toBe(0);
+    expect(summary.skipped).toBe(1);
+    expect(inserted).toHaveLength(2);
+    expect(heldCandidacy.status).toBe("active");
+    expect(candidatesByElection.get(oldElectionId.toString())?.[0].status).toBe("active");
+  });
+
   it("isolates a row whose insert throws so the rest of the pass still files", async () => {
     const poisonNpp = makeNPP({ name: "DUPKEY_NPC" });
     const goodNpp = makeNPP({ name: "Files Fine" });

@@ -11,6 +11,7 @@ import type {
 import type { CountryId } from "@/lib/constants/countries";
 import { computeSlateAssignmentScore, isNppSlateCompliant } from "@/lib/slateAssignments";
 import { getSlateAcceptanceStatBonus } from "@/lib/slateAuthority";
+import { canPartyContestState } from "@/lib/parties/regionalContest";
 
 /**
  * List all slates owned by a (countryId, partyId). Active by default; pass
@@ -183,6 +184,12 @@ interface SlateTemplateMaterializationArgs {
   /** When provided, the caller has already verified this slate has zero candidates.
    *  Skips the findSlateForElection + countDocuments checks. */
   knownEmptySlate?: RecruitmentSlate | null;
+  /**
+   * The party's abbreviation, when the caller already has the party document.
+   * Lets regional-party rows (SNP/Plaid/NI) be skipped when carrying a template
+   * into a region the party cannot contest (ticket #1181).
+   */
+  partyAbbreviation?: string | null;
 }
 
 /**
@@ -198,6 +205,7 @@ export async function materializeSlateAssignmentsFromTemplate({
   election,
   now,
   knownEmptySlate,
+  partyAbbreviation,
 }: SlateTemplateMaterializationArgs): Promise<RecruitmentSlate | null> {
   const existing =
     knownEmptySlate ?? (await findSlateForElection(db, countryId, partyId, election._id));
@@ -206,6 +214,21 @@ export async function materializeSlateAssignmentsFromTemplate({
       .collection<SlateCandidate>("slateCandidates")
       .countDocuments({ slateId: existing._id });
     if (rowCount > 0) return existing;
+  }
+
+  // Regional-party geography (SNP/Plaid/NI, ticket #1110): a template from a
+  // prior cycle must never resurrect rows into a region the party cannot
+  // contest — those rows would accept at response time and then be silently
+  // withdrawn by the filing pass every cycle.
+  if (
+    election.state &&
+    !canPartyContestState({
+      countryId,
+      abbreviation: partyAbbreviation ?? null,
+      stateId: election.state,
+    })
+  ) {
+    return existing;
   }
 
   const template = await findLatestSlateTemplate(
