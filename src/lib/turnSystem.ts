@@ -36,6 +36,7 @@ import { createTurnPhaseRuntime } from "@/simulation/engine/turnPhaseRuntime";
 import { buildTurnExecutionContext } from "@/simulation/engine/turnExecutionContext";
 import { getTurnPhaseRegistry } from "@/simulation/phases/turnPhaseRegistry";
 import { getSimTurnPhasePredicate } from "@/simulation/phases/simTurnProfiles";
+import { reportFederalBudgetInvariantBreaches } from "@/lib/budget/budgetInvariants";
 
 // Re-export public helpers consumed by other modules
 export {
@@ -441,6 +442,14 @@ export async function processTurn(): Promise<{
     for (const adapter of getTurnPhaseRegistry()) {
       await adapter.execute(context, runtime);
     }
+
+    // Diagnostic only, never throws. `federalBudget.surplus` and
+    // `debt.principal` are caches of an expression, and both drift intra-year
+    // on the live world even though every writer maintains them on its own
+    // write. Runs HERE, after every phase, because live `updatedAt` values show
+    // budget writes landing well after the corporation phase that recomputes
+    // them. See lib/budget/budgetInvariants.
+    await reportFederalBudgetInvariantBreaches(db, context.newTurn);
 
     healthSnapshotWritten = context.phaseResults.gameHealthSnapshot !== null;
 
