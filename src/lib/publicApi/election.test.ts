@@ -195,3 +195,57 @@ describe("queryElectionDetail", () => {
     expect(snap).not.toHaveProperty("_rawDbField");
   });
 });
+
+describe("queryElectionArchives", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    ["elections", "electionCandidates", "electionVoteTallies"].forEach((n) => db.collection(n));
+  });
+
+  it("returns archived elections with winner from the final tally", async () => {
+    const electionId = new ObjectId();
+    db.collection("elections").find.mockReturnValue({
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: electionId,
+          countryId: "US",
+          electionType: "presidential",
+          state: "national",
+          status: "resolved",
+          cycle: 5,
+          totalSeats: 1,
+          startTime: new Date("2026-01-01T00:00:00Z"),
+          endTime: new Date("2026-02-01T00:00:00Z"),
+        },
+      ]),
+    } as never);
+    db.collection("electionCandidates").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    } as never);
+    db.collection("electionVoteTallies").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: new ObjectId(),
+          electionId,
+          totalVotes: { "507f1f77bcf86cd799439011": 400, "507f1f77bcf86cd799439012": 100 },
+          candidateNames: { "507f1f77bcf86cd799439011": "Winner Name" },
+          candidateParties: { "507f1f77bcf86cd799439011": "1" },
+          finalized: true,
+        },
+      ]),
+    } as never);
+
+    const { queryElectionArchives } = await import("./election");
+    const result = await queryElectionArchives(db as unknown as Db, { country: "US" });
+    expect(result.found).toBe(true);
+    const e = (result.elections as Record<string, unknown>[])[0];
+    expect(e.status).toBe("resolved");
+    expect(e.totalVotes).toBe(500);
+    expect(e.winner).toEqual({ characterName: "Winner Name", party: "1", votes: 400 });
+  });
+});

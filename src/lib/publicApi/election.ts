@@ -1,3 +1,4 @@
+import type { CountryId } from "@/lib/constants/countries";
 import type { Db, Filter } from "mongodb";
 import { ObjectId } from "mongodb";
 import type {
@@ -242,5 +243,98 @@ export async function queryElectionDetail(db: Db, electionId: string) {
           ...(!isSingleSeat ? { seatsEstimate: tally.seatsEstimate ?? null } : {}),
         }
       : null,
+  };
+}
+
+/**
+ * Archived (completed/resolved) elections for a country, newest first.
+ * Returns one row per election with the winner and final tally summary;
+ * full candidate/vote detail stays behind /elections/[id].
+ */
+export async function queryElectionArchives(
+  db: Db,
+  params: { country: string; limit?: number; type?: string }
+) {
+  const { country, type } = params;
+  const limit = Math.min(Math.max(params.limit ?? 50, 1), 200);
+  const cid = country.toUpperCase() as CountryId;
+
+  const filter: Record<string, unknown> = {
+    countryId: cid,
+    status: { $in: ["ended", "completed", "resolved"] },
+  };
+  if (type) filter.electionType = type;
+
+  const elections = await db
+    .collection<Election>("elections")
+    .find(filter)
+    .sort({ endTime: -1 })
+    .limit(limit)
+    .toArray();
+
+  if (elections.length === 0) return { found: false, elections: [] as unknown[] };
+
+  const electionIds = elections.map((e) => e._id);
+  const [allCandidates, allTallies] = await Promise.all([
+    db
+      .collection<ElectionCandidate>("electionCandidates")
+      .find({ electionId: { $in: electionIds } })
+      .toArray(),
+    db
+      .collection<ElectionVoteTally>("electionVoteTallies")
+      .find({ electionId: { $in: electionIds } })
+      .toArray(),
+  ]);
+
+  const candidatesByElection = new Map<string, ElectionCandidate[]>();
+  for (const c of allCandidates) {
+    const key = c.electionId.toString();
+    if (!candidatesByElection.has(key)) candidatesByElection.set(key, []);
+    candidatesByElection.get(key)!.push(c);
+  }
+  const talliesByElection = new Map<string, ElectionVoteTally>();
+  for (const t of allTallies) talliesByElection.set(t.electionId.toString(), t);
+
+  return {
+    found: true,
+    elections: elections.map((e) => {
+      const key = e._id.toString();
+      const candidates = candidatesByElection.get(key) ?? [];
+      const tally = talliesByElection.get(key);
+
+      // Finalized winner = top of the final vote tally (candidates are not
+      // flagged as winners on the document; the tally is the record).
+      let winner: { characterName: string; party: string; votes: number } | null = null;
+      if (tally?.totalVotes) {
+        const top = Object.entries(tally.totalVotes).sort((a, b) => b[1] - a[1])[0];
+        if (top && top[1] > 0) {
+          winner = {
+            characterName:
+              tally.candidateNames?.[top[0]] ??
+              candidates.find((c) => c.characterId?.toString() === top[0])?.characterName ??
+              "Unknown",
+            party: tally.candidateParties?.[top[0]] ?? "Independent",
+            votes: top[1],
+          };
+        }
+      }
+
+      return {
+        id: e._id.toString(),
+        seatId: e.seatId ?? null,
+        electionType: e.electionType,
+        state: e.state,
+        cycle: e.cycle ?? null,
+        electionYear: e.electionYear ?? null,
+        totalSeats: e.totalSeats ?? null,
+        startTime: e.startTime?.toISOString() ?? null,
+        endTime: e.endTime?.toISOString() ?? null,
+        status: e.status,
+        totalVotes: tally ? Object.values(tally.totalVotes ?? {}).reduce((a, b) => a + b, 0) : null,
+        finalized: tally?.finalized ?? false,
+        candidateCount: candidates.length,
+        winner,
+      };
+    }),
   };
 }
