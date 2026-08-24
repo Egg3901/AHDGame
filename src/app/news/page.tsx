@@ -8,6 +8,8 @@ import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { isOnboardingChecklistEnabled } from "@/lib/onboarding/featureFlag";
 import { isOnboardingDismissed } from "@/lib/onboarding/checklist";
 import { OnboardingStepTracker } from "@/components/onboarding/OnboardingStepTracker";
+import { withPublicNewsVisibility } from "@/lib/news/publicModeration";
+import type { NewsPost } from "@/lib/db/types";
 
 export async function generateMetadata(): Promise<Metadata> {
   const base = publicPageMetadata({
@@ -22,13 +24,12 @@ export async function generateMetadata(): Promise<Metadata> {
   // query failure must not take the page down, so default to indexable.
   try {
     const db = await getDb();
-    const visiblePostCount = await db.collection("newsPosts").countDocuments(
-      {
+    const visiblePostCount = await db.collection<NewsPost>("newsPosts").countDocuments(
+      withPublicNewsVisibility({
         parentId: { $exists: false },
         feedType: { $ne: "advertisement" },
         isSystem: { $ne: true },
-        $or: [{ moderation: { $exists: false } }, { "moderation.status": "visible" }],
-      },
+      }),
       { limit: 1 }
     );
     if (visiblePostCount === 0) {

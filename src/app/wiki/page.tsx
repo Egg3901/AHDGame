@@ -14,7 +14,6 @@ import {
 import { WIKI_CATEGORIES } from "@/lib/wiki/categories";
 import { getVisibleLearningPaths } from "@/lib/wiki/learningPaths";
 import { getAuthUser } from "@/lib/auth";
-import { AdSenseUnit } from "@/components/AdSenseUnit";
 
 export const metadata: Metadata = wikiPublicPageMetadata({
   title: "Wiki | A House Divided",
@@ -584,8 +583,6 @@ export default async function WikiOverviewPage({
                   </>
                 )}
               </nav>
-
-              <AdSenseUnit slot="ahd-wiki-sidebar" format="auto" className="min-h-[250px]" />
             </div>
           </aside>
 

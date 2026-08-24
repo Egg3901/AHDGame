@@ -1,3 +1,5 @@
+import { isAdSenseContentPath } from "@/lib/adsenseContent";
+
 const GOOGLE_CMP_POLICY_PAGE_PATHS = ["/privacy"] as const;
 const FALLBACK_COOKIE_CONSENT_KEY = "ahd-cookie-consent";
 const GOOGLE_CMP_SITE_HOSTS = new Set(["ahousedividedgame.com", "www.ahousedividedgame.com"]);
@@ -65,7 +67,11 @@ export function shouldRenderGooglePrivacyMessaging(
   pathname: string,
   hostname?: string | null
 ): boolean {
-  return isGoogleCmpConfigured(hostname) && !isPrivacyMessagingExcludedPath(pathname);
+  return (
+    isGoogleCmpConfigured(hostname) &&
+    isAdSenseContentPath(pathname) &&
+    !isPrivacyMessagingExcludedPath(pathname)
+  );
 }
 
 export function shouldRenderConsentManagedGoogleTags(pathname: string): boolean {

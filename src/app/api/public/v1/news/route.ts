@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
+import type { Filter } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
 import { publicApiGuard } from "@/lib/publicApi/middleware";
+import type { NewsPost } from "@/lib/db/types";
+import { withPublicNewsVisibility } from "@/lib/news/publicModeration";
 
 // GET /api/public/v1/news?limit=N&category=CATEGORY
 // Accuracy fixes vs /discord-bot/news: full content (not truncated), countryId included.
@@ -14,13 +17,13 @@ export async function GET(request: Request) {
     const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "20", 10) || 20, 100);
     const category = url.searchParams.get("category") ?? undefined;
 
-    const query: Record<string, unknown> = {};
-    if (category) query.category = category;
+    const query: Filter<NewsPost> = {};
+    if (category) query.category = category as NewsPost["category"];
 
     const db = await getDb();
     const posts = await db
-      .collection("newsPosts")
-      .find(query)
+      .collection<NewsPost>("newsPosts")
+      .find(withPublicNewsVisibility(query))
       .sort({ createdAt: -1 })
       .limit(limit)
       .toArray();

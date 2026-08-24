@@ -232,6 +232,9 @@ export default async function RootLayout({
   // WebView: AdSense is not permitted in app WebViews, and its third-party
   // requests are routinely killed by mobile DNS filters / adblockers, which
   // the Android shell used to misread as the server being unreachable.
+  // The page tag enables Google Auto ads. Loading it on a game, account, or
+  // community screen can result in Google-served ads on a non-editorial page,
+  // even when no manual AdSense component is mounted there.
   const renderGoogleCmp = shouldRenderGooglePrivacyMessaging(pathname, host) && !isNativeApp;
   const renderConsentManagedGoogleTags = shouldRenderConsentManagedGoogleTags(pathname);
   const googleTagBootstrap = buildGoogleTagBootstrapScript(
