@@ -1,6 +1,7 @@
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { NewsPost } from "@/lib/db/types";
+import { withPublicNewsVisibility } from "@/lib/news/publicModeration";
 
 export type PublicNewsPostView = {
   title: string | null;
@@ -20,11 +21,12 @@ export async function loadNewsPostPublic(id: string): Promise<PublicNewsPostView
   if (!ObjectId.isValid(id)) return null;
 
   const db = await getDb();
-  const post = await db.collection<NewsPost>("newsPosts").findOne({
-    _id: new ObjectId(id),
-    parentId: { $exists: false },
-    $or: [{ moderation: { $exists: false } }, { "moderation.status": "visible" }],
-  });
+  const post = await db.collection<NewsPost>("newsPosts").findOne(
+    withPublicNewsVisibility({
+      _id: new ObjectId(id),
+      parentId: { $exists: false },
+    })
+  );
   if (!post) return null;
 
   return {
