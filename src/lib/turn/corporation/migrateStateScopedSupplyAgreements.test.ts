@@ -5,7 +5,13 @@ import { CONTRACT_CANCEL_NOTICE_TURNS } from "@/lib/db/types/supplyAgreement";
 import { migrateStateScopedSupplyAgreements } from "./migrateStateScopedSupplyAgreements";
 
 function result(modifiedCount: number): UpdateResult {
-  return { acknowledged: true, matchedCount: modifiedCount, modifiedCount, upsertedCount: 0 };
+  return {
+    acknowledged: true,
+    matchedCount: modifiedCount,
+    modifiedCount,
+    upsertedCount: 0,
+    upsertedId: null,
+  };
 }
 
 describe("migrateStateScopedSupplyAgreements", () => {
