@@ -70,6 +70,11 @@ export interface CorpPrivateSupply {
   coveragePercent: number;
   /** Turn the delivery quantities came from. */
   turn: number;
+  /** Buyer consumption used to allocate the latest delivery. */
+  consumptionUnits: number;
+  previousTurn?: number;
+  previousDeliveredUnits?: number;
+  previousConsumptionUnits?: number;
 }
 
 /** Persisted agreement rollup supplied by the corporation commodities query. */
@@ -77,6 +82,10 @@ export interface CorpPrivateSupplySnapshot {
   contractedUnits: number;
   deliveredUnits: number;
   turn: number;
+  consumptionUnits?: number;
+  previousTurn?: number;
+  previousDeliveredUnits?: number;
+  previousConsumptionUnits?: number;
 }
 
 /** A commodity this corporation produces and/or consumes. */
@@ -414,8 +423,11 @@ export function computeCorpCommodityFlows(
     const flow = latestFlowByCommodity.get(commodity);
     const privateSupply = privateSupplyByCommodity.get(commodity);
     if (output <= 0 && consumption <= 0 && !privateSupply) continue;
+    const settledConsumption = privateSupply
+      ? Math.max(0, privateSupply.consumptionUnits ?? consumption)
+      : 0;
     const consumptionCoveredUnits = privateSupply
-      ? Math.min(Math.max(0, privateSupply.deliveredUnits), Math.max(0, consumption))
+      ? Math.min(Math.max(0, privateSupply.deliveredUnits), settledConsumption)
       : 0;
     commodities.push({
       commodity,
@@ -441,10 +453,20 @@ export function computeCorpCommodityFlows(
               deliveredUnits: round2(Math.max(0, privateSupply.deliveredUnits)),
               consumptionCoveredUnits: round2(consumptionCoveredUnits),
               coveragePercent:
-                consumption > 0
-                  ? round2(Math.min(100, (consumptionCoveredUnits / consumption) * 100))
+                settledConsumption > 0
+                  ? round2(Math.min(100, (consumptionCoveredUnits / settledConsumption) * 100))
                   : 0,
               turn: privateSupply.turn,
+              consumptionUnits: round2(settledConsumption),
+              ...(privateSupply.previousTurn !== undefined
+                ? { previousTurn: privateSupply.previousTurn }
+                : {}),
+              ...(privateSupply.previousDeliveredUnits !== undefined
+                ? { previousDeliveredUnits: round2(privateSupply.previousDeliveredUnits) }
+                : {}),
+              ...(privateSupply.previousConsumptionUnits !== undefined
+                ? { previousConsumptionUnits: round2(privateSupply.previousConsumptionUnits) }
+                : {}),
             },
           }
         : {}),
