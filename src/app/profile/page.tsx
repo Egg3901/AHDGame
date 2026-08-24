@@ -63,7 +63,12 @@ import { CUR_ERA_YEAR } from "@/lib/military/generalsTree";
 import { PoliticalStanding } from "./components/PoliticalStanding";
 import { FinancialStrip } from "./components/FinancialStrip";
 import { CareerHistory } from "./components/CareerHistory";
-import { fetchPartyHistory, buildPartyTenures, type PartyTenure } from "@/lib/parties/historyQuery";
+import {
+  fetchPartyHistory,
+  fetchPartyNameChanges,
+  buildPartyTenures,
+  type PartyTenure,
+} from "@/lib/parties/historyQuery";
 import { ConstituencySelector } from "./components/ConstituencySelector";
 import { CeoCorporationCard } from "./components/CeoCorporationCard";
 import { NewPlayerBanner } from "./components/OnboardingCard";
@@ -263,13 +268,18 @@ async function getCharacterData() {
       partyNames[`${ev.newPartyCountryId}:${ev.newPartyId}`] = ev.newPartyName;
     }
   }
-  const partyHistory: PartyTenure[] = buildPartyTenures(partyHistoryEvents, {
-    partyId: character.party ?? "independent",
-    partyCountryId: character.countryId,
-    partyName: party?.name ?? null,
-    joinedAt: character.partyJoinedAt ?? null,
-    fallbackDate: new Date(),
-  });
+  const partyNameChanges = await fetchPartyNameChanges(db, partyHistoryEvents);
+  const partyHistory: PartyTenure[] = buildPartyTenures(
+    partyHistoryEvents,
+    {
+      partyId: character.party ?? "independent",
+      partyCountryId: character.countryId,
+      partyName: party?.name ?? null,
+      joinedAt: character.partyJoinedAt ?? null,
+      fallbackDate: new Date(),
+    },
+    partyNameChanges
+  );
 
   const nationalNpiOrdinalRank = await getNationalNpiOrdinalRank(db, character);
 

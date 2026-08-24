@@ -101,6 +101,8 @@
       "tenureJoined": "Joined {date}",
       "tenureLeft": "Left {date}",
       "tenurePurged": "Purged {date}",
+      "tenureRenamed": "Renamed {date}",
+      "tenureRenamedTo": "Renamed to {party} {date}",
       "tenureJoinedNext": "Joined {party} {date}",
       "tenureSwitched": "Switched to {party} {date}",
       "nextPartyFallback": "next party",
