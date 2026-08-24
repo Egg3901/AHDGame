@@ -63,6 +63,9 @@ describe("commitSettlementPlay", () => {
     prime(db, "characters").updateOne.mockResolvedValue({ matchedCount: 1 });
     prime(db, "federalBudget").findOne.mockResolvedValue({ treasuryBalance: 10_000_000_000 });
     prime(db, "settlementPlays").insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+    // Nothing played yet this turn. Explicit rather than relying on an
+    // unstubbed mock returning undefined.
+    prime(db, "settlementPlays").countDocuments.mockResolvedValue(0);
 
     const { loadSettlementActorContext } = await import("../actorContext");
     vi.mocked(loadSettlementActorContext).mockResolvedValue(seatCtx() as never);
@@ -331,6 +334,103 @@ describe("commitSettlementPlay", () => {
       playId: "aid",
     });
     expect(res).toMatchObject({ ok: false, status: 409 });
+  });
+
+  describe("per-character play limit", () => {
+    it("refuses a second use of the same play in one turn", async () => {
+      prime(db, "settlementPlays").countDocuments.mockResolvedValue(1);
+      const { commitSettlementPlay } = await import("./commitPlay");
+
+      const res = await commitSettlementPlay(db as unknown as Db, {
+        characterId,
+        actor: "personal",
+        playId: "letter",
+        direction: 1,
+      });
+
+      expect(res).toMatchObject({ ok: false, status: 409 });
+      expect(prime(db, "settlementPlays").insertOne).not.toHaveBeenCalled();
+    });
+
+    it("refuses BEFORE spending anything", async () => {
+      // The allowance is not a resource you can buy past. Debiting first would
+      // charge a player for a play the command then refuses.
+      prime(db, "settlementPlays").countDocuments.mockResolvedValue(1);
+      const { commitSettlementPlay } = await import("./commitPlay");
+
+      await commitSettlementPlay(db as unknown as Db, {
+        characterId,
+        actor: "personal",
+        playId: "letter",
+        direction: 1,
+      });
+
+      expect(prime(db, "characters").updateOne).not.toHaveBeenCalled();
+    });
+
+    it("allows the first use", async () => {
+      const { commitSettlementPlay } = await import("./commitPlay");
+      const res = await commitSettlementPlay(db as unknown as Db, {
+        characterId,
+        actor: "personal",
+        playId: "letter",
+        direction: 1,
+      });
+      expect(res).toMatchObject({ ok: true });
+    });
+
+    it("counts this character, this play, this turn only", async () => {
+      const plays = prime(db, "settlementPlays");
+      const { commitSettlementPlay } = await import("./commitPlay");
+
+      await commitSettlementPlay(db as unknown as Db, {
+        characterId,
+        actor: "personal",
+        playId: "letter",
+        direction: 1,
+      });
+
+      // Scoped on all four, or the allowance leaks across turns, across plays,
+      // or across players.
+      expect(plays.countDocuments).toHaveBeenCalledWith({
+        crisisId: CRISIS_ID,
+        turn: 412,
+        characterId,
+        playId: "letter",
+        actor: "personal",
+      });
+    });
+
+    it("refuses regardless of which way the second use pushes", async () => {
+      // The allowance is per play, not per direction. Pushing both ways in a
+      // turn is self-cancelling, so a per-direction allowance would only buy a
+      // way to burn twice the action points for no board effect.
+      prime(db, "settlementPlays").countDocuments.mockResolvedValue(1);
+      const { commitSettlementPlay } = await import("./commitPlay");
+
+      const res = await commitSettlementPlay(db as unknown as Db, {
+        characterId,
+        actor: "personal",
+        playId: "letter",
+        direction: -1,
+      });
+
+      expect(res).toMatchObject({ ok: false, status: 409 });
+    });
+
+    it("does not limit a delegation play", async () => {
+      // A seat is one actor with an action budget, not a crowd. Its brake is AP.
+      prime(db, "settlementPlays").countDocuments.mockResolvedValue(9);
+      const { commitSettlementPlay } = await import("./commitPlay");
+
+      const res = await commitSettlementPlay(db as unknown as Db, {
+        characterId,
+        actor: "seat",
+        playId: "aid",
+      });
+
+      expect(res).toMatchObject({ ok: true });
+    });
   });
 
   describe("payment mode", () => {

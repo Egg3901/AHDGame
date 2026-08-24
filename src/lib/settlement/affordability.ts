@@ -28,7 +28,7 @@ export interface SeatBudget {
  * here — Phase 3's commit route widens this when it starts rejecting unknown
  * play ids, rather than the union carrying a member nobody emits.
  */
-export type AffordabilityReason = "actions" | "capital" | "funds" | "no-direction";
+export type AffordabilityReason = "actions" | "capital" | "funds" | "no-direction" | "used";
 
 export interface Affordability {
   ok: boolean;

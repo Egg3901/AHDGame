@@ -31,7 +31,7 @@ import { ObjectId, type Db } from "mongodb";
 import type { Character } from "@/lib/db/types";
 import type { SettlementPaymentMode, SettlementPlayDoc } from "@/lib/db/types/settlementPlay";
 import { capitalPriceFor } from "../capitalPrice";
-import { getPlay } from "@/lib/constants/settlementCrisis";
+import { getPlay, PERSONAL_PLAY_USES_PER_TURN } from "@/lib/constants/settlementCrisis";
 import type { CountryId } from "@/lib/constants/countries";
 import { getSettlementCrisesCollection, getSettlementPlaysCollection } from "@/lib/db/collections";
 import { spendFromTreasury } from "@/lib/budget/treasurySpend";
@@ -192,6 +192,24 @@ export async function commitSettlementPlay(
   if (play.seat !== null) return fail(403, "That play is a delegation's, not yours to make.");
   if (input.direction !== 1 && input.direction !== -1) {
     return fail(400, "Choose which way to push.");
+  }
+
+  // The allowance is a COUNT OF THIS TURN'S ROWS, not a stored counter, so it
+  // resets with the turn on its own: nothing to clear, nothing to migrate, and
+  // no way for it to drift out of step with what was actually played.
+  //
+  // Enforced here and not only on the board: this route spends a budget, and a
+  // client can post whatever it likes. Checked BEFORE any debit, so a refused
+  // play never costs a player anything.
+  const usedThisTurn = await plays.countDocuments({
+    crisisId,
+    turn,
+    characterId: input.characterId,
+    playId: play.id,
+    actor: "personal",
+  });
+  if (usedThisTurn >= PERSONAL_PLAY_USES_PER_TURN) {
+    return fail(409, "You have already used this play this turn. It resets next turn.");
   }
 
   const character = await db
