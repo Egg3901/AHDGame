@@ -1,8 +1,10 @@
-import type { Db, ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import {
   getCountryConfig,
   getExecutiveOfficeKey,
   getHeadOfStateOfficeType,
+  getHeadOfStateTitle,
+  isImperialCountry,
   type CountryId,
 } from "@/lib/constants/countries";
 import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
@@ -40,9 +42,14 @@ async function readActivePreset(db: Db): Promise<string | undefined> {
  * The rule is deliberately narrow. Only the seated officeholder, and the two
  * offices that sit above every seat in the same country's government, may see
  * inside. Cabinet colleagues cannot: a foreign ministry has no business in the
- * defence ledger. Country scoping is implicit, because both head-of-X lookups
- * are asked about the OFFICE's country, so a foreign head of government never
- * matches.
+ * defence ledger. Country scoping is implicit, because every head-of-X lookup
+ * here is asked about the OFFICE's country, so a foreign head of government
+ * never matches.
+ *
+ * A head of state is reached three ways, because the game models them three
+ * ways: elected into `electedOfficials` (Ireland, France), appointed or synced
+ * into the same collection (RU's presidium chairman, CN's party chair), or
+ * reigning on the imperial roll with no office at all (the UK, Japan).
  *
  * `canAct` keeps exactly the meaning it had before (holder or admin), so a head
  * of government reads their own cabinet without being able to pull its levers.
@@ -67,11 +74,13 @@ export async function resolveCabinetOfficeVisibility(
     countryId: CountryId;
     holderCharacterId: ObjectId | null;
     viewerCharacterId: ObjectId | null;
+    /** The viewer's user id. Required to recognise a crowned head of state. */
+    viewerUserId?: string | null;
     isAdmin: boolean;
     preset?: string;
   }
 ): Promise<CabinetOfficeVisibility> {
-  const { countryId, holderCharacterId, viewerCharacterId, isAdmin } = args;
+  const { countryId, holderCharacterId, viewerCharacterId, viewerUserId, isAdmin } = args;
 
   // Compared as strings, and only when both sides exist: a vacant seat holds a
   // null characterId, and a signed-out visitor has none either. `null === null`
@@ -88,19 +97,25 @@ export async function resolveCabinetOfficeVisibility(
     return { canView: true, canAct: true, viewerRole: "admin" };
   }
 
-  if (!viewerId) return HIDDEN;
+  // Neither identity means a signed-out visitor. Not `!viewerId` alone: a player
+  // reigning as an imperial character need not have an ordinary character at all,
+  // and bailing here would shut the monarch out before the crown is ever checked.
+  if (!viewerId && !viewerUserId) return HIDDEN;
 
-  const hogCharacterId = await getHeadOfGovernmentCharacterId(db, countryId);
-  if (hogCharacterId && hogCharacterId.toString() === viewerId) {
-    return { canView: true, canAct: false, viewerRole: "headOfGovernment" };
+  if (viewerId) {
+    const hogCharacterId = await getHeadOfGovernmentCharacterId(db, countryId);
+    if (hogCharacterId && hogCharacterId.toString() === viewerId) {
+      return { canView: true, canAct: false, viewerRole: "headOfGovernment" };
+    }
   }
 
   // Resolved lazily on purpose: only this branch needs the preset, and it is
   // reached only after holder, admin and head of government have all missed, so
   // the common paths never pay for the lookup.
   const preset = args.preset ?? (await readActivePreset(db));
-  const headOfStateOfficeType = getHeadOfStateOfficeType(getCountryConfig(countryId, preset));
-  if (headOfStateOfficeType) {
+  const config = getCountryConfig(countryId, preset);
+  const headOfStateOfficeType = getHeadOfStateOfficeType(config);
+  if (viewerId && headOfStateOfficeType) {
     const hos = await db
       .collection<ElectedOfficial>("electedOfficials")
       .findOne(
@@ -110,6 +125,26 @@ export async function resolveCabinetOfficeVisibility(
     if (hos?.characterId && hos.characterId.toString() === viewerId) {
       return { canView: true, canAct: false, viewerRole: "headOfState" };
     }
+  }
+
+  // A crowned head of state is not an elected official and is not in the
+  // `characters` collection at all — they are an imperial character, keyed by
+  // USER rather than by character. Nothing ever writes a monarch into
+  // `electedOfficials` (only RU's presidium chairman and CN's party-chair sync
+  // write those rows), so without this branch every monarch and emperor would be
+  // shut out of their own government: the UK and Japan have no isHeadOfState
+  // office at all, and Spain's and Sweden's sit permanently vacant.
+  if (viewerUserId && isImperialCountry(config)) {
+    // A country may borrow another's crown, in which case the imperial character
+    // is filed under the source country.
+    const crownCountryId = config.imperialSharedWith ?? countryId;
+    const monarch = await db
+      .collection<{ userId: ObjectId; countryId: CountryId }>("imperialCharacters")
+      .findOne(
+        { countryId: crownCountryId, userId: new ObjectId(viewerUserId) },
+        { projection: { _id: 1 } }
+      );
+    if (monarch) return { canView: true, canAct: false, viewerRole: "headOfState" };
   }
 
   return HIDDEN;
@@ -136,6 +171,12 @@ export function cabinetOfficeViewerTitles(countryId: CountryId, preset?: string)
   if (headOfStateKey && headOfStateKey !== executiveKey) {
     const headOfState = config.officeTypes.find((office) => office.key === headOfStateKey);
     if (headOfState) titles.push(headOfState.label);
+  } else if (!headOfStateKey && isImperialCountry(config)) {
+    // A crown that holds no officeType (the UK monarch, the Japanese emperor)
+    // still passes the gate via the imperial roll, so the notice has to name it
+    // or the copy contradicts the rule. Spain and Sweden take the branch above
+    // instead, which is why this one only fires when there is no office at all.
+    titles.push(getHeadOfStateTitle(config));
   }
 
   return titles;

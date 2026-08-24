@@ -221,6 +221,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
       countryId,
       holderCharacterId: member?.characterId ?? null,
       viewerCharacterId: user?.character?._id ?? null,
+      // Keyed by user, not character: a reigning monarch is an imperial character.
+      viewerUserId: user?.userId ?? null,
       isAdmin: !!user?.isAdmin,
       // Already loaded here, so the resolver does not re-read it.
       preset: gameState?.preset,

@@ -533,4 +533,42 @@ describe("GET briefing — cabinet office visibility", () => {
     expect(json.canView).toBe(false);
     expect(json).not.toHaveProperty("forceSummary");
   });
+
+  // The route hands the resolver a viewerUserId, which a crowned head of state is
+  // recognised by. The field is optional, so dropping the wire would typecheck
+  // cleanly and silently shut every monarch out of their own government.
+  it("serves a monarchy's office to the reigning monarch", async () => {
+    const monarchUserId = new ObjectId().toString();
+    db.collection("cabinetMembers");
+    db.collection("cabinetSettings");
+    db.collection("states");
+    db.collection("imperialCharacters");
+    db.collectionMocks.cabinetSettings.findOne.mockResolvedValue(null);
+    db.collectionMocks.cabinetMembers.findOne.mockResolvedValue({
+      countryId: "UK",
+      positionId: "defence_secretary",
+      characterId: HOLDER,
+      characterName: "Jordan Ashton",
+    });
+    db.collectionMocks.states.find.mockReturnValue({
+      project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+    } as never);
+    db.collectionMocks.imperialCharacters.findOne.mockResolvedValue({ _id: new ObjectId() });
+    vi.mocked(getAuthUserWithCharacter).mockResolvedValue({
+      userId: monarchUserId,
+      isAdmin: false,
+      hasCharacter: false,
+    } as never);
+
+    const { GET } =
+      await import("@/app/api/country/[code]/executive/cabinet/[positionId]/briefing/route");
+    const response = await GET(
+      new Request("http://localhost/api/country/uk/executive/cabinet/defence_secretary/briefing"),
+      { params: Promise.resolve({ code: "uk", positionId: "defence_secretary" }) }
+    );
+    const json = (await response.json()) as Record<string, unknown>;
+
+    expect(json.canView).toBe(true);
+    expect(json.canAct).toBe(false);
+  });
 });

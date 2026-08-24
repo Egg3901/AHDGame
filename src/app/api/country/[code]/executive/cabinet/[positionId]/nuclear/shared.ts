@@ -56,6 +56,8 @@ export async function requireDefenceHolder(
     countryId,
     holderCharacterId: member?.characterId ?? null,
     viewerCharacterId: auth.user.character?._id ?? null,
+    // Keyed by user, not character: a reigning monarch is an imperial character.
+    viewerUserId: auth.user.userId ?? null,
     isAdmin: !!auth.user.isAdmin,
   });
 
