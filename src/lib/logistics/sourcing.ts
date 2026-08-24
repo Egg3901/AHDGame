@@ -266,16 +266,16 @@ export interface SourcingResult {
    *
    * Spare left over when the pass ends means one of two very different things,
    * and a player needs them told apart: "the market is full" says cut output,
-   * "it could not get there" says build freight. The test is whether any buyer
-   * is still short at the end of the pass. Residual unmet demand and unsold
-   * spare coexisting is the definition of a delivery failure, whatever stopped
-   * the haul (tolerance ceiling, shared freight capacity, embargo, no route).
+   * "it could not get there" says build freight.
    *
-   * Attributed proportionally and uniformly across the commodity's sellers:
-   * `min(1, residualUnmet / totalSpare)` of every state's spare. Per-flow
-   * origin blame is not available (a buyer's shortfall is not attributable to
-   * one seller), and a uniform share is honest about that rather than
-   * inventing precision.
+   * Only spare that the ORIGIN STATE'S OWN freight capacity refused to haul
+   * counts here, accumulated at the capacity gate where the origin is known.
+   * That is the only failure mode for which "build freight in this state" is
+   * the right instruction, and the only one attributable to a specific seller.
+   * A buyer who walked away over the landed price is a PRICE failure and is
+   * deliberately excluded: it belongs to `toleranceBoundUnits`, and calling it
+   * a delivery failure tells the seller to spend on trucks that would not have
+   * sold the unit anyway (ticket #1180).
    */
   deliveryLimitedSupplyByState: Map<CommodityType, Map<string, number>>;
 }
@@ -394,6 +394,18 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     const spareByState = new Map<string, number>();
     const localFillByState = new Map<string, number>();
     const unmetByState = new Map<string, number>();
+    // Units of an origin state's spare that a willing, in-tolerance buyer wanted
+    // and that state's own freight network could not haul. Accumulated at the
+    // capacity gate below, where the origin IS known, rather than inferred from
+    // world totals afterwards (ticket #1180).
+    const capacityBoundByOriginState = new Map<string, number>();
+    const addCapacityBound = (stateId: string, units: number) => {
+      if (!(units > 0)) return;
+      capacityBoundByOriginState.set(
+        stateId,
+        (capacityBoundByOriginState.get(stateId) ?? 0) + units
+      );
+    };
     for (const { stateId } of sortedStates) {
       const bal = byState.get(stateId)?.get(commodity);
       const supply = bal?.supply ?? 0;
@@ -539,6 +551,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
             if (!(nominal > 0)) {
               // A state with no freight supply at all hauls nothing.
               summary.capacityBoundUnits += deliver;
+              addCapacityBound(cand.originId, deliver);
               continue;
             }
             const unitsToNominal = Math.max(0, nominal - totalUsed) / teuPerUnit;
@@ -555,12 +568,19 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
             const dispatchCeiling = unitsToNominal + (overflowAffordable ? unitsInOverflow : 0);
             if (dispatchCeiling <= 0) {
               summary.capacityBoundUnits += deliver;
+              addCapacityBound(cand.originId, deliver);
               continue;
             }
             if (dispatch > dispatchCeiling) {
               const lost = (dispatch - dispatchCeiling) * deliveryFactor;
-              if (overflowAffordable) summary.capacityBoundUnits += lost;
-              else summary.toleranceBoundUnits += lost;
+              // Only the capacity branch is a delivery failure. When the
+              // overflow surcharge is what broke the buyer's ceiling the goods
+              // were haulable and merely too expensive, which is a price
+              // outcome and must not tell the seller to build freight.
+              if (overflowAffordable) {
+                summary.capacityBoundUnits += lost;
+                addCapacityBound(cand.originId, lost);
+              } else summary.toleranceBoundUnits += lost;
               dispatch = dispatchCeiling;
               deliver = dispatch * deliveryFactor;
             }
@@ -632,17 +652,23 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     // the freight seam. Kept unrounded; the price turn rounds on persist.
     unplacedSupplyByState.set(commodity, new Map(spareByState));
 
-    // Split that spare by REASON. `summary.unmetUnits` is still unrounded here
-    // and holds every buyer's residual shortfall, so spare with no residual
-    // unmet demand against it is a plain glut: the goods reached everyone who
-    // wanted them and stopped because want stopped. Spare standing against
-    // residual unmet demand is the seam this whole pass exists to measure.
-    const totalSpare = [...spareByState.values()].reduce((sum, spare) => sum + spare, 0);
-    const deliveryShare =
-      totalSpare > 0 ? Math.min(1, Math.max(0, summary.unmetUnits) / totalSpare) : 0;
+    // Split that spare by REASON, per state, from the capacity gate's own
+    // record of which origin could not haul (ticket #1180).
+    //
+    // The previous rule divided world residual unmet demand by world spare and
+    // stamped that one ratio on every state. It could not be right: the ratio
+    // carries no local information, so a state with idle trucks and a plain
+    // glut was blamed at exactly the same rate as a state whose network was
+    // genuinely full. Measured on prod at t361 it read 0.98947 in NJ, NY, OH,
+    // TX and CA alike, which lit the freight pill on essentially every physical
+    // sector in the world and told all of them to build freight they did not
+    // need. It also counted tolerance-bound demand, buyers refusing the landed
+    // price, as a delivery failure, which is the opposite instruction.
     const deliveryLimited = new Map<string, number>();
     for (const [stateId, spare] of spareByState) {
-      deliveryLimited.set(stateId, spare * deliveryShare);
+      // Bounded by what is actually left over: capacity-bound units the state
+      // later placed with someone else are not unsold, so they are not stuck.
+      deliveryLimited.set(stateId, Math.min(spare, capacityBoundByOriginState.get(stateId) ?? 0));
     }
     deliveryLimitedSupplyByState.set(commodity, deliveryLimited);
 
