@@ -2,20 +2,20 @@
  * Per-turn commodity output snapshot for corporation history charts.
  * Physical output units only — global supply share is derived at read time
  * from `commodityFlows.supplyUnits` for the same turn.
+ *
+ * The derivation is `computeSectorCommodityUnits`, shared with the Commodities
+ * tab, so a corp's charted history and its live tab report the same production
+ * (ticket #1177).
  */
 
-import type { CorporateSector } from "@/lib/db/types";
+import type { CommodityType } from "@/lib/constants/commodities";
 import {
-  COMMODITY_BASE_PRICES,
-  dollarsToUnits,
-  type CommodityType,
-} from "@/lib/constants/commodities";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+  computeSectorCommodityUnits,
+  type CorpCommodityFlowContext,
+  type FlowSector,
+} from "@/lib/corporations/corpCommodityFlows";
 
-type SnapshotSector = Pick<
-  CorporateSector,
-  "sectorType" | "revenue" | "strategyId" | "transitionFromStrategyId" | "transitionStartTurn"
->;
+type SnapshotSector = Omit<FlowSector, "stateId"> & { stateId?: FlowSector["stateId"] };
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
@@ -25,23 +25,18 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
  */
 export function buildCommodityOutputSnapshot(
   sectors: SnapshotSector[],
-  currentTurn: number
+  currentTurn: number,
+  context: CorpCommodityFlowContext = {}
 ): Record<string, number> {
   const totals = new Map<CommodityType, number>();
 
   for (const sector of sectors) {
-    const rates = getEffectiveStrategyRates(
-      sector.sectorType,
-      sector.strategyId ?? "standard",
-      sector.transitionFromStrategyId,
-      sector.transitionStartTurn,
-      currentTurn
+    const { supply } = computeSectorCommodityUnits(
+      { ...sector, stateId: sector.stateId ?? "" },
+      currentTurn,
+      context
     );
-    for (const [commodity, rate] of Object.entries(rates.supply) as [CommodityType, number][]) {
-      if (!rate || rate <= 0) continue;
-      const basePrice = COMMODITY_BASE_PRICES[commodity];
-      if (!(basePrice > 0)) continue;
-      const units = dollarsToUnits(sector.revenue * rate, basePrice);
+    for (const [commodity, units] of supply) {
       totals.set(commodity, (totals.get(commodity) ?? 0) + units);
     }
   }

@@ -6,6 +6,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { GameState } from "@/lib/db/types/gameState";
+import type { GameConfig } from "@/lib/db/types/gameConfig";
 import {
   isAgreementPremiumLegal,
   SUPPLY_AGREEMENT_PRICE_BAND,
@@ -116,21 +117,31 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
               productionPolicyLevel: 1,
               embargoSuspended: 1,
               embargoExportExposure: 1,
+              countryId: 1,
             },
           }
         )
         .toArray();
-      const turnNow =
+      const world = await db
+        .collection<GameState>("gameState")
+        .findOne({ _id: "current" }, { projection: { currentTurn: 1, currentYear: 1 } });
+      const turnNow = world?.currentTurn ?? 0;
+      // A planned economy's media plant makes a different commodity from the
+      // same capacity and is derated differently, so the validator needs both
+      // to size this against what the production sink will credit.
+      const commandEconomyEnabled =
         (
           await db
-            .collection<GameState>("gameState")
-            .findOne({ _id: "current" }, { projection: { currentTurn: 1 } })
-        )?.currentTurn ?? 0;
+            .collection<GameConfig>("gameConfig")
+            .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } })
+        )?.commandEconomyEnabled === true;
       const capacityUnits = computeSupplierCommodityCapacityUnits({
         sectors,
         commodity: body.commodity as CommodityType,
         isNatcorp: !!supplier.countryOwnerId,
         turn: turnNow,
+        currentYear: world?.currentYear,
+        commandEconomyEnabled,
       });
       const maxCap = capacityUnits * CONTRACT_OVERCOMMIT_TOLERANCE;
       if (!(maxCap > 0)) {
