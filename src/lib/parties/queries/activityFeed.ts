@@ -2,7 +2,7 @@ import type { PartyActivityFeedItem, PartyActivityFeedResponse } from "@/lib/par
 import type { RecruitmentSlate, SlateCandidate, TreasuryTransaction } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
-import { SLATE_REFUSAL_LABEL, isSlateFilingFailure } from "@/lib/slate/refusalReasons";
+import { SLATE_REFUSAL_LABEL, isSlateFilingFailure } from "@/lib/slateRefusalReasons";
 import type { Db } from "mongodb";
 
 const HIDDEN_OVERVIEW_TREASURY_CATEGORIES = new Set(["gotv", "suppression", "fund_generation"]);

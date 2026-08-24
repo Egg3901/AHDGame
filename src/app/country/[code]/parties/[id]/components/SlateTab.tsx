@@ -6,11 +6,11 @@ import dynamic from "next/dynamic";
 import { useCountdownTimer } from "@/hooks/useCountdownTimer";
 import { useGameClock } from "@/contexts/useGameClock";
 import type { ElectionPhaseStatusSummary } from "@/lib/elections/electionPhaseStatus";
-import type { ElectionDisplay, GameStateDisplay } from "@/lib/db/types";
+import type { ElectionDisplay, GameStateDisplay, SlateRefusalReason } from "@/lib/db/types";
 import { ElectionPhaseStatusStrip } from "@/components/elections/ElectionPhaseStatusStrip";
 import { SlateElectionResults } from "@/components/elections/SlateElectionResults";
 import type { StateMapData } from "@/components/USAMapPaths";
-import { SLATE_REFUSAL_LABEL, isSlateFilingFailure } from "@/lib/slate/refusalReasons";
+import { SLATE_REFUSAL_LABEL, isSlateFilingFailure } from "@/lib/slateRefusalReasons";
 
 const MapFallback = () => (
   <div className="h-full w-full animate-pulse rounded-md bg-card-elevated" />
@@ -110,20 +110,7 @@ interface SlateCandidateRow {
   status: "invited" | "considering" | "accepted" | "declined" | "withdrawn" | "filed";
   fitScore: number;
   invitationNote: string | null;
-  refusalReason:
-    | "low_relationship"
-    | "low_ambition"
-    | "low_compliance"
-    | "race_priority_mismatch"
-    | "in_other_race"
-    | "cooldown"
-    | "retired"
-    | "ineligible_region"
-    | "slot_taken"
-    | "party_restricted"
-    | "npp_unavailable"
-    | "already_slated_elsewhere"
-    | null;
+  refusalReason: SlateRefusalReason | null;
   autoFilled: boolean;
   invitedAt: string;
   respondedAt: string | null;
@@ -183,8 +170,6 @@ const PRIORITY_COLOR: Record<SlateOverviewItem["priority"], string> = {
   primary_threat: "bg-red-500/15 border-red-500/40 text-red-300",
   none: "bg-card-border/30 border-card-border text-muted",
 };
-
-const REFUSAL_LABEL = SLATE_REFUSAL_LABEL;
 
 const ACCEPTANCE_LIKELIHOOD_STYLES = {
   likely: "bg-emerald-500/15 border-emerald-500/40 text-emerald-300",
@@ -910,7 +895,7 @@ function RaceSlatePanel({
                       </span>
                     )}
                     {c.refusalReason && (
-                      <span className="text-red-300">- {REFUSAL_LABEL[c.refusalReason]}</span>
+                      <span className="text-red-300">- {SLATE_REFUSAL_LABEL[c.refusalReason]}</span>
                     )}
                     {c.invitationNote && <span>| &quot;{c.invitationNote}&quot;</span>}
                   </div>

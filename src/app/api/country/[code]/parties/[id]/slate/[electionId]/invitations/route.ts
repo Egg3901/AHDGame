@@ -128,7 +128,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     ) {
       return NextResponse.json(
         {
-          error: `${party.abbreviation ?? party.name} does not stand for election in this region.`,
+          error: `${party.name} does not stand for election in this region.`,
         },
         { status: 400 }
       );

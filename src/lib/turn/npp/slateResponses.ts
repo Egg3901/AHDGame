@@ -351,12 +351,17 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
           .find({ characterId: { $in: candidateIds }, status: "active" })
           .toArray()
       : [];
-  const activeCandidacyByCandidateId = new Map<string, ElectionCandidate>();
+  // Keyed by candidate, ALL of their active candidacies. The unique partial
+  // index allows only one, but a stale duplicate must not make the pass pick
+  // the wrong race: below we prefer the candidacy in the race being filed, so
+  // an NPP already correctly seated is marked filed rather than being told the
+  // slot is taken by themselves.
+  const activeCandidaciesByCandidateId = new Map<string, ElectionCandidate[]>();
   for (const candidacy of activeCandidacies) {
     const key = candidacy.characterId.toString();
-    if (!activeCandidacyByCandidateId.has(key)) {
-      activeCandidacyByCandidateId.set(key, candidacy);
-    }
+    const list = activeCandidaciesByCandidateId.get(key);
+    if (list) list.push(candidacy);
+    else activeCandidaciesByCandidateId.set(key, [candidacy]);
   }
 
   // Which (election, NPP) pairs hold a chair-issued slate row? Used below to
@@ -470,7 +475,13 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
         continue;
       }
 
-      const activeCandidacy = activeCandidacyByCandidateId.get(candidateKey) ?? null;
+      const candidacies = activeCandidaciesByCandidateId.get(candidateKey) ?? [];
+      const activeCandidacy =
+        candidacies.find(
+          (candidacy) => candidacy.electionId.toString() === election._id.toString()
+        ) ??
+        candidacies[0] ??
+        null;
       if (activeCandidacy && activeCandidacy.electionId.toString() === election._id.toString()) {
         await db
           .collection<SlateCandidate>("slateCandidates")
@@ -537,9 +548,6 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
         queueSkipped(row, "slot_taken");
         continue;
       }
-      for (const autoPick of activeChallengers) {
-        if (await withdrawAutoPickedCandidacy(ctx, election, autoPick)) displaced += 1;
-      }
 
       const candidateDoc: Omit<ElectionCandidate, "_id"> = {
         electionId: election._id,
@@ -568,6 +576,14 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
       } as ElectionCandidate);
       ctx.nppCandidacies.add(npp._id.toString());
       processedPartyElectionKeys.add(partyElectionKey);
+
+      // Only now that the chair's candidate is actually on the ballot do the
+      // auto-picks it displaces come off it. Withdrawing first would leave the
+      // party with no candidate at all if the insert above threw (the active
+      // candidacy index can reject it), and the retry is a whole turn away.
+      for (const autoPick of activeChallengers) {
+        if (await withdrawAutoPickedCandidacy(ctx, election, autoPick)) displaced += 1;
+      }
 
       await db
         .collection<SlateCandidate>("slateCandidates")

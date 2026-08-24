@@ -889,6 +889,8 @@ describe("fileAcceptedSlateRows", () => {
     );
 
     expect(summary.filed).toBe(1);
+    // A defending incumbent is never displaced to make room for the slate.
+    expect(summary.displaced).toBe(0);
     expect(inserted).toHaveLength(2);
     expect(inserted[0].status).toBe("active");
     expect(inserted[1].characterId).toEqual(slateNpp._id);
@@ -1053,6 +1055,96 @@ describe("fileAcceptedSlateRows", () => {
     expect(filedCandidate.status).toBe("active");
     expect(pendingRow.status).toBe("withdrawn");
     expect(pendingRow.refusalReason).toBe("slot_taken");
+  });
+
+  it("marks the row filed when the NPP already holds a candidacy in the slated race", async () => {
+    // Guards the degenerate double-candidacy state: a stale active row in
+    // another race must not make the pass resolve the wrong candidacy and then
+    // report the NPP's own seat as a taken slot.
+    const npp = makeNPP({ name: "Already Seated" });
+    const staleElectionId = new ObjectId();
+    const electionId = new ObjectId();
+
+    const election: Election = {
+      _id: electionId,
+      electionType: "house",
+      state: "US_CA",
+      countryId: "US",
+      cycle: 1,
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Election;
+
+    const candidateRow: SlateCandidate = {
+      _id: new ObjectId(),
+      slateId: new ObjectId(),
+      electionId,
+      partyId: "1",
+      countryId: "US",
+      candidateType: "npp",
+      candidateId: npp._id,
+      candidateName: npp.name,
+      homeState: npp.homeState,
+      status: "accepted",
+      fitScore: 90,
+      refusalReason: null,
+      autoFilled: false,
+      invitedAt: new Date(),
+      respondedAt: new Date(),
+      filedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const staleCandidacy: ElectionCandidate = {
+      _id: new ObjectId(),
+      electionId: staleElectionId,
+      characterId: npp._id,
+      characterName: npp.name,
+      party: "1",
+      status: "active",
+      isNPP: true,
+      nppId: npp._id,
+      enteredAt: new Date(),
+    };
+    const seatedCandidacy: ElectionCandidate = {
+      _id: new ObjectId(),
+      electionId,
+      characterId: npp._id,
+      characterName: npp.name,
+      party: "1",
+      status: "active",
+      isNPP: true,
+      nppId: npp._id,
+      enteredAt: new Date(),
+    };
+
+    const inserted: ElectionCandidate[] = [staleCandidacy, seatedCandidacy];
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: [candidateRow],
+      nppRelationships: [],
+      elections: [election],
+      electionCandidates: inserted,
+    });
+
+    const candidatesByElection = new Map<string, ElectionCandidate[]>([
+      [electionId.toString(), [seatedCandidacy]],
+    ]);
+    const summary = await fileAcceptedSlateRows(
+      makeCtx(db, [npp], {
+        candidatesByElection,
+        nppCandidacies: new Set([npp._id.toString()]),
+      })
+    );
+
+    expect(summary.filed).toBe(1);
+    expect(summary.skipped).toBe(0);
+    expect(summary.displaced).toBe(0);
+    expect(candidateRow.status).toBe("filed");
+    expect(seatedCandidacy.status).toBe("active");
+    expect(inserted).toHaveLength(2);
   });
 
   it("records ineligible_region when the party cannot contest the race's region", async () => {
