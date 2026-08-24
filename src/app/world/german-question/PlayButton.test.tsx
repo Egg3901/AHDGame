@@ -194,6 +194,35 @@ describe("PlayButton", () => {
     expect(screen.getByRole("button", { name: "PACT" })).toBeTruthy();
   });
 
+  it("closes a play the character has already used this turn, and says when it returns", () => {
+    render(
+      <PlayButton
+        play={singleRoute({
+          id: "letter",
+          actor: "personal",
+          payments: [
+            {
+              mode: "funds",
+              label: "COMMIT",
+              costLabel: "1 AP",
+              affordable: false,
+              blockedReason: "used",
+              debtNote: null,
+            },
+          ],
+        })}
+        onCommitted={() => {}}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "NATO" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "PACT" }).hasAttribute("disabled")).toBe(true);
+    // The horizon matters. A dead button with no stated return reads as
+    // permanently broken rather than as an allowance.
+    expect(screen.getByText(/already used this play this turn/i)).toBeTruthy();
+    expect(screen.getByText(/resets next turn/i)).toBeTruthy();
+  });
+
   it("sends a personal play's direction on the funds route", () => {
     render(
       <PlayButton play={singleRoute({ id: "letter", actor: "personal" })} onCommitted={() => {}} />

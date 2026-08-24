@@ -28,6 +28,9 @@ const REASON_COPY: Record<string, string> = {
   // treasury at all.
   funds: "Not enough campaign funds.",
   "no-direction": "Your country belongs to neither bloc.",
+  // Names WHEN it comes back. A dead button with no stated horizon reads as
+  // permanently broken rather than as an allowance that refills.
+  used: "You have already used this play this turn. It resets next turn.",
 };
 
 const copyFor = (reason: string | null) => (reason ? (REASON_COPY[reason] ?? reason) : null);

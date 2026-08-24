@@ -88,19 +88,26 @@ export function OpenFloorPanel({ openFloor }: { openFloor: DossierView["openFloo
         ✎ THE OPEN FLOOR
       </h2>
       <p className="font-mono text-body-xs leading-relaxed text-muted">
-        Every character in the world holds a 0.25× play on the street and the Bundestag.{" "}
-        {openFloor.characters.toLocaleString()}{" "}
+        Every character in the world holds one 0.25× play of each kind, per turn, on the street and
+        the Bundestag. {openFloor.characters.toLocaleString()}{" "}
         {openFloor.characters === 1 ? "character has" : "characters have"} taken a position this
-        turn — net {openFloor.netPoints >= 0 ? "+" : ""}
+        turn, for a net {openFloor.netPoints >= 0 ? "+" : ""}
         {openFloor.netPoints.toFixed(1)} toward{" "}
         {openFloor.netPoints >= 0 ? "reunification" : "NATO"}.
       </p>
+      {/*
+        The ceiling moves with turnout now, so it is stated as this turn's
+        rather than as a standing rule, and the scaling is future tense because
+        it happens when the turn resolves.
+      */}
       {openFloor.capped && (
         <p className="mt-2 font-mono text-body-xs leading-relaxed text-warning">
           The floor asked for {openFloor.rawPoints >= 0 ? "+" : ""}
-          {openFloor.rawPoints.toFixed(1)} and was scaled to {openFloor.netPoints >= 0 ? "+" : ""}
-          {openFloor.netPoints.toFixed(1)}: the personal tier is capped at ±
-          {openFloor.capPoints.toFixed(1)} per institution per turn.
+          {openFloor.rawPoints.toFixed(1)} and will be scaled to{" "}
+          {openFloor.netPoints >= 0 ? "+" : ""}
+          {openFloor.netPoints.toFixed(1)}: with {openFloor.characters.toLocaleString()} taking
+          part, the floor can move one institution by at most ±{openFloor.capPoints.toFixed(1)} this
+          turn. A larger turnout raises that ceiling.
         </p>
       )}
     </section>
