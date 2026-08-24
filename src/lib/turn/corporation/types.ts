@@ -136,6 +136,14 @@ export interface CorporationLookups {
    */
   stateInputAvailabilityByState: Map<string, Map<CommodityType, number>>;
   /**
+   * Lagged price-over-base ratio per state, the state twin of
+   * `reachablePriceRatioByCountry`. Feeds the price-realization leg for
+   * state-scoped commodities (ticket #1180), so a seller in a locally short
+   * state realizes that state's scarcity price rather than the national one.
+   * Sparse: falls back to the group/world ratio.
+   */
+  statePriceRatioByState?: Map<string, Map<CommodityType, number>>;
+  /**
    * Lagged share of a state's own production that active freight settlement
    * managed to PLACE (placed / supply, clamped 0..1), the sell-side mirror of
    * `stateInputAvailabilityByState`. Sparse and optional: absent state,

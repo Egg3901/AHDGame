@@ -40,7 +40,11 @@ import {
 } from "./settleSupplyAgreements";
 import type { SupplyAgreement } from "@/lib/db/types/supplyAgreement";
 import type { CommodityType } from "@/lib/constants/commodities";
-import { FREIGHT_CLASS_BY_COMMODITY, type FreightClass } from "@/lib/logistics/freightClass";
+import {
+  FREIGHT_CLASS_BY_COMMODITY,
+  STATE_SCOPED_COMMODITIES,
+  type FreightClass,
+} from "@/lib/logistics/freightClass";
 import {
   buildMinWageRatioByCountry,
   buildUnionLawBiasByCountry,
@@ -399,6 +403,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     const clearingGroupBySector = lookups.countryClearingBooks
       ? new Map<string, string>()
       : undefined;
+    // State-scoped clearing (ticket #1180): freight is a state's own haulage
+    // capacity, so it clears against that state's book rather than a national
+    // one. Built for every world, not just era worlds, because the constraint
+    // is physical rather than a trade-graph artifact.
+    const clearingStateBySector = new Map<string, string>();
     // Freight seam: per sector, the share of its offer that no network could
     // place. Populated only while settlement is active, so worlds with it off
     // (and every modern world) offer exactly what they offered before.
@@ -735,6 +744,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           deliveryLimitedBySectorId.set(sectorId, deliveryLimit.fraction);
           deliveryLimitedClassBySectorId.set(sectorId, deliveryLimit.freightClass);
         }
+        if (sector.stateId) clearingStateBySector.set(sectorId, sector.stateId);
         clearingInputs.push(clearingInput);
         // Brand loyalty (A2): remember what the rollup needs, joined post-clearing.
         if (brandLoyaltyEnabled) {
@@ -789,6 +799,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       // country's lagged reachable price. Sparse map; falls back to the
       // worldwide ratio per commodity. Modern worlds: no groups, unused.
       priceRatioByGroup: clearingGroupBySector ? lookups.reachablePriceRatioByCountry : undefined,
+      // Freight clears in the state that produced it: its supply IS that
+      // state's haulage ceiling, and no other state's trucks can serve it.
+      stateScopedCommodities: STATE_SCOPED_COMMODITIES,
+      stateBySector: clearingStateBySector,
+      balancesByState: lookups.rawStateBalances,
+      priceRatioByState: lookups.statePriceRatioByState,
       // The era table: clearing compares sector offers (era-based units under
       // plants) against the ledger's balances, which run on the same basis.
       basePrices: eraScaledBasePrices(lookups.eraUnitScale),
