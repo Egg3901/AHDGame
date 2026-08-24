@@ -46,6 +46,49 @@ describe("listStateLegislatureBills — regional budget gate", () => {
     expect(db.collectionMocks["regionalBudgets"]!.findOne).toHaveBeenCalledWith({ _id: "SCT" });
     expect(page.budget?.totalBudget).toBe(100);
   });
+
+  it("fetches legislation types named by provisions, not just each bill's headline type", async () => {
+    // A bill's provisions can name a different law from its headline type.
+    // Fetching only the headline type left those provisions unresolved, so the
+    // card had no law name to show for them.
+    db.collection("stateBills");
+    db.collectionMocks["stateBills"]!.find.mockReturnValue({
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: new ObjectId(),
+          stateId: "AZ",
+          countryId: "US",
+          title: "Omnibus",
+          summary: "Two laws",
+          sponsorName: "Jo",
+          sponsorParty: "1",
+          status: "active",
+          votesFor: 0,
+          votesAgainst: 0,
+          votesAbstain: 0,
+          votes: {},
+          proposedAt: new Date("2026-06-07T00:00:00Z"),
+          legislationTypeId: "headline_law",
+          provisions: [{ legislationTypeId: "other_law", effectDirection: 1 }],
+        },
+      ]),
+    });
+    db.collection("legislationTypes");
+
+    await listStateLegislatureBills(db as unknown as Db, {
+      countryId: "US",
+      stateId: "AZ",
+      authUser: null,
+    });
+
+    const filter = db.collectionMocks["legislationTypes"]!.find.mock.calls[0]?.[0] as {
+      _id: { $in: string[] };
+    };
+    expect(filter._id.$in).toContain("headline_law");
+    expect(filter._id.$in).toContain("other_law");
+  });
 });
 
 describe("getStateLegislatureBillDetail — provision descriptions", () => {

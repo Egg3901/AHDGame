@@ -41,6 +41,12 @@ export interface MigrationResult {
 
 type ProvisionDoc = Record<string, unknown>;
 
+/**
+ * An allowlist, not a denylist. `db/types/legislation.isPolicyProvision` names
+ * the types that are NOT policy provisions, which means a newly added type is
+ * treated as one until someone extends the list. A migration walking raw
+ * documents must refuse anything it does not recognise instead.
+ */
 function isPolicyProvision(provision: ProvisionDoc): boolean {
   const type = provision.type;
   if (type !== undefined && type !== "policy") return false;

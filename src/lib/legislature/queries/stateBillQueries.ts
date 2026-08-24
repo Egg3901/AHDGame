@@ -29,6 +29,7 @@ import { formatSubsidyProvisionLabel } from "@/lib/congress/billEnrichment";
 import {
   canonicalizeLegislationTypeId,
   getLegislationTypeById,
+  humanizeLegislationTypeId,
 } from "@/lib/legislationTypeAliases";
 import {
   loadLiveCurrentPolicies,
@@ -99,8 +100,21 @@ export async function listStateLegislatureBills(
         .toArray()
     : [];
 
+  // Provision legislation types as well as each bill's headline one: a bill's
+  // provisions can name a different law, and fetching only the headline type
+  // left those provisions unresolved on the card. The detail query has always
+  // fetched both.
   const legislationTypeIds = [
-    ...new Set(bills.map((bill) => bill.legislationTypeId).filter(Boolean)),
+    ...new Set(
+      [
+        ...bills.map((bill) => bill.legislationTypeId),
+        ...bills.flatMap((bill) =>
+          (bill.provisions ?? []).map((provision) =>
+            "legislationTypeId" in provision ? provision.legislationTypeId : null
+          )
+        ),
+      ].filter(Boolean)
+    ),
   ] as string[];
   const legislationTypes =
     legislationTypeIds.length > 0
@@ -250,7 +264,10 @@ export async function listStateLegislatureBills(
         const option = index !== undefined ? legislationType?.policyOptions?.[index] : undefined;
         return {
           legislationTypeId: provision.legislationTypeId,
-          legislationTypeName: legislationType?.name ?? provision.legislationTypeId,
+          legislationTypeName:
+            legislationType?.name ??
+            humanizeLegislationTypeId(provision.legislationTypeId) ??
+            provision.legislationTypeId,
           proposed: label,
           ...(index !== undefined ? { proposedPolicyIndex: index } : {}),
           effectDirection: provision.effectDirection,
@@ -513,7 +530,10 @@ export async function getStateLegislatureBillDetail(
           proposedRate?: number;
         },
         live: livePolicies.get(canonicalId),
-        legislationTypeName: legislationType?.name ?? provision.legislationTypeId,
+        legislationTypeName:
+          legislationType?.name ??
+          humanizeLegislationTypeId(provision.legislationTypeId) ??
+          provision.legislationTypeId,
         directionLabel: directionFromEffect(provision.effectDirection),
       });
     })

@@ -18,6 +18,12 @@ export type SnapshottableProvision = ResolvableProvision &
  * A bill's `provisions` array is heterogeneous: policy rows sit alongside
  * subsidy / end_subsidy rows, which have no policy option and no current law.
  * Only the policy rows can be snapshotted.
+ *
+ * Deliberately an allowlist, unlike `db/types/legislation.isPolicyProvision`,
+ * which lists the types that are NOT policy provisions. A denylist silently
+ * treats any newly added provision type as a policy provision until someone
+ * remembers to extend it; this one refuses anything it does not recognise. Do
+ * not "unify" the two.
  */
 function isSnapshottablePolicyProvision(value: unknown): value is SnapshottableProvision {
   if (typeof value !== "object" || value === null) return false;
