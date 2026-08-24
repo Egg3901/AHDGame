@@ -98,6 +98,23 @@ export async function listSlateCandidates(db: Db, slateId: ObjectId): Promise<Sl
     .toArray();
 }
 
+/**
+ * Should a slate row appear on the chair's Slate tab?
+ *
+ * Withdrawn rows are tombstones, but they come from two places. A reasonless
+ * one is a chair action — they removed the row, or reassigned that NPP to
+ * another race in the same region — and stays hidden. One carrying a
+ * `refusalReason` is the turn's filing pass reporting that it could not put
+ * the chair's pick on the ballot; before #1181 those were hidden too, so a
+ * chair-assigned NPP silently vanished and read as an assignment that never
+ * saved.
+ */
+export function isSlateRowVisibleToChair(
+  row: Pick<SlateCandidate, "status" | "refusalReason">
+): boolean {
+  return row.status !== "withdrawn" || row.refusalReason !== null;
+}
+
 /** List candidates across many slates in a single query (UI overview path). */
 export async function listSlateCandidatesByIds(
   db: Db,

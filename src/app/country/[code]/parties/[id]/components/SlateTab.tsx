@@ -10,6 +10,7 @@ import type { ElectionDisplay, GameStateDisplay } from "@/lib/db/types";
 import { ElectionPhaseStatusStrip } from "@/components/elections/ElectionPhaseStatusStrip";
 import { SlateElectionResults } from "@/components/elections/SlateElectionResults";
 import type { StateMapData } from "@/components/USAMapPaths";
+import { SLATE_REFUSAL_LABEL, isSlateFilingFailure } from "@/lib/slate/refusalReasons";
 
 const MapFallback = () => (
   <div className="h-full w-full animate-pulse rounded-md bg-card-elevated" />
@@ -117,6 +118,11 @@ interface SlateCandidateRow {
     | "in_other_race"
     | "cooldown"
     | "retired"
+    | "ineligible_region"
+    | "slot_taken"
+    | "party_restricted"
+    | "npp_unavailable"
+    | "already_slated_elsewhere"
     | null;
   autoFilled: boolean;
   invitedAt: string;
@@ -178,15 +184,7 @@ const PRIORITY_COLOR: Record<SlateOverviewItem["priority"], string> = {
   none: "bg-card-border/30 border-card-border text-muted",
 };
 
-const REFUSAL_LABEL: Record<NonNullable<SlateCandidateRow["refusalReason"]>, string> = {
-  low_relationship: "Low Relationship",
-  low_ambition: "Low Ambition",
-  low_compliance: "Low Compliance",
-  race_priority_mismatch: "Race Not a Fit",
-  in_other_race: "In Another Race",
-  cooldown: "Cooldown Active",
-  retired: "Retired",
-};
+const REFUSAL_LABEL = SLATE_REFUSAL_LABEL;
 
 const ACCEPTANCE_LIKELIHOOD_STYLES = {
   likely: "bg-emerald-500/15 border-emerald-500/40 text-emerald-300",
@@ -223,6 +221,13 @@ function getAcceptanceChip(
   if (candidate.status === "declined") {
     return {
       label: "Declined",
+      className: ACCEPTANCE_LIKELIHOOD_STYLES.unlikely,
+    };
+  }
+
+  if (candidate.status === "withdrawn") {
+    return {
+      label: "Could Not File",
       className: ACCEPTANCE_LIKELIHOOD_STYLES.unlikely,
     };
   }
@@ -848,10 +853,14 @@ function RaceSlatePanel({
             const isPendingAssignment = isPreTurnSlateAssignment(c);
             const isAwaitingTurnResponse =
               c.status === "invited" && c.respondedAt === null && c.filedAt === null;
+            const isFilingFailure =
+              c.status === "withdrawn" && isSlateFilingFailure(c.refusalReason);
             const statusLabel =
               isPendingAssignment || isAwaitingTurnResponse
                 ? "Assigned"
-                : formatSlateLabel(c.status);
+                : isFilingFailure
+                  ? "Not Filed"
+                  : formatSlateLabel(c.status);
             const statusClass = isPendingAssignment
               ? PENDING_ASSIGNMENT_STATUS_STYLE
               : isAwaitingTurnResponse
@@ -911,7 +920,10 @@ function RaceSlatePanel({
                 >
                   {statusLabel}
                 </span>
-                {canManageSlate && c.status !== "withdrawn" && (
+                {/* A filing failure is visible but has no live candidacy; the
+                    chair still needs a way to clear the row off the slate. The
+                    DELETE route nulls the reason, which hides it again. */}
+                {canManageSlate && (c.status !== "withdrawn" || isFilingFailure) && (
                   <WithdrawButton
                     countryCode={countryCode}
                     partyId={partyId}

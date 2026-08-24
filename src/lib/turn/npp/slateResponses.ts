@@ -26,6 +26,7 @@ import type {
   PoliticalParty,
   RecruitmentSlate,
   SlateCandidate,
+  SlateRefusalReason,
 } from "@/lib/db/types";
 import type { NPPContext } from "./context";
 import { decideNPPSlateResponse } from "./slateResponse";
@@ -34,6 +35,7 @@ import { materializeSlateAssignmentsFromTemplate } from "@/lib/db/recruitmentSla
 import { isElectionTypeEntryBlocked } from "@/lib/elections/nationwideExecutive";
 import { isPrimaryClosed } from "@/lib/elections/electionDeadlineFilters";
 import { canPartyContestState } from "@/lib/parties/regionalContest";
+import { removeWithdrawnCandidateFromTally } from "@/lib/electionEngine/tallyCleaner";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import {
   canFieldExecutiveCandidate,
@@ -50,6 +52,8 @@ interface SlateFilingSummary {
   rowsConsidered: number;
   filed: number;
   skipped: number;
+  /** Auto-picked same-party NPPs withdrawn to make room for a chair's pick. */
+  displaced: number;
 }
 
 export async function syncPersistentSlateAssignments(ctx: NPPContext): Promise<number> {
@@ -294,6 +298,19 @@ function isIncumbentForElection(ctx: NPPContext, candidateId: string, election: 
  * runs but before the generic party-pool fallback, so accepted slate rows can
  * still create a same-party primary against a defending NPP.
  *
+ * Ticket #1181 — two changes to how a row that cannot file is handled:
+ *
+ * 1. The chair outranks the autopilot. When the party's challenger slot in the
+ *    race is held by an NPP the generic party-pool fallback picked (i.e. one
+ *    with no chair-issued slate row of their own), that candidacy is withdrawn
+ *    and the chair's pick files in its place. A slot held by a defending
+ *    incumbent, or by another chair-issued slate candidate, still wins.
+ * 2. Every row this pass gives up on records WHY. It is still tombstoned as
+ *    `withdrawn`, but with a `refusalReason`, and the slate view now renders
+ *    reason-carrying tombstones instead of hiding them — previously the row
+ *    just disappeared and the chair had no way to tell a silent failure from
+ *    an assignment that never saved.
+ *
  * Returns counts so the caller can avoid double-filling slots that the
  * slate already covered.
  */
@@ -310,7 +327,7 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
       b.updatedAt.getTime() - a.updatedAt.getTime() || b.invitedAt.getTime() - a.invitedAt.getTime()
   );
   if (accepted.length === 0) {
-    return { rowsConsidered: 0, filed: 0, skipped: 0 };
+    return { rowsConsidered: 0, filed: 0, skipped: 0, displaced: 0 };
   }
 
   // Load only the elections still in primary phase — anything past primary
@@ -342,20 +359,38 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
     }
   }
 
+  // Which (election, NPP) pairs hold a chair-issued slate row? Used below to
+  // tell a chair's candidate apart from one the generic fallback auto-picked.
+  // `autoFilled` rows are turn-loop carry-forward, not a chair decision, so
+  // they do not confer precedence.
+  const chairSlatedRows = await db
+    .collection<SlateCandidate>("slateCandidates")
+    .find({
+      electionId: { $in: electionIds },
+      candidateType: "npp",
+      status: { $in: ["accepted", "filed"] },
+      autoFilled: { $ne: true },
+    })
+    .toArray();
+  const chairSlatedKeys = new Set(
+    chairSlatedRows.map((r) => `${r.electionId.toString()}:${r.candidateId.toString()}`)
+  );
+
   let filed = 0;
   let skipped = 0;
+  let displaced = 0;
   const processedCandidateIds = new Set<string>();
   const processedPartyElectionKeys = new Set<string>();
-  const skippedRowIds: ObjectId[] = [];
-  const queueSkipped = (row: SlateCandidate) => {
-    skippedRowIds.push(row._id);
+  const skippedRows: { rowId: ObjectId; reason: SlateRefusalReason }[] = [];
+  const queueSkipped = (row: SlateCandidate, reason: SlateRefusalReason) => {
+    skippedRows.push({ rowId: row._id, reason });
     skipped += 1;
   };
   for (const row of accepted) {
     try {
       const candidateKey = row.candidateId.toString();
       if (processedCandidateIds.has(candidateKey)) {
-        queueSkipped(row);
+        queueSkipped(row, "already_slated_elsewhere");
         continue;
       }
       processedCandidateIds.add(candidateKey);
@@ -363,29 +398,29 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
       const election = electionById.get(row.electionId.toString());
       const npp = nppMap.get(candidateKey);
       if (!election || !npp || npp.retiredAt) {
-        queueSkipped(row);
+        queueSkipped(row, "npp_unavailable");
         continue;
       }
       const electionCountry = election.countryId ?? "US";
       const rowCountry = row.countryId ?? electionCountry;
       const nppCountry = npp.countryId ?? "US";
       if (rowCountry !== electionCountry || nppCountry !== electionCountry) {
-        queueSkipped(row);
+        queueSkipped(row, "npp_unavailable");
         continue;
       }
       if (election.state && npp.homeState !== election.state) {
-        queueSkipped(row);
+        queueSkipped(row, "ineligible_region");
         continue;
       }
       const slateParty = ctx.partyByCompositeKey.get(`${electionCountry}:${row.partyId}`);
       const opsConfig = COUNTRY_CONFIGS[electionCountry as CountryId];
       if (opsConfig?.governmentType === "onePartyState") {
         if (!canFieldLegislativeCandidate(opsConfig, slateParty ?? null)) {
-          queueSkipped(row);
+          queueSkipped(row, "party_restricted");
           continue;
         }
         if (!canFieldExecutiveCandidate(opsConfig, slateParty ?? null, election.electionType)) {
-          queueSkipped(row);
+          queueSkipped(row, "party_restricted");
           continue;
         }
       }
@@ -396,14 +431,17 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
           stateId: election.state,
         })
       ) {
-        queueSkipped(row);
+        // e.g. a Plaid Cymru NPP slated into an English seat. The assignment
+        // route rejects this up front now, but rows predating that fix (and
+        // template carry-forward) still land here.
+        queueSkipped(row, "ineligible_region");
         continue;
       }
       if (
         ctx.nppElectionEligiblePartyKeys &&
         !ctx.nppElectionEligiblePartyKeys.has(`${rowCountry}:${row.partyId}`)
       ) {
-        queueSkipped(row);
+        queueSkipped(row, "party_restricted");
         continue;
       }
 
@@ -428,7 +466,7 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
 
       const partyElectionKey = `${row.electionId.toString()}_${row.partyId}`;
       if (processedPartyElectionKeys.has(partyElectionKey)) {
-        queueSkipped(row);
+        queueSkipped(row, "slot_taken");
         continue;
       }
 
@@ -476,17 +514,31 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
       const activeIncumbents = activeSamePartyNpps.filter((candidate) =>
         candidate.nppId ? isIncumbentForElection(ctx, candidate.nppId.toString(), election) : false
       );
-      const activeChallengers = activeSamePartyNpps.length - activeIncumbents.length;
+      const activeChallengers = activeSamePartyNpps.filter(
+        (candidate) => !activeIncumbents.includes(candidate)
+      );
 
       // Slate may create one same-party challenger alongside a defending
       // incumbent, but should not keep stacking extra same-party Slate NPPs once
       // that challenger slot is already occupied.
-      if (
-        activeChallengers > 0 ||
-        (activeIncumbents.length === 0 && activeSamePartyNpps.length > 0)
-      ) {
-        queueSkipped(row);
+      //
+      // #1181: WHO occupies it decides the outcome. A challenger the generic
+      // party-pool fallback auto-picked yields to the chair — the chair's
+      // instruction is the later, deliberate one, and silently discarding it
+      // was the whole bug. A challenger holding their own chair-issued slate
+      // row is the chair's earlier decision, so that one stands and this row
+      // is tombstoned with a reason the chair can actually read.
+      const chairBackedChallengers = activeChallengers.filter((candidate) =>
+        candidate.nppId
+          ? chairSlatedKeys.has(`${election._id.toString()}:${candidate.nppId.toString()}`)
+          : false
+      );
+      if (chairBackedChallengers.length > 0) {
+        queueSkipped(row, "slot_taken");
         continue;
+      }
+      for (const autoPick of activeChallengers) {
+        if (await withdrawAutoPickedCandidacy(ctx, election, autoPick)) displaced += 1;
       }
 
       const candidateDoc: Omit<ElectionCandidate, "_id"> = {
@@ -532,14 +584,15 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
     }
   }
 
-  if (skippedRowIds.length > 0) {
+  if (skippedRows.length > 0) {
     await db.collection<SlateCandidate>("slateCandidates").bulkWrite(
-      skippedRowIds.map((rowId) => ({
+      skippedRows.map(({ rowId, reason }) => ({
         updateOne: {
           filter: { _id: rowId },
           update: {
             $set: {
               status: "withdrawn",
+              refusalReason: reason,
               respondedAt: now,
               updatedAt: now,
             },
@@ -549,5 +602,56 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
     );
   }
 
-  return { rowsConsidered: accepted.length, filed, skipped };
+  return { rowsConsidered: accepted.length, filed, skipped, displaced };
+}
+
+/**
+ * Withdraw an auto-picked same-party NPP so a chair's slate pick can take the
+ * challenger slot (#1181). Mirrors the slate-withdraw cleanup used by
+ * `reconcileSlateMoves` and the slate DELETE route: mark the candidacy
+ * withdrawn, scrub the vote tally, archive the campaign, and drop the NPP from
+ * the turn's in-memory candidacy state so nothing re-files them.
+ *
+ * The in-memory `candidatesByElection` entry may be a clone with a synthetic
+ * `_id` (rows inserted earlier this turn), so the live row is matched on
+ * (electionId, characterId, status) rather than `_id`.
+ */
+async function withdrawAutoPickedCandidacy(
+  ctx: NPPContext,
+  election: Election,
+  inMemoryCandidate: ElectionCandidate
+): Promise<boolean> {
+  const { db, now } = ctx;
+  const live = await db.collection<ElectionCandidate>("electionCandidates").findOne({
+    electionId: election._id,
+    characterId: inMemoryCandidate.characterId,
+    status: "active",
+  });
+  if (!live) return false;
+
+  await db
+    .collection<ElectionCandidate>("electionCandidates")
+    .updateOne({ _id: live._id }, { $set: { status: "withdrawn", withdrawnAt: now } });
+  await removeWithdrawnCandidateFromTally(db, election._id, live._id.toString());
+  await db.collection("campaigns").updateOne(
+    { electionId: election._id, candidateId: live.characterId, status: { $ne: "archived" } },
+    {
+      $set: {
+        status: "archived",
+        archivedAt: now,
+        archivedReason: "withdrawn",
+        updatedAt: now,
+      },
+    }
+  );
+
+  inMemoryCandidate.status = "withdrawn";
+  inMemoryCandidate.withdrawnAt = now;
+  if (inMemoryCandidate.nppId) ctx.nppCandidacies.delete(inMemoryCandidate.nppId.toString());
+
+  console.log(
+    `[Turn] Slate precedence: withdrew auto-picked ${live.characterName} from ` +
+      `${election.electionType}/${election.state} for a chair slate assignment`
+  );
+  return true;
 }
