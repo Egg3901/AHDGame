@@ -23,7 +23,7 @@ import {
   LADDER_RUNGS,
   LADDER_UNLOCK_TURNS,
   MAX_COERCIVE_RUNG,
-  PERSONAL_NET_CAP,
+  PERSONAL_NET_CAP_BASE,
   PERSONAL_MULTIPLIER_PCT,
   SETTLEMENT_SEATS,
   driftBandLabel,
@@ -403,8 +403,8 @@ export async function loadGermanQuestionDossier(
     characters: new Set(personal.map((p) => String(p.characterId))).size,
     netPoints: pts(personal.reduce((sum, p) => sum + (p.appliedPoints ?? 0), 0)),
     rawPoints: pts(personalRawTotal),
-    capPoints: magPts(PERSONAL_NET_CAP),
-    capped: [...personalRawByInstitution.values()].some((v) => Math.abs(v) > PERSONAL_NET_CAP),
+    capPoints: magPts(PERSONAL_NET_CAP_BASE),
+    capped: [...personalRawByInstitution.values()].some((v) => Math.abs(v) > PERSONAL_NET_CAP_BASE),
   };
 
   // ── institutions ──────────────────────────────────────────────────────────

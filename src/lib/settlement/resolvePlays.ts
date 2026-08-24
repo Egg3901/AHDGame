@@ -12,7 +12,7 @@ import type { ObjectId } from "mongodb";
 import type { SettlementPlayDoc } from "@/lib/db/types/settlementPlay";
 import {
   PERSONAL_MULTIPLIER_PCT,
-  PERSONAL_NET_CAP,
+  PERSONAL_NET_CAP_BASE,
   getSeat,
 } from "@/lib/constants/settlementCrisis";
 
@@ -95,7 +95,7 @@ export function resolvePlayBatch(plays: readonly SettlementPlayDoc[]): ResolvedB
   for (const [institutionId, raw] of personalRaw) {
     const rows = personalPending.filter((r) => r.play.targetInstitutionId === institutionId);
     const magnitude = Math.abs(raw);
-    if (magnitude <= PERSONAL_NET_CAP) {
+    if (magnitude <= PERSONAL_NET_CAP_BASE) {
       for (const { play, requested } of rows) {
         stamped.push({ id: play._id, appliedPoints: requested });
         addTo(personalApplied, institutionId, requested);
@@ -103,11 +103,11 @@ export function resolvePlayBatch(plays: readonly SettlementPlayDoc[]): ResolvedB
       continue;
     }
 
-    const target = Math.sign(raw) * PERSONAL_NET_CAP;
+    const target = Math.sign(raw) * PERSONAL_NET_CAP_BASE;
     // Truncate toward zero so no row is ever stamped past what it asked for,
     // then hand the shortfall to the rows with the largest lost fractions.
     const shares = rows.map((row) => {
-      const exact = (row.requested * PERSONAL_NET_CAP) / magnitude;
+      const exact = (row.requested * PERSONAL_NET_CAP_BASE) / magnitude;
       const base = Math.trunc(exact);
       return { row, base, remainder: exact - base };
     });

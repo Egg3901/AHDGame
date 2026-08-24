@@ -4,11 +4,11 @@ import type { SettlementPlayDoc } from "@/lib/db/types/settlementPlay";
 import {
   HUNDREDTHS,
   PERSONAL_MULTIPLIER_PCT,
-  PERSONAL_NET_CAP,
+  PERSONAL_NET_CAP_BASE,
 } from "@/lib/constants/settlementCrisis";
 
 /** What one default personal play buys, at the personal tier's multiplier. */
-const PERSONAL_QUARTER = Math.round((PERSONAL_NET_CAP * PERSONAL_MULTIPLIER_PCT) / 100);
+const PERSONAL_QUARTER = Math.round((PERSONAL_NET_CAP_BASE * PERSONAL_MULTIPLIER_PCT) / 100);
 import { appliedPointsFor, resolvePlayBatch } from "./resolvePlays";
 
 function play(over: Partial<SettlementPlayDoc>): SettlementPlayDoc {
@@ -44,7 +44,7 @@ function personalPlay(over: Partial<SettlementPlayDoc> = {}): SettlementPlayDoc 
     // Derived from the cap so that TWO of these stay under it whatever the
     // tempo. A frozen literal drifted over the cap when the tempo moved, and
     // the "under the cap" tests then silently measured the apportionment.
-    basePoints: PERSONAL_NET_CAP,
+    basePoints: PERSONAL_NET_CAP_BASE,
     direction: 1,
     class: "personal",
     ...over,
@@ -114,8 +114,8 @@ describe("resolvePlayBatch", () => {
     );
     const batch = resolvePlayBatch(many);
     expect(batch.personalRaw.get("street")).toBe(10_000);
-    expect(batch.personalApplied.get("street")).toBe(PERSONAL_NET_CAP);
-    expect(batch.perInstitution.get("street")).toBe(PERSONAL_NET_CAP);
+    expect(batch.personalApplied.get("street")).toBe(PERSONAL_NET_CAP_BASE);
+    expect(batch.perInstitution.get("street")).toBe(PERSONAL_NET_CAP_BASE);
   });
 
   it("caps on the NET, so opposing personal plays cancel before the cap bites", () => {
@@ -136,7 +136,7 @@ describe("resolvePlayBatch", () => {
       personalPlay({ playId: "rally", basePoints: 2 * HUNDREDTHS, direction: -1 })
     );
     const batch = resolvePlayBatch(many);
-    expect(batch.personalApplied.get("street")).toBe(-PERSONAL_NET_CAP);
+    expect(batch.personalApplied.get("street")).toBe(-PERSONAL_NET_CAP_BASE);
   });
 
   it("does not let the personal cap touch seat plays", () => {
@@ -148,7 +148,7 @@ describe("resolvePlayBatch", () => {
       play({ seatId: "RU", targetInstitutionId: "street", direction: 1, basePoints: 500 }),
     ];
     const batch = resolvePlayBatch(withSeat);
-    expect(batch.perInstitution.get("street")).toBe(PERSONAL_NET_CAP + 500);
+    expect(batch.perInstitution.get("street")).toBe(PERSONAL_NET_CAP_BASE + 500);
   });
 
   it("caps each institution independently", () => {
@@ -165,8 +165,8 @@ describe("resolvePlayBatch", () => {
         })
       ),
     ]);
-    expect(batch.personalApplied.get("street")).toBe(PERSONAL_NET_CAP);
-    expect(batch.personalApplied.get("bundestag")).toBe(-PERSONAL_NET_CAP);
+    expect(batch.personalApplied.get("street")).toBe(PERSONAL_NET_CAP_BASE);
+    expect(batch.personalApplied.get("bundestag")).toBe(-PERSONAL_NET_CAP_BASE);
   });
 
   it("stamps capped personal plays with what they actually bought", () => {
@@ -183,7 +183,7 @@ describe("resolvePlayBatch", () => {
     expect(stampedTotal).toBe(batch.perInstitution.get("street"));
     // Derived, not frozen: the stamps must sum to exactly the cap and no row
     // may be stamped above the 50 it asked for, whatever the cap is tuned to.
-    expect(stampedTotal).toBe(PERSONAL_NET_CAP);
+    expect(stampedTotal).toBe(PERSONAL_NET_CAP_BASE);
     for (const row of batch.stamped) {
       expect(row.appliedPoints).toBeLessThanOrEqual(50);
       expect(row.appliedPoints).toBeGreaterThanOrEqual(0);
@@ -199,8 +199,8 @@ describe("resolvePlayBatch", () => {
       personalPlay({ playId: "rally", basePoints: 2 * HUNDREDTHS, direction: 1 })
     );
     const batch = resolvePlayBatch(crowd);
-    expect(batch.perInstitution.get("street")).toBe(PERSONAL_NET_CAP);
-    expect(batch.stamped.reduce((sum, r) => sum + r.appliedPoints, 0)).toBe(PERSONAL_NET_CAP);
+    expect(batch.perInstitution.get("street")).toBe(PERSONAL_NET_CAP_BASE);
+    expect(batch.stamped.reduce((sum, r) => sum + r.appliedPoints, 0)).toBe(PERSONAL_NET_CAP_BASE);
   });
 
   it("apportions a crowded NEGATIVE tier to the cap as well", () => {
@@ -208,7 +208,7 @@ describe("resolvePlayBatch", () => {
       personalPlay({ playId: "rally", basePoints: 2 * HUNDREDTHS, direction: -1 })
     );
     const batch = resolvePlayBatch(crowd);
-    expect(batch.perInstitution.get("street")).toBe(-PERSONAL_NET_CAP);
+    expect(batch.perInstitution.get("street")).toBe(-PERSONAL_NET_CAP_BASE);
     for (const row of batch.stamped) expect(row.appliedPoints).toBeLessThanOrEqual(0);
   });
 

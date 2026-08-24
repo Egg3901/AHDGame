@@ -32,7 +32,7 @@ export const HUNDREDTHS = 100;
  * independence locks at 156 turns, reunification carries at 294. So:
  *
  *   - every authored magnitude below is written `mag(<mockup points>)`
- *   - `DRIFT_K_BPS`, `DRIFT_NOISE_SPAN` and `PERSONAL_NET_CAP` divide by it too
+ *   - `DRIFT_K_BPS`, `DRIFT_NOISE_SPAN` and `PERSONAL_NET_CAP_BASE` divide by it too
  *
  * Change this one number to retune the whole clock. Changing a magnitude
  * WITHOUT changing the brake changes where the crisis lands, not how long it
@@ -211,14 +211,70 @@ export const DRIFT_NOISE_SPAN = mag(3);
 export const DRIFT_HISTORY_LENGTH = 6;
 
 /**
- * Cap on the personal tier's NET contribution to one institution per turn, in
- * hundredths. Uncapped, thousands of characters at 0.25x would dominate every
- * national seat combined.
+ * The personal tier's net ceiling on ONE institution per turn, at the REFERENCE
+ * turnout, in hundredths.
+ *
+ * Renamed from `PERSONAL_NET_CAP` when the ceiling stopped being flat. It is no
+ * longer "the cap" — it is the cap at one particular turnout — and the rename
+ * exists to force every call site through review rather than let it silently
+ * keep the old meaning. Read {@link personalNetCapFor} instead.
  *
  * Tempo-scaled with the rest, so the public tier keeps the same share of the
  * board as the seats no matter how slowly the crisis is set to run.
  */
-export const PERSONAL_NET_CAP = mag(6);
+export const PERSONAL_NET_CAP_BASE = mag(6);
+
+/**
+ * The turnout at which the pool equals {@link PERSONAL_NET_CAP_BASE} exactly.
+ *
+ * Eight, because that is roughly where the old flat cap began to bind: the
+ * street plays are worth 0.11 points per character per turn, so six or seven
+ * aligned characters filled a 0.75 ceiling. Anchoring here means the board at
+ * eight participants is unchanged by the switch and every earlier measurement
+ * still compares.
+ *
+ * ⚠️ THIS IS THE TUNING DIAL. Raising it lowers the ceiling at every turnout
+ * above the reference — at 16, the 59-participant pool falls from 2.04 points
+ * to 1.44. Tune this, never the exponent.
+ */
+export const PERSONAL_CAP_REFERENCE_TURNOUT = 8;
+
+/**
+ * How many times one character may use one personal play in a turn.
+ *
+ * Per PLAY, so a character still gets three a turn. Per play id and NOT per
+ * direction: one `oped` whether it pushes NATO or PACT. Pushing both ways in a
+ * turn is self-cancelling, so a per-direction allowance would only hand every
+ * character a way to burn twice the action points for no board effect.
+ *
+ * Exists because action points were the only brake, and a character carrying a
+ * hundred and fifty of them could spend the lot on a single button and consume
+ * the whole shared pool, scaling everyone else's contribution to nothing.
+ */
+export const PERSONAL_PLAY_USES_PER_TURN = 1;
+
+/**
+ * The pool that `participants` distinct characters share on one institution,
+ * in hundredths.
+ *
+ * SQUARE ROOT, so a mass turnout is genuinely louder but with diminishing
+ * returns. The two failure modes this sits between:
+ *
+ *   - a FLAT cap meant the first six aligned characters consumed everything and
+ *     the seventh onward moved the board by nothing, which reads to a player as
+ *     a dead button rather than as a crowd;
+ *   - LINEAR growth would let the street overrun all four delegations as the
+ *     playerbase grew, which is the outcome a cap exists to prevent at all.
+ *
+ * Counted per institution: forty people on the street must not raise the
+ * Bundestag's ceiling.
+ */
+export function personalNetCapFor(participants: number): number {
+  if (participants <= 0) return 0;
+  return Math.round(
+    PERSONAL_NET_CAP_BASE * Math.sqrt(participants / PERSONAL_CAP_REFERENCE_TURNOUT)
+  );
+}
 
 /** Highest rung coercive plays alone can reach. Rung 5 is a deliberate act. */
 export const MAX_COERCIVE_RUNG = 4;

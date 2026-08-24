@@ -3,7 +3,7 @@ import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockCollection, type MockDb } from "@/lib/test-utils/mockDb";
 import {
   HUNDREDTHS,
-  PERSONAL_NET_CAP,
+  PERSONAL_NET_CAP_BASE,
   LADDER_UNLOCK_TURNS,
   SETTLEMENT_INSTITUTIONS,
   SETTLEMENT_SEATS,
@@ -667,7 +667,7 @@ describe("loadGermanQuestionDossier", () => {
     expect(floor[0].text).toContain("+6.0");
     expect(floor[0].text).toContain("capped");
     expect(view!.openFloor.rawPoints).toBe(20);
-    expect(view!.openFloor.capPoints).toBe(PERSONAL_NET_CAP / HUNDREDTHS);
+    expect(view!.openFloor.capPoints).toBe(PERSONAL_NET_CAP_BASE / HUNDREDTHS);
   });
 
   it("stands the ladder down for every seat when escalation is off", async () => {

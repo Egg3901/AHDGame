@@ -10,6 +10,9 @@ import {
   LOCK_THRESHOLD,
   HUNDREDTHS,
   SEAT_ACTION_BANK_TURNS,
+  PERSONAL_CAP_REFERENCE_TURNOUT,
+  PERSONAL_NET_CAP_BASE,
+  personalNetCapFor,
   playsForSeat,
   seatActionBankCap,
   type SettlementInstitutionKey,
@@ -194,5 +197,42 @@ describe("settlement crisis config", () => {
       );
       expect([...reach].sort(), institution.id).toEqual(["east", "west"]);
     }
+  });
+});
+
+describe("personalNetCapFor", () => {
+  it("is exactly the base at the reference turnout", () => {
+    // The reference is chosen so the board at that turnout is unchanged by the
+    // switch from a flat cap. If this drifts, every earlier balance
+    // measurement silently stops comparing.
+    expect(personalNetCapFor(PERSONAL_CAP_REFERENCE_TURNOUT)).toBe(PERSONAL_NET_CAP_BASE);
+  });
+
+  it("grows with turnout", () => {
+    expect(personalNetCapFor(20)).toBeGreaterThan(personalNetCapFor(8));
+    expect(personalNetCapFor(59)).toBeGreaterThan(personalNetCapFor(20));
+  });
+
+  it("grows SUB-linearly, so a crowd is louder but never proportionally so", () => {
+    // The whole point of the shape. Linear growth would let the public tier
+    // overrun all four delegations as the playerbase grew, which is the
+    // outcome the cap exists to prevent.
+    const at8 = personalNetCapFor(8);
+    const at16 = personalNetCapFor(16);
+    expect(at16).toBeGreaterThan(at8);
+    expect(at16).toBeLessThan(at8 * 2);
+  });
+
+  it("gives an empty floor no ceiling to share", () => {
+    expect(personalNetCapFor(0)).toBe(0);
+    expect(personalNetCapFor(-3)).toBe(0);
+  });
+
+  it("matches the documented table", () => {
+    expect(personalNetCapFor(1)).toBe(27);
+    expect(personalNetCapFor(8)).toBe(75);
+    expect(personalNetCapFor(20)).toBe(119);
+    expect(personalNetCapFor(59)).toBe(204);
+    expect(personalNetCapFor(200)).toBe(375);
   });
 });
