@@ -24,7 +24,8 @@ interface Member {
   partyName?: string | null;
   partyColor?: string | null;
   partyLogoUrl?: string | null;
-  ministerialActions: number;
+  /** Absent on a withheld office: the briefing does not send it to outsiders. */
+  ministerialActions?: number;
   bannerImageUrl: string | null;
 }
 
@@ -44,6 +45,12 @@ interface Props {
   activeTab: CabinetTabId;
   onSelectTab: (id: CabinetTabId) => void;
   statStrip: ReactNode;
+  /**
+   * Whether to show the remaining-actions chip. False on a withheld office: how
+   * much of their turn a minister has left is departmental, and the fallback
+   * would otherwise render an authoritative-looking "0/2 Actions".
+   */
+  showActions?: boolean;
 }
 
 export function CabinetOfficeLayout({
@@ -62,6 +69,7 @@ export function CabinetOfficeLayout({
   activeTab,
   onSelectTab,
   statStrip,
+  showActions = true,
 }: Props) {
   const hasBanner = Boolean(bannerImageUrl);
   const actionsRemaining = member?.ministerialActions ?? 0;
@@ -153,17 +161,19 @@ export function CabinetOfficeLayout({
                   {group}
                 </Badge>
               )}
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/30 px-2.5 py-1 text-xs font-medium text-white/80">
-                <svg
-                  className="h-3 w-3 text-gov-soft"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  aria-hidden
-                >
-                  <path d="M12 1L3 5v6c0 5.25 3.75 10.2 9 11.25C17.25 21.2 21 16.25 21 11V5l-9-4z" />
-                </svg>
-                {actionsRemaining}/{MINISTERIAL_ACTION_CAP} {actionCopy?.title ?? "Actions"}
-              </span>
+              {showActions && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/30 px-2.5 py-1 text-xs font-medium text-white/80">
+                  <svg
+                    className="h-3 w-3 text-gov-soft"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    aria-hidden
+                  >
+                    <path d="M12 1L3 5v6c0 5.25 3.75 10.2 9 11.25C17.25 21.2 21 16.25 21 11V5l-9-4z" />
+                  </svg>
+                  {actionsRemaining}/{MINISTERIAL_ACTION_CAP} {actionCopy?.title ?? "Actions"}
+                </span>
+              )}
             </div>
           </div>
 
@@ -175,9 +185,14 @@ export function CabinetOfficeLayout({
           {bannerOverlay && <div className="shrink-0">{bannerOverlay}</div>}
         </div>
 
-        <div className="relative mt-4">
-          <CabinetTabBar tabs={tabs} activeTab={activeTab} onSelect={onSelectTab} />
-        </div>
+        {/* A withheld office passes no tabs. Rendering the bar anyway would leave
+            a strip of empty space above the rule, which reads as a failed load
+            rather than as a masthead with nothing under it. */}
+        {tabs.length > 0 && (
+          <div className="relative mt-4">
+            <CabinetTabBar tabs={tabs} activeTab={activeTab} onSelect={onSelectTab} />
+          </div>
+        )}
       </div>
 
       <div className="gov-rule" />

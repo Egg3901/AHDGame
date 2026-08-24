@@ -7,6 +7,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
+import { resolveCabinetOfficeVisibility } from "@/lib/cabinet/officeVisibility";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import { getNationalDoctrine } from "@/lib/db/collections/nationalDoctrine";
 import { getNuclearProgram } from "@/lib/db/collections/nuclearPrograms";
@@ -18,8 +19,23 @@ export interface NuclearRouteParams {
   params: Promise<{ code: string; positionId: string }>;
 }
 
-/** Shared guard: valid country, real defence seat, caller holds it (or is admin). */
-export async function requireDefenceHolder(code: string, positionId: string) {
+/**
+ * Shared guard: valid country, real defence seat, caller may reach it.
+ *
+ * `intent: "manage"` (the default, and what every mutation uses) keeps the
+ * original rule: the seated holder or an admin, nobody else.
+ *
+ * `intent: "read"` is for the GET surfaces, which are office RECORDS rather than
+ * levers, so they follow the cabinet office visibility rule instead — the holder,
+ * their country's head of government or head of state, or an admin. Without this
+ * split a head of government could open the defence office (which the briefing
+ * now allows) and then hit a 403 from the nuclear console inside it.
+ */
+export async function requireDefenceHolder(
+  code: string,
+  positionId: string,
+  { intent = "manage" }: { intent?: "manage" | "read" } = {}
+) {
   const auth = await requireAuth();
   if (!auth.ok) return { error: auth.response } as const;
 
@@ -35,14 +51,24 @@ export async function requireDefenceHolder(code: string, positionId: string) {
 
   const db = await getDb();
   const member = await getCabinetMembersCollection(db).findOne({ countryId, positionId });
-  const isHolder =
-    member?.characterId &&
-    auth.user.character &&
-    member.characterId.toString() === auth.user.character._id.toString();
-  if (!isHolder && !auth.user.isAdmin) {
+
+  const { canView, canAct } = await resolveCabinetOfficeVisibility(db, {
+    countryId,
+    holderCharacterId: member?.characterId ?? null,
+    viewerCharacterId: auth.user.character?._id ?? null,
+    isAdmin: !!auth.user.isAdmin,
+  });
+
+  const permitted = intent === "read" ? canView : canAct;
+  if (!permitted) {
     return {
       error: NextResponse.json(
-        { error: "Only the defence minister may manage the nuclear programme." },
+        {
+          error:
+            intent === "read"
+              ? "This office's records are not published outside the office."
+              : "Only the defence minister may manage the nuclear programme.",
+        },
         { status: 403 }
       ),
     } as const;
