@@ -36,7 +36,7 @@ export function mapStateBillToBillDisplay(
       legislationTypeName: p.legislationTypeName ?? "",
       effectDirection: p.effectDirection,
       directionLabel: directionFromEffect(p.effectDirection),
-      positionLabel: p.policyOptionName ?? undefined,
+      positionLabel: p.proposed.name,
       effectTargetLabel: p.effectTargetsWeighted?.[0]?.metricId
         ? `${p.legislationTypeName ?? "Policy"}: ${p.effectTargetsWeighted[0].metricId}`
         : undefined,
@@ -87,7 +87,7 @@ export function mapStateBillToBillDisplay(
     legislationTypeName: sb.legislationTypeName ?? firstProv?.legislationTypeName ?? null,
     effectDirection: firstProv?.effectDirection ?? null,
     directionLabel: firstProv ? directionFromEffect(firstProv.effectDirection) : null,
-    positionLabel: firstProv?.policyOptionName ?? null,
+    positionLabel: firstProv?.proposed.name ?? null,
     effectTargetLabel: null,
     provisions,
     proposedAt: sb.proposedAt,

@@ -134,10 +134,14 @@ describe("getStateLegislatureBillDetail — provision descriptions", () => {
 
     expect(detail).not.toBeNull();
     const prov = detail!.provisions[0]!;
-    expect(prov.policyOptionName).toBe("Direct Democracy Expansion Act");
-    expect(prov.policyOptionDescription).toBe("_Acht_ — citizens' assembly");
-    expect(prov.currentPolicyOptionName).toBe("Statutory Electoral Commission Act");
-    expect(prov.currentPolicyOptionDescription).toBe("Maintain current remit");
+    expect(prov.proposed).toEqual({
+      name: "Direct Democracy Expansion Act",
+      explanation: "_Acht_ — citizens' assembly",
+    });
+    expect(prov.current).toEqual({
+      name: "Statutory Electoral Commission Act",
+      explanation: "Maintain current remit",
+    });
     expect(prov.economic).toBe(-3);
     expect(prov.social).toBe(-4);
     expect(prov.effects && prov.effects.length).toBeGreaterThan(0);
@@ -350,5 +354,152 @@ describe("getStateLegislatureBillDetail — frozen snapshot for concluded bills 
     expect(card).toBeDefined();
     expect(card!.votesFor).toBe(14);
     expect(card!.votesAgainst).toBe(17);
+  });
+});
+
+describe("getStateLegislatureBillDetail — an enacted bill keeps the law it replaced", () => {
+  const BILL_ID = "507f1f77bcf86cd799439012";
+
+  const legType = {
+    _id: "ru_regional_health",
+    name: "Regional Health Programme",
+    policyDomain: "welfare",
+    effectTargetsWeighted: [
+      { metricCategoryId: "society", metricId: "healthcareQuality", weight: 1 },
+    ],
+    policyOptions: [
+      {
+        id: "o1",
+        name: "Minimal",
+        explanation: "Token funding.",
+        stance: "right",
+        effectDirection: 1,
+        economic: 2,
+        social: 0,
+      },
+      {
+        id: "o2",
+        name: "Universal",
+        explanation: "Full coverage.",
+        stance: "left",
+        effectDirection: -1,
+        economic: -2,
+        social: 0,
+      },
+    ],
+  };
+
+  const cursorOf = (rows: unknown[]) => ({
+    toArray: vi.fn().mockResolvedValue(rows),
+    sort: vi.fn().mockReturnThis(),
+    project: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    skip: vi.fn().mockReturnThis(),
+  });
+
+  it("shows the pre-enactment law, not the bill's own outcome", async () => {
+    // The reported bug. The bill has ALREADY enacted, so the live statePolicies
+    // row now points at the option this very bill introduced. Resolving current
+    // law live therefore rendered the bill's own outcome in the "Current law"
+    // box, and the bill looked like it had re-passed the law already in force.
+    const db = createMockDb();
+    db.collection("stateBills");
+    db.collectionMocks["stateBills"]!.findOne.mockResolvedValue({
+      _id: BILL_ID,
+      stateId: "MOW",
+      countryId: "RU",
+      title: "Moscow Health Act",
+      summary: "Expand coverage.",
+      sponsorName: "NPP",
+      sponsorParty: "1",
+      status: "enacted",
+      votesFor: 10,
+      votesAgainst: 2,
+      votesAbstain: 0,
+      votes: {},
+      proposedAt: new Date("2026-06-07T00:00:00Z"),
+      legislationTypeId: "ru_regional_health",
+      provisions: [
+        {
+          legislationTypeId: "ru_regional_health",
+          policyOptionId: "o2",
+          effectDirection: -1,
+          currentPolicyOptionIdSnapshot: "o1",
+          currentPolicyOptionNameSnapshot: "Minimal",
+          currentPolicyOptionExplanationSnapshot: "Token funding.",
+          policyOptionNameSnapshot: "Universal",
+          policyOptionExplanationSnapshot: "Full coverage.",
+        },
+      ],
+    });
+    db.collection("legislationTypes");
+    db.collectionMocks["legislationTypes"]!.find.mockReturnValue(cursorOf([legType]));
+    db.collection("statePolicies");
+    db.collectionMocks["statePolicies"]!.find.mockReturnValue(
+      cursorOf([{ stateId: "MOW", legislationTypeId: "ru_regional_health", policyOptionIndex: 1 }])
+    );
+    db.collection("enactedLaws");
+    db.collectionMocks["enactedLaws"]!.find.mockReturnValue(cursorOf([]));
+
+    const detail = await getStateLegislatureBillDetail(db as unknown as Db, {
+      countryId: "RU",
+      stateId: "MOW",
+      billId: BILL_ID,
+      authUser: null,
+    });
+
+    const prov = detail!.provisions[0]!;
+    expect(prov.current).toEqual({ name: "Minimal", explanation: "Token funding." });
+    expect(prov.proposed).toEqual({ name: "Universal", explanation: "Full coverage." });
+    expect(prov.current).not.toEqual(prov.proposed);
+    // The ladder positions must differ too, or the effect chips read as a no-op.
+    expect(prov.currentPolicyIndex).toBe(0);
+    expect(prov.proposedPolicyIndex).toBe(1);
+    expect(prov.effects?.length).toBeGreaterThan(0);
+  });
+
+  it("still falls back to the live law for a bill proposed before snapshots existed", async () => {
+    // Pre-fix documents carry no snapshot at all. They must keep rendering
+    // exactly as before rather than showing an empty current-law box.
+    const db = createMockDb();
+    db.collection("stateBills");
+    db.collectionMocks["stateBills"]!.findOne.mockResolvedValue({
+      _id: BILL_ID,
+      stateId: "MOW",
+      countryId: "RU",
+      title: "Legacy Bill",
+      summary: "No snapshots.",
+      sponsorName: "NPP",
+      sponsorParty: "1",
+      status: "active",
+      votesFor: 0,
+      votesAgainst: 0,
+      votesAbstain: 0,
+      votes: {},
+      proposedAt: new Date("2026-06-07T00:00:00Z"),
+      legislationTypeId: "ru_regional_health",
+      provisions: [
+        { legislationTypeId: "ru_regional_health", policyOptionId: "o2", effectDirection: -1 },
+      ],
+    });
+    db.collection("legislationTypes");
+    db.collectionMocks["legislationTypes"]!.find.mockReturnValue(cursorOf([legType]));
+    db.collection("statePolicies");
+    db.collectionMocks["statePolicies"]!.find.mockReturnValue(
+      cursorOf([{ stateId: "MOW", legislationTypeId: "ru_regional_health", policyOptionIndex: 0 }])
+    );
+    db.collection("enactedLaws");
+    db.collectionMocks["enactedLaws"]!.find.mockReturnValue(cursorOf([]));
+
+    const detail = await getStateLegislatureBillDetail(db as unknown as Db, {
+      countryId: "RU",
+      stateId: "MOW",
+      billId: BILL_ID,
+      authUser: null,
+    });
+
+    const prov = detail!.provisions[0]!;
+    expect(prov.current).toEqual({ name: "Minimal", explanation: "Token funding." });
+    expect(prov.proposed).toEqual({ name: "Universal", explanation: "Full coverage." });
   });
 });

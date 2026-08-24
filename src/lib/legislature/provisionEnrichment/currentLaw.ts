@@ -60,29 +60,39 @@ export function resolveCurrentLaw(
   provision: SnapshottedProvision,
   live: LiveCurrentPolicy | undefined
 ): { label?: ProvisionLabel; index?: number } {
-  // 1. Id snapshot — the strongest signal, and re-resolvable against the catalog.
-  //    A stale id (law reseeded with different option ids) falls through rather
-  //    than blanking the box.
+  // The index is resolved from the id snapshot wherever one exists, even when a
+  // structured label wins below: the ladder position drives effect chips and the
+  // approval shift, and those must not silently fall back to the live row.
+  let snapshotIndex: number | undefined;
   if (provision.currentPolicyOptionIdSnapshot) {
     const index = lt?.policyOptions?.findIndex(
       (opt) => opt.id === provision.currentPolicyOptionIdSnapshot
     );
-    if (index !== undefined && index !== -1) {
-      return { index, label: labelFromIndex(lt, index) };
-    }
+    if (index !== undefined && index !== -1) snapshotIndex = index;
   }
 
-  // 2. Structured label snapshot.
+  // 1. Structured label snapshot — frozen text, so a later seed-text edit does
+  //    not rewrite history. This is what the migration leaves behind, and it is
+  //    the field's original stated purpose.
   if (
     provision.currentPolicyOptionNameSnapshot &&
     provision.currentPolicyOptionExplanationSnapshot
   ) {
     return {
+      ...(snapshotIndex !== undefined ? { index: snapshotIndex } : {}),
       label: {
         name: provision.currentPolicyOptionNameSnapshot,
         explanation: provision.currentPolicyOptionExplanationSnapshot,
       },
     };
+  }
+
+  // 2. Id snapshot, re-resolved against the catalog. This is what corrects
+  //    documents written before structured snapshots existed, whose combined
+  //    label had dropped the option name. A stale id (law reseeded with
+  //    different option ids) falls through rather than blanking the box.
+  if (snapshotIndex !== undefined) {
+    return { index: snapshotIndex, label: labelFromIndex(lt, snapshotIndex) };
   }
 
   // 3. Legacy combined snapshot, split the way the national page always rendered it.

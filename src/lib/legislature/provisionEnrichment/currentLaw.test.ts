@@ -37,6 +37,44 @@ describe("resolveCurrentLaw — precedence", () => {
     expect(out.index).toBe(1);
   });
 
+  it("prefers a structured label snapshot over re-resolving the id, but keeps the id's index", () => {
+    // Frozen text wins so a later seed-text edit does not rewrite history. The
+    // index still comes from the id, because it drives the effect chips and the
+    // approval shift and must not fall back to the live row.
+    const out = resolveCurrentLaw(
+      lt,
+      {
+        effectDirection: -1,
+        currentPolicyOptionIdSnapshot: "o1",
+        currentPolicyOptionNameSnapshot: "Minimal (as it read then)",
+        currentPolicyOptionExplanationSnapshot: "Token funding, historical wording.",
+      },
+      { policyOptionIndex: 2 }
+    );
+    expect(out.label).toEqual({
+      name: "Minimal (as it read then)",
+      explanation: "Token funding, historical wording.",
+    });
+    expect(out.index).toBe(1);
+  });
+
+  it("re-resolves from the id when only a legacy combined label was stored", () => {
+    // This is how the 33 lossy labels are corrected on documents the migration
+    // has not reached: the combined string dropped the option name, but the id
+    // still identifies the option.
+    const out = resolveCurrentLaw(
+      lt,
+      {
+        effectDirection: -1,
+        currentPolicyOptionIdSnapshot: "o1",
+        currentPolicyOptionNameSnapshot: "Token funding.",
+      },
+      { policyOptionIndex: 2 }
+    );
+    expect(out.label).toEqual({ name: "Minimal", explanation: "Token funding." });
+    expect(out.index).toBe(1);
+  });
+
   it("uses structured name/explanation snapshots when no id snapshot exists", () => {
     const out = resolveCurrentLaw(
       lt,

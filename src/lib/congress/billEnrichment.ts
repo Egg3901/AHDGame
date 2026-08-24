@@ -29,8 +29,10 @@ import { effectTargetLabelFromMetricId } from "@/lib/legislature/metricLabels";
 import { computeProvisionEffectChips } from "@/lib/legislature/provisionEffects";
 import { optionIntensity } from "@/lib/legislature/optionIntensity";
 import {
-  resolveProvisionFiscal,
-  resolveProvisionPolicyOption,
+  loadLiveCurrentPolicies,
+  resolvePolicyProvision,
+  type ProvisionDisplay,
+  type SnapshottedProvision,
 } from "@/lib/legislature/provisionEnrichment";
 import { formatEmbargoProvisionLabel } from "@/lib/legislature/embargoProvisionLabel";
 import {
@@ -71,47 +73,15 @@ export interface BillProvisionEffect {
   isGood: boolean;
 }
 
-export interface BillDetailProvision {
-  legislationTypeName: string;
-  policyOptionId?: string;
-  policyOptionName?: string;
-  currentPolicyOptionName?: string;
-  /** "up" = raising/increasing from current, "down" = lowering, "same" = no change */
-  changeDirection?: "up" | "down" | "same";
-  effectDirection: number;
-  directionLabel: "Left" | "Center" | "Right";
-  positionLabel?: string;
-  effectTargetLabel?: string;
-  /**
-   * Per-metric projected effects (for effect chips), each carrying its own
-   * direction/polarity as a delta vs the current law.
-   */
-  effects?: BillProvisionEffect[];
-  /** Per-archetype approval impacts (-100..+100) for the proposed option (static, often empty). */
-  archetypeApprovals?: Record<string, number>;
-  /** Shift-based archetype-approval inputs (policy domain + current/proposed option indices). */
-  policyDomain?: string;
-  currentPolicyIndex?: number;
-  proposedPolicyIndex?: number;
-  economic?: number;
-  social?: number;
-  /** Only present on `nationalize` provisions. */
-  nationalizationDetail?: NationalizationProvisionDetail;
-  /**
-   * Political-legislation v2 (spec §8): live fiscal profile of the proposal
-   * NEXT TO the current law's, with the net delta. Program laws carry
-   * proposed/current/netDelta; tax sliders carry the rate move + revenue delta.
-   */
-  fiscal?: {
-    currencyCode: string;
-    proposed?: { cost: number; revenue: number; net: number };
-    current?: { cost: number; revenue: number; net: number };
-    netDelta?: number;
-    currentRate?: number;
-    proposedRate?: number;
-    revenueDelta?: number;
-  };
-}
+/**
+ * One resolved provision on the national bill page.
+ *
+ * Now an alias of the shared {@link ProvisionDisplay}: the national and regional
+ * pages emit the same shape so they cannot drift apart again. `changeDirection`
+ * used to live here; it was computed, typed and plumbed but rendered nowhere, so
+ * it was removed rather than carried across.
+ */
+export type BillDetailProvision = ProvisionDisplay;
 
 export interface EnrichedBillDetail {
   id: string;
@@ -297,7 +267,7 @@ function formatTariffProvisionLabel(provision: TariffProvision): string {
  */
 export function formatCreateDepartmentLabel(provision: CreateDepartmentProvision): {
   legislationTypeName: string;
-  policyOptionName: string;
+  proposed: { name: string };
 } {
   const seat = provision.positionId
     .split("_")
@@ -306,13 +276,13 @@ export function formatCreateDepartmentLabel(provision: CreateDepartmentProvision
     .join(" ");
   return {
     legislationTypeName: "Executive Reorganization",
-    policyOptionName: `Establish the office of ${seat}`,
+    proposed: { name: `Establish the office of ${seat}` },
   };
 }
 
 export function formatSubsidyProvisionLabel(provision: SubsidyProvision | EndSubsidyProvision): {
   legislationTypeName: string;
-  policyOptionName: string;
+  proposed: { name: string };
 } {
   const scopeLabel =
     provision.scopeType === "economy_wide"
@@ -323,13 +293,15 @@ export function formatSubsidyProvisionLabel(provision: SubsidyProvision | EndSub
   if (provision.type === "end_subsidy") {
     return {
       legislationTypeName: "Subsidy Repeal",
-      policyOptionName: `End subsidies for the ${scopeLabel}${strategyLabel}`,
+      proposed: { name: `End subsidies for the ${scopeLabel}${strategyLabel}` },
     };
   }
 
   return {
     legislationTypeName: "Subsidy",
-    policyOptionName: `Grant subsidies to the ${scopeLabel}${strategyLabel}${provision.domesticOnly ? " (domestic only)" : ""}`,
+    proposed: {
+      name: `Grant subsidies to the ${scopeLabel}${strategyLabel}${provision.domesticOnly ? " (domestic only)" : ""}`,
+    },
   };
 }
 
@@ -382,59 +354,21 @@ export async function resolveBillProvisions(
       }
     }
 
-    // Resolve the national-scope stateId from the bill's country (e.g. "federal" for US, "uk_national" for UK)
-    const nationalStateId = bill.countryId
-      ? (getNationalDocId(bill.countryId) ?? `${bill.countryId.toLowerCase()}_national`)
-      : (bill.stateId ?? "federal");
-    const currentPolicies = await db
-      .collection<StatePolicy>("statePolicies")
-      .find({ stateId: nationalStateId, legislationTypeId: { $in: legTypeIds } })
-      .toArray();
-    const currentPolicyMap = new Map<string, CurrentPolicySnapshot>();
-    for (const currentPolicy of currentPolicies) {
-      const canonicalId = canonicalizeLegislationTypeId(currentPolicy.legislationTypeId);
-      if (!canonicalId) continue;
-      if (!currentPolicyMap.has(canonicalId) || currentPolicy.legislationTypeId === canonicalId) {
-        currentPolicyMap.set(canonicalId, currentPolicy);
-      }
-    }
-
-    // Fallback: for types missing from statePolicies, check enacted laws for the active option index
-    const missingLegTypeIds = canonicalLegTypeIds.filter((id) => !currentPolicyMap.has(id));
-    if (missingLegTypeIds.length > 0) {
-      const countryId = bill.countryId ?? (inferCountryIdFromStateId(nationalStateId) as string);
-      const enactedLaws = await db
-        .collection<EnactedLaw>("enactedLaws")
-        .find({
-          legislationTypeId: {
-            $in: missingLegTypeIds.flatMap((id) => getEquivalentLegislationTypeIds(id)),
-          },
-          countryId,
-          repealedAt: { $exists: false },
-        })
-        .sort({ enactedAt: -1 })
-        .toArray();
-
-      const seen = new Set<string>();
-      for (const law of enactedLaws) {
-        const canonicalId = canonicalizeLegislationTypeId(law.legislationTypeId);
-        if (!canonicalId || seen.has(canonicalId)) continue;
-        seen.add(canonicalId);
-        if (law.policyOptionIndex !== undefined) {
-          // Create a minimal entry so the enrichment logic can find the option index
-          currentPolicyMap.set(canonicalId, {
-            policyOptionIndex: law.policyOptionIndex,
-          });
-        }
-      }
-    }
+    // Live current law per legislation type, snapshot-independent. The shared
+    // loader keys statePolicies on the national pseudo-stateId and falls back to
+    // the latest un-repealed enactedLaws row, exactly as this file did before.
+    const nationalScope = {
+      scope: "national" as const,
+      countryId: (bill.countryId ?? "US") as CountryId,
+    };
+    const livePolicies = await loadLiveCurrentPolicies(db, nationalScope, legTypeIds);
 
     for (const provision of bill.provisions) {
       if (!isPolicyProvision(provision)) {
         if (provision.type === "tariff") {
           provisionsResolved.push({
             legislationTypeName: "Tariff",
-            policyOptionName: formatTariffProvisionLabel(provision),
+            proposed: { name: formatTariffProvisionLabel(provision) },
             effectDirection: 0,
             directionLabel: "Center",
           });
@@ -500,7 +434,7 @@ export async function resolveBillProvisions(
 
           provisionsResolved.push({
             legislationTypeName: "Nationalization",
-            policyOptionName,
+            proposed: { name: policyOptionName },
             effectDirection: 0,
             directionLabel: "Center",
             ...(nationalizationDetail && { nationalizationDetail }),
@@ -511,7 +445,7 @@ export async function resolveBillProvisions(
         if (provision.type === "privatize") {
           provisionsResolved.push({
             legislationTypeName: "Privatization",
-            policyOptionName: `Spin out: ${provision.newCorpName}`,
+            proposed: { name: `Spin out: ${provision.newCorpName}` },
             effectDirection: 0,
             directionLabel: "Center",
           });
@@ -521,7 +455,7 @@ export async function resolveBillProvisions(
         if (provision.type === "designate_strategic_sector") {
           provisionsResolved.push({
             legislationTypeName: "Strategic-Sector Designation",
-            policyOptionName: provision.sectorType,
+            proposed: { name: provision.sectorType },
             effectDirection: 0,
             directionLabel: "Center",
           });
@@ -533,7 +467,7 @@ export async function resolveBillProvisions(
           provisionsResolved.push({
             legislationTypeName: embargoLabel.kind,
             // "Title: description" → split into proposed title + larp description.
-            policyOptionName: `${embargoLabel.summary}: ${embargoLabel.description}`,
+            proposed: { name: `${embargoLabel.summary}: ${embargoLabel.description}` },
             effectDirection: 0,
             directionLabel: "Center",
           });
@@ -553,7 +487,7 @@ export async function resolveBillProvisions(
               : provision.organizationName;
           provisionsResolved.push({
             legislationTypeName: kind,
-            policyOptionName: detail,
+            proposed: { name: detail },
             effectDirection: 0,
             directionLabel: "Center",
           });
@@ -563,7 +497,7 @@ export async function resolveBillProvisions(
         if (provision.type === "euro_adoption") {
           provisionsResolved.push({
             legislationTypeName: "Currency Adoption",
-            policyOptionName: "Adopt shared currency",
+            proposed: { name: "Adopt shared currency" },
             effectDirection: 0,
             directionLabel: "Center",
           });
@@ -573,16 +507,18 @@ export async function resolveBillProvisions(
         if (provision.type === "union_law") {
           provisionsResolved.push({
             legislationTypeName: "Union Law",
-            policyOptionName:
-              provision.banAction === "ban"
-                ? "Ban unions nationally"
-                : provision.banAction === "repeal_ban"
-                  ? "Repeal the union ban"
-                  : provision.bias > 0
-                    ? `Collective-bargaining strength: +${provision.bias}`
-                    : provision.bias < 0
-                      ? `Right-to-work strength: ${provision.bias}`
-                      : "Neutral",
+            proposed: {
+              name:
+                provision.banAction === "ban"
+                  ? "Ban unions nationally"
+                  : provision.banAction === "repeal_ban"
+                    ? "Repeal the union ban"
+                    : provision.bias > 0
+                      ? `Collective-bargaining strength: +${provision.bias}`
+                      : provision.bias < 0
+                        ? `Right-to-work strength: ${provision.bias}`
+                        : "Neutral",
+            },
             effectDirection: 0,
             directionLabel: "Center",
           });
@@ -592,7 +528,7 @@ export async function resolveBillProvisions(
         if (provision.type === "electoral_law") {
           provisionsResolved.push({
             legislationTypeName: "Electoral Law",
-            policyOptionName: describeElectoralLaw(provision),
+            proposed: { name: describeElectoralLaw(provision) },
             effectDirection: 0,
             directionLabel: "Center",
           });
@@ -602,10 +538,12 @@ export async function resolveBillProvisions(
         if (provision.type === "central_bank_independence") {
           provisionsResolved.push({
             legislationTypeName: "Central Bank Independence",
-            policyOptionName:
-              provision.action === "grant"
-                ? "Grant the central bank operational independence"
-                : "Return rate-setting to the government",
+            proposed: {
+              name:
+                provision.action === "grant"
+                  ? "Grant the central bank operational independence"
+                  : "Return rate-setting to the government",
+            },
             effectDirection: 0,
             directionLabel: "Center",
           });
@@ -617,7 +555,7 @@ export async function resolveBillProvisions(
         if (provision.type === "declare_war") {
           provisionsResolved.push({
             legislationTypeName: "Declaration of War",
-            policyOptionName: `${provision.targetCountry} · ${warGoalLabel(provision.warGoal)}`,
+            proposed: { name: `${provision.targetCountry} · ${warGoalLabel(provision.warGoal)}` },
             effectDirection: 0,
             directionLabel: "Center",
           });
@@ -627,7 +565,7 @@ export async function resolveBillProvisions(
         if (provision.type === "join_conflict") {
           provisionsResolved.push({
             legislationTypeName: "Entry into the Conflict",
-            policyOptionName: `Join side ${provision.side} at ${provision.organizationId}'s call`,
+            proposed: { name: `Join side ${provision.side} at ${provision.organizationId}'s call` },
             effectDirection: 0,
             directionLabel: "Center",
           });
@@ -638,7 +576,7 @@ export async function resolveBillProvisions(
           const dept = formatCreateDepartmentLabel(provision);
           provisionsResolved.push({
             legislationTypeName: dept.legislationTypeName,
-            policyOptionName: dept.policyOptionName,
+            proposed: dept.proposed,
             effectDirection: 0,
             directionLabel: "Center",
           });
@@ -648,7 +586,7 @@ export async function resolveBillProvisions(
         const subsidyProvision = formatSubsidyProvisionLabel(provision);
         provisionsResolved.push({
           legislationTypeName: subsidyProvision.legislationTypeName,
-          policyOptionName: subsidyProvision.policyOptionName,
+          proposed: subsidyProvision.proposed,
           effectDirection: 0,
           directionLabel: "Center",
         });
@@ -659,14 +597,8 @@ export async function resolveBillProvisions(
       const lt = canonicalLegislationTypeId
         ? legislationTypeMap.get(canonicalLegislationTypeId)
         : null;
-      const prov = provision as {
-        effectDirection: number;
-        policyOptionId?: string;
-        policyOptionNameSnapshot?: string;
-        currentPolicyOptionIdSnapshot?: string;
-        currentPolicyOptionNameSnapshot?: string;
-        economic?: number;
-        social?: number;
+      const prov = provision as SnapshottedProvision & {
+        legislationTypeId: string;
         proposedRate?: number;
       };
       const posLabel =
@@ -674,124 +606,22 @@ export async function resolveBillProvisions(
           ? formatBillPositionLabel(prov.economic, prov.social)
           : undefined;
 
-      const resolvedOption = resolveProvisionPolicyOption(lt, prov);
-      const policyOptionName =
-        prov.policyOptionNameSnapshot ??
-        (resolvedOption
-          ? formatPolicyOptionLabel(resolvedOption.option)
-          : (posLabel ?? `${directionLabel(prov.effectDirection)} policy`));
-      const proposedOptionIndex = resolvedOption?.index;
-
-      // Calculate change direction and current policy option name
-      let changeDirection: "up" | "down" | "same" | undefined;
-      let currentPolicyOptionName: string | undefined = prov.currentPolicyOptionNameSnapshot;
-      let currentIndex: number | undefined;
-      if (lt?.policyOptions?.length) {
-        if (prov.currentPolicyOptionIdSnapshot) {
-          const optionIndex = lt.policyOptions.findIndex(
-            (opt) => opt.id === prov.currentPolicyOptionIdSnapshot
-          );
-          if (optionIndex !== -1) currentIndex = optionIndex;
-        } else {
-          const currentPolicy = canonicalLegislationTypeId
-            ? currentPolicyMap.get(canonicalLegislationTypeId)
-            : undefined;
-          if (typeof currentPolicy?.policyOptionIndex === "number") {
-            currentIndex = currentPolicy.policyOptionIndex;
-          } else if (currentPolicy?.policyOptionId) {
-            const optionIndex = lt.policyOptions.findIndex(
-              (opt) => opt.id === currentPolicy.policyOptionId
-            );
-            if (optionIndex !== -1) currentIndex = optionIndex;
-          }
-        }
-
-        if (!currentPolicyOptionName && currentIndex !== undefined) {
-          const currentOpt = lt.policyOptions[currentIndex];
-          if (currentOpt) currentPolicyOptionName = formatPolicyOptionLabel(currentOpt);
-        }
-        if (proposedOptionIndex !== undefined && currentIndex !== undefined) {
-          if (proposedOptionIndex > currentIndex) {
-            changeDirection = "up";
-          } else if (proposedOptionIndex < currentIndex) {
-            changeDirection = "down";
-          } else {
-            changeDirection = "same";
-          }
-        }
-      }
-
-      // Per-metric DELTA: how each metric moves switching from current law to
-      // proposed, using GRADED option intensity (Bug #0962) so a same-side change of
-      // intensity still shows chips. Falls back to the effectDirection sign when the
-      // option can't be resolved. Shared with the state bill page via
-      // computeProvisionEffectChips so the two stay in lockstep.
-      const provOptions = lt?.policyOptions ?? [];
-      const proposedIntensity =
-        proposedOptionIndex !== undefined
-          ? optionIntensity(provOptions, proposedOptionIndex)
-          : Math.sign(prov.effectDirection);
-      const currentIntensity =
-        currentIndex !== undefined ? optionIntensity(provOptions, currentIndex) : 0;
-      const effectMetrics = computeProvisionEffectChips({
-        // The headline-effectTarget fallback synthesizes weight +1, which
-        // flips the displayed sign for laws whose real (removed) weighted
-        // entry was negative — and mirror-owned metrics never move from
-        // legislation anyway, so never synthesize a chip for them (same
-        // filter nationalPolicyRecords applies).
-        effectTargetsWeighted: lt?.effectTargetsWeighted?.length
-          ? lt.effectTargetsWeighted
-          : lt?.effectTarget?.metricId &&
-              !MIRROR_CONTROLLED_METRIC_IDS.has(lt.effectTarget.metricId)
-            ? [
-                {
-                  metricCategoryId: lt.effectTarget.metricCategoryId,
-                  metricId: lt.effectTarget.metricId,
-                  weight: 1,
-                },
-              ]
-            : [],
-        proposedIntensity,
-        currentIntensity,
-      });
-
-      provisionsResolved.push({
-        legislationTypeName:
-          lt?.name ??
-          humanizeLegislationTypeId(provision.legislationTypeId) ??
-          provision.legislationTypeId,
-        ...(prov.policyOptionId && { policyOptionId: prov.policyOptionId }),
-        policyOptionName,
-        ...(currentPolicyOptionName && { currentPolicyOptionName }),
-        ...(changeDirection && { changeDirection }),
-        effectDirection: provision.effectDirection,
-        directionLabel: directionLabel(provision.effectDirection),
-        ...(posLabel && { positionLabel: posLabel }),
-        effectTargetLabel: lt?.effectTarget?.metricId
-          ? effectTargetLabelFromMetricId(lt.effectTarget.metricId)
-          : undefined,
-        ...(effectMetrics.length && { effects: effectMetrics }),
-        ...(resolvedOption?.option.archetypeApprovals &&
-          Object.keys(resolvedOption.option.archetypeApprovals).length > 0 && {
-            archetypeApprovals: resolvedOption.option.archetypeApprovals,
-          }),
-        ...(lt?.policyDomain && { policyDomain: lt.policyDomain }),
-        ...(currentIndex !== undefined && { currentPolicyIndex: currentIndex }),
-        ...(proposedOptionIndex !== undefined && { proposedPolicyIndex: proposedOptionIndex }),
-        ...(lt?.policyOptions?.length && {
-          policyOptionScores: lt.policyOptions.map((o) => (o.economic ?? 0) + (o.social ?? 0)),
-        }),
-        ...(prov.economic != null && axisRelevant(lt, "economic") && { economic: prov.economic }),
-        ...(prov.social != null && axisRelevant(lt, "social") && { social: prov.social }),
-        ...(await resolveProvisionFiscal(
-          db,
-          { scope: "national", countryId: (bill.countryId ?? "US") as CountryId },
+      provisionsResolved.push(
+        await resolvePolicyProvision(db, {
+          scope: nationalScope,
           lt,
-          prov,
-          proposedOptionIndex,
-          currentIndex
-        )),
-      });
+          provision: prov,
+          live: canonicalLegislationTypeId
+            ? livePolicies.get(canonicalLegislationTypeId)
+            : undefined,
+          legislationTypeName:
+            lt?.name ??
+            humanizeLegislationTypeId(provision.legislationTypeId) ??
+            provision.legislationTypeId,
+          directionLabel: directionLabel(prov.effectDirection),
+          ...(posLabel ? { positionLabel: posLabel } : {}),
+        })
+      );
     }
   }
 
@@ -814,8 +644,8 @@ export async function resolveBillProvisions(
 
     provisionsResolved.push({
       legislationTypeName: label,
-      policyOptionName: summary,
-      currentPolicyOptionName: detail,
+      proposed: { name: summary },
+      current: { name: detail },
       effectDirection: 0,
       directionLabel: "Center",
     });

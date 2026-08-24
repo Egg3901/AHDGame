@@ -165,6 +165,21 @@ describe("resolvePolicyProvision", () => {
     expect(out.effects ?? []).toEqual([]);
   });
 
+  it("falls back to the resolved option's axis when the provision stamps none", async () => {
+    // The national adapter read only the provision's stamped axis; the regional
+    // one read only the option's. Region provisions often stamp neither, so
+    // reading the provision alone would empty the position badges there.
+    const out = await resolvePolicyProvision(db as unknown as Db, {
+      scope: REGION,
+      lt: LT as never,
+      provision: { legislationTypeId: "ru_health", policyOptionId: "o2", effectDirection: -1 },
+      live: undefined,
+      legislationTypeName: "Regional Health Programme",
+      directionLabel: "Left",
+    });
+    expect(out.economic).toBe(-2);
+  });
+
   it("falls back to the direction label when nothing resolves", async () => {
     const out = await resolvePolicyProvision(db as unknown as Db, {
       scope: REGION,

@@ -112,10 +112,16 @@ export async function resolvePolicyProvision(
     ...(options.length
       ? { policyOptionScores: options.map((o) => (o.economic ?? 0) + (o.social ?? 0)) }
       : {}),
-    ...(provision.economic != null && axisRelevant(lt, "economic")
-      ? { economic: provision.economic }
+    // The provision's own stamped axis wins (what was actually proposed), with
+    // the resolved option's axis as a fallback. The national adapter read only
+    // the provision, the regional one only the option; taking both keeps the
+    // position badges populated on either shape.
+    ...(axisRelevant(lt, "economic") && (provision.economic ?? proposedOption?.economic) != null
+      ? { economic: provision.economic ?? proposedOption?.economic }
       : {}),
-    ...(provision.social != null && axisRelevant(lt, "social") ? { social: provision.social } : {}),
+    ...(axisRelevant(lt, "social") && (provision.social ?? proposedOption?.social) != null
+      ? { social: provision.social ?? proposedOption?.social }
+      : {}),
     annualCostPerCapita: proposedOption?.annualCostPerCapita ?? null,
     gdpPerCapitaMultiplier: proposedOption?.gdpPerCapitaMultiplier ?? null,
     ...(await resolveProvisionFiscal(db, scope, lt, provision, proposed.index, current.index)),
