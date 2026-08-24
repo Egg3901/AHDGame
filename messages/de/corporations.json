@@ -1,0 +1,25 @@
+{
+  "corporations": {
+    "supplyAgreements": {
+      "settlement": {
+        "shortfallDamages": "Schadenersatz wegen Fehlmenge",
+        "noDamages": "Kein Schadenersatz wegen Fehlmenge",
+        "commitment": "Lieferverpflichtung",
+        "damageCeiling": "Obergrenze für Schadenersatz",
+        "productionCredited": "Angerechnete Produktion",
+        "chargeableShortfall": "Berechenbare Fehlmenge",
+        "damagesAssessed": "Festgesetzter Schadenersatz",
+        "netCash": "Nettozahlung aus dem Vertrag",
+        "unpaid": "Offener Abrechnungsbetrag",
+        "unknown": "Nicht bekannt",
+        "explanation": "Externe Produktionsgrenzen senken zuerst die Obergrenze für Schadenersatz. Berechnet wird nur eine Produktion unterhalb dieser Grenze."
+      },
+      "capacity": {
+        "current": "Aktuelle Vertragskapazität",
+        "latestAchievable": "Zuletzt erreichbare Produktion",
+        "maximumContract": "Maximale zulässige Verpflichtung",
+        "penaltyWarning": "Dies ist eine Verpflichtung pro Runde. Eine Produktion unterhalb der Obergrenze für Schadenersatz führt zu Schadenersatz in Höhe von {penaltyPercent}% des Marktwerts jeder fehlenden Einheit."
+      }
+    }
+  }
+}

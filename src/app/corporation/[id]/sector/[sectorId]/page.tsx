@@ -721,6 +721,7 @@ export default function SectorDetailPage() {
                 <>
                   <PlantPanel
                     plants={plants}
+                    marketSupplies={commodities?.supplies ?? []}
                     sectorType={sector.sectorType}
                     unionId={sector.unionId}
                     unionName={sector.unionName}

@@ -14,7 +14,7 @@ import {
   CONTRACT_DAMAGES_CAP_FRACTION,
   CONTRACT_SHORTFALL_PENALTY,
 } from "@/lib/db/types/supplyAgreement";
-import { createMockDb } from "@/lib/test-utils/mockDb";
+import { createAsyncIterableCursor, createMockDb } from "@/lib/test-utils/mockDb";
 import type { CorporationLookups } from "./types";
 
 const now = new Date("2026-01-01T00:00:00Z");
@@ -141,6 +141,13 @@ describe("computeSupplyAgreementSettlements", () => {
         contractedUnits: 100,
         deliveredUnits: 30,
         turn: 5,
+        // #1147: recorded on every delivery so the UI can distinguish "met the
+        // contract" from "never settled". No production sink here ⇒ nothing to
+        // charge for, and no ceiling is known ⇒ `achievableUnits` stays absent.
+        shortfallUnits: 0,
+        penaltyAnchor: 0,
+        supplierCashDeltaLocal: Math.round(30 * base * 0.2),
+        supplierCurrencyCode: "USD",
       },
     ]);
     expect(r.deltaByCorp.get(S)).toBe(Math.round(30 * base * 0.2));
@@ -199,6 +206,111 @@ describe("computeSupplyAgreementSettlements", () => {
     expect(r.deliveries.find((delivery) => delivery.agreementId === "s2-b1")?.deliveredUnits).toBe(
       100
     );
+  });
+
+  it("shares scarce supplier output proportionally instead of giving the first row everything", () => {
+    const buyer2 = new ObjectId().toString();
+    const available = 651_958.145;
+    const firstCap = 1_800_000;
+    const secondCap = 4_000_000;
+    const run = (reverse: boolean) => {
+      const agreements = [
+        {
+          agreementId: "smaller-contract",
+          supplierCorpId: S,
+          buyerCorpId: B,
+          commodity,
+          volumeCap: firstCap,
+          pricePremium: 0,
+        },
+        {
+          agreementId: "larger-contract",
+          supplierCorpId: S,
+          buyerCorpId: buyer2,
+          commodity,
+          volumeCap: secondCap,
+          pricePremium: 0,
+        },
+      ];
+      const result = computeSupplyAgreementSettlements({
+        agreements: reverse ? agreements.reverse() : agreements,
+        contractSettlementByCorp: new Map([[S, new Map([[commodity, available]])]]),
+        buyerDemandByCorpCommodity: new Map([
+          [B, new Map([[commodity, firstCap]])],
+          [buyer2, new Map([[commodity, secondCap]])],
+        ]),
+        eraUnitScale: 1,
+        priceRatioByCommodity: ratio,
+        corpInfo: () => undefined,
+        turn: 5,
+        now,
+      });
+      return new Map(
+        result.deliveries.map((delivery) => [delivery.agreementId, delivery.deliveredUnits])
+      );
+    };
+
+    const forward = run(false);
+    const reversed = run(true);
+    const expectedSmaller = available * (firstCap / (firstCap + secondCap));
+    const expectedLarger = available * (secondCap / (firstCap + secondCap));
+
+    expect(forward.get("smaller-contract")).toBeCloseTo(expectedSmaller, 5);
+    expect(forward.get("larger-contract")).toBeCloseTo(expectedLarger, 5);
+    expect(reversed).toEqual(forward);
+  });
+
+  it("keeps agreement caps while rebalancing a supplier across shared buyer demand", () => {
+    const supplier2 = new ObjectId().toString();
+    const buyer2 = new ObjectId().toString();
+    const result = computeSupplyAgreementSettlements({
+      agreements: [
+        {
+          agreementId: "main-buyer",
+          supplierCorpId: S,
+          buyerCorpId: B,
+          commodity,
+          volumeCap: 100,
+          pricePremium: 0,
+        },
+        {
+          agreementId: "alternate-supplier",
+          supplierCorpId: supplier2,
+          buyerCorpId: B,
+          commodity,
+          volumeCap: 100,
+          pricePremium: 0,
+        },
+        {
+          agreementId: "small-buyer",
+          supplierCorpId: S,
+          buyerCorpId: buyer2,
+          commodity,
+          volumeCap: 10,
+          pricePremium: 0,
+        },
+      ],
+      contractSettlementByCorp: new Map([
+        [S, new Map([[commodity, 110]])],
+        [supplier2, new Map([[commodity, 0]])],
+      ]),
+      buyerDemandByCorpCommodity: new Map([
+        [B, new Map([[commodity, 100]])],
+        [buyer2, new Map([[commodity, 10]])],
+      ]),
+      eraUnitScale: 1,
+      priceRatioByCommodity: ratio,
+      corpInfo: () => undefined,
+      turn: 5,
+      now,
+    });
+    const delivered = new Map(
+      result.deliveries.map((delivery) => [delivery.agreementId, delivery.deliveredUnits])
+    );
+
+    expect(delivered.get("main-buyer")).toBeCloseTo(100, 6);
+    expect(delivered.get("small-buyer")).toBeCloseTo(10, 6);
+    expect(delivered.get("alternate-supplier") ?? 0).toBe(0);
   });
 
   it("credits supplier and debits buyer the premium; conserves cash", () => {
@@ -377,12 +489,88 @@ describe("settleSupplyAgreements delivery persistence", () => {
             $set: {
               lastDeliveryTurn: 5,
               lastDeliveredUnits: 30,
+              // #1147: persisted so the contract row can explain its own
+              // charge. Zero here means no production sink, so nothing is owed.
+              lastShortfallUnits: 0,
+              lastShortfallPenaltyAnchor: 0,
+              lastSupplierCashDelta: 0,
+              lastUnpaidSettlementAnchor: 0,
               updatedAt: now,
+            },
+            $unset: {
+              lastAchievableUnits: "",
+              lastCreditedProductionUnits: "",
+              lastSupplierCashCurrency: "",
             },
           },
         },
       },
     ]);
+  });
+
+  it("uses the current database balance for the solvency floor", async () => {
+    const db = createMockDb();
+    db.collection("corporations");
+    db.collection("supplyAgreements");
+    const supplier = {
+      _id: supId,
+      name: "Sup",
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+      liquidCapital: 0,
+    };
+    const buyer = {
+      _id: buyId,
+      name: "Buy",
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+      liquidCapital: 1_000_000,
+    };
+    db.collectionMocks.corporations.find.mockReturnValue(
+      createAsyncIterableCursor([
+        { _id: supId, liquidCapital: 10_000 },
+        { _id: buyId, liquidCapital: 1_000_000 },
+      ])
+    );
+
+    await settleSupplyAgreements({
+      db: db as unknown as Db,
+      lookups: {
+        eraUnitScale: 1,
+        corpById: new Map([
+          [S, supplier],
+          [B, buyer],
+        ]),
+        exchangeRatesByCurrency: new Map([["USD", 1]]),
+      } as unknown as CorporationLookups,
+      agreements: [
+        {
+          supplierCorpId: S,
+          buyerCorpId: B,
+          commodity,
+          volumeCap: 100,
+          pricePremium: 0,
+        },
+      ],
+      contractSettlementByCorp: new Map(),
+      producedByCorpCommodity: new Map(),
+      plantsEnabled: true,
+      priceRatioByCommodity: ratio,
+      turn: 5,
+      now,
+      thresholds: {} as never,
+    });
+
+    expect(db.collectionMocks.corporations.bulkWrite).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          updateOne: expect.objectContaining({
+            filter: { _id: supId },
+            update: expect.objectContaining({ $inc: { liquidCapital: -10_000 } }),
+          }),
+        }),
+      ])
+    );
   });
 });
 
@@ -619,6 +807,130 @@ describe("computeSupplyAgreementSettlements — shortfall damages (P3b)", () => 
     const mothballed = call(undefined).deltaByCorp.get(S)!;
     const oneUnit = call(new Map([[commodity, 1]])).deltaByCorp.get(S)!;
     expect(mothballed).toBeLessThanOrEqual(oneUnit);
+  });
+
+  // ─── Ticket #1147: damages clamp to what the supplier could actually make ──
+  //
+  // `volumeCap` is validated at signing against NAMEPLATE capacity, but the
+  // sink measures ACTUAL production. Everything between the two (input
+  // throughput, capital utilization, the demand throttle, strike) opened a gap
+  // the supplier was billed 50% of every turn and could never close. These pin
+  // the clamp AND the anti-mothball property it must not break.
+  const withAchievable = (opts: { produced?: number; achievable?: number; volumeCap?: number }) =>
+    computeSupplyAgreementSettlements({
+      agreements: [
+        {
+          supplierCorpId: S,
+          buyerCorpId: B,
+          commodity,
+          volumeCap: opts.volumeCap ?? 100,
+          pricePremium: 0,
+        },
+      ],
+      contractSettlementByCorp: new Map(),
+      producedByCorpCommodity: new Map(
+        opts.produced !== undefined ? [[S, new Map([[commodity, opts.produced]])]] : []
+      ),
+      achievableByCorpCommodity:
+        opts.achievable !== undefined
+          ? new Map([[S, new Map([[commodity, opts.achievable]])]])
+          : undefined,
+      plantsEnabled: true,
+      eraUnitScale: 1,
+      priceRatioByCommodity: ratio,
+      corpInfo: makeInfo(),
+      turn: 5,
+      now,
+    });
+
+  it("charges nothing when the supplier produced everything it physically could", () => {
+    // Contracted 100 against nameplate, but inputs/utilization capped the plant
+    // at 30 this turn and it made all 30. No breach: the gap was not its doing.
+    const r = withAchievable({ produced: 30, achievable: 30 });
+    expect(r.deltaByCorp.get(S) ?? 0).toBe(0);
+    expect(r.deltaByCorp.get(B) ?? 0).toBe(0);
+  });
+
+  it("charges only the gap below the achievable ceiling, not below the contract", () => {
+    // Could have made 60, made 40. Liable for 20, not for the 60 vs the cap.
+    const r = withAchievable({ produced: 40, achievable: 60 });
+    const penalty = Math.round(20 * base * CONTRACT_SHORTFALL_PENALTY);
+    expect(r.deltaByCorp.get(S)).toBe(-penalty);
+    expect(r.deltaByCorp.get(B)).toBe(penalty);
+    expect(r.deltaByCorp.get(S)! + r.deltaByCorp.get(B)!).toBe(0);
+  });
+
+  it("computes one aggregate gap before splitting damages across agreements", () => {
+    const buyer2Id = new ObjectId();
+    const buyer2 = buyer2Id.toString();
+    const info = (id: string): SettleCorpInfo | undefined =>
+      id === S
+        ? { _id: supId, name: "Sup", ccy: "USD" as CurrencyCode, fxRate: 1 }
+        : id === B
+          ? { _id: buyId, name: "Buy 1", ccy: "USD" as CurrencyCode, fxRate: 1 }
+          : id === buyer2
+            ? { _id: buyer2Id, name: "Buy 2", ccy: "USD" as CurrencyCode, fxRate: 1 }
+            : undefined;
+    const r = computeSupplyAgreementSettlements({
+      agreements: [
+        { supplierCorpId: S, buyerCorpId: B, commodity, volumeCap: 100, pricePremium: 0 },
+        { supplierCorpId: S, buyerCorpId: buyer2, commodity, volumeCap: 100, pricePremium: 0 },
+      ],
+      contractSettlementByCorp: new Map(),
+      buyerDemandByCorpCommodity: new Map([
+        [B, new Map([[commodity, 100]])],
+        [buyer2, new Map([[commodity, 100]])],
+      ]),
+      producedByCorpCommodity: new Map([[S, new Map([[commodity, 80]])]]),
+      achievableByCorpCommodity: new Map([[S, new Map([[commodity, 100]])]]),
+      plantsEnabled: true,
+      eraUnitScale: 1,
+      priceRatioByCommodity: ratio,
+      corpInfo: info,
+      turn: 5,
+      now,
+    });
+
+    const expected = Math.round(20 * base * CONTRACT_SHORTFALL_PENALTY);
+    expect(r.deltaByCorp.get(S)).toBe(-expected);
+    expect((r.deltaByCorp.get(B) ?? 0) + (r.deltaByCorp.get(buyer2) ?? 0)).toBe(expected);
+  });
+
+  it("treats an explicit zero ceiling as known rather than unclamped", () => {
+    const r = withAchievable({ produced: 0, achievable: 0 });
+    expect(r.deltaByCorp.get(S) ?? 0).toBe(0);
+    expect(r.deltaByCorp.get(B) ?? 0).toBe(0);
+  });
+
+  it("never lets the ceiling raise damages above the contracted volume", () => {
+    // A ceiling above the cap is not a licence to bill beyond what was signed.
+    const clamped = withAchievable({ produced: 40, achievable: 500 }).deltaByCorp.get(S)!;
+    const unclamped = withAchievable({ produced: 40 }).deltaByCorp.get(S)!;
+    expect(clamped).toBe(unclamped);
+  });
+
+  // THE EXPLOIT GUARD. Mothballing is the operator's own lever, so it is
+  // excluded from the ceiling upstream in sectorTurn: a cold plant reports its
+  // FULL capacity as achievable and still owes the whole contracted volume.
+  it("still charges a mothballed seller in full when its ceiling stays at capacity", () => {
+    const r = withAchievable({ achievable: 100 });
+    const penalty = Math.round(100 * base * CONTRACT_DAMAGES_CAP_FRACTION);
+    expect(r.deltaByCorp.get(S)).toBe(-penalty);
+  });
+
+  it("keeps mothballing no cheaper than producing one unit, with the clamp on", () => {
+    const mothballed = withAchievable({ achievable: 100 }).deltaByCorp.get(S)!;
+    const oneUnit = withAchievable({ produced: 1, achievable: 100 }).deltaByCorp.get(S)!;
+    expect(mothballed).toBeLessThanOrEqual(oneUnit);
+  });
+
+  // First turn after deploy: no sector has persisted the field yet. A missing
+  // entry must mean "no ceiling known", never "ceiling of zero", or every
+  // contract in the world is silently forgiven for a turn.
+  it("leaves damages unclamped when no ceiling is known for the supplier", () => {
+    const r = withAchievable({ produced: 60 });
+    const penalty = Math.round(40 * base * CONTRACT_SHORTFALL_PENALTY);
+    expect(r.deltaByCorp.get(S)).toBe(-penalty);
   });
 
   // The production sink is only meaningful under plants: outside it, clearing's

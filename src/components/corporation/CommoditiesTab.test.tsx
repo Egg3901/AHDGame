@@ -61,6 +61,10 @@ describe("CommoditiesTab private supply", () => {
     expect(screen.getByText(/60 MWh delivered on turn 296/)).toBeTruthy();
     expect(screen.getByText(/60% of consumption covered/)).toBeTruthy();
     expect(screen.getByText(/Contracted cap: 80 MWh/)).toBeTruthy();
+    expect(screen.getByText(/Scarce supplier output is divided proportionally/)).toBeTruthy();
+    expect(
+      screen.getByText(/Net is this corporation's own output minus its input use/)
+    ).toBeTruthy();
   });
 
   it("links supply-deal actions to the Structure tab where the form lives", async () => {

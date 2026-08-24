@@ -5,7 +5,19 @@ import { handleRouteError } from "@/lib/api/errors";
 import { getAuthUser } from "@/lib/auth";
 import { proposeSupplyAgreement } from "@/lib/corporations/commands/supplyAgreements";
 import { corporationQueryFromParamId } from "@/lib/api/corporations/resolveQuery";
-import type { SupplyAgreement } from "@/lib/db/types/supplyAgreement";
+import {
+  CONTRACT_OVERCOMMIT_TOLERANCE,
+  type SupplyAgreement,
+} from "@/lib/db/types/supplyAgreement";
+import type { Corporation, CorporateSector } from "@/lib/db/types";
+import type { GameState } from "@/lib/db/types/gameState";
+import type { GameConfig } from "@/lib/db/types/gameConfig";
+import { COMMODITY_TYPES, type CommodityType } from "@/lib/constants/commodities";
+import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
+import {
+  computeSupplierCommodityAchievableUnits,
+  computeSupplierCommodityCapacityUnits,
+} from "@/lib/corporations/supplyAgreementCapacity";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -20,7 +32,9 @@ export async function GET(_request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid corporation id" }, { status: 400 });
     }
     const db = await getDb();
-    const corp = await db.collection("corporations").findOne(corpQuery, { projection: { _id: 1 } });
+    const corp = await db
+      .collection<Corporation>("corporations")
+      .findOne(corpQuery, { projection: { _id: 1, countryOwnerId: 1 } });
     if (!corp) {
       return NextResponse.json({ error: "Corporation not found" }, { status: 404 });
     }
@@ -54,6 +68,65 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const counterpartyById = new Map(
       counterparties.map((counterparty) => [counterparty._id.toString(), counterparty])
     );
+    const capacityByCommodity: Partial<
+      Record<
+        CommodityType,
+        { currentCapacityUnits: number; maxContractUnits: number; achievableUnits: number | null }
+      >
+    > = {};
+    if (marketAtLeast(await getMarketSystemModeForDb(db), "plants")) {
+      const [sectors, world, config] = await Promise.all([
+        db
+          .collection<CorporateSector>("corporateSectors")
+          .find(
+            { corporationId: corp._id },
+            {
+              projection: {
+                sectorType: 1,
+                capitalStock: 1,
+                strategyId: 1,
+                transitionFromStrategyId: 1,
+                transitionStartTurn: 1,
+                mothballed: 1,
+                productionPolicyLevel: 1,
+                embargoSuspended: 1,
+                embargoExportExposure: 1,
+                countryId: 1,
+                contractAchievableUnits: 1,
+              },
+            }
+          )
+          .toArray(),
+        db
+          .collection<GameState>("gameState")
+          .findOne({ _id: "current" }, { projection: { currentTurn: 1, currentYear: 1 } }),
+        db
+          .collection<GameConfig>("gameConfig")
+          .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } }),
+      ]);
+      const context = {
+        sectors,
+        isNatcorp: !!corp.countryOwnerId,
+        turn: world?.currentTurn ?? 0,
+        currentYear: world?.currentYear,
+        commandEconomyEnabled: config?.commandEconomyEnabled === true,
+      };
+      for (const commodity of COMMODITY_TYPES) {
+        const currentCapacityUnits = computeSupplierCommodityCapacityUnits({
+          ...context,
+          commodity,
+        });
+        const achievableUnits = computeSupplierCommodityAchievableUnits({
+          ...context,
+          commodity,
+        });
+        capacityByCommodity[commodity] = {
+          currentCapacityUnits,
+          maxContractUnits: currentCapacityUnits * CONTRACT_OVERCOMMIT_TOLERANCE,
+          achievableUnits,
+        };
+      }
+    }
     return NextResponse.json({
       agreements: agreements.map((a) => ({
         supplierCorpName:
@@ -68,6 +141,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         buyerCorpId: a.buyerCorpId.toString(),
         proposedByCorpId: a.proposedByCorpId.toString(),
       })),
+      capacityByCommodity,
     });
   } catch (error) {
     return handleRouteError(error);

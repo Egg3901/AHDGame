@@ -610,4 +610,59 @@ describe("plants mode — demand-aware production throttle", () => {
     const dead = producedWithHistory({ producedUnits: unthrottled, soldUnits: 0 });
     expect(dead).toBeCloseTo(unthrottled * DEMAND_THROTTLE_FLOOR, 2);
   });
+
+  it("keeps the contract ceiling independent of production policy while demand-bound", () => {
+    const unthrottled = producedWithHistory();
+    const history = {
+      producedUnits: unthrottled,
+      soldUnits: unthrottled / 3,
+    };
+    const open = run(
+      "plants",
+      makeSector({
+        capitalStock: stock,
+        plantsStartTurn: 100,
+        productionPolicyLevel: 0,
+        ...history,
+      }),
+      1000
+    ).update;
+    const cut = run(
+      "plants",
+      makeSector({
+        capitalStock: stock,
+        plantsStartTurn: 100,
+        productionPolicyLevel: -22,
+        productionPolicy: -22,
+        ...history,
+      }),
+      1000
+    ).update;
+
+    expect(cut.contractAchievableUnits).toBeCloseTo(open.contractAchievableUnits as number, 2);
+  });
+
+  it("keeps the demand ceiling when the operator mothballs the plant", () => {
+    const unthrottled = producedWithHistory();
+    const history = {
+      producedUnits: unthrottled,
+      soldUnits: unthrottled / 3,
+    };
+    const running = run(
+      "plants",
+      makeSector({ capitalStock: stock, plantsStartTurn: 100, ...history }),
+      1000
+    ).update;
+    const mothballed = run(
+      "plants",
+      makeSector({ capitalStock: stock, plantsStartTurn: 100, mothballed: true, ...history }),
+      1000
+    ).update;
+
+    expect(mothballed.producedUnits).toBe(0);
+    expect(mothballed.contractAchievableUnits).toBeCloseTo(
+      running.contractAchievableUnits as number,
+      2
+    );
+  });
 });
