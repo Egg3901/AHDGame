@@ -942,7 +942,7 @@ export async function POST(request: Request) {
 
     const snapshottedPolicyProvisions = await snapshotBillPolicyProvisions(
       db,
-      "federal",
+      { scope: "national", countryId: "US" },
       validatedPolicyProvisions
     );
 

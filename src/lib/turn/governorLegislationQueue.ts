@@ -7,6 +7,7 @@ import { getSubNationalLegislatureKey } from "@/lib/constants/countries";
 import { STATE_TERMINAL_STATUSES } from "@/lib/congress/billProposalLimits";
 import { cancelQueue } from "@/lib/governorOffice/legislation/cancelQueue";
 import { canManageOffice } from "@/lib/governorOffice/access";
+import { snapshotPolicyProvisionsInPlace } from "@/lib/legislature/provisionEnrichment";
 
 const VOTING_DURATION_HOURS = 24;
 
@@ -105,6 +106,19 @@ export async function processGovernorLegislationQueue(
     const sponsorVoteKey = `npp_${q.targetNppId.toString()}`;
     const billId = new ObjectId();
     const votingEndsAt = new Date(now.getTime() + VOTING_DURATION_HOURS * 3_600_000);
+
+    // Fire time is this queue's analogue of proposal, so freeze the proposed and
+    // current option labels here. Without them the bill detail page re-reads the
+    // live law and, once the bill enacts, shows the bill's own outcome as the
+    // current law.
+    const queuedProvisions = q.provisions ? [...q.provisions] : undefined;
+    if (queuedProvisions?.length) {
+      await snapshotPolicyProvisionsInPlace(db, queuedProvisions, {
+        scope: "region",
+        countryId: q.countryId,
+        regionId: q.stateId,
+      });
+    }
     const bill: StateBill = {
       _id: billId,
       stateId: q.stateId,
@@ -129,7 +143,7 @@ export async function processGovernorLegislationQueue(
       ...(q.category ? { category: q.category } : {}),
       ...(q.legislationTypeId ? { legislationTypeId: q.legislationTypeId } : {}),
       ...(q.effectDirection !== undefined ? { effectDirection: q.effectDirection } : {}),
-      ...(q.provisions ? { provisions: q.provisions } : {}),
+      ...(queuedProvisions ? { provisions: queuedProvisions } : {}),
       proposalActionCost: q.proposalActionCost,
       proposalNpiCost: q.proposalNpiCost,
       proposedAt: now,

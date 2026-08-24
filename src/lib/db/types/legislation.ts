@@ -70,12 +70,20 @@ export interface PolicyProvision {
   type?: "policy"; // optional for backwards compat with existing docs
   legislationTypeId: string;
   policyOptionId?: string;
-  /** Frozen label for the proposed option so historical bill detail stays stable if seed text changes. */
+  /**
+   * Frozen NAME of the proposed option so historical bill detail stays stable if
+   * seed text changes. Documents written before the structured split may hold a
+   * combined "Name: explanation" string; the read path splits those.
+   */
   policyOptionNameSnapshot?: string;
+  /** Frozen explanation for the proposed option. Paired with policyOptionNameSnapshot. */
+  policyOptionExplanationSnapshot?: string;
   /** Frozen current-law option id at proposal time so history doesn't drift after enactment. */
   currentPolicyOptionIdSnapshot?: string;
-  /** Frozen label for the current law shown beside the proposal on the bill detail page. */
+  /** Frozen NAME of the current law shown beside the proposal on the bill detail page. */
   currentPolicyOptionNameSnapshot?: string;
+  /** Frozen explanation for the current law. Paired with currentPolicyOptionNameSnapshot. */
+  currentPolicyOptionExplanationSnapshot?: string;
   effectDirection: number;
   economic?: number;
   social?: number;

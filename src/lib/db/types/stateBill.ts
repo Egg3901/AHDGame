@@ -31,8 +31,24 @@ export interface StateBillPolicyProvision {
   social?: number;
   /** Tax-slider laws: the slider-chosen rate. */
   proposedRate?: number;
+  /**
+   * Frozen NAME of the proposed option, stamped at proposal (or governor-queue
+   * fire) time. Documents written before the structured split may hold a
+   * combined "Name: explanation" string; the read path splits those.
+   */
   policyOptionNameSnapshot?: string;
+  /** Frozen explanation for the proposed option. */
+  policyOptionExplanationSnapshot?: string;
+  /**
+   * Frozen current-law option id at proposal time. Without it the bill detail
+   * page re-reads the live law, so after enactment the current-law box shows the
+   * bill's own outcome.
+   */
+  currentPolicyOptionIdSnapshot?: string;
+  /** Frozen NAME of the current law shown beside the proposal. */
   currentPolicyOptionNameSnapshot?: string;
+  /** Frozen explanation for the current law. */
+  currentPolicyOptionExplanationSnapshot?: string;
 }
 
 export interface StateBillSubsidyProvision {
