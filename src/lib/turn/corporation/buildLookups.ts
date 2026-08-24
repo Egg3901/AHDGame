@@ -565,7 +565,7 @@ export async function buildCorporationLookups(
   >();
   // Lagged price-over-base per STATE, the state twin of
   // `reachablePriceRatioByCountry`. Feeds the price-realization leg for
-  // state-scoped commodities (ticket #1180), so a seller in a locally short
+  // state-scoped commodities, so a seller in a locally short
   // state is paid that state's scarcity price rather than the national one.
   const statePriceRatioByState = new Map<string, Map<CommodityType, number>>();
   const stateInputAvailabilityByState = new Map<string, Map<CommodityType, number>>();

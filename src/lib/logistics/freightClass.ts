@@ -93,34 +93,6 @@ export const FREIGHT_CLASS_BY_COMMODITY: Record<CommodityType, FreightClass | nu
   entertainment_services: null,
 };
 
-/**
- * Commodities whose market is physically STATE-local and must clear against
- * the seller's own state rather than a national book (ticket #1180).
- *
- * `freight` is the only one, and the reason is structural rather than a
- * balance preference. A state's freight supply is not merely sold in that
- * state, it IS that state's haulage capacity: `runSourcingPass` reads
- * `byState.get(stateId).freight.supply` as the TEU ceiling on everything
- * leaving it. Ohio's trucks cannot haul a crate out of New Jersey.
- *
- * Clearing it nationally therefore made one number do two incompatible jobs.
- * The capacity a state must hold is local and non-transferable, while the
- * revenue that pays for it was pooled across every logistics sector in the
- * country and filled cheapest-first, so a seller could capture haul demand it
- * was physically incapable of serving. Measured on prod at t361: NJ held 30x
- * the freight its own state consumed and AZ was short, and because both faced
- * the same national book neither signal reached the player who could act on
- * it. Every other unshipped commodity (software, financial services, and the
- * rest) has no per-state capacity gate, so a national book is right for them.
- *
- * The price side already worked this way. `statePrices.freight` ran from 63.72
- * in NJ to 91.70 in AZ on the same turn, so the model already believed freight
- * was a local market; only the clearing disagreed.
- */
-export const STATE_SCOPED_COMMODITIES: ReadonlySet<CommodityType> = new Set<CommodityType>([
-  "freight",
-]);
-
 /** True when the class rides the haulage fleet and spends TEU capacity. */
 export function isHauledClass(freightClass: FreightClass): boolean {
   return freightClass !== "grid";

@@ -18,6 +18,7 @@ import {
   computeSupplierCommodityAchievableUnits,
   computeSupplierCommodityCapacityUnits,
 } from "@/lib/corporations/supplyAgreementCapacity";
+import { supportsCorporationWideSupplyAgreement } from "@/lib/market/commodityMarketScope";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -112,6 +113,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         commandEconomyEnabled: config?.commandEconomyEnabled === true,
       };
       for (const commodity of COMMODITY_TYPES) {
+        if (!supportsCorporationWideSupplyAgreement(commodity)) continue;
         const currentCapacityUnits = computeSupplierCommodityCapacityUnits({
           ...context,
           commodity,

@@ -207,6 +207,46 @@ describe("decideNppSupplyAgreements", () => {
     });
     expect(d.filter((x) => x.action === "propose")).toHaveLength(0);
   });
+
+  it("does not activate or propose corporation-wide freight agreements", () => {
+    const freightSupplier: NppAgreementParty = {
+      corpId: "haulier",
+      countryId: "US",
+      isNatcorp: false,
+      sectors: [
+        {
+          sectorType: "logistics",
+          capitalStock: 10_000,
+          strategyId: "standard",
+          soldFraction: 0.2,
+          productionPolicyLevel: 0,
+        },
+      ],
+    };
+    const pending: ExistingNppAgreement = {
+      id: "freight-pending",
+      supplierCorpId: "player-haulier",
+      buyerCorpId: "buyer1",
+      commodity: "freight",
+      volumeCap: 100,
+      pricePremium: 0,
+      status: "pending",
+    };
+
+    const d = decideNppSupplyAgreements({
+      turn: TURN,
+      plantsEnabled: true,
+      parties: [mill(), freightSupplier],
+      agreements: [pending],
+      priceRatioOf: prices({ freight: 1.4 }),
+      staggerEligible: always,
+    });
+
+    expect(d).not.toContainEqual({ action: "activate", agreementId: "freight-pending" });
+    expect(d).not.toContainEqual(
+      expect.objectContaining({ action: "propose", commodity: "freight" })
+    );
+  });
 });
 
 describe("decideNppSupplyAgreements — media capacity parity", () => {

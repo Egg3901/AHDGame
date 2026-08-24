@@ -138,7 +138,7 @@ export interface CorporationLookups {
   /**
    * Lagged price-over-base ratio per state, the state twin of
    * `reachablePriceRatioByCountry`. Feeds the price-realization leg for
-   * state-scoped commodities (ticket #1180), so a seller in a locally short
+   * state-scoped commodities, so a seller in a locally short
    * state realizes that state's scarcity price rather than the national one.
    * Sparse: falls back to the group/world ratio.
    */
