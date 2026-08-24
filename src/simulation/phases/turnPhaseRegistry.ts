@@ -918,6 +918,23 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         if (executiveEndorsementsResult) {
           phaseResults.executiveEndorsements = executiveEndorsementsResult;
         }
+        // Player endorsements must not outlive their issuer's party alignment
+        // (ticket #1179). Same placement rationale as governor/executive above:
+        // withdraw BEFORE campaignTurn so the defector's per-turn action grant
+        // to the old party's candidate stops this very turn.
+        const playerEndorsementSweepResult = await runtime.runPhase(
+          "playerEndorsementPartySweep",
+          async () => {
+            const { sweepPartyMismatchedPlayerEndorsements } =
+              await import("@/lib/elections/playerEndorsements");
+            return sweepPartyMismatchedPlayerEndorsements(db, newTurn, realNow);
+          }
+        );
+        if (playerEndorsementSweepResult) {
+          phaseResults.playerEndorsementPartySweep = {
+            withdrawn: playerEndorsementSweepResult,
+          };
+        }
 
         const campaignResults = await runtime.runPhase("campaignTurn", () =>
           processCampaignTurn(newTurn)
