@@ -5,6 +5,7 @@ import {
   buildGoogleTagBootstrapScript,
   isGoogleCmpSiteHost,
   isPrivacyMessagingExcludedPath,
+  shouldRenderGooglePrivacyMessaging,
   shouldRenderConsentManagedGoogleTags,
 } from "@/lib/googlePrivacyMessaging";
 
@@ -20,6 +21,22 @@ describe("googlePrivacyMessaging", () => {
     expect(isGoogleCmpSiteHost("www.ahousedividedgame.com")).toBe(true);
     expect(isGoogleCmpSiteHost("preview-ahd.vercel.app")).toBe(false);
     expect(isGoogleCmpSiteHost("localhost:3000")).toBe(false);
+  });
+
+  it("limits Google privacy messaging to reviewed editorial pages", () => {
+    const originalClientId = process.env.NEXT_PUBLIC_ADSENSE_CLIENT;
+    process.env.NEXT_PUBLIC_ADSENSE_CLIENT = "ca-pub-1234567890";
+
+    try {
+      expect(shouldRenderGooglePrivacyMessaging("/guides", "ahousedividedgame.com")).toBe(true);
+      expect(shouldRenderGooglePrivacyMessaging("/dashboard", "ahousedividedgame.com")).toBe(false);
+      expect(
+        shouldRenderGooglePrivacyMessaging("/wiki/getting-started", "ahousedividedgame.com")
+      ).toBe(false);
+    } finally {
+      if (originalClientId === undefined) delete process.env.NEXT_PUBLIC_ADSENSE_CLIENT;
+      else process.env.NEXT_PUBLIC_ADSENSE_CLIENT = originalClientId;
+    }
   });
 
   it("builds consent defaults for Google's regulated regions when consent mode is enabled", () => {
