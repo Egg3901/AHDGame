@@ -16,6 +16,7 @@ import { calculateFederalRevenue, loadLatestSourcedImportAggregates } from "@/li
 import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 import { FISCAL_YEAR_START_TURN_IN_YEAR, calculateFiscalYear } from "@/lib/budget/fiscalYear";
 import { normalizeFederalSpending } from "@/lib/budget/spending";
+import { federalSurplus } from "@/lib/budget/federalSurplus";
 import { TURNS_PER_YEAR, STARTING_YEAR } from "@/lib/constants/turnTime";
 import { formulaGrants } from "@/lib/seeds/reference/formulaGrants";
 import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
@@ -296,7 +297,7 @@ export async function loadFederalBudgetDetail(params: {
       ...storedNationalBudget,
       fiscalYear: liveFiscalYear,
       spending,
-      surplus: storedNationalBudget.revenue.total - spending.total,
+      surplus: federalSurplus({ revenue: storedNationalBudget.revenue, spending }),
     };
   } else {
     // Money wiring (interstate-logistics plan step 5, phase B): mirror the
@@ -328,7 +329,7 @@ export async function loadFederalBudgetDetail(params: {
       fiscalYear: liveFiscalYear,
       revenue: recalculatedRevenue,
       spending,
-      surplus: recalculatedRevenue.total - spending.total,
+      surplus: federalSurplus({ revenue: recalculatedRevenue, spending }),
     };
   }
 

@@ -26,6 +26,7 @@ import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { getCentralBankScope } from "@/lib/centralBank/helpers";
 import { getGameState } from "@/lib/gameState";
 import { getInflationTarget, getNeutralPrimeRate } from "@/lib/budget/inflation";
+import { federalSurplus } from "@/lib/budget/federalSurplus";
 import { aggregateNationalGdp } from "@/lib/utils/nationalGdp";
 import { aggregateCountrySectorMix, type CountrySectorMixEntry } from "@/lib/economy/sectorMix";
 import {
@@ -215,7 +216,10 @@ export async function buildCountryEconomyOutlook(
   const listings = snapshot?.listings ?? [];
   const stockMarketCap = snapshot ? listings.reduce((sum, l) => sum + (l.marketCap ?? 0), 0) : null;
 
-  const surplus = budget?.surplus ?? null;
+  // Derived, not read: `budget.surplus` is a cache that drifts intra-year, and
+  // `federalBudgetDetail` already recomputes the same expression for the Budget
+  // page. See lib/budget/federalSurplus.
+  const surplus = budget ? federalSurplus(budget) : null;
   const budgetGdp = budget?.gdp ?? null;
 
   return {
