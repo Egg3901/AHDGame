@@ -195,11 +195,16 @@ describe("Bill Lifecycle Integration Tests", () => {
         category: "economy",
       });
       expect(insertCall.provisions).toHaveLength(1);
+      // Snapshots are structured: option.name and option.explanation are stored
+      // as separate fields. The old combiner returned the explanation alone
+      // whenever it contained ": ", dropping the option's actual name.
       expect(insertCall.provisions[0]).toMatchObject({
         legislationTypeId: "tax_policy",
-        policyOptionNameSnapshot: "Proposed Law: Reduces corporate tax rates",
+        policyOptionNameSnapshot: "Proposed Law",
+        policyOptionExplanationSnapshot: "Proposed Law: Reduces corporate tax rates",
         currentPolicyOptionIdSnapshot: "tax_policy_current",
-        currentPolicyOptionNameSnapshot: "Current Law: Existing tax policy",
+        currentPolicyOptionNameSnapshot: "Current Law",
+        currentPolicyOptionExplanationSnapshot: "Current Law: Existing tax policy",
         effectDirection: 1,
         economic: 2,
       });

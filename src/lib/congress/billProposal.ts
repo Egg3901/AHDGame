@@ -10,14 +10,7 @@ import type {
 import { canLegislateBankIndependence } from "@/lib/centralBank/governance";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import type {
-  EnactedLaw,
-  LegislationPolicyOption,
-  LegislationType,
-  StatePolicy,
-  SubsidyProvision,
-  EndSubsidyProvision,
-} from "@/lib/db/types";
+import type { LegislationType, SubsidyProvision, EndSubsidyProvision } from "@/lib/db/types";
 import type {
   EmbargoProvision,
   EndEmbargoProvision,
@@ -43,19 +36,20 @@ import {
 import { getEraContext } from "@/lib/era/context";
 import { resolveTaxSliderProvisionFields } from "@/lib/politicalLegislation/taxSlider";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
-import { inferCountryIdFromStateId } from "@/lib/congress/resolveBillCountryId";
 import { resolveProvisionPolicyOption } from "@/lib/legislature/provisionEnrichment";
-import {
-  canonicalizeLegislationTypeId,
-  getEquivalentLegislationTypeIds,
-} from "@/lib/legislationTypeAliases";
+
+// snapshotBillPolicyProvisions now lives in the shared provision-enrichment core
+// so the regional bill paths can call it too. Re-exported for existing importers.
+export { snapshotBillPolicyProvisions } from "@/lib/legislature/provisionEnrichment";
 
 export interface ValidatedPolicyProvision {
   legislationTypeId: string;
   policyOptionId?: string;
   policyOptionNameSnapshot?: string;
+  policyOptionExplanationSnapshot?: string;
   currentPolicyOptionIdSnapshot?: string;
   currentPolicyOptionNameSnapshot?: string;
+  currentPolicyOptionExplanationSnapshot?: string;
   effectDirection: number;
   /** Omitted when the provision does not take a stance on this axis (0 is not centre). */
   economic?: number;
@@ -485,121 +479,4 @@ export async function validateBillProvisions(
     electoralLawProvisions: validatedElectoralLawProvisions,
     centralBankProvisions: validatedCentralBankProvisions,
   };
-}
-
-function formatPolicyOptionLabel(option: LegislationPolicyOption): string {
-  if (option.explanation?.includes(": ")) return option.explanation;
-  if (option.explanation) return `${option.name}: ${option.explanation}`;
-  return option.name;
-}
-
-/**
- * Freeze the proposed/current provision labels at proposal time so historical
- * bill detail does not drift after the law changes.
- */
-export async function snapshotBillPolicyProvisions(
-  db: Db,
-  policyStoreId: string,
-  provisions: ValidatedPolicyProvision[]
-): Promise<ValidatedPolicyProvision[]> {
-  if (provisions.length === 0) return provisions;
-
-  const canonicalLegTypeIds = [
-    ...new Set(
-      provisions
-        .map((provision) => canonicalizeLegislationTypeId(provision.legislationTypeId))
-        .filter((id): id is string => Boolean(id))
-    ),
-  ];
-  const legTypeIds = [
-    ...new Set(canonicalLegTypeIds.flatMap((id) => getEquivalentLegislationTypeIds(id))),
-  ];
-
-  const [legislationTypes, currentPolicies] = await Promise.all([
-    db
-      .collection<LegislationType>("legislationTypes")
-      .find({ _id: { $in: legTypeIds } })
-      .toArray(),
-    db
-      .collection<StatePolicy>("statePolicies")
-      .find({ stateId: policyStoreId, legislationTypeId: { $in: legTypeIds } })
-      .toArray(),
-  ]);
-
-  const legislationTypeMap = new Map<string, LegislationType>();
-  for (const lt of legislationTypes) {
-    const canonicalId = canonicalizeLegislationTypeId(lt._id);
-    if (!canonicalId) continue;
-    if (!legislationTypeMap.has(canonicalId) || lt._id === canonicalId) {
-      legislationTypeMap.set(canonicalId, lt);
-    }
-  }
-
-  const currentPolicyIdMap = new Map<string, string>();
-  for (const policy of currentPolicies) {
-    const canonicalId = canonicalizeLegislationTypeId(policy.legislationTypeId);
-    if (!canonicalId) continue;
-    if (!currentPolicyIdMap.has(canonicalId) || policy.legislationTypeId === canonicalId) {
-      currentPolicyIdMap.set(canonicalId, policy.policyOptionId);
-    }
-  }
-
-  const missingTypeIds = canonicalLegTypeIds.filter((id) => !currentPolicyIdMap.has(id));
-  if (missingTypeIds.length > 0) {
-    const countryId = inferCountryIdFromStateId(policyStoreId);
-    const enactedLawFilter: Record<string, unknown> = {
-      legislationTypeId: {
-        $in: missingTypeIds.flatMap((id) => getEquivalentLegislationTypeIds(id)),
-      },
-      repealedAt: { $exists: false },
-    };
-    if (countryId) {
-      enactedLawFilter.scope = "national";
-      enactedLawFilter.countryId = countryId;
-    } else {
-      enactedLawFilter.scope = "state";
-      enactedLawFilter.stateId = policyStoreId;
-    }
-
-    const enactedLaws = await db
-      .collection<EnactedLaw>("enactedLaws")
-      .find(enactedLawFilter)
-      .sort({ enactedAt: -1 })
-      .toArray();
-
-    const seenCanonicalIds = new Set<string>();
-    for (const law of enactedLaws) {
-      const canonicalId = canonicalizeLegislationTypeId(law.legislationTypeId);
-      if (!canonicalId || seenCanonicalIds.has(canonicalId)) continue;
-      seenCanonicalIds.add(canonicalId);
-
-      const lt = legislationTypeMap.get(canonicalId);
-      const currentOption = lt?.policyOptions?.[law.policyOptionIndex ?? -1];
-      if (currentOption?.id) {
-        currentPolicyIdMap.set(canonicalId, currentOption.id);
-      }
-    }
-  }
-
-  return provisions.map((provision) => {
-    const canonicalId =
-      canonicalizeLegislationTypeId(provision.legislationTypeId) ?? provision.legislationTypeId;
-    const lt = legislationTypeMap.get(canonicalId);
-    const proposedOption = resolveProvisionPolicyOption(lt, provision)?.option ?? null;
-    const currentPolicyOptionId = currentPolicyIdMap.get(canonicalId);
-    const currentPolicyOption = currentPolicyOptionId
-      ? lt?.policyOptions?.find((option) => option.id === currentPolicyOptionId)
-      : undefined;
-
-    return {
-      ...provision,
-      ...(proposedOption
-        ? { policyOptionNameSnapshot: formatPolicyOptionLabel(proposedOption) }
-        : {}),
-      ...(currentPolicyOptionId ? { currentPolicyOptionIdSnapshot: currentPolicyOptionId } : {}),
-      ...(currentPolicyOption
-        ? { currentPolicyOptionNameSnapshot: formatPolicyOptionLabel(currentPolicyOption) }
-        : {}),
-    };
-  });
 }
