@@ -97,6 +97,19 @@ describe("resolveCurrentLaw — precedence", () => {
     expect(out.label).toEqual({ name: "Minimal", explanation: "Token funding." });
   });
 
+  it("takes the ladder index from the live row when only a legacy label is stored", () => {
+    // There is no id to place the label on the ladder. The index drives the
+    // effect chips, and the national path has always taken it from the live row
+    // in exactly this case, so returning nothing would silently change the chips.
+    const out = resolveCurrentLaw(
+      lt,
+      { effectDirection: -1, currentPolicyOptionNameSnapshot: "Minimal: Token funding." },
+      { policyOptionIndex: 2 }
+    );
+    expect(out.label).toEqual({ name: "Minimal", explanation: "Token funding." });
+    expect(out.index).toBe(2);
+  });
+
   it("falls back to the live index when no snapshot exists", () => {
     const out = resolveCurrentLaw(lt, { effectDirection: -1 }, { policyOptionIndex: 2 });
     expect(out.index).toBe(2);

@@ -3,6 +3,18 @@ import type { NationalizationProvisionDetail } from "@/lib/nationalization/billT
 import type { ProvisionEffectChip } from "@/lib/legislature/provisionEffects";
 
 /**
+ * Which way a provision pushes, as a label.
+ *
+ * The single copy: this existed three times over (congress/billEnrichment,
+ * legislature/mapStateBillToBillDisplay, legislature/queries/stateBillQueries).
+ */
+export function directionLabel(d: number): "Left" | "Center" | "Right" {
+  if (d < 0) return "Left";
+  if (d > 0) return "Right";
+  return "Center";
+}
+
+/**
  * A policy option's display text, kept structured.
  *
  * Never pre-combined into "Name: explanation". The old combiner dropped

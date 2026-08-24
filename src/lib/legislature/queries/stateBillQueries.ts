@@ -34,15 +34,10 @@ import {
   loadLiveCurrentPolicies,
   resolvePolicyProvision,
   resolveProposedLabel,
+  directionLabel as directionFromEffect,
   type ProvisionDisplay,
   type SnapshottedProvision,
 } from "@/lib/legislature/provisionEnrichment";
-
-function directionFromEffect(d: number): "Left" | "Center" | "Right" {
-  if (d < 0) return "Left";
-  if (d > 0) return "Right";
-  return "Center";
-}
 
 export interface StateLegislatureBillsPage {
   blockedProvisions: { legislationTypeId: string; policyOptionId: string }[];

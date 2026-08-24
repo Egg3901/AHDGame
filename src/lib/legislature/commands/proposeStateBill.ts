@@ -227,20 +227,6 @@ export async function proposeStateBill(
     }
     sanitizedProvisions.length = 0;
     sanitizedProvisions.push(...stamped.provisions);
-
-    // Freeze the proposed and current option labels now. Without this the bill
-    // detail page re-reads the live law on every render, so once the bill enacts
-    // the current-law box shows the bill's own outcome and the bill looks like
-    // it re-passed the law already in force.
-    //
-    // Runs AFTER the slider stamp on purpose: a slider provision carries a
-    // synthetic "rate:" option id that resolves to no seeded option, so the
-    // snapshot pass leaves its already-stamped labels alone.
-    await snapshotPolicyProvisionsInPlace(db, sanitizedProvisions, {
-      scope: "region",
-      countryId,
-      regionId: stateId,
-    });
   }
 
   const policyProvisionsForCheck = (sanitizedProvisions ?? [])
@@ -375,6 +361,24 @@ export async function proposeStateBill(
         body: { error: "Your actions or national influence changed. Please try again." },
       };
     }
+  }
+
+  // Freeze the proposed and current option labels. Without this the bill detail
+  // page re-reads the live law on every render, so once the bill enacts the
+  // current-law box shows the bill's own outcome and the bill looks like it
+  // re-passed the law already in force.
+  //
+  // Deliberately placed after every validation gate, so a proposal that is about
+  // to be rejected does not pay for the catalog and policy lookups. It must
+  // still run AFTER stampTaxSliderProvisions: a slider provision carries a
+  // synthetic "rate:" option id that resolves to no seeded option, so the
+  // snapshot pass leaves its already-stamped labels alone.
+  if (sanitizedProvisions && sanitizedProvisions.length > 0) {
+    await snapshotPolicyProvisionsInPlace(db, sanitizedProvisions, {
+      scope: "region",
+      countryId,
+      regionId: stateId,
+    });
   }
 
   const bill: Omit<StateBill, "_id"> = {

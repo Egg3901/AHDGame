@@ -48,6 +48,19 @@ function labelFromIndex(
   return option ? resolveOptionLabel(option) : undefined;
 }
 
+/** The ladder position of the live current-law row, by index or by option id. */
+function liveIndex(
+  lt: LegislationType | null | undefined,
+  live: LiveCurrentPolicy | undefined
+): number | undefined {
+  if (live?.policyOptionIndex !== undefined) return live.policyOptionIndex;
+  if (live?.policyOptionId) {
+    const index = lt?.policyOptions?.findIndex((opt) => opt.id === live.policyOptionId);
+    if (index !== undefined && index !== -1) return index;
+  }
+  return undefined;
+}
+
 /**
  * The current law shown beside a proposal.
  *
@@ -95,21 +108,20 @@ export function resolveCurrentLaw(
     return { index: snapshotIndex, label: labelFromIndex(lt, snapshotIndex) };
   }
 
-  // 3. Legacy combined snapshot, split the way the national page always rendered it.
+  // 3. Legacy combined snapshot, split the way the national page always rendered
+  //    it. There is no id to place it on the ladder, so the index falls through
+  //    to the live row — the position drives the effect chips, and the national
+  //    path has always taken it from the live row in exactly this case.
+  const fromLive = liveIndex(lt, live);
+
   if (provision.currentPolicyOptionNameSnapshot) {
     const label = splitLegacySnapshot(provision.currentPolicyOptionNameSnapshot);
-    if (label) return { label };
+    if (label) return { label, ...(fromLive !== undefined ? { index: fromLive } : {}) };
   }
 
   // 4/5. Live row (statePolicies, else enactedLaws), supplied by the caller.
-  if (live?.policyOptionIndex !== undefined) {
-    return { index: live.policyOptionIndex, label: labelFromIndex(lt, live.policyOptionIndex) };
-  }
-  if (live?.policyOptionId) {
-    const index = lt?.policyOptions?.findIndex((opt) => opt.id === live.policyOptionId);
-    if (index !== undefined && index !== -1) {
-      return { index, label: labelFromIndex(lt, index) };
-    }
+  if (fromLive !== undefined) {
+    return { index: fromLive, label: labelFromIndex(lt, fromLive) };
   }
 
   // 6. Nothing to show.

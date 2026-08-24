@@ -29,6 +29,7 @@ import { effectTargetLabelFromMetricId } from "@/lib/legislature/metricLabels";
 import { computeProvisionEffectChips } from "@/lib/legislature/provisionEffects";
 import { optionIntensity } from "@/lib/legislature/optionIntensity";
 import {
+  directionLabel,
   loadLiveCurrentPolicies,
   resolvePolicyProvision,
   type ProvisionDisplay,
@@ -182,14 +183,8 @@ export interface EnrichedBillDetail {
   whipPanel: BillWhipPanelData | null;
 }
 
-export function directionLabel(d: number): "Left" | "Center" | "Right" {
-  if (d < 0) return "Left";
-  if (d > 0) return "Right";
-  return "Center";
-}
-
 // Re-exported (kept importable from this module for existing call sites).
-export { effectTargetLabelFromMetricId };
+export { directionLabel, effectTargetLabelFromMetricId };
 
 function sumVoteByParty(voteByParty: VoteByParty[]): {
   for: number;
@@ -357,9 +352,14 @@ export async function resolveBillProvisions(
     // Live current law per legislation type, snapshot-independent. The shared
     // loader keys statePolicies on the national pseudo-stateId and falls back to
     // the latest un-repealed enactedLaws row, exactly as this file did before.
+    // Legacy bills predate `countryId` and carry only the national pseudo-stateId
+    // ("uk_national", ...). Defaulting straight to US would send a UK bill's
+    // current-law lookup to the federal store and find nothing.
     const nationalScope = {
       scope: "national" as const,
-      countryId: (bill.countryId ?? "US") as CountryId,
+      countryId: (bill.countryId ??
+        (bill.stateId ? inferCountryIdFromStateId(bill.stateId) : undefined) ??
+        "US") as CountryId,
     };
     const livePolicies = await loadLiveCurrentPolicies(db, nationalScope, legTypeIds);
 

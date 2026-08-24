@@ -104,6 +104,39 @@ describe("resolveBillProvisions", () => {
     });
   });
 
+  it("infers the country from the national pseudo-stateId when a legacy bill has no countryId", async () => {
+    // Legacy bills predate `countryId`. Defaulting to US would look the current
+    // law up in the federal store and find nothing for a UK bill.
+    const { resolveBillProvisions } = await import("./billEnrichment");
+
+    db.collectionMocks.legislationTypes.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: "uk_health",
+          name: "UK Health",
+          policyOptions: [
+            { id: "a", name: "Minimal", effectDirection: 1, economic: 2, social: 0 },
+            { id: "b", name: "Universal", effectDirection: -1, economic: -2, social: 0 },
+          ],
+        },
+      ],
+    });
+    db.collectionMocks.statePolicies.find.mockReturnValue({ toArray: async () => [] });
+
+    const bill = {
+      stateId: "uk_national",
+      provisions: [{ legislationTypeId: "uk_health", policyOptionId: "b", effectDirection: -1 }],
+    } as unknown as Bill;
+
+    await resolveBillProvisions(db as unknown as Db, bill);
+
+    const filter = db.collectionMocks.statePolicies.find.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(filter.stateId).toBe("uk_national");
+  });
+
   it("renders readable labels for tariff provisions", async () => {
     const { resolveBillProvisions } = await import("./billEnrichment");
 

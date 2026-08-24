@@ -2,12 +2,7 @@ import type { BillDisplay } from "@/lib/legislature/dto/billDisplay";
 import type { BillChamber, BillStatus } from "@/lib/db/types/legislation";
 import type { StateBillDisplay } from "@/lib/legislature/dto/stateLegislature";
 import { isVotingDeadlinePassed } from "./billVotingWindow";
-
-function directionFromEffect(d: number): "Left" | "Center" | "Right" {
-  if (d < 0) return "Left";
-  if (d > 0) return "Right";
-  return "Center";
-}
+import { directionLabel as directionFromEffect } from "@/lib/legislature/provisionEnrichment";
 
 /**
  * Map a subnational bill API shape to {@link BillDisplay} so state/region bills can use
