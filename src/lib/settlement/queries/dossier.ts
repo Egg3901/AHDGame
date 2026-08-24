@@ -68,6 +68,29 @@ export interface DossierPlayView {
   blockedReason: string | null;
 }
 
+/**
+ * One institution's per-turn personal-tier cap usage.
+ *
+ * The cap itself lives in `PERSONAL_NET_CAP` and bites in `resolvePlayBatch`
+ * at the tick; this carries what the board needs to show how much of it this
+ * turn has already spent. Null on institutions the personal tier cannot reach,
+ * where a meter would imply a limit that never applies.
+ */
+export interface DossierInstitutionCapView {
+  /** Signed points the open floor asked for here this turn, before the cap. */
+  rawPoints: number;
+  /** What the tier will move here after the cap: clamped to ±capPoints. */
+  netPoints: number;
+  /** The ceiling itself, so the card quotes the rule next to the usage. */
+  capPoints: number;
+  /**
+   * The raw ask has reached the cap. From here on further personal plays
+   * change nothing on this institution until the next tick, so this is the
+   * state the board must make unmistakable.
+   */
+  maxed: boolean;
+}
+
 export interface DossierInstitutionView {
   id: string;
   name: string;
@@ -81,6 +104,7 @@ export interface DossierInstitutionView {
   lastPlayLabel: string | null;
   plays: DossierPlayView[];
   gateNote: string | null;
+  personalCap: DossierInstitutionCapView | null;
 }
 
 export interface DossierBenchView {
@@ -152,7 +176,12 @@ export interface DossierView {
   benches: { west: DossierBenchView[]; east: DossierBenchView[] };
   openFloor: {
     characters: number;
-    /** Net points the personal tier actually bought, after the cap. */
+    /**
+     * Net points the personal tier moves this turn, after the cap. While the
+     * rows are still pending this is the projection of what the tick will
+     * apply; once they are stamped it equals the stamps, because the resolver
+     * guarantees those already sum to the clamped figure.
+     */
     netPoints: number;
     /** What it asked for, before the cap. Equal to `netPoints` when uncapped. */
     rawPoints: number;
@@ -354,9 +383,21 @@ export async function loadGermanQuestionDossier(
       (personalRawByInstitution.get(p.targetInstitutionId) ?? 0) + raw
     );
   }
+  /**
+   * Per institution, what the tier moves after the cap: the raw ask clamped to
+   * ±PERSONAL_NET_CAP, which is exactly how `resolvePlayBatch` settles a
+   * pending batch. For rows already stamped it still agrees with the stamps,
+   * because the resolver makes those sum to this same clamped figure.
+   */
+  const personalNetFor = (institutionId: string): number => {
+    const raw = personalRawByInstitution.get(institutionId) ?? 0;
+    return Math.sign(raw) * Math.min(Math.abs(raw), PERSONAL_NET_CAP);
+  };
   const openFloor = {
     characters: new Set(personal.map((p) => String(p.characterId))).size,
-    netPoints: pts(personal.reduce((sum, p) => sum + (p.appliedPoints ?? 0), 0)),
+    netPoints: pts(
+      [...personalRawByInstitution.keys()].reduce((sum, id) => sum + personalNetFor(id), 0)
+    ),
     rawPoints: pts(personalRawTotal),
     capPoints: magPts(PERSONAL_NET_CAP),
     capped: [...personalRawByInstitution.values()].some((v) => Math.abs(v) > PERSONAL_NET_CAP),
@@ -387,6 +428,10 @@ export async function loadGermanQuestionDossier(
 
   const catalogue = seat ? playsForSeat(seat.id) : [];
   const personalCatalogue = playsForSeat(null);
+  // The institutions a personal play can land on at all. Everywhere else the
+  // cap never applies, so those cards carry no meter rather than one pinned
+  // permanently at zero.
+  const personalTargets = new Set(personalCatalogue.map((p) => p.target));
 
   // The viewer's own money, so a personal play a broke character cannot afford
   // renders disabled here instead of looking live and being refused by the
@@ -458,6 +503,7 @@ export async function loadGermanQuestionDossier(
     const eastPct = pts(inst.position);
     const drift = pts(inst.lastDrift);
     const plays = buildPlays(inst.id);
+    const personalRaw = personalRawByInstitution.get(inst.id) ?? 0;
     return {
       id: inst.id,
       name: def?.name ?? inst.id,
@@ -476,6 +522,17 @@ export async function loadGermanQuestionDossier(
           : seat
             ? "this seat has no lever on this institution."
             : "open plays only reach the street and the Bundestag.",
+      // At the cap exactly, nothing was scaled down but the institution is
+      // already at its ceiling for the turn, so `maxed` reads >= where the
+      // aggregate `openFloor.capped` (a throttle that BIT) stays strict.
+      personalCap: personalTargets.has(inst.id)
+        ? {
+            rawPoints: magPts(personalRaw),
+            netPoints: magPts(personalNetFor(inst.id)),
+            capPoints: magPts(PERSONAL_NET_CAP),
+            maxed: Math.abs(personalRaw) >= PERSONAL_NET_CAP,
+          }
+        : null,
     };
   });
 
