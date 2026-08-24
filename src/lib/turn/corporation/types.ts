@@ -122,6 +122,8 @@ export interface CorporationLookups {
    * both cases mean no rationing, which is the pre-phase-2 behaviour.
    */
   labourTightnessByState: Map<string, number>;
+  /** Prior-turn desired-worker-weighted wage bid for each state. */
+  labourDemandWageIndexByState?: Map<string, number>;
   crimeRateByState: Map<string, number>;
   broadbandByState: Map<string, number>;
   roadConditionByState: Map<string, number>;
@@ -135,6 +137,14 @@ export interface CorporationLookups {
    * the global throughput fallback.
    */
   stateInputAvailabilityByState: Map<string, Map<CommodityType, number>>;
+  /**
+   * Lagged price-over-base ratio per state, the state twin of
+   * `reachablePriceRatioByCountry`. Feeds the price-realization leg for
+   * state-scoped commodities, so a seller in a locally short
+   * state realizes that state's scarcity price rather than the national one.
+   * Sparse: falls back to the group/world ratio.
+   */
+  statePriceRatioByState?: Map<string, Map<CommodityType, number>>;
   /**
    * Lagged share of a state's own production that active freight settlement
    * managed to PLACE (placed / supply, clamped 0..1), the sell-side mirror of
@@ -425,10 +435,12 @@ export interface SectorCalculationsResult {
    * that state this turn. Compared against `macroMetrics.economic.laborForce` to
    * produce a tightness reading. Unlike the two indices above this is populated
    * regardless of whether the labour system is on, because desired headcount is
-   * a property of the sector rather than of the wage system. Measurement only:
-   * no mechanic reads it back into the economy yet.
+   * a property of the sector rather than of the wage system. The next turn uses
+   * tightness for staffing, participation, and migration.
    */
   labourDemandByState: Map<string, number>;
+  /** Desired-worker-weighted wage bid used to divide a scarce labour pool. */
+  labourDemandWageIndexByState: Map<string, number>;
   /**
    * v3 Phase 6: strike trigger/resolution events emitted this turn, for
    * `index.ts` (which owns `db`) to translate into sentiment pulses. Empty

@@ -38,6 +38,8 @@ beforeEach(async () => {
   db.collection("gameState");
   db.collection("federalBudget");
   db.collection("macroMetrics");
+  db.collection("tradeFlowSnapshots");
+  db.collection("commodityPrices");
 
   const { getDb } = await import("@/lib/mongodb");
   vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
@@ -66,6 +68,94 @@ beforeEach(async () => {
 });
 
 describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
+  it("quotes local freight room without state-scoping consulting from the same sector", async () => {
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "plants",
+    });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 10,
+      currentYear: 1953,
+    });
+    db.collectionMocks.unownedSectors.find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([
+        { stateId: "AZ", sectorType: "logistics", revenue: 1000, headroomUnits: 1000 },
+        { stateId: "NJ", sectorType: "logistics", revenue: 1000, headroomUnits: 1000 },
+      ]),
+    });
+    db.collectionMocks.states.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { _id: "AZ", name: "Arizona", countryId: "US" },
+        { _id: "NJ", name: "New Jersey", countryId: "US" },
+      ]),
+    });
+    db.collectionMocks.corporateSectors.find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks.macroMetrics.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks.tradeFlowSnapshots.findOne.mockResolvedValue({
+      books: {
+        US: {
+          freight: {
+            supply: 1000,
+            demand: 100,
+            domesticDemand: 100,
+            imports: 0,
+            exports: 0,
+            blockedSupply: 0,
+            untradedSupply: 0,
+          },
+          consulting_services: {
+            supply: 100,
+            demand: 1000,
+            domesticDemand: 1000,
+            imports: 0,
+            exports: 0,
+            blockedSupply: 0,
+            untradedSupply: 0,
+          },
+        },
+      },
+    });
+    db.collectionMocks.commodityPrices.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          commodity: "freight",
+          globalSupply: 1000,
+          globalDemand: 100,
+          stateSupply: { AZ: 100, NJ: 100 },
+          stateDemand: { AZ: 200, NJ: 10 },
+        },
+        {
+          commodity: "consulting_services",
+          globalSupply: 100,
+          globalDemand: 1000,
+          stateSupply: {},
+          stateDemand: {},
+        },
+      ]),
+    });
+
+    const { GET } = await import("./route");
+    const response = await GET(makeRequest("sectorType=logistics&mode=unowned"), ctx());
+    const data = await response.json();
+    const byState = new Map(
+      (data.suggestions as Array<{ stateId: string; headroomUnits: number }>).map((row) => [
+        row.stateId,
+        row,
+      ])
+    );
+
+    expect(response.status).toBe(200);
+    expect(byState.get("AZ")?.headroomUnits).toBeGreaterThan(0);
+    expect(byState.get("NJ")?.headroomUnits).toBe(0);
+  });
+
   it("offers zero-revenue greenfield markets under plants", async () => {
     db.collectionMocks.gameConfig.findOne.mockResolvedValue({
       _id: "default",

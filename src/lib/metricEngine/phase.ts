@@ -38,6 +38,7 @@ import {
 } from "./macroGrowthInputs";
 import { loadValuationFxRates } from "@/lib/currency/corporationCapital";
 import { getEraMonetaryBaseline } from "@/lib/constants/monetaryEra";
+import { nextLabourParticipationBonus } from "@/lib/labour/labourMarket";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import {
@@ -230,6 +231,8 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     "economic.unemploymentRate.value": 1,
     "economic.laborParticipation.value": 1,
     "economic.laborForce.value": 1,
+    "economic.labourTightness.value": 1,
+    "economic.labourParticipationDemandBonus.value": 1,
     // Generic nodes (P2+): prev value/simBaseline + external seed/lagged reads,
     // derived from the registry at module load.
     ...GENERIC_PROJECTION,
@@ -549,10 +552,22 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
 
     // Supply-side POTENTIAL growth (§5.1): αL·g_L + αK·g_K + TFP. Computed BEFORE
     // the registry so it can be threaded to the gdpGrowth/unemployment nodes.
+    const priorMetricDoc = prevDocById.get(state._id);
+    const participationDemandBonus = labourMacroEnabled
+      ? nextLabourParticipationBonus(
+          readMetricPath(priorMetricDoc, "economic.labourTightness", "value"),
+          readMetricPath(priorMetricDoc, "economic.labourParticipationDemandBonus", "value")
+        )
+      : 0;
+    const effectiveLaborParticipation = Math.min(
+      100,
+      (laborParticipationByState.get(state._id) ?? NEUTRAL_LABOR_PARTICIPATION) +
+        participationDemandBonus
+    );
     const laborForce = computeLaborForce(
       state.workingAgePopulation ?? 0,
       state.militaryServicePopulation ?? 0,
-      laborParticipationByState.get(state._id) ?? NEUTRAL_LABOR_PARTICIPATION
+      effectiveLaborParticipation
     );
     const gL = annualizedGrowthRate(
       laborForce,
@@ -771,6 +786,7 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
       "economic.unemploymentRate.value": results["economic.unemploymentRate"].value,
       "economic.potentialGrowth.value": potential,
       "economic.laborForce.value": laborForce,
+      "economic.labourParticipationDemandBonus.value": participationDemandBonus,
       lastUpdated: now,
     };
     // Generic nodes (P2+): persist value + simBaseline per node — but ONLY for

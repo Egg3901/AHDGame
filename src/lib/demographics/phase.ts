@@ -23,6 +23,7 @@ import {
   capNetMigrants,
   worldMigrationScale,
   ECON_PULL_NEUTRAL,
+  labourShortageMigrationBonusPct,
 } from "./flows/internationalMigration";
 import { getLabourSystemMode, labourAtLeast } from "@/lib/labour/featureFlag";
 import { labourMigrationWageFactor } from "@/lib/labour/laborCost";
@@ -61,6 +62,7 @@ interface MetricsDoc {
     medianIncome?: { value?: number };
     costOfLiving?: { value?: number };
     labourWageIndex?: { value?: number };
+    labourTightness?: { value?: number };
   };
 }
 
@@ -145,6 +147,7 @@ export async function runDemographicFlows(
     "economic.medianIncome.value": 1,
     "economic.costOfLiving.value": 1,
     "economic.labourWageIndex.value": 1,
+    "economic.labourTightness.value": 1,
   } as Record<string, 1>;
   const [demos, states, macroMetrics, gameState, labourConfig, politicalInputs] = await Promise.all(
     [
@@ -230,7 +233,15 @@ export async function runDemographicFlows(
       integrationScore == null
         ? seededMigrationPct
         : modulateByPoliticalScore(seededMigrationPct, integrationScore, 1.5);
-    const baseNet = ((migrationRatePct / 100) * popNow) / TURNS_PER_YEAR;
+    const labourMigrationBonusPct = labourMacroEnabled
+      ? labourShortageMigrationBonusPct(
+          val(m?.economic?.labourTightness, 0),
+          val(m?.economic?.labourWageIndex, 1)
+        )
+      : 0;
+    const policyGatedLabourMigrationBonusPct = migrationRatePct > 0 ? labourMigrationBonusPct : 0;
+    const baseNet =
+      (((migrationRatePct + policyGatedLabourMigrationBonusPct) / 100) * popNow) / TURNS_PER_YEAR;
     const gdpGrowthVal = val(m?.economic?.gdpGrowth, ECON_PULL_NEUTRAL.gdpGrowth);
     let econPull = economicPullFactor({
       gdpGrowth: gdpGrowthVal,
@@ -341,6 +352,8 @@ export async function runDemographicFlows(
             unemployment: val(w.m?.economic?.unemploymentRate, 5),
             medianIncome: val(w.m?.economic?.medianIncome, 50000),
             costOfLiving: val(w.m?.economic?.costOfLiving, 50),
+            labourTightness: labourMacroEnabled ? val(w.m?.economic?.labourTightness, 0) : 0,
+            labourWageIndex: labourMacroEnabled ? val(w.m?.economic?.labourWageIndex, 1) : 1,
           },
           avgIncome
         ),

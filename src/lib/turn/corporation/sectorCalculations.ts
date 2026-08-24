@@ -141,6 +141,7 @@ export function processSectors(
   // indices above this is NOT gated on the labour system being on, so it stays
   // populated in worlds where wages are off.
   const labourDemandByState = makeLabourDemandByState();
+  const labourDemandWageIndexByState = new Map<string, WageIndexAccumulator>();
   // v3 Phase 6: strike trigger/resolution events, for index.ts (which owns
   // db) to turn into sentiment pulses. Same "collect during the pure loop,
   // consume after" pattern as sectorFxSpreadFees below.
@@ -181,6 +182,7 @@ export function processSectors(
     wageIndexByState,
     automationIndexByState,
     labourDemandByState,
+    labourDemandWageIndexByState,
     pendingStrikeEvents,
     pendingCapacityBindingEvents,
     sectorOps,
@@ -1081,6 +1083,9 @@ export function processSectors(
       Array.from(automationIndexByState, ([stateId, acc]) => [stateId, resolveAutomationIndex(acc)])
     ),
     labourDemandByState,
+    labourDemandWageIndexByState: new Map(
+      Array.from(labourDemandWageIndexByState, ([stateId, acc]) => [stateId, resolveWageIndex(acc)])
+    ),
     strikeEvents: pendingStrikeEvents,
     capacityBindingEvents: pendingCapacityBindingEvents,
   };

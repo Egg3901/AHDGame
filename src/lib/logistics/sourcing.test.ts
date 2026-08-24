@@ -459,42 +459,91 @@ describe("runSourcingPass", () => {
     expect(r.deliveryLimitedSupplyByState.get("coal")!.get("A2")).toBe(0);
   });
 
-  it("deliveryLimitedSupplyByState: attributes only the spare somebody wanted", () => {
+  it("deliveryLimitedSupplyByState: a price lockout is not a delivery failure (ticket #1180)", () => {
     // Tolerance locks every seller out, so nothing ships. A1 wants 100 and A2
-    // holds 200: half of what A2 could not place was wanted by someone, the
-    // other half was never wanted at all.
+    // holds 200, but A2's trucks were never the constraint: the goods were
+    // haulable and too expensive. Telling A2 to build freight would sell it
+    // capacity that changes nothing, so this attributes zero.
     const r = runSourcingPass(
       makeInputs({
         statePricesFor: () => ({ A1: 100, A2: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
         nationalPricesFor: () => ({ UK: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
       })
     );
+    const coal = r.summaries.find((s) => s.commodity === "coal")!;
     const unplaced = r.unplacedSupplyByState.get("coal")!.get("A2")!;
     expect(unplaced).toBeCloseTo(200);
-    expect(r.deliveryLimitedSupplyByState.get("coal")!.get("A2")).toBeCloseTo(100);
+    // The demand was real and went unmet. It is just priced out, not stuck.
+    expect(coal.unmetUnits).toBeGreaterThan(0);
+    expect(coal.toleranceBoundUnits).toBeGreaterThan(0);
+    expect(coal.capacityBoundUnits).toBe(0);
+    expect(r.deliveryLimitedSupplyByState.get("coal")!.get("A2")).toBe(0);
   });
 
   it("deliveryLimitedSupplyByState: saturates at the spare on hand", () => {
-    // Demand of 500 against 200 of unshippable spare. The share caps at 1: a
-    // seller can only ever fail to deliver what it actually holds.
+    // Demand of 500 against 200 of spare in a state with NO freight capacity,
+    // so every unit a buyer wanted is capacity-bound. A seller can only ever
+    // fail to deliver what it actually holds, so this caps at the 200 spare
+    // rather than the 500 that was wanted.
     const r = runSourcingPass(
       makeInputs({
         byState: new Map([
           ["A1", new Map([["coal", { supply: 0, demand: 500 }]]) as Map<CommodityType, Balance>],
-          ["A2", new Map([["coal", { supply: 200, demand: 0 }]]) as Map<CommodityType, Balance>],
+          [
+            "A2",
+            new Map([
+              ["coal", { supply: 200, demand: 0 }],
+              ["freight", { supply: 0, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
         ]),
         states: [
           { stateId: "A1", countryId: "US" as CountryId },
           { stateId: "A2", countryId: "US" as CountryId },
         ],
         byCountry: new Map([["US", new Map([["coal", { supply: 200, demand: 500 }]])]]),
-        statePricesFor: () => ({ A1: 100, A2: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
-        nationalPricesFor: () => ({ UK: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
+        statePricesFor: () => ({ A1: 100, A2: 100 }),
       })
     );
     const unplaced = r.unplacedSupplyByState.get("coal")!.get("A2")!;
     expect(unplaced).toBeCloseTo(200);
     expect(r.deliveryLimitedSupplyByState.get("coal")!.get("A2")).toBeCloseTo(200);
+  });
+
+  it("deliveryLimitedSupplyByState: blames only the state whose network failed (ticket #1180)", () => {
+    // The regression the ticket reported. A2 has no freight capacity and its
+    // spare is genuinely stuck. A3 sits in a different country with the same
+    // spare and no buyer at all, a plain glut. The old rule divided world
+    // unmet demand by world spare and stamped one ratio on both, so A3 wore a
+    // freight warning for a shortage on another continent.
+    const r = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          ["A1", new Map([["coal", { supply: 0, demand: 200 }]]) as Map<CommodityType, Balance>],
+          [
+            "A2",
+            new Map([
+              ["coal", { supply: 200, demand: 0 }],
+              ["freight", { supply: 0, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+          ["A3", new Map([["coal", { supply: 200, demand: 0 }]]) as Map<CommodityType, Balance>],
+        ]),
+        states: [
+          { stateId: "A1", countryId: "US" as CountryId },
+          { stateId: "A2", countryId: "US" as CountryId },
+          { stateId: "A3", countryId: "UK" as CountryId },
+        ],
+        byCountry: new Map([["US", new Map([["coal", { supply: 200, demand: 200 }]])]]),
+        statePricesFor: () => ({ A1: 100, A2: 100, A3: 100 }),
+      })
+    );
+    // Both states end the pass holding all 200 units.
+    expect(r.unplacedSupplyByState.get("coal")!.get("A2")).toBeCloseTo(200);
+    expect(r.unplacedSupplyByState.get("coal")!.get("A3")).toBeCloseTo(200);
+    // Only A2's is a delivery failure.
+    expect(r.deliveryLimitedSupplyByState.get("coal")!.get("A2")).toBeGreaterThan(0);
+    expect(r.deliveryLimitedSupplyByState.get("coal")!.get("A3")).toBe(0);
   });
 
   it("unplacedSupplyByState: grid losses make the flow ledger unable to answer this", () => {

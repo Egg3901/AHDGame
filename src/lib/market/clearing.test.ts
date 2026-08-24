@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { CommodityType } from "@/lib/constants/commodities";
+import { COMMODITY_TYPES, type CommodityType } from "@/lib/constants/commodities";
 import {
   autoPosture,
   clampPricingPosture,
@@ -460,6 +460,165 @@ describe("computeClearingFactors", () => {
       basePrices,
     });
     expect(results.has("s")).toBe(false);
+  });
+});
+
+describe("computeClearingFactors: state-scoped commodities", () => {
+  const basePrices = { freight: 100, consulting_services: 100 } as Record<CommodityType, number>;
+
+  // Two logistics sectors in one country. NJ is 10x oversupplied against its
+  // own state; AZ is short. Nationally the two net out to a mild glut, which
+  // is the average that used to be handed to both of them.
+  const twoStates = {
+    sectors: [
+      { sectorId: "nj", revenue: 10_000, supplyRates: { freight: 1 }, posture: 0 },
+      { sectorId: "az", revenue: 10_000, supplyRates: { freight: 1 }, posture: 0 },
+    ],
+    balances: bals([["freight", { supply: 200, demand: 110 }]]),
+    stateMarkets: {
+      stateBySector: new Map([
+        ["nj", "NJ"],
+        ["az", "AZ"],
+      ]),
+      balances: new Map([
+        ["NJ", bals([["freight", { supply: 100, demand: 10 }]])],
+        ["AZ", bals([["freight", { supply: 100, demand: 100 }]])],
+      ]),
+      priceRatios: new Map<string, Map<CommodityType, number>>(),
+    },
+    priceRatioByCommodity: new Map<CommodityType, number>([["freight", 1]]),
+    basePrices,
+  };
+
+  it("pays the short state and starves the glutted one, instead of averaging both", () => {
+    const { stateMarkets: _stateMarkets, ...nationalInputs } = twoStates;
+    const national = computeClearingFactors(nationalInputs);
+    // Without scoping both sellers face the same national book and get the
+    // same answer, so neither player learns anything about their own state.
+    expect(national.get("nj")!.soldFraction).toBeCloseTo(national.get("az")!.soldFraction, 10);
+
+    const scoped = computeClearingFactors(twoStates);
+    expect(scoped.get("az")!.soldFraction).toBeCloseTo(1, 10);
+    expect(scoped.get("nj")!.soldFraction).toBeCloseTo(0.1, 10);
+  });
+
+  it("realizes the short state's scarcity price, not the national one", () => {
+    const scoped = computeClearingFactors({
+      ...twoStates,
+      stateMarkets: {
+        ...twoStates.stateMarkets,
+        // AZ's freight trades at 1.4x base, NJ's below base.
+        priceRatios: new Map([
+          ["AZ", new Map<CommodityType, number>([["freight", 1.4]])],
+          ["NJ", new Map<CommodityType, number>([["freight", 0.9]])],
+        ]),
+      },
+    });
+    // Clearing volume locally while realizing price nationally would leave
+    // these two identical. The seller who relieved the shortage earns more.
+    expect(scoped.get("az")!.factor).toBeGreaterThan(scoped.get("nj")!.factor);
+  });
+
+  it("leaves a non-scoped output on the national book from the same plant", () => {
+    // A logistics sector sells freight AND consulting from one plant. Only the
+    // freight leg is state-locked; consulting is a national service and must
+    // not be dragged into a state book by its neighbour.
+    const results = computeClearingFactors({
+      sectors: [
+        {
+          sectorId: "nj",
+          revenue: 10_000,
+          supplyRates: { freight: 1, consulting_services: 1 },
+          posture: 0,
+        },
+      ],
+      balances: bals([
+        ["freight", { supply: 100, demand: 10 }],
+        ["consulting_services", { supply: 100, demand: 100 }],
+      ]),
+      stateMarkets: {
+        stateBySector: new Map([["nj", "NJ"]]),
+        balances: new Map([
+          ["NJ", bals([["freight", { supply: 100, demand: 10 }]])],
+          // Deliberately NO consulting entry for NJ.
+        ]),
+        priceRatios: new Map(),
+      },
+      priceRatioByCommodity: new Map<CommodityType, number>([
+        ["freight", 1],
+        ["consulting_services", 1],
+      ]),
+      basePrices,
+    });
+    const sold = results.get("nj")!.soldByCommodity!;
+    expect(sold.freight).toBeCloseTo(0.1, 10);
+    expect(sold.consulting_services).toBeCloseTo(1, 10);
+  });
+
+  it("fails closed when a state-local seller has no balance entry", () => {
+    // Falling back would reuse the same national demand already consumed by
+    // correctly located state books.
+    const results = computeClearingFactors({
+      sectors: [{ sectorId: "us", revenue: 10_000, supplyRates: { freight: 1 }, posture: 0 }],
+      balances: bals([["freight", { supply: 100, demand: 100 }]]),
+      balancesByGroup: new Map([["US", bals([["freight", { supply: 100, demand: 100 }]])]]),
+      groupBySector: new Map([["us", "US"]]),
+      stateMarkets: {
+        stateBySector: new Map([["us", "NOWHERE"]]),
+        balances: new Map(),
+        priceRatios: new Map(),
+      },
+      priceRatioByCommodity: new Map<CommodityType, number>([["freight", 1]]),
+      basePrices,
+    });
+    expect(results.get("us")!.soldFraction).toBeCloseTo(0, 10);
+  });
+
+  it("does not let a state id collide with a country id", () => {
+    // DE is both Delaware and Germany. Delaware is glutted, Germany is not.
+    const results = computeClearingFactors({
+      sectors: [{ sectorId: "de", revenue: 10_000, supplyRates: { freight: 1 }, posture: 0 }],
+      balances: bals([["freight", { supply: 100, demand: 100 }]]),
+      balancesByGroup: new Map([["DE", bals([["freight", { supply: 100, demand: 100 }]])]]),
+      groupBySector: new Map([["de", "DE"]]),
+      stateMarkets: {
+        stateBySector: new Map([["de", "DE"]]),
+        balances: new Map([["DE", bals([["freight", { supply: 100, demand: 5 }]])]]),
+        priceRatios: new Map(),
+      },
+      priceRatioByCommodity: new Map<CommodityType, number>([["freight", 1]]),
+      basePrices,
+    });
+    // Delaware's book, not Germany's.
+    expect(results.get("de")!.soldFraction).toBeCloseTo(0.05, 10);
+  });
+
+  it("is byte-identical for every reachable commodity while state markets are active", () => {
+    const commodities = COMMODITY_TYPES.filter((commodity) => commodity !== "freight");
+    const supplyRates = Object.fromEntries(commodities.map((commodity) => [commodity, 1]));
+    const balances = bals(commodities.map((commodity) => [commodity, { supply: 100, demand: 60 }]));
+    const priceRatios = new Map<CommodityType, number>(
+      commodities.map((commodity) => [commodity, 1])
+    );
+    const allBasePrices = Object.fromEntries(
+      COMMODITY_TYPES.map((commodity) => [commodity, 100])
+    ) as Record<CommodityType, number>;
+    const inputs = {
+      sectors: [{ sectorId: "seller", revenue: 10_000, supplyRates, posture: 0 }],
+      balances,
+      priceRatioByCommodity: priceRatios,
+      basePrices: allBasePrices,
+    };
+    const before = computeClearingFactors(inputs);
+    const after = computeClearingFactors({
+      ...inputs,
+      stateMarkets: {
+        stateBySector: new Map([["seller", "NJ"]]),
+        balances: new Map(),
+        priceRatios: new Map(),
+      },
+    });
+    expect(after.get("seller")).toEqual(before.get("seller"));
   });
 });
 

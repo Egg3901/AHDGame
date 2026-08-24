@@ -37,12 +37,12 @@ const plants = {
   },
 } as unknown as PlantsData;
 
-function renderDialog(onSubmit = vi.fn()) {
+function renderDialog(onSubmit = vi.fn(), plantData = plants) {
   render(
     <BuildCapacityDialog
       open
       onClose={vi.fn()}
-      plants={plants}
+      plants={plantData}
       sectorType="manufacturing"
       sectorLabel="Manufacturing"
       submitting={false}
@@ -130,6 +130,18 @@ describe("BuildCapacityDialog count control", () => {
     const { input } = renderDialog();
     fireEvent.click(screen.getByLabelText(/build one more/i), { ...NO_MODS, metaKey: true });
     expect(input.value).toBe("101");
+  });
+
+  it("warns that new capacity may remain vacant when the sector is understaffed", () => {
+    renderDialog(vi.fn(), {
+      ...plants,
+      workers: 25,
+      workersDesired: 100,
+      labourStaffingFactor: 0.25,
+    } as PlantsData);
+
+    expect(screen.getByText(/currently fills 25% of its jobs/i)).toBeTruthy();
+    expect(screen.getByText(/unless you raise pay or the local workforce grows/i)).toBeTruthy();
   });
 
   it("steps from the arrow keys, with the same modifiers", () => {

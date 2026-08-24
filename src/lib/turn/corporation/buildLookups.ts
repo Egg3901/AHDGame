@@ -563,6 +563,11 @@ export async function buildCorporationLookups(
     string,
     Map<CommodityType, { supply: number; demand: number }>
   >();
+  // Lagged price-over-base per STATE, the state twin of
+  // `reachablePriceRatioByCountry`. Feeds the price-realization leg for
+  // state-scoped commodities, so a seller in a locally short
+  // state is paid that state's scarcity price rather than the national one.
+  const statePriceRatioByState = new Map<string, Map<CommodityType, number>>();
   const stateInputAvailabilityByState = new Map<string, Map<CommodityType, number>>();
   const statePlacementRatioByState = new Map<string, Map<CommodityType, number>>();
   const stateDeliveryLimitedRatioByState = new Map<string, Map<CommodityType, number>>();
@@ -614,6 +619,18 @@ export async function buildCorporationLookups(
         supply: cp.stateSupply[stateId] ?? 0,
         demand: cp.stateDemand[stateId] ?? 0,
       });
+    }
+
+    if (typeof cp.basePrice === "number" && cp.basePrice > 0 && cp.statePrices) {
+      for (const [stateId, price] of Object.entries(cp.statePrices)) {
+        if (!(typeof price === "number" && price > 0)) continue;
+        let byCommodity = statePriceRatioByState.get(stateId);
+        if (!byCommodity) {
+          byCommodity = new Map<CommodityType, number>();
+          statePriceRatioByState.set(stateId, byCommodity);
+        }
+        byCommodity.set(cp.commodity, price / cp.basePrice);
+      }
     }
 
     if (options?.freightSettlementActive) {
@@ -732,6 +749,7 @@ export async function buildCorporationLookups(
   // same trade the smoothed prime rate and the inflation passthrough already
   // make, and labour supply does not move fast enough for one turn to matter.
   const labourTightnessByState = new Map<string, number>();
+  const labourDemandWageIndexByState = new Map<string, number>();
   const crimeRateByState = new Map<string, number>();
   const broadbandByState = new Map<string, number>();
   const roadConditionByState = new Map<string, number>();
@@ -755,6 +773,10 @@ export async function buildCorporationLookups(
     const tightnessVal = sm.economic?.labourTightness?.value;
     if (typeof tightnessVal === "number" && Number.isFinite(tightnessVal)) {
       labourTightnessByState.set(stateId, tightnessVal);
+    }
+    const demandWageIndex = sm.economic?.labourDemandWageIndex?.value;
+    if (typeof demandWageIndex === "number" && Number.isFinite(demandWageIndex)) {
+      labourDemandWageIndexByState.set(stateId, demandWageIndex);
     }
     const skillVal = sm.education?.workforceSkill?.value;
     if (typeof skillVal === "number") {
@@ -1103,6 +1125,7 @@ export async function buildCorporationLookups(
     workforceSkillByState,
     rawWorkforceSkillByState,
     labourTightnessByState,
+    labourDemandWageIndexByState,
     crimeRateByState,
     broadbandByState,
     roadConditionByState,
@@ -1120,6 +1143,7 @@ export async function buildCorporationLookups(
     countryClearingBooks,
     exportIntensityByCountry,
     rawStateBalances,
+    statePriceRatioByState,
     sectorPresenceKeys,
     allTariffs,
     activeFtaPairs,

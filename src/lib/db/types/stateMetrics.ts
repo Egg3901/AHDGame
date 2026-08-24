@@ -100,6 +100,10 @@ export interface StateMetrics {
      */
     labourDemand?: StateMetricValue;
     labourTightness?: StateMetricValue;
+    /** Desired-worker-weighted wage bid used for scarce-labour allocation. */
+    labourDemandWageIndex?: StateMetricValue;
+    /** Temporary participation uplift caused by sustained worker shortages. */
+    labourParticipationDemandBonus?: StateMetricValue;
     // Uniform extended metric fields
     propertyValueIndex?: StateMetricValue;
     commercialValueIndex?: StateMetricValue;
