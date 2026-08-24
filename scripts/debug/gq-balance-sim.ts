@@ -30,6 +30,7 @@ import {
   TOTAL_INSTITUTION_WEIGHT,
   getPlay,
   getSeat,
+  personalNetCapFor,
   seatActionBankCap,
   type SettlementPlayDef,
   type SettlementSeatKey,
@@ -617,9 +618,16 @@ for (const scenario of selected) {
       (r.armedTurns ? `, armed for ${r.armedTurns} turns` : ", never armed")
   );
   if (scenario.personalCount) {
+    // The ceiling is no longer a constant, so the raw peak alone no longer says
+    // whether the cap bit. Print what this turnout actually earned. Plays cycle
+    // through the personal catalogue, so roughly two thirds of them land on the
+    // street and the rest on the Bundestag — the street's crowd, and therefore
+    // its pool, is the larger of the two.
+    const streetCrowd = Math.round((scenario.personalCount * 2) / 3);
     console.log(
       `   public: peak raw ${pts(r.personalRawPeak)} on one institution, ` +
-        `capped on ${r.personalCappedTurns}/${r.turns} turns`
+        `capped on ${r.personalCappedTurns}/${r.turns} turns` +
+        `  (~${streetCrowd} on the street earn a pool of ${pts(personalNetCapFor(streetCrowd))})`
     );
   }
   for (const seat of r.seats) {
