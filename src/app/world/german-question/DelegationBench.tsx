@@ -92,15 +92,18 @@ export function OpenFloorPanel({ openFloor }: { openFloor: DossierView["openFloo
         {openFloor.characters.toLocaleString()}{" "}
         {openFloor.characters === 1 ? "character has" : "characters have"} taken a position this
         turn — net {openFloor.netPoints >= 0 ? "+" : ""}
-        {openFloor.netPoints.toFixed(1)} toward{" "}
+        {/* Two decimals, matching the institution cards and the wire: at the
+            tuned tempo the whole cap is under one point, and one decimal
+            rounded the ceiling itself away from what the cards quote. */}
+        {openFloor.netPoints.toFixed(2)} toward{" "}
         {openFloor.netPoints >= 0 ? "reunification" : "NATO"}.
       </p>
       {openFloor.capped && (
         <p className="mt-2 font-mono text-body-xs leading-relaxed text-warning">
           The floor asked for {openFloor.rawPoints >= 0 ? "+" : ""}
-          {openFloor.rawPoints.toFixed(1)} and was scaled to {openFloor.netPoints >= 0 ? "+" : ""}
-          {openFloor.netPoints.toFixed(1)}: the personal tier is capped at ±
-          {openFloor.capPoints.toFixed(1)} per institution per turn.
+          {openFloor.rawPoints.toFixed(2)} and was scaled to {openFloor.netPoints >= 0 ? "+" : ""}
+          {openFloor.netPoints.toFixed(2)}: the personal tier is capped at ±
+          {openFloor.capPoints.toFixed(2)} per institution per turn.
         </p>
       )}
     </section>
