@@ -4,11 +4,21 @@ import type { SettlementPlayDoc } from "@/lib/db/types/settlementPlay";
 import {
   HUNDREDTHS,
   PERSONAL_MULTIPLIER_PCT,
-  PERSONAL_NET_CAP_BASE,
+  personalNetCapFor,
 } from "@/lib/constants/settlementCrisis";
 
-/** What one default personal play buys, at the personal tier's multiplier. */
-const PERSONAL_QUARTER = Math.round((PERSONAL_NET_CAP_BASE * PERSONAL_MULTIPLIER_PCT) / 100);
+/**
+ * The default personal play's magnitude, and what it buys after the quarter
+ * multiplier.
+ *
+ * Derived from the TWO-participant pool, not from the base, so two of these sum
+ * to about half the ceiling they are measured against. Deriving it from the base
+ * used to put two plays at exactly the cap — 19 + 19 against a pool of 38 — so
+ * the "under the cap" test passed only because the comparison is inclusive, and
+ * was really measuring a rounding coincidence rather than its own name.
+ */
+const PERSONAL_BASE_POINTS = personalNetCapFor(2);
+const PERSONAL_QUARTER = Math.round((PERSONAL_BASE_POINTS * PERSONAL_MULTIPLIER_PCT) / 100);
 import { appliedPointsFor, resolvePlayBatch } from "./resolvePlays";
 
 function play(over: Partial<SettlementPlayDoc>): SettlementPlayDoc {
@@ -44,7 +54,7 @@ function personalPlay(over: Partial<SettlementPlayDoc> = {}): SettlementPlayDoc 
     // Derived from the cap so that TWO of these stay under it whatever the
     // tempo. A frozen literal drifted over the cap when the tempo moved, and
     // the "under the cap" tests then silently measured the apportionment.
-    basePoints: PERSONAL_NET_CAP_BASE,
+    basePoints: PERSONAL_BASE_POINTS,
     direction: 1,
     class: "personal",
     ...over,
@@ -106,6 +116,9 @@ describe("resolvePlayBatch", () => {
     const batch = resolvePlayBatch([personalPlay(), personalPlay()]);
     expect(batch.personalApplied.get("street")).toBe(PERSONAL_QUARTER * 2);
     expect(batch.perInstitution.get("street")).toBe(PERSONAL_QUARTER * 2);
+    // Comfortably under, not level with it. If these ever meet, this test
+    // stops distinguishing "left alone" from "apportioned to exactly the cap".
+    expect(PERSONAL_QUARTER * 2).toBeLessThan(personalNetCapFor(2));
   });
 
   it("scales the personal tier down to the cap when it exceeds it", () => {
@@ -114,8 +127,8 @@ describe("resolvePlayBatch", () => {
     );
     const batch = resolvePlayBatch(many);
     expect(batch.personalRaw.get("street")).toBe(10_000);
-    expect(batch.personalApplied.get("street")).toBe(PERSONAL_NET_CAP_BASE);
-    expect(batch.perInstitution.get("street")).toBe(PERSONAL_NET_CAP_BASE);
+    expect(batch.personalApplied.get("street")).toBe(personalNetCapFor(200));
+    expect(batch.perInstitution.get("street")).toBe(personalNetCapFor(200));
   });
 
   it("caps on the NET, so opposing personal plays cancel before the cap bites", () => {
@@ -136,7 +149,7 @@ describe("resolvePlayBatch", () => {
       personalPlay({ playId: "rally", basePoints: 2 * HUNDREDTHS, direction: -1 })
     );
     const batch = resolvePlayBatch(many);
-    expect(batch.personalApplied.get("street")).toBe(-PERSONAL_NET_CAP_BASE);
+    expect(batch.personalApplied.get("street")).toBe(-personalNetCapFor(200));
   });
 
   it("does not let the personal cap touch seat plays", () => {
@@ -148,7 +161,7 @@ describe("resolvePlayBatch", () => {
       play({ seatId: "RU", targetInstitutionId: "street", direction: 1, basePoints: 500 }),
     ];
     const batch = resolvePlayBatch(withSeat);
-    expect(batch.perInstitution.get("street")).toBe(PERSONAL_NET_CAP_BASE + 500);
+    expect(batch.perInstitution.get("street")).toBe(personalNetCapFor(200) + 500);
   });
 
   it("caps each institution independently", () => {
@@ -165,8 +178,8 @@ describe("resolvePlayBatch", () => {
         })
       ),
     ]);
-    expect(batch.personalApplied.get("street")).toBe(PERSONAL_NET_CAP_BASE);
-    expect(batch.personalApplied.get("bundestag")).toBe(-PERSONAL_NET_CAP_BASE);
+    expect(batch.personalApplied.get("street")).toBe(personalNetCapFor(200));
+    expect(batch.personalApplied.get("bundestag")).toBe(-personalNetCapFor(200));
   });
 
   it("stamps capped personal plays with what they actually bought", () => {
@@ -183,7 +196,7 @@ describe("resolvePlayBatch", () => {
     expect(stampedTotal).toBe(batch.perInstitution.get("street"));
     // Derived, not frozen: the stamps must sum to exactly the cap and no row
     // may be stamped above the 50 it asked for, whatever the cap is tuned to.
-    expect(stampedTotal).toBe(PERSONAL_NET_CAP_BASE);
+    expect(stampedTotal).toBe(personalNetCapFor(200));
     for (const row of batch.stamped) {
       expect(row.appliedPoints).toBeLessThanOrEqual(50);
       expect(row.appliedPoints).toBeGreaterThanOrEqual(0);
@@ -199,8 +212,10 @@ describe("resolvePlayBatch", () => {
       personalPlay({ playId: "rally", basePoints: 2 * HUNDREDTHS, direction: 1 })
     );
     const batch = resolvePlayBatch(crowd);
-    expect(batch.perInstitution.get("street")).toBe(PERSONAL_NET_CAP_BASE);
-    expect(batch.stamped.reduce((sum, r) => sum + r.appliedPoints, 0)).toBe(PERSONAL_NET_CAP_BASE);
+    expect(batch.perInstitution.get("street")).toBe(personalNetCapFor(1_000));
+    expect(batch.stamped.reduce((sum, r) => sum + r.appliedPoints, 0)).toBe(
+      personalNetCapFor(1_000)
+    );
   });
 
   it("apportions a crowded NEGATIVE tier to the cap as well", () => {
@@ -208,7 +223,7 @@ describe("resolvePlayBatch", () => {
       personalPlay({ playId: "rally", basePoints: 2 * HUNDREDTHS, direction: -1 })
     );
     const batch = resolvePlayBatch(crowd);
-    expect(batch.perInstitution.get("street")).toBe(-PERSONAL_NET_CAP_BASE);
+    expect(batch.perInstitution.get("street")).toBe(-personalNetCapFor(1_000));
     for (const row of batch.stamped) expect(row.appliedPoints).toBeLessThanOrEqual(0);
   });
 
@@ -249,5 +264,45 @@ describe("resolvePlayBatch", () => {
     expect(batch.settlementDelta).toBe(0);
     expect(batch.heatAdded).toBe(0);
     expect(batch.stamped).toEqual([]);
+  });
+
+  it("gives a bigger crowd a bigger pool", () => {
+    const crowd = (n: number) =>
+      Array.from({ length: n }, () =>
+        personalPlay({ playId: "rally", basePoints: 2 * HUNDREDTHS, direction: 1 })
+      );
+
+    expect(resolvePlayBatch(crowd(8)).personalApplied.get("street")).toBe(personalNetCapFor(8));
+    expect(resolvePlayBatch(crowd(59)).personalApplied.get("street")).toBe(personalNetCapFor(59));
+  });
+
+  it("counts DISTINCT CHARACTERS, not plays, when sizing the pool", () => {
+    // One character playing two levers on the street must not inflate the
+    // ceiling they are then measured against. Counting rows would let the
+    // floor raise its own roof.
+    const one = new ObjectId();
+    const batch = resolvePlayBatch([
+      personalPlay({ characterId: one, playId: "oped", basePoints: 40 * HUNDREDTHS }),
+      personalPlay({ characterId: one, playId: "rally", basePoints: 40 * HUNDREDTHS }),
+    ]);
+    expect(batch.personalApplied.get("street")).toBe(personalNetCapFor(1));
+  });
+
+  it("sizes each institution's pool from its own crowd", () => {
+    const street = Array.from({ length: 40 }, () =>
+      personalPlay({ playId: "rally", basePoints: 2 * HUNDREDTHS, direction: 1 })
+    );
+    const bundestag = Array.from({ length: 4 }, () =>
+      personalPlay({
+        playId: "letter",
+        targetInstitutionId: "bundestag",
+        basePoints: 40 * HUNDREDTHS,
+        direction: 1,
+      })
+    );
+    const batch = resolvePlayBatch([...street, ...bundestag]);
+    // Forty people on the street must not raise the Bundestag's ceiling.
+    expect(batch.personalApplied.get("street")).toBe(personalNetCapFor(40));
+    expect(batch.personalApplied.get("bundestag")).toBe(personalNetCapFor(4));
   });
 });
