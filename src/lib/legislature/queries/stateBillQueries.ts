@@ -18,9 +18,7 @@ import type {
   PoliticalParty,
   StateBill,
   State,
-  StatePolicy,
 } from "@/lib/db/types";
-import type { EnactedLaw } from "@/lib/db/types/budget";
 import type { RegionalBudget } from "@/lib/db/types/regionalBudget";
 import type { StateBillDetail } from "@/lib/legislature/dto/stateBillDetail";
 import type { StateBillDisplay } from "@/lib/legislature/dto/stateLegislature";

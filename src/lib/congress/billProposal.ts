@@ -36,7 +36,6 @@ import {
 import { getEraContext } from "@/lib/era/context";
 import { resolveTaxSliderProvisionFields } from "@/lib/politicalLegislation/taxSlider";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
-import { resolveProvisionPolicyOption } from "@/lib/legislature/provisionEnrichment";
 
 // snapshotBillPolicyProvisions now lives in the shared provision-enrichment core
 // so the regional bill paths can call it too. Re-exported for existing importers.

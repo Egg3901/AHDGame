@@ -71,12 +71,14 @@ export async function migrateProvisionSnapshots(
   const result: MigrationResult = { scanned: 0, updated: 0, skipped: 0 };
 
   for (const collection of COLLECTIONS) {
-    const docs = await db
+    // Streamed, and projected to just the provisions. Loading whole bill
+    // documents would pull fullText and the vote maps along with them, which on
+    // a live database is a large and needless memory spike.
+    const cursor = db
       .collection(collection)
-      .find({ provisions: { $exists: true, $ne: [] } })
-      .toArray();
+      .find({ provisions: { $exists: true, $ne: [] } }, { projection: { provisions: 1 } });
 
-    for (const doc of docs) {
+    for await (const doc of cursor) {
       const provisions = ((doc as { provisions?: ProvisionDoc[] }).provisions ??
         []) as ProvisionDoc[];
       const set: Record<string, string> = {};

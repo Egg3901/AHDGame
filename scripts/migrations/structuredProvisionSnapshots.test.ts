@@ -21,10 +21,15 @@ const LT = {
   ],
 };
 
+// The migration streams bill documents rather than buffering them, so the mock
+// cursor has to be async-iterable as well as awaitable.
 const cursorOf = (rows: unknown[]) => ({
   toArray: vi.fn().mockResolvedValue(rows),
   sort: vi.fn().mockReturnThis(),
   project: vi.fn().mockReturnThis(),
+  async *[Symbol.asyncIterator]() {
+    for (const row of rows) yield row;
+  },
 });
 
 describe("migrateProvisionSnapshots", () => {

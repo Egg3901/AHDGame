@@ -8,7 +8,6 @@ import {
   billHasNatPrivProvision,
   getBillPassRule,
 } from "@/lib/congress/billPassRule";
-import { getNationalDocId } from "@/lib/constants/nationalScope";
 import { inferCountryIdFromStateId } from "@/lib/congress/resolveBillCountryId";
 import type { VoteByParty } from "./billVoting";
 import type { OverrideChamberDisplay } from "./vetoOverrideTally";
@@ -18,15 +17,11 @@ import type {
   EndSubsidyProvision,
   LegislationType,
   PoliticalParty,
-  StatePolicy,
   SubsidyProvision,
   TariffProvision,
 } from "@/lib/db/types";
-import type { EnactedLaw } from "@/lib/db/types/budget";
 import { isPolicyProvision } from "@/lib/db/types/legislation";
 import { effectTargetLabelFromMetricId } from "@/lib/legislature/metricLabels";
-import { computeProvisionEffectChips } from "@/lib/legislature/provisionEffects";
-import { optionIntensity } from "@/lib/legislature/optionIntensity";
 import {
   directionLabel,
   loadLiveCurrentPolicies,
@@ -48,7 +43,6 @@ import {
   getInternationalActionSummary,
 } from "@/lib/internationalOrganizations/withdrawalBills";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
-import { MIRROR_CONTROLLED_METRIC_IDS } from "@/lib/metricEngine/fiscalMirror";
 import {
   computeNationalizationProvisionDetail,
   type NationalizationProvisionDetail,
@@ -292,11 +286,6 @@ export function formatSubsidyProvisionLabel(provision: SubsidyProvision | EndSub
     },
   };
 }
-
-type CurrentPolicySnapshot = {
-  policyOptionId?: string;
-  policyOptionIndex?: number;
-};
 
 /**
  * Resolves bill provisions by fetching legislation types and formatting.
