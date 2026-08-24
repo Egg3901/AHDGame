@@ -4,7 +4,10 @@ import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { getAuthUser } from "@/lib/auth";
 import { shouldRedactCorporation } from "@/lib/corporations/redaction";
-import { computeCommodityOutputSharePercent } from "@/lib/corporations/corpCommoditySnapshot";
+import {
+  computeCommodityOutputSharePercent,
+  findCommodityOutputBasisChange,
+} from "@/lib/corporations/corpCommoditySnapshot";
 import type { CorporationHistory } from "@/lib/db/types";
 import type { CommodityFlow } from "@/lib/db/types/commodityFlow";
 import type { CommodityType } from "@/lib/constants/commodities";
@@ -59,13 +62,23 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const history = await db
       .collection<CorporationHistory>("corporationHistory")
-      .aggregate<Pick<CorporationHistory, "turn" | "commodityOutput">>([
+      .aggregate<
+        Pick<CorporationHistory, "turn" | "createdAt" | "commodityOutput" | "commodityOutputBasis">
+      >([
         { $match: { corporationId: corporation._id, commodityOutput: { $exists: true } } },
         { $sort: { turn: -1, createdAt: -1, _id: -1 } },
         { $group: { _id: "$turn", doc: { $first: "$$ROOT" } } },
         { $replaceRoot: { newRoot: "$doc" } },
         { $sort: { turn: 1 } },
-        { $project: { _id: 0, turn: 1, commodityOutput: 1 } },
+        {
+          $project: {
+            _id: 0,
+            turn: 1,
+            createdAt: 1,
+            commodityOutput: 1,
+            commodityOutputBasis: 1,
+          },
+        },
       ])
       .toArray();
 
@@ -166,7 +179,10 @@ export async function GET(request: Request, { params }: RouteParams) {
     });
 
     return NextResponse.json(
-      { series: series.filter((s) => s.points.length > 0) },
+      {
+        series: series.filter((s) => s.points.length > 0),
+        basisChange: findCommodityOutputBasisChange(history),
+      },
       {
         headers: {
           "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300, no-transform",

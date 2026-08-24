@@ -140,6 +140,7 @@ describe("computeCorpCommodityFlows", () => {
       consumptionCoveredUnits: 60,
       coveragePercent: 60,
       turn: 9,
+      consumptionUnits: 100,
     });
   });
 
@@ -167,6 +168,7 @@ describe("computeCorpCommodityFlows", () => {
       consumptionCoveredUnits: 0,
       coveragePercent: 0,
       turn: 9,
+      consumptionUnits: 0,
     });
   });
 

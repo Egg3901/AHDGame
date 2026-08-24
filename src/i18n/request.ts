@@ -36,6 +36,7 @@ const NAMESPACES = [
   "auth",
   "profile",
   "elections",
+  "corporations",
 ] as const;
 
 async function loadCatalog(locale: string): Promise<Messages> {

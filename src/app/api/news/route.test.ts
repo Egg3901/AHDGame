@@ -157,5 +157,16 @@ describe("GET /api/news", () => {
     expect(json.posts[0].content).toBe(
       "Financial media coverage keeps calling this a retail bounce instead of a defense move."
     );
+    expect(db.collectionMocks.newsPosts!.find).toHaveBeenCalledWith({
+      $and: [
+        {
+          parentId: { $exists: false },
+          $or: [{ isSystem: true }, { feedType: { $ne: "advertisement" } }],
+        },
+        {
+          $or: [{ moderation: { $exists: false } }, { "moderation.status": "visible" }],
+        },
+      ],
+    });
   });
 });

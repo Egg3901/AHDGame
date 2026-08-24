@@ -12,6 +12,11 @@ export default function robots(): MetadataRoute.Robots {
           "/guides/*",
           "/changelog",
           "/news",
+          // Stays allowed on purpose while the permalinks carry noindex. A
+          // crawler has to fetch a page to see its noindex, so disallowing the
+          // path now would freeze the already-indexed URLs in place instead of
+          // dropping them. Switch this to disallow once they are out of the
+          // index (see src/app/news/post/[id]/page.tsx).
           "/news/post/*",
           "/world",
           "/privacy",

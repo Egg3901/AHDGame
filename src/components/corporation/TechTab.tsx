@@ -59,6 +59,11 @@ interface TechResponse {
   rdBudget?: number | null;
   rdGainPerTurn?: number | null;
   liquidCapital?: number | null;
+  cashPricing?: {
+    dailyGrossOperatingScale: number;
+    defaultRevenueFraction: number;
+    capacityFloorApplied: boolean;
+  } | null;
   activeMarginPp?: number | null;
   marginCapPp?: number | null;
   unlockedStrategyNames?: string[];
@@ -302,6 +307,25 @@ export default function TechTab({ corporationId, isCeo }: TechTabProps) {
 
       {/* Tech overview */}
       <TechOverview data={data} code={code} fmtCash={fmtCash} />
+
+      {data.cashPricing && (
+        <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-3 text-sm text-sky-100">
+          <div className="font-semibold">How cash prices work</div>
+          <p className="mt-1 text-xs leading-relaxed text-gray-300">
+            Most technologies cost {Math.round(data.cashPricing.defaultRevenueFraction * 100)}% of
+            the corporation&apos;s {fmtCash(data.cashPricing.dailyGrossOperatingScale)} daily gross
+            operating scale. Market cap and profit do not set the price.
+            {data.cashPricing.capacityFloorApplied && (
+              <>
+                {" "}
+                Owned plant capacity is the minimum pricing basis, so mothballing does not make
+                research free.
+              </>
+            )}{" "}
+            Foreign sectors are converted into {code}. Exchange rates can move the converted total.
+          </p>
+        </div>
+      )}
 
       {/* Ready-to-unlock callout */}
       {viewerIsCeo && (data.unlockableCount ?? 0) > 0 && !dismissUnlock && (
