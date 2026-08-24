@@ -14,6 +14,7 @@ import {
   SUPPLY_AGREEMENT_PRICE_BAND,
 } from "@/lib/db/types/supplyAgreement";
 import { useToast } from "@/contexts/ToastContext";
+import { supportsCorporationWideSupplyAgreement } from "@/lib/market/commodityMarketScope";
 
 interface SupplyAgreement {
   _id: string;
@@ -56,6 +57,7 @@ interface CorpSearchResult {
 
 const BAND_PCT = Math.round(SUPPLY_AGREEMENT_PRICE_BAND * 100);
 const SHORTFALL_PENALTY_PCT = Math.round(CONTRACT_SHORTFALL_PENALTY * 100);
+const AGREEMENT_COMMODITIES = COMMODITY_TYPES.filter(supportsCorporationWideSupplyAgreement);
 
 /** Fraction premium to signed percent string, e.g. 0.2 to "+20%", -0.1 to "−10%". */
 function fmtPremium(fraction: number): string {
@@ -103,7 +105,9 @@ export default function SupplyAgreementsSection({
   const [buyerQuery, setBuyerQuery] = useState("");
   const [buyerResults, setBuyerResults] = useState<CorpSearchResult[]>([]);
   const [selectedBuyer, setSelectedBuyer] = useState<CorpSearchResult | null>(null);
-  const [commodity, setCommodity] = useState<CommodityType>(COMMODITY_TYPES[0]);
+  const [commodity, setCommodity] = useState<CommodityType>(
+    AGREEMENT_COMMODITIES[0] ?? COMMODITY_TYPES[0]
+  );
   const [volumeCap, setVolumeCap] = useState("");
   const [premiumPct, setPremiumPct] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -484,7 +488,7 @@ export default function SupplyAgreementsSection({
                 onChange={(e) => setCommodity(e.target.value as CommodityType)}
                 className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
               >
-                {COMMODITY_TYPES.map((c) => (
+                {AGREEMENT_COMMODITIES.map((c) => (
                   <option key={c} value={c}>
                     {COMMODITY_LABELS[c]}
                   </option>

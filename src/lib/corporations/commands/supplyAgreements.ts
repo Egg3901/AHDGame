@@ -18,6 +18,10 @@ import { COMMODITY_TYPES, type CommodityType } from "@/lib/constants/commodities
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { computeSupplierCommodityCapacityUnits } from "@/lib/corporations/supplyAgreementCapacity";
+import {
+  isStateScopedCommodity,
+  supportsCorporationWideSupplyAgreement,
+} from "@/lib/market/commodityMarketScope";
 
 /**
  * Private supply agreement lifecycle (bilateral, both-consent). The supplier's
@@ -57,6 +61,15 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
     }
     if (!body.commodity || !(COMMODITY_TYPES as readonly string[]).includes(body.commodity)) {
       return NextResponse.json({ error: "Valid commodity required" }, { status: 400 });
+    }
+    if (!supportsCorporationWideSupplyAgreement(body.commodity as CommodityType)) {
+      return NextResponse.json(
+        {
+          error:
+            "Freight capacity is sold in the state where it is based and cannot use a corporation-wide supply agreement.",
+        },
+        { status: 400 }
+      );
     }
     const volumeCap = Number(body.volumeCap);
     if (!(volumeCap > 0)) {
@@ -260,6 +273,15 @@ export async function updateSupplyAgreement(request: Request, corpId: string, ag
       }
       if (agreement.status !== "pending") {
         return NextResponse.json({ error: "Agreement is not pending" }, { status: 400 });
+      }
+      if (isStateScopedCommodity(agreement.commodity)) {
+        return NextResponse.json(
+          {
+            error:
+              "This legacy freight proposal cannot be accepted because freight now sells in a state-local market.",
+          },
+          { status: 409 }
+        );
       }
       await db
         .collection<SupplyAgreement>("supplyAgreements")

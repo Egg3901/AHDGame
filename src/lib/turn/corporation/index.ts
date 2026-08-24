@@ -41,6 +41,8 @@ import {
 import type { SupplyAgreement } from "@/lib/db/types/supplyAgreement";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { FREIGHT_CLASS_BY_COMMODITY, type FreightClass } from "@/lib/logistics/freightClass";
+import { isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
+import { migrateStateScopedSupplyAgreements } from "./migrateStateScopedSupplyAgreements";
 import {
   buildMinWageRatioByCountry,
   buildUnionLawBiasByCountry,
@@ -278,6 +280,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   let contractedByCorpCommodity: Map<string, Map<CommodityType, number>> | undefined;
   let settleableAgreements: SettleableSupplyAgreement[] | undefined;
   let buyerDemandByCorpCommodity: Map<string, Map<CommodityType, number>> | undefined;
+  // Corporation-wide agreements have no state identity. A live agreement for
+  // a state-local commodity must finish under the legacy national book rather
+  // than being silently reinterpreted or broken mid-contract. New agreements
+  // for these commodities are rejected at proposal time.
+  let stateLocalClearingBlockedByLegacyAgreement = false;
   // Populated during clearing: supplier corpId → commodity → contracted units that
   // actually cleared this turn. Drives the post-clearing premium settlement.
   const contractSettlementByCorp = new Map<string, Map<CommodityType, number>>();
@@ -299,12 +306,18 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // effective turn. Retire the ones whose notice has run out first, then load
     // everything still live. Ordering matters, a contract that expires this
     // turn must not settle again.
-    await db
-      .collection("supplyAgreements")
-      .updateMany(
-        { status: "cancelling", cancelEffectiveTurn: { $lte: turn ?? 0 } },
-        { $set: { status: "cancelled", updatedAt: now } }
+    const agreementMigration = await migrateStateScopedSupplyAgreements({
+      agreements: db.collection<SupplyAgreement>("supplyAgreements"),
+      turn: turn ?? 0,
+      now,
+    });
+    if (agreementMigration.noticeServed > 0 || agreementMigration.pendingCancelled > 0) {
+      console.info(
+        `[corporationTurn] retiring corporation-wide state-local agreements: ` +
+          `${agreementMigration.noticeServed} given notice, ` +
+          `${agreementMigration.pendingCancelled} pending withdrawn`
       );
+    }
     const agreements = await db
       .collection("supplyAgreements")
       .find(
@@ -342,6 +355,9 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       previousDeliveredUnits?: number;
       previousBuyerConsumptionUnits?: number;
     }[]) {
+      if (isStateScopedCommodity(a.commodity)) {
+        stateLocalClearingBlockedByLegacyAgreement = true;
+      }
       const cap = Math.max(0, a.volumeCap ?? 0);
       settleableAgreements.push({
         agreementId: a._id?.toString(),
@@ -363,6 +379,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         previousDeliveredUnits: a.previousDeliveredUnits,
         previousBuyerConsumptionUnits: a.previousBuyerConsumptionUnits,
       });
+    }
+    if (stateLocalClearingBlockedByLegacyAgreement) {
+      console.warn(
+        "[corporationTurn] state-local clearing deferred: a legacy state-local supply agreement is still live"
+      );
     }
   }
   // The slice (A2b) only bites when BOTH the master flag and the slice gate are
@@ -399,6 +420,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     const clearingGroupBySector = lookups.countryClearingBooks
       ? new Map<string, string>()
       : undefined;
+    // State-scoped clearing: freight is a state's own haulage
+    // capacity, so it clears against that state's book rather than a national
+    // one. Built for every world, not just era worlds, because the constraint
+    // is physical rather than a trade-graph artifact.
+    const clearingStateBySector = new Map<string, string>();
     // Freight seam: per sector, the share of its offer that no network could
     // place. Populated only while settlement is active, so worlds with it off
     // (and every modern world) offer exactly what they offered before.
@@ -735,6 +761,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           deliveryLimitedBySectorId.set(sectorId, deliveryLimit.fraction);
           deliveryLimitedClassBySectorId.set(sectorId, deliveryLimit.freightClass);
         }
+        if (sector.stateId) clearingStateBySector.set(sectorId, sector.stateId);
         clearingInputs.push(clearingInput);
         // Brand loyalty (A2): remember what the rollup needs, joined post-clearing.
         if (brandLoyaltyEnabled) {
@@ -789,6 +816,17 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       // country's lagged reachable price. Sparse map; falls back to the
       // worldwide ratio per commodity. Modern worlds: no groups, unused.
       priceRatioByGroup: clearingGroupBySector ? lookups.reachablePriceRatioByCountry : undefined,
+      // Freight capacity clears where it is based. The whole context is
+      // withheld while a legacy freight agreement is live because old
+      // corporation-wide contracts carry no state identity and cannot be
+      // reinterpreted safely mid-contract.
+      stateMarkets: stateLocalClearingBlockedByLegacyAgreement
+        ? undefined
+        : {
+            stateBySector: clearingStateBySector,
+            balances: lookups.rawStateBalances,
+            priceRatios: lookups.statePriceRatioByState ?? new Map(),
+          },
       // The era table: clearing compares sector offers (era-based units under
       // plants) against the ledger's balances, which run on the same basis.
       basePrices: eraScaledBasePrices(lookups.eraUnitScale),

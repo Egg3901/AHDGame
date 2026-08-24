@@ -42,7 +42,7 @@ import type {
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { type CommodityType } from "@/lib/constants/commodities";
 import { sectorDemandGapUnits } from "@/lib/market/sectorDemandGap";
-import { reachableDemandGap } from "@/lib/trade/reachableBook";
+import { commodityDemandGap } from "@/lib/market/commodityMarketScope";
 import { bookFor, loadReachableBooks } from "@/lib/trade/queries/loadReachableBooks";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityPrice, GameConfig, GameState } from "@/lib/db/types";
@@ -735,10 +735,12 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       // (ticket #1077). Falls back to the aggregate when no book is persisted.
       const reachableBooks = await loadReachableBooks(db);
       const demandGapUnits = sectorDemandGapUnits(effectiveSupply, (gapCommodity) => {
-        const book = bookFor(reachableBooks, sectorCountryId, gapCommodity);
-        if (book) return reachableDemandGap(book);
-        const bal = globalBalances.get(gapCommodity);
-        return (bal?.demand ?? 0) - (bal?.supply ?? 0);
+        return commodityDemandGap({
+          commodity: gapCommodity,
+          stateBalance: stateBalances.get(gapCommodity),
+          reachableBook: bookFor(reachableBooks, sectorCountryId, gapCommodity),
+          globalBalance: globalBalances.get(gapCommodity),
+        });
       });
 
       plants = buildSectorPlantsSection({
