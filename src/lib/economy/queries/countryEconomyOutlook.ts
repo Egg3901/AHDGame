@@ -27,6 +27,7 @@ import { getCentralBankScope } from "@/lib/centralBank/helpers";
 import { getGameState } from "@/lib/gameState";
 import { getInflationTarget, getNeutralPrimeRate } from "@/lib/budget/inflation";
 import { federalSurplus } from "@/lib/budget/federalSurplus";
+import { populationWeightedAverage } from "@/lib/metrics/populationWeightedAverage";
 import { aggregateNationalGdp } from "@/lib/utils/nationalGdp";
 import { aggregateCountrySectorMix, type CountrySectorMixEntry } from "@/lib/economy/sectorMix";
 import {
@@ -117,22 +118,27 @@ function mapHistory(history: TurnSnapshot[] | undefined): HistoryPoint[] {
 }
 
 /** Pop-weighted average of one state metric (value + trend), null-safe. */
+/**
+ * Thin adapter over the shared helper: maps the per-state metric rows onto
+ * `{ value, trend, population }` and rounds at this DTO's boundary. The
+ * weighting rule itself lives in lib/metrics/populationWeightedAverage, shared
+ * with the national Metrics page so the two cannot diverge again.
+ */
 function popWeighted(
   metrics: Array<{ _id: string; value?: number; trend?: number }>,
   populationByStateId: Map<string, number>
 ): { value: number | null; trend: number | null } {
-  let valueSum = 0;
-  let trendSum = 0;
-  let population = 0;
-  for (const m of metrics) {
-    if (typeof m.value !== "number") continue;
-    const pop = populationByStateId.get(m._id) ?? 0;
-    valueSum += m.value * pop;
-    trendSum += (typeof m.trend === "number" ? m.trend : 0) * pop;
-    population += pop;
-  }
-  if (population <= 0) return { value: null, trend: null };
-  return { value: round2(valueSum / population), trend: round2(trendSum / population) };
+  const { value, trend } = populationWeightedAverage(
+    metrics.map((m) => ({
+      value: m.value,
+      trend: m.trend,
+      population: populationByStateId.get(m._id) ?? 0,
+    }))
+  );
+  return {
+    value: value === null ? null : round2(value),
+    trend: trend === null ? null : round2(trend),
+  };
 }
 
 export async function buildCountryEconomyOutlook(
