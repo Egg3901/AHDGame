@@ -220,6 +220,10 @@ export default function CommoditiesTab({
       {/* Per-commodity flows */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Per-turn commodity flows</h3>
+        <p className="text-xs text-muted">
+          Net is this corporation&apos;s own output minus its input use. It is separate from the
+          world stockpile and does not describe a world shortage or surplus.
+        </p>
         <div className="grid gap-3 sm:grid-cols-2">
           {commodities.map((c) => (
             <div key={c.commodity} className="rounded-xl border border-card-border bg-card p-4">
@@ -308,6 +312,11 @@ export default function CommoditiesTab({
                   <div className="mt-1 text-[11px] text-muted">
                     {fmtUnits(c.privateSupply.coveragePercent)}% of consumption covered. Contracted
                     cap: {fmtUnits(c.privateSupply.contractedUnits)} {c.unit}/turn.
+                  </div>
+                  <div className="mt-2 text-[11px] text-muted">
+                    Delivery can be below the cap when the supplier cannot cover all active
+                    agreements or when your corporation consumes less. Scarce supplier output is
+                    divided proportionally across active agreements.
                   </div>
                 </div>
               )}

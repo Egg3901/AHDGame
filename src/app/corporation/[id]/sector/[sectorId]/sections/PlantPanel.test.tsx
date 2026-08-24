@@ -64,4 +64,46 @@ describe("PlantPanel workforce", () => {
       )
     ).toBe(true);
   });
+
+  it("separates a media sector's audience run from contractable ledger output", () => {
+    render(
+      <PlantPanel
+        plants={plants}
+        marketSupplies={[
+          {
+            commodity: "advertising",
+            label: "Advertising",
+            icon: "AD",
+            colors: "",
+            unit: "impressions",
+            units: 140,
+            rate: 1,
+            basePrice: 1,
+            globalPrice: 1,
+            nationalPrice: 1,
+            regionalPrice: 1,
+            marketPrice: 1,
+            weight: 100,
+            priceImpact: 0,
+          },
+        ]}
+        sectorType="media"
+        averageWageLevel={1}
+        isCeo={false}
+        busy={false}
+        message=""
+        onOpenBuild={noop}
+        onCancelOrder={noop}
+        onMothball={noop}
+        onReactivate={noop}
+      />
+    );
+
+    expect(
+      screen.getByText(/Commodity ledger output: Advertising 140 impressions\/day/)
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/eligible private supply agreements use the smaller ledger output/)
+    ).toBeTruthy();
+  });
 });

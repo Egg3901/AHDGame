@@ -315,7 +315,10 @@ export async function snapshotMarketCap(
         ...(sourceCorp?.averageQuality != null
           ? { averageQuality: sourceCorp.averageQuality }
           : {}),
-        ...((): { commodityOutput?: Record<string, number> } => {
+        ...((): {
+          commodityOutput?: Record<string, number>;
+          commodityOutputBasis?: "plants-ledger-v1";
+        } => {
           if (!sectorsByCorp) return {};
           const sectors = sectorsByCorp.get(id);
           if (!sectors?.length) return {};
@@ -334,7 +337,9 @@ export async function snapshotMarketCap(
             turn,
             { ...commodityContext, isNatcorp: !!sourceCorp?.countryOwnerId }
           );
-          return Object.keys(commodityOutput).length > 0 ? { commodityOutput } : {};
+          return Object.keys(commodityOutput).length > 0
+            ? { commodityOutput, commodityOutputBasis: "plants-ledger-v1" }
+            : {};
         })(),
         marketCap: Math.round(localPrice * s.totalShares),
         liquidCapital: Math.round(s.liquidCapital),
