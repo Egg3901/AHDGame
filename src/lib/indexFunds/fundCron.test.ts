@@ -6,9 +6,11 @@ import {
   executeFundShareBuy,
   rebalanceFundToTarget,
   rebalanceConstituents,
+  processQueuedRedemptions,
 } from "./fundCron";
-import type { IndexFund } from "@/lib/db/types";
+import type { IndexFund, IndexFundRedemptionQueueEntry } from "@/lib/db/types";
 import { ObjectId } from "mongodb";
+import { createMockDb } from "@/lib/test-utils/mockDb";
 import { INDEX_FUND_INITIAL_NAV } from "@/lib/indexFunds/unitAccounting";
 import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 
@@ -31,6 +33,7 @@ vi.mock("@/lib/indexFunds/fundQueries", () => ({
   listPendingRedemptions: vi.fn().mockResolvedValue([]),
   updateRedemptionEntry: vi.fn(),
   insertFundSnapshot: vi.fn(),
+  FUND_REDEMPTION_QUEUE_COLLECTION: "indexFundRedemptionQueue",
 }));
 
 vi.mock("@/lib/corporations/shareholderOps", () => ({
@@ -142,6 +145,55 @@ describe("fundCron — shouldRunCrossFundRebalancing", () => {
     expect(shouldRunCrossFundRebalancing(TURNS_PER_DAY - 1)).toBe(false);
     expect(shouldRunCrossFundRebalancing(TURNS_PER_DAY)).toBe(true);
     expect(shouldRunCrossFundRebalancing(TURNS_PER_DAY * 3)).toBe(true);
+  });
+});
+
+describe("fundCron: queued redemption claims", () => {
+  it("does not debit or pay when another worker owns the queue row", async () => {
+    const db = createMockDb();
+    const fundId = new ObjectId();
+    const queueEntry: IndexFundRedemptionQueueEntry = {
+      _id: new ObjectId(),
+      fundId,
+      holderKind: "character",
+      characterId: new ObjectId(),
+      units: 10,
+      requestedNavAnchor: 100,
+      requestedAmountAnchor: 1_000,
+      paidAmountAnchor: 0,
+      status: "queued",
+      unitsBurnedAtRequest: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const fund: IndexFund = {
+      _id: fundId,
+      slug: "claim-test",
+      name: "Claim Test Fund",
+      tickerSymbol: "CTF",
+      scope: "country",
+      kind: "broad",
+      countryId: "US",
+      anchorCurrencyCode: "USD",
+      status: "active",
+      quotedNav: 100,
+      unitSupply: 10,
+      reserveUnits: 0,
+      cashAnchor: 1_000,
+      targetConstituents: [],
+      holdings: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const { listPendingRedemptions } = await import("@/lib/indexFunds/fundQueries");
+    vi.mocked(listPendingRedemptions).mockResolvedValueOnce([queueEntry]);
+    db.collection("indexFundRedemptionQueue");
+    db.collectionMocks.indexFundRedemptionQueue.findOneAndUpdate.mockResolvedValueOnce(null);
+
+    await expect(processQueuedRedemptions(db as never, fund, false, 1)).resolves.toBe(0);
+    expect(db.collectionMocks.indexFunds).toBeUndefined();
+    expect(db.collectionMocks.characters).toBeUndefined();
   });
 });
 

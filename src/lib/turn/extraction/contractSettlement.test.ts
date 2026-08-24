@@ -179,7 +179,7 @@ describe("settleExtractionContracts", () => {
 
     expect(result.paymentsMissed).toBe(1);
     expect(result.contractsDefaulted).toBe(0);
-    const set = db.collectionMocks["extractionContracts"]!.updateOne.mock.calls[0][1].$set;
+    const set = db.collectionMocks["extractionContracts"]!.updateOne.mock.calls[1][1].$set;
     expect(set.missedPayments).toBe(2);
     expect(set.status).toBeUndefined();
     const notif = db.collectionMocks["notifications"]!.insertMany.mock.calls[0][0];
@@ -198,12 +198,27 @@ describe("settleExtractionContracts", () => {
     const result = await settle(db as unknown as Db, 13, NOW);
 
     expect(result.contractsDefaulted).toBe(1);
-    const set = db.collectionMocks["extractionContracts"]!.updateOne.mock.calls[0][1].$set;
+    const set = db.collectionMocks["extractionContracts"]!.updateOne.mock.calls[1][1].$set;
     expect(set.missedPayments).toBe(3);
     expect(set.status).toBe("defaulted");
     expect(set.revokedTurn).toBe(13);
     const notif = db.collectionMocks["notifications"]!.insertMany.mock.calls[0][0];
     expect(notif[0].type).toBe("contract_defaulted");
+  });
+
+  it("does not charge when another worker already claimed this turn", async () => {
+    setContractQueries(db, [], [makeContract({ lastRoyaltyTurn: 12 })]);
+    seedCommon(db);
+    db.collectionMocks["extractionContracts"]!.updateOne.mockResolvedValueOnce({
+      modifiedCount: 0,
+      matchedCount: 0,
+    });
+
+    const settle = await loadFn();
+    const result = await settle(db as unknown as Db, 13, NOW);
+
+    expect(result.contractsSettled).toBe(0);
+    expect(db.collectionMocks["corporations"]!.updateOne).not.toHaveBeenCalled();
   });
 
   it("lapses expired offers to status expired + revokedTurn", async () => {

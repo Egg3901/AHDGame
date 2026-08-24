@@ -492,6 +492,10 @@ describe("Election write race regressions", () => {
           }),
         },
         playerEndorsements,
+        playerEndorsementLocks: {
+          updateOne: vi.fn().mockResolvedValue({ matchedCount: 0, upsertedCount: 1 }),
+          deleteOne: vi.fn().mockResolvedValue({ deletedCount: 1 }),
+        },
       }) as never
     );
 

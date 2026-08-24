@@ -26,7 +26,11 @@ export async function processGovernorAPRegen(db: Db, currentTurn: number): Promi
     ? never
     : Array<{
         updateOne: {
-          filter: { _id: NonNullable<GovernorOfficeState["_id"]> };
+          filter: {
+            _id: NonNullable<GovernorOfficeState["_id"]>;
+            gubernatorialActions: number;
+            lastActionGrantedTurn: number;
+          };
           update: {
             $set: {
               gubernatorialActions: number;
@@ -42,7 +46,13 @@ export async function processGovernorAPRegen(db: Db, currentTurn: number): Promi
     if (!s._id) continue;
     ops.push({
       updateOne: {
-        filter: { _id: s._id },
+        // Claim the exact snapshot used for the calculation. A player action
+        // spending AP during this pass must not be overwritten by a stale set.
+        filter: {
+          _id: s._id,
+          gubernatorialActions: s.gubernatorialActions,
+          lastActionGrantedTurn: s.lastActionGrantedTurn,
+        },
         update: {
           $set: {
             gubernatorialActions: s.gubernatorialActions + 1,
@@ -55,7 +65,8 @@ export async function processGovernorAPRegen(db: Db, currentTurn: number): Promi
     regen++;
   }
   if (ops.length > 0) {
-    await db.collection<GovernorOfficeState>("governorOfficeState").bulkWrite(ops);
+    const result = await db.collection<GovernorOfficeState>("governorOfficeState").bulkWrite(ops);
+    regen = result.modifiedCount;
   }
   return regen;
 }

@@ -283,6 +283,7 @@ const RUNTIME: CollectionEntry[] = [
   { name: "nppVoteCommitments", category: "runtime" },
   { name: "nppVotePredictions", category: "runtime" },
   { name: "playerEndorsements", category: "runtime" },
+  { name: "playerEndorsementLocks", category: "runtime" },
 
   // Bills + legislation runtime
   { name: "bills", category: "runtime" },

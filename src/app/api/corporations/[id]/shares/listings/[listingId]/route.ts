@@ -8,6 +8,7 @@ import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { cancelShareListingAndRefund } from "@/lib/corporations/cancelShareListing";
 import type { ShareListing } from "@/lib/db/types";
+import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 
 interface RouteParams {
   params: Promise<{ id: string; listingId: string }>;
@@ -29,6 +30,8 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
 
     const { listingId } = await params;
     const db = await getDb();
+    const turnGuard = await rejectDuringTurn(db);
+    if (turnGuard) return turnGuard;
     const forexEnabled = await isForexEnabled();
 
     if (!ObjectId.isValid(listingId)) {

@@ -56,6 +56,7 @@ import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { assertCeoAcquisitionWithinCap } from "@/lib/corporations/ceoShareAcquisitionCap";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 
 interface RouteParams {
   params: Promise<{ id: string; orderId: string }>;
@@ -88,6 +89,8 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
     const db = await getDb();
     const corpGuard = await requireCorporationActionsEnabled(db);
     if (corpGuard) return corpGuard;
+    const turnGuard = await rejectDuringTurn(db);
+    if (turnGuard) return turnGuard;
 
     if (!ObjectId.isValid(orderId)) {
       return NextResponse.json({ error: "Invalid order ID" }, { status: 400 });
