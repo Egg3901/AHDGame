@@ -18,7 +18,7 @@
 
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import type { Corporation, CorporateSector, GameConfig } from "@/lib/db/types";
+import type { Corporation, CorporateSector, GameConfig, GameState } from "@/lib/db/types";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { SECTOR_DEMAND, SECTOR_SUPPLY } from "@/lib/constants/commodities";
 import type { CorporationType } from "@/lib/constants/corporations";
@@ -65,6 +65,7 @@ export type NppAgreementParty = {
     productionPolicyLevel?: number | null;
     embargoSuspended?: boolean | null;
     embargoExportExposure?: number | null;
+    countryId?: string | null;
   }>;
 };
 
@@ -213,6 +214,10 @@ export function nppContractPremium(fill: number | null, priceRatio: number | nul
  * a young world of single-sector NPP corps does not all contract on one turn.
  */
 export function decideNppSupplyAgreements(args: {
+  /** `gameState.currentYear`, with the flag below, resolves planned economies. */
+  currentYear?: number | null;
+  /** `gameConfig.commandEconomyEnabled`. */
+  commandEconomyEnabled?: boolean | null;
   turn: number;
   plantsEnabled: boolean;
   parties: readonly NppAgreementParty[];
@@ -221,6 +226,13 @@ export function decideNppSupplyAgreements(args: {
   staggerEligible: (corpId: string) => boolean;
 }): NppAgreementDecision[] {
   const { turn, plantsEnabled, parties, agreements, priceRatioOf, staggerEligible } = args;
+  // Threaded into every capacity check so the head-room the matcher proposes
+  // sits on the same base the production sink credits (see
+  // `computeSupplierCommodityCapacityUnits`).
+  const economy = {
+    currentYear: args.currentYear,
+    commandEconomyEnabled: args.commandEconomyEnabled,
+  };
   const byId = new Map(parties.map((p) => [p.corpId, p]));
   const out: NppAgreementDecision[] = [];
   const acceptedBuyer = new Set<string>();
@@ -264,6 +276,7 @@ export function decideNppSupplyAgreements(args: {
           commodity: a.commodity,
           isNatcorp: supplier.isNatcorp,
           turn,
+          ...economy,
         })
       : supplier.sectors.some(
             (s) =>
@@ -321,6 +334,7 @@ export function decideNppSupplyAgreements(args: {
         commodity,
         isNatcorp: supplier.isNatcorp,
         turn,
+        ...economy,
       });
       const uncommitted = Math.max(
         0,
@@ -383,6 +397,7 @@ function toParty(corp: Corporation, sectors: CorporateSector[]): NppAgreementPar
       productionPolicyLevel: s.productionPolicyLevel,
       embargoSuspended: s.embargoSuspended,
       embargoExportExposure: s.embargoExportExposure,
+      countryId: s.countryId,
     })),
   };
 }
@@ -399,7 +414,10 @@ export async function processNppSupplyAgreements(
 ): Promise<{ accepted: number; cancelled: number; proposed: number }> {
   const cfg = await db
     .collection<GameConfig>("gameConfig")
-    .findOne({ _id: "default" }, { projection: { supplyAgreementsEnabled: 1 } });
+    .findOne(
+      { _id: "default" },
+      { projection: { supplyAgreementsEnabled: 1, commandEconomyEnabled: 1 } }
+    );
   if (cfg?.supplyAgreementsEnabled !== true) {
     return { accepted: 0, cancelled: 0, proposed: 0 };
   }
@@ -478,6 +496,14 @@ export async function processNppSupplyAgreements(
     return price / doc.basePrice;
   };
 
+  // Planned economies produce a different commodity from the same media plant
+  // and are derated differently, so the capacity checks inside the matcher need
+  // both to size a contract against what the sink will credit.
+  const currentYear = (
+    await db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { currentYear: 1 } })
+  )?.currentYear;
   const decisions = decideNppSupplyAgreements({
     turn,
     plantsEnabled,
@@ -485,6 +511,8 @@ export async function processNppSupplyAgreements(
     agreements,
     priceRatioOf,
     staggerEligible: (id) => glutStaggerEligible(id, turn),
+    currentYear,
+    commandEconomyEnabled: cfg?.commandEconomyEnabled === true,
   });
 
   let accepted = 0;

@@ -7,13 +7,16 @@ import type {
 } from "@/lib/db/types";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { buildCommodityOutputSnapshot } from "@/lib/corporations/corpCommoditySnapshot";
+import type { CorpCommodityFlowContext } from "@/lib/corporations/corpCommodityFlows";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { logWireEvent, wireHeadlineCorpCreditRating } from "@/lib/wireEvent";
 import { createNotifications } from "@/lib/notifications";
 import type { CorpSnapshot } from "./types";
 import { ALL_EXCHANGES, getExchangeApiKey } from "@/lib/constants/exchangeRegistry";
 import {
+  fxRateForSectorHostFromMap,
   resolveCorpLiquidCurrencyCode,
+  resolveSectorHostCurrencyCode,
   type CorpCapitalCurrencyInfo,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor, writeCorpEconomicLocal } from "@/lib/currency/corpEconomyFields";
@@ -109,7 +112,11 @@ export async function snapshotMarketCap(
   // because the row is INSERTED in Phase 8; the Phase-3c writer that produced it
   // ran before the row existed, so its updateOne no-op'd (#3115). Home-country
   // domestic federal tax, so it lands in federal/combined + the domestic split.
-  dividendTaxPaidByCountry?: Map<string, Map<string, number>>
+  dividendTaxPaidByCountry?: Map<string, Map<string, number>>,
+  // World context the commodity-output snapshot needs to report the SAME
+  // production the world supply ledger books (ticket #1177). `isNatcorp` is
+  // resolved per corp below, so it is not part of this.
+  commodityContext?: Omit<CorpCommodityFlowContext, "isNatcorp">
 ): Promise<void> {
   let globalCap = 0;
   // Aggregate fundamental valuation, and the slice of globalCap it accounts
@@ -312,7 +319,21 @@ export async function snapshotMarketCap(
           if (!sectorsByCorp) return {};
           const sectors = sectorsByCorp.get(id);
           if (!sectors?.length) return {};
-          const commodityOutput = buildCommodityOutputSnapshot(sectors, turn);
+          // Sector revenue is booked in its HOST currency; the nameplate legs
+          // of the derivation run in ₳, the basis COMMODITY_BASE_PRICES use.
+          const commodityOutput = buildCommodityOutputSnapshot(
+            sectors.map((sector) => ({
+              ...sector,
+              revenueAnchor: readCorpEconomicAnchor(
+                sector.revenue,
+                resolveSectorHostCurrencyCode(sector, sourceCorp),
+                fxRateForSectorHostFromMap(sector, sourceCorp, fxByCurrency)
+              ),
+              capacityUnits: sector.capitalStock ?? null,
+            })),
+            turn,
+            { ...commodityContext, isNatcorp: !!sourceCorp?.countryOwnerId }
+          );
           return Object.keys(commodityOutput).length > 0 ? { commodityOutput } : {};
         })(),
         marketCap: Math.round(localPrice * s.totalShares),
