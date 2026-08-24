@@ -323,6 +323,28 @@ export async function proposeStateBill(
   const npiCost = getProvisionCostTotal(influenceProvisionCount);
   const actionCost = BILL_PROPOSE_ACTION_COST;
   const currentNational = character.nationalInfluence ?? 0;
+
+  // Freeze the proposed and current option labels. Without this the bill detail
+  // page re-reads the live law on every render, so once the bill enacts the
+  // current-law box shows the bill's own outcome and the bill looks like it
+  // re-passed the law already in force.
+  //
+  // Placed after every validation gate, so a proposal about to be rejected does
+  // not pay for the catalog and policy lookups, and BEFORE the action/influence
+  // charge, so a failure here cannot leave the sponsor billed for a bill that was
+  // never inserted. Only the insert below has a refund path.
+  //
+  // It must still run AFTER stampTaxSliderProvisions: a slider provision carries
+  // a synthetic "rate:" option id that resolves to no seeded option, so the
+  // snapshot pass leaves its already-stamped labels alone.
+  if (sanitizedProvisions && sanitizedProvisions.length > 0) {
+    await snapshotPolicyProvisionsInPlace(db, sanitizedProvisions, {
+      scope: "region",
+      countryId,
+      regionId: stateId,
+    });
+  }
+
   if (!(adminOverride && user.isAdmin)) {
     const currentActions = character.actions ?? 0;
     if (currentActions < actionCost) {
@@ -361,24 +383,6 @@ export async function proposeStateBill(
         body: { error: "Your actions or national influence changed. Please try again." },
       };
     }
-  }
-
-  // Freeze the proposed and current option labels. Without this the bill detail
-  // page re-reads the live law on every render, so once the bill enacts the
-  // current-law box shows the bill's own outcome and the bill looks like it
-  // re-passed the law already in force.
-  //
-  // Deliberately placed after every validation gate, so a proposal that is about
-  // to be rejected does not pay for the catalog and policy lookups. It must
-  // still run AFTER stampTaxSliderProvisions: a slider provision carries a
-  // synthetic "rate:" option id that resolves to no seeded option, so the
-  // snapshot pass leaves its already-stamped labels alone.
-  if (sanitizedProvisions && sanitizedProvisions.length > 0) {
-    await snapshotPolicyProvisionsInPlace(db, sanitizedProvisions, {
-      scope: "region",
-      countryId,
-      regionId: stateId,
-    });
   }
 
   const bill: Omit<StateBill, "_id"> = {
