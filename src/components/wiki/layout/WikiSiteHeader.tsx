@@ -5,18 +5,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Avatar } from "@/components/Avatar";
 import { useAuthMe, type ClientNavBootstrap } from "@/contexts/AuthDataContext";
-
-/** The wiki surfaces search can return. Mirrors `WikiSearchKind` on the server. */
-export type WikiSearchHitKind =
-  | "page"
-  | "election"
-  | "office"
-  | "cabinet"
-  | "leadership"
-  | "seat"
-  | "party"
-  | "category"
-  | "path";
+// Type-only, so nothing from the server module reaches the client bundle. Taking
+// the union from the server keeps KIND_LABELS exhaustive: adding a surface there
+// fails this file to compile until it gets a label, instead of silently falling
+// back to the generic one.
+import type { WikiSearchKind } from "@/lib/wiki/wikiSearch";
 
 export interface WikiSearchHit {
   slug: string;
@@ -28,10 +21,10 @@ export interface WikiSearchHit {
    * client derive one from the slug.
    */
   href?: string;
-  kind?: WikiSearchHitKind;
+  kind?: WikiSearchKind;
 }
 
-const KIND_LABELS: Record<WikiSearchHitKind, string> = {
+const KIND_LABELS: Record<WikiSearchKind, string> = {
   page: "Pages",
   category: "Categories",
   path: "Learning paths",
@@ -66,7 +59,7 @@ export function wikiPageHref(slug: string): string {
 }
 
 /** Prefer the server-supplied href; fall back to the authored-page path. */
-export function wikiHitHref(hit: WikiSearchHit): string {
+function wikiHitHref(hit: WikiSearchHit): string {
   return hit.href ?? wikiPageHref(hit.slug);
 }
 
@@ -84,7 +77,7 @@ export function groupWikiSearchHits(hits: WikiSearchHit[]): WikiSearchGroup[] {
     const kind = hit.kind ?? "page";
     let group = byKind.get(kind);
     if (!group) {
-      group = { kind, label: KIND_LABELS[kind as WikiSearchHitKind] ?? "Wiki", hits: [] };
+      group = { kind, label: KIND_LABELS[kind as WikiSearchKind] ?? "Wiki", hits: [] };
       byKind.set(kind, group);
       groups.push(group);
     }

@@ -47,7 +47,7 @@ const SCORE_NO_MATCH = 0;
  * Score one candidate against the query. Returns 0 when nothing matches, which
  * the caller treats as "exclude".
  */
-export function scoreWikiSearchCandidate(query: string, candidate: WikiSearchCandidate): number {
+function scoreWikiSearchCandidate(query: string, candidate: WikiSearchCandidate): number {
   const q = query.trim().toLowerCase();
   if (!q) return SCORE_TITLE_EXACT;
 
