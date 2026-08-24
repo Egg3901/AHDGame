@@ -17,7 +17,6 @@ import { AdminVersionBlock } from "./components/AdminVersionBlock";
 import { classifyItem, parseAdminChangelog } from "./changelogUtils";
 import { HeroImage } from "@/components/HeroImage";
 import { HeroStatsStrip } from "@/components/ui";
-import { AdSenseUnit } from "@/components/AdSenseUnit";
 import { LocalTime } from "@/components/time/LocalTime";
 
 interface ChangelogClientProps {
@@ -216,15 +215,6 @@ export function ChangelogClient({ publicPosts }: ChangelogClientProps) {
                         showAreas={adminView}
                         linkToPost={!adminView}
                       />
-                      {isFirstOverall && !adminView && (
-                        <div className="mt-6">
-                          <AdSenseUnit
-                            slot="ahd-changelog-native"
-                            format="auto"
-                            className="min-h-[90px]"
-                          />
-                        </div>
-                      )}
                     </div>
                   );
                 })}

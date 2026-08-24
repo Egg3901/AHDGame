@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
+import { isAdSenseContentPath } from "@/lib/adsenseContent";
 import { getAdSenseClientId } from "@/lib/googlePrivacyMessaging";
 import { getAdSlotId } from "@/lib/adSlots";
 
@@ -38,12 +40,14 @@ declare global {
  */
 export function AdSenseUnit({ slot, format = "auto", className = "", style }: AdSenseUnitProps) {
   const insRef = useRef<HTMLModElement>(null);
+  const pathname = usePathname();
+  const isEligiblePage = isAdSenseContentPath(pathname);
   const clientId = getAdSenseClientId();
   const slotId = getAdSlotId(slot);
 
   useEffect(() => {
     const ins = insRef.current;
-    if (!clientId || !slotId || !ins) return;
+    if (!isEligiblePage || !clientId || !slotId || !ins) return;
     if (ins.getAttribute("data-adsbygoogle-status")) return;
     // adsbygoogle throws on zero-width containers (hidden tabs, collapsed
     // parents); skip and let the next remount retry with real layout.
@@ -54,9 +58,9 @@ export function AdSenseUnit({ slot, format = "auto", className = "", style }: Ad
     } catch {
       // AdSense load failures are non-critical; silent fail keeps the UI stable.
     }
-  }, [clientId, slotId, format]);
+  }, [isEligiblePage, clientId, slotId, format]);
 
-  if (!clientId || !slotId) return null;
+  if (!isEligiblePage || !clientId || !slotId) return null;
 
   return (
     <div className="adsense-container" aria-label="Advertisement">

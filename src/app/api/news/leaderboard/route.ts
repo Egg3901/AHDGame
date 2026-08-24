@@ -4,6 +4,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { fetchBordersByUserIds } from "@/lib/db/patreonBorders";
 import { getAuthUser } from "@/lib/auth";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
+import { withPublicNewsVisibility } from "@/lib/news/publicModeration";
 
 export interface LeaderboardEntry {
   characterId: string;
@@ -36,11 +37,11 @@ export async function GET() {
       .collection("newsPosts")
       .aggregate<{ _id: string; totalLikes: number; postCount: number }>([
         {
-          $match: {
+          $match: withPublicNewsVisibility({
             parentId: { $exists: false },
             isSystem: { $ne: true },
             feedType: { $ne: "advertisement" },
-          },
+          }),
         },
         {
           $group: {

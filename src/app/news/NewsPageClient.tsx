@@ -8,7 +8,6 @@ import BackButton from "@/components/BackButton";
 import { HeroImage } from "@/components/HeroImage";
 import type { SerializedPost } from "@/components/news/NewsPost";
 import type { NewsFeedType } from "@/lib/db/types";
-import { AdSenseUnit } from "@/components/AdSenseUnit";
 import { useAuthMe } from "@/contexts/AuthDataContext";
 
 const HERO_IMAGE_URL =
@@ -143,8 +142,6 @@ export function NewsPageClient({
             </p>
           </div>
         </header>
-
-        <AdSenseUnit slot="ahd-news-infeed" format="fluid" className="min-h-[90px] my-4" />
 
         <NewsTab
           authorId={authorId}
