@@ -4,7 +4,8 @@ import { getGameStateCollection } from "@/lib/db/collections";
 import { getSiteUrl } from "@/lib/siteMetadata";
 import { getAllWikiPagesForDisplay } from "@/lib/wiki/getWikiPageData";
 import { getCategoryById } from "@/lib/wiki/categories";
-import { getStarterStubSlugs } from "@/lib/wiki/starterStub";
+import { getRedirectTarget } from "@/lib/wiki/redirects";
+import { getLowValueWikiSlugs } from "@/lib/wiki/starterStub";
 import { loadPublicPosts } from "@/lib/changelog/posts";
 
 /**
@@ -122,11 +123,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     });
     try {
       const allWikiPages = await getAllWikiPagesForDisplay();
-      // Pages still on their unedited starter template are scaffolds, not
-      // content, and they are served noindex. Submitting a noindexed URL is
-      // reported as an error in Search Console, so drop them here too.
-      const stubSlugs = new Set(await getStarterStubSlugs());
-      const wikiPages = allWikiPages.filter((page) => !stubSlugs.has(page.slug));
+      // Incomplete pages are served noindex, while compatibility aliases
+      // redirect to their canonical page. Neither belongs in the sitemap.
+      const lowValueSlugs = new Set(await getLowValueWikiSlugs());
+      const wikiPages = allWikiPages.filter(
+        (page) => !lowValueSlugs.has(page.slug) && !getRedirectTarget(page.slug)
+      );
       const categoryLastModified = new Map<string, Date>();
 
       for (const page of wikiPages) {

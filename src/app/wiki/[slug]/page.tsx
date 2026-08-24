@@ -23,7 +23,7 @@ import { PageMetadata } from "@/components/wiki/layout/PageMetadata";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
 import { getWikiCanonicalUrl } from "@/lib/siteMetadata";
-import { getStarterStubSlugs } from "@/lib/wiki/starterStub";
+import { getLowValueWikiSlugs } from "@/lib/wiki/starterStub";
 
 interface WikiPageProps {
   params: Promise<{ slug: string }>;
@@ -62,14 +62,13 @@ export async function generateMetadata({ params }: WikiPageProps): Promise<Metad
   const title = `${page.title} | Game Wiki | A House Divided`;
   const description = page.description;
   const canonical = getWikiCanonicalUrl(`/wiki/${slug}`);
-  // An untouched starter template is a scaffold of section headings addressed to
-  // the page owner. It reads as thin content to a reviewer and stays out of the
-  // index until the owner writes something.
-  const isStub = (await getStarterStubSlugs()).includes(slug);
+  // Incomplete community pages stay out of search until the owner adds enough
+  // original content to make the page useful on its own.
+  const isLowValue = (await getLowValueWikiSlugs()).includes(slug);
   return {
     title,
     description,
-    ...(isStub ? { robots: { index: false, follow: true } } : {}),
+    ...(isLowValue ? { robots: { index: false, follow: true } } : {}),
     alternates: { canonical },
     openGraph: {
       title,
