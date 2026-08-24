@@ -2,8 +2,9 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui";
-import { isGoogleCmpConfigured } from "@/lib/googlePrivacyMessaging";
+import { shouldRenderGooglePrivacyMessaging } from "@/lib/googlePrivacyMessaging";
 
 const STORAGE_KEY = "ahd-cookie-consent";
 export const CONSENT_EVENT = "ahd:cookie-consent-changed";
@@ -23,7 +24,8 @@ declare global {
 
 function applyFallbackGoogleConsent(choice: CookieConsentValue | null) {
   if (typeof window === "undefined") return;
-  if (isGoogleCmpConfigured(window.location.hostname)) return;
+  if (shouldRenderGooglePrivacyMessaging(window.location.pathname, window.location.hostname))
+    return;
   if (!window.gtag) return;
 
   const state = choice === "accepted" ? "granted" : "denied";
@@ -48,7 +50,7 @@ export function getStoredConsent(): CookieConsentValue | null {
 export function openCookiePreferences() {
   if (typeof window === "undefined") return;
 
-  if (isGoogleCmpConfigured(window.location.hostname)) {
+  if (shouldRenderGooglePrivacyMessaging(window.location.pathname, window.location.hostname)) {
     window.googlefc = window.googlefc || {};
     window.googlefc.callbackQueue = window.googlefc.callbackQueue || [];
     window.googlefc.callbackQueue.push(() => {
@@ -101,14 +103,18 @@ function setConsent(choice: CookieConsentValue) {
 }
 
 export function CookieConsentBanner() {
+  const pathname = usePathname();
   const consent = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const usesGoogleCmp =
+    typeof window !== "undefined" &&
+    shouldRenderGooglePrivacyMessaging(pathname, window.location.hostname);
 
   useEffect(() => {
     if (consent === UNSET) return;
     applyFallbackGoogleConsent(consent);
   }, [consent]);
 
-  if (typeof window !== "undefined" && isGoogleCmpConfigured(window.location.hostname)) return null;
+  if (usesGoogleCmp) return null;
 
   if (consent === UNSET || consent !== null) return null;
 
