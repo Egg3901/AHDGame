@@ -75,11 +75,15 @@ export function DelegationBench({
 }
 
 /**
- * The open floor: every character in the world holds a 0.25× play.
+ * The open floor: every character holds one 0.25× play of each kind per turn.
  *
- * The count and the net are this turn's real personal plays. When the net cap
- * bit, the panel says so — a silent throttle would read as "the public barely
- * turned out" when in fact thousands did and were scaled down.
+ * The count and the net are this turn's real personal plays, projected before
+ * the turn resolves. When the ceiling bites, the panel says so: a silent
+ * throttle would read as "the public barely turned out" when in fact thousands
+ * did and were scaled down.
+ *
+ * The ceiling itself is sized by turnout, so it is quoted as this turn's rather
+ * than as a standing rule.
  */
 export function OpenFloorPanel({ openFloor }: { openFloor: DossierView["openFloor"] }) {
   return (

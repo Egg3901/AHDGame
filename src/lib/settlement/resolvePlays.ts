@@ -7,6 +7,10 @@
  * rather than the gross is what lets a contested public cancel itself out —
  * which is the interesting outcome — instead of both sides being throttled into
  * a stalemate they did not choose.
+ *
+ * The ceiling is SIZED BY TURNOUT, per institution, not fixed. A flat number
+ * meant the first handful of aligned characters consumed all of it and everyone
+ * after them moved the board by nothing. See `personalNetCapFor`.
  */
 import type { ObjectId } from "mongodb";
 import type { SettlementPlayDoc } from "@/lib/db/types/settlementPlay";

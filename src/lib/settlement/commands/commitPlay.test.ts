@@ -418,6 +418,58 @@ describe("commitSettlementPlay", () => {
       expect(res).toMatchObject({ ok: false, status: 409 });
     });
 
+    it("loses on the unique index when two clicks race the count", async () => {
+      // The count and the insert are not atomic, so two fast clicks can both
+      // read zero. The index is what stops the second buying a second use.
+      prime(db, "settlementPlays").insertOne.mockRejectedValue(
+        Object.assign(new Error("E11000 duplicate key"), { code: 11000 })
+      );
+      const { commitSettlementPlay } = await import("./commitPlay");
+
+      const res = await commitSettlementPlay(db as unknown as Db, {
+        characterId,
+        actor: "personal",
+        playId: "letter",
+        direction: 1,
+      });
+
+      expect(res).toMatchObject({ ok: false, status: 409 });
+    });
+
+    it("gives the action points back when the index refuses the race", async () => {
+      // The debit already happened, and there is no effect to pay for.
+      prime(db, "settlementPlays").insertOne.mockRejectedValue(
+        Object.assign(new Error("E11000 duplicate key"), { code: 11000 })
+      );
+      const { commitSettlementPlay } = await import("./commitPlay");
+
+      await commitSettlementPlay(db as unknown as Db, {
+        characterId,
+        actor: "personal",
+        playId: "letter",
+        direction: 1,
+      });
+
+      const refund = prime(db, "characters").updateOne.mock.calls.at(-1)![1];
+      expect(refund.$inc.actions).toBeGreaterThan(0);
+    });
+
+    it("does not swallow an unrelated write failure", async () => {
+      // Only a duplicate key means the allowance. Anything else is a real
+      // fault and must not be reported to the player as "already used".
+      prime(db, "settlementPlays").insertOne.mockRejectedValue(new Error("connection lost"));
+      const { commitSettlementPlay } = await import("./commitPlay");
+
+      await expect(
+        commitSettlementPlay(db as unknown as Db, {
+          characterId,
+          actor: "personal",
+          playId: "letter",
+          direction: 1,
+        })
+      ).rejects.toThrow("connection lost");
+    });
+
     it("does not limit a delegation play", async () => {
       // A seat is one actor with an action budget, not a crowd. Its brake is AP.
       prime(db, "settlementPlays").countDocuments.mockResolvedValue(9);

@@ -179,10 +179,19 @@ export interface DossierView {
   benches: { west: DossierBenchView[]; east: DossierBenchView[] };
   openFloor: {
     characters: number;
-    /** Net points the personal tier actually bought, after the cap. */
+    /**
+     * Net points the personal tier bought, after the cap. Read off the stamps
+     * once the turn has resolved, and PROJECTED through the resolver before
+     * then, because `appliedPoints` does not exist until the phase writes it.
+     */
     netPoints: number;
     /** What it asked for, before the cap. Equal to `netPoints` when uncapped. */
     rawPoints: number;
+    /**
+     * The largest ceiling in play this turn. Derived from turnout rather than
+     * fixed, so it rises as more characters take part — see
+     * `personalNetCapFor`.
+     */
     capPoints: number;
     capped: boolean;
   };

@@ -26,6 +26,11 @@
  * money always moves BEFORE the effect exists: a player can be over-charged and
  * refunded, but can never get a free play. If this repo ever gains transactions,
  * wrap from the claim to the insert and delete this note.
+ *
+ * ONE EXCEPTION, on the personal path. A duplicate-key rejection from the
+ * once-per-turn index is not an outage — it is the allowance doing its job when
+ * two clicks race the count — so that case IS refunded rather than left
+ * over-charged. There is no effect to have paid for.
  */
 import { ObjectId, type Db } from "mongodb";
 import type { Character } from "@/lib/db/types";
@@ -58,6 +63,17 @@ export type CommitPlayResult =
   | { ok: false; status: number; error: string };
 
 const fail = (status: number, error: string): CommitPlayResult => ({ ok: false, status, error });
+
+/**
+ * A write the `settlementPlays_personal_once` index rejected.
+ *
+ * Matched on the code rather than the message: 11000 is the duplicate-key
+ * error, and the only unique constraint on this collection is the once-per-turn
+ * allowance, so any duplicate reaching the personal insert is that one.
+ */
+function isDuplicatePersonalPlay(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: number }).code === 11000;
+}
 
 export async function commitSettlementPlay(
   db: Db,
@@ -234,16 +250,35 @@ export async function commitSettlementPlay(
     return fail(409, "Your actions or funds changed before the play landed. Try again.");
   }
 
-  await plays.insertOne({
-    ...base,
-    _id: new ObjectId(),
-    actor: "personal",
-    seatId: null,
-    countryId: null,
-    direction: input.direction,
-    // Record what was ACTUALLY charged, not the anchor figure — the audit trail
-    // has to match the balance the player watched go down.
-    costs: { ...base.costs, funds: funds.local },
-  });
+  try {
+    await plays.insertOne({
+      ...base,
+      _id: new ObjectId(),
+      actor: "personal",
+      seatId: null,
+      countryId: null,
+      direction: input.direction,
+      // Record what was ACTUALLY charged, not the anchor figure — the audit
+      // trail has to match the balance the player watched go down.
+      costs: { ...base.costs, funds: funds.local },
+    });
+  } catch (error) {
+    // The unique partial index is the BACKSTOP for the allowance. The count
+    // above and this insert are not atomic, so two fast clicks can both read
+    // zero and both arrive here; the second one loses on the index instead of
+    // buying a second use.
+    if (!isDuplicatePersonalPlay(error)) throw error;
+    // The debit already happened, so give it back. This is the one place the
+    // file's usual ordering — money moves before the effect exists — has to be
+    // undone, because there IS no effect to pay for.
+    await db.collection<Character>("characters").updateOne(
+      { _id: input.characterId },
+      {
+        $inc: { actions: play.actionCost, [funds.field]: funds.local },
+        $set: { updatedAt: new Date() },
+      }
+    );
+    return fail(409, "You have already used this play this turn. It resets next turn.");
+  }
   return { ok: true, playId: play.id, appliedDirection: input.direction };
 }
