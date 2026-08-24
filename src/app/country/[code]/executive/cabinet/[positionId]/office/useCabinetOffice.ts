@@ -359,6 +359,15 @@ export interface DefenceContractView {
   totalFactories?: number;
   /** Public disclosure that the awarding minister had an interest in the supplier. */
   selfDealing?: { basis: "owner" | "shareholding"; stakeShare: number; ministerName?: string };
+  /**
+   * What tearing this contract up right now would cost, quoted BEFORE the minister confirms.
+   *
+   * A break fee the player only discovers from their appropriation afterwards is a trap, not
+   * a rule. `terminationBasis` is why the number is what it is: a withdrawal or a supplier
+   * who has stopped building costs nothing.
+   */
+  terminationFee?: number;
+  terminationBasis?: "withdrawal" | "cause" | "convenience";
 }
 
 export function useCabinetOffice(countryCode: string, positionId: string) {

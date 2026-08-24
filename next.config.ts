@@ -61,6 +61,8 @@ const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN;
 const sentryUrl = process.env.SENTRY_URL;
 
 const nextConfig: NextConfig = {
+  // Don't advertise the framework version via the x-powered-by header.
+  poweredByHeader: false,
   // `output: "standalone"` was previously set for Vercel-era cold-start wins.
   // On Railway's long-running container, the standalone server.js does NOT
   // invoke instrumentation.ts's nodejs `register()` — only the edge runtime

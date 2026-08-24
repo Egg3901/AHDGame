@@ -222,7 +222,7 @@ export interface GameConfig {
    * byte-for-byte unchanged). Written onto the sandbox gameConfig by
    * scripts/sim/runWorld.ts, mirroring how marketSystemMode is applied.
    */
-  simTurnPhaseMode?: "full" | "elections-only";
+  simTurnPhaseMode?: "full" | "elections-only" | "economy-only" | "macro-only";
   /**
    * SIM-ONLY marker: this database is a headless sandbox world, not a live
    * deployment. Written onto the sandbox gameConfig by scripts/sim/runWorld.ts

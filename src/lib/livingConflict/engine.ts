@@ -7,6 +7,7 @@ import type {
   LivingConflictDef,
   LivingConflictState,
 } from "./types";
+import { emptyCampaignState } from "./campaign";
 
 /**
  * The pure heart of the living-conflict engine: state in, state out, no DB and
@@ -25,6 +26,7 @@ export function emptyConflictState(defKey: string): LivingConflictState {
     phaseTurns: 0,
     totalTurns: 0,
     lastProcessedTurn: undefined,
+    campaign: emptyCampaignState(),
     updatedAt: new Date(0),
   };
 }
@@ -193,6 +195,9 @@ export function eventEffectsForRole(event: ConflictEvent, role: ConflictRole): C
 function triggerMatches(event: ConflictEvent, state: LivingConflictState): boolean {
   const t = event.trigger;
   if (!t) return event.kind === "authored"; // untriggered authored beats fire on phase entry
+  if (t.campaignStages && !t.campaignStages.includes(state.campaign?.stage ?? "posture")) {
+    return false;
+  }
   if (t.onPhaseEnter && state.phaseTurns !== 0) return false;
   if (t.minIntensity !== undefined && state.intensity < t.minIntensity) return false;
   if (t.maxIntensity !== undefined && state.intensity > t.maxIntensity) return false;

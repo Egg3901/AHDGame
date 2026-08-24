@@ -50,8 +50,12 @@ export async function launchCorpProspect(
 ): Promise<LaunchCorpProspectResult> {
   const { stateId, resource } = args;
 
-  if (corporation.type !== "extraction") {
-    return { ok: false, status: 400, error: "Only extraction corporations can prospect." };
+  if (corporation.type !== "extraction" && corporation.secondaryType !== "extraction") {
+    return {
+      ok: false,
+      status: 400,
+      error: "Only corporations with an extraction sector can prospect.",
+    };
   }
 
   // Corp must operate a sector in the target state. The sector is authoritative

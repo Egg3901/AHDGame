@@ -17,6 +17,7 @@ import { caucusesContent } from "../content/caucuses";
 import { tradeSystemContent } from "../content/tradeSystem";
 import { rpgStatsContent } from "../content/rpgStats";
 import { crisisInteractionContent } from "../content/crisisInteraction";
+import { globalResponseCrisesContent } from "../content/globalResponseCrises";
 import { playerEventsContent } from "../content/playerEvents";
 import { blocSpheresContent } from "../content/blocSpheres";
 import { notificationsContent } from "../content/notifications";
@@ -255,6 +256,20 @@ export const advancedPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 5,
+  },
+  {
+    slug: "global-response-crises",
+    title: "Global Response Crises",
+    description:
+      "Persistent international campaigns, country memory, capacity gates, asymmetric briefings, global tension, and the nuclear buildup connection.",
+    content: globalResponseCrisesContent,
+    category: "advanced",
+    extraTags: ["crisis", "cold war", "nuclear", "vietnam"],
+    designDocUrl: "design/global-response-crises-as-shipped.html",
+    featured: true,
+    difficulty: "intermediate",
+    contentType: "mechanics",
+    estimatedReadTime: 9,
   },
   {
     slug: "crisis-interaction",

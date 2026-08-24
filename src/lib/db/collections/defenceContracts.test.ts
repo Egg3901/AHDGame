@@ -5,6 +5,7 @@ import {
   advanceContract,
   cancelContract,
   respondToContract,
+  stampDeliveryCarry,
 } from "./defenceContracts";
 import type { DefenceContract } from "@/lib/db/types/defenceContract";
 
@@ -49,6 +50,8 @@ function stubDb(doc: Partial<DefenceContract> | null, capture: Capture): Db {
 const active = (over: Partial<DefenceContract> = {}): Partial<DefenceContract> => ({
   _id: new ObjectId(),
   countryId: "US",
+  corporationId: new ObjectId(),
+  pricePerLot: 1_000,
   lotsOrdered: 100,
   lotsDelivered: 0,
   status: "active",
@@ -158,21 +161,123 @@ describe("advanceContract", () => {
 });
 
 describe("cancelContract", () => {
-  it("cancels an active contract", async () => {
-    const doc = active();
-    expect(await cancelContract(stubDb(doc, { inserted: [], updates: [] }), doc._id!)).toBe(true);
+  it("cancels an active contract and returns the state it was cancelled in", async () => {
+    const doc = active({ lotsOrdered: 10, lotsDelivered: 3 });
+    const cancelled = await cancelContract(stubDb(doc, { inserted: [], updates: [] }), doc._id!);
+    // The snapshot is what the caller prices a break fee against, so it has to come back.
+    expect(cancelled).toMatchObject({ lotsOrdered: 10, lotsDelivered: 3 });
   });
 
   it("is idempotent — cancelling a closed contract is not an error", async () => {
     const doc = active({ status: "cancelled" });
-    expect(await cancelContract(stubDb(doc, { inserted: [], updates: [] }), doc._id!)).toBe(false);
+    expect(await cancelContract(stubDb(doc, { inserted: [], updates: [] }), doc._id!)).toBeNull();
   });
 
   // A minister must be able to withdraw an offer the supplier has not answered, not only a
   // live order — otherwise a mistaken award is unrecallable until the CEO responds.
   it("withdraws an offer the supplier has not answered yet", async () => {
     const doc = active({ status: "pending" });
-    expect(await cancelContract(stubDb(doc, { inserted: [], updates: [] }), doc._id!)).toBe(true);
+    expect(
+      await cancelContract(stubDb(doc, { inserted: [], updates: [] }), doc._id!)
+    ).not.toBeNull();
+  });
+
+  // The loop this closes: cancel a rival mid-window, get the quota back, re-award it to your
+  // own plant. A convenience termination leaves the tranche spent.
+  it("keeps the window quota spent when the termination is not a withdrawal or for cause", async () => {
+    const capture: Capture = { inserted: [], updates: [] };
+    const doc = active({ allocationWindowId: "US:5", allocatedLots: 10, lotsDelivered: 2 });
+    await cancelContract(stubDb(doc, capture), doc._id!, { releaseQuota: false });
+    const quotaWrites = capture.updates.filter((u) =>
+      JSON.stringify(u.update).includes("countryAmount")
+    );
+    expect(quotaWrites).toHaveLength(0);
+  });
+
+  it("hands the quota back when the offer was never accepted", async () => {
+    const capture: Capture = { inserted: [], updates: [] };
+    const doc = active({
+      status: "pending",
+      allocationWindowId: "US:5",
+      allocatedLots: 10,
+      lotsDelivered: 0,
+    });
+    await cancelContract(stubDb(doc, capture), doc._id!, { releaseQuota: true });
+    const quotaWrites = capture.updates.filter((u) =>
+      JSON.stringify(u.update).includes("countryAmount")
+    );
+    expect(quotaWrites.length).toBeGreaterThan(0);
+  });
+
+  it("records how the contract ended on the order book", async () => {
+    const capture: Capture = { inserted: [], updates: [] };
+    const doc = active({ lotsOrdered: 8, lotsDelivered: 1 });
+    await cancelContract(stubDb(doc, capture), doc._id!, {
+      releaseQuota: false,
+      termination: {
+        basis: "convenience",
+        fee: 1_000,
+        lotsCancelled: 7,
+        favorabilityPenalty: 2.4,
+        turn: 40,
+      },
+    });
+    expect(capture.updates[0].update).toMatchObject({
+      $set: expect.objectContaining({
+        termination: expect.objectContaining({ basis: "convenience", fee: 1_000 }),
+      }),
+    });
+  });
+});
+
+describe("stampDeliveryCarry supplier-fault streak", () => {
+  /** Every write the streak logic performed, in order. */
+  function streakWrites(capture: Capture) {
+    return capture.updates.filter((u) => JSON.stringify(u.update).includes("supplierFaultTurns"));
+  }
+
+  it("counts a turn the plant produced nothing", async () => {
+    const capture: Capture = { inserted: [], updates: [] };
+    await stampDeliveryCarry(stubDb(active(), capture), new ObjectId(), 0, "no_output", 12);
+    expect(streakWrites(capture)[0].update).toMatchObject({ $inc: { supplierFaultTurns: 1 } });
+  });
+
+  // A blind $inc would double-count: one delivery turn legitimately stamps a contract more
+  // than once, and a minister must not get a free cancellation a turn early.
+  it("guards the increment on the turn so one turn cannot count twice", async () => {
+    const capture: Capture = { inserted: [], updates: [] };
+    await stampDeliveryCarry(stubDb(active(), capture), new ObjectId(), 0, "no_output", 12);
+    expect(streakWrites(capture)[0].filter).toMatchObject({
+      $or: [
+        { supplierFaultThroughTurn: { $exists: false } },
+        { supplierFaultThroughTurn: { $lt: 12 } },
+      ],
+    });
+  });
+
+  // Underfunding your own appropriation must never buy you a free cancellation.
+  it("clears the streak when the failure was the buyer's", async () => {
+    const capture: Capture = { inserted: [], updates: [] };
+    await stampDeliveryCarry(
+      stubDb(active({ supplierFaultTurns: 2 }), capture),
+      new ObjectId(),
+      0,
+      "appropriation_short",
+      12
+    );
+    expect(streakWrites(capture)[0].update).toMatchObject({ $set: { supplierFaultTurns: 0 } });
+  });
+
+  it("clears the streak on a turn that shipped everything it built", async () => {
+    const capture: Capture = { inserted: [], updates: [] };
+    await stampDeliveryCarry(
+      stubDb(active({ supplierFaultTurns: 2 }), capture),
+      new ObjectId(),
+      0,
+      undefined,
+      12
+    );
+    expect(streakWrites(capture)[0].update).toMatchObject({ $set: { supplierFaultTurns: 0 } });
   });
 });
 

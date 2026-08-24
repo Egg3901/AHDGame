@@ -13,6 +13,7 @@ import { AUTH_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
 import { durableRateLimit } from "@/lib/api/rateLimit.mongo";
 import { parseJsonBody } from "@/lib/api/validate";
 import { registerBodySchema } from "@/lib/api/schemas/auth";
+import { normalizeReferralCode } from "@/lib/auth/normalizeReferralCode";
 import { getTrackingCookieOptions } from "@/lib/auth";
 import { assertRegistrationAllowed } from "@/lib/auth/registrationGate";
 import { normalizeIp } from "@/lib/utils/ipNormalize";
@@ -209,7 +210,20 @@ export async function POST(request: Request) {
     // Validate referral code if provided
     let referredByObjectId: ObjectId | undefined;
     if (referralCode) {
-      const referrer = await usersCollection.findOne({ _id: new ObjectId(referralCode) });
+      const normalizedReferralCode = normalizeReferralCode(referralCode);
+      if (!normalizedReferralCode) {
+        recordAudit({
+          source: "api",
+          category: "auth",
+          action: "auth.register",
+          subject: { type: "user", name: email.toLowerCase() },
+          net: netBase,
+          outcome: "rejected",
+          reason: "invalid_referral_code",
+        });
+        return NextResponse.json({ error: "Invalid referral code" }, { status: 400 });
+      }
+      const referrer = await usersCollection.findOne({ _id: new ObjectId(normalizedReferralCode) });
       if (!referrer) {
         recordAudit({
           source: "api",

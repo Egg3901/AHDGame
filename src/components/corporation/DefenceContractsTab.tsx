@@ -30,7 +30,7 @@ const STATUS_LABEL: Record<string, string> = {
   pending: "offered",
   active: "active",
   complete: "complete",
-  cancelled: "withdrawn",
+  cancelled: "terminated",
   declined: "declined",
 };
 
@@ -329,6 +329,15 @@ export default function DefenceContractsTab({
                         ? "owns this corporation"
                         : `holds ${(c.selfDealing.stakeShare * 100).toFixed(1)}% of it`}
                       . This award is on the public record.
+                    </p>
+                  )}
+                  {c.termination && (
+                    <p className="mt-1.5 text-[11px] text-[var(--warning)]">
+                      {c.termination.basis === "withdrawal"
+                        ? `Offer withdrawn by ${c.termination.ministerName ?? "the minister"} before you answered it.`
+                        : c.termination.basis === "cause"
+                          ? `Terminated for cause on ${c.termination.lotsCancelled.toLocaleString("en-US")} undelivered lots. The plant had stopped delivering, so no break fee was owed.`
+                          : `Terminated by ${c.termination.ministerName ?? "the minister"} on ${c.termination.lotsCancelled.toLocaleString("en-US")} undelivered lots. You were paid ${formatAmount(c.termination.fee)} in break fees.`}
                     </p>
                   )}
                   {isCeo && (c.status === "active" || c.status === "pending") && (

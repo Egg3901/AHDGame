@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 import type { GovernorExecutiveOrder, LegislationType, StatePolicy } from "@/lib/db/types";
-import { effectDirectionAtIndex } from "@/lib/legislature/optionIntensity";
+import { buildOrderRevertPolicyFields } from "@/lib/governorOffice/orders/revertPolicy";
 
 /**
  * Turn phase: process active executive orders.
@@ -61,16 +61,7 @@ export async function processGovernorExecutiveOrders(
         { stateId: order.stateId, legislationTypeId: order.legislationTypeId },
         {
           $set: {
-            policyOptionIndex: order.policyOptionIndexBefore,
-            ...(order.policyOptionIdBefore ? { policyOptionId: order.policyOptionIdBefore } : {}),
-            ...(order.economicBefore != null ? { economic: order.economicBefore } : {}),
-            ...(order.socialBefore != null ? { social: order.socialBefore } : {}),
-            effectDirection: effectDirectionAtIndex(
-              legislationType?.policyOptions,
-              order.policyOptionIndexBefore
-            ),
-            enactedTurn: currentTurn,
-            enactedBy: { kind: "expiry", id: order._id },
+            ...buildOrderRevertPolicyFields(order, legislationType, currentTurn),
           },
         }
       );

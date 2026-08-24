@@ -115,6 +115,10 @@ So a turn reads: **fight → count the losses → rebuild.** A formation mauled 
 
 The one-turn gap between declaring and resolving is the **defender's window**. If your opponent declares on turn 500, it resolves on turn 501, and in between you can reinforce the front, reshuffle generals, or pull out entirely.
 
+## The Cold War layer
+
+Above all the boards on [/world/conflicts](/world/conflicts) sits the world's shared **tension gauge**: one 0 to 100 reading of how close the standoff is to boiling over, with a feed of the events that moved it and a strip of the world's nuclear powers. Nuclear tests, escalation, and crises push it up; time and detente bring it down, and its band drives readiness, procurement demand, and diplomatic goodwill across every country at once. See [Cold War Tension](/wiki/cold-war-tension) for the gauge itself and [The Nuclear Programme](/wiki/nuclear-programme) for the tree that puts the warheads behind it.
+
 ## Where to go next
 
 **Prefer a guided route?** The [**War College**](/wiki/paths/war-college) learning path walks these pages in order (this overview, then units, generals, battle, and the full worked campaign) in about 51 minutes.

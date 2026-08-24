@@ -8,7 +8,11 @@ import type {
 } from "@/lib/db/types/crisis";
 import { createCrisisFromTemplate } from "@/lib/crises/createCrisisFromTemplate";
 import { logWireEvent } from "@/lib/wireEvent";
+import { listNuclearPrograms } from "@/lib/db/collections/nuclearPrograms";
+import { nuclearStandoffPossible } from "@/lib/military/nuclearProgram";
 import { allLivingConflictDefs } from "./registry";
+import { loadConflictState } from "./driver";
+import { normalizeCampaignState } from "./campaign";
 import { migrateLegacyVietnamState } from "./vietnamCompat";
 import {
   allParticipants,
@@ -105,6 +109,7 @@ async function materializeEvent(
   const roleByCountry = roleMapForEvent(def, participants, driven);
   const countryIds = Object.keys(roleByCountry);
   if (countryIds.length === 0) return false;
+  const campaign = normalizeCampaignState((await loadConflictState(db, def.key)).campaign);
 
   await createCrisisFromTemplate(db, {
     template: eventTemplate(driven, countryIds),
@@ -121,6 +126,11 @@ async function materializeEvent(
       defaultOptionIdByRole: response.defaultOptionIdByRole,
       outcomes: response.outcomes,
       defaultOutcomeId: response.defaultOutcomeId,
+      campaign: {
+        stage: campaign.stage,
+        cycle: campaign.cycle,
+        consequences: { ...campaign.consequences },
+      },
     },
   });
   return true;
@@ -142,12 +152,22 @@ export async function processLivingConflictsTurn(
   await migrateLegacyVietnamState(db);
   let eventsOpened = 0;
   const defs = allLivingConflictDefs().filter((def) => def.autoOpen !== false);
+  let nuclearPrograms: Awaited<ReturnType<typeof listNuclearPrograms>> | null = null;
+  let conflictsProcessed = 0;
   for (const def of defs) {
+    if (def.key === "nuclear_incident") {
+      const existing = await loadConflictState(db, def.key);
+      if (!existing.hasOpened) {
+        nuclearPrograms ??= await listNuclearPrograms(db);
+        if (!nuclearStandoffPossible(nuclearPrograms)) continue;
+      }
+    }
+    conflictsProcessed++;
     const participants: ConflictParticipants = def.participants;
     const result = await driveConflictTurn(db, def, participants, currentTurn, currentYear);
     for (const event of result.events) {
       if (await materializeEvent(db, def, participants, event, currentTurn)) eventsOpened++;
     }
   }
-  return { conflictsProcessed: defs.length, eventsOpened };
+  return { conflictsProcessed, eventsOpened };
 }

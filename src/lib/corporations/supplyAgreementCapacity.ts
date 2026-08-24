@@ -6,7 +6,12 @@ import {
   plantsCapacityScaledUnits,
   type CommodityType,
 } from "@/lib/constants/commodities";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import {
+  applyPlannedEconomyOutputMix,
+  getEffectiveStrategyRates,
+  plannedEconomyMediaSupplyFactor,
+} from "@/lib/constants/sectorStrategies";
+import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
 
 /**
  * Sector snapshot the plants-tier supply-agreement capacity check needs.
@@ -22,6 +27,8 @@ export type SupplyAgreementCapacitySector = {
   productionPolicyLevel?: number | null;
   embargoSuspended?: boolean | null;
   embargoExportExposure?: number | null;
+  /** Host country, for the planned-economy output remap and media derate. */
+  countryId?: string | null;
 };
 
 /**
@@ -41,6 +48,10 @@ export function computeSupplierCommodityCapacityUnits(args: {
   commodity: CommodityType;
   isNatcorp: boolean;
   turn: number;
+  /** `gameState.currentYear` — with the flag below, resolves planned economies. */
+  currentYear?: number | null;
+  /** `gameConfig.commandEconomyEnabled`. */
+  commandEconomyEnabled?: boolean | null;
 }): number {
   let capacityUnits = 0;
   for (const s of args.sectors) {
@@ -54,15 +65,30 @@ export function computeSupplierCommodityCapacityUnits(args: {
       s.transitionStartTurn,
       args.turn
     );
+    const plannedEconomy = isPlannedEconomy(
+      s.countryId,
+      args.currentYear,
+      args.commandEconomyEnabled
+    );
+    // The output mix and the supply derate BOTH have to match the production
+    // sink, or the head-room sits on a base the supplier can never reach and
+    // the shortfall leg bills them for the gap every turn. A command economy's
+    // media makes state information rather than advertising, and media supply
+    // is derated in every economy.
+    const supplyMix = applyPlannedEconomyOutputMix(
+      s.sectorType,
+      rates.supply ?? {},
+      plannedEconomy
+    );
     const scaled =
       plantsCapacityScaledUnits({
         capacityUnits: capacity,
         isNatcorp: args.isNatcorp,
         productionPolicyLevel: s.productionPolicyLevel,
-        embargoSupplyFactor: embargoSupplyFactorFor(s),
+        embargoSupplyFactor:
+          embargoSupplyFactorFor(s) * plannedEconomyMediaSupplyFactor(s.sectorType, plannedEconomy),
       }) ?? 0;
-    capacityUnits +=
-      scaled * commodityMixWeight(rates.supply ?? {}, COMMODITY_BASE_PRICES, args.commodity);
+    capacityUnits += scaled * commodityMixWeight(supplyMix, COMMODITY_BASE_PRICES, args.commodity);
   }
   return capacityUnits;
 }

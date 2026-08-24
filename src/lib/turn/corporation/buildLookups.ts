@@ -724,6 +724,14 @@ export async function buildCorporationLookups(
   const corruptionByState = new Map<string, number>();
   const workforceSkillByState = new Map<string, number>();
   const rawWorkforceSkillByState = new Map<string, number>();
+  // Phase 2 labour rationing: prior-turn labour market tightness, written by
+  // the previous corporation turn's telemetry pass. Read LAGGED by one turn on
+  // purpose. Rationing needs each state's TOTAL demand before it can allocate,
+  // and the sector loop only learns the total after it has finished, so a
+  // same-turn figure would mean a second pass over every sector. Lagging is the
+  // same trade the smoothed prime rate and the inflation passthrough already
+  // make, and labour supply does not move fast enough for one turn to matter.
+  const labourTightnessByState = new Map<string, number>();
   const crimeRateByState = new Map<string, number>();
   const broadbandByState = new Map<string, number>();
   const roadConditionByState = new Map<string, number>();
@@ -743,6 +751,10 @@ export async function buildCorporationLookups(
     const corrVal = sm.governance?.corruptionIndex?.value;
     if (typeof corrVal === "number") {
       corruptionByState.set(stateId, getCorruptionMarginModifier(corrVal));
+    }
+    const tightnessVal = sm.economic?.labourTightness?.value;
+    if (typeof tightnessVal === "number" && Number.isFinite(tightnessVal)) {
+      labourTightnessByState.set(stateId, tightnessVal);
     }
     const skillVal = sm.education?.workforceSkill?.value;
     if (typeof skillVal === "number") {
@@ -1090,6 +1102,7 @@ export async function buildCorporationLookups(
     corruptionByState,
     workforceSkillByState,
     rawWorkforceSkillByState,
+    labourTightnessByState,
     crimeRateByState,
     broadbandByState,
     roadConditionByState,

@@ -26,6 +26,7 @@ import { applyNationalizeProvision } from "@/lib/nationalization/legislativeNati
 import { computeNationalizationProvisionDetail } from "@/lib/nationalization/billTargetPreview";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { declareWar } from "@/lib/military/declareWar";
+import { allianceBarBetween } from "@/lib/military/allianceBar";
 import { joinSide } from "@/lib/military/joinSide";
 import { getConflict } from "@/lib/db/collections/conflicts";
 import { applyPrivatizeProvision } from "@/lib/nationalization/legislativePrivatize";
@@ -216,13 +217,30 @@ export async function applyLegislationEffect(
           // in the defender, or enrol this country in the one already being fought
           // there. Must sit above the tariff catch-all below, which would otherwise
           // cast a declaration to a TariffProvision.
-          await declareWar(db, {
-            declarer: countryId,
-            defender: p.targetCountry,
-            warGoal: p.warGoal,
-            billId: String(bill._id),
-            currentTurn: await getCurrentTurn(db),
-          });
+          //
+          // The alliance bar is re-read HERE and not only at proposal, for the reason
+          // `declareWar` re-reads the pair war: a declaration sits before the chambers
+          // for turns, and either country can accede to the other's bloc while it does.
+          // Without this, a bill filed against a neutral would open an intra-alliance
+          // war the proposal gate had already refused. A ratified declaration that has
+          // become an attack on an ally is dropped rather than enacted.
+          const alliedNow = await allianceBarBetween(db, countryId, p.targetCountry);
+          if (alliedNow) {
+            // Logged because the divergence is otherwise invisible: the bill is still
+            // marked passed and still announces itself as passed, and only the absence
+            // of a conflict would say the war never opened.
+            console.warn(
+              `[legislationEffects] declaration ${String(bill._id)} dropped: ${countryId} and ${p.targetCountry} are now both in ${alliedNow}`
+            );
+          } else {
+            await declareWar(db, {
+              declarer: countryId,
+              defender: p.targetCountry,
+              warGoal: p.warGoal,
+              billId: String(bill._id),
+              currentTurn: await getCurrentTurn(db),
+            });
+          }
         } else if (p.type === "join_conflict") {
           // Up to 48 turns of world state separate the bloc's vote from this
           // effect — 24 at the organisation and 24 on the floor — so re-check

@@ -33,3 +33,23 @@ export type BlocLookup = Readonly<Record<string, Bloc>>;
 export function blocOf(lookup: BlocLookup, country: string): Bloc {
   return lookup[country] ?? "nonAligned";
 }
+
+/**
+ * Do these two countries sit inside the SAME alliance bloc?
+ *
+ * `nonAligned` is deliberately NOT a shared bloc. It is the absence of an
+ * accession-governing alliance, not a pact between the countries that lack one. The
+ * 1991, 2019 and 2023 eras carry NATO with no eastern counterpart, so Russia and China
+ * read `nonAligned` there; counting that as a shared bloc would make a war between
+ * them — or between any two unaligned states, in any era — impossible.
+ *
+ * NOT the same question as the local `sharesBloc` in `src/lib/trade/tradeAffinity.ts`,
+ * which asks whether two countries share ANY organisation at all and pays a trade
+ * bonus for it. That one counts the EU and the UN; this one counts only the alliance
+ * poles a country can be barred from fighting inside. They are deliberately separate
+ * and must not be merged.
+ */
+export function sharesBloc(lookup: BlocLookup, a: string, b: string): boolean {
+  const bloc = blocOf(lookup, a);
+  return bloc !== "nonAligned" && bloc === blocOf(lookup, b);
+}

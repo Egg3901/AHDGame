@@ -46,6 +46,12 @@ const envSchema = z.preprocess(
     GITHUB_REPO: z.string().optional(),
     // Optional - secret required to register when test mode is enabled
     TEST_SECRET: z.string().optional(),
+    // Optional - shared secret Cloudflare injects into requests it proxies to
+    // origin (via a Transform Rule adding the x-cf-origin-secret header).
+    // When set, cf-connecting-ip is only trusted on requests carrying the
+    // matching header, closing forged-IP spoofing on direct hits to the
+    // Railway origin. Unset keeps legacy behavior (local dev, tests).
+    CF_ORIGIN_SECRET: z.string().min(1).optional(),
   })
 );
 

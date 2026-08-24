@@ -79,6 +79,32 @@ describe("spendingProvider", () => {
     expect(out.perCapitaByRegion.get("CA")?.environment).toBeCloseTo(0.5, 6);
   });
 
+  it("folds UK transport aliases into infrastructure and exposes budget-backed public capital", async () => {
+    db.collectionMocks.states!.find = vi.fn().mockReturnValue({
+      project: vi.fn().mockReturnThis(),
+      toArray: async () => [{ _id: "LON", countryId: "UK", population: 10_000_000 }],
+    });
+    db.collectionMocks.federalBudget!.find = vi.fn().mockReturnValue({
+      project: vi.fn().mockReturnThis(),
+      toArray: async () => [
+        {
+          _id: "UK",
+          countryId: "UK",
+          gdp: 120_000_000_000,
+          spending: { byCategory: { transport: 1_000_000_000 } },
+        },
+      ],
+    });
+    db.collectionMocks.stateBudgets!.find = vi.fn().mockReturnValue({
+      project: vi.fn().mockReturnThis(),
+      toArray: async () => [],
+    });
+
+    const out = await spendingProvider(db as unknown as Db);
+    expect(out.perCapitaByRegion.get("LON")?.infrastructure).toBeGreaterThan(0);
+    expect(out.publicCapitalAnnualLocalMillionsByRegion.get("LON")).toBeCloseTo(1_000, 6);
+  });
+
   it("normalizes per-capita spend by country GDP/capita onto the US reference scale (#0887 RC2)", async () => {
     db.collectionMocks.states!.find = vi.fn().mockReturnValue({
       project: vi.fn().mockReturnThis(),

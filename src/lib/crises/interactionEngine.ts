@@ -22,6 +22,8 @@ import { getGameState } from "@/lib/gameState";
 import {
   globalResponseRoleFor,
   optionsForGlobalResponder,
+  prepareGlobalResponseOption,
+  recordGlobalResponseCommitment,
   resolveGlobalResponse,
   spendGlobalResponseCost,
 } from "@/lib/livingConflict/globalResponse";
@@ -451,6 +453,9 @@ export async function submitCrisisDecision(
 
     const already = (interaction.leaderResponses ?? []).some((r) => r.countryId === countryId);
     if (already) throw new Error("Your country has already responded to this crisis");
+    const capabilitySnapshot = crisis.globalResponse
+      ? await prepareGlobalResponseOption(db, crisis, countryId, option)
+      : undefined;
 
     if (option.requiredBudget) {
       const treasury = await getTreasuryBalance(db, countryId);
@@ -475,6 +480,9 @@ export async function submitCrisisDecision(
       responseRole: globalResponseRoleFor(crisis, countryId) ?? undefined,
       effects: option.effects,
       responseScores: option.responseScores,
+      capabilitySnapshot,
+      campaignCommitment: option.campaignCommitment,
+      visibility: option.responseVisibility ?? "public",
       respondedAt: new Date(),
     };
     interaction.updatedAt = new Date();
@@ -510,8 +518,8 @@ export async function submitCrisisDecision(
     // single-responder ones. Without this a per-country choice could only ever
     // nudge metrics, which is precisely the cosmetic-crisis problem the hook
     // exists to solve.
+    const gameState = option.action || option.campaignCommitment ? await getGameState(db) : null;
     if (option.action) {
-      const gameState = await getGameState(db);
       await runCrisisOptionAction({
         db,
         crisis,
@@ -521,6 +529,15 @@ export async function submitCrisisDecision(
         countryId,
         currentTurn: gameState?.currentTurn ?? crisis.startTurn,
       });
+    }
+    if (option.campaignCommitment) {
+      await recordGlobalResponseCommitment(
+        db,
+        crisis,
+        countryId,
+        gameState?.currentTurn ?? crisis.startTurn,
+        option
+      );
     }
 
     return { interaction, nextNode: currentNode, appliedEffects: option.effects };

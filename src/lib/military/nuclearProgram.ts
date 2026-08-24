@@ -1,4 +1,5 @@
 import type { CountryId } from "@/lib/constants/countries";
+import type { NuclearProgram } from "@/lib/db/types/nuclearProgram";
 
 /**
  * The nuclear weapons programme: a small tech tree the defence seat climbs.
@@ -200,4 +201,13 @@ export function deterrenceScore(adopted: Record<string, number>, warheads: numbe
   if (legs === 0 || warheads <= 0) return 0;
   const legFactor = 0.4 + 0.15 * legs; // 0.55 one leg → 1.0 all four
   return Math.round(Math.min(100, Math.sqrt(warheads) * 10 * legFactor));
+}
+
+/** A bilateral alert requires two countries with deliverable, non-empty arsenals. */
+export function nuclearStandoffPossible(
+  programs: Array<Pick<NuclearProgram, "adopted" | "warheads">>
+): boolean {
+  return (
+    programs.filter((program) => deterrenceScore(program.adopted, program.warheads) > 0).length >= 2
+  );
 }
