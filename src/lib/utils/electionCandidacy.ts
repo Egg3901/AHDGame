@@ -16,6 +16,7 @@ import type {
 } from "@/lib/db/types";
 import { removeWithdrawnCandidateFromTally } from "@/lib/electionEngine/tallyCleaner";
 import { withdrawFromPartyLeadershipElections } from "@/lib/elections/withdrawFromPartyLeadershipElections";
+import { withdrawPlayerEndorsementsOnPartyChange } from "@/lib/elections/playerEndorsements";
 import { vacateCongressLeadershipRole } from "@/lib/congress/leadershipElections";
 import type { CongressLeader } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
@@ -183,6 +184,7 @@ export async function cleanupPartyPositionsOnSwitch(
   withdrawnStateElections: number;
   withdrawnNationalElections: number;
   withdrawnCommitteeElections: number;
+  withdrawnEndorsements: number;
 }> {
   if (oldParty === newParty || oldParty === "independent") {
     return {
@@ -192,6 +194,7 @@ export async function cleanupPartyPositionsOnSwitch(
       withdrawnStateElections: 0,
       withdrawnNationalElections: 0,
       withdrawnCommitteeElections: 0,
+      withdrawnEndorsements: 0,
     };
   }
 
@@ -378,6 +381,19 @@ export async function cleanupPartyPositionsOnSwitch(
     heldLeadershipRoles.map((doc) => vacateCongressLeadershipRole(db, doc.role, now))
   );
 
+  // 7. Withdraw player endorsements that now violate primary-phase party
+  // alignment (ticket #1179). A member who endorsed their party's presidential
+  // candidate must not keep boosting it — standings count and per-turn
+  // campaign-action grant included — after defecting to another party or to
+  // independence. Cross-party endorsements stay untouched in general-phase
+  // races, where they are legal.
+  const withdrawnEndorsements = await withdrawPlayerEndorsementsOnPartyChange(
+    db,
+    characterId,
+    newParty,
+    { now }
+  );
+
   return {
     clearedNationalLeadership,
     clearedStateLeadership,
@@ -385,6 +401,7 @@ export async function cleanupPartyPositionsOnSwitch(
     withdrawnStateElections,
     withdrawnNationalElections,
     withdrawnCommitteeElections,
+    withdrawnEndorsements,
   };
 }
 

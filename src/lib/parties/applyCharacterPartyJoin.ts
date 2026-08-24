@@ -140,6 +140,11 @@ export async function applyCharacterPartyJoin(
         `[Party Join] ${character.name} withdrew from ${cleanup.withdrawnCommitteeElections} national committee election(s)`
       );
     }
+    if (cleanup.withdrawnEndorsements > 0) {
+      console.log(
+        `[Party Join] ${character.name} withdrew ${cleanup.withdrawnEndorsements} player endorsement(s) due to party switch`
+      );
+    }
 
     // Caucuses are scoped to a single (countryId, partyId). Switching parties
     // without going independent must drop old-party caucus membership the same
