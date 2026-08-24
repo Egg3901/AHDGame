@@ -2,14 +2,51 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Avatar } from "@/components/Avatar";
 import { useAuthMe, type ClientNavBootstrap } from "@/contexts/AuthDataContext";
+
+/** The wiki surfaces search can return. Mirrors `WikiSearchKind` on the server. */
+export type WikiSearchHitKind =
+  | "page"
+  | "election"
+  | "office"
+  | "cabinet"
+  | "leadership"
+  | "seat"
+  | "party"
+  | "category"
+  | "path";
 
 export interface WikiSearchHit {
   slug: string;
   title: string;
   description?: string;
+  /**
+   * Generated surfaces do not live at /wiki/<slug> — a party page is
+   * /wiki/party/<id> — so the server sends the href rather than letting the
+   * client derive one from the slug.
+   */
+  href?: string;
+  kind?: WikiSearchHitKind;
+}
+
+const KIND_LABELS: Record<WikiSearchHitKind, string> = {
+  page: "Pages",
+  category: "Categories",
+  path: "Learning paths",
+  party: "Parties",
+  seat: "Seats",
+  office: "Offices",
+  cabinet: "Cabinet",
+  leadership: "Leadership",
+  election: "Elections",
+};
+
+export interface WikiSearchGroup {
+  kind: string;
+  label: string;
+  hits: WikiSearchHit[];
 }
 
 interface WikiSiteHeaderProps {
@@ -26,6 +63,35 @@ export interface WikiAccountProfile {
 
 export function wikiPageHref(slug: string): string {
   return `/wiki/${slug}`;
+}
+
+/** Prefer the server-supplied href; fall back to the authored-page path. */
+export function wikiHitHref(hit: WikiSearchHit): string {
+  return hit.href ?? wikiPageHref(hit.slug);
+}
+
+/**
+ * Group ranked hits by surface without disturbing the ranking: groups appear in
+ * order of their best-ranked member, and hits keep their order inside a group.
+ * Flattening the groups therefore still yields the ranked list, which is what
+ * keyboard navigation walks.
+ */
+export function groupWikiSearchHits(hits: WikiSearchHit[]): WikiSearchGroup[] {
+  const groups: WikiSearchGroup[] = [];
+  const byKind = new Map<string, WikiSearchGroup>();
+
+  for (const hit of hits) {
+    const kind = hit.kind ?? "page";
+    let group = byKind.get(kind);
+    if (!group) {
+      group = { kind, label: KIND_LABELS[kind as WikiSearchHitKind] ?? "Wiki", hits: [] };
+      byKind.set(kind, group);
+      groups.push(group);
+    }
+    group.hits.push(hit);
+  }
+
+  return groups;
 }
 
 export function wikiGamePath(playUrl: string, path: string): string {
@@ -238,9 +304,15 @@ function WikiSearchBox() {
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, []);
 
+  const groups = useMemo(() => groupWikiSearchHits(hits), [hits]);
+  // Flattening the groups preserves rank order, so the arrow keys walk the list
+  // in the same order it is painted.
+  const ordered = useMemo(() => groups.flatMap((group) => group.hits), [groups]);
+  const indexOfHit = useMemo(() => new Map(ordered.map((hit, index) => [hit, index])), [ordered]);
+
   function goTo(hit: WikiSearchHit) {
     setOpen(false);
-    router.push(wikiPageHref(hit.slug));
+    router.push(wikiHitHref(hit));
   }
 
   function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -251,7 +323,7 @@ function WikiSearchBox() {
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setOpen(true);
-      setActive((i) => Math.min(i + 1, Math.max(hits.length - 1, 0)));
+      setActive((i) => Math.min(i + 1, Math.max(ordered.length - 1, 0)));
       return;
     }
     if (event.key === "ArrowUp") {
@@ -259,9 +331,9 @@ function WikiSearchBox() {
       setActive((i) => Math.max(i - 1, 0));
       return;
     }
-    if (event.key === "Enter" && hits[active]) {
+    if (event.key === "Enter" && ordered[active]) {
       event.preventDefault();
-      goTo(hits[active]);
+      goTo(ordered[active]);
     }
   }
 
@@ -305,23 +377,45 @@ function WikiSearchBox() {
           {!loading && !error && hits.length === 0 && (
             <li className="px-3 py-2 text-sm text-muted">No matching pages.</li>
           )}
-          {hits.map((hit, index) => (
-            <li key={hit.slug} role="option" aria-selected={index === active}>
-              <Link
-                href={wikiPageHref(hit.slug)}
-                className={`block px-3 py-2 text-sm hover:bg-card-elevated ${
-                  index === active ? "bg-card-elevated" : ""
-                }`}
-                onMouseEnter={() => setActive(index)}
-                onClick={() => setOpen(false)}
+          {groups.map((group) => (
+            // A named group keeps the visual sectioning available to screen
+            // readers; the inner list is presentational so its options are still
+            // exposed as belonging to the listbox.
+            <li key={group.kind} role="group" aria-label={group.label}>
+              <p
+                aria-hidden="true"
+                className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted"
               >
-                <span className="block font-medium text-foreground">{hit.title}</span>
-                {hit.description ? (
-                  <span className="mt-0.5 line-clamp-1 block text-xs text-muted">
-                    {hit.description}
-                  </span>
-                ) : null}
-              </Link>
+                {group.label}
+              </p>
+              <ul role="presentation">
+                {group.hits.map((hit) => {
+                  const index = indexOfHit.get(hit) ?? 0;
+                  return (
+                    <li
+                      key={`${group.kind}-${hit.slug}`}
+                      role="option"
+                      aria-selected={index === active}
+                    >
+                      <Link
+                        href={wikiHitHref(hit)}
+                        className={`block px-3 py-2 text-sm hover:bg-card-elevated ${
+                          index === active ? "bg-card-elevated" : ""
+                        }`}
+                        onMouseEnter={() => setActive(index)}
+                        onClick={() => setOpen(false)}
+                      >
+                        <span className="block font-medium text-foreground">{hit.title}</span>
+                        {hit.description ? (
+                          <span className="mt-0.5 line-clamp-1 block text-xs text-muted">
+                            {hit.description}
+                          </span>
+                        ) : null}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
             </li>
           ))}
         </ul>

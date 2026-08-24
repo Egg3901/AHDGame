@@ -3,7 +3,14 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { WikiSiteHeader, wikiAccountFromNav, wikiGamePath, wikiPageHref } from "./WikiSiteHeader";
+import {
+  WikiSiteHeader,
+  groupWikiSearchHits,
+  wikiAccountFromNav,
+  wikiGamePath,
+  wikiPageHref,
+  type WikiSearchHit,
+} from "./WikiSiteHeader";
 import type { ClientNavBootstrap } from "@/contexts/AuthDataContext";
 
 const pushMock = vi.fn();
@@ -124,6 +131,95 @@ describe("WikiSiteHeader", () => {
     expect(result.getAttribute("href")).toBe(wikiPageHref("getting-started"));
   });
 
+  function stubResults(results: WikiSearchHit[]) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ results }) })
+    );
+  }
+
+  function renderHeader() {
+    render(
+      <WikiSiteHeader
+        playUrl="https://ahousedividedgame.com"
+        docsUrl="https://docs.lakesidegames.net"
+      />
+    );
+  }
+
+  it("links a party result to its own href rather than deriving /wiki/<slug>", async () => {
+    stubResults([
+      { slug: "labour", title: "Labour Party", href: "/wiki/party/abc123", kind: "party" },
+    ]);
+    renderHeader();
+
+    fireEvent.change(screen.getByRole("combobox", { name: /search wiki/i }), {
+      target: { value: "labour" },
+    });
+
+    const result = await screen.findByRole("link", { name: /Labour Party/i });
+    expect(result.getAttribute("href")).toBe("/wiki/party/abc123");
+  });
+
+  it("navigates to the result href on Enter for a generated surface", async () => {
+    stubResults([{ slug: "ny-01", title: "New York 1st", href: "/wiki/seat/ny-01", kind: "seat" }]);
+    renderHeader();
+
+    const input = screen.getByRole("combobox", { name: /search wiki/i });
+    fireEvent.change(input, { target: { value: "new york" } });
+    await screen.findByRole("link", { name: /New York 1st/i });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(pushMock).toHaveBeenCalledWith("/wiki/seat/ny-01");
+  });
+
+  it("labels each kind of wiki surface in the results panel", async () => {
+    stubResults([
+      { slug: "budget", title: "Budget", href: "/wiki/budget", kind: "page" },
+      { slug: "labour", title: "Labour Party", href: "/wiki/party/abc", kind: "party" },
+    ]);
+    renderHeader();
+
+    fireEvent.change(screen.getByRole("combobox", { name: /search wiki/i }), {
+      target: { value: "bud" },
+    });
+
+    await screen.findByRole("link", { name: /Budget/i });
+    expect(screen.getByText("Pages")).toBeTruthy();
+    expect(screen.getByText("Parties")).toBeTruthy();
+  });
+
+  it("exposes each kind as a named group so screen readers announce the sections", async () => {
+    stubResults([
+      { slug: "budget", title: "Budget", href: "/wiki/budget", kind: "page" },
+      { slug: "labour", title: "Labour Party", href: "/wiki/party/abc", kind: "party" },
+    ]);
+    renderHeader();
+
+    fireEvent.change(screen.getByRole("combobox", { name: /search wiki/i }), {
+      target: { value: "bud" },
+    });
+
+    await screen.findByRole("link", { name: /Budget/i });
+    expect(screen.getByRole("group", { name: "Pages" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Parties" })).toBeTruthy();
+  });
+
+  it("keeps every result reachable as a listbox option", async () => {
+    stubResults([
+      { slug: "budget", title: "Budget", href: "/wiki/budget", kind: "page" },
+      { slug: "labour", title: "Labour Party", href: "/wiki/party/abc", kind: "party" },
+    ]);
+    renderHeader();
+
+    fireEvent.change(screen.getByRole("combobox", { name: /search wiki/i }), {
+      target: { value: "bud" },
+    });
+
+    await screen.findByRole("link", { name: /Budget/i });
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+  });
+
   it("navigates to the active result on Enter", async () => {
     render(
       <WikiSiteHeader
@@ -164,5 +260,37 @@ describe("wikiAccountFromNav", () => {
       borderKey: null,
       tintColor: null,
     });
+  });
+});
+
+describe("groupWikiSearchHits", () => {
+  const hit = (title: string, kind: WikiSearchHit["kind"]): WikiSearchHit => ({
+    slug: title.toLowerCase(),
+    title,
+    href: `/wiki/${title.toLowerCase()}`,
+    kind,
+  });
+
+  it("orders groups by their best ranked member so the top hit stays first", () => {
+    const groups = groupWikiSearchHits([
+      hit("Labour Party", "party"),
+      hit("Budget", "page"),
+      hit("Tory Party", "party"),
+    ]);
+
+    expect(groups.map((g) => g.label)).toEqual(["Parties", "Pages"]);
+    expect(groups[0].hits.map((h) => h.title)).toEqual(["Labour Party", "Tory Party"]);
+  });
+
+  it("keeps every hit exactly once", () => {
+    const groups = groupWikiSearchHits([hit("A", "page"), hit("B", "seat"), hit("C", "page")]);
+
+    expect(groups.flatMap((g) => g.hits).map((h) => h.title)).toEqual(["A", "C", "B"]);
+  });
+
+  it("falls back to a generic label for an unrecognised kind", () => {
+    const groups = groupWikiSearchHits([hit("Odd", "mystery" as WikiSearchHit["kind"])]);
+
+    expect(groups[0].label).toBe("Wiki");
   });
 });
