@@ -3,7 +3,7 @@ import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockCollection, type MockDb } from "@/lib/test-utils/mockDb";
 import {
   HUNDREDTHS,
-  PERSONAL_NET_CAP_BASE,
+  personalNetCapFor,
   LADDER_UNLOCK_TURNS,
   SETTLEMENT_INSTITUTIONS,
   SETTLEMENT_SEATS,
@@ -667,7 +667,10 @@ describe("loadGermanQuestionDossier", () => {
     expect(floor[0].text).toContain("+6.0");
     expect(floor[0].text).toContain("capped");
     expect(view!.openFloor.rawPoints).toBe(20);
-    expect(view!.openFloor.capPoints).toBe(PERSONAL_NET_CAP_BASE / HUNDREDTHS);
+    // The ceiling is the one THIS crowd earned, not a constant: forty distinct
+    // characters on the street, so the pool is bigger than the eight-person
+    // reference it is anchored to.
+    expect(view!.openFloor.capPoints).toBe(personalNetCapFor(40) / HUNDREDTHS);
   });
 
   it("stands the ladder down for every seat when escalation is off", async () => {
@@ -681,6 +684,140 @@ describe("loadGermanQuestionDossier", () => {
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
     expect(view!.viewer.seat).toMatchObject({ canEscalate: false, canArmNow: false });
     expect(view!.viewer.seat!.escalateGate).toContain("switched off");
+  });
+
+  describe("per-character play limit", () => {
+    const personalDoc = (over: Record<string, unknown> = {}) => ({
+      // Distinct per row: the projection keys stamps by _id, so sharing one
+      // would make several rows read the same projected share.
+      _id: new ObjectId(),
+      actor: "personal",
+      seatId: null,
+      characterId,
+      playId: "letter",
+      targetInstitutionId: "bundestag",
+      basePoints: 13,
+      direction: 1,
+      appliedPoints: null,
+      turn: 412,
+      ...over,
+    });
+
+    it("disables a play this character has already used this turn", async () => {
+      prime(db, "settlementPlays").find.mockReturnValue(cursor([personalDoc()]));
+      const { loadGermanQuestionDossier } = await import("./dossier");
+      const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+      const bundestag = view!.institutions.find((i) => i.id === "bundestag")!;
+      const letter = bundestag.plays.find((p) => p.id === "letter")!;
+
+      expect(letter.payments[0].affordable).toBe(false);
+      expect(letter.payments[0].blockedReason).toBe("used");
+    });
+
+    it("leaves a play this character has not used alone", async () => {
+      prime(db, "settlementPlays").find.mockReturnValue(cursor([personalDoc()]));
+      const { loadGermanQuestionDossier } = await import("./dossier");
+      const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+      const street = view!.institutions.find((i) => i.id === "street")!;
+      expect(street.plays.find((p) => p.id === "oped")!.payments[0].affordable).toBe(true);
+    });
+
+    it("does not count another character's use against this one", async () => {
+      prime(db, "settlementPlays").find.mockReturnValue(
+        cursor([personalDoc({ characterId: new ObjectId() })])
+      );
+      const { loadGermanQuestionDossier } = await import("./dossier");
+      const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+      const bundestag = view!.institutions.find((i) => i.id === "bundestag")!;
+      expect(bundestag.plays.find((p) => p.id === "letter")!.payments[0].affordable).toBe(true);
+    });
+
+    it("names the allowance ahead of a money shortfall", async () => {
+      // A play you have already used is unavailable for a reason no amount of
+      // money fixes. Naming funds instead would send a player off to solve the
+      // wrong problem.
+      prime(db, "characters").findOne.mockResolvedValue({
+        _id: characterId,
+        actions: 4,
+        funds: 0,
+        countryId: "DD",
+      });
+      prime(db, "settlementPlays").find.mockReturnValue(cursor([personalDoc()]));
+      const { loadGermanQuestionDossier } = await import("./dossier");
+      const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+      const bundestag = view!.institutions.find((i) => i.id === "bundestag")!;
+      expect(bundestag.plays.find((p) => p.id === "letter")!.payments[0].blockedReason).toBe(
+        "used"
+      );
+    });
+  });
+
+  describe("open floor projection", () => {
+    it("projects what the floor will actually get, not a null-shaped zero", async () => {
+      // `appliedPoints` is null until the turn resolves, so summing it reported
+      // every unresolved turn as "scaled to +0.0" and made the panel claim a
+      // scaling that had not happened.
+      prime(db, "settlementPlays").find.mockReturnValue(
+        cursor([
+          {
+            _id: new ObjectId(),
+            actor: "personal",
+            seatId: null,
+            characterId: new ObjectId(),
+            playId: "oped",
+            targetInstitutionId: "street",
+            basePoints: 60,
+            direction: 1,
+            appliedPoints: null,
+            turn: 412,
+          },
+          {
+            _id: new ObjectId(),
+            actor: "personal",
+            seatId: null,
+            characterId: new ObjectId(),
+            playId: "oped",
+            targetInstitutionId: "street",
+            basePoints: 60,
+            direction: 1,
+            appliedPoints: null,
+            turn: 412,
+          },
+        ])
+      );
+      const { loadGermanQuestionDossier } = await import("./dossier");
+      const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+
+      // Two characters at 15 hundredths each, against a two-person pool of 38.
+      expect(view!.openFloor.netPoints).toBeCloseTo(0.3, 1);
+      expect(view!.openFloor.capped).toBe(false);
+    });
+
+    it("reports the ceiling this turn's turnout actually earned", async () => {
+      prime(db, "settlementPlays").find.mockReturnValue(
+        cursor(
+          Array.from({ length: 8 }, () => ({
+            _id: new ObjectId(),
+            actor: "personal",
+            seatId: null,
+            characterId: new ObjectId(),
+            playId: "rally",
+            targetInstitutionId: "street",
+            basePoints: 200,
+            direction: 1,
+            appliedPoints: null,
+            turn: 412,
+          }))
+        )
+      );
+      const { loadGermanQuestionDossier } = await import("./dossier");
+      const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+
+      // Eight participants is the reference turnout, so the pool is the base:
+      // 75 hundredths, which the panel then renders as 0.8.
+      expect(view!.openFloor.capPoints).toBeCloseTo(0.75, 2);
+      expect(view!.openFloor.capped).toBe(true);
+    });
   });
 
   describe("payment routes", () => {

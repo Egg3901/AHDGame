@@ -23,7 +23,8 @@ import {
   LADDER_RUNGS,
   LADDER_UNLOCK_TURNS,
   MAX_COERCIVE_RUNG,
-  PERSONAL_NET_CAP_BASE,
+  PERSONAL_PLAY_USES_PER_TURN,
+  personalNetCapFor,
   PERSONAL_MULTIPLIER_PCT,
   SETTLEMENT_SEATS,
   driftBandLabel,
@@ -42,6 +43,7 @@ import { defconFor, isArmed } from "../outcome";
 import { canCharacterAfford, canSeatAfford, seatBudgetFor } from "../affordability";
 import { resolveSeatOffices, type SettlementSeatOffice } from "../seatOffices";
 import { capitalPriceFor } from "../capitalPrice";
+import { resolvePlayBatch } from "../resolvePlays";
 import { computeFiscalImpact } from "@/lib/budget/fiscalImpact";
 import type { SettlementPaymentMode } from "@/lib/db/types/settlementPlay";
 import { loadSettlementActorContext } from "../actorContext";
@@ -399,12 +401,48 @@ export async function loadGermanQuestionDossier(
       (personalRawByInstitution.get(p.targetInstitutionId) ?? 0) + raw
     );
   }
+  // Distinct characters PER INSTITUTION, because that is what sizes each pool.
+  // A character pushing two levers on the street is one participant there.
+  const participantsByInstitution = new Map<string, Set<string>>();
+  for (const p of personal) {
+    if (!p.targetInstitutionId) continue;
+    const seen = participantsByInstitution.get(p.targetInstitutionId) ?? new Set<string>();
+    seen.add(String(p.characterId));
+    participantsByInstitution.set(p.targetInstitutionId, seen);
+  }
+  const capForInstitution = (id: string) =>
+    personalNetCapFor(participantsByInstitution.get(id)?.size ?? 0);
+
+  // A STAMPED row is the truth; only an unstamped one is projected.
+  //
+  // `appliedPoints` is null until the settlement phase resolves the turn, so
+  // summing it alone reported the live turn as "scaled to +0.0" every time and
+  // made the panel claim a scaling that had not happened. Projecting
+  // unconditionally would be the opposite error: between the phase stamping a
+  // turn's rows and the clock advancing, the board would recompute values that
+  // are already settled, and a row stamped under an older cap would silently
+  // be restated under this one.
+  //
+  // Projected THROUGH THE RESOLVER, never a second copy of the apportionment,
+  // so the panel and the turn phase cannot disagree about what the floor bought.
+  const projectedById = new Map(
+    resolvePlayBatch(personal).stamped.map((s) => [String(s.id), s.appliedPoints])
+  );
+  const projectedNet = personal.reduce(
+    (sum, p) => sum + (p.appliedPoints ?? projectedById.get(String(p._id)) ?? 0),
+    0
+  );
+
   const openFloor = {
     characters: new Set(personal.map((p) => String(p.characterId))).size,
-    netPoints: pts(personal.reduce((sum, p) => sum + (p.appliedPoints ?? 0), 0)),
+    netPoints: pts(projectedNet),
     rawPoints: pts(personalRawTotal),
-    capPoints: magPts(PERSONAL_NET_CAP_BASE),
-    capped: [...personalRawByInstitution.values()].some((v) => Math.abs(v) > PERSONAL_NET_CAP_BASE),
+    // The ceiling moves with turnout now, so report the largest one in play:
+    // the institution a crowd is most likely to be pushing against.
+    capPoints: magPts(Math.max(0, ...[...participantsByInstitution.keys()].map(capForInstitution))),
+    capped: [...personalRawByInstitution.entries()].some(
+      ([id, v]) => Math.abs(v) > capForInstitution(id)
+    ),
   };
 
   // ── institutions ──────────────────────────────────────────────────────────
@@ -449,6 +487,16 @@ export async function loadGermanQuestionDossier(
       const resolved = await resolvePersonalFunds(db, character, play);
       personalCost.set(play.id, { local: resolved.local, balance: resolved.balanceLocal });
     }
+  }
+
+  // Counted from the rows already fetched for the open floor, so gating the
+  // board costs no extra query. The command counts the same thing server-side;
+  // this half exists so a spent play reads as closed rather than being refused
+  // after the click.
+  const usedByThisCharacter = new Map<string, number>();
+  for (const p of personal) {
+    if (String(p.characterId) !== String(characterId)) continue;
+    usedByThisCharacter.set(p.playId, (usedByThisCharacter.get(p.playId) ?? 0) + 1);
   }
 
   const buildPlays = (institutionId: string | null): DossierPlayView[] => {
@@ -515,6 +563,11 @@ export async function loadGermanQuestionDossier(
         ctx.personal.actionsRemaining,
         money?.balance ?? 0
       );
+      // Named AHEAD of any money or action shortfall. A play already used this
+      // turn is closed for a reason no amount of either fixes, and reporting a
+      // funds shortfall instead would send a player off to solve the wrong
+      // problem.
+      const spent = (usedByThisCharacter.get(play.id) ?? 0) >= PERSONAL_PLAY_USES_PER_TURN;
       views.push(
         playView({
           play,
@@ -531,8 +584,8 @@ export async function loadGermanQuestionDossier(
               mode: "funds",
               label: "COMMIT",
               costLabel: costLabelFor(play, play.capitalCost, money?.local ?? play.fundsCost, null),
-              affordable: check.ok,
-              blockedReason: check.reason ?? null,
+              affordable: !spent && check.ok,
+              blockedReason: spent ? "used" : (check.reason ?? null),
               debtNote: null,
             },
           ],
