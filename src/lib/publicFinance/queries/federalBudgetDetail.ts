@@ -17,6 +17,7 @@ import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 import { FISCAL_YEAR_START_TURN_IN_YEAR, calculateFiscalYear } from "@/lib/budget/fiscalYear";
 import { normalizeFederalSpending } from "@/lib/budget/spending";
 import { federalSurplus } from "@/lib/budget/federalSurplus";
+import { liveNationalGdpUnits } from "@/lib/budget/gdpDenominator";
 import { TURNS_PER_YEAR, STARTING_YEAR } from "@/lib/constants/turnTime";
 import { formulaGrants } from "@/lib/seeds/reference/formulaGrants";
 import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
@@ -337,6 +338,10 @@ export async function loadFederalBudgetDetail(params: {
     .collection<State>("states")
     .find({ countryId: budgetCountryId })
     .toArray();
+  // A1 SSOT: national GDP is the live sum of regional gdp, not the fiscal-close
+  // snapshot in `budget.gdp`, which runs up to 6.5% behind between rollovers.
+  // See lib/budget/gdpDenominator.
+  const liveGdpUnits = liveNationalGdpUnits(states);
   const stateIds = states.map((state) => state._id);
   const [stateBudgets, regionalBudgets] = await Promise.all([
     db
@@ -431,6 +436,9 @@ export async function loadFederalBudgetDetail(params: {
       // debt. Pre-migration docs fall back to −debt.principal.
       treasuryReserve:
         resolvedNationalBudget.treasuryBalance ?? -(resolvedNationalBudget.debt?.principal ?? 0),
+      /** Live national GDP in base currency units, summed from every region this
+       *  turn. Prefer this over `budget.gdp` for display. */
+      liveGdpUnits,
       currencyCode:
         resolvedNationalBudget.currencyCode ??
         resolveCountryCurrencyCode({ countryId: budgetCountryId }),

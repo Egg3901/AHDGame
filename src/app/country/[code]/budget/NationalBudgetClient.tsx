@@ -29,6 +29,8 @@ import { currencySymbolSep } from "@/lib/currency/symbolSep";
 import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { budgetApiUrl } from "@/lib/urls";
 import { getCurrencyPrefix } from "@/lib/utils/budgetCalculations";
+import { federalSurplus } from "@/lib/budget/federalSurplus";
+import { resolveRatioGdp } from "@/lib/budget/gdpDenominator";
 
 interface SnapshotLaw {
   title: string;
@@ -54,6 +56,9 @@ interface BudgetData {
   stateOwnershipConcentration?: number;
   /** Signed national treasury balance (local currency); negative = national debt. */
   treasuryReserve?: number;
+  /** Live national GDP in base currency units, summed from every region this
+   *  turn. `budget.gdp` is the fiscal-close snapshot and lags this. */
+  liveGdpUnits?: number;
   /** FY trend series (stat-strip compare + debt sparkline). */
   fyHistory?: FyHistoryPoint[];
   /** Live sovereign-default signals (Sovereign Health panel). */
@@ -957,6 +962,11 @@ export function NationalBudgetClient() {
   const isLive = !(data.isSnapshot ?? false);
   const prevFyPoint = fyHistory.find((p) => p.fy === budget.fiscalYear - 1) ?? null;
   const treasuryBalance = data.treasuryReserve ?? -(budget.debt?.principal ?? 0);
+  // The `??` is load-bearing. `loadFederalBudgetDetail`'s historical-FY branch
+  // returns early and never sets `liveGdpUnits`, so a snapshot view falls back
+  // to that snapshot's own gdp rather than showing today's live figure. Do not
+  // "simplify" this to `data.liveGdpUnits`.
+  const displayGdp = data.liveGdpUnits ?? budget.gdp;
   // The minister lens is gated: a non-minister viewer (or a historical snapshot,
   // which never authorizes it) is always forced back to the Public lens. Derived
   // rather than reset via effect so toggling stays a pure render.
@@ -986,7 +996,8 @@ export function NationalBudgetClient() {
               sym={moneyPrefix}
               revenue={budget.revenue.total}
               spending={budget.spending.total}
-              gdp={budget.gdp}
+              gdp={displayGdp}
+              ratioGdp={resolveRatioGdp(budget)}
               gdpGrowth={budget.economicFactors.gdpGrowth}
               debtToGdp={budget.debtToGdpRatio}
               rating={budget.creditRating}
@@ -1027,7 +1038,10 @@ export function NationalBudgetClient() {
               sym: moneyPrefix,
               revenueTotal: budget.revenue.total,
               spendingTotal: budget.spending.total,
-              gdp: budget.gdp,
+              // Ratio basis, not the display level: these flags compare against
+              // deficit and debt thresholds, so they must sit on the same
+              // denominator as the stored `debtToGdpRatio` in the strip above.
+              gdp: resolveRatioGdp(budget),
               debtPrincipal: budget.debt.principal,
               debtCeiling: budget.debt.ceiling,
               ceilingLabel: labels.ceilingLabel,
@@ -1095,8 +1109,8 @@ export function NationalBudgetClient() {
             wageGrowth={budget.economicFactors.wageGrowth}
             primeRate={primeRate}
             deficitToGdp={
-              budget.gdp > 0
-                ? ((budget.revenue.total - budget.spending.total) / budget.gdp) * 100
+              resolveRatioGdp(budget) > 0
+                ? (federalSurplus(budget) / resolveRatioGdp(budget)) * 100
                 : 0
             }
           />

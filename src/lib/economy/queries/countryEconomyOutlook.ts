@@ -27,6 +27,7 @@ import { getCentralBankScope } from "@/lib/centralBank/helpers";
 import { getGameState } from "@/lib/gameState";
 import { getInflationTarget, getNeutralPrimeRate } from "@/lib/budget/inflation";
 import { federalSurplus } from "@/lib/budget/federalSurplus";
+import { resolveRatioGdp } from "@/lib/budget/gdpDenominator";
 import { populationWeightedAverage } from "@/lib/metrics/populationWeightedAverage";
 import { aggregateNationalGdp } from "@/lib/utils/nationalGdp";
 import { aggregateCountrySectorMix, type CountrySectorMixEntry } from "@/lib/economy/sectorMix";
@@ -117,8 +118,9 @@ function mapHistory(history: TurnSnapshot[] | undefined): HistoryPoint[] {
   return (history ?? []).map((s) => ({ turn: s.turn, rate: s.rate }));
 }
 
-/** Pop-weighted average of one state metric (value + trend), null-safe. */
 /**
+ * Pop-weighted average of one state metric (value + trend), null-safe.
+ *
  * Thin adapter over the shared helper: maps the per-state metric rows onto
  * `{ value, trend, population }` and rounds at this DTO's boundary. The
  * weighting rule itself lives in lib/metrics/populationWeightedAverage, shared
@@ -226,7 +228,7 @@ export async function buildCountryEconomyOutlook(
   // `federalBudgetDetail` already recomputes the same expression for the Budget
   // page. See lib/budget/federalSurplus.
   const surplus = budget ? federalSurplus(budget) : null;
-  const budgetGdp = budget?.gdp ?? null;
+  const ratioGdp = budget ? resolveRatioGdp(budget) : 0;
 
   return {
     countryId,
@@ -282,10 +284,11 @@ export async function buildCountryEconomyOutlook(
       exchangeName: snapshot?.exchangeName ?? COUNTRY_CONFIGS[countryId].exchangeName ?? null,
       forexRate: exchangeRate?.rate ?? null,
       surplus,
-      deficitToGdp:
-        surplus != null && budgetGdp != null && budgetGdp > 0
-          ? round2((surplus / budgetGdp) * 100)
-          : null,
+      // Same denominator the stored `debtToGdpRatio` uses, so the two ratios in
+      // this strip are comparable. Raw `budget.gdp` put them on different bases:
+      // BR read 156.2% debt-to-GDP beside a GDP implying 142.9%.
+      // See lib/budget/gdpDenominator.
+      deficitToGdp: surplus != null && ratioGdp > 0 ? round2((surplus / ratioGdp) * 100) : null,
     },
     sectorMix,
     stateOwnership: {

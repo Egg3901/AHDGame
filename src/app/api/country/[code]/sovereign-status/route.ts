@@ -12,6 +12,8 @@ import { computeMarketDemand } from "@/lib/sovereignDefault/marketDemand";
 import { computeDsa } from "@/lib/sovereignDefault/debtSustainability";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import type { FederalBudget } from "@/lib/db/types/budget";
+import { federalSurplus } from "@/lib/budget/federalSurplus";
+import { resolveRatioGdp } from "@/lib/budget/gdpDenominator";
 import type { SovereignCrisisDecision } from "@/lib/db/types/sovereignCrisisDecision";
 
 interface RouteParams {
@@ -48,10 +50,11 @@ export async function GET(_req: Request, { params }: RouteParams) {
   // hard fire trigger.
   const dsa = computeDsa({
     debtToGdp: snapshot.debtToGdp,
+    // Derived surplus over the smoothed GDP: the same two bases `snapshot.debtToGdp`
+    // and every other fiscal surface use, so this gauge cannot disagree with the
+    // debt ratio beside it. See lib/budget/federalSurplus + gdpDenominator.
     primarySurplusToGdp:
-      budget?.surplus !== undefined && budget?.gdp && budget.gdp > 0
-        ? budget.surplus / budget.gdp
-        : 0,
+      budget && resolveRatioGdp(budget) > 0 ? federalSurplus(budget) / resolveRatioGdp(budget) : 0,
     fxDepreciation10t: snapshot.fxDepreciationRate10t ?? 0,
     annualGdpGrowth: (budget?.economicFactors?.gdpGrowth ?? 0) / 100, // stored as percent
   });

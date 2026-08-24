@@ -135,7 +135,11 @@ describe("buildCountryEconomyOutlook", () => {
     expect(result.plannedEconomy).toBeNull();
     expect(result.commandEconomyEnabled).toBe(false);
     expect(result.currentYear).toBe(2019);
-  });
+    // 30s, not the 15s global: this case assembles the whole outlook behind a
+    // dynamic import, which costs ~9s on its own and tips past the global
+    // ceiling under parallel load. Same reason vitest.config.ts raised the
+    // global off 5s in the first place.
+  }, 30_000);
 
   it("pop-weights unemployment and median income with their trends", async () => {
     const { buildCountryEconomyOutlook } = await import("./countryEconomyOutlook");

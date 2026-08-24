@@ -15,6 +15,8 @@ import { computeMarketDemand } from "@/lib/sovereignDefault/marketDemand";
 import { computeDsa, type DsaResult } from "@/lib/sovereignDefault/debtSustainability";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import type { FederalBudget } from "@/lib/db/types/budget";
+import { federalSurplus } from "@/lib/budget/federalSurplus";
+import { resolveRatioGdp } from "@/lib/budget/gdpDenominator";
 
 interface SovereignWatchRow {
   countryCode: CountryId;
@@ -62,10 +64,10 @@ export async function GET() {
       const demand = computeMarketDemand(snapshot);
       const dsa = computeDsa({
         debtToGdp: snapshot.debtToGdp,
+        // Same two bases as `snapshot.debtToGdp` and the per-country
+        // sovereign-status route. See lib/budget/federalSurplus + gdpDenominator.
         primarySurplusToGdp:
-          budget.surplus !== undefined && budget.gdp && budget.gdp > 0
-            ? budget.surplus / budget.gdp
-            : 0,
+          resolveRatioGdp(budget) > 0 ? federalSurplus(budget) / resolveRatioGdp(budget) : 0,
         fxDepreciation10t: snapshot.fxDepreciationRate10t ?? 0,
         annualGdpGrowth: (budget.economicFactors?.gdpGrowth ?? 0) / 100,
       });
