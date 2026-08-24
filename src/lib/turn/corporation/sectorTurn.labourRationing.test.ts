@@ -39,7 +39,7 @@ function makeCorp(): Corporation {
   } as unknown as Corporation;
 }
 
-function makeSector(priorStaffingFactor?: number): CorporateSector {
+function makeSector(priorStaffingFactor?: number, wageLevel = 1): CorporateSector {
   return {
     _id: SECTOR_ID,
     corporationId: CORP_ID,
@@ -56,12 +56,16 @@ function makeSector(priorStaffingFactor?: number): CorporateSector {
     productionPolicy: 0,
     productionPolicyLevel: 0,
     workers: 1000,
+    wageLevel,
     labourStaffingFactor: priorStaffingFactor,
     createdAt: new Date(),
   } as unknown as CorporateSector;
 }
 
-function makeLookups(tightness: number | undefined): CorporationLookups {
+function makeLookups(
+  tightness: number | undefined,
+  labourDemandWageIndex: number | undefined
+): CorporationLookups {
   return {
     corporations: [],
     sectorsByCorp: new Map(),
@@ -94,6 +98,10 @@ function makeLookups(tightness: number | undefined): CorporationLookups {
     stateSectorSpecializationByState: new Map(),
     rawWorkforceSkillByState: new Map(),
     labourTightnessByState: tightness === undefined ? new Map() : new Map([[STATE_ID, tightness]]),
+    labourDemandWageIndexByState:
+      labourDemandWageIndex === undefined
+        ? new Map()
+        : new Map([[STATE_ID, labourDemandWageIndex]]),
     regionalConditionMarginByState: new Map(),
     sectorPresenceKeys: new Set(),
     exportIntensityByCountry: new Map(),
@@ -108,14 +116,18 @@ function makeLookups(tightness: number | undefined): CorporationLookups {
  * a test that wants to observe the settled constraint has to say which turn of
  * the ramp it is looking at. Passing the target itself means "fully ramped".
  */
-function run(tightness: number | undefined, priorStaffingFactor?: number) {
+function run(
+  tightness: number | undefined,
+  priorStaffingFactor?: number,
+  options: { wagesEnabled?: boolean; wageLevel?: number; stateDemandWageIndex?: number } = {}
+) {
   const env = {
-    lookups: makeLookups(tightness),
+    lookups: makeLookups(tightness, options.stateDemandWageIndex),
     turn: 1000,
     currentTurn: 1000,
     now: new Date("2026-08-23T00:00:00Z"),
     techTreesEnabled: false,
-    labour: { wagesEnabled: false },
+    labour: { wagesEnabled: options.wagesEnabled ?? false },
     market: buildMarketContext("plants"),
     wageIndexByState: new Map(),
     automationIndexByState: new Map(),
@@ -124,7 +136,14 @@ function run(tightness: number | undefined, priorStaffingFactor?: number) {
     pendingCapacityBindingEvents: [],
     sectorOps: [],
   } as unknown as SectorTurnEnv;
-  const result = processSector(env, makeCorp(), makeSector(priorStaffingFactor), 1, undefined, 1);
+  const result = processSector(
+    env,
+    makeCorp(),
+    makeSector(priorStaffingFactor, options.wageLevel),
+    1,
+    undefined,
+    1
+  );
   const op = env.sectorOps[0] as { updateOne: { update: { $set: Record<string, unknown> } } };
   return { result, env, update: op.updateOne.update.$set };
 }
@@ -146,6 +165,29 @@ describe("phase 2 labour rationing through processSector", () => {
     const desired = update.workersDesired as number;
     expect(update.labourStaffingFactor).toBe(0.5);
     expect(update.workers as number).toBe(Math.round(desired * 0.5));
+  });
+
+  it("sizes plant jobs from productive capacity instead of the old display-only scale", () => {
+    const { update } = run(1, 1);
+    expect(update.workersDesired as number).toBeGreaterThan(0);
+    expect(update.workersDesired as number).toBeLessThan(1_000);
+  });
+
+  it("lets higher pay win more of a scarce local workforce", () => {
+    const lowPay = run(2, 0.4, {
+      wagesEnabled: true,
+      wageLevel: 0.8,
+      stateDemandWageIndex: 1,
+    });
+    const highPay = run(2, 0.6, {
+      wagesEnabled: true,
+      wageLevel: 1.2,
+      stateDemandWageIndex: 1,
+    });
+
+    expect(lowPay.update.labourStaffingFactor).toBeCloseTo(0.4, 8);
+    expect(highPay.update.labourStaffingFactor).toBeCloseTo(0.6, 8);
+    expect(highPay.update.workers as number).toBeGreaterThan(lowPay.update.workers as number);
   });
 
   it("throttles realized output in proportion to the staffing shortfall", () => {

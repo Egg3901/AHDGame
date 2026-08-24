@@ -24,6 +24,8 @@ const plants = {
   depreciationPerTurn: 0.001,
   buildTurns: 72,
   workers: 1_867,
+  workersDesired: 3_734,
+  labourStaffingFactor: 0.5,
   unionizationPct: 31,
   laborIntensity: 0.93,
   governor: { active: false, startTurn: 1, rampTurns: 48, turnsRemaining: 0, cap: 0.15 },
@@ -55,6 +57,8 @@ describe("PlantPanel workforce", () => {
     expect(screen.getByText("1,867")).toBeTruthy();
     expect(screen.getByText("31% in a union")).toBeTruthy();
     expect(screen.getByText("Avg wage level 1.15×")).toBeTruthy();
+    expect(screen.getByText(/1,867 of 3,734 jobs filled/)).toBeTruthy();
+    expect(screen.getByText(/Higher pay can win a larger share/)).toBeTruthy();
 
     const unionLink = screen.getByRole("link", { name: "United Steelworkers" });
     expect(unionLink.getAttribute("href")).toBe("/unions/union-1");

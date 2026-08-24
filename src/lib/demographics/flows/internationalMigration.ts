@@ -61,6 +61,26 @@ export function applyEconomicPull(base: number, pull: number): number {
   return base >= 0 ? base * pull : base * (2 - pull);
 }
 
+/** Maximum annual migration-rate bonus from an undersupplied labour market. */
+export const LABOUR_SHORTAGE_MIGRATION_MAX_PCT = 0.5;
+
+/**
+ * Extra annual migration pull from jobs that cannot be filled locally.
+ * Relative wages modulate the signal, while the normal regional and world
+ * migration caps remain the final circuit breakers.
+ */
+export function labourShortageMigrationBonusPct(
+  tightness: number | undefined | null,
+  wageIndex: number | undefined | null
+): number {
+  if (typeof tightness !== "number" || !Number.isFinite(tightness) || tightness <= 1) return 0;
+  const wage =
+    typeof wageIndex === "number" && Number.isFinite(wageIndex)
+      ? Math.max(0.5, Math.min(1.5, wageIndex))
+      : 1;
+  return Math.min(LABOUR_SHORTAGE_MIGRATION_MAX_PCT, (1 - 1 / tightness) * 0.4 * wage);
+}
+
 // ── Conservation + caps (design 2026-06-16) ────────────────────────────────
 // The cohort flow consumes per-region `migrationRate` as a literal annual net %
 // and adds it to the national headcount with no global renormalization. Two

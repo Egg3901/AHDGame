@@ -56,8 +56,12 @@ export interface SectorLabourProductionEffects {
  */
 export function resolveSectorLabourProductionEffects(
   labour: LabourContext,
-  sector: Pick<CorporateSector, "_id" | "strikeStartedAtTurn" | "labourStaffingFactor">,
-  stateLabourTightness?: number
+  sector: Pick<
+    CorporateSector,
+    "_id" | "strikeStartedAtTurn" | "labourStaffingFactor" | "wageLevel"
+  >,
+  stateLabourTightness?: number,
+  stateDemandWageIndex?: number
 ): SectorLabourProductionEffects {
   const protectedByAgreement =
     labour.noStrikeProtectedSectorIds?.has(sector._id.toString()) === true;
@@ -90,7 +94,11 @@ export function resolveSectorLabourProductionEffects(
   // that newly reads oversubscribed loses output over ten turns instead of one.
   // See LABOUR_STAFFING_MAX_TURN_MOVE for why this is not capacityHaircutFactor.
   const staffingFactor = glideStaffingFactor(
-    staffingFactorFromTightness(stateLabourTightness),
+    staffingFactorFromTightness(
+      stateLabourTightness,
+      labour.wagesEnabled ? clampWageLevel(sector.wageLevel ?? 1) : 1,
+      labour.wagesEnabled ? stateDemandWageIndex : 1
+    ),
     sector.labourStaffingFactor
   );
 
@@ -126,6 +134,8 @@ export function resolveSectorHeadcount(args: {
   politicalBoard: Record<string, number> | undefined;
   staffingFactor: number;
   labourDemandByState: LabourDemandByState;
+  labourDemandWageIndexByState?: Map<string, import("@/lib/labour/laborCost").WageIndexAccumulator>;
+  wageLevel?: number;
 }): { desiredWorkers: number; workers: number } {
   const rawSkill =
     args.rawWorkforceSkillByState.get(args.stateId) ??
@@ -133,6 +143,14 @@ export function resolveSectorHeadcount(args: {
     null;
   const desiredWorkers = calculateWorkers(args.revenue, rawSkill);
   accumulateLabourDemand(args.labourDemandByState, args.stateId, desiredWorkers);
+  if (args.labourDemandWageIndexByState) {
+    let wageDemand = args.labourDemandWageIndexByState.get(args.stateId);
+    if (!wageDemand) {
+      wageDemand = makeWageIndexAccumulator();
+      args.labourDemandWageIndexByState.set(args.stateId, wageDemand);
+    }
+    accumulateWageIndex(wageDemand, desiredWorkers, clampWageLevel(args.wageLevel ?? 1), 1);
+  }
   return { desiredWorkers, workers: filledWorkers(desiredWorkers, args.staffingFactor) };
 }
 

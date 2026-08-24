@@ -732,6 +732,7 @@ export async function buildCorporationLookups(
   // same trade the smoothed prime rate and the inflation passthrough already
   // make, and labour supply does not move fast enough for one turn to matter.
   const labourTightnessByState = new Map<string, number>();
+  const labourDemandWageIndexByState = new Map<string, number>();
   const crimeRateByState = new Map<string, number>();
   const broadbandByState = new Map<string, number>();
   const roadConditionByState = new Map<string, number>();
@@ -755,6 +756,10 @@ export async function buildCorporationLookups(
     const tightnessVal = sm.economic?.labourTightness?.value;
     if (typeof tightnessVal === "number" && Number.isFinite(tightnessVal)) {
       labourTightnessByState.set(stateId, tightnessVal);
+    }
+    const demandWageIndex = sm.economic?.labourDemandWageIndex?.value;
+    if (typeof demandWageIndex === "number" && Number.isFinite(demandWageIndex)) {
+      labourDemandWageIndexByState.set(stateId, demandWageIndex);
     }
     const skillVal = sm.education?.workforceSkill?.value;
     if (typeof skillVal === "number") {
@@ -1103,6 +1108,7 @@ export async function buildCorporationLookups(
     workforceSkillByState,
     rawWorkforceSkillByState,
     labourTightnessByState,
+    labourDemandWageIndexByState,
     crimeRateByState,
     broadbandByState,
     roadConditionByState,

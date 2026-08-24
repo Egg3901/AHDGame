@@ -1035,6 +1035,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     labourWageIndexByState,
     automationIndexByState,
     labourDemandByState,
+    labourDemandWageIndexByState,
     strikeEvents,
     capacityBindingEvents,
   } = processSectors(
@@ -1126,7 +1127,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // Phase 1 labour market telemetry: record how many jobs the corporate sector
   // wants per state and how that compares to the civilian labour force. Inert
   // measurement, deliberately not gated on the labour system being on.
-  await persistLabourMarketTelemetry({ db, labourDemandByState, turn });
+  await persistLabourMarketTelemetry({
+    db,
+    labourDemandByState,
+    labourDemandWageIndexByState,
+    turn,
+  });
 
   // Phase 3: Bulk write sector and corp updates
   if (sectorOps.length > 0) {

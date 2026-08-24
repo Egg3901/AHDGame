@@ -8,6 +8,7 @@ import {
   worldMigrationScale,
   MAX_NET_MIGRATION_PCT_PER_YEAR,
   WORLD_NET_MIGRATION_PCT_PER_YEAR,
+  labourShortageMigrationBonusPct,
 } from "./internationalMigration";
 import { totalPopulation, type AgeSexVector } from "../cohortVector";
 import { advanceCohort, type CohortInputs } from "../cohortFlows";
@@ -48,6 +49,24 @@ describe("capNetMigrants", () => {
     const pulled = applyEconomicPull(base, 1.5); // ×1.5 → 1.8%/yr, over cap
     expect(pulled).toBeGreaterThan(cap);
     expect(capNetMigrants(pulled, pop, TPY)).toBeCloseTo(cap, 6);
+  });
+});
+
+describe("labourShortageMigrationBonusPct", () => {
+  it("adds no migration pull when the labour market is slack", () => {
+    expect(labourShortageMigrationBonusPct(0.8, 1)).toBe(0);
+  });
+
+  it("creates a bounded jobs pull for the demographic phase to policy-gate", () => {
+    const bonus = labourShortageMigrationBonusPct(4.8, 1);
+    expect(bonus).toBeGreaterThan(0);
+    expect(bonus).toBeLessThanOrEqual(0.5);
+  });
+
+  it("makes high-wage shortages more attractive than low-wage shortages", () => {
+    expect(labourShortageMigrationBonusPct(3, 1.2)).toBeGreaterThan(
+      labourShortageMigrationBonusPct(3, 0.8)
+    );
   });
 });
 
