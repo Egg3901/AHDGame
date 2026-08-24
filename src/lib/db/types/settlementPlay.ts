@@ -5,6 +5,12 @@ import type { SettlementInstitutionId, SettlementSeatId } from "./settlementCris
 /** Whether a play was made for the nation or by the character personally. */
 export type SettlementActor = "seat" | "personal";
 
+/**
+ * Which budget paid for a play. Personal plays are always `"funds"` — a
+ * character has no seat capital pool to draw on.
+ */
+export type SettlementPaymentMode = "funds" | "capital";
+
 export type SettlementPlayClass =
   "exclusive" | "diplomatic" | "spend" | "coercive" | "forces" | "personal";
 
@@ -32,6 +38,16 @@ export interface SettlementPlayDoc {
   direction: 1 | -1;
   class: SettlementPlayClass;
   costs: { funds: number; capital: number; actions: number };
+  /**
+   * Which budget paid. Recorded so adoption of the capital route is measurable
+   * after ship without re-deriving it from the cost figures — a zero `funds` is
+   * ambiguous, since four plays never cost money in the first place.
+   *
+   * OPTIONAL because rows written before the capital route existed do not carry
+   * it. Absent means `"funds"`: there was no other way to pay. Every new write
+   * sets it explicitly.
+   */
+  payment?: SettlementPaymentMode;
   /** Catalogue magnitude in hundredths, always UNSIGNED. */
   basePoints: number;
   /** Signed hundredths after the multiplier. Null while pending. */

@@ -23,7 +23,8 @@ import {
   LADDER_RUNGS,
   LADDER_UNLOCK_TURNS,
   MAX_COERCIVE_RUNG,
-  PERSONAL_NET_CAP,
+  PERSONAL_PLAY_USES_PER_TURN,
+  personalNetCapFor,
   PERSONAL_MULTIPLIER_PCT,
   SETTLEMENT_SEATS,
   driftBandLabel,
@@ -41,8 +42,31 @@ import { getSettlementCrisesCollection, getSettlementPlaysCollection } from "@/l
 import { defconFor, isArmed } from "../outcome";
 import { canCharacterAfford, canSeatAfford, seatBudgetFor } from "../affordability";
 import { resolveSeatOffices, type SettlementSeatOffice } from "../seatOffices";
+import { capitalPriceFor } from "../capitalPrice";
+import { resolvePlayBatch } from "../resolvePlays";
+import { computeFiscalImpact } from "@/lib/budget/fiscalImpact";
+import type { SettlementPaymentMode } from "@/lib/db/types/settlementPlay";
 import { loadSettlementActorContext } from "../actorContext";
 import { resolvePersonalFunds } from "../playCost";
+
+export interface DossierPaymentView {
+  mode: SettlementPaymentMode;
+  /** Button copy. "TREASURY" or "CAPITAL", or "COMMIT" when there is only one. */
+  label: string;
+  /** "£25M · 1 AP" or "16 capital · 1 AP". */
+  costLabel: string;
+  affordable: boolean;
+  blockedReason: string | null;
+  /**
+   * Set when this route would borrow, naming the shortfall.
+   *
+   * Load-bearing, not decoration. Spending into debt is allowed, so the cash
+   * button is ALWAYS live and nothing else on the board distinguishes spending
+   * savings from taking a loan — which is also the only reason to prefer the
+   * capital route.
+   */
+  debtNote: string | null;
+}
 
 export interface DossierPlayView {
   id: string;
@@ -63,15 +87,18 @@ export interface DossierPlayView {
   effectivePoints: number;
   /** "8.0 base × 2.0× seat" — the explanation under the number. */
   basisLabel: string;
-  costLabel: string;
-  affordable: boolean;
-  blockedReason: string | null;
+  /**
+   * One entry per route this play can be bought with, cash first. Always at
+   * least one, so personal plays and the four capital-only plays take the same
+   * code path and the card renders a single loop with no special case.
+   */
+  payments: DossierPaymentView[];
 }
 
 /**
  * One institution's per-turn personal-tier cap usage.
  *
- * The cap itself lives in `PERSONAL_NET_CAP` and bites in `resolvePlayBatch`
+ * The cap itself comes from `personalNetCapFor` and bites in `resolvePlayBatch`
  * at the tick; this carries what the board needs to show how much of it this
  * turn has already spent. Null on institutions the personal tier cannot reach,
  * where a meter would imply a limit that never applies.
@@ -177,14 +204,24 @@ export interface DossierView {
   openFloor: {
     characters: number;
     /**
-     * Net points the personal tier moves this turn, after the cap. While the
-     * rows are still pending this is the projection of what the tick will
-     * apply; once they are stamped it equals the stamps, because the resolver
-     * guarantees those already sum to the clamped figure.
+     * Net points the personal tier moves this turn, after the cap.
+     *
+     * A STAMPED row is read off its stamp; an unstamped one is PROJECTED
+     * through the resolver, because `appliedPoints` does not exist until the
+     * phase writes it. The two agree by construction, since the resolver makes
+     * the stamps sum to the same clamped figure the projection computes — but
+     * preferring the stamp matters in the window between the phase settling a
+     * turn and the clock advancing, where recomputing would restate a settled
+     * row under whatever ceiling is current now.
      */
     netPoints: number;
     /** What it asked for, before the cap. Equal to `netPoints` when uncapped. */
     rawPoints: number;
+    /**
+     * The largest ceiling in play this turn. Derived from turnout rather than
+     * fixed, so it rises as more characters take part — see
+     * `personalNetCapFor`.
+     */
     capPoints: number;
     capped: boolean;
   };
@@ -271,39 +308,61 @@ async function laenderSubtitle(db: Db): Promise<string> {
   return `${count} state governments · Bundesrat bloc`;
 }
 
-/** One play as the board shows it, priced and gated for this viewer. */
-function playView(params: {
-  play: SettlementPlayDef;
-  actor: "seat" | "personal";
-  multiplierPct: number;
-  direction: 1 | -1 | null;
-  multiplierLabel: string;
-  currency: CountryId | null;
-  /** Personal plays: the converted local cost, so the card never shows anchor. */
-  localFundsOverride?: number;
-  affordable: boolean;
-  blockedReason: string | null;
-}): DossierPlayView {
-  const { play, multiplierPct, direction, multiplierLabel } = params;
-  const magnitude = (play.magnitude * multiplierPct) / 100;
-  // Direction is unknown for a seat with no bloc; show the magnitude unsigned
-  // rather than guessing a side.
-  const effective = direction === null ? magnitude : magnitude * direction;
-
-  const costBits: string[] = [];
-  if (play.capitalCost > 0) costBits.push(`${play.capitalCost} capital`);
-  const fundsShown = params.localFundsOverride ?? play.fundsCost;
+/**
+ * One route's cost line: capital, then money, then AP, omitting the zeroes.
+ *
+ * `capital` and `fundsShown` are passed rather than read off the play, because
+ * the two routes charge different amounts for the same play.
+ */
+function costLabelFor(
+  play: SettlementPlayDef,
+  capital: number,
+  fundsShown: number,
+  currency: CountryId | null
+): string {
+  const bits: string[] = [];
+  if (capital > 0) bits.push(`${capital} capital`);
   if (fundsShown > 0) {
-    costBits.push(
-      params.currency
-        ? formatLocalFunds(fundsShown, COUNTRY_CURRENCY_MAP[params.currency])
+    bits.push(
+      currency
+        ? formatLocalFunds(fundsShown, COUNTRY_CURRENCY_MAP[currency])
         : // A personal play's cost is already converted to the viewer's local
           // currency by `resolvePersonalFunds`; the symbol is theirs, not a
           // seat's, so it is left to the client's own formatter.
           fundsShown.toLocaleString()
     );
   }
-  costBits.push(`${play.actionCost} AP`);
+  bits.push(`${play.actionCost} AP`);
+  return bits.join(" · ");
+}
+
+/**
+ * The seat's cash position, named for what it actually is.
+ *
+ * `treasuryBalance` is SIGNED and `formatLocalFunds` puts the sign after the
+ * symbol, so a seat in the red rendered as "M-500,000,000 treasury". Since
+ * delegations borrow routinely now, that is the normal case rather than an edge
+ * one. The label carries its own noun, so the Masthead does not append one.
+ */
+function treasuryLabelFor(balance: number, countryId: CountryId): string {
+  const money = formatLocalFunds(Math.abs(balance), COUNTRY_CURRENCY_MAP[countryId]);
+  return balance < 0 ? `${money} national debt` : `${money} treasury`;
+}
+
+/** One play as the board shows it, with every route it can be bought through. */
+function playView(params: {
+  play: SettlementPlayDef;
+  actor: "seat" | "personal";
+  multiplierPct: number;
+  direction: 1 | -1 | null;
+  multiplierLabel: string;
+  payments: DossierPaymentView[];
+}): DossierPlayView {
+  const { play, multiplierPct, direction, multiplierLabel } = params;
+  const magnitude = (play.magnitude * multiplierPct) / 100;
+  // Direction is unknown for a seat with no bloc; show the magnitude unsigned
+  // rather than guessing a side.
+  const effective = direction === null ? magnitude : magnitude * direction;
 
   return {
     id: play.id,
@@ -314,9 +373,7 @@ function playView(params: {
     danger: play.addsHeat,
     effectivePoints: magPts(effective),
     basisLabel: `${magPts(play.magnitude).toFixed(2)} base × ${multiplierLabel}`,
-    costLabel: costBits.join(" · "),
-    affordable: params.affordable,
-    blockedReason: params.blockedReason,
+    payments: params.payments,
   };
 }
 
@@ -383,24 +440,71 @@ export async function loadGermanQuestionDossier(
       (personalRawByInstitution.get(p.targetInstitutionId) ?? 0) + raw
     );
   }
+  // Distinct characters PER INSTITUTION, because that is what sizes each pool.
+  // A character pushing two levers on the street is one participant there.
+  const participantsByInstitution = new Map<string, Set<string>>();
+  for (const p of personal) {
+    if (!p.targetInstitutionId) continue;
+    const seen = participantsByInstitution.get(p.targetInstitutionId) ?? new Set<string>();
+    seen.add(String(p.characterId));
+    participantsByInstitution.set(p.targetInstitutionId, seen);
+  }
   /**
-   * Per institution, what the tier moves after the cap: the raw ask clamped to
-   * ±PERSONAL_NET_CAP, which is exactly how `resolvePlayBatch` settles a
-   * pending batch. For rows already stamped it still agrees with the stamps,
-   * because the resolver makes those sum to this same clamped figure.
+   * The ceiling to SHOW for an institution.
+   *
+   * Floored at one participant. An untouched institution has a crowd of zero
+   * and therefore a true ceiling of zero, which on a meter reads as "the floor
+   * can never move this" — the opposite of the truth. One participant is what
+   * the first person to act would earn, so that is the honest thing to quote
+   * before anyone has.
+   *
+   * Resolution is unaffected: `resolvePlayBatch` sizes the real pool from the
+   * real count, and an institution with no plays has nothing to apportion.
    */
-  const personalNetFor = (institutionId: string): number => {
-    const raw = personalRawByInstitution.get(institutionId) ?? 0;
-    return Math.sign(raw) * Math.min(Math.abs(raw), PERSONAL_NET_CAP);
-  };
+  const capForInstitution = (id: string) =>
+    personalNetCapFor(Math.max(1, participantsByInstitution.get(id)?.size ?? 0));
+
+  // PROJECTED, not read off the stamps.
+  //
+  // `appliedPoints` is null until the settlement phase resolves the turn, so
+  // summing it reported the live turn as "scaled to +0.0" every time and made
+  // the panel claim a scaling that had not happened. The board reports what the
+  // tick WILL enforce; the wire is the side that reports what was already
+  // written.
+  //
+  // Reading stamps where they exist would be no more accurate: the resolver
+  // makes them sum to exactly the figure this projection computes, so the two
+  // agree on every batch the resolver actually produced. They diverge only on
+  // rows whose stamps could not have come from it.
+  //
+  // Run THROUGH THE RESOLVER, never a second copy of the apportionment, so the
+  // panel, the institution cards and the turn phase cannot disagree. A local
+  // clamp would be a second copy and would miss the largest-remainder split.
+  const projected = resolvePlayBatch(personal);
+  const byId = new Map(personal.map((p) => [String(p._id), p]));
+  const netByInstitution = new Map<string, number>();
+  for (const stamp of projected.stamped) {
+    const institutionId = byId.get(String(stamp.id))?.targetInstitutionId;
+    if (!institutionId) continue;
+    netByInstitution.set(
+      institutionId,
+      (netByInstitution.get(institutionId) ?? 0) + stamp.appliedPoints
+    );
+  }
+  /** What the tier moves on one institution, after that institution's ceiling. */
+  const personalNetFor = (institutionId: string): number =>
+    netByInstitution.get(institutionId) ?? 0;
+
   const openFloor = {
     characters: new Set(personal.map((p) => String(p.characterId))).size,
-    netPoints: pts(
-      [...personalRawByInstitution.keys()].reduce((sum, id) => sum + personalNetFor(id), 0)
-    ),
+    netPoints: pts([...netByInstitution.values()].reduce((sum, v) => sum + v, 0)),
     rawPoints: pts(personalRawTotal),
-    capPoints: magPts(PERSONAL_NET_CAP),
-    capped: [...personalRawByInstitution.values()].some((v) => Math.abs(v) > PERSONAL_NET_CAP),
+    // The ceiling moves with turnout now, so report the largest one in play:
+    // the institution a crowd is most likely to be pushing against.
+    capPoints: magPts(Math.max(0, ...[...participantsByInstitution.keys()].map(capForInstitution))),
+    capped: [...personalRawByInstitution.entries()].some(
+      ([id, v]) => Math.abs(v) > capForInstitution(id)
+    ),
   };
 
   // ── institutions ──────────────────────────────────────────────────────────
@@ -451,11 +555,59 @@ export async function loadGermanQuestionDossier(
     }
   }
 
+  // Counted from the rows already fetched for the open floor, so gating the
+  // board costs no extra query. The command counts the same thing server-side;
+  // this half exists so a spent play reads as closed rather than being refused
+  // after the click.
+  const usedByThisCharacter = new Map<string, number>();
+  for (const p of personal) {
+    if (String(p.characterId) !== String(characterId)) continue;
+    usedByThisCharacter.set(p.playId, (usedByThisCharacter.get(p.playId) ?? 0) + 1);
+  }
+
   const buildPlays = (institutionId: string | null): DossierPlayView[] => {
     const views: DossierPlayView[] = [];
     if (seat && seatDef && budget) {
+      const balance = treasury?.treasuryBalance ?? 0;
       for (const play of catalogue.filter((p) => p.target === institutionId)) {
-        const check = canSeatAfford(play, budget, treasury?.treasuryBalance ?? 0);
+        const cash = canSeatAfford(play, budget);
+        // THE canonical split, not a local subtraction. `treasuryBalance` is
+        // signed, so `fundsCost - balance` counts pre-existing debt as newly
+        // added: at a balance of -500M a 12M play reads as adding 512M. This is
+        // the same function `spendFromTreasury` books the spend with, so the
+        // number on the button is the number that lands.
+        const { addedToDebt } = computeFiscalImpact(balance, play.fundsCost);
+        const payments: DossierPaymentView[] = [
+          {
+            mode: "funds",
+            label: "TREASURY",
+            costLabel: costLabelFor(play, play.capitalCost, play.fundsCost, seat.id as CountryId),
+            affordable: seat.canAct && cash.ok,
+            blockedReason: seat.blockedReason ?? cash.reason ?? null,
+            debtNote:
+              addedToDebt > 0
+                ? `adds ${formatLocalFunds(addedToDebt, COUNTRY_CURRENCY_MAP[seat.id as CountryId])} to the national debt`
+                : null,
+          },
+        ];
+        // Only a play the treasury actually pays for gets a second route. The
+        // four capital-only plays would otherwise show two buttons for the same
+        // thing, the second one dearer.
+        if (play.fundsCost > 0) {
+          const capitalCost = capitalPriceFor(play);
+          // Priced through the SAME affordability rule as the cash route, so a
+          // live button and the command can never disagree about what is
+          // payable. `fundsCost: 0` is what makes the treasury irrelevant here.
+          const alt = canSeatAfford({ ...play, capitalCost }, budget);
+          payments.push({
+            mode: "capital",
+            label: "CAPITAL",
+            costLabel: costLabelFor(play, capitalCost, 0, seat.id as CountryId),
+            affordable: seat.canAct && alt.ok,
+            blockedReason: seat.blockedReason ?? alt.reason ?? null,
+            debtNote: null,
+          });
+        }
         views.push(
           playView({
             play,
@@ -463,9 +615,7 @@ export async function loadGermanQuestionDossier(
             multiplierPct: seatDef.multiplierPct,
             direction: seat.direction,
             multiplierLabel: `${(seatDef.multiplierPct / 100).toFixed(1)}× seat`,
-            currency: seat.id as CountryId,
-            affordable: seat.canAct && check.ok,
-            blockedReason: seat.blockedReason ?? check.reason ?? null,
+            payments,
           })
         );
       }
@@ -479,6 +629,11 @@ export async function loadGermanQuestionDossier(
         ctx.personal.actionsRemaining,
         money?.balance ?? 0
       );
+      // Named AHEAD of any money or action shortfall. A play already used this
+      // turn is closed for a reason no amount of either fixes, and reporting a
+      // funds shortfall instead would send a player off to solve the wrong
+      // problem.
+      const spent = (usedByThisCharacter.get(play.id) ?? 0) >= PERSONAL_PLAY_USES_PER_TURN;
       views.push(
         playView({
           play,
@@ -488,10 +643,18 @@ export async function loadGermanQuestionDossier(
           // magnitude and the card offers the direction.
           direction: null,
           multiplierLabel: "0.25× personal",
-          currency: null,
-          localFundsOverride: money?.local,
-          affordable: check.ok,
-          blockedReason: check.reason ?? null,
+          // One route only: a character has no seat capital pool, and the
+          // command refuses capital mode on a personal play.
+          payments: [
+            {
+              mode: "funds",
+              label: "COMMIT",
+              costLabel: costLabelFor(play, play.capitalCost, money?.local ?? play.fundsCost, null),
+              affordable: !spent && check.ok,
+              blockedReason: spent ? "used" : (check.reason ?? null),
+              debtNote: null,
+            },
+          ],
         })
       );
     }
@@ -525,12 +688,15 @@ export async function loadGermanQuestionDossier(
       // At the cap exactly, nothing was scaled down but the institution is
       // already at its ceiling for the turn, so `maxed` reads >= where the
       // aggregate `openFloor.capped` (a throttle that BIT) stays strict.
+      // The ceiling is THIS institution's, sized by the crowd pushing it, not a
+      // constant shared across the board. Two cards can legitimately quote
+      // different limits on the same turn.
       personalCap: personalTargets.has(inst.id)
         ? {
             rawPoints: magPts(personalRaw),
             netPoints: magPts(personalNetFor(inst.id)),
-            capPoints: magPts(PERSONAL_NET_CAP),
-            maxed: Math.abs(personalRaw) >= PERSONAL_NET_CAP,
+            capPoints: magPts(capForInstitution(inst.id)),
+            maxed: Math.abs(personalRaw) >= capForInstitution(inst.id),
           }
         : null,
     };
@@ -669,10 +835,7 @@ export async function loadGermanQuestionDossier(
               multiplier: `${(seatDef.multiplierPct / 100).toFixed(1)}×`,
               capital: budget.capital,
               capitalLabel: seatDef.capitalLabel,
-              treasuryLabel: formatLocalFunds(
-                treasury?.treasuryBalance ?? 0,
-                COUNTRY_CURRENCY_MAP[seat.id as CountryId]
-              ),
+              treasuryLabel: treasuryLabelFor(treasury?.treasuryBalance ?? 0, seat.id as CountryId),
               actionsRemaining: budget.actionsRemaining,
               actionsPerTurn: budget.actionsPerTurn,
               actionsBankCap: budget.actionsBankCap,

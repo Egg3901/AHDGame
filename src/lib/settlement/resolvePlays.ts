@@ -7,12 +7,16 @@
  * rather than the gross is what lets a contested public cancel itself out —
  * which is the interesting outcome — instead of both sides being throttled into
  * a stalemate they did not choose.
+ *
+ * The ceiling is SIZED BY TURNOUT, per institution, not fixed. A flat number
+ * meant the first handful of aligned characters consumed all of it and everyone
+ * after them moved the board by nothing. See `personalNetCapFor`.
  */
 import type { ObjectId } from "mongodb";
 import type { SettlementPlayDoc } from "@/lib/db/types/settlementPlay";
 import {
   PERSONAL_MULTIPLIER_PCT,
-  PERSONAL_NET_CAP,
+  personalNetCapFor,
   getSeat,
 } from "@/lib/constants/settlementCrisis";
 
@@ -94,8 +98,14 @@ export function resolvePlayBatch(plays: readonly SettlementPlayDoc[]): ResolvedB
   // at that turnout one more signature genuinely did not buy a hundredth.
   for (const [institutionId, raw] of personalRaw) {
     const rows = personalPending.filter((r) => r.play.targetInstitutionId === institutionId);
+    // DISTINCT CHARACTERS, not rows. A character who plays two levers on one
+    // institution must not raise the ceiling they are then measured against —
+    // counting rows would let the floor inflate its own roof, since every extra
+    // play would lift both the demand and the limit.
+    const participants = new Set(rows.map((r) => String(r.play.characterId))).size;
+    const cap = personalNetCapFor(participants);
     const magnitude = Math.abs(raw);
-    if (magnitude <= PERSONAL_NET_CAP) {
+    if (magnitude <= cap) {
       for (const { play, requested } of rows) {
         stamped.push({ id: play._id, appliedPoints: requested });
         addTo(personalApplied, institutionId, requested);
@@ -103,11 +113,11 @@ export function resolvePlayBatch(plays: readonly SettlementPlayDoc[]): ResolvedB
       continue;
     }
 
-    const target = Math.sign(raw) * PERSONAL_NET_CAP;
+    const target = Math.sign(raw) * cap;
     // Truncate toward zero so no row is ever stamped past what it asked for,
     // then hand the shortfall to the rows with the largest lost fractions.
     const shares = rows.map((row) => {
-      const exact = (row.requested * PERSONAL_NET_CAP) / magnitude;
+      const exact = (row.requested * cap) / magnitude;
       const base = Math.trunc(exact);
       return { row, base, remainder: exact - base };
     });

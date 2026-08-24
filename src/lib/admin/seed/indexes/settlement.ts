@@ -21,6 +21,22 @@ import { ensureIndex } from "./helpers";
  *     plays, which runs on every page view and every commit. The drain index
  *     above cannot serve it: `resolvedTurn` is the second field there, and this
  *     query filters on `turn`.
+ *   - `settlementPlays { crisisId, turn, characterId, playId }` UNIQUE, partial
+ *     on `actor: "personal"` — the backstop for the once-per-turn allowance.
+ *     `commitPlay` counts a character's uses before inserting, and that read and
+ *     that write are not atomic: two fast clicks both count zero and both
+ *     insert, which is exactly the race the `settlementCrises { kind }` index
+ *     below exists to close. PARTIAL because a DELEGATION may legitimately
+ *     repeat a play in one turn if its action points allow, so the constraint
+ *     must not reach seat rows.
+ *
+ *     ⚠️ A world that already holds duplicate personal rows — anything played
+ *     before the allowance existed — will REJECT this index at creation.
+ *     `ensureIndex` is tolerant and logs a `✗` rather than failing the seed, so
+ *     the symptom is a quiet missing index, not a crash. The allowance still
+ *     holds in that state, because `commitPlay` counts before inserting; only
+ *     the double-click race is left open. Clear the duplicates and re-run this
+ *     target to close it.
  *   - `settlementCrises { status }` — the open-crisis lookup. The collection
  *     holds a handful of documents at most, so this buys little today; it costs
  *     nothing and keeps the lookup honest if settlement crises ever run several
@@ -48,6 +64,18 @@ export async function seedSettlementIndexes(db: Db, log: (msg: string) => void) 
     "settlementPlays",
     { crisisId: 1, turn: 1 },
     { name: "settlementPlays_crisis_turn" },
+    log
+  );
+
+  await ensureIndex(
+    db,
+    "settlementPlays",
+    { crisisId: 1, turn: 1, characterId: 1, playId: 1 },
+    {
+      name: "settlementPlays_personal_once",
+      unique: true,
+      partialFilterExpression: { actor: "personal" },
+    },
     log
   );
 

@@ -6,6 +6,7 @@ import { useCabinetOffice } from "./useCabinetOffice";
 import { useMergerReviewQueue } from "./useMergerReviewQueue";
 import { MergerReviewQueuePanel } from "./components/MergerReviewQueuePanel";
 import { CabinetOfficeLayout } from "./components/CabinetOfficeLayout";
+import { RestrictedOfficeNotice } from "./components/RestrictedOfficeNotice";
 import { CabinetStatStrip } from "./components/CabinetStatStrip";
 import { CabinetPositionRail } from "./components/CabinetPositionRail";
 import { FlagshipRouter } from "./components/FlagshipRouter";
@@ -140,6 +141,44 @@ export default function CabinetOfficePage() {
           <div className="rounded-xl border border-error/30 bg-error/10 p-6 text-center">
             <h2 className="text-lg font-semibold text-error">{error ?? "Failed to load"}</h2>
           </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Fog of war. The server has already withheld every departmental field, so
+  // there is nothing below the letterhead left to render: no stat strip, no
+  // tabs, and therefore no tab body and none of the panels that fetch on mount.
+  // `=== false` so a pre-gate payload mid-deploy keeps today's behaviour.
+  if (data.canView === false) {
+    return (
+      <div className="min-h-screen bg-background pb-16">
+        <main className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
+          <CabinetOfficeLayout
+            positionName={data.position?.name ?? positionConfig.name}
+            department={data.position?.department ?? mechanics.department}
+            sealImage={mechanics.sealImage}
+            countryId={countryId as CountryId}
+            member={data.member}
+            bannerImageUrl={data.member?.bannerImageUrl}
+            identityGlyph={identity.glyph}
+            identitySerif={identity.serif}
+            group={getCabinetPositionGroup(countryId, positionId)}
+            registry={COUNTRY_CONFIGS[countryId as CountryId]?.name}
+            tabs={[]}
+            activeTab={activeTab}
+            onSelectTab={setActiveTab}
+            showActions={false}
+            statStrip={null}
+          />
+          <RestrictedOfficeNotice
+            seatName={data.position?.name ?? positionConfig.name}
+            allowedTitles={data.restriction?.allowedTitles ?? []}
+            // Deliberately no COUNTRY_CONFIGS fallback: the bare `name` drops the
+            // definite article ("of United States"), and the notice reads fine
+            // without a country at all. The server sends the realm phrase.
+            countryName={data.restriction?.countryName ?? ""}
+          />
         </main>
       </div>
     );

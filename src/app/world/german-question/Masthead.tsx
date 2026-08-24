@@ -152,7 +152,8 @@ export function Masthead({ view }: { view: DossierView }) {
                   <span>
                     {seat.capital} {seat.capitalLabel}
                   </span>
-                  <span>{seat.treasuryLabel} treasury</span>
+                  {/* The label names itself: "treasury" or "national debt". */}
+                  <span>{seat.treasuryLabel}</span>
                   <span className="text-gold">
                     {seat.actionsRemaining} / {seat.actionsBankCap} AP banked (+
                     {seat.actionsPerTurn}/turn) · {seat.multiplier} seat multiplier
