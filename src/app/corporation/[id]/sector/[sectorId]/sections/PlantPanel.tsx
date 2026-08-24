@@ -7,7 +7,7 @@ import { Button } from "@/components/ui";
 import { UnionEmblem } from "@/components/unions/UnionEmblem";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { Factory, Hammer, PauseCircle, PlayCircle, ShieldCheck, X } from "lucide-react";
-import type { PlantsData } from "../types";
+import type { CommodityFlow, PlantsData } from "../types";
 import type { CorporationType } from "@/lib/constants/corporations";
 import {
   capitalizeFacility,
@@ -22,6 +22,8 @@ import { facilitiesFromUnits, plantSizeUnits } from "@/lib/constants/facilityQua
 
 interface PlantPanelProps {
   plants: PlantsData;
+  /** Commodity-ledger output after media, embargo and other market scaling. */
+  marketSupplies?: CommodityFlow[];
   /** Drives the facility noun. A retail sector says "stores", not "plants". */
   sectorType: CorporationType;
   /** The national industry union covering this workforce, vacant or led. */
@@ -56,6 +58,7 @@ interface PlantPanelProps {
  */
 export default function PlantPanel({
   plants,
+  marketSupplies = [],
   sectorType,
   unionId,
   unionName,
@@ -74,6 +77,12 @@ export default function PlantPanel({
   const money = (anchor: number) => formatAmount(anchor);
   const mothballed = plants.mothballed;
   const hasRun = plants.producedUnits != null;
+  const primaryMediaSupply =
+    sectorType === "media" ? marketSupplies.find((supply) => supply.units > 0) : undefined;
+  const mediaLedgerShare =
+    hasRun && primaryMediaSupply && (plants.producedUnits ?? 0) > 0
+      ? primaryMediaSupply.units / (plants.producedUnits ?? 1)
+      : null;
 
   return (
     <div
@@ -144,14 +153,29 @@ export default function PlantPanel({
           Today&apos;s run
         </p>
         {hasRun ? (
-          <RunMeter
-            capacityUnits={plants.capacityUnits ?? 0}
-            producedUnits={plants.producedUnits ?? 0}
-            soldUnits={plants.soldUnits ?? 0}
-            idleCauses={plants.idleCauses}
-            sectorType={sectorType}
-            dimmed={mothballed}
-          />
+          <>
+            <RunMeter
+              capacityUnits={plants.capacityUnits ?? 0}
+              producedUnits={plants.producedUnits ?? 0}
+              soldUnits={plants.soldUnits ?? 0}
+              idleCauses={plants.idleCauses}
+              sectorType={sectorType}
+              dimmed={mothballed}
+            />
+            {primaryMediaSupply && (
+              <div className="mt-3 rounded-lg border border-info/30 bg-info/10 px-3 py-2 text-body-xs text-foreground">
+                <p className="font-semibold">
+                  Commodity ledger output: {primaryMediaSupply.label}{" "}
+                  {fmtUnits(primaryMediaSupply.units)} {primaryMediaSupply.unit}/day
+                  {mediaLedgerShare != null ? ` (${fmtPct(mediaLedgerShare)} of today's run)` : ""}
+                </p>
+                <p className="mt-1 text-muted">
+                  Media run units measure total audience activity. The commodity market and eligible
+                  private supply agreements use the smaller ledger output shown here.
+                </p>
+              </div>
+            )}
+          </>
         ) : (
           <p className="rounded-lg border border-dashed border-card-border px-3 py-4 text-center text-body-sm text-muted">
             Your first run shows here after the next turn.

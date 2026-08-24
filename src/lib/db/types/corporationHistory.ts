@@ -127,6 +127,8 @@ export interface CorporationHistory {
    * `commodityFlows.supplyUnits` for the same turn.
    */
   commodityOutput?: Record<string, number>;
+  /** Calculation basis for commodityOutput. Missing on rows written before ticket #1179. */
+  commodityOutputBasis?: "revenue-proxy-v1" | "plants-ledger-v1";
   /** Composite credit score (0–100), same formula as bonds tab; set from turn processor. */
   creditComposite?: number;
   /** Letter rating tier (AAA … CCC). */

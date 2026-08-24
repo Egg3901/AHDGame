@@ -7,6 +7,9 @@
  * route modules").
  */
 import type { CommodityType } from "@/lib/constants/commodities";
+import type { CommodityOutputBasisChange } from "@/lib/corporations/corpCommoditySnapshot";
+
+export type CommodityHistoryBasisChange = CommodityOutputBasisChange;
 
 /** One chart point of a corporation's commodity output/share history. */
 export interface CommodityHistoryPoint {

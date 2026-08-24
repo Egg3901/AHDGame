@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { computeSupplierCommodityCapacityUnits } from "./supplyAgreementCapacity";
+import {
+  computeSupplierCommodityAchievableUnits,
+  computeSupplierCommodityCapacityUnits,
+} from "./supplyAgreementCapacity";
 import {
   plantsCapacityScaledUnits,
   commodityMixWeight,
@@ -139,5 +142,34 @@ describe("computeSupplierCommodityCapacityUnits — parity with the production s
     );
     // ...and it cannot contract advertising, a thing its economy does not sell.
     expect(computeSupplierCommodityCapacityUnits({ ...args, commodity: "advertising" })).toBe(0);
+  });
+});
+
+describe("computeSupplierCommodityAchievableUnits", () => {
+  it("preserves a measured zero ceiling", () => {
+    expect(
+      computeSupplierCommodityAchievableUnits({
+        sectors: [
+          {
+            sectorType: "manufacturing",
+            contractAchievableUnits: 0,
+          },
+        ],
+        commodity: "steel",
+        isNatcorp: false,
+        turn: 10,
+      })
+    ).toBe(0);
+  });
+
+  it("returns unknown when a contributing sector has no telemetry", () => {
+    expect(
+      computeSupplierCommodityAchievableUnits({
+        sectors: [{ sectorType: "manufacturing" }],
+        commodity: "steel",
+        isNatcorp: false,
+        turn: 10,
+      })
+    ).toBeNull();
   });
 });
