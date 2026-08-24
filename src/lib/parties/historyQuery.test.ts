@@ -1,5 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { buildPartyTenures, type CurrentTenureInput, type PartyHistoryEntry } from "./historyQuery";
+import { ObjectId, type Db } from "mongodb";
+import { describe, expect, it, vi } from "vitest";
+import {
+  buildPartyTenures,
+  fetchPartyNameChanges,
+  type CurrentTenureInput,
+  type PartyHistoryEntry,
+} from "./historyQuery";
 
 function entry(overrides: Partial<PartyHistoryEntry>): PartyHistoryEntry {
   return {
@@ -63,6 +69,73 @@ describe("buildPartyTenures", () => {
       endKind: "present",
       endedAt: null,
     });
+  });
+
+  it("splits a membership when the party is renamed so each period keeps its contemporaneous name", () => {
+    const tenures = buildPartyTenures(
+      [
+        entry({
+          reason: "join",
+          newPartyId: "10",
+          newPartyCountryId: "US",
+          newPartyName: "Federalist Party",
+          date: new Date("2025-01-01T00:00:00Z"),
+          turn: 100,
+        }),
+      ],
+      current({
+        partyId: "10",
+        partyCountryId: "US",
+        partyName: "National Union Party",
+        joinedAt: new Date("2025-01-01T00:00:00Z"),
+      }),
+      [
+        {
+          partyId: "10",
+          partyCountryId: "US",
+          newName: "National Union Party",
+          effectiveAt: new Date("2025-06-01T00:00:00Z"),
+          turn: 200,
+        },
+      ]
+    );
+
+    expect(tenures.map((tenure) => [tenure.partyName, tenure.startKind, tenure.endKind])).toEqual([
+      ["Federalist Party", "joined", "renamed"],
+      ["National Union Party", "renamed", "present"],
+    ]);
+  });
+
+  it("recovers a legacy tenure's name from the latest rename before it began", () => {
+    const tenures = buildPartyTenures(
+      [
+        entry({
+          reason: "join",
+          newPartyId: "10",
+          newPartyCountryId: "US",
+          newPartyName: null,
+          date: new Date("2025-07-01T00:00:00Z"),
+          turn: 250,
+        }),
+      ],
+      current({
+        partyId: "10",
+        partyCountryId: "US",
+        partyName: "National Union Party",
+        joinedAt: new Date("2025-07-01T00:00:00Z"),
+      }),
+      [
+        {
+          partyId: "10",
+          partyCountryId: "US",
+          newName: "National Union Party",
+          effectiveAt: new Date("2025-06-01T00:00:00Z"),
+          turn: 200,
+        },
+      ]
+    );
+
+    expect(tenures[0]?.partyName).toBe("National Union Party");
   });
 
   it("renders a leave -> Independent gap -> next-party join as three tenures", () => {
@@ -305,5 +378,63 @@ describe("buildPartyTenures", () => {
       endKind: "present",
     });
     expect(tenures[0].startedAt.toISOString()).toBe("2025-05-01T00:00:00.000Z");
+  });
+});
+
+describe("fetchPartyNameChanges", () => {
+  it("uses passed rename proposals as the historical name ledger for legacy membership rows", async () => {
+    const partyObjectId = new ObjectId();
+    const partyFind = vi.fn(() => ({
+      project: vi.fn(() => ({
+        toArray: vi
+          .fn()
+          .mockResolvedValue([{ _id: partyObjectId, countryId: "US", sequentialId: 10 }]),
+      })),
+    }));
+    const proposalFind = vi.fn(() => ({
+      project: vi.fn(() => ({
+        sort: vi.fn(() => ({
+          toArray: vi.fn().mockResolvedValue([
+            {
+              partyId: partyObjectId,
+              rename: { newName: "National Union Party" },
+              resolvedAtTurn: 200,
+              updatedAt: new Date("2025-06-01T00:00:00Z"),
+            },
+          ]),
+        })),
+      })),
+    }));
+    const db = {
+      collection: vi.fn((name: string) => {
+        if (name === "politicalParties") return { find: partyFind };
+        if (name === "committeeProposals") return { find: proposalFind };
+        throw new Error(`Unexpected collection: ${name}`);
+      }),
+    } as unknown as Db;
+
+    const changes = await fetchPartyNameChanges(db, [
+      entry({
+        reason: "join",
+        newPartyId: "10",
+        newPartyCountryId: "US",
+        newPartyName: null,
+      }),
+    ]);
+
+    expect(changes).toEqual([
+      {
+        partyId: "10",
+        partyCountryId: "US",
+        newName: "National Union Party",
+        effectiveAt: new Date("2025-06-01T00:00:00Z"),
+        turn: 200,
+      },
+    ]);
+    expect(proposalFind).toHaveBeenCalledWith({
+      type: "rename",
+      status: "passed",
+      partyId: { $in: [partyObjectId] },
+    });
   });
 });

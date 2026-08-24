@@ -179,6 +179,8 @@ function tenureStartText(
   switch (tenure.startKind) {
     case "founded":
       return t("tenureFounded", { date });
+    case "renamed":
+      return t("tenureRenamed", { date });
     case "became_independent":
       return date; // Independent rows just show the date
     case "switched_to":
@@ -199,6 +201,9 @@ function tenureEndPhrase(
   if (tenure.endKind === "present") return t("present");
   if (tenure.endKind === "left") return t("tenureLeft", { date: endLabel });
   if (tenure.endKind === "purged") return t("tenurePurged", { date: endLabel });
+  if (tenure.endKind === "renamed") {
+    return t("tenureRenamedTo", { party: nextLabel ?? t("nextPartyFallback"), date: endLabel });
+  }
   // switched_to: from Independent → "Joined X"; from a party → "Switched to X".
   const party = nextLabel ?? t("nextPartyFallback");
   return tenure.partyId === null

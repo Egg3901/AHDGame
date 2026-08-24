@@ -48,7 +48,12 @@ import { FinancialStrip } from "@/app/profile/components/FinancialStrip";
 import { CareerHistory } from "@/app/profile/components/CareerHistory";
 import { DiscordBadge } from "@/app/profile/DiscordBadge";
 import { getOnlineStatus } from "@/lib/utils/onlineStatus";
-import { fetchPartyHistory, buildPartyTenures, type PartyTenure } from "@/lib/parties/historyQuery";
+import {
+  fetchPartyHistory,
+  fetchPartyNameChanges,
+  buildPartyTenures,
+  type PartyTenure,
+} from "@/lib/parties/historyQuery";
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { getOfficeLabel, getPartyHex } from "@/lib/utils/politics";
@@ -414,13 +419,18 @@ async function getCharacterById(characterId: string) {
         partyNames[`${ev.newPartyCountryId}:${ev.newPartyId}`] = ev.newPartyName;
       }
     }
-    const partyHistory: PartyTenure[] = buildPartyTenures(partyHistoryEvents, {
-      partyId: character.party ?? "independent",
-      partyCountryId: character.countryId,
-      partyName: party?.name ?? null,
-      joinedAt: character.partyJoinedAt ?? null,
-      fallbackDate: new Date(),
-    });
+    const partyNameChanges = await fetchPartyNameChanges(db, partyHistoryEvents);
+    const partyHistory: PartyTenure[] = buildPartyTenures(
+      partyHistoryEvents,
+      {
+        partyId: character.party ?? "independent",
+        partyCountryId: character.countryId,
+        partyName: party?.name ?? null,
+        joinedAt: character.partyJoinedAt ?? null,
+        fallbackDate: new Date(),
+      },
+      partyNameChanges
+    );
 
     const patreonTier = user?.patreonTier ?? null;
     const patreonExpiresAt = user?.patreonExpiresAt ?? null;
