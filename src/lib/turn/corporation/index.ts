@@ -286,12 +286,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // supply-agreement shortfall penalty, a contract is a promise about goods,
   // so under-PRODUCING against it is the breach, not under-selling it.
   const producedByCorpCommodity = new Map<string, Map<CommodityType, number>>();
-  // Ticket #1147 — the involuntary-constraint ceiling, accumulated on exactly
+  // Ticket #1147: the involuntary-constraint ceiling, accumulated on exactly
   // the same corp/commodity keys as `producedByCorpCommodity` so the damages
   // leg can compare like with like. A supplier whose plants were starved of
   // inputs, throttled by a glutted market or struck is billed against what it
   // could have made, not against a nameplate it could never reach.
-  const achievableByCorpCommodity = new Map<string, Map<CommodityType, number>>();
+  const achievableByCorpCommodity = new Map<string, Map<CommodityType, number | null>>();
   if (supplyAgreementsEnabled) {
     contractedByCorpCommodity = new Map();
     settleableAgreements = [];
@@ -535,13 +535,13 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         // The achievable ceiling is accumulated for EVERY sector including
         // mothballed ones. A cold plant produces nothing and gets no entry in
         // the produced map (its documented "zero produced" meaning), but its
-        // ceiling is still its full capacity — mothballing is the operator's
+        // ceiling is still its full capacity because mothballing is the operator's
         // own choice and must keep owing damages on the whole contracted
         // volume. Skipping it here would hand back the exact exploit the
         // damages leg exists to close.
         if (supplyAgreementsEnabled && market.plantsEnabled) {
           const achievableScaled = plantsSupplyScaledUnits({
-            producedUnits: (sector as { contractAchievableUnits?: number }).contractAchievableUnits,
+            producedUnits: sector.contractAchievableUnits,
             isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
             embargoSupplyFactor:
               embargoSupplyFactorFor(sector) *
@@ -554,22 +554,26 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
                 )
               ),
           });
-          if (achievableScaled !== null && achievableScaled > 0) {
-            const supplyRates = rates.supply ?? {};
-            for (const commodity of Object.keys(supplyRates) as CommodityType[]) {
-              const units =
-                achievableScaled *
-                commodityMixWeight(
-                  supplyRates,
-                  eraScaledBasePrices(lookups.eraUnitScale),
-                  commodity
-                );
-              if (!(units > 0)) continue;
-              const byCommodity =
-                achievableByCorpCommodity.get(corpId) ?? new Map<CommodityType, number>();
-              byCommodity.set(commodity, (byCommodity.get(commodity) ?? 0) + units);
-              achievableByCorpCommodity.set(corpId, byCommodity);
+          const supplyRates = rates.supply ?? {};
+          for (const commodity of Object.keys(supplyRates) as CommodityType[]) {
+            const weight = commodityMixWeight(
+              supplyRates,
+              eraScaledBasePrices(lookups.eraUnitScale),
+              commodity
+            );
+            if (!(weight > 0)) continue;
+            const byCommodity =
+              achievableByCorpCommodity.get(corpId) ?? new Map<CommodityType, number | null>();
+            const accumulated = byCommodity.get(commodity);
+            if (achievableScaled === null || accumulated === null) {
+              // One unknown contributing sector makes the group total unknown.
+              // A measured zero remains numeric zero and must not fall through
+              // to the settlement's intentionally-unclamped rollout behavior.
+              byCommodity.set(commodity, null);
+            } else {
+              byCommodity.set(commodity, (accumulated ?? 0) + achievableScaled * weight);
             }
+            achievableByCorpCommodity.set(corpId, byCommodity);
           }
         }
         if (supplyAgreementsEnabled && market.plantsEnabled && sector.mothballed !== true) {

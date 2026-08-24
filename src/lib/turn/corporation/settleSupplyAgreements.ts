@@ -132,7 +132,7 @@ export interface SupplyAgreementDelivery {
   deliveredUnits: number;
   turn: number;
   /**
-   * Ticket #1147 — why the supplier was charged, persisted so the corporation
+   * Ticket #1147: why the supplier was charged, persisted so the corporation
    * UI can say it in words instead of the player watching cash vanish. A
    * shortfall with no explanation is what made this bug unreadable: the
    * reporter saw "120k profit became 119k" and had no way to connect it to a
@@ -145,7 +145,17 @@ export interface SupplyAgreementDelivery {
    */
   shortfallUnits?: number;
   achievableUnits?: number;
+  creditedProductionUnits?: number;
+  penaltyAnchor?: number;
+  supplierCashDeltaLocal?: number;
+  supplierCurrencyCode?: CurrencyCode;
+  unpaidSettlementAnchor?: number;
 }
+
+export type AchievableByCorpCommodity = ReadonlyMap<
+  string,
+  ReadonlyMap<CommodityType, number | null>
+>;
 
 export interface SupplyAgreementSettlements {
   /** corpId → net liquidCapital delta (in that corp's currency). */
@@ -174,6 +184,149 @@ type DeliveryFlowEdge = {
   originalCapacity: number;
 };
 
+function demandCappedAgreementWeights(args: {
+  agreements: readonly SettleableSupplyAgreement[];
+  buyerDemandByCorpCommodity: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+}): Map<number, number> {
+  const totalCapByBuyerCommodity = new Map<string, number>();
+  for (const agreement of args.agreements) {
+    const key = `${agreement.buyerCorpId}:${agreement.commodity}`;
+    totalCapByBuyerCommodity.set(
+      key,
+      (totalCapByBuyerCommodity.get(key) ?? 0) + Math.max(0, agreement.volumeCap)
+    );
+  }
+
+  const weights = new Map<number, number>();
+  for (let index = 0; index < args.agreements.length; index++) {
+    const agreement = args.agreements[index]!;
+    const cap = Math.max(0, agreement.volumeCap);
+    const totalCap = totalCapByBuyerCommodity.get(
+      `${agreement.buyerCorpId}:${agreement.commodity}`
+    );
+    if (!(cap > 0) || !(totalCap && totalCap > 0)) continue;
+    const demand = Math.max(
+      0,
+      args.buyerDemandByCorpCommodity.get(agreement.buyerCorpId)?.get(agreement.commodity) ?? 0
+    );
+    const weight = cap * Math.min(1, demand / totalCap);
+    if (weight > 0) weights.set(index, weight);
+  }
+  return weights;
+}
+
+/**
+ * Keep the max-flow total, then remove its database-order bias where buyer
+ * demand leaves room to do so. A supplier short of two otherwise viable
+ * commitments must share what it delivered by their demand-capped sizes, not
+ * give the first Mongo row everything and the second row zero.
+ */
+function rebalanceDeliveriesProRata(args: {
+  agreements: readonly SettleableSupplyAgreement[];
+  deliveredByAgreement: Map<number, number>;
+  buyerDemandByCorpCommodity: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+}): void {
+  const weights = demandCappedAgreementWeights(args);
+  const deliveredByBuyerCommodity = new Map<string, number>();
+  const indicesBySupplierCommodity = new Map<string, number[]>();
+
+  for (let index = 0; index < args.agreements.length; index++) {
+    const agreement = args.agreements[index]!;
+    const delivered = args.deliveredByAgreement.get(index) ?? 0;
+    const buyerKey = `${agreement.buyerCorpId}:${agreement.commodity}`;
+    deliveredByBuyerCommodity.set(
+      buyerKey,
+      (deliveredByBuyerCommodity.get(buyerKey) ?? 0) + delivered
+    );
+    const supplierKey = `${agreement.supplierCorpId}:${agreement.commodity}`;
+    const indices = indicesBySupplierCommodity.get(supplierKey) ?? [];
+    indices.push(index);
+    indicesBySupplierCommodity.set(supplierKey, indices);
+  }
+
+  for (const indices of indicesBySupplierCommodity.values()) {
+    const deliveredTotal = indices.reduce(
+      (sum, index) => sum + (args.deliveredByAgreement.get(index) ?? 0),
+      0
+    );
+    const weightTotal = indices.reduce((sum, index) => sum + (weights.get(index) ?? 0), 0);
+    if (!(deliveredTotal > 0) || !(weightTotal > 0)) continue;
+
+    const targets = new Map(
+      indices.map((index) => [index, deliveredTotal * ((weights.get(index) ?? 0) / weightTotal)])
+    );
+    const donors = indices
+      .filter(
+        (index) => (args.deliveredByAgreement.get(index) ?? 0) - (targets.get(index) ?? 0) > 1e-9
+      )
+      .sort((left, right) =>
+        (args.agreements[left]!.agreementId ?? String(left)).localeCompare(
+          args.agreements[right]!.agreementId ?? String(right)
+        )
+      );
+    const recipients = indices
+      .filter(
+        (index) => (targets.get(index) ?? 0) - (args.deliveredByAgreement.get(index) ?? 0) > 1e-9
+      )
+      .sort((left, right) =>
+        (args.agreements[left]!.agreementId ?? String(left)).localeCompare(
+          args.agreements[right]!.agreementId ?? String(right)
+        )
+      );
+
+    for (const recipientIndex of recipients) {
+      const recipient = args.agreements[recipientIndex]!;
+      const recipientBuyerKey = `${recipient.buyerCorpId}:${recipient.commodity}`;
+      let recipientNeed =
+        (targets.get(recipientIndex) ?? 0) - (args.deliveredByAgreement.get(recipientIndex) ?? 0);
+
+      for (const donorIndex of donors) {
+        if (!(recipientNeed > 1e-9)) break;
+        const donor = args.agreements[donorIndex]!;
+        const donorExcess =
+          (args.deliveredByAgreement.get(donorIndex) ?? 0) - (targets.get(donorIndex) ?? 0);
+        if (!(donorExcess > 1e-9)) continue;
+
+        const sameBuyer = donor.buyerCorpId === recipient.buyerCorpId;
+        const buyerDemand = Math.max(
+          0,
+          args.buyerDemandByCorpCommodity.get(recipient.buyerCorpId)?.get(recipient.commodity) ?? 0
+        );
+        const buyerRoom = sameBuyer
+          ? Number.POSITIVE_INFINITY
+          : Math.max(0, buyerDemand - (deliveredByBuyerCommodity.get(recipientBuyerKey) ?? 0));
+        const agreementRoom = Math.max(
+          0,
+          recipient.volumeCap - (args.deliveredByAgreement.get(recipientIndex) ?? 0)
+        );
+        const shifted = Math.min(recipientNeed, donorExcess, buyerRoom, agreementRoom);
+        if (!(shifted > 1e-9)) continue;
+
+        args.deliveredByAgreement.set(
+          donorIndex,
+          (args.deliveredByAgreement.get(donorIndex) ?? 0) - shifted
+        );
+        args.deliveredByAgreement.set(
+          recipientIndex,
+          (args.deliveredByAgreement.get(recipientIndex) ?? 0) + shifted
+        );
+        recipientNeed -= shifted;
+        if (!sameBuyer) {
+          const donorBuyerKey = `${donor.buyerCorpId}:${donor.commodity}`;
+          deliveredByBuyerCommodity.set(
+            donorBuyerKey,
+            (deliveredByBuyerCommodity.get(donorBuyerKey) ?? 0) - shifted
+          );
+          deliveredByBuyerCommodity.set(
+            recipientBuyerKey,
+            (deliveredByBuyerCommodity.get(recipientBuyerKey) ?? 0) + shifted
+          );
+        }
+      }
+    }
+  }
+}
+
 /**
  * Allocate the delivered supplier totals to named buyers without exceeding an
  * agreement cap or the buyer's physical demand. This is a small max-flow graph
@@ -190,7 +343,12 @@ function allocateDeliveriesToBuyers(args: {
   for (const commodity of commodities) {
     const indexed = args.agreements
       .map((agreement, index) => ({ agreement, index }))
-      .filter(({ agreement }) => agreement.commodity === commodity && agreement.volumeCap > 0);
+      .filter(({ agreement }) => agreement.commodity === commodity && agreement.volumeCap > 0)
+      .sort((left, right) =>
+        (left.agreement.agreementId ?? String(left.index)).localeCompare(
+          right.agreement.agreementId ?? String(right.index)
+        )
+      );
     if (indexed.length === 0) continue;
 
     const suppliers = [...new Set(indexed.map(({ agreement }) => agreement.supplierCorpId))];
@@ -287,6 +445,12 @@ function allocateDeliveriesToBuyers(args: {
     }
   }
 
+  rebalanceDeliveriesProRata({
+    agreements: args.agreements,
+    deliveredByAgreement,
+    buyerDemandByCorpCommodity: args.buyerDemandByCorpCommodity,
+  });
+
   return deliveredByAgreement;
 }
 
@@ -300,27 +464,11 @@ export function computeDemandCappedContractReservations(args: {
   agreements: readonly SettleableSupplyAgreement[];
   buyerDemandByCorpCommodity: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
 }): Map<string, Map<CommodityType, number>> {
-  const totalCapByBuyerCommodity = new Map<string, number>();
-  for (const agreement of args.agreements) {
-    const key = `${agreement.buyerCorpId}:${agreement.commodity}`;
-    totalCapByBuyerCommodity.set(
-      key,
-      (totalCapByBuyerCommodity.get(key) ?? 0) + Math.max(0, agreement.volumeCap)
-    );
-  }
-
+  const weights = demandCappedAgreementWeights(args);
   const reservations = new Map<string, Map<CommodityType, number>>();
-  for (const agreement of args.agreements) {
-    const cap = Math.max(0, agreement.volumeCap);
-    const totalCap = totalCapByBuyerCommodity.get(
-      `${agreement.buyerCorpId}:${agreement.commodity}`
-    );
-    if (!(cap > 0) || !(totalCap && totalCap > 0)) continue;
-    const demand = Math.max(
-      0,
-      args.buyerDemandByCorpCommodity.get(agreement.buyerCorpId)?.get(agreement.commodity) ?? 0
-    );
-    const reserved = cap * Math.min(1, demand / totalCap);
+  for (let index = 0; index < args.agreements.length; index++) {
+    const agreement = args.agreements[index]!;
+    const reserved = weights.get(index) ?? 0;
     if (!(reserved > 0)) continue;
     const byCommodity =
       reservations.get(agreement.supplierCorpId) ?? new Map<CommodityType, number>();
@@ -433,11 +581,11 @@ export function computeSupplyAgreementSettlements(args: {
    */
   producedByCorpCommodity?: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
   /**
-   * Ticket #1147 — what each supplier COULD have produced, given only the
+   * Ticket #1147: what each supplier COULD have produced, given only the
    * constraints it does not control (input throughput, capital utilization, the
    * demand throttle, strike, disaster, nationalization transition, extraction
-   * hard-min). The operator's own levers — the production-policy slider and
-   * mothballing — are deliberately excluded, so choosing to cut output keeps
+   * hard-min). The operator's own levers, the production-policy slider and
+   * mothballing, are deliberately excluded, so choosing to cut output keeps
    * owing damages on the full contracted volume.
    *
    * The damages leg clamps the contracted obligation to this ceiling. Without
@@ -453,7 +601,7 @@ export function computeSupplyAgreementSettlements(args: {
    * It is NOT read as a zero ceiling, which would forgive every contract in
    * the world for one turn.
    */
-  achievableByCorpCommodity?: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+  achievableByCorpCommodity?: AchievableByCorpCommodity;
   /**
    * Plants gate, required whenever `producedByCorpCommodity` is supplied.
    *
@@ -491,6 +639,11 @@ export function computeSupplyAgreementSettlements(args: {
     throw new Error(
       "computeSupplyAgreementSettlements: producedByCorpCommodity requires plantsEnabled — " +
         "outside plants those units are the post-normalization revenue nameplate, not production."
+    );
+  }
+  if (args.achievableByCorpCommodity && args.plantsEnabled !== true) {
+    throw new Error(
+      "computeSupplyAgreementSettlements: achievableByCorpCommodity requires plantsEnabled"
     );
   }
 
@@ -533,14 +686,62 @@ export function computeSupplyAgreementSettlements(args: {
         buyerDemandByCorpCommodity: args.buyerDemandByCorpCommodity,
       })
     : null;
-  const productionAllocations =
-    args.buyerDemandByCorpCommodity && producedByCorpCommodity
-      ? allocateDeliveriesToBuyers({
-          agreements,
-          contractSettlementByCorp: producedByCorpCommodity,
-          buyerDemandByCorpCommodity: args.buyerDemandByCorpCommodity,
-        })
-      : null;
+  type DamageAllocation = {
+    achievableUnits?: number;
+    creditedProductionUnits: number;
+    shortfallUnits: number;
+  };
+  const damageByAgreement = new Map<number, DamageAllocation>();
+  if (producedByCorpCommodity) {
+    const agreementIndicesByGroup = new Map<string, number[]>();
+    for (let index = 0; index < agreements.length; index++) {
+      const agreement = agreements[index]!;
+      if (agreement.shortfallEligible === false || agreement.volumeCap <= 0) continue;
+      const key = `${agreement.supplierCorpId}:${agreement.commodity}`;
+      const indices = agreementIndicesByGroup.get(key) ?? [];
+      indices.push(index);
+      agreementIndicesByGroup.set(key, indices);
+    }
+
+    for (const indices of agreementIndicesByGroup.values()) {
+      const first = agreements[indices[0]!]!;
+      const obligations = indices.map((index) =>
+        Math.max(
+          0,
+          obligationAllocations
+            ? (obligationAllocations.get(index) ?? 0)
+            : agreements[index]!.volumeCap
+        )
+      );
+      const totalObligation = obligations.reduce((sum, units) => sum + units, 0);
+      if (!(totalObligation > 0)) continue;
+
+      const produced = Math.max(
+        0,
+        producedByCorpCommodity.get(first.supplierCorpId)?.get(first.commodity) ?? 0
+      );
+      const achievableRaw = achievableByCorpCommodity
+        ?.get(first.supplierCorpId)
+        ?.get(first.commodity);
+      const achievableKnown = typeof achievableRaw === "number" && Number.isFinite(achievableRaw);
+      const effectiveObligation = achievableKnown
+        ? Math.min(totalObligation, Math.max(0, achievableRaw))
+        : totalObligation;
+      const groupShortfall = Math.max(0, effectiveObligation - produced);
+
+      for (let position = 0; position < indices.length; position++) {
+        const index = indices[position]!;
+        const share = obligations[position]! / totalObligation;
+        const agreementEffective = effectiveObligation * share;
+        const agreementShortfall = groupShortfall * share;
+        damageByAgreement.set(index, {
+          ...(achievableKnown ? { achievableUnits: agreementEffective } : {}),
+          creditedProductionUnits: Math.max(0, agreementEffective - agreementShortfall),
+          shortfallUnits: agreementShortfall,
+        });
+      }
+    }
+  }
   let settledCount = 0;
   let totalPremiumAnchor = 0;
 
@@ -600,44 +801,20 @@ export function computeSupplyAgreementSettlements(args: {
     // `shortfallEligible === false` grandfathers a contract out of the damages
     // leg entirely: its `volumeCap` was never validated against anything the
     // plants could physically make, so a penalty on it would be arbitrary.
-    const produced =
-      producedByCorpCommodity && a.shortfallEligible !== false
-        ? (producedByCorpCommodity.get(a.supplierCorpId)?.get(a.commodity) ?? 0)
-        : undefined;
-    // Ticket #1147 — clamp the obligation to what this supplier could actually
-    // have made. `achievable` is the involuntary-constraint ceiling; the
-    // operator's own levers are excluded from it upstream, so a supplier that
-    // chose to throttle or mothball still faces its full contracted volume and
-    // the anti-mothball property of this leg is preserved exactly.
-    //
-    // Absent entry ⇒ undefined ⇒ no clamp, the pre-fix behaviour. See the
-    // param docblock for why that is not read as a zero ceiling.
-    const achievableRaw = achievableByCorpCommodity?.get(a.supplierCorpId)?.get(a.commodity);
-    const achievable =
-      typeof achievableRaw === "number" && Number.isFinite(achievableRaw)
-        ? Math.max(0, achievableRaw)
-        : undefined;
-    const effectiveTotalCap = achievable !== undefined ? Math.min(totalCap, achievable) : totalCap;
-    const shortfallUnits =
-      typeof produced === "number" && Number.isFinite(produced)
-        ? Math.max(
-            0,
-            obligationAllocations && productionAllocations
-              ? Math.min(
-                  obligationAllocations.get(agreementIndex) ?? 0,
-                  // The allocator splits a supplier's obligation across its
-                  // contracts; the ceiling is a supplier-level quantity, so it
-                  // is apportioned on the same `capShare` the fallback uses.
-                  achievable !== undefined ? achievable * capShare : Number.POSITIVE_INFINITY
-                ) - (productionAllocations.get(agreementIndex) ?? 0)
-              : (effectiveTotalCap - produced) * capShare
-          )
-        : 0;
+    // Compute damages once for the supplier's whole commodity book, then split
+    // that one gap across eligible agreements. Delivery remains a max-flow
+    // problem, but production is a supplier-level fact. Mixing max-flow output
+    // with a pro-rata ceiling charged 50 units on a real 20-unit group gap.
+    const damage = damageByAgreement.get(agreementIndex);
+    const shortfallUnits = damage?.shortfallUnits ?? 0;
     // Tell the supplier what happened. Written even when the shortfall is zero
     // so the UI can distinguish "met the contract" from "never settled".
     if (deliveryRecord) {
       deliveryRecord.shortfallUnits = shortfallUnits;
-      if (achievable !== undefined) deliveryRecord.achievableUnits = achievable * capShare;
+      if (damage?.achievableUnits !== undefined) {
+        deliveryRecord.achievableUnits = damage.achievableUnits;
+      }
+      if (damage) deliveryRecord.creditedProductionUnits = damage.creditedProductionUnits;
     }
     // C6 — DAMAGES ARE CAPPED AT A FRACTION OF THE CONTRACT'S OWN NOTIONAL.
     // Uncapped, this line is an unbounded wire between two consenting corps:
@@ -652,6 +829,7 @@ export function computeSupplyAgreementSettlements(args: {
       uncappedPenaltyAnchor,
       notionalAnchor * CONTRACT_DAMAGES_CAP_FRACTION
     );
+    if (deliveryRecord) deliveryRecord.penaltyAnchor = penaltyAnchor;
 
     // Supplier's net position: it is credited the premium and debited damages.
     const rawNetAnchor = premiumAnchor - penaltyAnchor;
@@ -677,6 +855,9 @@ export function computeSupplyAgreementSettlements(args: {
       const available = Math.max(0, payer.liquidCapitalAnchor - (paidByCorp.get(payerId) ?? 0));
       const payable = Math.min(owedAnchor, available);
       unpaidAnchor = owedAnchor - payable;
+      if (deliveryRecord && unpaidAnchor > 0) {
+        deliveryRecord.unpaidSettlementAnchor = unpaidAnchor;
+      }
       paidByCorp.set(payerId, (paidByCorp.get(payerId) ?? 0) + payable);
       netAnchor = rawNetAnchor < 0 ? -payable : payable;
       if (Math.abs(netAnchor) < MIN_SETTLE_ANCHOR) continue;
@@ -686,6 +867,10 @@ export function computeSupplyAgreementSettlements(args: {
     const buyerLocal = Math.round(anchorToCorpCapital(netAnchor, buyer.ccy, buyer.fxRate));
     if (!Number.isFinite(supplierLocal) || !Number.isFinite(buyerLocal)) continue;
     if (supplierLocal === 0 && buyerLocal === 0) continue;
+    if (deliveryRecord) {
+      deliveryRecord.supplierCashDeltaLocal = supplierLocal;
+      deliveryRecord.supplierCurrencyCode = supplier.ccy;
+    }
 
     // Supplier is credited its net position; buyer is debited it (each in its
     // own ccy). A net-negative position (damages exceeding the premium) simply
@@ -696,6 +881,7 @@ export function computeSupplyAgreementSettlements(args: {
     totalPremiumAnchor += premiumAnchor;
 
     const meta = {
+      ...(a.agreementId ? { agreementId: a.agreementId } : {}),
       commodity: a.commodity,
       unitsSettled: Math.round(qty),
       pricePremium: a.pricePremium,
@@ -767,7 +953,7 @@ export async function settleSupplyAgreements(args: {
   /** Plants tier: supplier corpId -> commodity -> units actually produced. */
   producedByCorpCommodity?: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
   /** Plants tier: supplier corpId -> commodity -> involuntary-constraint ceiling (#1147). */
-  achievableByCorpCommodity?: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+  achievableByCorpCommodity?: AchievableByCorpCommodity;
   /** Required alongside `producedByCorpCommodity` — see the guard in the pure fn. */
   plantsEnabled?: boolean;
   turn: number;
@@ -783,6 +969,30 @@ export async function settleSupplyAgreements(args: {
     args;
   if (agreements.length === 0)
     return { settledCount: 0, totalPremiumAnchor: 0, settledPremiums: [], deliveries: [] };
+
+  // Income, dividends and other corporation-turn writes have already landed in
+  // MongoDB, while `lookups.corpById` is the pre-turn snapshot. The solvency
+  // floor must use the balance that actually exists at settlement time. Using
+  // the stale lookup made damages depend on whether the player spent yesterday's
+  // cash, exactly the behavior reported in ticket #1147.
+  const participantIds = [
+    ...new Set(
+      agreements.flatMap((agreement) => [agreement.supplierCorpId, agreement.buyerCorpId])
+    ),
+  ].filter(ObjectId.isValid);
+  const freshCapitalByCorpId = new Map<string, number>();
+  if (participantIds.length > 0) {
+    const currentBalances = await db
+      .collection<Pick<Corporation, "_id" | "liquidCapital">>("corporations")
+      .find(
+        { _id: { $in: participantIds.map((id) => new ObjectId(id)) } },
+        { projection: { liquidCapital: 1 } }
+      )
+      .toArray();
+    for (const current of currentBalances) {
+      freshCapitalByCorpId.set(current._id.toString(), current.liquidCapital ?? 0);
+    }
+  }
 
   const { deltaByCorp, txEntries, settledCount, totalPremiumAnchor, settledPremiums, deliveries } =
     computeSupplyAgreementSettlements({
@@ -804,7 +1014,7 @@ export async function settleSupplyAgreements(args: {
           fxRate: fxRateForCorpFromMap(corp, lookups.exchangeRatesByCurrency),
           // C6 solvency floor: the payer's own balance, in ₳.
           liquidCapitalAnchor: corpCapitalToAnchor(
-            corp.liquidCapital ?? 0,
+            freshCapitalByCorpId.get(corpId) ?? corp.liquidCapital ?? 0,
             resolveCorpLiquidCurrencyCode(corp),
             fxRateForCorpFromMap(corp, lookups.exchangeRatesByCurrency)
           ),
@@ -827,7 +1037,7 @@ export async function settleSupplyAgreements(args: {
         },
       });
       // Keep the in-memory snapshot consistent for any later same-turn reader.
-      corp.liquidCapital = (corp.liquidCapital ?? 0) + delta;
+      corp.liquidCapital = (freshCapitalByCorpId.get(corpId) ?? corp.liquidCapital ?? 0) + delta;
     }
     if (ops.length > 0) await db.collection<Corporation>("corporations").bulkWrite(ops);
   }
@@ -835,20 +1045,42 @@ export async function settleSupplyAgreements(args: {
     const deliveryOps: AnyBulkWriteOperation<SupplyAgreement>[] = [];
     for (const delivery of deliveries) {
       if (!ObjectId.isValid(delivery.agreementId)) continue;
+      const setFields = {
+        lastDeliveryTurn: delivery.turn,
+        lastDeliveredUnits: delivery.deliveredUnits,
+        lastShortfallUnits: Math.round(delivery.shortfallUnits ?? 0),
+        lastShortfallPenaltyAnchor: Math.round(delivery.penaltyAnchor ?? 0),
+        lastSupplierCashDelta: delivery.supplierCashDeltaLocal ?? 0,
+        lastUnpaidSettlementAnchor: Math.round(delivery.unpaidSettlementAnchor ?? 0),
+        ...(delivery.achievableUnits !== undefined
+          ? { lastAchievableUnits: Math.round(delivery.achievableUnits) }
+          : {}),
+        ...(delivery.creditedProductionUnits !== undefined
+          ? { lastCreditedProductionUnits: Math.round(delivery.creditedProductionUnits) }
+          : {}),
+        ...(delivery.supplierCurrencyCode
+          ? { lastSupplierCashCurrency: delivery.supplierCurrencyCode }
+          : {}),
+        updatedAt: now,
+      };
+      const unsetFields: Partial<
+        Record<
+          "lastAchievableUnits" | "lastCreditedProductionUnits" | "lastSupplierCashCurrency",
+          ""
+        >
+      > = {
+        ...(delivery.achievableUnits === undefined ? { lastAchievableUnits: "" } : {}),
+        ...(delivery.creditedProductionUnits === undefined
+          ? { lastCreditedProductionUnits: "" }
+          : {}),
+        ...(!delivery.supplierCurrencyCode ? { lastSupplierCashCurrency: "" } : {}),
+      };
       deliveryOps.push({
         updateOne: {
           filter: { _id: new ObjectId(delivery.agreementId) },
           update: {
-            $set: {
-              lastDeliveryTurn: delivery.turn,
-              lastDeliveredUnits: delivery.deliveredUnits,
-              // #1147: persisted so the contract can explain its own charge.
-              lastShortfallUnits: Math.round(delivery.shortfallUnits ?? 0),
-              ...(delivery.achievableUnits !== undefined
-                ? { lastAchievableUnits: Math.round(delivery.achievableUnits) }
-                : {}),
-              updatedAt: now,
-            },
+            $set: setFields,
+            ...(Object.keys(unsetFields).length > 0 ? { $unset: unsetFields } : {}),
           },
         },
       });

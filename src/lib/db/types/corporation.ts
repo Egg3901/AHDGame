@@ -654,6 +654,12 @@ export interface CorporateSector {
    */
   producedUnits?: number;
   /**
+   * Units this sector could have produced after external constraints but before
+   * the operator's production-policy and mothball choices. Used by supply
+   * agreement damages. Absent until the sector has run after rollout.
+   */
+  contractAchievableUnits?: number;
+  /**
    * Units telemetry: the share of `producedUnits` that cleared this turn,
    * `producedUnits × soldFraction` when market clearing ran, else equal to
    * `producedUnits`. Same DAILY, currency-free basis.

@@ -1,5 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { CommodityType } from "@/lib/constants/commodities";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 
 /**
  * Private supply agreement (bilateral, both-consent). A supplier corp commits
@@ -76,7 +77,7 @@ export interface SupplyAgreement {
   /** Units this agreement delivered to its named buyer on lastDeliveryTurn. */
   lastDeliveredUnits?: number;
   /**
-   * Ticket #1147 — the shortfall this contract was charged for on
+   * Ticket #1147: the shortfall this contract was charged for on
    * `lastDeliveryTurn`, and the ceiling that shortfall was measured against.
    *
    * Both exist purely so the supplier can be TOLD why its cash moved. Damages
@@ -89,6 +90,15 @@ export interface SupplyAgreement {
    */
   lastShortfallUnits?: number;
   lastAchievableUnits?: number;
+  /** Production credited against the damage ceiling on `lastDeliveryTurn`. */
+  lastCreditedProductionUnits?: number;
+  /** Damages assessed before premium netting and the payer solvency floor, in anchor currency. */
+  lastShortfallPenaltyAnchor?: number;
+  /** Exact supplier-side cash movement after premium netting and solvency, in the stored currency. */
+  lastSupplierCashDelta?: number;
+  lastSupplierCashCurrency?: CurrencyCode;
+  /** Net settlement amount left unpaid by the solvency floor, in anchor currency. */
+  lastUnpaidSettlementAnchor?: number;
   createdAt: Date;
   updatedAt: Date;
 }

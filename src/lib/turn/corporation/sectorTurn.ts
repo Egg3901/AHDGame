@@ -116,8 +116,7 @@ import {
   resolveSectorLabourEconomics,
   resolveSectorLabourProductionEffects,
 } from "./sectorLabour";
-import { computeSectorOutputUnits } from "./sectorOutputUnits";
-import { demandThrottleFactor } from "./demandThrottle";
+import { computeContractProduction } from "./contractProduction";
 import { advanceSectorInventory } from "@/lib/corporations/sectorInventory";
 import type { SectorTurnEnv, SectorTurnResult } from "./sectorTurnTypes";
 import { legacyRevenueShadowTelemetry, marketTelemetry } from "./sectorTelemetry";
@@ -869,80 +868,22 @@ export function processSector(
       ? 0
       : plantsCapacity * bankingCommodityScale
     : nameplateUnits * bankingCommodityScale;
-  // ─── Demand-aware production throttle (#1072) ────────────────────────────
-  //
-  // Revenue carries `soldFraction` (via `clearingRevenueLeg`); the cost lines
-  // do not. Inputs bill at `utilization`, labor at headcount, upkeep at
-  // capacity, `otherOpexPerUnit` per produced unit — and unsold output is not
-  // capitalised, it goes to the shadow stock in `market/inventory.ts`. A plant
-  // making 60k and selling 10k therefore paid full freight on 60k against
-  // revenue on 10k, which is the -254%/-500% margin players reported and no
-  // operator could manage out of.
-  //
-  // Firms do not run flat out into a market that will not take the goods.
-  // Target last turn's SALES plus a probe margin. A plant at capacity that
-  // clears its output is unaffected (its target exceeds what it can make), so
-  // this is a flip identity for every healthy sector and only gluts move.
-  //
-  // Applied to the tonnage, NOT as another factor inside `productionFactor`:
-  // it is a decision about how much to run, not a physical constraint on the
-  // run, and folding it in would have it re-multiply everywhere
-  // `productionFactor` is reused.
-  const plannedUnits = productionNameplateUnits * productionFactor;
-  const demandThrottle = plantsEnabled
-    ? demandThrottleFactor(plannedUnits, sector.soldUnits, sector.producedUnits)
-    : 1;
-  const { producedUnits, soldUnits } = computeSectorOutputUnits({
-    // Plants inverts the P1 decomposition: units come from owned capacity, not
-    // from the revenue nameplate. Everything downstream of `unitsBase` is the
-    // same production-leg chain.
-    // D12: mothballed plants are cold — zero units produced, hence zero offered
-    // to the clearing book next turn.
-    nameplateUnits: productionNameplateUnits,
-    productionFactor: productionFactor * demandThrottle,
+  const { producedUnits, soldUnits, contractAchievableUnits } = computeContractProduction({
+    plantsEnabled,
+    actualNameplateUnits: productionNameplateUnits,
+    actualProductionFactor: productionFactor,
+    fullPolicyNameplateUnits: plantsCapacity * bankingCommodityScale,
+    involuntaryProductionFactor:
+      disasterOutputFactor *
+      nationalizationTransition *
+      plantsExtractionHardMin *
+      throughputFactor *
+      plantsTechOutputMultiplier *
+      labourOutputFactor,
+    priorSoldUnits: sector.soldUnits,
+    priorProducedUnits: sector.producedUnits,
     soldFraction: market.clearingEnabled && clearing ? clearing.soldFraction : null,
   });
-  // ─── Contract-achievable output (ticket #1147) ───────────────────────────
-  //
-  // What this plant COULD have made this turn if the operator had asked it for
-  // everything, given the constraints the operator does not control. It is the
-  // ceiling the supply-agreement damages leg clamps a contracted volume to, so
-  // a supplier is never billed for a gap it was physically unable to close.
-  //
-  // The split is deliberate and is the whole point of the number:
-  //
-  //   FORGIVEN (divided out, so the ceiling falls and damages shrink) — the
-  //   involuntary legs: disaster, nationalization transition, the extraction
-  //   hard-min, input throughput, tech, labour/strike, and the demand throttle.
-  //   The throttle belongs here even though the engine, not the market, applies
-  //   it: it fires precisely because the market would not take the goods, and
-  //   settleSupplyAgreements already holds that "units the supplier made but
-  //   could not move because the market did not want them are a demand problem,
-  //   not a breach". Units it did not make for that same reason are the same
-  //   problem wearing a different hat.
-  //
-  //   STILL LIABLE (excluded, so the ceiling stays high) — the two levers the
-  //   operator owns: the production-policy slider and mothballing. Folding
-  //   either in would reopen the exploit the damages leg exists to close, where
-  //   cutting output to zero is cheaper than under-producing. A cold plant owes
-  //   damages on its whole contracted volume, exactly as before.
-  //
-  // Non-plants worlds have no capacity base and no contract capacity check, so
-  // this is 0 there and the settlement falls through to its old behaviour.
-  const contractAchievableUnits = plantsEnabled
-    ? Math.max(
-        0,
-        plantsCapacity *
-          bankingCommodityScale *
-          disasterOutputFactor *
-          nationalizationTransition *
-          plantsExtractionHardMin *
-          throughputFactor *
-          plantsTechOutputMultiplier *
-          labourOutputFactor *
-          demandThrottle
-      )
-    : 0;
   // Plants: revenue is DERIVED from produced output, exactly inverting the P1
   // identity (producedUnits × mixPrice × sales legs == realizedRevenue). At the
   // flip, capacity == impliedOutputUnits(nameplate) and every leg is unchanged,
