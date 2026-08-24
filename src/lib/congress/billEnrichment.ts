@@ -37,6 +37,7 @@ import { isNewGenerationType } from "@/lib/politicalLegislation/project";
 import type { LawCountryId } from "@/lib/politicalLegislation/types";
 import { computeProvisionEffectChips } from "@/lib/legislature/provisionEffects";
 import { optionIntensity } from "@/lib/legislature/optionIntensity";
+import { resolveProvisionPolicyOption } from "@/lib/legislature/provisionEnrichment";
 import { formatEmbargoProvisionLabel } from "@/lib/legislature/embargoProvisionLabel";
 import {
   canonicalizeLegislationTypeId,
@@ -259,44 +260,6 @@ function formatPolicyOptionLabel(option: LegislationPolicyOption): string {
   if (option.explanation?.includes(": ")) return option.explanation;
   if (option.explanation) return `${option.name}: ${option.explanation}`;
   return option.name;
-}
-
-function resolveProvisionPolicyOption(
-  lt: LegislationType | null | undefined,
-  provision: {
-    policyOptionId?: string;
-    economic?: number;
-    social?: number;
-    effectDirection: number;
-  }
-): { option: LegislationPolicyOption; index: number } | null {
-  if (!lt?.policyOptions?.length) return null;
-
-  if (provision.policyOptionId) {
-    const optionIndex = lt.policyOptions.findIndex((opt) => opt.id === provision.policyOptionId);
-    if (optionIndex !== -1) {
-      return { option: lt.policyOptions[optionIndex], index: optionIndex };
-    }
-  }
-
-  const hasExplicitAxes = provision.economic != null || provision.social != null;
-  if (hasExplicitAxes) {
-    const optionIndex = lt.policyOptions.findIndex(
-      (opt) =>
-        (opt.economic ?? 0) === (provision.economic ?? 0) &&
-        (opt.social ?? 0) === (provision.social ?? 0)
-    );
-    if (optionIndex !== -1) {
-      return { option: lt.policyOptions[optionIndex], index: optionIndex };
-    }
-  }
-
-  const directionMatches = lt.policyOptions
-    .map((option, index) => ({ option, index }))
-    .filter(({ option }) => option.effectDirection === provision.effectDirection);
-  if (directionMatches.length === 1) return directionMatches[0];
-
-  return null;
 }
 
 function formatCountryName(countryId?: string): string {

@@ -44,6 +44,7 @@ import { getEraContext } from "@/lib/era/context";
 import { resolveTaxSliderProvisionFields } from "@/lib/politicalLegislation/taxSlider";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
 import { inferCountryIdFromStateId } from "@/lib/congress/resolveBillCountryId";
+import { resolveProvisionPolicyOption } from "@/lib/legislature/provisionEnrichment";
 import {
   canonicalizeLegislationTypeId,
   getEquivalentLegislationTypeIds,
@@ -492,36 +493,6 @@ function formatPolicyOptionLabel(option: LegislationPolicyOption): string {
   return option.name;
 }
 
-function resolveProvisionPolicyOption(
-  lt: LegislationType | null | undefined,
-  provision: Pick<
-    ValidatedPolicyProvision,
-    "policyOptionId" | "economic" | "social" | "effectDirection"
-  >
-): LegislationPolicyOption | null {
-  if (!lt?.policyOptions?.length) return null;
-
-  if (provision.policyOptionId) {
-    const exactOption = lt.policyOptions.find((opt) => opt.id === provision.policyOptionId);
-    if (exactOption) return exactOption;
-  }
-
-  // Label resolution still treats a missing axis as 0 so legacy provisions
-  // (which stamped a literal 0) and new ones (which omit the field) resolve to
-  // the same option. Only the vote-time shift distinguishes the two.
-  const explicitAxisMatch = lt.policyOptions.find(
-    (opt) =>
-      (opt.economic ?? 0) === (provision.economic ?? 0) &&
-      (opt.social ?? 0) === (provision.social ?? 0)
-  );
-  if (explicitAxisMatch) return explicitAxisMatch;
-
-  const directionMatches = lt.policyOptions.filter(
-    (option) => option.effectDirection === provision.effectDirection
-  );
-  return directionMatches.length === 1 ? directionMatches[0] : null;
-}
-
 /**
  * Freeze the proposed/current provision labels at proposal time so historical
  * bill detail does not drift after the law changes.
@@ -614,7 +585,7 @@ export async function snapshotBillPolicyProvisions(
     const canonicalId =
       canonicalizeLegislationTypeId(provision.legislationTypeId) ?? provision.legislationTypeId;
     const lt = legislationTypeMap.get(canonicalId);
-    const proposedOption = resolveProvisionPolicyOption(lt, provision);
+    const proposedOption = resolveProvisionPolicyOption(lt, provision)?.option ?? null;
     const currentPolicyOptionId = currentPolicyIdMap.get(canonicalId);
     const currentPolicyOption = currentPolicyOptionId
       ? lt?.policyOptions?.find((option) => option.id === currentPolicyOptionId)
