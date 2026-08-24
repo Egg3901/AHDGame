@@ -76,6 +76,14 @@ export interface SupplyAgreement {
   lastDeliveryTurn?: number;
   /** Units this agreement delivered to its named buyer on lastDeliveryTurn. */
   lastDeliveredUnits?: number;
+  /** Buyer demand used to allocate this agreement's latest delivery. */
+  lastBuyerConsumptionUnits?: number;
+  /** Delivery turn retained before lastDeliveryTurn was updated. */
+  previousDeliveryTurn?: number;
+  /** Units delivered on previousDeliveryTurn. */
+  previousDeliveredUnits?: number;
+  /** Buyer demand used to allocate the previous delivery. */
+  previousBuyerConsumptionUnits?: number;
   /**
    * Ticket #1147: the shortfall this contract was charged for on
    * `lastDeliveryTurn`, and the ceiling that shortfall was measured against.

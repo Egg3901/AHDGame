@@ -42,6 +42,7 @@ beforeEach(() => {
               consumptionCoveredUnits: 60,
               coveragePercent: 60,
               turn: 296,
+              consumptionUnits: 100,
             },
           },
         ],
@@ -58,12 +59,65 @@ describe("CommoditiesTab private supply", () => {
 
     await waitFor(() => expect(screen.getByText("Energy")).toBeTruthy());
     expect(screen.getByText("Private supply")).toBeTruthy();
-    expect(screen.getByText(/60 MWh delivered on turn 296/)).toBeTruthy();
-    expect(screen.getByText(/60% of consumption covered/)).toBeTruthy();
+    expect(screen.getByText(/60 of 100 MWh consumed came from private supply/)).toBeTruthy();
+    expect(screen.getByText(/40 MWh came from the open market or other sources/)).toBeTruthy();
+    expect(screen.getByText(/Delivered on turn 296/)).toBeTruthy();
+    expect(screen.getByText(/60% covered/)).toBeTruthy();
     expect(screen.getByText(/Contracted cap: 80 MWh/)).toBeTruthy();
     expect(screen.getByText(/Scarce supplier output is divided proportionally/)).toBeTruthy();
     expect(
-      screen.getByText(/Net is this corporation's own output minus its input use/)
+      screen.getByText(/Net production is this corporation's own output minus its input use/)
+    ).toBeTruthy();
+  });
+
+  it("reconciles private delivery with consumption and the prior turn", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        clearingEnabled: true,
+        ledgerEnabled: true,
+        supplyAgreementsEnabled: true,
+        commodities: [
+          {
+            commodity: "advertising",
+            label: "Advertising & Media",
+            icon: "AD",
+            color: "bg-pink-500",
+            unit: "campaigns",
+            outputUnits: 0,
+            consumptionUnits: 5_130_654,
+            netUnits: -5_130_654,
+            market: { price: 8 },
+            privateSupply: {
+              contractedUnits: 4_000_000,
+              deliveredUnits: 519_229,
+              consumptionCoveredUnits: 519_229,
+              coveragePercent: 10.12,
+              turn: 362,
+              consumptionUnits: 5_130_654,
+              previousDeliveredUnits: 0,
+              previousConsumptionUnits: 5_081_983,
+              previousTurn: 361,
+            },
+          },
+        ],
+        regions: [],
+        marketShare: [],
+      }),
+    } as Response);
+
+    render(<CommoditiesTab corpId="624" isCeo />);
+
+    await waitFor(() => expect(screen.getByText("Advertising & Media")).toBeTruthy());
+    expect(screen.getByText("Net production")).toBeTruthy();
+    expect(
+      screen.getByText(/519,229 of 5,130,654 campaigns consumed came from private supply/)
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/4,611,425 campaigns came from the open market or other sources/)
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/Previous turn 361: 0 delivered against 5,081,983 consumed/)
     ).toBeTruthy();
   });
 
