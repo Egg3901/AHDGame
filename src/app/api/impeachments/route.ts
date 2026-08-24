@@ -64,8 +64,11 @@ export async function GET(request: Request) {
 
     // Attach the all-seats bar (chamber size + ayes needed) for every open
     // case so the panel can show what passage actually takes. Seat counts are
-    // memoized per chamber; most requests touch one or two.
-    const seatCache = new Map<string, number>();
+    // memoized per chamber; most requests touch one or two. Cache the PROMISE,
+    // not the resolved count: these callbacks all run to their first await
+    // before any of them resolves, so caching the number would let every case
+    // in the same chamber issue its own duplicate seat scan.
+    const seatCache = new Map<string, Promise<number>>();
     const chambers = await Promise.all(
       impeachments.map(async (imp): Promise<ImpeachmentChamberInfo | null> => {
         if (imp.stage !== "house" && imp.stage !== "senate") return null;
@@ -73,11 +76,12 @@ export async function GET(request: Request) {
         if (!officeType) return null;
         const stateScope = imp.targetOffice === "governor" ? (imp.state ?? "") : "";
         const cacheKey = `${officeType}|${stateScope}`;
-        let seats = seatCache.get(cacheKey);
-        if (seats == null) {
-          seats = await countChamberSeats(db, imp.countryId, officeType, stateScope || undefined);
-          seatCache.set(cacheKey, seats);
+        let pending = seatCache.get(cacheKey);
+        if (!pending) {
+          pending = countChamberSeats(db, imp.countryId, officeType, stateScope || undefined);
+          seatCache.set(cacheKey, pending);
         }
+        const seats = await pending;
         return {
           seats,
           needed:
