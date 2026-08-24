@@ -96,7 +96,10 @@ export function OpenFloorPanel({ openFloor }: { openFloor: DossierView["openFloo
         the Bundestag. {openFloor.characters.toLocaleString()}{" "}
         {openFloor.characters === 1 ? "character has" : "characters have"} taken a position this
         turn, for a net {openFloor.netPoints >= 0 ? "+" : ""}
-        {openFloor.netPoints.toFixed(1)} toward{" "}
+        {/* Two decimals, matching the institution cards and the wire: at the
+            tuned tempo a small crowd's whole ceiling is under one point, and
+            one decimal rounded it away from what the cards quote. */}
+        {openFloor.netPoints.toFixed(2)} toward{" "}
         {openFloor.netPoints >= 0 ? "reunification" : "NATO"}.
       </p>
       {/*
@@ -107,10 +110,10 @@ export function OpenFloorPanel({ openFloor }: { openFloor: DossierView["openFloo
       {openFloor.capped && (
         <p className="mt-2 font-mono text-body-xs leading-relaxed text-warning">
           The floor asked for {openFloor.rawPoints >= 0 ? "+" : ""}
-          {openFloor.rawPoints.toFixed(1)} and will be scaled to{" "}
+          {openFloor.rawPoints.toFixed(2)} and will be scaled to{" "}
           {openFloor.netPoints >= 0 ? "+" : ""}
-          {openFloor.netPoints.toFixed(1)}: with {openFloor.characters.toLocaleString()} taking
-          part, the floor can move one institution by at most ±{openFloor.capPoints.toFixed(1)} this
+          {openFloor.netPoints.toFixed(2)}: with {openFloor.characters.toLocaleString()} taking
+          part, the floor can move one institution by at most ±{openFloor.capPoints.toFixed(2)} this
           turn. A larger turnout raises that ceiling.
         </p>
       )}

@@ -95,6 +95,29 @@ export interface DossierPlayView {
   payments: DossierPaymentView[];
 }
 
+/**
+ * One institution's per-turn personal-tier cap usage.
+ *
+ * The cap itself comes from `personalNetCapFor` and bites in `resolvePlayBatch`
+ * at the tick; this carries what the board needs to show how much of it this
+ * turn has already spent. Null on institutions the personal tier cannot reach,
+ * where a meter would imply a limit that never applies.
+ */
+export interface DossierInstitutionCapView {
+  /** Signed points the open floor asked for here this turn, before the cap. */
+  rawPoints: number;
+  /** What the tier will move here after the cap: clamped to ±capPoints. */
+  netPoints: number;
+  /** The ceiling itself, so the card quotes the rule next to the usage. */
+  capPoints: number;
+  /**
+   * The raw ask has reached the cap. From here on further personal plays
+   * change nothing on this institution until the next tick, so this is the
+   * state the board must make unmistakable.
+   */
+  maxed: boolean;
+}
+
 export interface DossierInstitutionView {
   id: string;
   name: string;
@@ -108,6 +131,7 @@ export interface DossierInstitutionView {
   lastPlayLabel: string | null;
   plays: DossierPlayView[];
   gateNote: string | null;
+  personalCap: DossierInstitutionCapView | null;
 }
 
 export interface DossierBenchView {
@@ -180,9 +204,15 @@ export interface DossierView {
   openFloor: {
     characters: number;
     /**
-     * Net points the personal tier bought, after the cap. Read off the stamps
-     * once the turn has resolved, and PROJECTED through the resolver before
-     * then, because `appliedPoints` does not exist until the phase writes it.
+     * Net points the personal tier moves this turn, after the cap.
+     *
+     * A STAMPED row is read off its stamp; an unstamped one is PROJECTED
+     * through the resolver, because `appliedPoints` does not exist until the
+     * phase writes it. The two agree by construction, since the resolver makes
+     * the stamps sum to the same clamped figure the projection computes — but
+     * preferring the stamp matters in the window between the phase settling a
+     * turn and the clock advancing, where recomputing would restate a settled
+     * row under whatever ceiling is current now.
      */
     netPoints: number;
     /** What it asked for, before the cap. Equal to `netPoints` when uncapped. */
@@ -419,32 +449,55 @@ export async function loadGermanQuestionDossier(
     seen.add(String(p.characterId));
     participantsByInstitution.set(p.targetInstitutionId, seen);
   }
+  /**
+   * The ceiling to SHOW for an institution.
+   *
+   * Floored at one participant. An untouched institution has a crowd of zero
+   * and therefore a true ceiling of zero, which on a meter reads as "the floor
+   * can never move this" — the opposite of the truth. One participant is what
+   * the first person to act would earn, so that is the honest thing to quote
+   * before anyone has.
+   *
+   * Resolution is unaffected: `resolvePlayBatch` sizes the real pool from the
+   * real count, and an institution with no plays has nothing to apportion.
+   */
   const capForInstitution = (id: string) =>
-    personalNetCapFor(participantsByInstitution.get(id)?.size ?? 0);
+    personalNetCapFor(Math.max(1, participantsByInstitution.get(id)?.size ?? 0));
 
-  // A STAMPED row is the truth; only an unstamped one is projected.
+  // PROJECTED, not read off the stamps.
   //
   // `appliedPoints` is null until the settlement phase resolves the turn, so
-  // summing it alone reported the live turn as "scaled to +0.0" every time and
-  // made the panel claim a scaling that had not happened. Projecting
-  // unconditionally would be the opposite error: between the phase stamping a
-  // turn's rows and the clock advancing, the board would recompute values that
-  // are already settled, and a row stamped under an older cap would silently
-  // be restated under this one.
+  // summing it reported the live turn as "scaled to +0.0" every time and made
+  // the panel claim a scaling that had not happened. The board reports what the
+  // tick WILL enforce; the wire is the side that reports what was already
+  // written.
   //
-  // Projected THROUGH THE RESOLVER, never a second copy of the apportionment,
-  // so the panel and the turn phase cannot disagree about what the floor bought.
-  const projectedById = new Map(
-    resolvePlayBatch(personal).stamped.map((s) => [String(s.id), s.appliedPoints])
-  );
-  const projectedNet = personal.reduce(
-    (sum, p) => sum + (p.appliedPoints ?? projectedById.get(String(p._id)) ?? 0),
-    0
-  );
+  // Reading stamps where they exist would be no more accurate: the resolver
+  // makes them sum to exactly the figure this projection computes, so the two
+  // agree on every batch the resolver actually produced. They diverge only on
+  // rows whose stamps could not have come from it.
+  //
+  // Run THROUGH THE RESOLVER, never a second copy of the apportionment, so the
+  // panel, the institution cards and the turn phase cannot disagree. A local
+  // clamp would be a second copy and would miss the largest-remainder split.
+  const projected = resolvePlayBatch(personal);
+  const byId = new Map(personal.map((p) => [String(p._id), p]));
+  const netByInstitution = new Map<string, number>();
+  for (const stamp of projected.stamped) {
+    const institutionId = byId.get(String(stamp.id))?.targetInstitutionId;
+    if (!institutionId) continue;
+    netByInstitution.set(
+      institutionId,
+      (netByInstitution.get(institutionId) ?? 0) + stamp.appliedPoints
+    );
+  }
+  /** What the tier moves on one institution, after that institution's ceiling. */
+  const personalNetFor = (institutionId: string): number =>
+    netByInstitution.get(institutionId) ?? 0;
 
   const openFloor = {
     characters: new Set(personal.map((p) => String(p.characterId))).size,
-    netPoints: pts(projectedNet),
+    netPoints: pts([...netByInstitution.values()].reduce((sum, v) => sum + v, 0)),
     rawPoints: pts(personalRawTotal),
     // The ceiling moves with turnout now, so report the largest one in play:
     // the institution a crowd is most likely to be pushing against.
@@ -479,6 +532,10 @@ export async function loadGermanQuestionDossier(
 
   const catalogue = seat ? playsForSeat(seat.id) : [];
   const personalCatalogue = playsForSeat(null);
+  // The institutions a personal play can land on at all. Everywhere else the
+  // cap never applies, so those cards carry no meter rather than one pinned
+  // permanently at zero.
+  const personalTargets = new Set(personalCatalogue.map((p) => p.target));
 
   // The viewer's own money, so a personal play a broke character cannot afford
   // renders disabled here instead of looking live and being refused by the
@@ -609,6 +666,7 @@ export async function loadGermanQuestionDossier(
     const eastPct = pts(inst.position);
     const drift = pts(inst.lastDrift);
     const plays = buildPlays(inst.id);
+    const personalRaw = personalRawByInstitution.get(inst.id) ?? 0;
     return {
       id: inst.id,
       name: def?.name ?? inst.id,
@@ -627,6 +685,20 @@ export async function loadGermanQuestionDossier(
           : seat
             ? "this seat has no lever on this institution."
             : "open plays only reach the street and the Bundestag.",
+      // At the cap exactly, nothing was scaled down but the institution is
+      // already at its ceiling for the turn, so `maxed` reads >= where the
+      // aggregate `openFloor.capped` (a throttle that BIT) stays strict.
+      // The ceiling is THIS institution's, sized by the crowd pushing it, not a
+      // constant shared across the board. Two cards can legitimately quote
+      // different limits on the same turn.
+      personalCap: personalTargets.has(inst.id)
+        ? {
+            rawPoints: magPts(personalRaw),
+            netPoints: magPts(personalNetFor(inst.id)),
+            capPoints: magPts(capForInstitution(inst.id)),
+            maxed: Math.abs(personalRaw) >= capForInstitution(inst.id),
+          }
+        : null,
     };
   });
 

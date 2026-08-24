@@ -297,9 +297,138 @@ describe("loadGermanQuestionDossier", () => {
     const { loadGermanQuestionDossier } = await import("./dossier");
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
     expect(view!.openFloor.characters).toBe(40);
-    // 40 × 200 × 0.25 = 2000 raw against a 600 cap.
+    // 40 x 200 x 0.25 = 2000 hundredths asked for, far past the cap. The figure
+    // shown is the projection clamped to the cap, whatever the fixture's own
+    // stamps claim: the card reports what the tick will enforce, and the wire
+    // is the side that reports what was already written.
     expect(view!.openFloor.capped).toBe(true);
-    expect(view!.openFloor.netPoints).toBe(6);
+    // One decimal, like every other aggregate on the board; the per-institution
+    // meter keeps two, where the ceiling needs the precision. Forty distinct
+    // characters earn a bigger pool than the eight-person reference.
+    expect(view!.openFloor.netPoints).toBe(
+      Math.round((personalNetCapFor(40) / HUNDREDTHS) * 10) / 10
+    );
+  });
+
+  it("carries per-institution cap usage below the cap", async () => {
+    // Two letters at basePoints 60: 2 x 60 x 0.25 = 30 hundredths asked for,
+    // under the 38 a two-person crowd earns, so usage reads uncapped and equals
+    // the ask. The magnitude is sized against personalNetCapFor(2) rather than
+    // a flat number, because the ceiling now moves with turnout.
+    prime(db, "settlementPlays").find.mockReturnValue(
+      cursor(
+        Array.from({ length: 2 }, () => ({
+          _id: new ObjectId(),
+          crisisId: CRISIS_ID,
+          actor: "personal",
+          seatId: null,
+          characterId: new ObjectId(),
+          playId: "letter",
+          targetInstitutionId: "bundestag",
+          direction: -1,
+          basePoints: 60,
+          appliedPoints: null,
+          turn: 412,
+          resolvedTurn: null,
+        }))
+      )
+    );
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    expect(view!.institutions.find((i) => i.id === "bundestag")!.personalCap).toEqual({
+      rawPoints: -0.3,
+      netPoints: -0.3,
+      capPoints: personalNetCapFor(2) / HUNDREDTHS,
+      maxed: false,
+    });
+    // Reachable but untouched this turn: the meter sits at zero rather than
+    // disappearing, so the limit is visible before anyone has spent any of it.
+    expect(view!.institutions.find((i) => i.id === "street")!.personalCap).toEqual({
+      rawPoints: 0,
+      netPoints: 0,
+      // Nobody has acted here, so the meter quotes what the FIRST person to
+      // act would earn. A true zero-crowd ceiling of 0.00 would read as "the
+      // floor can never move this".
+      capPoints: personalNetCapFor(1) / HUNDREDTHS,
+      maxed: false,
+    });
+    // The personal tier has no lever here; a meter would imply a limit that
+    // never applies.
+    expect(view!.institutions.find((i) => i.id === "laender")!.personalCap).toBeNull();
+    expect(view!.institutions.find((i) => i.id === "garrison")!.personalCap).toBeNull();
+    expect(view!.openFloor.netPoints).toBe(-0.3);
+  });
+
+  it("projects a still-pending batch onto the cap as MAXED", async () => {
+    // Nothing is stamped yet mid-turn: appliedPoints are null. The projection
+    // has to read the ceiling the tick will enforce, not zero. Four rallies:
+    // 4 x 200 x 0.25 = 200 hundredths asked for, past the 53 a four-person
+    // crowd earns.
+    prime(db, "settlementPlays").find.mockReturnValue(
+      cursor(
+        Array.from({ length: 4 }, () => ({
+          _id: new ObjectId(),
+          crisisId: CRISIS_ID,
+          actor: "personal",
+          seatId: null,
+          characterId: new ObjectId(),
+          playId: "rally",
+          targetInstitutionId: "street",
+          direction: 1,
+          basePoints: 200,
+          appliedPoints: null,
+          turn: 412,
+          resolvedTurn: null,
+        }))
+      )
+    );
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    expect(view!.institutions.find((i) => i.id === "street")!.personalCap).toMatchObject({
+      rawPoints: 2,
+      netPoints: personalNetCapFor(4) / HUNDREDTHS,
+      maxed: true,
+    });
+    expect(view!.openFloor.capped).toBe(true);
+    // One decimal on the aggregate, where the card's own meter keeps two: four
+    // participants earn 53 hundredths, which reads 0.5 here. Derived rather
+    // than frozen, so retuning the reference turnout moves this with it.
+    expect(view!.openFloor.netPoints).toBe(
+      Math.round((personalNetCapFor(4) / HUNDREDTHS) * 10) / 10
+    );
+  });
+
+  it("marks an institution AT the cap as maxed without claiming a throttle", async () => {
+    // Two letters at 76: 2 x 76 x 0.25 = 38, exactly the ceiling a two-person
+    // crowd earns. Nothing was scaled away, so `capped` stays strict — but the
+    // category sits at its ceiling and further plays cannot add movement,
+    // which is what `maxed` reports.
+    prime(db, "settlementPlays").find.mockReturnValue(
+      cursor(
+        Array.from({ length: 2 }, () => ({
+          _id: new ObjectId(),
+          crisisId: CRISIS_ID,
+          actor: "personal",
+          seatId: null,
+          characterId: new ObjectId(),
+          playId: "letter",
+          targetInstitutionId: "bundestag",
+          direction: 1,
+          basePoints: 76,
+          appliedPoints: null,
+          turn: 412,
+          resolvedTurn: null,
+        }))
+      )
+    );
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    expect(view!.institutions.find((i) => i.id === "bundestag")!.personalCap).toMatchObject({
+      rawPoints: personalNetCapFor(2) / HUNDREDTHS,
+      netPoints: personalNetCapFor(2) / HUNDREDTHS,
+      maxed: true,
+    });
+    expect(view!.openFloor.capped).toBe(false);
   });
 
   it("builds the wire newest-first and caps it at eight lines", async () => {

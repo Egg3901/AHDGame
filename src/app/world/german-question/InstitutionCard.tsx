@@ -34,6 +34,11 @@ export function InstitutionCard({
   // Only the catalogue the viewer is currently acting from. Offering the other
   // one would render buttons the command refuses 403 every time.
   const plays = institution.plays.filter((p) => p.actor === mode);
+  const cap = institution.personalCap;
+  // The cap governs the open floor's push, so its usage reads in the same
+  // direction colours as everything else: east is error, west is info.
+  const capTone =
+    cap && cap.netPoints > 0 ? "text-error" : cap && cap.netPoints < 0 ? "text-info" : "text-muted";
 
   return (
     <section className="flex flex-col overflow-hidden rounded-lg border border-card-border bg-background">
@@ -69,6 +74,36 @@ export function InstitutionCard({
       </header>
 
       <div className="flex flex-1 flex-col gap-2 px-4 pb-4 pt-3">
+        {cap && (
+          <div data-testid="open-floor-cap" aria-live="polite">
+            <div
+              className={`flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 font-mono text-body-xs ${
+                cap.maxed
+                  ? "border-warning/40 bg-warning/[0.05]"
+                  : "border-card-border bg-card-muted"
+              }`}
+            >
+              <span className="tracking-widest text-muted">OPEN FLOOR CAP</span>
+              <span className="flex items-center gap-1.5">
+                <span className={`font-bold ${capTone}`}>
+                  {cap.netPoints >= 0 ? "+" : ""}
+                  {cap.netPoints.toFixed(2)} / ±{cap.capPoints.toFixed(2)}
+                </span>
+                {cap.maxed && (
+                  <span className="rounded border border-warning/40 px-1 font-bold tracking-widest text-warning">
+                    MAXED
+                  </span>
+                )}
+              </span>
+            </div>
+            {cap.maxed && (
+              <p className="mt-1 font-mono text-body-xs leading-relaxed text-warning">
+                The open floor has reached its limit on this category for this turn. Further
+                personal plays cost their action point but move nothing here until the next tick.
+              </p>
+            )}
+          </div>
+        )}
         <p className="font-mono text-body-xs tracking-widest text-muted">
           PLAYS OPEN TO {actorLabel} HERE
         </p>

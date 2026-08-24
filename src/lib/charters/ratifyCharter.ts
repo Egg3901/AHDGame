@@ -266,6 +266,15 @@ export async function ratifyCharter(
     } catch {
       /* non-fatal */
     }
+    // Founders defecting from another party must not keep active player
+    // endorsements of their old party's primary candidates (ticket #1179).
+    try {
+      const { withdrawPlayerEndorsementsOnPartyChange } =
+        await import("@/lib/elections/playerEndorsements");
+      await withdrawPlayerEndorsementsOnPartyChange(db, ch._id, partyIdStr, { now });
+    } catch {
+      /* non-fatal */
+    }
   }
   // Drop former-party caucus membership for every founder who actually moved.
   // Charter ratification is a party-switch and must clear factionId the same
