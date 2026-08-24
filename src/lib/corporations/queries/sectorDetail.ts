@@ -776,7 +776,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           sectorDetailUnitScale
         ),
         demandGapUnits,
-        workers: calculateWorkers(sectorRevenueAnchor, metrics.workforceSkill),
+        workers: sector.workers ?? calculateWorkers(sectorRevenueAnchor, metrics.workforceSkill),
         money: {
           realizedRevenueAnchor: sectorAmountAnchor(sectorEconomicRevenue(sector)),
           maintenanceNetAnchor: sectorAmountAnchor(maintenanceNet),
@@ -847,7 +847,10 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         currentGrowthRate: sector.currentGrowthRate ?? sector.growthRate ?? 0,
         currentGrowthCost: Math.round(sectorAmountInCorpCurrency(sector.currentGrowthCost)),
         revenue: Math.round(sectorAmountInCorpCurrency(sector.revenue)),
-        workers: calculateWorkers(sectorRevenueAnchor, metrics.workforceSkill),
+        workers: sector.workers ?? calculateWorkers(sectorRevenueAnchor, metrics.workforceSkill),
+        workersDesired:
+          sector.workersDesired ?? calculateWorkers(sectorRevenueAnchor, metrics.workforceSkill),
+        labourStaffingFactor: sector.labourStaffingFactor ?? 1,
         productionPolicy: sector.productionPolicy ?? 0,
         productionPolicyLevel: sector.productionPolicyLevel ?? 0,
         // Labour system: CEO wage-level lever (1.0 = baseline), the sector's pay
@@ -1098,6 +1101,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       (payload.sector as Record<string, unknown>).revenue = null;
       (payload.sector as Record<string, unknown>).currentGrowthCost = null;
       (payload.sector as Record<string, unknown>).workers = null;
+      (payload.sector as Record<string, unknown>).workersDesired = null;
+      (payload.sector as Record<string, unknown>).labourStaffingFactor = null;
       payload.corporation = redactPrivateCorporation(
         payload.corporation as Record<string, unknown>
       );
@@ -1114,6 +1119,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       (payload.sector as Record<string, unknown>).revenue = null;
       (payload.sector as Record<string, unknown>).currentGrowthCost = null;
       (payload.sector as Record<string, unknown>).workers = null;
+      (payload.sector as Record<string, unknown>).workersDesired = null;
+      (payload.sector as Record<string, unknown>).labourStaffingFactor = null;
       payload.margins = null;
       payload.financials = null;
       payload.financialVisibility = {

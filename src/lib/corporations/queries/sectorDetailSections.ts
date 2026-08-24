@@ -1093,6 +1093,10 @@ export interface SectorPlantsSection {
   /** Turns a new build in this sector takes to come online. */
   buildTurns: number;
   workers: number;
+  /** Headcount this capacity would employ if every role could be filled. */
+  workersDesired: number;
+  /** Actual workers divided by desired workers, after the hiring ramp. */
+  labourStaffingFactor: number;
   /** NPC unionization pressure, 0–100. */
   unionizationPct: number;
   /** Workers needed per unit/day of capacity at this era. */
@@ -1671,6 +1675,8 @@ export function buildSectorPlantsSection(args: {
     depreciationPerTurn: CAPITAL_DEPRECIATION_PER_TURN,
     buildTurns: CAPACITY_BUILD_TURNS(sectorType),
     workers,
+    workersDesired: num(sector.workersDesired) ?? workers,
+    labourStaffingFactor: Math.max(0, Math.min(1, num(sector.labourStaffingFactor) ?? 1)),
     unionizationPct: num(sector.unionization) ?? 0,
     laborIntensity: laborIntensity(sectorType, currentYear, eraUnitScale),
     governor: {

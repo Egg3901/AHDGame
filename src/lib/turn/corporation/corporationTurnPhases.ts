@@ -120,9 +120,10 @@ export async function persistLabourIndices(args: {
 export async function persistLabourMarketTelemetry(args: {
   db: Db;
   labourDemandByState: Map<string, number>;
+  labourDemandWageIndexByState?: Map<string, number>;
   turn: number | undefined;
 }): Promise<void> {
-  const { db, labourDemandByState, turn } = args;
+  const { db, labourDemandByState, labourDemandWageIndexByState, turn } = args;
   if (labourDemandByState.size === 0) return;
 
   const stateIds = Array.from(labourDemandByState.keys());
@@ -138,6 +139,7 @@ export async function persistLabourMarketTelemetry(args: {
   const ops = Array.from(labourDemandByState, ([stateId, demand]) => {
     const set: Record<string, number> = {
       "economic.labourDemand.value": Math.round(demand),
+      "economic.labourDemandWageIndex.value": labourDemandWageIndexByState?.get(stateId) ?? 1,
     };
     const tightness = computeLabourTightness(demand, supplyByState.get(stateId));
     if (tightness !== undefined) {

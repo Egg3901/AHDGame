@@ -30,6 +30,20 @@ describe("regionAttractiveness", () => {
     const pricey = regionAttractiveness({ ...neutral, costOfLiving: 80 }, 50000);
     expect(cheap).toBeGreaterThan(pricey);
   });
+  it("pulls workers toward persistent vacancies, with higher wages strengthening the signal", () => {
+    const slack = regionAttractiveness({ ...neutral, labourTightness: 0.8 }, 50000);
+    const shortage = regionAttractiveness(
+      { ...neutral, labourTightness: 4.8, labourWageIndex: 1 },
+      50000
+    );
+    const betterPaidShortage = regionAttractiveness(
+      { ...neutral, labourTightness: 4.8, labourWageIndex: 1.2 },
+      50000
+    );
+
+    expect(shortage).toBeGreaterThan(slack);
+    expect(betterPaidShortage).toBeGreaterThan(shortage);
+  });
   it("is clamped to a bounded band (no runaway pull)", () => {
     const extreme = regionAttractiveness(
       { gdpGrowth: 100, unemployment: 0, medianIncome: 1e9, costOfLiving: 0 },
