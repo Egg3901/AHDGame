@@ -16,7 +16,6 @@ import type {
   Bill,
   CreateDepartmentProvision,
   EndSubsidyProvision,
-  LegislationPolicyOption,
   LegislationType,
   PoliticalParty,
   StatePolicy,
@@ -213,12 +212,6 @@ export function axisRelevant(
 ): boolean {
   if (!lt?.policyOptions?.length) return false;
   return lt.policyOptions.some((opt) => (opt[axis] ?? 0) !== 0);
-}
-
-function formatPolicyOptionLabel(option: LegislationPolicyOption): string {
-  if (option.explanation?.includes(": ")) return option.explanation;
-  if (option.explanation) return `${option.name}: ${option.explanation}`;
-  return option.name;
 }
 
 function formatCountryName(countryId?: string): string {

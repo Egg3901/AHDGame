@@ -35,7 +35,7 @@ export interface LiveCurrentPolicy {
  * pre-migration documents lack it, so filtering on it would silently miss them.
  * Both pre-merge implementations keyed on stateId and this preserves that.
  */
-function policyStoreId(scope: FiscalScope): string {
+export function policyStoreId(scope: FiscalScope): string {
   if (scope.scope === "region") return scope.regionId;
   return getNationalDocId(scope.countryId) ?? `${scope.countryId.toLowerCase()}_national`;
 }

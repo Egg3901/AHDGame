@@ -1,14 +1,13 @@
 import type { Db } from "mongodb";
 import type { LegislationType, StatePolicy } from "@/lib/db/types";
 import type { EnactedLaw } from "@/lib/db/types/budget";
-import { getNationalDocId } from "@/lib/constants/nationalScope";
 import {
   canonicalizeLegislationTypeId,
   getEquivalentLegislationTypeIds,
 } from "@/lib/legislationTypeAliases";
 import { resolveOptionLabel } from "./optionLabel";
 import { resolveProvisionPolicyOption, type ResolvableProvision } from "./resolvePolicyOption";
-import type { SnapshotFields } from "./currentLaw";
+import { policyStoreId, type SnapshotFields } from "./currentLaw";
 import type { FiscalScope } from "./types";
 
 export type SnapshottableProvision = ResolvableProvision &
@@ -57,12 +56,6 @@ export async function snapshotPolicyProvisionsInPlace<T>(
   positions.forEach((position, i) => {
     provisions[position] = snapshotted[i] as T;
   });
-}
-
-/** Mirrors `currentLaw.policyStoreId` — national rows live under a pseudo-stateId. */
-function policyStoreId(scope: FiscalScope): string {
-  if (scope.scope === "region") return scope.regionId;
-  return getNationalDocId(scope.countryId) ?? `${scope.countryId.toLowerCase()}_national`;
 }
 
 /**
