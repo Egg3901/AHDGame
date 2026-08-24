@@ -8,6 +8,8 @@ import {
   type ExistingNppAgreement,
 } from "./nppSupplyAgreements";
 import type { CommodityType } from "@/lib/constants/commodities";
+import { computeSupplierCommodityCapacityUnits } from "@/lib/corporations/supplyAgreementCapacity";
+import { CONTRACT_OVERCOMMIT_TOLERANCE } from "@/lib/db/types/supplyAgreement";
 
 const TURN = 10;
 const always = () => true;
@@ -204,5 +206,65 @@ describe("decideNppSupplyAgreements", () => {
       staggerEligible: always,
     });
     expect(d.filter((x) => x.action === "propose")).toHaveLength(0);
+  });
+});
+
+describe("decideNppSupplyAgreements — media capacity parity", () => {
+  // A proposed volumeCap the supplier can never fill is a standing damages
+  // bill, so the matcher has to size media on the derated figure the
+  // production sink credits.
+  function broadcaster(over: Partial<NppAgreementParty> = {}): NppAgreementParty {
+    return {
+      corpId: "seller-media",
+      countryId: "US",
+      isNatcorp: false,
+      sectors: [
+        {
+          sectorType: "media",
+          capitalStock: 10_000,
+          strategyId: "standard",
+          productionPolicyLevel: 0,
+          countryId: "US",
+        },
+      ],
+      ...over,
+    };
+  }
+
+  it("sizes an advertising contract on the derated media figure", () => {
+    const adBuyer: NppAgreementParty = {
+      corpId: "buyer-ads",
+      countryId: "US",
+      isNatcorp: false,
+      sectors: [
+        {
+          sectorType: "retail",
+          capitalStock: 10_000,
+          strategyId: "standard",
+          throughputFactor: 0.8,
+          productionPolicyLevel: 0,
+          countryId: "US",
+        },
+      ],
+    };
+
+    const proposals = decideNppSupplyAgreements({
+      turn: TURN,
+      plantsEnabled: true,
+      parties: [adBuyer, broadcaster()],
+      agreements: [],
+      priceRatioOf: prices({ advertising: 1.4 }),
+      staggerEligible: always,
+    }).flatMap((x) => (x.action === "propose" && x.commodity === "advertising" ? [x] : []));
+
+    const capacity = computeSupplierCommodityCapacityUnits({
+      sectors: broadcaster().sectors,
+      commodity: "advertising",
+      isNatcorp: false,
+      turn: TURN,
+    });
+    for (const p of proposals) {
+      expect(p.volumeCap).toBeLessThanOrEqual(capacity * CONTRACT_OVERCOMMIT_TOLERANCE + 1e-6);
+    }
   });
 });
