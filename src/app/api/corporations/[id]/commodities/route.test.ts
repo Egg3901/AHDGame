@@ -90,6 +90,10 @@ beforeEach(async () => {
         status: "active",
         lastDeliveryTurn: 9,
         lastDeliveredUnits: 60,
+        lastBuyerConsumptionUnits: 100,
+        previousDeliveryTurn: 8,
+        previousDeliveredUnits: 20,
+        previousBuyerConsumptionUnits: 90,
       },
     ])
   );
@@ -113,6 +117,54 @@ describe("GET /api/corporations/[id]/commodities private supply", () => {
       consumptionCoveredUnits: 60,
       coveragePercent: 60,
       turn: 9,
+      consumptionUnits: 100,
+      previousTurn: 8,
+      previousDeliveredUnits: 20,
+      previousConsumptionUnits: 90,
+    });
+  });
+
+  it("sums deliveries without counting shared buyer consumption twice", async () => {
+    db.collectionMocks.supplyAgreements.find.mockReturnValue(
+      cursor([
+        {
+          commodity: "energy",
+          volumeCap: 50,
+          lastDeliveryTurn: 9,
+          lastDeliveredUnits: 40,
+          lastBuyerConsumptionUnits: 100,
+          previousDeliveryTurn: 8,
+          previousDeliveredUnits: 10,
+          previousBuyerConsumptionUnits: 90,
+        },
+        {
+          commodity: "energy",
+          volumeCap: 30,
+          lastDeliveryTurn: 9,
+          lastDeliveredUnits: 20,
+          lastBuyerConsumptionUnits: 100,
+          previousDeliveryTurn: 8,
+          previousDeliveredUnits: 10,
+          previousBuyerConsumptionUnits: 90,
+        },
+      ])
+    );
+
+    const { GET } = await import("./route");
+    const response = await GET(new Request("http://localhost/api/corporations/buyer/commodities"), {
+      params: Promise.resolve({ id: "buyer" }),
+    });
+    const data = await response.json();
+    const energy = data.commodities.find(
+      (row: { commodity: string }) => row.commodity === "energy"
+    );
+
+    expect(energy.privateSupply).toMatchObject({
+      contractedUnits: 80,
+      deliveredUnits: 60,
+      consumptionUnits: 100,
+      previousDeliveredUnits: 20,
+      previousConsumptionUnits: 90,
     });
   });
 
@@ -131,9 +183,13 @@ describe("GET /api/corporations/[id]/commodities private supply", () => {
       privateSupply: {
         contractedUnits: 80,
         deliveredUnits: 60,
-        consumptionCoveredUnits: 0,
-        coveragePercent: 0,
+        consumptionCoveredUnits: 60,
+        coveragePercent: 60,
         turn: 9,
+        consumptionUnits: 100,
+        previousTurn: 8,
+        previousDeliveredUnits: 20,
+        previousConsumptionUnits: 90,
       },
     });
   });

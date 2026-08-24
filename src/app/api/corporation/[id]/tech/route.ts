@@ -41,11 +41,12 @@ import {
   describeTechEffect,
   techEffectCategory,
   TECH_MARGIN_BONUS_CAP_PP,
+  TECH_NODE_CASH_REVENUE_FRACTION,
   type TechCorpView,
   type TechLane,
 } from "@/lib/constants/techTree";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
-import { corpDailyGrossRevenueLocal } from "@/lib/corporations/dailyGrossRevenue";
+import { corpDailyGrossRevenuePricingLocal } from "@/lib/corporations/dailyGrossRevenue";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -94,11 +95,14 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     // Daily gross revenue → per-node cash cost. Null when redacted.
     let dailyGrossRevenue: number | null = null;
+    let capacityFloorApplied = false;
     if (!redact) {
       // Ticket #1118: one helper for both the quoted price and the charged
       // price, and it converts each sector out of its host currency before
       // summing. The old inline reduce added yen straight into dollars.
-      dailyGrossRevenue = await corpDailyGrossRevenueLocal(db, corporation);
+      const pricing = await corpDailyGrossRevenuePricingLocal(db, corporation);
+      dailyGrossRevenue = pricing.dailyGrossRevenueLocal;
+      capacityFloorApplied = pricing.capacityFloorApplied;
     }
     const rdScore = redact ? null : Math.floor(corporation.rdScore ?? 0);
     const liquidCapital = redact ? null : Math.floor(corporation.liquidCapital ?? 0);
@@ -282,6 +286,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
             calculateCorpStrengthProjection(corporation, corpFxRate).rdScoreNetChange * 10
           ) / 10,
       liquidCapital,
+      cashPricing: redact
+        ? null
+        : {
+            dailyGrossOperatingScale: Math.round(dailyGrossRevenue ?? 0),
+            defaultRevenueFraction: TECH_NODE_CASH_REVENUE_FRACTION,
+            capacityFloorApplied,
+          },
       unlockedStrategyIds: redact ? [] : getUnlockedStrategyIds(corpView),
       unlockedStrategyNames,
       // Active tech-effect summary (transparency for the capped margin).

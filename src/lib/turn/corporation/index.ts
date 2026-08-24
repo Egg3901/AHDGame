@@ -317,6 +317,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
             volumeCap: 1,
             pricePremium: 1,
             volumeCapBasis: 1,
+            lastDeliveryTurn: 1,
+            lastDeliveredUnits: 1,
+            lastBuyerConsumptionUnits: 1,
+            previousDeliveryTurn: 1,
+            previousDeliveredUnits: 1,
+            previousBuyerConsumptionUnits: 1,
           },
         }
       )
@@ -329,6 +335,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       volumeCap: number;
       pricePremium?: number;
       volumeCapBasis?: SupplyAgreement["volumeCapBasis"];
+      lastDeliveryTurn?: number;
+      lastDeliveredUnits?: number;
+      lastBuyerConsumptionUnits?: number;
+      previousDeliveryTurn?: number;
+      previousDeliveredUnits?: number;
+      previousBuyerConsumptionUnits?: number;
     }[]) {
       const cap = Math.max(0, a.volumeCap ?? 0);
       settleableAgreements.push({
@@ -344,6 +356,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         // premium as usual and are grandfathered out of the damages leg, see
         // the stamp in corporations/commands/supplyAgreements.
         shortfallEligible: a.volumeCapBasis === "scaledCapacity",
+        lastDeliveryTurn: a.lastDeliveryTurn,
+        lastDeliveredUnits: a.lastDeliveredUnits,
+        lastBuyerConsumptionUnits: a.lastBuyerConsumptionUnits,
+        previousDeliveryTurn: a.previousDeliveryTurn,
+        previousDeliveredUnits: a.previousDeliveredUnits,
+        previousBuyerConsumptionUnits: a.previousBuyerConsumptionUnits,
       });
     }
   }
