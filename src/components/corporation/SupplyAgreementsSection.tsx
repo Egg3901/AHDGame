@@ -26,6 +26,9 @@ interface SupplyAgreement {
   proposedByCorpId: string;
   lastDeliveryTurn?: number;
   lastDeliveredUnits?: number;
+  /** #1147 — what the last settlement charged for, and the ceiling it used. */
+  lastShortfallUnits?: number;
+  lastAchievableUnits?: number;
 }
 
 interface CorpSearchResult {
@@ -256,6 +259,53 @@ export default function SupplyAgreementsSection({
           </p>
         )}
 
+        {/*
+          #1147 — say why the money moved.
+
+          Shortfall damages used to be invisible: the contract charged 50% of
+          every unit it fell short by, every turn, and nothing anywhere in the
+          UI mentioned that the penalty existed. Players saw an unexplained
+          debit and reported it as their profit "disappearing".
+
+          Two distinct messages, because they need different actions. If the
+          ceiling is below the cap the contract is simply too big for the
+          plants and the fix is to renegotiate or build. If the plants could
+          have covered it, the shortfall is the operator's own throttling or
+          mothballing and the fix is to turn production back up.
+        */}
+        {role === "supplier" &&
+          (a.status === "active" || a.status === "cancelling") &&
+          (a.lastShortfallUnits ?? 0) > 0 && (
+            <div className="rounded-lg border border-danger/40 bg-danger/10 p-2.5 text-xs">
+              <p className="font-semibold text-danger">
+                Short {Math.round(a.lastShortfallUnits ?? 0).toLocaleString("en-US")}{" "}
+                {COMMODITY_UNITS[a.commodity]} last turn
+              </p>
+              <p className="mt-1 text-muted">
+                {a.lastAchievableUnits !== undefined && a.lastAchievableUnits < a.volumeCap ? (
+                  <>
+                    Your plants could only make{" "}
+                    <span className="font-medium text-foreground tabular-nums">
+                      {Math.round(a.lastAchievableUnits).toLocaleString("en-US")}
+                    </span>{" "}
+                    of the{" "}
+                    <span className="font-medium text-foreground tabular-nums">
+                      {a.volumeCap.toLocaleString("en-US")}
+                    </span>{" "}
+                    you committed to. You are only charged for the gap you could have closed, but
+                    this contract is bigger than your capacity. Lower the volume cap or build more.
+                  </>
+                ) : (
+                  <>
+                    Your plants had the capacity for this. Missing a commitment costs half the value
+                    of every unit you fall short by, so check whether production is throttled down
+                    or a sector is mothballed.
+                  </>
+                )}
+              </p>
+            </div>
+          )}
+
         {(canAccept || canCancel) && (
           <div className="flex flex-wrap gap-2 border-t border-card-border pt-3">
             {canAccept && (
@@ -399,6 +449,17 @@ export default function SupplyAgreementsSection({
               <p className="text-[11px] text-muted">
                 Units/day reserved for the buyer. Anything your sectors make above this still sells
                 on the open market as normal.
+              </p>
+              {/*
+                #1147 — the penalty has to be stated where the number is
+                chosen. Suppliers were signing caps against nameplate capacity
+                with no idea a shortfall cost anything, then reading the
+                resulting debit as a bug.
+              */}
+              <p className="text-[11px] text-warning">
+                This is a commitment, not a ceiling you can drift under. Fall short of it and you
+                pay half the market value of every missing unit, every turn. Size it to what your
+                plants reliably make, not to their maximum.
               </p>
             </div>
           </div>

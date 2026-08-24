@@ -902,6 +902,47 @@ export function processSector(
     productionFactor: productionFactor * demandThrottle,
     soldFraction: market.clearingEnabled && clearing ? clearing.soldFraction : null,
   });
+  // ─── Contract-achievable output (ticket #1147) ───────────────────────────
+  //
+  // What this plant COULD have made this turn if the operator had asked it for
+  // everything, given the constraints the operator does not control. It is the
+  // ceiling the supply-agreement damages leg clamps a contracted volume to, so
+  // a supplier is never billed for a gap it was physically unable to close.
+  //
+  // The split is deliberate and is the whole point of the number:
+  //
+  //   FORGIVEN (divided out, so the ceiling falls and damages shrink) — the
+  //   involuntary legs: disaster, nationalization transition, the extraction
+  //   hard-min, input throughput, tech, labour/strike, and the demand throttle.
+  //   The throttle belongs here even though the engine, not the market, applies
+  //   it: it fires precisely because the market would not take the goods, and
+  //   settleSupplyAgreements already holds that "units the supplier made but
+  //   could not move because the market did not want them are a demand problem,
+  //   not a breach". Units it did not make for that same reason are the same
+  //   problem wearing a different hat.
+  //
+  //   STILL LIABLE (excluded, so the ceiling stays high) — the two levers the
+  //   operator owns: the production-policy slider and mothballing. Folding
+  //   either in would reopen the exploit the damages leg exists to close, where
+  //   cutting output to zero is cheaper than under-producing. A cold plant owes
+  //   damages on its whole contracted volume, exactly as before.
+  //
+  // Non-plants worlds have no capacity base and no contract capacity check, so
+  // this is 0 there and the settlement falls through to its old behaviour.
+  const contractAchievableUnits = plantsEnabled
+    ? Math.max(
+        0,
+        plantsCapacity *
+          bankingCommodityScale *
+          disasterOutputFactor *
+          nationalizationTransition *
+          plantsExtractionHardMin *
+          throughputFactor *
+          plantsTechOutputMultiplier *
+          labourOutputFactor *
+          demandThrottle
+      )
+    : 0;
   // Plants: revenue is DERIVED from produced output, exactly inverting the P1
   // identity (producedUnits × mixPrice × sales legs == realizedRevenue). At the
   // flip, capacity == impliedOutputUnits(nameplate) and every leg is unchanged,
@@ -1655,6 +1696,10 @@ export function processSector(
     // economy.
     producedUnits: Math.round(producedUnits * 100) / 100,
     soldUnits: Math.round(soldUnits * 100) / 100,
+    // Ceiling the supply-agreement damages leg clamps a contracted volume to,
+    // so a supplier is never billed for output it could not physically have
+    // made. See the derivation beside `contractAchievableUnits` above.
+    contractAchievableUnits: Math.round(contractAchievableUnits * 100) / 100,
     currentGrowthRate: newCurrentGrowthRate,
     // Persisted so the brake is durable: without this the next turn's trend
     // simply pulls the rate straight back toward the old, unaffordable target.

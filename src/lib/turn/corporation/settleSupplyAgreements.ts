@@ -131,6 +131,20 @@ export interface SupplyAgreementDelivery {
   contractedUnits: number;
   deliveredUnits: number;
   turn: number;
+  /**
+   * Ticket #1147 — why the supplier was charged, persisted so the corporation
+   * UI can say it in words instead of the player watching cash vanish. A
+   * shortfall with no explanation is what made this bug unreadable: the
+   * reporter saw "120k profit became 119k" and had no way to connect it to a
+   * contract they signed turns earlier.
+   *
+   * `achievableUnits` is the involuntary-constraint ceiling used to clamp the
+   * obligation; when it sits below `contractedUnits` the contract is asking
+   * for more than the plants can currently make, which is the single most
+   * useful thing a supplier can be told.
+   */
+  shortfallUnits?: number;
+  achievableUnits?: number;
 }
 
 export interface SupplyAgreementSettlements {
@@ -419,6 +433,28 @@ export function computeSupplyAgreementSettlements(args: {
    */
   producedByCorpCommodity?: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
   /**
+   * Ticket #1147 — what each supplier COULD have produced, given only the
+   * constraints it does not control (input throughput, capital utilization, the
+   * demand throttle, strike, disaster, nationalization transition, extraction
+   * hard-min). The operator's own levers — the production-policy slider and
+   * mothballing — are deliberately excluded, so choosing to cut output keeps
+   * owing damages on the full contracted volume.
+   *
+   * The damages leg clamps the contracted obligation to this ceiling. Without
+   * it, `volumeCap` is validated at signing against NAMEPLATE capacity while
+   * the sink measures ACTUAL production, and every leg in between bills the
+   * supplier 50% of a gap it was never physically able to close. That is what
+   * drained a live logistics corp's entire balance every turn: legal at
+   * signing, unreachable in practice, penalized forever.
+   *
+   * A MISSING (supplier, commodity) entry means "no ceiling known" and leaves
+   * the obligation unclamped, i.e. the pre-fix behaviour. That is the state on
+   * the first turn after deploy, before any sector has persisted the field.
+   * It is NOT read as a zero ceiling, which would forgive every contract in
+   * the world for one turn.
+   */
+  achievableByCorpCommodity?: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+  /**
    * Plants gate, required whenever `producedByCorpCommodity` is supplied.
    *
    * The production sink is filled from each sector's measured `producedUnits`,
@@ -444,6 +480,12 @@ export function computeSupplyAgreementSettlements(args: {
   const producedByCorpCommodity =
     args.producedByCorpCommodity && args.plantsEnabled === true
       ? args.producedByCorpCommodity
+      : undefined;
+  // Same plants gate as the production sink: the ceiling is built from the same
+  // per-sector legs and is meaningless without them.
+  const achievableByCorpCommodity =
+    args.achievableByCorpCommodity && args.plantsEnabled === true
+      ? args.achievableByCorpCommodity
       : undefined;
   if (args.producedByCorpCommodity && args.plantsEnabled !== true) {
     throw new Error(
@@ -511,8 +553,12 @@ export function computeSupplyAgreementSettlements(args: {
     const capShare = a.volumeCap / totalCap;
 
     const qty = buyerAllocations?.get(agreementIndex) ?? filled * capShare;
+    // Held so the shortfall computed below can be written back onto it. The
+    // record is pushed here, before any of the `continue` gates, because a
+    // delivery happened whether or not the settlement wires cash.
+    let deliveryRecord: SupplyAgreementDelivery | undefined;
     if (a.agreementId) {
-      deliveries.push({
+      deliveryRecord = {
         agreementId: a.agreementId,
         supplierCorpId: a.supplierCorpId,
         buyerCorpId: a.buyerCorpId,
@@ -520,7 +566,8 @@ export function computeSupplyAgreementSettlements(args: {
         contractedUnits: a.volumeCap,
         deliveredUnits: qty,
         turn,
-      });
+      };
+      deliveries.push(deliveryRecord);
     }
     const unitPriceAnchor =
       ((COMMODITY_BASE_PRICES[a.commodity] ?? 0) / safeUnitScale(args.eraUnitScale)) *
@@ -557,16 +604,41 @@ export function computeSupplyAgreementSettlements(args: {
       producedByCorpCommodity && a.shortfallEligible !== false
         ? (producedByCorpCommodity.get(a.supplierCorpId)?.get(a.commodity) ?? 0)
         : undefined;
+    // Ticket #1147 — clamp the obligation to what this supplier could actually
+    // have made. `achievable` is the involuntary-constraint ceiling; the
+    // operator's own levers are excluded from it upstream, so a supplier that
+    // chose to throttle or mothball still faces its full contracted volume and
+    // the anti-mothball property of this leg is preserved exactly.
+    //
+    // Absent entry ⇒ undefined ⇒ no clamp, the pre-fix behaviour. See the
+    // param docblock for why that is not read as a zero ceiling.
+    const achievableRaw = achievableByCorpCommodity?.get(a.supplierCorpId)?.get(a.commodity);
+    const achievable =
+      typeof achievableRaw === "number" && Number.isFinite(achievableRaw)
+        ? Math.max(0, achievableRaw)
+        : undefined;
+    const effectiveTotalCap = achievable !== undefined ? Math.min(totalCap, achievable) : totalCap;
     const shortfallUnits =
       typeof produced === "number" && Number.isFinite(produced)
         ? Math.max(
             0,
             obligationAllocations && productionAllocations
-              ? (obligationAllocations.get(agreementIndex) ?? 0) -
-                  (productionAllocations.get(agreementIndex) ?? 0)
-              : (totalCap - produced) * capShare
+              ? Math.min(
+                  obligationAllocations.get(agreementIndex) ?? 0,
+                  // The allocator splits a supplier's obligation across its
+                  // contracts; the ceiling is a supplier-level quantity, so it
+                  // is apportioned on the same `capShare` the fallback uses.
+                  achievable !== undefined ? achievable * capShare : Number.POSITIVE_INFINITY
+                ) - (productionAllocations.get(agreementIndex) ?? 0)
+              : (effectiveTotalCap - produced) * capShare
           )
         : 0;
+    // Tell the supplier what happened. Written even when the shortfall is zero
+    // so the UI can distinguish "met the contract" from "never settled".
+    if (deliveryRecord) {
+      deliveryRecord.shortfallUnits = shortfallUnits;
+      if (achievable !== undefined) deliveryRecord.achievableUnits = achievable * capShare;
+    }
     // C6 — DAMAGES ARE CAPPED AT A FRACTION OF THE CONTRACT'S OWN NOTIONAL.
     // Uncapped, this line is an unbounded wire between two consenting corps:
     // the pair that signs the contract also sets `volumeCap`, so two colluding
@@ -694,6 +766,8 @@ export async function settleSupplyAgreements(args: {
   priceRatioByCommodity: ReadonlyMap<CommodityType, number>;
   /** Plants tier: supplier corpId -> commodity -> units actually produced. */
   producedByCorpCommodity?: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+  /** Plants tier: supplier corpId -> commodity -> involuntary-constraint ceiling (#1147). */
+  achievableByCorpCommodity?: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
   /** Required alongside `producedByCorpCommodity` — see the guard in the pure fn. */
   plantsEnabled?: boolean;
   turn: number;
@@ -718,6 +792,7 @@ export async function settleSupplyAgreements(args: {
       priceRatioByCommodity,
       eraUnitScale: lookups.eraUnitScale,
       producedByCorpCommodity: args.producedByCorpCommodity,
+      achievableByCorpCommodity: args.achievableByCorpCommodity,
       plantsEnabled: args.plantsEnabled,
       corpInfo: (corpId) => {
         const corp = lookups.corpById.get(corpId);
@@ -767,6 +842,11 @@ export async function settleSupplyAgreements(args: {
             $set: {
               lastDeliveryTurn: delivery.turn,
               lastDeliveredUnits: delivery.deliveredUnits,
+              // #1147: persisted so the contract can explain its own charge.
+              lastShortfallUnits: Math.round(delivery.shortfallUnits ?? 0),
+              ...(delivery.achievableUnits !== undefined
+                ? { lastAchievableUnits: Math.round(delivery.achievableUnits) }
+                : {}),
               updatedAt: now,
             },
           },

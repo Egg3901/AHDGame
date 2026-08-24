@@ -75,6 +75,20 @@ export interface SupplyAgreement {
   lastDeliveryTurn?: number;
   /** Units this agreement delivered to its named buyer on lastDeliveryTurn. */
   lastDeliveredUnits?: number;
+  /**
+   * Ticket #1147 — the shortfall this contract was charged for on
+   * `lastDeliveryTurn`, and the ceiling that shortfall was measured against.
+   *
+   * Both exist purely so the supplier can be TOLD why its cash moved. Damages
+   * used to arrive as an unexplained debit: the reporter watched a 120k profit
+   * become 119k every turn and could not connect it to a contract signed turns
+   * earlier, because nothing in the UI mentioned that shortfall damages exist.
+   *
+   * `lastAchievableUnits` below `volumeCap` is the diagnosis in one number:
+   * the contract is asking for more than the plants can currently make.
+   */
+  lastShortfallUnits?: number;
+  lastAchievableUnits?: number;
   createdAt: Date;
   updatedAt: Date;
 }

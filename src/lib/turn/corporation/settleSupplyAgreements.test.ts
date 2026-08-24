@@ -141,6 +141,10 @@ describe("computeSupplyAgreementSettlements", () => {
         contractedUnits: 100,
         deliveredUnits: 30,
         turn: 5,
+        // #1147: recorded on every delivery so the UI can distinguish "met the
+        // contract" from "never settled". No production sink here ⇒ nothing to
+        // charge for, and no ceiling is known ⇒ `achievableUnits` stays absent.
+        shortfallUnits: 0,
       },
     ]);
     expect(r.deltaByCorp.get(S)).toBe(Math.round(30 * base * 0.2));
@@ -377,6 +381,9 @@ describe("settleSupplyAgreements delivery persistence", () => {
             $set: {
               lastDeliveryTurn: 5,
               lastDeliveredUnits: 30,
+              // #1147: persisted so the contract row can explain its own
+              // charge. Zero here — no production sink, so nothing is owed.
+              lastShortfallUnits: 0,
               updatedAt: now,
             },
           },
@@ -619,6 +626,88 @@ describe("computeSupplyAgreementSettlements — shortfall damages (P3b)", () => 
     const mothballed = call(undefined).deltaByCorp.get(S)!;
     const oneUnit = call(new Map([[commodity, 1]])).deltaByCorp.get(S)!;
     expect(mothballed).toBeLessThanOrEqual(oneUnit);
+  });
+
+  // ─── Ticket #1147: damages clamp to what the supplier could actually make ──
+  //
+  // `volumeCap` is validated at signing against NAMEPLATE capacity, but the
+  // sink measures ACTUAL production. Everything between the two (input
+  // throughput, capital utilization, the demand throttle, strike) opened a gap
+  // the supplier was billed 50% of every turn and could never close. These pin
+  // the clamp AND the anti-mothball property it must not break.
+  const withAchievable = (opts: { produced?: number; achievable?: number; volumeCap?: number }) =>
+    computeSupplyAgreementSettlements({
+      agreements: [
+        {
+          supplierCorpId: S,
+          buyerCorpId: B,
+          commodity,
+          volumeCap: opts.volumeCap ?? 100,
+          pricePremium: 0,
+        },
+      ],
+      contractSettlementByCorp: new Map(),
+      producedByCorpCommodity: new Map(
+        opts.produced !== undefined ? [[S, new Map([[commodity, opts.produced]])]] : []
+      ),
+      achievableByCorpCommodity:
+        opts.achievable !== undefined
+          ? new Map([[S, new Map([[commodity, opts.achievable]])]])
+          : undefined,
+      plantsEnabled: true,
+      eraUnitScale: 1,
+      priceRatioByCommodity: ratio,
+      corpInfo: makeInfo(),
+      turn: 5,
+      now,
+    });
+
+  it("charges nothing when the supplier produced everything it physically could", () => {
+    // Contracted 100 against nameplate, but inputs/utilization capped the plant
+    // at 30 this turn and it made all 30. No breach: the gap was not its doing.
+    const r = withAchievable({ produced: 30, achievable: 30 });
+    expect(r.deltaByCorp.get(S) ?? 0).toBe(0);
+    expect(r.deltaByCorp.get(B) ?? 0).toBe(0);
+  });
+
+  it("charges only the gap below the achievable ceiling, not below the contract", () => {
+    // Could have made 60, made 40. Liable for 20, not for the 60 vs the cap.
+    const r = withAchievable({ produced: 40, achievable: 60 });
+    const penalty = Math.round(20 * base * CONTRACT_SHORTFALL_PENALTY);
+    expect(r.deltaByCorp.get(S)).toBe(-penalty);
+    expect(r.deltaByCorp.get(B)).toBe(penalty);
+    expect(r.deltaByCorp.get(S)! + r.deltaByCorp.get(B)!).toBe(0);
+  });
+
+  it("never lets the ceiling raise damages above the contracted volume", () => {
+    // A ceiling above the cap is not a licence to bill beyond what was signed.
+    const clamped = withAchievable({ produced: 40, achievable: 500 }).deltaByCorp.get(S)!;
+    const unclamped = withAchievable({ produced: 40 }).deltaByCorp.get(S)!;
+    expect(clamped).toBe(unclamped);
+  });
+
+  // THE EXPLOIT GUARD. Mothballing is the operator's own lever, so it is
+  // excluded from the ceiling upstream in sectorTurn: a cold plant reports its
+  // FULL capacity as achievable and still owes the whole contracted volume.
+  it("still charges a mothballed seller in full when its ceiling stays at capacity", () => {
+    const r = withAchievable({ achievable: 100 });
+    const penalty = Math.round(100 * base * CONTRACT_DAMAGES_CAP_FRACTION);
+    expect(r.deltaByCorp.get(S)).toBe(-penalty);
+  });
+
+  it("keeps mothballing no cheaper than producing one unit, with the clamp on", () => {
+    const mothballed = withAchievable({ achievable: 100 }).deltaByCorp.get(S)!;
+    const oneUnit = withAchievable({ produced: 1, achievable: 100 }).deltaByCorp.get(S)!;
+    expect(mothballed).toBeLessThanOrEqual(oneUnit);
+  });
+
+  // First turn after deploy: no sector has persisted the field yet. A missing
+  // entry must mean "no ceiling known", never "ceiling of zero", or every
+  // contract in the world is silently forgiven for a turn.
+  it("leaves damages unclamped when no ceiling is known for the supplier", () => {
+    const r = withAchievable({ produced: 60 });
+    const penalty = Math.round(40 * base * CONTRACT_SHORTFALL_PENALTY);
+    expect(r.deltaByCorp.get(S)).toBe(-penalty);
   });
 
   // The production sink is only meaningful under plants: outside it, clearing's
