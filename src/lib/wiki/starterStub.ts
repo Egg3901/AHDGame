@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import type { Filter } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { WikiPage } from "@/lib/db/types";
 import { playerWikiStarter, partyWikiStarter, corporationWikiStarter } from "./playerPages";
@@ -11,8 +12,9 @@ import { playerWikiStarter, partyWikiStarter, corporationWikiStarter } from "./p
  * "Write your biography here".
  *
  * A page still carrying its untouched starter is not content, so it is excluded
- * from the sitemap and served noindex. It flips back the moment the owner saves
- * anything of their own, with no admin step.
+ * from the sitemap and served noindex. The same applies to a page with less than
+ * a short paragraph of readable text. It flips back automatically when the owner
+ * adds meaningful content, with no admin step.
  */
 
 /** The italic first line each starter emits. Cheap prefilter for the Mongo query. */
@@ -38,6 +40,9 @@ const STARTER_SCAFFOLDS = new Set(
   [playerWikiStarter(""), partyWikiStarter(""), corporationWikiStarter("")].map(scaffoldOf)
 );
 
+const MIN_INDEXABLE_TEXT_LENGTH = 160;
+const MAX_SHORT_PAGE_CANDIDATE_LENGTH = 1_000;
+
 /** True when the page is empty or still exactly its unedited starter template. */
 export function isStarterStub(content: string | null | undefined): boolean {
   const scaffold = scaffoldOf(String(content ?? ""));
@@ -45,24 +50,45 @@ export function isStarterStub(content: string | null | undefined): boolean {
   return STARTER_SCAFFOLDS.has(scaffold);
 }
 
-async function loadStarterStubSlugs(): Promise<string[]> {
+function readableTextOf(markdown: string): string {
+  return markdown
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/[#>*_`|~-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** True when a published page is too incomplete to submit to search engines. */
+export function isLowValueWikiContent(content: string | null | undefined): boolean {
+  const markdown = String(content ?? "");
+  return isStarterStub(markdown) || readableTextOf(markdown).length < MIN_INDEXABLE_TEXT_LENGTH;
+}
+
+async function loadLowValueWikiSlugs(): Promise<string[]> {
   const db = await getDb();
-  // Only pages that still contain a starter's marker line can be stubs, so the
-  // content projection stays on a handful of documents rather than the whole wiki.
+  // Starter markers find untouched scaffolds. The raw-length expression adds
+  // obvious one-line pages without loading every full wiki article.
+  const candidateFilter: Filter<WikiPage> = {
+    status: "published",
+    $or: [
+      ...STARTER_MARKERS.map((marker) => ({
+        content: { $regex: escapeRegex(marker) },
+      })),
+      {
+        $expr: {
+          $lt: [{ $strLenCP: { $ifNull: ["$content", ""] } }, MAX_SHORT_PAGE_CANDIDATE_LENGTH],
+        },
+      },
+    ],
+  };
   const candidates = await db
     .collection<WikiPage>("wikiPages")
-    .find(
-      {
-        status: "published",
-        $or: STARTER_MARKERS.map((marker) => ({
-          content: { $regex: escapeRegex(marker) },
-        })),
-      },
-      { projection: { slug: 1, content: 1 } }
-    )
+    .find(candidateFilter, { projection: { slug: 1, content: 1 } })
     .toArray();
 
-  return candidates.filter((page) => isStarterStub(page.content)).map((page) => page.slug);
+  return candidates.filter((page) => isLowValueWikiContent(page.content)).map((page) => page.slug);
 }
 
 function escapeRegex(value: string): string {
@@ -70,9 +96,11 @@ function escapeRegex(value: string): string {
 }
 
 /**
- * Slugs whose wiki page is still an unedited starter. Cached on the same 120s
+ * Slugs whose wiki page is not ready for search. Cached on the same 120s
  * revalidate as the other wiki loaders so the sitemap and page metadata agree.
  */
-export const getStarterStubSlugs = unstable_cache(loadStarterStubSlugs, ["wiki-starter-stubs"], {
-  revalidate: 120,
-});
+export const getLowValueWikiSlugs = unstable_cache(
+  loadLowValueWikiSlugs,
+  ["wiki-low-value-pages"],
+  { revalidate: 120 }
+);
