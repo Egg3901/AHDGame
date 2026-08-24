@@ -11,7 +11,7 @@ import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import { BillProvisionCard } from "@/components/legislature/BillProvisionCard";
 import { BillProposalChip } from "@/components/bills/BillProposalChip";
-import { nationalProvisionToView } from "@/lib/legislature/dto/provisionView";
+import { provisionToView } from "@/lib/legislature/dto/provisionView";
 import type { BillDetail } from "./types";
 import { chamberLabel } from "./billHelpers";
 import { otherChamber } from "@/lib/billLifecycleHelpers";
@@ -308,7 +308,7 @@ function BillDetailContent() {
               {bill.provisions.map((p, i) => (
                 <BillProvisionCard
                   key={i}
-                  view={nationalProvisionToView(p)}
+                  view={provisionToView(p)}
                   billCountry={resolvedCountryId}
                   index={i}
                 />

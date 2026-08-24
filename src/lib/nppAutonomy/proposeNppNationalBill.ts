@@ -172,9 +172,11 @@ export async function proposeNppNationalBill(
   }
 
   // ── Snapshot provision labels at proposal time ────────────────────────────
-  const snapshottedProvisions = await snapshotBillPolicyProvisions(db, policyStoreId, [
-    rawProvision,
-  ]);
+  const snapshottedProvisions = await snapshotBillPolicyProvisions(
+    db,
+    { scope: "national", countryId },
+    [rawProvision]
+  );
 
   const firstPolicy = snapshottedProvisions[0];
   const votingEndsAt = new Date(now.getTime() + VOTING_DURATION_HOURS * 60 * 60 * 1000);

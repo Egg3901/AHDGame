@@ -18,16 +18,25 @@ import type {
   PoliticalParty,
   StateBill,
   State,
-  StatePolicy,
 } from "@/lib/db/types";
-import type { EnactedLaw } from "@/lib/db/types/budget";
 import type { RegionalBudget } from "@/lib/db/types/regionalBudget";
 import type { StateBillDetail } from "@/lib/legislature/dto/stateBillDetail";
 import type { StateBillDisplay } from "@/lib/legislature/dto/stateLegislature";
 import { STATE_TERMINAL_STATUSES } from "@/lib/congress/billProposalLimits";
-import { computeProvisionEffectChips } from "@/lib/legislature/provisionEffects";
-import { optionIntensity } from "@/lib/legislature/optionIntensity";
-import { axisRelevant, formatSubsidyProvisionLabel } from "@/lib/congress/billEnrichment";
+import { formatSubsidyProvisionLabel } from "@/lib/congress/billEnrichment";
+import {
+  canonicalizeLegislationTypeId,
+  getLegislationTypeById,
+  humanizeLegislationTypeId,
+} from "@/lib/legislationTypeAliases";
+import {
+  loadLiveCurrentPolicies,
+  resolvePolicyProvision,
+  resolveProposedLabel,
+  directionLabel as directionFromEffect,
+  type ProvisionDisplay,
+  type SnapshottedProvision,
+} from "@/lib/legislature/provisionEnrichment";
 
 export interface StateLegislatureBillsPage {
   blockedProvisions: { legislationTypeId: string; policyOptionId: string }[];
@@ -89,8 +98,21 @@ export async function listStateLegislatureBills(
         .toArray()
     : [];
 
+  // Provision legislation types as well as each bill's headline one: a bill's
+  // provisions can name a different law, and fetching only the headline type
+  // left those provisions unresolved on the card. The detail query has always
+  // fetched both.
   const legislationTypeIds = [
-    ...new Set(bills.map((bill) => bill.legislationTypeId).filter(Boolean)),
+    ...new Set(
+      [
+        ...bills.map((bill) => bill.legislationTypeId),
+        ...bills.flatMap((bill) =>
+          (bill.provisions ?? []).map((provision) =>
+            "legislationTypeId" in provision ? provision.legislationTypeId : null
+          )
+        ),
+      ].filter(Boolean)
+    ),
   ] as string[];
   const legislationTypes =
     legislationTypeIds.length > 0
@@ -206,12 +228,18 @@ export async function listStateLegislatureBills(
       overrideVotingEndsOnTurn: bill.overrideVotingEndsOnTurn,
       myVote: myCharacterId ? (bill.votes[myCharacterId] ?? null) : null,
       ...(bill.vetoMessage ? { hasVetoMessage: true } : {}),
-      provisions: (bill.provisions ?? []).map((provision) => {
+      // The card row needs only the legislation name and the proposed option's
+      // label. Resolved snapshot-first through the shared helper: matching on
+      // effectDirection alone (as this did) picks the wrong option whenever a
+      // ladder has more than one option pushing the same way.
+      provisions: (bill.provisions ?? []).map((provision): ProvisionDisplay => {
         if (provision.type === "subsidy" || provision.type === "end_subsidy") {
+          const { legislationTypeName, proposed } = formatSubsidyProvisionLabel(provision);
           return {
-            legislationTypeName: null,
-            policyOptionName: null,
+            legislationTypeName,
+            proposed,
             effectDirection: 0,
+            directionLabel: "Center",
             effectTargetsWeighted: [],
             annualCostPerCapita: null,
             gdpPerCapitaMultiplier: null,
@@ -220,18 +248,32 @@ export async function listStateLegislatureBills(
             targetSectorType: provision.targetSectorType ?? null,
           };
         }
-        const legislationType = legislationTypeMap.get(provision.legislationTypeId);
-        const matchedOption = legislationType?.policyOptions?.find(
-          (option) => option.effectDirection === provision.effectDirection
+        const legislationType = getLegislationTypeById(
+          legislationTypeMap,
+          provision.legislationTypeId
         );
+        const snapshotted = provision as SnapshottedProvision & { legislationTypeId: string };
+        const directionText = directionFromEffect(provision.effectDirection);
+        const { label, index } = resolveProposedLabel(
+          legislationType,
+          snapshotted,
+          `${directionText} policy`
+        );
+        const option = index !== undefined ? legislationType?.policyOptions?.[index] : undefined;
         return {
-          legislationTypeName: legislationType?.name ?? null,
-          policyOptionName: matchedOption?.name ?? null,
+          legislationTypeId: provision.legislationTypeId,
+          legislationTypeName:
+            legislationType?.name ??
+            humanizeLegislationTypeId(provision.legislationTypeId) ??
+            provision.legislationTypeId,
+          proposed: label,
+          ...(index !== undefined ? { proposedPolicyIndex: index } : {}),
           effectDirection: provision.effectDirection,
+          directionLabel: directionText,
           effectTargetsWeighted: legislationType?.effectTargetsWeighted ?? [],
-          groupApprovals: matchedOption?.groupApprovals ?? {},
-          annualCostPerCapita: matchedOption?.annualCostPerCapita ?? null,
-          gdpPerCapitaMultiplier: matchedOption?.gdpPerCapitaMultiplier ?? null,
+          ...(option?.groupApprovals ? { groupApprovals: option.groupApprovals } : {}),
+          annualCostPerCapita: option?.annualCostPerCapita ?? null,
+          gdpPerCapitaMultiplier: option?.gdpPerCapitaMultiplier ?? null,
         };
       }),
     })),
@@ -435,10 +477,9 @@ export async function getStateLegislatureBillDetail(
     }
   }
 
-  // Resolve the region's CURRENT law per legislation type so each provision can
-  // show a Current → Proposed comparison (parity with the national bill page).
-  // Primary source is `statePolicies` (keyed by this region's stateId); fall back
-  // to the most recent un-repealed enacted law for types missing from it.
+  // The region's live current law per legislation type, used only as a fallback:
+  // the provision's own snapshot wins. Reading live unconditionally is what made
+  // an enacted bill render its own outcome as "Current law".
   const provisionLegTypeIds = [
     ...new Set(
       (bill.provisions ?? [])
@@ -446,113 +487,55 @@ export async function getStateLegislatureBillDetail(
         .filter((id): id is string => Boolean(id))
     ),
   ];
-  const currentPolicyByType = new Map<
-    string,
-    { policyOptionIndex?: number; policyOptionId?: string }
-  >();
-  if (provisionLegTypeIds.length > 0) {
-    const currentStatePolicies = await db
-      .collection<StatePolicy>("statePolicies")
-      .find({ stateId: bill.stateId, legislationTypeId: { $in: provisionLegTypeIds } })
-      .toArray();
-    for (const sp of currentStatePolicies) currentPolicyByType.set(sp.legislationTypeId, sp);
+  const regionScope = {
+    scope: "region" as const,
+    countryId,
+    regionId: bill.stateId,
+  };
+  const livePolicies = await loadLiveCurrentPolicies(db, regionScope, provisionLegTypeIds);
 
-    const missingIds = provisionLegTypeIds.filter((id) => !currentPolicyByType.has(id));
-    if (missingIds.length > 0) {
-      const laws = await db
-        .collection<EnactedLaw>("enactedLaws")
-        .find({
-          stateId: bill.stateId,
-          legislationTypeId: { $in: missingIds },
-          repealedAt: { $exists: false },
-        })
-        .sort({ enactedAt: -1 })
-        .toArray();
-      const seen = new Set<string>();
-      for (const law of laws) {
-        if (seen.has(law.legislationTypeId)) continue;
-        seen.add(law.legislationTypeId);
-        if (law.policyOptionIndex !== undefined) {
-          currentPolicyByType.set(law.legislationTypeId, {
-            policyOptionIndex: law.policyOptionIndex,
-          });
-        }
+  const provisions: ProvisionDisplay[] = await Promise.all(
+    (bill.provisions ?? []).map(async (provision): Promise<ProvisionDisplay> => {
+      if (provision.type === "subsidy" || provision.type === "end_subsidy") {
+        // Subsidies have no policy option and no current law, so they render as a
+        // proposed-only box. Same label builder the national page uses.
+        const { legislationTypeName, proposed } = formatSubsidyProvisionLabel(provision);
+        return {
+          legislationTypeName,
+          proposed,
+          effectDirection: 0,
+          directionLabel: "Center",
+          effectTargetsWeighted: [],
+          annualCostPerCapita: null,
+          gdpPerCapitaMultiplier: null,
+          type: provision.type,
+          scopeType: provision.scopeType,
+          targetSectorType: provision.targetSectorType ?? null,
+        };
       }
-    }
-  }
 
-  const provisions = (bill.provisions ?? []).map((provision) => {
-    if (provision.type === "subsidy" || provision.type === "end_subsidy") {
-      // Subsidies have no policy option / current law → proposed-only box. Build a
-      // label (mirroring the national page) so the shared card has something to show.
-      const { legislationTypeName, policyOptionName } = formatSubsidyProvisionLabel(provision);
-      return {
-        legislationTypeName,
-        policyOptionName,
-        effectDirection: 0,
-        effectTargetsWeighted: [],
-        annualCostPerCapita: null,
-        gdpPerCapitaMultiplier: null,
-        type: provision.type,
-        scopeType: provision.scopeType,
-        targetSectorType: provision.targetSectorType ?? null,
-      };
-    }
-    const legislationType = legislationTypeMap.get(provision.legislationTypeId);
-    const options = legislationType?.policyOptions ?? [];
-    const proposedIdx = provision.policyOptionId
-      ? options.findIndex((o) => o.id === provision.policyOptionId)
-      : options.findIndex((o) => o.effectDirection === provision.effectDirection);
-    const proposedOption = proposedIdx >= 0 ? options[proposedIdx] : undefined;
-
-    const cur = currentPolicyByType.get(provision.legislationTypeId);
-    let currentIdx: number | undefined;
-    if (cur?.policyOptionIndex !== undefined) {
-      currentIdx = cur.policyOptionIndex;
-    } else if (cur?.policyOptionId) {
-      const i = options.findIndex((o) => o.id === cur.policyOptionId);
-      if (i >= 0) currentIdx = i;
-    }
-    const currentOption = currentIdx !== undefined ? options[currentIdx] : undefined;
-
-    const effects = computeProvisionEffectChips({
-      effectTargetsWeighted: legislationType?.effectTargetsWeighted ?? [],
-      proposedIntensity:
-        proposedIdx >= 0
-          ? optionIntensity(options, proposedIdx)
-          : Math.sign(provision.effectDirection),
-      currentIntensity: currentIdx !== undefined ? optionIntensity(options, currentIdx) : 0,
-    });
-
-    return {
-      legislationTypeName: legislationType?.name ?? null,
-      policyOptionName: proposedOption?.name ?? null,
-      policyOptionDescription: proposedOption?.explanation ?? null,
-      currentPolicyOptionName: currentOption?.name ?? null,
-      currentPolicyOptionDescription: currentOption?.explanation ?? null,
-      effectDirection: provision.effectDirection,
-      effectTargetsWeighted: legislationType?.effectTargetsWeighted ?? [],
-      groupApprovals: proposedOption?.groupApprovals ?? {},
-      archetypeApprovals: proposedOption?.archetypeApprovals ?? proposedOption?.groupApprovals,
-      annualCostPerCapita: proposedOption?.annualCostPerCapita ?? null,
-      gdpPerCapitaMultiplier: proposedOption?.gdpPerCapitaMultiplier ?? null,
-      economic:
-        proposedOption?.economic != null && axisRelevant(legislationType, "economic")
-          ? proposedOption.economic
-          : null,
-      social:
-        proposedOption?.social != null && axisRelevant(legislationType, "social")
-          ? proposedOption.social
-          : null,
-      policyDomain: legislationType?.policyDomain ?? null,
-      currentPolicyIndex: currentIdx,
-      proposedPolicyIndex: proposedIdx >= 0 ? proposedIdx : undefined,
-      ...(options.length > 0 && {
-        policyOptionScores: options.map((o) => (o.economic ?? 0) + (o.social ?? 0)),
-      }),
-      effects,
-    };
-  });
+      const legislationType = getLegislationTypeById(
+        legislationTypeMap,
+        provision.legislationTypeId
+      );
+      const canonicalId =
+        canonicalizeLegislationTypeId(provision.legislationTypeId) ?? provision.legislationTypeId;
+      return resolvePolicyProvision(db, {
+        scope: regionScope,
+        lt: legislationType,
+        provision: provision as SnapshottedProvision & {
+          legislationTypeId: string;
+          proposedRate?: number;
+        },
+        live: livePolicies.get(canonicalId),
+        legislationTypeName:
+          legislationType?.name ??
+          humanizeLegislationTypeId(provision.legislationTypeId) ??
+          provision.legislationTypeId,
+        directionLabel: directionFromEffect(provision.effectDirection),
+      });
+    })
+  );
 
   // Headline tallies come from the scoped (current-chamber) votes so they match
   // the per-party breakdown and never cross an election boundary. Fall back to

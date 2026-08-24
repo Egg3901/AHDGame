@@ -91,12 +91,50 @@ describe("resolveBillProvisions", () => {
     const result = await resolveBillProvisions(db as unknown as Db, bill);
 
     expect(result.provisionsResolved).toHaveLength(1);
+    // Both fixtures' explanations contain ": ", the case the old combiner
+    // mishandled by returning the explanation alone and dropping option.name.
+    // changeDirection is gone: it was computed and plumbed but rendered nowhere.
+    // The ladder positions it was derived from are still emitted.
     expect(result.provisionsResolved[0]).toMatchObject({
       legislationTypeName: "Federal Domestic Corporate Tax Rate",
-      policyOptionName: "20%: Center-Left econ",
-      currentPolicyOptionName: "0%: Far Right econ",
-      changeDirection: "up",
+      proposed: { name: "20%", explanation: "20%: Center-Left econ" },
+      current: { name: "0%", explanation: "0%: Far Right econ" },
+      proposedPolicyIndex: 1,
+      currentPolicyIndex: 0,
     });
+  });
+
+  it("infers the country from the national pseudo-stateId when a legacy bill has no countryId", async () => {
+    // Legacy bills predate `countryId`. Defaulting to US would look the current
+    // law up in the federal store and find nothing for a UK bill.
+    const { resolveBillProvisions } = await import("./billEnrichment");
+
+    db.collectionMocks.legislationTypes.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: "uk_health",
+          name: "UK Health",
+          policyOptions: [
+            { id: "a", name: "Minimal", effectDirection: 1, economic: 2, social: 0 },
+            { id: "b", name: "Universal", effectDirection: -1, economic: -2, social: 0 },
+          ],
+        },
+      ],
+    });
+    db.collectionMocks.statePolicies.find.mockReturnValue({ toArray: async () => [] });
+
+    const bill = {
+      stateId: "uk_national",
+      provisions: [{ legislationTypeId: "uk_health", policyOptionId: "b", effectDirection: -1 }],
+    } as unknown as Bill;
+
+    await resolveBillProvisions(db as unknown as Db, bill);
+
+    const filter = db.collectionMocks.statePolicies.find.mock.calls[0]?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(filter.stateId).toBe("uk_national");
   });
 
   it("renders readable labels for tariff provisions", async () => {
@@ -127,7 +165,7 @@ describe("resolveBillProvisions", () => {
     expect(result.provisionsResolved).toHaveLength(1);
     expect(result.provisionsResolved[0]).toMatchObject({
       legislationTypeName: "Tariff",
-      policyOptionName: "40% tariff on imports from Japan",
+      proposed: { name: "40% tariff on imports from Japan" },
     });
   });
 
@@ -262,10 +300,18 @@ describe("resolveBillProvisions", () => {
 
     const result = await resolveBillProvisions(db as unknown as Db, bill);
 
+    // The live statePolicies row now points at the proposal (post-enactment), so
+    // reading live would show the bill's own outcome as the current law. It does
+    // not: the id snapshot re-resolves the option that was actually in force.
+    //
+    // The stored labels here are LEGACY combined strings. The proposed one has
+    // no id to re-resolve from, so it is split; the current one does, so it is
+    // re-resolved and recovers the option name the combiner had dropped.
     expect(result.provisionsResolved[0]).toMatchObject({
-      policyOptionName: "Supporting Families Act: Historical proposal text",
-      currentPolicyOptionName: "Status Quo Law: Historical current text",
-      changeDirection: "up",
+      proposed: { name: "Supporting Families Act", explanation: "Historical proposal text" },
+      current: { name: "Current Law", explanation: "Current Law: Live value after enactment" },
+      currentPolicyIndex: 0,
+      proposedPolicyIndex: 1,
     });
   });
 
@@ -299,7 +345,7 @@ describe("resolveBillProvisions", () => {
 
     expect(result.provisionsResolved[0]).toMatchObject({
       legislationTypeName: "Nationalization",
-      policyOptionName: "Sector takeover — Technology · 100% · All holders + unowned market",
+      proposed: { name: "Sector takeover — Technology · 100% · All holders + unowned market" },
       nationalizationDetail: {
         kind: "sector",
         sector: { affectedCount: 1, totalCompensationLocal: 2000, unownedSliceRevenuePerTurn: 500 },
@@ -327,7 +373,7 @@ describe("resolveBillProvisions", () => {
 
     expect(result.provisionsResolved[0]).toMatchObject({
       legislationTypeName: "Nationalization",
-      policyOptionName: "Whole-corporation takeover",
+      proposed: { name: "Whole-corporation takeover" },
       nationalizationDetail: {
         kind: "corp",
         corp: { name: "Zhongtian", ownerKind: "player", triggers: ["strategic"] },
