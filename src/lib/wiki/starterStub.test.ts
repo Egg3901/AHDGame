@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isStarterStub } from "./starterStub";
+import { isLowValueWikiContent, isStarterStub } from "./starterStub";
 import { playerWikiStarter, partyWikiStarter, corporationWikiStarter } from "./playerPages";
 
 describe("isStarterStub", () => {
@@ -41,5 +41,30 @@ describe("isStarterStub", () => {
     expect(isStarterStub("# Bonds\n\nBonds are issued at auction and settle the next turn.")).toBe(
       false
     );
+  });
+});
+
+describe("isLowValueWikiContent", () => {
+  it("keeps an edited community page indexable", () => {
+    const edited = partyWikiStarter("The Conservative and Unionist Party").replace(
+      "Core ideology and the policies we campaign on.",
+      "The party campaigns for privatization, lower public spending, and a stronger military."
+    );
+
+    expect(isLowValueWikiContent(edited)).toBe(false);
+  });
+
+  it("keeps a one-line placeholder out of search", () => {
+    expect(
+      isLowValueWikiContent("Tweamonster is currently the Vice President of the United States")
+    ).toBe(true);
+  });
+
+  it("does not count markdown image URLs as readable content", () => {
+    expect(
+      isLowValueWikiContent(
+        "![Portrait](https://cdn.ahousedividedgame.com/wiki-images/very-long-file-name.webp)"
+      )
+    ).toBe(true);
   });
 });
