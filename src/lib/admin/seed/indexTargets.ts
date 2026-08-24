@@ -178,7 +178,7 @@ export const INDEX_TARGETS = [
     id: "indexesSettlement",
     label: "Indexes — Settlement Crisis",
     description:
-      "settlementPlays drain + per-turn indexes, and the UNIQUE partial index on settlementCrises that stops two live German Questions. Required before the crisis is opened on a world that was never reset.",
+      "settlementPlays drain + per-turn indexes, the UNIQUE partial index that holds each character to one use of a personal play per turn, and the UNIQUE partial index on settlementCrises that stops two live German Questions. Required before the crisis is opened on a world that was never reset.",
   },
 ] as const satisfies readonly IndexTargetMeta[];
 

@@ -35,6 +35,7 @@ import {
   MAX_COERCIVE_RUNG,
   MOBILISATION_APPROVAL_HIT,
   MOBILISATION_TREASURY_SHARE,
+  SEAT_CAPITAL_CAP,
   SETTLEMENT_PLAYS,
   SETTLEMENT_SEATS,
   getSeat,
@@ -159,7 +160,9 @@ function run(bloc: "east" | "west", holdTurns: number): Run {
     for (const seat of seats) {
       const def = getSeat(seat.id)!;
       seat.ap = Math.min(seat.ap + def.actionsPerTurn, seatActionBankCap(def.actionsPerTurn));
-      seat.capital = Math.min(seat.capital + def.capitalPerTurn, 60);
+      // The constant, not a literal 60: these agreed by luck, and would have
+      // silently disagreed the moment the cap moved.
+      seat.capital = Math.min(seat.capital + def.capitalPerTurn, SEAT_CAPITAL_CAP);
       seat.treasury = treasuries[seat.id];
     }
 

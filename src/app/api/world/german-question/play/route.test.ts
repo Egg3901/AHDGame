@@ -122,17 +122,21 @@ describe("POST /api/world/german-question/play", () => {
   });
 
   it("returns the command's status on refusal", async () => {
+    // A refusal the command can actually still produce. It used to be the 402
+    // treasury refusal, which no longer exists — spending into debt is allowed —
+    // and a fixture quoting a dead status reads as documentation of behaviour
+    // that is not there.
     const { commitSettlementPlay } = await import("@/lib/settlement/commands/commitPlay");
     vi.mocked(commitSettlementPlay).mockResolvedValue({
       ok: false,
-      status: 402,
-      error: "The national treasury cannot cover this play.",
+      status: 409,
+      error: "Your delegation's budget changed before the play landed. Try again.",
     });
     const { POST } = await import("./route");
     const res = await POST(req({ actor: "seat", playId: "aid" }));
-    expect(res.status).toBe(402);
+    expect(res.status).toBe(409);
     await expect(res.json()).resolves.toMatchObject({
-      error: "The national treasury cannot cover this play.",
+      error: "Your delegation's budget changed before the play landed. Try again.",
     });
   });
 

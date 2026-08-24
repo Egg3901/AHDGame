@@ -54,12 +54,12 @@ describe("canSeatAfford", () => {
 
   it("allows a play inside every budget", () => {
     // `aid`: 1 AP, 0 capital, ℳ45M.
-    expect(canSeatAfford(getPlay("aid")!, budget, 100_000_000)).toEqual({ ok: true });
+    expect(canSeatAfford(getPlay("aid")!, budget)).toEqual({ ok: true });
   });
 
   it("refuses a play the seat cannot action", () => {
     const spent = seatBudgetFor({ ...ddState, actions: 0 }, "DD");
-    expect(canSeatAfford(getPlay("aid")!, spent, 1e12)).toEqual({
+    expect(canSeatAfford(getPlay("aid")!, spent)).toEqual({
       ok: false,
       reason: "actions",
     });
@@ -67,33 +67,34 @@ describe("canSeatAfford", () => {
 
   it("refuses a play the seat cannot fund from capital", () => {
     // `referendum`: 22 capital against a 20-point bank.
-    expect(canSeatAfford(getPlay("referendum")!, budget, 1e12)).toEqual({
+    expect(canSeatAfford(getPlay("referendum")!, budget)).toEqual({
       ok: false,
       reason: "capital",
     });
   });
 
-  it("refuses a play the treasury cannot cover", () => {
-    expect(canSeatAfford(getPlay("aid")!, budget, 1_000)).toEqual({
-      ok: false,
-      reason: "funds",
-    });
+  it("allows a play the treasury cannot cover, because a nation may borrow", () => {
+    // The treasury is not an input at all now. `commitPlay` has no balance
+    // guard either — spending past zero is national debt, which
+    // `spendFromTreasury` models rather than refuses — so gating the button on
+    // funds would grey out a play the command accepts.
+    expect(canSeatAfford(getPlay("aid")!, budget)).toEqual({ ok: true });
   });
 
   it("allows a play costing exactly what is left", () => {
     const exact = seatBudgetFor({ ...ddState, capital: 22, actions: 3 }, "DD");
-    expect(canSeatAfford(getPlay("referendum")!, exact, 30_000_000)).toEqual({ ok: true });
+    expect(canSeatAfford(getPlay("referendum")!, exact)).toEqual({ ok: true });
   });
 
   it("reports the action shortfall before the capital one", () => {
     // Deterministic ordering matters: the UI shows one reason, not a set.
     const broke = seatBudgetFor({ ...ddState, capital: 0, actions: 0 }, "DD");
-    expect(canSeatAfford(getPlay("referendum")!, broke, 0).reason).toBe("actions");
+    expect(canSeatAfford(getPlay("referendum")!, broke).reason).toBe("actions");
   });
 
-  it("reports the capital shortfall before the funds one", () => {
+  it("names capital when only capital is short", () => {
     const noCapital = seatBudgetFor({ ...ddState, capital: 0 }, "DD");
-    expect(canSeatAfford(getPlay("referendum")!, noCapital, 0).reason).toBe("capital");
+    expect(canSeatAfford(getPlay("referendum")!, noCapital).reason).toBe("capital");
   });
 });
 

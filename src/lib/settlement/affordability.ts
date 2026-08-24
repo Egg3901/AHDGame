@@ -28,7 +28,7 @@ export interface SeatBudget {
  * here — Phase 3's commit route widens this when it starts rejecting unknown
  * play ids, rather than the union carrying a member nobody emits.
  */
-export type AffordabilityReason = "actions" | "capital" | "funds" | "no-direction";
+export type AffordabilityReason = "actions" | "capital" | "funds" | "no-direction" | "used";
 
 export interface Affordability {
   ok: boolean;
@@ -54,18 +54,24 @@ export function seatBudgetFor(state: SettlementSeatState, seatId: SettlementSeat
 }
 
 /**
- * Reasons are checked in a fixed order — actions, then capital, then funds — so
- * a play short on two counts always names the same one and the UI copy does not
+ * Reasons are checked in a fixed order — actions, then capital — so a play
+ * short on two counts always names the same one and the UI copy does not
  * flicker between renders.
+ *
+ * ⚠️ THE TREASURY IS NOT CONSULTED, deliberately. A nation may spend into debt:
+ * `treasuryBalance` is the signed cash position and `spendFromTreasury` splits
+ * a spend into surplus and new debt rather than refusing it, so `commitPlay`
+ * has no balance guard either. Gating the button on funds here would grey out a
+ * play the command accepts, and the board disagreeing with the command is worse
+ * than either behaviour on its own.
+ *
+ * Personal plays are different and still check funds — see
+ * {@link canCharacterAfford}. A character's campaign balance cannot go
+ * negative; a nation's can, and that is what national debt IS.
  */
-export function canSeatAfford(
-  play: SettlementPlayDef,
-  budget: SeatBudget,
-  availableFunds: number
-): Affordability {
+export function canSeatAfford(play: SettlementPlayDef, budget: SeatBudget): Affordability {
   if (play.actionCost > budget.actionsRemaining) return { ok: false, reason: "actions" };
   if (play.capitalCost > budget.capital) return { ok: false, reason: "capital" };
-  if (play.fundsCost > availableFunds) return { ok: false, reason: "funds" };
   return { ok: true };
 }
 

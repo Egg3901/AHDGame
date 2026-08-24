@@ -17,11 +17,21 @@ const schema = z.object({
    * honoured.
    */
   direction: z.union([z.literal(1), z.literal(-1)]).optional(),
+  /**
+   * Which budget pays. Absent means the treasury, so an older client body is
+   * honoured exactly as it was rather than being switched to a budget the
+   * player never chose.
+   */
+  payment: z.enum(["funds", "capital"]).optional(),
 });
 
 // POST /api/world/german-question/play - Commit one play against the German Question.
 // Auth: requireHumanSessionWithCharacter
-// Errors: 400, 401, 402, 403, 404, 409, 413, 429
+// Errors: 400, 401, 403, 404, 409, 413, 429
+//
+// No 402: a play is never refused for want of money. `treasuryBalance` is the
+// signed national cash position, so spending past zero is national debt, which
+// `spendFromTreasury` models rather than blocks.
 //
 // `requireHumanSessionWithCharacter` rather than `requireAuthWithCharacter`:
 // this route spends a NATIONAL TREASURY, so it needs the same-origin assertion
@@ -52,6 +62,7 @@ export async function POST(request: Request) {
       actor: parsed.data.actor,
       playId: parsed.data.playId,
       direction: parsed.data.direction,
+      payment: parsed.data.payment,
     });
 
     if (!result.ok) {
