@@ -41,14 +41,12 @@ export async function resolveProvisionFiscal(
     const proposedRate = prov.proposedRate;
     if (proposedRate === undefined) return {};
 
+    let currentRate: number;
+    let taxBase: number;
     // A state-scope slider prices against the region's own budget; a
     // national-scope slider always prices against the national one, even when
     // the slider appears on a regional bill.
-    const useStateBudget = lt.taxSlider.scope === "state" && scope.scope === "region";
-
-    let currentRate: number;
-    let taxBase: number;
-    if (useStateBudget && scope.scope === "region") {
+    if (lt.taxSlider.scope === "state" && scope.scope === "region") {
       const budget = await db
         .collection<StateBudget>("stateBudgets")
         .findOne(

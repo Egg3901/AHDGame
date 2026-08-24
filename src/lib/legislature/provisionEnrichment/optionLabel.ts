@@ -31,3 +31,15 @@ export function splitLegacySnapshot(combined?: string | null): ProvisionLabel | 
   if (idx === -1) return { name: combined };
   return { name: combined.slice(0, idx), explanation: combined.slice(idx + 2) };
 }
+
+/**
+ * Which way a provision pushes, as a label.
+ *
+ * The single copy: this existed three times over (congress/billEnrichment,
+ * legislature/mapStateBillToBillDisplay, legislature/queries/stateBillQueries).
+ */
+export function directionLabel(d: number): "Left" | "Center" | "Right" {
+  if (d < 0) return "Left";
+  if (d > 0) return "Right";
+  return "Center";
+}
