@@ -111,13 +111,17 @@ async function withdrawPrimaryMisalignedRows(
   if (misaligned.length === 0) return 0;
 
   // Reverse the landing Support bump exactly like DELETE /api/elections/[id]/endorse
-  // does, once per candidate row no matter how many endorsers were withdrawn.
-  const bumpReversed = new Set<string>();
+  // does: ONCE PER WITHDRAWN ENDORSEMENT, not once per candidate.
+  //
+  // The bump ledger is per endorsement. POST adds a flat SUPPORT_ENDORSEMENT_BUMP
+  // for every row created and DELETE removes one for every row deleted, so a
+  // candidate carrying twenty endorsers is carrying twenty bumps. Collapsing the
+  // reversal to one per candidate leaves the other nineteen behind permanently:
+  // the rows are inactive by the time this returns, so no later pass can find
+  // them to correct it. The DELETE route looks like a per-candidate precedent
+  // only because it handles exactly one endorsement per call.
   for (const e of misaligned) {
-    const key = e.candidateId.toString();
-    if (bumpReversed.has(key)) continue;
-    bumpReversed.add(key);
-    const candidate = candidateById.get(key);
+    const candidate = candidateById.get(e.candidateId.toString());
     // NPP candidates never received a landing bump (applySupportDelta is keyed
     // by characterId), so their revocation stays a no-op too.
     if (!candidate || candidate.isNPP || !candidate.characterId) continue;

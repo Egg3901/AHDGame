@@ -239,7 +239,39 @@ describe("withdrawPlayerEndorsementsOnPartyChange", () => {
 });
 
 describe("sweepPartyMismatchedPlayerEndorsements", () => {
-  it("heals legacy rows by reading each endorser's live party and reverses the bump once per candidate", async () => {
+  it("reverses one bump per withdrawn endorsement, not one per candidate", async () => {
+    // The bump ledger is per endorsement, so a candidate losing two endorsers in
+    // the same sweep must lose two bumps. Collapsing to one per candidate leaves
+    // Support the candidate no longer has any endorsement backing, and the rows
+    // are inactive afterwards so nothing can find them to correct it later.
+    const db = createInMemoryDb();
+    const ids = seedScenario(db, { support: 60 });
+    const firstDefectorId = new ObjectId();
+    const secondDefectorId = new ObjectId();
+    seededEndorser(db, firstDefectorId, "4");
+    seededEndorser(db, secondDefectorId, "4");
+    seedEndorsement(db, { ...ids, endorserId: firstDefectorId }, { characterId: firstDefectorId });
+    seedEndorsement(
+      db,
+      { ...ids, endorserId: secondDefectorId },
+      { characterId: secondDefectorId }
+    );
+
+    const withdrawn = await sweepPartyMismatchedPlayerEndorsements(
+      db as never,
+      PRIMARY_OPEN_TURN,
+      NOW
+    );
+
+    expect(withdrawn).toBe(2);
+    const rows = await db.collection("playerEndorsements").find({}).toArray();
+    expect(rows.filter((r) => r.isActive)).toHaveLength(0);
+    await expect(
+      db.collection("electionCandidates").findOne({ _id: ids.candidateRowId })
+    ).resolves.toMatchObject({ support: 54 }); // two withdrawals, two -3
+  });
+
+  it("heals legacy rows by reading each endorser's live party and leaves aligned endorsers alone", async () => {
     const db = createInMemoryDb();
     const ids = seedScenario(db, { support: 60 });
     // Defector (party already rewritten) + loyal member both endorsed LBJ.
