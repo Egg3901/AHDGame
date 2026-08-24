@@ -134,6 +134,8 @@ export const NOTIFICATION_TYPES = [
   "merger_review_decided",
   "merger_remedy_overdue",
   "transfer_pricing_assessed",
+  /** A supply agreement charged its supplier shortfall damages this turn. */
+  "corp_supply_agreement_damages",
   "bank_supervision_breach",
   "bank_supervision_cleared",
   // Defence procurement: a government offering one of this corp's plants an order.

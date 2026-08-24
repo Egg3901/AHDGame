@@ -133,6 +133,30 @@ export interface SupplyAgreementDelivery {
   turn: number;
 }
 
+/**
+ * Ticket #1147: shortfall damages assessed on one agreement in one turn.
+ *
+ * Damages are a large, recurring, and previously INVISIBLE cash drain: the
+ * penalty leg settles silently while the corp's income statement still shows
+ * a healthy per-turn profit, so a CEO whose plants under-produce against a
+ * signed volume sees cash stay flat forever with no explanation anywhere in
+ * the UI. Reported alongside deliveries so the turn phase can notify the
+ * paying corp's owner.
+ */
+export interface SupplyAgreementDamages {
+  agreementId?: string;
+  supplierCorpId: string;
+  buyerCorpId: string;
+  commodity: CommodityType;
+  contractedUnits: number;
+  producedUnits: number | undefined;
+  shortfallUnits: number;
+  /** Damages wired this turn, in ₳ (after the C6 notional cap). */
+  penaltyAnchor: number;
+  /** Damages owed but NOT wired because the payer hit its solvency floor, in ₳. */
+  unpaidAnchor: number;
+}
+
 export interface SupplyAgreementSettlements {
   /** corpId → net liquidCapital delta (in that corp's currency). */
   deltaByCorp: Map<string, number>;
@@ -148,6 +172,8 @@ export interface SupplyAgreementSettlements {
   settledPremiums: SettledPremium[];
   /** Per-agreement quantities delivered to the named buyer this turn. */
   deliveries: SupplyAgreementDelivery[];
+  /** Per-agreement shortfall damages assessed this turn (see the type doc). */
+  damages: SupplyAgreementDamages[];
 }
 
 /** Below this ₳ magnitude a settlement is not worth a write. */
@@ -466,6 +492,7 @@ export function computeSupplyAgreementSettlements(args: {
   const txEntries: TxInput[] = [];
   const settledPremiums: SettledPremium[] = [];
   const deliveries: SupplyAgreementDelivery[] = [];
+  const damages: SupplyAgreementDamages[] = [];
   const buyerAllocations = args.buyerDemandByCorpCommodity
     ? allocateDeliveriesToBuyers({
         agreements,
@@ -607,7 +634,41 @@ export function computeSupplyAgreementSettlements(args: {
       unpaidAnchor = owedAnchor - payable;
       paidByCorp.set(payerId, (paidByCorp.get(payerId) ?? 0) + payable);
       netAnchor = rawNetAnchor < 0 ? -payable : payable;
-      if (Math.abs(netAnchor) < MIN_SETTLE_ANCHOR) continue;
+      if (Math.abs(netAnchor) < MIN_SETTLE_ANCHOR) {
+        // Nothing wired, but the OWED damages are exactly what the paying CEO
+        // needs to see. Record before dropping the settlement.
+        if (shortfallUnits > 0 && penaltyAnchor >= MIN_SETTLE_ANCHOR) {
+          damages.push({
+            agreementId: a.agreementId,
+            supplierCorpId: a.supplierCorpId,
+            buyerCorpId: a.buyerCorpId,
+            commodity: a.commodity,
+            contractedUnits: Math.max(0, a.volumeCap),
+            producedUnits: typeof produced === "number" ? produced : undefined,
+            shortfallUnits,
+            penaltyAnchor: 0,
+            unpaidAnchor,
+          });
+        }
+        continue;
+      }
+    }
+
+    // Ticket #1147: report assessed damages even when the premium nets them
+    // away on this agreement — the CEO still owes capacity against a signed
+    // volume and the next turn will charge it again.
+    if (shortfallUnits > 0 && penaltyAnchor >= MIN_SETTLE_ANCHOR) {
+      damages.push({
+        agreementId: a.agreementId,
+        supplierCorpId: a.supplierCorpId,
+        buyerCorpId: a.buyerCorpId,
+        commodity: a.commodity,
+        contractedUnits: Math.max(0, a.volumeCap),
+        producedUnits: typeof produced === "number" ? produced : undefined,
+        shortfallUnits,
+        penaltyAnchor,
+        unpaidAnchor,
+      });
     }
 
     const supplierLocal = Math.round(anchorToCorpCapital(netAnchor, supplier.ccy, supplier.fxRate));
@@ -680,6 +741,7 @@ export function computeSupplyAgreementSettlements(args: {
     totalPremiumAnchor,
     settledPremiums,
     deliveries,
+    damages,
   };
 }
 
@@ -704,40 +766,54 @@ export async function settleSupplyAgreements(args: {
   totalPremiumAnchor: number;
   settledPremiums: SettledPremium[];
   deliveries: SupplyAgreementDelivery[];
+  damages: SupplyAgreementDamages[];
 }> {
   const { db, lookups, agreements, contractSettlementByCorp, priceRatioByCommodity, turn, now } =
     args;
   if (agreements.length === 0)
-    return { settledCount: 0, totalPremiumAnchor: 0, settledPremiums: [], deliveries: [] };
+    return {
+      settledCount: 0,
+      totalPremiumAnchor: 0,
+      settledPremiums: [],
+      deliveries: [],
+      damages: [],
+    };
 
-  const { deltaByCorp, txEntries, settledCount, totalPremiumAnchor, settledPremiums, deliveries } =
-    computeSupplyAgreementSettlements({
-      agreements,
-      contractSettlementByCorp,
-      buyerDemandByCorpCommodity: args.buyerDemandByCorpCommodity,
-      priceRatioByCommodity,
-      eraUnitScale: lookups.eraUnitScale,
-      producedByCorpCommodity: args.producedByCorpCommodity,
-      plantsEnabled: args.plantsEnabled,
-      corpInfo: (corpId) => {
-        const corp = lookups.corpById.get(corpId);
-        if (!corp) return undefined;
-        return {
-          _id: corp._id,
-          name: corp.name,
-          ccy: resolveCorpLiquidCurrencyCode(corp),
-          fxRate: fxRateForCorpFromMap(corp, lookups.exchangeRatesByCurrency),
-          // C6 solvency floor: the payer's own balance, in ₳.
-          liquidCapitalAnchor: corpCapitalToAnchor(
-            corp.liquidCapital ?? 0,
-            resolveCorpLiquidCurrencyCode(corp),
-            fxRateForCorpFromMap(corp, lookups.exchangeRatesByCurrency)
-          ),
-        };
-      },
-      turn,
-      now,
-    });
+  const {
+    deltaByCorp,
+    txEntries,
+    settledCount,
+    totalPremiumAnchor,
+    settledPremiums,
+    deliveries,
+    damages,
+  } = computeSupplyAgreementSettlements({
+    agreements,
+    contractSettlementByCorp,
+    buyerDemandByCorpCommodity: args.buyerDemandByCorpCommodity,
+    priceRatioByCommodity,
+    eraUnitScale: lookups.eraUnitScale,
+    producedByCorpCommodity: args.producedByCorpCommodity,
+    plantsEnabled: args.plantsEnabled,
+    corpInfo: (corpId) => {
+      const corp = lookups.corpById.get(corpId);
+      if (!corp) return undefined;
+      return {
+        _id: corp._id,
+        name: corp.name,
+        ccy: resolveCorpLiquidCurrencyCode(corp),
+        fxRate: fxRateForCorpFromMap(corp, lookups.exchangeRatesByCurrency),
+        // C6 solvency floor: the payer's own balance, in ₳.
+        liquidCapitalAnchor: corpCapitalToAnchor(
+          corp.liquidCapital ?? 0,
+          resolveCorpLiquidCurrencyCode(corp),
+          fxRateForCorpFromMap(corp, lookups.exchangeRatesByCurrency)
+        ),
+      };
+    },
+    turn,
+    now,
+  });
 
   if (deltaByCorp.size > 0) {
     const ops: AnyBulkWriteOperation<Corporation>[] = [];
@@ -778,6 +854,64 @@ export async function settleSupplyAgreements(args: {
     }
   }
   if (txEntries.length > 0) await emitTxBulk(db, txEntries, args.thresholds);
+  await notifySupplyAgreementDamages({ damages, lookups, turn });
 
-  return { settledCount, totalPremiumAnchor, settledPremiums, deliveries };
+  return { settledCount, totalPremiumAnchor, settledPremiums, deliveries, damages };
+}
+
+/**
+ * Ticket #1147: tell a player-owned supplier's owner when its contract charged
+ * shortfall damages. The penalty leg settles silently while the income
+ * statement still shows a healthy per-turn profit — the reporting player's
+ * cash sat flat for days with no signal anywhere that a signed volume cap was
+ * eating the entire profit every turn. NPP/state corps (no real user) are
+ * skipped; best-effort like every other notification in the turn pipeline.
+ */
+async function notifySupplyAgreementDamages(args: {
+  damages: readonly SupplyAgreementDamages[];
+  lookups: CorporationLookups;
+  turn: number;
+}): Promise<void> {
+  if (args.damages.length === 0) return;
+  const ZERO_USER = "000000000000000000000000";
+  const notifications = args.damages.flatMap((d) => {
+    const supplier = args.lookups.corpById.get(d.supplierCorpId);
+    const buyer = args.lookups.corpById.get(d.buyerCorpId);
+    const userId = supplier?.userId;
+    if (!supplier || !buyer || !userId || userId.toString() === ZERO_USER) return [];
+    const paid = Math.round(d.penaltyAnchor);
+    const unpaid = Math.round(d.unpaidAnchor);
+    return [
+      {
+        userId,
+        type: "corp_supply_agreement_damages" as const,
+        title: "Supply contract shortfall damages",
+        message:
+          `${supplier.name} delivered ${Math.round(d.contractedUnits - d.shortfallUnits)} of ` +
+          `${Math.round(d.contractedUnits)} contracted ${d.commodity} units and was charged ` +
+          `₳${paid.toLocaleString()} in shortfall damages (paid to ${buyer.name}` +
+          (unpaid > 0 ? `, ₳${unpaid.toLocaleString()} unpaid` : "") +
+          "). Raise production or renegotiate the contract's volume to stop the bleed.",
+        metadata: {
+          corporationId: d.supplierCorpId,
+          counterpartyCorpId: d.buyerCorpId,
+          agreementId: d.agreementId,
+          commodity: d.commodity,
+          contractedUnits: Math.round(d.contractedUnits),
+          producedUnits: d.producedUnits !== undefined ? Math.round(d.producedUnits) : undefined,
+          shortfallUnits: Math.round(d.shortfallUnits),
+          penaltyAnchor: paid,
+          unpaidAnchor: unpaid,
+          turn: args.turn,
+        },
+      },
+    ];
+  });
+  if (notifications.length === 0) return;
+  try {
+    const { createNotifications } = await import("@/lib/notifications");
+    await createNotifications(notifications);
+  } catch (err) {
+    console.error("[settleSupplyAgreements] damage notifications failed:", err);
+  }
 }

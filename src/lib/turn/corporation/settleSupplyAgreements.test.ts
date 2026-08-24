@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { COMMODITY_BASE_PRICES, type CommodityType } from "@/lib/constants/commodities";
@@ -16,6 +16,11 @@ import {
 } from "@/lib/db/types/supplyAgreement";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import type { CorporationLookups } from "./types";
+
+const createNotifications = vi.fn();
+vi.mock("@/lib/notifications", () => ({
+  createNotifications: (...a: unknown[]) => createNotifications(...a),
+}));
 
 const now = new Date("2026-01-01T00:00:00Z");
 const commodity = Object.keys(COMMODITY_BASE_PRICES)[0] as CommodityType;
@@ -775,5 +780,90 @@ describe("C6 — damages are bounded and solvency-floored", () => {
       now,
     });
     expect(r.deltaByCorp.get(B)).toBe(Math.round(100 * base * CONTRACT_DAMAGES_CAP_FRACTION));
+  });
+});
+
+describe("ticket #1147 — shortfall damage visibility", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    createNotifications.mockResolvedValue(undefined);
+  });
+
+  function corpRow(userId?: string) {
+    return {
+      _id: supId,
+      name: "Sup",
+      // Solvent payer so damages actually wire and are reported as paid.
+      liquidCapital: 1_000_000_000,
+      ...(userId !== undefined ? { userId: new ObjectId(userId) } : {}),
+    };
+  }
+
+  function lookupsWith(userId?: string): CorporationLookups {
+    return {
+      eraUnitScale: 1,
+      corpById: new Map([
+        [S, corpRow(userId)],
+        [B, { _id: buyId, name: "Buy", liquidCapital: 1_000_000_000 }],
+      ]),
+      exchangeRatesByCurrency: new Map(),
+    } as unknown as CorporationLookups;
+  }
+
+  async function settle(lookups: CorporationLookups) {
+    const db = createMockDb();
+    db.collection("corporations");
+    db.collection("supplyAgreements");
+    return settleSupplyAgreements({
+      db: db as unknown as Db,
+      lookups,
+      agreements: [
+        {
+          agreementId: new ObjectId().toString(),
+          supplierCorpId: S,
+          buyerCorpId: B,
+          commodity,
+          volumeCap: 100,
+          pricePremium: 0,
+        },
+      ],
+      contractSettlementByCorp: new Map(),
+      producedByCorpCommodity: new Map([[S, new Map([[commodity, 60]])]]),
+      plantsEnabled: true,
+      priceRatioByCommodity: ratio,
+      turn: 5,
+      now,
+      thresholds: {} as never,
+    });
+  }
+
+  it("reports assessed damages so the paying CEO's owner can be notified", async () => {
+    const r = await settle(lookupsWith(new ObjectId().toString()));
+    expect(r.damages).toHaveLength(1);
+    expect(r.damages[0]).toMatchObject({
+      supplierCorpId: S,
+      buyerCorpId: B,
+      commodity,
+      contractedUnits: 100,
+      shortfallUnits: 40,
+    });
+    expect(r.damages[0]!.penaltyAnchor).toBeGreaterThan(0);
+    expect(r.damages[0]!.unpaidAnchor).toBe(0);
+  });
+
+  it("notifies the player-owned supplier about recurring damages", async () => {
+    await settle(lookupsWith(new ObjectId().toString()));
+    expect(createNotifications).toHaveBeenCalledTimes(1);
+    const [notes] = createNotifications.mock.calls[0] as unknown as [
+      Array<{ userId: ObjectId; type: string; message: string }>,
+    ];
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.type).toBe("corp_supply_agreement_damages");
+    expect(notes[0]!.message).toContain("shortfall damages");
+  });
+
+  it("does not notify for NPP/state corps without a real user", async () => {
+    await settle(lookupsWith("000000000000000000000000"));
+    expect(createNotifications).not.toHaveBeenCalled();
   });
 });
