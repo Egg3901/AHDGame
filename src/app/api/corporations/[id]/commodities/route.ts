@@ -8,13 +8,15 @@ import { computeCorpCommodityFlows } from "@/lib/corporations/corpCommodityFlows
 import { computeCorpMarketShare } from "@/lib/corporations/corpMarketShare";
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildMarketContext } from "@/lib/market/marketContext";
-import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import {
   fxRateForSectorHostFromMap,
   resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
+import { COUNTRY_CURRENCY_MAP, eraRateForCurrency } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
 import type { CorporateSector, ExchangeRate, State } from "@/lib/db/types";
 import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
@@ -45,6 +47,7 @@ type CommoditySector = Pick<
   | "embargoSuspended"
   | "embargoExportExposure"
   | "militaryDivertedFraction"
+  | "militaryDivertedTurn"
 >;
 
 // GET /api/corporations/[id]/commodities — Per-turn commodity output/consumption,
@@ -111,6 +114,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         embargoSuspended: 1,
         embargoExportExposure: 1,
         militaryDivertedFraction: 1,
+        militaryDivertedTurn: 1,
         _id: 1,
       })
       .toArray();
@@ -125,12 +129,12 @@ export async function GET(request: Request, { params }: RouteParams) {
       gameConfig,
       exchangeRateDocs,
       stateResourceCapacityDocs,
-      eraUnitScale,
+      worldPreset,
       supplyAgreements,
     ] = await Promise.all([
       db
         .collection<GameState>("gameState")
-        .findOne({ _id: "current" }, { projection: { currentTurn: 1 } }),
+        .findOne({ _id: "current" }, { projection: { currentTurn: 1, currentYear: 1 } }),
       db
         .collection<State>("states")
         .find({ _id: { $in: stateIds } })
@@ -155,6 +159,7 @@ export async function GET(request: Request, { params }: RouteParams) {
             sectorQualityEnabled: 1,
             supplyAgreementsEnabled: 1,
             marketSystemMode: 1,
+            commandEconomyEnabled: 1,
           },
         }
       ),
@@ -166,7 +171,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         .collection<StateResourceCapacity>("stateResourceCapacity")
         .find({ stateId: { $in: stateIds } }, { projection: { stateId: 1, resources: 1 } })
         .toArray(),
-      loadWorldEraUnitScale(db),
+      loadWorldPreset(db),
       canViewPrivateSupply
         ? db
             .collection<SupplyAgreement>("supplyAgreements")
@@ -240,6 +245,16 @@ export async function GET(request: Request, { params }: RouteParams) {
     const fxByCurrency = new Map<CurrencyCode, number>(
       exchangeRateDocs.map((r) => [r.currencyCode as CurrencyCode, r.rate])
     );
+    // Some command-economy currencies are deliberately not player-traded and
+    // have no exchangeRates row, but their sectors still book revenue in local
+    // units. Falling back to 1.0 inflates them 13.5x to 27x, so fill only the
+    // absent ones from the authored preset — exactly what the turn path does
+    // in `buildLookups`. Live rates are never overwritten.
+    for (const code of Object.values(COUNTRY_CURRENCY_MAP) as CurrencyCode[]) {
+      if (fxByCurrency.has(code)) continue;
+      const authoredRate = eraRateForCurrency(code, worldPreset);
+      if (authoredRate !== undefined) fxByCurrency.set(code, authoredRate);
+    }
     const flowSectors = sectors.map((sector) => ({
       ...sector,
       revenueAnchor: readCorpEconomicAnchor(
@@ -262,8 +277,10 @@ export async function GET(request: Request, { params }: RouteParams) {
       {
         plantsEnabled: marketAtLeast(mode, "plants"),
         isNatcorp: !!corporation.countryOwnerId,
-        eraUnitScale,
+        eraUnitScale: getEraUnitScale(worldPreset),
         stateResourcesByState,
+        currentYear: gameState?.currentYear,
+        commandEconomyEnabled: gameConfig?.commandEconomyEnabled === true,
       }
     );
 

@@ -6,6 +6,11 @@ import {
   dollarsToUnits,
 } from "@/lib/constants/commodities";
 import { TRADE_EMBARGO_EXPORT_LOSS_SHARE } from "@/lib/trade/constants";
+import {
+  MARKET_ECONOMY_MEDIA_SUPPLY_FACTOR,
+  PLANNED_ECONOMY_MEDIA_OUTPUT,
+  PLANNED_ECONOMY_MEDIA_SUPPLY_FACTOR,
+} from "@/lib/constants/sectorStrategies";
 import type { CommodityFlow } from "@/lib/db/types/commodityFlow";
 
 type FlowSector = Parameters<typeof computeCorpCommodityFlows>[0][number];
@@ -279,6 +284,7 @@ describe("computeCorpCommodityFlows — plants-tier physical production (ticket 
           producedUnits: 1_000,
           capacityUnits: 1_000,
           militaryDivertedFraction: 0.25,
+          militaryDivertedTurn: 10,
         }),
       ],
       10,
@@ -342,5 +348,97 @@ describe("computeCorpCommodityFlows — plants-tier physical production (ticket 
       dollarsToUnits(100_000 * 0.25, COMMODITY_BASE_PRICES.iron),
       1
     );
+  });
+});
+
+describe("computeCorpCommodityFlows — ledger parity legs (ticket #1177 audit)", () => {
+  const plants = { plantsEnabled: true, isNatcorp: false } as const;
+
+  it("derates media supply the way the world ledger and the clearing offer do", () => {
+    const { commodities } = computeCorpCommodityFlows(
+      [mkSector({ sectorType: "media", producedUnits: 1_000, capacityUnits: 1_000 })],
+      10,
+      new Map(),
+      stateInfo,
+      new Map(),
+      plants
+    );
+
+    // Media is a single-output mix, so the whole 1,000 units carry the
+    // market-economy media supply factor.
+    const advertising = commodities.find((c) => c.commodity === "advertising")!;
+    expect(advertising.outputUnits).toBeCloseTo(1_000 * MARKET_ECONOMY_MEDIA_SUPPLY_FACTOR, 1);
+  });
+
+  it("remaps planned-economy media output off advertising", () => {
+    const { commodities } = computeCorpCommodityFlows(
+      [
+        mkSector({
+          sectorType: "media",
+          countryId: "RU",
+          producedUnits: 1_000,
+          capacityUnits: 1_000,
+        }),
+      ],
+      10,
+      new Map(),
+      stateInfo,
+      new Map(),
+      { ...plants, currentYear: 1953, commandEconomyEnabled: true }
+    );
+
+    // A command economy has no advertising market: its media output is state
+    // information, and it carries the planned-economy supply factor.
+    expect(commodities.find((c) => c.commodity === "advertising")).toBeUndefined();
+    const planned = commodities.find((c) => c.commodity === PLANNED_ECONOMY_MEDIA_OUTPUT)!;
+    expect(planned).toBeDefined();
+    expect(planned.outputUnits).toBeCloseTo(1_000 * PLANNED_ECONOMY_MEDIA_SUPPLY_FACTOR, 1);
+  });
+
+  it("ignores an arsenal diversion left over from an ended contract", () => {
+    const { commodities } = computeCorpCommodityFlows(
+      [
+        mkSector({
+          producedUnits: 1_000,
+          capacityUnits: 1_000,
+          militaryDivertedFraction: 0.25,
+          militaryDivertedTurn: 2,
+        }),
+      ],
+      40,
+      new Map(),
+      stateInfo,
+      new Map(),
+      plants
+    );
+
+    // The contract ended long ago; the world market books the full output, so
+    // the tab must not keep shaving a quarter off it forever.
+    const steel = commodities.find((c) => c.commodity === "steel")!;
+    expect(steel.outputUnits).toBeCloseTo(
+      1_000 *
+        commodityMixWeight({ steel: 0.4, building_materials: 0.2 }, COMMODITY_BASE_PRICES, "steel"),
+      1
+    );
+  });
+
+  it("keeps the CEO pricing link for a plant that made nothing this turn", () => {
+    // `outputSectors` is a capability list — which plants can make this, so the
+    // CEO can go and price them. An idle plant is exactly the one you want to
+    // reach, so it must not drop off the moment it produces zero.
+    const { commodities } = computeCorpCommodityFlows(
+      [
+        mkSector({ _id: "busy" as never, producedUnits: 900, capacityUnits: 1_000 }),
+        mkSector({ _id: "idle" as never, producedUnits: 0, capacityUnits: 1_000 }),
+      ],
+      10,
+      new Map(),
+      stateInfo,
+      new Map(),
+      plants
+    );
+
+    const steel = commodities.find((c) => c.commodity === "steel")!;
+    expect(steel.outputSectors?.map((s) => s.sectorId).sort()).toEqual(["busy", "idle"]);
   });
 });

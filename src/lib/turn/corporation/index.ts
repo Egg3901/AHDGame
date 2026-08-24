@@ -1714,6 +1714,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         plantsEnabled: market.plantsEnabled,
         eraUnitScale: lookups.eraUnitScale,
         stateResourcesByState: lookups.stateResourceCapacityByState,
+        currentYear,
+        commandEconomyEnabled,
       }
     );
   }
