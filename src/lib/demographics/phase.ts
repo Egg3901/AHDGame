@@ -340,7 +340,7 @@ export async function runDemographicFlows(
             gdpGrowth: val(w.m?.economic?.gdpGrowth, 2.5),
             unemployment: val(w.m?.economic?.unemploymentRate, 5),
             medianIncome: val(w.m?.economic?.medianIncome, 50000),
-            costOfLiving: val(w.m?.economic?.costOfLiving, 50),
+            costOfLiving: val(w.m?.economic?.costOfLiving, 100),
           },
           avgIncome
         ),
@@ -349,6 +349,9 @@ export async function runDemographicFlows(
     const pop = new Map(countryWorks.map((w) => [w.id, totalPopulation(w.vector)]));
     const targets = computeInternalNetTargets(attract, pop, TURNS_PER_YEAR);
     const vectorsMap = new Map(countryWorks.map((w) => [w.id, w.vector]));
+    const preInternalPopulation = new Map(
+      countryWorks.map((w) => [w.id, totalPopulation(w.vector)])
+    );
     const { vectors: finalVectors, circuitBreakerTrips: trips } = applyInternalMigration(
       vectorsMap,
       targets,
@@ -356,7 +359,11 @@ export async function runDemographicFlows(
       MAX_INTERNAL_CHANGE_FRACTION
     );
     circuitBreakerTrips += trips;
-    for (const w of countryWorks) w.vector = finalVectors.get(w.id) ?? w.vector;
+    for (const w of countryWorks) {
+      const finalVector = finalVectors.get(w.id) ?? w.vector;
+      w.flows.netMigration += totalPopulation(finalVector) - (preInternalPopulation.get(w.id) ?? 0);
+      w.vector = finalVector;
+    }
   }
 
   // ── Stage 3: derive readouts from the FINAL vectors and persist ──

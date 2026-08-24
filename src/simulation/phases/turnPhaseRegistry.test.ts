@@ -193,6 +193,7 @@ describe("turn phase registry", () => {
     };
 
     expect(indexOf("candidatePartySweep")).toBeLessThan(indexOf("primaryResolution"));
+    expect(indexOf("withdrawInactiveCandidates")).toBeLessThan(indexOf("primaryResolution"));
     expect(indexOf("primaryResolution")).toBeLessThan(indexOf("voteAccumulation"));
     expect(indexOf("voteAccumulation")).toBeLessThan(indexOf("electionTimers"));
     expect(indexOf("electionTimers")).toBeLessThan(indexOf("electionResolution"));

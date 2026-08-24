@@ -312,8 +312,11 @@ export async function originateLoan(
       : rates.lendingRatePercent;
 
   const reserveRatio = await getReserveRequirement(db, currency);
-  const headroom = getLendableHeadroom(charter, reserveRatio);
   const cashReserves = getCashReserves(charter);
+  const headroom =
+    charter.type === "investment"
+      ? Math.max(0, cashReserves - (charter.totalLoans ?? 0))
+      : getLendableHeadroom(charter, reserveRatio);
   const committedPaymentPerTurn = await committedNamedLoanPaymentPerTurn(
     db,
     borrower,
@@ -433,7 +436,12 @@ export async function disburseNamedLoan(
     {
       _id: bankCorporationId,
       "bankCharter.status": "active",
-      "bankCharter.type": { $in: ["retail", "universal"] },
+      "bankCharter.type": {
+        $in:
+          loan.borrowerType === "corporation"
+            ? ["retail", "investment", "universal"]
+            : ["retail", "universal"],
+      },
     },
     {
       $inc: { "bankCharter.totalLoans": principal },

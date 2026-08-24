@@ -295,7 +295,7 @@ export async function spawnBundestagElection(
 
   const inserted = await db.collection<Election>("elections").insertOne(newElection as Election);
   console.log(
-    `[Turn] Bundestag election spawned for ${fromElection.state} cycle ${spawn.cycle} status=${status} — id ${inserted.insertedId}`
+    `[Turn] Bundestag election spawned for ${fromElection.state} cycle ${spawn.cycle} status=${newElection.status} - id ${inserted.insertedId}`
   );
 
   // Seed Landeslisten for the new cycle so chairs have an edit window before the

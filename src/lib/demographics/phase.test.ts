@@ -201,6 +201,18 @@ describe("runDemographicFlows", () => {
     const txPop = writes.find((w) => w.updateOne.filter._id === "TX")!.updateOne.update.$set
       .population;
     expect(caPop).toBeGreaterThan(txPop); // internal migration favored the attractive region
+    const metricWrites = db.collectionMocks.macroMetrics!.bulkWrite.mock.calls[0][0] as Array<{
+      updateOne: {
+        filter: { _id: string };
+        update: { $set: Record<string, number> };
+      };
+    }>;
+    const caMigration = metricWrites.find((w) => w.updateOne.filter._id === "CA")!.updateOne.update
+      .$set["population.realizedMigrationRate.value"];
+    const txMigration = metricWrites.find((w) => w.updateOne.filter._id === "TX")!.updateOne.update
+      .$set["population.realizedMigrationRate.value"];
+    expect(caMigration).toBeGreaterThan(0);
+    expect(txMigration).toBeLessThan(0);
   });
 
   it("writes state.militaryServicePopulation (conscription withdrawal) for a conscripting country", async () => {
