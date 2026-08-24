@@ -297,9 +297,126 @@ describe("loadGermanQuestionDossier", () => {
     const { loadGermanQuestionDossier } = await import("./dossier");
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
     expect(view!.openFloor.characters).toBe(40);
-    // 40 × 200 × 0.25 = 2000 raw against a 600 cap.
+    // 40 x 200 x 0.25 = 2000 hundredths asked for, far past the cap. The figure
+    // shown is the projection clamped to the cap, whatever the fixture's own
+    // stamps claim: the card reports what the tick will enforce, and the wire
+    // is the side that reports what was already written.
     expect(view!.openFloor.capped).toBe(true);
-    expect(view!.openFloor.netPoints).toBe(6);
+    // One decimal, like every other aggregate on the board: 0.75 displays 0.8.
+    // The per-institution meter keeps two, where the cap needs the precision.
+    expect(view!.openFloor.netPoints).toBe(0.8);
+  });
+
+  it("carries per-institution cap usage below the cap", async () => {
+    // Two letters at basePoints 100: 2 x 100 x 0.25 = 50 hundredths asked for,
+    // under the 75 cap, so usage reads uncapped and equals the ask.
+    prime(db, "settlementPlays").find.mockReturnValue(
+      cursor(
+        Array.from({ length: 2 }, () => ({
+          _id: new ObjectId(),
+          crisisId: CRISIS_ID,
+          actor: "personal",
+          seatId: null,
+          characterId: new ObjectId(),
+          playId: "letter",
+          targetInstitutionId: "bundestag",
+          direction: -1,
+          basePoints: 100,
+          appliedPoints: null,
+          turn: 412,
+          resolvedTurn: null,
+        }))
+      )
+    );
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    expect(view!.institutions.find((i) => i.id === "bundestag")!.personalCap).toEqual({
+      rawPoints: -0.5,
+      netPoints: -0.5,
+      capPoints: PERSONAL_NET_CAP / HUNDREDTHS,
+      maxed: false,
+    });
+    // Reachable but untouched this turn: the meter sits at zero rather than
+    // disappearing, so the limit is visible before anyone has spent any of it.
+    expect(view!.institutions.find((i) => i.id === "street")!.personalCap).toEqual({
+      rawPoints: 0,
+      netPoints: 0,
+      capPoints: PERSONAL_NET_CAP / HUNDREDTHS,
+      maxed: false,
+    });
+    // The personal tier has no lever here; a meter would imply a limit that
+    // never applies.
+    expect(view!.institutions.find((i) => i.id === "laender")!.personalCap).toBeNull();
+    expect(view!.institutions.find((i) => i.id === "garrison")!.personalCap).toBeNull();
+    expect(view!.openFloor.netPoints).toBe(-0.5);
+  });
+
+  it("projects a still-pending batch onto the cap as MAXED", async () => {
+    // Nothing is stamped yet mid-turn: appliedPoints are null. The projection
+    // has to read the ceiling the tick will enforce, not zero. Four rallies:
+    // 4 x 200 x 0.25 = 200 hundredths asked for, past the 75 cap.
+    prime(db, "settlementPlays").find.mockReturnValue(
+      cursor(
+        Array.from({ length: 4 }, () => ({
+          _id: new ObjectId(),
+          crisisId: CRISIS_ID,
+          actor: "personal",
+          seatId: null,
+          characterId: new ObjectId(),
+          playId: "rally",
+          targetInstitutionId: "street",
+          direction: 1,
+          basePoints: 200,
+          appliedPoints: null,
+          turn: 412,
+          resolvedTurn: null,
+        }))
+      )
+    );
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    expect(view!.institutions.find((i) => i.id === "street")!.personalCap).toMatchObject({
+      rawPoints: 2,
+      netPoints: PERSONAL_NET_CAP / HUNDREDTHS,
+      maxed: true,
+    });
+    expect(view!.openFloor.capped).toBe(true);
+    // One-decimal aggregate display: the 0.75 cap reads 0.8 here, while the
+    // card's own meter keeps both decimals.
+    expect(view!.openFloor.netPoints).toBe(0.8);
+  });
+
+  it("marks an institution AT the cap as maxed without claiming a throttle", async () => {
+    // Three letters: 3 x 100 x 0.25 = exactly the 75-hundredth cap. Nothing
+    // was scaled away, so `capped` stays strict — but the category sits at its
+    // ceiling and further plays cannot add movement, which is what `maxed`
+    // reports.
+    prime(db, "settlementPlays").find.mockReturnValue(
+      cursor(
+        Array.from({ length: 3 }, () => ({
+          _id: new ObjectId(),
+          crisisId: CRISIS_ID,
+          actor: "personal",
+          seatId: null,
+          characterId: new ObjectId(),
+          playId: "letter",
+          targetInstitutionId: "bundestag",
+          direction: 1,
+          basePoints: 100,
+          appliedPoints: null,
+          turn: 412,
+          resolvedTurn: null,
+        }))
+      )
+    );
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+    expect(view!.institutions.find((i) => i.id === "bundestag")!.personalCap).toMatchObject({
+      rawPoints: 0.75,
+      netPoints: 0.75,
+      maxed: true,
+    });
+    expect(view!.openFloor.capped).toBe(false);
   });
 
   it("builds the wire newest-first and caps it at eight lines", async () => {

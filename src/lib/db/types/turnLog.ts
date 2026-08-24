@@ -579,6 +579,11 @@ export interface TurnLog {
       byReason: Record<string, number>;
     } | null;
 
+    /** Ticket #1179 — player endorsements withdrawn for primary-phase party misalignment. */
+    playerEndorsementPartySweep?: {
+      withdrawn: number;
+    } | null;
+
     governorLegislationQueue?: {
       fired: number;
       cancelled: number;

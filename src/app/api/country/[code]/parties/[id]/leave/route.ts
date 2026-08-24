@@ -115,6 +115,11 @@ export async function POST(
         `[Party Leave] ${auth.character.name} withdrew from ${cleanup.withdrawnCommitteeElections} national committee election(s)`
       );
     }
+    if (cleanup.withdrawnEndorsements > 0) {
+      console.log(
+        `[Party Leave] ${auth.character.name} withdrew ${cleanup.withdrawnEndorsements} player endorsement(s) due to party switch`
+      );
+    }
 
     // Caucuses are scoped to a single (countryId, partyId), so leaving the
     // party means leaving the caucus. Closes membership, clears factionId,

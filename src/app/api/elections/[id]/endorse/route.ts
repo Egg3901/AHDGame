@@ -8,6 +8,8 @@ import { recordAudit } from "@/lib/audit/recordAudit";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
 import type { ElectionCandidate, PlayerEndorsement } from "@/lib/db/types";
 import { resolveElectionRouteParam } from "@/lib/elections/electionParamResolution";
+import { isPrimaryPhaseOpen } from "@/lib/elections/playerEndorsements";
+import { getGameTime } from "@/lib/time/gameTime";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isActivePlayerEndorsementDuplicateKey } from "@/lib/elections/duplicateKey";
 import { assertSameCountry } from "@/lib/api/sameCountry";
@@ -74,6 +76,19 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Cannot endorse yourself
     if (candidate.characterId?.equals(character._id)) {
       return NextResponse.json({ error: "You cannot endorse yourself" }, { status: 400 });
+    }
+
+    // Primaries are intra-party contests — the /president/primary/[partyId]
+    // surface only ever offered this control to same-party members, so hold
+    // the API to the same rule (ticket #1179). Cross-party endorsements open
+    // up in the general phase. Turn-first phase check with Date fallback.
+    const { effectiveNow, currentTurn } = await getGameTime();
+    const inPrimary = isPrimaryPhaseOpen(election, { currentTurn, now: effectiveNow });
+    if (inPrimary && candidate.party && candidate.party !== character.party) {
+      return NextResponse.json(
+        { error: "You can only endorse candidates in your own party while the primary is running" },
+        { status: 403 }
+      );
     }
 
     const ownCandidacy = await db.collection<ElectionCandidate>("electionCandidates").findOne({
