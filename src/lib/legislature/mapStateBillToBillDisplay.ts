@@ -2,7 +2,11 @@ import type { BillDisplay } from "@/lib/legislature/dto/billDisplay";
 import type { BillChamber, BillStatus } from "@/lib/db/types/legislation";
 import type { StateBillDisplay } from "@/lib/legislature/dto/stateLegislature";
 import { isVotingDeadlinePassed } from "./billVotingWindow";
-import { directionLabel as directionFromEffect } from "@/lib/legislature/provisionEnrichment";
+// Imported from the leaf module, NOT the provisionEnrichment barrel. This file
+// is reachable from client components, and the barrel re-exports the fiscal
+// resolver, which pulls the Mongo driver into the client bundle and breaks the
+// production build.
+import { directionLabel as directionFromEffect } from "@/lib/legislature/provisionEnrichment/optionLabel";
 
 /**
  * Map a subnational bill API shape to {@link BillDisplay} so state/region bills can use
