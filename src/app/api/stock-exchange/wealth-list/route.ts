@@ -19,6 +19,7 @@ import {
   loadFxRatesByCurrency,
 } from "@/lib/currency/corporationCapital";
 import { computeLocDebtInternal } from "@/lib/lineOfCredit/netWorth";
+import { getPublicShareQuote } from "@/lib/corporations/marketQuote";
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
@@ -181,7 +182,11 @@ async function computeWealthListFallback(
     if (ceoId && !corp.ceoVacant && characterIdSet.has(ceoId) && !ceoCorpByCharId.has(ceoId)) {
       ceoCorpByCharId.set(ceoId, corp.name);
     }
-    const price = corp.sharePrice ?? 0;
+    // Same accessor every other valuation surface uses, including this route's
+    // own hourly snapshot in turn/investorWealthSnapshots. A MISSING price falls
+    // back to DEFAULT_SHARE_PRICE rather than dropping the holding to zero; an
+    // explicit 0 still skips.
+    const price = getPublicShareQuote(corp);
     if (price <= 0) continue;
     const corpFxRate = fxRateForCorpFromMap(corp, fxByCurrency);
     for (const sh of corp.shareholders ?? []) {
