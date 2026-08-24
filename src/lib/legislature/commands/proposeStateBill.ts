@@ -32,6 +32,7 @@ import { getGameState } from "@/lib/gameState";
 import { getEraContext } from "@/lib/era/context";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
 import { stampTaxSliderProvisions } from "@/lib/politicalLegislation/taxSlider";
+import { snapshotPolicyProvisionsInPlace } from "@/lib/legislature/provisionEnrichment";
 
 const VOTING_DURATION_HOURS = 24;
 
@@ -226,6 +227,20 @@ export async function proposeStateBill(
     }
     sanitizedProvisions.length = 0;
     sanitizedProvisions.push(...stamped.provisions);
+
+    // Freeze the proposed and current option labels now. Without this the bill
+    // detail page re-reads the live law on every render, so once the bill enacts
+    // the current-law box shows the bill's own outcome and the bill looks like
+    // it re-passed the law already in force.
+    //
+    // Runs AFTER the slider stamp on purpose: a slider provision carries a
+    // synthetic "rate:" option id that resolves to no seeded option, so the
+    // snapshot pass leaves its already-stamped labels alone.
+    await snapshotPolicyProvisionsInPlace(db, sanitizedProvisions, {
+      scope: "region",
+      countryId,
+      regionId: stateId,
+    });
   }
 
   const policyProvisionsForCheck = (sanitizedProvisions ?? [])

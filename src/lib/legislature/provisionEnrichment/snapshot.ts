@@ -14,6 +14,45 @@ import type { FiscalScope } from "./types";
 export type SnapshottableProvision = ResolvableProvision &
   SnapshotFields & { legislationTypeId: string };
 
+/**
+ * A bill's `provisions` array is heterogeneous: policy rows sit alongside
+ * subsidy / end_subsidy rows, which have no policy option and no current law.
+ * Only the policy rows can be snapshotted.
+ */
+function isSnapshottablePolicyProvision(value: unknown): value is SnapshottableProvision {
+  if (typeof value !== "object" || value === null) return false;
+  const provision = value as { type?: unknown; legislationTypeId?: unknown };
+  if (provision.type !== undefined && provision.type !== "policy") return false;
+  return typeof provision.legislationTypeId === "string" && provision.legislationTypeId.length > 0;
+}
+
+/**
+ * Snapshot the policy provisions of a mixed provisions array, in place,
+ * preserving every row's original position.
+ *
+ * Shared by both regional write sites (proposal and governor-queue fire) so the
+ * position-preserving walk is written once.
+ */
+export async function snapshotPolicyProvisionsInPlace<T>(
+  db: Db,
+  provisions: T[],
+  scope: FiscalScope
+): Promise<void> {
+  const positions: number[] = [];
+  const policyProvisions: SnapshottableProvision[] = [];
+  provisions.forEach((provision, index) => {
+    if (!isSnapshottablePolicyProvision(provision)) return;
+    positions.push(index);
+    policyProvisions.push(provision);
+  });
+  if (policyProvisions.length === 0) return;
+
+  const snapshotted = await snapshotBillPolicyProvisions(db, scope, policyProvisions);
+  positions.forEach((position, i) => {
+    provisions[position] = snapshotted[i] as T;
+  });
+}
+
 /** Mirrors `currentLaw.policyStoreId` — national rows live under a pseudo-stateId. */
 function policyStoreId(scope: FiscalScope): string {
   if (scope.scope === "region") return scope.regionId;
