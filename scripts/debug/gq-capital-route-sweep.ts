@@ -21,6 +21,7 @@
  */
 import {
   HUNDREDTHS,
+  SETTLEMENT_CAPITAL_K,
   SETTLEMENT_PLAYS,
   SETTLEMENT_TEMPO,
   TOTAL_INSTITUTION_WEIGHT,
@@ -28,9 +29,13 @@ import {
   getSeat,
 } from "../../src/lib/constants/settlementCrisis";
 
-/** Proposed seat capital income, against today's. */
-const INCOME_NOW: Record<string, number> = { DD: 6, RU: 3, US: 3, UK: 3 };
-const INCOME_NEW: Record<string, number> = { DD: 8, RU: 4, US: 4, UK: 4 };
+/**
+ * Seat capital income BEFORE the raise that shipped alongside this route,
+ * against the live values. Kept so the cadence table still shows what the raise
+ * bought; everything else reads the shipped constants.
+ */
+const INCOME_BEFORE: Record<string, number> = { DD: 6, RU: 3, US: 3, UK: 3 };
+const incomeNow = (seatId: string) => getSeat(seatId as never)?.capitalPerTurn ?? 0;
 
 const K_SWEEP = [1, 1.5, 2, 2.5, 3, 4, 5];
 
@@ -101,16 +106,18 @@ console.log("\n\nVERDICT — plays whose capital route beats the seat's own benc
 for (const k of K_SWEEP) {
   const broken = paid.filter((p) => indexValue(p) / capitalPrice(p, k) > benchmark[p.seat!]);
   const flag = broken.length === 0 ? "OK  " : "BAD ";
+  const shipped = k === SETTLEMENT_CAPITAL_K ? "  <- SHIPPED" : "";
   console.log(
     `${flag} k=${String(k).padEnd(4)} ${broken.length}/9 obsolete` +
-      (broken.length ? `  (${broken.map((p) => p.id).join(", ")})` : "")
+      (broken.length ? `  (${broken.map((p) => p.id).join(", ")})` : "") +
+      shipped
   );
 }
 
 // ── cadence: turns a debt-bound seat waits for its CHEAPEST capital option ───
-const K_PICK = Number(process.argv[2] ?? 3);
-console.log(`\n\nCADENCE at k=${K_PICK} — a seat with an empty treasury\n`);
-console.log("seat  cheapest option   cap   turns now   turns raised");
+const K_PICK = Number(process.argv[2] ?? SETTLEMENT_CAPITAL_K);
+console.log(`\n\nCADENCE at k=${K_PICK} — a seat that will not borrow\n`);
+console.log("seat  cheapest option   cap   before raise   at live income");
 for (const seatId of ["DD", "RU", "US", "UK"]) {
   const options = seatPlays
     .filter((p) => p.seat === seatId)
@@ -122,8 +129,8 @@ for (const seatId of ["DD", "RU", "US", "UK"]) {
   const best = options[0];
   console.log(
     `${seatId.padEnd(5)} ${best.id.padEnd(17)} ${String(best.cap).padStart(3)}   ` +
-      `${(best.cap / INCOME_NOW[seatId]).toFixed(1).padStart(9)}   ` +
-      `${(best.cap / INCOME_NEW[seatId]).toFixed(1).padStart(12)}`
+      `${(best.cap / INCOME_BEFORE[seatId]).toFixed(1).padStart(12)}   ` +
+      `${(best.cap / incomeNow(seatId)).toFixed(1).padStart(14)}`
   );
 }
 

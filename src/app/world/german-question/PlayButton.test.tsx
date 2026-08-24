@@ -113,6 +113,39 @@ describe("PlayButton", () => {
     );
     expect(screen.getByRole("button", { name: /TREASURY/ }).hasAttribute("disabled")).toBe(false);
     expect(screen.getByRole("button", { name: /CAPITAL/ }).hasAttribute("disabled")).toBe(true);
+    // One route being short is a reason to use the OTHER one, not a reason the
+    // play is unavailable. A standalone blocker line under a live treasury
+    // button would read as though the whole play were dead.
+    expect(screen.queryByText("Not enough capital banked.")).toBeNull();
+  });
+
+  it("explains the block only when every route is dead", () => {
+    render(
+      <PlayButton
+        play={playView({
+          payments: [
+            {
+              mode: "funds",
+              label: "TREASURY",
+              costLabel: "x",
+              affordable: false,
+              blockedReason: "actions",
+              debtNote: null,
+            },
+            {
+              mode: "capital",
+              label: "CAPITAL",
+              costLabel: "y",
+              affordable: false,
+              blockedReason: "actions",
+              debtNote: null,
+            },
+          ],
+        })}
+        onCommitted={() => {}}
+      />
+    );
+    expect(screen.getByText("No action points left this turn.")).toBeTruthy();
   });
 
   it("warns on the cash route when it would borrow", () => {

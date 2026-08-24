@@ -365,7 +365,19 @@ describe("loadGermanQuestionDossier", () => {
       actionsBankCap: 9,
       canAct: true,
     });
-    expect(view!.viewer.seat!.treasuryLabel).toContain("310,000,000");
+    expect(view!.viewer.seat!.treasuryLabel).toBe("M310,000,000 treasury");
+  });
+
+  it("labels a negative treasury as national debt, without a stray minus sign", async () => {
+    // Delegations borrow routinely now, so a seat in the red is the normal
+    // case. `formatLocalFunds` puts the sign after the symbol, which read as
+    // "M-500,000,000 treasury".
+    prime(db, "federalBudget").findOne.mockResolvedValue({ treasuryBalance: -500_000_000 });
+    const { loadGermanQuestionDossier } = await import("./dossier");
+    const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
+
+    expect(view!.viewer.seat!.treasuryLabel).toBe("M500,000,000 national debt");
+    expect(view!.viewer.seat!.treasuryLabel).not.toContain("-");
   });
 
   it("denies escalation to a non-authority seat and explains why", async () => {
@@ -717,6 +729,17 @@ describe("loadGermanQuestionDossier", () => {
     it("leaves the debt note off when the treasury covers the play", async () => {
       const border = await playOn("street", "border");
       expect(border.payments[0].debtNote).toBeNull();
+    });
+
+    it("counts only the NEW debt when the treasury is already negative", async () => {
+      // `treasuryBalance` is signed, so `fundsCost - balance` would count the
+      // debt a country already carries as though this play created it: at
+      // -ℳ500M a ℳ12M play would read as adding ℳ512M. It adds ℳ12M.
+      prime(db, "federalBudget").findOne.mockResolvedValue({ treasuryBalance: -500_000_000 });
+      const border = await playOn("street", "border");
+
+      expect(border.payments[0].debtNote).toContain("12");
+      expect(border.payments[0].debtNote).not.toContain("512");
     });
 
     it("gates the capital route on capital alone, never on the treasury", async () => {

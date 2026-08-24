@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getPlay, mag, SETTLEMENT_PLAYS } from "@/lib/constants/settlementCrisis";
+import { getPlay, mag, SEAT_CAPITAL_CAP, SETTLEMENT_PLAYS } from "@/lib/constants/settlementCrisis";
 import { authoredPoints, capitalPriceFor } from "./capitalPrice";
 
 describe("authoredPoints", () => {
@@ -55,6 +55,17 @@ describe("capitalPriceFor", () => {
         play.magnitude / capitalPriceFor(play),
         `${play.id} obsoletes ${bench.id}`
       ).toBeLessThanOrEqual(bench.magnitude / bench.capitalCost);
+    }
+  });
+
+  it("never prices a route above what a seat can ever bank", () => {
+    // A price over SEAT_CAPITAL_CAP is not expensive, it is UNBUYABLE: the bank
+    // cannot hold enough to ever afford it, so the button would sit dead
+    // forever. The dearest is `border` at 46 against a ceiling of 60.
+    for (const play of SETTLEMENT_PLAYS.filter((p) => p.seat !== null && p.fundsCost > 0)) {
+      expect(capitalPriceFor(play), `${play.id} is unbuyable`).toBeLessThanOrEqual(
+        SEAT_CAPITAL_CAP
+      );
     }
   });
 

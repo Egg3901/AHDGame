@@ -64,9 +64,15 @@ export function PlayButton({ play, onCommitted }: PlayButtonProps) {
   // A personal play has exactly one route; its two buttons choose a SIDE, not a
   // budget.
   const personalRoute = play.payments[0];
-  const blockedCopy = copyFor(
-    play.payments.find((p) => !p.affordable && p.blockedReason)?.blockedReason ?? null
-  );
+  // Only when EVERY route is blocked. With two routes, one being unaffordable
+  // is not a reason the play is unavailable — it is a reason to use the other
+  // one, and a standalone "Not enough capital banked" under a live treasury
+  // button reads as though the whole play were dead. Each button carries its
+  // own reason in its title.
+  const allBlocked = play.payments.every((p) => !p.affordable);
+  const blockedCopy = allBlocked
+    ? copyFor(play.payments.find((p) => p.blockedReason)?.blockedReason ?? null)
+    : null;
   const swingTone = play.effectivePoints >= 0 ? "text-error" : "text-info";
   const tagTone = play.danger ? "text-warning" : "text-muted";
 
@@ -74,7 +80,7 @@ export function PlayButton({ play, onCommitted }: PlayButtonProps) {
     <div className="flex flex-col gap-1">
       <div
         className={`flex w-full items-center gap-2.5 rounded-md border border-card-border bg-foreground/[0.02] px-3 py-2.5 ${
-          play.payments.every((p) => !p.affordable) ? "opacity-55" : ""
+          allBlocked ? "opacity-55" : ""
         }`}
       >
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -110,7 +116,7 @@ export function PlayButton({ play, onCommitted }: PlayButtonProps) {
             <>
               <button
                 type="button"
-                disabled={pending !== null || !personalRoute.affordable}
+                disabled={pending !== null || !personalRoute?.affordable}
                 onClick={() => void commit("funds", -1)}
                 className="min-h-11 min-w-16 rounded border border-info/40 px-3 font-mono text-body-xs text-info hover:bg-info/10 disabled:cursor-not-allowed disabled:opacity-50"
                 title={blockedCopy ?? "Push toward NATO"}
@@ -119,7 +125,7 @@ export function PlayButton({ play, onCommitted }: PlayButtonProps) {
               </button>
               <button
                 type="button"
-                disabled={pending !== null || !personalRoute.affordable}
+                disabled={pending !== null || !personalRoute?.affordable}
                 onClick={() => void commit("funds", 1)}
                 className="min-h-11 min-w-16 rounded border border-error/40 px-3 font-mono text-body-xs text-error hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-50"
                 title={blockedCopy ?? "Push toward reunification"}

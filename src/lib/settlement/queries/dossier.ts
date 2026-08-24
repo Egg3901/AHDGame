@@ -42,6 +42,7 @@ import { defconFor, isArmed } from "../outcome";
 import { canCharacterAfford, canSeatAfford, seatBudgetFor } from "../affordability";
 import { resolveSeatOffices, type SettlementSeatOffice } from "../seatOffices";
 import { capitalPriceFor } from "../capitalPrice";
+import { computeFiscalImpact } from "@/lib/budget/fiscalImpact";
 import type { SettlementPaymentMode } from "@/lib/db/types/settlementPlay";
 import { loadSettlementActorContext } from "../actorContext";
 import { resolvePersonalFunds } from "../playCost";
@@ -294,6 +295,19 @@ function costLabelFor(
   return bits.join(" · ");
 }
 
+/**
+ * The seat's cash position, named for what it actually is.
+ *
+ * `treasuryBalance` is SIGNED and `formatLocalFunds` puts the sign after the
+ * symbol, so a seat in the red rendered as "M-500,000,000 treasury". Since
+ * delegations borrow routinely now, that is the normal case rather than an edge
+ * one. The label carries its own noun, so the Masthead does not append one.
+ */
+function treasuryLabelFor(balance: number, countryId: CountryId): string {
+  const money = formatLocalFunds(Math.abs(balance), COUNTRY_CURRENCY_MAP[countryId]);
+  return balance < 0 ? `${money} national debt` : `${money} treasury`;
+}
+
 /** One play as the board shows it, with every route it can be bought through. */
 function playView(params: {
   play: SettlementPlayDef;
@@ -443,10 +457,12 @@ export async function loadGermanQuestionDossier(
       const balance = treasury?.treasuryBalance ?? 0;
       for (const play of catalogue.filter((p) => p.target === institutionId)) {
         const cash = canSeatAfford(play, budget);
-        // `treasuryBalance` is the signed cash position, so a shortfall is what
-        // this play would ADD to the national debt. Negative balances give the
-        // full cost, which is correct: all of it is borrowed.
-        const shortfall = Math.max(0, play.fundsCost - balance);
+        // THE canonical split, not a local subtraction. `treasuryBalance` is
+        // signed, so `fundsCost - balance` counts pre-existing debt as newly
+        // added: at a balance of -500M a 12M play reads as adding 512M. This is
+        // the same function `spendFromTreasury` books the spend with, so the
+        // number on the button is the number that lands.
+        const { addedToDebt } = computeFiscalImpact(balance, play.fundsCost);
         const payments: DossierPaymentView[] = [
           {
             mode: "funds",
@@ -455,8 +471,8 @@ export async function loadGermanQuestionDossier(
             affordable: seat.canAct && cash.ok,
             blockedReason: seat.blockedReason ?? cash.reason ?? null,
             debtNote:
-              shortfall > 0
-                ? `adds ${formatLocalFunds(shortfall, COUNTRY_CURRENCY_MAP[seat.id as CountryId])} to the national debt`
+              addedToDebt > 0
+                ? `adds ${formatLocalFunds(addedToDebt, COUNTRY_CURRENCY_MAP[seat.id as CountryId])} to the national debt`
                 : null,
           },
         ];
@@ -685,10 +701,7 @@ export async function loadGermanQuestionDossier(
               multiplier: `${(seatDef.multiplierPct / 100).toFixed(1)}×`,
               capital: budget.capital,
               capitalLabel: seatDef.capitalLabel,
-              treasuryLabel: formatLocalFunds(
-                treasury?.treasuryBalance ?? 0,
-                COUNTRY_CURRENCY_MAP[seat.id as CountryId]
-              ),
+              treasuryLabel: treasuryLabelFor(treasury?.treasuryBalance ?? 0, seat.id as CountryId),
               actionsRemaining: budget.actionsRemaining,
               actionsPerTurn: budget.actionsPerTurn,
               actionsBankCap: budget.actionsBankCap,
