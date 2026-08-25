@@ -97,7 +97,7 @@ import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import type { State } from "@/lib/db/types/state";
 import { COUNTRY_ORDER } from "@/lib/constants/countries";
 import type { CountryId } from "@/lib/constants/countries";
-import { isPlannedEconomy, plannedShare } from "@/lib/constants/commandEconomy";
+import { isCurtained, isPlannedEconomy, plannedShare } from "@/lib/constants/commandEconomy";
 import { plannedEconomyMediaSupplyFactor } from "@/lib/constants/sectorStrategies";
 import { administeredNationalPrice, dualTrackPrice } from "@/lib/economy/administeredPricing";
 import type { GameState } from "@/lib/db/types/gameState";
@@ -1188,10 +1188,11 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   }
   // Iron curtain: planned economies trade only among themselves until real
   // east-west trade mechanics exist (owner decision 2026-08-16). Membership is
-  // the engine's own MARKETIZATION_SCHEDULE via isPlannedEconomy, so the
-  // curtain lifts country-by-country on the historical marketization dates.
+  // the engine's own MARKETIZATION_SCHEDULE via isCurtained, so the curtain
+  // lifts country-by-country on the historical marketization dates and the
+  // Tito-split exemption keeps Yugoslavia trading with the open world.
   const curtainedCountries = new Set<string>(
-    COUNTRY_ORDER.filter((c) => isPlannedEconomy(c, ledgerCurrentYear, ledgerCommandEconomyEnabled))
+    COUNTRY_ORDER.filter((c) => isCurtained(c, ledgerCurrentYear, ledgerCommandEconomyEnabled))
   );
   const { affinityFor, capUnitsFor } = buildTradeAffinity({
     ftaPairs,
