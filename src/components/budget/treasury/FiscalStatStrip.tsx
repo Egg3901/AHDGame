@@ -20,7 +20,24 @@ export interface FiscalStatStripProps {
   sym: string;
   revenue: number;
   spending: number;
+  /**
+   * LIVE national GDP in base currency units, the sum of every region's
+   * `state.gdp` this turn (the A1 SSOT). Callers pass `data.liveGdpUnits`, not
+   * `budget.gdp` — the latter is only refreshed at fiscal close and runs up to
+   * 6.5% behind. The prior-FY compare point is the same Σ-states basis measured
+   * at that close, so the delta reads as growth since then, matching how every
+   * other tile here compares a live value against a prior-FY snapshot.
+   */
   gdp: number;
+  /**
+   * Denominator for the "% of GDP" sub-line, kept separate from `gdp` because
+   * they are different numbers on purpose: `gdp` is the live LEVEL to display,
+   * this is the RATIO basis (`gdpSmoothed`) the stored `debtToGdp` already uses.
+   * Without the split, the deficit share and the debt ratio in this same strip
+   * would sit on different denominators. Defaults to `gdp` for callers that
+   * have no smoothed figure. See lib/budget/gdpDenominator.
+   */
+  ratioGdp?: number;
   /**
    * `economicFactors.gdpGrowth`: the growth rate the budget projects revenue
    * off. It is NOT the live rate. `fiscalYear.ts` copies the pipeline figure
@@ -58,6 +75,7 @@ export function FiscalStatStrip({
   revenue,
   spending,
   gdp,
+  ratioGdp,
   gdpGrowth,
   debtToGdp,
   rating,
@@ -68,7 +86,8 @@ export function FiscalStatStrip({
 }: FiscalStatStripProps) {
   const surplus = revenue - spending;
   const prevSurplus = prev ? prev.revenue - prev.spending : null;
-  const deficitToGdp = gdp > 0 ? (surplus / gdp) * 100 : 0;
+  const deficitBasis = ratioGdp && ratioGdp > 0 ? ratioGdp : gdp;
+  const deficitToGdp = deficitBasis > 0 ? (surplus / deficitBasis) * 100 : 0;
   const money = (n: number) => formatFundsCompact1dp(n, sym);
   const usdNote = (local: number, existing?: string): string | undefined => {
     if (!toUsd) return existing;
@@ -129,9 +148,10 @@ export function FiscalStatStrip({
         sub={
           <span
             title={
-              "Growth assumption for this fiscal year, fixed at the last rollover. " +
-              "The budget projects revenue off it, so it does not move between rollovers. " +
-              "For the current rate, see the Economy page."
+              "Live national GDP, summed from every region each turn. The growth " +
+              "figure beside it is the assumption this fiscal year's revenue was " +
+              "projected off, fixed at the last rollover, so the two move apart " +
+              "between rollovers. For the current growth rate, see the Economy page."
             }
           >
             {usdNote(gdp, `${pctSign(gdpGrowth)} FY assumption`)}

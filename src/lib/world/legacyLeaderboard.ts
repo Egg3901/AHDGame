@@ -12,7 +12,7 @@ import { iterationLabel } from "@/lib/wiki/officeIteration";
 import { deriveHighestOffice, deriveHighestOfficeRank } from "@/lib/character/deriveHighestOffice";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import {
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
   fxRateForCorpFromMap,
   shareTradeAnchorValue,
   corpCapitalToAnchor,
@@ -269,7 +269,7 @@ export async function getLegacyLeaderboardData(
       ])
       .toArray(),
     fetchExchangeRateMap(db),
-    loadFxRatesByCurrency(db),
+    loadValuationFxRates(db),
     db
       .collection<Corporation>("corporations")
       .find(

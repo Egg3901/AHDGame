@@ -26,6 +26,10 @@ import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { getCentralBankScope } from "@/lib/centralBank/helpers";
 import { getGameState } from "@/lib/gameState";
 import { getInflationTarget, getNeutralPrimeRate } from "@/lib/budget/inflation";
+import { federalSurplus } from "@/lib/budget/federalSurplus";
+import { resolveRatioGdp } from "@/lib/budget/gdpDenominator";
+import { populationWeightedAverage } from "@/lib/metrics/populationWeightedAverage";
+import { aggregateExchangeTotals } from "@/lib/stockExchange/aggregate";
 import { aggregateNationalGdp } from "@/lib/utils/nationalGdp";
 import { aggregateCountrySectorMix, type CountrySectorMixEntry } from "@/lib/economy/sectorMix";
 import {
@@ -115,23 +119,29 @@ function mapHistory(history: TurnSnapshot[] | undefined): HistoryPoint[] {
   return (history ?? []).map((s) => ({ turn: s.turn, rate: s.rate }));
 }
 
-/** Pop-weighted average of one state metric (value + trend), null-safe. */
+/**
+ * Pop-weighted average of one state metric (value + trend), null-safe.
+ *
+ * Thin adapter over the shared helper: maps the per-state metric rows onto
+ * `{ value, trend, population }` and rounds at this DTO's boundary. The
+ * weighting rule itself lives in lib/metrics/populationWeightedAverage, shared
+ * with the national Metrics page so the two cannot diverge again.
+ */
 function popWeighted(
   metrics: Array<{ _id: string; value?: number; trend?: number }>,
   populationByStateId: Map<string, number>
 ): { value: number | null; trend: number | null } {
-  let valueSum = 0;
-  let trendSum = 0;
-  let population = 0;
-  for (const m of metrics) {
-    if (typeof m.value !== "number") continue;
-    const pop = populationByStateId.get(m._id) ?? 0;
-    valueSum += m.value * pop;
-    trendSum += (typeof m.trend === "number" ? m.trend : 0) * pop;
-    population += pop;
-  }
-  if (population <= 0) return { value: null, trend: null };
-  return { value: round2(valueSum / population), trend: round2(trendSum / population) };
+  const { value, trend } = populationWeightedAverage(
+    metrics.map((m) => ({
+      value: m.value,
+      trend: m.trend,
+      population: populationByStateId.get(m._id) ?? 0,
+    }))
+  );
+  return {
+    value: value === null ? null : round2(value),
+    trend: trend === null ? null : round2(trend),
+  };
 }
 
 export async function buildCountryEconomyOutlook(
@@ -213,10 +223,17 @@ export async function buildCountryEconomyOutlook(
   const primeRateHistory = mapHistory(bank?.interestRateHistory);
 
   const listings = snapshot?.listings ?? [];
-  const stockMarketCap = snapshot ? listings.reduce((sum, l) => sum + (l.marketCap ?? 0), 0) : null;
+  // Anchored, so this matches the total on the stock market page this card links
+  // to. The raw sum added currencies together: the Nikkei read 445x its anchored
+  // total, and the NYSE literally added GBP listings to USD ones.
+  // See lib/stockExchange/aggregate.
+  const stockMarketCap = snapshot ? aggregateExchangeTotals(listings).marketCap : null;
 
-  const surplus = budget?.surplus ?? null;
-  const budgetGdp = budget?.gdp ?? null;
+  // Derived, not read: `budget.surplus` is a cache that drifts intra-year, and
+  // `federalBudgetDetail` already recomputes the same expression for the Budget
+  // page. See lib/budget/federalSurplus.
+  const surplus = budget ? federalSurplus(budget) : null;
+  const ratioGdp = budget ? resolveRatioGdp(budget) : 0;
 
   return {
     countryId,
@@ -272,10 +289,11 @@ export async function buildCountryEconomyOutlook(
       exchangeName: snapshot?.exchangeName ?? COUNTRY_CONFIGS[countryId].exchangeName ?? null,
       forexRate: exchangeRate?.rate ?? null,
       surplus,
-      deficitToGdp:
-        surplus != null && budgetGdp != null && budgetGdp > 0
-          ? round2((surplus / budgetGdp) * 100)
-          : null,
+      // Same denominator the stored `debtToGdpRatio` uses, so the two ratios in
+      // this strip are comparable. Raw `budget.gdp` put them on different bases:
+      // BR read 156.2% debt-to-GDP beside a GDP implying 142.9%.
+      // See lib/budget/gdpDenominator.
+      deficitToGdp: surplus != null && ratioGdp > 0 ? round2((surplus / ratioGdp) * 100) : null,
     },
     sectorMix,
     stateOwnership: {

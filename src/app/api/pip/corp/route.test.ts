@@ -17,7 +17,10 @@ vi.mock("@/lib/gameState", () => ({
 }));
 
 vi.mock("@/lib/currency/corporationCapital", () => ({
-  loadFxRatesByCurrency: vi.fn().mockResolvedValue({}),
+  // The route ranks corps for display, so it takes the VALUATION map (which
+  // backfills an era rate for the bloc currencies the settlement map leaves
+  // missing). See lib/currency/valuationFxUsage.test.ts.
+  loadValuationFxRates: vi.fn().mockResolvedValue({}),
   resolveCorpLiquidCurrencyCode: vi.fn().mockReturnValue(undefined),
   fxRateForCorpFromMap: vi.fn().mockReturnValue(1),
 }));

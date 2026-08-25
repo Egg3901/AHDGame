@@ -76,10 +76,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         ? (interaction!.leaderResponses ?? []).some((r) => r.countryId === character.countryId)
         : false;
 
+    // An interaction keeps the `aid` node type it was promoted to even after
+    // crisisAidBillsEnabled is turned off, but the panel then renders neither
+    // the aid slider nor the option grid and the command path refuses it, so the
+    // node is not actually interactable. Read the flag only when a node is aid.
+    const aidBillsEnabled = activeNode?.type === "aid" ? await isCrisisAidBillsEnabled() : false;
+
     const canInteract =
       crisis.interactionDefinition && interaction && activeNode && !interaction.resolvedAt
         ? canCharacterInteract(activeNode, characterRoles) &&
           !alreadyResponded &&
+          (activeNode.type !== "aid" || aidBillsEnabled) &&
           (!crisis.globalResponse || !!globalResponseRoleFor(crisis, character.countryId))
         : false;
 
@@ -117,7 +124,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const currentNode = interaction?.decisionTree.find(
       (n) => n.nodeId === interaction.currentNodeId
     );
-    if (currentNode?.type === "aid" && (await isCrisisAidBillsEnabled()) && character.countryId) {
+    if (currentNode?.type === "aid" && aidBillsEnabled && character.countryId) {
       const budget = await db
         .collection<FederalBudget>("federalBudget")
         .findOne({ countryId: character.countryId });
