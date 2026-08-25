@@ -2,8 +2,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
-import { processExtractionAutoStrategy } from "./extractionAutoStrategy";
+import { spawnNppCorporation } from "@/lib/admin/spawnNppCorporation";
+import {
+  EXTRACTION_AUTO_STRATEGY_CADENCE_TURNS,
+  EXTRACTION_AUTO_STRATEGY_MAX_PER_RUN,
+  EXTRACTION_AUTO_STRATEGY_PLACEMENT_MAX_PER_RUN,
+  processExtractionAutoStrategy,
+} from "./extractionAutoStrategy";
 import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
+
+vi.mock("@/lib/admin/spawnNppCorporation", () => ({
+  generateNppCorpName: vi.fn(() => "Shortage Mining"),
+  spawnNppCorporation: vi.fn(),
+  // Placement is gated on the authored capital-state list so market corps are
+  // never founded inside a planned economy. US/BR are market countries here;
+  // DD stands in for the planned economies, which map to "" upstream.
+  NPP_CAPITAL_STATES: { US: "DC", BR: "SUDESTE", CN: "BEI", DD: "", RU: "" },
+}));
 
 function cursor<T>(rows: T[]) {
   const c = { toArray: vi.fn().mockResolvedValue(rows), project: vi.fn(() => c) };
@@ -11,6 +26,11 @@ function cursor<T>(rows: T[]) {
 }
 
 const ENABLED = { extractionAutoStrategyEnabled: true, lastExtractionAutoStrategyTurn: 0 };
+const NPC_USER_ID = new ObjectId("000000000000000000000000");
+
+function npcCorp(_id: ObjectId, countryId = "US") {
+  return { _id, countryId, ceoType: "npp", userId: NPC_USER_ID };
+}
 
 describe("processExtractionAutoStrategy", () => {
   let db: MockDb;
@@ -34,6 +54,188 @@ describe("processExtractionAutoStrategy", () => {
     });
     // Pass 2 (NPP re-strategize) is inert in these tests: no NPP corps.
     db.collectionMocks.corporations.find.mockReturnValue(cursor([]));
+    vi.mocked(spawnNppCorporation).mockResolvedValue({
+      corporationId: new ObjectId().toString(),
+      sequentialId: 1,
+      name: "Shortage Mining",
+      type: "extraction",
+      countryId: "US",
+      headquartersState: "MN",
+      startingCapital: 2_000_000,
+      startingRevenue: 100_000,
+      sectorId: new ObjectId().toString(),
+      nppId: new ObjectId().toString(),
+      nppName: "NPC Miner",
+      tickerSymbol: "MINE",
+    });
+  });
+
+  it("places a new NPP miner on idle iron capacity when no miner can be re-pointed", async () => {
+    db.collectionMocks.commodityPrices.find.mockReturnValue(
+      cursor([
+        {
+          commodity: "iron",
+          globalSupply: 200,
+          globalDemand: 1000,
+          stateSupply: { MN: 0 },
+        },
+      ])
+    );
+    db.collectionMocks.stateResourceCapacity.find.mockReturnValue(
+      cursor([{ stateId: "MN", countryId: "US", resources: { iron: 10_000 } }])
+    );
+    db.collectionMocks.corporateSectors.find.mockReturnValue(cursor([]));
+
+    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+
+    expect(res.placed).toBe(1);
+    expect(res.placedByResource).toEqual({ iron: 1 });
+    expect(spawnNppCorporation).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        type: "extraction",
+        countryId: "US",
+        headquartersState: "MN",
+        initialStrategyId: "iron_mining",
+        foundedAtTurn: 10,
+      })
+    );
+  });
+
+  it("never retools or displaces a player-owned extraction sector", async () => {
+    const playerCorpId = new ObjectId();
+    const playerSectorId = new ObjectId();
+    const playerUserId = new ObjectId();
+    db.collectionMocks.commodityPrices.find.mockReturnValue(
+      cursor([
+        {
+          commodity: "iron",
+          globalSupply: 200,
+          globalDemand: 1000,
+          stateSupply: { MN: 0 },
+        },
+      ])
+    );
+    db.collectionMocks.stateResourceCapacity.find.mockReturnValue(
+      cursor([{ stateId: "MN", countryId: "US", resources: { iron: 10_000 } }])
+    );
+    db.collectionMocks.corporations.find.mockReturnValue(
+      cursor([
+        {
+          _id: playerCorpId,
+          countryId: "US",
+          ceoType: "npp",
+          userId: playerUserId,
+          caretakerCeo: { underlyingUserId: playerUserId, appointedTurn: 1 },
+        },
+      ])
+    );
+    db.collectionMocks.corporateSectors.find.mockReturnValue(
+      cursor([
+        {
+          _id: playerSectorId,
+          corporationId: playerCorpId,
+          stateId: "MN",
+          sectorType: "extraction",
+          strategyId: "standard",
+        },
+      ])
+    );
+
+    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+
+    expect(res.converted).toBe(0);
+    expect(res.restrategized).toBe(0);
+    expect(res.placed).toBe(0);
+    expect(db.collectionMocks.corporateSectors.bulkWrite).not.toHaveBeenCalled();
+    expect(spawnNppCorporation).not.toHaveBeenCalled();
+  });
+
+  it("respects the placement cap independently of re-pointing", async () => {
+    const stateIds = ["MN", "MI", "WI", "PA"];
+    db.collectionMocks.commodityPrices.find.mockReturnValue(
+      cursor([
+        {
+          commodity: "iron",
+          globalSupply: 200,
+          globalDemand: 1000,
+          stateSupply: Object.fromEntries(stateIds.map((stateId) => [stateId, 0])),
+        },
+      ])
+    );
+    db.collectionMocks.stateResourceCapacity.find.mockReturnValue(
+      cursor(
+        stateIds.map((stateId) => ({
+          stateId,
+          countryId: "US",
+          resources: { iron: 10_000 },
+        }))
+      )
+    );
+    db.collectionMocks.corporateSectors.find.mockReturnValue(cursor([]));
+
+    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+
+    // Four eligible US states, but placement is capped at one per COUNTRY per
+    // run as well as one per state, so a single country cannot absorb the whole
+    // placement budget in one turn.
+    expect(EXTRACTION_AUTO_STRATEGY_PLACEMENT_MAX_PER_RUN).toBe(3);
+    expect(res.placed).toBe(1);
+    expect(spawnNppCorporation).toHaveBeenCalledTimes(1);
+  });
+
+  it("spreads placements across countries rather than stacking one", async () => {
+    const states = [
+      { stateId: "MN", countryId: "US" as const },
+      { stateId: "MI", countryId: "US" as const },
+      { stateId: "SUDESTE", countryId: "BR" as const },
+    ];
+    db.collectionMocks.commodityPrices.find.mockReturnValue(
+      cursor([
+        {
+          commodity: "iron",
+          globalSupply: 200,
+          globalDemand: 1000,
+          stateSupply: Object.fromEntries(states.map((s) => [s.stateId, 0])),
+        },
+      ])
+    );
+    db.collectionMocks.stateResourceCapacity.find.mockReturnValue(
+      cursor(states.map((s) => ({ ...s, resources: { iron: 10_000 } })))
+    );
+    db.collectionMocks.corporateSectors.find.mockReturnValue(cursor([]));
+
+    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+
+    expect(res.placed).toBe(2);
+    const countries = (spawnNppCorporation as unknown as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => (call[1] as { countryId: string }).countryId
+    );
+    expect(new Set(countries)).toEqual(new Set(["US", "BR"]));
+  });
+
+  it("never founds a market miner inside a planned economy", async () => {
+    db.collectionMocks.commodityPrices.find.mockReturnValue(
+      cursor([
+        {
+          commodity: "iron",
+          globalSupply: 200,
+          globalDemand: 1000,
+          stateSupply: { SN: 0 },
+        },
+      ])
+    );
+    db.collectionMocks.stateResourceCapacity.find.mockReturnValue(
+      cursor([{ stateId: "SN", countryId: "DD", resources: { iron: 10_000 } }])
+    );
+    db.collectionMocks.corporateSectors.find.mockReturnValue(cursor([]));
+
+    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+
+    // DD seeds its mining through the budget seeders as SOEs; a market NPP corp
+    // has no business being founded there.
+    expect(res.placed).toBe(0);
+    expect(spawnNppCorporation).not.toHaveBeenCalled();
   });
 
   function seed(opts: {
@@ -42,6 +244,7 @@ describe("processExtractionAutoStrategy", () => {
     stateSupply: number;
     sectors: unknown[];
   }) {
+    const corpId = new ObjectId();
     db.collectionMocks.commodityPrices.find.mockReturnValue(
       cursor([
         {
@@ -53,9 +256,19 @@ describe("processExtractionAutoStrategy", () => {
       ])
     );
     db.collectionMocks.stateResourceCapacity.find.mockReturnValue(
-      cursor([{ stateId: "HB", resources: { rare_earth: opts.stateCap } }])
+      cursor([{ stateId: "HB", countryId: "CN", resources: { rare_earth: opts.stateCap } }])
     );
-    db.collectionMocks.corporateSectors.find.mockReturnValue(cursor(opts.sectors));
+    db.collectionMocks.corporations.find.mockReturnValue(cursor([npcCorp(corpId, "CN")]));
+    db.collectionMocks.corporateSectors.find
+      .mockReturnValueOnce(
+        cursor(
+          opts.sectors.map((sector) => ({
+            corporationId: corpId,
+            ...(sector as Record<string, unknown>),
+          }))
+        )
+      )
+      .mockReturnValueOnce(cursor([]));
   }
 
   it("is inert when the flag is off", async () => {
@@ -66,9 +279,59 @@ describe("processExtractionAutoStrategy", () => {
   });
 
   it("respects the cadence interval", async () => {
-    const res = await processExtractionAutoStrategy(db as unknown as Db, 2, ENABLED); // < 4 turns since 0
+    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, {
+      extractionAutoStrategyEnabled: true,
+      lastExtractionAutoStrategyTurn: 10,
+    });
+    expect(EXTRACTION_AUTO_STRATEGY_CADENCE_TURNS).toBe(1);
     expect(res.converted).toBe(0);
     expect(res.skippedReason).toBe("cadence");
+  });
+
+  it("caps direct shortage re-pointing at four NPP sectors per turn", async () => {
+    const stateIds = Array.from({ length: 9 }, (_, index) => `S${index}`);
+    const corpIds = stateIds.map(() => new ObjectId());
+    db.collectionMocks.commodityPrices.find.mockReturnValue(
+      cursor([
+        {
+          commodity: "iron",
+          globalSupply: 200,
+          globalDemand: 1000,
+          stateSupply: Object.fromEntries(stateIds.map((stateId) => [stateId, 0])),
+        },
+      ])
+    );
+    db.collectionMocks.stateResourceCapacity.find.mockReturnValue(
+      cursor(
+        stateIds.map((stateId) => ({
+          stateId,
+          countryId: "US",
+          resources: { iron: 10_000 },
+        }))
+      )
+    );
+    db.collectionMocks.corporations.find.mockReturnValue(
+      cursor(corpIds.map((_id) => npcCorp(_id)))
+    );
+    db.collectionMocks.corporateSectors.find
+      .mockReturnValueOnce(
+        cursor(
+          stateIds.map((stateId, index) => ({
+            _id: new ObjectId(),
+            corporationId: corpIds[index],
+            stateId,
+            sectorType: "extraction",
+            strategyId: "standard",
+          }))
+        )
+      )
+      .mockReturnValueOnce(cursor([]));
+
+    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+
+    expect(EXTRACTION_AUTO_STRATEGY_MAX_PER_RUN).toBe(4);
+    expect(res.converted).toBe(4);
+    expect(db.collectionMocks.corporateSectors.bulkWrite.mock.calls[0][0]).toHaveLength(4);
   });
 
   it("converts a standard miner on a shortage deposit with per-state headroom", async () => {
@@ -101,6 +364,51 @@ describe("processExtractionAutoStrategy", () => {
     const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
     expect(res.converted).toBe(0);
     expect(db.collectionMocks.corporateSectors.bulkWrite).not.toHaveBeenCalled();
+  });
+
+  it("does not place a miner in a saturated state with no existing sector", async () => {
+    db.collectionMocks.commodityPrices.find.mockReturnValue(
+      cursor([
+        {
+          commodity: "iron",
+          globalSupply: 200,
+          globalDemand: 1000,
+          stateSupply: { MN: 9_800 },
+        },
+      ])
+    );
+    db.collectionMocks.stateResourceCapacity.find.mockReturnValue(
+      cursor([{ stateId: "MN", countryId: "US", resources: { iron: 10_000 } }])
+    );
+    db.collectionMocks.corporateSectors.find.mockReturnValue(cursor([]));
+
+    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+
+    expect(res.placed).toBe(0);
+    expect(spawnNppCorporation).not.toHaveBeenCalled();
+  });
+
+  it("does not place a miner when idle capacity is not in global shortage", async () => {
+    db.collectionMocks.commodityPrices.find.mockReturnValue(
+      cursor([
+        {
+          commodity: "iron",
+          globalSupply: 900,
+          globalDemand: 1000,
+          stateSupply: { MN: 0 },
+        },
+      ])
+    );
+    db.collectionMocks.stateResourceCapacity.find.mockReturnValue(
+      cursor([{ stateId: "MN", countryId: "US", resources: { iron: 10_000 } }])
+    );
+    db.collectionMocks.corporateSectors.find.mockReturnValue(cursor([]));
+
+    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+
+    expect(res.placed).toBe(0);
+    expect(res.skippedReason).toBe("no-shortage");
+    expect(spawnNppCorporation).not.toHaveBeenCalled();
   });
 
   it("does nothing when no resource is in global shortage", async () => {
@@ -143,7 +451,7 @@ describe("processExtractionAutoStrategy", () => {
     db.collectionMocks.stateResourceCapacity.find.mockReturnValue(
       cursor(opts.capacities ?? [{ stateId: "HB", resources: { iron: 1222, rare_earth: 50_000 } }])
     );
-    db.collectionMocks.corporations.find.mockReturnValue(cursor([{ _id: corpId }]));
+    db.collectionMocks.corporations.find.mockReturnValue(cursor([npcCorp(corpId)]));
     db.collectionMocks.corporateSectors.find
       .mockReturnValueOnce(cursor([])) // pass 1 candidates (standard sectors)
       .mockReturnValueOnce(cursor([{ corporationId: corpId, ...opts.sector }])); // pass 2 NPP sectors
@@ -386,9 +694,7 @@ describe("processExtractionAutoStrategy", () => {
     db.collectionMocks.stateResourceCapacity.find.mockReturnValue(
       cursor([{ stateId: "NC", resources: { timber: 10_000, iron: 10_000 } }])
     );
-    db.collectionMocks.corporations.find.mockReturnValue(
-      cursor([{ _id: corpId, countryId: "US" }])
-    );
+    db.collectionMocks.corporations.find.mockReturnValue(cursor([npcCorp(corpId)]));
     db.collectionMocks.corporateSectors.find.mockReturnValueOnce(cursor([])).mockReturnValueOnce(
       cursor([
         {
@@ -442,9 +748,7 @@ describe("processExtractionAutoStrategy", () => {
       ])
     );
     db.collectionMocks.stateResourceCapacity.find.mockReturnValue(cursor([]));
-    db.collectionMocks.corporations.find.mockReturnValue(
-      cursor([{ _id: corpId, countryId: "US" }])
-    );
+    db.collectionMocks.corporations.find.mockReturnValue(cursor([npcCorp(corpId)]));
     db.collectionMocks.corporateSectors.find
       .mockReturnValueOnce(cursor([])) // pass 1
       .mockReturnValueOnce(cursor([])) // pass 2 extraction

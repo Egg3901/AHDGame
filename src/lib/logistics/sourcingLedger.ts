@@ -16,8 +16,15 @@ export const SOURCING_FLOW_RETENTION_TURNS = 48;
 export const SOURCING_FLOW_MAX_ITEMIZED = 200;
 
 export interface CommoditySourcingDoc {
+  /**
+   * State buyer intents before era calibration, resolved through reachable
+   * sellers, landed-price tolerance, and freight capacity.
+   */
+  basis: "buyer_intent_sourcing";
   commodity: CommodityType;
   turn: number;
+  /** Full buyer-intent denominator: all delivered legs plus `unmetUnits`. */
+  demandUnitsIntent: number;
   intraStateUnits: number;
   interStateUnits: number;
   importUnits: number;
@@ -70,8 +77,12 @@ export function buildSourcingDocs(
       .slice(0, SOURCING_FLOW_MAX_ITEMIZED)
       .map(({ commodity: _commodity, ...rest }) => rest);
     return {
+      basis: "buyer_intent_sourcing",
       commodity: s.commodity,
       turn,
+      demandUnitsIntent:
+        Math.round((s.intraStateUnits + s.interStateUnits + s.importUnits + s.unmetUnits) * 100) /
+        100,
       intraStateUnits: s.intraStateUnits,
       interStateUnits: s.interStateUnits,
       importUnits: s.importUnits,

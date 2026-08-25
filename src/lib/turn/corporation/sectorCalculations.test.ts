@@ -281,6 +281,116 @@ describe("expropriation-risk margin drag", () => {
   });
 });
 
+describe("marketing settlement", () => {
+  type CorpOp = {
+    updateOne: {
+      filter: { _id: ObjectId };
+      update: { $inc?: { liquidCapital?: number } };
+    };
+  };
+
+  const liquidDeltaFor = (corpOps: CorpOp[], corp: Corporation): number =>
+    corpOps
+      .filter((op) => op.updateOne.filter._id.equals(corp._id))
+      .reduce((sum, op) => sum + (op.updateOne.update.$inc?.liquidCapital ?? 0), 0);
+
+  it("conserves the delivered settlement across every corp op", () => {
+    const buyer = makeCorp({ liquidCapital: 1_000, marketingBudget: 2_400 });
+    const sellerOne = makeCorp({
+      liquidCapital: 1_000,
+      // 432.5 per turn offsets the scenario's non-marketing corp income so an
+      // all-op conservation assertion remains sensitive to an unmatched leg.
+      logisticsBudget: 10_380,
+    });
+    const sellerTwo = makeCorp({
+      countryId: "UK",
+      headquartersState: "UK-ENG",
+      liquidCurrencyCode: "GBP",
+      liquidCapital: 2_000,
+    });
+    const buyerSector = makeSector(buyer._id, { revenue: 24_000, profitMargin: 50 });
+    const lookups = baseLookups([buyer, sellerOne, sellerTwo], [buyerSector]);
+    lookups.exchangeRatesByCurrency = new Map<CurrencyCode, number>([
+      ["USD", 1],
+      ["GBP", 2],
+    ]);
+    lookups.domesticCorpTaxRateByCountry = new Map([["US", 10]]);
+    lookups.domesticStateCorpTaxRateByState = new Map([["US-CA", 5]]);
+    const market: MarketContext = {
+      ...MARKET_DISABLED,
+      clearingEnabled: true,
+      advertisingSellerDeliveredValueAnchorByCorpId: new Map([
+        [sellerOne._id.toString(), 30],
+        [sellerTwo._id.toString(), 20],
+      ]),
+    };
+
+    const result = processSectors(lookups, 1, new Date(), false, 1953, undefined, market);
+    const actualOps = result.corpOps as CorpOp[];
+    const allCorpOpsDeltaAnchor = [buyer, sellerOne, sellerTwo].reduce((sum, corp) => {
+      const localDelta = liquidDeltaFor(actualOps, corp);
+      const fx = corp.liquidCurrencyCode === "GBP" ? 2 : 1;
+      return sum + localDelta / fx;
+    }, 0);
+
+    expect(
+      result.corpSnapshots.find((s) => s.corpId.equals(buyer._id))?.federalTaxPaid
+    ).toBeGreaterThan(0);
+    expect(liquidDeltaFor(actualOps, sellerOne)).toBe(-402.5);
+    expect(liquidDeltaFor(actualOps, sellerTwo)).toBe(40);
+    expect(allCorpOpsDeltaAnchor).toBeCloseTo(0, 10);
+  });
+
+  it("does not charge a buyer for unfilled advertising demand", () => {
+    const buyer = makeCorp({ liquidCapital: 1_000, marketingBudget: 2_400 });
+    const seller = makeCorp({ liquidCapital: 1_000 });
+    const market: MarketContext = {
+      ...MARKET_DISABLED,
+      clearingEnabled: true,
+      advertisingSellerDeliveredValueAnchorByCorpId: new Map([[seller._id.toString(), 10]]),
+    };
+
+    const result = processSectors(
+      baseLookups([buyer, seller], []),
+      1,
+      new Date(),
+      false,
+      1953,
+      undefined,
+      market
+    );
+    const corpOps = result.corpOps as CorpOp[];
+
+    expect(liquidDeltaFor(corpOps, buyer)).toBe(-10);
+    expect(liquidDeltaFor(corpOps, seller)).toBe(10);
+    expect(result.corpSnapshots.find((s) => s.corpId.equals(buyer._id))?.liquidCapital).toBe(990);
+    expect(result.corpSnapshots.find((s) => s.corpId.equals(seller._id))?.liquidCapital).toBe(
+      1_010
+    );
+  });
+
+  it("charges marketing without settlement when no advertising seller exists", () => {
+    const buyer = makeCorp({ liquidCapital: 100, marketingBudget: 2_400 });
+    const market: MarketContext = {
+      ...MARKET_DISABLED,
+      clearingEnabled: true,
+      advertisingSellerDeliveredValueAnchorByCorpId: new Map(),
+    };
+
+    const result = processSectors(
+      baseLookups([buyer], []),
+      1,
+      new Date(),
+      false,
+      1953,
+      undefined,
+      market
+    );
+
+    expect(liquidDeltaFor(result.corpOps as CorpOp[], buyer)).toBe(-100);
+  });
+});
+
 describe("total-embargo corporate suppression", () => {
   it("mothballs a foreign-national sector operating in an embargoing country", () => {
     const jpCorp = makeCorp({ countryId: "JP", headquartersState: "JP-13" });
