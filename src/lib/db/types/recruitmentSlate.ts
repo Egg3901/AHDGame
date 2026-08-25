@@ -49,10 +49,18 @@ export interface RecruitmentSlate {
 }
 
 /**
- * Refusal reason emitted by `decideNPPSlateResponse` when an NPP declines an
- * invitation. Stored on `SlateCandidate.refusalReason` so the chair can see
- * why the recruit fell through. Kept as a small enum (not free text) so the
- * UI can render localized labels.
+ * Why a slate row never made it onto the ballot. Two sources write it:
+ *
+ * - `decideNPPSlateResponse`, when the NPP itself declines the invitation
+ *   (the first seven values).
+ * - the turn's `fileAcceptedSlateRows` pass, when an accepted row cannot be
+ *   converted into an `ElectionCandidate` (the `*_` filing values below).
+ *
+ * Stored on `SlateCandidate.refusalReason` so the chair can see why the
+ * recruit fell through. Before ticket #1181 the filing pass tombstoned failed
+ * rows as `withdrawn` with no reason, and the slate view hides reasonless
+ * tombstones — so a chair-assigned NPP simply vanished from the Slate tab.
+ * Kept as a small enum (not free text) so the UI can render localized labels.
  */
 export type SlateRefusalReason =
   | "low_relationship"
@@ -61,7 +69,17 @@ export type SlateRefusalReason =
   | "race_priority_mismatch"
   | "in_other_race"
   | "cooldown"
-  | "retired";
+  | "retired"
+  /** Filing: the party may not contest this region (e.g. Plaid Cymru outside Wales). */
+  | "ineligible_region"
+  /** Filing: another chair-slated candidate of the same party already holds the slot. */
+  | "slot_taken"
+  /** Filing: the party itself may not field NPP candidates in this race. */
+  | "party_restricted"
+  /** Filing: the NPP retired, moved, or is no longer reachable for this race. */
+  | "npp_unavailable"
+  /** Filing: the chair slated this NPP into more than one race; another row won. */
+  | "already_slated_elsewhere";
 
 export type SlateCandidateStatus =
   "invited" | "considering" | "accepted" | "declined" | "withdrawn" | "filed";
