@@ -207,6 +207,52 @@ describe("sideWouldEmpty", () => {
   });
 });
 
+describe("validatePeaceOffer treaty bar", () => {
+  const pact = {
+    status: "active",
+    sideA: { label: "US", countries: ["US"], kind: "state" },
+    sideB: { label: "Pact", countries: ["DD", "RU"], kind: "coalition" },
+    treatyEntries: [
+      { countryId: "RU", organizationId: "WARSAW_PACT", defending: "DD", joinedTurn: 5 },
+    ],
+  } as unknown as ConflictDoc;
+
+  it("refuses an auto-joined ally while the country it defends still fights", () => {
+    const res = validatePeaceOffer(pact, "RU", "US", { payer: "RU", amount: 0 });
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toContain("Warsaw Pact");
+      expect(res.error).toContain("East Germany");
+      // Player-facing copy: no em or en dashes, in any language.
+      expect(res.error).not.toMatch(/[—–]/);
+    }
+  });
+
+  it("allows the ally once the defended country has left the war", () => {
+    const settled = {
+      ...pact,
+      sideB: { label: "Pact", countries: ["RU"], kind: "coalition" },
+    } as unknown as ConflictDoc;
+    expect(validatePeaceOffer(settled, "RU", "US", { payer: "RU", amount: 0 }).ok).toBe(true);
+  });
+
+  it("never bars the defended country itself", () => {
+    expect(validatePeaceOffer(pact, "DD", "US", { payer: "DD", amount: 0 }).ok).toBe(true);
+  });
+
+  // The OFFERER is the country that leaves (acceptPeace sets leaver = offer.fromCountry).
+  // An attacker offering peace to an auto-joined ally is the attacker giving up, and must
+  // not be refused.
+  it("never bars the attacker from offering peace to an ally", () => {
+    expect(validatePeaceOffer(pact, "US", "RU", { payer: "US", amount: 0 }).ok).toBe(true);
+  });
+
+  it("leaves a conflict with no treaty entries unaffected", () => {
+    const plain = { ...pact, treatyEntries: undefined } as unknown as ConflictDoc;
+    expect(validatePeaceOffer(plain, "RU", "US", { payer: "RU", amount: 0 }).ok).toBe(true);
+  });
+});
+
 describe("constants", () => {
   it("stands an offer for 72 turns and a truce for 240", () => {
     // Player-facing copy renders from these, so a change here changes the UI too.

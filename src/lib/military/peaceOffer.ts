@@ -1,6 +1,7 @@
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import type { PeaceOfferDoc } from "@/lib/db/types/peaceOffer";
-import type { CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { INTERNATIONAL_ORGANIZATIONS } from "@/lib/constants/internationalOrganizations";
 import { opposedBelligerents, type Side } from "@/lib/military/occupation";
 
 export type PeaceOfferCheck = { ok: true } | { ok: false; error: string };
@@ -82,7 +83,7 @@ export function sideWouldEmpty(
  * countries that would want to.
  */
 export function validatePeaceOffer(
-  conflict: Pick<ConflictDoc, "status" | "sideA" | "sideB">,
+  conflict: Pick<ConflictDoc, "status" | "sideA" | "sideB" | "treatyEntries">,
   from: CountryId,
   to: CountryId,
   indemnity: { payer: CountryId; amount: number },
@@ -115,6 +116,35 @@ export function validatePeaceOffer(
   // had joined, and offer a settlement for it.
   if (!opposedBelligerents(conflict, from, to)) {
     return { ok: false, error: "You are on the same side of that war." };
+  }
+
+  // Enforced mutual defence: a country pulled in by a treaty cannot buy its way out while
+  // the member it came to defend is still fighting. Without this an aggressor peels the
+  // coalition apart one member at a time and the guarantee is theatre.
+  //
+  // Checked on `from` and not `to`: acceptPeace sets `leaver = offer.fromCountry`, so the
+  // OFFERER is the one who leaves the war. Barring `to` would refuse an attacker's
+  // surrender to an ally, which is exactly the deal that should be allowed.
+  //
+  // Reported ahead of the indemnity rules below because it is the durable bar of the two:
+  // a player refused here needs to be told about the treaty, not about the money.
+  const bound = conflict.treatyEntries?.find((e) => e.countryId === from);
+  if (bound) {
+    // A live roster read, never a stored flag, so the bar lifts by itself the moment the
+    // defended member takes its own peace.
+    const stillFighting = rosters.includes(bound.defending);
+    if (stillFighting) {
+      const org =
+        INTERNATIONAL_ORGANIZATIONS[
+          bound.organizationId as keyof typeof INTERNATIONAL_ORGANIZATIONS
+        ]?.name ?? bound.organizationId;
+      const fromName = COUNTRY_CONFIGS[from]?.name ?? from;
+      const defendedName = COUNTRY_CONFIGS[bound.defending]?.name ?? bound.defending;
+      return {
+        ok: false,
+        error: `${fromName} entered this war under the ${org}. It cannot make a separate peace while ${defendedName} is still fighting.`,
+      };
+    }
   }
 
   if (!(indemnity.amount >= 0)) {
