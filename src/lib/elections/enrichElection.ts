@@ -94,9 +94,12 @@ import { loadRegionalBonusMaps } from "@/lib/primaryRegionalBonusLoader";
 import { fetchEnrichedCandidates } from "@/lib/electionEngine/candidateEnrichment";
 import {
   getAllStaggerStates,
+  getPrimaryWaveSchedule,
   getTotalDelegatesForFamily,
   resolvePartyFamily,
+  type PrimaryWaveSchedule,
 } from "@/lib/constants/primaryCalendar";
+import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
 import {
   applyProjectedDelegatePolling,
   applyProjectedDelegateShares,
@@ -118,13 +121,17 @@ async function applyPresidentialPrimaryDisplay(
   byParty: PartyGroup[],
   polling: PollingData | null,
   preloadedStatePartyOrgs: StatePartyOrg[],
+  schedule: PrimaryWaveSchedule,
   preset?: string
 ): Promise<{
   byParty: PartyGroup[];
   polling: PollingData | null;
   displayCandidates: EnrichedCandidate[];
 }> {
-  const staggerStateIds = getAllStaggerStates();
+  // State membership is identical across schedules; the schedule is threaded so
+  // this display path stays coherent with the race's actual calendar even if a
+  // future schedule ever changes membership.
+  const staggerStateIds = getAllStaggerStates(schedule);
   const [categories, states, demographics, resolvedStatePartyOrgs, engineEnriched] =
     await Promise.all([
       loadDemographicCategories(db),
@@ -658,6 +665,7 @@ export async function _enrichElection(
       byParty,
       polling,
       statePartyOrgs,
+      getPrimaryWaveSchedule(presidentialRulesetFor(election)),
       gameState?.preset
     );
     byParty = projectedDisplay.byParty;

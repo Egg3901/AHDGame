@@ -31,24 +31,38 @@ describe("presidential ruleset seam (rules freeze)", () => {
     expect(CURRENT_PRESIDENTIAL_RULESET_VERSION).toBe(3);
   });
 
-  it("v1, v2, and v3 are all behaviorally identical at ship (rules-freeze guarantee)", () => {
-    // The rework seam and its full knob set land as pure infrastructure: a
-    // 1964 race spawned under v3 must behave exactly like the live 1960 race
-    // until a subsystem PR flips an individual v3 knob. This test is the guard
-    // against a knob being flipped without intent -- if it fails, a v3 default
-    // diverged from identity and the change must be deliberate.
+  it("v2 is still fully identical to v1 (its seam shipped as pure infrastructure)", () => {
     const { version: v1v, ...v1 } = presidentialRulesetFor({ rulesetVersion: 1 });
     const { version: v2v, ...v2 } = presidentialRulesetFor({ rulesetVersion: 2 });
-    const { version: v3v, ...v3 } = presidentialRulesetFor({ rulesetVersion: 3 });
-    expect([v1v, v2v, v3v]).toEqual([1, 2, 3]);
+    expect([v1v, v2v]).toEqual([1, 2]);
     expect(v2).toEqual(v1);
-    expect(v3).toEqual(v1);
   });
 
-  it("carries the full rework knob set at identity values", () => {
+  it("v3 differs from v1 ONLY by the intended primaryCalendar flip; every other knob still matches", () => {
+    // The calendar-rework subsystem flips exactly one v3 knob: primaryCalendar
+    // -> "stretched" (structural, safe mid-race, 1964+ spawns only). This guard
+    // pins that flip as intended while asserting EVERY OTHER v3 knob remains at
+    // v1 identity -- so an accidental flip of an UNTOUCHED knob (momentum cap,
+    // convention, transfers, surrogate weights) still fails the test.
+    const v1 = presidentialRulesetFor({ rulesetVersion: 1 });
+    const v3 = presidentialRulesetFor({ rulesetVersion: 3 });
+
+    // The one intended divergence.
+    expect(v1.primaryCalendar).toBe("compressed");
+    expect(v3.primaryCalendar).toBe("stretched");
+
+    // Everything else must still equal v1, knob by knob.
+    const { version: _v1ver, primaryCalendar: _v1cal, ...v1Rest } = v1;
+    const { version: _v3ver, primaryCalendar: _v3cal, ...v3Rest } = v3;
+    expect(v3Rest).toEqual(v1Rest);
+  });
+
+  it("carries the momentum + nomination + surrogate knobs at identity values (only calendar flipped)", () => {
     const r = presidentialRulesetFor({ rulesetVersion: 3 });
-    expect(r.primaryCalendar).toBe("compressed");
+    // primaryCalendar is intentionally "stretched" now (see the guard above);
+    // the magnitude/structural knobs below are still at ship identity.
     expect(r.primaryMomentumCapPoints).toBe(0);
+    expect(r.primaryMomentumDecay).toBe(0.5);
     expect(r.conventionEnabled).toBe(false);
     expect(r.suspendTransferMode).toBe("flat");
     expect(r.suspendTransferMaxFraction).toBe(0.25);

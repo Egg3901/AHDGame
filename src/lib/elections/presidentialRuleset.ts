@@ -114,12 +114,17 @@ const V1: PresidentialRuleset = { version: 1, ...IDENTITY };
 const V2: PresidentialRuleset = { version: 2, ...IDENTITY };
 
 /**
- * v3 is the presidential-rework version. It ships identical to v1/v2 and is
- * mutated field-by-field by the rework subsystem PRs (each flip paired with
- * the code that reads it). Keeping it at identity here means bumping CURRENT to
- * 3 changes nothing until a subsystem lands.
+ * v3 is the presidential-rework version. It is mutated field-by-field by the
+ * rework subsystem PRs (each flip paired with the code that reads it).
+ *
+ * primaryCalendar → "stretched": the primary-calendar subsystem's structural
+ * flip. Spacing only (timing, not magnitude), so it is safe to land during the
+ * live 1960 race — that race is v1 (unstamped) and keeps the compressed table;
+ * "stretched" applies only to races spawned under v3 (1964 onward). The
+ * momentum magnitude knobs (primaryMomentumCapPoints/Decay) stay at identity:
+ * momentum computes and persists but multiplies x1 until calibrated at t384.
  */
-const V3: PresidentialRuleset = { version: 3, ...IDENTITY };
+const V3: PresidentialRuleset = { version: 3, ...IDENTITY, primaryCalendar: "stretched" };
 
 const RULESETS: Record<number, PresidentialRuleset> = {
   1: V1,
