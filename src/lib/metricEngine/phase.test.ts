@@ -328,7 +328,15 @@ describe("runMetricEngine — v2-2/v2-3a labour wage-index Δ → medianIncome +
 
   function seed(target: MockDb, stateMetrics: unknown[], labourSystemMode: string) {
     setupCollection(target, "states", [
-      { _id: "s1", name: "s1", countryId: "US", population: 100, gdp: 1000 },
+      {
+        _id: "s1",
+        name: "s1",
+        countryId: "US",
+        population: 100,
+        gdp: 1000,
+        workingAgePopulation: 60,
+        militaryServicePopulation: 0,
+      },
     ]);
     setupCollection(target, "corporateSectors", [
       { _id: "secA", stateId: "s1", revenue: 1000, currentGrowthRate: 3, corporationId: undefined },
@@ -366,6 +374,40 @@ describe("runMetricEngine — v2-2/v2-3a labour wage-index Δ → medianIncome +
     runAndCapture(target, "economic.medianIncome.value");
   const runAndCaptureUnemployment = (target: MockDb) =>
     runAndCapture(target, "economic.unemploymentRate.value");
+
+  it("gradually expands participation while employers keep asking for more workers", async () => {
+    const shortage = createMockDb();
+    seed(
+      shortage,
+      [
+        {
+          _id: "s1",
+          economic: {
+            laborParticipation: { value: 60 },
+            laborForce: { value: 36 },
+            labourTightness: { value: 4.8 },
+            labourParticipationDemandBonus: { value: 0 },
+          },
+        },
+      ],
+      "macro"
+    );
+    const ops: Array<{
+      updateOne: { filter: { _id: string }; update: { $set: Record<string, number> } };
+    }> = [];
+    shortage.collectionMocks.stateMetrics!.bulkWrite = vi
+      .fn()
+      .mockImplementation((writes: typeof ops) => {
+        ops.push(...writes);
+        return Promise.resolve({ ok: 1 });
+      });
+
+    await runMetricEngine(shortage as unknown as Db, 10);
+
+    const set = ops.find((op) => op.updateOne.filter._id === "s1")!.updateOne.update.$set;
+    expect(set["economic.labourParticipationDemandBonus.value"]).toBeCloseTo(0.25, 8);
+    expect(set["economic.laborForce.value"]).toBeCloseTo(36.15, 6);
+  });
 
   it("at 'macro', a positive wage-index Δ raises medianIncome above the no-Δ baseline", async () => {
     const withDelta = createMockDb();

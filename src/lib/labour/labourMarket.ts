@@ -102,15 +102,53 @@ export function roundTightness(tightness: number): number {
  * metric engine has no labour force reading for behaves exactly as it does
  * today rather than being silently throttled on missing data.
  *
- * Pro rata rather than first-come: sectors are processed in an arbitrary order
- * inside the turn, so any priority rule would hand a windfall to whichever
- * sector happened to be iterated first, and that order is not something a
- * player can see or act on. Bidding for priority is phase 3, once wages can
- * actually respond to scarcity.
+ * Allocation is order-independent. The base share is available workers over
+ * desired workers, then each sector's wage relative to the desired-worker-
+ * weighted state bid changes its share. If every employer raises pay together,
+ * the relative bids and allocations stay unchanged.
  */
-export function staffingFactorFromTightness(tightness: number | undefined | null): number {
+export function staffingFactorFromTightness(
+  tightness: number | undefined | null,
+  sectorWageLevel: number = 1,
+  stateDemandWageIndex: number = 1
+): number {
   if (typeof tightness !== "number" || !Number.isFinite(tightness) || tightness <= 1) return 1;
-  return 1 / tightness;
+  const wage = Number.isFinite(sectorWageLevel) && sectorWageLevel > 0 ? sectorWageLevel : 1;
+  const marketWage =
+    Number.isFinite(stateDemandWageIndex) && stateDemandWageIndex > 0 ? stateDemandWageIndex : 1;
+  const relativeBid = Math.max(0.25, Math.min(4, wage / marketWage));
+  return Math.max(0, Math.min(1, relativeBid / tightness));
+}
+
+/** Maximum participation uplift created by sustained labour shortages. */
+export const LABOUR_PARTICIPATION_SHORTAGE_MAX_PP = 6;
+
+/** Maximum change in the shortage participation uplift per turn. */
+export const LABOUR_PARTICIPATION_SHORTAGE_MAX_MOVE_PP = 0.25;
+
+/**
+ * Move the effective participation bonus toward the shortage implied target.
+ * The authored participation metric remains the policy baseline. This bonus is
+ * a bounded economic response from residents entering or leaving the workforce.
+ */
+export function nextLabourParticipationBonus(
+  tightness: number | undefined | null,
+  previousBonus: number | undefined | null
+): number {
+  const shortage =
+    typeof tightness === "number" && Number.isFinite(tightness) && tightness > 1
+      ? 1 - 1 / tightness
+      : 0;
+  const target = LABOUR_PARTICIPATION_SHORTAGE_MAX_PP * shortage;
+  const previous =
+    typeof previousBonus === "number" && Number.isFinite(previousBonus)
+      ? Math.max(0, Math.min(LABOUR_PARTICIPATION_SHORTAGE_MAX_PP, previousBonus))
+      : 0;
+  const delta = Math.max(
+    -LABOUR_PARTICIPATION_SHORTAGE_MAX_MOVE_PP,
+    Math.min(LABOUR_PARTICIPATION_SHORTAGE_MAX_MOVE_PP, target - previous)
+  );
+  return Math.max(0, Math.min(LABOUR_PARTICIPATION_SHORTAGE_MAX_PP, previous + delta));
 }
 
 /**

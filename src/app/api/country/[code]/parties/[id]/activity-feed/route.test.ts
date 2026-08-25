@@ -160,6 +160,7 @@ describe("describeSlateActivity", () => {
     const { describeSlateActivity } = await import("./route");
     const activity = describeSlateActivity({
       status: "accepted",
+      refusalReason: null,
       invitedAt,
       respondedAt: invitedAt,
       filedAt: null,
@@ -176,6 +177,7 @@ describe("describeSlateActivity", () => {
     const { describeSlateActivity } = await import("./route");
     const activity = describeSlateActivity({
       status: "filed",
+      refusalReason: null,
       invitedAt,
       respondedAt: invitedAt,
       filedAt,
@@ -192,6 +194,7 @@ describe("describeSlateActivity", () => {
     const { describeSlateActivity } = await import("./route");
     const activity = describeSlateActivity({
       status: "declined",
+      refusalReason: null,
       invitedAt,
       respondedAt,
       filedAt: null,
@@ -208,6 +211,7 @@ describe("describeSlateActivity", () => {
     const { describeSlateActivity } = await import("./route");
     const activity = describeSlateActivity({
       status: "withdrawn",
+      refusalReason: null,
       invitedAt,
       respondedAt: null,
       filedAt: null,
@@ -215,6 +219,25 @@ describe("describeSlateActivity", () => {
     });
 
     expect(activity.summary).toBe("removed from slate");
+    expect(activity.createdAt).toEqual(updatedAt);
+  });
+
+  // #1181: the turn's filing pass tombstones rows it cannot file. Reporting
+  // those as "removed from slate" blamed the chair for a system outcome.
+  it("distinguishes a row the turn could not file from a chair removal", async () => {
+    const invitedAt = new Date("2026-04-28T12:00:00Z");
+    const updatedAt = new Date("2026-04-28T14:00:00Z");
+    const { describeSlateActivity } = await import("./route");
+    const activity = describeSlateActivity({
+      status: "withdrawn",
+      refusalReason: "ineligible_region",
+      invitedAt,
+      respondedAt: updatedAt,
+      filedAt: null,
+      updatedAt,
+    });
+
+    expect(activity.summary).toBe("could not be filed from the slate");
     expect(activity.createdAt).toEqual(updatedAt);
   });
 });

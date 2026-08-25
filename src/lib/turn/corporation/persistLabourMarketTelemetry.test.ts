@@ -64,12 +64,14 @@ describe("persistLabourMarketTelemetry", () => {
     await persistLabourMarketTelemetry({
       db: db as unknown as Db,
       labourDemandByState: new Map([["AZ", 62_738_464]]),
+      labourDemandWageIndexByState: new Map([["AZ", 1.15]]),
       turn: 338,
     });
 
     const set = setFor(db, "AZ");
     expect(set["economic.labourDemand.value"]).toBe(62_738_464);
     expect(set["economic.labourTightness.value"]).toBeGreaterThan(199);
+    expect(set["economic.labourDemandWageIndex.value"]).toBe(1.15);
     expect(set["economic.labourDemandTurn"]).toBe(338);
   });
 

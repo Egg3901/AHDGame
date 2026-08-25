@@ -1310,10 +1310,13 @@ export async function loadCorporationDetailView(args: {
       ...mods,
       commoditySupplyDemandBlendPct,
       profit: Math.round(profit),
-      workers: calculateWorkers(
-        sectorFieldToAnchor(sector.revenue, sector),
-        metrics.workforceSkill
-      ),
+      workers:
+        sector.workers ??
+        calculateWorkers(sectorFieldToAnchor(sector.revenue, sector), metrics.workforceSkill),
+      workersDesired:
+        sector.workersDesired ??
+        calculateWorkers(sectorFieldToAnchor(sector.revenue, sector), metrics.workforceSkill),
+      labourStaffingFactor: sector.labourStaffingFactor ?? 1,
       strategyId: sector.strategyId ?? "standard",
       stateResources: stateResourceCapacityByState.has(sector.stateId)
         ? (stateResourceCapacityByState.get(sector.stateId) ?? null)

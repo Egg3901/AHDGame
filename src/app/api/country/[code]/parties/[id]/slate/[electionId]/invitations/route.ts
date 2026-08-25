@@ -16,6 +16,7 @@ import { getSlateAcceptanceStatBonus, resolveSlateAuthority } from "@/lib/slateA
 import { getPartyNppControlStatus } from "@/lib/parties/antiAbuseGuards";
 import { findBlockingActiveCandidacy } from "@/lib/elections/activeCandidacy";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
+import { canPartyContestState } from "@/lib/parties/regionalContest";
 import { isPrimaryClosed } from "@/lib/elections/electionDeadlineFilters";
 
 interface RouteParams {
@@ -114,6 +115,25 @@ export async function POST(request: Request, { params }: RouteParams) {
         { status: 409 }
       );
     }
+    // #1181: a regional party (Plaid Cymru, SNP, the NI parties) cannot stand
+    // outside its home nation. The turn's filing pass enforces this and used to
+    // tombstone the row silently, so the chair saw the assignment vanish a turn
+    // later with no explanation. Refuse it here, where they get a message.
+    if (
+      !canPartyContestState({
+        countryId,
+        abbreviation: party.abbreviation,
+        stateId: election.state,
+      })
+    ) {
+      return NextResponse.json(
+        {
+          error: `${party.name} does not stand for election in this region.`,
+        },
+        { status: 400 }
+      );
+    }
+
     if (parsed.data.candidateType === "npp") {
       const nppControl = await getPartyNppControlStatus({
         db,
@@ -239,7 +259,7 @@ export async function POST(request: Request, { params }: RouteParams) {
             countryId,
             electionId: { $in: sameStateSlateIds, $ne: election._id },
           },
-          { $set: { status: "withdrawn", updatedAt: now } }
+          { $set: { status: "withdrawn", refusalReason: null, updatedAt: now } }
         );
       }
       if (candidate.candidateType === "character" && candidate.userId) {
@@ -267,7 +287,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           countryId,
           electionId: { $in: sameStateSlateIds, $ne: election._id },
         },
-        { $set: { status: "withdrawn", updatedAt: now } }
+        { $set: { status: "withdrawn", refusalReason: null, updatedAt: now } }
       );
     }
     if (candidate.candidateType === "character" && candidate.userId) {

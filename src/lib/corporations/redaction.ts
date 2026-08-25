@@ -70,6 +70,8 @@ const PRIVATE_REDACTED_SECTOR_FIELDS = [
   "profitMargin",
   "currentGrowthCost",
   "workers",
+  "workersDesired",
+  "labourStaffingFactor",
   // Plants-tier physicals.
   "capacityUnits",
   "producedUnits",

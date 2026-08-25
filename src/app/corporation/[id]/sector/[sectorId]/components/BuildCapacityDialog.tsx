@@ -5,7 +5,7 @@ import { Modal, Button } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { AlertTriangle, Info, TrendingUp } from "lucide-react";
 import type { PlantsData } from "../types";
-import { fmtUnits, fmtMult } from "../lib/plants";
+import { fmtUnits, fmtMult, fmtPct } from "../lib/plants";
 import type { CorporationType } from "@/lib/constants/corporations";
 import {
   capitalizeFacility,
@@ -76,6 +76,10 @@ export default function BuildCapacityDialog({
   onSubmit,
 }: BuildCapacityDialogProps) {
   const { formatAmount } = useCurrency();
+  const workersDesired = plants.workersDesired ?? plants.workers;
+  const labourStaffingFactor =
+    plants.labourStaffingFactor ??
+    (workersDesired > 0 ? Math.min(1, plants.workers / workersDesired) : 1);
   // The dialog counts FACILITIES (the multi-build lever); the API stays in
   // units. One facility = plantSizeUnits(type) units — see facilityQuantum.ts
   // for why a "power station" is not one ₳92/day unit.
@@ -394,6 +398,17 @@ export default function BuildCapacityDialog({
             }
           />
         </div>
+
+        {workersDesired > 0 && plants.workers < workersDesired && (
+          <p className="flex gap-2 rounded-md border border-warning/30 bg-warning/10 p-2 text-body-sm text-foreground">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+            <span>
+              This sector currently fills {fmtPct(labourStaffingFactor)} of its jobs. Building this
+              adds {fmtUnits(preview.workersNeeded)} wanted workers, but those jobs may remain
+              vacant unless you raise pay or the local workforce grows.
+            </span>
+          </p>
+        )}
 
         {/* 4. SHOULD YOU ───────────────────────────────────────────────────── */}
         <div

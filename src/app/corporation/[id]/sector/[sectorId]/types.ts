@@ -18,6 +18,8 @@ export interface SectorData {
   currentGrowthCost: number;
   revenue: number;
   workers: number;
+  workersDesired?: number;
+  labourStaffingFactor?: number;
   productionPolicy: number;
   productionPolicyLevel: number;
   /** Labour system: CEO wage-level lever (1.0 = baseline). */
@@ -554,6 +556,8 @@ export interface PlantsData {
   depreciationPerTurn: number;
   buildTurns: number;
   workers: number;
+  workersDesired?: number;
+  labourStaffingFactor?: number;
   unionizationPct: number;
   laborIntensity: number;
   governor: {

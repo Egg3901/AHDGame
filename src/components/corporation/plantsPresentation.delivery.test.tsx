@@ -10,6 +10,24 @@ function renderTooltip(freightClass: "bulk" | "grid"): string {
   return container.querySelector("[title]")?.getAttribute("title") ?? "";
 }
 
+describe("DeliveryLimitedPill face (ticket #1180)", () => {
+  it("says how much is stuck, not just the freight class", () => {
+    const { container } = render(<DeliveryLimitedPill fraction={0.32} freightClass="bulk" />);
+    const text = container.textContent ?? "";
+
+    // The bare class name read as a category label, or as "needs freight".
+    expect(text).toContain("Bulk freight");
+    expect(text).toContain("32%");
+    expect(text).toContain("stuck");
+  });
+
+  it("stays hidden when nothing is stuck, so it cannot read as a freight-shortage light", () => {
+    const { container } = render(<DeliveryLimitedPill fraction={0} freightClass="bulk" />);
+
+    expect(container.textContent).toBe("");
+  });
+});
+
 describe("DeliveryLimitedPill guidance (ticket #1169)", () => {
   it("turns freight capacity into a concrete player action", () => {
     const tooltip = renderTooltip("bulk");

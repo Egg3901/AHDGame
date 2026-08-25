@@ -157,12 +157,20 @@ export function DeliveryLimitedPill({
   const action = freightClass
     ? freightClassAction(freightClass)
     : "Add freight capacity out of this state, or site capacity nearer buyers.";
+  // Ticket #1180: the pill used to render the bare class name, so "BULK
+  // FREIGHT" sat in warning colours next to a healthy fill chip and read as a
+  // category label, or worse, as "this sector needs freight". A player took it
+  // for a freight-shortage light and built two logistics sectors into a glutted
+  // market. Same lesson as the build-queue pill in #1141: the number and the
+  // verb go on the face, because the tooltip does not exist on touch at all.
   return (
     <span
-      className={`inline-flex items-center rounded-full border border-warning/30 bg-warning/10 px-1.5 py-0 text-[9px] font-bold uppercase tracking-wider text-warning ${className}`.trim()}
+      className={`inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-1.5 py-0 text-[9px] font-bold uppercase tracking-wider text-warning ${className}`.trim()}
       title={`${label} limited. ${formatFillPercent(fraction)} of this sector's output could not reach buyers outside this state. ${explanation} ${action} Cutting production is not the fix.`}
     >
       {label}
+      <span className="tabular-nums">{formatFillPercent(fraction)}</span>
+      <span className="font-normal opacity-80">stuck</span>
     </span>
   );
 }

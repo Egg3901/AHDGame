@@ -292,11 +292,12 @@ export function processSector(
   // LABOUR_MODE_ORDER, but LabourContext doesn't enforce that, so this
   // reads `sector.strikeStartedAtTurn` regardless of wagesEnabled.
   const tightness = lookups.labourTightnessByState.get(sector.stateId);
+  const stateDemandWageIndex = lookups.labourDemandWageIndexByState?.get(sector.stateId);
   const {
     outputFactor: labourOutputFactor,
     strikeMarginModifier,
     staffingFactor,
-  } = resolveSectorLabourProductionEffects(labour, sector, tightness);
+  } = resolveSectorLabourProductionEffects(labour, sector, tightness, stateDemandWageIndex);
   // Effective strategy rates, resolved once here and reused below by the
   // capacity haircut, price realization, and the blended commodity margin
   // modifiers (so non-standard strategies are priced against what the
@@ -1232,12 +1233,14 @@ export function processSector(
   );
   // Ahead of the labor-cost split below, so labor is workers x wage-per-worker.
   const { desiredWorkers, workers: computedWorkers } = resolveSectorHeadcount({
-    revenue: newRevenue,
+    revenue: plantsEnabled ? plantsNameplateRevenue : newRevenue,
     stateId: sector.stateId,
     rawWorkforceSkillByState: lookups.rawWorkforceSkillByState,
     politicalBoard,
     staffingFactor,
     labourDemandByState,
+    labourDemandWageIndexByState: env.labourDemandWageIndexByState,
+    wageLevel: labour.wagesEnabled ? sector.wageLevel : 1,
   });
 
   const grossMaintenance = hourlyRevenue * (1 - effectiveMargin / 100);
