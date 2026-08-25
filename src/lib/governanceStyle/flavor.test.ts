@@ -30,10 +30,21 @@ describe("governanceStyleFlavor", () => {
     input.competition = {
       dominantPartyId: "dem",
       dominantSeatShare: 75,
+      chambersMeasured: 2,
+      executivePartyId: "dem",
+      executiveAlignedWithLegislature: true,
       uninterruptedControlTurns: 60,
       consecutiveExecutiveTerms: 3,
+      seatMarginPenalty: 12,
+      legislativeContinuityPenalty: 1.5,
+      executiveContinuityPenalty: 4,
       penalty: 17.5,
     };
-    expect(governanceStyleFlavor(input).competitionNarrative).toContain("subtract 17.5 points");
+    expect(governanceStyleFlavor(input).competitionNarrative).toContain(
+      "total democratic-health penalty of 17.5"
+    );
+    expect(governanceStyleFlavor(input).competitionNarrative).toContain("2 elected chambers");
+    expect(governanceStyleFlavor(input).competitionNarrative).toContain("presidency");
+    expect(governanceStyleFlavor(input).competitionNarrative).toContain("continuity");
   });
 });
