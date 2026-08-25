@@ -37,8 +37,8 @@ const PRODUCTION_POLICY_DEADBAND = 0.05;
  * (observed on prod 2026-08-16: freight 2.0x base, 19% US coverage, and no NPP
  * founding it). 1.6 clears genuine multi-turn shortages without firing on a
  * mild 1.1x premium, and self-disarms: as capacity lands the ratio falls back
- * under the bar. Paced by the same cadence / MIN_CASH / MAX_SECTORS gates as
- * every other founding.
+ * under the bar. Ordinary entry keeps the established cash and sector-cap
+ * gates; exceptional entry adds its own stagger and hard ceiling.
  */
 export const ESSENTIAL_SHORTAGE_SCORE = 1.6;
 
@@ -188,16 +188,8 @@ export function findBestUnownedSector(
   // genuine single-input crisis behind a co-product. The essential-shortage
   // override gates on the peak so freight at 2.0x triggers logistics even
   // though consulting is at base.
-  const peakShortageOf = (c: UnownedSector): number => {
-    const supply = SECTOR_SUPPLY[c.sectorType as CorporationType];
-    if (!supply || supply.length === 0) return 0;
-    let peak = 0;
-    for (const { commodity } of supply) {
-      const ratio = priceRatioOf(commodity, countryId);
-      if (ratio != null && Number.isFinite(ratio) && ratio > peak) peak = ratio;
-    }
-    return peak;
-  };
+  const peakShortageOf = (c: UnownedSector): number =>
+    sectorPeakShortageScore(c.sectorType as CorporationType, countryId, priceRatioOf);
   // Highest market-weighted score wins; the HQ state gets a score bonus, not
   // the old unconditional first pick (see HQ_STATE_SCORE_BONUS).
   const best = (list: UnownedSector[]) => list.sort((a, b) => score(b) - score(a))[0];
@@ -290,4 +282,24 @@ export function sectorShortageScore(
     totalWeight += rate;
   }
   return totalWeight > 0 ? weighted / totalWeight : 1;
+}
+
+/**
+ * Highest live price-over-base ratio among a sector type's outputs. This is the
+ * essential-shortage signal used for entry: a critical single output must not
+ * be hidden by a balanced co-product in the weighted sector average.
+ */
+export function sectorPeakShortageScore(
+  sectorType: CorporationType,
+  countryId: string,
+  priceRatioOf: CommodityPriceRatioFn
+): number {
+  const supply = SECTOR_SUPPLY[sectorType];
+  if (!supply || supply.length === 0) return 0;
+  let peak = 0;
+  for (const { commodity } of supply) {
+    const ratio = priceRatioOf(commodity, countryId);
+    if (ratio != null && Number.isFinite(ratio) && ratio > peak) peak = ratio;
+  }
+  return peak;
 }
