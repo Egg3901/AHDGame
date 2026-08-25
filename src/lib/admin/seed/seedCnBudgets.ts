@@ -105,7 +105,8 @@ export async function seedCnBudgets(
   const countryOwnedSeedData = generateCountryOwnedSeedData(
     statesForBudgets,
     preset,
-    commandEconomyEnabled
+    commandEconomyEnabled,
+    log
   );
   const cnCorpData = countryOwnedSeedData.filter(
     (entry) => entry.corporation.countryOwnerId === "CN"

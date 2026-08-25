@@ -64,6 +64,7 @@ import {
   type CommodityType,
   type ExtractableResource,
 } from "@/lib/constants/commodities";
+import { extractionDesiredUnits } from "@/lib/extraction/capacityHaircut";
 import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
 import {
   STRANDED_DIVEST_TURNS,
@@ -95,7 +96,11 @@ import {
   unownedHeadroomUnitsPerAnchor,
   unownedPoolTrailingSet,
 } from "@/lib/market/unownedHeadroom";
-import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
+import {
+  getExtractionOutputScaleEnabled,
+  getMarketSystemModeForDb,
+  marketAtLeast,
+} from "@/lib/market/featureFlag";
 import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
@@ -337,6 +342,53 @@ interface SectorProfitInfo {
   marginCategory: "loss" | "thin" | "healthy" | "strong";
 }
 
+export function computeExtractionHeadroomByState(
+  capDocs: Array<Pick<StateResourceCapacity, "stateId" | "resources">>,
+  sectors: CorporateSector[],
+  eraUnitScale: number,
+  extractionOutputScaleEnabled: boolean
+): Map<string, number> {
+  const desiredByState = new Map<string, Partial<Record<ExtractableResource, number>>>();
+  for (const sector of sectors) {
+    if (sector.sectorType !== "extraction") continue;
+    const strat =
+      SECTOR_STRATEGIES["extraction"]?.find((st) => st.id === (sector.strategyId ?? "standard")) ??
+      SECTOR_STRATEGIES["extraction"]?.[0];
+    const supplyRates = (strat?.supply ?? {}) as Partial<Record<string, number>>;
+    const forState = desiredByState.get(sector.stateId) ?? {};
+    for (const resource of EXTRACTABLE_RESOURCES) {
+      const rate = supplyRates[resource] ?? 0;
+      if (rate <= 0) continue;
+      forState[resource] =
+        (forState[resource] ?? 0) +
+        extractionDesiredUnits(
+          sector.revenue,
+          rate,
+          resource,
+          eraUnitScale,
+          extractionOutputScaleEnabled
+        );
+    }
+    desiredByState.set(sector.stateId, forState);
+  }
+
+  const headroomByState = new Map<string, number>();
+  for (const capDoc of capDocs) {
+    let capValue = 0;
+    let headroomValue = 0;
+    for (const resource of EXTRACTABLE_RESOURCES) {
+      const capacity = capDoc.resources?.[resource] ?? 0;
+      if (capacity <= 0) continue;
+      const basePrice = COMMODITY_BASE_PRICES[resource] ?? 1;
+      const desired = desiredByState.get(capDoc.stateId)?.[resource] ?? 0;
+      capValue += capacity * basePrice;
+      headroomValue += Math.max(0, capacity - desired) * basePrice;
+    }
+    headroomByState.set(capDoc.stateId, capValue > 0 ? headroomValue / capValue : 0);
+  }
+  return headroomByState;
+}
+
 /**
  * Process all NPP-run corporations each turn.
  * Returns decisions that the caller applies via bulkWrite.
@@ -458,42 +510,25 @@ export async function processNppCorporationDecisions(
   };
 
   // Value-weighted unclaimed deposit headroom per state, in [0, 1]. Desired
-  // output per state mirrors computeResourceOpportunities / the sector deposit
-  // view (revenue-based), so this ranks states by the same numbers players see.
-  const capDocs = await db
-    .collection<StateResourceCapacity>("stateResourceCapacity")
-    .find({}, { projection: { stateId: 1, resources: 1 } })
-    .toArray();
-  const desiredByState = new Map<string, Partial<Record<ExtractableResource, number>>>();
-  for (const sector of allSectors) {
-    if (sector.sectorType !== "extraction") continue;
-    const strat =
-      SECTOR_STRATEGIES["extraction"]?.find((st) => st.id === (sector.strategyId ?? "standard")) ??
-      SECTOR_STRATEGIES["extraction"]?.[0];
-    const supplyRates = (strat?.supply ?? {}) as Partial<Record<string, number>>;
-    const forState = desiredByState.get(sector.stateId) ?? {};
-    for (const resource of EXTRACTABLE_RESOURCES) {
-      const rate = supplyRates[resource] ?? 0;
-      if (rate <= 0) continue;
-      const basePrice = COMMODITY_BASE_PRICES[resource as keyof typeof COMMODITY_BASE_PRICES] ?? 1;
-      forState[resource] = (forState[resource] ?? 0) + (sector.revenue * rate) / basePrice;
-    }
-    desiredByState.set(sector.stateId, forState);
-  }
-  const extractionHeadroomByState = new Map<string, number>();
-  for (const capDoc of capDocs) {
-    let capValue = 0;
-    let headroomValue = 0;
-    for (const resource of EXTRACTABLE_RESOURCES) {
-      const capacity = capDoc.resources?.[resource] ?? 0;
-      if (capacity <= 0) continue;
-      const basePrice = COMMODITY_BASE_PRICES[resource as keyof typeof COMMODITY_BASE_PRICES] ?? 1;
-      const desired = desiredByState.get(capDoc.stateId)?.[resource] ?? 0;
-      capValue += capacity * basePrice;
-      headroomValue += Math.max(0, capacity - desired) * basePrice;
-    }
-    extractionHeadroomByState.set(capDoc.stateId, capValue > 0 ? headroomValue / capValue : 0);
-  }
+  // output uses the supply ledger's era and output-scale unit basis, matching
+  // computeResourceOpportunities and the capacity clamp.
+  const [capDocs, extractionEraUnitScale, extractionConfig] = await Promise.all([
+    db
+      .collection<StateResourceCapacity>("stateResourceCapacity")
+      .find({}, { projection: { stateId: 1, resources: 1 } })
+      .toArray(),
+    loadWorldEraUnitScale(db),
+    db
+      .collection<GameConfig>("gameConfig")
+      .findOne({ _id: "default" }, { projection: { extractionOutputScaleEnabled: 1 } }),
+  ]);
+  const extractionOutputScaleEnabled = await getExtractionOutputScaleEnabled(extractionConfig);
+  const extractionHeadroomByState = computeExtractionHeadroomByState(
+    capDocs,
+    allSectors,
+    extractionEraUnitScale,
+    extractionOutputScaleEnabled
+  );
   const placementSignals: PlacementSignals = {
     statePriceRatioOf,
     // A state with no capacity doc has no deposits — headroom 0, never found there.

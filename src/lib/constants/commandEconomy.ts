@@ -252,6 +252,37 @@ export function isPlannedEconomy(
 }
 
 /**
+ * Planned economies whose TRADE is nevertheless open to the market world.
+ *
+ * Yugoslavia: expelled from the Cominform in June 1948 and embargoed by the
+ * bloc, it reoriented toward Western trade, credits, and aid years before the
+ * era worlds begin (1953) while keeping a planned domestic economy. Curtaining
+ * it walls it in with the exact countries that were embargoing it and cuts it
+ * off from its real trading partners. Domestic planned machinery (administered
+ * prices, SOEs, overhang) still applies through `isPlannedEconomy`; only the
+ * curtain membership is exempted. Note the wall is absolute both ways, so the
+ * exemption also severs YU from the Comecon book, which matches the 1948-55
+ * bloc embargo years the era opens in.
+ */
+export const CURTAIN_EXEMPT_COUNTRIES: ReadonlySet<string> = new Set(["YU"]);
+
+/**
+ * True when a country sits behind the iron curtain for TRADE purposes: a
+ * planned economy that is not curtain-exempt. This is the single membership
+ * authority for `buildTradeAffinity`'s `curtainedCountries` at every call
+ * site — the ledger and the corp clearing books must never disagree about who
+ * is behind the wall.
+ */
+export function isCurtained(
+  countryId: string | null | undefined,
+  currentYear: number | null | undefined,
+  enabled: boolean | null | undefined
+): boolean {
+  if (countryId && CURTAIN_EXEMPT_COUNTRIES.has(countryId)) return false;
+  return isPlannedEconomy(countryId, currentYear, enabled);
+}
+
+/**
  * Share of an economy's activity governed by the PLAN rather than the market
  * (1 at full command → 0 at the dual-track ceiling and above). Drives dual-track
  * splits, administered-price coverage, and overhang accumulation. Returns 0 when

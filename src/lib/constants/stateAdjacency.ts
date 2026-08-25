@@ -216,9 +216,249 @@ const DD_ADJACENCY: AdjacencyMap = {
 };
 
 /**
- * Per-country adjacency map. Coming-soon countries (BR, IE, NG) ship with
- * empty maps — the F4 picker just shows the chair's home state until
- * those countries activate and their adjacency data is filled in.
+ * Ireland's eight composite planning regions. Borders follow the constituent
+ * counties documented in `ieRegions.ts`.
+ */
+const IE_ADJACENCY: AdjacencyMap = {
+  DUB: ["KIL"],
+  KIL: ["DUB", "MID", "WEX", "DON"],
+  MID: ["KIL", "WEX", "LIM", "GAL", "DON"],
+  WEX: ["KIL", "MID", "LIM", "COR"],
+  LIM: ["MID", "WEX", "COR", "GAL"],
+  COR: ["WEX", "LIM"],
+  GAL: ["MID", "LIM", "DON"],
+  DON: ["KIL", "MID", "GAL"],
+};
+
+/** Brazil's five IBGE macro-regions. */
+const BR_ADJACENCY: AdjacencyMap = {
+  NORTE: ["NORDESTE", "CENTRO_OESTE"],
+  NORDESTE: ["NORTE", "CENTRO_OESTE", "SUDESTE"],
+  CENTRO_OESTE: ["NORTE", "NORDESTE", "SUDESTE", "SUL"],
+  SUDESTE: ["NORDESTE", "CENTRO_OESTE", "SUL"],
+  SUL: ["CENTRO_OESTE", "SUDESTE"],
+};
+
+/** Nigeria's six geopolitical zones. */
+const NG_ADJACENCY: AdjacencyMap = {
+  NORTH_WEST: ["NORTH_EAST", "NORTH_CENTRAL"],
+  NORTH_EAST: ["NORTH_WEST", "NORTH_CENTRAL"],
+  NORTH_CENTRAL: ["NORTH_WEST", "NORTH_EAST", "SOUTH_WEST", "SOUTH_SOUTH", "SOUTH_EAST"],
+  SOUTH_WEST: ["NORTH_CENTRAL", "SOUTH_SOUTH"],
+  SOUTH_SOUTH: ["NORTH_CENTRAL", "SOUTH_WEST", "SOUTH_EAST"],
+  SOUTH_EAST: ["NORTH_CENTRAL", "SOUTH_SOUTH"],
+};
+
+/** Hungary's six 1979 macro-regions. Budapest is enclaved within Pest. */
+const HU_ADJACENCY: AdjacencyMap = {
+  HU_BUD: ["HU_PES"],
+  HU_PES: ["HU_BUD", "HU_TRW", "HU_NOR", "HU_ALF"],
+  HU_TRW: ["HU_PES", "HU_TRS", "HU_ALF"],
+  HU_TRS: ["HU_TRW", "HU_ALF"],
+  HU_NOR: ["HU_PES", "HU_ALF"],
+  HU_ALF: ["HU_PES", "HU_TRW", "HU_TRS", "HU_NOR"],
+};
+
+/** Poland's eight 1979 macro-regions. */
+const PL_ADJACENCY: AdjacencyMap = {
+  PL_MAZ: ["PL_LOD", "PL_WLK", "PL_POM", "PL_EAS"],
+  PL_LOD: ["PL_MAZ", "PL_MAL", "PL_SLK", "PL_WLK", "PL_EAS"],
+  PL_MAL: ["PL_LOD", "PL_SLK", "PL_EAS"],
+  PL_SLK: ["PL_LOD", "PL_MAL", "PL_DSL", "PL_WLK"],
+  PL_DSL: ["PL_SLK", "PL_WLK", "PL_POM"],
+  PL_WLK: ["PL_MAZ", "PL_LOD", "PL_SLK", "PL_DSL", "PL_POM"],
+  PL_POM: ["PL_MAZ", "PL_DSL", "PL_WLK", "PL_EAS"],
+  PL_EAS: ["PL_MAZ", "PL_LOD", "PL_MAL", "PL_POM"],
+};
+
+/** Romania's seven 1979 historic-province regions. */
+const RO_ADJACENCY: AdjacencyMap = {
+  RO_BUC: ["RO_MUN"],
+  RO_MUN: ["RO_BUC", "RO_OLT", "RO_TRA", "RO_MOL", "RO_DOB"],
+  RO_OLT: ["RO_MUN", "RO_TRA", "RO_VST"],
+  RO_TRA: ["RO_MUN", "RO_OLT", "RO_VST", "RO_MOL"],
+  RO_VST: ["RO_OLT", "RO_TRA", "RO_MOL"],
+  RO_MOL: ["RO_MUN", "RO_TRA", "RO_VST", "RO_DOB"],
+  RO_DOB: ["RO_MUN", "RO_MOL"],
+};
+
+/** Yugoslavia's six republics and two Serbian autonomous provinces. */
+const YU_ADJACENCY: AdjacencyMap = {
+  YU_SLO: ["YU_CRO"],
+  YU_CRO: ["YU_SLO", "YU_BIH", "YU_VOJ", "YU_MNE"],
+  YU_BIH: ["YU_CRO", "YU_SRB", "YU_MNE"],
+  YU_SRB: ["YU_BIH", "YU_VOJ", "YU_KOS", "YU_MNE", "YU_MKD"],
+  YU_VOJ: ["YU_CRO", "YU_SRB"],
+  YU_KOS: ["YU_SRB", "YU_MNE", "YU_MKD"],
+  YU_MNE: ["YU_CRO", "YU_BIH", "YU_SRB", "YU_KOS"],
+  YU_MKD: ["YU_SRB", "YU_KOS"],
+};
+
+/** Bulgaria's five 1979 geographic regions. */
+const BG_ADJACENCY: AdjacencyMap = {
+  BG_SOF: ["BG_NOR", "BG_THR", "BG_SW"],
+  BG_NOR: ["BG_SOF", "BG_COA", "BG_THR"],
+  BG_COA: ["BG_NOR", "BG_THR"],
+  BG_THR: ["BG_SOF", "BG_NOR", "BG_COA", "BG_SW"],
+  BG_SW: ["BG_SOF", "BG_THR"],
+};
+
+/** Ukraine's six 1953 and 1979 macro-regions. */
+const UKR_ADJACENCY: AdjacencyMap = {
+  UKR_KYI: ["UKR_WES", "UKR_POD", "UKR_DNI"],
+  UKR_WES: ["UKR_KYI", "UKR_POD"],
+  UKR_POD: ["UKR_KYI", "UKR_WES", "UKR_DNI", "UKR_SOU"],
+  UKR_DON: ["UKR_DNI"],
+  UKR_DNI: ["UKR_KYI", "UKR_POD", "UKR_DON", "UKR_SOU"],
+  UKR_SOU: ["UKR_POD", "UKR_DNI"],
+};
+
+/** Byelorussia's six oblasts. */
+const BLR_ADJACENCY: AdjacencyMap = {
+  BLR_MIN: ["BLR_HOM", "BLR_VIT", "BLR_MOG", "BLR_BRE", "BLR_GRO"],
+  BLR_HOM: ["BLR_MIN", "BLR_MOG", "BLR_BRE"],
+  BLR_VIT: ["BLR_MIN", "BLR_MOG", "BLR_GRO"],
+  BLR_MOG: ["BLR_MIN", "BLR_HOM", "BLR_VIT"],
+  BLR_BRE: ["BLR_MIN", "BLR_HOM", "BLR_GRO"],
+  BLR_GRO: ["BLR_MIN", "BLR_VIT", "BLR_BRE"],
+};
+
+/** Czechoslovakia's three historic lands plus enclaved Prague. */
+const CS_ADJACENCY: AdjacencyMap = {
+  CS_PRG: ["CS_BOH"],
+  CS_BOH: ["CS_PRG", "CS_MOR"],
+  CS_MOR: ["CS_BOH", "CS_SVK"],
+  CS_SVK: ["CS_MOR"],
+};
+
+/** Baltic republics, ordered north to south. */
+const BAL_ADJACENCY: AdjacencyMap = {
+  BAL_LTU: ["BAL_LVA"],
+  BAL_LVA: ["BAL_LTU", "BAL_EST"],
+  BAL_EST: ["BAL_LVA"],
+};
+
+/** France's eight 1979 macro-regions. */
+const FR_ADJACENCY: AdjacencyMap = {
+  FR_IDF: ["FR_NOR", "FR_EST", "FR_CEN", "FR_OUE"],
+  FR_NOR: ["FR_IDF", "FR_EST", "FR_OUE"],
+  FR_EST: ["FR_IDF", "FR_NOR", "FR_CEN", "FR_ARA"],
+  FR_OUE: ["FR_IDF", "FR_NOR", "FR_CEN", "FR_SOU"],
+  FR_SOU: ["FR_OUE", "FR_CEN", "FR_ARA", "FR_MED"],
+  FR_ARA: ["FR_EST", "FR_CEN", "FR_SOU", "FR_MED"],
+  FR_MED: ["FR_SOU", "FR_ARA"],
+  FR_CEN: ["FR_IDF", "FR_EST", "FR_OUE", "FR_SOU", "FR_ARA"],
+};
+
+/**
+ * Italy's eight 1979 macro-regions. Sicily connects to the south across the
+ * Strait of Messina. Sardinia connects to Lazio by the Olbia-Civitavecchia
+ * ferry route.
+ */
+const IT_ADJACENCY: AdjacencyMap = {
+  IT_NW: ["IT_NE", "IT_TUS"],
+  IT_NE: ["IT_NW", "IT_TUS"],
+  IT_TUS: ["IT_NW", "IT_NE", "IT_LAZ", "IT_SUD"],
+  IT_LAZ: ["IT_TUS", "IT_CAM", "IT_SUD", "IT_SAR"],
+  IT_CAM: ["IT_LAZ", "IT_SUD"],
+  IT_SUD: ["IT_TUS", "IT_LAZ", "IT_CAM", "IT_SIC"],
+  IT_SIC: ["IT_SUD"], // Strait of Messina ferry
+  IT_SAR: ["IT_LAZ"], // Olbia-Civitavecchia ferry
+};
+
+/** Spain's eight 1979 macro-regions. Island groups belong to ES_CEN. */
+const ES_ADJACENCY: AdjacencyMap = {
+  ES_MAD: ["ES_CEN"],
+  ES_CAT: ["ES_VAL", "ES_NOR"],
+  ES_AND: ["ES_VAL", "ES_CEN"],
+  ES_VAL: ["ES_CAT", "ES_AND", "ES_CEN", "ES_NOR"],
+  ES_PVB: ["ES_CEN", "ES_NOR"],
+  ES_GAL: ["ES_CEN", "ES_NOR"],
+  ES_NOR: ["ES_CAT", "ES_VAL", "ES_PVB", "ES_GAL", "ES_CEN"],
+  ES_CEN: ["ES_MAD", "ES_AND", "ES_VAL", "ES_PVB", "ES_GAL", "ES_NOR"],
+};
+
+/** Sweden's eight 1979 macro-regions. */
+const SE_ADJACENCY: AdjacencyMap = {
+  SE_STH: ["SE_EAS", "SE_UPP"],
+  SE_GOT: ["SE_SKA", "SE_SML", "SE_EAS", "SE_VML"],
+  SE_SKA: ["SE_GOT", "SE_SML"],
+  SE_EAS: ["SE_STH", "SE_GOT", "SE_SML", "SE_VML", "SE_UPP"],
+  SE_SML: ["SE_GOT", "SE_SKA", "SE_EAS"],
+  SE_VML: ["SE_GOT", "SE_EAS", "SE_UPP"],
+  SE_NOR: ["SE_UPP"],
+  SE_UPP: ["SE_STH", "SE_EAS", "SE_VML", "SE_NOR"],
+};
+
+/** Turkey's eight 1979 macro-regions. */
+const TR_ADJACENCY: AdjacencyMap = {
+  TR_IST: ["TR_IZM", "TR_BLA", "TR_CEN"],
+  TR_ANK: ["TR_BLA", "TR_CEN"],
+  TR_IZM: ["TR_IST", "TR_MED", "TR_CEN"],
+  TR_MED: ["TR_IZM", "TR_CEN", "TR_ESA", "TR_SEA"],
+  TR_BLA: ["TR_IST", "TR_ANK", "TR_CEN", "TR_ESA"],
+  TR_ESA: ["TR_BLA", "TR_CEN", "TR_MED", "TR_SEA"],
+  TR_SEA: ["TR_MED", "TR_ESA"],
+  TR_CEN: ["TR_IST", "TR_ANK", "TR_IZM", "TR_MED", "TR_BLA", "TR_ESA"],
+};
+
+/**
+ * Greece's six 1979 macro-regions. The islands connect to Attica through the
+ * Piraeus ferry network.
+ */
+const GR_ADJACENCY: AdjacencyMap = {
+  GR_ATT: ["GR_EPC", "GR_PEL", "GR_ISL"],
+  GR_MAC: ["GR_THE", "GR_EPC"],
+  GR_THE: ["GR_MAC", "GR_EPC"],
+  GR_EPC: ["GR_ATT", "GR_MAC", "GR_THE", "GR_PEL"],
+  GR_PEL: ["GR_ATT", "GR_EPC"],
+  GR_ISL: ["GR_ATT"], // Piraeus ferry network
+};
+
+/** Austria's five 1979 macro-regions. Vienna is enclaved within AT_NOE. */
+const AT_ADJACENCY: AdjacencyMap = {
+  AT_VIE: ["AT_NOE"],
+  AT_NOE: ["AT_VIE", "AT_OOE", "AT_STK"],
+  AT_OOE: ["AT_NOE", "AT_STK", "AT_TYR"],
+  AT_STK: ["AT_NOE", "AT_OOE", "AT_TYR"],
+  AT_TYR: ["AT_OOE", "AT_STK"],
+};
+
+/** Finland's six 1979 macro-regions. */
+const FI_ADJACENCY: AdjacencyMap = {
+  FI_UUS: ["FI_SW", "FI_HAM", "FI_EAS"],
+  FI_SW: ["FI_UUS", "FI_HAM", "FI_OST"],
+  FI_HAM: ["FI_UUS", "FI_SW", "FI_EAS", "FI_OST"],
+  FI_EAS: ["FI_UUS", "FI_HAM", "FI_OST"],
+  FI_OST: ["FI_SW", "FI_HAM", "FI_EAS", "FI_LAP"],
+  FI_LAP: ["FI_OST"],
+};
+
+/** Scotland's seven post-secession sub-regions. */
+const SCO_ADJACENCY: AdjacencyMap = {
+  GLA: ["HIG", "TAY", "CSC", "STH"],
+  LOT: ["CSC", "STH"],
+  HIG: ["GLA", "GRA", "TAY"],
+  GRA: ["HIG", "TAY"],
+  TAY: ["GLA", "HIG", "GRA", "CSC"],
+  STH: ["GLA", "LOT", "CSC"],
+  CSC: ["GLA", "LOT", "TAY", "STH"],
+};
+
+/** Wales's six post-secession sub-regions. */
+const WAL_ADJACENCY: AdjacencyMap = {
+  CDF: ["SWA", "VAL", "MWA"],
+  SWA: ["CDF", "VAL", "MWA", "NWW"],
+  VAL: ["CDF", "SWA", "MWA"],
+  MWA: ["CDF", "SWA", "VAL", "NWW", "NEW"],
+  NWW: ["SWA", "MWA", "NEW"],
+  NEW: ["MWA", "NWW"],
+};
+
+/**
+ * Per-country adjacency map. Every country includes its full seeded region
+ * vocabulary, including countries and breakaway nations that are not active in
+ * every preset.
  */
 export const STATE_ADJACENCY: Readonly<Record<CountryId, AdjacencyMap>> = {
   US: US_ADJACENCY,
@@ -226,30 +466,30 @@ export const STATE_ADJACENCY: Readonly<Record<CountryId, AdjacencyMap>> = {
   DE: DE_ADJACENCY,
   JP: JP_ADJACENCY,
   CN: CN_ADJACENCY,
-  IE: {},
-  BR: {},
-  NG: {},
-  HU: {},
-  PL: {},
-  RO: {},
-  YU: {},
-  BG: {},
-  UKR: {},
-  BLR: {},
-  CS: {},
-  BAL: {},
+  IE: IE_ADJACENCY,
+  BR: BR_ADJACENCY,
+  NG: NG_ADJACENCY,
+  HU: HU_ADJACENCY,
+  PL: PL_ADJACENCY,
+  RO: RO_ADJACENCY,
+  YU: YU_ADJACENCY,
+  BG: BG_ADJACENCY,
+  UKR: UKR_ADJACENCY,
+  BLR: BLR_ADJACENCY,
+  CS: CS_ADJACENCY,
+  BAL: BAL_ADJACENCY,
   RU: RU_ADJACENCY,
-  FR: {},
-  IT: {},
-  ES: {},
-  SE: {},
-  TR: {},
-  GR: {},
-  AT: {},
-  FI: {},
+  FR: FR_ADJACENCY,
+  IT: IT_ADJACENCY,
+  ES: ES_ADJACENCY,
+  SE: SE_ADJACENCY,
+  TR: TR_ADJACENCY,
+  GR: GR_ADJACENCY,
+  AT: AT_ADJACENCY,
+  FI: FI_ADJACENCY,
   DD: DD_ADJACENCY,
-  SCO: {},
-  WAL: {},
+  SCO: SCO_ADJACENCY,
+  WAL: WAL_ADJACENCY,
 };
 
 /**

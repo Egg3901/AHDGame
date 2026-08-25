@@ -7,7 +7,11 @@ import { GeneralElectionPanel, GeneralElectionNoTallyPanel } from "./ElectionDet
 import { GeneralElectionShellClient } from "./GeneralElectionShellClient";
 import { buildGeneralElectionViewModel } from "@/lib/elections/generalViewModel";
 import { countryHasPresidentialRunningMate } from "@/lib/elections/runningMateEligibility";
-import { assessContingentEvRisk } from "@/lib/elections/presidentialResolutionDisplay";
+import {
+  assessContingentEvRisk,
+  collegeSizeFromEvByState,
+  electoralMajorityFor,
+} from "@/lib/elections/presidentialResolutionDisplay";
 import { ContingentRiskBanner } from "./ContingentRiskBanner";
 import { CampaignSeasonBanner } from "./CampaignSeasonBanner";
 import type { DriverDisplayInputs } from "@/lib/elections/computePersuasionDriverDisplay";
@@ -202,9 +206,10 @@ export function GeneralPhaseView({
           !localInPrimary &&
           !localIsEnded &&
           (() => {
+            const college = collegeSizeFromEvByState(election.generalVotes?.evByState);
             const risk = assessContingentEvRisk(
               election.generalVotes?.electoralVotesByCandidate,
-              270
+              college > 0 ? electoralMajorityFor(college) : 270
             );
             return risk?.atRisk ? (
               <ContingentRiskBanner

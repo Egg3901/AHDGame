@@ -63,6 +63,12 @@ export interface Election {
   primaryEndTurn?: number;
   durationHours?: number;
   primaryDurationHours?: number;
+  /**
+   * Presidential ruleset the race is frozen to (stamped at spawn; see
+   * elections/presidentialRuleset.ts). Absent on races that predate the seam,
+   * which resolve to v1.
+   */
+  rulesetVersion?: number;
   /** Campaign Here boosts: districtIndex → partySeqId → active boost % (0..7.5). */
   districtCampaignBoosts?: Record<string, Record<string, number>>;
   createdAt: Date;

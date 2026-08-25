@@ -249,7 +249,8 @@ export async function seedEasternBlocBudget(
   const corpData = generateCountryOwnedSeedData(
     statesForBudgets,
     preset,
-    easternBlocGameConfig?.commandEconomyEnabled === true
+    easternBlocGameConfig?.commandEconomyEnabled === true,
+    log
   ).filter((e) => e.corporation.countryOwnerId === countryId);
   await upsertCountryOwnedCorpEntries(db, countryId, corpData);
   log(
