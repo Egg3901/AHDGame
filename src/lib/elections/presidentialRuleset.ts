@@ -1,4 +1,5 @@
 import type { Election } from "@/lib/db/types";
+import { SUSPEND_ENDORSE_TRANSFER_MAX_FRACTION } from "@/lib/campaigns/constants/suspendEndorse";
 
 /**
  * Presidential ruleset version seam (the retrospective's "rules freeze" gate).
@@ -101,7 +102,7 @@ const IDENTITY: Omit<PresidentialRuleset, "version"> = {
   primaryMomentumDecay: 0.5,
   conventionEnabled: false,
   suspendTransferMode: "flat",
-  suspendTransferMaxFraction: 0.25,
+  suspendTransferMaxFraction: SUSPEND_ENDORSE_TRANSFER_MAX_FRACTION,
   endorsementOrgFraction: 0,
   endorsementCoalitionCredibility: 0,
   vpSurrogateActionCap: 2,
@@ -123,8 +124,22 @@ const V2: PresidentialRuleset = { version: 2, ...IDENTITY };
  * "stretched" applies only to races spawned under v3 (1964 onward). The
  * momentum magnitude knobs (primaryMomentumCapPoints/Decay) stay at identity:
  * momentum computes and persists but multiplies x1 until calibrated at t384.
+ *
+ * conventionEnabled → true and suspendTransferMode → "affinity": the nomination
+ * subsystem's two STRUCTURAL flips. Both change WHICH path a race takes, not the
+ * magnitudes, so they are safe mid-cycle and only reach 1964+ spawns. The
+ * magnitude knobs stay at identity: suspendTransferMaxFraction keeps 0.25 (a
+ * perfectly aligned suspender still transfers today's 25%, misaligned ones less),
+ * and endorsementOrgFraction / endorsementCoalitionCredibility stay 0 so
+ * endorsements grant no org or credibility until calibrated at t384.
  */
-const V3: PresidentialRuleset = { version: 3, ...IDENTITY, primaryCalendar: "stretched" };
+const V3: PresidentialRuleset = {
+  version: 3,
+  ...IDENTITY,
+  primaryCalendar: "stretched",
+  conventionEnabled: true,
+  suspendTransferMode: "affinity",
+};
 
 const RULESETS: Record<number, PresidentialRuleset> = {
   1: V1,

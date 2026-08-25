@@ -188,6 +188,33 @@ export interface ElectionVoteTally {
     recordedAt: Date;
   }[];
   /**
+   * President-primary-only: how each party's presidential nomination resolved.
+   * Written once at primary close for races on a convention-enabled ruleset
+   * (v3+). `delegate_majority` means a candidate held a pledged-delegate majority
+   * on the first ballot; `convention` records the multi-ballot elimination that
+   * released delegates by affinity until a survivor reached a majority of the
+   * remaining delegates. Purely descriptive/audit — the nominee is also seated
+   * through the normal primaryResults/elimination machinery. Absent on v1/v2
+   * races (which keep the silent plurality pick). Shape: partyId -> resolution.
+   */
+  nominationResolution?: {
+    byParty: Record<
+      string,
+      {
+        mode: "delegate_majority" | "convention";
+        winnerCandidateId: string;
+        majorityThreshold: number;
+        firstBallotLeaderId: string;
+        ballots?: {
+          ballot: number;
+          tallies: Record<string, number>;
+          eliminatedCandidateId?: string;
+        }[];
+        resolvedAt: Date;
+      }
+    >;
+  };
+  /**
    * President-primary-only: per-state polling trend during the pre-stagger
    * window. Each snapshot captures projected score per candidate per state for
    * each party, so the state-detail page can render a simple trend over time.
