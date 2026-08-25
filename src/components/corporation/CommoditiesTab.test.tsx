@@ -29,12 +29,16 @@ beforeEach(() => {
             consumptionUnits: 100,
             netUnits: -100,
             market: {
+              basis: "ledger_aggregate",
+              clearingBasis: "global_pooled_availability",
               price: 50,
               stockUnits: null,
               coverTurns: null,
               spoiledUnits: null,
               surplusUnits: null,
               unmetDemandUnits: null,
+              surplusUnitsPooled: null,
+              unmetDemandUnitsPooled: null,
             },
             privateSupply: {
               contractedUnits: 80,

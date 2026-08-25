@@ -62,9 +62,11 @@ export function buildCommodityFlowDocs(args: {
       const cb = countryBals.get(commodity);
       if (!cb || (cb.supply <= 0 && cb.demand <= 0)) continue;
       perCountry[countryId] = {
+        basis: "country_scoped_ledger",
         supply: round(cb.supply),
         demand: round(cb.demand),
         cleared: round(Math.min(cb.supply, cb.demand)),
+        clearedUnitsScoped: round(Math.min(cb.supply, cb.demand)),
         price: nationalPrices[countryId] ?? 0,
       };
     }
@@ -91,6 +93,8 @@ export function buildCommodityFlowDocs(args: {
       soldUnits,
     });
     return {
+      basis: "ledger_aggregate",
+      clearingBasis: "global_pooled_availability",
       commodity,
       turn,
       stockUnits: isStorable(commodity) ? stock : null,
@@ -105,9 +109,13 @@ export function buildCommodityFlowDocs(args: {
       ...(excessSpoiledUnits > 0 ? { excessSpoiledUnits } : {}),
       supplyUnits: round(bal.supply),
       demandUnits: round(bal.demand),
+      demandUnitsLedger: round(bal.demand),
       clearedUnits: round(Math.min(bal.supply, bal.demand)),
+      clearedUnitsPooled: round(Math.min(bal.supply, bal.demand)),
       unmetDemandUnits: round(Math.max(0, bal.demand - bal.supply)),
+      unmetDemandUnitsPooled: round(Math.max(0, bal.demand - bal.supply)),
       surplusUnits: round(Math.max(0, bal.supply - bal.demand)),
+      surplusUnitsPooled: round(Math.max(0, bal.supply - bal.demand)),
       price: globalPriceByCommodity.get(commodity) ?? 0,
       byCountry: perCountry,
       createdAt: now,
