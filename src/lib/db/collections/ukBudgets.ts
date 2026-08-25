@@ -133,20 +133,45 @@ export async function resolveBudgetVote(
   }
 
   const passed = args.votesFor > args.votesAgainst;
+  return applyBudgetOutcome(db, { ...args, passed });
+}
+
+/**
+ * Apply an explicit pass/fail outcome to a tabled Budget (e.g. mirroring the
+ * result of its vote-vehicle bill, whose pass rule may differ from a raw
+ * majority). Sets status and, on defeat, fires the budgetDefeat confidence hit.
+ */
+export async function applyBudgetOutcome(
+  db: Db,
+  args: {
+    fiscalYear: number;
+    passed: boolean;
+    votesFor?: number;
+    votesAgainst?: number;
+    now: Date;
+  }
+): Promise<BudgetResolution> {
+  const col = getUKBudgetsCollection(db);
+  const budget = await col.findOne({ fiscalYear: args.fiscalYear });
+  if (!budget) return { ok: false, passed: false, confidenceHit: false, error: "no budget" };
+  if (budget.status !== "tabled") {
+    return { ok: false, passed: false, confidenceHit: false, error: "budget not tabled" };
+  }
+
   await col.updateOne(
     { fiscalYear: args.fiscalYear },
     {
       $set: {
-        status: passed ? "passed" : "defeated",
-        votesFor: args.votesFor,
-        votesAgainst: args.votesAgainst,
+        status: args.passed ? "passed" : "defeated",
+        votesFor: args.votesFor ?? budget.votesFor ?? 0,
+        votesAgainst: args.votesAgainst ?? budget.votesAgainst ?? 0,
         resolvedAt: args.now,
         updatedAt: args.now,
       },
     }
   );
 
-  if (!passed) {
+  if (!args.passed) {
     await applyConfidenceEventToGov(db, { kind: "budgetDefeat" }, args.now);
     return { ok: true, passed: false, confidenceHit: true };
   }

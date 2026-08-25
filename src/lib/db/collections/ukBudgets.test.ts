@@ -4,6 +4,7 @@ import {
   tableBudget,
   resolveBudgetVote,
   ensureBudgetDraftForFiscalYear,
+  applyBudgetOutcome,
 } from "./ukBudgets";
 import type { UKBudget } from "../types/ukBudget";
 
@@ -145,6 +146,28 @@ describe("resolveBudgetVote", () => {
       votesAgainst: 0,
       now: new Date(),
     });
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe("applyBudgetOutcome", () => {
+  it("mirrors an explicit pass with no confidence hit", async () => {
+    const { db, budgets, gov } = fakeDb({ status: "tabled", ...valid } as Partial<UKBudget>);
+    const r = await applyBudgetOutcome(db, { fiscalYear: 1953, passed: true, now: new Date() });
+    expect(r.passed).toBe(true);
+    expect(budgets[0].status).toBe("passed");
+    expect(gov.confidenceGauge).toBe(100);
+  });
+  it("mirrors an explicit defeat and fires the confidence hit", async () => {
+    const { db, budgets, gov } = fakeDb({ status: "tabled", ...valid } as Partial<UKBudget>);
+    const r = await applyBudgetOutcome(db, { fiscalYear: 1953, passed: false, now: new Date() });
+    expect(r.confidenceHit).toBe(true);
+    expect(budgets[0].status).toBe("defeated");
+    expect(gov.confidenceGauge).toBeLessThan(100);
+  });
+  it("is idempotent once resolved (guards on tabled)", async () => {
+    const { db } = fakeDb({ status: "passed", ...valid } as Partial<UKBudget>);
+    const r = await applyBudgetOutcome(db, { fiscalYear: 1953, passed: false, now: new Date() });
     expect(r.ok).toBe(false);
   });
 });
