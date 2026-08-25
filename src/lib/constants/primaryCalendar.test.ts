@@ -3,6 +3,9 @@ import {
   getDefaultPrimaryAllocation,
   getPrimaryWaveSchedule,
   getAllStaggerStates,
+  startedScheduleForFirstOffset,
+  COMPRESSED_SCHEDULE,
+  STRETCHED_SCHEDULE,
   GOP_DEFAULT_ALLOCATION,
   GOP_HYBRID_STATES,
   PRIMARY_WAVES,
@@ -109,5 +112,36 @@ describe("stretched wave schedule", () => {
     const maxOffset = Math.max(...PRIMARY_WAVES_STRETCHED.map((w) => w.turnsRemaining));
     expect(STAGGER_WINDOW_TURNS_STRETCHED).toBe(maxOffset + 1);
     expect(STAGGER_WINDOW_TURNS_STRETCHED).toBe(41);
+  });
+});
+
+describe("startedScheduleForFirstOffset (mid-primary schedule stickiness)", () => {
+  it("locks a primary that opened compressed to the compressed schedule", () => {
+    // The live 1960 race: first wave fired at the compressed lead (turnsRemaining 5).
+    const started = startedScheduleForFirstOffset(PRIMARY_WAVES[0].turnsRemaining);
+    expect(started).toBe(COMPRESSED_SCHEDULE);
+    expect(started?.kind).toBe("compressed");
+  });
+
+  it("locks a primary that opened stretched to the stretched schedule", () => {
+    const started = startedScheduleForFirstOffset(PRIMARY_WAVES_STRETCHED[0].turnsRemaining);
+    expect(started).toBe(STRETCHED_SCHEDULE);
+    expect(started?.kind).toBe("stretched");
+  });
+
+  it("returns null for a not-yet-started primary (no wave history) so the ruleset schedule is used", () => {
+    expect(startedScheduleForFirstOffset(null)).toBeNull();
+    expect(startedScheduleForFirstOffset(undefined)).toBeNull();
+  });
+
+  it("prevents the wave-dump: a compressed-in-flight primary re-stamped to v3 keeps compressed cadence", () => {
+    // At turnsRemaining 5, a stretched schedule would report every remaining
+    // wave as due; the sticky compressed schedule reports exactly one.
+    const dumped = STRETCHED_SCHEDULE.waves.filter((w) => 5 <= w.turnsRemaining).length;
+    const sticky = COMPRESSED_SCHEDULE.waves.filter((w) => 5 <= w.turnsRemaining).length;
+    expect(dumped).toBeGreaterThan(1);
+    expect(sticky).toBe(1);
+    // The guard resolves the compressed schedule from the recorded first offset.
+    expect(startedScheduleForFirstOffset(5)).toBe(COMPRESSED_SCHEDULE);
   });
 });

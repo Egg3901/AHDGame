@@ -121,21 +121,48 @@ export const STAGGER_WINDOW_TURNS_STRETCHED = 41;
 
 /** A resolved wave table plus its stagger-window size. */
 export interface PrimaryWaveSchedule {
+  kind: "compressed" | "stretched";
   waves: PrimaryWave[];
   windowTurns: number;
 }
 
 /** Compressed calendar (v1/v2 live behavior): six waves in the final six turns. */
 export const COMPRESSED_SCHEDULE: PrimaryWaveSchedule = {
+  kind: "compressed",
   waves: PRIMARY_WAVES,
   windowTurns: STAGGER_WINDOW_TURNS,
 };
 
 /** Stretched calendar: same waves spaced across the primary window. */
 export const STRETCHED_SCHEDULE: PrimaryWaveSchedule = {
+  kind: "stretched",
   waves: PRIMARY_WAVES_STRETCHED,
   windowTurns: STAGGER_WINDOW_TURNS_STRETCHED,
 };
+
+/**
+ * Resolve the schedule a primary is ACTUALLY on from the turnsRemaining its
+ * first wave was recorded at, independent of the race's current ruleset stamp.
+ *
+ * A primary keeps the cadence it opened on: a race whose first wave fired at
+ * the compressed lead (turnsRemaining `STAGGER_WINDOW_TURNS - 1`) is mid-flight
+ * on the compressed table, and re-stamping it to a stretched ruleset must NOT
+ * switch it (the stretched waves would all fall due at once because the
+ * 40-turn lead is already gone). Returns null when the recorded offset matches
+ * neither schedule's first wave, so callers fall back to the ruleset schedule.
+ */
+export function startedScheduleForFirstOffset(
+  firstWaveTurnsRemaining: number | null | undefined
+): PrimaryWaveSchedule | null {
+  if (firstWaveTurnsRemaining == null) return null;
+  if (firstWaveTurnsRemaining === COMPRESSED_SCHEDULE.waves[0]?.turnsRemaining) {
+    return COMPRESSED_SCHEDULE;
+  }
+  if (firstWaveTurnsRemaining === STRETCHED_SCHEDULE.waves[0]?.turnsRemaining) {
+    return STRETCHED_SCHEDULE;
+  }
+  return null;
+}
 
 /**
  * Resolve which wave schedule a race runs from its ruleset. "stretched" only
