@@ -299,6 +299,20 @@ export async function accumulateVoteTurn(
         substrate.partyGroupFavorabilityByKey ?? partyGroupFavorabilityByKey;
     }
   }
+  // ── Physical electorate ceiling ────────────────────────────────────────────
+  // The resolved turnout pool can exceed the people who exist: the granular
+  // substrate aggregates turnout over overlapping demographic dimensions, and
+  // on era worlds the 1956 general certified 333% of the voting-eligible
+  // population (the audited engine defect behind 378.8M ballots from 204.9M
+  // residents). A state cannot cast more ballots than it has eligible voters,
+  // so the pool is capped at the electorate and the per-turn slice rescaled
+  // proportionally. Vote SHARES are invariant to the pool basis (the F-4
+  // guarantee above), so this changes reported magnitudes only; turnVoteWeight
+  // conserves the capped pool, making totals invariant to window length too.
+  if (effTotalPool > electorate && electorate > 0) {
+    effEffectiveTurnPool = effEffectiveTurnPool * (electorate / effTotalPool);
+    effTotalPool = electorate;
+  }
   // Determine if we are in the general election phase (after primary end).
   // Turn-first (drift-immune, freezes on pause); falls back to the Date for
   // elections not yet backfilled. `now` is the game-time of this turn, so it

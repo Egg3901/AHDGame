@@ -32,6 +32,8 @@ export interface PresidentMessagingContext {
   contingentResult?: ContingentElectionResult;
   vpCharId?: ObjectId;
   now: Date;
+  /** Majority of the ACTUAL college (era-aware); falls back to 270 if absent. */
+  evNeeded?: number;
 }
 
 export async function sendPresidentResolutionMessaging(
@@ -51,6 +53,7 @@ export async function sendPresidentResolutionMessaging(
     vpCharId,
     now,
   } = ctx;
+  const evNeeded = ctx.evNeeded ?? 270;
 
   await recordPresidentLeaderChange(db, ctx).catch((err) =>
     logger.error("countryHistory", "president leader_change failed", err)
@@ -67,7 +70,7 @@ export async function sendPresidentResolutionMessaging(
       const winMessage = isContingent
         ? tiedEv > 0
           ? `Congratulations! The Electoral College tied ${tiedEv}–${tiedEv} with no majority. The House of Representatives chose you as President with ${houseDelegationVotes} state delegation vote(s).`
-          : `Congratulations! No candidate reached 270 electoral votes. The House of Representatives chose you as President with ${houseDelegationVotes} state delegation vote(s) (${winnerEV} EV).`
+          : `Congratulations! No candidate reached ${evNeeded} electoral votes. The House of Representatives chose you as President with ${houseDelegationVotes} state delegation vote(s) (${winnerEV} EV).`
         : `Congratulations! You won the presidential election with ${winnerEV} electoral votes.`;
       await createNotifications([
         {
@@ -177,7 +180,7 @@ export async function sendPresidentResolutionMessaging(
         const lossMessage = lostHouseBallot
           ? tiedEv > 0 && candidateEv === tiedEv
             ? `The Electoral College tied ${tiedEv}–${tiedEv}. The state-delegation ballot in the House chose another candidate.`
-            : `No candidate reached 270 electoral votes. You finished with ${candidateEv} EV but lost the House state-delegation ballot.`
+            : `No candidate reached ${evNeeded} electoral votes. You finished with ${candidateEv} EV but lost the House state-delegation ballot.`
           : "You did not win the presidential election. Better luck next cycle!";
         loserNotifInputs.push({
           userId: char.userId,
@@ -263,6 +266,7 @@ async function sendPresidentialElectionWebhook(
   db: Db,
   ctx: PresidentMessagingContext
 ): Promise<void> {
+  const evNeeded = ctx.evNeeded ?? 270;
   const {
     ranked,
     candidateMap,
@@ -314,9 +318,9 @@ async function sendPresidentialElectionWebhook(
     : `**${winnerCandidate.characterName}** with ${winnerEV} electoral votes`;
   const footerText = isContingent
     ? contingentResult?.deadlockBreakerUsed
-      ? `House/Senate contingent ballot. Deadlock breaker applied. 270 EV needed for outright victory.`
-      : "Resolved by House state-delegation ballot (26 states). 270 EV needed for outright victory."
-    : "270 electoral votes needed to win";
+      ? `House/Senate contingent ballot. Deadlock breaker applied. ${evNeeded} EV needed for outright victory.`
+      : `Resolved by House state-delegation ballot (majority ${contingentResult?.houseThreshold ?? 26} state delegations). ${evNeeded} EV needed for outright victory.`
+    : `${evNeeded} electoral votes needed to win`;
 
   const vpNameById = new Map<string, string>();
   for (const candidate of candidateMap.values()) {
