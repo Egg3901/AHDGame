@@ -18,6 +18,7 @@ import { RallyPanel } from "./components/RallyPanel";
 import { SuspendEndorsePanel } from "./components/SuspendEndorsePanel";
 import { CampaignManagersPanel } from "./components/CampaignManagersPanel";
 import { RunningMateSurrogatePanel } from "./components/RunningMateSurrogatePanel";
+import { CampaignRoomBriefing } from "./components/CampaignRoomBriefing";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 export default function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -424,6 +425,12 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
             </p>
           </div>
         )}
+
+        {/* Owner: Campaign Room briefing — read-only strategic digest. Only the
+            manager/nominee surface sees it (canManage); a running mate's narrower
+            surrogate view and every non-owner viewer get nothing, keeping the
+            coalition-weakness intel behind the same fog-of-war wall. */}
+        {canManage && campaign.briefing && <CampaignRoomBriefing campaign={campaign} />}
 
         {/* Owner: Resource Overview */}
         {isOwner && campaign.funds !== undefined && <ResourceOverview campaign={campaign} />}

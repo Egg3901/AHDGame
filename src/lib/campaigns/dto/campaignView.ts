@@ -167,6 +167,16 @@ export interface CampaignData {
   opsTrees?: Record<UpgradeCategory, OpsTreeView>;
 
   /**
+   * Campaign-room briefing — an owner-only, READ-ONLY strategic digest that
+   * composes data the election engine / vote tally already produced. It never
+   * recomputes vote math. Present only for owner-access viewers (nominee /
+   * managers / running mate) on a non-archived campaign; `undefined` for every
+   * non-owner, so the coalition-weakness intel a rival must not see stays behind
+   * the same fog-of-war wall as the exact levels.
+   */
+  briefing?: CampaignBriefing;
+
+  /**
    * Phase B — own candidate's Support snapshot for the rally panel.
    * Fog-of-war: only populated when the viewer has owner access (campaign
    * manager / nominee / admin). Opposing viewers see undefined.
@@ -199,6 +209,83 @@ export interface CampaignData {
     eligible: boolean;
     targets: Array<{ id: string; name: string; party: string }>;
   };
+}
+
+/**
+ * Presidential-primary path to victory: pledged-delegate math the primary
+ * stagger phase already awarded (`tally.primaryDelegates`), plus the majority
+ * threshold from the delegate helpers. Nothing here is recomputed — it reads
+ * the stored counts.
+ */
+export interface BriefingDelegatePath {
+  kind: "delegate";
+  /** Delegates the owner candidate has already been awarded. */
+  won: number;
+  /** Majority threshold to clinch the nomination. */
+  needed: number;
+  /** Delegates still required (clamped at 0 once clinched). */
+  remaining: number;
+  /** Delegate leaders in the owner's party, strongest first. */
+  leaders: { candidateId: string; name: string; delegates: number }[];
+}
+
+/**
+ * Presidential-general path to victory: electoral-vote standing plus the
+ * closest states, derived from the tally's per-unit vote totals via the
+ * existing general-election view model. Descriptive only.
+ */
+export interface BriefingTippingPath {
+  kind: "tipping";
+  /** Electoral votes the owner candidate currently leads. */
+  evHave: number;
+  /** Electoral-college majority for the live apportionment. */
+  evNeeded: number;
+  /** Closest states by popular-vote margin, closest first. */
+  tippingStates: { stateId: string; name: string; marginPp: number }[];
+}
+
+/**
+ * A census bucket where the owner candidate is weakest, read straight from the
+ * factor ledger's per-bucket appeal share. Buckets, never archetypes.
+ */
+export interface BriefingCoalitionBucket {
+  /** Census bucket key ("dimension:bucket", e.g. "race:white"). */
+  bucket: string;
+  /** Share of the candidate's appeal contributed by this bucket. */
+  appealShare: number;
+  /** Contribution-weighted mean economic lean of the bucket. */
+  demoEP: number;
+  /** Contribution-weighted mean social lean of the bucket. */
+  demoSP: number;
+}
+
+export interface CampaignBriefing {
+  /**
+   * Path to victory. Delegate math in the primary phase, tipping-point EV math
+   * in the general phase. Absent for races / phases where neither applies
+   * (e.g. a down-ballot campaign, or a presidential race with no tally yet).
+   */
+  path?: BriefingDelegatePath | BriefingTippingPath;
+  /**
+   * Treasury runway: how many turns the current balance lasts at the current
+   * net burn. `turnsOfRunway` is null when net income is non-negative (no burn,
+   * so the runway is effectively unbounded).
+   */
+  cashRunway: { funds: number; netPerTurn: number; turnsOfRunway: number | null };
+  /**
+   * The owner candidate's weakest census buckets, weakest first. Empty for
+   * non-presidential races or before the ledger is first teed.
+   */
+  coalitionWeakness: BriefingCoalitionBucket[];
+  /** Per-lever operations saturation: invested branch levels vs the lever max. */
+  opsSaturation: { category: string; level: number; max: number }[];
+  /** Next affordable-to-consider upgrades and what each buys, for the turn plan. */
+  tradeoffs: {
+    actionId: string;
+    label: string;
+    cost: { funds: number; actions: number };
+    expectedEffect: string;
+  }[];
 }
 
 export interface OpsBranchCostView {
