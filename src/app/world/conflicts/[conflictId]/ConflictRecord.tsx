@@ -38,6 +38,12 @@ export interface ConflictRecordView {
   /** Faction entity on a proxy-war side (orients the front; not a belligerent). */
   sideAFaction?: string;
   sideBFaction?: string;
+  /**
+   * Belligerents present under a mutual-defence treaty rather than their own
+   * declaration, already humanised by the page. Optional so a conflict with none (and
+   * every existing test fixture) renders unchanged.
+   */
+  treatyNotes?: { country: string; organization: string; defending: string }[];
   /** Side B's share of the host, 0–100, and where it opened. */
   control: number;
   controlStart: number;
@@ -547,6 +553,18 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
                 </div>
               </div>
             </div>
+            {(c.treatyNotes ?? []).length > 0 ? (
+              <div style={{ marginTop: 10 }}>
+                {c.treatyNotes!.map((n) => (
+                  <div
+                    key={n.country}
+                    style={{ font: `500 9.5px ${mono}`, color: MIL_COLOR.textFaint, marginTop: 2 }}
+                  >
+                    {n.country} entered under the {n.organization} to defend {n.defending}.
+                  </div>
+                ))}
+              </div>
+            ) : null}
             <div style={{ marginTop: 14 }}>
               <ControlTrack pctA={pctA} />
             </div>

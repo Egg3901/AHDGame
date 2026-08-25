@@ -24,6 +24,7 @@ import { getCabinetSettingsCollection } from "@/lib/db/collections/cabinetSettin
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import { conflictTier, belligerentSideOf } from "@/lib/military/conflictVisibility";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { INTERNATIONAL_ORGANIZATIONS } from "@/lib/constants/internationalOrganizations";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import { READINESS_DRIFT_STEP } from "@/lib/military/readinessDrift";
 import { getDefenseAppropriation } from "@/lib/db/collections/defenseAppropriation";
@@ -499,6 +500,15 @@ export default async function ConflictRecordPage({
     sideBCountries,
     sideAFaction: doc.sideA.factionEntity,
     sideBFaction: doc.sideB.factionEntity,
+    // Humanised here rather than in the component: the record is a presentational
+    // client component and has no business reaching for country or org constants.
+    treatyNotes: (doc.treatyEntries ?? []).map((e) => ({
+      country: COUNTRY_CONFIGS[e.countryId]?.name ?? e.countryId,
+      organization:
+        INTERNATIONAL_ORGANIZATIONS[e.organizationId as keyof typeof INTERNATIONAL_ORGANIZATIONS]
+          ?.name ?? e.organizationId,
+      defending: COUNTRY_CONFIGS[e.defending]?.name ?? e.defending,
+    })),
     control: doc.control,
     controlStart,
     hostRegionCodes,
