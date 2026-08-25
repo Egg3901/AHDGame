@@ -50,6 +50,7 @@ import { migration as backfillPoliticalLegislationTypes } from "./entries/2026-0
 import { migration as seedGlobalResponseFoundations } from "./entries/2026-08-23-seed-global-response-foundations";
 import { migration as repairKazakhLawLevels } from "./entries/2026-08-23-repair-kazakh-law-levels";
 import { migration as crisesLivingEventPartialIndex } from "./entries/2026-08-25-crises-living-event-partial-index";
+import { migration as ukRegionalPartyOrgBackfill } from "./entries/2026-08-26-uk-regional-party-org-backfill";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -134,6 +135,10 @@ export const MIGRATIONS: Migration[] = [
   // Per-turn E11000 on crises_living_event: unset null keys, rebuild the
   // sparse unique index as partial-on-string (GlitchTip AHD-1JV).
   crisesLivingEventPartialIndex,
+  // The UK regional-party contest gate is gone (SNP/Plaid/DUP/SF/UUP now stand
+  // UK-wide); give them the statePartyOrg rows they were never seeded outside
+  // their home nation, or the presence gate keeps them off the ballot anyway.
+  ukRegionalPartyOrgBackfill,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.

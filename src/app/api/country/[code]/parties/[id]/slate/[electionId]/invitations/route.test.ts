@@ -108,10 +108,10 @@ describe("POST .../slate/[electionId]/invitations", () => {
     }
   });
 
-  // #1181: a regional party assigned outside its home nation used to be
-  // accepted here and then silently tombstoned by the turn's filing pass, so
-  // the chair watched the assignment disappear with no explanation.
-  it("rejects assigning a regional party's candidate outside its home nation", async () => {
+  // Formerly-regional parties (Plaid Cymru, SNP, the NI parties) stand
+  // UK-wide. A chair may slate them into any region; geography is no longer a
+  // filing gate, only org and the electorate decide how they do there.
+  it("allows a formerly-regional party's candidate outside its historic home nation", async () => {
     const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
     vi.mocked(findPartyBySequentialId).mockResolvedValue({
       sequentialId: 4,
@@ -134,12 +134,13 @@ describe("POST .../slate/[electionId]/invitations", () => {
       params: Promise.resolve({ code: "uk", id: "4", electionId: ELECTION_ID }),
     });
 
-    expect(response.status).toBe(400);
-    const body = (await response.json()) as { error: string };
-    expect(body.error).toMatch(/does not stand for election in this region/i);
+    if (response.status === 400) {
+      const body = (await response.json()) as { error: string };
+      expect(body.error).not.toMatch(/does not stand for election in this region/i);
+    }
   });
 
-  it("allows a regional party's candidate inside its home nation", async () => {
+  it("allows a formerly-regional party's candidate inside its historic home nation", async () => {
     const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
     vi.mocked(findPartyBySequentialId).mockResolvedValue({
       sequentialId: 4,

@@ -1147,7 +1147,7 @@ describe("fileAcceptedSlateRows", () => {
     expect(inserted).toHaveLength(2);
   });
 
-  it("records ineligible_region when the party cannot contest the race's region", async () => {
+  it("files a formerly-regional party's NPP outside its historic home nation", async () => {
     const electionId = new ObjectId();
     const election: Election = {
       _id: electionId,
@@ -1192,7 +1192,8 @@ describe("fileAcceptedSlateRows", () => {
       electionCandidates: inserted,
     });
 
-    // Plaid Cymru stands in Wales only, so an East Midlands seat is out.
+    // Plaid Cymru stands UK-wide, so an East Midlands seat files like any
+    // other. The NPP is homed in EMI, so the home-state rule is satisfied too.
     const summary = await fileAcceptedSlateRows(
       makeCtx(db, [npp], {
         partyByCompositeKey: new Map([
@@ -1201,11 +1202,11 @@ describe("fileAcceptedSlateRows", () => {
       })
     );
 
-    expect(summary.filed).toBe(0);
-    expect(summary.skipped).toBe(1);
-    expect(inserted).toHaveLength(0);
-    expect(candidateRow.status).toBe("withdrawn");
-    expect(candidateRow.refusalReason).toBe("ineligible_region");
+    expect(summary.filed).toBe(1);
+    expect(summary.skipped).toBe(0);
+    expect(inserted).toHaveLength(1);
+    expect(candidateRow.status).toBe("filed");
+    expect(candidateRow.refusalReason).toBeNull();
   });
 
   it("isolates a row whose insert throws so the rest of the pass still files", async () => {
