@@ -1,5 +1,9 @@
 import type { CommodityType, ExtractableResource } from "@/lib/constants/commodities";
-import { EXTRACTABLE_RESOURCES } from "@/lib/constants/commodities";
+import {
+  EXTRACTABLE_RESOURCES,
+  eraScaledBasePrices,
+  extractionOutputScaleFor,
+} from "@/lib/constants/commodities";
 
 /**
  * Extraction capacity → revenue haircut.
@@ -23,6 +27,9 @@ import { EXTRACTABLE_RESOURCES } from "@/lib/constants/commodities";
 
 /** Transition window (turns) over which the capacity haircut fades to full. 5 game years. */
 export const EXTRACTION_CAPACITY_HAIRCUT_TURNS = 240;
+
+/** One-turn utilization drop that restarts the capacity haircut ramp. */
+export const RAMP_REANCHOR_DELTA = 0.25;
 
 /** Utilization below this is treated as "capacity bound" for display/alerts. */
 export const CAPACITY_BINDING_THRESHOLD = 0.9;
@@ -73,24 +80,27 @@ export function haircutScarcityRelief(
 }
 
 /**
- * Revenue-weighted capacity utilization for an extraction sector.
- * weightedUtil = Σ(supplyRate_r × multiplier_r) / Σ(supplyRate_r)
- *
- * `multipliers` is the per-sector map from computeExtractionCapacityMultipliers
- * (resource → 0..1). Resources the sector produces but that are missing from the
- * map are treated as unconstrained (multiplier 1) — a state with no capacity doc
- * is uncapped. Returns 1 (no haircut) when the sector has no extractable output.
+ * Desired extraction output on the same unit basis as the world supply ledger.
  */
-export function weightedCapacityUtilization(
+export function extractionDesiredUnits(
+  revenueAnchor: number,
+  supplyRate: number,
+  resource: ExtractableResource,
+  eraUnitScale: number,
+  extractionOutputScaleEnabled: boolean
+): number {
+  return (
+    (revenueAnchor *
+      supplyRate *
+      extractionOutputScaleFor(resource, extractionOutputScaleEnabled)) /
+    eraScaledBasePrices(eraUnitScale)[resource]
+  );
+}
+
+function weightedCapacityUtilizationWithRelief(
   supplyRates: Partial<Record<CommodityType, number>>,
   multipliers: Partial<Record<ExtractableResource, number>> | undefined,
-  /**
-   * Optional per-resource scarcity relief (0..1, from haircutScarcityRelief).
-   * Lifts that resource's utilization leg toward 1 — a scarce resource's
-   * physical clamp still limits market supply, but stops clawing back the
-   * revenue that makes mining it worthwhile.
-   */
-  reliefByResource?: Partial<Record<ExtractableResource, number>>
+  reliefByResource: Partial<Record<ExtractableResource, number>> | undefined
 ): { utilization: number; bindingResource: ExtractableResource | null } {
   let rateSum = 0;
   let weighted = 0;
@@ -112,11 +122,87 @@ export function weightedCapacityUtilization(
   }
 
   if (rateSum <= 0) return { utilization: 1, bindingResource: null };
-  const utilization = weighted / rateSum;
-  // Only report a binding resource when it is actually constrained.
   return {
-    utilization,
+    utilization: weighted / rateSum,
     bindingResource: minMult < 1 ? bindingResource : null,
+  };
+}
+
+/**
+ * Revenue-weighted capacity utilization for an extraction sector.
+ * weightedUtil = Σ(supplyRate_r × multiplier_r) / Σ(supplyRate_r)
+ *
+ * `multipliers` is the per-sector map from computeExtractionCapacityMultipliers
+ * (resource → 0..1). Resources the sector produces but that are missing from the
+ * map are treated as unconstrained (multiplier 1) — a state with no capacity doc
+ * is uncapped. Returns 1 (no haircut) when the sector has no extractable output.
+ */
+export function weightedCapacityUtilization(
+  supplyRates: Partial<Record<CommodityType, number>>,
+  multipliers: Partial<Record<ExtractableResource, number>> | undefined
+): { utilization: number; bindingResource: ExtractableResource | null } {
+  return weightedCapacityUtilizationWithRelief(supplyRates, multipliers, undefined);
+}
+
+/**
+ * Capacity utilization with scarcity relief capped by the physical deposit
+ * ceiling.
+ *
+ * The relief exists so a shortage stops taxing exactly the extraction revenue
+ * the economy needs. Against the corrected ledger-basis output figures,
+ * though, an unconstrained relief can lift utilization fully to 1 for a
+ * sector whose desired output is many times its state's capacity: the corp
+ * would book revenue for ore the deposits cannot physically yield.
+ *
+ * The raw capacity ratio bounds that: the share of the sector's DESIRED
+ * output (in corrected units) its multipliers actually permit,
+ *
+ *   ratio = Σ(units_r × multiplier_r) / Σ(units_r)
+ *
+ * The relieved, rate-weighted utilization is honored only up to this ratio;
+ * past it the physical clamp wins and the unrelieved figure is returned.
+ * When no corrected units are recorded this is exactly
+ * weightedCapacityUtilization.
+ */
+export function scarcityReliefCappedUtilization(
+  supplyRates: Partial<Record<CommodityType, number>>,
+  multipliers: Partial<Record<ExtractableResource, number>> | undefined,
+  reliefByResource?: Partial<Record<ExtractableResource, number>>,
+  /** Corrected desired output per resource, same basis as the multipliers. */
+  desiredOutputUnits?: Partial<Record<ExtractableResource, number>>
+): { utilization: number; bindingResource: ExtractableResource | null } {
+  const relieved = weightedCapacityUtilizationWithRelief(
+    supplyRates,
+    multipliers,
+    reliefByResource
+  );
+
+  let unitSum = 0;
+  let unitWeightedRaw = 0;
+  for (const resource of EXTRACTABLE_RESOURCES) {
+    const units = desiredOutputUnits?.[resource] ?? 0;
+    if (!(units > 0)) continue;
+    unitSum += units;
+    unitWeightedRaw += units * (multipliers?.[resource] ?? 1);
+  }
+  if (!(unitSum > 0)) return relieved;
+  const rawCapacityRatio = unitWeightedRaw / unitSum;
+  if (relieved.utilization <= rawCapacityRatio) return relieved;
+
+  // The cap binds: report the physical ratio and the resource that binds it.
+  let minMult = Infinity;
+  let binding: ExtractableResource | null = null;
+  for (const resource of EXTRACTABLE_RESOURCES) {
+    if (!((desiredOutputUnits?.[resource] ?? 0) > 0)) continue;
+    const rawMult = multipliers?.[resource] ?? 1;
+    if (rawMult < minMult) {
+      minMult = rawMult;
+      binding = resource;
+    }
+  }
+  return {
+    utilization: rawCapacityRatio,
+    bindingResource: minMult < 1 ? binding : null,
   };
 }
 

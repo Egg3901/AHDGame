@@ -102,11 +102,17 @@ export interface CampaignStrengthPullbackCandidate {
 }
 
 export function campaignStrengthVoteMultiplier(
-  campaignStrength: number | null | undefined
+  campaignStrength: number | null | undefined,
+  /**
+   * Asymptotic bonus cap, supplied by the race's frozen presidential ruleset
+   * (elections/presidentialRuleset.ts). Defaults to the live constant so
+   * non-presidential callers and legacy races are unchanged.
+   */
+  maxBonus: number = CAMPAIGN_STRENGTH_MAX_BONUS
 ): number {
   const strength = Math.max(0, campaignStrength ?? 0);
   if (strength === 0) return 1;
-  return 1 + CAMPAIGN_STRENGTH_MAX_BONUS * (1 - Math.exp(-strength / CAMPAIGN_STRENGTH_TAU));
+  return 1 + maxBonus * (1 - Math.exp(-strength / CAMPAIGN_STRENGTH_TAU));
 }
 
 export function campaignStrengthBoostPercent(campaignStrength: number | null | undefined): number {

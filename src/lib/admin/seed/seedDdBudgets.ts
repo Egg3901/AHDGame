@@ -104,7 +104,8 @@ export async function seedDdBudgets(
   const countryOwnedSeedData = generateCountryOwnedSeedData(
     statesForBudgets,
     preset,
-    ddGameConfig?.commandEconomyEnabled === true
+    ddGameConfig?.commandEconomyEnabled === true,
+    log
   );
   const ddCorpData = countryOwnedSeedData.filter(
     (entry) => entry.corporation.countryOwnerId === "DD"

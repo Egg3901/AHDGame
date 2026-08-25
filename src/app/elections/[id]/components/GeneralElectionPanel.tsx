@@ -19,6 +19,8 @@ import {
   assessContingentEvRisk,
   isContingentResolutionMode,
   PRESIDENTIAL_EV_NEEDED,
+  electoralMajorityFor,
+  collegeSizeFromEvByState,
   resolvePresidentialWinnerCandidateId,
 } from "@/lib/elections/presidentialResolutionDisplay";
 import { ContingentRiskBanner } from "./ContingentRiskBanner";
@@ -236,8 +238,12 @@ export function GeneralElectionPanel({
 
   // Presidential election - enhanced table view
   if (isPresident) {
-    const totalEV = 538;
-    const evNeeded = PRESIDENTIAL_EV_NEEDED;
+    // Era-aware college: sum the active apportionment's per-state EVs (531 on
+    // 1950s worlds, 538 modern) and take its majority; fall back to the modern
+    // constants when the payload predates evByState.
+    const liveCollege = collegeSizeFromEvByState(tally.evByState);
+    const totalEV = liveCollege > 0 ? liveCollege : 538;
+    const evNeeded = liveCollege > 0 ? electoralMajorityFor(liveCollege) : PRESIDENTIAL_EV_NEEDED;
     const contingentRisk =
       !isEnded && electoralVotes ? assessContingentEvRisk(electoralVotes, evNeeded) : null;
 
