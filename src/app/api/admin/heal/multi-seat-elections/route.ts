@@ -7,6 +7,8 @@ import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";
 import { allocateSeats } from "@/lib/turn/election/seatAllocation";
+import { loadApportionment } from "@/lib/elections/apportionment";
+import { getGameStateCollection } from "@/lib/db/collections";
 import type {
   Election,
   ElectionVoteTally,
@@ -65,6 +67,13 @@ export async function GET() {
       });
     }
 
+    // House seat counts are era- and census-dependent. Without the live
+    // apportionment `allocateSeats` falls back to the modern 2020 map, so on a
+    // 1953 world this heal "corrected" delegations to the wrong size and undid
+    // the census sizing the turn loop maintains (#1190).
+    const gs = await (await getGameStateCollection(db)).findOne({ _id: "current" });
+    const { houseSeats } = await loadApportionment(db, gs?.preset, gs?.currentYear);
+
     const electionIds = recentElections.map((e) => e._id);
 
     // Get vote tallies for these elections
@@ -108,7 +117,8 @@ export async function GET() {
         election.state,
         totalSeats,
         ranked,
-        totalVotesCast
+        totalVotesCast,
+        houseSeats
       );
 
       // Get current officials for this election
@@ -187,6 +197,13 @@ export async function POST() {
       });
     }
 
+    // House seat counts are era- and census-dependent. Without the live
+    // apportionment `allocateSeats` falls back to the modern 2020 map, so on a
+    // 1953 world this heal "corrected" delegations to the wrong size and undid
+    // the census sizing the turn loop maintains (#1190).
+    const gs = await (await getGameStateCollection(db)).findOne({ _id: "current" });
+    const { houseSeats } = await loadApportionment(db, gs?.preset, gs?.currentYear);
+
     const electionIds = recentElections.map((e) => e._id);
 
     // Get vote tallies and candidates
@@ -235,7 +252,8 @@ export async function POST() {
         election.state,
         totalSeats,
         ranked,
-        totalVotesCast
+        totalVotesCast,
+        houseSeats
       );
 
       // Get election's candidates

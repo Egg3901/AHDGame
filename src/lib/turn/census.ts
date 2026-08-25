@@ -100,20 +100,30 @@ export async function runCensus(db: Db, _turn: number): Promise<CensusResult> {
   }));
   if (ops.length > 0) await db.collection<State>("states").bulkWrite(ops);
 
-  // Redistricting (flag-gated): regenerate the maps of states whose seat count
-  // changed, plus commission-run states that auto-neutralize each census. Neutral
-  // rebuilds; a legislature-drawn trifecta may still redraw this census.
-  if (gameState?.redistrictingEnabled) {
-    const changed = deltas.map((d) => d.state);
-    const autoNeutral = await getAutoNeutralizeStateIds(db, "US");
-    const toRegen = [...new Set([...changed, ...autoNeutral])];
-    if (toRegen.length > 0) {
-      await regenerateCongressionalDistricts(db, {
-        countryId: "US",
-        stateIds: toRegen,
-        now: new Date(),
-      });
-    }
+  // Regenerate the maps of states whose seat count changed, plus — only when the
+  // redistricting system is on — commission-run states that auto-neutralize each
+  // census. Neutral rebuilds; a legislature-drawn trifecta may still redraw this
+  // census.
+  //
+  // The reapportioned states are redrawn REGARDLESS of the flag (#1190). A
+  // state's district docs are its delegation size of record for
+  // `districtedHouseResolution`, and they are seeded unconditionally at world
+  // seed, so leaving them at the old count on a flag-off world means the map
+  // simply disagrees with `houseDistricts`. Turning the flag on later then
+  // resurrects the exact mismatch this ticket fixes: allocation over a stale
+  // district count against a correctly-sized race. The flag gates whether
+  // districts DRIVE resolution, not whether they are accurate.
+  const changed = deltas.map((d) => d.state);
+  const autoNeutral = gameState?.redistrictingEnabled
+    ? await getAutoNeutralizeStateIds(db, "US")
+    : [];
+  const toRegen = [...new Set([...changed, ...autoNeutral])];
+  if (toRegen.length > 0) {
+    await regenerateCongressionalDistricts(db, {
+      countryId: "US",
+      stateIds: toRegen,
+      now: new Date(),
+    });
   }
 
   await db.collection<GameState>("gameState").updateOne({ _id: "current" } as Partial<GameState>, {
