@@ -49,6 +49,7 @@ import { migration as campaignOpsTrees } from "./entries/2026-08-18-campaign-ops
 import { migration as backfillPoliticalLegislationTypes } from "./entries/2026-08-19-backfill-political-legislation-types";
 import { migration as seedGlobalResponseFoundations } from "./entries/2026-08-23-seed-global-response-foundations";
 import { migration as repairKazakhLawLevels } from "./entries/2026-08-23-repair-kazakh-law-levels";
+import { migration as crisesLivingEventPartialIndex } from "./entries/2026-08-25-crises-living-event-partial-index";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -130,6 +131,9 @@ export const MIGRATIONS: Migration[] = [
   // Ticket #1174: reconcile KAZ laws from their durable enacted-law and
   // pre-executive-order records after legacy order expiry left mismatched rows.
   repairKazakhLawLevels,
+  // Per-turn E11000 on crises_living_event: unset null keys, rebuild the
+  // sparse unique index as partial-on-string (GlitchTip AHD-1JV).
+  crisesLivingEventPartialIndex,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.
