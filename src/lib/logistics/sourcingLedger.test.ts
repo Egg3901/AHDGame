@@ -13,6 +13,8 @@ function baseResult(overrides: Partial<SourcingResult> = {}): SourcingResult {
     importAggregatesByCountry: new Map(),
     unplacedSupplyByState: new Map(),
     deliveryLimitedSupplyByState: new Map(),
+    freightChargesByDestState: new Map(),
+    haulRevenueByOriginState: new Map(),
     ...overrides,
   };
 }
@@ -42,6 +44,8 @@ describe("buildSourcingDocs", () => {
       importAggregatesByCountry: new Map(),
       unplacedSupplyByState: new Map(),
       deliveryLimitedSupplyByState: new Map(),
+      freightChargesByDestState: new Map(),
+      haulRevenueByOriginState: new Map(),
     };
 
     const { commodityDocs } = buildSourcingDocs(result, 365, new Date("2026-08-25T00:00:00.000Z"));
@@ -101,5 +105,39 @@ describe("buildSourcingDocs", () => {
     );
     expect(networkDoc.importAggregates.US).toEqual({ tariffPaid: 12.35, importValue: 100.01 });
     expect(networkDoc.importAggregates.UK).toBeUndefined();
+  });
+
+  it("writes no freight billing fields unless the flag asks for them", () => {
+    const result = baseResult({
+      freightChargesByDestState: new Map([["A1", new Map([["coal" as CommodityType, 400]])]]),
+      haulRevenueByOriginState: new Map([["A2", 400]]),
+    });
+    const { networkDoc } = buildSourcingDocs(result, 10, new Date());
+    expect(networkDoc.freightCharges).toBeUndefined();
+    expect(networkDoc.freightHaulRevenue).toBeUndefined();
+  });
+
+  it("persists freight billing aggregates rounded to 2 decimals when included", () => {
+    const result = baseResult({
+      freightChargesByDestState: new Map([
+        [
+          "A1",
+          new Map([
+            ["coal" as CommodityType, 400.005],
+            ["oil" as CommodityType, 0], // zero -> omitted
+          ]),
+        ],
+        ["A3", new Map([["oil" as CommodityType, 0]])], // empty after omit -> state dropped
+      ]),
+      haulRevenueByOriginState: new Map([
+        ["A2", 400.005],
+        ["A4", 0],
+      ]),
+    });
+    const { networkDoc } = buildSourcingDocs(result, 10, new Date(), {
+      includeFreightBilling: true,
+    });
+    expect(networkDoc.freightCharges).toEqual({ A1: { coal: 400.01 } });
+    expect(networkDoc.freightHaulRevenue).toEqual({ A2: 400.01 });
   });
 });

@@ -119,6 +119,14 @@ export async function buildCorporationLookups(
     moneyWiringEnabled?: boolean;
     /** Use lagged freight-delivery availability as a local input constraint. */
     freightSettlementActive?: boolean;
+    /**
+     * Canonical freight billing v1 (issue #897):
+     * gameConfig.canonicalFreightBillingEnabled. When true, loads last turn's
+     * sourcingNetworkLoad billing aggregates as `freightChargesByDestState` /
+     * `freightHaulRevenueByOriginState`. Omitted/false keeps both maps empty,
+     * so the corporation turn computes and writes nothing.
+     */
+    canonicalFreightBillingEnabled?: boolean;
   }
 ): Promise<CorporationLookups> {
   await reconcileSignedTariffBills(db);
@@ -1104,8 +1112,13 @@ export async function buildCorporationLookups(
   // its doc for `turn`, so on a normal cadence that's turn - 1, but reading
   // <= current turn survives a doc gap without going in-turn-mutation-order
   // sensitive.
+  //
+  // Canonical freight billing (issue #897) shares the same doc and the same
+  // lag, so one fetch serves both flags.
   const landedPremiumByState = new Map<string, Map<CommodityType, number>>();
-  if (options?.moneyWiringEnabled) {
+  const freightChargesByDestState = new Map<string, Map<CommodityType, number>>();
+  const freightHaulRevenueByOriginState = new Map<string, number>();
+  if (options?.moneyWiringEnabled || options?.canonicalFreightBillingEnabled) {
     const networkDoc = await db
       .collection<SourcingNetworkDoc>("sourcingNetworkLoad")
       .find({ turn: { $lte: embargoTurn } })
@@ -1113,7 +1126,7 @@ export async function buildCorporationLookups(
       .limit(1)
       .toArray();
     const doc = networkDoc[0];
-    if (doc?.landedPremiums) {
+    if (options?.moneyWiringEnabled && doc?.landedPremiums) {
       for (const [stateId, byCommodity] of Object.entries(doc.landedPremiums)) {
         const m = new Map<CommodityType, number>();
         for (const [commodity, premium] of Object.entries(byCommodity)) {
@@ -1121,6 +1134,19 @@ export async function buildCorporationLookups(
             m.set(commodity as CommodityType, premium);
         }
         if (m.size > 0) landedPremiumByState.set(stateId, m);
+      }
+    }
+    if (options?.canonicalFreightBillingEnabled) {
+      for (const [stateId, byCommodity] of Object.entries(doc?.freightCharges ?? {})) {
+        const m = new Map<CommodityType, number>();
+        for (const [commodity, charge] of Object.entries(byCommodity)) {
+          if (typeof charge === "number" && charge > 0) m.set(commodity as CommodityType, charge);
+        }
+        if (m.size > 0) freightChargesByDestState.set(stateId, m);
+      }
+      for (const [stateId, revenue] of Object.entries(doc?.freightHaulRevenue ?? {})) {
+        if (typeof revenue === "number" && revenue > 0)
+          freightHaulRevenueByOriginState.set(stateId, revenue);
       }
     }
   }
@@ -1170,6 +1196,8 @@ export async function buildCorporationLookups(
     reachablePriceRatioByCountry,
     reachableInputPriceRatiosByCountry,
     landedPremiumByState,
+    freightChargesByDestState,
+    freightHaulRevenueByOriginState,
     nationalCommodityBalancesByCountry,
     countryClearingBooks,
     exportIntensityByCountry,

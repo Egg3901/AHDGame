@@ -52,13 +52,34 @@ export interface SourcingNetworkDoc {
   landedPremiums: Record<string, Record<CommodityType, number>>;
   /** Per buyer country: tariff paid and import value, rounded to 2 decimals. Omits zero entries. */
   importAggregates: Record<string, { tariffPaid: number; importValue: number }>;
+  /**
+   * Canonical freight billing v1 (gameConfig.canonicalFreightBillingEnabled):
+   * per destination state, per commodity, the shipping money buyers there owe
+   * for accepted domestic hauls, rounded to 2 decimals. Only written while the
+   * flag is on; absent otherwise, so a world with billing off persists nothing
+   * new. The corporation turn reads it one turn lagged, like landedPremiums.
+   */
+  freightCharges?: Record<string, Partial<Record<CommodityType, number>>>;
+  /**
+   * The transfer's other half: per origin state, the shipping money its
+   * freight network earned, rounded to 2 decimals. Same gate and cadence as
+   * `freightCharges`.
+   */
+  freightHaulRevenue?: Record<string, number>;
   createdAt: Date;
 }
 
 export function buildSourcingDocs(
   result: SourcingResult,
   turn: number,
-  now: Date
+  now: Date,
+  options?: {
+    /**
+     * gameConfig.canonicalFreightBillingEnabled. Off (the default) writes no
+     * billing fields at all — the aggregates exist only inside the pure pass.
+     */
+    includeFreightBilling?: boolean;
+  }
 ): { commodityDocs: CommoditySourcingDoc[]; networkDoc: SourcingNetworkDoc } {
   const flowsByCommodity = new Map<CommodityType, SourcingFlow[]>();
   for (const flow of result.flows) {
@@ -131,8 +152,34 @@ export function buildSourcingDocs(
     importAggregates[countryId] = { tariffPaid, importValue };
   }
 
-  return {
-    commodityDocs,
-    networkDoc: { turn, freightTeuByState, landedPremiums, importAggregates, createdAt: now },
+  const networkDoc: SourcingNetworkDoc = {
+    turn,
+    freightTeuByState,
+    landedPremiums,
+    importAggregates,
+    createdAt: now,
   };
+
+  if (options?.includeFreightBilling) {
+    const freightCharges: Record<string, Partial<Record<CommodityType, number>>> = {};
+    for (const [stateId, byCommodity] of result.freightChargesByDestState) {
+      const perCommodity: Partial<Record<CommodityType, number>> = {};
+      for (const [commodity, charge] of byCommodity) {
+        const rounded = Math.round(charge * 100) / 100;
+        if (rounded <= 0) continue;
+        perCommodity[commodity] = rounded;
+      }
+      if (Object.keys(perCommodity).length > 0) freightCharges[stateId] = perCommodity;
+    }
+    const freightHaulRevenue: Record<string, number> = {};
+    for (const [stateId, revenue] of result.haulRevenueByOriginState) {
+      const rounded = Math.round(revenue * 100) / 100;
+      if (rounded <= 0) continue;
+      freightHaulRevenue[stateId] = rounded;
+    }
+    networkDoc.freightCharges = freightCharges;
+    networkDoc.freightHaulRevenue = freightHaulRevenue;
+  }
+
+  return { commodityDocs, networkDoc };
 }
