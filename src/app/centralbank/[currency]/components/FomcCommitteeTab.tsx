@@ -25,11 +25,26 @@ interface MeetingState {
   viewerCanVote: boolean;
 }
 
+interface ResolvedMeeting {
+  motion: "hike" | "cut" | "hold";
+  proposedDelta: number;
+  result: "passed" | "failed" | undefined;
+  openedAtTurn: number;
+  resolvedAtTurn: number | null;
+  agree: number;
+  disagree: number;
+  abstain: number;
+}
+
 interface CommitteeState {
   hasCommittee: boolean;
   primeRate: number;
   rateChangesThisTerm: number;
   rateChangesPerTerm: number;
+  currentTurn?: number;
+  nextMeetingAtTurn?: number | null;
+  termEndsAtTurn?: number | null;
+  meetingHistory?: ResolvedMeeting[];
   canNominate: boolean;
   viewerSeatId: string | null;
   board: BoardSeat[];
@@ -142,6 +157,22 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
 
   const { board, meeting } = state;
   const budgetLeft = state.rateChangesPerTerm - state.rateChangesThisTerm;
+  const currentTurn = state.currentTurn ?? null;
+  const turnsToNextSession =
+    meeting === null && state.nextMeetingAtTurn != null && currentTurn != null
+      ? Math.max(0, state.nextMeetingAtTurn - currentTurn)
+      : null;
+  const turnsToTermEnd =
+    state.termEndsAtTurn != null && currentTurn != null
+      ? Math.max(0, state.termEndsAtTurn - currentTurn)
+      : null;
+
+  const sessionLine =
+    turnsToNextSession == null
+      ? null
+      : turnsToNextSession <= 0
+        ? "The next session is due any turn now."
+        : `The next session opens in ${turnsToNextSession} turn${turnsToNextSession === 1 ? "" : "s"} (one every 8 turns).`;
 
   return (
     <div className="space-y-6">
@@ -153,6 +184,10 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
             The committee votes on rate moves. A motion passes only on a majority of the full board;
             no-shows abstain. {budgetLeft} of {state.rateChangesPerTerm} rate changes remain this
             term.
+            {budgetLeft <= 0 &&
+              (turnsToTermEnd != null
+                ? ` The budget resets when the term ends in ${turnsToTermEnd} turn${turnsToTermEnd === 1 ? "" : "s"}.`
+                : " The budget resets when the term ends.")}
           </p>
         </div>
 
@@ -191,9 +226,54 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
             )}
           </div>
         ) : (
-          <p className="px-5 py-4 text-sm text-muted">No meeting is currently in session.</p>
+          <div className="px-5 py-4">
+            <p className="text-sm text-muted">No meeting is currently in session.</p>
+            {sessionLine && <p className="mt-1 text-xs text-muted">{sessionLine}</p>}
+          </div>
         )}
       </div>
+
+      {/* Recent sessions — how past votes went */}
+      {(state.meetingHistory?.length ?? 0) > 0 && (
+        <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
+          <div className="border-b border-card-border px-5 py-4">
+            <h3 className="text-sm font-semibold text-foreground">Recent sessions</h3>
+            <p className="mt-0.5 text-xs text-muted">How the last votes went, newest first.</p>
+          </div>
+          <ul className="divide-y divide-card-border">
+            {[...state.meetingHistory!].reverse().map((m, i) => (
+              <li
+                key={`${m.openedAtTurn}-${i}`}
+                className="flex flex-wrap items-center gap-2 px-5 py-3"
+              >
+                <span className="text-sm font-medium text-foreground">
+                  {MOTION_LABEL[m.motion]}
+                  {m.motion !== "hold" &&
+                    ` (${m.proposedDelta > 0 ? "+" : ""}${m.proposedDelta.toFixed(2)}pp)`}
+                </span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                    m.result === "passed"
+                      ? "bg-primary/10 text-primary"
+                      : "bg-danger/10 text-danger"
+                  }`}
+                >
+                  {m.result === "passed" ? "Passed" : m.result === "failed" ? "Failed" : "Resolved"}
+                </span>
+                <span className="ml-auto text-xs text-muted">
+                  {m.agree} for / {m.disagree} against / {m.abstain} abstain
+                </span>
+                <span className="w-full text-[10px] text-muted">
+                  Turn {m.openedAtTurn}
+                  {m.resolvedAtTurn != null && m.resolvedAtTurn !== m.openedAtTurn
+                    ? `, resolved turn ${m.resolvedAtTurn}`
+                    : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {error && <p className="text-xs text-danger">{error}</p>}
 
