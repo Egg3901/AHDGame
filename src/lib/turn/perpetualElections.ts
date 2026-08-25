@@ -688,7 +688,14 @@ export async function ensurePerpetualElections(now: Date, currentTurn?: number):
 
   // Live (census-updated) House apportionment for fallback delegation sizes
   // (P1d-2); equals the preset seed until a decennial census reapportions.
-  const { houseSeats: liveHouseSeats } = await loadApportionment(db, ctx.preset);
+  //
+  // `currentYear` is load-bearing: without it the admitted-state set is built as
+  // of the PRESET year, and a state admitted mid-game is absent from that set by
+  // definition — so it drops out of `houseSeats` entirely. It would then fall to
+  // the 1-seat backstop below and, worse, be invisible to the census heal, which
+  // skips states the map does not carry. `stateIds` above already gates
+  // admission on `currentYear`, so passing it keeps the two in agreement.
+  const { houseSeats: liveHouseSeats } = await loadApportionment(db, ctx.preset, currentYear);
 
   // A census between cycles leaves live races sized to the OLD apportionment
   // (#1190). Correct them before anything reads `totalSeats` this turn.
