@@ -6,6 +6,7 @@ import type {
   ConflictSide,
   ConflictType,
   ConflictBloc,
+  TreatyEntry,
 } from "@/lib/db/types/conflict";
 import type { Front } from "@/lib/military/combat";
 import { homeRegionOf } from "@/lib/military/regionTopology";
@@ -68,6 +69,8 @@ export interface BuildConflictInput {
   warGoal?: WarGoal;
   /** The bill that declared it, when a declaration created this war. */
   declaredByBillId?: string;
+  /** Countries pulled in by a mutual-defence treaty at declaration time. */
+  treatyEntries?: TreatyEntry[];
 }
 
 /**
@@ -139,6 +142,7 @@ export function buildConflict(input: BuildConflictInput): ConflictDoc {
     ...(input.hostEntities ? { hostEntities: input.hostEntities } : {}),
     ...(input.warGoal ? { warGoal: input.warGoal } : {}),
     ...(input.declaredByBillId ? { declaredByBillId: input.declaredByBillId } : {}),
+    ...(input.treatyEntries?.length ? { treatyEntries: input.treatyEntries } : {}),
   };
 }
 

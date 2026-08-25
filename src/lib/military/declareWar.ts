@@ -8,6 +8,8 @@ import { joinSide } from "@/lib/military/joinSide";
 import { findWarBetween } from "@/lib/military/findWarBetween";
 import { sideOf } from "@/lib/military/occupation";
 import { loadMilitaryBlocs } from "@/lib/military/blocLookup";
+import { resolveTreatyDefenders, type TreatyDefender } from "@/lib/military/treatyDefence";
+import type { TreatyEntry } from "@/lib/db/types/conflict";
 import type { WarGoal } from "@/lib/military/warGoals";
 
 export interface DeclareWarInput {
@@ -23,6 +25,20 @@ export interface DeclareWarResult {
   conflict: ConflictDoc;
   /** True when the declarer enrolled in an existing war rather than starting one. */
   joined: boolean;
+}
+
+/** Stamp the resolver's output with who it came for and when. */
+function toTreatyEntries(
+  defenders: TreatyDefender[],
+  defending: CountryId,
+  joinedTurn: number
+): TreatyEntry[] {
+  return defenders.map((d) => ({
+    countryId: d.countryId,
+    organizationId: d.organizationId,
+    defending,
+    joinedTurn,
+  }));
 }
 
 /**
@@ -63,6 +79,23 @@ export async function declareWar(db: Db, input: DeclareWarInput): Promise<Declar
     // than hoisted because enactment runs once per ratified declaration, not per tick.
     const blocs = await loadMilitaryBlocs(db);
     const defenderSide = sideOf(live, defender, blocs);
+
+    // Enforced mutual defence, on the join path. Only when the defender can actually be
+    // placed: a null side means we do not know which roster is the defence, and guessing
+    // would enrol allies AGAINST the country they came to protect. The declarer's own
+    // enrolment keeps its long-standing `?? "A"` fallback below, unchanged.
+    if (defenderSide) {
+      const defenders = await resolveTreatyDefenders(db, { defender, declarer, conflict: live });
+      for (const d of defenders) {
+        await joinSide(db, live, d.countryId, defenderSide);
+      }
+      if (defenders.length > 0) {
+        await getConflictsCollection(db).updateOne({ _id: live._id }, {
+          $push: { treatyEntries: { $each: toTreatyEntries(defenders, defender, currentTurn) } },
+        } as never);
+      }
+    }
+
     const target = defenderSide === "A" ? "B" : "A";
     await joinSide(db, live, declarer, target);
     return { conflict: live, joined: true };
@@ -70,17 +103,33 @@ export async function declareWar(db: Db, input: DeclareWarInput): Promise<Declar
 
   const defenderName = COUNTRY_CONFIGS[defender]?.name ?? defender;
   const declarerName = COUNTRY_CONFIGS[declarer]?.name ?? declarer;
+
+  // Resolved BEFORE createConflict, deliberately. The roster it is handed drives
+  // `initialControl`, `deployOpeningForces` (so allies arrive with troops instead of an
+  // empty theatre) and `baseStrength = 320 + sideB.countries.length * 60`. Enrolling
+  // afterwards with `joinSide` leaves all three computed for a coalition of one.
+  const defenders = await resolveTreatyDefenders(db, { defender, declarer });
+  const treatyEntries = toTreatyEntries(defenders, defender, currentTurn);
+
   const conflict = await createConflict(db, {
     id: `war_${declarer}_${defender}_${currentTurn}`.toLowerCase(),
     name: `${declarerName}–${defenderName} War`,
     hostCountry: defender,
     type: "interstate",
     sideA: { label: declarerName, countries: [declarer], kind: "state" },
-    sideB: { label: defenderName, countries: [defender], kind: "state" },
+    sideB: {
+      label: defenderName,
+      countries: [defender, ...defenders.map((d) => d.countryId)],
+      // Descriptive only: nothing branches on "state" vs "coalition" (only "generated"
+      // is ever tested, in createConflict and peaceOffer), but a side of three countries
+      // labelled "state" reads as a bug to the next person.
+      kind: defenders.length > 0 ? "coalition" : "state",
+    },
     createdBy: "player",
     startTurn: currentTurn,
     warGoal,
     declaredByBillId: billId,
+    ...(treatyEntries.length > 0 ? { treatyEntries } : {}),
   });
   return { conflict, joined: false };
 }
