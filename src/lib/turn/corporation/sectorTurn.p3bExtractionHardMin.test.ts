@@ -59,7 +59,7 @@ function makeSector(overrides: Partial<CorporateSector> = {}): CorporateSector {
   } as unknown as CorporateSector;
 }
 
-function makeLookups(): CorporationLookups {
+function makeLookups(utilization = UTILIZATION): CorporationLookups {
   return {
     corporations: [],
     sectorsByCorp: new Map(),
@@ -88,7 +88,7 @@ function makeLookups(): CorporationLookups {
     nationalCommodityBalancesByCountry: new Map(),
     rawStateBalances: new Map(),
     extractionCapacityUtilBySector: new Map([
-      [SECTOR_ID.toString(), { utilization: UTILIZATION, bindingResource: "oil" }],
+      [SECTOR_ID.toString(), { utilization, bindingResource: "oil" }],
     ]),
     stateResourceCapacityByState: new Map(),
     stateSectorSpecializationByState: new Map(),
@@ -102,9 +102,13 @@ function makeLookups(): CorporationLookups {
   } as unknown as CorporationLookups;
 }
 
-function makeEnv(mode: "capital" | "plants", currentTurn: number): SectorTurnEnv {
+function makeEnv(
+  mode: "capital" | "plants",
+  currentTurn: number,
+  utilization = UTILIZATION
+): SectorTurnEnv {
   return {
-    lookups: makeLookups(),
+    lookups: makeLookups(utilization),
     turn: currentTurn,
     currentTurn,
     now: new Date("2026-08-01T00:00:00Z"),
@@ -120,8 +124,13 @@ function makeEnv(mode: "capital" | "plants", currentTurn: number): SectorTurnEnv
   } as unknown as SectorTurnEnv;
 }
 
-function run(mode: "capital" | "plants", sector: CorporateSector, currentTurn = 1000) {
-  const env = makeEnv(mode, currentTurn);
+function run(
+  mode: "capital" | "plants",
+  sector: CorporateSector,
+  currentTurn = 1000,
+  utilization = UTILIZATION
+) {
+  const env = makeEnv(mode, currentTurn, utilization);
   const result = processSector(env, makeCorp(), sector, 1, undefined, 1);
   const op = env.sectorOps[0] as { updateOne: { update: { $set: Record<string, unknown> } } };
   return { result, env, update: op.updateOne.update.$set };
@@ -169,5 +178,52 @@ describe("P3b extraction hard-min (plants)", () => {
     // ≈ capacity × utilization (capacity is one turn of depreciation below STOCK).
     expect((plantsRun.update.producedUnits as number) / (STOCK * UTILIZATION)).toBeCloseTo(1, 2);
     expect(plantsRun.result.hourlyRevenue).toBeLessThan(capitalRun.result.hourlyRevenue);
+  });
+});
+
+describe("extraction capacity haircut ramp re-anchor", () => {
+  it("restarts the ramp after a one-turn utilization drop from 0.9 to 0.1", () => {
+    const currentTurn = 1000;
+    const first = run(
+      "capital",
+      makeSector({ capacityUtilization: 0.9, capacityHaircutStartTurn: 1 }),
+      currentTurn,
+      0.1
+    );
+
+    expect(first.update.capacityHaircutStartTurn).toBe(currentTurn);
+
+    const next = run(
+      "capital",
+      makeSector({ capacityUtilization: 0.1, capacityHaircutStartTurn: currentTurn }),
+      currentTurn + 1,
+      0.1
+    );
+    expect(next.result.hourlyRevenue / first.result.hourlyRevenue).toBeCloseTo(0.99625, 6);
+    expect(next.result.hourlyRevenue / first.result.hourlyRevenue).toBeGreaterThan(0.5);
+  });
+
+  it("keeps the existing ramp anchor when utilization drops by less than 0.25", () => {
+    const runAfterSmallDrop = run(
+      "capital",
+      makeSector({ capacityUtilization: 0.9, capacityHaircutStartTurn: 1 }),
+      1000,
+      0.7
+    );
+
+    expect(runAfterSmallDrop.update.capacityHaircutStartTurn).toBe(1);
+  });
+  it("does not reset an immature ramp, so oscillation cannot freeze the clamp", () => {
+    // Anchor re-set 5 turns ago (age 5 < EXTRACTION_CAPACITY_HAIRCUT_TURNS).
+    // Another sharp drop must NOT re-anchor: repeated >0.25 sawtooths would
+    // otherwise reset every time and the haircut would never accrue.
+    const oscillating = run(
+      "capital",
+      makeSector({ capacityUtilization: 0.9, capacityHaircutStartTurn: 995 }),
+      1000,
+      0.1
+    );
+
+    expect(oscillating.update.capacityHaircutStartTurn).toBe(995);
   });
 });

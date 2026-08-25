@@ -24,6 +24,8 @@ import {
   capacityHaircutFactor,
   CAPACITY_BINDING_THRESHOLD,
   EXTRACTION_CAPACITY_HAIRCUT_FLOOR,
+  EXTRACTION_CAPACITY_HAIRCUT_TURNS,
+  RAMP_REANCHOR_DELTA,
 } from "@/lib/extraction/capacityHaircut";
 import { computePriceRealization } from "@/lib/market/priceRealization";
 import { computeThroughput } from "@/lib/market/throughput";
@@ -323,9 +325,23 @@ export function processSector(
         })
       : { utilization: 1, bindingResource: null as ExtractableResource | null };
   // Stamp the ramp start the first time an extraction sector is under-utilized.
+  // First-exposure stamping cannot see a later, much larger correction. Reset
+  // the anchor after a large one-turn utilization drop so that new exposure
+  // eases in over the full window instead of landing as an immediate cliff.
+  // Maturity gate: only a MATURED ramp may re-anchor. Without it, a sector
+  // whose utilization sawtooths by more than the delta every few turns would
+  // reset forever and never accrue haircut, silently disabling the clamp.
+  const rampAgeTurns = currentTurn - (sector.capacityHaircutStartTurn ?? currentTurn);
+  const capacityUtilizationDroppedSharply =
+    sector.sectorType === "extraction" &&
+    typeof sector.capacityUtilization === "number" &&
+    sector.capacityUtilization - capacityUtil.utilization > RAMP_REANCHOR_DELTA &&
+    rampAgeTurns >= EXTRACTION_CAPACITY_HAIRCUT_TURNS;
   const capacityHaircutStartTurn =
     sector.sectorType === "extraction" && capacityUtil.utilization < 1
-      ? (sector.capacityHaircutStartTurn ?? currentTurn)
+      ? capacityUtilizationDroppedSharply
+        ? currentTurn
+        : (sector.capacityHaircutStartTurn ?? currentTurn)
       : sector.capacityHaircutStartTurn;
   const capacityHaircut = capacityHaircutFactor(
     capacityUtil.utilization,
