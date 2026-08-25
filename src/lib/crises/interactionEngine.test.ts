@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { ApiError } from "@/lib/api/errors";
 import {
   createCrisisInteraction,
   submitCrisisDecision,
@@ -823,5 +824,112 @@ describe("createCrisisInteraction — aid node transform (flag ON)", () => {
     // Node should remain as "choice" type (not transformed)
     const aidNode = result!.decisionTree.find((n) => n.nodeId === "aid_choice");
     expect(aidNode!.type).toBe("choice");
+  });
+});
+
+// ── Rejection status codes (ticket #1183) ───────────────────────────────────
+// A blocked decision has to reach the player as a readable rejection. The API
+// routes hand every throw to handleRouteError, which maps anything that is not
+// an ApiError to a generic 500 "Internal server error" AND reports it to
+// Sentry as a fault, so the engine's own guards must carry their own status.
+
+describe("submitCrisisDecision — rejection status codes", () => {
+  it("rejects a decision from an unauthorized character as a 403", async () => {
+    const interaction = makeInteraction();
+    db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue(interaction);
+
+    const err = await submitCrisisDecision(mdb(), interaction._id, "opt_a", new ObjectId(), "US", [
+      "any",
+    ]).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(403);
+    expect((err as ApiError).message).toMatch(/not authorized/i);
+  });
+
+  it("rejects an unknown option as a 400", async () => {
+    const interaction = makeInteraction();
+    db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue(interaction);
+
+    const err = await submitCrisisDecision(mdb(), interaction._id, "nope", new ObjectId(), "US", [
+      "any",
+      "headOfState",
+    ]).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(400);
+  });
+
+  it("rejects a decision on an already-resolved crisis as a 409", async () => {
+    const interaction = makeInteraction({ resolvedAt: new Date(), currentNodeId: null });
+    db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue(interaction);
+
+    const err = await submitCrisisDecision(mdb(), interaction._id, "opt_a", new ObjectId(), "US", [
+      "any",
+      "headOfState",
+    ]).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(409);
+  });
+
+  it("rejects a missing interaction as a 404", async () => {
+    db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue(null);
+
+    const err = await submitCrisisDecision(mdb(), new ObjectId(), "opt_a", new ObjectId(), "US", [
+      "headOfState",
+    ]).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(404);
+  });
+
+  it("rejects a repeat response from a country that already answered as a 409", async () => {
+    const interaction = makeGlobalInteraction({
+      leaderResponses: [
+        {
+          countryId: "US",
+          characterId: new ObjectId(),
+          characterName: "Prior Leader",
+          nodeId: "response",
+          optionId: "subsidies",
+          optionLabel: "Consumer Subsidies",
+          respondedAt: new Date(),
+        },
+      ],
+    });
+    stubGlobalCrisis(interaction);
+
+    const err = await submitCrisisDecision(
+      mdb(),
+      interaction._id,
+      "reserves",
+      new ObjectId(),
+      "US",
+      ["headOfState"]
+    ).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(409);
+    expect((err as ApiError).message).toMatch(/already responded/i);
+  });
+
+  it("rejects a contribution the treasury cannot cover as a 400", async () => {
+    const interaction = makeInteraction({ currentNodeId: "fund", collectiveTarget: 10_000_000 });
+    db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue(interaction);
+    db.collectionMocks["federalBudget"]!.findOne.mockResolvedValue({ treasuryBalance: 1_000 });
+
+    const err = await submitCrisisDecision(
+      mdb(),
+      interaction._id,
+      "contribute_5m",
+      new ObjectId(),
+      "US",
+      ["any"]
+    ).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(400);
+    expect((err as ApiError).message).toMatch(/insufficient treasury/i);
   });
 });

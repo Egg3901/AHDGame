@@ -17,8 +17,10 @@ import { isCrisisInteractionEnabled } from "@/lib/crises/featureFlag";
 import { conditionalJson } from "@/lib/api/conditionalJson";
 import {
   globalResponseRoleFor,
+  optionAvailabilityForGlobalResponder,
   optionsForGlobalResponder,
 } from "@/lib/livingConflict/globalResponse";
+import type { CampaignRequirementResult } from "@/lib/livingConflict/campaign";
 
 export interface ActiveCrisisForCharacter {
   crisis: Crisis;
@@ -27,6 +29,13 @@ export interface ActiveCrisisForCharacter {
   canInteract: boolean;
   timeRemainingMinutes: number | null;
   hasContributed: boolean;
+  /**
+   * Per-option campaign eligibility for global-response crises, mirroring the
+   * crisis detail page's `campaignBrief.optionAvailability`. Null when the
+   * crisis is not a global response or the character's country has no role in
+   * it. Without this the card offers options the command path must refuse.
+   */
+  optionAvailability: Record<string, CampaignRequirementResult> | null;
 }
 
 export async function GET(request: Request) {
@@ -113,6 +122,17 @@ export async function GET(request: Request) {
             )
           : false;
 
+        // Only worth loading when the card will actually render the buttons.
+        const optionAvailability =
+          canInteract && currentNode && crisis.globalResponse && countryId
+            ? await optionAvailabilityForGlobalResponder(
+                db,
+                crisis,
+                countryId,
+                currentNode.options ?? []
+              )
+            : null;
+
         return {
           crisis,
           interaction,
@@ -120,6 +140,7 @@ export async function GET(request: Request) {
           canInteract,
           timeRemainingMinutes,
           hasContributed,
+          optionAvailability,
         };
       })
     );

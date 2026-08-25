@@ -11,6 +11,11 @@ interface ActiveCrisisData {
   canInteract: boolean;
   timeRemainingMinutes: number | null;
   hasContributed: boolean;
+  /**
+   * Per-option campaign eligibility for global-response crises, as the crisis
+   * detail page receives it. Null for crises that carry no such requirements.
+   */
+  optionAvailability?: Record<string, { eligible: boolean; reasons: string[] }> | null;
 }
 
 function formatTimeRemaining(minutes: number): string {
@@ -179,6 +184,7 @@ export default function CrisisActionCard() {
           canInteract,
           timeRemainingMinutes,
           hasContributed,
+          optionAvailability,
         } = data;
         const severity = crisisSeverity(crisis);
         const styles = SEVERITY_STYLES[severity];
@@ -292,8 +298,14 @@ export default function CrisisActionCard() {
                     {currentNode.options.map((option) => {
                       const isSubmitting =
                         submitting === `${crisis._id.toString()}:${option.optionId}`;
+                      // An option the nation cannot meet the campaign requirement
+                      // for would be refused by the command path, so it is closed
+                      // here with its reasons rather than offered and rejected.
+                      const availability = optionAvailability?.[option.optionId];
                       const isDisabled =
-                        isSubmitting || (currentNode.type === "collective" && hasContributed);
+                        isSubmitting ||
+                        availability?.eligible === false ||
+                        (currentNode.type === "collective" && hasContributed);
 
                       return (
                         <button
@@ -306,6 +318,13 @@ export default function CrisisActionCard() {
                         >
                           <div className="text-sm font-medium text-foreground">{option.label}</div>
                           <div className="text-xs text-muted mt-0.5">{option.description}</div>
+                          {availability?.eligible === false && (
+                            <ul className="mt-2 space-y-0.5 text-[10px] text-error">
+                              {availability.reasons.map((reason) => (
+                                <li key={reason}>{reason}</li>
+                              ))}
+                            </ul>
+                          )}
                           {option.collectiveContribution && (
                             <div className="text-xs text-primary mt-1">
                               Contribute ${option.collectiveContribution.toLocaleString("en-US")}

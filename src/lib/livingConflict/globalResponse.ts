@@ -16,6 +16,7 @@ import type {
   GlobalResponseRole,
   ResolvedGlobalResponse,
 } from "@/lib/db/types/crisis";
+import { badRequest } from "@/lib/api/errors";
 import { spendFromTreasury } from "@/lib/budget/treasurySpend";
 import { applyCrisisEffects } from "@/lib/crises/applyEffects";
 import { getGameState } from "@/lib/gameState";
@@ -117,6 +118,38 @@ async function loadCampaignCapability(
   };
 }
 
+/**
+ * The two country-scoped inputs every eligibility question needs: which campaign
+ * stage the conflict is in, and what the nation can currently bring to bear.
+ */
+async function responderContext(
+  db: Db,
+  definition: NonNullable<Crisis["globalResponse"]>,
+  countryId: string
+): Promise<{ stage: CampaignStage; capability: CampaignCapabilitySnapshot }> {
+  const state = await loadConflictState(db, definition.conflictKey);
+  const stage = definition.campaign?.stage ?? normalizeCampaignState(state.campaign).stage;
+  return { stage, capability: await loadCampaignCapability(db, countryId) };
+}
+
+/**
+ * Per-option eligibility for one country. The Actions-page card and the crisis
+ * detail page both gate their buttons on this, so a player is never offered an
+ * option the command path is bound to refuse (ticket #1183). Null when the
+ * country has no role in this response.
+ */
+export async function optionAvailabilityForGlobalResponder(
+  db: Db,
+  crisis: Pick<Crisis, "globalResponse">,
+  countryId: string,
+  options: CrisisDecisionOption[]
+): Promise<Record<string, CampaignRequirementResult> | null> {
+  const definition = crisis.globalResponse;
+  if (!definition || !globalResponseRoleFor(crisis, countryId)) return null;
+  const { stage, capability } = await responderContext(db, definition, countryId);
+  return assessCampaignOptions(options, capability, stage);
+}
+
 export interface GlobalResponseCampaignBrief {
   stage: CampaignStage;
   stageLabel: string;
@@ -173,13 +206,15 @@ export async function prepareGlobalResponseOption(
   option: CrisisDecisionOption
 ): Promise<CampaignCapabilitySnapshot> {
   const definition = crisis.globalResponse;
+  // A missing definition is a data fault, not a player error: leave it bare so
+  // handleRouteError captures it.
   if (!definition) throw new Error("Global response definition missing");
-  const state = await loadConflictState(db, definition.conflictKey);
-  const stage = definition.campaign?.stage ?? normalizeCampaignState(state.campaign).stage;
-  const capability = await loadCampaignCapability(db, countryId);
+  const { stage, capability } = await responderContext(db, definition, countryId);
   const assessment = assessCampaignRequirement(option.campaignRequirement, capability, stage);
   if (!assessment.eligible) {
-    throw new Error(`National capacity is insufficient: ${assessment.reasons.join("; ")}`);
+    // A refusal the player can act on — the same reasons the crisis page lists
+    // under the option. Typed so it reaches them as a 400, not a generic 500.
+    throw badRequest(`National capacity is insufficient: ${assessment.reasons.join("; ")}`);
   }
   return capability;
 }

@@ -11,6 +11,7 @@ import {
   getHeadOfStateOfficeType,
   type CountryId,
 } from "@/lib/constants/countries";
+import { badRequest, conflict, forbidden, notFound } from "@/lib/api/errors";
 import { logWireEvent } from "@/lib/wireEvent";
 import { applyCrisisEffects } from "./applyEffects";
 import { runCrisisOptionAction, type CrisisActionResult } from "./optionActions";
@@ -427,14 +428,14 @@ export async function submitCrisisDecision(
     .collection<CrisisInteraction>("crisisInteractions")
     .findOne({ _id: interactionId });
 
-  if (!interaction) throw new Error("Crisis interaction not found");
-  if (interaction.resolvedAt) throw new Error("Crisis already resolved");
+  if (!interaction) throw notFound("Crisis interaction not found");
+  if (interaction.resolvedAt) throw conflict("Crisis already resolved");
 
   const currentNode = interaction.decisionTree.find((n) => n.nodeId === interaction.currentNodeId);
-  if (!currentNode) throw new Error("No active decision node");
+  if (!currentNode) throw conflict("No active decision node");
 
   if (!canCharacterInteract(currentNode, characterRoles)) {
-    throw new Error("You are not authorized to make this decision");
+    throw forbidden("You are not authorized to make this decision");
   }
 
   const crisis = await db.collection<Crisis>("crises").findOne({ _id: interaction.crisisId });
@@ -449,10 +450,10 @@ export async function submitCrisisDecision(
       ? optionsForGlobalResponder(crisis, currentNode, countryId)
       : (currentNode.options ?? []);
     const option = responseOptions.find((o) => o.optionId === optionId);
-    if (!option) throw new Error("Invalid option");
+    if (!option) throw badRequest("Invalid option");
 
     const already = (interaction.leaderResponses ?? []).some((r) => r.countryId === countryId);
-    if (already) throw new Error("Your country has already responded to this crisis");
+    if (already) throw conflict("Your country has already responded to this crisis");
     const capabilitySnapshot = crisis.globalResponse
       ? await prepareGlobalResponseOption(db, crisis, countryId, option)
       : undefined;
@@ -460,7 +461,7 @@ export async function submitCrisisDecision(
     if (option.requiredBudget) {
       const treasury = await getTreasuryBalance(db, countryId);
       if (treasury < option.requiredBudget) {
-        throw new Error(
+        throw badRequest(
           `Insufficient funds. Required: ${option.requiredBudget}, Available: ${treasury}`
         );
       }
@@ -501,7 +502,7 @@ export async function submitCrisisDecision(
       }
     );
     if (claimed.modifiedCount === 0) {
-      throw new Error("Your country has already responded to this crisis");
+      throw conflict("Your country has already responded to this crisis");
     }
     interaction.leaderResponses = [...(interaction.leaderResponses ?? []), response];
 
@@ -547,17 +548,17 @@ export async function submitCrisisDecision(
   //    on its deadline via autoResolveCrisisInteraction, not on each submit. ──
   if (currentNode.type === "collective") {
     const option = currentNode.options?.find((o) => o.optionId === optionId);
-    if (!option) throw new Error("Invalid option");
+    if (!option) throw badRequest("Invalid option");
 
     if (option.collectiveContribution && option.collectiveContribution > 0) {
       const already = interaction.contributors.some(
         (c) => c.characterId.toString() === characterId.toString()
       );
-      if (already) throw new Error("You have already contributed to this crisis");
+      if (already) throw conflict("You have already contributed to this crisis");
 
       const treasury = await getTreasuryBalance(db, countryId);
       if (treasury < option.collectiveContribution) {
-        throw new Error(
+        throw badRequest(
           `Insufficient treasury funds. Required: ${option.collectiveContribution}, Available: ${treasury}`
         );
       }
@@ -605,12 +606,12 @@ export async function submitCrisisDecision(
 
   if (currentNode.type === "choice" || currentNode.type === "aid") {
     const option = currentNode.options?.find((o) => o.optionId === optionId);
-    if (!option) throw new Error("Invalid option");
+    if (!option) throw badRequest("Invalid option");
 
     if (option.requiredBudget) {
       const treasury = await getTreasuryBalance(db, countryId);
       if (treasury < option.requiredBudget) {
-        throw new Error(
+        throw badRequest(
           `Insufficient funds. Required: ${option.requiredBudget}, Available: ${treasury}`
         );
       }
@@ -623,7 +624,7 @@ export async function submitCrisisDecision(
         .findOne({ _id: countryId as unknown as import("mongodb").ObjectId });
       const approval = (approvalDoc?.approvalRating as number | undefined) ?? 0;
       if (approval < option.requiredApproval) {
-        throw new Error(
+        throw badRequest(
           `Insufficient approval. Required: ${option.requiredApproval}, Current: ${approval}`
         );
       }
@@ -633,7 +634,7 @@ export async function submitCrisisDecision(
     nextNodeId = option.nextNodeId;
     interaction.resolutionPath.push(optionId);
   } else {
-    throw new Error("Current node does not accept choices");
+    throw badRequest("Current node does not accept choices");
   }
 
   if (appliedEffects.length > 0) {
