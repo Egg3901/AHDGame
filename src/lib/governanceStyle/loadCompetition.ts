@@ -19,30 +19,45 @@ export async function loadDemocraticCompetition(
   preset: string | undefined,
   gameState: Pick<GameState, "presidentialTenureByCountry"> | null
 ): Promise<DemocraticCompetition> {
-  const lowerChamber = getCountryConfig(countryId, preset).legislature.lowerChamber.key;
+  const config = getCountryConfig(countryId, preset);
+  const legislature = config.legislature;
+  const chamberKeys = [legislature.lowerChamber.key];
+  if (legislature.bicameral && legislature.upperChamber) {
+    chamberKeys.push(legislature.upperChamber.key);
+  }
+  const officeType = chamberKeys.length === 1 ? chamberKeys[0] : { $in: chamberKeys };
   const [officials, history] = await Promise.all([
     db
       .collection<ElectedOfficial>("electedOfficials")
-      .find({ countryId, officeType: lowerChamber })
-      .project<Pick<ElectedOfficial, "party" | "seatsHeld">>({ party: 1, seatsHeld: 1 })
+      .find({ countryId, officeType })
+      .project<Pick<ElectedOfficial, "officeType" | "party" | "seatsHeld">>({
+        officeType: 1,
+        party: 1,
+        seatsHeld: 1,
+      })
       .toArray(),
     db
       .collection<ParliamentSeatHistoryDoc>("parliamentSeatsHistory")
-      .find({ countryId, officeType: lowerChamber })
+      .find({ countryId, officeType })
       .sort({ turn: 1 })
       .toArray(),
   ]);
 
-  const seatsByParty: Record<string, number> = {};
+  const chamberTallies = new Map<string, Record<string, number>>();
   for (const official of officials) {
     if (!official.party) continue;
+    const seatsByParty = chamberTallies.get(official.officeType) ?? {};
     seatsByParty[official.party] = (seatsByParty[official.party] ?? 0) + (official.seatsHeld ?? 1);
+    chamberTallies.set(official.officeType, seatsByParty);
   }
 
+  const executiveTenure = gameState?.presidentialTenureByCountry?.[countryId];
+  const hasSeparateExecutive = config.governmentType === "presidential";
+
   return assessDemocraticCompetition({
-    seatsByParty,
+    chambersByParty: chamberKeys.map((key) => chamberTallies.get(key) ?? {}),
     history,
-    consecutiveExecutiveTerms:
-      gameState?.presidentialTenureByCountry?.[countryId]?.consecutiveTerms ?? 0,
+    executivePartyId: hasSeparateExecutive ? executiveTenure?.party : null,
+    consecutiveExecutiveTerms: hasSeparateExecutive ? (executiveTenure?.consecutiveTerms ?? 0) : 0,
   });
 }

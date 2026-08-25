@@ -40,19 +40,21 @@ What counts as "unmanned":
 
 The shield only reduces what the rival's attack *removes from the target*. It never changes how much the attacker draws from the pool of unaffiliated voters, so attacking an unmanned default party is weaker, not pointless.
 
-## UK regional party ballot gating
+## UK regional parties
 
-The UK's regional parties only contest elections in their home nation or region:
+The SNP, Plaid Cymru, the DUP, Sinn Féin and the UUP used to be barred from appearing on a ballot outside their home nation. That rule is gone. All five now stand anywhere in the country, on the same terms as every other party.
 
-| Party | Home |
+What replaced the rule is organisation. Each of them starts with deep roots in the nation they came from and almost nothing everywhere else:
+
+| Party | Where it starts strong |
 | --- | --- |
 | **SNP** (Scottish National Party) | Scotland |
 | **Plaid Cymru** | Wales |
 | **DUP, Sinn Féin, UUP** | Northern Ireland |
 
-None of these parties can appear on a ballot outside their home region: the SNP does not stand in England, Plaid Cymru does not stand in Scotland, and the three Northern Ireland parties do not stand on the mainland. This is enforced at the point of filing, so it doesn't matter if an NPP happens to be homed in the wrong region or a stale record exists somewhere, the game checks eligibility at filing time and blocks it.
+Outside those places they begin on the minimum organisation floor with no registered support, so a candidate can file but starts as a fringe presence and has to build from there. Organisation is now the only thing standing between these parties and a seat anywhere in the country, and Build Org is how you close that gap.
 
-The gate only applies to these five parties. Every other UK party, and every party in every other country, is unaffected.
+Note that the major-party sets used for spoiler effects are still scoped by nation, so standing outside your heartland means running as a third party against two entrenched rivals.
 
 ## Related pages
 

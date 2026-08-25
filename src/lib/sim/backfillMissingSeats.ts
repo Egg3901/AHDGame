@@ -107,9 +107,12 @@ const SEATS_HELD_OFFICE_TYPES = new Set([
  * by their SEEDED per-region strength from statePartyOrg — organization,
  * scaled by the seeded registration share where present — so a 2.5%-polling
  * party gets a sliver, and a party with NO statePartyOrg row (or
- * hasPresence: false) in a region gets NOTHING there (regional parties never
- * get seats outside their home regions). Only regions with no statePartyOrg
- * data at all fall back to the legacy even split.
+ * hasPresence: false) in a region gets NOTHING there. A party sitting on the
+ * seed-floor org with no registered support is likewise weightless, which is
+ * what now keeps the UK regional parties out of chambers they have no support
+ * in — they hold a row everywhere since the home-nation ballot gate was
+ * removed, but org x zero registration is zero. Only regions with no
+ * statePartyOrg data at all fall back to the legacy even split.
  */
 /** Minimal statePartyOrg row shape consumed by the zero-state weighting. */
 export interface SeedStrengthRow {
@@ -125,7 +128,9 @@ export interface SeedStrengthRow {
  * Zero-state party weights for ONE region, from seeded statePartyOrg rows.
  *
  * - A party with no row in the region isn't in the result at all (weight 0):
- *   no seeded presence → no synthetic incumbents (SNP never seats in London).
+ *   no seeded presence → no synthetic incumbents. A row on the seed-floor org
+ *   with a zero registration share resolves to weight 0 the same way, so the
+ *   SNP still never seats in London off a backfill.
  * - `hasPresence: false` rows are likewise excluded.
  * - Weight = organization, scaled by the seeded registration share
  *   (`registrationShare` preferred, `registration` fallback) when EVERY

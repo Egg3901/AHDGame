@@ -19,13 +19,10 @@ import { getSubsidyMarginModifier } from "@/lib/subsidies/subsidyEffects";
 import { politicalSoeInputs } from "@/lib/politicalLegislation/marginAdapter";
 import { computeExportPremium, computeExportExposure } from "@/lib/trade/exportPremium";
 import { TRADE_EMBARGO_EXPORT_LOSS_SHARE } from "@/lib/trade/constants";
-import type { CommodityType, ExtractableResource } from "@/lib/constants/commodities";
+import type { CommodityType } from "@/lib/constants/commodities";
 import {
   capacityHaircutFactor,
   CAPACITY_BINDING_THRESHOLD,
-  EXTRACTION_CAPACITY_HAIRCUT_FLOOR,
-  EXTRACTION_CAPACITY_HAIRCUT_TURNS,
-  RAMP_REANCHOR_DELTA,
 } from "@/lib/extraction/capacityHaircut";
 import { computePriceRealization } from "@/lib/market/priceRealization";
 import { computeThroughput } from "@/lib/market/throughput";
@@ -122,6 +119,7 @@ import { computeContractProduction } from "./contractProduction";
 import { advanceSectorInventory } from "@/lib/corporations/sectorInventory";
 import type { SectorTurnEnv, SectorTurnResult } from "./sectorTurnTypes";
 import { legacyRevenueShadowTelemetry, marketTelemetry } from "./sectorTelemetry";
+import { resolveSectorCapacityHaircut } from "./sectorCapacityHaircut";
 
 export { computeSectorOutputUnits } from "./sectorOutputUnits";
 export type { SectorTurnEnv, SectorTurnResult } from "./sectorTurnTypes";
@@ -311,43 +309,10 @@ export function processSector(
     sector.transitionStartTurn,
     turn ?? 0
   );
-  // Extraction capacity haircut: a sector that can only extract a fraction of
-  // its revenue-based output realizes only that fraction of resource revenue.
-  // Ramped in over EXTRACTION_CAPACITY_HAIRCUT_TURNS from the sector's first
-  // exposure so it doesn't insta-bankrupt miners (audit t786). Applied to
-  // realized output (hourlyRevenue), NOT the stored revenue base — mirrors the
-  // nationalization transition so the growth trajectory stays clean.
-  const capacityUtil =
-    sector.sectorType === "extraction"
-      ? (lookups.extractionCapacityUtilBySector.get(sector._id.toString()) ?? {
-          utilization: 1,
-          bindingResource: null,
-        })
-      : { utilization: 1, bindingResource: null as ExtractableResource | null };
-  // Stamp the ramp start the first time an extraction sector is under-utilized.
-  // First-exposure stamping cannot see a later, much larger correction. Reset
-  // the anchor after a large one-turn utilization drop so that new exposure
-  // eases in over the full window instead of landing as an immediate cliff.
-  // Maturity gate: only a MATURED ramp may re-anchor. Without it, a sector
-  // whose utilization sawtooths by more than the delta every few turns would
-  // reset forever and never accrue haircut, silently disabling the clamp.
-  const rampAgeTurns = currentTurn - (sector.capacityHaircutStartTurn ?? currentTurn);
-  const capacityUtilizationDroppedSharply =
-    sector.sectorType === "extraction" &&
-    typeof sector.capacityUtilization === "number" &&
-    sector.capacityUtilization - capacityUtil.utilization > RAMP_REANCHOR_DELTA &&
-    rampAgeTurns >= EXTRACTION_CAPACITY_HAIRCUT_TURNS;
-  const capacityHaircutStartTurn =
-    sector.sectorType === "extraction" && capacityUtil.utilization < 1
-      ? capacityUtilizationDroppedSharply
-        ? currentTurn
-        : (sector.capacityHaircutStartTurn ?? currentTurn)
-      : sector.capacityHaircutStartTurn;
-  const capacityHaircut = capacityHaircutFactor(
-    capacityUtil.utilization,
-    capacityHaircutStartTurn,
-    currentTurn,
-    EXTRACTION_CAPACITY_HAIRCUT_FLOOR
+  const { capacityUtil, capacityHaircutStartTurn, capacityHaircut } = resolveSectorCapacityHaircut(
+    sector,
+    lookups.extractionCapacityUtilBySector,
+    currentTurn
   );
   // Business Acumen no longer scales revenue — it now lowers growth cost and
   // softens high interest rates (see calculateDailyGrowthCost above).
