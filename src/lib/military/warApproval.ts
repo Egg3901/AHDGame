@@ -267,12 +267,23 @@ export function stepWarTotal(
  * meant to prevent it. A single chip whose effect IS the applied total cannot
  * disagree with the rating; the parts ride along undamped for the tooltip.
  */
-export function buildWarModifier(applied: number, parts: WarPart[]): ActiveModifier | null {
+export function buildWarModifier(
+  applied: number,
+  parts: WarPart[],
+  atPeace = false
+): ActiveModifier | null {
   const effect = round1(applied);
   if (effect === 0 || !Number.isFinite(effect)) return null;
   return {
     id: "war",
-    label: "War",
+    // The block retires at two points a turn, so a country can sit at peace for
+    // up to fourteen turns still carrying it, with no live war behind it and
+    // therefore no breakdown to show. Saying "War" there leaves a nation that
+    // is no longer fighting anyone displaying a war penalty it cannot account
+    // for. `atPeace` is passed explicitly rather than inferred from empty
+    // parts, because the failure path also has no parts and a failed read is
+    // not peace: that war may well still be running.
+    label: atPeace ? "War (winding down)" : "War",
     effect,
     marginEffect: 0,
     source: "war",
@@ -355,7 +366,8 @@ export async function computeWarApproval(
       .sort((a, b) => a.entry.turn - b.entry.turn || a.conflict._id.localeCompare(b.conflict._id));
 
     const principal = mine[0];
-    if (!principal) return settle(previous, 0, []);
+    // No live war: target zero and let the damping step walk the block out.
+    if (!principal) return settle(previous, 0, [], true);
 
     const { conflict, side, entry } = principal;
     const turnsSinceEntry = Math.max(0, turn - entry.turn);
@@ -405,7 +417,12 @@ export async function computeWarApproval(
   }
 }
 
-function settle(previous: number, raw: number, parts: WarPart[]): WarApprovalResult {
+function settle(
+  previous: number,
+  raw: number,
+  parts: WarPart[],
+  atPeace = false
+): WarApprovalResult {
   // A corrupt conflict document (a non-finite `control`, say) would otherwise
   // carry NaN through the clamps, through the damping step, and into
   // governmentApprovals — where it poisons every rating computation downstream
@@ -415,7 +432,7 @@ function settle(previous: number, raw: number, parts: WarPart[]): WarApprovalRes
   const stepped = stepWarTotal(previous, safeRaw);
   const total = Number.isFinite(stepped) ? stepped : 0;
   const finiteParts = parts.filter((part) => Number.isFinite(part.effect));
-  const modifier = buildWarModifier(total, finiteParts);
+  const modifier = buildWarModifier(total, finiteParts, atPeace);
   return { modifiers: modifier ? [modifier] : [], total };
 }
 

@@ -155,7 +155,7 @@ function DriverRow({ modifier }: { modifier: ActiveModifier }) {
         isAddress
           ? "Temporary boost from an active State of the State address (approval only)"
           : isWar
-            ? "How the war is going: the front line, whether allies are contributing, and how long the public has carried it. Affects approval only."
+            ? "How the war is going: the front line, whether allies are contributing, and how long the public has carried it. Fades gradually once the fighting ends. Affects approval only."
             : "Derived from regional metric thresholds; affects approval and sector profit margins"
       }
     >

@@ -324,6 +324,24 @@ describe("buildWarModifier", () => {
     expect(label.length).toBeGreaterThan(0);
     expect(label).not.toMatch(/[–—]/);
   });
+
+  /**
+   * The block retires at two points a turn, so a country can sit at peace for
+   * up to fourteen turns still carrying it. Labelling that "War" leaves a
+   * nation that is no longer fighting anyone showing a war penalty with
+   * nothing to explain it.
+   */
+  it("says it is winding down once the fighting has stopped", () => {
+    expect(buildWarModifier(-6, [], true)?.label).toBe("War (winding down)");
+  });
+
+  it("keeps the plain label while a war is still being fought", () => {
+    expect(buildWarModifier(-6, parts, false)?.label).toBe("War");
+  });
+
+  it("keeps the winding down label free of dashes too", () => {
+    expect(buildWarModifier(-6, [], true)?.label).not.toMatch(/[–—]/);
+  });
 });
 
 describe("nextControlSample", () => {

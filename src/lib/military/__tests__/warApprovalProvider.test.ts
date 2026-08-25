@@ -104,6 +104,24 @@ describe("computeWarApproval", () => {
     expect(result.modifiers[0]!.effect).toBe(-7);
   });
 
+  it("tells the player the block is winding down while it retires", async () => {
+    wire([]);
+    const result = await computeWarApproval(db as unknown as Db, "US", 100, -9);
+    expect(result.modifiers[0]!.label).toBe("War (winding down)");
+  });
+
+  /**
+   * A failed read is not peace. The war may well still be running, so the
+   * held-over total must not tell the player the fighting has stopped.
+   */
+  it("does not claim a war has ended when the read merely failed", async () => {
+    db.collection("conflicts").find.mockImplementation(() => {
+      throw new Error("mongo is having a day");
+    });
+    const result = await computeWarApproval(db as unknown as Db, "US", 100, -6);
+    expect(result.modifiers[0]!.label).toBe("War");
+  });
+
   /** The exhaustion clock and the war-effort baseline both run from own entry. */
   it("bills a late joiner from its own entry, not the war's start", async () => {
     const late = conflict({
