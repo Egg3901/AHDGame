@@ -95,22 +95,35 @@ export function manifestoMultiplierForGroup(
   return 1 + maxSwing * clamped;
 }
 
-/** Active policy at judgment time: legislationTypeId → { policyOptionId, effectDirection }. */
+/**
+ * Active policy at judgment time. Option-based laws record `policyOptionId`;
+ * UK level-based ("primary") laws record `policyOptionIndex`.
+ */
 export type EnactedPolicyLookup = Record<
   string,
-  { policyOptionId?: string; effectDirection?: number } | undefined
+  { policyOptionId?: string; policyOptionIndex?: number; effectDirection?: number } | undefined
 >;
 
+export interface PledgeTargetLike {
+  legislationTypeId: string;
+  policyOptionId?: string;
+  policyOptionLevel?: number;
+}
+
 /**
- * Is a single pledge kept, given the currently-active policies?
- *  - enact:    kept iff any mapped option is the active option for its law.
- *  - maintain: kept unless the active policy moved AGAINST the pledge, i.e. the
- *              active option's effectDirection is on the opposite side of the
- *              pledged target's (a cut / reversal). No active record = kept
- *              (nothing was changed to break it).
+ * Is a single pledge kept, given the currently-active policies? Handles both
+ * option-based and level-based (UK) laws.
+ *
+ * enact:
+ *  - option: kept iff a mapped option is the active option.
+ *  - level:  kept iff the active level is >= the pledged floor.
+ * maintain:
+ *  - level:  kept unless the active level fell below the pledged floor.
+ *  - option: kept unless the active policy moved AGAINST the pledged direction
+ *            (a cut / reversal). No active record = kept (nothing changed it).
  */
 export function isPledgeKept(
-  targets: { legislationTypeId: string; policyOptionId: string }[],
+  targets: PledgeTargetLike[],
   semantics: PledgeTargetSemantics,
   enacted: EnactedPolicyLookup,
   targetDirections?: Record<string, number>
@@ -120,24 +133,42 @@ export function isPledgeKept(
   if (semantics === "enact") {
     for (const t of targets) {
       const active = enacted[t.legislationTypeId];
-      if (active?.policyOptionId && active.policyOptionId === t.policyOptionId) {
+      if (!active) continue;
+      if (t.policyOptionId !== undefined && active.policyOptionId === t.policyOptionId) {
         return { kept: true, reason: `enacted ${t.policyOptionId}` };
       }
+      if (
+        t.policyOptionLevel !== undefined &&
+        active.policyOptionIndex !== undefined &&
+        active.policyOptionIndex >= t.policyOptionLevel
+      ) {
+        return { kept: true, reason: `reached level ${active.policyOptionIndex}` };
+      }
     }
-    return { kept: false, reason: "pledged option not the active policy" };
+    return { kept: false, reason: "pledged target not reached" };
   }
 
   // maintain
   for (const t of targets) {
     const active = enacted[t.legislationTypeId];
-    if (!active || active.policyOptionId === undefined) continue; // untouched → fine
-    if (active.policyOptionId === t.policyOptionId) continue; // still at baseline → fine
-    const wanted = targetDirections?.[t.legislationTypeId];
-    const got = active.effectDirection;
-    if (typeof wanted === "number" && typeof got === "number") {
-      // Broken only if it moved to the opposite side of the pledged direction.
-      if (Math.sign(got) !== 0 && Math.sign(got) === -Math.sign(wanted)) {
-        return { kept: false, reason: `policy moved against pledge on ${t.legislationTypeId}` };
+    if (!active) continue; // untouched → fine
+
+    if (t.policyOptionLevel !== undefined && active.policyOptionIndex !== undefined) {
+      if (active.policyOptionIndex < t.policyOptionLevel) {
+        return { kept: false, reason: `level fell to ${active.policyOptionIndex}` };
+      }
+      continue;
+    }
+
+    if (t.policyOptionId !== undefined) {
+      if (active.policyOptionId === undefined) continue; // untouched
+      if (active.policyOptionId === t.policyOptionId) continue; // still at baseline
+      const wanted = targetDirections?.[t.legislationTypeId];
+      const got = active.effectDirection;
+      if (typeof wanted === "number" && typeof got === "number") {
+        if (Math.sign(got) !== 0 && Math.sign(got) === -Math.sign(wanted)) {
+          return { kept: false, reason: `policy moved against pledge on ${t.legislationTypeId}` };
+        }
       }
     }
   }
@@ -151,7 +182,7 @@ export function isPledgeKept(
 export function evaluateDelivery(
   pledges: {
     catalogEntryId: string;
-    targets: { legislationTypeId: string; policyOptionId: string }[];
+    targets: PledgeTargetLike[];
     targetSemantics: PledgeTargetSemantics;
     targetDirections?: Record<string, number>;
   }[],

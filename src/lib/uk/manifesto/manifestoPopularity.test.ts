@@ -69,12 +69,9 @@ describe("manifesto multiplier", () => {
   });
   it("respects a custom maxSwing", () => {
     const pledges = [entry({ position: { economic: -5, social: -5 } })];
-    const m = manifestoMultiplierForGroup(
-      pledges,
-      { economicLean: -5, socialLean: -5 },
-      "g",
-      { maxSwing: 0.1 }
-    );
+    const m = manifestoMultiplierForGroup(pledges, { economicLean: -5, socialLean: -5 }, "g", {
+      maxSwing: 0.1,
+    });
     expect(m).toBeGreaterThan(1);
     expect(m).toBeLessThanOrEqual(1.1 + 1e-9);
   });
@@ -101,14 +98,22 @@ describe("kept/broken: maintain", () => {
   });
   it("kept when still at baseline", () => {
     expect(
-      isPledgeKept(targets, "maintain", { nhs: { policyOptionId: "current", effectDirection: 0 } }, dirs)
-        .kept
+      isPledgeKept(
+        targets,
+        "maintain",
+        { nhs: { policyOptionId: "current", effectDirection: 0 } },
+        dirs
+      ).kept
     ).toBe(true);
   });
   it("broken when moved to the opposite direction (a cut)", () => {
     expect(
-      isPledgeKept(targets, "maintain", { nhs: { policyOptionId: "cut", effectDirection: -1 } }, dirs)
-        .kept
+      isPledgeKept(
+        targets,
+        "maintain",
+        { nhs: { policyOptionId: "cut", effectDirection: -1 } },
+        dirs
+      ).kept
     ).toBe(false);
   });
   it("kept when moved further in the pledged direction", () => {

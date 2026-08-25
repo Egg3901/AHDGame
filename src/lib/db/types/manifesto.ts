@@ -63,8 +63,18 @@ export interface PledgeCatalogEntry {
 
 export interface PledgeTarget {
   legislationTypeId: string;
-  /** The specific option that satisfies the pledge (enact), or the baseline to not fall below (maintain). */
-  policyOptionId: string;
+  /**
+   * Option-based laws: the option id that satisfies the pledge (enact), or the
+   * baseline stance to hold (maintain).
+   */
+  policyOptionId?: string;
+  /**
+   * Level-based laws (UK "primary" laws use a `levels[]` ladder recorded as
+   * `policyOptionIndex`): the minimum level that satisfies the pledge.
+   * enact  → kept when the active level is >= this.
+   * maintain → kept unless the active level falls below this floor.
+   */
+  policyOptionLevel?: number;
 }
 
 /** A concrete pledge chosen for a manifesto — a reference into the catalog. */
