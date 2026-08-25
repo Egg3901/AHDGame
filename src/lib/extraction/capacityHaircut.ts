@@ -121,6 +121,64 @@ export function weightedCapacityUtilization(
 }
 
 /**
+ * Capacity utilization with scarcity relief capped by the physical deposit
+ * ceiling.
+ *
+ * The relief exists so a shortage stops taxing exactly the extraction revenue
+ * the economy needs. Against the corrected ledger-basis output figures,
+ * though, an unconstrained relief can lift utilization fully to 1 for a
+ * sector whose desired output is many times its state's capacity: the corp
+ * would book revenue for ore the deposits cannot physically yield.
+ *
+ * The raw capacity ratio bounds that: the share of the sector's DESIRED
+ * output (in corrected units) its multipliers actually permit,
+ *
+ *   ratio = Σ(units_r × multiplier_r) / Σ(units_r)
+ *
+ * The relieved, rate-weighted utilization is honored only up to this ratio;
+ * past it the physical clamp wins and the unrelieved figure is returned.
+ * When no corrected units are recorded this is exactly
+ * weightedCapacityUtilization.
+ */
+export function scarcityReliefCappedUtilization(
+  supplyRates: Partial<Record<CommodityType, number>>,
+  multipliers: Partial<Record<ExtractableResource, number>> | undefined,
+  reliefByResource?: Partial<Record<ExtractableResource, number>>,
+  /** Corrected desired output per resource, same basis as the multipliers. */
+  desiredOutputUnits?: Partial<Record<ExtractableResource, number>>
+): { utilization: number; bindingResource: ExtractableResource | null } {
+  const relieved = weightedCapacityUtilization(supplyRates, multipliers, reliefByResource);
+
+  let unitSum = 0;
+  let unitWeightedRaw = 0;
+  for (const resource of EXTRACTABLE_RESOURCES) {
+    const units = desiredOutputUnits?.[resource] ?? 0;
+    if (!(units > 0)) continue;
+    unitSum += units;
+    unitWeightedRaw += units * (multipliers?.[resource] ?? 1);
+  }
+  if (!(unitSum > 0)) return relieved;
+  const rawCapacityRatio = unitWeightedRaw / unitSum;
+  if (relieved.utilization <= rawCapacityRatio) return relieved;
+
+  // The cap binds: report the physical ratio and the resource that binds it.
+  let minMult = Infinity;
+  let binding: ExtractableResource | null = null;
+  for (const resource of EXTRACTABLE_RESOURCES) {
+    if (!((desiredOutputUnits?.[resource] ?? 0) > 0)) continue;
+    const rawMult = multipliers?.[resource] ?? 1;
+    if (rawMult < minMult) {
+      minMult = rawMult;
+      binding = resource;
+    }
+  }
+  return {
+    utilization: rawCapacityRatio,
+    bindingResource: minMult < 1 ? binding : null,
+  };
+}
+
+/**
  * Transition-ramped revenue multiplier for the capacity haircut.
  * Fades from 1.0 (no haircut) at the start turn to `utilization` after the
  * full EXTRACTION_CAPACITY_HAIRCUT_TURNS window.

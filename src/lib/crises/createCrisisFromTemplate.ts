@@ -60,6 +60,13 @@ export async function createCrisisFromTemplate(
   // metadata and the detail page all read with the location, not "{location}".
   const locationName = await resolveCrisisLocationName(db, { scope, countryIds, regionIds });
 
+  // Omitted entirely when absent, never written as undefined: the driver
+  // serializes an explicit undefined as null, and the crises_living_event
+  // unique index (sparse OR partial) tolerates missing fields but a sparse
+  // one still indexes null — the second { livingConflictEventId: null }
+  // insert then fails E11000 on every spawner turn (GlitchTip AHD-1JV).
+  const livingConflictEventId = params.livingConflictEventId ?? template.livingConflictEventId;
+
   const crisis: Omit<Crisis, "_id"> = {
     name: template.name,
     description: interpolateLocation(template.description, locationName),
@@ -85,7 +92,7 @@ export async function createCrisisFromTemplate(
     autoSource: params.autoSource,
     interactionDefinition: template.interactionDefinition,
     globalResponse: params.globalResponse ?? template.globalResponse,
-    livingConflictEventId: params.livingConflictEventId ?? template.livingConflictEventId,
+    ...(livingConflictEventId !== undefined ? { livingConflictEventId } : {}),
   };
 
   const result = await db.collection<Crisis>("crises").insertOne(crisis as Crisis);
