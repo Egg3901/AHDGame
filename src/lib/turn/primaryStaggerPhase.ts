@@ -33,6 +33,8 @@ import type {
 } from "@/lib/db/types";
 import {
   getPrimaryWaveSchedule,
+  startedScheduleForFirstOffset,
+  STAGGER_WINDOW_TURNS_STRETCHED,
   resolvePartyFamily,
   getDelegatesForState,
   getDefaultPrimaryAllocation,
@@ -183,14 +185,8 @@ export async function runPrimaryStaggerWaveIfDue(
   // keeps the schedule it opened under. Unstamped races (the 1960 race) resolve
   // to v1 = compressed with momentum off.
   const ruleset = presidentialRulesetFor(election);
-  const schedule = getPrimaryWaveSchedule(ruleset);
   const momentumCap = ruleset.primaryMomentumCapPoints;
   const momentumDecay = ruleset.primaryMomentumDecay;
-  // Momentum is a stretched-calendar-subsystem feature: it computes and persists
-  // only for races on the stretched calendar (v3+). Compressed races (v1/v2,
-  // including the live 1960 race) never touch `primaryMomentum` — byte-identical
-  // to the pre-subsystem engine.
-  const momentumEnabled = momentumEnabledForRuleset(ruleset);
 
   // Turns remaining until the primary closes — turn-first so the stagger window
   // tracks game turns rather than wall-clock, freezing on pause. Falls back to
@@ -203,8 +199,11 @@ export async function runPrimaryStaggerWaveIfDue(
   } else {
     return null;
   }
-  const dueWaveCount = getDuePrimaryWaveCount(turnsToEnd, schedule);
-  if (dueWaveCount === 0) return null;
+  // Cheap early bail: outside the widest possible stagger window no wave can be
+  // due, so return before loading (and bootstrapping) the tally for a race that
+  // is nowhere near its primary. The precise, schedule-aware gate runs after the
+  // tally load below.
+  if (turnsToEnd < 0 || turnsToEnd > STAGGER_WINDOW_TURNS_STRETCHED - 1) return null;
 
   // Active preset drives per-state delegate rescaling (delegates track each
   // state's EV weight, which is 1990-census in a 1991 game).
@@ -246,6 +245,29 @@ export async function runPrimaryStaggerWaveIfDue(
       .findOne({ electionId: election._id });
     if (!tally) return null;
   }
+
+  // Schedule stickiness: once a primary has begun, it keeps the wave cadence it
+  // opened on, even if the race is later re-stamped to a ruleset with a
+  // different calendar. Retrofitting the stretched schedule onto a primary that
+  // already ran waves on the compressed cadence would drop every remaining wave
+  // at once (the 40-turn lead is gone), so a mid-flight primary is locked to the
+  // schedule its first recorded wave used; only a primary that has not started
+  // yet takes the ruleset schedule.
+  const schedule =
+    startedScheduleForFirstOffset(tally.primaryWaveHistory?.[0]?.turnsRemaining) ??
+    getPrimaryWaveSchedule(ruleset);
+  // Momentum is a stretched-calendar-subsystem feature: it computes and persists
+  // only for races on the stretched calendar (v3+). Compressed races (v1/v2,
+  // including the live 1960 race) never touch `primaryMomentum` — byte-identical
+  // to the pre-subsystem engine. Keyed on the EFFECTIVE (started) schedule, so a
+  // compressed-in-flight primary re-stamped to v3 still never accrues momentum.
+  const momentumEnabled = momentumEnabledForRuleset(ruleset) && schedule.kind === "stretched";
+  // Precise, schedule-aware due-wave count: this bounds the per-turn catch-up
+  // (`wavesRun >= dueWaveCount` below), so it must use the sticky schedule to
+  // avoid dumping every remaining wave when a compressed-in-flight primary was
+  // re-stamped to a stretched ruleset.
+  const dueWaveCount = getDuePrimaryWaveCount(turnsToEnd, schedule);
+  if (dueWaveCount === 0) return null;
 
   // Source of truth for control flow: the atomic counter, if present. Falls
   // back to `primaryWaveHistory.length` for legacy tallies that pre-date the
