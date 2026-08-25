@@ -1286,9 +1286,10 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       ]);
     }
 
-    // Freight demand wiring (ticket #1039): haul TEU is booked as real freight
-    // demand before clearing, so the Logistics map and sold % read one market.
-    applyFreightHaulDemand(freightSettlement.sourcing.freightTeuByState, {
+    // Freight demand wiring (ticket #1039): price-tolerant haul TEU, including
+    // the final requests refused by local capacity, is booked before clearing.
+    // Observed network load remains separately available as freightTeuByState.
+    applyFreightHaulDemand(freightSettlement.sourcing.freightDemandTeuByState, {
       global,
       byState,
       byCountry,
