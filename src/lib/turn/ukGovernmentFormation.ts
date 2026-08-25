@@ -20,6 +20,7 @@ import { getGovernmentFormationsCollection } from "@/lib/db/collections/governme
 import { getTotalUkCommonsSeats } from "@/lib/constants/states";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { lowerChamberMajorityThreshold } from "./lowerChamberSeats";
+import { resetConfidenceGauge } from "@/lib/uk/confidence/confidenceGaugeStore";
 import {
   tallySeatsByParty,
   getLargestParty as sharedGetLargestParty,
@@ -182,4 +183,8 @@ async function seedGovernmentFormation(db: Db): Promise<void> {
 export async function resetGovernmentAfterElection(now: Date): Promise<void> {
   const db = await getDb();
   await resetParliamentaryGovernmentAfterElection(db, "UK", now);
+  // Confidence gauge (epic #856): a fresh parliament starts with full
+  // confidence. Reset regardless of the dissolution flag — this is the value,
+  // not the consequence.
+  await resetConfidenceGauge(db, now);
 }
