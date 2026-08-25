@@ -2,6 +2,7 @@ import type { PartyActivityFeedItem, PartyActivityFeedResponse } from "@/lib/par
 import type { RecruitmentSlate, SlateCandidate, TreasuryTransaction } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
+import { SLATE_REFUSAL_LABEL, isSlateFilingFailure } from "@/lib/slateRefusalReasons";
 import type { Db } from "mongodb";
 
 const HIDDEN_OVERVIEW_TREASURY_CATEGORIES = new Set(["gotv", "suppression", "fund_generation"]);
@@ -15,7 +16,10 @@ export function shouldIncludePartyOverviewTreasuryActivity(
 }
 
 export function describeSlateActivity(
-  row: Pick<SlateCandidate, "status" | "invitedAt" | "respondedAt" | "filedAt" | "updatedAt">
+  row: Pick<
+    SlateCandidate,
+    "status" | "invitedAt" | "respondedAt" | "filedAt" | "updatedAt" | "refusalReason"
+  >
 ): { createdAt: Date; summary: string } {
   if (row.status === "filed" && row.filedAt) {
     return { createdAt: row.filedAt, summary: "filed via slate" };
@@ -24,7 +28,15 @@ export function describeSlateActivity(
     return { createdAt: row.respondedAt, summary: "declined slate offer" };
   }
   if (row.status === "withdrawn") {
-    return { createdAt: row.updatedAt, summary: "removed from slate" };
+    // #1181: a tombstone with a filing-failure reason is the turn giving up on
+    // the row, not the chair removing it. Saying "removed from slate" there
+    // pinned a system failure on the chair.
+    return {
+      createdAt: row.updatedAt,
+      summary: isSlateFilingFailure(row.refusalReason)
+        ? "could not be filed from the slate"
+        : "removed from slate",
+    };
   }
   if (row.status === "considering" && row.respondedAt) {
     return { createdAt: row.respondedAt, summary: "is considering slate offer" };
@@ -100,7 +112,7 @@ export async function getPartyActivityFeed(
       type: "slate",
       createdAt: slateActivity.createdAt.toISOString(),
       summary: `${row.candidateName} ${slateActivity.summary} (${stateLabel})`,
-      detail: row.refusalReason ?? undefined,
+      detail: row.refusalReason ? SLATE_REFUSAL_LABEL[row.refusalReason] : undefined,
       link: { tab: "slate" },
     });
   }

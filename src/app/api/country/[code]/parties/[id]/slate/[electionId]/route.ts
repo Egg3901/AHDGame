@@ -9,6 +9,7 @@ import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import {
   ensureSlate,
   findSlateForElection,
+  isSlateRowVisibleToChair,
   listSlateCandidates,
   listStateAssignedCandidateIds,
   materializeSlateAssignmentsFromTemplate,
@@ -108,9 +109,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       });
     }
 
-    const candidates = (await listSlateCandidates(db, slate._id)).filter(
-      (candidate) => candidate.status !== "withdrawn"
-    );
+    const candidates = (await listSlateCandidates(db, slate._id)).filter(isSlateRowVisibleToChair);
     return NextResponse.json({
       slate: {
         id: slate._id.toString(),

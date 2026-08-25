@@ -719,6 +719,7 @@ describe("fileAcceptedSlateRows", () => {
     expect(summary.skipped).toBe(1);
     expect(inserted).toHaveLength(0);
     expect(candidateRow.status).toBe("withdrawn");
+    expect(candidateRow.refusalReason).toBe("npp_unavailable");
   });
 
   it("withdraws an NPP from their old race before filing the newly assigned slate race", async () => {
@@ -888,6 +889,8 @@ describe("fileAcceptedSlateRows", () => {
     );
 
     expect(summary.filed).toBe(1);
+    // A defending incumbent is never displaced to make room for the slate.
+    expect(summary.displaced).toBe(0);
     expect(inserted).toHaveLength(2);
     expect(inserted[0].status).toBe("active");
     expect(inserted[1].characterId).toEqual(slateNpp._id);
@@ -895,7 +898,7 @@ describe("fileAcceptedSlateRows", () => {
     expect(candidatesByElection.get(electionId.toString())).toHaveLength(2);
   });
 
-  it("does not add a second same-party slate challenger when one is already active", async () => {
+  it("displaces an auto-picked same-party challenger so the chair's pick files (#1181)", async () => {
     const electionId = new ObjectId();
     const election: Election = {
       _id: electionId,
@@ -956,18 +959,253 @@ describe("fileAcceptedSlateRows", () => {
     const candidatesByElection = new Map<string, ElectionCandidate[]>([
       [electionId.toString(), [challengerCandidate]],
     ]);
+    const ctx = makeCtx(db, [activeChallenger, anotherChallenger], {
+      candidatesByElection,
+      nppCandidacies: new Set([activeChallenger._id.toString()]),
+    });
+    const summary = await fileAcceptedSlateRows(ctx);
+
+    // The occupant holds no slate row of their own, so it is a generic
+    // party-pool auto-pick and yields to the chair's instruction.
+    expect(summary.filed).toBe(1);
+    expect(summary.skipped).toBe(0);
+    expect(summary.displaced).toBe(1);
+    expect(candidateRow.status).toBe("filed");
+    expect(challengerCandidate.status).toBe("withdrawn");
+    expect(ctx.nppCandidacies.has(activeChallenger._id.toString())).toBe(false);
+    expect(inserted.filter((c) => c.status === "active")).toHaveLength(1);
+    expect(inserted.find((c) => c.status === "active")?.characterId).toEqual(anotherChallenger._id);
+  });
+
+  it("yields to a same-party challenger the chair already slated, recording slot_taken", async () => {
+    const electionId = new ObjectId();
+    const election: Election = {
+      _id: electionId,
+      electionType: "house",
+      state: "US_CA",
+      countryId: "US",
+      cycle: 1,
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Election;
+
+    const firstPick = makeNPP({ name: "Chair First Pick" });
+    const secondPick = makeNPP({ name: "Chair Second Pick" });
+
+    const makeRow = (npp: NPP, status: SlateCandidate["status"]): SlateCandidate => ({
+      _id: new ObjectId(),
+      slateId: new ObjectId(),
+      electionId,
+      partyId: "1",
+      countryId: "US",
+      candidateType: "npp",
+      candidateId: npp._id,
+      candidateName: npp.name,
+      homeState: npp.homeState,
+      status,
+      fitScore: 90,
+      refusalReason: null,
+      autoFilled: false,
+      invitedAt: new Date(),
+      respondedAt: new Date(),
+      filedAt: status === "filed" ? new Date() : null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const filedRow = makeRow(firstPick, "filed");
+    const pendingRow = makeRow(secondPick, "accepted");
+
+    const filedCandidate: ElectionCandidate = {
+      _id: new ObjectId(),
+      electionId,
+      characterId: firstPick._id,
+      characterName: firstPick.name,
+      party: "1",
+      status: "active",
+      isNPP: true,
+      nppId: firstPick._id,
+      enteredAt: new Date(),
+    };
+
+    const inserted: ElectionCandidate[] = [filedCandidate];
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: [filedRow, pendingRow],
+      nppRelationships: [],
+      elections: [election],
+      electionCandidates: inserted,
+    });
+
+    const candidatesByElection = new Map<string, ElectionCandidate[]>([
+      [electionId.toString(), [filedCandidate]],
+    ]);
     const summary = await fileAcceptedSlateRows(
-      makeCtx(db, [activeChallenger, anotherChallenger], {
+      makeCtx(db, [firstPick, secondPick], {
         candidatesByElection,
-        nppCandidacies: new Set([activeChallenger._id.toString()]),
+        nppCandidacies: new Set([firstPick._id.toString()]),
       })
     );
 
     expect(summary.filed).toBe(0);
     expect(summary.skipped).toBe(1);
+    expect(summary.displaced).toBe(0);
     expect(inserted).toHaveLength(1);
+    expect(filedCandidate.status).toBe("active");
+    expect(pendingRow.status).toBe("withdrawn");
+    expect(pendingRow.refusalReason).toBe("slot_taken");
+  });
+
+  it("marks the row filed when the NPP already holds a candidacy in the slated race", async () => {
+    // Guards the degenerate double-candidacy state: a stale active row in
+    // another race must not make the pass resolve the wrong candidacy and then
+    // report the NPP's own seat as a taken slot.
+    const npp = makeNPP({ name: "Already Seated" });
+    const staleElectionId = new ObjectId();
+    const electionId = new ObjectId();
+
+    const election: Election = {
+      _id: electionId,
+      electionType: "house",
+      state: "US_CA",
+      countryId: "US",
+      cycle: 1,
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Election;
+
+    const candidateRow: SlateCandidate = {
+      _id: new ObjectId(),
+      slateId: new ObjectId(),
+      electionId,
+      partyId: "1",
+      countryId: "US",
+      candidateType: "npp",
+      candidateId: npp._id,
+      candidateName: npp.name,
+      homeState: npp.homeState,
+      status: "accepted",
+      fitScore: 90,
+      refusalReason: null,
+      autoFilled: false,
+      invitedAt: new Date(),
+      respondedAt: new Date(),
+      filedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const staleCandidacy: ElectionCandidate = {
+      _id: new ObjectId(),
+      electionId: staleElectionId,
+      characterId: npp._id,
+      characterName: npp.name,
+      party: "1",
+      status: "active",
+      isNPP: true,
+      nppId: npp._id,
+      enteredAt: new Date(),
+    };
+    const seatedCandidacy: ElectionCandidate = {
+      _id: new ObjectId(),
+      electionId,
+      characterId: npp._id,
+      characterName: npp.name,
+      party: "1",
+      status: "active",
+      isNPP: true,
+      nppId: npp._id,
+      enteredAt: new Date(),
+    };
+
+    const inserted: ElectionCandidate[] = [staleCandidacy, seatedCandidacy];
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: [candidateRow],
+      nppRelationships: [],
+      elections: [election],
+      electionCandidates: inserted,
+    });
+
+    const candidatesByElection = new Map<string, ElectionCandidate[]>([
+      [electionId.toString(), [seatedCandidacy]],
+    ]);
+    const summary = await fileAcceptedSlateRows(
+      makeCtx(db, [npp], {
+        candidatesByElection,
+        nppCandidacies: new Set([npp._id.toString()]),
+      })
+    );
+
+    expect(summary.filed).toBe(1);
+    expect(summary.skipped).toBe(0);
+    expect(summary.displaced).toBe(0);
+    expect(candidateRow.status).toBe("filed");
+    expect(seatedCandidacy.status).toBe("active");
+    expect(inserted).toHaveLength(2);
+  });
+
+  it("records ineligible_region when the party cannot contest the race's region", async () => {
+    const electionId = new ObjectId();
+    const election: Election = {
+      _id: electionId,
+      electionType: "commons",
+      state: "EMI",
+      countryId: "UK",
+      cycle: 1,
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Election;
+
+    const npp = makeNPP({ name: "Oliver Hall", countryId: "UK", homeState: "EMI", party: "4" });
+
+    const candidateRow: SlateCandidate = {
+      _id: new ObjectId(),
+      slateId: new ObjectId(),
+      electionId,
+      partyId: "4",
+      countryId: "UK",
+      candidateType: "npp",
+      candidateId: npp._id,
+      candidateName: npp.name,
+      homeState: npp.homeState,
+      status: "accepted",
+      fitScore: 64,
+      refusalReason: null,
+      autoFilled: false,
+      invitedAt: new Date(),
+      respondedAt: new Date(),
+      filedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const inserted: ElectionCandidate[] = [];
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: [candidateRow],
+      nppRelationships: [],
+      elections: [election],
+      electionCandidates: inserted,
+    });
+
+    // Plaid Cymru stands in Wales only, so an East Midlands seat is out.
+    const summary = await fileAcceptedSlateRows(
+      makeCtx(db, [npp], {
+        partyByCompositeKey: new Map([
+          ["UK:4", { sequentialId: 4, abbreviation: "PC", countryId: "UK" }],
+        ]) as NPPContext["partyByCompositeKey"],
+      })
+    );
+
+    expect(summary.filed).toBe(0);
+    expect(summary.skipped).toBe(1);
+    expect(inserted).toHaveLength(0);
     expect(candidateRow.status).toBe("withdrawn");
-    expect(candidatesByElection.get(electionId.toString())).toHaveLength(1);
+    expect(candidateRow.refusalReason).toBe("ineligible_region");
   });
 
   it("isolates a row whose insert throws so the rest of the pass still files", async () => {
