@@ -7,6 +7,9 @@ import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getCountryState } from "@/lib/countryState";
 import { getExchangeApiKey } from "@/lib/constants/exchangeRegistry";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
+import type { FederalBudget } from "@/lib/db/types/budget";
+import { getNationalBudgetId } from "@/lib/bonds/sovereign";
+import { aggregateExchangeTotals } from "@/lib/stockExchange/aggregate";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://ahousedividedgame.com";
 const HISTORY_CAP = 12;
@@ -88,7 +91,7 @@ export async function queryCountryEconomy(db: Db, country: string) {
 
   const exchangeApiKey = getExchangeApiKey(country as CountryId);
 
-  const [centralBank, snapshot] = await Promise.all([
+  const [centralBank, snapshot, budget] = await Promise.all([
     db
       .collection<CentralBank>("centralBanks")
       .findOne({ countryId: country } as Filter<CentralBank>),
@@ -97,31 +100,38 @@ export async function queryCountryEconomy(db: Db, country: string) {
           .collection<StockExchangeSnapshot>("stockExchangeSnapshots")
           .findOne({ _id: exchangeApiKey as unknown as StockExchangeSnapshot["_id"] })
       : Promise.resolve(null),
+    db
+      .collection<FederalBudget>("federalBudget")
+      .findOne(
+        { _id: getNationalBudgetId(country as CountryId) },
+        { projection: { "economicFactors.inflationRate": 1 } }
+      ),
   ]);
 
   const rateHistory = (centralBank?.interestRateHistory ?? []).slice(-HISTORY_CAP);
   const inflationHistory = (centralBank?.inflationHistory ?? []).slice(-HISTORY_CAP);
   const gdpGrowthHistory = (centralBank?.gdpGrowthHistory ?? []).slice(-HISTORY_CAP);
 
-  const latestInflation = inflationHistory.at(-1)?.rate ?? null;
+  // `centralBanks.inflationHistory` is a per-turn COPY of this budget field
+  // (interestRateSnapshot.ts), so the budget is the source and the history is a
+  // chart series. Reading the copy returned null for the three countries that
+  // hold a budget but no central bank, while the site showed a real rate.
+  const budgetInflation = budget?.economicFactors?.inflationRate;
+  const latestInflation =
+    typeof budgetInflation === "number" && Number.isFinite(budgetInflation)
+      ? budgetInflation
+      : (inflationHistory.at(-1)?.rate ?? null);
   const latestGdpGrowth = gdpGrowthHistory.at(-1)?.rate ?? null;
 
+  // Anchored totals, matching the stock market page and the Economy page card.
+  // The raw sum added currencies together. See lib/stockExchange/aggregate.
   const listings = snapshot?.listings ?? [];
-  const totalMarketCap = listings.reduce((sum, l) => sum + (l.marketCap ?? 0), 0);
-  const weightedChange1h = listings.reduce(
-    (sum, l) => sum + (l.priceChange1h ?? 0) * (l.marketCap ?? 0),
-    0
-  );
-  const weightedChange24h = listings.reduce(
-    (sum, l) => sum + (l.priceChange24h ?? 0) * (l.marketCap ?? 0),
-    0
-  );
+  const totals = aggregateExchangeTotals(listings);
 
   const stockMarket = {
-    totalMarketCap,
-    change1h: totalMarketCap > 0 ? Math.round((weightedChange1h / totalMarketCap) * 100) / 100 : 0,
-    change24h:
-      totalMarketCap > 0 ? Math.round((weightedChange24h / totalMarketCap) * 100) / 100 : 0,
+    totalMarketCap: totals.marketCap,
+    change1h: Math.round(totals.weightedChange1h * 100) / 100,
+    change24h: Math.round(totals.weightedChange24h * 100) / 100,
     exchange: snapshot?.exchangeName ?? countryConfig.exchangeName ?? null,
   };
 

@@ -19,10 +19,11 @@ import type {
 import type { CommodityType } from "@/lib/constants/commodities";
 import {
   fxRateForCorpFromMap,
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
+import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 // The six commodity types shown in the PiP Corp view
@@ -82,9 +83,17 @@ export async function GET() {
       db
         .collection<CorporateSector>("corporateSectors")
         .find({ corporationId: { $in: topCorpIds } })
-        .project<{ corporationId: ObjectId; revenue: number }>({ corporationId: 1, revenue: 1 })
+        .project<{ corporationId: ObjectId; revenue: number; realizedRevenue?: number }>({
+          corporationId: 1,
+          revenue: 1,
+          // Without this `sectorEconomicRevenue` silently degrades to nameplate.
+          realizedRevenue: 1,
+        })
         .toArray(),
-      loadFxRatesByCurrency(db),
+      // Valuation map, not the settlement map: this RANKS corps for display, and
+      // the settlement map converts the six bloc currencies at 1.0. See
+      // corporationCapital.ts.
+      loadValuationFxRates(db),
     ]);
 
     const fxByCorpId = new Map<string, { code: CurrencyCode | undefined; rate: number }>();
@@ -99,7 +108,11 @@ export async function GET() {
     for (const sector of allSectors) {
       const key = sector.corporationId.toString();
       const fx = fxByCorpId.get(key);
-      const revenueAnchor = readCorpEconomicAnchor(sector.revenue ?? 0, fx?.code, fx?.rate ?? 1);
+      const revenueAnchor = readCorpEconomicAnchor(
+        sectorEconomicRevenue(sector),
+        fx?.code,
+        fx?.rate ?? 1
+      );
       revenueAnchorMap.set(key, (revenueAnchorMap.get(key) ?? 0) + revenueAnchor);
     }
 
@@ -131,10 +144,17 @@ export async function GET() {
         const sectors = await db
           .collection<CorporateSector>("corporateSectors")
           .find({ corporationId: corp._id })
-          .project({ revenue: 1 })
+          .project<Pick<CorporateSector, "revenue" | "realizedRevenue">>({
+            revenue: 1,
+            // Without this `sectorEconomicRevenue` silently degrades to nameplate.
+            realizedRevenue: 1,
+          })
           .toArray();
 
-        const revenuePerTurn = sectors.reduce((sum, s) => sum + (s.revenue ?? 0), 0);
+        // Realized, not nameplate - the same basis the corporation page, the
+        // stock list, the public API and the Discord cards use. See
+        // lib/corporations/sectorRevenueBasis.
+        const revenuePerTurn = sectors.reduce((sum, s) => sum + sectorEconomicRevenue(s), 0);
 
         playerCorp = {
           id: corp._id.toString(),

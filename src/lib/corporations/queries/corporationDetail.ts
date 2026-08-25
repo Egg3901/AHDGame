@@ -66,7 +66,7 @@ import {
   corpCapitalToAnchor,
   corpLiquidCapitalToAnchor,
   fxRateForCorpFromMap,
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
   resolveCorpLiquidCurrencyCode,
   resolveSectorHostCurrencyCode,
   fxRateForSectorHostFromMap,
@@ -396,7 +396,11 @@ async function buildHostileTakeoverEligibility(
     .project({ _id: 1 })
     .toArray();
 
-  const fxByCurrency = await loadFxRatesByCurrency(db);
+  // Valuation map, not the settlement map: this value is DISPLAYED and RANKED.
+  // The settlement map leaves the six bloc currencies (PLZ/CSK/HUF/YUD/BGL/ROL,
+  // 102 corps) missing on purpose, which converted them at 1.0. See
+  // corporationCapital.ts.
+  const fxByCurrency = await loadValuationFxRates(db);
   for (const mc of myCorps) {
     const acqPct = acquirerOwnershipPercent(mc._id, corporation);
     if (acqPct > HOSTILE_TAKEOVER_OWNERSHIP_THRESHOLD_PERCENT) {
@@ -1376,7 +1380,7 @@ export async function loadCorporationDetailView(args: {
   const heldBondIssuerMap = new Map(heldBondIssuerCorps.map((c) => [c._id.toString(), c.name]));
 
   const GAME_DAYS_PER_YEAR_RATIO = TURNS_PER_YEAR / TURNS_PER_DAY;
-  const portfolioFxByCurrency = await loadFxRatesByCurrency(db);
+  const portfolioFxByCurrency = await loadValuationFxRates(db);
   const heldBondsSummary = heldBondsRaw.map((bond) => {
     const holding = bond.holders.find(
       (h) => h.corporationId?.toString() === corporation._id.toString()

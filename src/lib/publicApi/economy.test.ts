@@ -58,13 +58,67 @@ describe("queryCountryEconomy", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     db = createMockDb();
-    ["centralBanks", "stockExchangeSnapshots"].forEach((n) => db.collection(n));
+    ["centralBanks", "stockExchangeSnapshots", "federalBudget"].forEach((n) => db.collection(n));
   });
 
   it("returns null for unknown country", async () => {
     const { queryCountryEconomy } = await import("./economy");
     const result = await queryCountryEconomy(db as unknown as Db, "XX" as never);
     expect(result).toBeNull();
+  });
+
+  it("prefers the budget's economicFactors.inflationRate over the bank chart series", async () => {
+    // `centralBanks.inflationHistory` is a per-turn COPY of the budget field
+    // (interestRateSnapshot.ts), so the budget is the source. The bank value
+    // here is deliberately wrong so this fails if the copy is read again.
+    db.collectionMocks.centralBanks!.findOne.mockResolvedValue({
+      _id: "US",
+      countryId: "US",
+      inflationHistory: [{ turn: 1, rate: 9.9 }],
+      interestRateHistory: [],
+      gdpGrowthHistory: [],
+    });
+    db.collectionMocks.federalBudget!.findOne.mockResolvedValue({
+      economicFactors: { inflationRate: 0.15 },
+    });
+    db.collectionMocks.stockExchangeSnapshots!.findOne.mockResolvedValue(null);
+
+    const { queryCountryEconomy } = await import("./economy");
+    const result = await queryCountryEconomy(db as unknown as Db, "US");
+
+    expect(result!.inflation).toBe(0.15);
+  });
+
+  it("falls back to the bank history when the budget carries no rate", async () => {
+    db.collectionMocks.centralBanks!.findOne.mockResolvedValue({
+      _id: "US",
+      countryId: "US",
+      inflationHistory: [{ turn: 1, rate: 2.2 }],
+      interestRateHistory: [],
+      gdpGrowthHistory: [],
+    });
+    db.collectionMocks.federalBudget!.findOne.mockResolvedValue({});
+    db.collectionMocks.stockExchangeSnapshots!.findOne.mockResolvedValue(null);
+
+    const { queryCountryEconomy } = await import("./economy");
+    const result = await queryCountryEconomy(db as unknown as Db, "US");
+
+    expect(result!.inflation).toBe(2.2);
+  });
+
+  it("returns the budget rate for a country that has no central bank", async () => {
+    // BAL, BLR and UKR each hold a budget but no centralBanks document, so the
+    // old bank-only read returned null while the site showed a real rate.
+    db.collectionMocks.centralBanks!.findOne.mockResolvedValue(null);
+    db.collectionMocks.federalBudget!.findOne.mockResolvedValue({
+      economicFactors: { inflationRate: 0.5 },
+    });
+    db.collectionMocks.stockExchangeSnapshots!.findOne.mockResolvedValue(null);
+
+    const { queryCountryEconomy } = await import("./economy");
+    const result = await queryCountryEconomy(db as unknown as Db, "US");
+
+    expect(result!.inflation).toBe(0.5);
   });
 
   it("caps rateHistory at 12 entries", async () => {

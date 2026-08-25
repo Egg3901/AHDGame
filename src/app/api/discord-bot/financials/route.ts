@@ -45,7 +45,7 @@ import {
   anchorToCorpCapital,
   corpCapitalToAnchor,
   fxRateForCorpFromMap,
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
@@ -180,18 +180,24 @@ export async function GET(request: Request) {
       // physical cost model, and inverting ANY margin drops upkeep and
       // compliance and cannot represent a negative operating cost. Falls back
       // to the old expression for rows without the field.
+      // Realized, not nameplate — the same basis the NPV block further down in
+      // this same route already uses, so the per-sector rows and the balance
+      // sheet in one response cannot disagree. `workers` below deliberately
+      // stays on the nameplate: headcount tracks installed capacity, not what
+      // the sector managed to sell. See lib/corporations/sectorRevenueBasis.
+      const sectorRevenue = sectorEconomicRevenue(sector);
       const bookedPnl = readPlantsPnl(sector);
       const maintenance = bookedPnl
         ? bookedPnl.operatingCost
-        : sector.revenue * (1 - effectiveMargin / 100);
+        : sectorRevenue * (1 - effectiveMargin / 100);
       const profit = bookedPnl
         ? bookedPnl.profit
-        : sector.revenue - maintenance - sector.currentGrowthCost;
+        : sectorRevenue - maintenance - sector.currentGrowthCost;
 
       return {
         stateId: sector.stateId,
         stateName: stateNameMap.get(sector.stateId) ?? sector.stateId,
-        revenue: Math.round(sector.revenue),
+        revenue: Math.round(sectorRevenue),
         maintenanceCost: Math.round(maintenance),
         growthCost: Math.round(sector.currentGrowthCost),
         profit: Math.round(profit),
@@ -209,7 +215,11 @@ export async function GET(request: Request) {
     // would mix denominations. Normalize per-bond → ₳ → convert to corp
     // LOCAL for the income statement (all display fields land in corp
     // LOCAL to match `totalRevenue` / `operatingCosts`).
-    const fxByCurrency = await loadFxRatesByCurrency(db);
+    // Valuation map, not the settlement map: this value is DISPLAYED and RANKED.
+    // The settlement map leaves the six bloc currencies (PLZ/CSK/HUF/YUD/BGL/ROL,
+    // 102 corps) missing on purpose, which converted them at 1.0. See
+    // corporationCapital.ts.
+    const fxByCurrency = await loadValuationFxRates(db);
     const corpCurrency = resolveCorpLiquidCurrencyCode(corporation);
     const corpFxRate = fxRateForCorpFromMap(corporation, fxByCurrency);
     const totalDebtAnchor = outstandingBonds.reduce((sum, b) => {

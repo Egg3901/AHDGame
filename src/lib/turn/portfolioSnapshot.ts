@@ -22,7 +22,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
   corpLiquidCapitalToAnchor,
   fxRateForCorpFromMap,
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
 } from "@/lib/currency/corporationCapital";
 import { computeCorporationLiabilityValueAnchor } from "@/lib/corporations/netWorth";
 
@@ -109,7 +109,7 @@ export async function snapshotPortfolioValues(turn: number): Promise<number> {
       .find({ matured: false, "holders.0": { $exists: true } })
       .project<Bond>({ holders: 1, marketPrice: 1, currencyCode: 1, countryId: 1 })
       .toArray(),
-    loadFxRatesByCurrency(db),
+    loadValuationFxRates(db),
   ]);
 
   // Aggregate per-character: stocks, bonds, and cash
@@ -356,7 +356,7 @@ export async function snapshotCorporationPortfolioValues(turn: number): Promise<
       .find({ matured: false, "holders.corporationId": { $exists: true } })
       .project<Bond>({ holders: 1, marketPrice: 1, currencyCode: 1, countryId: 1 })
       .toArray(),
-    loadFxRatesByCurrency(db),
+    loadValuationFxRates(db),
   ]);
 
   // All portfolio aggregates land in ₳ (anchor). sharePrice, bond face values,

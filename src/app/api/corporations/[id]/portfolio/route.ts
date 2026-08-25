@@ -18,7 +18,7 @@ import { computeCorporationLiabilityValueAnchor } from "@/lib/corporations/netWo
 import {
   corpLiquidCapitalToAnchor,
   fxRateForCorpFromMap,
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
 } from "@/lib/currency/corporationCapital";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -98,7 +98,7 @@ export async function GET(request: Request, { params }: RouteParams) {
           $or: [{ "holders.corporationId": corporation._id }, { corporationId: corporation._id }],
         })
         .toArray(),
-      loadFxRatesByCurrency(db),
+      loadValuationFxRates(db),
       loadReservedPositionsPlacedBy(db, corporation._id),
     ]);
 

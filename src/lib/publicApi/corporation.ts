@@ -4,6 +4,11 @@ import type { Corporation, Character } from "@/lib/db/types";
 import type { CorporateSector } from "@/lib/db/types/corporation";
 import type { Bond } from "@/lib/db/types/bond";
 import { getRoundedPublicMarketCap } from "@/lib/corporations/marketQuote";
+import {
+  loadValuationFxRates,
+  fxRateForSectorHostFromMap,
+} from "@/lib/currency/corporationCapital";
+import { corpFinancials } from "./corpFinancials";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://ahousedividedgame.com";
 
@@ -69,14 +74,20 @@ export async function queryCorporation(db: Db, params: { name?: string; id?: str
   const totalShares = corp.totalShares ?? 1;
 
   // Financials are derived from the operational sectors (the corp document does
-  // not store revenue/income directly). Mirrors the per-sector basis the
-  // internal corporation detail view uses.
-  const totalRevenue = sectors.reduce((sum, s) => sum + (s.revenue ?? 0), 0);
-  const operatingIncome = sectors.reduce(
-    (sum, s) => sum + (s.revenue ?? 0) * ((s.profitMargin ?? 0) / 100),
-    0
+  // not store revenue/income directly), on the same basis the internal
+  // corporation detail view uses: realized revenue, the engine-applied margin,
+  // and each sector converted from its HOST currency before summing. See
+  // lib/publicApi/corpFinancials.
+  //
+  // Valuation map, not the settlement map: these figures are DISPLAYED.
+  const fxByCurrency = await loadValuationFxRates(db);
+  const hostRateBySectorId = new Map<string, number>(
+    sectors.map((s) => [String(s._id), fxRateForSectorHostFromMap(s, corp, fxByCurrency)])
   );
-  const operatingCosts = totalRevenue - operatingIncome;
+  const { totalRevenue, operatingIncome, operatingCosts } = corpFinancials({
+    sectors,
+    hostRateBySectorId,
+  });
 
   return {
     found: true,
