@@ -128,23 +128,26 @@ export function validatePeaceOffer(
   //
   // Reported ahead of the indemnity rules below because it is the durable bar of the two:
   // a player refused here needs to be told about the treaty, not about the money.
-  const bound = conflict.treatyEntries?.find((e) => e.countryId === from);
-  if (bound) {
+  //
+  // ANY entry binding this country, not merely the first: `resolveTreatyDefenders`
+  // excludes anyone already rostered, so today a country holds at most one entry per
+  // conflict — but a `find` would silently release the bar on the wrong obligation if
+  // that ever stopped holding, and the invariant is not enforced here.
+  const bound = conflict.treatyEntries?.find(
     // A live roster read, never a stored flag, so the bar lifts by itself the moment the
     // defended member takes its own peace.
-    const stillFighting = rosters.includes(bound.defending);
-    if (stillFighting) {
-      const org =
-        INTERNATIONAL_ORGANIZATIONS[
-          bound.organizationId as keyof typeof INTERNATIONAL_ORGANIZATIONS
-        ]?.name ?? bound.organizationId;
-      const fromName = COUNTRY_CONFIGS[from]?.name ?? from;
-      const defendedName = COUNTRY_CONFIGS[bound.defending]?.name ?? bound.defending;
-      return {
-        ok: false,
-        error: `${fromName} entered this war under the ${org}. It cannot make a separate peace while ${defendedName} is still fighting.`,
-      };
-    }
+    (e) => e.countryId === from && rosters.includes(e.defending)
+  );
+  if (bound) {
+    const org =
+      INTERNATIONAL_ORGANIZATIONS[bound.organizationId as keyof typeof INTERNATIONAL_ORGANIZATIONS]
+        ?.name ?? bound.organizationId;
+    const fromName = COUNTRY_CONFIGS[from]?.name ?? from;
+    const defendedName = COUNTRY_CONFIGS[bound.defending]?.name ?? bound.defending;
+    return {
+      ok: false,
+      error: `${fromName} entered this war under the ${org}. It cannot make a separate peace while ${defendedName} is still fighting.`,
+    };
   }
 
   if (!(indemnity.amount >= 0)) {

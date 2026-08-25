@@ -10,6 +10,8 @@ import {
 } from "@/lib/constants/internationalOrganizations";
 import { isMember } from "@/lib/internationalOrganizations/service";
 import { votingMembers } from "@/lib/internationalOrganizations/orgMembership";
+import { findWarBetween } from "@/lib/military/findWarBetween";
+import { activeTruceExpiry } from "@/lib/military/truce";
 
 /**
  * Enforced mutual defence: who a treaty drags into a war, and under which treaty.
@@ -45,6 +47,8 @@ export interface ResolveTreatyDefendersParams {
    * country already fighting would give the peace bar a duplicate to reason about.
    */
   conflict?: Pick<ConflictDoc, "sideA" | "sideB">;
+  /** Turn the declaration is enacted on, for the truce check. */
+  currentTurn: number;
 }
 
 export async function resolveTreatyDefenders(
@@ -101,6 +105,24 @@ export async function resolveTreatyDefenders(
     for (const countryId of await votingMembers(db, organizationId)) {
       if (excluded.has(countryId) || seen.has(countryId)) continue;
       seen.add(countryId);
+
+      // ONE war at a time between the same pair, the invariant `findWarBetween` exists
+      // to hold. A declaration is refused when the two are already opposed, but an ally
+      // arrives without one, so nothing else would stop treaty entry opening a SECOND
+      // live war between this ally and the declarer — a pair already fighting in a war
+      // hosted by some third country. The treaty is already being honoured on that
+      // front; it does not need a parallel one.
+      if (await findWarBetween(db, countryId, params.declarer)) continue;
+
+      // A truce is a hard bar on re-opening a war, and it must bind the treaty too.
+      // This is not hypothetical: release grants a departing ally exactly such a truce,
+      // so without this check an aggressor could re-declare on the same member and drag
+      // the released ally straight back in, turn after turn, and the truce release just
+      // handed out would be worth nothing.
+      if ((await activeTruceExpiry(db, countryId, params.declarer, params.currentTurn)) != null) {
+        continue;
+      }
+
       out.push({ countryId, organizationId });
     }
   }

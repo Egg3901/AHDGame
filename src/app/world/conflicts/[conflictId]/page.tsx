@@ -502,13 +502,19 @@ export default async function ConflictRecordPage({
     sideBFaction: doc.sideB.factionEntity,
     // Humanised here rather than in the component: the record is a presentational
     // client component and has no business reaching for country or org constants.
-    treatyNotes: (doc.treatyEntries ?? []).map((e) => ({
-      country: COUNTRY_CONFIGS[e.countryId]?.name ?? e.countryId,
-      organization:
-        INTERNATIONAL_ORGANIZATIONS[e.organizationId as keyof typeof INTERNATIONAL_ORGANIZATIONS]
-          ?.name ?? e.organizationId,
-      defending: COUNTRY_CONFIGS[e.defending]?.name ?? e.defending,
-    })),
+    //
+    // Filtered to countries STILL on a roster. Entries are never deleted (they are the
+    // war's record of why each ally came), so an ally released by its principal's peace
+    // would otherwise keep claiming a place in a belligerent list it has left.
+    treatyNotes: (doc.treatyEntries ?? [])
+      .filter((e) => sideACountries.includes(e.countryId) || sideBCountries.includes(e.countryId))
+      .map((e) => ({
+        country: COUNTRY_CONFIGS[e.countryId]?.name ?? e.countryId,
+        organization:
+          INTERNATIONAL_ORGANIZATIONS[e.organizationId as keyof typeof INTERNATIONAL_ORGANIZATIONS]
+            ?.name ?? e.organizationId,
+        defending: COUNTRY_CONFIGS[e.defending]?.name ?? e.defending,
+      })),
     control: doc.control,
     controlStart,
     hostRegionCodes,

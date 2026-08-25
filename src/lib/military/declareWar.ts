@@ -1,7 +1,8 @@
 import { ObjectId, type Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
-import type { Character } from "@/lib/db/types";
+import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
+import { getCharactersCollection } from "@/lib/db/collections/characters";
 import { createNotifications, type NotificationInput } from "@/lib/notifications";
 import { recordOrgHistoryEvent } from "@/lib/internationalOrganizations/service";
 import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
@@ -42,8 +43,11 @@ export interface DeclareWarResult {
  * the defence minister, the same pair the declare-war route authorises to take a country
  * to war in the first place.
  *
- * A war must never fail over a notification. `createNotifications` already swallows and
- * logs its own errors, which is the behaviour this relies on.
+ * A war must never fail over a notification. `createNotifications` swallows its own
+ * errors, but the seat lookups either side of it do not, and this runs AFTER the
+ * conflict has been written — so an unguarded throw here would abandon the rest of the
+ * enactment (the engine catches and logs it) over a side effect, reporting a failed
+ * enactment for a war that was in fact created correctly. Hence the blanket catch.
  */
 async function announceTreatyEntries(
   db: Db,
@@ -52,7 +56,19 @@ async function announceTreatyEntries(
   currentTurn: number
 ): Promise<void> {
   if (entries.length === 0) return;
+  try {
+    await announceTreatyEntriesUnguarded(db, entries, conflictName, currentTurn);
+  } catch (err) {
+    console.error("[declareWar] treaty entry announcement failed:", err);
+  }
+}
 
+async function announceTreatyEntriesUnguarded(
+  db: Db,
+  entries: TreatyEntry[],
+  conflictName: string,
+  currentTurn: number
+): Promise<void> {
   const inputs: NotificationInput[] = [];
   for (const e of entries) {
     const org =
@@ -65,15 +81,17 @@ async function announceTreatyEntries(
     if (hog) seatCharacterIds.push(hog);
     const defenceSeat = DEFENSE_POSITION_BY_COUNTRY[e.countryId];
     if (defenceSeat) {
-      const row = await db
-        .collection<{ characterId?: ObjectId }>("cabinetMembers")
-        .findOne({ countryId: e.countryId, positionId: defenceSeat });
+      const row = await getCabinetMembersCollection(db).findOne({
+        countryId: e.countryId,
+        positionId: defenceSeat,
+      });
       if (row?.characterId) seatCharacterIds.push(row.characterId);
     }
     if (seatCharacterIds.length === 0) continue;
 
-    const chars = await db
-      .collection<Character>("characters")
+    const chars = await (
+      await getCharactersCollection(db)
+    )
       .find({ _id: { $in: seatCharacterIds } })
       .project<{ _id: ObjectId; userId?: ObjectId }>({ _id: 1, userId: 1 })
       .toArray();
@@ -176,7 +194,12 @@ export async function declareWar(db: Db, input: DeclareWarInput): Promise<Declar
     // would enrol allies AGAINST the country they came to protect. The declarer's own
     // enrolment keeps its long-standing `?? "A"` fallback below, unchanged.
     if (defenderSide) {
-      const defenders = await resolveTreatyDefenders(db, { defender, declarer, conflict: live });
+      const defenders = await resolveTreatyDefenders(db, {
+        defender,
+        declarer,
+        conflict: live,
+        currentTurn,
+      });
       for (const d of defenders) {
         await joinSide(db, live, d.countryId, defenderSide);
       }
@@ -201,7 +224,7 @@ export async function declareWar(db: Db, input: DeclareWarInput): Promise<Declar
   // `initialControl`, `deployOpeningForces` (so allies arrive with troops instead of an
   // empty theatre) and `baseStrength = 320 + sideB.countries.length * 60`. Enrolling
   // afterwards with `joinSide` leaves all three computed for a coalition of one.
-  const defenders = await resolveTreatyDefenders(db, { defender, declarer });
+  const defenders = await resolveTreatyDefenders(db, { defender, declarer, currentTurn });
   const treatyEntries = toTreatyEntries(defenders, defender, currentTurn);
 
   const conflict = await createConflict(db, {
