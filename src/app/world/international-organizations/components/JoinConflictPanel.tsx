@@ -249,7 +249,7 @@ export function JoinConflictPanel({
                 <div className="mb-3">
                   <div className="mb-1 flex items-center justify-between text-xs text-muted">
                     <span>
-                      {yesCount} / {memberCount} members in favour — majority required
+                      {yesCount} / {memberCount} members in favour, majority required
                     </span>
                     <span className="tabular-nums">
                       {votingWindowTurns - turnsLeft}/{votingWindowTurns} turns
