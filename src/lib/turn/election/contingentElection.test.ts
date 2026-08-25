@@ -185,9 +185,12 @@ describe("resolveContingentElection", () => {
     expect(result.eligiblePresidentCandidateIds).not.toContain("fourth");
   });
 
-  it("uses deadlock breaker when House does not reach 26 states", () => {
+  it("uses deadlock breaker when no candidate reaches a majority of the delegations on the ballot", () => {
+    // 13-13: an even split of 26 delegations (roster majority 14). The old
+    // hardcoded 26-of-50 threshold also called 13-of-25 a deadlock, but under
+    // roster-derived majorities 13 of 25 is a legitimate House win.
     const demStates = Array.from({ length: 13 }, (_, i) => `D${i}`);
-    const gopStates = Array.from({ length: 12 }, (_, i) => `R${i}`);
+    const gopStates = Array.from({ length: 13 }, (_, i) => `R${i}`);
     const result = resolveContingentElection({
       electionId: new ObjectId(),
       electoralVotesByCandidate: { dem: 260, gop: 200, ind: 78 },
