@@ -19,7 +19,8 @@ export async function loadDemocraticCompetition(
   preset: string | undefined,
   gameState: Pick<GameState, "presidentialTenureByCountry"> | null
 ): Promise<DemocraticCompetition> {
-  const legislature = getCountryConfig(countryId, preset).legislature;
+  const config = getCountryConfig(countryId, preset);
+  const legislature = config.legislature;
   const chamberKeys = [legislature.lowerChamber.key];
   if (legislature.bicameral && legislature.upperChamber) {
     chamberKeys.push(legislature.upperChamber.key);
@@ -50,10 +51,13 @@ export async function loadDemocraticCompetition(
     chamberTallies.set(official.officeType, seatsByParty);
   }
 
+  const executiveTenure = gameState?.presidentialTenureByCountry?.[countryId];
+  const hasSeparateExecutive = config.governmentType === "presidential";
+
   return assessDemocraticCompetition({
     chambersByParty: chamberKeys.map((key) => chamberTallies.get(key) ?? {}),
     history,
-    consecutiveExecutiveTerms:
-      gameState?.presidentialTenureByCountry?.[countryId]?.consecutiveTerms ?? 0,
+    executivePartyId: hasSeparateExecutive ? executiveTenure?.party : null,
+    consecutiveExecutiveTerms: hasSeparateExecutive ? (executiveTenure?.consecutiveTerms ?? 0) : 0,
   });
 }

@@ -10,8 +10,14 @@ export interface DemocraticCompetition {
   /** Equal-chamber average held by the dominant party. */
   dominantSeatShare: number;
   chambersMeasured: number;
+  executivePartyId: string | null;
+  /** Null when the country has no separately elected executive. */
+  executiveAlignedWithLegislature: boolean | null;
   uninterruptedControlTurns: number;
   consecutiveExecutiveTerms: number;
+  seatMarginPenalty: number;
+  legislativeContinuityPenalty: number;
+  executiveContinuityPenalty: number;
   penalty: number;
 }
 
@@ -69,29 +75,44 @@ function uninterruptedControlTurns(
 
 /**
  * Competitive-balance pressure for a liberal democracy. A normal majority has
- * no cost. Large seat monopolies cost health immediately, then uninterrupted
- * control and repeated executive wins add slower pressure.
+ * no cost. Large seat monopolies cost health immediately. Uninterrupted chamber
+ * leadership and repeated executive wins add slower pressure, but presidential
+ * tenure compounds legislative dominance only when the same party holds both.
  */
 export function assessDemocraticCompetition(input: {
   seatsByParty?: Record<string, number>;
   chambersByParty?: readonly Record<string, number>[];
   history?: readonly SeatControlHistoryRow[];
+  executivePartyId?: string | null;
   consecutiveExecutiveTerms?: number;
 }): DemocraticCompetition {
   const current = tallyChambers(input.chambersByParty ?? [input.seatsByParty ?? {}]);
-  const controlTurns = uninterruptedControlTurns(current.party, input.history ?? []);
+  const executivePartyId = input.executivePartyId || null;
+  const executiveAligned = executivePartyId ? executivePartyId === current.party : null;
+  const continuityPartyId = executivePartyId ?? current.party;
+  const controlTurns = uninterruptedControlTurns(continuityPartyId, input.history ?? []);
   const executiveTerms = Math.max(0, Math.floor(input.consecutiveExecutiveTerms ?? 0));
 
   const seatPenalty = clamp((current.share * 100 - 55) * 0.6, 0, 27);
-  const controlPenalty = clamp(((controlTurns - 48) / 48) * 6, 0, 6);
-  const tenurePenalty = clamp((executiveTerms - 2) * 4, 0, 12);
+  const legislativeContinuityPenalty = clamp(((controlTurns - 48) / 48) * 6, 0, 6);
+  const executiveContinuityPenalty = executiveAligned ? clamp((executiveTerms - 1) * 2, 0, 8) : 0;
+  const roundedSeatPenalty = Math.round(seatPenalty * 10) / 10;
+  const roundedLegislativeContinuityPenalty = Math.round(legislativeContinuityPenalty * 10) / 10;
+  const roundedExecutiveContinuityPenalty = Math.round(executiveContinuityPenalty * 10) / 10;
 
   return {
     dominantPartyId: current.party,
     dominantSeatShare: Math.round(current.share * 1000) / 10,
     chambersMeasured: current.chambersMeasured,
+    executivePartyId,
+    executiveAlignedWithLegislature: executiveAligned,
     uninterruptedControlTurns: controlTurns,
     consecutiveExecutiveTerms: executiveTerms,
-    penalty: Math.round((seatPenalty + controlPenalty + tenurePenalty) * 10) / 10,
+    seatMarginPenalty: roundedSeatPenalty,
+    legislativeContinuityPenalty: roundedLegislativeContinuityPenalty,
+    executiveContinuityPenalty: roundedExecutiveContinuityPenalty,
+    penalty:
+      Math.round((seatPenalty + legislativeContinuityPenalty + executiveContinuityPenalty) * 10) /
+      10,
   };
 }

@@ -52,7 +52,11 @@ describe("loadDemocraticCompetition", () => {
       dominantPartyId: "dem",
       dominantSeatShare: 67.9,
       chambersMeasured: 2,
-      penalty: 7.7,
+      executivePartyId: "dem",
+      executiveAlignedWithLegislature: true,
+      seatMarginPenalty: 7.7,
+      executiveContinuityPenalty: 2,
+      penalty: 9.7,
     });
   });
 
@@ -78,6 +82,32 @@ describe("loadDemocraticCompetition", () => {
 
     expect(result.uninterruptedControlTurns).toBe(96);
     expect(result.consecutiveExecutiveTerms).toBe(4);
-    expect(result.penalty).toBe(17);
+    expect(result.seatMarginPenalty).toBe(3);
+    expect(result.legislativeContinuityPenalty).toBe(6);
+    expect(result.executiveContinuityPenalty).toBe(6);
+    expect(result.penalty).toBe(15);
+  });
+
+  it("does not apply a separate presidential signal to parliamentary government", async () => {
+    db.collection("electedOfficials")
+      .find()
+      .toArray.mockResolvedValue([
+        { officeType: "commons", party: "labour", seatsHeld: 364 },
+        { officeType: "commons", party: "conservative", seatsHeld: 215 },
+        { officeType: "commons", party: "liberal", seatsHeld: 9 },
+      ]);
+
+    const result = await loadDemocraticCompetition(db as unknown as Db, "UK", "1953-default", {
+      presidentialTenureByCountry: { UK: { party: "labour", consecutiveTerms: 4 } },
+    });
+
+    expect(result).toMatchObject({
+      dominantPartyId: "labour",
+      chambersMeasured: 1,
+      executivePartyId: null,
+      executiveAlignedWithLegislature: null,
+      consecutiveExecutiveTerms: 0,
+      executiveContinuityPenalty: 0,
+    });
   });
 });

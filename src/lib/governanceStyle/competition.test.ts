@@ -19,13 +19,19 @@ describe("assessDemocraticCompetition", () => {
         { dem: 237, farmerLabor: 165, conservative: 25, corporatist: 8 },
         { dem: 78, farmerLabor: 18 },
       ],
+      executivePartyId: "dem",
+      consecutiveExecutiveTerms: 2,
     });
 
     expect(score).toMatchObject({
       dominantPartyId: "dem",
       dominantSeatShare: 67.9,
       chambersMeasured: 2,
-      penalty: 7.7,
+      executivePartyId: "dem",
+      executiveAlignedWithLegislature: true,
+      seatMarginPenalty: 7.7,
+      executiveContinuityPenalty: 2,
+      penalty: 9.7,
     });
   });
 
@@ -59,10 +65,31 @@ describe("assessDemocraticCompetition", () => {
     const score = assessDemocraticCompetition({
       seatsByParty: { dem: 70, rep: 30 },
       history,
+      executivePartyId: "dem",
       consecutiveExecutiveTerms: 5,
     });
     expect(score.uninterruptedControlTurns).toBe(96);
-    expect(score.penalty).toBe(27);
+    expect(score.seatMarginPenalty).toBe(9);
+    expect(score.legislativeContinuityPenalty).toBe(6);
+    expect(score.executiveContinuityPenalty).toBe(8);
+    expect(score.penalty).toBe(23);
+  });
+
+  it("treats an opposition presidency as divided government", () => {
+    const score = assessDemocraticCompetition({
+      seatsByParty: { dem: 70, rep: 30 },
+      executivePartyId: "rep",
+      consecutiveExecutiveTerms: 4,
+    });
+
+    expect(score).toMatchObject({
+      dominantPartyId: "dem",
+      executivePartyId: "rep",
+      executiveAlignedWithLegislature: false,
+      seatMarginPenalty: 9,
+      executiveContinuityPenalty: 0,
+      penalty: 9,
+    });
   });
 
   it("stops the control streak at the last alternation", () => {

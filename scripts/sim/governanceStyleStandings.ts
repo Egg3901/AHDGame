@@ -84,18 +84,28 @@ async function boardDocs(countryId: CountryId, regions: State[]) {
 }
 
 function seedCompetition(countryId: CountryId) {
-  const legislature = getCountryConfig(countryId, PRESET).legislature;
+  const config = getCountryConfig(countryId, PRESET);
+  const legislature = config.legislature;
+  const seats = getPresetSeats(PRESET);
   const chamberKeys = [legislature.lowerChamber.key];
   if (legislature.bicameral && legislature.upperChamber) {
     chamberKeys.push(legislature.upperChamber.key);
   }
   const chamberTallies = new Map(chamberKeys.map((key) => [key, {} as Record<string, number>]));
-  for (const seat of getPresetSeats(PRESET)) {
+  for (const seat of seats) {
     const seatsByParty = chamberTallies.get(seat.officeType);
     if (!seatsByParty) continue;
     seatsByParty[seat.party] = (seatsByParty[seat.party] ?? 0) + (seat.seatsHeld ?? 1);
   }
-  return assessDemocraticCompetition({ chambersByParty: [...chamberTallies.values()] });
+  const executive =
+    config.governmentType === "presidential"
+      ? seats.find((seat) => seat.officeType === "president" && seat.state === countryId)
+      : undefined;
+  return assessDemocraticCompetition({
+    chambersByParty: [...chamberTallies.values()],
+    executivePartyId: executive?.party,
+    consecutiveExecutiveTerms: executive ? 1 : 0,
+  });
 }
 
 async function main() {
@@ -108,6 +118,7 @@ async function main() {
     healthLabel: string;
     hasCompetitionData: boolean;
     dominantSeatShare: number;
+    executiveStatus: string;
     competitionPenalty: number;
   }> = [];
   const excluded: string[] = [];
@@ -141,6 +152,12 @@ async function main() {
       healthLabel: score.democraticHealth.label,
       hasCompetitionData: competition.dominantPartyId !== null,
       dominantSeatShare: competition.dominantSeatShare,
+      executiveStatus:
+        competition.executiveAlignedWithLegislature === null
+          ? "Parliamentary"
+          : competition.executiveAlignedWithLegislature
+            ? "Aligned"
+            : "Divided",
       competitionPenalty: competition.penalty,
     });
   }
@@ -150,15 +167,15 @@ async function main() {
   console.log(`# Governance Style standings: ${PRESET}`);
   console.log("");
   console.log(
-    "| Player nation | Left to Right | Direction | Failed State to Healthy Democracy | Health | Largest party across elected chambers | Health penalty |"
+    "| Player nation | Left to Right | Direction | Failed State to Healthy Democracy | Health | Largest party across elected chambers | Executive status | Health penalty |"
   );
-  console.log("|---|---:|---|---:|---|---:|---:|");
+  console.log("|---|---:|---|---:|---|---:|---|---:|");
   for (const row of standings) {
     const dominantShare = row.hasCompetitionData
       ? `${row.dominantSeatShare.toFixed(1)}%`
       : "Not seeded";
     console.log(
-      `| ${row.country} (${row.countryId}) | ${row.direction.toFixed(1)} | ${row.directionLabel} | ${row.health.toFixed(1)} | ${row.healthLabel} | ${dominantShare} | -${row.competitionPenalty.toFixed(1)} |`
+      `| ${row.country} (${row.countryId}) | ${row.direction.toFixed(1)} | ${row.directionLabel} | ${row.health.toFixed(1)} | ${row.healthLabel} | ${dominantShare} | ${row.executiveStatus} | -${row.competitionPenalty.toFixed(1)} |`
     );
   }
   console.log("");
