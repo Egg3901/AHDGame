@@ -20,7 +20,11 @@ import { getGovernmentFormationsCollection } from "@/lib/db/collections/governme
 import { getTotalUkCommonsSeats } from "@/lib/constants/states";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { lowerChamberMajorityThreshold } from "./lowerChamberSeats";
-import { resetConfidenceGauge } from "@/lib/uk/confidence/confidenceGaugeStore";
+import {
+  resetConfidenceGauge,
+  tickConfidenceForGov,
+} from "@/lib/uk/confidence/confidenceGaugeStore";
+import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
 import {
   tallySeatsByParty,
   getLargestParty as sharedGetLargestParty,
@@ -169,6 +173,17 @@ async function seedGovernmentFormation(db: Db): Promise<void> {
       },
       { upsert: true }
     );
+  }
+
+  // Confidence gauge per-turn drift (epic #856): recovers when the government
+  // is popular, erodes when it isn't. The broken-promise bleed is added once
+  // manifesto-delivery evaluation is wired. Persists the value only — no
+  // consequence until UK_CONFIDENCE_GAUGE_DISSOLUTION is enabled.
+  const approvalDoc = await db
+    .collection<GovernmentApproval>("governmentApprovals")
+    .findOne({ _id: "UK" });
+  if (approvalDoc) {
+    await tickConfidenceForGov(db, { approval: approvalDoc.approvalRating, now });
   }
 }
 
