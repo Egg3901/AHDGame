@@ -48,7 +48,12 @@ import { getPresidentialConsecutiveTerms } from "@/lib/turn/election/presidentia
 import type { GameState } from "@/lib/db/types/gameState";
 import { BASE_APPROVAL } from "@/lib/utils/governmentApproval";
 import { getStateLean } from "@/lib/utils/demographics";
-import type { StatePartyOrg, StateDemographicTurnout, GovernorEndorsement } from "@/lib/db/types";
+import type {
+  StatePartyOrg,
+  StateDemographicTurnout,
+  GovernorEndorsement,
+  PlayerEndorsement,
+} from "@/lib/db/types";
 import { resolveTurnout } from "@/lib/electionEngine/resolvedTurnout";
 import { campaignStrengthVoteMultiplier } from "@/lib/campaigns/campaignStrength";
 import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
@@ -58,6 +63,12 @@ import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularEle
 import { eraYearContextFromGameState } from "@/lib/era/context";
 import { loadRegionalBonusMapsWithLookup } from "@/lib/primaryRegionalBonusLoader";
 import { campaignStrengthLookupKey } from "@/lib/campaigns/suspendEndorseLifecycle";
+import { computeSuspendTransferFraction } from "@/lib/campaigns/suspendEndorseAffinity";
+import {
+  applyEndorsementOrgBoosts,
+  endorsementCredibilityMultiplier,
+  type EndorsementOrgLink,
+} from "@/lib/campaigns/endorsementActivation";
 
 /** Vote multiplier applied in a state when its sitting governor has endorsed
  *  the candidate. Half of the VP-home-state effect — a real in-state lift
@@ -458,30 +469,6 @@ export async function accumulatePresidentVoteTurn(
   // in the per-state distribution call below.
   const regionalBonuses = await loadRegionalBonusMapsWithLookup(db, candidates);
 
-  // Endorsement org boost: when a suspended candidate has endorsed another,
-  // 25% of the suspender's per-state character org adds to the endorsed
-  // candidate's effective org for vote distribution. No org is debited — it's
-  // a passive multiplier from the suspender's existing ground organization.
-  const suspendToEndorse = new Map<string, string>();
-  for (const c of candidates) {
-    if (c.campaignSuspended && c.endorsedElectionCandidateId) {
-      suspendToEndorse.set(c._id.toString(), c.endorsedElectionCandidateId.toString());
-    }
-  }
-  if (suspendToEndorse.size > 0) {
-    for (const [, stateMap] of regionalBonuses.stateOrgByStateAndCandidate) {
-      for (const [suspenderId, endorsedId] of suspendToEndorse) {
-        const suspenderOrg = stateMap.get(suspenderId);
-        if (suspenderOrg && suspenderOrg > 0) {
-          const boost = Math.floor(suspenderOrg * 0.25);
-          if (boost > 0) {
-            stateMap.set(endorsedId, (stateMap.get(endorsedId) ?? 0) + boost);
-          }
-        }
-      }
-    }
-  }
-
   // Governor endorsements for this presidential election, indexed by the
   // endorsing governor's state. Each entry grants the candidate a state-
   // scoped vote bonus only in that state — see GOVERNOR_ENDORSEMENT_STATE_BONUS.
@@ -510,6 +497,84 @@ export async function accumulatePresidentVoteTurn(
     electionCountryId,
     turnNumber
   );
+
+  const enrichedByCandidateId = new Map(enriched.map((ec) => [ec.candidateId, ec]));
+
+  // Endorsement org boost: when a suspended candidate has endorsed another, a
+  // fraction of the suspender's per-state character org adds to the endorsed
+  // candidate's effective org for vote distribution. No org is debited — it's a
+  // passive multiplier from the suspender's existing ground organization. Under
+  // the "flat" ruleset (v1/v2) that fraction is exactly the ceiling (today's
+  // 25%); under "affinity" it is scaled by how aligned the pair is, so an
+  // aligned suspender still transfers the full 25% and a misaligned one less.
+  const suspendToEndorse = new Map<string, string>();
+  for (const c of candidates) {
+    if (c.campaignSuspended && c.endorsedElectionCandidateId) {
+      suspendToEndorse.set(c._id.toString(), c.endorsedElectionCandidateId.toString());
+    }
+  }
+  if (suspendToEndorse.size > 0) {
+    for (const [, stateMap] of regionalBonuses.stateOrgByStateAndCandidate) {
+      for (const [suspenderId, endorsedId] of suspendToEndorse) {
+        const suspenderOrg = stateMap.get(suspenderId);
+        if (!suspenderOrg || suspenderOrg <= 0) continue;
+        const suspenderEc = enrichedByCandidateId.get(suspenderId);
+        const endorsedEc = enrichedByCandidateId.get(endorsedId);
+        const fraction =
+          suspenderEc && endorsedEc
+            ? computeSuspendTransferFraction({
+                suspender: suspenderEc,
+                endorsed: endorsedEc,
+                mode: ruleset.suspendTransferMode,
+                maxFraction: ruleset.suspendTransferMaxFraction,
+                partyGroupFavorabilityByKey,
+              })
+            : ruleset.suspendTransferMaxFraction;
+        const boost = Math.floor(suspenderOrg * fraction);
+        if (boost > 0) {
+          stateMap.set(endorsedId, (stateMap.get(endorsedId) ?? 0) + boost);
+        }
+      }
+    }
+  }
+
+  // Endorsement activation (rework, magnitudes held at identity 0 until t384):
+  // sibling channels to the suspend-transfer above, driven by every active
+  // player endorsement in the race rather than just suspend-endorse links. Both
+  // knobs sit at 0 today, so we skip the extra query and mutation entirely and
+  // the race stays byte-identical; only a positive ruleset knob activates them.
+  const endorsementCountByCandidateId = new Map<string, number>();
+  if (ruleset.endorsementOrgFraction > 0 || ruleset.endorsementCoalitionCredibility > 0) {
+    const characterIdToCandidateId = new Map<string, string>();
+    for (const c of candidates) {
+      if (!c.isNPP && c.characterId) {
+        characterIdToCandidateId.set(c.characterId.toString(), c._id.toString());
+      }
+    }
+    const activeEndorsements = await db
+      .collection<PlayerEndorsement>("playerEndorsements")
+      .find({ electionId, isActive: true })
+      .toArray();
+    const orgLinks: EndorsementOrgLink[] = [];
+    for (const e of activeEndorsements) {
+      const endorsedCandidateId = e.candidateId.toString();
+      endorsementCountByCandidateId.set(
+        endorsedCandidateId,
+        (endorsementCountByCandidateId.get(endorsedCandidateId) ?? 0) + 1
+      );
+      // Org lending only when the endorser is themselves a candidate row in this
+      // race (only candidate rows carry per-state org). Note the suspend-endorse
+      // path also lends org via its own block above; the t384 calibration owns
+      // reconciling any overlap when these fractions leave 0.
+      const endorserCandidateId = characterIdToCandidateId.get(e.characterId.toString());
+      if (endorserCandidateId) orgLinks.push({ endorserCandidateId, endorsedCandidateId });
+    }
+    applyEndorsementOrgBoosts(
+      regionalBonuses.stateOrgByStateAndCandidate,
+      orgLinks,
+      ruleset.endorsementOrgFraction
+    );
+  }
 
   // Pre-resolve runtime governmentType so the per-state distribute calls
   // below see a single cached value. A post-Stage-4 conversion would flip
@@ -807,6 +872,18 @@ export async function accumulatePresidentVoteTurn(
       const stateGovEndorsed = governorEndorsedCandidatesByState.get(stateId.toUpperCase());
       if (stateGovEndorsed && stateGovEndorsed.has(ec.candidateId)) {
         votes = Math.round(votes * GOVERNOR_ENDORSEMENT_STATE_BONUS);
+      }
+
+      // Coalition credibility: active player endorsements lend a small vote
+      // multiplier that grows with the endorsement count. Held at identity
+      // (credibility 0 -> multiplier 1) until calibrated at t384, so this is a
+      // no-op today and skipped entirely unless the ruleset knob is positive.
+      if (ruleset.endorsementCoalitionCredibility > 0) {
+        const credMult = endorsementCredibilityMultiplier(
+          endorsementCountByCandidateId.get(ec.candidateId) ?? 0,
+          ruleset.endorsementCoalitionCredibility
+        );
+        if (credMult !== 1) votes = Math.round(votes * credMult);
       }
 
       // Campaign strength: multiplicative reach boost from player contributions.
