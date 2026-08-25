@@ -70,7 +70,12 @@ export type SlateRefusalReason =
   | "in_other_race"
   | "cooldown"
   | "retired"
-  /** Filing: the party may not contest this region (e.g. Plaid Cymru outside Wales). */
+  /**
+   * Filing: the row is not eligible in the race's region — the candidate is
+   * homed elsewhere. Rows written before the UK regional-party gate was
+   * removed also carry this reason for a party-level geography rule that no
+   * longer exists.
+   */
   | "ineligible_region"
   /** Filing: another chair-slated candidate of the same party already holds the slot. */
   | "slot_taken"

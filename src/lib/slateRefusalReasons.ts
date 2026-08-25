@@ -15,7 +15,11 @@ export const SLATE_REFUSAL_LABEL: Record<SlateRefusalReason, string> = {
   in_other_race: "In Another Race",
   cooldown: "Cooldown Active",
   retired: "Retired",
-  ineligible_region: "Party Cannot Contest This Region",
+  // Neutral wording on purpose. The only live producer is a candidate whose
+  // home region is not the race's region, but rows written before the UK
+  // regional-party gate was removed carry this same reason for a party-level
+  // rule. "Not eligible" reads correctly for both.
+  ineligible_region: "Not Eligible in This Region",
   slot_taken: "Slot Already Filled",
   party_restricted: "Party Not Eligible for This Race",
   npp_unavailable: "No Longer Available",
