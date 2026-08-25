@@ -2,6 +2,7 @@
 
 import type { CountryPoliticalMetricsResponse } from "@/lib/politicalMetrics/queries/countryPoliticalMetrics";
 import { CategoryCard } from "./CategoryCard";
+import { GovernanceStyleCard } from "./GovernanceStyleCard";
 import { scoreTone } from "./tones";
 
 /** Movement tiles render honest empty states until the dynamics sub-project lands. */
@@ -33,10 +34,12 @@ export function OverviewView({
   data,
   onOpenCategory,
   onOpenMetric,
+  showGovernanceStyle,
 }: {
   data: CountryPoliticalMetricsResponse;
   onOpenCategory: (categoryId: string) => void;
   onOpenMetric: (categoryId: string, metricId: string) => void;
+  showGovernanceStyle: boolean;
 }) {
   const tone = scoreTone(data.overall);
   const sorted = [...data.categories].sort((a, b) => b.score - a.score);
@@ -114,6 +117,8 @@ export function OverviewView({
           />
         </div>
       </div>
+
+      {showGovernanceStyle && <GovernanceStyleCard score={data.governanceStyle} />}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {data.categories.map((cat) => (

@@ -61,6 +61,11 @@ describe("loadCountryPoliticalMetrics", () => {
     // Regions sorted by value, names resolved.
     expect(worker.regions[0]).toMatchObject({ regionId: "MI", name: "Michigan", value: 69 });
     expect(res!.overall).toBeGreaterThan(0);
+    expect(res!.governanceStyle.name).toBe("Governance Style");
+    expect(res!.governanceStyle.leftRight.value).toBeGreaterThanOrEqual(0);
+    expect(res!.governanceStyle.leftRight.value).toBeLessThanOrEqual(100);
+    expect(res!.governanceStyle.democraticHealth.value).toBeGreaterThanOrEqual(0);
+    expect(res!.governanceStyle.democraticHealth.value).toBeLessThanOrEqual(100);
     expect(res!.turn).toBe(212);
   });
 
@@ -69,6 +74,30 @@ describe("loadCountryPoliticalMetrics", () => {
     const worker = res!.categories[0].metrics[0];
     expect(worker.indicators).toContain("Strike settlement rate"); // early list
     expect(worker.indicators).not.toContain("Gig-work coverage"); // modern list
+  });
+
+  it("subtracts lopsided party control from health without moving political direction", async () => {
+    const balanced = await loadCountryPoliticalMetrics("US", db as unknown as Db);
+    db.collection("electedOfficials")
+      .find()
+      .toArray.mockResolvedValue([
+        { party: "dem", seatsHeld: 75 },
+        { party: "rep", seatsHeld: 25 },
+      ]);
+
+    const lopsided = await loadCountryPoliticalMetrics("US", db as unknown as Db);
+
+    expect(lopsided!.governanceStyle.leftRight.value).toBe(
+      balanced!.governanceStyle.leftRight.value
+    );
+    expect(lopsided!.governanceStyle.democraticHealth.value).toBe(
+      balanced!.governanceStyle.democraticHealth.value - 12
+    );
+    expect(lopsided!.governanceStyle.competition).toMatchObject({
+      dominantPartyId: "dem",
+      dominantSeatShare: 75,
+      penalty: 12,
+    });
   });
 
   it("returns null when the country has no political metrics docs", async () => {
