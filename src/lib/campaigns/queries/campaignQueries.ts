@@ -16,7 +16,11 @@ import {
   SUPPORT_RALLY_ACTION_COST,
   SUPPORT_RALLY_TOUR_TICK_ACTION_COST,
 } from "@/lib/electionEngine/electionFormulaFactors";
-import { isCampaignManagerUser, isCampaignNomineeUser } from "@/lib/campaigns/access";
+import {
+  isCampaignManagerUser,
+  isCampaignNomineeUser,
+  legacyManagersAsList,
+} from "@/lib/campaigns/access";
 import { getCampaignCopyForElection } from "@/lib/campaigns/raceFamilyCopy";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import {
@@ -85,6 +89,24 @@ export async function getCampaignDetail(
   }
   const managerName = manager?.name ?? null;
 
+  // Resolve every appointed manager (multi-manager, up to MAX_CAMPAIGN_MANAGERS)
+  // to character id + name. Folds in the legacy single-manager pair so old
+  // campaigns render identically. One `$in` fetch for all of them.
+  const managerCharIds = (campaign.managers ?? legacyManagersAsList(campaign)).map(
+    (m) => m.characterId
+  );
+  const managerChars = managerCharIds.length
+    ? await db
+        .collection<Character>("characters")
+        .find({ _id: { $in: managerCharIds } }, { projection: { _id: 1, name: 1 } })
+        .toArray()
+    : [];
+  const managerNameById = new Map(managerChars.map((c) => [c._id.toString(), c.name]));
+  const managers = managerCharIds.map((id) => ({
+    characterId: id.toString(),
+    name: managerNameById.get(id.toString()) ?? "Unknown",
+  }));
+
   const isIneligible = !election || !isCampaignEligibleElection(election);
   if (isIneligible && !user?.isAdmin) {
     throw notFound("Campaign not found");
@@ -150,6 +172,10 @@ export async function getCampaignDetail(
         },
     managerId: campaign.managerId?.toString() || null,
     managerName,
+    managers,
+    // Only the nominee (or an admin) may change managers, and not on an
+    // archived campaign. Managers themselves cannot appoint further managers.
+    canAppointManagers: (isNominee || isAdmin) && campaign.status !== "archived",
     oppositionTargetId: canSeeExact ? campaign.oppositionTargetId?.toString() || null : null,
     oppositionTargetName: canSeeExact ? campaign.oppositionTargetName : null,
     fogLastUpdated:
