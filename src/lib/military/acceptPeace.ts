@@ -34,6 +34,25 @@ export interface AcceptPeaceResult {
  *
  * Spec: docs/superpowers/specs/2026-08-04-suing-for-peace-design.md
  */
+/**
+ * Everyone a released ally was fighting, read from the roster it is leaving.
+ *
+ * `principal` is excluded: it is the country the ally came to defend, so they were never
+ * at war with each other and a truce between them would be meaningless.
+ *
+ * ⚠️ Must be called BEFORE the rosters are spliced. Afterwards the answer is wrong in a
+ * way that is silent: the ally simply walks away with fewer truces than it earned.
+ */
+function opposingRosterOf(
+  conflict: Pick<ConflictDoc, "sideA" | "sideB">,
+  ally: CountryId,
+  principal: CountryId
+): CountryId[] {
+  const onA = conflict.sideA.countries.includes(ally);
+  const enemies = onA ? conflict.sideB.countries : conflict.sideA.countries;
+  return enemies.filter((c) => c !== principal && c !== ally);
+}
+
 export async function acceptPeace(
   db: Db,
   offer: PeaceOfferDoc,
@@ -57,32 +76,65 @@ export async function acceptPeace(
 
   await moveIndemnity(db, offer);
 
-  // Compute BEFORE the roster edit below — afterwards the leaver is gone and the
-  // side would read as already empty (or, for a two-country side, not empty at all).
-  const emptied = sideWouldEmpty(conflict, leaver);
-  // Roster-only, deliberately NOT `sideOf`: its bloc fallback could name a side the
-  // leaver was never rostered on, and this value picks which roster to edit.
-  const leaverSide: Side | null = conflict.sideA.countries.includes(leaver)
-    ? "A"
-    : conflict.sideB.countries.includes(leaver)
-      ? "B"
-      : null;
+  // Treaty release: an ally pulled in to defend this country leaves with it. The war it
+  // was brought into is over for the country it came for, and leaving it to fight on
+  // alone would be a guarantee that outlives its own cause.
+  //
+  // Matched on `defending`, so an ally bound to a DIFFERENT member of the same alliance
+  // stays exactly where it is.
+  const rosters = [...conflict.sideA.countries, ...conflict.sideB.countries] as string[];
+  const released = (conflict.treatyEntries ?? [])
+    .filter((e) => e.defending === leaver)
+    .map((e) => e.countryId)
+    .filter((c) => rosters.includes(c));
+  const leaving: CountryId[] = [leaver, ...released];
 
-  await standDownCountry(db, conflict, leaver);
+  // Captured NOW, before the splice loop below mutates the rosters. Read afterwards, the
+  // principal is already gone from its side and a released ally would be truced against
+  // the survivors only — or, when it was the last one out, against nobody at all.
+  const enemiesByAlly = new Map<CountryId, CountryId[]>(
+    released.map((ally) => [ally, opposingRosterOf(conflict, ally, leaver)])
+  );
 
-  if (leaverSide) {
-    const path = `side${leaverSide}.countries` as const;
+  // Compute BEFORE the roster edit below — afterwards the leavers are gone and the
+  // side would read as already empty. Over the WHOLE leaving set, because a two-country
+  // side can empty in one call now: asked about the principal alone this returns null and
+  // the war sits active with an empty roster and no victor.
+  const emptied = sideWouldEmpty(conflict, leaving);
+
+  for (const country of leaving) {
+    await standDownCountry(db, conflict, country);
+  }
+
+  for (const country of leaving) {
+    // Roster-only, deliberately NOT `sideOf`: its bloc fallback could name a side the
+    // country was never rostered on, and this value picks which roster to edit.
+    const side: Side | null = conflict.sideA.countries.includes(country)
+      ? "A"
+      : conflict.sideB.countries.includes(country)
+        ? "B"
+        : null;
+    if (!side) continue;
+    const path = `side${side}.countries` as const;
     await getConflictsCollection(db).updateOne({ _id: conflict._id }, {
-      $pull: { [path]: leaver },
+      $pull: { [path]: country },
     } as never);
     // Keep the in-memory doc consistent for the rest of this call — resolveConflict
-    // below reads the rosters, and a stale copy would truce the leaver again.
-    const roster = leaverSide === "A" ? conflict.sideA.countries : conflict.sideB.countries;
-    const at = roster.indexOf(leaver);
+    // below reads the rosters, and a stale copy would truce a leaver again.
+    const roster = side === "A" ? conflict.sideA.countries : conflict.sideB.countries;
+    const at = roster.indexOf(country);
     if (at >= 0) roster.splice(at, 1);
   }
 
   await recordTruce(db, leaver, other, currentTurn);
+  // A released ally did the fighting too. Without its own truce it would be
+  // re-declarable the moment it left while the principal was protected — the same
+  // argument resolveConflict makes for trucing every cross-side pair.
+  for (const ally of released) {
+    for (const enemy of enemiesByAlly.get(ally) ?? []) {
+      await recordTruce(db, ally, enemy, currentTurn);
+    }
+  }
 
   if (emptied) {
     // The side the leaver was on is now empty, so the other side won. resolveConflict
