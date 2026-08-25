@@ -118,6 +118,14 @@ export interface DistributeVotesOptions {
    */
   countryId?: CountryId;
   /**
+   * UK manifesto policy-popularity multipliers, keyed party → demographic group
+   * id → factor (centred on 1.0). Absent (the default) means the feature is off:
+   * the per-candidate weight is multiplied by 1.0. Precomputed by the manifesto
+   * layer (src/lib/uk/manifesto) so the vote engine stays generic and decoupled.
+   * Epic #856 / ticket #857. Enable only after worldsim coefficient calibration.
+   */
+  manifestoMultipliers?: Record<string, Record<string, number>>;
+  /**
    * Runtime override for whether the country is currently a one-party state.
    * When supplied, takes precedence over `COUNTRY_CONFIGS[countryId].governmentType`.
    * Pre-resolved by callers from the `countryState` collection so that a

@@ -95,6 +95,42 @@ export function manifestoMultiplierForGroup(
   return 1 + maxSwing * clamped;
 }
 
+export interface GroupLeanWithId extends GroupLean {
+  id: string;
+}
+
+/**
+ * Build the `manifestoMultipliers` map the vote engine consumes:
+ * party → demographic group id → factor (~1.0).
+ *
+ * Pure: given each party's chosen catalog entries and the state's demographic
+ * groups (with leans), it produces the per-group multiplier via
+ * `manifestoMultiplierForGroup`. Callers pass the result as
+ * `DistributeVotesOptions.manifestoMultipliers`. Returns an empty object when
+ * there are no manifestos (⇒ engine falls back to 1.0, i.e. feature off).
+ */
+export function buildManifestoMultipliers(
+  pledgesByParty: Record<string, PledgeCatalogEntry[]>,
+  groups: GroupLeanWithId[],
+  opts: ManifestoScoreOptions = {}
+): Record<string, Record<string, number>> {
+  const out: Record<string, Record<string, number>> = {};
+  for (const [party, pledges] of Object.entries(pledgesByParty)) {
+    if (!pledges || pledges.length === 0) continue;
+    const byGroup: Record<string, number> = {};
+    for (const g of groups) {
+      byGroup[g.id] = manifestoMultiplierForGroup(
+        pledges,
+        { economicLean: g.economicLean, socialLean: g.socialLean },
+        g.id,
+        opts
+      );
+    }
+    out[party] = byGroup;
+  }
+  return out;
+}
+
 /**
  * Active policy at judgment time. Option-based laws record `policyOptionId`;
  * UK level-based ("primary") laws record `policyOptionIndex`.

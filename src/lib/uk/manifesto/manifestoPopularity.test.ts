@@ -77,6 +77,26 @@ describe("manifesto multiplier", () => {
   });
 });
 
+describe("buildManifestoMultipliers", () => {
+  const groups = [
+    { id: "wealth:low", economicLean: -4, socialLean: -1 },
+    { id: "wealth:high", economicLean: 4, socialLean: 1 },
+  ];
+  it("produces party → group → factor, and omits empty manifestos", async () => {
+    const { buildManifestoMultipliers } = await import("./manifestoPopularity");
+    const left = entry({ position: { economic: -4, social: -1 } });
+    const map = buildManifestoMultipliers({ lab: [left], con: [] }, groups);
+    expect(Object.keys(map)).toEqual(["lab"]); // con omitted (no pledges)
+    // Left manifesto pleases the low-wealth group, repels the high-wealth group.
+    expect(map.lab["wealth:low"]).toBeGreaterThan(1);
+    expect(map.lab["wealth:high"]).toBeLessThan(1);
+  });
+  it("returns empty when there are no manifestos", async () => {
+    const { buildManifestoMultipliers } = await import("./manifestoPopularity");
+    expect(buildManifestoMultipliers({}, groups)).toEqual({});
+  });
+});
+
 describe("kept/broken: enact", () => {
   const targets = [{ legislationTypeId: "nhs", policyOptionId: "increase" }];
   it("kept when the mapped option is active", () => {

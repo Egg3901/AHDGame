@@ -244,6 +244,11 @@ function appealWeight(
     }
   }
 
+  // UK manifesto policy-popularity factor (epic #856). Off by default: absent
+  // map ⇒ 1.0 (no effect). Mirrors the group-level engine so the two lanes
+  // cannot drift.
+  const manifestoMult = options?.manifestoMultipliers?.[ec.party]?.[groupId] ?? 1;
+
   return Math.max(
     0,
     appeal *
@@ -260,7 +265,8 @@ function appealWeight(
       regResist *
       regBaseline *
       stateOrgMult *
-      homeStateMult
+      homeStateMult *
+      manifestoMult
   );
 }
 
