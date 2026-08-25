@@ -1,7 +1,12 @@
 import type { Db, ObjectId } from "mongodb";
 import type { UKBudget, UKBudgetStatus } from "../types/ukBudget";
+import type { Bill } from "../types/legislation";
 import { validateBudget } from "@/lib/uk/budget/budgetValidation";
 import { applyConfidenceEventToGov } from "@/lib/uk/confidence/confidenceGaugeStore";
+import { getNationalDocId } from "@/lib/constants/nationalScope";
+
+/** Hours a Budget vote runs — mirrors the UK bill voting window. */
+const BUDGET_VOTING_HOURS = 24;
 
 /**
  * UK Budget persistence + lifecycle (epic #856, ticket #858).
@@ -107,6 +112,54 @@ export async function tableBudget(db: Db, fiscalYear: number, now: Date): Promis
     { $set: { status: "tabled", tabledAt: now, updatedAt: now } }
   );
   return { ok: true };
+}
+
+/**
+ * Create the Budget's vote-vehicle bill so MPs vote on it through the normal UK
+ * Commons lifecycle (whip and all). The bill carries no policy provisions — the
+ * budget's tax/spend content lives on the UKBudget doc; `budgetFiscalYear` links
+ * them so the notifier applies the outcome on resolution. Returns the bill id.
+ */
+export async function createBudgetBill(
+  db: Db,
+  args: {
+    fiscalYear: number;
+    chancellorCharacterId: ObjectId | null;
+    chancellorName: string | null;
+    chancellorParty: string | null;
+    currentTurn: number;
+    now: Date;
+  }
+): Promise<ObjectId> {
+  const countryId = "UK" as const;
+  const bill: Omit<Bill, "_id"> = {
+    countryId,
+    stateId: getNationalDocId(countryId) ?? "uk_national",
+    title: `Budget ${args.fiscalYear}`,
+    summary: `The annual Budget for fiscal year ${args.fiscalYear}, tabled by the Chancellor.`,
+    originChamber: "commons",
+    currentChamber: "commons",
+    sponsorId: args.chancellorCharacterId,
+    sponsorName: args.chancellorName ?? "HM Treasury",
+    ...(args.chancellorParty ? { sponsorParty: args.chancellorParty } : {}),
+    ...(args.chancellorCharacterId ? {} : { adminProposed: true }),
+    status: "active",
+    votesFor: 0,
+    votesAgainst: 0,
+    votesAbstain: 0,
+    votes: {},
+    category: "budget",
+    budgetFiscalYear: args.fiscalYear,
+    proposedAt: args.now,
+    proposedTurn: args.currentTurn,
+    votingStartedAt: args.now,
+    votingEndsAt: new Date(args.now.getTime() + BUDGET_VOTING_HOURS * 60 * 60 * 1000),
+    votingEndsOnTurn: args.currentTurn + BUDGET_VOTING_HOURS,
+    createdAt: args.now,
+    updatedAt: args.now,
+  };
+  const res = await db.collection<Omit<Bill, "_id">>("bills").insertOne(bill);
+  return res.insertedId;
 }
 
 export interface BudgetResolution {

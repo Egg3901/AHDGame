@@ -5,7 +5,9 @@ import {
   resolveBudgetVote,
   ensureBudgetDraftForFiscalYear,
   applyBudgetOutcome,
+  createBudgetBill,
 } from "./ukBudgets";
+import { ObjectId } from "mongodb";
 import type { UKBudget } from "../types/ukBudget";
 
 /** In-memory ukBudgets + ukGovernment (for the confidence hit) fake. */
@@ -147,6 +149,39 @@ describe("resolveBudgetVote", () => {
       now: new Date(),
     });
     expect(r.ok).toBe(false);
+  });
+});
+
+describe("createBudgetBill", () => {
+  it("inserts a votable commons bill linked to the fiscal year", async () => {
+    let inserted: Record<string, unknown> | null = null;
+    const insertedId = new ObjectId();
+    const db = {
+      collection: () => ({
+        insertOne: async (doc: Record<string, unknown>) => {
+          inserted = doc;
+          return { insertedId };
+        },
+      }),
+    } as never;
+    const id = await createBudgetBill(db, {
+      fiscalYear: 1953,
+      chancellorCharacterId: null,
+      chancellorName: null,
+      chancellorParty: null,
+      currentTurn: 100,
+      now: new Date("2026-01-01"),
+    });
+    expect(id).toBe(insertedId);
+    expect(inserted).toMatchObject({
+      countryId: "UK",
+      currentChamber: "commons",
+      status: "active",
+      category: "budget",
+      budgetFiscalYear: 1953,
+      adminProposed: true, // no chancellor
+      votingEndsOnTurn: 124,
+    });
   });
 });
 
