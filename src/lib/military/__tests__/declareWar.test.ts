@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { declareWar } from "../declareWar";
 
 const createConflictSpy = vi.fn();
 const joinSideSpy = vi.fn();
+const conflictUpdateSpy = vi.fn();
 
 vi.mock("@/lib/military/createConflict", () => ({
   createConflict: (...args: unknown[]) => {
@@ -19,6 +20,33 @@ vi.mock("@/lib/military/joinSide", () => ({
   },
 }));
 
+const treatyDefendersSpy = vi.fn();
+vi.mock("@/lib/military/treatyDefence", () => ({
+  resolveTreatyDefenders: (...a: unknown[]) => treatyDefendersSpy(...a),
+}));
+
+const notifySpy = vi.fn();
+const orgHistorySpy = vi.fn();
+const hogSpy = vi.fn();
+vi.mock("@/lib/notifications", () => ({
+  createNotifications: (...a: unknown[]) => {
+    notifySpy(...a);
+    return Promise.resolve();
+  },
+}));
+vi.mock("@/lib/internationalOrganizations/service", () => ({
+  recordOrgHistoryEvent: (...a: unknown[]) => {
+    orgHistorySpy(...a);
+    return Promise.resolve();
+  },
+}));
+vi.mock("@/lib/api/headOfGovernment", () => ({
+  getHeadOfGovernmentCharacterId: (...a: unknown[]) => hogSpy(...a),
+}));
+
+const CHAR_ID = new ObjectId();
+const USER_ID = new ObjectId();
+
 /**
  * A db whose host-scoped lookup returns `hosted`, and whose scan for a war between
  * the two parties sees `all` (defaulting to just `hosted`).
@@ -29,10 +57,21 @@ vi.mock("@/lib/military/joinSide", () => ({
  */
 function stubDb(hosted: unknown = null, all?: unknown[]): Db {
   const scan = all ?? (hosted == null ? [] : [hosted]);
+  const characters = [{ _id: CHAR_ID, userId: USER_ID }];
   return {
-    collection: () => ({
-      findOne: vi.fn().mockResolvedValue(hosted),
-      find: () => ({ toArray: async () => scan }),
+    collection: (name: string) => ({
+      // `cabinetMembers` is the defence-seat lookup for a notified ally; returning null
+      // leaves the head of government as the sole recipient.
+      findOne: vi.fn().mockResolvedValue(name === "cabinetMembers" ? null : hosted),
+      find: () => ({
+        toArray: async () => (name === "characters" ? characters : scan),
+        project: () => ({ toArray: async () => (name === "characters" ? characters : scan) }),
+      }),
+      // Treaty entries are $push-ed onto a live conflict when allies join one.
+      updateOne: (...a: unknown[]) => {
+        conflictUpdateSpy(...a);
+        return Promise.resolve({ modifiedCount: 1 });
+      },
     }),
   } as unknown as Db;
 }
@@ -45,7 +84,12 @@ const input = {
   currentTurn: 40,
 };
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  // Default: no treaty binds anybody, so every pre-existing case keeps its shape.
+  treatyDefendersSpy.mockResolvedValue([]);
+  hogSpy.mockResolvedValue(CHAR_ID);
+});
 
 describe("declareWar", () => {
   it("creates a war hosted in the defender when none exists", async () => {
@@ -134,5 +178,115 @@ describe("one war at a time between the same pair", () => {
     expect(joined).toBe(false);
     expect(conflict.hostCountry).toBe("CN");
     expect(createConflictSpy).toHaveBeenCalled();
+  });
+});
+
+describe("declareWar treaty defence", () => {
+  const pactDefender = { ...input, defender: "DD" as const };
+
+  it("opens a new war with treaty allies already on the defending side", async () => {
+    treatyDefendersSpy.mockResolvedValue([{ countryId: "RU", organizationId: "WARSAW_PACT" }]);
+    const { conflict } = await declareWar(stubDb(), pactDefender);
+    expect(conflict.sideB.countries).toEqual(["DD", "RU"]);
+    // Allies must be in the roster BEFORE createConflict, or opening forces are never
+    // deployed for them and baseStrength is computed for a coalition of one.
+    const passed = createConflictSpy.mock.calls[0][1] as { sideB: { countries: string[] } };
+    expect(passed.sideB.countries).toEqual(["DD", "RU"]);
+  });
+
+  it("records why each ally is present", async () => {
+    treatyDefendersSpy.mockResolvedValue([{ countryId: "RU", organizationId: "WARSAW_PACT" }]);
+    const { conflict } = await declareWar(stubDb(), pactDefender);
+    expect(conflict.treatyEntries).toEqual([
+      { countryId: "RU", organizationId: "WARSAW_PACT", defending: "DD", joinedTurn: 40 },
+    ]);
+  });
+
+  it("labels a defended side as a coalition, not a lone state", async () => {
+    treatyDefendersSpy.mockResolvedValue([{ countryId: "RU", organizationId: "WARSAW_PACT" }]);
+    const { conflict } = await declareWar(stubDb(), pactDefender);
+    expect(conflict.sideB.kind).toBe("coalition");
+  });
+
+  it("leaves a bilateral war untouched when no treaty binds the defender", async () => {
+    const { conflict } = await declareWar(stubDb(), input);
+    expect(conflict.sideB.countries).toEqual(["CN"]);
+    expect(conflict.sideB.kind).toBe("state");
+    expect(conflict.treatyEntries).toBeUndefined();
+  });
+
+  it("enrols allies on the defender's side of a war already being fought there", async () => {
+    treatyDefendersSpy.mockResolvedValue([{ countryId: "RU", organizationId: "WARSAW_PACT" }]);
+    const live = {
+      _id: "c1",
+      hostCountry: "DD",
+      sideA: { countries: ["UK"], kind: "state" },
+      sideB: { countries: ["DD"], kind: "state" },
+    };
+    await declareWar(stubDb(live), pactDefender);
+    // The ally joins the DEFENDER's side (B); the declarer joins the other one.
+    expect(joinSideSpy).toHaveBeenCalledWith(expect.anything(), live, "RU", "B");
+    expect(joinSideSpy).toHaveBeenCalledWith(expect.anything(), live, "US", "A");
+  });
+
+  // The join path records provenance through a $push rather than at creation. Without
+  // this the peace bar and release would have nothing to read for an ally that entered
+  // an existing war, and both would silently do nothing for it.
+  it("records provenance when allies join an existing war", async () => {
+    treatyDefendersSpy.mockResolvedValue([{ countryId: "RU", organizationId: "WARSAW_PACT" }]);
+    const live = {
+      _id: "c1",
+      hostCountry: "DD",
+      name: "Battle of Berlin",
+      sideA: { countries: ["UK"], kind: "state" },
+      sideB: { countries: ["DD"], kind: "state" },
+    };
+    await declareWar(stubDb(live), pactDefender);
+    const push = conflictUpdateSpy.mock.calls.find(
+      (c) => (c[1] as { $push?: unknown })?.$push !== undefined
+    );
+    expect(push).toBeDefined();
+    const entries = (push![1] as { $push: { treatyEntries: { $each: Record<string, unknown>[] } } })
+      .$push.treatyEntries.$each;
+    expect(entries).toEqual([
+      { countryId: "RU", organizationId: "WARSAW_PACT", defending: "DD", joinedTurn: 40 },
+    ]);
+  });
+
+  it("does not auto-join when the defender cannot be placed on either side", async () => {
+    treatyDefendersSpy.mockResolvedValue([{ countryId: "RU", organizationId: "WARSAW_PACT" }]);
+    // The defender is on neither roster and has no bloc backer to fall back on, so there
+    // is no side to defend. Guessing would enrol the ally AGAINST the country it came to
+    // protect.
+    const live = {
+      _id: "c1",
+      hostCountry: "DD",
+      sideA: { countries: ["UK"], kind: "state" },
+      sideB: { countries: ["FR"], kind: "state" },
+    };
+    await declareWar(stubDb(live), pactDefender);
+    expect(joinSideSpy).not.toHaveBeenCalledWith(expect.anything(), live, "RU", expect.anything());
+  });
+
+  it("tells an auto-joined ally's government that its treaty took it to war", async () => {
+    treatyDefendersSpy.mockResolvedValue([{ countryId: "RU", organizationId: "WARSAW_PACT" }]);
+    await declareWar(stubDb(), pactDefender);
+    const inputs = notifySpy.mock.calls[0][0] as Array<{
+      userId: unknown;
+      type: string;
+      message: string;
+    }>;
+    expect(inputs.length).toBeGreaterThan(0);
+    expect(inputs[0].userId).toEqual(USER_ID);
+    expect(inputs[0].type).toBe("treaty_defence_invoked");
+    expect(inputs[0].message).toContain("Warsaw Pact");
+    // Player-facing copy: no em or en dashes.
+    expect(inputs[0].message).not.toMatch(/[—–]/);
+    expect(orgHistorySpy).toHaveBeenCalled();
+  });
+
+  it("sends nothing when no ally was pulled in", async () => {
+    await declareWar(stubDb(), input);
+    expect(notifySpy).not.toHaveBeenCalled();
   });
 });

@@ -48,6 +48,23 @@ export interface ConflictSide {
   tokenStrength?: number;
 }
 
+/**
+ * One country pulled into a war by a mutual-defence treaty, and who it came for.
+ *
+ * `defending` is the load-bearing field: it is what the separate-peace bar reads to
+ * decide whether this country may still buy its way out, and what release reads to
+ * decide who leaves when that country settles. Without it an auto-joined ally is
+ * indistinguishable from one that declared war itself.
+ */
+export interface TreatyEntry {
+  countryId: CountryId;
+  /** The alliance that bound it, e.g. "NATO" / "WARSAW_PACT". */
+  organizationId: string;
+  /** The member this country was pulled in to defend. */
+  defending: CountryId;
+  joinedTurn: number;
+}
+
 export interface ConflictDoc {
   /** Dynamic conflict id (a unit's `theaterId` holds this, or "reserve"). */
   _id: string;
@@ -75,6 +92,11 @@ export interface ConflictDoc {
   sideB: ConflictSide;
   /** Cold War alignment of the conflict as a whole. */
   bloc: ConflictBloc;
+  /**
+   * Countries pulled in by a mutual-defence treaty. Optional, so every conflict
+   * created before this feature reads as `undefined` and needs no migration.
+   */
+  treatyEntries?: TreatyEntry[];
 
   // Generated at birth (was hardcoded across BOTH old static datasets — the Theater
   // situation flavor AND the combat.ts Front battle-math data):

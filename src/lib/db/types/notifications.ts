@@ -16,6 +16,8 @@ export const NOTIFICATION_TYPES = [
   "leadership_appointed",
   /** Named Commanding General of a military command by the defence seat. */
   "command_appointed",
+  /** A mutual-defence treaty took this country into a war it did not declare. */
+  "treaty_defence_invoked",
   "leadership_removed",
   "leadership_candidacy",
   "leadership_election_opened",
