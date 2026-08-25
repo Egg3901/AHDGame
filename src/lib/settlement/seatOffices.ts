@@ -94,14 +94,11 @@ export async function resolveSeatOffices(db: Db): Promise<SettlementSeatOffices>
   const ministerOffices = new Map(SEAT_COUNTRIES.map((id) => [id, foreignMinisterOffice(id)]));
   const defenseOffices = new Map(SEAT_COUNTRIES.map((id) => [id, defenseMinisterOffice(id)]));
   const pairs = SEAT_COUNTRIES.flatMap((seatId) => {
-    // `CountryId`, not `string`: `Filter<UnifiedCabinetMember>` types countryId
-    // as Condition<CountryId>, and widening it here made the `$or` below fail
-    // to typecheck. `SEAT_COUNTRIES` entries are already CountryId values.
     const ids: { countryId: CountryId; positionId: string }[] = [];
     const foreignId = ministerOffices.get(seatId)?.positionId;
-    if (foreignId) ids.push({ countryId: seatId, positionId: foreignId });
+    if (foreignId) ids.push({ countryId: seatId as CountryId, positionId: foreignId });
     const defenseId = defenseOffices.get(seatId)?.positionId;
-    if (defenseId) ids.push({ countryId: seatId, positionId: defenseId });
+    if (defenseId) ids.push({ countryId: seatId as CountryId, positionId: defenseId });
     return ids;
   });
   const members =

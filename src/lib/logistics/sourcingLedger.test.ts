@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
-import type { CommodityType } from "@/lib/constants/commodities";
-import { buildSourcingDocs } from "./sourcingLedger";
+import { describe, expect, it } from "vitest";
 import type { SourcingResult } from "./sourcing";
+import { buildSourcingDocs } from "./sourcingLedger";
+import type { CommodityType } from "@/lib/constants/commodities";
 
 function baseResult(overrides: Partial<SourcingResult> = {}): SourcingResult {
   return {
@@ -17,7 +17,41 @@ function baseResult(overrides: Partial<SourcingResult> = {}): SourcingResult {
   };
 }
 
-describe("buildSourcingDocs — money wiring fields", () => {
+describe("buildSourcingDocs", () => {
+  it("persists the buyer-intent denominator and basis marker", () => {
+    const result: SourcingResult = {
+      flows: [],
+      summaries: [
+        {
+          commodity: "energy",
+          intraStateUnits: 10,
+          interStateUnits: 20,
+          importUnits: 30,
+          tariffPaid: 0,
+          unmetUnits: 40,
+          toleranceBoundUnits: 5,
+          capacityBoundUnits: 6,
+          congestionUnits: 0,
+          congestionSurchargePaid: 0,
+          gridLossUnits: 0,
+        },
+      ],
+      freightTeuByState: new Map(),
+      freightDemandTeuByState: new Map(),
+      landedPremiumByDestState: new Map(),
+      importAggregatesByCountry: new Map(),
+      unplacedSupplyByState: new Map(),
+      deliveryLimitedSupplyByState: new Map(),
+    };
+
+    const { commodityDocs } = buildSourcingDocs(result, 365, new Date("2026-08-25T00:00:00.000Z"));
+    const persisted = JSON.parse(JSON.stringify(commodityDocs[0]));
+
+    expect(persisted.basis).toBe("buyer_intent_sourcing");
+    expect(persisted.demandUnitsIntent).toBe(100);
+    expect(persisted.unmetUnits).toBe(40);
+  });
+
   it("rounds premiumPerUnit to 4 decimals and omits zero/negative entries", () => {
     const landedPremiumByDestState = new Map<
       string,

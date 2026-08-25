@@ -1,4 +1,4 @@
-import type { Db, ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import type {
   CommodityPrice,
   Corporation,
@@ -20,6 +20,14 @@ import {
 } from "@/lib/turn/npp/strategyExpectedRevenue";
 import { retoolRescaleFields } from "@/lib/corporations/retoolRescale";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
+import type { CountryId } from "@/lib/constants/countries";
+import {
+  generateNppCorpName,
+  spawnNppCorporation,
+  NPP_CAPITAL_STATES,
+} from "@/lib/admin/spawnNppCorporation";
+
+const NPC_CORPORATION_USER_ID = new ObjectId("000000000000000000000000");
 
 /**
  * Lagged price ratio for auto-strategy scoring: host reachable book, then
@@ -80,9 +88,9 @@ function capacityRescaleUpdate(
  * remediation). Capacity is enforced per state, and the shortage commodities
  * (copper/rare_earth/timber) have large idle headroom in states where broad-mix
  * ("standard") miners sit — they extract copper at rate 0.15 instead of the
- * focused 0.72. This phase nudges standard extraction sectors that sit on a
- * shortage deposit *with per-state headroom* onto the matching focused mining
- * strategy, gradually, so real utilization rises and the capacity haircut
+ * focused 0.72. This phase nudges NPP-owned standard extraction sectors that
+ * sit on a shortage deposit *with per-state headroom* onto the matching focused
+ * mining strategy, gradually, so real utilization rises and the capacity haircut
  * recedes at its source (rather than being masked by the Phase-0 floor).
  *
  * Self-limiting: only global-shortage resources (S/D < SHORTAGE_SD) are targeted
@@ -96,17 +104,40 @@ function capacityRescaleUpdate(
  * switched when a meaningfully better strategy exists, including OUT of a
  * focused strategy whose deposit the state can't physically support. Price
  * ratios are the sector host country's reachable book (national, then global
- * fallback). Player-CEO sectors are never touched by pass 2. Same flag/cadence
- * as pass 1.
+ * fallback). Player-CEO sectors are never touched by either retool pass. Same
+ * flag/cadence as pass 1.
+ *
+ * Pass 3 places a new NPP extraction corporation through the shared founding
+ * core when a genuine global shortage has idle state deposit capacity and the
+ * state has no extraction sector that can be re-pointed. Placement has its own
+ * cap, separate from retools, because each placement creates a corporation.
  *
  * There is no generic (non-extraction) pass here. That used to start a
  * transition + 24-turn cooldown on global prices before `nppCorporationBehavior`
  * section 2e could re-score the same sector on reachable prices. Generic
  * retools belong to 2e.
  */
-export const EXTRACTION_AUTO_STRATEGY_CADENCE_TURNS = 4; // act at most this often
-export const EXTRACTION_AUTO_STRATEGY_MAX_PER_RUN = 3; // conversions per run (gradual)
+export const EXTRACTION_AUTO_STRATEGY_CADENCE_TURNS = 1;
+// Seven direct shortage retools plus the existing three expected-revenue
+// retools cap fleet changes at ten per turn. That can unwind a chronic shortage
+// without making a 1959 mining fleet change trades all at once.
+// New mine placement has its own lower cap because each placement founds a corp.
+export const EXTRACTION_AUTO_STRATEGY_MAX_PER_RUN = 4;
+export const EXTRACTION_AUTO_STRATEGY_PLACEMENT_MAX_PER_RUN = 3;
 export const EXTRACTION_AUTO_STRATEGY_SHORTAGE_SD = 0.6; // global S/D below this = shortage
+/**
+ * Placement uses a looser shortage gate than retooling, deliberately.
+ *
+ * Retooling redirects an EXISTING miner and blends over a 12-turn transition,
+ * so several of them in flight commit supply the S/D gate cannot see yet: that
+ * is the overshoot vector and it keeps the strict gate. Placement starts a new
+ * miner on a deposit nobody is working, is capped per run, per state and per
+ * country, and permanently drains its own candidate pool, so it is safe to fire
+ * on merely-short resources. At the 0.6 retool gate placement would be inert on
+ * the live world (coal 0.67 and timber 0.67 are the worst extractables today),
+ * which would leave every idle deposit idle.
+ */
+export const EXTRACTION_AUTO_STRATEGY_PLACEMENT_SHORTAGE_SD = 0.78;
 export const EXTRACTION_STATE_HEADROOM_FRACTION = 0.98; // state must sit below this × capacity
 export const NPP_RESTRATEGIZE_MAX_PER_RUN = 3; // NPP expected-revenue switches per run
 
@@ -133,6 +164,9 @@ export function focusedStrategyByResource(): Map<
 export interface ExtractionAutoStrategyResult {
   converted: number;
   byResource: Record<string, number>;
+  /** New NPP extraction corporations placed on idle shortage deposits. */
+  placed?: number;
+  placedByResource?: Record<string, number>;
   /** NPP expected-revenue re-strategizations (second pass), by target strategy. */
   restrategized?: number;
   restrategizedByStrategy?: Record<string, number>;
@@ -186,6 +220,11 @@ export async function processExtractionAutoStrategy(
   // sector host country's reachable book (national, then global fallback) so a
   // partitioned miner is not steered by unreachable-bloc prices.
   const priceByCommodity = new Map<string, ExtractionPriceDoc>();
+  // Placement reads its own, looser shortage set (see the constant's comment).
+  const placementShortage = new Map<
+    ExtractableResource,
+    { sd: number; stateSupply: Record<string, number> }
+  >();
   const stateSupplyByResource = new Map<ExtractableResource, Record<string, number>>();
   for (const cp of prices) {
     const r = cp.commodity as ExtractableResource;
@@ -194,6 +233,9 @@ export async function processExtractionAutoStrategy(
     if (sd < EXTRACTION_AUTO_STRATEGY_SHORTAGE_SD) {
       shortage.set(r, { sd, stateSupply: cp.stateSupply ?? {} });
     }
+    if (sd < EXTRACTION_AUTO_STRATEGY_PLACEMENT_SHORTAGE_SD) {
+      placementShortage.set(r, { sd, stateSupply: cp.stateSupply ?? {} });
+    }
     priceByCommodity.set(cp.commodity, cp);
     stateSupplyByResource.set(r, cp.stateSupply ?? {});
   }
@@ -201,18 +243,40 @@ export async function processExtractionAutoStrategy(
   const caps = await db
     .collection<StateResourceCapacity>("stateResourceCapacity")
     .find({})
-    .project({ stateId: 1, resources: 1 })
+    .project({ stateId: 1, countryId: 1, resources: 1 })
     .toArray();
   const capByState = new Map(caps.map((c) => [c.stateId, c.resources ?? {}]));
   const focusMap = focusedStrategyByResource();
 
-  // ── Pass 1: standard→focused shortage conversions (any corp, unchanged) ────
-  // Candidate = standard-strategy extraction sector, not mid-transition, not on cooldown.
+  const nppCorps = await db
+    .collection<Corporation>("corporations")
+    .find({
+      ceoType: "npp",
+      userId: NPC_CORPORATION_USER_ID,
+      caretakerCeo: { $exists: false },
+      suspended: { $ne: true },
+    })
+    .project({ _id: 1, countryId: 1, ceoType: 1, userId: 1, caretakerCeo: 1 })
+    .toArray();
+  const npcCorps = nppCorps.filter(
+    (corp) =>
+      corp.ceoType === "npp" &&
+      !corp.caretakerCeo &&
+      corp.userId?.toString() === NPC_CORPORATION_USER_ID.toString()
+  );
+  const nppCorpIds = new Set(npcCorps.map((corp) => corp._id.toString()));
+
+  // ── Pass 1: standard→focused shortage conversions for NPP corps only ──────
+  // Read every extraction location so placement cannot crowd an existing player
+  // miner, then defensively restrict every retool to the NPP corporation set.
   type CandidateSector = Pick<
     CorporateSector,
     | "_id"
+    | "corporationId"
     | "stateId"
+    | "strategyId"
     | "revenue"
+    | "transitionFromStrategyId"
     | "transitionCooldownUntilTurn"
     | "capitalStock"
     | "buildQueue"
@@ -220,21 +284,14 @@ export async function processExtractionAutoStrategy(
   >;
   const candidates = await db
     .collection<CorporateSector>("corporateSectors")
-    .find({
-      sectorType: "extraction",
-      // `strategyId: null` matches docs where the field is literally null;
-      // the schema types it string|undefined, hence the narrow cast.
-      $or: [
-        { strategyId: { $exists: false } },
-        { strategyId: "standard" },
-        { strategyId: null as unknown as string },
-      ],
-      transitionFromStrategyId: { $in: [null, undefined] },
-    })
+    .find({ sectorType: "extraction" })
     .project<CandidateSector>({
       _id: 1,
+      corporationId: 1,
       stateId: 1,
+      strategyId: 1,
       revenue: 1,
+      transitionFromStrategyId: 1,
       transitionCooldownUntilTurn: 1,
       capitalStock: 1,
       buildQueue: 1,
@@ -249,7 +306,16 @@ export async function processExtractionAutoStrategy(
     score: number;
   };
   const picks: StrategyPick[] = [];
+  const occupiedExtractionStates = new Set(candidates.map((sector) => sector.stateId));
   for (const s of candidates) {
+    // NPP-founded corps only. State mining enterprises carry no ceoType and are
+    // deliberately OUT of scope here: they hold the largest idle deposits but
+    // several are player-run (the East German one is), and a blanket predicate
+    // that caught them would retool a player's mine. Their retooling stays a
+    // deliberate, migration-shaped act (see the eastern-deposits migration).
+    if (!nppCorpIds.has(s.corporationId?.toString() ?? "")) continue;
+    if (s.strategyId != null && s.strategyId !== "standard") continue;
+    if (s.transitionFromStrategyId != null) continue;
     if (s.transitionCooldownUntilTurn != null && currentTurn < s.transitionCooldownUntilTurn)
       continue;
     const stateRes = capByState.get(s.stateId);
@@ -312,13 +378,8 @@ export async function processExtractionAutoStrategy(
   // player-CEO sectors; rides the same flag/cadence as pass 1.
   const restrategizedByStrategy: Record<string, number> = {};
   let restrategized = 0;
-  const nppCorps = await db
-    .collection<Corporation>("corporations")
-    .find({ ceoType: "npp", suspended: { $ne: true } })
-    .project({ _id: 1, countryId: 1 })
-    .toArray();
-  const nppCountryById = new Map(nppCorps.map((c) => [c._id.toString(), c.countryId]));
-  if (nppCorps.length > 0) {
+  const nppCountryById = new Map(npcCorps.map((c) => [c._id.toString(), c.countryId]));
+  if (npcCorps.length > 0) {
     const alreadyChosen = new Set(chosen.map((p) => p.sector._id.toString()));
     type NppSector = Pick<
       CorporateSector,
@@ -337,7 +398,7 @@ export async function processExtractionAutoStrategy(
       .collection<CorporateSector>("corporateSectors")
       .find({
         sectorType: "extraction",
-        corporationId: { $in: nppCorps.map((c) => c._id as ObjectId) },
+        corporationId: { $in: npcCorps.map((c) => c._id as ObjectId) },
         transitionFromStrategyId: { $in: [null, undefined] },
       })
       .project<NppSector>({
@@ -429,10 +490,83 @@ export async function processExtractionAutoStrategy(
     }
   }
 
+  const placementCandidates: Array<{
+    stateId: string;
+    countryId: StateResourceCapacity["countryId"];
+    resource: ExtractableResource;
+    strategyId: string;
+    score: number;
+  }> = [];
+  for (const capDoc of caps) {
+    // Market NPP corps only exist where the authored capital-state list says
+    // they can: planned economies seed SOEs through the budget seeders and
+    // latent nations cannot spawn pre-activation. Founding a market miner in
+    // East Germany or the USSR would be a category error, not a supply fix.
+    if (!NPP_CAPITAL_STATES[capDoc.countryId as CountryId]) continue;
+    for (const [resource, info] of placementShortage) {
+      const cap = capDoc.resources?.[resource] ?? 0;
+      if (cap <= 0) continue;
+      const stateSupplied = info.stateSupply[capDoc.stateId] ?? 0;
+      if (stateSupplied >= cap * EXTRACTION_STATE_HEADROOM_FRACTION) continue;
+      if (occupiedExtractionStates.has(capDoc.stateId)) continue;
+      const focus = focusMap.get(resource);
+      if (!focus) continue;
+      placementCandidates.push({
+        stateId: capDoc.stateId,
+        countryId: capDoc.countryId,
+        resource,
+        strategyId: focus.id,
+        score: (1 - info.sd) * Math.max(0, cap - stateSupplied),
+      });
+    }
+  }
+  placementCandidates.sort((a, b) => b.score - a.score);
+
+  const placedByResource: Record<string, number> = {};
+  const placedNames: string[] = [];
+  let placed = 0;
+  // One placement per state and per country per run. Candidates are keyed by
+  // (state, resource), so a state holding three shortage resources would
+  // otherwise absorb every placement in a single turn.
+  const placedStates = new Set<string>();
+  const placedCountries = new Set<string>();
+  for (const candidate of placementCandidates) {
+    if (placed >= EXTRACTION_AUTO_STRATEGY_PLACEMENT_MAX_PER_RUN) break;
+    if (placedStates.has(candidate.stateId)) continue;
+    if (placedCountries.has(candidate.countryId)) continue;
+    const name = generateNppCorpName(candidate.countryId, "extraction", placedNames);
+    try {
+      await spawnNppCorporation(db, {
+        name,
+        type: "extraction",
+        countryId: candidate.countryId,
+        headquartersState: candidate.stateId,
+        initialStrategyId: candidate.strategyId,
+        foundedAtTurn: currentTurn,
+      });
+    } catch (err) {
+      // Mongo here is standalone, so a spawn is not transactional: a mid-spawn
+      // throw can leave an orphan corporation. Skip the candidate and keep the
+      // run going rather than aborting before stampRun and repeating forever.
+      console.warn(
+        `[extractionAutoStrategy] placement failed for ${candidate.countryId}/${candidate.stateId}:`,
+        err
+      );
+      continue;
+    }
+    placedStates.add(candidate.stateId);
+    placedCountries.add(candidate.countryId);
+    placedNames.push(name);
+    placed += 1;
+    placedByResource[candidate.resource] = (placedByResource[candidate.resource] ?? 0) + 1;
+  }
+
   await stampRun(db, currentTurn);
   return {
     converted: chosen.length,
     byResource,
+    placed,
+    placedByResource,
     restrategized,
     restrategizedByStrategy,
     genericRestrategized: 0,

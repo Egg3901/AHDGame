@@ -88,13 +88,18 @@ export interface CommodityDetail {
   totalCapacity?: number;
   /**
    * Latest flow-ledger row (marketSystemMode >= "ledger", audit t806 Fix 3/D0):
-   * what this market actually moved last turn. undefined when the mode is off.
+   * pooled world availability last turn. undefined when the mode is off.
    */
   flows?: {
+    basis: "ledger_aggregate";
+    clearingBasis: "global_pooled_availability";
     turn: number;
     clearedUnits: number;
+    clearedUnitsPooled: number;
     unmetDemandUnits: number;
+    unmetDemandUnitsPooled: number;
     surplusUnits: number;
+    surplusUnitsPooled: number;
     /** Shadow inventory: null for non-storable commodities. */
     stockUnits: number | null;
     coverTurns: number | null;
