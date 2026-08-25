@@ -30,10 +30,12 @@ describe("governanceStyleFlavor", () => {
     input.competition = {
       dominantPartyId: "dem",
       dominantSeatShare: 75,
+      chambersMeasured: 2,
       uninterruptedControlTurns: 60,
       consecutiveExecutiveTerms: 3,
       penalty: 17.5,
     };
     expect(governanceStyleFlavor(input).competitionNarrative).toContain("subtract 17.5 points");
+    expect(governanceStyleFlavor(input).competitionNarrative).toContain("2 elected chambers");
   });
 });

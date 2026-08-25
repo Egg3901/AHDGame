@@ -2,11 +2,14 @@ export interface SeatControlHistoryRow {
   turn: number;
   party: string;
   seats: number;
+  officeType?: string;
 }
 
 export interface DemocraticCompetition {
   dominantPartyId: string | null;
+  /** Equal-chamber average held by the dominant party. */
   dominantSeatShare: number;
+  chambersMeasured: number;
   uninterruptedControlTurns: number;
   consecutiveExecutiveTerms: number;
   penalty: number;
@@ -14,15 +17,27 @@ export interface DemocraticCompetition {
 
 const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
 
-function tallyCurrent(seatsByParty: Record<string, number>) {
-  const entries = Object.entries(seatsByParty).filter(
-    ([, seats]) => Number.isFinite(seats) && seats > 0
+function tallyChambers(chambersByParty: readonly Record<string, number>[]) {
+  const validChambers = chambersByParty.filter((chamber) =>
+    Object.values(chamber).some((seats) => Number.isFinite(seats) && seats > 0)
   );
-  const total = entries.reduce((sum, [, seats]) => sum + seats, 0);
-  const dominant = entries.sort((a, b) => b[1] - a[1])[0] ?? null;
+  const averageShares = new Map<string, number>();
+
+  for (const chamber of validChambers) {
+    const entries = Object.entries(chamber).filter(
+      ([, seats]) => Number.isFinite(seats) && seats > 0
+    );
+    const total = entries.reduce((sum, [, seats]) => sum + seats, 0);
+    for (const [party, seats] of entries) {
+      averageShares.set(party, (averageShares.get(party) ?? 0) + seats / total);
+    }
+  }
+
+  const dominant = [...averageShares.entries()].sort((a, b) => b[1] - a[1])[0] ?? null;
   return {
     party: dominant?.[0] ?? null,
-    share: total > 0 && dominant ? dominant[1] / total : 0,
+    share: dominant && validChambers.length > 0 ? dominant[1] / validChambers.length : 0,
+    chambersMeasured: validChambers.length,
   };
 }
 
@@ -31,18 +46,21 @@ function uninterruptedControlTurns(
   history: readonly SeatControlHistoryRow[]
 ): number {
   if (!dominantPartyId || history.length === 0) return 0;
-  const byTurn = new Map<number, Map<string, number>>();
+  const byTurn = new Map<number, Map<string, Record<string, number>>>();
   for (const row of history) {
     if (!Number.isFinite(row.turn) || !Number.isFinite(row.seats) || row.seats <= 0) continue;
-    const seats = byTurn.get(row.turn) ?? new Map<string, number>();
-    seats.set(row.party, (seats.get(row.party) ?? 0) + row.seats);
-    byTurn.set(row.turn, seats);
+    const chambers = byTurn.get(row.turn) ?? new Map<string, Record<string, number>>();
+    const chamberKey = row.officeType ?? "default";
+    const seats = chambers.get(chamberKey) ?? {};
+    seats[row.party] = (seats[row.party] ?? 0) + row.seats;
+    chambers.set(chamberKey, seats);
+    byTurn.set(row.turn, chambers);
   }
 
   const turns = [...byTurn.keys()].sort((a, b) => b - a);
   let count = 0;
   for (const turn of turns) {
-    const leader = [...byTurn.get(turn)!.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const leader = tallyChambers([...byTurn.get(turn)!.values()]).party;
     if (leader !== dominantPartyId) break;
     count++;
   }
@@ -55,11 +73,12 @@ function uninterruptedControlTurns(
  * control and repeated executive wins add slower pressure.
  */
 export function assessDemocraticCompetition(input: {
-  seatsByParty: Record<string, number>;
+  seatsByParty?: Record<string, number>;
+  chambersByParty?: readonly Record<string, number>[];
   history?: readonly SeatControlHistoryRow[];
   consecutiveExecutiveTerms?: number;
 }): DemocraticCompetition {
-  const current = tallyCurrent(input.seatsByParty);
+  const current = tallyChambers(input.chambersByParty ?? [input.seatsByParty ?? {}]);
   const controlTurns = uninterruptedControlTurns(current.party, input.history ?? []);
   const executiveTerms = Math.max(0, Math.floor(input.consecutiveExecutiveTerms ?? 0));
 
@@ -70,6 +89,7 @@ export function assessDemocraticCompetition(input: {
   return {
     dominantPartyId: current.party,
     dominantSeatShare: Math.round(current.share * 1000) / 10,
+    chambersMeasured: current.chambersMeasured,
     uninterruptedControlTurns: controlTurns,
     consecutiveExecutiveTerms: executiveTerms,
     penalty: Math.round((seatPenalty + controlPenalty + tenurePenalty) * 10) / 10,

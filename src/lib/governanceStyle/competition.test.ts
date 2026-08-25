@@ -5,7 +5,44 @@ describe("assessDemocraticCompetition", () => {
   it("does not punish an ordinary democratic majority", () => {
     expect(
       assessDemocraticCompetition({ seatsByParty: { dem: 213, rep: 221, independent: 1 } })
-    ).toMatchObject({ dominantPartyId: "rep", dominantSeatShare: 50.8, penalty: 0 });
+    ).toMatchObject({
+      dominantPartyId: "rep",
+      dominantSeatShare: 50.8,
+      chambersMeasured: 1,
+      penalty: 0,
+    });
+  });
+
+  it("weights elected chambers equally when one party controls both", () => {
+    const score = assessDemocraticCompetition({
+      chambersByParty: [
+        { dem: 237, farmerLabor: 165, conservative: 25, corporatist: 8 },
+        { dem: 78, farmerLabor: 18 },
+      ],
+    });
+
+    expect(score).toMatchObject({
+      dominantPartyId: "dem",
+      dominantSeatShare: 67.9,
+      chambersMeasured: 2,
+      penalty: 7.7,
+    });
+  });
+
+  it("keeps the competitive 1953 US Congress unpenalized", () => {
+    const score = assessDemocraticCompetition({
+      chambersByParty: [
+        { dem: 213, rep: 221, independent: 1 },
+        { dem: 47, rep: 48, independent: 1 },
+      ],
+    });
+
+    expect(score).toMatchObject({
+      dominantPartyId: "rep",
+      dominantSeatShare: 50.4,
+      chambersMeasured: 2,
+      penalty: 0,
+    });
   });
 
   it("penalizes a lopsided chamber", () => {

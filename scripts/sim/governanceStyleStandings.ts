@@ -84,13 +84,18 @@ async function boardDocs(countryId: CountryId, regions: State[]) {
 }
 
 function seedCompetition(countryId: CountryId) {
-  const lowerChamber = getCountryConfig(countryId, PRESET).legislature.lowerChamber.key;
-  const seatsByParty: Record<string, number> = {};
+  const legislature = getCountryConfig(countryId, PRESET).legislature;
+  const chamberKeys = [legislature.lowerChamber.key];
+  if (legislature.bicameral && legislature.upperChamber) {
+    chamberKeys.push(legislature.upperChamber.key);
+  }
+  const chamberTallies = new Map(chamberKeys.map((key) => [key, {} as Record<string, number>]));
   for (const seat of getPresetSeats(PRESET)) {
-    if (seat.officeType !== lowerChamber) continue;
+    const seatsByParty = chamberTallies.get(seat.officeType);
+    if (!seatsByParty) continue;
     seatsByParty[seat.party] = (seatsByParty[seat.party] ?? 0) + (seat.seatsHeld ?? 1);
   }
-  return assessDemocraticCompetition({ seatsByParty });
+  return assessDemocraticCompetition({ chambersByParty: [...chamberTallies.values()] });
 }
 
 async function main() {
@@ -145,7 +150,7 @@ async function main() {
   console.log(`# Governance Style standings: ${PRESET}`);
   console.log("");
   console.log(
-    "| Player nation | Left to Right | Direction | Failed State to Healthy Democracy | Health | Largest lower-chamber party | Health penalty |"
+    "| Player nation | Left to Right | Direction | Failed State to Healthy Democracy | Health | Largest party across elected chambers | Health penalty |"
   );
   console.log("|---|---:|---|---:|---|---:|---:|");
   for (const row of standings) {

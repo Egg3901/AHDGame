@@ -106,10 +106,14 @@ export function governanceStyleFlavor(score: GovernanceStyleScore): GovernanceSt
   const competition = score.competition;
   let competitionNarrative: string | null = null;
   if (competition && competition.dominantSeatShare > 0) {
+    const chamberScope =
+      competition.chambersMeasured === 1
+        ? "in the elected chamber"
+        : `across ${competition.chambersMeasured} elected chambers`;
     competitionNarrative =
       competition.penalty > 0
-        ? `One party controls ${competition.dominantSeatShare.toFixed(1)}% of the lower chamber. Concentrated power and its continuing tenure subtract ${competition.penalty.toFixed(1)} points from democratic health.`
-        : `The largest party controls ${competition.dominantSeatShare.toFixed(1)}% of the lower chamber. Power remains electorally contestable, so competitive balance applies no health penalty.`;
+        ? `One party averages ${competition.dominantSeatShare.toFixed(1)}% control ${chamberScope}. Concentrated power and its continuing tenure subtract ${competition.penalty.toFixed(1)} points from democratic health.`
+        : `The largest party averages ${competition.dominantSeatShare.toFixed(1)}% control ${chamberScope}. Power remains electorally contestable, so competitive balance applies no health penalty.`;
   }
   return {
     headline: health.headline,
