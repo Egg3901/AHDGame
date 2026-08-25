@@ -20,6 +20,32 @@ export async function getBudgetForFiscalYear(db: Db, fiscalYear: number): Promis
   return getUKBudgetsCollection(db).findOne({ fiscalYear });
 }
 
+/**
+ * Ensure a draft Budget exists for a fiscal year so the Chancellor has something
+ * to author when the annual cycle opens. Idempotent: a no-op if any budget
+ * (draft or resolved) already exists for the year. Returns true if it created one.
+ * Seeds empty tax/spend maps for the Chancellor to fill.
+ */
+export async function ensureBudgetDraftForFiscalYear(
+  db: Db,
+  fiscalYear: number,
+  now: Date
+): Promise<boolean> {
+  const col = getUKBudgetsCollection(db);
+  const existing = await col.findOne({ fiscalYear });
+  if (existing) return false;
+  await col.insertOne({
+    fiscalYear,
+    status: "draft",
+    chancellorCharacterId: null,
+    taxRates: {},
+    spendingAllocations: {},
+    createdAt: now,
+    updatedAt: now,
+  } as UKBudget);
+  return true;
+}
+
 export interface UpsertBudgetDraftInput {
   fiscalYear: number;
   chancellorCharacterId: ObjectId | null;

@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { upsertBudgetDraft, tableBudget, resolveBudgetVote } from "./ukBudgets";
+import {
+  upsertBudgetDraft,
+  tableBudget,
+  resolveBudgetVote,
+  ensureBudgetDraftForFiscalYear,
+} from "./ukBudgets";
 import type { UKBudget } from "../types/ukBudget";
 
 /** In-memory ukBudgets + ukGovernment (for the confidence hit) fake. */
@@ -24,6 +29,9 @@ function fakeDb(seed?: Partial<UKBudget>) {
         budgets.push(b);
       }
       if (b) Object.assign(b, u.$set);
+    },
+    async insertOne(doc: UKBudget) {
+      budgets.push(doc);
     },
   };
   const govCol = {
@@ -64,6 +72,21 @@ describe("upsertBudgetDraft", () => {
       now: new Date(),
     });
     expect(r.ok).toBe(false);
+  });
+});
+
+describe("ensureBudgetDraftForFiscalYear", () => {
+  it("creates a draft when none exists", async () => {
+    const { db, budgets } = fakeDb();
+    const created = await ensureBudgetDraftForFiscalYear(db, 1954, new Date());
+    expect(created).toBe(true);
+    expect(budgets[0]).toMatchObject({ fiscalYear: 1954, status: "draft" });
+  });
+  it("is a no-op when a budget already exists", async () => {
+    const { db, budgets } = fakeDb({ status: "tabled", fiscalYear: 1953 } as Partial<UKBudget>);
+    const created = await ensureBudgetDraftForFiscalYear(db, 1953, new Date());
+    expect(created).toBe(false);
+    expect(budgets).toHaveLength(1);
   });
 });
 
