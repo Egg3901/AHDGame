@@ -32,6 +32,12 @@ export interface MarketContext {
    */
   clearingBySectorId?: ReadonlyMap<string, SectorClearingResult>;
   /**
+   * Advertising sellers that filled the clearing book this turn, keyed by
+   * corporation id. Values are the per-turn anchor value of campaign units
+   * actually delivered at their reachable clearing price.
+   */
+  advertisingSellerDeliveredValueAnchorByCorpId?: ReadonlyMap<string, number>;
+  /**
    * Freight seam: per sector id, the share of its clearing offer (0..1) that
    * last turn's freight network could not place out of its host state, so the
    * offer was cut by it. Set by the corp-phase entry only while freight

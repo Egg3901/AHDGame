@@ -14,7 +14,12 @@ import { processSectors } from "./sectorCalculations";
 import { getLabourSystemMode, labourAtLeast } from "@/lib/labour/featureFlag";
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildMarketContext } from "@/lib/market/marketContext";
-import { computeClearingFactors, type SectorClearingInput } from "@/lib/market/clearing";
+import {
+  computeClearingFactors,
+  qualityPremiumMultiplier,
+  type SectorClearingInput,
+} from "@/lib/market/clearing";
+import { priceRealizationFactor } from "@/lib/market/priceRealization";
 import { computeBrandLoyaltyUpdates, type LoyaltySectorInput } from "./brandLoyaltyTurn";
 import { computeQualityUpdates } from "./brandQualityTurn";
 import {
@@ -100,6 +105,8 @@ import { makeSeededRng } from "@/lib/events/substrate/rng";
 import { logger } from "../../observability/logger";
 import { recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
+import { TURNS_PER_DAY } from "@/lib/constants/corporations";
+import { advertisingDeliveredValueByCorp } from "./advertisingDeliveredValue";
 
 // Optional sim-run salt, same convention as nppActionProcessing.ts's RNG.
 const CORP_TURN_RNG_SALT = process.env.SIM_RNG_SALT ? `:${process.env.SIM_RNG_SALT}` : "";
@@ -535,8 +542,10 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         const hostCode = resolveSectorHostCurrencyCode(sector, corp);
         const hostRate = fxRateForSectorHostFromMap(sector, corp, lookups.exchangeRatesByCurrency);
         const revenueAnchor = readCorpEconomicAnchor(sector.revenue, hostCode, hostRate);
+        // Shared ownership map for both bilateral supply agreements and the
+        // anonymous advertising settlement that follows clearing.
+        sectorCorpId.set(sectorId, corpId);
         if (supplyAgreementsEnabled) {
-          sectorCorpId.set(sectorId, corpId);
           supplyAgreementDemandSectors.push({
             corporationId: corpId,
             sectorType: sector.sectorType,
@@ -862,6 +871,35 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         }
       },
     });
+
+    // Marketing budgets are a real corporation cost, so filled advertising
+    // must have a real recipient. Reproduce clearing's offer normalization for
+    // this commodity, then value each seller's actually delivered units at its
+    // reachable price. processSectors routes that delivered value through one
+    // equal-and-opposite transfer.
+    const clearingBasePrices = eraScaledBasePrices(lookups.eraUnitScale);
+    const advertisingSellerDeliveredValueAnchorByCorpId = advertisingDeliveredValueByCorp({
+      inputs: clearingInputs.map((input) => ({
+        sectorId: input.sectorId,
+        supplyRates: input.supplyRates,
+        revenue: input.revenue,
+        producedUnits: input.producedUnits,
+        outputQuality: input.outputQuality,
+      })),
+      clearingBasePrices,
+      plantsEnabled: market.plantsEnabled,
+      clearingGroupBySector,
+      clearingBySectorId: market.clearingBySectorId,
+      countryClearingBooks: lookups.countryClearingBooks,
+      globalCommodityBalances: lookups.globalCommodityBalances,
+      reachablePriceRatioByCountry: lookups.reachablePriceRatioByCountry,
+      priceRatioByCommodity: lookups.priceRatioByCommodity,
+      sectorCorpId,
+      commodityMixWeight,
+      qualityPremiumPricingEnabled,
+    });
+    market.advertisingSellerDeliveredValueAnchorByCorpId =
+      advertisingSellerDeliveredValueAnchorByCorpId;
     if (bookViolations.length > 0) {
       console.warn(
         "[clearing] post-normalization order-book/ledger unit mismatch on " +

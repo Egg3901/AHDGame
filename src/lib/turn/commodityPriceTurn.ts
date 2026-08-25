@@ -27,6 +27,7 @@ import {
   resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
+import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { costPassThroughMultiplier } from "@/lib/market/costPassThrough";
 import { eraForPreset } from "@/lib/seeds/presetSelector";
 import { commodityDemandCalibration } from "@/lib/constants/commodityDemandCalibration";
@@ -311,6 +312,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
           projection: {
             _id: 1,
             marketingBudget: 1,
+            liquidCapital: 1,
             headquartersState: 1,
             countryOwnerId: 1,
             countryId: 1,
@@ -837,7 +839,21 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     if (budgetLocal <= 0 || !corp.headquartersState) continue;
     const fx = currencyByCorpId.get(corp._id.toString());
     const budgetAnchor = readCorpEconomicAnchor(budgetLocal, fx?.code, fx?.rate ?? 1);
-    const units = (budgetAnchor * MARKETING_ADVERTISING_DEMAND_RATE) / advertisingBasePrice;
+    // Demand is a daily flow, while settlement charges one twenty-fourth each
+    // turn. A corporation may therefore book at most the daily budget its
+    // current treasury can cover for the next turn. Anything beyond that is
+    // unfunded intent, not advertising demand.
+    const liquidCapitalAnchor = readCorpEconomicAnchor(
+      Number.isFinite(corp.liquidCapital) ? corp.liquidCapital : 0,
+      fx?.code,
+      fx?.rate ?? 1
+    );
+    const fundedBudgetAnchor = Math.min(
+      budgetAnchor,
+      Math.max(0, liquidCapitalAnchor) * TURNS_PER_DAY
+    );
+    if (!(fundedBudgetAnchor > 0)) continue;
+    const units = (fundedBudgetAnchor * MARKETING_ADVERTISING_DEMAND_RATE) / advertisingBasePrice;
 
     // Add to global
     const advertisingBal = global.get("advertising")!;
