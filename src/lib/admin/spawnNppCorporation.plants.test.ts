@@ -18,6 +18,7 @@ import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { DEFAULT_SECTOR_STARTING_REVENUE } from "@/lib/constants/corporations";
 import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
+import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/npp/generator", () => ({
@@ -125,6 +126,51 @@ describe("spawnNppCorporation — plants", () => {
     // Seed context: instant, so nothing is queued.
     expect(sector.buildQueue).toBeUndefined();
     expect(sector.plantsStartTurn).toBe(0);
+  });
+
+  it("founds a focused extraction sector with strategy-normalized capacity", async () => {
+    const extractionPoolUnits = computeUnownedHeadroomUnits("extraction", POOL_REVENUE, 1);
+    db.collectionMocks.unownedSectors!.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      stateId: "CA",
+      countryId: "US",
+      sectorType: "extraction",
+      revenue: POOL_REVENUE,
+      headroomUnits: extractionPoolUnits,
+    });
+    const { spawnNppCorporation } = await import("./spawnNppCorporation");
+    await spawnNppCorporation(db as unknown as Db, {
+      name: "Iron Mine",
+      type: "extraction",
+      countryId: "US",
+      headquartersState: "CA",
+      initialStrategyId: "iron_mining",
+      foundedAtTurn: 10,
+    });
+    const sector = db.collectionMocks.corporateSectors!.insertOne.mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
+    const corporation = db.collectionMocks.corporations!.insertOne.mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
+    const poolSet = (
+      db.collectionMocks.unownedSectors!.updateOne.mock.calls[0][1] as {
+        $set: Record<string, number>;
+      }
+    ).$set;
+    const expectedStandardUnits = computeUnownedHeadroomUnits("extraction", CAPTURE_REVENUE, 1);
+
+    expect(sector.strategyId).toBe("iron_mining");
+    expect(corporation.ceoType).toBe("npp");
+    expect((corporation.userId as ObjectId).toString()).toBe("000000000000000000000000");
+    expect(sector.capitalStock).toBeCloseTo(
+      expectedStandardUnits * capacityRescaleRatio("extraction", "standard", "iron_mining"),
+      6
+    );
+    expect(sector.plantsStartTurn).toBe(10);
+    expect(poolSet.headroomUnits).toBeCloseTo(extractionPoolUnits - expectedStandardUnits, 6);
   });
 
   it("decrements the pool's headroom by exactly what it granted", async () => {

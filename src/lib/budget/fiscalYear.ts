@@ -22,6 +22,7 @@ import { processFormulaGrants, updateStateGrantRevenue } from "./grants";
 import { calculateCountryInflation } from "./inflation";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
 import { getNationalDocId, NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
+import { resolvePipelineGdpGrowth } from "@/lib/country/nationalGdpGrowth";
 import { smoothNationalGdp } from "@/lib/metricEngine/gdpLevel";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import {
@@ -131,7 +132,33 @@ export async function processFiscalYear(
     const nationalMetrics = nationalDocId
       ? (allStateMetrics.find((metric) => String(metric._id) === nationalDocId) ?? null)
       : null;
-    const pipelineGdpGrowth = nationalMetrics?.economic?.gdpGrowth?.value ?? 2.5;
+    // Canonical national growth, not a flat 2.5. The 17 countries with no
+    // national metrics doc used to record +2.5% here while several of their
+    // economies were contracting 6-9% (CS -8.9%, HU -7.4%, RO -6.9% at turn
+    // 369). `states` and `allStateMetrics` are already loaded above, so the
+    // regional leg reuses them rather than querying per country.
+    //
+    // Blast radius is narrow and was verified live: `economicFactors.gdpGrowth`
+    // does NOT drive tax-base growth (fiscalBaseGrowth.ts builds its own factors
+    // from the national macroMetrics doc), and the fallbacks at :173/:313/:427
+    // below are unreachable while every country has regional GDP and every
+    // region has a growth metric. Its one live consumer is
+    // `moneySupply/nppPolicy.ts` (NPP open-market decisions), which was choosing
+    // operations against a fictitious +2.5%.
+    const countryRegionGdp = new Map(
+      states
+        .filter((s) => s.countryId === countryId && !NATIONAL_SCOPE_IDS.has(String(s._id)))
+        .map((s) => [String(s._id), s.gdp ?? 0])
+    );
+    const pipelineGdpGrowth = resolvePipelineGdpGrowth({
+      nationalDocGrowth: nationalMetrics?.economic?.gdpGrowth?.value,
+      regions: allStateMetrics
+        .filter((m) => countryRegionGdp.has(String(m._id)))
+        .map((m) => ({
+          growth: m.economic?.gdpGrowth?.value,
+          gdp: countryRegionGdp.get(String(m._id)) ?? 0,
+        })),
+    });
 
     const economicFactors = federalBudget.economicFactors || {
       gdpGrowth: pipelineGdpGrowth,

@@ -111,6 +111,17 @@
       "recordedTurn": "Stand von Zug {turn}.",
       "pts": "Pkt."
     },
+    "factorLedger": {
+      "title": "Faktoren-Aufschluesselung",
+      "subtitle": "Warum eine Kandidatin oder ein Kandidat vorn oder hinten liegt, aufgeteilt in benannte Faktoren. Dies steckt bereits in den Stimmen.",
+      "candidateLabel": "Kandidat",
+      "candidateFallback": "die Kandidatur",
+      "baseline": "Basiswert",
+      "totalVotes": "Erwartete Stimmen",
+      "votesUnit": "Stimmen",
+      "bucketsTitle": "Woher die Unterstuetzung kommt",
+      "recordedTurn": "Stand von Runde {turn}."
+    },
     "registration": {
       "title": "Registrierungseinfluss",
       "noData": "{state} ({stateId}): für diesen Staat werden keine Registrierungsdaten erfasst.",

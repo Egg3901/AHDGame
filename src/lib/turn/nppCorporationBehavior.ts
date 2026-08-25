@@ -7,7 +7,7 @@
  * - Adjust growth rates aggressively based on margin bands
  * - Scale budgets as % of REVENUE (not cash) — spend only what you earn
  * - Kill losing sectors (divest) that drag overall profitability
- * - Expand only when profitable with strong margins and cash buffer
+ * - Expand only when profitable, using recorded corporate credit only for shortages
  * - Set dividend rate based on profit margin, not just existence of profit
  * - Maintain a cash floor to avoid insolvency
  */
@@ -26,9 +26,13 @@ import type {
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { isCorporateIssuerBond } from "@/lib/bonds/corporateCredit";
 import { netPerTurnDebtServiceAnchor } from "@/lib/bonds/corpBondCashflows";
+import { issueRelocationBond, previewRelocationBond } from "@/lib/corporations/issueRelocationBond";
+import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import {
+  ESSENTIAL_SHORTAGE_SCORE,
   findBestUnownedSector,
   hasEnterableHeadroom,
+  sectorPeakShortageScore,
   sectorShortageScore,
   computeMacroProductionPolicy,
   type CommodityPriceRatioFn,
@@ -58,13 +62,7 @@ import {
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
-import {
-  EXTRACTABLE_RESOURCES,
-  COMMODITY_BASE_PRICES,
-  type CommodityType,
-  type ExtractableResource,
-} from "@/lib/constants/commodities";
-import { extractionDesiredUnits } from "@/lib/extraction/capacityHaircut";
+import type { CommodityType } from "@/lib/constants/commodities";
 import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
 import {
   STRANDED_DIVEST_TURNS,
@@ -105,12 +103,16 @@ import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
   anchorToCorpCapital,
+  corpLiquidCapitalToAnchor,
   resolveSectorHostCurrencyCode,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { pickBestNppTechNode } from "@/lib/turn/npp/corpBehaviorConfig";
+import { computeExtractionHeadroomByState } from "@/lib/turn/nppExtractionOpportunity";
+
+export { computeExtractionHeadroomByState } from "@/lib/turn/nppExtractionOpportunity";
 
 /**
  * Largest share of a sector's gross margin that may be spent on growth before an
@@ -142,7 +144,25 @@ const CASH_FLOOR = 250_000; // Never spend below this
 const EXPANSION_COST = 500_000;
 const EXPANSION_MIN_CASH = 625_000; // Need this much above floor to expand
 const EXPANSION_MIN_MARGIN = 15; // Corp-level avg margin must be healthy
-const MAX_SECTORS = 5;
+
+/** Ordinary NPP diversification stops here, preserving the established behavior. */
+export const NPP_BASE_SECTOR_CAP = 5;
+/**
+ * A genuine shortage may open three exceptional sector slots. This is high
+ * enough for a capped corporation to answer several shortages, but remains a
+ * hard conglomerate ceiling after the price signal has justified entry.
+ */
+export const NPP_SHORTAGE_SECTOR_HARD_CAP = 8;
+/**
+ * Exceptional shortage entry is cohort-staggered to one opportunity per eight
+ * turns. Each eligible corporation can add at most one starter facility in its
+ * slot, and that capacity still waits half the normal build lead time. Expected
+ * response is therefore at most 0.125 starter facilities per corporation per
+ * turn, while unowned-pool drawdown prevents entrants from exceeding headroom.
+ */
+export const NPP_SHORTAGE_ENTRY_STAGGER_TURNS = 8;
+/** One decision can found only one exceptional sector, even with several shortages. */
+export const NPP_SHORTAGE_ENTRIES_PER_TURN = 1;
 
 // Archetypes may scale the rails but never remove the minimum buffer.
 const SAFE_CASH_FLOOR_MIN = 125_000; // an aggressive floor still leaves a buffer
@@ -165,11 +185,28 @@ const NPP_WAGE_GLUT_TARGET = 0.95;
 /** Spread cohort state changes across turns to avoid supply cliffs. */
 export const GLUT_STATE_CHANGE_STAGGER = 8;
 
+/** Half the stagger window, so shortage entry never lands on the glut cohort's turn. */
+const SHORTAGE_ENTRY_COHORT_OFFSET = 4;
+
 /** Deterministic per-corp turn slot for glut state changes (exported for tests). */
 export function glutStaggerEligible(corpId: string, turn: number): boolean {
   const tail = parseInt(corpId.slice(-6), 16);
   const hash = Number.isFinite(tail) ? tail : 0;
   return (hash + turn) % GLUT_STATE_CHANGE_STAGGER === 0;
+}
+
+/**
+ * Deterministic cohort slot for cap-exception and credit-funded shortage entry.
+ *
+ * Offset from the glut cohort on purpose. Both draw the same hash from the corp
+ * id, so without the offset the two cohorts are the SAME corps on the SAME
+ * turns, and every corp would weigh mothballing a glutted sector and borrowing
+ * into a short one on one tick.
+ */
+export function shortageEntryStaggerEligible(corpId: string, turn: number): boolean {
+  const tail = parseInt(corpId.slice(-6), 16);
+  const hash = Number.isFinite(tail) ? tail : 0;
+  return (hash + turn + SHORTAGE_ENTRY_COHORT_OFFSET) % NPP_SHORTAGE_ENTRY_STAGGER_TURNS === 0;
 }
 
 // Re-score NPP recipes against reachable prices so an input squeeze can trigger
@@ -249,6 +286,10 @@ interface NppCorpDecisionContext {
   strategyEligible?: boolean;
   /** Explicit false disables strategy memory and pins legacy expand levers. */
   strategyLoopEnabled?: boolean;
+  /** True only on this corporation's exceptional shortage-entry cohort slot. */
+  shortageEntryEligible?: boolean;
+  /** Actual local-currency corporate-bond proceeds reserved for shortage entry. */
+  shortageEntryCreditLocal?: number;
 }
 
 /**
@@ -313,6 +354,11 @@ interface NppCorpDecision {
     costLocal: number;
     onlineTurn: number;
   }>;
+  /** Request for the processor to fund through the existing corporate bond path. */
+  shortageCreditRequest?: {
+    amountLocal: number;
+    sectorType: CorporationType;
+  };
 }
 
 /**
@@ -340,53 +386,6 @@ interface SectorProfitInfo {
   margin: number;
   isProfitable: boolean;
   marginCategory: "loss" | "thin" | "healthy" | "strong";
-}
-
-export function computeExtractionHeadroomByState(
-  capDocs: Array<Pick<StateResourceCapacity, "stateId" | "resources">>,
-  sectors: CorporateSector[],
-  eraUnitScale: number,
-  extractionOutputScaleEnabled: boolean
-): Map<string, number> {
-  const desiredByState = new Map<string, Partial<Record<ExtractableResource, number>>>();
-  for (const sector of sectors) {
-    if (sector.sectorType !== "extraction") continue;
-    const strat =
-      SECTOR_STRATEGIES["extraction"]?.find((st) => st.id === (sector.strategyId ?? "standard")) ??
-      SECTOR_STRATEGIES["extraction"]?.[0];
-    const supplyRates = (strat?.supply ?? {}) as Partial<Record<string, number>>;
-    const forState = desiredByState.get(sector.stateId) ?? {};
-    for (const resource of EXTRACTABLE_RESOURCES) {
-      const rate = supplyRates[resource] ?? 0;
-      if (rate <= 0) continue;
-      forState[resource] =
-        (forState[resource] ?? 0) +
-        extractionDesiredUnits(
-          sector.revenue,
-          rate,
-          resource,
-          eraUnitScale,
-          extractionOutputScaleEnabled
-        );
-    }
-    desiredByState.set(sector.stateId, forState);
-  }
-
-  const headroomByState = new Map<string, number>();
-  for (const capDoc of capDocs) {
-    let capValue = 0;
-    let headroomValue = 0;
-    for (const resource of EXTRACTABLE_RESOURCES) {
-      const capacity = capDoc.resources?.[resource] ?? 0;
-      if (capacity <= 0) continue;
-      const basePrice = COMMODITY_BASE_PRICES[resource] ?? 1;
-      const desired = desiredByState.get(capDoc.stateId)?.[resource] ?? 0;
-      capValue += capacity * basePrice;
-      headroomValue += Math.max(0, capacity - desired) * basePrice;
-    }
-    headroomByState.set(capDoc.stateId, capValue > 0 ? headroomValue / capValue : 0);
-  }
-  return headroomByState;
 }
 
 /**
@@ -698,37 +697,92 @@ export async function processNppCorporationDecisions(
     const archetype =
       (corp.ceoId && archetypeByNppId.get(corp.ceoId.toString())) || DEFAULT_ARCHETYPE;
     const corpCurrency = resolveCorpLiquidCurrencyCode(corp);
-    const decision = makeNppCorpDecision(
-      {
-        corp,
-        sectors,
-        turn,
-        now,
-        fxRate: (corpCurrency && fxByCurrency.get(corpCurrency)) || 1,
-        fxByCurrency,
-        strategy: corp.nppStrategy,
-        // Same 1-in-8 cohort slot the glut mothball pass uses.
-        strategyEligible: glutStaggerEligible(corp._id.toString(), turn),
-        strategyLoopEnabled,
-        debtServiceAnchor: netPerTurnDebtServiceAnchor({
-          issuerBonds: issuerBondsByCorpId.get(corp._id.toString()),
-          heldPositions: heldBondsByCorpId.get(corp._id.toString()),
-          fxByCurrency: fxByCurrency as ReadonlyMap<CurrencyCode, number>,
-          // The government bond subsidy waives issuer interest for national
-          // enterprises, exactly as `perTurnBondDragOnNetIncome` does.
-          isNationalEnterprise: !!corp.countryOwnerId,
-        }),
-        modifiers: ceoArchetypeModifiers(archetype),
-        labourWagesEnabled,
-        currentYear: techCurrentYear > 0 ? techCurrentYear : undefined,
-        techTreesEnabled,
-      },
+    const corpFxRate = (corpCurrency && fxByCurrency.get(corpCurrency)) || 1;
+    const decisionContext: NppCorpDecisionContext = {
+      corp,
+      sectors,
+      turn,
+      now,
+      fxRate: corpFxRate,
+      fxByCurrency,
+      strategy: corp.nppStrategy,
+      // Strategy and exceptional entry use separate names so changing one
+      // cadence later cannot silently alter the other.
+      strategyEligible: glutStaggerEligible(corp._id.toString(), turn),
+      shortageEntryEligible: shortageEntryStaggerEligible(corp._id.toString(), turn),
+      strategyLoopEnabled,
+      debtServiceAnchor: netPerTurnDebtServiceAnchor({
+        issuerBonds: issuerBondsByCorpId.get(corp._id.toString()),
+        heldPositions: heldBondsByCorpId.get(corp._id.toString()),
+        fxByCurrency: fxByCurrency as ReadonlyMap<CurrencyCode, number>,
+        // The government bond subsidy waives issuer interest for national
+        // enterprises, exactly as `perTurnBondDragOnNetIncome` does.
+        isNationalEnterprise: !!corp.countryOwnerId,
+      }),
+      modifiers: ceoArchetypeModifiers(archetype),
+      labourWagesEnabled,
+      currentYear: techCurrentYear > 0 ? techCurrentYear : undefined,
+      techTreesEnabled,
+    };
+    let decision = makeNppCorpDecision(
+      decisionContext,
       unownedByCountry,
       stateControlled,
       priceRatioOf,
       plants,
       placementSignals
     );
+
+    // Shortage entry may borrow only through the existing corporate bond
+    // mechanism. Its preflight enforces the normal issuance cooldown, leverage
+    // ceiling, credit rating and coupon. The bond is the liability matching the
+    // proceeds; this function never grants or mints a separate cash balance.
+    const creditRequest = decision.shortageCreditRequest;
+    if (creditRequest) {
+      const roundedLocal =
+        Math.ceil(creditRequest.amountLocal / BOND_UNIT_FACE_VALUE) * BOND_UNIT_FACE_VALUE;
+      const requestedAnchor = corpLiquidCapitalToAnchor(roundedLocal, corp, corpFxRate);
+      const preflight = await previewRelocationBond(
+        db,
+        corp,
+        requestedAnchor,
+        turn,
+        fxByCurrency as ReadonlyMap<CurrencyCode, number>
+      );
+      if (preflight.ok) {
+        const issued = await issueRelocationBond(
+          db,
+          corp,
+          requestedAnchor,
+          turn,
+          preflight,
+          fxByCurrency as ReadonlyMap<CurrencyCode, number>
+        );
+        // The request is converted local -> anchor on the way in and floored on
+        // the way back out, so on a non-anchor currency the issued face can land
+        // one bond unit BELOW the gap it was meant to close. Re-running with a
+        // short credit would fail affordability while the bond already exists,
+        // leaving phantom debt, so only proceed when the proceeds actually cover
+        // the request.
+        if (issued.ok && issued.data.bondFaceValueLocal >= creditRequest.amountLocal) {
+          // Re-run the pure decision with the ACTUAL rounded proceeds. The
+          // resulting liquidCapital write nets debt proceeds against founding
+          // capex in one balance, while the inserted bond records the equal
+          // liability. Bond rounding residue remains as ordinary corp cash.
+          decision = makeNppCorpDecision(
+            {
+              ...decisionContext,
+              shortageEntryCreditLocal: issued.data.bondFaceValueLocal,
+            },
+            unownedByCountry,
+            stateControlled,
+            priceRatioOf,
+            plants,
+            placementSignals
+          );
+        }
+      }
+    }
 
     if (decision.reinvestments && corpCurrency) {
       for (const r of decision.reinvestments) {
@@ -982,6 +1036,7 @@ export function makeNppCorpDecision(
   const divestedSectorIds: ObjectId[] = [];
   const unownedDraws: NonNullable<NppCorpDecision["unownedDraws"]> = [];
   const reinvestments: NonNullable<NppCorpDecision["reinvestments"]> = [];
+  let shortageCreditRequest: NppCorpDecision["shortageCreditRequest"];
 
   const liquidCapital = corp.liquidCapital ?? 0;
   // Running balance across the spending sections below (founding, then
@@ -1580,33 +1635,58 @@ export function makeNppCorpDecision(
   }
 
   // ── 5. Sector expansion ───────────────────────────────────────────────────
-  // Only expand when profitable, strong margins, ample cash above floor,
-  // and under max sectors. Deterministic — no random dice roll. isProfitable/
-  // corpMargin are net of overhead — see profitability-analysis block above.
+  // Balanced and glutted markets retain the established five-sector and cash
+  // gates. A candidate whose live output-price score reaches the engine's
+  // essential-shortage threshold may use the higher hard ceiling and corporate
+  // credit, but only on its deterministic cohort slot. One decision selects at
+  // most one candidate, so the exceptional path cannot stack entries in a tick.
   const surplusCash = liquidCapital - effectiveCashFloor;
-  if (
-    levers.allowExpansion &&
-    effectiveSectors < MAX_SECTORS &&
-    isProfitable &&
-    corpMargin >= effectiveExpansionMinMargin &&
-    surplusCash > effectiveExpansionMinCash
-  ) {
-    const existingTypes = new Set(sectors.map((s) => s.sectorType));
-    const expansion = findBestUnownedSector(
-      corp.countryId,
-      corp.headquartersState,
-      corp.type,
-      corp.secondaryType,
-      existingTypes,
-      unownedByCountry,
-      stateControlled,
-      priceRatioOf,
-      plants?.enabled === true,
-      plants?.eraUnitScale ?? 1,
-      placementSignals
-    );
+  const existingTypes = new Set(sectors.map((s) => s.sectorType));
+  const expansion =
+    levers.allowExpansion && isProfitable && corpMargin >= effectiveExpansionMinMargin
+      ? findBestUnownedSector(
+          corp.countryId,
+          corp.headquartersState,
+          corp.type,
+          corp.secondaryType,
+          existingTypes,
+          unownedByCountry,
+          stateControlled,
+          priceRatioOf,
+          plants?.enabled === true,
+          plants?.eraUnitScale ?? 1,
+          placementSignals
+        )
+      : null;
+  const expansionShortageScore = expansion
+    ? sectorPeakShortageScore(
+        expansion.sectorType as CorporationType,
+        expansion.countryId,
+        (commodity, countryId) =>
+          placementSignals?.statePriceRatioOf?.(commodity, expansion.stateId) ??
+          priceRatioOf(commodity, countryId)
+      )
+    : 1;
+  // The cap exception exists to let a corp that has hit the ordinary limit
+  // still answer a shortage. A corp under the limit does not need it: it takes
+  // the ordinary path, which keeps the old cash discipline instead of borrowing.
+  const exceptionalShortageEntry =
+    expansion !== null &&
+    expansionShortageScore >= ESSENTIAL_SHORTAGE_SCORE &&
+    ctx.shortageEntryEligible === true &&
+    effectiveSectors >= NPP_BASE_SECTOR_CAP &&
+    effectiveSectors < NPP_SHORTAGE_SECTOR_HARD_CAP;
+  const ordinaryEntry =
+    expansion !== null &&
+    effectiveSectors < NPP_BASE_SECTOR_CAP &&
+    surplusCash > effectiveExpansionMinCash;
 
-    if (expansion && plants?.enabled) {
+  if (
+    expansion &&
+    newSectors.length < NPP_SHORTAGE_ENTRIES_PER_TURN &&
+    (ordinaryEntry || exceptionalShortageEntry)
+  ) {
+    if (plants?.enabled) {
       // ─── Plants: an NPP founds a sector on the SAME terms a player does ────
       //
       // Pre-plants the AI paid a flat EXPANSION_COST (500k) and was handed
@@ -1645,6 +1725,8 @@ export function makeNppCorpDecision(
       // Charged in the corp's own currency: fee + build are ₳, liquidCapital is not.
       const entryFeeAnchor = sectorEntryFeeAnchor(plants.preset);
       const foundingCost = toCorpLocal(entryFeeAnchor + buildAnchor);
+      const entryCapital =
+        liquidCapital + (exceptionalShortageEntry ? (ctx.shortageEntryCreditLocal ?? 0) : 0);
 
       // Affordability against the REAL cost. The generic surplus gate above is
       // a flat nominal band and cannot know what a build in this sector costs;
@@ -1654,7 +1736,7 @@ export function makeNppCorpDecision(
       if (
         starterUnits > 0 &&
         headroomUnits >= starterUnits &&
-        liquidCapital - foundingCost >= effectiveCashFloor
+        entryCapital - foundingCost >= effectiveCashFloor
       ) {
         const buildTurns = Math.max(
           1,
@@ -1689,19 +1771,40 @@ export function makeNppCorpDecision(
           units: starterUnits,
           countryId: expansion.countryId,
         });
-        cashLocal = liquidCapital - foundingCost;
+        cashLocal = entryCapital - foundingCost;
         updates.liquidCapital = cashLocal;
+      } else if (
+        exceptionalShortageEntry &&
+        starterUnits > 0 &&
+        headroomUnits >= starterUnits &&
+        !isStateOwned(corp) &&
+        !corp.imfBailoutActive
+      ) {
+        shortageCreditRequest = {
+          amountLocal: Math.max(0, foundingCost + effectiveCashFloor - entryCapital),
+          sectorType: expansion.sectorType as CorporationType,
+        };
       }
-    } else if (expansion) {
-      newSectors.push({
-        stateId: expansion.stateId,
-        countryId: expansion.countryId,
-        sectorType: expansion.sectorType,
-        revenue: Math.round(expansion.revenue * 0.25),
-        profitMargin: 35,
-      });
-      cashLocal = liquidCapital - toCorpLocal(EXPANSION_COST);
-      updates.liquidCapital = cashLocal;
+    } else {
+      const foundingCost = toCorpLocal(EXPANSION_COST);
+      const entryCapital =
+        liquidCapital + (exceptionalShortageEntry ? (ctx.shortageEntryCreditLocal ?? 0) : 0);
+      if (entryCapital - foundingCost >= effectiveCashFloor) {
+        newSectors.push({
+          stateId: expansion.stateId,
+          countryId: expansion.countryId,
+          sectorType: expansion.sectorType,
+          revenue: Math.round(expansion.revenue * 0.25),
+          profitMargin: 35,
+        });
+        cashLocal = entryCapital - foundingCost;
+        updates.liquidCapital = cashLocal;
+      } else if (exceptionalShortageEntry && !isStateOwned(corp) && !corp.imfBailoutActive) {
+        shortageCreditRequest = {
+          amountLocal: Math.max(0, foundingCost + effectiveCashFloor - entryCapital),
+          sectorType: expansion.sectorType as CorporationType,
+        };
+      }
     }
   }
 
@@ -2020,6 +2123,7 @@ export function makeNppCorpDecision(
     divestedSectorIds: divestedSectorIds.length > 0 ? divestedSectorIds : undefined,
     unownedDraws: unownedDraws.length > 0 ? unownedDraws : undefined,
     reinvestments: reinvestments.length > 0 ? reinvestments : undefined,
+    shortageCreditRequest,
     strategy: strategyDecision?.state,
   };
 }

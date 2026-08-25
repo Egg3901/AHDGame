@@ -16,7 +16,7 @@ import { getPublicShareQuote } from "@/lib/corporations/marketQuote";
 import {
   corpLiquidCapitalToAnchor,
   fxRateForCorpFromMap,
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
 } from "@/lib/currency/corporationCapital";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -123,7 +123,11 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     // Cross-corp share totals must anchor-normalize: sharePrice is stored in
     // each corp's liquidCurrencyCode (v0.2.6).
-    const fxByCurrency = await loadFxRatesByCurrency(db);
+    // Valuation map, not the settlement map: this value is DISPLAYED and RANKED.
+    // The settlement map leaves the six bloc currencies (PLZ/CSK/HUF/YUD/BGL/ROL,
+    // 102 corps) missing on purpose, which converted them at 1.0. See
+    // corporationCapital.ts.
+    const fxByCurrency = await loadValuationFxRates(db);
     const holdings: Holding[] = [];
     let totalValue = 0;
 

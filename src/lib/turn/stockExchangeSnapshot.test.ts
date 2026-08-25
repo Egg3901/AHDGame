@@ -38,6 +38,10 @@ describe("stockExchangeSnapshot", () => {
 
   const createMockChain = (result: any[]) => ({
     find: vi.fn().mockReturnThis(),
+    // `loadValuationFxRates` reads gameState.preset via findOne to pick the era
+    // fallback rate. Null keeps the valuation map equal to the settlement map
+    // here, which is what these fixtures assume.
+    findOne: vi.fn().mockResolvedValue(null),
     sort: vi.fn().mockReturnThis(),
     project: vi.fn().mockReturnThis(),
     aggregate: vi.fn().mockReturnThis(),
@@ -657,7 +661,8 @@ describe("stockExchangeSnapshot", () => {
         .mockReturnValueOnce(createMockChain([{ _id: "NY", name: "New York" }]))
         .mockReturnValueOnce(createMockChain([]))
         .mockReturnValueOnce(createMockChain([]))
-        .mockReturnValueOnce(createMockChain([]))
+        .mockReturnValueOnce(createMockChain([])) // exchangeRates (loadValuationFxRates)
+        .mockReturnValueOnce(createMockChain([])) // gameState preset (loadValuationFxRates)
         // wealthListSnapshots collection — bulkWrite at the end
         .mockReturnValueOnce({
           find: vi.fn().mockReturnThis(),
@@ -719,7 +724,8 @@ describe("stockExchangeSnapshot", () => {
     it("returns early when no corporations have shareholders", async () => {
       mockCollection
         .mockReturnValueOnce(createMockChain([])) // corporations
-        .mockReturnValueOnce(createMockChain([])) // exchangeRates (loadFxRatesByCurrency)
+        .mockReturnValueOnce(createMockChain([])) // exchangeRates (loadValuationFxRates)
+        .mockReturnValueOnce(createMockChain([])) // gameState preset (loadValuationFxRates)
         .mockReturnValue({ updateOne: mockUpdateOne });
 
       await generateInvestorRankingSnapshot(100, mockDb);
@@ -747,7 +753,8 @@ describe("stockExchangeSnapshot", () => {
             }),
           ])
         )
-        .mockReturnValueOnce(createMockChain([])) // exchangeRates (loadFxRatesByCurrency)
+        .mockReturnValueOnce(createMockChain([])) // exchangeRates (loadValuationFxRates)
+        .mockReturnValueOnce(createMockChain([])) // gameState preset (loadValuationFxRates)
         .mockReturnValueOnce(
           createMockChain([
             createCharacter({ _id: char1Id, name: "Investor 1" }),
@@ -795,7 +802,8 @@ describe("stockExchangeSnapshot", () => {
 
       mockCollection
         .mockReturnValueOnce(createMockChain(corps))
-        .mockReturnValueOnce(createMockChain([])) // exchangeRates (loadFxRatesByCurrency)
+        .mockReturnValueOnce(createMockChain([])) // exchangeRates (loadValuationFxRates)
+        .mockReturnValueOnce(createMockChain([])) // gameState preset (loadValuationFxRates)
         .mockReturnValueOnce(createMockChain([createCharacter({ _id: charId, name: "Investor" })]));
 
       vi.mocked(getPublicShareQuote).mockImplementation((corp) => {
@@ -827,7 +835,8 @@ describe("stockExchangeSnapshot", () => {
             },
           ])
         )
-        .mockReturnValueOnce(createMockChain([])) // exchangeRates (loadFxRatesByCurrency)
+        .mockReturnValueOnce(createMockChain([])) // exchangeRates (loadValuationFxRates)
+        .mockReturnValueOnce(createMockChain([])) // gameState preset (loadValuationFxRates)
         .mockReturnValueOnce(
           createMockChain([
             createCharacter({ _id: richId, name: "Rich Investor" }),

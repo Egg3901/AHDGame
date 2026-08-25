@@ -5,6 +5,8 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { formatFundsCompact1dp } from "@/lib/utils/formatters";
 import { Skeleton } from "@/components/ui";
+import { federalSurplus } from "@/lib/budget/federalSurplus";
+import { resolveRatioGdp } from "@/lib/budget/gdpDenominator";
 
 export interface BudgetDisplayProps {
   budget: FederalBudget | null;
@@ -180,9 +182,13 @@ export function BudgetDisplay({
 
   const { revenue, spending, debt, economicFactors } = budget;
 
-  const surplus = revenue.total - spending.total;
+  const surplus = federalSurplus(budget);
   const debtToGdp = budget.debtToGdpRatio;
-  const deficitToGdp = budget.gdp > 0 ? (surplus / budget.gdp) * 100 : 0;
+  // Divide by the SAME basis the stored `debtToGdpRatio` beside it uses
+  // (`gdpSmoothed`), not raw `budget.gdp`, so the two ratios in this panel are
+  // comparable. See lib/budget/gdpDenominator.
+  const ratioGdp = resolveRatioGdp(budget);
+  const deficitToGdp = ratioGdp > 0 ? (surplus / ratioGdp) * 100 : 0;
 
   // Revenue breakdown segments — colorblind-friendly, max contrast between neighbors
   const revenueSegments = [

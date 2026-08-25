@@ -32,6 +32,12 @@ export interface MarketContext {
    */
   clearingBySectorId?: ReadonlyMap<string, SectorClearingResult>;
   /**
+   * Advertising sellers that filled the clearing book this turn, keyed by
+   * corporation id. Values are the per-turn anchor value of campaign units
+   * actually delivered at their reachable clearing price.
+   */
+  advertisingSellerDeliveredValueAnchorByCorpId?: ReadonlyMap<string, number>;
+  /**
    * Freight seam: per sector id, the share of its clearing offer (0..1) that
    * last turn's freight network could not place out of its host state, so the
    * offer was cut by it. Set by the corp-phase entry only while freight
@@ -41,6 +47,19 @@ export interface MarketContext {
   deliveryLimitedBySectorId?: ReadonlyMap<string, number>;
   /** Cargo class responsible for the delivery-limited share above. */
   deliveryLimitedClassBySectorId?: ReadonlyMap<string, FreightClass | null>;
+  /**
+   * Canonical freight billing v1 (issue #897): per sector id, last turn's
+   * shipping cost the sector owes for its state's inbound hauls of the
+   * commodities it consumes. Set by the corp-phase entry only while
+   * `gameConfig.canonicalFreightBillingEnabled` is on; absent everywhere else,
+   * so a world with billing off computes and persists nothing.
+   */
+  freightBillingChargeBySectorId?: ReadonlyMap<string, number>;
+  /**
+   * The transfer's other half: per sector id, last turn's haul revenue the
+   * sector's freight supply earned. Same gate as the charge map.
+   */
+  freightBillingCreditBySectorId?: ReadonlyMap<string, number>;
   /**
    * Launch-safety governor bounds (tunable live via gameConfig). `cap` is the
    * max fractional deviation the clearing/throughput legs may take from the

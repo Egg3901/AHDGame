@@ -7,11 +7,16 @@ import { campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
 import { getStateDemographicTurnoutCollection } from "@/lib/db/collections";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
-import type { Election } from "@/lib/db/types";
+import type { Campaign, Election } from "@/lib/db/types";
+import { ObjectId } from "mongodb";
 import { applyDiminishingReturns } from "@/lib/utils/diminishingReturns";
 import { resolveCanvassGroup } from "@/lib/demographics/countryDemographics";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
-import { resolveCanvassState, CANVASS_ELIGIBILITY_MESSAGE } from "@/lib/canvassing/eligibility";
+import {
+  resolveCanvassState,
+  resolveRunningMateCanvassState,
+  CANVASS_ELIGIBILITY_MESSAGE,
+} from "@/lib/canvassing/eligibility";
 import { getGameTime } from "@/lib/time/gameTime";
 
 const COST_FUNDS = 100;
@@ -51,21 +56,45 @@ export async function POST(req: NextRequest) {
 
     const db = await getDb();
 
-    // Resolve canvass eligibility — presidential candidates use travel/primary state,
-    // everyone else uses home state. Returns blocked when a presidential candidate
-    // hasn't set their travel/primary state yet.
-    const eligibility = await resolveCanvassState(db, user.character);
-    if (!eligibility.ok) {
-      return NextResponse.json(
-        { error: CANVASS_ELIGIBILITY_MESSAGE[eligibility.reason] },
-        { status: 403 }
+    // Running-mate surrogate branch takes precedence when the acting character
+    // is the running mate on an active general-phase presidential ticket and is
+    // canvassing that ticket's travel state. The surrogate spends the VP's own
+    // actions/funds (like any canvass) AND draws down the ticket's shared
+    // per-day surrogate pool. Otherwise fall through to the normal home / own
+    // candidacy eligibility.
+    const mateEligibility = await resolveRunningMateCanvassState(db, user.character);
+    const usingSurrogate = mateEligibility.ok && mateEligibility.stateId === stateId;
+    let surrogateCampaignId: ObjectId | null = null;
+    if (usingSurrogate && mateEligibility.ok) {
+      const ticketCampaign = await db.collection<Campaign>("campaigns").findOne(
+        {
+          electionId: mateEligibility.electionId,
+          candidateId: mateEligibility.nomineeCharacterId,
+          status: { $ne: "archived" },
+        },
+        { projection: { _id: 1 } }
       );
-    }
-    if (eligibility.stateId !== stateId) {
-      return NextResponse.json(
-        { error: "You can only canvass in your active campaign state" },
-        { status: 403 }
-      );
+      if (!ticketCampaign) {
+        return NextResponse.json({ error: "Ticket campaign not found" }, { status: 404 });
+      }
+      surrogateCampaignId = ticketCampaign._id;
+    } else {
+      // Resolve canvass eligibility: presidential candidates use travel/primary
+      // state, everyone else uses home state. Returns blocked when a presidential
+      // candidate hasn't set their travel/primary state yet.
+      const eligibility = await resolveCanvassState(db, user.character);
+      if (!eligibility.ok) {
+        return NextResponse.json(
+          { error: CANVASS_ELIGIBILITY_MESSAGE[eligibility.reason] },
+          { status: 403 }
+        );
+      }
+      if (eligibility.stateId !== stateId) {
+        return NextResponse.json(
+          { error: "You can only canvass in your active campaign state" },
+          { status: 403 }
+        );
+      }
     }
 
     const totalFundsCost = COST_FUNDS * count;
@@ -133,6 +162,29 @@ export async function POST(req: NextRequest) {
       },
     };
 
+    // Surrogate branch: draw down the ticket's shared per-day pool BEFORE the
+    // personal spend, guarded by $gte so a depleted pool blocks the canvass with
+    // no character debit. On any downstream failure the pool is restored (mirror
+    // of the character/turnout rollback below).
+    if (surrogateCampaignId) {
+      const poolResult = await db.collection<Campaign>("campaigns").updateOne(
+        {
+          _id: surrogateCampaignId,
+          runningMateSurrogateActionsRemaining: { $gte: totalActionsCost },
+        },
+        {
+          $inc: { runningMateSurrogateActionsRemaining: -totalActionsCost },
+          $set: { updatedAt: new Date() },
+        }
+      );
+      if (poolResult.modifiedCount === 0) {
+        return NextResponse.json(
+          { error: "No running-mate surrogate actions remaining today." },
+          { status: 409 }
+        );
+      }
+    }
+
     try {
       await runWithOptionalTransaction(
         async (session) => {
@@ -180,6 +232,16 @@ export async function POST(req: NextRequest) {
         }
       );
     } catch (error) {
+      // Restore the surrogate pool debit if the personal spend / turnout write
+      // failed after we drew it down.
+      if (surrogateCampaignId) {
+        await db
+          .collection<Campaign>("campaigns")
+          .updateOne(
+            { _id: surrogateCampaignId },
+            { $inc: { runningMateSurrogateActionsRemaining: totalActionsCost } }
+          );
+      }
       if ((error as Error).message === "INSUFFICIENT_RESOURCES") {
         return NextResponse.json(
           { error: "Your available actions or funds changed. Please try again." },

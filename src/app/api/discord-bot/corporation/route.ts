@@ -39,7 +39,7 @@ import {
   corpCapitalToAnchor,
   fxRateForCorpFromMap,
   fxRateForSectorHostFromMap,
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
   resolveCorpLiquidCurrencyCode,
   resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
@@ -190,7 +190,11 @@ async function buildCorpDetail(nameLower: string): Promise<CorpDetailPayload> {
   // sections (the income-statement interest line now comes from `f`). Per-bond
   // anchor-normalize then convert to corp LOCAL (A30 mirror). Same-currency
   // issuers collapse to the raw sum; cross-currency bonds are handled correctly.
-  const fxByCurrency = await loadFxRatesByCurrency(db);
+  // Valuation map, not the settlement map: this value is DISPLAYED and RANKED.
+  // The settlement map leaves the six bloc currencies (PLZ/CSK/HUF/YUD/BGL/ROL,
+  // 102 corps) missing on purpose, which converted them at 1.0. See
+  // corporationCapital.ts.
+  const fxByCurrency = await loadValuationFxRates(db);
   const corpCurrency = resolveCorpLiquidCurrencyCode(corporation);
   const corpFxRate = fxRateForCorpFromMap(corporation, fxByCurrency);
 

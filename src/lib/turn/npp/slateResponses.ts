@@ -34,7 +34,6 @@ import { DEFAULT_CANDIDATE_SUPPORT } from "@/lib/electionEngine/electionFormulaF
 import { materializeSlateAssignmentsFromTemplate } from "@/lib/db/recruitmentSlateLookup";
 import { isElectionTypeEntryBlocked } from "@/lib/elections/nationwideExecutive";
 import { isPrimaryClosed } from "@/lib/elections/electionDeadlineFilters";
-import { canPartyContestState } from "@/lib/parties/regionalContest";
 import { removeWithdrawnCandidateFromTally } from "@/lib/electionEngine/tallyCleaner";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import {
@@ -428,19 +427,6 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
           queueSkipped(row, "party_restricted");
           continue;
         }
-      }
-      if (
-        !canPartyContestState({
-          countryId: electionCountry,
-          abbreviation: slateParty?.abbreviation,
-          stateId: election.state,
-        })
-      ) {
-        // e.g. a Plaid Cymru NPP slated into an English seat. The assignment
-        // route rejects this up front now, but rows predating that fix (and
-        // template carry-forward) still land here.
-        queueSkipped(row, "ineligible_region");
-        continue;
       }
       if (
         ctx.nppElectionEligiblePartyKeys &&

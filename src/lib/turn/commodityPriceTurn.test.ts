@@ -304,14 +304,39 @@ describe("commodityPriceTurn", () => {
           {
             _id: new ObjectId(),
             marketingBudget: 10000,
+            liquidCapital: 1_000,
             headquartersState: "US-CA",
             countryOwnerId: null,
           },
         ],
+        states: [{ _id: "US-CA", countryId: "US", gdp: 1_000 }],
       });
 
       await processCommodityPriceTurn(100);
-      expect(mockBulkWrite).toHaveBeenCalled();
+      const ops = mockBulkWrite.mock.calls[0][0];
+      const advertisingOp = ops.find((op: any) => op.updateOne.filter.commodity === "advertising");
+      expect(advertisingOp.updateOne.update.$set.stateDemand["US-CA"]).toBe(60);
+    });
+
+    it("does not book advertising demand a corporation cannot afford", async () => {
+      setupMocks({
+        corporations: [
+          {
+            _id: new ObjectId(),
+            marketingBudget: 10_000,
+            liquidCapital: 0,
+            headquartersState: "US-CA",
+            countryOwnerId: null,
+          },
+        ],
+        states: [{ _id: "US-CA", countryId: "US", gdp: 1_000 }],
+      });
+
+      await processCommodityPriceTurn(100);
+
+      const ops = mockBulkWrite.mock.calls[0][0];
+      const advertisingOp = ops.find((op: any) => op.updateOne.filter.commodity === "advertising");
+      expect(advertisingOp.updateOne.update.$set.stateDemand["US-CA"]).toBe(0);
     });
 
     it("handles natcorp sectors correctly", async () => {

@@ -35,6 +35,9 @@ describe("GET /api/country/[code]/sovereign-status", () => {
               toArray: () => Promise.resolve([]),
             }),
           }),
+          // `loadNationalGdpGrowth` derives the GDP-weighted regional mean when
+          // a country has no national metrics doc, which needs find().project().
+          project: () => ({ toArray: () => Promise.resolve([]) }),
         }),
       }),
     });
@@ -121,6 +124,8 @@ describe("GET /api/country/[code]/sovereign-status", () => {
           }),
         find: () => ({
           sort: () => ({ limit: () => ({ toArray: () => Promise.resolve([]) }) }),
+          // See the beforeEach mock: loadNationalGdpGrowth needs find().project().
+          project: () => ({ toArray: () => Promise.resolve([]) }),
         }),
       }),
     });

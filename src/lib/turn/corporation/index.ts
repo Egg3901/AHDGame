@@ -6,6 +6,7 @@ import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { getDb } from "@/lib/mongodb";
 import { refreshNationalBudgetRevenue } from "@/lib/budget/revenue";
 import { buildCorporationLookups } from "./buildLookups";
+import { buildFreightBillingBySector } from "./freightBillingTurn";
 import { USE_GROWTH_INCREMENT, businessAcumenGrowthMultiplier } from "@/lib/stats/statsConstants";
 import { shedVacantCeoSectorsToUnowned } from "./vacantCeoSectorShed";
 import { shedInactiveCeoSectorsToUnowned } from "./inactiveCeoSectorShed";
@@ -14,7 +15,12 @@ import { processSectors } from "./sectorCalculations";
 import { getLabourSystemMode, labourAtLeast } from "@/lib/labour/featureFlag";
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildMarketContext } from "@/lib/market/marketContext";
-import { computeClearingFactors, type SectorClearingInput } from "@/lib/market/clearing";
+import {
+  computeClearingFactors,
+  qualityPremiumMultiplier,
+  type SectorClearingInput,
+} from "@/lib/market/clearing";
+import { priceRealizationFactor } from "@/lib/market/priceRealization";
 import { computeBrandLoyaltyUpdates, type LoyaltySectorInput } from "./brandLoyaltyTurn";
 import { computeQualityUpdates } from "./brandQualityTurn";
 import {
@@ -100,6 +106,8 @@ import { makeSeededRng } from "@/lib/events/substrate/rng";
 import { logger } from "../../observability/logger";
 import { recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
+import { TURNS_PER_DAY } from "@/lib/constants/corporations";
+import { advertisingDeliveredValueByCorp } from "./advertisingDeliveredValue";
 
 // Optional sim-run salt, same convention as nppActionProcessing.ts's RNG.
 const CORP_TURN_RNG_SALT = process.env.SIM_RNG_SALT ? `:${process.env.SIM_RNG_SALT}` : "";
@@ -188,6 +196,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           privateBankingEnabled: 1,
           interstateMoneyWiringEnabled: 1,
           freightSettlementMode: 1,
+          canonicalFreightBillingEnabled: 1,
         },
       }
     ),
@@ -210,10 +219,18 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const freightSettlementActive =
     (marketGovernorConfig as { freightSettlementMode?: string } | null)?.freightSettlementMode ===
       "active" && marketAtLeast(marketSystemMode, "clearing");
+  // Canonical freight billing v1 (issue #897, default OFF): while on, last
+  // turn's per-state shipping money is loaded from the sourcingNetworkLoad doc
+  // and apportioned across sectors below. Off keeps both lookup maps empty and
+  // the whole billing path inert.
+  const canonicalFreightBillingEnabled =
+    (marketGovernorConfig as { canonicalFreightBillingEnabled?: boolean } | null)
+      ?.canonicalFreightBillingEnabled === true;
   const lookups = await buildCorporationLookups(db, {
     plantsEnabled: plantsEnabledForMarketShare,
     freightSettlementActive,
     moneyWiringEnabled: interstateMoneyWiringEnabled,
+    canonicalFreightBillingEnabled,
   });
   const currentYear = gameState?.currentYear;
   // Soft-budget gate for the turn path (see sectorTurn's affordability brake and
@@ -394,6 +411,22 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     cap: marketGovernorConfig?.marketGovernorCap,
     rampTurns: marketGovernorConfig?.marketGovernorRampTurns,
   });
+  // Canonical freight billing (issue #897): apportion last turn's state-scoped
+  // shipping money onto sectors once, before the per-corp loop, and thread the
+  // result through the market context like the delivery-limited telemetry.
+  // Strictly flag-gated: with the flag off the lookup maps are empty, this
+  // block is skipped, and processSector neither computes nor persists billing.
+  if (canonicalFreightBillingEnabled) {
+    const billing = buildFreightBillingBySector({
+      lookups,
+      currentTurn: turn ?? gameState?.currentTurn ?? 0,
+      plantsEnabled: market.plantsEnabled,
+      currentYear,
+      commandEconomyEnabled,
+    });
+    market.freightBillingChargeBySectorId = billing.chargeBySectorId;
+    market.freightBillingCreditBySectorId = billing.creditBySectorId;
+  }
   // Brand loyalty (A2, shadow-safe): per-sector meta captured during the
   // clearing-input build, joined to clearing results after the pass.
   const loyaltySectorMeta = new Map<
@@ -535,8 +568,10 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         const hostCode = resolveSectorHostCurrencyCode(sector, corp);
         const hostRate = fxRateForSectorHostFromMap(sector, corp, lookups.exchangeRatesByCurrency);
         const revenueAnchor = readCorpEconomicAnchor(sector.revenue, hostCode, hostRate);
+        // Shared ownership map for both bilateral supply agreements and the
+        // anonymous advertising settlement that follows clearing.
+        sectorCorpId.set(sectorId, corpId);
         if (supplyAgreementsEnabled) {
-          sectorCorpId.set(sectorId, corpId);
           supplyAgreementDemandSectors.push({
             corporationId: corpId,
             sectorType: sector.sectorType,
@@ -862,6 +897,35 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         }
       },
     });
+
+    // Marketing budgets are a real corporation cost, so filled advertising
+    // must have a real recipient. Reproduce clearing's offer normalization for
+    // this commodity, then value each seller's actually delivered units at its
+    // reachable price. processSectors routes that delivered value through one
+    // equal-and-opposite transfer.
+    const clearingBasePrices = eraScaledBasePrices(lookups.eraUnitScale);
+    const advertisingSellerDeliveredValueAnchorByCorpId = advertisingDeliveredValueByCorp({
+      inputs: clearingInputs.map((input) => ({
+        sectorId: input.sectorId,
+        supplyRates: input.supplyRates,
+        revenue: input.revenue,
+        producedUnits: input.producedUnits,
+        outputQuality: input.outputQuality,
+      })),
+      clearingBasePrices,
+      plantsEnabled: market.plantsEnabled,
+      clearingGroupBySector,
+      clearingBySectorId: market.clearingBySectorId,
+      countryClearingBooks: lookups.countryClearingBooks,
+      globalCommodityBalances: lookups.globalCommodityBalances,
+      reachablePriceRatioByCountry: lookups.reachablePriceRatioByCountry,
+      priceRatioByCommodity: lookups.priceRatioByCommodity,
+      sectorCorpId,
+      commodityMixWeight,
+      qualityPremiumPricingEnabled,
+    });
+    market.advertisingSellerDeliveredValueAnchorByCorpId =
+      advertisingSellerDeliveredValueAnchorByCorpId;
     if (bookViolations.length > 0) {
       console.warn(
         "[clearing] post-normalization order-book/ledger unit mismatch on " +

@@ -62,7 +62,16 @@ import {
   summarizePrimaryProjection,
   presidentialPrimaryStanding,
 } from "@/lib/elections/presidentialPrimaryDisplay";
-import { resolvePartyFamily, getTotalDelegatesForFamily } from "@/lib/constants/primaryCalendar";
+import {
+  resolvePartyFamily,
+  getTotalDelegatesForFamily,
+  getPrimaryWaveSchedule,
+} from "@/lib/constants/primaryCalendar";
+import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
+import {
+  resolveNominationForParty,
+  type NominationResolutionResult,
+} from "@/lib/turn/election/conventionResolution";
 import { logger } from "../observability/logger";
 import { isNationwideDirectExecutiveElection } from "@/lib/elections/nationwideExecutive";
 import { buildNationwideElectoratePreload } from "@/lib/electionEngine/nationwideElectorate";
@@ -201,6 +210,16 @@ export async function resolvePrimariesIfNeeded(now: Date, currentTurn: number): 
       : [];
   const charMap: Map<string, Character> = new Map(chars.map((c) => [c._id.toString(), c]));
 
+  // Active preset for delegate-majority thresholds (convention path). Fetched
+  // once for the whole resolution pass; only presidential races consume it.
+  const presPreset = hasPresident
+    ? (
+        await db
+          .collection<{ _id: string; preset?: string }>("gameState")
+          .findOne({ _id: "current" }, { projection: { preset: 1 } })
+      )?.preset
+    : undefined;
+
   for (const { election, candidates, partyCounts, maxAdvancing } of resolvingElections) {
     const electionId = election._id as ObjectId;
 
@@ -236,6 +255,11 @@ export async function resolvePrimariesIfNeeded(now: Date, currentTurn: number): 
 
     const loserIds: string[] = [];
     const primaryResultsByParty: Record<string, PrimaryResultEntry[]> = {};
+
+    // President-only: nomination resolution (convention/delegate-majority) per
+    // party, recorded onto the general tally after it re-inits below. Populated
+    // only on convention-enabled rulesets (v3+); v1/v2 keep the plurality pick.
+    const nominationResolutionByParty: Record<string, NominationResolutionResult> = {};
 
     // Resolve state lean for state-level alignment (skip president — national).
     let raceStateEconLean: number | null | undefined;
@@ -310,6 +334,51 @@ export async function resolvePrimariesIfNeeded(now: Date, currentTurn: number): 
             score: partyDelegates[c._id.toString()] ?? 0,
           }))
           .sort((a, b) => b.score - a.score);
+
+        // Convention nomination (v3+ structural): only on a convention-enabled
+        // ruleset AND once every stagger wave has run, so partial delegate data
+        // can't trigger a premature convention. When gated off (v1/v2, or an
+        // admin-forced early resolution) this whole block is skipped and the
+        // plurality pick above stands byte-for-byte. When it fires, the winner is
+        // reordered to the front so the downstream primaryResults/elimination
+        // machinery seats them exactly as it seats a plurality winner.
+        const ruleset = presidentialRulesetFor(election);
+        const waveCount = getPrimaryWaveSchedule(ruleset).waves.length;
+        const wavesRun =
+          presidentialTally?.primaryStaggerWavesRun ??
+          presidentialTally?.primaryWaveHistory?.length ??
+          0;
+        if (ruleset.conventionEnabled && wavesRun >= waveCount) {
+          const family = resolvePartyFamily(partyId, {
+            primaryCalendar: party?.primaryCalendar ?? null,
+            economicPosition: party?.economicPosition ?? 0,
+          });
+          const resolution = resolveNominationForParty({
+            partyCandidates: partyCandidates.map((c) => ({ candidateId: c._id.toString() })),
+            partyDelegates,
+            family,
+            preset: presPreset,
+            enriched: enriched
+              .filter((ec) => partyCandidates.some((c) => c._id.toString() === ec.candidateId))
+              .map((ec) => ({
+                candidateId: ec.candidateId,
+                charEP: ec.charEP,
+                charSP: ec.charSP,
+                party: ec.party,
+              })),
+            nationalVotes: partyNationalVotes,
+            ruleset,
+            now,
+          });
+          if (resolution) {
+            nominationResolutionByParty[partyId] = resolution;
+            const winnerId = resolution.winnerCandidateId;
+            scored = [
+              ...scored.filter((s) => s.candidateId === winnerId),
+              ...scored.filter((s) => s.candidateId !== winnerId),
+            ];
+          }
+        }
       } else if (usePresidentialVoteFallback) {
         scored = partyCandidates
           .map((c) => ({
@@ -533,6 +602,20 @@ export async function resolvePrimariesIfNeeded(now: Date, currentTurn: number): 
       // the primary on the final turn isn't VP-less when votes start accumulating.
       await autoAssignTentativeRunningMates(db, generalCandidates, election.countryId as CountryId);
       await initPresidentVoteTally(electionId, generalCandidates, primaryResults);
+      // Persist the nomination resolution AFTER the general re-init (which
+      // replaces the whole tally doc), so the audit record survives. Additive
+      // and president-only; never written for v1/v2 (map stays empty).
+      if (Object.keys(nominationResolutionByParty).length > 0) {
+        await db.collection<ElectionVoteTally>("electionVoteTallies").updateOne(
+          { electionId },
+          {
+            $set: {
+              nominationResolution: { byParty: nominationResolutionByParty },
+              updatedAt: now,
+            },
+          }
+        );
+      }
     } else {
       await initElectionVoteTally(
         electionId,

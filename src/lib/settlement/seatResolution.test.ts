@@ -45,6 +45,19 @@ describe("resolveSettlementSeat", () => {
     });
   });
 
+  it("claims the seat for a defence minister of a seat country", async () => {
+    prime(db, "cabinetMembers").findOne.mockResolvedValue({
+      countryId: "DD",
+      positionId: "minister_of_defence",
+      characterId,
+    });
+    const { resolveSettlementSeat } = await import("./seatResolution");
+    await expect(resolveSettlementSeat(db as unknown as Db, characterId)).resolves.toEqual({
+      seatId: "DD",
+      role: "defenseMinister",
+    });
+  });
+
   it("prefers the head-of-government claim when a character somehow holds both", async () => {
     const { findCountryHeadedBy } = await import("@/lib/api/headOfGovernment");
     vi.mocked(findCountryHeadedBy).mockResolvedValue("US");
@@ -90,9 +103,13 @@ describe("resolveSettlementSeat", () => {
         { countryId: "UK", positionId: "foreign_secretary" },
         { countryId: "RU", positionId: "minister_of_foreign_affairs" },
         { countryId: "DD", positionId: "minister_of_foreign_affairs" },
+        { countryId: "US", positionId: "secretary_of_defense" },
+        { countryId: "UK", positionId: "defence_secretary" },
+        { countryId: "RU", positionId: "minister_of_defence" },
+        { countryId: "DD", positionId: "minister_of_defence" },
       ])
     );
-    expect(filter.$or).toHaveLength(4);
+    expect(filter.$or).toHaveLength(8);
   });
 
   it("pairs country to position rather than crossing the two lists", async () => {

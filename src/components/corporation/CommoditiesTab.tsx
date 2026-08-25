@@ -185,16 +185,18 @@ export default function CommoditiesTab({
                     </div>
                   </div>
                 </div>
-                {(c.market.surplusUnits != null || c.market.unmetDemandUnits != null) && (
+                {(c.market.surplusUnitsPooled != null ||
+                  c.market.unmetDemandUnitsPooled != null) && (
                   <div className="mt-2 flex flex-wrap gap-x-3 text-[11px] text-muted">
-                    {c.market.surplusUnits != null && c.market.surplusUnits > 0 && (
-                      <span>Surplus: {fmtUnits(c.market.surplusUnits)}</span>
+                    {c.market.surplusUnitsPooled != null && c.market.surplusUnitsPooled > 0 && (
+                      <span>Pooled surplus: {fmtUnits(c.market.surplusUnitsPooled)}</span>
                     )}
-                    {c.market.unmetDemandUnits != null && c.market.unmetDemandUnits > 0 && (
-                      <span className="text-amber-400">
-                        Unmet: {fmtUnits(c.market.unmetDemandUnits)}
-                      </span>
-                    )}
+                    {c.market.unmetDemandUnitsPooled != null &&
+                      c.market.unmetDemandUnitsPooled > 0 && (
+                        <span className="text-amber-400">
+                          Pooled unmet: {fmtUnits(c.market.unmetDemandUnitsPooled)}
+                        </span>
+                      )}
                   </div>
                 )}
                 <div className="mt-3 flex flex-wrap gap-2 border-t border-card-border pt-2">
