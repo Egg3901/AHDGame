@@ -31,7 +31,6 @@ import { calcAppeal, approvalScalar } from "@/lib/utils/demographicAppeal";
 import { normalizeNPI, normalizeNationalReachPresidentialPrimary } from "@/lib/utils/normalizeNPI";
 import { infamyPenaltyMultiplier } from "@/lib/utils/infamy";
 import { getMajorPartiesForRegion } from "@/lib/constants/countries";
-import { canPartyContestState } from "@/lib/parties/regionalContest";
 import { calcEffectiveFavorability } from "./voteCalculations";
 import { splitGroupPoolBySlate } from "./slateAllocation";
 import {
@@ -85,21 +84,6 @@ function appealWeight(
   options: DistributeVotesOptions | undefined,
   trace?: AppealWeightTrace
 ): number {
-  if (
-    !canPartyContestState({
-      countryId: options?.countryId,
-      abbreviation: ec.partyAbbr,
-      stateId: options?.currentStateId,
-    })
-  ) {
-    if (trace) {
-      trace.reachMult = 0;
-      trace.fitMult = 0;
-      trace.restMult = 0;
-    }
-    return 0;
-  }
-
   // Personal-stat tenure fatigue (see `personalStatTenureFatigue`'s doc
   // comment in electionFormulaFactors.ts for the full root-cause writeup).
   // politicalInfluence / favorability have no tenure-aware decay of their

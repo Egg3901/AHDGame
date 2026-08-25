@@ -50,6 +50,7 @@ import { migration as backfillPoliticalLegislationTypes } from "./entries/2026-0
 import { migration as seedGlobalResponseFoundations } from "./entries/2026-08-23-seed-global-response-foundations";
 import { migration as repairKazakhLawLevels } from "./entries/2026-08-23-repair-kazakh-law-levels";
 import { migration as crisesLivingEventPartialIndex } from "./entries/2026-08-25-crises-living-event-partial-index";
+import { migration as ukRegionalPartyOrgBackfill } from "./entries/2026-08-26-uk-regional-party-org-backfill";
 import { migration as easternDepositsCnSoeIron } from "./entries/2026-08-25-eastern-deposits-cn-soe-iron";
 
 export const MIGRATIONS: Migration[] = [
@@ -135,6 +136,10 @@ export const MIGRATIONS: Migration[] = [
   // Per-turn E11000 on crises_living_event: unset null keys, rebuild the
   // sparse unique index as partial-on-string (GlitchTip AHD-1JV).
   crisesLivingEventPartialIndex,
+  // The UK regional-party contest gate is gone (SNP/Plaid/DUP/SF/UUP now stand
+  // UK-wide); give them the statePartyOrg rows they were never seeded outside
+  // their home nation, or the presence gate keeps them off the ballot anyway.
+  ukRegionalPartyOrgBackfill,
   // Markets repair P2a: eastern deposits were never authored for the playable
   // bloc countries (every state resources:{}), and the CN extraction SOE was
   // coal-locked in its four iron-rich states.

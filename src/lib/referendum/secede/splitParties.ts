@@ -16,6 +16,7 @@ import { ObjectId, type Db } from "mongodb";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import type { PoliticalParty } from "@/lib/db/types/party";
 import type { StatePartyOrg } from "@/lib/db/types/statePartyOrg";
+import { TIER_LOSE_REGION_ORG_PCT } from "@/lib/parties/partyTier";
 import type { ElectedOfficial } from "@/lib/db/types/officials";
 import type { Counter } from "@/lib/db/types/counter";
 import { CAPITAL_SUBREGION, type SecedingCountryId } from "./subRegions";
@@ -63,9 +64,22 @@ export async function splitParties(
       regionSeqIds.add(Number(o.party));
   for (const g of orgs) if (g.stateId === regionId) regionSeqIds.add(Number(g.partyId));
 
+  // "Outside presence" must mean the party is actually organised outside the
+  // seceding region, not merely that a row exists there. Every party now holds
+  // a seed-floor org row in every region (the UK regional parties included,
+  // since the home-nation ballot gate was removed), so a bare row proves
+  // nothing. Anything below the tier system's own "meaningfully present"
+  // threshold is treated as no presence — otherwise a token floor row would
+  // flip Sinn Fein or the SNP from a wholesale transfer to being dissolved on
+  // the secession their region just voted for.
   const hasOutsidePresence = (seqId: number): boolean =>
     officials.some((o) => o.party === String(seqId) && o.state !== regionId) ||
-    orgs.some((g) => g.partyId === String(seqId) && g.stateId !== regionId);
+    orgs.some(
+      (g) =>
+        g.partyId === String(seqId) &&
+        g.stateId !== regionId &&
+        (g.organization ?? 0) >= TIER_LOSE_REGION_ORG_PCT
+    );
 
   const parties = await db
     .collection<PoliticalParty>("politicalParties")

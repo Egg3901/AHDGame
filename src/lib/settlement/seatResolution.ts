@@ -5,9 +5,10 @@
  * same two offices carry a nation's voice abroad, and the two features should
  * not disagree about who holds them.
  *
- * A seat is exercisable by its country's head of government AND its foreign
- * minister. They share one budget — the SEAT is rate-limited, not the person —
- * so which of the two acted matters only for the audit trail.
+ * A seat is exercisable by its country's head of government, its foreign
+ * minister, and its defence minister. They share one budget — the SEAT is
+ * rate-limited, not the person — so which of the three acted matters only for
+ * the audit trail.
  *
  * One-party states resolve correctly through `findCountryHeadedBy`: DD and RU
  * seat their General Secretary / Premier through `governmentFormations`, the
@@ -16,11 +17,12 @@
 import type { Db, ObjectId } from "mongodb";
 import { SETTLEMENT_SEATS, type SettlementSeatKey } from "@/lib/constants/settlementCrisis";
 import { FOREIGN_AFFAIRS_POSITION_BY_COUNTRY } from "@/lib/constants/internationalOrganizations";
+import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import type { CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { findCountryHeadedBy } from "@/lib/api/headOfGovernment";
 
-export type SettlementSeatRole = "headOfGovernment" | "foreignMinister";
+export type SettlementSeatRole = "headOfGovernment" | "foreignMinister" | "defenseMinister";
 
 export interface SettlementSeatClaim {
   seatId: SettlementSeatKey;
@@ -57,18 +59,31 @@ export async function resolveSettlementSeat(
   // `$or` of pairs rather than `$in` on each field: RU and DD share the position
   // id `minister_of_foreign_affairs`, so crossing the two lists would match a
   // pairing that does not exist.
-  const pairs = SEAT_COUNTRIES.flatMap((seatId) => {
+  const foreignPairs = SEAT_COUNTRIES.flatMap((seatId) => {
     const positionId = FOREIGN_AFFAIRS_POSITION_BY_COUNTRY[seatId as CountryId];
     return positionId ? [{ countryId: seatId, positionId }] : [];
   });
+  const defensePairs = SEAT_COUNTRIES.flatMap((seatId) => {
+    const positionId = DEFENSE_POSITION_BY_COUNTRY[seatId as CountryId];
+    return positionId ? [{ countryId: seatId, positionId }] : [];
+  });
+  const pairs = [...foreignPairs, ...defensePairs];
   if (pairs.length === 0) return null;
 
-  // Matching on `characterId` in the query is also what excludes a vacant or
-  // NPP-held seat, both of which carry a null characterId.
   const member = await getCabinetMembersCollection(db).findOne({
     characterId,
     $or: pairs,
   });
-  const ministerSeat = seatFor(member?.countryId ?? null);
-  return ministerSeat ? { seatId: ministerSeat, role: "foreignMinister" } : null;
+  if (!member) return null;
+  const ministerSeat = seatFor(member.countryId ?? null);
+  if (!ministerSeat) return null;
+  const foreignPosition = FOREIGN_AFFAIRS_POSITION_BY_COUNTRY[ministerSeat as unknown as CountryId];
+  if (member.positionId === foreignPosition) {
+    return { seatId: ministerSeat, role: "foreignMinister" };
+  }
+  const defensePosition = DEFENSE_POSITION_BY_COUNTRY[ministerSeat as unknown as CountryId];
+  if (member.positionId === defensePosition) {
+    return { seatId: ministerSeat, role: "defenseMinister" };
+  }
+  return { seatId: ministerSeat, role: "foreignMinister" };
 }

@@ -273,15 +273,15 @@ export async function seedUKStatePartyOrg(
 
 /**
  * Reconcile UK statePartyOrg rows with the calculated seed set, used during
- * world reset:
- *  - Deletes rows for regional parties (SNP/Plaid/DUP/SF/UUP) outside their
- *    home regions. These shouldn't exist — those parties don't operate
- *    outside their home nation IRL. Catches stale rows from pre-fix
- *    bootstraps that seeded them with the 5% MIN_ORG floor.
- *  - Inserts polling-derived rows for (region, party) pairs that don't
- *    already exist (e.g. UUP's NIR row when a 1991 reset coming from a
- *    2019 game). Player-modified org values on existing rows are preserved
- *    — never overwrites a row that's there.
+ * world reset: inserts polling-derived rows for (region, party) pairs that
+ * don't already exist (e.g. UUP's NIR row when a 1991 reset coming from a
+ * 2019 game). Player-modified org values on existing rows are preserved —
+ * never overwrites a row that's there.
+ *
+ * This used to also sweep away rows for the regional parties (SNP/Plaid/DUP/
+ * SF/UUP) outside their home nations. Those parties now stand UK-wide, so the
+ * rows are legitimate and the sweep is gone — deleting them here would have
+ * silently undone the org a party built up outside its historic home.
  */
 export async function ensureMissingUKStatePartyOrgRows(
   db: Db,
@@ -298,33 +298,7 @@ export async function ensureMissingUKStatePartyOrgRows(
   const now = new Date();
   const orgs = await calculateUKStatePartyOrgs(db, activePreset);
 
-  // ── 1. Sweep regional-party rows in non-home regions ──────────────────────
-  // The set of (region, partyId) keys we expect to exist; anything else
-  // bearing a regional-party slug for a non-home region is stale.
-  const expectedKeys = new Set(orgs.map((o) => o._id));
-  const { UK_REGIONAL_PARTY_SLUGS } = await import("@/lib/parties/regionalContest");
-  const { buildUKPartySlugToSeqId } = await import("@/lib/seeds/uk/ukStatePartyOrgCalculations");
-  const slugToSeqId = await buildUKPartySlugToSeqId(db);
-  const regionalSeqIds = UK_REGIONAL_PARTY_SLUGS.map((slug) => slugToSeqId[slug]).filter(
-    (seq): seq is string => seq != null
-  );
-  if (regionalSeqIds.length > 0) {
-    const allRegionalOrgs = await db
-      .collection<StatePartyOrg>("statePartyOrg")
-      .find({ countryId: "UK", partyId: { $in: regionalSeqIds } })
-      .project<{ _id: string }>({ _id: 1 })
-      .toArray();
-    const stale = allRegionalOrgs.map((r) => String(r._id)).filter((id) => !expectedKeys.has(id));
-    if (stale.length > 0) {
-      const swept = await db
-        .collection<StatePartyOrg>("statePartyOrg")
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .deleteMany({ _id: { $in: stale as any } } as any);
-      log(`Swept ${swept.deletedCount} stale regional-party org row(s) from non-home regions`);
-    }
-  }
-
-  // ── 2. Insert missing expected rows ───────────────────────────────────────
+  // ── Insert missing expected rows ──────────────────────────────────────────
   const ids = orgs.map((o) => o._id);
   const existing = await db
     .collection<StatePartyOrg>("statePartyOrg")
