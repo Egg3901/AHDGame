@@ -16,7 +16,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
   corpLiquidCapitalToAnchor,
   fxRateForCorpFromMap,
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
 } from "@/lib/currency/corporationCapital";
 import { computeLocDebtInternal } from "@/lib/lineOfCredit/netWorth";
 import { getPublicShareQuote } from "@/lib/corporations/marketQuote";
@@ -170,7 +170,10 @@ async function computeWealthListFallback(
         countryId: 1,
       })
       .toArray(),
-    loadFxRatesByCurrency(db),
+    // Valuation map, not the settlement map: this list RANKS players by wealth.
+    // The settlement map leaves the six bloc currencies (PLZ/CSK/HUF/YUD/BGL/ROL)
+    // missing on purpose, which converted them at 1.0. See corporationCapital.ts.
+    loadValuationFxRates(db),
   ]);
 
   const stateNameMap = new Map(states.map((s) => [s._id, s.name]));

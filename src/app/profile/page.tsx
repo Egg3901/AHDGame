@@ -374,8 +374,7 @@ export default async function ProfilePage() {
     getFinancialData(data.character._id),
     unionContributionIncomePerTurn(db, data.character._id),
   ]);
-  const { corporation, bondIncomePerTurn, dividendIncomePerTurn, portfolioValue, fxRatesRecord } =
-    financialData;
+  const { corporation, bondIncomePerTurn, dividendIncomePerTurn, fxRatesRecord } = financialData;
 
   const {
     character,
@@ -753,7 +752,6 @@ export default async function ProfilePage() {
                     ceoSalaryCurrencyCode: corporation?.liquidCurrencyCode ?? null,
                     bondIncomePerTurn,
                     dividendIncomePerTurn,
-                    portfolioValue,
                     forexBalances: character.currencyBalances
                       ? {
                           personal: character.currencyBalances.personal,

@@ -45,7 +45,7 @@ import {
   anchorToCorpCapital,
   corpCapitalToAnchor,
   fxRateForCorpFromMap,
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
@@ -209,7 +209,11 @@ export async function GET(request: Request) {
     // would mix denominations. Normalize per-bond → ₳ → convert to corp
     // LOCAL for the income statement (all display fields land in corp
     // LOCAL to match `totalRevenue` / `operatingCosts`).
-    const fxByCurrency = await loadFxRatesByCurrency(db);
+    // Valuation map, not the settlement map: this value is DISPLAYED and RANKED.
+    // The settlement map leaves the six bloc currencies (PLZ/CSK/HUF/YUD/BGL/ROL,
+    // 102 corps) missing on purpose, which converted them at 1.0. See
+    // corporationCapital.ts.
+    const fxByCurrency = await loadValuationFxRates(db);
     const corpCurrency = resolveCorpLiquidCurrencyCode(corporation);
     const corpFxRate = fxRateForCorpFromMap(corporation, fxByCurrency);
     const totalDebtAnchor = outstandingBonds.reduce((sum, b) => {
