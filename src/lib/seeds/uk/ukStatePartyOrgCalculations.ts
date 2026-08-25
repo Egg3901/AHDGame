@@ -3,7 +3,6 @@ import { UK_REGION_POLLING_2020 } from "./ukRegionPolling2020";
 import { UK_REGION_POLLING_1992 } from "./ukRegionPolling1992";
 import { UK_REGION_POLLING_1951 } from "./ukRegionPolling1951";
 import type { StatePartyOrg, PoliticalParty } from "@/lib/db/types";
-import { canPartyContestState } from "@/lib/parties/regionalContest";
 
 /**
  * Calculate UK state party organization levels from era polling data
@@ -38,10 +37,6 @@ const UK_PARTY_SLUG_TO_NAME: Record<string, string> = {
   uk_sf: "Sinn Féin",
   uk_uup: "Ulster Unionist Party",
 };
-
-function isPartyHomeRegion(partySlug: string, regionId: string): boolean {
-  return canPartyContestState({ countryId: "UK", slug: partySlug, stateId: regionId });
-}
 
 /**
  * Calculate initial organization level from vote share.
@@ -108,9 +103,11 @@ export async function calculateUKStatePartyOrgs(
     for (const [partySlug, voteShare] of Object.entries(partyVotes)) {
       const partySeqId = slugToSeqId[partySlug];
       if (!partySeqId) continue; // party not in DB (e.g. UUP under 2019 preset)
-      // Skip regional parties outside their home region — SNP doesn't have
-      // org in NIR, DUP doesn't have org in London, etc.
-      if (!isPartyHomeRegion(partySlug, regionId)) continue;
+      // Every party in the polling table gets a row in every region. The
+      // formerly-regional parties (SNP/Plaid/DUP/SF/UUP) poll 0 outside their
+      // historic home nation, so they land on the MIN_ORG floor with a 0
+      // registration share — present and organisable, but starting from
+      // nothing rather than barred outright.
       const org = calculateUKPartyOrg(voteShare);
 
       orgs.push({

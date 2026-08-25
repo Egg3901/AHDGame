@@ -384,7 +384,7 @@ describe("distributeVotesBySwingFlow — Step 1 reproduces the appeal kernel", (
     expect(total).toBeLessThanOrEqual(1_000_000);
   });
 
-  it("gives SNP zero weight in a London general (ticket #1110)", () => {
+  it("gives SNP real weight in a London general now that geography is not a gate", () => {
     const lab: EnrichedCandidate = {
       ...fixtureCandidates()[0]!,
       candidateId: "lab",
@@ -431,9 +431,12 @@ describe("distributeVotesBySwingFlow — Step 1 reproduces the appeal kernel", (
         votingSystem: "fptp",
       }
     );
-    expect(out.votesPerCandidate.snp).toBe(0);
+    expect(out.votesPerCandidate.snp).toBeGreaterThan(0);
     expect(out.votesPerCandidate.lab).toBeGreaterThan(0);
     expect(out.votesPerCandidate.con).toBeGreaterThan(0);
+    // Org 5 against Labour's 70 keeps them a fringe presence, not a threat:
+    // geography stops being a wall and becomes a disadvantage.
+    expect(out.votesPerCandidate.snp).toBeLessThan(out.votesPerCandidate.lab!);
   });
 
   it("still awards SNP votes in a Scotland general", () => {

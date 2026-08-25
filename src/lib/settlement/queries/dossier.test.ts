@@ -14,7 +14,6 @@ vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("../actorContext", () => ({ loadSettlementActorContext: vi.fn() }));
 vi.mock("../seatOffices", () => ({ resolveSeatOffices: vi.fn() }));
 
-/** Both offices of every seat, unheld unless a test says otherwise. */
 function seatOffices(over: Record<string, unknown> = {}) {
   const base = Object.fromEntries(
     SETTLEMENT_SEATS.map((s) => [
@@ -22,6 +21,7 @@ function seatOffices(over: Record<string, unknown> = {}) {
       [
         { role: "headOfGovernment", title: "Head of Government", holder: null },
         { role: "foreignMinister", title: "Foreign Minister", holder: null },
+        { role: "defenseMinister", title: "Defence Minister", holder: null },
       ],
     ])
   );
@@ -255,6 +255,7 @@ describe("loadGermanQuestionDossier", () => {
         US: [
           { role: "headOfGovernment", title: "President", holder: "Ariane Yeong" },
           { role: "foreignMinister", title: "Secretary of State", holder: null },
+          { role: "defenseMinister", title: "Secretary of Defense", holder: null },
         ],
       }) as never
     );
@@ -264,6 +265,7 @@ describe("loadGermanQuestionDossier", () => {
     expect(us.offices).toEqual([
       { role: "headOfGovernment", title: "President", holder: "Ariane Yeong" },
       { role: "foreignMinister", title: "Secretary of State", holder: null },
+      { role: "defenseMinister", title: "Secretary of Defense", holder: null },
     ]);
   });
 
@@ -271,9 +273,11 @@ describe("loadGermanQuestionDossier", () => {
     const { loadGermanQuestionDossier } = await import("./dossier");
     const view = await loadGermanQuestionDossier(db as unknown as Db, characterId);
     for (const b of [...view!.benches.west, ...view!.benches.east]) {
-      // The block says what the seat's offices ARE, not merely who is in them:
-      // "vacant" is the fact that no one can act for this delegation.
-      expect(b.offices.map((o) => o.role)).toEqual(["headOfGovernment", "foreignMinister"]);
+      expect(b.offices.map((o) => o.role)).toEqual([
+        "headOfGovernment",
+        "foreignMinister",
+        "defenseMinister",
+      ]);
       expect(b.offices.every((o) => o.holder === null)).toBe(true);
     }
   });

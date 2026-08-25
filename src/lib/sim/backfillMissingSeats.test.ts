@@ -43,12 +43,26 @@ describe("computeZeroStateRegionWeights", () => {
     expect(w.get("2")).toBe(30);
   });
 
-  it("a party with NO row in the region simply has no weight (regional parties stay home)", () => {
-    // Only Con/Lab/Lib have rows in an English region — SNP/PC/SF do not.
+  it("a party with NO row in the region simply has no weight", () => {
     const w = computeZeroStateRegionWeights([row("con", 65), row("lab", 70), row("lib", 8)]);
     expect(w.has("snp")).toBe(false);
     expect(w.has("pc")).toBe(false);
     expect(w.size).toBe(3);
+  });
+
+  // The UK regional parties now hold a seed-floor row in every region, so
+  // "no row" is no longer what keeps them out of an English chamber. What
+  // keeps them out is a zero registration share: org 5 x reg 0 is zero
+  // weight, so a backfill still seats them nowhere they have no support.
+  it("gives a seed-floor row with no registered support zero weight", () => {
+    const w = computeZeroStateRegionWeights([
+      row("lab", 70, { registrationShare: 51 }),
+      row("con", 14, { registrationShare: 46 }),
+      row("pc", 5, { registrationShare: 0, registration: 0 }),
+    ]);
+    expect(w.has("pc")).toBe(false);
+    expect(w.get("lab")).toBe(70 * 51);
+    expect(w.size).toBe(2);
   });
 
   it("excludes hasPresence: false rows", () => {
