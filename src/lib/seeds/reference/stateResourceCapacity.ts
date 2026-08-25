@@ -337,7 +337,9 @@ export const STATE_RESOURCE_CAPACITY: Record<string, StateResourceCapacityEntry>
   }, // Kuzbass coal; Tyumen oil/gas stripped pre-1960
   "RU:ESB": { countryId: "RU", resources: { timber: 300000, coal: 30000, rare_earth: 2400 } }, // East Siberian forests & minerals
   "RU:FEA": { countryId: "RU", resources: { timber: 90000, coal: 22500, oil: 15000 } }, // Far East; Sakhalin oil
-  "RU:UKR": { countryId: "RU", resources: { coal: 300000, iron: 270000, natural_gas: 45000 } }, // Donbass coal; Krivoy Rog iron; Dashava gas
+  // (Ukraine's Donbass/Krivoy Rog/Dashava budget moved to the "UKR:*" entries
+  // below when Ukraine became its own playable country; the old "RU:UKR" key
+  // matched no state and left every UKR state seeded with zero deposits.)
   "RU:KAZ": {
     countryId: "RU",
     resources: { coal: 90000, oil: 30000, iron: 27000, rare_earth: 1200 },
@@ -347,6 +349,68 @@ export const STATE_RESOURCE_CAPACITY: Record<string, StateResourceCapacityEntry>
   "RU:MOL": { countryId: "RU", resources: { timber: 3000 } }, // Moldavia — agrarian
   "RU:BEL": { countryId: "RU", resources: { timber: 30000 } }, // Belorussia — forest & peat
   "RU:BLT": { countryId: "RU", resources: { coal: 22500, timber: 30000 } }, // Estonian oil shale (as coal); Baltic timber
+
+  // ── Ukraine (playable country; split of the former "RU:UKR" budget) ───
+  // The pre-split combined entry authored coal 300000 / iron 270000 /
+  // natural_gas 45000 for all of Ukraine; the split preserves those totals and
+  // places them where the deposits are, so the country-level calibration the
+  // original author chose survives the state breakdown.
+  "UKR:UKR_DON": { countryId: "UKR", resources: { coal: 270000, natural_gas: 15000 } }, // Donbass, the USSR's premier coal basin
+  "UKR:UKR_DNI": { countryId: "UKR", resources: { iron: 243000, coal: 30000 } }, // Krivoy Rog iron; Dnieper industry
+  "UKR:UKR_WES": { countryId: "UKR", resources: { natural_gas: 30000, oil: 15000, timber: 22500 } }, // Dashava gas; Boryslav oil; Carpathian timber
+  "UKR:UKR_KYI": { countryId: "UKR", resources: { timber: 15000 } }, // Polesian forests
+  "UKR:UKR_SOU": { countryId: "UKR", resources: { iron: 27000 } }, // Kerch iron ore
+  // UKR_POD, agrarian Podillia: no authored deposits.
+
+  // ── Poland ────────────────────────────────────────────────────────────
+  // Upper Silesia was Europe's second coal basin after the Ruhr in 1953.
+  "PL:PL_SLK": { countryId: "PL", resources: { coal: 300000 } }, // Upper Silesian hard coal
+  "PL:PL_DSL": { countryId: "PL", resources: { coal: 60000 } }, // Wałbrzych basin
+  "PL:PL_MAL": { countryId: "PL", resources: { coal: 45000 } }, // Kraków/Jaworzno basin
+  "PL:PL_POM": { countryId: "PL", resources: { timber: 22500 } }, // Pomeranian forests
+  "PL:PL_EAS": { countryId: "PL", resources: { timber: 30000 } }, // Białowieża/eastern forests
+
+  // ── Czechoslovakia ────────────────────────────────────────────────────
+  "CS:CS_BOH": { countryId: "CS", resources: { coal: 120000 } }, // North Bohemian lignite
+  "CS:CS_MOR": { countryId: "CS", resources: { coal: 120000, iron: 13500 } }, // Ostrava-Karviná coal; Vítkovice iron
+  "CS:CS_SVK": { countryId: "CS", resources: { iron: 13500, timber: 30000 } }, // Slovak Ore Mountains; Carpathian timber
+
+  // ── Hungary ───────────────────────────────────────────────────────────
+  // (Bauxite, Hungary's real 1953 headline mineral, has no engine resource.)
+  "HU:HU_TRW": { countryId: "HU", resources: { coal: 60000 } }, // Tatabánya/Veszprém brown coal
+  "HU:HU_NOR": { countryId: "HU", resources: { coal: 45000, iron: 9000 } }, // Borsod coal; Miskolc-area iron
+
+  // ── Romania ───────────────────────────────────────────────────────────
+  // Ploiești was Europe's largest oil district outside the USSR in 1953.
+  "RO:RO_MUN": { countryId: "RO", resources: { oil: 90000, natural_gas: 15000 } }, // Ploiești oil
+  "RO:RO_TRA": { countryId: "RO", resources: { natural_gas: 90000, timber: 22500 } }, // Transylvanian methane fields
+  "RO:RO_OLT": { countryId: "RO", resources: { coal: 45000, oil: 15000 } }, // Jiu Valley coal
+  "RO:RO_MOL": { countryId: "RO", resources: { oil: 15000 } }, // Bacău oil
+
+  // ── Bulgaria ──────────────────────────────────────────────────────────
+  "BG:BG_THR": { countryId: "BG", resources: { coal: 60000 } }, // Maritsa lignite
+  "BG:BG_SW": { countryId: "BG", resources: { coal: 22500, timber: 15000 } }, // Pernik coal; Rila/Pirin timber
+
+  // ── Byelorussia ───────────────────────────────────────────────────────
+  "BLR:BLR_MIN": { countryId: "BLR", resources: { timber: 9000 } },
+  "BLR:BLR_HOM": { countryId: "BLR", resources: { timber: 15000 } }, // Polesian forests
+  "BLR:BLR_VIT": { countryId: "BLR", resources: { timber: 15000 } },
+
+  // ── Baltics ───────────────────────────────────────────────────────────
+  "BAL:BAL_EST": { countryId: "BAL", resources: { oil: 9000 } }, // kukersite oil shale
+  "BAL:BAL_LVA": { countryId: "BAL", resources: { timber: 15000 } },
+  "BAL:BAL_LTU": { countryId: "BAL", resources: { timber: 9000 } },
+
+  // ── Yugoslavia ────────────────────────────────────────────────────────
+  // (Bor copper and Trepča lead/zinc, the famous ones, have no engine resource.)
+  "YU:YU_BIH": { countryId: "YU", resources: { coal: 90000, iron: 27000 } }, // Bosnian lignite; Ljubija iron for Zenica
+  "YU:YU_SRB": { countryId: "YU", resources: { coal: 60000 } }, // Kolubara lignite
+  "YU:YU_KOS": { countryId: "YU", resources: { coal: 45000 } }, // Kosovo lignite
+  "YU:YU_SLO": { countryId: "YU", resources: { coal: 30000, timber: 22500 } }, // Trbovlje coal; Alpine timber
+  "YU:YU_CRO": { countryId: "YU", resources: { oil: 15000, timber: 22500 } }, // Slavonian oil; Croatian forests
+  "YU:YU_MKD": { countryId: "YU", resources: { iron: 4500 } }, // Macedonian iron
+  "YU:YU_MNE": { countryId: "YU", resources: { timber: 9000 } }, // Montenegrin forests
+  "YU:YU_VOJ": { countryId: "YU", resources: { oil: 9000 } }, // Vojvodina oil, minor
 
   // ── East Germany (DDR) ────────────────────────────────────────────────
   // The world's largest lignite producer; no domestic oil/gas (Soviet imports +

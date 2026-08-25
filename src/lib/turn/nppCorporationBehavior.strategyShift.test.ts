@@ -11,6 +11,7 @@
 import { describe, it, expect } from "vitest";
 import { ObjectId } from "mongodb";
 import {
+  computeExtractionHeadroomByState,
   glutStaggerEligible,
   makeNppCorpDecision,
   strategyPriceScore,
@@ -104,6 +105,31 @@ describe("strategyPriceScore", () => {
 
   it("returns null when no commodity on either side has ever priced", () => {
     expect(strategyPriceScore(standard, "US", () => null)).toBeNull();
+  });
+});
+
+describe("extraction placement headroom", () => {
+  it("measures 1953 desired output in era-scaled ledger units", () => {
+    const stateId = "AZ";
+    const extractionSector = {
+      ...sector({
+        sectorType: "extraction",
+        stateId,
+        revenue: 21_000,
+        strategyId: "standard",
+      }),
+    };
+    const headroom = computeExtractionHeadroomByState(
+      [{ stateId, resources: { rare_earth: 200 } }],
+      [extractionSector],
+      27_000 / 387,
+      true
+    );
+
+    // Standard extraction's 0.14 rate requests 24.42 of the state's 200
+    // rare-earth units on this basis. With only that deposit leg present,
+    // extractionHeadroomOf must therefore expose 87.79% free capacity.
+    expect(headroom.get(stateId)).toBeCloseTo(0.8779069767, 8);
   });
 });
 

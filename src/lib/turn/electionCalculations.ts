@@ -58,25 +58,31 @@ export function allocateElectoralVotes(
   return electoralVotesByCandidate;
 }
 
+// Majority of the ACTUAL college (era-aware). Canonical definition lives in
+// the client-safe display module; re-exported here for the turn engine.
+export { electoralMajorityFor } from "@/lib/elections/presidentialResolutionDisplay";
+
 /**
  * Determine the presidential winner from Electoral Vote totals.
  *
- * If a candidate exceeds ELECTORAL_MAJORITY, they win outright.
- * Otherwise returns null so resolution can run a House/Senate contingent election
- * (269–269 ties, third-party blocks on 270, etc.).
+ * If a candidate reaches `evNeeded` (a majority of the actual college — pass
+ * `electoralMajorityFor(collegeSize)`; the default is the modern 538-college
+ * threshold), they win outright. Otherwise returns null so resolution can run
+ * a House/Senate contingent election (269–269 ties, third-party blocks, etc.).
  *
  * @param electoralVotesByCandidate - Output of `allocateElectoralVotes`
  * @returns Winner candidate ID and their EV count, or null for contingent election
  */
 export function determinePresidentialWinner(
-  electoralVotesByCandidate: Record<string, number>
+  electoralVotesByCandidate: Record<string, number>,
+  evNeeded: number = ELECTORAL_MAJORITY
 ): { winnerId: string; winnerEV: number } | null {
   const ranked = Object.entries(electoralVotesByCandidate).sort((a, b) => b[1] - a[1]);
   if (ranked.length === 0) return null;
 
   const [winnerId, winnerEV] = ranked[0];
 
-  if (winnerEV >= ELECTORAL_MAJORITY) {
+  if (winnerEV >= evNeeded) {
     return { winnerId, winnerEV };
   }
 
