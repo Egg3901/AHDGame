@@ -41,6 +41,7 @@ import {
   isOwnRegionalExecutiveRace,
 } from "@/lib/electionEngine/govCoattail";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
+import { applyFactorLedgerFogOfWar } from "@/lib/elections/factorLedgerFog";
 import { type GameTimeContext } from "@/lib/time/gameTime";
 import { computeElectionPhase } from "@/lib/elections/phases";
 import {
@@ -642,6 +643,8 @@ export async function _enrichElection(
   let myEndorsedCandidateId: string | null = null;
   /** Read-through of the tally's economic-referendum snapshot (president only). */
   let economicReferendum: ElectionResponse["economicReferendum"];
+  /** Read-through of the tally's factor ledger, fog-of-war applied (president only). */
+  let factorLedger: ElectionResponse["factorLedger"];
 
   if (isPresident && inPrimary) {
     const projectedDisplay = await applyPresidentialPrimaryDisplay(
@@ -738,6 +741,21 @@ export async function _enrichElection(
           ...(referendumParty?.name ? { incumbentPartyName: referendumParty.name } : {}),
           ...(referendumParty?.color ? { incumbentPartyColor: referendumParty.color } : {}),
         };
+      }
+
+      // Factor Ledger card input. Read straight off the tally (never recomputed).
+      // Fog-of-war: the national factor waterfall is public for every candidate,
+      // but per-candidate `bucketAppeal` (where a candidate's appeal comes from)
+      // and the per-unit breakdown are stripped for candidates the viewer does
+      // not own, matching the Support fog on the persuasion card. Admins see all.
+      const factorLedgerSnapshot = resolvedTally.factorLedger ?? tally?.factorLedger;
+      if (isPresident && factorLedgerSnapshot) {
+        const ownedCandidateIds = new Set(
+          isAdmin
+            ? factorLedgerSnapshot.byCandidateNational.map((c) => c.candidateId)
+            : enrichedWithIsYou.filter((c) => c.isYou).map((c) => c.id)
+        );
+        factorLedger = applyFactorLedgerFogOfWar(factorLedgerSnapshot, ownedCandidateIds);
       }
 
       const filterRecord = <T>(rec: Record<string, T>): Record<string, T> => {
@@ -1192,6 +1210,7 @@ export async function _enrichElection(
 
     // National Mood gauge input (president only, when the engine recorded one).
     ...(economicReferendum ? { economicReferendum } : {}),
+    ...(factorLedger ? { factorLedger } : {}),
 
     // Registration Influence card inputs (US presidential general only).
     ...(regByState ? { regByState } : {}),
