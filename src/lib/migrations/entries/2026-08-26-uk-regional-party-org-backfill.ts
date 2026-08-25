@@ -70,10 +70,25 @@ async function backfillUKRegionalPartyOrg(db: Db, dryRun: boolean): Promise<Migr
   const now = new Date();
   let documentsInserted = 0;
   for (const org of missing) {
-    await db
-      .collection<StatePartyOrg>("statePartyOrg")
-      .insertOne({ ...org, createdAt: now, updatedAt: now });
-    documentsInserted++;
+    // Upsert with $setOnInsert rather than a bare insert. The runner executes
+    // on deploy, which can overlap a turn: Build Org can create the very row
+    // being backfilled between the scan above and this write. An insert would
+    // abort the whole run on E11000; $setOnInsert makes the write a no-op on
+    // a row that already exists, so the player's org survives either way.
+    const { _id, ...fields } = org;
+    const result = await db.collection<StatePartyOrg>("statePartyOrg").updateOne(
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+      { _id: _id as any },
+      { $setOnInsert: { ...fields, createdAt: now, updatedAt: now } },
+      { upsert: true }
+    );
+    if (result.upsertedCount > 0) documentsInserted++;
+  }
+
+  if (documentsInserted !== missing.length) {
+    notes.push(
+      `${missing.length - documentsInserted} row(s) appeared between scan and write; left untouched`
+    );
   }
 
   return { documentsScanned: expected.length, documentsInserted, notes };

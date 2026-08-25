@@ -53,21 +53,35 @@ function buildDb(preset = "1953-default") {
     ...SF_EXISTING.map((r) => `${r}_5`),
   ];
 
+  // Model the collection as a real store keyed by _id so the write path is
+  // exercised against actual upsert semantics rather than a bare call recorder.
+  const store = new Map<string, Record<string, unknown>>(
+    existingIds.map((_id) => [_id, { _id, organization: _id === "EMI_4" ? 29.16 : 12 }])
+  );
   const inserted: Record<string, unknown>[] = [];
+
   db.collection("statePartyOrg");
   db.collectionMocks.statePartyOrg.find.mockReturnValue({
     project: () => ({
-      toArray: vi.fn().mockResolvedValue(existingIds.map((_id) => ({ _id }))),
+      toArray: vi.fn().mockResolvedValue([...store.keys()].map((_id) => ({ _id }))),
     }),
   });
-  db.collectionMocks.statePartyOrg.insertOne.mockImplementation(
-    async (doc: Record<string, unknown>) => {
+  db.collectionMocks.statePartyOrg.updateOne.mockImplementation(
+    async (
+      filter: { _id: string },
+      update: { $setOnInsert?: Record<string, unknown> },
+      options?: { upsert?: boolean }
+    ) => {
+      if (store.has(filter._id)) return { matchedCount: 1, modifiedCount: 0, upsertedCount: 0 };
+      if (!options?.upsert) return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
+      const doc = { _id: filter._id, ...(update.$setOnInsert ?? {}) };
+      store.set(filter._id, doc);
       inserted.push(doc);
-      return { insertedId: doc._id };
+      return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
     }
   );
 
-  return { db: db as unknown as Db, inserted };
+  return { db: db as unknown as Db, inserted, store };
 }
 
 describe(migration.id, () => {
@@ -95,12 +109,30 @@ describe(migration.id, () => {
   });
 
   it("never overwrites org a party already built outside its historic home", async () => {
-    const { db, inserted } = buildDb();
+    const { db, inserted, store } = buildDb();
     await migration.execute(db, { dryRun: false });
 
     // EMI_4 carries 29.16 org on live from player Build Org actions. It is an
-    // existing row, so the backfill must not touch it at all.
+    // existing row, so the backfill must leave its value exactly as it was.
     expect(inserted.map((d) => d._id)).not.toContain("EMI_4");
+    expect(store.get("EMI_4")?.organization).toBe(29.16);
+  });
+
+  // The runner executes on deploy, which can overlap a turn. Build Org can
+  // create the very row being backfilled in between the scan and the write, so
+  // the write must not be a bare insert that would abort the run on E11000.
+  it("does not clobber or fail on a row that appears after the scan", async () => {
+    const { db, inserted, store } = buildDb();
+
+    // The scan snapshots the key set at build time, so adding LON_4 now models
+    // a row created by a concurrent turn after the scan but before the write.
+    store.set("LON_4", { _id: "LON_4", organization: 41 });
+
+    const result = await migration.execute(db, { dryRun: false });
+
+    expect(store.get("LON_4")?.organization).toBe(41);
+    expect(inserted.map((d) => d._id)).not.toContain("LON_4");
+    expect(result.documentsInserted).toBe(17);
   });
 
   it("seeds the new rows on the minimum-org floor, not at parity", async () => {
@@ -117,17 +149,9 @@ describe(migration.id, () => {
   });
 
   it("is a no-op on a world that already has every row", async () => {
-    const { db, inserted } = buildDb();
-    db.collection("statePartyOrg");
-    (db.collection("statePartyOrg").find as ReturnType<typeof vi.fn>).mockReturnValue({
-      project: () => ({
-        toArray: vi
-          .fn()
-          .mockResolvedValue(
-            UK_REGIONS.flatMap((r) => [1, 2, 4, 5, 6].map((p) => ({ _id: `${r}_${p}` })))
-          ),
-      }),
-    });
+    const { db, inserted, store } = buildDb();
+    for (const r of UK_REGIONS)
+      for (const p of [1, 2, 4, 5, 6]) store.set(`${r}_${p}`, { _id: `${r}_${p}` });
 
     const result = await migration.execute(db, { dryRun: false });
     expect(result.documentsInserted).toBe(0);

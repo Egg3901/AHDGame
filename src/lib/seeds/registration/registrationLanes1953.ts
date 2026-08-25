@@ -396,10 +396,21 @@ const UK_SLUG_TO_ABBR: Record<string, string> = {
   uk_sf: "SF",
 };
 
+const UK_REGIONAL_HOMES: Record<string, string> = {
+  uk_snp: "SCO",
+  uk_plaid: "WAL",
+  uk_sf: "NIR",
+};
+
 function buildUKSeeds1953(): StateRegistrationSeed[] {
   return Object.entries(UK_REGION_POLLING_1951).map(([stateId, votes]) => {
     const parties = Object.entries(votes)
-      .filter(([slug]) => UK_SLUG_TO_ABBR[slug] != null)
+      .filter(([slug]) => {
+        const abbr = UK_SLUG_TO_ABBR[slug];
+        if (!abbr) return false;
+        const home = UK_REGIONAL_HOMES[slug];
+        return !home || home === stateId;
+      })
       .map(([slug, voteShare]) => ({
         abbr: UK_SLUG_TO_ABBR[slug],
         // Organization is a strength share, not raw polling. A 60% scale
