@@ -1,152 +1,234 @@
-import type { GovernanceStyleScore } from "@/lib/governanceStyle/score";
+import type { DemocraticCompetition } from "@/lib/governanceStyle/competition";
 import { governanceStyleFlavor } from "@/lib/governanceStyle/flavor";
+import type { GovernanceStyleAxis, GovernanceStyleScore } from "@/lib/governanceStyle/score";
+import { scoreTone } from "./tones";
 
-function AxisReading({
-  label,
-  value,
+function BalanceRail({
   description,
+  axis,
+  low,
+  high,
+  accentClass,
+  markerClass,
+  trackClass,
 }: {
-  label: string;
-  value: number;
   description: string;
+  axis: GovernanceStyleAxis;
+  low: string;
+  high: string;
+  accentClass: string;
+  markerClass: string;
+  trackClass: string;
 }) {
   return (
-    <div className="rounded-md border border-card-border bg-background/40 px-3 py-2">
-      <div className="font-mono text-body-xs uppercase tracking-wider text-muted">
-        {description}
+    <div>
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <div className="font-mono text-body-xs uppercase tracking-[0.18em] text-muted">
+            {description}
+          </div>
+          <div className={`mt-1 font-display text-heading font-semibold ${accentClass}`}>
+            {axis.label}
+          </div>
+        </div>
+        <div className="font-mono text-heading-lg font-semibold tabular-nums text-foreground">
+          {Math.round(axis.value)}
+        </div>
       </div>
-      <div className="mt-1 flex items-baseline justify-between gap-3">
-        <span className="font-display text-body-lg font-semibold text-foreground">{label}</span>
-        <span className="font-mono text-body tabular-nums text-muted">{Math.round(value)}</span>
+
+      <div className="mt-3">
+        <div className="relative h-3 rounded-full bg-background/80 ring-1 ring-card-border">
+          <div
+            className={`absolute inset-x-1 top-1/2 h-1 -translate-y-1/2 rounded-full ${trackClass}`}
+          />
+          <span
+            className={`absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-card shadow-card ${markerClass}`}
+            style={{ left: `${axis.value}%` }}
+          >
+            <span className="sr-only">{axis.label}</span>
+          </span>
+        </div>
+        <div className="mt-2 flex justify-between font-mono text-[10px] uppercase tracking-[0.14em] text-muted">
+          <span>{low}</span>
+          <span>{high}</span>
+        </div>
       </div>
     </div>
   );
 }
 
+function governmentStatus(competition: DemocraticCompetition) {
+  if (competition.executiveAlignedWithLegislature === true) {
+    return "Aligned presidency";
+  }
+  if (competition.executiveAlignedWithLegislature === false) {
+    return "Divided government";
+  }
+  return "Parliamentary government";
+}
+
+function continuityStatus(competition: DemocraticCompetition) {
+  if (competition.executiveAlignedWithLegislature !== null) {
+    const terms = competition.consecutiveExecutiveTerms;
+    return terms > 0 ? `${terms} executive ${terms === 1 ? "term" : "terms"}` : "New executive";
+  }
+  return competition.uninterruptedControlTurns > 0
+    ? `${competition.uninterruptedControlTurns} turns of chamber lead`
+    : "No recorded streak";
+}
+
+function PowerBalance({ competition }: { competition: DemocraticCompetition }) {
+  const chamberScope =
+    competition.chambersMeasured === 1
+      ? "elected chamber"
+      : `${competition.chambersMeasured} elected chambers`;
+
+  return (
+    <div className="border-t border-card-border bg-background/30 px-4 py-4 sm:px-5">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <div className="font-mono text-body-xs uppercase tracking-[0.18em] text-muted">
+            Balance of power
+          </div>
+          <p className="mt-1 text-body-sm text-muted">
+            Concentrated control can hollow out an otherwise healthy democracy over time.
+          </p>
+        </div>
+        <div className="rounded-full border border-card-border bg-card px-3 py-1 font-mono text-body-xs tabular-nums text-muted">
+          {competition.penalty > 0 ? `−${competition.penalty.toFixed(1)} health` : "No pressure"}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-px overflow-hidden rounded-md border border-card-border bg-card-border sm:grid-cols-2 xl:grid-cols-4">
+        <div className="bg-card px-3 py-3">
+          <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted">
+            Chambers
+          </div>
+          <div className="mt-1 text-body-lg font-semibold tabular-nums text-foreground">
+            {competition.dominantSeatShare.toFixed(1)}%
+          </div>
+          <div className="mt-1 text-body-xs text-muted">Largest party across {chamberScope}</div>
+        </div>
+        <div className="bg-card px-3 py-3">
+          <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted">
+            Government
+          </div>
+          <div className="mt-1 text-body-lg font-semibold text-foreground">
+            {governmentStatus(competition)}
+          </div>
+          <div className="mt-1 text-body-xs text-muted">Executive and legislature status</div>
+        </div>
+        <div className="bg-card px-3 py-3">
+          <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted">
+            Continuity
+          </div>
+          <div className="mt-1 text-body-lg font-semibold text-foreground">
+            {continuityStatus(competition)}
+          </div>
+          <div className="mt-1 text-body-xs text-muted">Same governing settlement</div>
+        </div>
+        <div className="bg-card px-3 py-3">
+          <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted">
+            Institutional cost
+          </div>
+          <div className="mt-1 text-body-lg font-semibold tabular-nums text-foreground">
+            −{competition.penalty.toFixed(1)}
+          </div>
+          <div className="mt-1 text-body-xs text-muted">Democratic-health pressure</div>
+        </div>
+      </div>
+
+      <p className="mt-3 text-body-xs leading-relaxed text-muted">
+        Chamber margins: −{competition.seatMarginPenalty.toFixed(1)}. Legislative continuity: −
+        {competition.legislativeContinuityPenalty.toFixed(1)}. Executive continuity: −
+        {competition.executiveContinuityPenalty.toFixed(1)}.
+      </p>
+    </div>
+  );
+}
+
+/** A game-facing national-spirit dossier, not a generic metrics chart. */
 export function GovernanceStyleCard({ score }: { score: GovernanceStyleScore }) {
   const flavor = governanceStyleFlavor(score);
+  const healthTone = scoreTone(score.democraticHealth.value);
+
   return (
     <section
-      className="overflow-hidden rounded-lg border border-card-border bg-card shadow-card"
+      className="overflow-hidden rounded-xl border border-card-border bg-card shadow-card"
       aria-labelledby="governance-style-heading"
     >
-      <div className="border-b border-card-border px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="relative overflow-hidden border-b border-card-border bg-gradient-to-br from-primary/15 via-card to-secondary/10 px-4 py-5 sm:px-5">
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/80 to-transparent" />
+        <div className="relative grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(420px,1.1fr)] lg:items-end">
           <div>
-            <div className="font-mono text-body-xs uppercase tracking-widest text-muted">
-              National spirit
+            <div className="flex flex-wrap items-center gap-2 font-mono text-body-xs uppercase tracking-[0.18em] text-muted">
+              <span>National spirit</span>
+              <span className="h-1 w-1 rounded-full bg-gold" />
+              <span>Liberal democracy</span>
             </div>
             <h2
               id="governance-style-heading"
-              className="mt-0.5 font-display text-heading font-semibold text-foreground"
+              className="mt-3 font-display text-heading-lg font-bold leading-tight text-foreground"
             >
-              Governance Style
+              {flavor.headline}
             </h2>
-          </div>
-          <span className="rounded border border-card-border px-2 py-1 font-mono text-body-xs uppercase tracking-wider text-muted">
-            Liberal democracy
-          </span>
-        </div>
-        <p className="mt-2 max-w-3xl text-body-sm text-muted">
-          Policy direction and democratic health move independently as laws and national outcomes
-          change.
-        </p>
-      </div>
-
-      <div className="grid gap-4 p-4 lg:grid-cols-[minmax(260px,420px)_1fr] lg:items-center">
-        <div
-          className="relative mx-auto aspect-square w-full max-w-[360px]"
-          role="img"
-          aria-label={`${score.leftRight.label}, ${Math.round(score.leftRight.value)} out of 100 from Left to Right. ${score.democraticHealth.label}, ${Math.round(score.democraticHealth.value)} out of 100 from Failed State to Healthy Democracy.`}
-        >
-          <span className="absolute left-1/2 top-0 -translate-x-1/2 font-mono text-body-xs uppercase tracking-wider text-success">
-            Healthy democracy
-          </span>
-          <span className="absolute bottom-0 left-1/2 -translate-x-1/2 font-mono text-body-xs uppercase tracking-wider text-error">
-            Failed state
-          </span>
-          <span className="absolute left-0 top-1/2 -translate-y-1/2 font-mono text-body-xs uppercase tracking-wider text-muted">
-            Left
-          </span>
-          <span className="absolute right-0 top-1/2 -translate-y-1/2 font-mono text-body-xs uppercase tracking-wider text-muted">
-            Right
-          </span>
-
-          <div className="absolute inset-x-12 bottom-8 top-8 rounded-md border border-card-border bg-background/30">
-            <div className="absolute inset-x-0 top-1/2 border-t border-card-border" />
-            <div className="absolute inset-y-0 left-1/2 border-l border-card-border" />
-            <div
-              className="absolute h-4 w-4 -translate-x-1/2 translate-y-1/2 rounded-full border-2 border-background bg-primary shadow-card"
-              style={{
-                left: `${score.leftRight.value}%`,
-                bottom: `${score.democraticHealth.value}%`,
-              }}
-            >
-              <span className="sr-only">Current Governance Style position</span>
+            <p className="mt-2 max-w-xl text-body text-muted">{flavor.institutionalSigns[0]}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="rounded-full border border-card-border bg-card/80 px-3 py-1 font-mono text-body-xs text-muted">
+                Political character: {flavor.politicalHeadline}
+              </span>
+              <span
+                className={`rounded-full border border-card-border bg-card/80 px-3 py-1 font-mono text-body-xs ${healthTone.text}`}
+              >
+                {score.democraticHealth.label}
+              </span>
             </div>
           </div>
-        </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-          <AxisReading
-            description="Political direction"
-            label={score.leftRight.label}
-            value={score.leftRight.value}
-          />
-          <AxisReading
-            description="Democratic health"
-            label={score.democraticHealth.label}
-            value={score.democraticHealth.value}
-          />
-          <p className="text-body-xs leading-relaxed text-muted sm:col-span-2 lg:col-span-1">
-            Left and right describe association, not quality. Democratic health reads election
-            participation, openness, integrity, administration, due process, courts, public trust,
-            safety, and civic life.
-          </p>
+          <div className="grid gap-5 rounded-lg border border-card-border bg-card/70 p-4 shadow-card">
+            <BalanceRail
+              description="Political direction"
+              axis={score.leftRight}
+              low="Left"
+              high="Right"
+              accentClass="text-primary"
+              markerClass="bg-primary"
+              trackClass="bg-gradient-to-r from-secondary via-muted/40 to-primary"
+            />
+            <BalanceRail
+              description="Democratic health"
+              axis={score.democraticHealth}
+              low="Failed state"
+              high="Healthy democracy"
+              accentClass={healthTone.text}
+              markerClass={healthTone.bg}
+              trackClass="bg-gradient-to-r from-error via-warning to-success"
+            />
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-4 border-t border-card-border bg-background/30 p-4 lg:grid-cols-2">
+      {score.competition && <PowerBalance competition={score.competition} />}
+
+      <div className="grid gap-4 px-4 py-4 sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.72fr)]">
         <div>
-          <div className="font-mono text-body-xs uppercase tracking-widest text-muted">
-            Institutional character
+          <div className="font-mono text-body-xs uppercase tracking-[0.18em] text-muted">
+            The institutional assessment
           </div>
-          <h3 className="mt-1 font-display text-heading font-semibold text-foreground">
-            {flavor.headline}
-          </h3>
           <p className="mt-2 text-body-sm leading-relaxed text-muted">
             {flavor.institutionalNarrative}
           </p>
         </div>
-        <div>
-          <div className="font-mono text-body-xs uppercase tracking-widest text-muted">
-            Political character
+        <div className="rounded-md border border-card-border bg-background/30 p-3">
+          <div className="font-mono text-body-xs uppercase tracking-[0.18em] text-muted">
+            What this means
           </div>
-          <h3 className="mt-1 font-display text-heading font-semibold text-foreground">
-            {flavor.politicalHeadline}
-          </h3>
           <p className="mt-2 text-body-sm leading-relaxed text-muted">
-            {flavor.politicalNarrative}
+            Left and right describe political direction, not quality. Democratic health reflects
+            whether institutions can constrain power, survive scandal, and hand authority over
+            peacefully.
           </p>
         </div>
-        <div className="lg:col-span-2">
-          <div className="font-mono text-body-xs uppercase tracking-widest text-muted">
-            Signs of the system
-          </div>
-          <ul className="mt-2 grid gap-2 text-body-sm text-muted md:grid-cols-3">
-            {flavor.institutionalSigns.map((sign) => (
-              <li key={sign} className="rounded-md border border-card-border bg-card px-3 py-2">
-                {sign}
-              </li>
-            ))}
-          </ul>
-        </div>
-        {flavor.competitionNarrative && (
-          <div className="rounded-md border border-card-border bg-card px-3 py-2 text-body-sm text-muted lg:col-span-2">
-            <span className="font-semibold text-foreground">Competitive balance: </span>
-            {flavor.competitionNarrative}
-          </div>
-        )}
       </div>
     </section>
   );
