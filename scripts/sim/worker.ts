@@ -40,6 +40,13 @@ const OPS_DB_NAME = process.env.OPS_DB_NAME || "a-house-divided";
 const SIM_MONGODB_URI = process.env.SIM_MONGODB_URI;
 const GAME_REPO_DIR = process.env.GAME_REPO_DIR || process.cwd();
 const TICK_MS = Number(process.env.SIM_WORKER_TICK_MS || "15000");
+// The LIVE game DB — required only for cloneFromLive jobs. NOT the same thing
+// as OPS_MONGODB_URI: on the ops box the control-plane (simJobs) lives on the
+// local Mongo while the live game lives on the hosted prod cluster. Cloning
+// from the control-plane URI silently copies sim metadata and bootstraps a
+// fresh world, which defeats the entire point of a clone run.
+const LIVE_MONGODB_URI = process.env.LIVE_MONGODB_URI;
+const LIVE_DB_NAME = process.env.LIVE_DB_NAME || "a-house-divided";
 const STATUS_MIRROR_MS = Number(process.env.SIM_WORKER_STATUS_MIRROR_MS || "20000");
 
 if (!OPS_MONGODB_URI) {
@@ -232,11 +239,16 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
         { _id: job._id },
         { $set: { status: "running", currentTurn: 0, updatedAt: new Date() } }
       );
-      log(`Cloning live world ${OPS_DB_NAME} -> ${job.dbName} ...`);
+      log(`Cloning live world ${LIVE_DB_NAME} -> ${job.dbName} ...`);
+      if (!LIVE_MONGODB_URI) {
+        throw new Error(
+          "cloneFromLive job but LIVE_MONGODB_URI is not set — refusing to clone from the control-plane DB"
+        );
+      }
       const cloneEnv = {
         ...baseChildEnv(),
-        SOURCE_MONGODB_URI: OPS_MONGODB_URI as string,
-        SOURCE_DB_NAME: OPS_DB_NAME,
+        SOURCE_MONGODB_URI: LIVE_MONGODB_URI,
+        SOURCE_DB_NAME: LIVE_DB_NAME,
         SIM_MONGODB_URI: SIM_MONGODB_URI as string,
       };
       const cloneResult = await run(

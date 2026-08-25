@@ -106,6 +106,18 @@ async function main() {
     console.log(`[clone] dropped ${destName}`);
   }
 
+  // Refuse a source that does not look like a game world — cloning the sim
+  // control-plane by URI mixup copies 3 metadata collections and the engine
+  // then silently bootstraps a fresh world instead of continuing the clone.
+  const gameStateDoc = await sdb.collection("gameState").findOne({ _id: "current" as never });
+  const corpCount = await sdb.collection("corporations").countDocuments();
+  if (!gameStateDoc || corpCount === 0) {
+    throw new Error(
+      `source db "${SOURCE_DB_NAME}" has no gameState/current or no corporations — ` +
+        "this is not a live game world; check SOURCE_MONGODB_URI/SOURCE_DB_NAME"
+    );
+  }
+
   const collections = (await sdb.listCollections({}, { nameOnly: true }).toArray())
     .map((c) => c.name)
     .filter((n) => !n.startsWith("system.") && !EXCLUDED_COLLECTIONS.has(n))
