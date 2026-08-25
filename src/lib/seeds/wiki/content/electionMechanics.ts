@@ -6,7 +6,7 @@ Elections in A House Divided run perpetually. Every office has continuous cycles
 
 Every election has two phases:
 
-1. **Primary phase**: intra-party competition. Candidates from the same party compete for one nomination slot. Resolution uses a **primary score** (no votes accumulate). Highest score per party advances.
+1. **Primary phase**: intra-party competition. Candidates from the same party compete for one nomination slot. **State races** (House, Senate, Governor, State Senate) resolve on a **primary score**, with no votes accumulated: the highest score per party advances. **Presidential** primaries instead run staggered state voting that hands out **pledged delegates**, and the delegate leader is nominated, at a [convention](/wiki/nominating-convention) if no one holds a majority.
 2. **General phase**: inter-party competition. Nominees from different parties compete. **Votes accumulate turn by turn**; the final 4 turns land 30% of the pool.
 
 When the general resolves, winners take office and the next cycle spawns.
@@ -46,7 +46,7 @@ Of the 40 alignment points, 25 measure how closely you match your state's politi
 
 ## The primary score (presidential)
 
-Presidential primaries are national, so they weight party platform and national reach instead of state position:
+A presidential nomination is decided by the **pledged delegates** won across the staggered state waves (see below), settled at a [nominating convention](/wiki/nominating-convention) when no candidate holds a majority. The score below is the national ranking the game falls back to when there is no delegate or vote data to read (for example an admin-forced resolution that skips the waves). It weights party platform and national reach instead of state position:
 
 | Bucket | Range | Formula |
 | --- | --- | --- |
@@ -57,7 +57,7 @@ Presidential primaries are national, so they weight party platform and national 
 
 Same infamy penalty applies on the final score. Alignment stays dominant, but Favorability was repriced from 10 to 25 points so the primary selects for roughly what the general election rewards, and parties stop nominating candidates the electorate has already rejected.
 
-**Presidential primary stagger waves** (the final 6 turns of the primary) use a delegate accumulator. NPPs in stagger waves receive an **extra 0.6 multiplier** on top of the usual handicaps when a player is in the same party.
+**Presidential primary stagger waves** use a delegate accumulator. States vote in six waves modeled on the 2020 calendar (Iowa, then New Hampshire, then Nevada and South Carolina, then a 14-state Super Tuesday, then mid-March, then everyone remaining), each wave allocating pledged delegates. Older and unstamped races (including the 1960 race) run all six waves **compressed** into the final 6 turns; reworked races (1964 onward) run them **stretched** across the primary so results land with a reaction gap. A primary keeps whichever cadence it opened on. NPPs in stagger waves receive an **extra 0.6 multiplier** on top of the usual handicaps when a player is in the same party. See [Primaries](/wiki/primaries) and [the convention](/wiki/nominating-convention) for the full flow.
 
 ## Vote accumulation (general)
 

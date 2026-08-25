@@ -103,6 +103,7 @@ When the primary deadline passes:
 ## Related
 
 - [Election Mechanics](/wiki/election-mechanics): Full election structure.
+- [Presidential Nominating Convention](/wiki/nominating-convention): How pledged delegates settle the presidential nomination.
 - [General Elections](/wiki/general-elections): What happens after you win the primary.
 - [Primary vs General Tactics](/wiki/primary-general-tactics): Pivoting once the general starts.
 - [NPP Elections](/wiki/npp-elections): Strategies for competing against autonomous candidates.

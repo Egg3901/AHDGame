@@ -81,6 +81,17 @@ An admin can assign a manager to a campaign. The manager has:
 
 This is designed for multi-player coordination: a campaign manager can run the operational details while the candidate focuses on character actions.
 
+### Campaign room briefing (owner-only)
+
+Presidential campaigns get a private briefing panel that turns the current race state into a plan. It only reads numbers the engine and tally already produced, so it never invents vote math. It is visible to the campaign owner, its manager, the nominee, and the running mate. It has:
+
+- **Path to victory.** In the primary, your **delegate path**: delegates won, the majority you need, how many remain, and the top delegate leaders in your party. In the general, your **tipping-point path**: the electoral votes you hold, the majority you need, and the 5 closest states by popular-vote margin, the ones that actually decide the race.
+- **Cash runway.** How many turns your funds last at the current burn rate, or unbounded if you are net positive.
+- **Coalition weaknesses.** Your weakest voter buckets, weakest first, so you know where your support is thin.
+- **Ops saturation and tradeoffs.** How far you have invested each operations lever, and what the next upgrade tier would cost in funds and actions and what it does.
+
+The [Vote Factor Ledger](/wiki/vote-factor-ledger) tells you why you have the votes you have; the briefing tells you what to do about it.
+
 ## Campaign actions (separate from character actions)
 
 Your campaign generates its own per-turn action pool:

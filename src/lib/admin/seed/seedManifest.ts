@@ -831,6 +831,24 @@ const RUNTIME: CollectionEntry[] = [
     category: "runtime",
     notes: "UK judicial-review cases spawned by the turn pipeline (ukJrSurpriseTurn).",
   },
+  {
+    name: "manifestos",
+    category: "runtime",
+    notes:
+      "Westminster party manifestos (#901). Owned by gameplay; no seeder writes them. Accessed via db/collections/manifestos.ts.",
+  },
+  {
+    name: "ukBudgets",
+    category: "runtime",
+    notes:
+      "UK Westminster Budgets (#901). Owned by gameplay; no seeder writes them. Accessed via db/collections/ukBudgets.ts. Distinct from the regional ukBudget budget rows.",
+  },
+  {
+    name: "ukNhsState",
+    category: "runtime",
+    notes:
+      "UK NHS state (#901). Owned by gameplay and the turn pipeline; no seeder writes it. Accessed via uk/nhs/nhsStore.ts.",
+  },
 ];
 
 // ─── Preserved collections ───────────────────────────────────────────────────
