@@ -254,15 +254,12 @@ export function isPlannedEconomy(
 /**
  * Planned economies whose TRADE is nevertheless open to the market world.
  *
- * Yugoslavia: expelled from the Cominform in June 1948 and embargoed by the
- * bloc, it reoriented toward Western trade, credits, and aid years before the
- * era worlds begin (1953) while keeping a planned domestic economy. Curtaining
- * it walls it in with the exact countries that were embargoing it and cuts it
- * off from its real trading partners. Domestic planned machinery (administered
- * prices, SOEs, overhang) still applies through `isPlannedEconomy`; only the
- * curtain membership is exempted. Note the wall is absolute both ways, so the
- * exemption also severs YU from the Comecon book, which matches the 1948-55
- * bloc embargo years the era opens in.
+ * Yugoslavia: the 1948 Tito-Stalin split and expulsion from the Cominform
+ * moved it outside the Soviet bloc while it kept a planned domestic economy.
+ * Only about 25-31% of its total 1959 trade was with the bloc, with most trade
+ * instead oriented toward the West. Domestic planned machinery (administered
+ * prices, SOEs, overhang) still applies through `isPlannedEconomy`; only trade
+ * curtain membership is exempted.
  */
 export const CURTAIN_EXEMPT_COUNTRIES: ReadonlySet<string> = new Set(["YU"]);
 
@@ -270,7 +267,7 @@ export const CURTAIN_EXEMPT_COUNTRIES: ReadonlySet<string> = new Set(["YU"]);
  * True when a country sits behind the iron curtain for TRADE purposes: a
  * planned economy that is not curtain-exempt. This is the single membership
  * authority for `buildTradeAffinity`'s `curtainedCountries` at every call
- * site — the ledger and the corp clearing books must never disagree about who
+ * site. The ledger and the corp clearing books must never disagree about who
  * is behind the wall.
  */
 export function isCurtained(

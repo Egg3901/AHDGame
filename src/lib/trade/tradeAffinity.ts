@@ -17,8 +17,8 @@ export interface TradeAffinityContext {
   /** Active trade embargoes. */
   embargoes: readonly TradeEmbargo[];
   /**
-   * Iron curtain: countries whose trade with the OUTSIDE world is closed —
-   * the planned-economy set (`isPlannedEconomy` over MARKETIZATION_SCHEDULE),
+   * Iron curtain: countries whose trade with the OUTSIDE world is closed.
+   * This is the planned-economy set minus curtain-specific exemptions,
    * resolved by the caller which owns year and flag context. Affinity between
    * a curtained and a non-curtained country is 0 in both directions; trade
    * WITHIN the curtain (Comecon) and within the open world is unaffected.
