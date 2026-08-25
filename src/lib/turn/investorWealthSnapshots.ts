@@ -24,7 +24,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
   corpLiquidCapitalToAnchor,
   fxRateForCorpFromMap,
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
 } from "@/lib/currency/corporationCapital";
 import { computeLocDebtInternal } from "@/lib/lineOfCredit/netWorth";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
@@ -67,7 +67,11 @@ export async function generateInvestorRankingSnapshot(currentTurn: number, db?: 
     })
     .toArray();
 
-  const fxByCurrency = await loadFxRatesByCurrency(database);
+  // Valuation map, not the settlement map: this value is DISPLAYED and RANKED.
+  // The settlement map leaves the six bloc currencies (PLZ/CSK/HUF/YUD/BGL/ROL,
+  // 102 corps) missing on purpose, which converted them at 1.0. See
+  // corporationCapital.ts.
+  const fxByCurrency = await loadValuationFxRates(database);
 
   // Calculate portfolio values for all shareholders (₳-normalized).
   const portfolioValues = new Map<string, number>();
@@ -289,7 +293,7 @@ export async function generateWealthListSnapshots(currentTurn: number, db?: Db):
         countryId: 1,
       })
       .toArray(),
-    loadFxRatesByCurrency(database),
+    loadValuationFxRates(database),
   ]);
 
   const stateNameMap = new Map(states.map((s) => [s._id, s.name]));

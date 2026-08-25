@@ -20,6 +20,7 @@ import { resolveGameYear } from "@/lib/era/era";
 import { NATIONAL_SCOPE_IDS, getNationalDocId } from "@/lib/constants/nationalScope";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { aggregateNationalGdp } from "@/lib/utils/nationalGdp";
+import { populationWeightedAverage } from "@/lib/metrics/populationWeightedAverage";
 import { isMetricActive } from "@/lib/era/metricCatalog";
 import { computeAllNationalMetricTickRates } from "@/lib/api/stateTickRates";
 import { IS_HIGHER_BETTER } from "@/lib/utils/metricScoring";
@@ -186,11 +187,13 @@ export async function loadNationalMetrics(
 
       // Calculate statistics
       const simpleAverage = values.reduce((sum, v) => sum + v.value, 0) / values.length;
-      const weightedAverage =
-        values.reduce((sum, v) => sum + v.value * v.population, 0) / totalPopulation;
-      // Population-weighted national trend, aggregated from per-state trends.
-      const weightedTrend =
-        values.reduce((sum, v) => sum + v.trend * v.population, 0) / totalPopulation;
+      // Denominator is COVERED population, not `totalPopulation`. A region that
+      // carries no value for this metric must not dilute the average toward
+      // zero. The Economy page has always weighted it this way; both surfaces
+      // now share one helper so they cannot drift apart again.
+      const weighted = populationWeightedAverage(values);
+      const weightedAverage = weighted.value ?? 0;
+      const weightedTrend = weighted.trend ?? 0;
 
       // Single sort by value: ascending for min/max, then reverse for rank if higher-is-better
       const sortedByValue = [...values].sort((a, b) => a.value - b.value);

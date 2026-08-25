@@ -10,6 +10,13 @@ export interface MinisterInputs {
   sym: string;
   revenueTotal: number;
   spendingTotal: number;
+  /**
+   * GDP as a RATIO BASIS, not the display level. Both flags below divide by it
+   * and compare the result against fixed thresholds, so it must be the same
+   * denominator the stored `debtToGdpRatio` uses. Callers pass
+   * `resolveRatioGdp(budget)` (i.e. `gdpSmoothed`), never the live GDP level
+   * shown on the tile beside it. See lib/budget/gdpDenominator.
+   */
   gdp: number;
   debtPrincipal: number;
   debtCeiling: number;
