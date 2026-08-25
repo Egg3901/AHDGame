@@ -126,8 +126,13 @@ export function JoinConflictPanel({
           <h3 className="text-lg font-semibold text-foreground">Entry into a conflict</h3>
           <p className="text-xs text-muted">
             Call the bloc into a war already being fought. If the members carry it, every
-            player-enabled member puts the question to both chambers of its own legislature at once
-            — and each one decides for itself.
+            player-enabled member puts the question to both chambers of its own legislature at once,
+            and each one decides for itself.
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            Defence of a member is not voted on. If a member is attacked, every player-led member of
+            this alliance enters that war at once. Leaving the alliance beforehand is the only way
+            to stay out of it, and leaving after a war has begun does not take you out of that war.
           </p>
         </div>
         {viewerIsMember && viewerFmCountry && (
@@ -244,7 +249,7 @@ export function JoinConflictPanel({
                 <div className="mb-3">
                   <div className="mb-1 flex items-center justify-between text-xs text-muted">
                     <span>
-                      {yesCount} / {memberCount} members in favour — majority required
+                      {yesCount} / {memberCount} members in favour, majority required
                     </span>
                     <span className="tabular-nums">
                       {votingWindowTurns - turnsLeft}/{votingWindowTurns} turns

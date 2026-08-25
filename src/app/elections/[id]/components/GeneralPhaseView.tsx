@@ -20,6 +20,7 @@ import {
   type PersuasionDriverCandidate,
 } from "@/components/elections/general/PersuasionDrivers";
 import { NationalMoodGauge } from "@/components/elections/general/NationalMoodGauge";
+import { FactorLedgerCard } from "@/components/elections/general/FactorLedgerCard";
 import { states as referenceStates } from "@/lib/seeds/reference/states";
 import { getSubdivisionMode } from "@/lib/maps/subdivisionConfig";
 import { UK_REGION_NAMES, RU_REGION_NAMES } from "@/lib/constants/states";
@@ -226,6 +227,22 @@ export function GeneralPhaseView({
             races have no field and the card returns null. */}
         {election.electionType === "president" && !localInPrimary && (
           <NationalMoodGauge data={election.economicReferendum} />
+        )}
+
+        {/* Factor Ledger — the read-only decomposition of each candidate's
+            projected votes into named factors, teed off the engine's own math.
+            Sits beside National Mood; renders null for races with no ledger. */}
+        {election.electionType === "president" && !localInPrimary && (
+          <FactorLedgerCard
+            data={election.factorLedger}
+            candidates={Object.entries(election.generalVotes?.candidateNames ?? {}).map(
+              ([id, name]) => ({
+                id,
+                name,
+                color: election.generalVotes?.candidateColors?.[id] ?? "#9CA3AF",
+              })
+            )}
+          />
         )}
 
         {isUS && election.electionType === "president" && !localInPrimary && (

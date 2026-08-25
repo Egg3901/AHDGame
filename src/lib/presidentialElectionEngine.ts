@@ -27,6 +27,11 @@ import {
   PARTY_STRENGTH_BY_OFFICE,
 } from "@/lib/electionEngine";
 import { distributeVotesBySwingFlow } from "@/lib/electionEngine/voteDistributionSwingFlow";
+import {
+  createLedgerSink,
+  assembleNationalLedger,
+  type FactorLedgerSnapshot,
+} from "@/lib/electionEngine/factorLedger";
 import { PRESIDENTIAL_SPOILER_RATE } from "@/lib/electionEngine/constants";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCountryState } from "@/lib/countryState";
@@ -43,15 +48,27 @@ import { getPresidentialConsecutiveTerms } from "@/lib/turn/election/presidentia
 import type { GameState } from "@/lib/db/types/gameState";
 import { BASE_APPROVAL } from "@/lib/utils/governmentApproval";
 import { getStateLean } from "@/lib/utils/demographics";
-import type { StatePartyOrg, StateDemographicTurnout, GovernorEndorsement } from "@/lib/db/types";
+import type {
+  StatePartyOrg,
+  StateDemographicTurnout,
+  GovernorEndorsement,
+  PlayerEndorsement,
+} from "@/lib/db/types";
 import { resolveTurnout } from "@/lib/electionEngine/resolvedTurnout";
 import { campaignStrengthVoteMultiplier } from "@/lib/campaigns/campaignStrength";
+import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
 import { getGroundGameSwingBonus, getGroundGameGotvBonus } from "@/lib/campaigns/opsEffects";
 import { loadPartyGroupFavorability } from "@/lib/governorOffice/address/partyGroupFavorabilityLoader";
 import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
 import { eraYearContextFromGameState } from "@/lib/era/context";
 import { loadRegionalBonusMapsWithLookup } from "@/lib/primaryRegionalBonusLoader";
 import { campaignStrengthLookupKey } from "@/lib/campaigns/suspendEndorseLifecycle";
+import { computeSuspendTransferFraction } from "@/lib/campaigns/suspendEndorseAffinity";
+import {
+  applyEndorsementOrgBoosts,
+  endorsementCredibilityMultiplier,
+  type EndorsementOrgLink,
+} from "@/lib/campaigns/endorsementActivation";
 
 /** Vote multiplier applied in a state when its sitting governor has endorsed
  *  the candidate. Half of the VP-home-state effect — a real in-state lift
@@ -271,6 +288,8 @@ export interface PresidentVoteTurnDryRun {
   candidateIds: string[];
   /** The referendum reading used this turn, when the channel was active. */
   referendum?: ReferendumResult;
+  /** The descriptive factor-ledger snapshot the engine teed this turn. */
+  factorLedger?: FactorLedgerSnapshot;
 }
 
 export async function accumulatePresidentVoteTurn(
@@ -291,6 +310,11 @@ export async function accumulatePresidentVoteTurn(
   ]);
 
   if (!tally || !tally.totalVotesByUnit || candidates.length === 0 || !election?.endTime) return;
+
+  // Rules freeze: the race runs under the ruleset it was stamped with at
+  // spawn (legacy races resolve to v1), so mid-cycle deploys cannot change
+  // how a live presidency is decided.
+  const ruleset = presidentialRulesetFor(election);
 
   const uniqueStateIds = [...new Set(ELECTORAL_VOTE_UNITS.map((u) => u.stateId))];
 
@@ -445,30 +469,6 @@ export async function accumulatePresidentVoteTurn(
   // in the per-state distribution call below.
   const regionalBonuses = await loadRegionalBonusMapsWithLookup(db, candidates);
 
-  // Endorsement org boost: when a suspended candidate has endorsed another,
-  // 25% of the suspender's per-state character org adds to the endorsed
-  // candidate's effective org for vote distribution. No org is debited — it's
-  // a passive multiplier from the suspender's existing ground organization.
-  const suspendToEndorse = new Map<string, string>();
-  for (const c of candidates) {
-    if (c.campaignSuspended && c.endorsedElectionCandidateId) {
-      suspendToEndorse.set(c._id.toString(), c.endorsedElectionCandidateId.toString());
-    }
-  }
-  if (suspendToEndorse.size > 0) {
-    for (const [, stateMap] of regionalBonuses.stateOrgByStateAndCandidate) {
-      for (const [suspenderId, endorsedId] of suspendToEndorse) {
-        const suspenderOrg = stateMap.get(suspenderId);
-        if (suspenderOrg && suspenderOrg > 0) {
-          const boost = Math.floor(suspenderOrg * 0.25);
-          if (boost > 0) {
-            stateMap.set(endorsedId, (stateMap.get(endorsedId) ?? 0) + boost);
-          }
-        }
-      }
-    }
-  }
-
   // Governor endorsements for this presidential election, indexed by the
   // endorsing governor's state. Each entry grants the candidate a state-
   // scoped vote bonus only in that state — see GOVERNOR_ENDORSEMENT_STATE_BONUS.
@@ -497,6 +497,84 @@ export async function accumulatePresidentVoteTurn(
     electionCountryId,
     turnNumber
   );
+
+  const enrichedByCandidateId = new Map(enriched.map((ec) => [ec.candidateId, ec]));
+
+  // Endorsement org boost: when a suspended candidate has endorsed another, a
+  // fraction of the suspender's per-state character org adds to the endorsed
+  // candidate's effective org for vote distribution. No org is debited — it's a
+  // passive multiplier from the suspender's existing ground organization. Under
+  // the "flat" ruleset (v1/v2) that fraction is exactly the ceiling (today's
+  // 25%); under "affinity" it is scaled by how aligned the pair is, so an
+  // aligned suspender still transfers the full 25% and a misaligned one less.
+  const suspendToEndorse = new Map<string, string>();
+  for (const c of candidates) {
+    if (c.campaignSuspended && c.endorsedElectionCandidateId) {
+      suspendToEndorse.set(c._id.toString(), c.endorsedElectionCandidateId.toString());
+    }
+  }
+  if (suspendToEndorse.size > 0) {
+    for (const [, stateMap] of regionalBonuses.stateOrgByStateAndCandidate) {
+      for (const [suspenderId, endorsedId] of suspendToEndorse) {
+        const suspenderOrg = stateMap.get(suspenderId);
+        if (!suspenderOrg || suspenderOrg <= 0) continue;
+        const suspenderEc = enrichedByCandidateId.get(suspenderId);
+        const endorsedEc = enrichedByCandidateId.get(endorsedId);
+        const fraction =
+          suspenderEc && endorsedEc
+            ? computeSuspendTransferFraction({
+                suspender: suspenderEc,
+                endorsed: endorsedEc,
+                mode: ruleset.suspendTransferMode,
+                maxFraction: ruleset.suspendTransferMaxFraction,
+                partyGroupFavorabilityByKey,
+              })
+            : ruleset.suspendTransferMaxFraction;
+        const boost = Math.floor(suspenderOrg * fraction);
+        if (boost > 0) {
+          stateMap.set(endorsedId, (stateMap.get(endorsedId) ?? 0) + boost);
+        }
+      }
+    }
+  }
+
+  // Endorsement activation (rework, magnitudes held at identity 0 until t384):
+  // sibling channels to the suspend-transfer above, driven by every active
+  // player endorsement in the race rather than just suspend-endorse links. Both
+  // knobs sit at 0 today, so we skip the extra query and mutation entirely and
+  // the race stays byte-identical; only a positive ruleset knob activates them.
+  const endorsementCountByCandidateId = new Map<string, number>();
+  if (ruleset.endorsementOrgFraction > 0 || ruleset.endorsementCoalitionCredibility > 0) {
+    const characterIdToCandidateId = new Map<string, string>();
+    for (const c of candidates) {
+      if (!c.isNPP && c.characterId) {
+        characterIdToCandidateId.set(c.characterId.toString(), c._id.toString());
+      }
+    }
+    const activeEndorsements = await db
+      .collection<PlayerEndorsement>("playerEndorsements")
+      .find({ electionId, isActive: true })
+      .toArray();
+    const orgLinks: EndorsementOrgLink[] = [];
+    for (const e of activeEndorsements) {
+      const endorsedCandidateId = e.candidateId.toString();
+      endorsementCountByCandidateId.set(
+        endorsedCandidateId,
+        (endorsementCountByCandidateId.get(endorsedCandidateId) ?? 0) + 1
+      );
+      // Org lending only when the endorser is themselves a candidate row in this
+      // race (only candidate rows carry per-state org). Note the suspend-endorse
+      // path also lends org via its own block above; the t384 calibration owns
+      // reconciling any overlap when these fractions leave 0.
+      const endorserCandidateId = characterIdToCandidateId.get(e.characterId.toString());
+      if (endorserCandidateId) orgLinks.push({ endorserCandidateId, endorsedCandidateId });
+    }
+    applyEndorsementOrgBoosts(
+      regionalBonuses.stateOrgByStateAndCandidate,
+      orgLinks,
+      ruleset.endorsementOrgFraction
+    );
+  }
 
   // Pre-resolve runtime governmentType so the per-state distribute calls
   // below see a single cached value. A post-Stage-4 conversion would flip
@@ -553,6 +631,12 @@ export async function accumulatePresidentVoteTurn(
   const newTotalVotesByUnit = { ...tally.totalVotesByUnit };
   const newTotalVotes: Record<string, number> = { ...tally.totalVotes };
 
+  // Factor-ledger sink — teed off the engine's own per-unit locals below. Pure
+  // observation: it records the values the engine already computed and changes
+  // no vote math. Assembled and persisted after the loop as a descriptive,
+  // read-only field (see `factorLedger.ts`).
+  const ledgerSink = createLedgerSink();
+
   for (const unit of electoralVoteUnits) {
     const stateId = getDemographicsStateId(unit);
     const state = resolveElectoralUnitState(stateMap, stateId);
@@ -594,6 +678,10 @@ export async function accumulatePresidentVoteTurn(
     let effTotalPool = resolvedTotalPool;
     let effEnriched = enriched;
     let effPartyGroupFavorabilityByKey = partyGroupFavorabilityByKey;
+    // Per-cell census bucketWeights for the ledger's bucket-appeal aggregation.
+    // Populated only on the granular substrate; the legacy archetype path leaves
+    // it undefined so the ledger emits no bucket appeal (never archetype keys).
+    let effLedgerBucketWeights: Map<string, Record<string, number>> | undefined;
     {
       const substrate = buildGranularElectorateSubstrate({
         countryId: electionCountryId,
@@ -618,6 +706,7 @@ export async function accumulatePresidentVoteTurn(
         effEnriched = substrate.enriched;
         effPartyGroupFavorabilityByKey =
           substrate.partyGroupFavorabilityByKey ?? partyGroupFavorabilityByKey;
+        effLedgerBucketWeights = new Map(substrate.units.map((u) => [u.id, u.bucketWeights]));
       }
     }
 
@@ -682,8 +771,17 @@ export async function accumulatePresidentVoteTurn(
         currentStateId: stateId,
         stateOrgByCandidate: regionalBonuses.stateOrgByStateAndCandidate.get(stateId),
         homeStateByCandidate: regionalBonuses.homeStateByCandidate,
+        // Factor-ledger tee — recording only, no behavior change.
+        ledgerSink,
+        ledgerUnitId: unit.unitId,
+        ledgerBucketWeightsByGroup: effLedgerBucketWeights,
       }
     );
+
+    // Turnout scaler for this unit: the swing-flow ran on `effectiveTurnPool`
+    // (= turnPool × strengthMultiplier), so the ledger peels turnout back out by
+    // this factor to report it as its own line.
+    ledgerSink.setUnitTurnout(unit.unitId, strengthMultiplier);
 
     // Share-combination step: the referendum shift moves `referendumSharePts`
     // of this unit's pool from the rest of the field to the incumbent party
@@ -694,6 +792,17 @@ export async function accumulatePresidentVoteTurn(
       referendumIncumbentCandidateIds,
       referendumSharePts
     );
+
+    // Ledger: national-environment (referendum) is the signed float shift the
+    // engine just applied per candidate. Recorded before the integer pipeline
+    // rounds it, so `nationalEnvironment` carries the exact share move.
+    for (const ec of enriched) {
+      ledgerSink.recordReferendum(
+        unit.unitId,
+        ec.candidateId,
+        (votesPerCandidate[ec.candidateId] ?? 0) - (rawVotesPerCandidate[ec.candidateId] ?? 0)
+      );
+    }
 
     const unitTotals = { ...(tally.totalVotesByUnit[unit.unitId] ?? {}) };
     const districtLean = UNIT_LEAN[unit.unitId];
@@ -714,9 +823,15 @@ export async function accumulatePresidentVoteTurn(
       // Suspended candidates no longer accumulate votes — zero their turn tally.
       // They stay on the ballot in name only. Previously earned votes are preserved.
       let votes = isSuspended ? 0 : Math.round(votesPerCandidate[ec.candidateId] ?? 0);
+      // Ledger capture points: each stage's signed integer delta is measured at
+      // the exact line the engine applies it, so the waterfall reconstructs the
+      // stored votes exactly. `afterRound` is the referendum-shifted, rounded
+      // float; the float→int rounding lands in the ledger's `uncertainty` line.
+      const afterRound = votes;
       if (ec.party === "independent") {
         votes = Math.round(votes * INDEPENDENT_VOTE_PENALTY);
       }
+      const afterIndependent = votes;
       if (lean !== 0) {
         const posForLean =
           ec.partyEcon != null && ec.partySocial != null
@@ -727,6 +842,7 @@ export async function accumulatePresidentVoteTurn(
         votes = Math.round(votes * leanVoteMultiplier(lean, epSign, districtLean !== undefined));
         votes = Math.max(0, votes);
       }
+      const afterLean = votes;
 
       // Ground game (suspended campaigns forfeit): Field Offices boost swing
       // areas only; Get-Out-The-Vote boosts turnout in EVERY area. Both stack.
@@ -758,13 +874,40 @@ export async function accumulatePresidentVoteTurn(
         votes = Math.round(votes * GOVERNOR_ENDORSEMENT_STATE_BONUS);
       }
 
+      // Coalition credibility: active player endorsements lend a small vote
+      // multiplier that grows with the endorsement count. Held at identity
+      // (credibility 0 -> multiplier 1) until calibrated at t384, so this is a
+      // no-op today and skipped entirely unless the ruleset knob is positive.
+      if (ruleset.endorsementCoalitionCredibility > 0) {
+        const credMult = endorsementCredibilityMultiplier(
+          endorsementCountByCandidateId.get(ec.candidateId) ?? 0,
+          ruleset.endorsementCoalitionCredibility
+        );
+        if (credMult !== 1) votes = Math.round(votes * credMult);
+      }
+
       // Campaign strength: multiplicative reach boost from player contributions.
       // Shared curve preserves early gains while soft-capping high spend.
       const csKey = campaignStrengthKeyByElectionCandidateId.get(ec.candidateId) ?? ec.characterId;
       const cs = campaignStrengthByCandidate.get(csKey) ?? 0;
       if (cs > 0) {
-        votes = Math.round(votes * campaignStrengthVoteMultiplier(cs));
+        votes = Math.round(
+          votes * campaignStrengthVoteMultiplier(cs, ruleset.campaignStrengthMaxBonus)
+        );
       }
+
+      // Ledger: attribute the integer-pipeline stage deltas. The independent
+      // structural haircut and the state partisan-lean multiplier fold into
+      // stateBaseline; ground game + VP + governor endorsement + campaign
+      // strength fold into campaign.
+      ledgerSink.recordIndependentPenalty(
+        unit.unitId,
+        ec.candidateId,
+        afterIndependent - afterRound
+      );
+      ledgerSink.recordLean(unit.unitId, ec.candidateId, afterLean - afterIndependent);
+      ledgerSink.recordCampaign(unit.unitId, ec.candidateId, votes - afterLean);
+      ledgerSink.recordFinalVotes(unit.unitId, ec.candidateId, votes);
 
       unitTotals[ec.candidateId] = (unitTotals[ec.candidateId] ?? 0) + votes;
       newTotalVotes[ec.candidateId] = (newTotalVotes[ec.candidateId] ?? 0) + votes;
@@ -808,12 +951,23 @@ export async function accumulatePresidentVoteTurn(
     ),
   };
 
+  // Assemble the descriptive factor ledger from the sink. Read-only and purely
+  // additive: a failure here must never break a live turn, so assembly is
+  // guarded and simply omits the field on error.
+  let factorLedger: FactorLedgerSnapshot | undefined;
+  try {
+    factorLedger = assembleNationalLedger(ledgerSink, turnNumber);
+  } catch {
+    factorLedger = undefined;
+  }
+
   if (calibration?.dryRun) {
     return {
       totalVotes: newTotalVotes,
       totalVotesByUnit: newTotalVotesByUnit,
       candidateIds: enriched.map((ec) => ec.candidateId),
       ...(referendum && { referendum }),
+      ...(factorLedger && { factorLedger }),
     };
   }
 
@@ -842,6 +996,10 @@ export async function accumulatePresidentVoteTurn(
             recordedTurn: turnNumber,
           },
         }),
+        // Additive, optional, descriptive: the read-only decomposition of why
+        // each candidate is ahead or behind. Already baked into the vote totals
+        // above (it is teed off them), so nothing downstream re-applies it.
+        ...(factorLedger && { factorLedger }),
       },
       $push: { turnSnapshots: snapshot } as never,
     }

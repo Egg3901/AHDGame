@@ -19,6 +19,12 @@ interface OperationsSectionProps {
   onRetarget?: (targetId: string) => void;
   onResetOppositionResearch?: () => void;
   resettingOppositionResearch?: boolean;
+  /**
+   * Running-mate surrogate view: show ONLY the fundraising lever (the single
+   * ops lane a VP may act on). Every other lever is manager/nominee-only, both
+   * here and at the server gate.
+   */
+  restrictToFundraising?: boolean;
 }
 
 /**
@@ -34,14 +40,19 @@ export function OperationsSection({
   onRetarget,
   onResetOppositionResearch,
   resettingOppositionResearch = false,
+  restrictToFundraising = false,
 }: OperationsSectionProps) {
   const [openCategory, setOpenCategory] = useState<string | null>(null);
 
   // Race-family-aware copy (swing states vs counties vs precincts) when we know
   // the election; otherwise presidential-default labels.
-  const categories = campaign.electionInfo?.electionType
+  const allCategories = campaign.electionInfo?.electionType
     ? getCampaignCategoriesForElection({ electionType: campaign.electionInfo.electionType })
     : CAMPAIGN_CATEGORIES;
+  // A running-mate surrogate only sees the fundraising lane.
+  const categories = restrictToFundraising
+    ? allCategories.filter((cat) => cat.key === "fundraising")
+    : allCategories;
 
   const opsTrees = campaign.opsTrees;
 

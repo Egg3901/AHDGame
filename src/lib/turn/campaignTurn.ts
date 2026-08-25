@@ -18,6 +18,7 @@ import { computeAutoDowngrade } from "@/lib/campaigns/autoDowngrade";
 import { calculateCampaignStrengthLeaderPullbacks } from "@/lib/campaigns/campaignStrength";
 import { GOVERNOR_ENDORSEMENT_CAMPAIGN_ACTIONS } from "@/lib/constants/governorOffice";
 import { isCampaignEligibleElection } from "@/lib/campaigns/isCampaignEligible";
+import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
 import { selfHealMissingCampaigns } from "@/lib/campaigns/selfHealCampaigns";
 import {
   campaignAnchorToLocal,
@@ -106,6 +107,7 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
                 primaryEndTurn: 1,
                 electionType: 1,
                 countryId: 1,
+                rulesetVersion: 1,
               },
             }
           )
@@ -121,6 +123,7 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
               primaryEndTurn: (e.primaryEndTurn as number | undefined) ?? null,
               electionType: e.electionType as string,
               countryId: e.countryId,
+              rulesetVersion: (e.rulesetVersion as number | undefined) ?? null,
             },
           ])
         );
@@ -149,6 +152,9 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
         // travelState is used during general-phase travel presence bonus; primaryCampaignState
         // and primaryCampaignTicks drive the primary-phase in-state bonus.
         const electionCandidateTravelMap = new Map<string, string | null>();
+        // Running-mate surrogate travel: keyed by election:nominee, holds the
+        // ticket's runningMateTravelState (set on the nominee's candidate row).
+        const electionCandidateRunningMateTravelMap = new Map<string, string | null>();
         const electionCandidatePrimaryMap = new Map<
           string,
           { primaryCampaignState: string | null; primaryCampaignTicks: number; _id: ObjectId }
@@ -182,6 +188,7 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
                 electionId: 1,
                 characterId: 1,
                 travelState: 1,
+                runningMateTravelState: 1,
                 primaryCampaignState: 1,
                 primaryCampaignTicks: 1,
                 rallyTourActive: 1,
@@ -196,6 +203,7 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
                 suspendedCampaignKeys.add(key);
               }
               electionCandidateTravelMap.set(key, doc.travelState ?? null);
+              electionCandidateRunningMateTravelMap.set(key, doc.runningMateTravelState ?? null);
               electionCandidatePrimaryMap.set(key, {
                 _id: doc._id,
                 primaryCampaignState: doc.primaryCampaignState ?? null,
@@ -699,12 +707,28 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
             if (isPresidential && !campaign.candidateIsNPP) {
               const travelKey = `${campaign.electionId.toString()}:${campaign.candidateId.toString()}`;
               const travelState = electionCandidateTravelMap.get(travelKey);
-              if (travelState) {
+              const runningMateTravelState = electionCandidateRunningMateTravelMap.get(travelKey);
+              let travelPresenceBonus = 0;
+              if (travelState) travelPresenceBonus += 1.0;
+              // Running-mate surrogate presence: the VP campaigning in a state
+              // adds the ruleset's vpTravelPresenceWeight to the SAME ticket
+              // favorability the vote engine reads. At the v3 identity weight of
+              // 1 this is a real +1 per VP-traveled state, the intended ship
+              // value for a brand-new mechanic (no prior behavior to preserve),
+              // and it cannot touch the live 1960 race because no running mate
+              // can be selected there before the general opens.
+              if (runningMateTravelState) {
+                const ruleset = presidentialRulesetFor({
+                  rulesetVersion: electionData?.rulesetVersion ?? undefined,
+                });
+                travelPresenceBonus += ruleset.vpTravelPresenceWeight * 1.0;
+              }
+              if (travelPresenceBonus > 0) {
                 const key = campaign.candidateId.toString();
                 const existingEntry = favorabilityChanges.get(key);
                 favorabilityChanges.set(key, {
                   collection: candidateCollection,
-                  amount: (existingEntry?.amount ?? 0) + 1.0,
+                  amount: (existingEntry?.amount ?? 0) + travelPresenceBonus,
                 });
               }
             }
