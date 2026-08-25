@@ -6,6 +6,7 @@ import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { getDb } from "@/lib/mongodb";
 import { refreshNationalBudgetRevenue } from "@/lib/budget/revenue";
 import { buildCorporationLookups } from "./buildLookups";
+import { buildFreightBillingBySector } from "./freightBillingTurn";
 import { USE_GROWTH_INCREMENT, businessAcumenGrowthMultiplier } from "@/lib/stats/statsConstants";
 import { shedVacantCeoSectorsToUnowned } from "./vacantCeoSectorShed";
 import { shedInactiveCeoSectorsToUnowned } from "./inactiveCeoSectorShed";
@@ -195,6 +196,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           privateBankingEnabled: 1,
           interstateMoneyWiringEnabled: 1,
           freightSettlementMode: 1,
+          canonicalFreightBillingEnabled: 1,
         },
       }
     ),
@@ -217,10 +219,18 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const freightSettlementActive =
     (marketGovernorConfig as { freightSettlementMode?: string } | null)?.freightSettlementMode ===
       "active" && marketAtLeast(marketSystemMode, "clearing");
+  // Canonical freight billing v1 (issue #897, default OFF): while on, last
+  // turn's per-state shipping money is loaded from the sourcingNetworkLoad doc
+  // and apportioned across sectors below. Off keeps both lookup maps empty and
+  // the whole billing path inert.
+  const canonicalFreightBillingEnabled =
+    (marketGovernorConfig as { canonicalFreightBillingEnabled?: boolean } | null)
+      ?.canonicalFreightBillingEnabled === true;
   const lookups = await buildCorporationLookups(db, {
     plantsEnabled: plantsEnabledForMarketShare,
     freightSettlementActive,
     moneyWiringEnabled: interstateMoneyWiringEnabled,
+    canonicalFreightBillingEnabled,
   });
   const currentYear = gameState?.currentYear;
   // Soft-budget gate for the turn path (see sectorTurn's affordability brake and
@@ -401,6 +411,22 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     cap: marketGovernorConfig?.marketGovernorCap,
     rampTurns: marketGovernorConfig?.marketGovernorRampTurns,
   });
+  // Canonical freight billing (issue #897): apportion last turn's state-scoped
+  // shipping money onto sectors once, before the per-corp loop, and thread the
+  // result through the market context like the delivery-limited telemetry.
+  // Strictly flag-gated: with the flag off the lookup maps are empty, this
+  // block is skipped, and processSector neither computes nor persists billing.
+  if (canonicalFreightBillingEnabled) {
+    const billing = buildFreightBillingBySector({
+      lookups,
+      currentTurn: turn ?? gameState?.currentTurn ?? 0,
+      plantsEnabled: market.plantsEnabled,
+      currentYear,
+      commandEconomyEnabled,
+    });
+    market.freightBillingChargeBySectorId = billing.chargeBySectorId;
+    market.freightBillingCreditBySectorId = billing.creditBySectorId;
+  }
   // Brand loyalty (A2, shadow-safe): per-sector meta captured during the
   // clearing-input build, joined to clearing results after the pass.
   const loyaltySectorMeta = new Map<

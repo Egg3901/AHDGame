@@ -16,6 +16,14 @@ export interface UKGovernment {
   formedAt?: Date;
   /** Last no-confidence vote timestamp (for cooldown) */
   lastNoConfidenceVoteAt?: Date;
+  /**
+   * Government confidence gauge, 0..100 (epic #856, ticket #858). Running
+   * stability value fed by lost votes / budget defeat / broken promises /
+   * cabinet churn; dissolution fires only when it bottoms out. Reset to
+   * CONFIDENCE_START on government formation. Undefined ⇒ treated as full.
+   */
+  confidenceGauge?: number;
+  confidenceGaugeUpdatedAt?: Date;
   updatedAt: Date;
 }
 

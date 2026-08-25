@@ -268,6 +268,35 @@ export interface SourcingResult {
    */
   unplacedSupplyByState: Map<CommodityType, Map<string, number>>;
   /**
+   * Canonical freight billing v1 (markets plan Phase 4): shipping money per
+   * DESTINATION state and commodity, from accepted domestic hauled flows only.
+   *
+   * charge = units x shippingPerUnit (freightPrice x priceTeuPerUnitHop x hops
+   * x route multiplier) plus the congestion surcharge those units actually
+   * paid. Accumulated at the accept site, like {@link landedPremiumByDestState},
+   * so the itemization floor on `flows` cannot make the aggregate drift.
+   *
+   * Deliberately excluded, so the transfer identity below holds exactly:
+   *  - refused hauls (capacity- or tolerance-bound): no units moved, so no TEU
+   *    is billed;
+   *  - grid legs: wheeling is priced off the seller's ask, not the freight
+   *    market, and the haulage fleet earns nothing from the wire;
+   *  - imports: no origin-state freight network is modeled for foreign
+   *    sellers, so billing the sea leg would create money with no earner.
+   *
+   * Identity: the sum over this map equals the sum over
+   * {@link haulRevenueByOriginState}. Billing is a transfer to the origin
+   * state's freight network, never a sink.
+   */
+  freightChargesByDestState: Map<string, Map<CommodityType, number>>;
+  /**
+   * The other half of the transfer: shipping money earned per ORIGIN state,
+   * i.e. what that state's freight network hauled for this turn. Same
+   * accepted-domestic-hauled-flows-only scope as
+   * {@link freightChargesByDestState}.
+   */
+  haulRevenueByOriginState: Map<string, number>;
+  /**
    * The share of {@link unplacedSupplyByState} that failed for a DELIVERY
    * reason rather than because nobody wanted the goods.
    *
@@ -362,6 +391,27 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
   const importAggregatesByCountry = new Map<string, ImportAggregate>();
   const unplacedSupplyByState = new Map<CommodityType, Map<string, number>>();
   const deliveryLimitedSupplyByState = new Map<CommodityType, Map<string, number>>();
+  const freightChargesByDestState = new Map<string, Map<CommodityType, number>>();
+  const haulRevenueByOriginState = new Map<string, number>();
+
+  const addFreightBilling = (
+    destStateId: string,
+    originStateId: string,
+    commodity: CommodityType,
+    amount: number
+  ) => {
+    if (!(amount > 0)) return;
+    let byCommodity = freightChargesByDestState.get(destStateId);
+    if (!byCommodity) {
+      byCommodity = new Map();
+      freightChargesByDestState.set(destStateId, byCommodity);
+    }
+    byCommodity.set(commodity, (byCommodity.get(commodity) ?? 0) + amount);
+    haulRevenueByOriginState.set(
+      originStateId,
+      (haulRevenueByOriginState.get(originStateId) ?? 0) + amount
+    );
+  };
 
   const addLandedPremium = (
     destStateId: string,
@@ -631,6 +681,18 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         // of the itemization floor below (that floor only caps the doc's flow
         // list; the aggregates must stay exact).
         addLandedPremium(buyer.stateId, commodity, take, take * cand.shippingPerUnit + tariffPaid);
+        // Canonical freight billing: the shipping leg of a domestic hauled flow
+        // is the buyer state's charge and the origin state's haul revenue, one
+        // amount booked on both sides. Hauled classes lose nothing in transit
+        // (deliveryFactor 1), so `take` here is also what was dispatched.
+        if (cand.originType === "state" && isHauledClass(freightClass)) {
+          addFreightBilling(
+            buyer.stateId,
+            cand.originId,
+            commodity,
+            take * cand.shippingPerUnit + congestionSurchargePaid
+          );
+        }
         if (cand.originType === "country") {
           const agg = importAggregatesByCountry.get(buyer.countryId) ?? {
             tariffPaid: 0,
@@ -722,5 +784,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     importAggregatesByCountry,
     unplacedSupplyByState,
     deliveryLimitedSupplyByState,
+    freightChargesByDestState,
+    haulRevenueByOriginState,
   };
 }

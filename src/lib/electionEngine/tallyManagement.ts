@@ -60,6 +60,10 @@ import {
   isMidtermOppositionBoostEligible,
 } from "./midtermOppositionBoost";
 import { resolveGoverningPartyIds } from "@/lib/government/governingPartyIds";
+import {
+  resolveElectionManifestoMultipliers,
+  deriveGroupLeans,
+} from "@/lib/uk/manifesto/electionManifestoResolver";
 
 // ─── Accumulate one turn of votes into a tally ───────────────────────────────
 
@@ -494,6 +498,17 @@ export async function accumulateVoteTurn(
     );
   }
 
+  // UK manifesto policy-popularity map (epic #856). Off by default: the
+  // resolver short-circuits to undefined unless UK_MANIFESTO_VOTE_EFFECT=1 and
+  // this is a UK general election with locked manifestos — so no DB read and no
+  // behaviour change in prod until the coefficient is worldsim-calibrated.
+  const manifestoMultipliers = await resolveElectionManifestoMultipliers(db, {
+    countryId: electionCountryId,
+    electionId,
+    isGeneralElection,
+    groups: deriveGroupLeans(effCategories, effDemographics),
+  });
+
   const { votesPerCandidate, sharesPct } = distributeFn(
     effEnriched,
     effEffectiveTurnPool,
@@ -510,6 +525,7 @@ export async function accumulateVoteTurn(
       countryId: electionCountryId,
       currentStateId: stateId,
       parentRegionId: state.parentRegionId,
+      manifestoMultipliers,
       liveTurnouts: effLiveTurnouts, // Pass resolved turnout to vote distribution
       hasPlayerInRace,
       partyGroupFavorabilityByKey: effPartyGroupFavorabilityByKey,

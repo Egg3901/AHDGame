@@ -48,6 +48,19 @@ export interface MarketContext {
   /** Cargo class responsible for the delivery-limited share above. */
   deliveryLimitedClassBySectorId?: ReadonlyMap<string, FreightClass | null>;
   /**
+   * Canonical freight billing v1 (issue #897): per sector id, last turn's
+   * shipping cost the sector owes for its state's inbound hauls of the
+   * commodities it consumes. Set by the corp-phase entry only while
+   * `gameConfig.canonicalFreightBillingEnabled` is on; absent everywhere else,
+   * so a world with billing off computes and persists nothing.
+   */
+  freightBillingChargeBySectorId?: ReadonlyMap<string, number>;
+  /**
+   * The transfer's other half: per sector id, last turn's haul revenue the
+   * sector's freight supply earned. Same gate as the charge map.
+   */
+  freightBillingCreditBySectorId?: ReadonlyMap<string, number>;
+  /**
    * Launch-safety governor bounds (tunable live via gameConfig). `cap` is the
    * max fractional deviation the clearing/throughput legs may take from the
    * ledger baseline; `rampTurns` is the window over which that divergence fades

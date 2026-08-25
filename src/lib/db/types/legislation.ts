@@ -418,6 +418,13 @@ export interface Bill {
   countryId?: CountryId;
   /** Optional pseudo-state for country-scoped national bills (e.g. "uk_national"). */
   stateId?: string;
+  /**
+   * Set on the UK annual Budget's vote-vehicle bill (epic #856): links this bill
+   * to the UKBudget for that fiscal year. When such a bill resolves, the UK
+   * notifier applies the outcome to the budget (defeat → budgetDefeat confidence
+   * hit). The budget's tax/spend content lives in the UKBudget doc, not here.
+   */
+  budgetFiscalYear?: number;
   legislationTypeId?: string;
   effectDirection?: number;
   provisions?: BillProvision[];
