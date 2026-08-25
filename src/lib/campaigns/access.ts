@@ -1,5 +1,5 @@
 import { ObjectId, type Db } from "mongodb";
-import type { Campaign } from "@/lib/db/types";
+import type { Campaign, ElectionCandidate } from "@/lib/db/types";
 
 export async function isCampaignNomineeUser(
   db: Db,
@@ -24,6 +24,52 @@ export async function isCampaignNomineeUser(
       { projection: { _id: 1 } }
     );
   return ownedCandidate?._id?.equals(campaign.candidateId) ?? false;
+}
+
+/**
+ * Whether `userId` owns the running mate on this campaign's ticket.
+ *
+ * The running mate is stored as `runningMateId` on the ticket's active
+ * ElectionCandidate row (the nominee's row); the mate has no candidate row of
+ * their own. This resolves that row, reads the running mate character, and
+ * compares ownership. NPP tickets never have a player running mate, so they
+ * return false. Presence of an `activeCharacterId` matching the running mate is
+ * a fast path (the authenticated character is the mate); the DB ownership match
+ * is the authoritative fallback.
+ */
+export async function isCampaignRunningMateUser(
+  db: Db,
+  campaign: Campaign,
+  userId: string,
+  activeCharacterId?: ObjectId | string | null
+): Promise<boolean> {
+  if (campaign.candidateIsNPP) return false;
+
+  const candidateRow = await db
+    .collection<ElectionCandidate>("electionCandidates")
+    .findOne(
+      { electionId: campaign.electionId, characterId: campaign.candidateId, status: "active" },
+      { projection: { runningMateId: 1 } }
+    );
+  const runningMateId = candidateRow?.runningMateId;
+  if (!runningMateId) return false;
+
+  if (activeCharacterId) {
+    const activeId =
+      activeCharacterId instanceof ObjectId ? activeCharacterId : new ObjectId(activeCharacterId);
+    if (runningMateId.equals(activeId)) return true;
+  }
+
+  let userOid: ObjectId;
+  try {
+    userOid = new ObjectId(userId);
+  } catch {
+    return false;
+  }
+  const ownedMate = await db
+    .collection("characters")
+    .findOne({ _id: runningMateId, userId: userOid }, { projection: { _id: 1 } });
+  return ownedMate != null;
 }
 
 /**

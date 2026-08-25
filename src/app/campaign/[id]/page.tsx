@@ -17,6 +17,7 @@ import { CampaignStrengthPanel } from "./components/CampaignStrengthPanel";
 import { RallyPanel } from "./components/RallyPanel";
 import { SuspendEndorsePanel } from "./components/SuspendEndorsePanel";
 import { CampaignManagersPanel } from "./components/CampaignManagersPanel";
+import { RunningMateSurrogatePanel } from "./components/RunningMateSurrogatePanel";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 export default function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -255,10 +256,18 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   }
 
   const isOwner = campaign.accessLevel === "owner";
+  const isRunningMate = campaign.isRunningMate === true;
   // Archived campaigns (primary loser / withdrawn) are viewable as history but
   // not manageable — owners still see their figures, but every action affordance
   // is hidden (and the server rejects mutations regardless).
-  const canManage = isOwner && !campaign.isArchived && !campaign.campaignSuspended;
+  //
+  // A running mate has owner-level VIEW but NOT full manage: canManage (the
+  // manager/nominee surface: full ops, oppo reset, retarget, budget controls) is
+  // withheld from them. Their narrower surrogate action set is gated on
+  // canSurrogate instead, and the server enforces the same split.
+  const canManage =
+    isOwner && !isRunningMate && !campaign.isArchived && !campaign.campaignSuspended;
+  const canSurrogate = isRunningMate && !campaign.isArchived && !campaign.campaignSuspended;
   const electionYear = campaign.electionInfo
     ? resolveElectionYear({
         electionType: campaign.electionInfo.electionType,
@@ -419,10 +428,13 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
         {/* Owner: Resource Overview */}
         {isOwner && campaign.funds !== undefined && <ResourceOverview campaign={campaign} />}
 
-        {/* Campaign Levels - visible to everyone */}
+        {/* Campaign Levels - visible to everyone. A running mate sees only the
+            fundraising lane as actionable (restrictToFundraising); managers and
+            nominees see the full ops board. */}
         <OperationsSection
           campaign={campaign}
-          isOwner={canManage}
+          isOwner={canManage || canSurrogate}
+          restrictToFundraising={!canManage && canSurrogate}
           upgrading={upgrading}
           onUpgrade={handleUpgrade}
           onRetarget={canManage ? handleRetarget : undefined}
@@ -466,10 +478,12 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           />
         )}
 
-        {/* Owner: Rally Panel — Phase B Support mutation surface.
-            Fog-of-war hides opponent Support entirely; this panel only
-            renders for owner-access viewers and only for non-NPP candidates. */}
-        {canManage && campaign.ownSupport && campaign.electionInfo && (
+        {/* Owner + running-mate: Rally Panel, the Phase B Support mutation surface.
+            Fog-of-war hides opponent Support entirely; this panel only renders
+            for owner-access viewers (which now includes the running mate, whose
+            rally fire button shares the ticket's action pool) and only for
+            non-NPP candidates. */}
+        {(canManage || canSurrogate) && campaign.ownSupport && campaign.electionInfo && (
           <div className="mb-6">
             <RallyPanel
               campaignId={campaign.id}
@@ -481,7 +495,24 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           </div>
         )}
 
-        {/* Owner: Canvassing Panel */}
+        {/* Running-mate surrogate surface: shared-cap display, campaign-in-a-state
+            visit, and canvass-for-ticket. Presidential tickets only. */}
+        {canSurrogate &&
+          campaign.runningMateSurrogate &&
+          campaign.electionInfo &&
+          !campaign.electionInfo.isEnded && (
+            <RunningMateSurrogatePanel
+              electionId={campaign.electionId}
+              surrogate={campaign.runningMateSurrogate}
+              countryId={myCountryId ?? undefined}
+              characterActions={myActions ?? undefined}
+              characterFunds={myFunds ?? undefined}
+              onRefresh={fetchCampaign}
+              onResourcesSpent={fetchMe}
+            />
+          )}
+
+        {/* Owner (manager/nominee): Canvassing Panel */}
         {canManage && campaign.electionInfo && !campaign.electionInfo.isEnded && (
           <div className="mb-6">
             <CanvassingPanel

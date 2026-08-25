@@ -33,6 +33,27 @@ export interface CampaignData {
    */
   isArchived: boolean;
 
+  /**
+   * True when the viewer owns the ticket's running mate. A running mate gets an
+   * owner-level VIEW of the ticket campaign, but a narrower set of ACTIONS than
+   * a manager/nominee: rally, the fundraising ops lane, and the surrogate panel
+   * (canvass-for-ticket + campaign-in-a-state) only. Every other manage control
+   * stays manager/nominee-only, client-side and server-side.
+   */
+  isRunningMate: boolean;
+  /**
+   * Running-mate surrogate pool snapshot, present only for a running-mate viewer
+   * of a presidential ticket. Drives the surrogate panel's shared-cap display.
+   */
+  runningMateSurrogate?: {
+    /** Surrogate actions left today (canvass + state-visit combined). */
+    actionsRemaining: number;
+    /** Daily cap from the race's frozen presidential ruleset. */
+    cap: number;
+    /** Human-readable reset cadence hint. */
+    resetHint: string;
+  };
+
   /** Currency the campaign treasury (`funds`, budget, upgrade costs) is denominated in. */
   currencyCode: CurrencyCode;
   /**

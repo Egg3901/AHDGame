@@ -19,8 +19,10 @@ import {
 import {
   isCampaignManagerUser,
   isCampaignNomineeUser,
+  isCampaignRunningMateUser,
   legacyManagersAsList,
 } from "@/lib/campaigns/access";
+import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
 import { getCampaignCopyForElection } from "@/lib/campaigns/raceFamilyCopy";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import {
@@ -126,13 +128,19 @@ export async function getCampaignDetail(
   const campaignCurrencyCode = getCampaignCurrency(electionCountryId);
   const campaignRate = campaignLocalRate(electionCountryId); // frozen base rate, for the fxRate payload field
   const toLocal = (anchor: number) => campaignAnchorToLocal(anchor, electionCountryId);
-  const [isNominee, partyTreasuryAccess] = await Promise.all([
+  const [isNominee, isRunningMate, partyTreasuryAccess] = await Promise.all([
     user
       ? isCampaignNomineeUser(db, campaign, user.userId, user.character?._id ?? null)
       : Promise.resolve(false),
+    user
+      ? isCampaignRunningMateUser(db, campaign, user.userId, user.character?._id ?? null)
+      : Promise.resolve(false),
     getPartyTreasuryAccess(db, campaign, election, user),
   ]);
-  const canSeeExact = isManager || isNominee || isAdmin;
+  // A running mate gets an owner-level VIEW of the ticket campaign (canSeeExact),
+  // but a narrower action set, enforced client-side and by the server route
+  // gates, not here.
+  const canSeeExact = isManager || isNominee || isAdmin || isRunningMate;
   const isSameParty =
     user?.character?.party === campaign.party &&
     (user?.character?.countryId ?? "US") === electionCountryId;
@@ -143,6 +151,21 @@ export async function getCampaignDetail(
       : "public";
   const fogData = isSameParty ? campaign.partyFogOfWar : campaign.publicFogOfWar;
 
+  // Running-mate surrogate pool snapshot (presidential tickets only). The cap
+  // comes from the race's frozen ruleset; a fresh/unrefilled pool degrades to
+  // the cap so the panel never shows an empty pool before the first daily reset.
+  const presRuleset =
+    election?.electionType === "president" ? presidentialRulesetFor(election) : null;
+  const runningMateSurrogate =
+    isRunningMate && presRuleset
+      ? {
+          actionsRemaining:
+            campaign.runningMateSurrogateActionsRemaining ?? presRuleset.vpSurrogateActionCap,
+          cap: presRuleset.vpSurrogateActionCap,
+          resetHint: "Resets daily at midnight Eastern Time.",
+        }
+      : undefined;
+
   const base: CampaignData = {
     id: campaign._id.toString(),
     electionId: campaign.electionId.toString(),
@@ -152,6 +175,8 @@ export async function getCampaignDetail(
     party: campaign.party,
     accessLevel,
     isArchived: campaign.status === "archived",
+    isRunningMate,
+    ...(runningMateSurrogate ? { runningMateSurrogate } : {}),
     currencyCode: campaignCurrencyCode,
     fxRate: campaignRate,
     campaignStrength: campaign.campaignStrength ?? 0,

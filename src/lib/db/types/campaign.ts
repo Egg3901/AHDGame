@@ -158,6 +158,22 @@ export interface Campaign {
   /** Accumulated campaign strength from player contributions. Resets to 0 on election resolution. */
   campaignStrength?: number;
 
+  /**
+   * Running-mate surrogate action pool for a presidential ticket. Bounds the
+   * throughput of the VP's ticket-surrogate acts (canvass-for-ticket +
+   * campaign-in-a-state), which spend the VP's OWN character economy (their
+   * actions/funds) rather than the campaign treasury, but draw down this shared
+   * per-day counter so the mechanic degrades on the VP's absence rather than
+   * scaling without limit. Refilled to `presidentialRulesetFor(election)
+   * .vpSurrogateActionCap` once per Eastern-time calendar day by the turn engine
+   * (see src/lib/turn/runningMateSurrogateActionReset.ts). Optional/undefined on
+   * rows written before this shipped and on non-presidential campaigns; effect
+   * code degrades to the ruleset cap on read.
+   */
+  runningMateSurrogateActionsRemaining?: number;
+  /** Eastern-time calendar day the surrogate pool was last refilled (YYYY-MM-DD). */
+  runningMateSurrogateActionsResetDay?: string;
+
   createdAt: Date;
   updatedAt: Date;
 }
