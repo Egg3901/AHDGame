@@ -3,6 +3,7 @@ import { ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getCountryAccessFromDb, withCountryAccessSnapshot } from "@/lib/countryAccess";
 import type { Election, ElectionStatus, GameState, Seat, State } from "@/lib/db/types";
+import { CURRENT_PRESIDENTIAL_RULESET_VERSION } from "@/lib/elections/presidentialRuleset";
 import { US_STATE_FILTER } from "@/lib/utils/electionLabels";
 import { MS_PER_TURN, STARTING_YEAR } from "@/lib/constants/turnTime";
 import {
@@ -474,6 +475,11 @@ function buildCanonicalSpawn(params: {
     endTurn: spawn.endTurn,
     durationHours: dur.durationHours,
     primaryDurationHours: dur.durationHours - dur.generalDurationHours,
+    // Rules freeze: the race keeps the ruleset it opened under for its whole
+    // cycle, so mid-race deploys cannot change how it counts.
+    ...(electionType === "president"
+      ? { rulesetVersion: CURRENT_PRESIDENTIAL_RULESET_VERSION }
+      : {}),
     createdAt: now,
     updatedAt: now,
   };
