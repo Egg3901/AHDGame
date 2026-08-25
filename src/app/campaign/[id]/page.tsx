@@ -16,6 +16,7 @@ import { ContributionsSection } from "./components/ContributionsSection";
 import { CampaignStrengthPanel } from "./components/CampaignStrengthPanel";
 import { RallyPanel } from "./components/RallyPanel";
 import { SuspendEndorsePanel } from "./components/SuspendEndorsePanel";
+import { CampaignManagersPanel } from "./components/CampaignManagersPanel";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 export default function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -359,6 +360,17 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
             endorsedCandidate={campaign.endorsedCandidate}
             endorsementTargetWithdrawn={campaign.endorsementTargetWithdrawn}
             suspendEndorse={campaign.suspendEndorse}
+            onRefresh={fetchCampaign}
+          />
+        )}
+
+        {/* Campaign managers — appoint players to act alongside the candidate. */}
+        {(campaign.canAppointManagers || campaign.managers.length > 0) && (
+          <CampaignManagersPanel
+            campaignId={campaign.id}
+            candidateId={campaign.candidateId}
+            managers={campaign.managers}
+            canAppoint={campaign.canAppointManagers}
             onRefresh={fetchCampaign}
           />
         )}

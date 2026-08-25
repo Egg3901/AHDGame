@@ -53,6 +53,14 @@ export interface CampaignData {
 
   managerId: string | null;
   managerName: string | null;
+  /**
+   * Every appointed campaign manager (up to MAX_CAMPAIGN_MANAGERS), resolved to
+   * character id + name. Empty when none are set. The legacy single manager is
+   * folded in, so this is the canonical list to render.
+   */
+  managers: Array<{ characterId: string; name: string }>;
+  /** The viewer may appoint/remove managers (nominee or admin, non-archived). */
+  canAppointManagers: boolean;
 
   campaignStrength?: number;
 
