@@ -167,6 +167,27 @@ export interface ElectionVoteTally {
    */
   primaryStaggerWavesRun?: number;
   /**
+   * President-primary-only: accumulated, decayed expectation-beating momentum
+   * points per candidate. A candidate that beats its projected national share in
+   * a wave gains points (capped at `primaryMomentumCapPoints`); carried momentum
+   * decays by `primaryMomentumDecay` each wave. Persisted only for races on the
+   * stretched calendar; at cap 0 every value is 0 and the vote path is
+   * unchanged. Distinct from the favorability-bump "momentum" (win/upset fav
+   * bonuses applied to characters/npps) — this is the vote-share carry.
+   * Shape: partyId -> candidateId -> accumulated decayed momentum points.
+   */
+  primaryMomentum?: Record<string, Record<string, number>>;
+  /**
+   * President-primary-only: per-wave momentum snapshot for history/replay. Each
+   * entry records the post-decay momentum points for every party's candidates
+   * after that wave resolved.
+   */
+  primaryMomentumByWave?: {
+    wave: number;
+    byParty: Record<string, Record<string, number>>;
+    recordedAt: Date;
+  }[];
+  /**
    * President-primary-only: per-state polling trend during the pre-stagger
    * window. Each snapshot captures projected score per candidate per state for
    * each party, so the state-detail page can render a simple trend over time.
