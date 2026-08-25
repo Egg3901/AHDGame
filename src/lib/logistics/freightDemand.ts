@@ -4,21 +4,22 @@ import type { FreightClass } from "./freightClass";
 type Balance = { supply: number; demand: number };
 
 /**
- * Book the sourcing pass's consumed haul TEU as freight demand (ticket #1039).
+ * Book the sourcing pass's price-tolerant haul TEU as freight demand.
  *
- * The TEU an origin state's network hauled is real freight consumption, so it
- * enters all three levels the market reads before clearing: byState (state
- * price legs + the stored stateDemand the Logistics map shows), byCountry
- * (trade clearing + national legs; aggregated from byState before the sourcing
- * pass runs, so it needs its own add), and global (price + sold %). Haul TEU
- * and freight supply share the era unit basis. Freight is never itself shipped
+ * The sourcing pass includes both TEU that moved and final, price-tolerant
+ * requests refused by the origin state's capacity. That demand enters all
+ * three levels the market reads before clearing: byState (the local seller's
+ * book and stored stateDemand), byCountry (aggregated before sourcing, so it
+ * needs its own add), and global. Haul TEU and freight supply share the era
+ * unit basis. Haul TEU has been booked as real freight demand since the
+ * logistics recalibration (ticket #1039). Freight is never itself shipped
  * (FREIGHT_CLASS_BY_COMMODITY.freight = null), so this cannot feed back into
- * the same pass; higher freight prices damp next turn's haul via shipping
- * cost, a lagged negative feedback. Money still does not move (interstate
- * logistics plan step 5); shipping stays unbilled to buyers.
+ * the same pass; see interstate logistics plan step 5 for the intended
+ * follow-on. Higher freight prices damp the next turn's request through
+ * shipping cost. Money still does not move; shipping stays unbilled to buyers.
  */
 export function applyFreightHaulDemand(
-  freightTeuByState: ReadonlyMap<string, Record<FreightClass, number>>,
+  freightDemandTeuByState: ReadonlyMap<string, Record<FreightClass, number>>,
   balances: {
     global: Map<CommodityType, Balance>;
     byState: Map<string, Map<CommodityType, Balance>>;
@@ -28,8 +29,8 @@ export function applyFreightHaulDemand(
 ): void {
   const { global, byState, byCountry, stateToCountry } = balances;
   const globalBal = global.get("freight");
-  for (const [stateId, used] of freightTeuByState) {
-    const haulTeu = used.bulk + used.special;
+  for (const [stateId, demand] of freightDemandTeuByState) {
+    const haulTeu = demand.bulk + demand.special;
     if (haulTeu <= 0) continue;
     const stateBal = byState.get(stateId)?.get("freight");
     if (stateBal) stateBal.demand += haulTeu;

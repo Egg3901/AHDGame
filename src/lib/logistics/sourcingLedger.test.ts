@@ -8,6 +8,7 @@ function baseResult(overrides: Partial<SourcingResult> = {}): SourcingResult {
     flows: [],
     summaries: [],
     freightTeuByState: new Map(),
+    freightDemandTeuByState: new Map(),
     landedPremiumByDestState: new Map(),
     importAggregatesByCountry: new Map(),
     unplacedSupplyByState: new Map(),

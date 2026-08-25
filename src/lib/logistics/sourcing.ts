@@ -229,8 +229,15 @@ export interface ImportAggregate {
 export interface SourcingResult {
   flows: SourcingFlow[];
   summaries: SourcingCommoditySummary[];
-  /** TEU consumed per state per class — the load on each shipping network. */
+  /** TEU consumed per state per class, the load on each shipping network. */
   freightTeuByState: Map<string, Record<FreightClass, number>>;
+  /**
+   * Price-tolerant TEU demand per origin state and class. This includes the
+   * load that moved plus the final unplaced cargo that the origin state's
+   * capacity refused. It is the freight commodity demand book, while
+   * {@link freightTeuByState} remains the observed network load.
+   */
+  freightDemandTeuByState: Map<string, Record<FreightClass, number>>;
   /**
    * Per destination state, per commodity: units actually delivered (local fill
    * plus interstate plus import) and the extra cost over local ask those units
@@ -341,10 +348,12 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
   // that make freight look oversupplied while one cargo class cannot move.
   const freightCapacityByState = new Map<string, number>();
   const freightUsedByState = new Map<string, Record<FreightClass, number>>();
+  const freightDemandByState = new Map<string, Record<FreightClass, number>>();
   for (const { stateId } of sortedStates) {
     const freightSupply = byState.get(stateId)?.get("freight")?.supply ?? 0;
     freightCapacityByState.set(stateId, freightSupply);
     freightUsedByState.set(stateId, { bulk: 0, special: 0, grid: 0 });
+    freightDemandByState.set(stateId, { bulk: 0, special: 0, grid: 0 });
   }
 
   const flows: SourcingFlow[] = [];
@@ -399,11 +408,19 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     // capacity gate below, where the origin IS known, rather than inferred from
     // world totals afterwards (ticket #1180).
     const capacityBoundByOriginState = new Map<string, number>();
-    const addCapacityBound = (stateId: string, units: number) => {
+    // Same rejected requests expressed in TEU. At the end of the commodity
+    // pass this is reduced to cargo that is still unplaced, matching the
+    // delivery warning instead of counting a request later served elsewhere.
+    const capacityBoundTeuByOriginState = new Map<string, number>();
+    const addCapacityBound = (stateId: string, units: number, teuPerUnit: number) => {
       if (!(units > 0)) return;
       capacityBoundByOriginState.set(
         stateId,
         (capacityBoundByOriginState.get(stateId) ?? 0) + units
+      );
+      capacityBoundTeuByOriginState.set(
+        stateId,
+        (capacityBoundTeuByOriginState.get(stateId) ?? 0) + units * teuPerUnit
       );
     };
     for (const { stateId } of sortedStates) {
@@ -551,7 +568,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
             if (!(nominal > 0)) {
               // A state with no freight supply at all hauls nothing.
               summary.capacityBoundUnits += deliver;
-              addCapacityBound(cand.originId, deliver);
+              addCapacityBound(cand.originId, deliver, teuPerUnit);
               continue;
             }
             const unitsToNominal = Math.max(0, nominal - totalUsed) / teuPerUnit;
@@ -568,7 +585,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
             const dispatchCeiling = unitsToNominal + (overflowAffordable ? unitsInOverflow : 0);
             if (dispatchCeiling <= 0) {
               summary.capacityBoundUnits += deliver;
-              addCapacityBound(cand.originId, deliver);
+              addCapacityBound(cand.originId, deliver, teuPerUnit);
               continue;
             }
             if (dispatch > dispatchCeiling) {
@@ -579,7 +596,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
               // outcome and must not tell the seller to build freight.
               if (overflowAffordable) {
                 summary.capacityBoundUnits += lost;
-                addCapacityBound(cand.originId, lost);
+                addCapacityBound(cand.originId, lost, teuPerUnit);
               } else summary.toleranceBoundUnits += lost;
               dispatch = dispatchCeiling;
               deliver = dispatch * deliveryFactor;
@@ -590,6 +607,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
               overflowDispatch * cand.shippingPerUnit * FREIGHT_CONGESTION_SURCHARGE;
             teuConsumed = dispatch * teuPerUnit;
             used[freightClass] += teuConsumed;
+            freightDemandByState.get(cand.originId)![freightClass] += teuConsumed;
           }
         }
         if (deliver <= 0) continue;
@@ -668,7 +686,17 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     for (const [stateId, spare] of spareByState) {
       // Bounded by what is actually left over: capacity-bound units the state
       // later placed with someone else are not unsold, so they are not stuck.
-      deliveryLimited.set(stateId, Math.min(spare, capacityBoundByOriginState.get(stateId) ?? 0));
+      const capacityBound = capacityBoundByOriginState.get(stateId) ?? 0;
+      const limited = Math.min(spare, capacityBound);
+      deliveryLimited.set(stateId, limited);
+      // Book only the capacity-bound requests that remain genuinely unserved.
+      // A failed attempt later placed with another buyer must not claim freight
+      // demand twice. Scaling preserves the attempted routes' TEU weighting.
+      if (limited > 0 && capacityBound > 0 && isHauledClass(freightClass)) {
+        const capacityBoundTeu = capacityBoundTeuByOriginState.get(stateId) ?? 0;
+        freightDemandByState.get(stateId)![freightClass] +=
+          capacityBoundTeu * (limited / capacityBound);
+      }
     }
     deliveryLimitedSupplyByState.set(commodity, deliveryLimited);
 
@@ -689,6 +717,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     flows,
     summaries,
     freightTeuByState: freightUsedByState,
+    freightDemandTeuByState: freightDemandByState,
     landedPremiumByDestState,
     importAggregatesByCountry,
     unplacedSupplyByState,
