@@ -1,5 +1,58 @@
 import { describe, expect, it, vi } from "vitest";
-import { gdpWeightedGrowth, loadNationalGdpGrowth } from "./nationalGdpGrowth";
+import {
+  gdpWeightedGrowth,
+  loadNationalGdpGrowth,
+  resolvePipelineGdpGrowth,
+} from "./nationalGdpGrowth";
+
+describe("resolvePipelineGdpGrowth", () => {
+  it("prefers the national doc when it carries a finite value", () => {
+    expect(
+      resolvePipelineGdpGrowth({
+        nationalDocGrowth: 4.068,
+        regions: [{ growth: -9, gdp: 100 }],
+      })
+    ).toBe(4.068);
+  });
+
+  it("keeps a negative or zero national value rather than falling through", () => {
+    expect(resolvePipelineGdpGrowth({ nationalDocGrowth: -4.867, regions: [] })).toBe(-4.867);
+    expect(resolvePipelineGdpGrowth({ nationalDocGrowth: 0, regions: [] })).toBe(0);
+  });
+
+  it("derives the GDP-weighted regional mean when there is no national doc", () => {
+    // The 17 countries with no national doc. This is the whole point of the
+    // change: the old code returned a flat 2.5 here.
+    expect(
+      resolvePipelineGdpGrowth({
+        regions: [
+          { growth: -8.912, gdp: 100 },
+          { growth: -8.912, gdp: 50 },
+        ],
+      })
+    ).toBeCloseTo(-8.912, 3);
+  });
+
+  it("reports a contraction as a contraction, never as +2.5", () => {
+    const result = resolvePipelineGdpGrowth({ regions: [{ growth: -6.87, gdp: 10 }] });
+    expect(result).toBeLessThan(0);
+    expect(result).not.toBe(2.5);
+  });
+
+  it("falls back to 2.5 only when no region is weightable", () => {
+    expect(resolvePipelineGdpGrowth({ regions: [] })).toBe(2.5);
+    expect(resolvePipelineGdpGrowth({ regions: [{ gdp: 100 }] })).toBe(2.5);
+  });
+
+  it("ignores a non-finite national value and uses the regions", () => {
+    expect(
+      resolvePipelineGdpGrowth({
+        nationalDocGrowth: Number.NaN,
+        regions: [{ growth: 3, gdp: 100 }],
+      })
+    ).toBe(3);
+  });
+});
 
 /**
  * `findOne` answers the national-doc lookup; `find(...).project(...).toArray()`

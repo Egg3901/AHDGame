@@ -29,6 +29,32 @@ export function gdpWeightedGrowth(rows: Array<{ growth?: number; gdp: number }>)
 }
 
 /**
+ * Default when a country has neither a national metrics doc nor a single
+ * weightable region. Matches the long-standing `fiscalYear.ts` constant.
+ */
+const NEUTRAL_PIPELINE_GDP_GROWTH = 2.5;
+
+/**
+ * Resolve the growth rate the annual fiscal pass records on the budget, from
+ * data the caller has already loaded. Pure, so the selection rule is testable
+ * without standing up a whole fiscal-year pass.
+ *
+ * Same order as {@link loadNationalGdpGrowth}: national doc, then the
+ * GDP-weighted regional mean, then a neutral default. The middle step is the
+ * one that matters - without it the 17 countries with no national doc recorded
+ * a flat +2.5% while several were contracting 6-9%.
+ */
+export function resolvePipelineGdpGrowth(input: {
+  nationalDocGrowth?: number;
+  regions: Array<{ growth?: number; gdp: number }>;
+}): number {
+  const national = input.nationalDocGrowth;
+  // `typeof`, not `??` or truthiness: a negative rate is real and so is 0.
+  if (typeof national === "number" && Number.isFinite(national)) return national;
+  return gdpWeightedGrowth(input.regions) ?? NEUTRAL_PIPELINE_GDP_GROWTH;
+}
+
+/**
  * The country's national GDP growth rate, in percent.
  *
  * Resolution order, all three producing the same quantity:
