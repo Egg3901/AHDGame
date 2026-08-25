@@ -33,14 +33,14 @@ describe("ManifestoFlavorBar", () => {
       party: { id: "1", name: "Labour" },
       manifesto: null,
     });
-    render(<ManifestoFlavorBar countryCode="uk" electionId="e1" regionId="ENG" />);
+    render(<ManifestoFlavorBar countryCode="uk" electionId="e1" />);
 
     await waitFor(() => expect(screen.getByText("A universal NHS")).toBeTruthy());
     expect(screen.getByText(/Labour/)).toBeTruthy();
-    expect(screen.getByText("0/3 pledges")).toBeTruthy();
+    expect(screen.getByText("0 of 3 chosen")).toBeTruthy();
 
     fireEvent.click(screen.getByText("A universal NHS"));
-    await waitFor(() => expect(screen.getByText("1/3 pledges")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("1 of 3 chosen")).toBeTruthy());
   });
 
   it("caps selection at the pledge count", async () => {
@@ -51,16 +51,16 @@ describe("ManifestoFlavorBar", () => {
       party: { id: "1", name: "Labour" },
       manifesto: null,
     });
-    render(<ManifestoFlavorBar countryCode="uk" electionId="e1" regionId="ENG" />);
+    render(<ManifestoFlavorBar countryCode="uk" electionId="e1" />);
     await waitFor(() => screen.getByText("A universal NHS"));
 
     fireEvent.click(screen.getByText("A universal NHS"));
     fireEvent.click(screen.getByText("Cut income tax"));
     fireEvent.click(screen.getByText("Sound money"));
-    await waitFor(() => expect(screen.getByText("3/3 pledges")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("3 of 3 chosen")).toBeTruthy());
     // 4th should be disabled (still 3/3)
     fireEvent.click(screen.getByText("Schools for all"));
-    expect(screen.getByText("3/3 pledges")).toBeTruthy();
+    expect(screen.getByText("3 of 3 chosen")).toBeTruthy();
   });
 
   it("shows a read-only message to a non-leader", async () => {
@@ -71,7 +71,7 @@ describe("ManifestoFlavorBar", () => {
       party: null,
       manifesto: null,
     });
-    render(<ManifestoFlavorBar countryCode="uk" electionId="e1" regionId="ENG" />);
+    render(<ManifestoFlavorBar countryCode="uk" electionId="e1" />);
     await waitFor(() =>
       expect(screen.getByText(/Only the party leader sets the manifesto/)).toBeTruthy()
     );
@@ -85,7 +85,7 @@ describe("ManifestoFlavorBar", () => {
       party: { id: "1", name: "Labour" },
       manifesto: { pledges: ["uk.nhs.universal"], locked: true, lockedAt: "2026-01-01" },
     });
-    render(<ManifestoFlavorBar countryCode="uk" electionId="e1" regionId="ENG" />);
+    render(<ManifestoFlavorBar countryCode="uk" electionId="e1" />);
     await waitFor(() => expect(screen.getByText(/Manifesto locked/)).toBeTruthy());
     // No Save/Lock buttons when locked
     expect(screen.queryByText("Save draft")).toBeNull();
@@ -93,9 +93,7 @@ describe("ManifestoFlavorBar", () => {
 
   it("renders nothing until data loads", () => {
     stubGet(new Promise(() => {})); // never resolves
-    const { container } = render(
-      <ManifestoFlavorBar countryCode="uk" electionId="e1" regionId="ENG" />
-    );
+    const { container } = render(<ManifestoFlavorBar countryCode="uk" electionId="e1" />);
     expect(container.firstChild).toBeNull();
   });
 });

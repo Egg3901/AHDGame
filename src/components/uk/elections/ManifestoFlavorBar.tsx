@@ -28,11 +28,9 @@ interface ManifestoResponse {
 export function ManifestoFlavorBar({
   countryCode,
   electionId,
-  regionId,
 }: {
   countryCode: string;
   electionId: string;
-  regionId: string;
 }) {
   const endpoint = `/api/country/${countryCode}/elections/${electionId}/manifesto`;
   const [data, setData] = useState<ManifestoResponse | null>(null);
@@ -102,11 +100,11 @@ export function ManifestoFlavorBar({
 
   if (!data.isPartyLeader) {
     return (
-      <div className="rounded-lg border border-card-border bg-card/80 px-3 py-2">
-        <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-          Manifesto · {regionId}
-        </h4>
-        <p className="text-[10px] text-muted">
+      <div className="rounded-2xl border border-card-border bg-card p-5 shadow-card">
+        <h3 className="text-caption font-semibold uppercase tracking-wider text-muted">
+          Election Manifesto
+        </h3>
+        <p className="mt-2 text-body-sm text-muted">
           Only the party leader sets the manifesto for this campaign.
         </p>
       </div>
@@ -114,17 +112,35 @@ export function ManifestoFlavorBar({
   }
 
   return (
-    <div className="rounded-lg border border-card-border bg-card/80 px-3 py-2 space-y-2">
+    <div className="rounded-2xl border border-card-border bg-card p-5 shadow-card space-y-4">
       <div className="flex items-baseline justify-between gap-2">
-        <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-          Manifesto · {data.party?.name ?? regionId}
-        </h4>
-        <span className="text-[10px] text-muted">
-          {locked ? "locked" : `${selected.length}/${maxPledges} pledges`}
-        </span>
+        <h3 className="text-caption font-semibold uppercase tracking-wider text-muted">
+          Election Manifesto
+        </h3>
+        {data.party?.name ? (
+          <span className="text-body-sm font-medium text-foreground">{data.party.name}</span>
+        ) : null}
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex items-center justify-between">
+        <p className="text-body-sm text-muted">
+          {locked
+            ? "Manifesto locked for this campaign."
+            : "Choose the pledges you'll run on. Keeping them rewards you; breaking them costs you."}
+        </p>
+        <div className="ml-3 flex shrink-0 items-center gap-1" aria-hidden>
+          {Array.from({ length: maxPledges }).map((_, i) => (
+            <span
+              key={i}
+              className={`h-2 w-2 rounded-full ${
+                i < selected.length ? "bg-foreground" : "bg-card-muted ring-1 ring-card-border"
+              }`}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
         {data.catalog.map((entry) => {
           const active = selected.includes(entry.id);
           const disabled = locked || (!active && selected.length >= maxPledges);
@@ -134,30 +150,42 @@ export function ManifestoFlavorBar({
               type="button"
               disabled={disabled}
               onClick={() => toggle(entry.id)}
-              className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
-                active
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-card-border text-muted hover:text-foreground"
-              } ${disabled && !active ? "opacity-40" : ""}`}
               title={entry.blurb}
+              className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-body-sm transition-colors ${
+                active
+                  ? "border-foreground/60 bg-foreground/10 text-foreground"
+                  : "border-card-border text-muted hover:border-foreground/40 hover:text-foreground"
+              } ${disabled && !active ? "opacity-40" : ""}`}
             >
-              {entry.label}
+              <span className="flex items-center gap-2">
+                <span
+                  className={`flex h-4 w-4 items-center justify-center rounded-full border text-[10px] ${
+                    active
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-card-border"
+                  }`}
+                >
+                  {active ? "✓" : ""}
+                </span>
+                {entry.label}
+              </span>
+              <span className="shrink-0 text-caption uppercase tracking-wide text-muted">
+                {entry.policyDomain}
+              </span>
             </button>
           );
         })}
       </div>
 
-      {error ? <p className="text-[10px] text-danger">{error}</p> : null}
+      {error ? <p className="text-body-sm text-danger">{error}</p> : null}
 
-      {locked ? (
-        <p className="text-[10px] text-muted">Manifesto locked for this election.</p>
-      ) : (
-        <div className="flex items-center gap-2">
+      {!locked && (
+        <div className="flex items-center gap-2 pt-1">
           <button
             type="button"
             disabled={busy}
             onClick={() => submit("save")}
-            className="rounded border border-card-border px-2 py-1 text-[11px] text-muted hover:text-foreground disabled:opacity-50"
+            className="rounded border border-card-border px-3 py-1.5 text-body-sm text-muted hover:text-foreground disabled:opacity-50"
           >
             Save draft
           </button>
@@ -165,7 +193,7 @@ export function ManifestoFlavorBar({
             type="button"
             disabled={busy || selected.length !== maxPledges}
             onClick={() => submit("lock")}
-            className="rounded border border-foreground bg-foreground px-2 py-1 text-[11px] text-background disabled:opacity-50"
+            className="rounded border border-foreground bg-foreground px-3 py-1.5 text-body-sm text-background disabled:opacity-50"
             title={
               selected.length !== maxPledges
                 ? `Pick ${maxPledges} pledges to lock`
@@ -174,6 +202,9 @@ export function ManifestoFlavorBar({
           >
             Lock in
           </button>
+          <span className="text-caption text-muted">
+            {selected.length} of {maxPledges} chosen
+          </span>
         </div>
       )}
     </div>
