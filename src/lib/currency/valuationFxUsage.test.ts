@@ -29,6 +29,8 @@ const DISPLAY_PATHS = [
   "src/lib/turn/portfolioSnapshot.ts",
   "src/app/api/corporations/[id]/portfolio/route.ts",
   "src/lib/world/legacyLeaderboard.ts",
+  // Ranks corps by revenue for the player info panel.
+  "src/app/api/pip/corp/route.ts",
 ];
 
 /**

@@ -39,10 +39,24 @@ const NEUTRAL_PIPELINE_GDP_GROWTH = 2.5;
  * data the caller has already loaded. Pure, so the selection rule is testable
  * without standing up a whole fiscal-year pass.
  *
- * Same order as {@link loadNationalGdpGrowth}: national doc, then the
- * GDP-weighted regional mean, then a neutral default. The middle step is the
- * one that matters - without it the 17 countries with no national doc recorded
- * a flat +2.5% while several were contracting 6-9%.
+ * Steps 1 and 2 are identical to {@link loadNationalGdpGrowth}: national doc,
+ * then the GDP-weighted regional mean. The middle step is the one that matters -
+ * without it the 17 countries with no national doc recorded a flat +2.5% while
+ * several were contracting 6-9%.
+ *
+ * The TERMINAL fallback deliberately differs, and the difference must not be
+ * "unified" away:
+ *
+ *   this function          -> 2.5, because the annual pass must record a number,
+ *                             and 2.5 is exactly what it recorded before, so an
+ *                             unseeded world behaves identically to before.
+ *   loadNationalGdpGrowth  -> the authored era trend, then null, because a
+ *                             display surface may legitimately show nothing.
+ *
+ * Both terminal branches are unreachable on a seeded world (every country has
+ * regional GDP and every region carries a gdpGrowth metric), so the divergence
+ * costs nothing today; it exists so neither caller is forced into the other's
+ * failure mode.
  */
 export function resolvePipelineGdpGrowth(input: {
   nationalDocGrowth?: number;
