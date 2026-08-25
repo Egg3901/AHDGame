@@ -81,8 +81,8 @@ describe("loadCountryPoliticalMetrics", () => {
     db.collection("electedOfficials")
       .find()
       .toArray.mockResolvedValue([
-        { party: "dem", seatsHeld: 75 },
-        { party: "rep", seatsHeld: 25 },
+        { officeType: "house", party: "dem", seatsHeld: 75 },
+        { officeType: "house", party: "rep", seatsHeld: 25 },
       ]);
 
     const lopsided = await loadCountryPoliticalMetrics("US", db as unknown as Db);
