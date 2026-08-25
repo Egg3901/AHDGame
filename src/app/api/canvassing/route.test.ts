@@ -324,3 +324,133 @@ describe("POST /api/canvassing — country-aware groups", () => {
     expect(body.error).toBe("Invalid demographic group");
   });
 });
+
+describe("POST /api/canvassing running-mate surrogate branch", () => {
+  let db: MockDb;
+
+  // Wire up the character as the running mate on an active general-phase
+  // presidential ticket canvassing that ticket's travel state ("PA").
+  async function setupMateCanvass(overrides: {
+    poolModified?: number;
+    spendModified?: number;
+    turnoutModified?: number;
+  }) {
+    const character = authedCharacter({ homeState: "GA", countryId: "US" } as never);
+    const electionId = new ObjectId();
+    const nomineeId = new ObjectId();
+    const past = new Date(Date.now() - 60 * 60 * 1000);
+    const future = new Date(Date.now() + 60 * 60 * 1000);
+
+    db.collection("electionCandidates").find.mockReturnValue({
+      toArray: () =>
+        Promise.resolve([
+          {
+            _id: new ObjectId(),
+            electionId,
+            characterId: nomineeId,
+            status: "active",
+            runningMateId: character._id,
+            runningMateTravelState: "PA",
+          },
+        ]),
+    });
+    db.collection("elections").find.mockReturnValue({
+      toArray: () =>
+        Promise.resolve([
+          {
+            _id: electionId,
+            electionType: "president",
+            status: "active",
+            primaryEndTime: past,
+            endTime: future,
+          },
+        ]),
+    });
+    db.collection("campaigns").findOne.mockResolvedValue({ _id: new ObjectId() });
+    db.collection("campaigns").updateOne.mockResolvedValue({
+      modifiedCount: overrides.poolModified ?? 1,
+      matchedCount: overrides.poolModified ?? 1,
+    });
+    db.collection("characters").updateOne.mockResolvedValue({
+      modifiedCount: overrides.spendModified ?? 1,
+      matchedCount: overrides.spendModified ?? 1,
+    });
+
+    const turnoutCollection = {
+      findOne: vi.fn().mockResolvedValue({
+        _id: "PA",
+        modifiers: { race: { white: 0 } },
+        lastUpdated: new Date(),
+      }),
+      updateOne: vi.fn().mockResolvedValue({ modifiedCount: overrides.turnoutModified ?? 1 }),
+    };
+    const { getStateDemographicTurnoutCollection } = await import("@/lib/db/collections");
+    vi.mocked(getStateDemographicTurnoutCollection).mockResolvedValue(turnoutCollection as never);
+
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: { userId: "u1", character },
+    } as never);
+
+    return { character };
+  }
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+  });
+
+  it("decrements the ticket surrogate pool by the canvass count and canvasses PA", async () => {
+    await setupMateCanvass({});
+    const { POST } = await import("./route");
+    const res = await POST(
+      makeRequest({ stateId: "PA", category: "race", group: "white", count: 2 }) as never
+    );
+
+    expect(res.status).toBe(200);
+    // Pool decrement: guarded by $gte and $inc of -count.
+    const poolCall = db.collectionMocks.campaigns.updateOne.mock.calls[0];
+    expect(
+      (poolCall[0] as { runningMateSurrogateActionsRemaining?: { $gte?: number } })
+        .runningMateSurrogateActionsRemaining?.$gte
+    ).toBe(2);
+    expect(
+      (poolCall[1] as { $inc?: { runningMateSurrogateActionsRemaining?: number } }).$inc
+        ?.runningMateSurrogateActionsRemaining
+    ).toBe(-2);
+  });
+
+  it("returns 409 and does not debit the character when the pool is exhausted", async () => {
+    await setupMateCanvass({ poolModified: 0 });
+    const { POST } = await import("./route");
+    const res = await POST(
+      makeRequest({ stateId: "PA", category: "race", group: "white", count: 1 }) as never
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(body.error).toBe("No running-mate surrogate actions remaining today.");
+    // Character spend never runs when the pool is empty.
+    expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("restores the surrogate pool when the character spend fails", async () => {
+    await setupMateCanvass({ spendModified: 0 });
+    const { POST } = await import("./route");
+    const res = await POST(
+      makeRequest({ stateId: "PA", category: "race", group: "white", count: 3 }) as never
+    );
+
+    expect(res.status).toBe(409);
+    // Two campaign writes: the guarded decrement, then the +count restore.
+    const calls = db.collectionMocks.campaigns.updateOne.mock.calls;
+    expect(calls.length).toBe(2);
+    expect(
+      (calls[1][1] as { $inc?: { runningMateSurrogateActionsRemaining?: number } }).$inc
+        ?.runningMateSurrogateActionsRemaining
+    ).toBe(3);
+  });
+});

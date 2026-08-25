@@ -16,7 +16,13 @@ import {
   SUPPORT_RALLY_ACTION_COST,
   SUPPORT_RALLY_TOUR_TICK_ACTION_COST,
 } from "@/lib/electionEngine/electionFormulaFactors";
-import { isCampaignManagerUser, isCampaignNomineeUser } from "@/lib/campaigns/access";
+import {
+  isCampaignManagerUser,
+  isCampaignNomineeUser,
+  isCampaignRunningMateUser,
+  legacyManagersAsList,
+} from "@/lib/campaigns/access";
+import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
 import { getCampaignCopyForElection } from "@/lib/campaigns/raceFamilyCopy";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import {
@@ -24,8 +30,22 @@ import {
   campaignLocalRate,
   getCampaignCurrency,
 } from "@/lib/campaigns/campaignCurrency";
-import type { CampaignData } from "@/lib/campaigns/dto/campaignView";
-import { buildOpsTrees } from "@/lib/campaigns/dto/campaignView";
+import type { CampaignData, CampaignBriefing } from "@/lib/campaigns/dto/campaignView";
+import {
+  buildOpsTrees,
+  CAMPAIGN_CATEGORIES,
+  type CampaignUpgrade,
+} from "@/lib/campaigns/dto/campaignView";
+import {
+  buildCashRunway,
+  buildCoalitionWeakness,
+  buildDelegatePath,
+  buildOpsSaturation,
+  buildTippingPath,
+  buildTradeoffs,
+} from "@/lib/campaigns/briefing";
+import { getDelegateMajority, resolvePartyFamily } from "@/lib/constants/primaryCalendar";
+import { loadApportionment } from "@/lib/elections/apportionment";
 import { notFound } from "@/lib/api/errors";
 import { buildActiveVisibleNppEndorsementFilter } from "@/lib/nppEndorsements";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
@@ -35,6 +55,7 @@ import type {
   Character,
   Election,
   ElectionCandidate,
+  ElectionVoteTally,
   NPP,
   NPPEndorsement,
   PoliticalParty,
@@ -85,6 +106,24 @@ export async function getCampaignDetail(
   }
   const managerName = manager?.name ?? null;
 
+  // Resolve every appointed manager (multi-manager, up to MAX_CAMPAIGN_MANAGERS)
+  // to character id + name. Folds in the legacy single-manager pair so old
+  // campaigns render identically. One `$in` fetch for all of them.
+  const managerCharIds = (campaign.managers ?? legacyManagersAsList(campaign)).map(
+    (m) => m.characterId
+  );
+  const managerChars = managerCharIds.length
+    ? await db
+        .collection<Character>("characters")
+        .find({ _id: { $in: managerCharIds } }, { projection: { _id: 1, name: 1 } })
+        .toArray()
+    : [];
+  const managerNameById = new Map(managerChars.map((c) => [c._id.toString(), c.name]));
+  const managers = managerCharIds.map((id) => ({
+    characterId: id.toString(),
+    name: managerNameById.get(id.toString()) ?? "Unknown",
+  }));
+
   const isIneligible = !election || !isCampaignEligibleElection(election);
   if (isIneligible && !user?.isAdmin) {
     throw notFound("Campaign not found");
@@ -104,13 +143,19 @@ export async function getCampaignDetail(
   const campaignCurrencyCode = getCampaignCurrency(electionCountryId);
   const campaignRate = campaignLocalRate(electionCountryId); // frozen base rate, for the fxRate payload field
   const toLocal = (anchor: number) => campaignAnchorToLocal(anchor, electionCountryId);
-  const [isNominee, partyTreasuryAccess] = await Promise.all([
+  const [isNominee, isRunningMate, partyTreasuryAccess] = await Promise.all([
     user
       ? isCampaignNomineeUser(db, campaign, user.userId, user.character?._id ?? null)
       : Promise.resolve(false),
+    user
+      ? isCampaignRunningMateUser(db, campaign, user.userId, user.character?._id ?? null)
+      : Promise.resolve(false),
     getPartyTreasuryAccess(db, campaign, election, user),
   ]);
-  const canSeeExact = isManager || isNominee || isAdmin;
+  // A running mate gets an owner-level VIEW of the ticket campaign (canSeeExact),
+  // but a narrower action set, enforced client-side and by the server route
+  // gates, not here.
+  const canSeeExact = isManager || isNominee || isAdmin || isRunningMate;
   const isSameParty =
     user?.character?.party === campaign.party &&
     (user?.character?.countryId ?? "US") === electionCountryId;
@@ -121,6 +166,21 @@ export async function getCampaignDetail(
       : "public";
   const fogData = isSameParty ? campaign.partyFogOfWar : campaign.publicFogOfWar;
 
+  // Running-mate surrogate pool snapshot (presidential tickets only). The cap
+  // comes from the race's frozen ruleset; a fresh/unrefilled pool degrades to
+  // the cap so the panel never shows an empty pool before the first daily reset.
+  const presRuleset =
+    election?.electionType === "president" ? presidentialRulesetFor(election) : null;
+  const runningMateSurrogate =
+    isRunningMate && presRuleset
+      ? {
+          actionsRemaining:
+            campaign.runningMateSurrogateActionsRemaining ?? presRuleset.vpSurrogateActionCap,
+          cap: presRuleset.vpSurrogateActionCap,
+          resetHint: "Resets daily at midnight Eastern Time.",
+        }
+      : undefined;
+
   const base: CampaignData = {
     id: campaign._id.toString(),
     electionId: campaign.electionId.toString(),
@@ -130,6 +190,8 @@ export async function getCampaignDetail(
     party: campaign.party,
     accessLevel,
     isArchived: campaign.status === "archived",
+    isRunningMate,
+    ...(runningMateSurrogate ? { runningMateSurrogate } : {}),
     currencyCode: campaignCurrencyCode,
     fxRate: campaignRate,
     campaignStrength: campaign.campaignStrength ?? 0,
@@ -150,6 +212,10 @@ export async function getCampaignDetail(
         },
     managerId: campaign.managerId?.toString() || null,
     managerName,
+    managers,
+    // Only the nominee (or an admin) may change managers, and not on an
+    // archived campaign. Managers themselves cannot appoint further managers.
+    canAppointManagers: (isNominee || isAdmin) && campaign.status !== "archived",
     oppositionTargetId: canSeeExact ? campaign.oppositionTargetId?.toString() || null : null,
     oppositionTargetName: canSeeExact ? campaign.oppositionTargetName : null,
     fogLastUpdated:
@@ -332,9 +398,72 @@ export async function getCampaignDetail(
     }
   }
 
+  const opsTrees = buildOpsTrees(campaign, electionType, isGeneralPhase, toLocal);
+  const nextUpgradeCosts: CampaignData["nextUpgradeCosts"] = {
+    fundraising: localizeUpgradeCostFunds(
+      getEffectiveUpgradeCost(
+        "fundraising",
+        campaign.fundraisingLevel + 1,
+        electionType,
+        isGeneralPhase
+      ),
+      toLocal
+    ),
+    oppositionResearch: localizeUpgradeCostFunds(
+      getEffectiveUpgradeCost(
+        "oppositionResearch",
+        campaign.oppositionResearchLevel + 1,
+        electionType,
+        isGeneralPhase
+      ),
+      toLocal
+    ),
+    groundGame: localizeUpgradeCostFunds(
+      localizeGroundGameEffect(
+        getEffectiveUpgradeCost(
+          "groundGame",
+          campaign.groundGameLevel + 1,
+          electionType,
+          isGeneralPhase
+        ),
+        election
+      ),
+      toLocal
+    ),
+    mediaSpending: localizeUpgradeCostFunds(
+      getEffectiveUpgradeCost(
+        "mediaSpending",
+        campaign.mediaSpendingLevel + 1,
+        electionType,
+        isGeneralPhase
+      ),
+      toLocal
+    ),
+  };
+
+  // Campaign-room briefing (owner-only, read-only). Composes data the engine /
+  // tally already produced — never recomputes vote math. Skipped for archived
+  // campaigns (no live plan to brief). Delegate/tipping paths and coalition
+  // weakness are presidential concepts read off the tally; cash runway, ops
+  // saturation, and tradeoffs apply to any race.
+  const briefing =
+    campaign.status === "archived"
+      ? undefined
+      : await buildBriefing({
+          db,
+          campaign,
+          election,
+          candidateRow,
+          isGeneralPhase,
+          opsTrees,
+          nextUpgradeCosts,
+          netPerTurn: toLocal(income) - toLocal(maintenance),
+        });
+
   return {
     ...base,
     ...(ownSupport ? { ownSupport } : {}),
+    ...(briefing ? { briefing } : {}),
     ...(campaignSuspended
       ? {
           campaignSuspended: true,
@@ -372,48 +501,107 @@ export async function getCampaignDetail(
         actionsSpent: campaign.totalActionsSpent,
       },
     },
-    nextUpgradeCosts: {
-      fundraising: localizeUpgradeCostFunds(
-        getEffectiveUpgradeCost(
-          "fundraising",
-          campaign.fundraisingLevel + 1,
-          electionType,
-          isGeneralPhase
-        ),
-        toLocal
-      ),
-      oppositionResearch: localizeUpgradeCostFunds(
-        getEffectiveUpgradeCost(
-          "oppositionResearch",
-          campaign.oppositionResearchLevel + 1,
-          electionType,
-          isGeneralPhase
-        ),
-        toLocal
-      ),
-      groundGame: localizeUpgradeCostFunds(
-        localizeGroundGameEffect(
-          getEffectiveUpgradeCost(
-            "groundGame",
-            campaign.groundGameLevel + 1,
-            electionType,
-            isGeneralPhase
-          ),
-          election
-        ),
-        toLocal
-      ),
-      mediaSpending: localizeUpgradeCostFunds(
-        getEffectiveUpgradeCost(
-          "mediaSpending",
-          campaign.mediaSpendingLevel + 1,
-          electionType,
-          isGeneralPhase
-        ),
-        toLocal
-      ),
-    },
-    opsTrees: buildOpsTrees(campaign, electionType, isGeneralPhase, toLocal),
+    nextUpgradeCosts,
+    opsTrees,
+  };
+}
+
+/**
+ * Build the owner-only campaign-room briefing. Pure composition of already-stored
+ * data: the presidential tally (delegate map / per-unit votes / factor ledger),
+ * the just-built ops-tree view, and the localized next-upgrade costs. Presidential
+ * intel (path + coalition weakness) is loaded only for a president race with a
+ * tally; every other campaign still gets cash runway, ops saturation, and
+ * tradeoffs. No vote math is recomputed anywhere here.
+ */
+async function buildBriefing(args: {
+  db: Db;
+  campaign: Campaign;
+  election: Election | null;
+  candidateRow: ElectionCandidate | null;
+  isGeneralPhase: boolean;
+  opsTrees: NonNullable<CampaignData["opsTrees"]>;
+  nextUpgradeCosts: CampaignData["nextUpgradeCosts"];
+  netPerTurn: number;
+}): Promise<CampaignBriefing> {
+  const { db, campaign, election, candidateRow, isGeneralPhase, opsTrees, nextUpgradeCosts } = args;
+
+  const cashRunway = buildCashRunway(campaign.funds, args.netPerTurn);
+  const opsSaturation = buildOpsSaturation(opsTrees);
+  const tradeoffs = buildTradeoffs(
+    CAMPAIGN_CATEGORIES.map((cat) => ({
+      key: cat.key,
+      label: cat.label,
+      cost: (nextUpgradeCosts?.[cat.key as keyof NonNullable<typeof nextUpgradeCosts>] ??
+        null) as CampaignUpgrade | null,
+    }))
+  );
+
+  let path: CampaignBriefing["path"];
+  let coalitionWeakness: CampaignBriefing["coalitionWeakness"] = [];
+
+  if (election?.electionType === "president") {
+    const tally = await db
+      .collection<ElectionVoteTally>("electionVoteTallies")
+      .findOne({ electionId: campaign.electionId });
+    if (tally) {
+      // The tally / ledger / delegate map are keyed by the electionCandidate row
+      // id, not the character identity id — resolve the owner's row id.
+      const ownerTallyId = candidateRow?._id.toString() ?? null;
+
+      const ownerNational = tally.factorLedger?.byCandidateNational.find(
+        (c) => c.candidateId === ownerTallyId
+      );
+      coalitionWeakness = buildCoalitionWeakness(ownerNational?.bucketAppeal);
+
+      const gameState = await db
+        .collection<{ _id: string; preset?: string }>("gameState")
+        .findOne({ _id: "current" }, { projection: { preset: 1 } });
+      const preset = gameState?.preset;
+
+      if (isGeneralPhase) {
+        const { electoralVoteUnits } = await loadApportionment(db, preset);
+        const stateDocs = (await db
+          .collection("states")
+          .find({ countryId: election.countryId ?? "US" }, { projection: { _id: 1, name: 1 } })
+          .toArray()) as unknown as Array<{ _id: string; name: string }>;
+        const stateNameById: Record<string, string> = {};
+        for (const s of stateDocs) stateNameById[s._id] = s.name;
+        path = buildTippingPath({
+          totalVotesByUnit: tally.totalVotesByUnit ?? {},
+          evUnits: electoralVoteUnits,
+          ownerTallyId,
+          candidateIds: Object.keys(tally.candidateNames ?? {}),
+          stateNameById,
+        });
+      } else {
+        const party = await db
+          .collection<PoliticalParty>("politicalParties")
+          .findOne(
+            { sequentialId: Number(campaign.party), countryId: election.countryId },
+            { projection: { primaryCalendar: 1, economicPosition: 1 } }
+          );
+        const family = resolvePartyFamily(campaign.party, {
+          primaryCalendar: party?.primaryCalendar ?? null,
+          economicPosition: party?.economicPosition,
+        });
+        const needed = getDelegateMajority(family, preset);
+        path = buildDelegatePath(
+          tally.primaryDelegates?.[campaign.party],
+          ownerTallyId,
+          needed,
+          tally.candidateNames ?? {}
+        );
+      }
+    }
+  }
+
+  return {
+    ...(path ? { path } : {}),
+    cashRunway,
+    coalitionWeakness,
+    opsSaturation,
+    tradeoffs,
   };
 }
 

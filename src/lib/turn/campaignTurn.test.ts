@@ -239,6 +239,12 @@ function buildMockDb(opts: {
   oppositionResearchLevel: number;
   nppEndorsementCount: number;
   playerEndorsementCount: number;
+  /** Nominee's own campaign travel state (flat +1 presence). */
+  travelState?: string;
+  /** Ticket's running-mate surrogate travel state (ruleset-weighted presence). */
+  runningMateTravelState?: string;
+  /** Frozen ruleset stamp for the race (governs vpTravelPresenceWeight). */
+  rulesetVersion?: number;
 }) {
   const {
     electionId,
@@ -250,6 +256,9 @@ function buildMockDb(opts: {
     oppositionResearchLevel,
     nppEndorsementCount,
     playerEndorsementCount,
+    travelState,
+    runningMateTravelState,
+    rulesetVersion,
   } = opts;
 
   const campaign = {
@@ -289,7 +298,9 @@ function buildMockDb(opts: {
             // check passes for the race types being exercised.
             toArray: vi
               .fn()
-              .mockResolvedValue([{ _id: electionId, endTime, electionType, countryId: "US" }]),
+              .mockResolvedValue([
+                { _id: electionId, endTime, electionType, countryId: "US", rulesetVersion },
+              ]),
           }),
         };
       }
@@ -358,9 +369,15 @@ function buildMockDb(opts: {
         return {
           find: vi.fn().mockReturnValue({
             project: vi.fn().mockReturnValue({
-              toArray: vi
-                .fn()
-                .mockResolvedValue([{ _id: candidateRowId, electionId, characterId: candidateId }]),
+              toArray: vi.fn().mockResolvedValue([
+                {
+                  _id: candidateRowId,
+                  electionId,
+                  characterId: candidateId,
+                  travelState,
+                  runningMateTravelState,
+                },
+              ]),
             }),
           }),
         };
@@ -545,6 +562,111 @@ describe("season multiplier", () => {
     // No favorability writes should have been queued. UK commons (non-eligible
     // per D4) must not see passive media / opposition-research effects fire,
     // even if a stray Campaign doc somehow exists.
+    expect(charBulkWrite).not.toHaveBeenCalled();
+  });
+});
+
+describe("running-mate surrogate travel presence", () => {
+  it("adds the ruleset's vpTravelPresenceWeight to the ticket favorability when the running mate is traveling", async () => {
+    const { getDb } = await import("@/lib/mongodb");
+
+    const electionId = new ObjectId();
+    const candidateId = new ObjectId();
+    const targetId = new ObjectId();
+    // >4h out so the season multiplier is 1 (travel presence is a flat add
+    // regardless, but this keeps the arithmetic unambiguous).
+    const endTime = new Date(Date.now() + 10 * 60 * 60 * 1000);
+
+    const { db, charBulkWrite } = buildMockDb({
+      electionId,
+      electionType: "president",
+      endTime,
+      candidateId,
+      targetId,
+      mediaSpendingLevel: 0,
+      oppositionResearchLevel: 0,
+      nppEndorsementCount: 0,
+      playerEndorsementCount: 0,
+      runningMateTravelState: "PA",
+      rulesetVersion: 3,
+    });
+
+    vi.mocked(getDb).mockResolvedValue(db as never);
+
+    await processCampaignTurn(1);
+
+    expect(charBulkWrite).toHaveBeenCalled();
+    const ops: { updateOne: { filter: { _id: ObjectId }; update: unknown } }[] =
+      charBulkWrite.mock.calls[0][0];
+    const candidateOp = ops.find(
+      (o) => o.updateOne.filter._id.toString() === candidateId.toString()
+    );
+    // v3 vpTravelPresenceWeight identity = 1 → +1.0 on the ticket favorability.
+    expect(extractPipelineFavorabilityDelta(candidateOp?.updateOne.update)).toBe(1.0);
+  });
+
+  it("stacks the nominee's own travel presence and the running mate's", async () => {
+    const { getDb } = await import("@/lib/mongodb");
+
+    const electionId = new ObjectId();
+    const candidateId = new ObjectId();
+    const targetId = new ObjectId();
+    const endTime = new Date(Date.now() + 10 * 60 * 60 * 1000);
+
+    const { db, charBulkWrite } = buildMockDb({
+      electionId,
+      electionType: "president",
+      endTime,
+      candidateId,
+      targetId,
+      mediaSpendingLevel: 0,
+      oppositionResearchLevel: 0,
+      nppEndorsementCount: 0,
+      playerEndorsementCount: 0,
+      travelState: "OH",
+      runningMateTravelState: "PA",
+      rulesetVersion: 3,
+    });
+
+    vi.mocked(getDb).mockResolvedValue(db as never);
+
+    await processCampaignTurn(1);
+
+    const ops: { updateOne: { filter: { _id: ObjectId }; update: unknown } }[] =
+      charBulkWrite.mock.calls[0][0];
+    const candidateOp = ops.find(
+      (o) => o.updateOne.filter._id.toString() === candidateId.toString()
+    );
+    // Nominee travel (+1.0) + running-mate travel (weight 1 × 1.0) = +2.0.
+    expect(extractPipelineFavorabilityDelta(candidateOp?.updateOne.update)).toBe(2.0);
+  });
+
+  it("does not add a running-mate bonus when the running mate has not traveled", async () => {
+    const { getDb } = await import("@/lib/mongodb");
+
+    const electionId = new ObjectId();
+    const candidateId = new ObjectId();
+    const targetId = new ObjectId();
+    const endTime = new Date(Date.now() + 10 * 60 * 60 * 1000);
+
+    const { db, charBulkWrite } = buildMockDb({
+      electionId,
+      electionType: "president",
+      endTime,
+      candidateId,
+      targetId,
+      mediaSpendingLevel: 0,
+      oppositionResearchLevel: 0,
+      nppEndorsementCount: 0,
+      playerEndorsementCount: 0,
+      rulesetVersion: 3,
+    });
+
+    vi.mocked(getDb).mockResolvedValue(db as never);
+
+    await processCampaignTurn(1);
+
+    // No media, no oppo, no travel → no favorability write at all.
     expect(charBulkWrite).not.toHaveBeenCalled();
   });
 });

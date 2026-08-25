@@ -3,6 +3,7 @@ import type {
   ContingentElectionDisplay,
   PresidentialResolutionMode,
 } from "@/lib/elections/presidentialResolutionDisplay";
+import type { FactorLedgerSnapshot } from "@/lib/electionEngine/factorLedger";
 
 export interface Endorsement {
   nppId?: string;
@@ -323,4 +324,11 @@ export interface ElectionDetail {
     incumbentPartyColor?: string;
     recordedTurn: number;
   };
+
+  /**
+   * President only: the descriptive factor ledger passed through by
+   * `_enrichElection`, fog-of-war applied. Feeds the Factor Ledger card.
+   * Absent for races that ran before the ledger existed.
+   */
+  factorLedger?: FactorLedgerSnapshot;
 }

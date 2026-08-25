@@ -16,9 +16,11 @@ interface CanvassingPanelProps {
   onResourcesSpent?: () => void;
 }
 
+type CanvassSource = "home" | "travel" | "primaryCampaign" | "runningMateSurrogate";
+
 type EligibilityState =
   | { status: "loading" }
-  | { status: "eligible"; stateId: string; source: "home" | "travel" | "primaryCampaign" }
+  | { status: "eligible"; stateId: string; source: CanvassSource }
   | { status: "blocked"; reason: "needs_travel" | "needs_primary_campaign"; message: string };
 
 // Mirrors CANVASS_ELIGIBILITY_MESSAGE in src/lib/canvassing/eligibility.ts.
@@ -28,14 +30,13 @@ const ELIGIBILITY_MESSAGE: Record<"needs_travel" | "needs_primary_campaign", str
   needs_primary_campaign: "Set your primary campaign state to canvass voters there",
 };
 
-const SOURCE_DESCRIPTION: Record<
-  "home" | "travel" | "primaryCampaign",
-  (isRegionBased: boolean) => string
-> = {
+const SOURCE_DESCRIPTION: Record<CanvassSource, (isRegionBased: boolean) => string> = {
   home: (isRegionBased) =>
     `Boost turnout for specific demographics in your home ${isRegionBased ? "region" : "state"}.`,
   travel: () => "Boost turnout for specific demographics in your travel state.",
   primaryCampaign: () => "Boost turnout for specific demographics in your primary campaign state.",
+  runningMateSurrogate: () =>
+    "Boost turnout for the ticket in the state you are campaigning in as running mate. Spends a shared surrogate action.",
 };
 
 function calculateMaxCanvasses(actions: number, funds: number): number {

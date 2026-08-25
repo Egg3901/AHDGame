@@ -9,9 +9,17 @@ import type {
   Character,
   Election,
   ElectionCandidate,
+  NPP,
   PlayerEndorsement,
 } from "@/lib/db/types";
 import { isActivePlayerEndorsementDuplicateKey } from "@/lib/elections/duplicateKey";
+import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
+import {
+  computeSuspendTransferFraction,
+  type AffinityCandidate,
+} from "@/lib/campaigns/suspendEndorseAffinity";
+import { loadPartyGroupFavorability } from "@/lib/governorOffice/address/partyGroupFavorabilityLoader";
+import type { CountryId } from "@/lib/constants/countries";
 import { ObjectId, type Db } from "mongodb";
 
 async function getCurrentTurn(db: Db): Promise<number> {
@@ -135,15 +143,31 @@ export async function suspendCampaignAndEndorse(params: {
     }
   }
 
-  // One-time immediate transfer: 25% of campaign strength from suspender to
-  // endorsed. The suspender retains all existing votes but will not accumulate
-  // any further. Additionally, 25% of the suspender's per-state character org
-  // is contributed to the endorsed candidate in the vote calculation engine
-  // (see accumulatePresidentVoteTurn); no org is debited from the suspender.
+  // One-time immediate transfer of campaign strength from suspender to endorsed.
+  // The suspender retains all existing votes but will not accumulate any further.
+  // The suspender's per-state character org is likewise contributed to the
+  // endorsed candidate in the vote calculation engine (see
+  // accumulatePresidentVoteTurn); no org is debited from the suspender. Both the
+  // CS transfer here and the org boost in the engine resolve their fraction off
+  // the SAME stamped ruleset (presidentialRulesetFor(election)), so a live race
+  // cannot see one path on "flat" and the other on "affinity". Under "flat"
+  // (v1/v2) the fraction is exactly the ceiling (today's 25%); under "affinity"
+  // it is scaled by how aligned the suspender and endorsee are.
   const endorsedLookupKey =
     endorsedCandidate.isNPP && endorsedCandidate.nppId
       ? endorsedCandidate.nppId.toString()
       : endorsedCandidate.characterId.toString();
+
+  const ruleset = presidentialRulesetFor(election);
+  const transferFraction = await resolveSuspendTransferFraction({
+    db,
+    ruleset,
+    countryId: (election.countryId ?? "US") as CountryId,
+    currentTurn: turnNumber,
+    suspender: ownCandidate,
+    endorsed: endorsedCandidate,
+    endorsedLookupKey,
+  });
 
   // Transfer campaign strength
   const ownCampaignDoc = await db.collection<Campaign>("campaigns").findOne({
@@ -151,7 +175,7 @@ export async function suspendCampaignAndEndorse(params: {
   });
   if (ownCampaignDoc && (ownCampaignDoc.campaignStrength ?? 0) > 0) {
     const cs = ownCampaignDoc.campaignStrength ?? 0;
-    const transfer = Math.floor(cs * 0.25);
+    const transfer = Math.floor(cs * transferFraction);
     await db
       .collection<Campaign>("campaigns")
       .updateOne({ _id: ownCampaignDoc._id }, { $inc: { campaignStrength: -transfer } });
@@ -186,5 +210,69 @@ export async function suspendCampaignAndEndorse(params: {
     endorsedCandidateId: endorsedCandidate._id.toString(),
     endorsedCandidateName: endorsedCandidate.characterName,
     suspendedAt: now.toISOString(),
+  };
+}
+
+/**
+ * Resolve the campaign-strength transfer fraction for a suspend-endorse. Under
+ * "flat" mode the fraction is the ruleset ceiling and no positions are loaded
+ * (byte-identical to the legacy hardcoded 0.25). Under "affinity" mode the
+ * suspender/endorsee ideological positions and the coalition substrate are
+ * loaded so the ceiling scales by alignment — mirroring the engine's org path.
+ */
+async function resolveSuspendTransferFraction(params: {
+  db: Db;
+  ruleset: ReturnType<typeof presidentialRulesetFor>;
+  countryId: CountryId;
+  currentTurn: number;
+  suspender: ElectionCandidate;
+  endorsed: ElectionCandidate;
+  endorsedLookupKey: string;
+}): Promise<number> {
+  const { db, ruleset, countryId, currentTurn, suspender, endorsed, endorsedLookupKey } = params;
+  if (ruleset.suspendTransferMode === "flat") return ruleset.suspendTransferMaxFraction;
+
+  const suspenderPos = await resolveAffinityCandidate(db, {
+    isNPP: false,
+    positionId: suspender.characterId,
+    party: suspender.party,
+  });
+  const endorsedPos = await resolveAffinityCandidate(db, {
+    isNPP: Boolean(endorsed.isNPP),
+    positionId: new ObjectId(endorsedLookupKey),
+    party: endorsed.party,
+  });
+  if (!suspenderPos || !endorsedPos) return ruleset.suspendTransferMaxFraction;
+
+  const partyGroupFavorabilityByKey = await loadPartyGroupFavorability(db, countryId, currentTurn);
+  return computeSuspendTransferFraction({
+    suspender: suspenderPos,
+    endorsed: endorsedPos,
+    mode: ruleset.suspendTransferMode,
+    maxFraction: ruleset.suspendTransferMaxFraction,
+    partyGroupFavorabilityByKey,
+  });
+}
+
+/** Load a candidate's (EP, SP) policy position for the affinity model. */
+async function resolveAffinityCandidate(
+  db: Db,
+  input: { isNPP: boolean; positionId: ObjectId; party: string }
+): Promise<AffinityCandidate | null> {
+  if (input.isNPP) {
+    const npp = await db
+      .collection<NPP>("npps")
+      .findOne({ _id: input.positionId }, { projection: { policies: 1 } });
+    if (!npp) return null;
+    return { charEP: npp.policies.economic, charSP: npp.policies.social, party: input.party };
+  }
+  const character = await db
+    .collection<Character>("characters")
+    .findOne({ _id: input.positionId }, { projection: { policies: 1 } });
+  if (!character) return null;
+  return {
+    charEP: character.policies.economic,
+    charSP: character.policies.social,
+    party: input.party,
   };
 }

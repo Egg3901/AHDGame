@@ -64,6 +64,7 @@ import { runAuditAnomalyScan } from "@/lib/audit/anomalyScan";
 import { processGameHealthSnapshot } from "@/lib/turn/gameHealthSnapshot";
 import { processNppStanceDrift } from "@/lib/turn/nppStanceDrift";
 import { resetVicePresidentActions } from "@/lib/turn/vicePresidentActionReset";
+import { resetRunningMateSurrogateActions } from "@/lib/turn/runningMateSurrogateActionReset";
 import { resetJusticeActions } from "@/lib/turn/justiceActionReset";
 import { COUNTRY_ORDER, COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type { TurnPhaseAdapter } from "@/simulation/engine/types";
@@ -190,6 +191,12 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       // Appended (result intentionally not destructured): refill the seated
       // vice-president's self-serve action pool once per Eastern-time day (#67).
       runtime.runPhase("vicePresidentActionReset", () => resetVicePresidentActions(db)),
+      // Appended (result intentionally not destructured): refill each active
+      // presidential ticket's shared running-mate surrogate action pool once per
+      // Eastern-time day (mirrors vicePresidentActionReset above).
+      runtime.runPhase("runningMateSurrogateActionReset", () =>
+        resetRunningMateSurrogateActions(db)
+      ),
       // Appended (result intentionally not destructured): refill seated
       // Justices' self-serve action pool once per Eastern-time day (#3598,
       // mirrors vicePresidentActionReset above).
