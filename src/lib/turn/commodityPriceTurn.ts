@@ -16,6 +16,7 @@ import {
   COUNTRY_CURRENCY_MAP,
   INITIAL_RATES,
   MONETARY_BASELINES,
+  eraRateForCurrency,
   getInitialRates,
 } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -416,6 +417,11 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   );
   const activePreset = presetState?.preset ?? "";
   const ledgerCurrentYear = presetState?.currentYear ?? null;
+  for (const code of Object.values(COUNTRY_CURRENCY_MAP) as CurrencyCode[]) {
+    if (fxByCurrency.has(code)) continue;
+    const authoredRate = eraRateForCurrency(code, activePreset);
+    if (authoredRate !== undefined) fxByCurrency.set(code, authoredRate);
+  }
   // Resolved here, above the supply ledger, because a command economy's media
   // produces state information rather than sold advertising. Safe to add: every
   // positional cursor the turn tests stub is already consumed by the parallel
