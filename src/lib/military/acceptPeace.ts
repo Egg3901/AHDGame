@@ -48,9 +48,9 @@ function opposingRosterOf(
   ally: CountryId,
   principal: CountryId
 ): CountryId[] {
-  const onA = (conflict.sideA.countries as string[]).includes(ally);
+  const onA = conflict.sideA.countries.includes(ally);
   const enemies = onA ? conflict.sideB.countries : conflict.sideA.countries;
-  return (enemies as CountryId[]).filter((c) => c !== principal && c !== ally);
+  return enemies.filter((c) => c !== principal && c !== ally);
 }
 
 export async function acceptPeace(
@@ -87,13 +87,13 @@ export async function acceptPeace(
     .filter((e) => e.defending === leaver)
     .map((e) => e.countryId)
     .filter((c) => rosters.includes(c));
-  const leaving: CountryId[] = [leaver as CountryId, ...released];
+  const leaving: CountryId[] = [leaver, ...released];
 
   // Captured NOW, before the splice loop below mutates the rosters. Read afterwards, the
-  // principal is already gone from its side and a released ally would be trucated against
+  // principal is already gone from its side and a released ally would be truced against
   // the survivors only — or, when it was the last one out, against nobody at all.
   const enemiesByAlly = new Map<CountryId, CountryId[]>(
-    released.map((ally) => [ally, opposingRosterOf(conflict, ally, leaver as CountryId)])
+    released.map((ally) => [ally, opposingRosterOf(conflict, ally, leaver)])
   );
 
   // Compute BEFORE the roster edit below — afterwards the leavers are gone and the
