@@ -32,10 +32,20 @@ describe("buildCommodityFlowDocs", () => {
     const d = docs[0];
     expect(d.commodity).toBe("rare_earth");
     expect(d.turn).toBe(810);
+    expect(d.basis).toBe("ledger_aggregate");
+    expect(d.clearingBasis).toBe("global_pooled_availability");
+    expect(d.demandUnitsLedger).toBe(24296);
     expect(d.clearedUnits).toBe(4504);
+    expect(d.clearedUnitsPooled).toBe(4504);
     expect(d.unmetDemandUnits).toBe(19792);
+    expect(d.unmetDemandUnitsPooled).toBe(19792);
     expect(d.surplusUnits).toBe(0);
+    expect(d.surplusUnitsPooled).toBe(0);
     expect(d.price).toBe(12426.5);
+    const persisted = JSON.parse(JSON.stringify(d));
+    expect(persisted.basis).toBe("ledger_aggregate");
+    expect(persisted.clearingBasis).toBe("global_pooled_availability");
+    expect(persisted.demandUnitsLedger).toBe(24296);
   });
 
   it("records glut flows: cleared = demand, surplus = supply − demand", () => {
@@ -62,9 +72,17 @@ describe("buildCommodityFlowDocs", () => {
     );
     const d = docs[0];
     expect(Object.keys(d.byCountry).sort()).toEqual(["UK", "US"]);
-    expect(d.byCountry.US).toEqual({ supply: 80, demand: 100, cleared: 80, price: 200 });
+    expect(d.byCountry.US).toEqual({
+      basis: "country_scoped_ledger",
+      supply: 80,
+      demand: 100,
+      cleared: 80,
+      clearedUnitsScoped: 80,
+      price: 200,
+    });
     expect(d.byCountry.UK.cleared).toBe(20);
     expect(d.byCountry.UK.price).toBe(210);
+    expect(JSON.parse(JSON.stringify(d)).byCountry.UK.basis).toBe("country_scoped_ledger");
   });
 
   it("records the cover-cap write-down explicitly when enabled, omits it otherwise", () => {
@@ -88,5 +106,6 @@ describe("buildCommodityFlowDocs", () => {
     );
     expect(docs[0].supplyUnits).toBe(10.12);
     expect(docs[0].demandUnits).toBe(20.99);
+    expect(docs[0].demandUnitsLedger).toBe(20.99);
   });
 });

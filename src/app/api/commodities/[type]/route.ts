@@ -763,10 +763,15 @@ export async function getCommodityDetailData(
     // Flow ledger (marketSystemMode >= "ledger"): latest row for this commodity.
     let flows:
       | {
+          basis: CommodityFlowDoc["basis"];
+          clearingBasis: CommodityFlowDoc["clearingBasis"];
           turn: number;
           clearedUnits: number;
+          clearedUnitsPooled: number;
           unmetDemandUnits: number;
+          unmetDemandUnitsPooled: number;
           surplusUnits: number;
+          surplusUnitsPooled: number;
           stockUnits: number | null;
           coverTurns: number | null;
         }
@@ -780,10 +785,15 @@ export async function getCommodityDetailData(
         .next();
       if (flowDoc) {
         flows = {
+          basis: flowDoc.basis ?? "ledger_aggregate",
+          clearingBasis: flowDoc.clearingBasis ?? "global_pooled_availability",
           turn: flowDoc.turn,
           clearedUnits: flowDoc.clearedUnits,
+          clearedUnitsPooled: flowDoc.clearedUnitsPooled ?? flowDoc.clearedUnits,
           unmetDemandUnits: flowDoc.unmetDemandUnits,
+          unmetDemandUnitsPooled: flowDoc.unmetDemandUnitsPooled ?? flowDoc.unmetDemandUnits,
           surplusUnits: flowDoc.surplusUnits,
+          surplusUnitsPooled: flowDoc.surplusUnitsPooled ?? flowDoc.surplusUnits,
           stockUnits: flowDoc.stockUnits ?? null,
           coverTurns: flowDoc.coverTurns ?? null,
         };
