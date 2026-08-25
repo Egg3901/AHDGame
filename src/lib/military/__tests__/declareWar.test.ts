@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { declareWar } from "../declareWar";
 
 const createConflictSpy = vi.fn();
@@ -25,6 +25,28 @@ vi.mock("@/lib/military/treatyDefence", () => ({
   resolveTreatyDefenders: (...a: unknown[]) => treatyDefendersSpy(...a),
 }));
 
+const notifySpy = vi.fn();
+const orgHistorySpy = vi.fn();
+const hogSpy = vi.fn();
+vi.mock("@/lib/notifications", () => ({
+  createNotifications: (...a: unknown[]) => {
+    notifySpy(...a);
+    return Promise.resolve();
+  },
+}));
+vi.mock("@/lib/internationalOrganizations/service", () => ({
+  recordOrgHistoryEvent: (...a: unknown[]) => {
+    orgHistorySpy(...a);
+    return Promise.resolve();
+  },
+}));
+vi.mock("@/lib/api/headOfGovernment", () => ({
+  getHeadOfGovernmentCharacterId: (...a: unknown[]) => hogSpy(...a),
+}));
+
+const CHAR_ID = new ObjectId();
+const USER_ID = new ObjectId();
+
 /**
  * A db whose host-scoped lookup returns `hosted`, and whose scan for a war between
  * the two parties sees `all` (defaulting to just `hosted`).
@@ -35,10 +57,16 @@ vi.mock("@/lib/military/treatyDefence", () => ({
  */
 function stubDb(hosted: unknown = null, all?: unknown[]): Db {
   const scan = all ?? (hosted == null ? [] : [hosted]);
+  const characters = [{ _id: CHAR_ID, userId: USER_ID }];
   return {
-    collection: () => ({
-      findOne: vi.fn().mockResolvedValue(hosted),
-      find: () => ({ toArray: async () => scan }),
+    collection: (name: string) => ({
+      // `cabinetMembers` is the defence-seat lookup for a notified ally; returning null
+      // leaves the head of government as the sole recipient.
+      findOne: vi.fn().mockResolvedValue(name === "cabinetMembers" ? null : hosted),
+      find: () => ({
+        toArray: async () => (name === "characters" ? characters : scan),
+        project: () => ({ toArray: async () => (name === "characters" ? characters : scan) }),
+      }),
       // Treaty entries are $push-ed onto a live conflict when allies join one.
       updateOne: (...a: unknown[]) => {
         conflictUpdateSpy(...a);
@@ -60,6 +88,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Default: no treaty binds anybody, so every pre-existing case keeps its shape.
   treatyDefendersSpy.mockResolvedValue([]);
+  hogSpy.mockResolvedValue(CHAR_ID);
 });
 
 describe("declareWar", () => {
@@ -213,5 +242,27 @@ describe("declareWar treaty defence", () => {
     };
     await declareWar(stubDb(live), pactDefender);
     expect(joinSideSpy).not.toHaveBeenCalledWith(expect.anything(), live, "RU", expect.anything());
+  });
+
+  it("tells an auto-joined ally's government that its treaty took it to war", async () => {
+    treatyDefendersSpy.mockResolvedValue([{ countryId: "RU", organizationId: "WARSAW_PACT" }]);
+    await declareWar(stubDb(), pactDefender);
+    const inputs = notifySpy.mock.calls[0][0] as Array<{
+      userId: unknown;
+      type: string;
+      message: string;
+    }>;
+    expect(inputs.length).toBeGreaterThan(0);
+    expect(inputs[0].userId).toEqual(USER_ID);
+    expect(inputs[0].type).toBe("treaty_defence_invoked");
+    expect(inputs[0].message).toContain("Warsaw Pact");
+    // Player-facing copy: no em or en dashes.
+    expect(inputs[0].message).not.toMatch(/[—–]/);
+    expect(orgHistorySpy).toHaveBeenCalled();
+  });
+
+  it("sends nothing when no ally was pulled in", async () => {
+    await declareWar(stubDb(), input);
+    expect(notifySpy).not.toHaveBeenCalled();
   });
 });

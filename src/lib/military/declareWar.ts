@@ -1,6 +1,12 @@
-import type { Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import type { Character } from "@/lib/db/types";
+import { createNotifications, type NotificationInput } from "@/lib/notifications";
+import { recordOrgHistoryEvent } from "@/lib/internationalOrganizations/service";
+import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
+import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
+import { INTERNATIONAL_ORGANIZATIONS } from "@/lib/constants/internationalOrganizations";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import { getConflictsCollection } from "@/lib/db/collections/conflicts";
 import { createConflict } from "@/lib/military/createConflict";
@@ -25,6 +31,91 @@ export interface DeclareWarResult {
   conflict: ConflictDoc;
   /** True when the declarer enrolled in an existing war rather than starting one. */
   joined: boolean;
+}
+
+/**
+ * Tell the countries a treaty just took to war, and log it on the alliance.
+ *
+ * Notifications are addressed to USERS, not countries — `NotificationInput` carries a
+ * `userId` and there is no country-addressed notice anywhere in this codebase. So a
+ * country's notice goes to the two seats that can act on it: the head of government and
+ * the defence minister, the same pair the declare-war route authorises to take a country
+ * to war in the first place.
+ *
+ * A war must never fail over a notification. `createNotifications` already swallows and
+ * logs its own errors, which is the behaviour this relies on.
+ */
+async function announceTreatyEntries(
+  db: Db,
+  entries: TreatyEntry[],
+  conflictName: string,
+  currentTurn: number
+): Promise<void> {
+  if (entries.length === 0) return;
+
+  const inputs: NotificationInput[] = [];
+  for (const e of entries) {
+    const org =
+      INTERNATIONAL_ORGANIZATIONS[e.organizationId as keyof typeof INTERNATIONAL_ORGANIZATIONS]
+        ?.name ?? e.organizationId;
+    const defended = COUNTRY_CONFIGS[e.defending]?.name ?? e.defending;
+
+    const seatCharacterIds: ObjectId[] = [];
+    const hog = await getHeadOfGovernmentCharacterId(db, e.countryId);
+    if (hog) seatCharacterIds.push(hog);
+    const defenceSeat = DEFENSE_POSITION_BY_COUNTRY[e.countryId];
+    if (defenceSeat) {
+      const row = await db
+        .collection<{ characterId?: ObjectId }>("cabinetMembers")
+        .findOne({ countryId: e.countryId, positionId: defenceSeat });
+      if (row?.characterId) seatCharacterIds.push(row.characterId);
+    }
+    if (seatCharacterIds.length === 0) continue;
+
+    const chars = await db
+      .collection<Character>("characters")
+      .find({ _id: { $in: seatCharacterIds } })
+      .project<{ _id: ObjectId; userId?: ObjectId }>({ _id: 1, userId: 1 })
+      .toArray();
+
+    for (const c of chars) {
+      if (!c.userId) continue;
+      inputs.push({
+        userId: c.userId,
+        type: "treaty_defence_invoked" as const,
+        title: "Treaty obligations invoked",
+        message: `${defended} has been attacked. Under the ${org}, your forces have entered the ${conflictName}.`,
+        metadata: {
+          countryId: e.countryId,
+          organizationId: e.organizationId,
+          defending: e.defending,
+        },
+      });
+    }
+  }
+
+  // Deduped by user: one player can hold both seats, and two identical notices about one
+  // war reads as a bug.
+  const seen = new Set<string>();
+  await createNotifications(
+    inputs.filter((i) => {
+      const key = String(i.userId);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+  );
+
+  for (const e of entries) {
+    const defended = COUNTRY_CONFIGS[e.defending]?.name ?? e.defending;
+    await recordOrgHistoryEvent(
+      db,
+      e.countryId,
+      currentTurn,
+      `${e.organizationId} collective defence invoked: entered the ${conflictName} to defend ${defended}.`,
+      { organizationId: e.organizationId, defending: e.defending }
+    );
+  }
 }
 
 /** Stamp the resolver's output with who it came for and when. */
@@ -90,9 +181,11 @@ export async function declareWar(db: Db, input: DeclareWarInput): Promise<Declar
         await joinSide(db, live, d.countryId, defenderSide);
       }
       if (defenders.length > 0) {
+        const entries = toTreatyEntries(defenders, defender, currentTurn);
         await getConflictsCollection(db).updateOne({ _id: live._id }, {
-          $push: { treatyEntries: { $each: toTreatyEntries(defenders, defender, currentTurn) } },
+          $push: { treatyEntries: { $each: entries } },
         } as never);
+        await announceTreatyEntries(db, entries, live.name, currentTurn);
       }
     }
 
@@ -113,7 +206,10 @@ export async function declareWar(db: Db, input: DeclareWarInput): Promise<Declar
 
   const conflict = await createConflict(db, {
     id: `war_${declarer}_${defender}_${currentTurn}`.toLowerCase(),
-    name: `${declarerName}–${defenderName} War`,
+    // Plain hyphen, not an en dash: the war name is player-facing copy and the project
+    // bars en dashes there. Conflicts created before this keep their stored name; only
+    // new wars are affected.
+    name: `${declarerName}-${defenderName} War`,
     hostCountry: defender,
     type: "interstate",
     sideA: { label: declarerName, countries: [declarer], kind: "state" },
@@ -131,5 +227,6 @@ export async function declareWar(db: Db, input: DeclareWarInput): Promise<Declar
     declaredByBillId: billId,
     ...(treatyEntries.length > 0 ? { treatyEntries } : {}),
   });
+  await announceTreatyEntries(db, treatyEntries, conflict.name, currentTurn);
   return { conflict, joined: false };
 }
