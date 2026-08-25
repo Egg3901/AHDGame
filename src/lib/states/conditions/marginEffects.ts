@@ -67,6 +67,12 @@ export const MODIFIER_MARGIN_FACTOR: Record<string, number> = {
   national_confidence: 0,
   secure_border: 0,
   broad_firearm_rights: 0,
+
+  // The war block. Purely political: it moves approval and nothing else. This
+  // registration is load-bearing rather than defensive — an unregistered id
+  // takes the 0.75 default below, and war exhaustion reaches -25, so leaving it
+  // out puts -18.75 into every region's margins and clamps at the cap.
+  war: 0,
 };
 
 export function marginEffectForModifier(approvalEffect: number, modifierId: string): number {

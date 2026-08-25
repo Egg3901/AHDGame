@@ -40,8 +40,15 @@ export interface ActiveModifier {
   effect: number;
   /** Stacked profit-margin swing in percentage points (capped at turn time). */
   marginEffect?: number;
-  /** Where the modifier originated — metric thresholds or a governor address. */
-  source?: "metric" | "address";
+  /**
+   * Where the modifier originated — metric thresholds, a governor address, or
+   * the war block. `war` carries its own damped total and declares
+   * `marginEffect: 0`; it must not be treated as a metric condition by the
+   * margin fallbacks or by the chip tooltips.
+   */
+  source?: "metric" | "address" | "war";
+  /** `war` only: the undamped parts behind the total, for the chip tooltip. */
+  breakdown?: Array<{ id: string; label: string; effect: number }>;
 }
 
 export interface EvaluateModifiersOptions {
