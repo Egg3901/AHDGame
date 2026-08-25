@@ -25,7 +25,7 @@ import type { CommodityType } from "@/lib/constants/commodities";
 import type { CountryId } from "@/lib/constants/countries";
 import { isCorporateIssuerBond } from "@/lib/bonds/corporateCredit";
 import { buildPrimeRateByCountry } from "@/lib/centralBank/helpers";
-import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
+import { isCurtained } from "@/lib/constants/commandEconomy";
 import { capInputPriceRatioAtWorld } from "@/lib/corporations/physicalPnl";
 import { getActiveSubsidies } from "@/lib/subsidies/subsidyEffects";
 import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
@@ -845,8 +845,9 @@ export async function buildCorporationLookups(
       blocsByCountry.get(m.countryId)!.add(String(m.organizationId));
     }
     // Iron curtain (mirrors commodityPriceTurn): planned economies trade only
-    // among themselves; membership from the engine's MARKETIZATION_SCHEDULE so
-    // the curtain lifts on the historical marketization dates.
+    // among themselves; membership from the engine's MARKETIZATION_SCHEDULE via
+    // isCurtained, so the curtain lifts on the historical marketization dates
+    // and the Tito-split exemption keeps Yugoslavia trading with the open world.
     const [curtainCfg, curtainState] = await Promise.all([
       db
         .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
@@ -858,7 +859,7 @@ export async function buildCorporationLookups(
     const curtainEnabled = curtainCfg?.commandEconomyEnabled === true;
     const curtainYear = curtainState?.currentYear ?? null;
     const curtainedCountries = new Set<string>(
-      COUNTRY_ORDER.filter((c) => isPlannedEconomy(c, curtainYear, curtainEnabled))
+      COUNTRY_ORDER.filter((c) => isCurtained(c, curtainYear, curtainEnabled))
     );
     const { affinityFor, capUnitsFor } = buildTradeAffinity({
       ftaPairs: activeFtaPairs,
