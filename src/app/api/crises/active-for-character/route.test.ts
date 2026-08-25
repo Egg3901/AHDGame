@@ -173,3 +173,83 @@ describe("GET /api/crises/active-for-character — option availability", () => {
     expect(body.crises[0]?.optionAvailability?.allied_mediation?.eligible).toBe(true);
   });
 });
+
+describe("GET /api/crises/active-for-character — query volume", () => {
+  it("loads the nation's capability once no matter how many global responses are open", async () => {
+    // Capability is country-scoped: budget, approval and military rows are the
+    // same for every crisis in one request. Reloading them per crisis multiplies
+    // a militaryUnits scan across a feed every player polls each minute.
+    const second = { ...makeCrisis(), _id: new ObjectId() };
+    db.collectionMocks["crises"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([makeCrisis(), second]),
+    });
+
+    const res = await get();
+    const body = (await res.json()) as { crises: unknown[] };
+
+    expect(body.crises).toHaveLength(2);
+    expect(db.collectionMocks["federalBudget"]!.findOne).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks["governmentApprovals"]!.findOne).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks["militaryUnits"]!.find).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── Aid nodes outlive the flag that created them (audit) ───────────────────
+// createCrisisInteraction promotes a choice node to an `aid` node only while
+// crisisAidBillsEnabled is on, but the promoted tree is stored on the
+// interaction. Turn the flag off and those nodes stay `aid` while the interact
+// route refuses them with "Aid bills are not enabled" and the crisis page
+// renders no controls. Advertising the prompt as actionable is then a lie.
+
+describe("GET /api/crises/active-for-character — aid nodes with aid bills off", () => {
+  const AID_NODE = {
+    ...NODE,
+    type: "aid" as const,
+    requiredRoles: ["headOfState"],
+    optionsByRole: undefined,
+    options: [
+      { optionId: "aid_skip", label: "No Aid", description: "No contribution.", effects: [] },
+      { optionId: "aid_contribute", label: "Send Aid", description: "Contribute.", effects: [] },
+    ],
+  };
+
+  function stubAidCrisis() {
+    const crisis = {
+      ...makeCrisis(),
+      scope: "country",
+      countryIds: ["US"],
+      globalResponse: undefined,
+      interactionDefinition: { decisionTree: [AID_NODE] },
+    };
+    db.collectionMocks["crises"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([crisis]),
+    });
+    db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue({
+      ...makeInteraction(),
+      decisionTree: [AID_NODE],
+    });
+  }
+
+  it("does not offer the prompt when aid bills are disabled", async () => {
+    const { isCrisisAidBillsEnabled } = await import("@/lib/crises/featureFlag");
+    vi.mocked(isCrisisAidBillsEnabled).mockResolvedValue(false);
+    stubAidCrisis();
+
+    const res = await get();
+    const body = (await res.json()) as { crises: Array<{ canInteract: boolean }> };
+
+    expect(body.crises).toHaveLength(0);
+  });
+
+  it("offers the prompt when aid bills are enabled", async () => {
+    const { isCrisisAidBillsEnabled } = await import("@/lib/crises/featureFlag");
+    vi.mocked(isCrisisAidBillsEnabled).mockResolvedValue(true);
+    stubAidCrisis();
+
+    const res = await get();
+    const body = (await res.json()) as { crises: Array<{ canInteract: boolean }> };
+
+    expect(body.crises).toHaveLength(1);
+    expect(body.crises[0]!.canInteract).toBe(true);
+  });
+});

@@ -933,3 +933,70 @@ describe("submitCrisisDecision — rejection status codes", () => {
     expect((err as ApiError).message).toMatch(/insufficient treasury/i);
   });
 });
+
+// ── Countries with no part in a global response (audit, ticket #1183) ───────
+// optionsForGlobalResponder returns [] for a country that holds no role, so the
+// option lookup misses and the responder was told "Invalid option" — the option
+// is fine, their nation simply is not party to the response. Same class of
+// misleading refusal the ticket is about.
+
+describe("submitCrisisDecision — a country with no role in the response", () => {
+  function stubResponseCrisis(
+    interaction: CrisisInteraction,
+    roleByCountry: Record<string, string>
+  ) {
+    db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue(interaction);
+    db.collectionMocks["crises"]!.findOne.mockResolvedValue({
+      ...makeCrisis(),
+      _id: interaction.crisisId,
+      scope: "global",
+      interactionDefinition: { decisionTree: GLOBAL_TREE, autoResolveOnExpiry: true },
+      globalResponse: {
+        conflictKey: "berlin",
+        eventKey: "berlin_bloc",
+        roleByCountry,
+        defaultOptionIdByRole: { bloc: "reserves" },
+        outcomes: [],
+        defaultOutcomeId: "stalemate",
+      },
+    });
+    db.collection("characters");
+  }
+
+  it("refuses with 403 naming the real reason, not 'Invalid option'", async () => {
+    const interaction = makeGlobalInteraction();
+    stubResponseCrisis(interaction, { GB: "bloc" });
+
+    const err = await submitCrisisDecision(
+      mdb(),
+      interaction._id,
+      "reserves",
+      new ObjectId(),
+      "US",
+      ["headOfState"]
+    ).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(403);
+    expect((err as ApiError).message).not.toMatch(/invalid option/i);
+    expect((err as ApiError).message).toMatch(/not one of the governments|no role/i);
+  });
+
+  it("still rejects a genuinely unknown option from a participating country as 400", async () => {
+    const interaction = makeGlobalInteraction();
+    stubResponseCrisis(interaction, { US: "bloc" });
+
+    const err = await submitCrisisDecision(
+      mdb(),
+      interaction._id,
+      "not_an_option",
+      new ObjectId(),
+      "US",
+      ["headOfState"]
+    ).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(400);
+    expect((err as ApiError).message).toMatch(/invalid option/i);
+  });
+});

@@ -69,7 +69,13 @@ function clamp(value: number, min = 0, max = 100): number {
   return Math.max(min, Math.min(max, Math.round(value * 10) / 10));
 }
 
-async function loadCampaignCapability(
+/**
+ * A nation's current capability snapshot. Country-scoped and independent of any
+ * one crisis, so a caller answering several crises in a single request should
+ * load it once and pass it back in rather than paying for the militaryUnits
+ * read per crisis.
+ */
+export async function loadCampaignCapability(
   db: Db,
   countryId: string
 ): Promise<CampaignCapabilitySnapshot> {
@@ -125,11 +131,12 @@ async function loadCampaignCapability(
 async function responderContext(
   db: Db,
   definition: NonNullable<Crisis["globalResponse"]>,
-  countryId: string
+  countryId: string,
+  capability?: CampaignCapabilitySnapshot
 ): Promise<{ stage: CampaignStage; capability: CampaignCapabilitySnapshot }> {
   const state = await loadConflictState(db, definition.conflictKey);
   const stage = definition.campaign?.stage ?? normalizeCampaignState(state.campaign).stage;
-  return { stage, capability: await loadCampaignCapability(db, countryId) };
+  return { stage, capability: capability ?? (await loadCampaignCapability(db, countryId)) };
 }
 
 /**
@@ -142,12 +149,13 @@ export async function optionAvailabilityForGlobalResponder(
   db: Db,
   crisis: Pick<Crisis, "globalResponse">,
   countryId: string,
-  options: CrisisDecisionOption[]
+  options: CrisisDecisionOption[],
+  capability?: CampaignCapabilitySnapshot
 ): Promise<Record<string, CampaignRequirementResult> | null> {
   const definition = crisis.globalResponse;
   if (!definition || !globalResponseRoleFor(crisis, countryId)) return null;
-  const { stage, capability } = await responderContext(db, definition, countryId);
-  return assessCampaignOptions(options, capability, stage);
+  const context = await responderContext(db, definition, countryId, capability);
+  return assessCampaignOptions(options, context.capability, context.stage);
 }
 
 export interface GlobalResponseCampaignBrief {

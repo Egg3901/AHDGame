@@ -446,6 +446,12 @@ export async function submitCrisisDecision(
   //    interaction stays open on the same node so other leaders can still
   //    respond — it does not resolve on a single decision. ──
   if (crisis && isMultiResponderNode(crisis, currentNode)) {
+    // A country with no role sees an empty option list, which would otherwise
+    // surface as "Invalid option" — the option is fine, the nation simply is
+    // not party to this response. Say so instead.
+    if (crisis.globalResponse && !globalResponseRoleFor(crisis, countryId)) {
+      throw forbidden("Your country is not one of the governments called to respond");
+    }
     const responseOptions = crisis.globalResponse
       ? optionsForGlobalResponder(crisis, currentNode, countryId)
       : (currentNode.options ?? []);
