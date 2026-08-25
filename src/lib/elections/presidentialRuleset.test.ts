@@ -58,6 +58,21 @@ describe("presidential ruleset seam (rules freeze)", () => {
     expect(r.vpTravelPresenceWeight).toBe(1);
   });
 
+  it("the running-mate surrogate knobs are identical across v1, v2, and v3", () => {
+    // The surrogate mechanic wires to these knobs but ships at identity in this
+    // PR: magnitude tuning happens later (t384). Pin cross-version equality so a
+    // stray tuning edit to one version is caught.
+    const v1 = presidentialRulesetFor({ rulesetVersion: 1 });
+    const v2 = presidentialRulesetFor({ rulesetVersion: 2 });
+    const v3 = presidentialRulesetFor({ rulesetVersion: 3 });
+    expect(v1.vpSurrogateActionCap).toBe(2);
+    expect(v2.vpSurrogateActionCap).toBe(2);
+    expect(v3.vpSurrogateActionCap).toBe(2);
+    expect(v1.vpTravelPresenceWeight).toBe(1);
+    expect(v2.vpTravelPresenceWeight).toBe(1);
+    expect(v3.vpTravelPresenceWeight).toBe(1);
+  });
+
   it("the strength multiplier honors a ruleset-supplied cap and defaults to the live constant", () => {
     const strength = 1_000_000; // deep in the asymptote
     expect(campaignStrengthVoteMultiplier(strength)).toBeCloseTo(
