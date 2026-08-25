@@ -180,18 +180,24 @@ export async function GET(request: Request) {
       // physical cost model, and inverting ANY margin drops upkeep and
       // compliance and cannot represent a negative operating cost. Falls back
       // to the old expression for rows without the field.
+      // Realized, not nameplate — the same basis the NPV block further down in
+      // this same route already uses, so the per-sector rows and the balance
+      // sheet in one response cannot disagree. `workers` below deliberately
+      // stays on the nameplate: headcount tracks installed capacity, not what
+      // the sector managed to sell. See lib/corporations/sectorRevenueBasis.
+      const sectorRevenue = sectorEconomicRevenue(sector);
       const bookedPnl = readPlantsPnl(sector);
       const maintenance = bookedPnl
         ? bookedPnl.operatingCost
-        : sector.revenue * (1 - effectiveMargin / 100);
+        : sectorRevenue * (1 - effectiveMargin / 100);
       const profit = bookedPnl
         ? bookedPnl.profit
-        : sector.revenue - maintenance - sector.currentGrowthCost;
+        : sectorRevenue - maintenance - sector.currentGrowthCost;
 
       return {
         stateId: sector.stateId,
         stateName: stateNameMap.get(sector.stateId) ?? sector.stateId,
-        revenue: Math.round(sector.revenue),
+        revenue: Math.round(sectorRevenue),
         maintenanceCost: Math.round(maintenance),
         growthCost: Math.round(sector.currentGrowthCost),
         profit: Math.round(profit),
