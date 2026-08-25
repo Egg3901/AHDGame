@@ -1,4 +1,9 @@
+import type { Db } from "mongodb";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import type { CountryId } from "@/lib/constants/countries";
+import { listConflictsForCountry } from "@/lib/db/collections/conflicts";
+import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
+import type { ConflictDoc } from "@/lib/db/types/conflict";
 import { shareOf, type Side } from "@/lib/military/occupation";
 import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
 
@@ -70,6 +75,13 @@ export interface WarEffortInput {
   turn?: number;
   /** Trailing control reading, refreshed when a battle resolves. */
   sample?: { turn: number; control: number };
+  /**
+   * Turn this country entered. The sample belongs to the CONFLICT, not to any
+   * one belligerent, so a sample older than this is discarded: a country that
+   * joined last week must not be credited with an advance its side made before
+   * it arrived.
+   */
+  entryTurn?: number;
 }
 
 /**
@@ -96,7 +108,7 @@ export interface WarEffortInput {
  * invasion scores negative, and a proxy war pays both patrons symmetrically.
  */
 export function warEffort(input: WarEffortInput): number {
-  const { control, entryControl, side, turnsSinceEntry, turn, sample } = input;
+  const { control, entryControl, side, turnsSinceEntry, turn, sample, entryTurn } = input;
 
   const held = shareOf(control, side) * 100;
   const start = shareOf(entryControl, side) * 100;
@@ -105,15 +117,28 @@ export function warEffort(input: WarEffortInput): number {
   const span = gain >= 0 ? 100 - start : start;
   const position = span > 0 ? gain / span : 0;
 
-  const pace = Math.min(EXPECTATION_CAP, turnsSinceEntry / EXPECTATION_TURNS);
+  // Floored at zero: a reseed or an admin rewind can move the clock backwards,
+  // and a negative age would run the expectation in reverse — crediting an
+  // attacker for ground it has not taken and penalising a defender for holding.
+  const pace = clamp(turnsSinceEntry / EXPECTATION_TURNS, 0, EXPECTATION_CAP);
   const expected = (0.5 - start / 100) * 2 * pace;
 
   let momentum = 0;
-  if (sample && turn !== undefined) {
+  const sampleIsOurs = sample && (entryTurn === undefined || sample.turn >= entryTurn);
+  if (sample && sampleIsOurs && turn !== undefined) {
     const elapsed = turn - sample.turn;
     if (elapsed > 0) {
       const sampleHeld = shareOf(sample.control, side) * 100;
-      const rate = (held - sampleHeld) / (MOMENTUM_SPAN * (elapsed / MOMENTUM_WINDOW));
+      // The divisor is flat inside the window and only grows beyond it. Scaling
+      // by raw elapsed would make momentum hyper-sensitive right after a
+      // refresh — a five point battle reads as full momentum one turn after the
+      // sample was taken and a fifth of that twenty-four turns later, so the
+      // same engagement is worth wildly different approval depending only on
+      // where in the refresh cycle it happened to land. Flat inside the window
+      // makes an identical advance score identically; growing outside it keeps
+      // a stale sample from crediting movement it is too old to measure.
+      const age = Math.max(elapsed, MOMENTUM_WINDOW);
+      const rate = (held - sampleHeld) / (MOMENTUM_SPAN * (age / MOMENTUM_WINDOW));
       momentum = clamp(rate, -1, 1);
     }
   }
@@ -161,11 +186,40 @@ export function allianceContribution(input: AllianceContributionInput): number |
   const { mine, peers, turnsSinceEntry } = input;
 
   const fair = median(peers);
-  const ratio = fair > 0 ? mine / fair : 0;
+  // A side where more than half the members sent nothing has a median of zero,
+  // and dividing by it would score EVERY member at the floor — including the one
+  // actually fighting the war. When the typical ally contributes nothing,
+  // contributing anything is carrying the coalition.
+  const ratio = fair > 0 ? mine / fair : mine > 0 ? 2 : 0;
   const value = round1(clamp(ratio - 1, -ALLIANCE_CONTRIBUTION_BOUND, ALLIANCE_CONTRIBUTION_BOUND));
 
   if (turnsSinceEntry < ALLIANCE_GRACE_TURNS && value < 0) return null;
   return value;
+}
+
+export type ControlSample = { turn: number; control: number };
+
+/**
+ * The trailing sample to persist, or `undefined` to leave the stored one alone.
+ *
+ * Called from `applyOccupation` — the only writer of `control` — ABOVE its early
+ * return, so a turn on which the front did not move still ages the sample out.
+ * Otherwise a stalled front keeps a sample that grows arbitrarily old and
+ * dilutes any movement that eventually happens.
+ *
+ * A sample stamped in the future is replaced rather than trusted: a reseed or an
+ * admin rewind can move the clock backwards, and a negative elapsed would
+ * otherwise invert the momentum term.
+ */
+export function nextControlSample(
+  current: ControlSample | undefined,
+  turn: number,
+  control: number
+): ControlSample | undefined {
+  if (!current) return { turn, control };
+  const elapsed = turn - current.turn;
+  if (elapsed >= MOMENTUM_WINDOW || elapsed < 0) return { turn, control };
+  return undefined;
 }
 
 export interface WarPart {
@@ -224,4 +278,164 @@ export function buildWarModifier(applied: number, parts: WarPart[]): ActiveModif
     source: "war",
     breakdown: parts.filter((part) => part.effect !== 0),
   };
+}
+
+export interface WarApprovalResult {
+  modifiers: ActiveModifier[];
+  /** The block total to persist as `warApprovalTotal`. */
+  total: number;
+}
+
+/** Which side's roster holds this country, or null when it is not a belligerent. */
+function rosterSideOf(conflict: ConflictDoc, countryId: CountryId): Side | null {
+  if ((conflict.sideA.countries as string[]).includes(countryId)) return "A";
+  if ((conflict.sideB.countries as string[]).includes(countryId)) return "B";
+  return null;
+}
+
+/**
+ * When this country entered, and where the front stood then.
+ *
+ * `joinTurns` first, because it is the only complete entry ledger — `treatyEntries`
+ * records treaty-pulled allies alone, so a country that declared into an existing
+ * war has no entry there. Founding belligerents appear in neither and fall back to
+ * the conflict's own opening, which is correct for them.
+ */
+function entryOf(conflict: ConflictDoc, countryId: CountryId): { turn: number; control: number } {
+  const control = conflict.controlStart ?? conflict.control;
+  const joined = conflict.joinTurns?.find((entry) => entry.countryId === countryId);
+  // `?? control` rather than trusting the stamp: a half-written entry would
+  // otherwise put `undefined` through shareOf and make the whole block NaN.
+  if (joined) return { turn: joined.turn, control: joined.control ?? control };
+  const treaty = conflict.treatyEntries?.find((entry) => entry.countryId === countryId);
+  if (treaty) return { turn: treaty.joinedTurn, control };
+  return { turn: conflict.startTurn, control };
+}
+
+/**
+ * The war approval block for one country, damped and ready to persist.
+ *
+ * Selects a single conflict — the one this country has personally fought longest,
+ * ranked by its own entry turn so the choice agrees with the exhaustion clock.
+ * One war per country is deliberate: summing exhaustion across simultaneous wars
+ * would run past the settled floor, and duplicate modifier ids would stack in
+ * `applyModifiers` and collide on the React key in the chip list.
+ *
+ * Never throws. It runs inside `runPhase("approvalSnapshot", ...)` for every
+ * active country in a single `Promise.all`, so an unguarded failure would take
+ * the approval snapshot down for every country rather than one. On failure the
+ * previous total is held rather than zeroed, since a transient error reading as
+ * "target zero" would walk the block down at the damping step and back up again.
+ */
+export async function computeWarApproval(
+  db: Db,
+  countryId: CountryId,
+  turn: number,
+  prevTotal: number | undefined
+): Promise<WarApprovalResult> {
+  const previous = Number.isFinite(prevTotal) ? (prevTotal as number) : 0;
+
+  try {
+    const live = await listConflictsForCountry(db, countryId);
+    const mine = live
+      // Liveness is already in the query, and is re-checked here on purpose.
+      // `resolveConflict` stamps `status` and `endTurn` but never deletes the
+      // document, so a war that ended keeps matching every other predicate
+      // forever — and because `turn - entry` only grows, a resolved war would
+      // walk a country to the exhaustion floor and hold it there permanently.
+      // A silent, unrecoverable failure is worth two lines of defence.
+      .filter((conflict) => conflict.status !== "resolved")
+      .map((conflict) => ({ conflict, side: rosterSideOf(conflict, countryId) }))
+      .filter((row): row is { conflict: ConflictDoc; side: Side } => row.side !== null)
+      .map((row) => ({ ...row, entry: entryOf(row.conflict, countryId) }))
+      // Longest personally fought first, then by id. The id tiebreak is not
+      // cosmetic: `find()` without a sort has no guaranteed order, so two wars
+      // entered on the same turn could swap places between turns and swing the
+      // block from one front's score to the other's. Selection must be total.
+      .sort((a, b) => a.entry.turn - b.entry.turn || a.conflict._id.localeCompare(b.conflict._id));
+
+    const principal = mine[0];
+    if (!principal) return settle(previous, 0, []);
+
+    const { conflict, side, entry } = principal;
+    const turnsSinceEntry = Math.max(0, turn - entry.turn);
+
+    const parts: WarPart[] = [
+      {
+        id: "war_effort",
+        label: "War effort",
+        effect: warEffort({
+          control: conflict.control,
+          entryControl: entry.control,
+          side,
+          turnsSinceEntry,
+          turn,
+          sample: conflict.controlSample,
+          entryTurn: entry.turn,
+        }),
+      },
+      { id: "war_exhaustion", label: "War exhaustion", effect: warExhaustion(turnsSinceEntry) },
+    ];
+
+    const pulledIn = conflict.treatyEntries?.some((e) => e.countryId === countryId) ?? false;
+    if (pulledIn) {
+      const peers = (
+        side === "A" ? conflict.sideA.countries : conflict.sideB.countries
+      ) as CountryId[];
+      const byCountry = await theatrePersonnel(db, conflict._id, peers);
+      const contribution = allianceContribution({
+        mine: byCountry.get(countryId) ?? 0,
+        peers: peers.map((peer) => byCountry.get(peer) ?? 0),
+        turnsSinceEntry,
+      });
+      if (contribution !== null) {
+        parts.push({
+          id: "alliance_contribution",
+          label: "Alliance contribution",
+          effect: contribution,
+        });
+      }
+    }
+
+    const raw = parts.reduce((sum, part) => sum + part.effect, 0);
+    return settle(previous, raw, parts);
+  } catch (error) {
+    console.error("[warApproval] scoring failed, holding previous total:", error);
+    return settle(previous, previous, []);
+  }
+}
+
+function settle(previous: number, raw: number, parts: WarPart[]): WarApprovalResult {
+  // A corrupt conflict document (a non-finite `control`, say) would otherwise
+  // carry NaN through the clamps, through the damping step, and into
+  // governmentApprovals — where it poisons every rating computation downstream
+  // until something overwrites it. Fall back to holding the previous total,
+  // which is the same thing the failure path does.
+  const safeRaw = Number.isFinite(raw) ? raw : previous;
+  const stepped = stepWarTotal(previous, safeRaw);
+  const total = Number.isFinite(stepped) ? stepped : 0;
+  const finiteParts = parts.filter((part) => Number.isFinite(part.effect));
+  const modifier = buildWarModifier(total, finiteParts);
+  return { modifiers: modifier ? [modifier] : [], total };
+}
+
+/** Theatre personnel per country, for the countries on one side of one conflict. */
+async function theatrePersonnel(
+  db: Db,
+  theaterId: string,
+  countries: CountryId[]
+): Promise<Map<CountryId, number>> {
+  const units = await getMilitaryUnitsCollection(db)
+    .find(
+      { theaterId, countryId: { $in: countries } },
+      { projection: { countryId: 1, personnel: 1 } }
+    )
+    .toArray();
+
+  const byCountry = new Map<CountryId, number>();
+  for (const unit of units) {
+    const personnel = Number.isFinite(unit.personnel) ? unit.personnel : 0;
+    byCountry.set(unit.countryId, (byCountry.get(unit.countryId) ?? 0) + Math.max(0, personnel));
+  }
+  return byCountry;
 }

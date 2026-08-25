@@ -408,6 +408,13 @@ describe("resolveBattleDeclarations — occupation", () => {
 
     const join = db.collectionMocks.conflicts.updateOne.mock.calls.find((c) => c[1]?.$addToSet);
     expect(join![1].$addToSet).toEqual({ "sideA.countries": "US" });
+
+    // The entry stamp is a separate, country-filtered write: war approval scores
+    // a country from the turn and front position at which it actually entered.
+    const stamp = db.collectionMocks.conflicts.updateOne.mock.calls.find(
+      (c) => c[1]?.$push?.joinTurns
+    );
+    expect(stamp![1].$push.joinTurns).toEqual({ countryId: "US", turn: 41, control: 100 });
   });
 
   it("fights normally but moves no ground when neither side can be resolved", async () => {

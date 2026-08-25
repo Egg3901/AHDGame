@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   allianceContribution,
   buildWarModifier,
+  nextControlSample,
   stepWarTotal,
   warEffort,
   warExhaustion,
@@ -114,17 +115,48 @@ describe("warEffort", () => {
   });
 
   /**
+   * The sample belongs to the conflict, not to any one belligerent. A country
+   * that joined two turns ago must not be credited with an advance its side
+   * made before it arrived.
+   */
+  it("ignores a momentum sample taken before the country entered", () => {
+    const joined = {
+      control: 45,
+      entryControl: 45,
+      side: "A" as const,
+      turnsSinceEntry: 2,
+      turn: 902,
+      entryTurn: 900,
+    };
+    const withStale = warEffort({ ...joined, sample: { turn: 880, control: 100 } });
+    const withNone = warEffort({ ...joined, sample: undefined });
+    expect(withStale).toBe(withNone);
+  });
+
+  /**
    * The sample refreshes only when a battle resolves, so its age drifts with
    * how often the front happens to fight. Momentum is a rate, not a raw
    * displacement, or an identical advance would score differently.
    */
-  it("credits the same ground more when it was taken faster", () => {
-    const base = { control: 90, entryControl: 100, side: "A" as const, turnsSinceEntry: 96 };
-    const still = warEffort(base);
-    const fast = warEffort({ ...base, turn: 124, sample: { turn: 100, control: 100 } });
-    const slow = warEffort({ ...base, turn: 148, sample: { turn: 100, control: 100 } });
-    expect(fast).toBeGreaterThan(slow);
-    expect(slow).toBeGreaterThan(still);
+  /**
+   * The sample refreshes only when a battle resolves, so its age drifts freely
+   * between zero and the window. Inside the window the same ground must score
+   * the same however many turns ago the sample happened to be taken, or an
+   * identical advance is worth four times as much purely because the front
+   * fought recently.
+   */
+  it("scores the same advance identically anywhere inside the momentum window", () => {
+    const base = { control: 95, entryControl: 100, side: "A" as const, turnsSinceEntry: 96 };
+    const justSampled = warEffort({ ...base, turn: 101, sample: { turn: 100, control: 100 } });
+    const fullWindow = warEffort({ ...base, turn: 124, sample: { turn: 100, control: 100 } });
+    expect(justSampled).toBe(fullWindow);
+  });
+
+  it("dilutes an advance measured against a sample older than the window", () => {
+    const base = { control: 95, entryControl: 100, side: "A" as const, turnsSinceEntry: 96 };
+    const fresh = warEffort({ ...base, turn: 124, sample: { turn: 100, control: 100 } });
+    const stale = warEffort({ ...base, turn: 220, sample: { turn: 100, control: 100 } });
+    expect(stale).toBeLessThan(fresh);
   });
 
   it("cannot be farmed by oscillating across a fixed point", () => {
@@ -154,6 +186,17 @@ describe("warEffort", () => {
     });
     expect(extreme).toBeLessThanOrEqual(2);
     expect(extreme).toBeGreaterThanOrEqual(-2);
+  });
+
+  /**
+   * A reseed or an admin rewind can move the clock backwards. A negative age
+   * must not run the expectation backwards and start crediting an attacker for
+   * ground it has not taken.
+   */
+  it("treats a negative war age as a war that has just begun", () => {
+    const rewound = { control: 100, entryControl: 100, turnsSinceEntry: -500 };
+    expect(warEffort({ ...rewound, side: "A" })).toBe(0);
+    expect(warEffort({ ...rewound, side: "B" })).toBe(0);
   });
 });
 
@@ -202,6 +245,19 @@ describe("allianceContribution", () => {
 
   it("floors every member of a coalition that deployed nothing", () => {
     expect(allianceContribution({ ...settled, mine: 0, peers: [0, 0, 0] })).toBe(-1);
+  });
+
+  /**
+   * With more than half the side absent the median is zero, and dividing by it
+   * would score EVERY member at the floor including the one actually fighting
+   * the war. Sending anything when the typical ally sends nothing is carrying it.
+   */
+  it("pays the one country carrying a coalition of no-shows", () => {
+    expect(allianceContribution({ ...settled, mine: 500000, peers: [0, 0, 0, 500000] })).toBe(1);
+  });
+
+  it("still floors the absentees in that same coalition", () => {
+    expect(allianceContribution({ ...settled, mine: 0, peers: [0, 0, 0, 500000] })).toBe(-1);
   });
 
   it("never leaves its declared bounds", () => {
@@ -267,5 +323,37 @@ describe("buildWarModifier", () => {
     const label = buildWarModifier(-2, parts)?.label ?? "";
     expect(label.length).toBeGreaterThan(0);
     expect(label).not.toMatch(/[–—]/);
+  });
+});
+
+describe("nextControlSample", () => {
+  it("takes a first sample when the conflict has never had one", () => {
+    expect(nextControlSample(undefined, 100, 80)).toEqual({ turn: 100, control: 80 });
+  });
+
+  it("leaves a sample alone while it is still inside the momentum window", () => {
+    expect(nextControlSample({ turn: 100, control: 90 }, 110, 80)).toBeUndefined();
+  });
+
+  it("refreshes a sample that has aged past the window", () => {
+    expect(nextControlSample({ turn: 100, control: 90 }, 130, 80)).toEqual({
+      turn: 130,
+      control: 80,
+    });
+  });
+
+  it("refreshes exactly at the window boundary", () => {
+    expect(nextControlSample({ turn: 100, control: 90 }, 124, 80)).toEqual({
+      turn: 124,
+      control: 80,
+    });
+  });
+
+  /** Clock changes (a reseed, an admin rewind) must not strand a future-dated sample. */
+  it("replaces a sample stamped in the future", () => {
+    expect(nextControlSample({ turn: 500, control: 90 }, 100, 80)).toEqual({
+      turn: 100,
+      control: 80,
+    });
   });
 });

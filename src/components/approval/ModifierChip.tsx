@@ -3,7 +3,7 @@
 import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
 
 function marginForModifier(modifier: ActiveModifier): number | null {
-  if (modifier.source === "address") return null;
+  if (modifier.source === "address" || modifier.source === "war") return null;
   if (modifier.marginEffect === 0) return null;
   return modifier.marginEffect ?? null;
 }
@@ -46,6 +46,7 @@ function EffectIcon({ effect }: { effect: number }) {
 function ModifierChip({ modifier }: { modifier: ActiveModifier }) {
   const positive = modifier.effect > 0;
   const isAddress = modifier.source === "address";
+  const isWar = modifier.source === "war";
   const margin = marginForModifier(modifier);
   const marginPositive = margin != null && margin > 0;
 
@@ -61,7 +62,9 @@ function ModifierChip({ modifier }: { modifier: ActiveModifier }) {
       title={
         isAddress
           ? "Temporary boost from an active State of the State address (approval only)"
-          : "Derived from regional metric thresholds; affects approval and sector profit margins"
+          : isWar
+            ? "How the war is going: the front line, whether allies are contributing, and how long the public has carried it. Affects approval only."
+            : "Derived from regional metric thresholds; affects approval and sector profit margins"
       }
     >
       <EffectIcon effect={modifier.effect} />

@@ -55,7 +55,16 @@ export async function loadNationalApproval(countryId: CountryId): Promise<Nation
   // the era-1991 patches under the 1991 preset — threading era context fixes
   // both that and era-aware year drift in one go.
   const { preset, year } = await getEraContext(db);
-  const modifiers = evaluateModifiers(nationalAverages, { countryId, preset, year });
+  // Metric conditions are cheap to recompute from the averages already fetched.
+  // The national providers — the address bump, org statements and the war block
+  // — are not: they read conflicts, personnel and org state, which belongs in
+  // the turn phase rather than a page render. They are stored by the snapshot
+  // that produced this rating, so read them rather than recompute, and the
+  // chips a reader shows are exactly the ones folded into the number above.
+  const modifiers = [
+    ...evaluateModifiers(nationalAverages, { countryId, preset, year }),
+    ...(approvalDoc?.activeNationalModifiers ?? []),
+  ];
 
   // Canonical approval is the value the per-turn snapshot stored in
   // governmentApprovals (includes national address/cabinet adjustments and

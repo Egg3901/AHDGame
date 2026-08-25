@@ -35,7 +35,7 @@ function toneClass(n: number, kind: "text" | "bg" | "fill"): string {
 }
 
 function marginForModifier(modifier: ActiveModifier): number | null {
-  if (modifier.source === "address") return null;
+  if (modifier.source === "address" || modifier.source === "war") return null;
   if (modifier.marginEffect === 0) return null;
   return modifier.marginEffect ?? null;
 }
@@ -50,8 +50,12 @@ export function splitConditionForces(modifiers: ActiveModifier[]): {
   boostTotal: number;
   dragTotal: number;
 } {
-  const tailwinds = modifiers.filter((m) => m.effect > 0);
-  const headwinds = modifiers.filter((m) => m.effect < 0);
+  // The war block is national and can reach into the twenties. It has no
+  // business in a regional balance bar: it would dominate the viz and read as
+  // though one region were carrying a country-wide effect.
+  const regional = modifiers.filter((m) => m.source !== "war");
+  const tailwinds = regional.filter((m) => m.effect > 0);
+  const headwinds = regional.filter((m) => m.effect < 0);
   return {
     tailwinds,
     headwinds,
@@ -138,6 +142,7 @@ function DriverRow({ modifier }: { modifier: ActiveModifier }) {
   const positive = modifier.effect > 0;
   const margin = marginForModifier(modifier);
   const isAddress = modifier.source === "address";
+  const isWar = modifier.source === "war";
 
   return (
     <li
@@ -149,7 +154,9 @@ function DriverRow({ modifier }: { modifier: ActiveModifier }) {
       title={
         isAddress
           ? "Temporary boost from an active State of the State address (approval only)"
-          : "Derived from regional metric thresholds; affects approval and sector profit margins"
+          : isWar
+            ? "How the war is going: the front line, whether allies are contributing, and how long the public has carried it. Affects approval only."
+            : "Derived from regional metric thresholds; affects approval and sector profit margins"
       }
     >
       <span
