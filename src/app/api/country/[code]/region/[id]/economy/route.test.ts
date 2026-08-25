@@ -223,7 +223,7 @@ describe("GET /api/country/[code]/region/[id]/economy", () => {
     expect(owner!.marketShare).toBeGreaterThan(0);
   });
 
-  it("returns macro growth context (state metric + pop-weighted national) for the macro header", async () => {
+  it("returns macro growth context (own region metric + canonical national) for the macro header", async () => {
     db.collectionMocks.states.findOne.mockResolvedValue({
       _id: "CA",
       countryId: "US",
@@ -239,14 +239,13 @@ describe("GET /api/country/[code]/region/[id]/economy", () => {
       }),
     });
     db.collectionMocks.stateMetrics.findOne.mockResolvedValue(null);
-    db.collectionMocks.macroMetrics.find.mockReturnValue({
-      project: vi.fn().mockReturnValue({
-        toArray: async () => [
-          { _id: "CA", economic: { gdpGrowth: { value: 2.5 } } },
-          { _id: "TX", economic: { gdpGrowth: { value: 1.5 } } },
-        ],
-      }),
-    });
+    // The region's own value comes from its own doc; the NATIONAL figure comes
+    // from the national doc (`federal` for US), never a mean of the regions.
+    db.collectionMocks.macroMetrics.findOne.mockImplementation(async (filter: { _id: string }) =>
+      filter._id === "CA"
+        ? { _id: "CA", economic: { gdpGrowth: { value: 2.5 } } }
+        : { _id: "federal", economic: { gdpGrowth: { value: 4.068 } } }
+    );
     db.collectionMocks.tariffs.find.mockReturnValue({ toArray: async () => [] });
     db.collectionMocks.stateResourceCapacity.findOne.mockResolvedValue(null);
     db.collectionMocks.corporateSectors.find.mockReturnValue({ toArray: async () => [] });
@@ -265,8 +264,12 @@ describe("GET /api/country/[code]/region/[id]/economy", () => {
     expect(response.status).toBe(200);
     expect(data.macro).toBeDefined();
     expect(data.macro.stateGdpGrowth).toBe(2.5);
-    // (2.5×30M + 1.5×10M) / 40M = 2.25
-    expect(data.macro.nationalGdpGrowth).toBe(2.25);
+    // The national doc's own value, NOT a population-weighted mean of the two
+    // regions (which would have produced 2.25). Population is the wrong weight:
+    // the engine compounds each region's GDP by that region's own rate, so only
+    // a GDP-weighted aggregate is consistent, and the national doc already is
+    // one. See lib/country/nationalGdpGrowth.
+    expect(data.macro.nationalGdpGrowth).toBe(4.068);
   });
 
   it("degrades macro growth to nulls when metrics are missing instead of failing", async () => {
