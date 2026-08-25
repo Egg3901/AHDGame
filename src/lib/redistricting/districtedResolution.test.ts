@@ -62,7 +62,13 @@ describe("computePartySeatQuotas — proportional, no sweep (ticket 926)", () =>
       DSA: 140109, // 2.4%
     };
     const q = computePartySeatQuotas(baselines, 31, HOUSE_MIN_SHARE);
-    expect(q).toEqual({ AIP: 11, RFP: 10, DEM: 5, REP: 4, DSA: 1 });
+    // The anti-sweep property #926 exists for: the 36.5% plurality takes 16 of
+    // 31, not all 31. Since #1190 aligned the eligibility gate with
+    // `allocateSeats`, the sub-20% parties (DEM 17.0 / REP 11.7 / DSA 2.4) are
+    // no longer re-admitted — the same result the statewide resolver has
+    // produced for these tallies since #1032.
+    expect(q).toEqual({ AIP: 16, RFP: 15, DEM: 0, REP: 0, DSA: 0 });
+    expect(q.AIP).toBeLessThan(31);
     expect(Object.values(q).reduce((a, b) => a + b, 0)).toBe(31);
   });
 
@@ -76,26 +82,49 @@ describe("computePartySeatQuotas — proportional, no sweep (ticket 926)", () =>
       COM: 1375553, // 13.7%
     };
     const q = computePartySeatQuotas(baselines, 55, HOUSE_MIN_SHARE);
-    expect(q).toEqual({ REP: 18, DEM: 18, RFP: 12, COM: 7 });
+    // RFP clears the 20% floor on its own, so #926's concern still holds after
+    // the #1190 gate alignment. COM (13.7%) does not, and is now dropped rather
+    // than re-admitted by the old min-pool rule.
+    expect(q).toEqual({ REP: 21, DEM: 20, RFP: 14, COM: 0 });
     expect(q.RFP).toBeGreaterThan(0); // Reform is represented, not swept out
     expect(Object.values(q).reduce((a, b) => a + b, 0)).toBe(55);
   });
 
-  it("keeps a small party via the min-pool fallback when few clear the floor", () => {
-    // DEM 60 / REP 30 / MINOR 10 over 10 seats. Only DEM+REP clear 20%, but the
-    // pool must hold min(seats, parties)=3, so MINOR is pulled back in and gets
-    // its proportional seat (mirrors legacy allocateSeats — favors representation
-    // in many-seat races rather than concentrating on the top two).
+  it("drops a sub-threshold party whenever anyone clears the floor (#1190)", () => {
+    // DEM 60 / REP 30 / MINOR 10 over 10 seats. Only DEM+REP clear 20%, so only
+    // they are seated. This used to re-admit MINOR: the pool had to hold
+    // min(seats, parties)=3, and multi-seat states nearly always have more seats
+    // than parties, so the gate fired almost never and a 10% party collected a
+    // largest-remainder seat. `allocateSeats` and `computeSeatEstimates` both
+    // dropped that rule in #1032; this path had been left behind, which is why
+    // the districted projection disagreed with both of them.
     const q = computePartySeatQuotas({ DEM: 60, REP: 30, MINOR: 10 }, 10, HOUSE_MIN_SHARE);
-    expect(q).toEqual({ DEM: 6, REP: 3, MINOR: 1 });
+    expect(q).toEqual({ DEM: 7, REP: 3, MINOR: 0 });
+    expect(Object.values(q).reduce((a, b) => a + b, 0)).toBe(10);
   });
 
   it("excludes a sub-threshold party once the eligibles already fill the seats", () => {
-    // DEM 50 / REP 45 / MINOR 5 over just 2 seats: min-pool is 2, DEM+REP both
-    // clear 20% and fill it, so the 5% party is dropped.
+    // DEM 50 / REP 45 / MINOR 5 over just 2 seats: DEM+REP clear 20%, so the 5%
+    // party is dropped.
     const q = computePartySeatQuotas({ DEM: 50, REP: 45, MINOR: 5 }, 2, HOUSE_MIN_SHARE);
     expect(q.MINOR).toBe(0);
     expect(q.DEM + q.REP).toBe(2);
+  });
+
+  it("gives a dominant party the whole delegation when no rival clears the floor", () => {
+    // Live AL tally behind ticket #1190: 89.0% / 7.3% / 3.8% over 8 districts.
+    // The old rule re-admitted both sub-threshold parties and handed the 7.3%
+    // one a largest-remainder seat, so a candidate polling 89% was projected
+    // 7 of 8 while `allocateSeats` would have seated all 8.
+    const q = computePartySeatQuotas({ CUP: 48862, NPP: 3983, IND: 2085 }, 8, HOUSE_MIN_SHARE);
+    expect(q).toEqual({ CUP: 8, NPP: 0, IND: 0 });
+  });
+
+  it("falls back to the top parties only when NOBODY clears the floor", () => {
+    // Four-way 25/25/25/25 split against a 30% floor: nobody is eligible, so the
+    // degenerate fallback fills from the top rather than seating no one.
+    const q = computePartySeatQuotas({ A: 25, B: 25, C: 25, D: 25 }, 4, 0.3);
+    expect(Object.values(q).reduce((a, b) => a + b, 0)).toBe(4);
   });
 });
 
