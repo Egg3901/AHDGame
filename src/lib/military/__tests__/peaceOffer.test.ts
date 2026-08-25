@@ -176,6 +176,35 @@ describe("sideWouldEmpty", () => {
     } as unknown as ConflictDoc;
     expect(sideWouldEmpty(solo, "UK")).toBe("A");
   });
+
+  it("accepts a set of leavers and empties the side when they are all of it", () => {
+    const pact = {
+      sideA: { label: "US", countries: ["US"], kind: "state" },
+      sideB: { label: "Pact", countries: ["DD", "RU"], kind: "coalition" },
+    } as unknown as ConflictDoc;
+    // Treaty release takes DD and RU out together. Asked about DD alone this returns
+    // null, and the war would sit active with an empty side B and no winner.
+    expect(sideWouldEmpty(pact, ["DD", "RU"])).toBe("B");
+    expect(sideWouldEmpty(pact, ["DD"])).toBeNull();
+  });
+
+  it("ignores leavers that are not on the side", () => {
+    const pact = {
+      sideA: { label: "US", countries: ["US"], kind: "state" },
+      sideB: { label: "Pact", countries: ["DD"], kind: "state" },
+    } as unknown as ConflictDoc;
+    expect(sideWouldEmpty(pact, ["DD", "PL"])).toBe("B");
+  });
+
+  // A generated side carries `countries: []`. Without the length guard an `every` over
+  // an empty array is vacuously true and every insurgency would read as "emptied".
+  it("never names a side that was already empty", () => {
+    const generated = {
+      sideA: { label: "Gov", countries: ["CN"], kind: "state" },
+      sideB: { label: "Rebels", countries: [], kind: "generated" },
+    } as unknown as ConflictDoc;
+    expect(sideWouldEmpty(generated, ["CN"])).toBe("A");
+  });
 });
 
 describe("constants", () => {

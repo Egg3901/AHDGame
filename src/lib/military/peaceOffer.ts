@@ -48,19 +48,28 @@ export function isOfferLive(
 }
 
 /**
- * The side that would be left with nobody on it if `leaver` walked away, or null.
+ * The side that would be left with nobody on it if these countries walked away, or null.
  *
  * Used to decide whether accepting a peace deal also ends the war outright. Both
  * sides can never empty at once: emptying one resolves the conflict.
+ *
+ * Takes a SET, not one country. Treaty release removes an auto-joined ally at the same
+ * moment as the member it was defending, so a two-country side can empty in a single
+ * `acceptPeace` call. Asked about the principal alone this returned null and the war was
+ * left `active` with an empty roster and no victor.
  */
 export function sideWouldEmpty(
   c: Pick<ConflictDoc, "sideA" | "sideB">,
-  leaver: CountryId
+  leavers: CountryId | CountryId[]
 ): Side | null {
+  const gone = new Set<string>(Array.isArray(leavers) ? leavers : [leavers]);
   const a = c.sideA.countries as string[];
   const b = c.sideB.countries as string[];
-  if (a.length === 1 && a[0] === leaver) return "A";
-  if (b.length === 1 && b[0] === leaver) return "B";
+  // `length > 0` is load-bearing, not defensive: a generated side carries an EMPTY
+  // roster, and `[].every(...)` is vacuously true, so without the guard every
+  // insurgency would read as a side that had just emptied.
+  if (a.length > 0 && a.every((x) => gone.has(x))) return "A";
+  if (b.length > 0 && b.every((x) => gone.has(x))) return "B";
   return null;
 }
 
