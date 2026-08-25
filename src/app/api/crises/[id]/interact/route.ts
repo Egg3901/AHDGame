@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, isUnexpectedError } from "@/lib/api/errors";
 import {
   submitCrisisDecision,
   resolveCharacterRoles,
@@ -64,14 +64,29 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         if (!optionId) {
           return NextResponse.json({ error: "optionId required to decline aid" }, { status: 400 });
         }
-        const declined = await submitCrisisDecision(
-          db,
-          interaction._id,
-          optionId,
-          character._id,
-          character.countryId,
-          characterRoles
-        );
+        let declined;
+        try {
+          declined = await submitCrisisDecision(
+            db,
+            interaction._id,
+            optionId,
+            character._id,
+            character.countryId,
+            characterRoles
+          );
+        } catch (err) {
+          if (isUnexpectedError(err)) {
+            return handleRouteError(err, {
+              request: _req,
+              route: "/api/crises/[id]/interact",
+              extra: { crisisId: id, optionId, decline: true },
+            });
+          }
+          return NextResponse.json(
+            { error: err instanceof Error ? err.message : "Decision failed" },
+            { status: 400 }
+          );
+        }
         return NextResponse.json({
           success: true,
           interaction: declined.interaction,
@@ -107,14 +122,34 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: "optionId required" }, { status: 400 });
     }
 
-    const result = await submitCrisisDecision(
-      db,
-      interaction._id,
-      optionId,
-      character._id,
-      character.countryId,
-      characterRoles
-    );
+    let result;
+    try {
+      result = await submitCrisisDecision(
+        db,
+        interaction._id,
+        optionId,
+        character._id,
+        character.countryId,
+        characterRoles
+      );
+    } catch (err) {
+      // The engine's plain `Error`s are authored player-facing rejections
+      // (invalid option, not authorized, insufficient funds, national
+      // capacity, already responded). They must reach the player as a 400
+      // with the reason, not as a 500 "Internal server error". Genuine
+      // infra/programming faults keep the handleRouteError capture path.
+      if (isUnexpectedError(err)) {
+        return handleRouteError(err, {
+          request: _req,
+          route: "/api/crises/[id]/interact",
+          extra: { crisisId: id, optionId },
+        });
+      }
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : "Decision failed" },
+        { status: 400 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
