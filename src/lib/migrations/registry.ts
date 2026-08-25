@@ -50,6 +50,7 @@ import { migration as backfillPoliticalLegislationTypes } from "./entries/2026-0
 import { migration as seedGlobalResponseFoundations } from "./entries/2026-08-23-seed-global-response-foundations";
 import { migration as repairKazakhLawLevels } from "./entries/2026-08-23-repair-kazakh-law-levels";
 import { migration as crisesLivingEventPartialIndex } from "./entries/2026-08-25-crises-living-event-partial-index";
+import { migration as easternDepositsCnSoeIron } from "./entries/2026-08-25-eastern-deposits-cn-soe-iron";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -134,6 +135,10 @@ export const MIGRATIONS: Migration[] = [
   // Per-turn E11000 on crises_living_event: unset null keys, rebuild the
   // sparse unique index as partial-on-string (GlitchTip AHD-1JV).
   crisesLivingEventPartialIndex,
+  // Markets repair P2a: eastern deposits were never authored for the playable
+  // bloc countries (every state resources:{}), and the CN extraction SOE was
+  // coal-locked in its four iron-rich states.
+  easternDepositsCnSoeIron,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.
