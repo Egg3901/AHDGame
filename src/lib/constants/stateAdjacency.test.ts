@@ -1,17 +1,82 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { STATE_ADJACENCY, adjacentStates } from "./stateAdjacency";
 import type { CountryId } from "./countries";
-import { ruRegions } from "@/lib/seeds/ru/ruRegions";
+import { states1953 } from "@/lib/seeds/reference/states1953";
+import { atRegions } from "@/lib/seeds/at/atRegions";
+import { balRegions } from "@/lib/seeds/bal/balRegions";
+import { bgRegions } from "@/lib/seeds/bg/bgRegions";
+import { blrRegions } from "@/lib/seeds/blr/blrRegions";
+import { brRegions } from "@/lib/seeds/br/brRegions";
+import { cnRegions } from "@/lib/seeds/cn/cnRegions";
+import { csRegions } from "@/lib/seeds/cs/csRegions";
 import { ddRegions } from "@/lib/seeds/dd/ddRegions";
+import { deRegions } from "@/lib/seeds/de/deRegions";
+import { esRegions } from "@/lib/seeds/es/esRegions";
+import { fiRegions } from "@/lib/seeds/fi/fiRegions";
+import { frRegions } from "@/lib/seeds/fr/frRegions";
+import { grRegions } from "@/lib/seeds/gr/grRegions";
+import { huRegions } from "@/lib/seeds/hu/huRegions";
+import { ieRegions } from "@/lib/seeds/ie/ieRegions";
+import { itRegions } from "@/lib/seeds/it/itRegions";
+import { jpRegions } from "@/lib/seeds/jp/jpRegions";
+import { ngRegions } from "@/lib/seeds/ng/ngRegions";
+import { plRegions } from "@/lib/seeds/pl/plRegions";
+import { roRegions } from "@/lib/seeds/ro/roRegions";
+import { ruRegions } from "@/lib/seeds/ru/ruRegions";
+import { scoRegions } from "@/lib/seeds/sco/scoRegions";
+import { seRegions } from "@/lib/seeds/se/seRegions";
+import { trRegions } from "@/lib/seeds/tr/trRegions";
+import { uaRegions } from "@/lib/seeds/ua/uaRegions";
+import { ukRegions } from "@/lib/seeds/uk/ukRegions";
+import { walRegions } from "@/lib/seeds/wal/walRegions";
+import { yuRegions } from "@/lib/seeds/yu/yuRegions";
 
-const ACTIVE_COUNTRIES_WITH_DATA: CountryId[] = ["US", "UK", "DE", "JP", "CN", "RU", "DD"];
+const COUNTRY_REGIONS: Readonly<Record<CountryId, readonly { _id: string }[]>> = {
+  US: states1953,
+  UK: ukRegions,
+  DE: deRegions,
+  JP: jpRegions,
+  IE: ieRegions,
+  BR: brRegions,
+  CN: cnRegions,
+  NG: ngRegions,
+  HU: huRegions,
+  PL: plRegions,
+  RO: roRegions,
+  YU: yuRegions,
+  BG: bgRegions,
+  BLR: blrRegions,
+  UKR: uaRegions,
+  CS: csRegions,
+  BAL: balRegions,
+  RU: ruRegions,
+  FR: frRegions,
+  IT: itRegions,
+  ES: esRegions,
+  SE: seRegions,
+  TR: trRegions,
+  GR: grRegions,
+  AT: atRegions,
+  FI: fiRegions,
+  DD: ddRegions,
+  SCO: scoRegions,
+  WAL: walRegions,
+};
+
+const ALL_COUNTRIES = Object.keys(COUNTRY_REGIONS) as CountryId[];
+
+const DELIBERATE_DISCONNECTED_REGIONS: Partial<Record<CountryId, readonly string[]>> = {
+  US: ["HI"],
+  RU: ["MOL"],
+};
 
 describe("STATE_ADJACENCY", () => {
   describe("symmetry invariant", () => {
     // For every (country, A, B), B ∈ adjacency[A] must imply A ∈ adjacency[B].
     // A broken symmetry would mean the picker offers an inconsistent set
     // of states from different chair home-state perspectives.
-    for (const country of ACTIVE_COUNTRIES_WITH_DATA) {
+    for (const country of ALL_COUNTRIES) {
       it(`is symmetric for ${country}`, () => {
         const map = STATE_ADJACENCY[country];
         const broken: Array<{ from: string; to: string }> = [];
@@ -31,11 +96,57 @@ describe("STATE_ADJACENCY", () => {
   describe("no self-edges", () => {
     // adjacency[X] must not include X itself — the caller prepends the
     // home state separately so it doesn't appear twice in the picker.
-    for (const country of ACTIVE_COUNTRIES_WITH_DATA) {
+    for (const country of ALL_COUNTRIES) {
       it(`has no self-edges for ${country}`, () => {
         const map = STATE_ADJACENCY[country];
         for (const [from, neighbors] of Object.entries(map)) {
           expect(neighbors).not.toContain(from);
+        }
+      });
+    }
+  });
+
+  describe("seed vocabulary", () => {
+    for (const country of ALL_COUNTRIES) {
+      it(`covers exactly the seeded IDs for ${country}`, () => {
+        const expected = COUNTRY_REGIONS[country].map((region) => region._id).sort();
+        expect(Object.keys(STATE_ADJACENCY[country]).sort()).toEqual(expected);
+      });
+
+      it(`references only seeded IDs for ${country}`, () => {
+        const seeded = new Set(COUNTRY_REGIONS[country].map((region) => region._id));
+        for (const [from, neighbors] of Object.entries(STATE_ADJACENCY[country])) {
+          expect(seeded.has(from), from).toBe(true);
+          for (const to of neighbors) {
+            expect(seeded.has(to), `${from} -> ${to}`).toBe(true);
+          }
+        }
+      });
+    }
+  });
+
+  describe("connectivity invariant", () => {
+    for (const country of ALL_COUNTRIES) {
+      it(`is connected for ${country} apart from documented exceptions`, () => {
+        const map = STATE_ADJACENCY[country];
+        const disconnected = new Set(DELIBERATE_DISCONNECTED_REGIONS[country] ?? []);
+        const connectedIds = Object.keys(map).filter((id) => !disconnected.has(id));
+        const start = connectedIds[0]!;
+        const seen = new Set<string>([start]);
+        const queue = [start];
+
+        while (queue.length > 0) {
+          for (const next of map[queue.pop()!] ?? []) {
+            if (!disconnected.has(next) && !seen.has(next)) {
+              seen.add(next);
+              queue.push(next);
+            }
+          }
+        }
+
+        expect([...seen].sort()).toEqual(connectedIds.sort());
+        for (const region of disconnected) {
+          expect(map[region]).toEqual([]);
         }
       });
     }
@@ -202,17 +313,6 @@ describe("STATE_ADJACENCY", () => {
     });
   });
 
-  describe("coming-soon countries", () => {
-    it("IE returns an empty map", () => {
-      expect(STATE_ADJACENCY.IE).toEqual({});
-    });
-    it("adjacentStates returns [] for any state in coming-soon countries", () => {
-      expect(adjacentStates("IE", "DUB")).toEqual([]);
-      expect(adjacentStates("BR", "SUDESTE")).toEqual([]);
-      expect(adjacentStates("NG", "LAG")).toEqual([]);
-    });
-  });
-
   describe("unknown state IDs", () => {
     it("returns [] rather than throwing for missing state", () => {
       expect(adjacentStates("US", "ZZ")).toEqual([]);
@@ -268,5 +368,26 @@ describe("STATE_ADJACENCY", () => {
       ];
       expect(Object.keys(STATE_ADJACENCY.DE).sort()).toEqual([...expected].sort());
     });
+  });
+
+  describe("pre-existing map regression", () => {
+    const expectedHashes = {
+      US: "e3651f06d9a6dd0dbd46d3ce2451254238ff17d773ce7f4990a193eeec6da0fe",
+      UK: "d8faf3c50af27363e2928f5023013390c6f8f7173a532cab2340d5ca33527962",
+      DE: "b90125507666e35479502e98f1133036829ce08beb19118a3e61bdce26d3a057",
+      JP: "f37d5e2c92001b8e1bded1cdda618cd0fc38b493d6526491e45ed5ef65f64a18",
+      CN: "9dba610303f1f4d0743da4fe109d2de5bbcf4b4f24b89ccda064864280449e67",
+      RU: "bba4abddee750c284631e8479eae5f49bba1d4d2ac4b0d0f445248917dd9a6a9",
+      DD: "057f20ed1076098b4999facbb4c46d506e73caa091baa07ad99ed9ef81bfdc8c",
+    } as const;
+
+    for (const [country, expectedHash] of Object.entries(expectedHashes)) {
+      it(`keeps the serialized ${country} map byte-unchanged`, () => {
+        const actualHash = createHash("sha256")
+          .update(JSON.stringify(STATE_ADJACENCY[country as keyof typeof expectedHashes]))
+          .digest("hex");
+        expect(actualHash).toBe(expectedHash);
+      });
+    }
   });
 });
