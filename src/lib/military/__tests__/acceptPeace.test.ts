@@ -272,3 +272,67 @@ describe("a double accept", () => {
     expect(r.applied).toBe(true);
   });
 });
+
+describe("treaty release", () => {
+  /** US attacks DD; RU was pulled in under the Warsaw Pact to defend DD. */
+  function pactConflict(): ConflictDoc {
+    return {
+      _id: "t1",
+      status: "active",
+      hostCountry: "DD",
+      sideA: { label: "US", countries: ["US"], kind: "state" },
+      sideB: { label: "Pact", countries: ["DD", "RU"], kind: "coalition" },
+      treatyEntries: [
+        { countryId: "RU", organizationId: "WARSAW_PACT", defending: "DD", joinedTurn: 5 },
+      ],
+    } as unknown as ConflictDoc;
+  }
+
+  const ddLeaves = () =>
+    offer({ fromCountry: "DD", toCountry: "US", indemnity: { payer: "DD", amount: 0 } });
+
+  it("takes the ally out when the country it defended makes peace", async () => {
+    const conflict = pactConflict();
+    await acceptPeace(db, ddLeaves(), conflict, 100, "c1");
+    expect(standDownSpy).toHaveBeenCalledWith(expect.anything(), conflict, "DD");
+    expect(standDownSpy).toHaveBeenCalledWith(expect.anything(), conflict, "RU");
+  });
+
+  it("truces the released ally against the opposing side", async () => {
+    await acceptPeace(db, ddLeaves(), pactConflict(), 100, "c1");
+    expect(recordTruceSpy).toHaveBeenCalledWith(expect.anything(), "RU", "US", 100);
+  });
+
+  it("resolves the war when the principal and its allies were the whole side", async () => {
+    const res = await acceptPeace(db, ddLeaves(), pactConflict(), 100, "c1");
+    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "A", 100);
+    expect(res.resolved).toBe(true);
+  });
+
+  it("leaves allies bound to a different member in place", async () => {
+    const conflict = pactConflict();
+    conflict.sideB.countries = ["DD", "RU", "PL"];
+    conflict.treatyEntries = [
+      { countryId: "RU", organizationId: "WARSAW_PACT", defending: "DD", joinedTurn: 5 },
+      { countryId: "PL", organizationId: "WARSAW_PACT", defending: "CS", joinedTurn: 5 },
+    ];
+    await acceptPeace(db, ddLeaves(), conflict, 100, "c1");
+    expect(standDownSpy).not.toHaveBeenCalledWith(expect.anything(), conflict, "PL");
+  });
+
+  it("is unchanged for a conflict with no treaty entries", async () => {
+    await acceptPeace(db, offer(), makeConflict(), 100, "c1");
+    expect(standDownSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // The ally's enemy roster must be captured BEFORE the roster splices run, or the
+  // truce loop reads an array the principal has already been removed from and the ally
+  // walks away with no truce at all.
+  it("truces a released ally against every enemy, not only the survivors", async () => {
+    const conflict = pactConflict();
+    conflict.sideA.countries = ["US", "UK"];
+    await acceptPeace(db, ddLeaves(), conflict, 100, "c1");
+    expect(recordTruceSpy).toHaveBeenCalledWith(expect.anything(), "RU", "US", 100);
+    expect(recordTruceSpy).toHaveBeenCalledWith(expect.anything(), "RU", "UK", 100);
+  });
+});
