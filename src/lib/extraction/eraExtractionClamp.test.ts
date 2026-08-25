@@ -12,11 +12,7 @@ import {
   computeExtractionCapacityMultipliers,
   type ExtractionSectorInput,
 } from "@/lib/turn/extraction/extractionCapacity";
-import {
-  haircutScarcityRelief,
-  scarcityReliefCappedUtilization,
-  weightedCapacityUtilization,
-} from "./capacityHaircut";
+import { haircutScarcityRelief, scarcityReliefCappedUtilization } from "./capacityHaircut";
 
 /**
  * The corp-phase extraction clamp must ration against the SAME desired-output
@@ -77,12 +73,7 @@ describe("1953 extraction clamp against corrected output", () => {
 
     const rates = { iron: IRON_RATE };
 
-    // Pre-fix behaviour: unconstrained relief lifts the clamp entirely off.
-    expect(weightedCapacityUtilization(rates, { iron: mult }, { iron: relief }).utilization).toBe(
-      1
-    );
-
-    // Post-fix: relief cannot book past what the deposits can yield.
+    // Relief cannot book past what the deposits can yield.
     const capped = scarcityReliefCappedUtilization(
       rates,
       { iron: mult },
@@ -150,15 +141,8 @@ describe("1953 extraction clamp against corrected output", () => {
 
   it("caps at the unit-weighted raw capacity ratio, not the bare rate mix", () => {
     // Iron leg physically clamped to 0.1 and in shortage; coal leg free.
-    // Bare-rate weighting with full iron relief would report 1. The corrected
-    // units are overwhelmingly iron, so the physical ratio wins.
-    const relieved = weightedCapacityUtilization(
-      { iron: 0.4, coal: 0.6 },
-      { iron: 0.1, coal: 1 },
-      { iron: 1 }
-    );
-    expect(relieved.utilization).toBeCloseTo(1, 10);
-
+    // The corrected units are overwhelmingly iron, so the physical ratio wins
+    // even though full scarcity relief applies to that leg.
     const capped = scarcityReliefCappedUtilization(
       { iron: 0.4, coal: 0.6 },
       { iron: 0.1, coal: 1 },

@@ -12,11 +12,14 @@
  * extraction sectors). No economy state is written or changed.
  */
 import type { Db } from "mongodb";
-import type { CorporateSector } from "@/lib/db/types";
+import type { CorporateSector, GameConfig } from "@/lib/db/types";
 import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
 import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
-import { COMMODITY_BASE_PRICES, EXTRACTABLE_RESOURCES } from "@/lib/constants/commodities";
+import { EXTRACTABLE_RESOURCES } from "@/lib/constants/commodities";
 import type { ExtractableResource } from "@/lib/constants/commodities";
+import { extractionDesiredUnits } from "@/lib/extraction/capacityHaircut";
+import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { getExtractionOutputScaleEnabled } from "@/lib/market/featureFlag";
 
 export interface OpportunityState {
   stateId: string;
@@ -36,8 +39,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 /**
  * For each of `resources`, return up to `limit` other states (excluding
  * `excludeStateId`) with the most free capacity for that resource. Desired
- * output per state mirrors sectorDetailExtraction's revenue-based formula so
- * the numbers line up with the sector's own deposit view.
+ * output per state uses the same ledger-unit formula as the capacity clamp.
  */
 export async function computeResourceOpportunities(
   db: Db,
@@ -47,7 +49,7 @@ export async function computeResourceOpportunities(
 ): Promise<ResourceOpportunity[]> {
   if (resources.length === 0) return [];
 
-  const [capDocs, extractionSectors, states] = await Promise.all([
+  const [capDocs, extractionSectors, states, eraUnitScale, gameConfig] = await Promise.all([
     db
       .collection<StateResourceCapacity>("stateResourceCapacity")
       .find({}, { projection: { stateId: 1, resources: 1 } })
@@ -60,13 +62,17 @@ export async function computeResourceOpportunities(
       .collection<{ _id: string; countryId: string }>("states")
       .find({}, { projection: { _id: 1, countryId: 1 } })
       .toArray(),
+    loadWorldEraUnitScale(db),
+    db
+      .collection<GameConfig>("gameConfig")
+      .findOne({ _id: "default" }, { projection: { extractionOutputScaleEnabled: 1 } }),
   ]);
+  const extractionOutputScaleEnabled = await getExtractionOutputScaleEnabled(gameConfig);
 
   const countryByState = new Map(states.map((s) => [s._id, s.countryId]));
 
   // desired[stateId][resource] — total unconstrained revenue-based output that
-  // every extraction sector in the state wants (same formula as the per-sector
-  // deposit view in sectorDetailExtraction.ts).
+  // every extraction sector in the state wants on the supply ledger's unit basis.
   const desiredByState = new Map<string, Partial<Record<ExtractableResource, number>>>();
   for (const sector of extractionSectors) {
     const strat =
@@ -77,9 +83,13 @@ export async function computeResourceOpportunities(
     for (const resource of EXTRACTABLE_RESOURCES) {
       const rate = supplyRates[resource] ?? 0;
       if (rate <= 0) continue;
-      const output =
-        (sector.revenue * rate) /
-        (COMMODITY_BASE_PRICES[resource as keyof typeof COMMODITY_BASE_PRICES] ?? 1);
+      const output = extractionDesiredUnits(
+        sector.revenue,
+        rate,
+        resource,
+        eraUnitScale,
+        extractionOutputScaleEnabled
+      );
       forState[resource] = (forState[resource] ?? 0) + output;
     }
     desiredByState.set(sector.stateId, forState);
