@@ -46,6 +46,7 @@ import { getStateLean } from "@/lib/utils/demographics";
 import type { StatePartyOrg, StateDemographicTurnout, GovernorEndorsement } from "@/lib/db/types";
 import { resolveTurnout } from "@/lib/electionEngine/resolvedTurnout";
 import { campaignStrengthVoteMultiplier } from "@/lib/campaigns/campaignStrength";
+import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
 import { getGroundGameSwingBonus, getGroundGameGotvBonus } from "@/lib/campaigns/opsEffects";
 import { loadPartyGroupFavorability } from "@/lib/governorOffice/address/partyGroupFavorabilityLoader";
 import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
@@ -291,6 +292,11 @@ export async function accumulatePresidentVoteTurn(
   ]);
 
   if (!tally || !tally.totalVotesByUnit || candidates.length === 0 || !election?.endTime) return;
+
+  // Rules freeze: the race runs under the ruleset it was stamped with at
+  // spawn (legacy races resolve to v1), so mid-cycle deploys cannot change
+  // how a live presidency is decided.
+  const ruleset = presidentialRulesetFor(election);
 
   const uniqueStateIds = [...new Set(ELECTORAL_VOTE_UNITS.map((u) => u.stateId))];
 
@@ -763,7 +769,9 @@ export async function accumulatePresidentVoteTurn(
       const csKey = campaignStrengthKeyByElectionCandidateId.get(ec.candidateId) ?? ec.characterId;
       const cs = campaignStrengthByCandidate.get(csKey) ?? 0;
       if (cs > 0) {
-        votes = Math.round(votes * campaignStrengthVoteMultiplier(cs));
+        votes = Math.round(
+          votes * campaignStrengthVoteMultiplier(cs, ruleset.campaignStrengthMaxBonus)
+        );
       }
 
       unitTotals[ec.candidateId] = (unitTotals[ec.candidateId] ?? 0) + votes;
