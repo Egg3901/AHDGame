@@ -31,6 +31,8 @@ import {
   getEligibleCabinetCharacters,
   requireCurrentPrimeMinister,
 } from "./cabinetEligibility";
+import { applyConfidenceEventToGov } from "./confidence/confidenceGaugeStore";
+import { GREAT_OFFICE_POSITION_IDS } from "./confidence/confidenceGauge";
 
 const appointSchema = z.object({
   positionId: z.string(),
@@ -411,6 +413,15 @@ export async function fireCabinetMemberHandler(request: Request, countryId: Coun
     // appointment cooldown on this seat (set when the minister was appointed) is
     // intentionally left in place so the seat stays locked for the remainder of
     // its 24-turn window.
+
+    // Confidence gauge (epic #856): firing a minister dents government
+    // confidence — heavier for a Great Office of State. Persists only; no
+    // consequence until UK_CONFIDENCE_GAUGE_DISSOLUTION is enabled.
+    // eslint-disable-next-line local/no-country-literals -- the confidence gauge and Great Offices are UK-specific structures (ukGovernment singleton)
+    if (countryId === "UK") {
+      const greatOffice = GREAT_OFFICE_POSITION_IDS.has(positionId);
+      await applyConfidenceEventToGov(db, { kind: "ministerFired", greatOffice }, new Date());
+    }
 
     return NextResponse.json({
       success: true,
