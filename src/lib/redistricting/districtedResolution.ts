@@ -64,12 +64,25 @@ export function districtWinnerParty(
 /**
  * Proportional party seat quotas for a districted state. Each party's share of
  * the statewide vote maps to a whole-seat count via largest remainder, gated by
- * `minShare` (mirrors the legacy `allocateSeats` eligibility rule: a party below
- * the floor is dropped only while enough others clear it; otherwise the field
- * falls back to the top `min(seats, parties)`). The quotas sum to exactly
- * `authoritativeSeats`, so district lean / gerrymandering redistribute WHICH
- * districts a party wins — never HOW MANY. This is what prevents a statewide
- * plurality (or a lean-invariant centrist party) from sweeping every district.
+ * `minShare`. The quotas sum to exactly `authoritativeSeats`, so district lean /
+ * gerrymandering redistribute WHICH districts a party wins — never HOW MANY.
+ * This is what prevents a statewide plurality (or a lean-invariant centrist
+ * party) from sweeping every district.
+ *
+ * Eligibility matches `allocateSeats` and `computeSeatEstimates` exactly: a
+ * party below the floor is dropped, and the field falls back to the top
+ * `min(seats, parties)` ONLY in the degenerate case where nobody clears it.
+ *
+ * This path used to keep the older rule — re-admit EVERY party whenever fewer
+ * cleared the floor than `min(seats, parties)`. Multi-seat states almost always
+ * have more seats than parties, so that condition demanded a clean sweep of the
+ * gate and therefore almost never held: the districted resolver effectively
+ * applied no threshold, and parties polling a few percent collected
+ * largest-remainder seats that both other allocators zero. #1032 removed the
+ * rule from them and left this copy behind, so the districted projection and
+ * the districted RESULT disagreed with the rest of the engine (#1190: a
+ * candidate on 89% of Alabama was projected 7 of 8 seats, with the eighth going
+ * to a party on 7.3%).
  */
 export function computePartySeatQuotas(
   baselines: Record<string, number>,
@@ -85,11 +98,12 @@ export function computePartySeatQuotas(
   if (total <= 0) return out;
 
   const eligible = parties.filter((p) => baselines[p] / total >= minShare);
-  const minPool = Math.min(authoritativeSeats, parties.length);
   const pool =
-    eligible.length >= minPool
+    eligible.length > 0
       ? eligible
-      : [...parties].sort((a, b) => baselines[b] - baselines[a]).slice(0, minPool);
+      : [...parties]
+          .sort((a, b) => baselines[b] - baselines[a])
+          .slice(0, Math.min(authoritativeSeats, parties.length));
 
   const counts = largestRemainderAllocate(
     authoritativeSeats,

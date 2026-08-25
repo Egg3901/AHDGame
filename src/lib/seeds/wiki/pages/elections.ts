@@ -18,6 +18,9 @@ import { contingentElectionContent } from "../content/contingentElection";
 import { executiveTermLimitsContent } from "../content/executiveTermLimits";
 import { referendumsContent } from "../content/referendums";
 import { politicalOperationsContent } from "../content/politicalOperations";
+import { nominatingConventionContent } from "../content/nominatingConvention";
+import { runningMateSurrogateContent } from "../content/runningMateSurrogate";
+import { voteFactorLedgerContent } from "../content/voteFactorLedger";
 
 export const electionsPages: readonly WikiSeedPage[] = [
   {
@@ -84,6 +87,42 @@ export const electionsPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 6,
+  },
+  {
+    slug: "nominating-convention",
+    title: "Presidential Nominating Convention",
+    description:
+      "How pledged delegates settle a presidential nomination: the delegate-majority threshold, first-ballot wins, and the multi-ballot contested convention with affinity-weighted delegate releases.",
+    content: nominatingConventionContent,
+    category: "elections",
+    extraTags: ["president", "primary", "delegate", "convention"],
+    difficulty: "advanced",
+    contentType: "mechanics",
+    estimatedReadTime: 5,
+  },
+  {
+    slug: "running-mate-surrogate",
+    title: "Running Mate Surrogate Campaigning",
+    description:
+      "The running mate's own player can campaign for the ticket: state visits and ticket canvassing, the shared 2-per-day surrogate pool, favorability and turnout effects, and action costs.",
+    content: runningMateSurrogateContent,
+    category: "elections",
+    extraTags: ["president", "general", "running-mate", "campaign"],
+    difficulty: "advanced",
+    contentType: "guide",
+    estimatedReadTime: 5,
+  },
+  {
+    slug: "vote-factor-ledger",
+    title: "Vote Factor Ledger",
+    description:
+      "The presidential general vote decomposition: the baseline-plus-factors waterfall, every factor and what it means, vote delta vs display multiplier, and what is public vs owner-only.",
+    content: voteFactorLedgerContent,
+    category: "elections",
+    extraTags: ["president", "general", "results", "transparency"],
+    difficulty: "intermediate",
+    contentType: "reference",
+    estimatedReadTime: 5,
   },
   {
     slug: "general-elections",

@@ -3,6 +3,7 @@ import type { Db } from "mongodb";
 import { createNotifications } from "@/lib/notifications";
 import type { Bill, Character } from "@/lib/db/types";
 import type { BillLifecycleConfig } from "../types";
+import { applyBudgetOutcome } from "@/lib/db/collections/ukBudgets";
 
 const VOTING_HOURS = 24;
 
@@ -11,6 +12,20 @@ const VOTING_HOURS = 24;
  * pass Parliament on reject; Lords revision when held in enrolled.
  */
 async function notifyUKSponsor(db: Db, bill: Bill, status: Bill["status"]): Promise<void> {
+  // Budget vote-vehicle bills (epic #856): apply the outcome to the UKBudget on
+  // final resolution (signed = passed, failed = defeated → budgetDefeat
+  // confidence hit). Runs before the sponsor guard since a budget bill may have
+  // no seated sponsor. applyBudgetOutcome is idempotent (guards on "tabled").
+  if (bill.budgetFiscalYear != null && (status === "signed" || status === "failed")) {
+    await applyBudgetOutcome(db, {
+      fiscalYear: bill.budgetFiscalYear,
+      passed: status === "signed",
+      votesFor: bill.votesFor,
+      votesAgainst: bill.votesAgainst,
+      now: new Date(),
+    });
+  }
+
   if (status !== "signed" && status !== "failed" && status !== "enrolled") return;
   if (!bill.sponsorId) return;
   try {

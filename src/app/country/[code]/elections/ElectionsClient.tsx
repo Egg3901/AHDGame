@@ -276,7 +276,7 @@ export default function ElectionsClient({ code, initialElections }: ElectionsCli
             const carveUp = buildCommonsCarveUpSlices(election);
             return (
               <div key={election.id} className="space-y-3">
-                <ManifestoFlavorBar electionId={election.id} regionId={election.state} />
+                <ManifestoFlavorBar countryCode={code} electionId={election.id} />
                 <CommonsCarveUpPanel
                   regionName={ELECTION_STATE_NAMES[election.state] ?? election.state}
                   regionId={election.state}

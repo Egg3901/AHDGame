@@ -119,6 +119,7 @@ import { computeContractProduction } from "./contractProduction";
 import { advanceSectorInventory } from "@/lib/corporations/sectorInventory";
 import type { SectorTurnEnv, SectorTurnResult } from "./sectorTurnTypes";
 import { legacyRevenueShadowTelemetry, marketTelemetry } from "./sectorTelemetry";
+import { resolveSectorFreightBillingLegs } from "./freightBillingTurn";
 import { resolveSectorCapacityHaircut } from "./sectorCapacityHaircut";
 
 export { computeSectorOutputUnits } from "./sectorOutputUnits";
@@ -1590,6 +1591,20 @@ export function processSector(
     : 0;
   const hourlyInventoryCarry = inventoryTurn ? inventoryTurn.carryCostAnchor / TURNS_PER_DAY : 0;
 
+  // Canonical freight billing (issue #897, gameConfig gate, default off):
+  // last turn's state-scoped shipping money as this sector's own named legs,
+  // ₳/turn. Charge rides `costs` and credit rides the returned revenue below;
+  // both legs and the flag-off stale-clear behavior live in
+  // `resolveSectorFreightBillingLegs`. Off ⇒ both 0 and no fields written.
+  const freightBilling = resolveSectorFreightBillingLegs({
+    market,
+    sector,
+    embargoLegacyMothball,
+    currentTurn,
+    sectorCurrencyCode,
+    sectorFxRate,
+  });
+
   // Persist countryId so API endpoints don't need to re-derive it from the state.
   // newRevenue / newGrowthCost are ₳ (computed from anchor inputs); convert
   // back to the sector's HOST-state functional currency for storage (the market
@@ -1768,6 +1783,9 @@ export function processSector(
         ? (market.deliveryLimitedClassBySectorId?.get(sector._id.toString()) ?? null)
         : null;
   }
+  // Canonical freight billing: persist both legs as named daily lines (or
+  // clear stale ones); see `resolveSectorFreightBillingLegs`.
+  Object.assign(sectorUpdate, freightBilling.sectorUpdate);
   // Labour telemetry: persist the per-turn labor cost on a daily basis (like
   // `revenue`), in the sector's host-state currency. Display/analytics only;
   // never read back into the economy. Only written when the labour system is on.
@@ -1923,8 +1941,10 @@ export function processSector(
 
   return {
     // Inventory sell-down earns beside operating revenue and rides the same
-    // aggregation/tax rails; carry cost lands in `costs` below.
-    hourlyRevenue: hourlyRevenue + hourlyInventoryRevenue,
+    // aggregation/tax rails; carry cost lands in `costs` below. The freight
+    // billing credit (canonical freight billing, flag-gated, 0 otherwise) is
+    // haulage income and rides the same rails.
+    hourlyRevenue: hourlyRevenue + hourlyInventoryRevenue + freightBilling.credit,
     newCurrentGrowthRate,
     // P3.5: under plants this is the DERIVED margin (profit ÷ revenue), not the
     // modifier stack — see `reportedEffectiveMargin`.
@@ -1942,7 +1962,10 @@ export function processSector(
       ? 0
       : (physicalPnl?.totalCost ??
           maintenance + plantsUpkeepCost + hourlyGrowthCost + regulatoryBurden) +
-        hourlyInventoryCarry,
+        hourlyInventoryCarry +
+        // Canonical freight billing: the shipping bill is a real cost leg
+        // (flag-gated, 0 otherwise), the buyer half of the haul transfer.
+        freightBilling.charge,
     /** P3a: idle-capacity (or mothball) upkeep charged this turn, ₳/turn. */
     plantsUpkeepCost,
     /** P3a: ₳ of paid-but-not-yet-delivered build orders after this turn. */

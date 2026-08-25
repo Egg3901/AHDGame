@@ -1242,10 +1242,18 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // deliveries constrain next turn's local plant inputs.
   const freightSettlementConfig = await db
     .collection<GameConfig>("gameConfig")
-    .findOne({ _id: "default" }, { projection: { freightSettlementMode: 1 } });
+    .findOne(
+      { _id: "default" },
+      { projection: { freightSettlementMode: 1, canonicalFreightBillingEnabled: 1 } }
+    );
   const freightSettlementActive =
     freightSettlementConfig?.freightSettlementMode === "active" &&
     marketAtLeast(marketSystemMode, "clearing");
+  // Canonical freight billing v1 (issue #897): while on, the sourcing pass's
+  // per-state shipping money aggregates are persisted on the network doc for
+  // the next corporation turn to apportion. Off (the default) writes nothing.
+  const canonicalFreightBillingEnabled =
+    freightSettlementConfig?.canonicalFreightBillingEnabled === true;
   let freightSettlement: FreightSettlement | null = null;
 
   // ── Landed-price freight settlement (shadow or active) ──
@@ -1285,7 +1293,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       isBlocked: (commodity, exporter, importer) =>
         affinityFor(commodity, exporter, importer) === 0,
     });
-    const { commodityDocs, networkDoc } = buildSourcingDocs(freightSettlement.sourcing, turn, now);
+    const { commodityDocs, networkDoc } = buildSourcingDocs(freightSettlement.sourcing, turn, now, {
+      includeFreightBilling: canonicalFreightBillingEnabled,
+    });
     if (commodityDocs.length > 0) {
       // Lazy index for the {commodity} + latest-turn read path, mirroring
       // commodityFlows. Fire-and-forget.

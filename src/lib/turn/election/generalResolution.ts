@@ -294,12 +294,20 @@ export async function resolveOneGeneralElection(
     // it allocateSeats always used the modern UK_COMMONS_SEATS (ticket #1058).
     let houseSeats: Record<string, number> | undefined;
     let commonsSeats: Record<string, number> | undefined;
-    let gsForHouse: { preset?: string; redistrictingEnabled?: boolean } | null = null;
+    let gsForHouse: {
+      preset?: string;
+      redistrictingEnabled?: boolean;
+      currentYear?: number;
+    } | null = null;
     if (election.electionType === "house") {
       gsForHouse = await (await getGameStateCollection(db)).findOne({ _id: "current" });
       // Live (census-updated) House apportionment; equals the preset seed until a
-      // decennial census reapportions (P1d-2).
-      houseSeats = (await loadApportionment(db, gsForHouse?.preset)).houseSeats;
+      // decennial census reapportions (P1d-2). `currentYear` keeps a state
+      // admitted mid-game in the map — without it the admitted set is built as of
+      // the preset year, so `authoritativeSeats` silently fell back to the
+      // election's own `totalSeats` for Alaska and Hawaii (#1190).
+      houseSeats = (await loadApportionment(db, gsForHouse?.preset, gsForHouse?.currentYear))
+        .houseSeats;
     }
 
     // FPTP winner's bonus (#3244): UK Commons regions in historical in-game

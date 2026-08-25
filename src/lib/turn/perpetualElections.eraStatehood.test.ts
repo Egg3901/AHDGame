@@ -150,6 +150,24 @@ describe("ensurePerpetualElections US era statehood gate", () => {
     ]);
   });
 
+  it("sizes an admitted state's House race from its live apportionment (#1190)", async () => {
+    // The apportionment map is built as of the PRESET year unless the caller
+    // passes the live one, and a state admitted mid-game is absent from it at
+    // the preset year by definition. Without the live year Alaska fell through
+    // to the 1-seat backstop and — worse — was invisible to the census heal, so
+    // a reapportionment could never resize its delegation.
+    const inserted = await mountUsWorld("1953-default", {
+      stateDocs: [{ _id: "WY" }, { _id: "AK", admittedYear: 1959, houseDistricts: 2 }],
+      currentYear: 1962,
+    });
+
+    const { ensurePerpetualElections } = await import("./perpetualElections");
+    await ensurePerpetualElections(NOW, 1);
+
+    const akHouse = inserted.find((e) => e.state === "AK" && e.electionType === "house");
+    expect(akHouse?.totalSeats).toBe(2);
+  });
+
   it("does not spawn races before the admission year arrives", async () => {
     const inserted = await mountUsWorld("1953-default", {
       stateDocs: [{ _id: "WY" }, { _id: "AK", admittedYear: 1959 }],

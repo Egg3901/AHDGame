@@ -191,6 +191,20 @@ export interface CorporationLookups {
    * behavior exactly.
    */
   landedPremiumByState?: Map<string, Map<CommodityType, number>>;
+  /**
+   * Canonical freight billing v1 (issue #897): per destination state, per
+   * commodity, LAST turn's shipping money buyers there owe for accepted
+   * domestic hauls, read from the prior sourcingNetworkLoad doc. Empty when
+   * `canonicalFreightBillingEnabled` is off or no doc carries the fields yet,
+   * in which case the corporation turn computes and writes nothing.
+   */
+  freightChargesByDestState?: Map<string, Map<CommodityType, number>>;
+  /**
+   * The transfer's other half: per origin state, LAST turn's haul revenue its
+   * freight network earned. Same gate and source as
+   * `freightChargesByDestState`.
+   */
+  freightHaulRevenueByOriginState?: Map<string, number>;
   nationalCommodityBalancesByCountry: Map<
     string,
     Map<CommodityType, { supply: number; demand: number }>

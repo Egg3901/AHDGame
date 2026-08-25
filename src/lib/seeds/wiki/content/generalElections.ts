@@ -134,6 +134,8 @@ After the primary, each presidential nominee selects a running mate (VP):
 
 You can change your running mate any time before the election resolves, and clear it entirely if you want to run without one.
 
+Beyond the standing bonus, the running mate's own player can campaign for the ticket as a surrogate: state visits that add favorability and canvassing that drives turnout, from a shared 2-per-day pool. See [Running Mate Surrogate Campaigning](/wiki/running-mate-surrogate).
+
 ## Related
 
 - [Election Mechanics](/wiki/election-mechanics): Overall framework.
