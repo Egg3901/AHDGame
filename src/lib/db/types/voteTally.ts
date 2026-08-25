@@ -1,4 +1,5 @@
 import type { ObjectId } from "mongodb";
+import type { FactorLedgerSnapshot } from "@/lib/electionEngine/factorLedger";
 
 export interface VoteTurnSnapshot {
   turn: number;
@@ -85,6 +86,16 @@ export interface ElectionVoteTally {
     incumbentPartyId?: string;
     recordedTurn: number;
   };
+  /**
+   * President only: the descriptive factor ledger the engine teed on the last
+   * accumulation turn (see `src/lib/electionEngine/factorLedger.ts`). A
+   * read-only decomposition of each candidate's votes into named factors
+   * (state lean & standing, policy fit, name recognition, turnout, persuasion
+   * swing, spoiler, national mood, campaign, and a rounding residual). Already
+   * baked into the vote totals above — it is teed off them — so, exactly like
+   * `economicReferendum`, it must NEVER be re-applied anywhere downstream.
+   */
+  factorLedger?: FactorLedgerSnapshot;
   /**
    * President only: frozen House/Senate chamber used for contingent ballots.
    * Captured when contingent resolution first runs so same-turn chamber flips
