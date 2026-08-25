@@ -693,4 +693,149 @@ describe("grid class (energy and natural gas)", () => {
     expect(leg(cheapFreight)).toBeCloseTo(leg(dearFreight));
     expect(leg(cheapFreight)).toBeCloseTo(90 * GRID_WHEELING_PER_HOP_FRACTION);
   });
+
+  it("freight billing: wheeled grid legs never bill the haulage fleet", () => {
+    const r = runSourcingPass(gridInputs());
+    expect(r.flows.some((f) => f.commodity === "energy" && f.units > 0)).toBe(true);
+    expect(r.freightChargesByDestState.size).toBe(0);
+    expect(r.haulRevenueByOriginState.size).toBe(0);
+  });
+});
+
+describe("freight billing aggregates (canonical freight billing v1)", () => {
+  const totalCharges = (r: ReturnType<typeof runSourcingPass>) => {
+    let sum = 0;
+    for (const byCommodity of r.freightChargesByDestState.values())
+      for (const charge of byCommodity.values()) sum += charge;
+    return sum;
+  };
+  const totalHaulRevenue = (r: ReturnType<typeof runSourcingPass>) => {
+    let sum = 0;
+    for (const revenue of r.haulRevenueByOriginState.values()) sum += revenue;
+    return sum;
+  };
+
+  it("books the shipping leg of an accepted domestic haul on both sides", () => {
+    // Default fixture: A1 buys 100 coal from A2, shippingPerUnit = 1000 × 0.004
+    // × 1 hop = 4 → 400 charged to A1, 400 earned by A2's network.
+    const r = runSourcingPass(makeInputs());
+    expect(r.freightChargesByDestState.get("A1")!.get("coal")).toBeCloseTo(400);
+    expect(r.haulRevenueByOriginState.get("A2")).toBeCloseTo(400);
+  });
+
+  it("transfer identity: total charges equal total haul revenue", () => {
+    const r = runSourcingPass(makeInputs());
+    expect(totalCharges(r)).toBeCloseTo(totalHaulRevenue(r), 10);
+    expect(totalCharges(r)).toBeGreaterThan(0);
+  });
+
+  it("refused hauls bill zero TEU: a state with no freight supply moves no money", () => {
+    const r = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          ["A1", new Map([["coal", { supply: 0, demand: 100 }]]) as Map<CommodityType, Balance>],
+          [
+            "A2",
+            new Map([
+              ["coal", { supply: 200, demand: 0 }],
+              ["freight", { supply: 0, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+        ]),
+        states: [
+          { stateId: "A1", countryId: "US" as CountryId },
+          { stateId: "A2", countryId: "US" as CountryId },
+        ],
+        byCountry: new Map([["US", new Map([["coal", { supply: 200, demand: 100 }]])]]),
+      })
+    );
+    const coal = r.summaries.find((s) => s.commodity === "coal")!;
+    expect(coal.capacityBoundUnits).toBeGreaterThan(0);
+    expect(r.freightChargesByDestState.size).toBe(0);
+    expect(r.haulRevenueByOriginState.size).toBe(0);
+  });
+
+  it("tolerance-refused demand bills nothing", () => {
+    const r = runSourcingPass(
+      makeInputs({
+        statePricesFor: () => ({ A1: 100, A2: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
+        nationalPricesFor: () => ({ UK: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
+      })
+    );
+    expect(r.freightChargesByDestState.size).toBe(0);
+    expect(r.haulRevenueByOriginState.size).toBe(0);
+  });
+
+  it("imports are excluded: no domestic network exists to earn the sea leg", () => {
+    // freightPrice 100: UK wins the coal book (see the cheap-sea test above).
+    const r = runSourcingPass(
+      makeInputs({
+        freightPrice: 100,
+        nationalPricesFor: () => ({ US: 95, UK: 60 }),
+      })
+    );
+    expect(coalFlow(r)[0].originType).toBe("country");
+    expect(r.freightChargesByDestState.size).toBe(0);
+    expect(r.haulRevenueByOriginState.size).toBe(0);
+  });
+
+  it("congested hauls carry their surcharge, and the identity still holds", () => {
+    const freightSupply = 0.2;
+    const r = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          ["A1", new Map([["coal", { supply: 0, demand: 100 }]]) as Map<CommodityType, Balance>],
+          [
+            "A2",
+            new Map([
+              ["coal", { supply: 200, demand: 0 }],
+              ["freight", { supply: freightSupply, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+        ]),
+        states: [
+          { stateId: "A1", countryId: "US" as CountryId },
+          { stateId: "A2", countryId: "US" as CountryId },
+        ],
+        byCountry: new Map([["US", new Map([["coal", { supply: 200, demand: 100 }]])]]),
+        statePricesFor: () => ({ A1: 200, A2: 90, B1: 80 }),
+      })
+    );
+    const coal = r.summaries.find((s) => s.commodity === "coal")!;
+    expect(coal.congestionSurchargePaid).toBeGreaterThan(0);
+    const flow = coalFlow(r)[0];
+    // Base shipping on every shipped unit plus the overflow units' surcharge.
+    expect(r.freightChargesByDestState.get("A1")!.get("coal")).toBeCloseTo(
+      coal.interStateUnits * flow.shippingPerUnit + coal.congestionSurchargePaid,
+      6
+    );
+    expect(totalCharges(r)).toBeCloseTo(totalHaulRevenue(r), 10);
+  });
+
+  it("aggregates survive the itemization floor: sub-floor flows still bill", () => {
+    // 0.5 units is below FLOW_RECORD_FLOOR_UNITS (1), so no flow is itemized,
+    // but the money aggregates must stay exact regardless.
+    const r = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          ["A1", new Map([["coal", { supply: 0, demand: 0.5 }]]) as Map<CommodityType, Balance>],
+          [
+            "A2",
+            new Map([
+              ["coal", { supply: 200, demand: 0 }],
+              ["freight", { supply: 1000, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+        ]),
+        states: [
+          { stateId: "A1", countryId: "US" as CountryId },
+          { stateId: "A2", countryId: "US" as CountryId },
+        ],
+        byCountry: new Map([["US", new Map([["coal", { supply: 200, demand: 0.5 }]])]]),
+      })
+    );
+    expect(coalFlow(r)).toHaveLength(0);
+    expect(r.freightChargesByDestState.get("A1")!.get("coal")).toBeCloseTo(0.5 * 4);
+    expect(r.haulRevenueByOriginState.get("A2")).toBeCloseTo(0.5 * 4);
+  });
 });

@@ -264,6 +264,23 @@ export interface GameConfig {
    */
   interstateMoneyWiringEnabled?: boolean;
   /**
+   * Canonical freight billing v1 (issue #897, markets plan Phase 4): when
+   * true, the sourcing pass's per-state shipping money (charge = freight price
+   * x price TEU weight x units x hops on each accepted domestic haul) is
+   * persisted on the sourcingNetworkLoad doc and the next corporation turn
+   * apportions it: charges across buyer sectors in the destination state
+   * proportional to their input demand for the hauled commodity, haul revenue
+   * across freight-supplying sectors in the origin state proportional to
+   * their freight supply share. Both legs are persisted per sector as named
+   * lines (freightBillingCharge / freightBillingCredit) and ride sector costs
+   * and revenue. A transfer, not a sink: world totals of the two legs match.
+   * Off (or unset) → nothing is computed or written, matching the shadow-price
+   * behavior from before this flag existed. ENABLING IS A BALANCE CHANGE
+   * (~22M/turn world-scale bill at audit calibration) and merges only with a
+   * simulation report from scripts/sim/ per CONTRIBUTING.md.
+   */
+  canonicalFreightBillingEnabled?: boolean;
+  /**
    * Legacy-stockpile cover cap (week-1 clearing balance pass): when true,
    * shadow-inventory stock above STOCK_COVER_CAP_TURNS × current demand takes
    * an additional EXCESS_STOCK_SPOILAGE_RATE per-turn spoilage on the excess

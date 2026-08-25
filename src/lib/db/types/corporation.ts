@@ -836,6 +836,26 @@ export interface CorporateSector {
   /** Cargo class of the output leg with the largest delivery-limited share. */
   deliveryLimitedFreightClass?: "bulk" | "special" | "grid" | null;
   /**
+   * Canonical freight billing v1 (issue #897,
+   * gameConfig.canonicalFreightBillingEnabled, default off): the shipping cost
+   * this sector was charged last turn for its state's inbound hauls of the
+   * commodities it consumes. Named cost line on the same daily basis and host
+   * currency as `revenue` / `laborCost`, persisted so a later financials
+   * bridge can show "freight" instead of a blended haircut. The amount also
+   * rides the sector's cost leg into corp income, so it is real money while
+   * the flag is on. Absent on worlds that never billed.
+   */
+  freightBillingCharge?: number;
+  /**
+   * The transfer's other half: haul revenue this sector's freight supply
+   * earned last turn, apportioned by supply share in its state. Named revenue
+   * leg, same basis and gate as `freightBillingCharge`; rides the sector's
+   * revenue into corp income while the flag is on.
+   */
+  freightBillingCredit?: number;
+  /** Turn the freight billing legs above were computed for. */
+  freightBillingTurn?: number;
+  /**
    * Posted-price market clearing (marketSystemMode >= "clearing", audit t806
    * Fix 2). `pricingPosture` is the CEO's posted price relative to market
    * (−0.2 … 0.2); null/absent = auto-position (NPP/unowned heuristic).

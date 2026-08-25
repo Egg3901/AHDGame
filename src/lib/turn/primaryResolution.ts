@@ -77,6 +77,7 @@ import { isNationwideDirectExecutiveElection } from "@/lib/elections/nationwideE
 import { buildNationwideElectoratePreload } from "@/lib/electionEngine/nationwideElectorate";
 import { resolveGoverningPartyIds } from "@/lib/government/governingPartyIds";
 import { isMidtermOppositionBoostEligible } from "@/lib/electionEngine/midtermOppositionBoost";
+import { finaliseManifestosAtElectionCall } from "@/lib/uk/manifesto/manifestoLifecycle";
 
 /**
  * For elections whose primaryEndTime just passed, eliminate losers per party.
@@ -225,6 +226,33 @@ export async function resolvePrimariesIfNeeded(now: Date, currentTurn: number): 
     const enriched = await fetchEnrichedCandidates(candidates, {
       countryId: (election.countryId ?? "US") as CountryId,
     });
+
+    // UK manifestos finalise at the primary→general transition (epic #856):
+    // lock each player party's complete draft, auto-generate + lock NPP
+    // manifestos. Only writes to the `manifestos` collection; the vote-share
+    // effect stays gated by UK_MANIFESTO_VOTE_EFFECT, so this is inert on the
+    // result until that flag is set.
+    if (
+      election.countryId === "UK" &&
+      (election.electionType === "commons" || election.electionType === "snap_commons")
+    ) {
+      const manifestoParties = [...partyCounts.keys()].map((partyId) => {
+        const party = partyMap.get(`UK:${partyId}`);
+        return {
+          party: String(partyId),
+          isNpp: !party?.chairId,
+          economic: party?.economicPosition ?? 0,
+          social: party?.socialPosition ?? 0,
+        };
+      });
+      await finaliseManifestosAtElectionCall(db, {
+        countryId: "UK",
+        electionId,
+        parties: manifestoParties,
+        now,
+      });
+    }
+
     const loserIds: string[] = [];
     const primaryResultsByParty: Record<string, PrimaryResultEntry[]> = {};
 
