@@ -25,6 +25,10 @@ import {
   tickConfidenceForGov,
 } from "@/lib/uk/confidence/confidenceGaugeStore";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
+import { tickNhsFromBudget } from "@/lib/uk/nhs/nhsStore";
+import { getGameState } from "@/lib/gameState";
+import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import { calculateFiscalYear } from "@/lib/budget/fiscalYear";
 import {
   tallySeatsByParty,
   getLargestParty as sharedGetLargestParty,
@@ -185,6 +189,19 @@ async function seedGovernmentFormation(db: Db): Promise<void> {
   if (approvalDoc) {
     await tickConfidenceForGov(db, { approval: approvalDoc.approvalRating, now });
   }
+
+  // NHS quality per-turn drift (epic #856): pulled toward the target implied by
+  // the current passed Budget's healthcare share. Persists the value only.
+  const nhsGameState = await getGameState(db);
+  const nhsCurrentTurn = nhsGameState?.currentTurn ?? 1;
+  const nhsStartingYear = nhsGameState?.startingYear ?? STARTING_YEAR;
+  const nhsCurrentYear =
+    nhsGameState?.currentYear ??
+    nhsStartingYear + Math.floor((nhsCurrentTurn - 1) / TURNS_PER_YEAR);
+  await tickNhsFromBudget(db, {
+    fiscalYear: calculateFiscalYear(nhsCurrentYear, nhsCurrentTurn),
+    now,
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -16,6 +16,22 @@
 export const NHS_QUALITY_MIN = 0;
 export const NHS_QUALITY_MAX = 100;
 
+/** Starting NHS quality for a world with no history. */
+export const NHS_QUALITY_START = 60;
+
+/**
+ * Healthcare share of the Budget (percent) that is treated as exactly meeting
+ * demand (funding ratio 1.0). Fund the NHS above this in the Budget and quality
+ * climbs; below it and quality falls. First-pass; calibrate in worldsim.
+ */
+export const NHS_BASELINE_HEALTHCARE_SHARE = 18;
+
+/** Funding ratio implied by the Budget's healthcare spending share. */
+export function fundingRatioFromHealthcareShare(healthcareSharePct: number): number {
+  if (NHS_BASELINE_HEALTHCARE_SHARE <= 0) return 1;
+  return Math.max(0, healthcareSharePct) / NHS_BASELINE_HEALTHCARE_SHARE;
+}
+
 /** Max quality change per turn — the gradual-movement (hysteresis) knob. */
 export const NHS_QUALITY_MAX_STEP = 6;
 
