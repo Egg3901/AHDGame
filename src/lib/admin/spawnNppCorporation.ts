@@ -39,6 +39,7 @@ import {
   unownedHeadroomUnitsPerAnchor,
 } from "@/lib/market/unownedHeadroom";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
+import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
 
 /**
  * Default founding book for an admin/NPP-spawned corporation, in ₳ at MODERN
@@ -123,6 +124,8 @@ export interface SpawnNppCorporationInput {
    * stamped for audit/timeline data rather than reading as turn 0.
    */
   foundedAtTurn?: number;
+  /** Initial operating strategy for the founding sector. Defaults to standard. */
+  initialStrategyId?: string;
 }
 
 /**
@@ -394,8 +397,12 @@ export async function spawnNppCorporation(
   // ₳/day to units/day.
   const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
   const eraUnitScale = await loadWorldEraUnitScale(db);
-  const startingCapacityUnits = plantsEnabled
+  const startingCapacityUnitsStandard = plantsEnabled
     ? computeUnownedHeadroomUnits(type, startingRevenue, eraUnitScale)
+    : 0;
+  const startingCapacityUnits = plantsEnabled
+    ? startingCapacityUnitsStandard *
+      capacityRescaleRatio(type, "standard", input.initialStrategyId)
     : 0;
 
   // ─── Currency: `corporateSectors.revenue` is stored in the sector's HOST-state
@@ -435,6 +442,7 @@ export async function spawnNppCorporation(
     revenue: startingRevenueLocal,
     profitMargin,
     workers: DEFAULT_SECTOR_STARTING_WORKERS,
+    ...(input.initialStrategyId ? { strategyId: input.initialStrategyId } : {}),
     createdAt: now,
     updatedAt: now,
     ...(plantsEnabled
@@ -462,8 +470,11 @@ export async function spawnNppCorporation(
     // headroom of the market it had just taken a bite out of. Decrement in
     // lockstep. Non-plants worlds get the same fix: `headroomUnits` is a derived
     // view of `revenue` and must never disagree with it.
+    // The pool is denominated on the sector type's standard strategy. A focused
+    // founding holds a D9-rescaled stock but consumes the same standard-basis
+    // market entry that its unchanged starting revenue represents.
     const unitsCaptured = plantsEnabled
-      ? startingCapacityUnits
+      ? startingCapacityUnitsStandard
       : computeUnownedHeadroomUnits(type, captureAmount, eraUnitScale);
     const priorUnits =
       typeof unownedSector.headroomUnits === "number" &&

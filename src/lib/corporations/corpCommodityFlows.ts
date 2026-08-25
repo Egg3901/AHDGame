@@ -50,12 +50,16 @@ import { getInputMultiplier, getOutputMultiplier } from "@/lib/utils/productionP
 
 /** Market context for one commodity, from the latest global flow ledger row. */
 export interface CommodityMarketContext {
+  basis: CommodityFlow["basis"] | null;
+  clearingBasis: CommodityFlow["clearingBasis"] | null;
   price: number | null;
   stockUnits: number | null;
   coverTurns: number | null;
   spoiledUnits: number | null;
   surplusUnits: number | null;
   unmetDemandUnits: number | null;
+  surplusUnitsPooled: number | null;
+  unmetDemandUnitsPooled: number | null;
 }
 
 /** Latest private-agreement supply delivered to this corporation. */
@@ -439,12 +443,18 @@ export function computeCorpCommodityFlows(
       consumptionUnits: round2(consumption),
       netUnits: round2(output - consumption),
       market: {
+        basis: flow ? (flow.basis ?? "ledger_aggregate") : null,
+        clearingBasis: flow ? (flow.clearingBasis ?? "global_pooled_availability") : null,
         price: flow ? flow.price : null,
         stockUnits: flow ? flow.stockUnits : null,
         coverTurns: flow ? flow.coverTurns : null,
         spoiledUnits: flow ? round2(flow.spoiledUnits) : null,
         surplusUnits: flow ? round2(flow.surplusUnits) : null,
         unmetDemandUnits: flow ? round2(flow.unmetDemandUnits) : null,
+        surplusUnitsPooled: flow ? round2(flow.surplusUnitsPooled ?? flow.surplusUnits) : null,
+        unmetDemandUnitsPooled: flow
+          ? round2(flow.unmetDemandUnitsPooled ?? flow.unmetDemandUnits)
+          : null,
       },
       ...(privateSupply
         ? {

@@ -116,6 +116,29 @@ export interface SettleCorpInfo {
   liquidCapitalAnchor?: number;
 }
 
+/**
+ * Add one equal-and-opposite corporation cash transfer to an accumulator.
+ *
+ * Conversion deliberately remains unrounded here. Callers that fan one payer
+ * out across many recipients must aggregate all of a corporation's legs before
+ * rounding, otherwise every sub-unit pair can disappear independently.
+ */
+export function addCorpToCorpSettlement(
+  deltaByCorp: Map<string, number>,
+  payerCorpId: string,
+  payer: SettleCorpInfo,
+  recipientCorpId: string,
+  recipient: SettleCorpInfo,
+  amountAnchor: number
+): void {
+  if (!(Number.isFinite(amountAnchor) && amountAnchor > 0)) return;
+  const payerLocal = anchorToCorpCapital(amountAnchor, payer.ccy, payer.fxRate);
+  const recipientLocal = anchorToCorpCapital(amountAnchor, recipient.ccy, recipient.fxRate);
+  if (!(Number.isFinite(payerLocal) && Number.isFinite(recipientLocal))) return;
+  deltaByCorp.set(payerCorpId, (deltaByCorp.get(payerCorpId) ?? 0) - payerLocal);
+  deltaByCorp.set(recipientCorpId, (deltaByCorp.get(recipientCorpId) ?? 0) + recipientLocal);
+}
+
 type TxInput = Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged">;
 
 /** One agreement's settled price premium, for the C5 transfer-pricing accrual. */
