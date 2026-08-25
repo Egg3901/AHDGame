@@ -63,6 +63,12 @@ export interface Election {
   primaryEndTurn?: number;
   durationHours?: number;
   primaryDurationHours?: number;
+  /**
+   * Presidential ruleset the race is frozen to (stamped at spawn; see
+   * elections/presidentialRuleset.ts). Absent on races that predate the seam,
+   * which resolve to v1.
+   */
+  rulesetVersion?: number;
   /** Campaign Here boosts: districtIndex → partySeqId → active boost % (0..7.5). */
   districtCampaignBoosts?: Record<string, Record<string, number>>;
   createdAt: Date;
@@ -99,6 +105,16 @@ export interface ElectionCandidate {
   travelState?: string | null;
   /** When the travel was last set */
   traveledAt?: Date;
+  /**
+   * President-general-only: state the ticket's running mate is campaigning in as
+   * a surrogate. Set on the NOMINEE's candidate row (the running mate has no
+   * candidate row of their own). Adds the ruleset's vpTravelPresenceWeight to the
+   * ticket's per-turn travel-presence favorability. Optional/undefined until the
+   * running mate travels; degrades to no bonus on read.
+   */
+  runningMateTravelState?: string | null;
+  /** When the running mate's surrogate travel state was last set. */
+  runningMateTraveledAt?: Date | null;
   /**
    * President-primary-only: state the candidate is campaigning in during the primary phase.
    * Badge-only (does NOT relocate the character). Cleared when primary ends.

@@ -5,7 +5,26 @@ export type PresidentialResolutionMode = "majority" | "contingent" | "contingent
 /** Client-safe contingent breakdown mirrored from ElectionVoteTally.contingentResult. */
 export type ContingentElectionDisplay = NonNullable<ElectionVoteTally["contingentResult"]>;
 
+/** Modern 538-college majority; display fallback when no live college is known. */
 export const PRESIDENTIAL_EV_NEEDED = 270;
+
+/**
+ * Majority threshold for an Electoral College of `totalEv` electors: more than
+ * half. Modern 538 -> 270; the 1953-60 era college of 531 -> 266. Client-safe
+ * (pure); the turn engine re-exports this for resolution.
+ */
+export function electoralMajorityFor(totalEv: number): number {
+  if (!Number.isFinite(totalEv) || totalEv <= 0) return PRESIDENTIAL_EV_NEEDED;
+  return Math.floor(totalEv / 2) + 1;
+}
+
+/** College size from a per-state EV map; 0 when absent/empty. */
+export function collegeSizeFromEvByState(
+  evByState: Record<string, number> | undefined | null
+): number {
+  if (!evByState) return 0;
+  return Object.values(evByState).reduce((s, v) => s + (Number.isFinite(v) ? v : 0), 0);
+}
 
 export interface ContingentEvRiskAssessment {
   atRisk: boolean;

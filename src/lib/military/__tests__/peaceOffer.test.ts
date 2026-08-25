@@ -176,6 +176,81 @@ describe("sideWouldEmpty", () => {
     } as unknown as ConflictDoc;
     expect(sideWouldEmpty(solo, "UK")).toBe("A");
   });
+
+  it("accepts a set of leavers and empties the side when they are all of it", () => {
+    const pact = {
+      sideA: { label: "US", countries: ["US"], kind: "state" },
+      sideB: { label: "Pact", countries: ["DD", "RU"], kind: "coalition" },
+    } as unknown as ConflictDoc;
+    // Treaty release takes DD and RU out together. Asked about DD alone this returns
+    // null, and the war would sit active with an empty side B and no winner.
+    expect(sideWouldEmpty(pact, ["DD", "RU"])).toBe("B");
+    expect(sideWouldEmpty(pact, ["DD"])).toBeNull();
+  });
+
+  it("ignores leavers that are not on the side", () => {
+    const pact = {
+      sideA: { label: "US", countries: ["US"], kind: "state" },
+      sideB: { label: "Pact", countries: ["DD"], kind: "state" },
+    } as unknown as ConflictDoc;
+    expect(sideWouldEmpty(pact, ["DD", "PL"])).toBe("B");
+  });
+
+  // A generated side carries `countries: []`. Without the length guard an `every` over
+  // an empty array is vacuously true and every insurgency would read as "emptied".
+  it("never names a side that was already empty", () => {
+    const generated = {
+      sideA: { label: "Gov", countries: ["CN"], kind: "state" },
+      sideB: { label: "Rebels", countries: [], kind: "generated" },
+    } as unknown as ConflictDoc;
+    expect(sideWouldEmpty(generated, ["CN"])).toBe("A");
+  });
+});
+
+describe("validatePeaceOffer treaty bar", () => {
+  const pact = {
+    status: "active",
+    sideA: { label: "US", countries: ["US"], kind: "state" },
+    sideB: { label: "Pact", countries: ["DD", "RU"], kind: "coalition" },
+    treatyEntries: [
+      { countryId: "RU", organizationId: "WARSAW_PACT", defending: "DD", joinedTurn: 5 },
+    ],
+  } as unknown as ConflictDoc;
+
+  it("refuses an auto-joined ally while the country it defends still fights", () => {
+    const res = validatePeaceOffer(pact, "RU", "US", { payer: "RU", amount: 0 });
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toContain("Warsaw Pact");
+      expect(res.error).toContain("East Germany");
+      // Player-facing copy: no em or en dashes, in any language.
+      expect(res.error).not.toMatch(/[—–]/);
+    }
+  });
+
+  it("allows the ally once the defended country has left the war", () => {
+    const settled = {
+      ...pact,
+      sideB: { label: "Pact", countries: ["RU"], kind: "coalition" },
+    } as unknown as ConflictDoc;
+    expect(validatePeaceOffer(settled, "RU", "US", { payer: "RU", amount: 0 }).ok).toBe(true);
+  });
+
+  it("never bars the defended country itself", () => {
+    expect(validatePeaceOffer(pact, "DD", "US", { payer: "DD", amount: 0 }).ok).toBe(true);
+  });
+
+  // The OFFERER is the country that leaves (acceptPeace sets leaver = offer.fromCountry).
+  // An attacker offering peace to an auto-joined ally is the attacker giving up, and must
+  // not be refused.
+  it("never bars the attacker from offering peace to an ally", () => {
+    expect(validatePeaceOffer(pact, "US", "RU", { payer: "US", amount: 0 }).ok).toBe(true);
+  });
+
+  it("leaves a conflict with no treaty entries unaffected", () => {
+    const plain = { ...pact, treatyEntries: undefined } as unknown as ConflictDoc;
+    expect(validatePeaceOffer(plain, "RU", "US", { payer: "RU", amount: 0 }).ok).toBe(true);
+  });
 });
 
 describe("constants", () => {

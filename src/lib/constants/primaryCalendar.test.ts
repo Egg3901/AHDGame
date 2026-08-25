@@ -1,9 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   getDefaultPrimaryAllocation,
+  getPrimaryWaveSchedule,
+  getAllStaggerStates,
+  startedScheduleForFirstOffset,
+  COMPRESSED_SCHEDULE,
+  STRETCHED_SCHEDULE,
   GOP_DEFAULT_ALLOCATION,
   GOP_HYBRID_STATES,
+  PRIMARY_WAVES,
+  PRIMARY_WAVES_STRETCHED,
+  STAGGER_WINDOW_TURNS,
+  STAGGER_WINDOW_TURNS_STRETCHED,
 } from "./primaryCalendar";
+import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
 
 describe("getDefaultPrimaryAllocation", () => {
   it("returns PR for every Dem state (DNC Rule 14)", () => {
@@ -46,5 +56,92 @@ describe("getDefaultPrimaryAllocation", () => {
     // silent fallback to "WTA" for cataloged states.
     const cataloguedDelegateStates = Object.keys(GOP_DEFAULT_ALLOCATION);
     expect(cataloguedDelegateStates.length).toBeGreaterThanOrEqual(50);
+  });
+});
+
+describe("getPrimaryWaveSchedule", () => {
+  it("resolves compressed for v1 and v2 (unstamped / pre-rework live races)", () => {
+    const v1 = getPrimaryWaveSchedule(presidentialRulesetFor({ rulesetVersion: 1 }));
+    const v2 = getPrimaryWaveSchedule(presidentialRulesetFor({ rulesetVersion: 2 }));
+    expect(v1.waves).toBe(PRIMARY_WAVES);
+    expect(v1.windowTurns).toBe(STAGGER_WINDOW_TURNS);
+    expect(v2.waves).toBe(PRIMARY_WAVES);
+    expect(v2.windowTurns).toBe(STAGGER_WINDOW_TURNS);
+  });
+
+  it("resolves stretched for v3 (the calendar-rework version)", () => {
+    const v3 = getPrimaryWaveSchedule(presidentialRulesetFor({ rulesetVersion: 3 }));
+    expect(v3.waves).toBe(PRIMARY_WAVES_STRETCHED);
+    expect(v3.windowTurns).toBe(STAGGER_WINDOW_TURNS_STRETCHED);
+  });
+
+  it("unstamped races resolve to compressed (1960 protection)", () => {
+    const unstamped = getPrimaryWaveSchedule(presidentialRulesetFor(undefined));
+    expect(unstamped.windowTurns).toBe(STAGGER_WINDOW_TURNS);
+    expect(unstamped.waves).toBe(PRIMARY_WAVES);
+  });
+});
+
+describe("stretched wave schedule", () => {
+  it("spaces the six waves at exactly [40, 32, 24, 16, 8, 0]", () => {
+    expect(PRIMARY_WAVES_STRETCHED.map((w) => w.turnsRemaining)).toEqual([40, 32, 24, 16, 8, 0]);
+  });
+
+  it("keeps the same six waves in the same order with identical labels", () => {
+    expect(PRIMARY_WAVES_STRETCHED).toHaveLength(PRIMARY_WAVES.length);
+    for (let i = 0; i < PRIMARY_WAVES.length; i++) {
+      expect(PRIMARY_WAVES_STRETCHED[i].label).toBe(PRIMARY_WAVES[i].label);
+    }
+  });
+
+  it("has byte-identical per-wave state membership (only timing differs)", () => {
+    for (let i = 0; i < PRIMARY_WAVES.length; i++) {
+      expect(PRIMARY_WAVES_STRETCHED[i].states).toEqual(PRIMARY_WAVES[i].states);
+    }
+  });
+
+  it("yields an identical flattened stagger-state set across schedules", () => {
+    const compressed = getAllStaggerStates().slice().sort();
+    const stretched = getAllStaggerStates(getPrimaryWaveSchedule({ primaryCalendar: "stretched" }))
+      .slice()
+      .sort();
+    expect(stretched).toEqual(compressed);
+  });
+
+  it("sets windowTurns to the max offset + 1", () => {
+    const maxOffset = Math.max(...PRIMARY_WAVES_STRETCHED.map((w) => w.turnsRemaining));
+    expect(STAGGER_WINDOW_TURNS_STRETCHED).toBe(maxOffset + 1);
+    expect(STAGGER_WINDOW_TURNS_STRETCHED).toBe(41);
+  });
+});
+
+describe("startedScheduleForFirstOffset (mid-primary schedule stickiness)", () => {
+  it("locks a primary that opened compressed to the compressed schedule", () => {
+    // The live 1960 race: first wave fired at the compressed lead (turnsRemaining 5).
+    const started = startedScheduleForFirstOffset(PRIMARY_WAVES[0].turnsRemaining);
+    expect(started).toBe(COMPRESSED_SCHEDULE);
+    expect(started?.kind).toBe("compressed");
+  });
+
+  it("locks a primary that opened stretched to the stretched schedule", () => {
+    const started = startedScheduleForFirstOffset(PRIMARY_WAVES_STRETCHED[0].turnsRemaining);
+    expect(started).toBe(STRETCHED_SCHEDULE);
+    expect(started?.kind).toBe("stretched");
+  });
+
+  it("returns null for a not-yet-started primary (no wave history) so the ruleset schedule is used", () => {
+    expect(startedScheduleForFirstOffset(null)).toBeNull();
+    expect(startedScheduleForFirstOffset(undefined)).toBeNull();
+  });
+
+  it("prevents the wave-dump: a compressed-in-flight primary re-stamped to v3 keeps compressed cadence", () => {
+    // At turnsRemaining 5, a stretched schedule would report every remaining
+    // wave as due; the sticky compressed schedule reports exactly one.
+    const dumped = STRETCHED_SCHEDULE.waves.filter((w) => 5 <= w.turnsRemaining).length;
+    const sticky = COMPRESSED_SCHEDULE.waves.filter((w) => 5 <= w.turnsRemaining).length;
+    expect(dumped).toBeGreaterThan(1);
+    expect(sticky).toBe(1);
+    // The guard resolves the compressed schedule from the recorded first offset.
+    expect(startedScheduleForFirstOffset(5)).toBe(COMPRESSED_SCHEDULE);
   });
 });

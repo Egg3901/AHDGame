@@ -345,6 +345,35 @@ export interface DistributeVotesOptions {
    * state map / compare to the candidate's home state.
    */
   currentStateId?: string;
+  /**
+   * Factor-ledger sink (see `factorLedger.ts`). When present the swing-flow
+   * TEES its already-computed per-cell appeal decomposition, swing, and spoiler
+   * values into the sink — pure observation, byte-identical vote math. Undefined
+   * (production default for every non-presidential caller) is a complete no-op.
+   */
+  ledgerSink?: import("./factorLedger").LedgerSink;
+  /** Electoral-unit id the ledger sink keys the current call under. */
+  ledgerUnitId?: string;
+  /**
+   * Per-group census `bucketWeights` ("dim:bucket" → 0..1) for the granular
+   * substrate, so the sink can fold each cell's appeal back onto census buckets.
+   * Absent (legacy archetype path) means the ledger emits no bucket appeal.
+   */
+  ledgerBucketWeightsByGroup?: Map<string, Record<string, number>>;
+}
+
+/**
+ * Optional multiplicand trace for `appealWeight`. When passed, the function
+ * records the exact multiplicands it ALREADY multiplies — reach, candidate-fit
+ * (appeal), and the product of every remaining structural term — so the ledger
+ * can decompose a cell's nominal votes without recomputing anything. The
+ * recorded values reproduce the return value byte-for-byte
+ * (`reachMult * fitMult * restMult === return`).
+ */
+export interface AppealWeightTrace {
+  reachMult: number;
+  fitMult: number;
+  restMult: number;
 }
 
 export interface AccumulateVoteTurnPreload {

@@ -22,6 +22,7 @@
 
 import { getElectoralVotes } from "@/lib/constants/states";
 import type { AllocationMethod } from "@/lib/primaryDelegateAllocation";
+import type { PresidentialRuleset } from "@/lib/elections/presidentialRuleset";
 
 /** Party family — determines which calendar + delegate count the candidate's party uses. */
 export type PrimaryCalendarFamily = "dem" | "gop";
@@ -101,17 +102,99 @@ export const PRIMARY_WAVES: PrimaryWave[] = [
 ];
 
 /**
- * Return the wave that fires when `turnsRemaining` turns are left in the primary.
- * Returns null outside the 6-turn stagger window.
+ * Stretched wave schedule — the SAME six waves with IDENTICAL state membership,
+ * but spaced across the primary window so each wave's result lands with turns to
+ * spare before the next. The compressed table bunches all six into the final six
+ * turns (the audited defect where a whole primary resolved in one burst with no
+ * reaction gap). Only the `turnsRemaining` offsets differ; the union of states is
+ * byte-for-byte the same, so every downstream consumer that reads state
+ * membership (delegate tables, projections, UI carve-up) is unchanged.
  */
-export function getWaveForTurnsRemaining(turnsRemaining: number): PrimaryWave | null {
-  if (turnsRemaining < 0 || turnsRemaining > STAGGER_WINDOW_TURNS - 1) return null;
-  return PRIMARY_WAVES.find((w) => w.turnsRemaining === turnsRemaining) ?? null;
+export const PRIMARY_WAVES_STRETCHED: PrimaryWave[] = PRIMARY_WAVES.map((wave, index) => ({
+  ...wave,
+  states: [...wave.states],
+  turnsRemaining: [40, 32, 24, 16, 8, 0][index],
+}));
+
+/** Number of stagger turns before primaryEndTime for the stretched calendar (max offset + 1). */
+export const STAGGER_WINDOW_TURNS_STRETCHED = 41;
+
+/** A resolved wave table plus its stagger-window size. */
+export interface PrimaryWaveSchedule {
+  kind: "compressed" | "stretched";
+  waves: PrimaryWave[];
+  windowTurns: number;
 }
 
-/** Flatten all wave states. Used to sanity-check every state is assigned. */
-export function getAllStaggerStates(): string[] {
-  return PRIMARY_WAVES.flatMap((w) => w.states);
+/** Compressed calendar (v1/v2 live behavior): six waves in the final six turns. */
+export const COMPRESSED_SCHEDULE: PrimaryWaveSchedule = {
+  kind: "compressed",
+  waves: PRIMARY_WAVES,
+  windowTurns: STAGGER_WINDOW_TURNS,
+};
+
+/** Stretched calendar: same waves spaced across the primary window. */
+export const STRETCHED_SCHEDULE: PrimaryWaveSchedule = {
+  kind: "stretched",
+  waves: PRIMARY_WAVES_STRETCHED,
+  windowTurns: STAGGER_WINDOW_TURNS_STRETCHED,
+};
+
+/**
+ * Resolve the schedule a primary is ACTUALLY on from the turnsRemaining its
+ * first wave was recorded at, independent of the race's current ruleset stamp.
+ *
+ * A primary keeps the cadence it opened on: a race whose first wave fired at
+ * the compressed lead (turnsRemaining `STAGGER_WINDOW_TURNS - 1`) is mid-flight
+ * on the compressed table, and re-stamping it to a stretched ruleset must NOT
+ * switch it (the stretched waves would all fall due at once because the
+ * 40-turn lead is already gone). Returns null when the recorded offset matches
+ * neither schedule's first wave, so callers fall back to the ruleset schedule.
+ */
+export function startedScheduleForFirstOffset(
+  firstWaveTurnsRemaining: number | null | undefined
+): PrimaryWaveSchedule | null {
+  if (firstWaveTurnsRemaining == null) return null;
+  if (firstWaveTurnsRemaining === COMPRESSED_SCHEDULE.waves[0]?.turnsRemaining) {
+    return COMPRESSED_SCHEDULE;
+  }
+  if (firstWaveTurnsRemaining === STRETCHED_SCHEDULE.waves[0]?.turnsRemaining) {
+    return STRETCHED_SCHEDULE;
+  }
+  return null;
+}
+
+/**
+ * Resolve which wave schedule a race runs from its ruleset. "stretched" only
+ * applies to races spawned under the version that sets it; every unstamped or
+ * pre-rework race stays on the compressed table (identical to prior behavior).
+ */
+export function getPrimaryWaveSchedule(
+  ruleset: Pick<PresidentialRuleset, "primaryCalendar">
+): PrimaryWaveSchedule {
+  return ruleset.primaryCalendar === "stretched" ? STRETCHED_SCHEDULE : COMPRESSED_SCHEDULE;
+}
+
+/**
+ * Return the wave that fires when `turnsRemaining` turns are left in the primary.
+ * Returns null outside the schedule's stagger window. Defaults to the compressed
+ * schedule so existing callers keep their behavior.
+ */
+export function getWaveForTurnsRemaining(
+  turnsRemaining: number,
+  schedule: PrimaryWaveSchedule = COMPRESSED_SCHEDULE
+): PrimaryWave | null {
+  if (turnsRemaining < 0 || turnsRemaining > schedule.windowTurns - 1) return null;
+  return schedule.waves.find((w) => w.turnsRemaining === turnsRemaining) ?? null;
+}
+
+/**
+ * Flatten all wave states. Used to sanity-check every state is assigned. State
+ * membership is identical across schedules, so the default compressed schedule
+ * yields the same set as the stretched one.
+ */
+export function getAllStaggerStates(schedule: PrimaryWaveSchedule = COMPRESSED_SCHEDULE): string[] {
+  return schedule.waves.flatMap((w) => w.states);
 }
 
 /**

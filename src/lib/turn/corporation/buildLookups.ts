@@ -25,7 +25,7 @@ import type { CommodityType } from "@/lib/constants/commodities";
 import type { CountryId } from "@/lib/constants/countries";
 import { isCorporateIssuerBond } from "@/lib/bonds/corporateCredit";
 import { buildPrimeRateByCountry } from "@/lib/centralBank/helpers";
-import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
+import { isCurtained } from "@/lib/constants/commandEconomy";
 import { capInputPriceRatioAtWorld } from "@/lib/corporations/physicalPnl";
 import { getActiveSubsidies } from "@/lib/subsidies/subsidyEffects";
 import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
@@ -77,8 +77,9 @@ import { buildSovereignDefaultMarginByCorpId } from "@/lib/sovereignDefault/marg
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
-  COMMODITY_BASE_PRICES,
+  eraScaledBasePrices,
   EXTRACTABLE_RESOURCES,
+  extractionOutputScaleFor,
   SECTOR_SUPPLY,
 } from "@/lib/constants/commodities";
 import type { ExtractableResource } from "@/lib/constants/commodities";
@@ -89,13 +90,14 @@ import {
 } from "@/lib/turn/extraction/extractionCapacity";
 import { depletedCapacityDoc } from "@/lib/extraction/depletion";
 import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
+import { getExtractionOutputScaleEnabled } from "@/lib/market/featureFlag";
 import {
   getExtractionContractsCollection,
   activeExtractionContractFilter,
 } from "@/lib/db/collections/extractionContracts";
 import {
   haircutScarcityRelief,
-  weightedCapacityUtilization,
+  scarcityReliefCappedUtilization,
 } from "@/lib/extraction/capacityHaircut";
 import type { SourcingNetworkDoc } from "@/lib/logistics/sourcingLedger";
 
@@ -843,8 +845,9 @@ export async function buildCorporationLookups(
       blocsByCountry.get(m.countryId)!.add(String(m.organizationId));
     }
     // Iron curtain (mirrors commodityPriceTurn): planned economies trade only
-    // among themselves; membership from the engine's MARKETIZATION_SCHEDULE so
-    // the curtain lifts on the historical marketization dates.
+    // among themselves; membership from the engine's MARKETIZATION_SCHEDULE via
+    // isCurtained, so the curtain lifts on the historical marketization dates
+    // and the Tito-split exemption keeps Yugoslavia trading with the open world.
     const [curtainCfg, curtainState] = await Promise.all([
       db
         .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
@@ -856,7 +859,7 @@ export async function buildCorporationLookups(
     const curtainEnabled = curtainCfg?.commandEconomyEnabled === true;
     const curtainYear = curtainState?.currentYear ?? null;
     const curtainedCountries = new Set<string>(
-      COUNTRY_ORDER.filter((c) => isPlannedEconomy(c, curtainYear, curtainEnabled))
+      COUNTRY_ORDER.filter((c) => isCurtained(c, curtainYear, curtainEnabled))
     );
     const { affinityFor, capUnitsFor } = buildTradeAffinity({
       ftaPairs: activeFtaPairs,
@@ -904,6 +907,14 @@ export async function buildCorporationLookups(
   >();
   if (extractionSectors.length > 0) {
     const capacityTurn = await getCurrentTurn(db);
+    // Mirror the supply-ledger input exactly (commodityPriceTurn): the
+    // extraction output-scale flag gates the per-resource boost, and the
+    // ₳↔unit conversion runs on this world's ERA base-price table. The
+    // previous modern-table figure here was 70-174x smaller than what the
+    // ledger books on a 1953 world, so this clamp rationed against a
+    // fraction of the sector's real desired output and never bound.
+    const extractionOutputScaleEnabled = await getExtractionOutputScaleEnabled();
+    const extractionBasePrices = eraScaledBasePrices(eraUnitScale);
     const extractionStateIds = [...new Set(extractionSectors.map((s) => s.stateId))];
     const activeContracts = await (
       await getExtractionContractsCollection(db)
@@ -913,6 +924,7 @@ export async function buildCorporationLookups(
     // Resolve each extraction sector's effective supply rates once, then reuse
     // them for both the capacity clamp input and the revenue-weighted utilization.
     const ratesBySector = new Map<string, Partial<Record<ExtractableResource, number>>>();
+    const outputUnitsBySector = new Map<string, Partial<Record<ExtractableResource, number>>>();
     const extractionInputs: ExtractionSectorInput[] = extractionSectors.map((sector) => {
       const hasStrategy = sector.strategyId && sector.strategyId !== "standard";
       const strategyRates =
@@ -933,11 +945,21 @@ export async function buildCorporationLookups(
           : ((SECTOR_SUPPLY["extraction"] ?? []).find((f) => f.commodity === resource)?.rate ?? 0);
         if (rate > 0) {
           rates[resource] = rate;
-          revenueBasedOutput[resource] = (sector.revenue * rate) / COMMODITY_BASE_PRICES[resource];
+          // Identical expression to the ledger path: revenue x rate x
+          // per-resource output scale, over the era-scaled base price. At
+          // eraUnitScale 1 the table IS COMMODITY_BASE_PRICES and the scale
+          // follows the same config flag as the ledger, so modern worlds are
+          // unchanged whenever the ledger is.
+          revenueBasedOutput[resource] =
+            (sector.revenue *
+              rate *
+              extractionOutputScaleFor(resource, extractionOutputScaleEnabled)) /
+            extractionBasePrices[resource];
         }
       }
       const sectorId = sector._id.toString();
       ratesBySector.set(sectorId, rates);
+      outputUnitsBySector.set(sectorId, revenueBasedOutput);
       return {
         sectorId,
         stateId: sector.stateId,
@@ -967,9 +989,18 @@ export async function buildCorporationLookups(
       if (relief > 0) reliefByResource[resource] = relief;
     }
     for (const [sectorId, rates] of ratesBySector) {
+      // Relief is capped at the raw capacity ratio over the CORRECTED
+      // desired-output units: a sector whose desired output exceeds its
+      // state's deposit ceiling cannot have the haircut lifted past what
+      // those deposits can actually yield.
       extractionCapacityUtilBySector.set(
         sectorId,
-        weightedCapacityUtilization(rates, multipliers.get(sectorId), reliefByResource)
+        scarcityReliefCappedUtilization(
+          rates,
+          multipliers.get(sectorId),
+          reliefByResource,
+          outputUnitsBySector.get(sectorId)
+        )
       );
     }
   }

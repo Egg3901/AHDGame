@@ -16,6 +16,7 @@ import type {
   PresidentialResolutionMode,
 } from "@/lib/elections/presidentialResolutionDisplay";
 import type { EnrichedCandidate, PartyGroup } from "@/lib/elections/candidateEnrichment";
+import type { FactorLedgerSnapshot } from "@/lib/electionEngine/factorLedger";
 
 export interface PollingData {
   leaderId: string | null;
@@ -262,6 +263,16 @@ export interface ElectionResponse {
     incumbentPartyColor?: string;
     recordedTurn: number;
   };
+
+  /**
+   * President only: the descriptive factor ledger read straight off the vote
+   * tally (`ElectionVoteTally.factorLedger`), never recomputed here. Feeds the
+   * Factor Ledger card. Fog-of-war applied in `enrichElection`: the national
+   * factor waterfall is shown for every candidate, but per-candidate
+   * `bucketAppeal` and the per-unit breakdown are stripped for candidates the
+   * viewer does not own. Absent for races that ran before the ledger existed.
+   */
+  factorLedger?: FactorLedgerSnapshot;
 
   /**
    * Per-state registration-lean breakdown for the presidential

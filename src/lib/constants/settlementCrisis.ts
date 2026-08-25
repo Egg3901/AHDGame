@@ -638,6 +638,21 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     detail:
       "Coal, steel and cheap credit into the border Länder. Buys quiet sympathy in state capitals.",
   },
+  {
+    id: "nva",
+    name: "NVA Border Deployment",
+    seat: "DD",
+    class: "forces",
+    target: "garrison",
+    magnitude: mag(4),
+    capitalCost: 10,
+    fundsUnit: "local",
+    fundsCost: 18_000_000,
+    actionCost: 1,
+    addsHeat: false,
+    detail:
+      "Station National People's Army liaison detachments along the inner border. Makes the Allied garrison look like the problem, not the guarantee.",
+  },
   // ── USSR · Politburo ───────────────────────────────────────────────────────
   {
     id: "ostpolitik",

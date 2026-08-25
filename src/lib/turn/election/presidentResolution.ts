@@ -30,7 +30,10 @@ import {
   toCharacterObjectId,
   toNppObjectId,
 } from "@/lib/turn/election/contingentPersonIds";
-import { resolvePresidentialWinnerCandidateId } from "@/lib/elections/presidentialResolutionDisplay";
+import {
+  resolvePresidentialWinnerCandidateId,
+  electoralMajorityFor,
+} from "@/lib/elections/presidentialResolutionDisplay";
 import { getGameStateCollection } from "@/lib/db/collections";
 import { loadApportionment } from "@/lib/elections/apportionment";
 import { logger } from "../../observability/logger";
@@ -244,6 +247,15 @@ export async function resolvePresidentElection(
     ? Object.entries(electoralVotesByCandidate).sort((a, b) => b[1] - a[1])
     : [];
   let resolutionMode: PresidentialResolutionMode = tally.resolutionMode ?? "majority";
+  // Majority of the ACTUAL college, not the modern 538-college constant: on
+  // era worlds (531 EV in 1953-60) the hardcoded 270 would wrongly send a
+  // 266-269 EV winner to a contingent House ballot. Both branches below
+  // recompute this from the college they actually allocated.
+  let evNeeded = electoralMajorityFor(
+    electoralVotesByCandidate
+      ? Object.values(electoralVotesByCandidate).reduce((s, v) => s + v, 0)
+      : 0
+  );
   let contingentResult: ContingentElectionResult | undefined = tally.contingentResult as
     ContingentElectionResult | undefined;
 
@@ -281,6 +293,9 @@ export async function resolvePresidentElection(
       await vacatePresidency(db, election, now, "resolved with zero electoral votes");
       return true;
     }
+    // Every unit allocates all of its electors, so the allocated sum IS the
+    // college size for this world's apportionment.
+    evNeeded = electoralMajorityFor(totalEV);
   }
 
   if (!electoralVotesByCandidate) {
@@ -315,7 +330,7 @@ export async function resolvePresidentElection(
     winnerId = retryWinnerId;
     winnerEV = electoralVotesByCandidate[winnerId] ?? ranked[0]?.[1] ?? 0;
   } else {
-    const winner = determinePresidentialWinner(electoralVotesByCandidate);
+    const winner = determinePresidentialWinner(electoralVotesByCandidate, evNeeded);
     resolutionMode = "majority";
     contingentResult = undefined;
 
@@ -450,6 +465,7 @@ export async function resolvePresidentElection(
     contingentResult,
     vpCharId,
     now,
+    evNeeded,
   });
 
   console.log(

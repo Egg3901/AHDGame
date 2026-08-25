@@ -510,6 +510,66 @@ describe("runSourcingPass", () => {
     expect(r.deliveryLimitedSupplyByState.get("coal")!.get("A2")).toBeCloseTo(200);
   });
 
+  it("books refused haul TEU scaled by what was genuinely stuck, not the sum of attempts", () => {
+    // Two buyers each want 300 of A2's 200 spare and both are refused by A2's
+    // zero-capacity network, so capacityBound (400 of attempts against the
+    // spare) exceeds the 200 that is genuinely stuck. The booked freight
+    // demand must be the attempts' TEU scaled by limited/capacityBound, not
+    // the raw sum: a refused attempt later placed elsewhere may not claim
+    // freight demand twice.
+    const r = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          ["A1", new Map([["coal", { supply: 0, demand: 300 }]]) as Map<CommodityType, Balance>],
+          ["A3", new Map([["coal", { supply: 0, demand: 300 }]]) as Map<CommodityType, Balance>],
+          [
+            "A2",
+            new Map([
+              ["coal", { supply: 200, demand: 0 }],
+              ["freight", { supply: 0, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+        ]),
+        states: [
+          { stateId: "A1", countryId: "US" as CountryId },
+          { stateId: "A2", countryId: "US" as CountryId },
+          { stateId: "A3", countryId: "US" as CountryId },
+        ],
+        byCountry: new Map([["US", new Map([["coal", { supply: 200, demand: 600 }]])]]),
+        statePricesFor: () => ({ A1: 100, A2: 100, A3: 100 }),
+      })
+    );
+    const limited = r.deliveryLimitedSupplyByState.get("coal")!.get("A2")!;
+    expect(limited).toBeCloseTo(200);
+    const bookedTwoBuyers = r.freightDemandTeuByState.get("A2")!.bulk;
+    expect(bookedTwoBuyers).toBeGreaterThan(0);
+
+    // Single-buyer control: same 200 spare, one 300-unit refusal. The booked
+    // TEU must be identical: it tracks the stuck spare, not the attempt count.
+    const single = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          ["A1", new Map([["coal", { supply: 0, demand: 300 }]]) as Map<CommodityType, Balance>],
+          [
+            "A2",
+            new Map([
+              ["coal", { supply: 200, demand: 0 }],
+              ["freight", { supply: 0, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+        ]),
+        states: [
+          { stateId: "A1", countryId: "US" as CountryId },
+          { stateId: "A2", countryId: "US" as CountryId },
+        ],
+        byCountry: new Map([["US", new Map([["coal", { supply: 200, demand: 300 }]])]]),
+        statePricesFor: () => ({ A1: 100, A2: 100 }),
+      })
+    );
+    const bookedSingle = single.freightDemandTeuByState.get("A2")!.bulk;
+    expect(bookedTwoBuyers).toBeCloseTo(bookedSingle, 10);
+  });
+
   it("deliveryLimitedSupplyByState: blames only the state whose network failed (ticket #1180)", () => {
     // The regression the ticket reported. A2 has no freight capacity and its
     // spare is genuinely stuck. A3 sits in a different country with the same

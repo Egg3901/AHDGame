@@ -32,13 +32,19 @@ import type {
   StateDemographicTurnout,
 } from "@/lib/db/types";
 import {
-  PRIMARY_WAVES,
-  STAGGER_WINDOW_TURNS,
+  getPrimaryWaveSchedule,
+  startedScheduleForFirstOffset,
+  STAGGER_WINDOW_TURNS_STRETCHED,
   resolvePartyFamily,
   getDelegatesForState,
   getDefaultPrimaryAllocation,
   type PrimaryCalendarFamily,
+  type PrimaryWaveSchedule,
 } from "@/lib/constants/primaryCalendar";
+import {
+  presidentialRulesetFor,
+  type PresidentialRuleset,
+} from "@/lib/elections/presidentialRuleset";
 import { initPresidentVoteTally } from "@/lib/presidentialElectionEngine";
 import { fetchEnrichedCandidates } from "@/lib/electionEngine/candidateEnrichment";
 import { distributeVotesByGroupLevelAllocation } from "@/lib/electionEngine/voteDistribution";
@@ -93,9 +99,68 @@ export interface StaggerPhaseResult {
   momentumBumps: number;
 }
 
-export function getDuePrimaryWaveCount(turnsToEnd: number): number {
-  if (turnsToEnd < 0 || turnsToEnd > STAGGER_WINDOW_TURNS - 1) return 0;
-  return PRIMARY_WAVES.filter((wave) => turnsToEnd <= wave.turnsRemaining).length;
+export function getDuePrimaryWaveCount(turnsToEnd: number, schedule: PrimaryWaveSchedule): number {
+  if (turnsToEnd < 0 || turnsToEnd > schedule.windowTurns - 1) return 0;
+  return schedule.waves.filter((wave) => turnsToEnd <= wave.turnsRemaining).length;
+}
+
+/** Clamp a number to [lo, hi]. */
+function clampTo(value: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, value));
+}
+
+/**
+ * Expectation-beating momentum, concept #2 (the vote-share carry).
+ *
+ * Two distinct "momentum" ideas live in this file and must not be conflated:
+ *   1. Favorability-bump momentum — the PRIMARY_MOMENTUM_WIN_BONUS /
+ *      PRIMARY_MOMENTUM_UPSET_BONUS fav points applied to the wave winner's
+ *      character/npp. Orthogonal, untouched by this subsystem.
+ *   2. Vote-share momentum (this) — a candidate that beats its projected
+ *      national share in a wave accumulates decayed points that multiply its
+ *      vote in LATER waves.
+ *
+ * `momentumMultiplier` maps a candidate's carried momentum points into a vote
+ * multiplier for the current wave. At cap 0 (the ship value) it returns exactly
+ * 1, so the vote path is byte-identical to the no-momentum engine until the cap
+ * is calibrated at t384.
+ */
+export function momentumMultiplier(priorPoints: number, cap: number): number {
+  if (cap <= 0) return 1;
+  const bounded = clampTo(priorPoints, -cap, cap);
+  return 1 + bounded / 100;
+}
+
+/**
+ * Whether vote-share momentum computes and persists for a race. Coupled to the
+ * stretched calendar (the subsystem shipped together): compressed races (v1/v2,
+ * including the live 1960 race) never touch `primaryMomentum` at all. This is
+ * the gate that keeps v1 byte-identical while v3 persists momentum (zeros at
+ * cap 0) for later calibration.
+ */
+export function momentumEnabledForRuleset(
+  ruleset: Pick<PresidentialRuleset, "primaryCalendar">
+): boolean {
+  return ruleset.primaryCalendar === "stretched";
+}
+
+/** This wave's expectation beat/miss for a candidate (national share points), clamped to +-cap. */
+export function waveMomentumPoints(
+  expectedShare: number,
+  actualShare: number,
+  cap: number
+): number {
+  return clampTo(actualShare - expectedShare, -cap, cap);
+}
+
+/** Decay the carried momentum then add this wave's beat/miss, clamped to +-cap. */
+export function accumulateMomentum(
+  prior: number,
+  momentumC: number,
+  decay: number,
+  cap: number
+): number {
+  return clampTo(prior * decay + momentumC, -cap, cap);
 }
 
 /**
@@ -115,6 +180,14 @@ export async function runPrimaryStaggerWaveIfDue(
 ): Promise<StaggerPhaseResult | null> {
   if (election.electionType !== "president") return null;
 
+  // Rules-freeze seam: the calendar spacing (compressed vs stretched) and the
+  // momentum knobs are read from the race's stamped ruleset, so a live race
+  // keeps the schedule it opened under. Unstamped races (the 1960 race) resolve
+  // to v1 = compressed with momentum off.
+  const ruleset = presidentialRulesetFor(election);
+  const momentumCap = ruleset.primaryMomentumCapPoints;
+  const momentumDecay = ruleset.primaryMomentumDecay;
+
   // Turns remaining until the primary closes — turn-first so the stagger window
   // tracks game turns rather than wall-clock, freezing on pause. Falls back to
   // the Date for primaries not yet backfilled (retained as a safety net).
@@ -126,8 +199,11 @@ export async function runPrimaryStaggerWaveIfDue(
   } else {
     return null;
   }
-  const dueWaveCount = getDuePrimaryWaveCount(turnsToEnd);
-  if (dueWaveCount === 0) return null;
+  // Cheap early bail: outside the widest possible stagger window no wave can be
+  // due, so return before loading (and bootstrapping) the tally for a race that
+  // is nowhere near its primary. The precise, schedule-aware gate runs after the
+  // tally load below.
+  if (turnsToEnd < 0 || turnsToEnd > STAGGER_WINDOW_TURNS_STRETCHED - 1) return null;
 
   // Active preset drives per-state delegate rescaling (delegates track each
   // state's EV weight, which is 1990-census in a 1991 game).
@@ -170,6 +246,29 @@ export async function runPrimaryStaggerWaveIfDue(
     if (!tally) return null;
   }
 
+  // Schedule stickiness: once a primary has begun, it keeps the wave cadence it
+  // opened on, even if the race is later re-stamped to a ruleset with a
+  // different calendar. Retrofitting the stretched schedule onto a primary that
+  // already ran waves on the compressed cadence would drop every remaining wave
+  // at once (the 40-turn lead is gone), so a mid-flight primary is locked to the
+  // schedule its first recorded wave used; only a primary that has not started
+  // yet takes the ruleset schedule.
+  const schedule =
+    startedScheduleForFirstOffset(tally.primaryWaveHistory?.[0]?.turnsRemaining) ??
+    getPrimaryWaveSchedule(ruleset);
+  // Momentum is a stretched-calendar-subsystem feature: it computes and persists
+  // only for races on the stretched calendar (v3+). Compressed races (v1/v2,
+  // including the live 1960 race) never touch `primaryMomentum` — byte-identical
+  // to the pre-subsystem engine. Keyed on the EFFECTIVE (started) schedule, so a
+  // compressed-in-flight primary re-stamped to v3 still never accrues momentum.
+  const momentumEnabled = momentumEnabledForRuleset(ruleset) && schedule.kind === "stretched";
+  // Precise, schedule-aware due-wave count: this bounds the per-turn catch-up
+  // (`wavesRun >= dueWaveCount` below), so it must use the sticky schedule to
+  // avoid dumping every remaining wave when a compressed-in-flight primary was
+  // re-stamped to a stretched ruleset.
+  const dueWaveCount = getDuePrimaryWaveCount(turnsToEnd, schedule);
+  if (dueWaveCount === 0) return null;
+
   // Source of truth for control flow: the atomic counter, if present. Falls
   // back to `primaryWaveHistory.length` for legacy tallies that pre-date the
   // counter. When the two disagree (display-array tampering, partial-write
@@ -192,16 +291,16 @@ export async function runPrimaryStaggerWaveIfDue(
     );
     wavesRun = 0;
   }
-  if (wavesRun > PRIMARY_WAVES.length) {
+  if (wavesRun > schedule.waves.length) {
     console.warn(
-      `[Primary Stagger] Election ${election._id}: wavesRun (${wavesRun}) exceeds PRIMARY_WAVES.length (${PRIMARY_WAVES.length}) — clamping`
+      `[Primary Stagger] Election ${election._id}: wavesRun (${wavesRun}) exceeds wave count (${schedule.waves.length}) — clamping`
     );
-    wavesRun = PRIMARY_WAVES.length;
+    wavesRun = schedule.waves.length;
   }
-  if (wavesRun >= PRIMARY_WAVES.length) return null;
+  if (wavesRun >= schedule.waves.length) return null;
   if (wavesRun >= dueWaveCount) return null;
 
-  const wave = PRIMARY_WAVES[wavesRun];
+  const wave = schedule.waves[wavesRun];
 
   const uniquePartyIds = [...new Set(candidates.map((c) => c.party))];
   // Candidates store `party` as the sequentialId stringified (per codebase convention).
@@ -377,6 +476,10 @@ export async function runPrimaryStaggerWaveIfDue(
   // "projected winner" and "actual winner" disagree only when random demographic
   // variance flips the result (i.e., a real upset).
   const projectionByParty = new Map<string, Record<string, string | null>>();
+  // Projected per-candidate votes per state per party — the EXPECTED-share
+  // source for momentum. Same GE-style demographic allocation the stagger uses,
+  // so expected-vs-actual diverges only on a real demographic-variance upset.
+  const projectionVotesByParty = new Map<string, Record<string, Record<string, number>>>();
   for (const partyId of uniquePartyIds) {
     const party = partyMap.get(partyId);
     const partyCandidates = enriched.filter((c) => c.party === partyId);
@@ -384,7 +487,7 @@ export async function runPrimaryStaggerWaveIfDue(
     const metaForParty = candidateMetaForProjection.filter((m) =>
       partyCandidates.some((c) => c.candidateId === m.candidateId)
     );
-    const { stateWinners } = projectPrimaryByState({
+    const { stateWinners, byState } = projectPrimaryByState({
       candidates: partyCandidates,
       candidateMeta: metaForParty,
       stateIds: waveStates,
@@ -404,6 +507,7 @@ export async function runPrimaryStaggerWaveIfDue(
       countryId: (election.countryId ?? "US") as CountryId,
     });
     projectionByParty.set(partyId, stateWinners);
+    projectionVotesByParty.set(partyId, byState);
   }
 
   // ── Per-party, per-state vote accumulation ──────────────────────────────────
@@ -422,6 +526,13 @@ export async function runPrimaryStaggerWaveIfDue(
     string,
     Record<string, AllocationMethod>
   > = structuredCloneOr(tally.primaryAllocationByState ?? {});
+
+  // Vote-share momentum carried INTO this wave (accumulated from prior waves).
+  // Read-only here; the new accumulated value is computed after the wave votes.
+  // partyId -> candidateId -> points.
+  const priorMomentum: Record<string, Record<string, number>> = momentumEnabled
+    ? structuredCloneOr(tally.primaryMomentum ?? {})
+    : {};
 
   const momentumOps: {
     characterId: ObjectId;
@@ -625,6 +736,23 @@ export async function runPrimaryStaggerWaveIfDue(
         }
       }
 
+      // Vote-share momentum carry: a candidate that beat expectations in
+      // EARLIER waves carries decayed momentum points that multiply this wave's
+      // vote (concept #2 — see momentumMultiplier). At cap 0 the multiplier is
+      // exactly 1 and this block is a strict no-op, so the vote path is
+      // byte-identical to the no-momentum engine. Only runs on stretched races.
+      if (momentumEnabled) {
+        const priorForParty = priorMomentum[partyId] ?? {};
+        for (const ec of partyCandidates) {
+          const mult = momentumMultiplier(priorForParty[ec.candidateId] ?? 0, momentumCap);
+          if (mult !== 1) {
+            votesPerCandidate[ec.candidateId] = Math.round(
+              (votesPerCandidate[ec.candidateId] ?? 0) * mult
+            );
+          }
+        }
+      }
+
       // Extra NPP-in-primary penalty when a player is also running in this
       // party's primary. Stacks on top of NPP_GENERAL_WEIGHT_MULTIPLIER (0.8)
       // already applied inside distribution → combined 0.48× for NPPs.
@@ -745,11 +873,66 @@ export async function runPrimaryStaggerWaveIfDue(
     await db.collection("npps").bulkWrite(ops);
   }
 
+  // ── Vote-share momentum accumulation (stretched races only) ────────────────
+  // Compare each candidate's EXPECTED national share (aggregated from the
+  // projection across this wave's states) to its ACTUAL share (aggregated from
+  // the votes just recorded), clamp the beat/miss to +-cap, then decay-and-add
+  // to the carried total. At cap 0 every momentum_c is 0 and every accumulated
+  // value stays 0 — persisted as zeros so the field exists for later
+  // calibration, with no effect on votes.
+  const newMomentum: Record<string, Record<string, number>> = momentumEnabled
+    ? structuredCloneOr(tally.primaryMomentum ?? {})
+    : {};
+  const momentumByPartyThisWave: Record<string, Record<string, number>> = {};
+  if (momentumEnabled) {
+    for (const partyId of uniquePartyIds) {
+      const partyCandidates = enriched.filter((ec) => ec.party === partyId);
+      // Uncontested primaries (0 or 1 candidate) have no expectation to beat.
+      if (partyCandidates.length < 2) continue;
+      const projByState = projectionVotesByParty.get(partyId) ?? {};
+      const actualByState = primaryStateVotes[partyId] ?? {};
+
+      let expectedTotal = 0;
+      let actualTotal = 0;
+      const expectedByCandidate: Record<string, number> = {};
+      const actualByCandidate: Record<string, number> = {};
+      for (const ec of partyCandidates) {
+        let expected = 0;
+        let actual = 0;
+        for (const stateId of waveStates) {
+          expected += projByState[stateId]?.[ec.candidateId] ?? 0;
+          actual += actualByState[stateId]?.[ec.candidateId] ?? 0;
+        }
+        expectedByCandidate[ec.candidateId] = expected;
+        actualByCandidate[ec.candidateId] = actual;
+        expectedTotal += expected;
+        actualTotal += actual;
+      }
+
+      const priorForParty = priorMomentum[partyId] ?? {};
+      const nextForParty: Record<string, number> = {};
+      for (const ec of partyCandidates) {
+        const expectedShare =
+          expectedTotal > 0 ? (expectedByCandidate[ec.candidateId] / expectedTotal) * 100 : 0;
+        const actualShare =
+          actualTotal > 0 ? (actualByCandidate[ec.candidateId] / actualTotal) * 100 : 0;
+        const momentumC = waveMomentumPoints(expectedShare, actualShare, momentumCap);
+        const prior = priorForParty[ec.candidateId] ?? 0;
+        const next = accumulateMomentum(prior, momentumC, momentumDecay, momentumCap);
+        nextForParty[ec.candidateId] = next;
+      }
+      newMomentum[partyId] = { ...(newMomentum[partyId] ?? {}), ...nextForParty };
+      momentumByPartyThisWave[partyId] = nextForParty;
+    }
+  }
+
   // Persist tally updates + wave-history entry. The atomic `$inc` on the
   // counter is the runtime source of truth; the `$push` to the history array
   // is for display only. Keeping them in a single updateOne ensures they
   // advance together — concurrent stagger runs cannot double-increment without
-  // also double-pushing (and vice versa).
+  // also double-pushing (and vice versa). Momentum ($set primaryMomentum +
+  // $push primaryMomentumByWave) rides the same single write so the carry and
+  // the wave counter can never diverge.
   await db.collection<ElectionVoteTally>("electionVoteTallies").updateOne(
     { electionId: election._id },
     {
@@ -758,6 +941,7 @@ export async function runPrimaryStaggerWaveIfDue(
         primaryDelegates,
         primaryDelegatesByState,
         primaryAllocationByState,
+        ...(momentumEnabled ? { primaryMomentum: newMomentum } : {}),
         updatedAt: now,
       },
       $inc: { primaryStaggerWavesRun: 1 },
@@ -768,12 +952,21 @@ export async function runPrimaryStaggerWaveIfDue(
           statesVoted: wave.states,
           recordedAt: now,
         },
+        ...(momentumEnabled
+          ? {
+              primaryMomentumByWave: {
+                wave: wavesRun,
+                byParty: momentumByPartyThisWave,
+                recordedAt: now,
+              },
+            }
+          : {}),
       } as never,
     }
   );
 
   console.log(
-    `[Primary Stagger] Election ${election._id} wave ${wavesRun + 1}/${PRIMARY_WAVES.length} (${wave.label}) — ${wave.states.join(", ")}; delegates awarded: ${totalDelegatesAwarded}; momentum bumps: ${totalMomentumBumps}`
+    `[Primary Stagger] Election ${election._id} wave ${wavesRun + 1}/${schedule.waves.length} (${wave.label}) — ${wave.states.join(", ")}; delegates awarded: ${totalDelegatesAwarded}; momentum bumps: ${totalMomentumBumps}`
   );
 
   return {
@@ -813,7 +1006,10 @@ export async function processPrimaryStaggerWaves(
 
   for (const election of presElections) {
     try {
-      for (let i = 0; i < PRIMARY_WAVES.length; i++) {
+      // Upper bound on catch-up waves in a single turn = the race's wave count.
+      // Both schedules have six waves; resolve per election to stay schedule-agnostic.
+      const maxWaves = getPrimaryWaveSchedule(presidentialRulesetFor(election)).waves.length;
+      for (let i = 0; i < maxWaves; i++) {
         const result = await runPrimaryStaggerWaveIfDue(db, election, now, turnNumber);
         if (!result) break;
       }

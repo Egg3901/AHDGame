@@ -1,4 +1,5 @@
 import type { ObjectId } from "mongodb";
+import type { FactorLedgerSnapshot } from "@/lib/electionEngine/factorLedger";
 
 export interface VoteTurnSnapshot {
   turn: number;
@@ -86,6 +87,16 @@ export interface ElectionVoteTally {
     recordedTurn: number;
   };
   /**
+   * President only: the descriptive factor ledger the engine teed on the last
+   * accumulation turn (see `src/lib/electionEngine/factorLedger.ts`). A
+   * read-only decomposition of each candidate's votes into named factors
+   * (state lean & standing, policy fit, name recognition, turnout, persuasion
+   * swing, spoiler, national mood, campaign, and a rounding residual). Already
+   * baked into the vote totals above — it is teed off them — so, exactly like
+   * `economicReferendum`, it must NEVER be re-applied anywhere downstream.
+   */
+  factorLedger?: FactorLedgerSnapshot;
+  /**
    * President only: frozen House/Senate chamber used for contingent ballots.
    * Captured when contingent resolution first runs so same-turn chamber flips
    * cannot change the ballot after down-ballot races resolve.
@@ -155,6 +166,54 @@ export interface ElectionVoteTally {
    * `primaryWaveHistory.length` for legacy tallies without the counter.
    */
   primaryStaggerWavesRun?: number;
+  /**
+   * President-primary-only: accumulated, decayed expectation-beating momentum
+   * points per candidate. A candidate that beats its projected national share in
+   * a wave gains points (capped at `primaryMomentumCapPoints`); carried momentum
+   * decays by `primaryMomentumDecay` each wave. Persisted only for races on the
+   * stretched calendar; at cap 0 every value is 0 and the vote path is
+   * unchanged. Distinct from the favorability-bump "momentum" (win/upset fav
+   * bonuses applied to characters/npps) — this is the vote-share carry.
+   * Shape: partyId -> candidateId -> accumulated decayed momentum points.
+   */
+  primaryMomentum?: Record<string, Record<string, number>>;
+  /**
+   * President-primary-only: per-wave momentum snapshot for history/replay. Each
+   * entry records the post-decay momentum points for every party's candidates
+   * after that wave resolved.
+   */
+  primaryMomentumByWave?: {
+    wave: number;
+    byParty: Record<string, Record<string, number>>;
+    recordedAt: Date;
+  }[];
+  /**
+   * President-primary-only: how each party's presidential nomination resolved.
+   * Written once at primary close for races on a convention-enabled ruleset
+   * (v3+). `delegate_majority` means a candidate held a pledged-delegate majority
+   * on the first ballot; `convention` records the multi-ballot elimination that
+   * released delegates by affinity until a survivor reached a majority of the
+   * remaining delegates. Purely descriptive/audit — the nominee is also seated
+   * through the normal primaryResults/elimination machinery. Absent on v1/v2
+   * races (which keep the silent plurality pick). Shape: partyId -> resolution.
+   */
+  nominationResolution?: {
+    byParty: Record<
+      string,
+      {
+        mode: "delegate_majority" | "convention";
+        winnerCandidateId: string;
+        majorityThreshold: number;
+        firstBallotLeaderId: string;
+        ballots?: {
+          ballot: number;
+          tallies: Record<string, number>;
+          eliminatedCandidateId?: string;
+        }[];
+        resolvedAt: Date;
+      }
+    >;
+  };
   /**
    * President-primary-only: per-state polling trend during the pre-stagger
    * window. Each snapshot captures projected score per candidate per state for

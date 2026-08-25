@@ -122,7 +122,7 @@ describe("settlement crisis config", () => {
       playsForSeat("DD")
         .map((p) => p.id)
         .sort()
-    ).toEqual(["aid", "border", "referendum", "terms"]);
+    ).toEqual(["aid", "border", "nva", "referendum", "terms"]);
     expect(
       playsForSeat("UK")
         .map((p) => p.id)

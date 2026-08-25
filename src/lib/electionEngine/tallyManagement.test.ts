@@ -540,6 +540,44 @@ describe("accumulateVoteTurn — vote accumulation", () => {
     expect(surgePool).toBeGreaterThan(earlyPool * 2);
   });
 
+  it("caps the vote pool at the state's electorate (no 333%-of-VEP ballots)", async () => {
+    // Audited engine defect: the resolved turnout pool could exceed the people
+    // who exist (1956 certified 333% of the voting-eligible population). The
+    // pool is now capped at the electorate — makeState() has population
+    // 1,000,000 and no votingEligiblePopulation, so the ceiling is 1,000,000 —
+    // and the per-turn slice rescales proportionally.
+    const { accumulateVoteTurn } = await import("./tallyManagement");
+    const { distributeVotesBySwingFlow } = await import("./voteDistributionSwingFlow");
+
+    const electionId = new ObjectId();
+    const candidate = makeCandidate({ electionId });
+    const start = new Date("2024-01-01T00:00:00Z");
+    const election = makeElection({
+      _id: electionId,
+      startTurn: 100,
+      endTurn: 148,
+      startTime: start,
+      endTime: new Date(start.getTime() + 48 * 3_600_000),
+    });
+    const now = new Date(start.getTime() + 10 * 3_600_000);
+
+    // Baseline: a pool exactly at the ceiling.
+    await setupHappyPath({ electionId, candidates: [candidate], election, totalPool: 1_000_000 });
+    await accumulateVoteTurn(electionId, 110, now);
+    const atCeilingCall = vi.mocked(distributeVotesBySwingFlow).mock.calls.at(-1)!;
+
+    // Inflated: 3.3x the electorate must be clamped to the same values.
+    await setupHappyPath({ electionId, candidates: [candidate], election, totalPool: 3_300_000 });
+    await accumulateVoteTurn(electionId, 110, now);
+    const inflatedCall = vi.mocked(distributeVotesBySwingFlow).mock.calls.at(-1)!;
+
+    // Downstream scaling (turnout shares, strength) applies equally to both
+    // runs, so the capped 3.3M pool must produce byte-identical distribution
+    // inputs to a pool exactly at the ceiling.
+    expect(inflatedCall[2]).toBeCloseTo(atCeilingCall[2] as number, 6); // totalPool capped
+    expect(inflatedCall[1]).toBeCloseTo(atCeilingCall[1] as number, 6); // slice rescaled
+  });
+
   it("accumulates votes on top of existing totals", async () => {
     const { accumulateVoteTurn } = await import("./tallyManagement");
 
