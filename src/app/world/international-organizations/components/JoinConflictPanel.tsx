@@ -131,8 +131,8 @@ export function JoinConflictPanel({
           </p>
           <p className="mt-1 text-xs text-muted">
             Defence of a member is not voted on. If a member is attacked, every player-led member of
-            this alliance enters that war at once. Withdrawing from the alliance is the only way to
-            stay out of it.
+            this alliance enters that war at once. Leaving the alliance beforehand is the only way
+            to stay out of it, and leaving after a war has begun does not take you out of that war.
           </p>
         </div>
         {viewerIsMember && viewerFmCountry && (

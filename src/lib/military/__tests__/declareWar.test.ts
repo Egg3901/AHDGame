@@ -229,6 +229,30 @@ describe("declareWar treaty defence", () => {
     expect(joinSideSpy).toHaveBeenCalledWith(expect.anything(), live, "US", "A");
   });
 
+  // The join path records provenance through a $push rather than at creation. Without
+  // this the peace bar and release would have nothing to read for an ally that entered
+  // an existing war, and both would silently do nothing for it.
+  it("records provenance when allies join an existing war", async () => {
+    treatyDefendersSpy.mockResolvedValue([{ countryId: "RU", organizationId: "WARSAW_PACT" }]);
+    const live = {
+      _id: "c1",
+      hostCountry: "DD",
+      name: "Battle of Berlin",
+      sideA: { countries: ["UK"], kind: "state" },
+      sideB: { countries: ["DD"], kind: "state" },
+    };
+    await declareWar(stubDb(live), pactDefender);
+    const push = conflictUpdateSpy.mock.calls.find(
+      (c) => (c[1] as { $push?: unknown })?.$push !== undefined
+    );
+    expect(push).toBeDefined();
+    const entries = (push![1] as { $push: { treatyEntries: { $each: Record<string, unknown>[] } } })
+      .$push.treatyEntries.$each;
+    expect(entries).toEqual([
+      { countryId: "RU", organizationId: "WARSAW_PACT", defending: "DD", joinedTurn: 40 },
+    ]);
+  });
+
   it("does not auto-join when the defender cannot be placed on either side", async () => {
     treatyDefendersSpy.mockResolvedValue([{ countryId: "RU", organizationId: "WARSAW_PACT" }]);
     // The defender is on neither roster and has no bloc backer to fall back on, so there
