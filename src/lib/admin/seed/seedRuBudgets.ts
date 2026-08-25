@@ -105,7 +105,8 @@ export async function seedRuBudgets(
   const countryOwnedSeedData = generateCountryOwnedSeedData(
     statesForBudgets,
     preset,
-    commandEconomyEnabled
+    commandEconomyEnabled,
+    log
   );
   const suCorpData = countryOwnedSeedData.filter(
     (entry) => entry.corporation.countryOwnerId === "RU"

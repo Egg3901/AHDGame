@@ -107,6 +107,7 @@ import {
 } from "@/lib/seeds/dd/ddCorporations";
 import { getCountryConfig } from "@/lib/constants/countries";
 import { computeUnownedSeedRevenue } from "@/lib/admin/seed/seedUnownedSectors";
+import { getStateResourceCapacity } from "./stateResourceCapacity";
 
 /**
  * Default legal structure stamped on each country's sovereign issuer corporation.
@@ -5110,7 +5111,7 @@ const RU_COMMANDING_HEIGHTS: CorporationType[] = [
  * Command Economy v2: build the per-sector state-owned-enterprise corp entries
  * for a command country — one SOE corporation per commanding-height sector (from
  * {@link commandEconomySoeSectors}), each OWNING that sector's producing
- * `corporateSectors` across every supplied region and carrying the
+ * `corporateSectors` across every supplied region where it can operate and carrying the
  * {@link SoeState} plan-fulfillment overlay. Shared by RU and CN so both command
  * economies split identically: deterministic per-country SOE ids/sequentials
  * (from the `SOE_*_BASE_BY_COUNTRY` maps), on-plan seed output, a vacant
@@ -5130,6 +5131,11 @@ function buildCommandSoeCorpEntries(params: {
   headquartersState: string;
   currencyCode: ActiveCurrencyCode;
   legalStructure: LegalStructureId | undefined;
+  /** Extraction default, optionally overridden for selected states. */
+  defaultExtractionStrategyId?: string;
+  extractionStrategyByState?: Partial<Record<string, string>>;
+  /** Seed logger used when extraction placement is rejected. */
+  log?: (message: string) => void;
 }): CountryOwnedSeedData[] {
   const {
     countryId,
@@ -5141,6 +5147,9 @@ function buildCommandSoeCorpEntries(params: {
     headquartersState,
     currencyCode,
     legalStructure,
+    defaultExtractionStrategyId,
+    extractionStrategyByState,
+    log,
   } = params;
   const soeSectors = commandEconomySoeSectors(countryId);
   if (soeSectors.length === 0 || states.length === 0) return [];
@@ -5149,6 +5158,7 @@ function buildCommandSoeCorpEntries(params: {
   const idBase = SOE_ID_BASE_BY_COUNTRY[countryId] ?? 0xa00;
   const seqBase = SOE_SEQUENTIAL_BASE_BY_COUNTRY[countryId] ?? 900_100;
   const eraUnitScale = getEraUnitScale(preset);
+  const capacityMap = getStateResourceCapacity(preset);
 
   // Plan growth for the state enterprises, from the era monetary baseline
   // (RU 1953 → 6.0). In a market economy an SOE can sit at zero because
@@ -5171,6 +5181,10 @@ function buildCommandSoeCorpEntries(params: {
     sectorType: CorporationType,
     corpId: ObjectId
   ) => {
+    const strategyId =
+      sectorType === "extraction"
+        ? (extractionStrategyByState?.[state.id] ?? defaultExtractionStrategyId)
+        : undefined;
     const revenueAtlantic = computeUnownedSeedRevenue({
       gdp: state.gdp,
       countryId,
@@ -5179,7 +5193,12 @@ function buildCommandSoeCorpEntries(params: {
       preset,
     });
     const revenue = Math.round(revenueAtlantic / usdRate);
-    const capitalStock = computeSectorImpliedUnits(sectorType, revenueAtlantic, null, eraUnitScale);
+    const capitalStock = computeSectorImpliedUnits(
+      sectorType,
+      revenueAtlantic,
+      strategyId,
+      eraUnitScale
+    );
     return {
       _id: new ObjectId(),
       corporationId: corpId,
@@ -5191,6 +5210,7 @@ function buildCommandSoeCorpEntries(params: {
       currentGrowthCost: 0,
       revenue,
       capitalStock,
+      ...(strategyId ? { strategyId } : {}),
       // Soft-budget state enterprises run thin margins vs private firms.
       profitMargin: 12,
       workers: Math.max(100, Math.round(revenue / 2_000)),
@@ -5207,7 +5227,19 @@ function buildCommandSoeCorpEntries(params: {
     const corpId = soeObjectId(idBase + slot * 8);
     const ceoId = soeObjectId(idBase + slot * 8 + 1);
     const userId = soeObjectId(idBase + slot * 8 + 2);
-    const sectors = states.map((state) => buildSector(state, sectorType, corpId));
+    const sectorStates =
+      sectorType === "extraction"
+        ? states.filter((state) => {
+            const resources = capacityMap[`${countryId}:${state.id}`]?.resources ?? {};
+            if (Object.keys(resources).length > 0) return true;
+            log?.(
+              `[${countryId}] skipping extraction SOE sector in ${state.id}: ` +
+                `no seeded resource capacity for preset ${preset}`
+            );
+            return false;
+          })
+        : states;
+    const sectors = sectorStates.map((state) => buildSector(state, sectorType, corpId));
     const planTarget = sectors.reduce((sum, s) => sum + s.revenue, 0);
     const label = CORPORATION_TYPE_LABELS[sectorType];
     return {
@@ -5597,7 +5629,8 @@ export const DORMANT_MARKET_STATE_ENTERPRISE_SPECS: MarketStateEnterpriseSpec[] 
 export function generateCountryOwnedSeedData(
   states: StateBudgetSeedInput[],
   preset: string,
-  commandEconomyEnabled: boolean = false
+  commandEconomyEnabled: boolean = false,
+  log?: (message: string) => void
 ): CountryOwnedSeedData[] {
   const now = new Date();
   const data: CountryOwnedSeedData[] = [
@@ -5883,6 +5916,7 @@ export function generateCountryOwnedSeedData(
           headquartersState: "CEN",
           currencyCode: COUNTRY_CURRENCY_MAP.RU as ActiveCurrencyCode,
           legalStructure: SOVEREIGN_CORP_LEGAL_STRUCTURE.RU,
+          log,
         })
       );
     }
@@ -6033,6 +6067,14 @@ export function generateCountryOwnedSeedData(
           headquartersState: "BJ",
           currencyCode: COUNTRY_CURRENCY_MAP.CN as ActiveCurrencyCode,
           legalStructure: SOVEREIGN_CORP_LEGAL_STRUCTURE.CN,
+          defaultExtractionStrategyId: "coal_mining",
+          extractionStrategyByState: {
+            DB: "iron_mining",
+            HB: "iron_mining",
+            HZ: "iron_mining",
+            XN: "iron_mining",
+          },
+          log,
         })
       );
     }
@@ -6154,6 +6196,7 @@ export function generateCountryOwnedSeedData(
           headquartersState: spec.headquartersState,
           currencyCode: COUNTRY_CURRENCY_MAP[spec.countryId] as ActiveCurrencyCode,
           legalStructure: SOVEREIGN_CORP_LEGAL_STRUCTURE[spec.countryId],
+          log,
         })
       );
     }

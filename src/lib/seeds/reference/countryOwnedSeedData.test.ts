@@ -5,6 +5,7 @@ import { CORPORATION_TYPES } from "@/lib/constants/corporations";
 import { commandEconomySoeSectors } from "@/lib/constants/commandEconomy";
 import { NPP_CAPITAL_STATES } from "@/lib/admin/spawnNppCorporation";
 import { generateCountryOwnedSeedData } from "./budgets";
+import { getStateResourceCapacity } from "./stateResourceCapacity";
 
 /**
  * The seeded country-owned corporations ARE each country's primary National
@@ -130,8 +131,13 @@ describe("generateCountryOwnedSeedData", () => {
   // corps. The command-era split must not double-count or clobber that.
   describe("CN command-era multi-SOE (v2, #3496)", () => {
     const cnStates = [
-      { id: "BJ", population: 20_000_000, gdp: 300_000, countryId: "CN" },
-      { id: "SH", population: 24_000_000, gdp: 350_000, countryId: "CN" },
+      { id: "DB", population: 110_000_000, gdp: 300_000, countryId: "CN" },
+      { id: "HB", population: 170_000_000, gdp: 350_000, countryId: "CN" },
+      { id: "HD", population: 150_000_000, gdp: 340_000, countryId: "CN" },
+      { id: "HZ", population: 100_000_000, gdp: 250_000, countryId: "CN" },
+      { id: "HN", population: 80_000_000, gdp: 180_000, countryId: "CN" },
+      { id: "XN", population: 90_000_000, gdp: 190_000, countryId: "CN" },
+      { id: "XB", population: 50_000_000, gdp: 120_000, countryId: "CN" },
     ];
     const cnSoeSectorCount = commandEconomySoeSectors("CN").length;
 
@@ -188,6 +194,43 @@ describe("generateCountryOwnedSeedData", () => {
       expect(issuer.sectors).toHaveLength(0);
     });
 
+    it("routes iron states to iron mining and skips extraction in empty-capacity states", () => {
+      const logs: string[] = [];
+      const data = generateCountryOwnedSeedData(
+        [...cnStates, { id: "EMPTY", population: 1_000_000, gdp: 10_000, countryId: "CN" }],
+        "1953-default",
+        true,
+        (message) => logs.push(message)
+      );
+      const extraction = data.find(
+        (entry) =>
+          entry.corporation.countryOwnerId === "CN" &&
+          entry.corporation.soe?.sector === "extraction"
+      );
+      expect(extraction).toBeDefined();
+
+      const strategiesByState = Object.fromEntries(
+        extraction!.sectors.map((sector) => [sector.stateId, sector.strategyId])
+      );
+      for (const stateId of ["DB", "HB", "HZ", "XN"]) {
+        expect(strategiesByState[stateId], stateId).toBe("iron_mining");
+      }
+      for (const stateId of ["HD", "HN", "XB"]) {
+        expect(strategiesByState[stateId], stateId).toBe("coal_mining");
+      }
+      expect(strategiesByState.EMPTY).toBeUndefined();
+
+      const capacity = getStateResourceCapacity("1953-default");
+      expect(
+        extraction!.sectors.every(
+          (sector) => Object.keys(capacity[`CN:${sector.stateId}`]?.resources ?? {}).length > 0
+        )
+      ).toBe(true);
+      expect(logs).toContain(
+        "[CN] skipping extraction SOE sector in EMPTY: no seeded resource capacity for preset 1953-default"
+      );
+    });
+
     it("flag ON but dual-track era (1979) → CN keeps the bare issuer, no command SOE stack", () => {
       const data = generateCountryOwnedSeedData(cnStates, "1979-default", true);
       const cn = data.filter((e) => e.corporation.countryOwnerId === "CN");
@@ -237,7 +280,7 @@ describe("generateCountryOwnedSeedData", () => {
       ],
       HU: [
         { id: "HU_BUD", population: 1_800_000, gdp: 20_000 },
-        { id: "HU_ALF", population: 1_500_000, gdp: 15_000 },
+        { id: "HU_NOR", population: 1_500_000, gdp: 15_000 },
       ],
       CS: [
         { id: "CS_PRG", population: 1_100_000, gdp: 18_000 },
@@ -245,7 +288,7 @@ describe("generateCountryOwnedSeedData", () => {
       ],
       BG: [
         { id: "BG_SOF", population: 800_000, gdp: 8_000 },
-        { id: "BG_NOR", population: 1_200_000, gdp: 6_000 },
+        { id: "BG_THR", population: 1_200_000, gdp: 6_000 },
       ],
       RO: [
         { id: "RO_BUC", population: 1_200_000, gdp: 10_000 },
@@ -339,7 +382,8 @@ describe("generateCountryOwnedSeedData", () => {
       expect(soeIds.has(shell!.corporation._id.toHexString())).toBe(false);
     });
 
-    it("sector-count scale is sane: every Warsaw-Pact SOE country covers all sector types × states", () => {
+    it("sector-count scale is sane: extraction only covers states with seeded capacity", () => {
+      const capacity = getStateResourceCapacity("1953-default");
       for (const countryId of ["DD", "PL", "HU", "CS", "BG", "RO", "YU"] as const) {
         const data = generateCountryOwnedSeedData(
           WARSAW_PACT_STATES[countryId].map((s) => ({ ...s, countryId })),
@@ -351,7 +395,12 @@ describe("generateCountryOwnedSeedData", () => {
         );
         expect(soes).toHaveLength(CORPORATION_TYPES.length);
         const sectorCount = soes.reduce((n, e) => n + e.sectors.length, 0);
-        expect(sectorCount).toBe(CORPORATION_TYPES.length * WARSAW_PACT_STATES[countryId].length);
+        const capacityStateCount = WARSAW_PACT_STATES[countryId].filter(
+          (state) => Object.keys(capacity[`${countryId}:${state.id}`]?.resources ?? {}).length > 0
+        ).length;
+        expect(sectorCount).toBe(
+          (CORPORATION_TYPES.length - 1) * WARSAW_PACT_STATES[countryId].length + capacityStateCount
+        );
       }
     });
   });
