@@ -32,6 +32,13 @@ export const CONFIDENCE_HITS = {
 /** Great Offices of State (Chancellor, Foreign, Home) hit harder on departure. */
 export const GREAT_OFFICE_MULTIPLIER = 2;
 
+/** UK cabinet position ids that count as Great Offices of State. */
+export const GREAT_OFFICE_POSITION_IDS = new Set([
+  "chancellor",
+  "foreign_secretary",
+  "home_secretary",
+]);
+
 export type ConfidenceEvent =
   | { kind: "budgetDefeat" }
   | { kind: "lostVonc" }
