@@ -9,6 +9,7 @@ import { getExchangeApiKey } from "@/lib/constants/exchangeRegistry";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
+import { aggregateExchangeTotals } from "@/lib/stockExchange/aggregate";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://ahousedividedgame.com";
 const HISTORY_CAP = 12;
@@ -122,22 +123,15 @@ export async function queryCountryEconomy(db: Db, country: string) {
       : (inflationHistory.at(-1)?.rate ?? null);
   const latestGdpGrowth = gdpGrowthHistory.at(-1)?.rate ?? null;
 
+  // Anchored totals, matching the stock market page and the Economy page card.
+  // The raw sum added currencies together. See lib/stockExchange/aggregate.
   const listings = snapshot?.listings ?? [];
-  const totalMarketCap = listings.reduce((sum, l) => sum + (l.marketCap ?? 0), 0);
-  const weightedChange1h = listings.reduce(
-    (sum, l) => sum + (l.priceChange1h ?? 0) * (l.marketCap ?? 0),
-    0
-  );
-  const weightedChange24h = listings.reduce(
-    (sum, l) => sum + (l.priceChange24h ?? 0) * (l.marketCap ?? 0),
-    0
-  );
+  const totals = aggregateExchangeTotals(listings);
 
   const stockMarket = {
-    totalMarketCap,
-    change1h: totalMarketCap > 0 ? Math.round((weightedChange1h / totalMarketCap) * 100) / 100 : 0,
-    change24h:
-      totalMarketCap > 0 ? Math.round((weightedChange24h / totalMarketCap) * 100) / 100 : 0,
+    totalMarketCap: totals.marketCap,
+    change1h: Math.round(totals.weightedChange1h * 100) / 100,
+    change24h: Math.round(totals.weightedChange24h * 100) / 100,
     exchange: snapshot?.exchangeName ?? countryConfig.exchangeName ?? null,
   };
 

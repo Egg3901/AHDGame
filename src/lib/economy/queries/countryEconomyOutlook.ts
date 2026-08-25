@@ -29,6 +29,7 @@ import { getInflationTarget, getNeutralPrimeRate } from "@/lib/budget/inflation"
 import { federalSurplus } from "@/lib/budget/federalSurplus";
 import { resolveRatioGdp } from "@/lib/budget/gdpDenominator";
 import { populationWeightedAverage } from "@/lib/metrics/populationWeightedAverage";
+import { aggregateExchangeTotals } from "@/lib/stockExchange/aggregate";
 import { aggregateNationalGdp } from "@/lib/utils/nationalGdp";
 import { aggregateCountrySectorMix, type CountrySectorMixEntry } from "@/lib/economy/sectorMix";
 import {
@@ -222,7 +223,11 @@ export async function buildCountryEconomyOutlook(
   const primeRateHistory = mapHistory(bank?.interestRateHistory);
 
   const listings = snapshot?.listings ?? [];
-  const stockMarketCap = snapshot ? listings.reduce((sum, l) => sum + (l.marketCap ?? 0), 0) : null;
+  // Anchored, so this matches the total on the stock market page this card links
+  // to. The raw sum added currencies together: the Nikkei read 445x its anchored
+  // total, and the NYSE literally added GBP listings to USD ones.
+  // See lib/stockExchange/aggregate.
+  const stockMarketCap = snapshot ? aggregateExchangeTotals(listings).marketCap : null;
 
   // Derived, not read: `budget.surplus` is a cache that drifts intra-year, and
   // `federalBudgetDetail` already recomputes the same expression for the Budget
