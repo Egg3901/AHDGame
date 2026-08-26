@@ -39,7 +39,7 @@ export async function seedStatePolicies(
   // statePolicies alongside the §7 new-generation baseline).
   const { isOldLegislationTypeExcluded } = await import("@/lib/politicalMetrics/pipelinePreset");
   const excludedOldIds = isPoliticalLegislationPreset(preset)
-    ? new Set(legislationTypes.filter(isOldLegislationTypeExcluded).map((lt) => lt._id))
+    ? new Set(legislationTypes.filter((lt) => isOldLegislationTypeExcluded(lt)).map((lt) => lt._id))
     : new Set<string>();
 
   const basePolicies = (await getBasePolicies(preset)).filter(

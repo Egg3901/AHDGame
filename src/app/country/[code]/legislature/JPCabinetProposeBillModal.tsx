@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ladderBounds } from "@/lib/legislature/policyLadder";
 import { useToast } from "@/contexts/ToastContext";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import {
@@ -376,7 +377,10 @@ export function JPCabinetProposeBillModal({
                         archetypeApprovals={selectedPolicyOption.archetypeApprovals}
                         groupApprovals={selectedPolicyOption.groupApprovals}
                         policyDomain={selectedLegislationType.policyDomain}
-                        currentPolicyIndex={currentPolicies[selectedLegislationType._id] ?? 3}
+                        currentPolicyIndex={
+                          currentPolicies[selectedLegislationType._id] ??
+                          ladderBounds(selectedLegislationType.policyOptions?.length).centerIndex
+                        }
                         proposedPolicyIndex={
                           selectedLegislationType.policyOptions?.findIndex(
                             (option) => option.id === selectedPolicyOption.id
