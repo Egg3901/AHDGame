@@ -79,7 +79,11 @@ import {
 } from "@/lib/turn/householdConsumption";
 import { buildCommodityFlowDocs, COMMODITY_FLOW_RETENTION_TURNS } from "@/lib/market/flowLedger";
 import { applyFreightHaulDemand } from "@/lib/logistics/freightDemand";
-import { settleFreightNetwork, type FreightSettlement } from "@/lib/logistics/settlement";
+import {
+  settleFreightNetwork,
+  freightSettlementRampFraction,
+  type FreightSettlement,
+} from "@/lib/logistics/settlement";
 import { buildSourcingDocs, SOURCING_FLOW_RETENTION_TURNS } from "@/lib/logistics/sourcingLedger";
 import { stateHops } from "@/lib/logistics/stateDistance";
 import { importerTariffOnFlow } from "@/lib/trade/tariffDrag";
@@ -1240,15 +1244,24 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // Freight is a separately-soaked rollout.  The market ladder enables the
   // ledger needed to observe routes, while this gate decides whether those
   // deliveries constrain next turn's local plant inputs.
-  const freightSettlementConfig = await db
-    .collection<GameConfig>("gameConfig")
-    .findOne(
-      { _id: "default" },
-      { projection: { freightSettlementMode: 1, canonicalFreightBillingEnabled: 1 } }
-    );
+  const freightSettlementConfig = await db.collection<GameConfig>("gameConfig").findOne(
+    { _id: "default" },
+    {
+      projection: {
+        freightSettlementMode: 1,
+        canonicalFreightBillingEnabled: 1,
+        freightSettlementRampStartTurn: 1,
+        freightSettlementRampTurns: 1,
+      },
+    }
+  );
   const freightSettlementActive =
     freightSettlementConfig?.freightSettlementMode === "active" &&
     marketAtLeast(marketSystemMode, "clearing");
+  // Gradual freight-settlement ramp (Phase 4): fade the ACTIVE effect in over a
+  // configured window instead of a hard balance step. R scales the cap here and
+  // the persisted billing money below; unset window → 1 (instant, unchanged).
+  const freightRampFraction = freightSettlementRampFraction(freightSettlementConfig, turn);
   // Canonical freight billing v1 (issue #897): while on, the sourcing pass's
   // per-state shipping money aggregates are persisted on the network doc for
   // the next corporation turn to apportion. Off (the default) writes nothing.
@@ -1295,6 +1308,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     });
     const { commodityDocs, networkDoc } = buildSourcingDocs(freightSettlement.sourcing, turn, now, {
       includeFreightBilling: canonicalFreightBillingEnabled,
+      billingRampFraction: freightRampFraction,
     });
     if (commodityDocs.length > 0) {
       // Lazy index for the {commodity} + latest-turn read path, mirroring
@@ -1313,6 +1327,16 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
           },
         }))
       );
+    }
+    // Player/telemetry indicator: expose the ramp fraction while it is mid-flight
+    // so the phase-in is legible on the markets tracker and admin view. Only when
+    // an active effect is actually being scaled (mode active or billing on).
+    if (
+      (freightSettlementActive || canonicalFreightBillingEnabled) &&
+      freightRampFraction > 0 &&
+      freightRampFraction < 1
+    ) {
+      networkDoc.freightSettlementRampFraction = Math.round(freightRampFraction * 10000) / 10000;
     }
     await db
       .collection("sourcingNetworkLoad")
@@ -1619,9 +1643,14 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
           countryId && nationalPrices[countryId] != null
             ? nationalPrices[countryId]
             : globalMktPrice;
+        // Ramp the cap in: blend from full supply (R=0) toward the
+        // freight-limited delivered supply (R=1). At R=1 this is the plain
+        // capped value; a partial ramp softens the sales cap proportionally.
+        const cappedDelivered =
+          freightSettlement?.deliveredSupplyByCommodity.get(commodity)?.get(stateId) ??
+          stateBal.supply;
         const deliveredSupply = freightSettlementActive
-          ? (freightSettlement?.deliveredSupplyByCommodity.get(commodity)?.get(stateId) ??
-            stateBal.supply)
+          ? stateBal.supply + freightRampFraction * (cappedDelivered - stateBal.supply)
           : stateBal.supply;
         const regionalLeg = isMacroPriceBlend
           ? nationalLeg

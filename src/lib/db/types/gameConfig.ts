@@ -213,6 +213,22 @@ export interface GameConfig {
   /** World turn at which the freight-settlement rollout was last changed. */
   freightSettlementModeUpdatedTurn?: number;
   /**
+   * Gradual freight-settlement ramp (markets plan Phase 4). When set, the
+   * ACTIVE effect fades in linearly instead of landing at full strength on the
+   * flip turn: a ramp fraction R = clamp01((turn - rampStartTurn) / rampTurns)
+   * scales both the delivered-supply cap (the state price leg blends from full
+   * supply toward the freight-limited delivered supply by R) and the canonical
+   * freight billing legs (charge/credit are multiplied by R). This turns a hard
+   * balance step into a measured phase-in so sales caps and the shipping bill
+   * arrive together, gradually, with the effect visible each turn on the
+   * markets tracker and the sector Freight tag. Unset (or rampTurns <= 0) → R is
+   * 1 whenever active, i.e. the pre-ramp instant-activation behavior, byte
+   * identical. Applies to whichever of freightSettlementMode:"active" /
+   * canonicalFreightBillingEnabled is on.
+   */
+  freightSettlementRampStartTurn?: number;
+  freightSettlementRampTurns?: number;
+  /**
    * SIM-ONLY turn-phase profile (headless worldsim; never set in prod).
    * "elections-only" makes processTurn() skip the economy/finance/ledger
    * phases (see ELECTIONS_SKIP_PHASES in src/simulation/phases/simTurnProfiles.ts)

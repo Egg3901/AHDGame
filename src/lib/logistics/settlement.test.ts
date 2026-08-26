@@ -1,6 +1,30 @@
 import { describe, expect, it } from "vitest";
 import type { CommodityType } from "@/lib/constants/commodities";
-import { settleFreightNetwork } from "./settlement";
+import { settleFreightNetwork, freightSettlementRampFraction } from "./settlement";
+
+describe("freightSettlementRampFraction", () => {
+  it("returns 1 (instant) when no ramp window is configured", () => {
+    expect(freightSettlementRampFraction(undefined, 100)).toBe(1);
+    expect(freightSettlementRampFraction({}, 100)).toBe(1);
+    expect(freightSettlementRampFraction({ freightSettlementRampStartTurn: 100 }, 200)).toBe(1); // rampTurns missing
+    expect(
+      freightSettlementRampFraction(
+        { freightSettlementRampStartTurn: 100, freightSettlementRampTurns: 0 },
+        200
+      )
+    ).toBe(1); // non-positive window
+  });
+
+  it("fades linearly from 0 at the start turn to 1 at the end of the window", () => {
+    const cfg = { freightSettlementRampStartTurn: 100, freightSettlementRampTurns: 20 };
+    expect(freightSettlementRampFraction(cfg, 99)).toBe(0); // clamped before start
+    expect(freightSettlementRampFraction(cfg, 100)).toBe(0);
+    expect(freightSettlementRampFraction(cfg, 105)).toBeCloseTo(0.25, 10);
+    expect(freightSettlementRampFraction(cfg, 110)).toBeCloseTo(0.5, 10);
+    expect(freightSettlementRampFraction(cfg, 120)).toBe(1);
+    expect(freightSettlementRampFraction(cfg, 200)).toBe(1); // clamped after end
+  });
+});
 
 function balances(
   entries: Array<[string, Partial<Record<CommodityType, { supply: number; demand: number }>>]>
