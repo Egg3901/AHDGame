@@ -66,6 +66,13 @@ export interface SourcingNetworkDoc {
    * `freightCharges`.
    */
   freightHaulRevenue?: Record<string, number>;
+  /**
+   * Phase 4 freight ramp indicator: the active ramp fraction R in [0,1] applied
+   * this turn to the sales cap and billing money. Written whenever the ramp is
+   * mid-flight (0 < R < 1) so the markets tracker and admin view can show the
+   * phase-in explicitly; absent when unramped (R == 1, full effect or off).
+   */
+  freightSettlementRampFraction?: number;
   createdAt: Date;
 }
 
@@ -79,6 +86,14 @@ export function buildSourcingDocs(
      * billing fields at all — the aggregates exist only inside the pure pass.
      */
     includeFreightBilling?: boolean;
+    /**
+     * Phase 4 freight ramp: scale the persisted billing money (charge AND haul
+     * revenue) by this fraction [0,1] so the shipping bill fades in with the
+     * sales cap. Both sides scale by the same factor, so the charge/credit
+     * conservation the corp-turn apportionment relies on is preserved. Default
+     * 1 (unramped, byte-identical to before).
+     */
+    billingRampFraction?: number;
   }
 ): { commodityDocs: CommoditySourcingDoc[]; networkDoc: SourcingNetworkDoc } {
   const flowsByCommodity = new Map<CommodityType, SourcingFlow[]>();
@@ -161,11 +176,14 @@ export function buildSourcingDocs(
   };
 
   if (options?.includeFreightBilling) {
+    // Ramp fraction scales both the charge and the haul-revenue side by the
+    // same factor, preserving their conservation. Clamped defensively; default 1.
+    const rampScale = Math.max(0, Math.min(1, options.billingRampFraction ?? 1));
     const freightCharges: Record<string, Partial<Record<CommodityType, number>>> = {};
     for (const [stateId, byCommodity] of result.freightChargesByDestState) {
       const perCommodity: Partial<Record<CommodityType, number>> = {};
       for (const [commodity, charge] of byCommodity) {
-        const rounded = Math.round(charge * 100) / 100;
+        const rounded = Math.round(charge * rampScale * 100) / 100;
         if (rounded <= 0) continue;
         perCommodity[commodity] = rounded;
       }
@@ -173,7 +191,7 @@ export function buildSourcingDocs(
     }
     const freightHaulRevenue: Record<string, number> = {};
     for (const [stateId, revenue] of result.haulRevenueByOriginState) {
-      const rounded = Math.round(revenue * 100) / 100;
+      const rounded = Math.round(revenue * rampScale * 100) / 100;
       if (rounded <= 0) continue;
       freightHaulRevenue[stateId] = rounded;
     }
