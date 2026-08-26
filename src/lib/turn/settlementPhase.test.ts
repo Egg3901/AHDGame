@@ -691,3 +691,173 @@ describe("seat capital income", () => {
     expect(SEAT_CAPITAL_CAP).toBe(60);
   });
 });
+
+describe("processSettlementTurn — war attachment", () => {
+  let db: MockDb;
+
+  /** A live war declared on East Germany by a NATO member. */
+  const war = (over: Record<string, unknown> = {}) => ({
+    _id: "war_us_dd_412",
+    name: "United States vs East Germany",
+    hostCountry: "DD",
+    status: "active",
+    startTurn: 410,
+    sideA: { label: "United States", countries: ["US"], kind: "state" },
+    sideB: { label: "East Germany", countries: ["DD"], kind: "state" },
+    ...over,
+  });
+
+  /**
+   * A 1953 world, and the bloc roll `loadBlocMembership` reads out of it.
+   *
+   * The preset MATTERS. `DEFAULT_SEED_PRESET` is 2019, an era whose only
+   * accession channel is NATO — there is no Warsaw Pact to put East Germany in a
+   * bloc, so every war against it reads as a war on a non-aligned state and
+   * nothing qualifies. Stated here rather than defaulted.
+   */
+  function primeBlocs(db: MockDb) {
+    prime(db, "gameState").findOne.mockResolvedValue({
+      _id: "current",
+      settlementCrisisEnabled: true,
+      preset: "1953-default",
+    });
+    prime(db, "organizationMemberships").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { organizationId: "NATO", countryId: "US" },
+        { organizationId: "NATO", countryId: "DE" },
+        { organizationId: "WARSAW_PACT", countryId: "DD" },
+        { organizationId: "WARSAW_PACT", countryId: "RU" },
+      ]),
+    });
+  }
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+  });
+
+  it("freezes an open crisis onto a war declared against East Germany", async () => {
+    const doc = crisis();
+    arrange(db, doc, [play()]);
+    primeBlocs(db);
+    prime(db, "conflicts").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([war()]),
+    });
+
+    const { processSettlementTurn } = await import("./settlementPhase");
+    const result = await processSettlementTurn(db as unknown as Db, 412);
+
+    // The tick returns idle: no play was drained, no drift was rolled.
+    expect(result.playsResolved).toBe(0);
+    expect(result.position).toBe(0);
+
+    const freeze = db.collectionMocks.settlementCrises!.updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.status === "frozen"
+    );
+    expect(freeze, "expected the crisis to be frozen onto the war").toBeDefined();
+    expect(freeze![1].$set.conflictId).toBe("war_us_dd_412");
+    expect(freeze![1].$set.conflictSides).toEqual({ challenger: "B", incumbent: "A" });
+  });
+
+  it("leaves the board in play when the only live war does not qualify", async () => {
+    const doc = crisis();
+    arrange(db, doc, [play()]);
+    primeBlocs(db);
+    // East Germany is here only because the Warsaw Pact's charter dragged it in.
+    prime(db, "conflicts").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        war({
+          hostCountry: "PL",
+          sideA: { label: "United Kingdom", countries: ["UK"], kind: "state" },
+          sideB: { label: "Poland", countries: ["PL", "DD"], kind: "coalition" },
+          treatyEntries: [
+            { countryId: "DD", organizationId: "WARSAW_PACT", defending: "PL", joinedTurn: 411 },
+          ],
+        }),
+      ]),
+    });
+
+    const { processSettlementTurn } = await import("./settlementPhase");
+    const result = await processSettlementTurn(db as unknown as Db, 412);
+
+    expect(result.playsResolved).toBe(1);
+    const frozen = db.collectionMocks.settlementCrises!.updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.status === "frozen"
+    );
+    expect(frozen).toBeUndefined();
+  });
+
+  it("returns an attached crisis to play once its anchor leaves the war", async () => {
+    const doc = crisis({
+      status: "frozen",
+      conflictId: "war_us_dd_412",
+      conflictSides: { challenger: "B", incumbent: "A" },
+      conflictAttachment: {
+        anchor: "DD",
+        previousName: "United States vs East Germany",
+        previousHostEntities: null,
+      },
+    });
+    arrange(db, doc, []);
+    prime(db, "conflicts").findOne.mockResolvedValue(
+      war({ sideB: { label: "East Germany", countries: [], kind: "state" } })
+    );
+
+    const { processSettlementTurn } = await import("./settlementPhase");
+    await processSettlementTurn(db as unknown as Db, 412);
+
+    const release = db.collectionMocks.settlementCrises!.updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.status === "open"
+    );
+    expect(release, "expected the crisis to be released back to the board").toBeDefined();
+    expect(release![1].$set.conflictId).toBeNull();
+    expect(release![1].$set.conflictAttachment).toBeNull();
+  });
+
+  it("never writes an open status back over a crisis frozen mid-tick", async () => {
+    // A `declare` press can land between this phase's tick claim and its state
+    // write. The write is guarded on `open` so the press wins; without the guard
+    // the phase silently un-declares a war that is already on the Conflicts board.
+    const doc = crisis();
+    arrange(db, doc, [play()]);
+    primeBlocs(db);
+    const crises = prime(db, "settlementCrises");
+    crises.updateOne.mockImplementation(async (filter: { status?: string }) =>
+      // The state write restates `status: "open"`; the tick claim does not.
+      filter?.status === "open" ? { matchedCount: 0 } : { matchedCount: 1 }
+    );
+
+    const { processSettlementTurn } = await import("./settlementPhase");
+    await processSettlementTurn(db as unknown as Db, 412);
+
+    const stateWrite = crises.updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.institutions !== undefined
+    );
+    expect(stateWrite, "expected a state write").toBeDefined();
+    expect(stateWrite![0].status, "the state write must restate open").toBe("open");
+  });
+
+  it("keeps a crisis frozen by its OWN declaration attached to its war", async () => {
+    const doc = crisis({
+      status: "frozen",
+      conflictId: "gq_de_400",
+      conflictSides: { challenger: "B", incumbent: "A" },
+    });
+    arrange(db, doc, []);
+    // Nobody is left on side B, but this crisis declared its own war: the war IS
+    // the crisis, and it settles on the result rather than detaching.
+    prime(db, "conflicts").findOne.mockResolvedValue(
+      war({ _id: "gq_de_400", sideB: { label: "Warsaw Pact", countries: [], kind: "coalition" } })
+    );
+
+    const { processSettlementTurn } = await import("./settlementPhase");
+    await processSettlementTurn(db as unknown as Db, 412);
+
+    const release = db.collectionMocks.settlementCrises!.updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.status === "open"
+    );
+    expect(release).toBeUndefined();
+  });
+});

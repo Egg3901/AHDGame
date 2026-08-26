@@ -24,6 +24,43 @@ export type SettlementSeatId = "US" | "UK" | "RU" | "DD";
 export type SettlementStatus = "open" | "frozen" | "resolved" | "cancelled";
 export type SettlementOutcome = "incumbent" | "challenger";
 
+/** Which of the two Germanies a war's attachment is anchored on. */
+export type SettlementGermanAnchor = "DE" | "DD";
+
+/**
+ * Which conflict roster carries which settlement outcome.
+ *
+ * Stamped when the crisis freezes, NOT derived when the war ends. A
+ * player-declared war carries no `backer` on either side — only this crisis's
+ * own declaration and the admin proxy-war route set that field — so reading the
+ * winner's bloc at resolution time would leave an attached crisis frozen for
+ * ever. Stamping also survives a roster or a bloc membership changing mid-war,
+ * which a live read would silently follow.
+ */
+export interface SettlementConflictSides {
+  /** The roster whose victory reunifies Germany under the East. */
+  challenger: "A" | "B";
+  /** The roster whose victory keeps West Germany sovereign. */
+  incumbent: "A" | "B";
+}
+
+/**
+ * Bookkeeping for a crisis that ATTACHED itself to a war it did not start.
+ *
+ * Absent on a crisis frozen by its own `declare` press, and that absence is what
+ * `detachCrisisFromWar` reads: the crisis's own war is the crisis, and never
+ * detaches. The two `previous*` fields exist so a detach can put the conflict
+ * record back the way it found it.
+ */
+export interface SettlementConflictAttachment {
+  /** The Germany whose belligerency anchored the attachment. */
+  anchor: SettlementGermanAnchor;
+  /** The war's name before the attachment renamed it. */
+  previousName: string;
+  /** Its `hostEntities` before widening. Null when the field was absent or empty. */
+  previousHostEntities: string[] | null;
+}
+
 export interface SettlementInstitutionState {
   id: SettlementInstitutionId;
   /** Relative pull on the index. Weights across all institutions sum to 10. */
@@ -98,8 +135,24 @@ export interface SettlementCrisisDoc {
    * that landed that turn.
    */
   lastTickedTurn: number | null;
-  /** Set when a declared war freezes the crisis. */
+  /**
+   * Set when a declared war freezes the crisis.
+   *
+   * Two roads reach it. The crisis's own `declare` press creates "The War for
+   * Germany" and points at it; or a war declared by or against one of the
+   * Germanies against the opposing bloc is ATTACHED by the turn phase, in which
+   * case `conflictAttachment` is stamped too. Either way the war decides the
+   * settlement outright and the index is not consulted.
+   */
   conflictId: string | null;
+  /**
+   * Which roster wins the settlement for whom. Optional because crises frozen
+   * before this field existed have none; `settleFromConflict` falls back to the
+   * sides' `backer` for those.
+   */
+  conflictSides?: SettlementConflictSides | null;
+  /** Present only on an ATTACHED crisis. See `SettlementConflictAttachment`. */
+  conflictAttachment?: SettlementConflictAttachment | null;
   openedTurn: number;
   /**
    * The turn the crisis left play — decided OR cancelled. `outcome` is what
