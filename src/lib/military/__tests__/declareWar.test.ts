@@ -117,7 +117,13 @@ describe("declareWar", () => {
     const { joined } = await declareWar(stubDb(live), input);
     expect(joined).toBe(true);
     expect(createConflictSpy).not.toHaveBeenCalled();
-    expect(joinSideSpy).toHaveBeenCalledWith(expect.anything(), live, "US", "A");
+    expect(joinSideSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      live,
+      "US",
+      "A",
+      expect.any(Number)
+    );
   });
 
   it("enrols on the side OPPOSING the defender, not simply side A", async () => {
@@ -130,7 +136,13 @@ describe("declareWar", () => {
       sideB: { countries: ["RU"], kind: "state" },
     };
     await declareWar(stubDb(live), input);
-    expect(joinSideSpy).toHaveBeenCalledWith(expect.anything(), live, "US", "B");
+    expect(joinSideSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      live,
+      "US",
+      "B",
+      expect.any(Number)
+    );
   });
 
   it("opens a NEW war rather than resurrecting a resolved one", async () => {
@@ -225,8 +237,20 @@ describe("declareWar treaty defence", () => {
     };
     await declareWar(stubDb(live), pactDefender);
     // The ally joins the DEFENDER's side (B); the declarer joins the other one.
-    expect(joinSideSpy).toHaveBeenCalledWith(expect.anything(), live, "RU", "B");
-    expect(joinSideSpy).toHaveBeenCalledWith(expect.anything(), live, "US", "A");
+    expect(joinSideSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      live,
+      "RU",
+      "B",
+      expect.any(Number)
+    );
+    expect(joinSideSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      live,
+      "US",
+      "A",
+      expect.any(Number)
+    );
   });
 
   // The join path records provenance through a $push rather than at creation. Without
@@ -265,7 +289,13 @@ describe("declareWar treaty defence", () => {
       sideB: { countries: ["FR"], kind: "state" },
     };
     await declareWar(stubDb(live), pactDefender);
-    expect(joinSideSpy).not.toHaveBeenCalledWith(expect.anything(), live, "RU", expect.anything());
+    expect(joinSideSpy).not.toHaveBeenCalledWith(
+      expect.anything(),
+      live,
+      "RU",
+      expect.anything(),
+      expect.anything()
+    );
   });
 
   it("tells an auto-joined ally's government that its treaty took it to war", async () => {

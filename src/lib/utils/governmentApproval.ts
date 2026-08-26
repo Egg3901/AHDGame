@@ -29,6 +29,7 @@ import { isMetricActive } from "@/lib/era/metricCatalog";
 import { getActiveNationalAddressModifier } from "@/lib/governorOffice/address/activeAddressModifiers";
 import { getActiveOrgStatementModifiersByCountry } from "@/lib/internationalOrganizations/jointStatement";
 import { getActiveFairnessGapModifiers } from "@/lib/redistricting/fairnessApproval";
+import { computeWarApproval } from "@/lib/military/warApproval";
 import { IS_HIGHER_BETTER } from "@/lib/utils/metricScoring";
 import { axisAffinityFor, type AxisAffinity } from "@/lib/utils/metricAxisAffinity";
 import type { StateDemographicGroup, StateDemographics } from "@/lib/db/types/demographics";
@@ -589,7 +590,30 @@ export async function snapshotApprovalHistory(
       .toArray(),
   ]);
 
-  if (allMetrics.length === 0) return;
+  // The war block is computed BEFORE the metrics guard below, and persisted on
+  // both sides of it. At peace its target is zero, so it retires at the damping
+  // step rather than vanishing — but only if it is stepped every turn. A country
+  // that returns early here would otherwise freeze its war total forever.
+  const approvalDoc = await db
+    .collection<GovernmentApproval>("governmentApprovals")
+    .findOne({ _id: countryId }, { projection: { warApprovalTotal: 1 } });
+  const war = await computeWarApproval(db, countryId, turn, approvalDoc?.warApprovalTotal);
+
+  if (allMetrics.length === 0) {
+    // No rating to write, but the block still has to move. Only the total is
+    // written: the address and org providers are not run on this path, so
+    // storing a war-only modifier list would drop those chips from beside a
+    // rating that still includes them. A stale list matching a stale rating is
+    // better than a fresh list that contradicts it.
+    //
+    // `upsert: false` — a country with neither metrics nor an approval document
+    // has nothing to retire, and inventing one here would create a document
+    // missing every other required field.
+    await db
+      .collection<GovernmentApproval>("governmentApprovals")
+      .updateOne({ _id: countryId }, { $set: { warApprovalTotal: war.total } });
+    return;
+  }
 
   const statePopMap = new Map(allStates.map((s) => [s._id, s.population ?? 0]));
   const groupsByState = new Map<string, StateDemographicGroup[]>(
@@ -652,18 +676,24 @@ export async function snapshotApprovalHistory(
 
   let approval = calculateNationalApproval(dampedStateApprovals);
 
-  // National (head-of-government) address approval bump — applied at the
-  // country level rather than cascaded through per-state approvals, so the
-  // boost shows on the national rating without bumping every state.
+  // Every national-scope modifier goes through ONE applyModifiers call.
+  //
+  //  - the head-of-government address bump, applied at country level rather than
+  //    cascaded through per-state approvals so it shows on the national rating
+  //    without bumping every state;
+  //  - international joint statements about this country, bounded and time
+  //    limited, which lift cleanly when the statement lapses;
+  //  - the war block, already damped as a block by computeWarApproval.
+  //
+  // One call rather than a chain: each call independently clamps to [0,100] and
+  // rounds to a tenth, and each gets its own POSITIVE_MODIFIER_NET_CAP — so
+  // chaining rounds twice and lets each source spend the cap the others are
+  // subject to. The stored modifier list is exactly what this call consumed, so
+  // the chips a reader shows cannot disagree with the rating beside them.
   const nationalAddressMods = await getActiveNationalAddressModifier(db, countryId, turn);
-  approval = applyModifiers(approval, nationalAddressMods);
-
-  // International joint statements (org endorsements / condemnations about this
-  // country) apply a bounded, time-limited approval effect at the national level
-  // — same recompute-folded mechanism as the address bump, so the effect
-  // persists across turns and lifts cleanly when the statement lapses.
   const orgStatementMods = await getActiveOrgStatementModifiersByCountry(db, countryId, turn);
-  approval = applyModifiers(approval, orgStatementMods);
+  const nationalMods = [...nationalAddressMods, ...orgStatementMods, ...war.modifiers];
+  approval = applyModifiers(approval, nationalMods);
 
   // Penalise national approval if the country has no confirmed cabinet members.
   const cabinetMembers = await db.collection("cabinetMembers").find({ countryId }).toArray();
@@ -691,6 +721,8 @@ export async function snapshotApprovalHistory(
         disapprovalRating: 100 - approval,
         netApproval: approval - (100 - approval),
         source: "aggregate" as const,
+        warApprovalTotal: war.total,
+        activeNationalModifiers: nationalMods,
         updatedAt: new Date(),
       },
       $push: {

@@ -39,4 +39,19 @@ describe("splitConditionForces", () => {
     expect(boostOnly.dragTotal).toBe(0);
     expect(boostOnly.headwinds).toHaveLength(0);
   });
+
+  /**
+   * This card is region scoped. The war block is national and reaches into the
+   * twenties, so if it ever arrived here it would swamp the balance bar and
+   * misattribute a national effect to one region.
+   */
+  it("leaves the national war block out of a regional balance", () => {
+    const mods = [
+      mod({ id: "a", label: "Boom", effect: 2 }),
+      mod({ id: "war", label: "War", effect: -8, source: "war" }),
+    ];
+    const result = splitConditionForces(mods);
+    expect(result.headwinds).toHaveLength(0);
+    expect(result.dragTotal).toBe(0);
+  });
 });

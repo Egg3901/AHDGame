@@ -203,6 +203,23 @@ describe("approvalModifiers", () => {
       expect(result.headline.map((m) => m.id)).toEqual(["big", "mid"]);
       expect(result.remainder.map((m) => m.id)).toEqual(["small"]);
     });
+
+    /**
+     * Ranking is by |marginEffect| first, so a war chip — which declares
+     * marginEffect 0 precisely so it cannot touch profit margins — would sort
+     * below every economic condition and fall off the end of the headline list.
+     * The deepest approval swing in the game would be the one nobody sees.
+     */
+    it("headlines a war modifier despite its zero margin effect", async () => {
+      const { prioritizeModifiers } = await import("./approvalModifiers");
+      const mods = [
+        { id: "m1", label: "M1", effect: 1, marginEffect: 2, source: "metric" as const },
+        { id: "m2", label: "M2", effect: 1, marginEffect: 2, source: "metric" as const },
+        { id: "war", label: "War", effect: -8, marginEffect: 0, source: "war" as const },
+      ];
+      const result = prioritizeModifiers(mods, { max: 2 });
+      expect(result.headline.map((m) => m.id)).toContain("war");
+    });
   });
 
   describe("applyModifiers", () => {

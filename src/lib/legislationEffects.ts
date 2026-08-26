@@ -254,7 +254,10 @@ export async function applyLegislationEffect(
             // other one by its own declaration while this bill was on the floor.
             if (!(opposing as string[]).includes(countryId)) {
               // Idempotent — joinSide returns early if the roster already has it.
-              await joinSide(db, conflict, countryId, p.side);
+              // The turn read happens either way (it is an argument), which is a
+              // single indexed gameState lookup on a path that runs once per
+              // enacted provision.
+              await joinSide(db, conflict, countryId, p.side, await getCurrentTurn(db));
             }
           }
         } else if (p.type === "embargo" || p.type === "end_embargo") {
