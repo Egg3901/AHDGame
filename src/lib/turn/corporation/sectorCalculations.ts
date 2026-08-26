@@ -1077,6 +1077,27 @@ export function processSectors(
         );
       }
     }
+    // Net the settled advertising out of each seller's CASH leg. The seller
+    // already booked this advertising as ordinary sector revenue, so income and
+    // tax keep it; crediting the transfer receipt ON TOP double-pays it in cash
+    // (once through revenue → liquidCapital, once through this settlement). This
+    // mirrors the buyer's cost add-back above, which defers the marketing DEBIT
+    // to this same transfer so the cost lands exactly once: here we defer the
+    // seller's advertising CREDIT the same way, removing its delivered value
+    // from cash so the transfer receipt is its only ad cash. When budgets fund
+    // the delivered book the receipt equals the delivered value and the two
+    // cancel (money conserved); a funding shortfall (delivered > funded) leaves
+    // the unpaid remainder as bad debt on the seller, never minted cash.
+    for (const [sellerId, deliveredValueAnchor] of advertisingSellerDeliveredValues) {
+      const seller = corpInfo(sellerId);
+      if (!seller) continue;
+      const deliveredLocal = anchorToCorpCapital(deliveredValueAnchor, seller.ccy, seller.fxRate);
+      if (!Number.isFinite(deliveredLocal)) continue;
+      marketingDeltasLocal.set(
+        sellerId,
+        (marketingDeltasLocal.get(sellerId) ?? 0) - deliveredLocal
+      );
+    }
     for (let i = 0; i < lookups.corporations.length; i++) {
       const delta = marketingDeltasLocal.get(lookups.corporations[i]._id.toString()) ?? 0;
       if (delta === 0) continue;
