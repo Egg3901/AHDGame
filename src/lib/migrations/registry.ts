@@ -52,6 +52,8 @@ import { migration as repairKazakhLawLevels } from "./entries/2026-08-23-repair-
 import { migration as crisesLivingEventPartialIndex } from "./entries/2026-08-25-crises-living-event-partial-index";
 import { migration as ukRegionalPartyOrgBackfill } from "./entries/2026-08-26-uk-regional-party-org-backfill";
 import { migration as easternDepositsCnSoeIron } from "./entries/2026-08-25-eastern-deposits-cn-soe-iron";
+import { migration as backfillRedistrictingAuthorityTypes } from "./entries/2026-08-26-backfill-redistricting-authority-types";
+import { migration as repairOutOfRangePolicyLevels } from "./entries/2026-08-26-repair-out-of-range-policy-levels";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -140,6 +142,15 @@ export const MIGRATIONS: Migration[] = [
   // UK-wide); give them the statePartyOrg rows they were never seeded outside
   // their home nation, or the presence gate keeps them off the ballot anyway.
   ukRegionalPartyOrgBackfill,
+  // Ticket #1189: the three state redistricting laws stopped seeding when the
+  // old US catalog was superseded, leaving every state pinned to the default
+  // commission with no bill able to change it. Insert-missing only.
+  backfillRedistrictingAuthorityTypes,
+  // Ticket #1189: the executive-order ladder assumed a seven-option (0-6)
+  // policy list, so orders on the five-level new-generation laws wrote levels
+  // past the end. Clamp those rows down to the ladder top the game already
+  // coerces them to.
+  repairOutOfRangePolicyLevels,
   // Markets repair P2a: eastern deposits were never authored for the playable
   // bloc countries (every state resources:{}), and the CN extraction SOE was
   // coal-locked in its four iron-rich states.

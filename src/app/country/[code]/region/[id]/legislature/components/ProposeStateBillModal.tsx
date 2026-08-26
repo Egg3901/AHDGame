@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { ladderBounds } from "@/lib/legislature/policyLadder";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { regionApiSubUrl } from "@/lib/urls";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
@@ -648,7 +649,10 @@ export function ProposeStateBillModal({
                             options.find((o) => o.id === p.policyOptionId)?.groupApprovals
                           }
                           policyDomain={type?.policyDomain}
-                          currentPolicyIndex={currentPolicies[p.legislationTypeId] ?? 3}
+                          currentPolicyIndex={
+                            currentPolicies[p.legislationTypeId] ??
+                            ladderBounds(options.length).centerIndex
+                          }
                           proposedPolicyIndex={options.findIndex((o) => o.id === p.policyOptionId)}
                           billCountry={countryId}
                           policyOptions={options}
