@@ -44,6 +44,7 @@ import {
   derivedSupplies,
   type Side,
 } from "@/lib/military/occupation";
+import { nextControlSample } from "@/lib/military/warApproval";
 
 /** Apply a side's outcome to its live units + the generals who led them. */
 async function persistSide(db: Db, side: BattleSide, outcome: SideOutcome, sideWon: boolean) {
@@ -133,6 +134,21 @@ async function applyOccupation(
   currentTurn: number
 ): Promise<number> {
   const control = occupationShift({ control: conflict.control, winner, margin, loserRetreated });
+
+  // Age out the war-approval momentum sample BEFORE the no-move early return.
+  // A front that stops moving must still let its sample expire, or the next
+  // advance is measured against a reading from arbitrarily long ago and diluted
+  // to nothing. Written on its own so the no-move path costs one small update
+  // and nothing else.
+  const sample = nextControlSample(conflict.controlSample, currentTurn, conflict.control);
+  if (sample) {
+    conflict.controlSample = sample;
+    await getConflictsCollection(db).updateOne(
+      { _id: conflict._id },
+      { $set: { controlSample: sample } }
+    );
+  }
+
   if (control === conflict.control) return conflict.control;
 
   // Pin the front's starting line and supply baselines on the first write. A conflict
@@ -294,7 +310,7 @@ export async function resolveBattleDeclarations(
         const walkoverBefore = conflict.control;
         let walkoverAfter = walkoverBefore;
         if (off.side) {
-          for (const c of off.attackers) await joinSide(db, conflict, c, off.side);
+          for (const c of off.attackers) await joinSide(db, conflict, c, off.side, currentTurn);
           walkoverAfter = await applyOccupation(
             db,
             conflict,
@@ -330,14 +346,14 @@ export async function resolveBattleDeclarations(
       // written against matches the army that actually fought. An unplaced matchup
       // enrols nobody: there is no side to enrol them onto.
       if (off.side && off.enemySide) {
-        for (const c of off.attackers) await joinSide(db, conflict, c, off.side);
+        for (const c of off.attackers) await joinSide(db, conflict, c, off.side, currentTurn);
         for (const c of defenders) {
           // A faction is never enrolled into a roster: it IS the side, named by
           // `factionEntity`. Writing it into `sideX.countries` would list North
           // Vietnam as a member country of its own side, and would put a
           // non-CountryId into a field every belligerent list reads as one.
           if (isFactionEntity(conflict, c)) continue;
-          await joinSide(db, conflict, c as CountryId, off.enemySide);
+          await joinSide(db, conflict, c as CountryId, off.enemySide, currentTurn);
         }
       }
 

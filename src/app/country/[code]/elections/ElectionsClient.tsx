@@ -279,6 +279,7 @@ export default function ElectionsClient({ code, initialElections }: ElectionsCli
                 <ManifestoFlavorBar countryCode={code} electionId={election.id} />
                 <CommonsCarveUpPanel
                   regionName={ELECTION_STATE_NAMES[election.state] ?? election.state}
+                  regionId={election.state}
                   slices={carveUp.slices}
                   topDemographics={carveUp.topDemographics}
                 />

@@ -66,4 +66,43 @@ describe("national approval route — canonical stored value", () => {
     const json = await call();
     expect(json.governmentApproval).toBe(BASE_APPROVAL);
   });
+
+  /**
+   * The stored rating already includes the national providers — the address
+   * bump, org statements and the war block. Those are computed in the turn
+   * phase and stored, because recomputing them needs conflict, personnel and
+   * org reads that do not belong in a page render. Showing the rating without
+   * them leaves a player watching approval move with nothing to explain it.
+   */
+  it("shows the stored national modifiers beside the stored rating", async () => {
+    db.collectionMocks.governmentApprovals!.findOne.mockResolvedValue({
+      _id: "US",
+      approvalRating: 38,
+      history: [],
+      activeNationalModifiers: [
+        { id: "war", label: "War", effect: -4, marginEffect: 0, source: "war" },
+      ],
+    });
+    db.collectionMocks.states!.find.mockReturnValue(cursorOf([]) as never);
+    db.collectionMocks.stateMetrics!.find.mockReturnValue(cursorOf([]) as never);
+
+    const json = await call();
+    expect(json.modifiers).toContainEqual(
+      expect.objectContaining({ id: "war", effect: -4, source: "war" })
+    );
+  });
+
+  it("omits the war chip entirely when the country is at peace", async () => {
+    db.collectionMocks.governmentApprovals!.findOne.mockResolvedValue({
+      _id: "US",
+      approvalRating: 51,
+      history: [],
+      activeNationalModifiers: [],
+    });
+    db.collectionMocks.states!.find.mockReturnValue(cursorOf([]) as never);
+    db.collectionMocks.stateMetrics!.find.mockReturnValue(cursorOf([]) as never);
+
+    const json = await call();
+    expect(json.modifiers.some((m: { id: string }) => m.id === "war")).toBe(false);
+  });
 });
