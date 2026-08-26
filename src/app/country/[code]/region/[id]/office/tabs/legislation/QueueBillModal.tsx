@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ladderBounds } from "@/lib/legislature/policyLadder";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import {
   STATE_BILL_CATEGORIES,
@@ -507,7 +508,9 @@ export function QueueBillModal({
                 }
                 groupApprovals={policyOptions.find((o) => o.id === policyOptionId)?.groupApprovals}
                 policyDomain={selectedType?.policyDomain}
-                currentPolicyIndex={currentPolicies[legId] ?? 3}
+                currentPolicyIndex={
+                  currentPolicies[legId] ?? ladderBounds(policyOptions.length).centerIndex
+                }
                 proposedPolicyIndex={policyOptions.findIndex((o) => o.id === policyOptionId)}
                 billCountry={countryId.toUpperCase()}
                 policyOptions={policyOptions}

@@ -15,6 +15,7 @@ import {
 } from "@/lib/constants/governorOffice";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { generateOrderNews } from "@/lib/news";
+import { ladderBounds } from "@/lib/legislature/policyLadder";
 
 export interface IssueOrderInput {
   countryId: CountryId;
@@ -96,9 +97,23 @@ export async function issueOrder(db: Db, input: IssueOrderInput): Promise<IssueO
   const priorPolicy = await db
     .collection<StatePolicy>("statePolicies")
     .findOne({ stateId, legislationTypeId });
-  const before = priorPolicy?.policyOptionIndex ?? 3;
+
+  // The ladder's bounds come from THIS type's option set, not the 7-option
+  // (0–6) shape most types happen to have. A three-option type like the state
+  // redistricting authority act has no index 3 to default to and no index 6 to
+  // clamp at, so the old constants let an order write a policyOptionIndex no
+  // option exists at — which downstream readers then silently reinterpret
+  // (redistricting caps clamp an out-of-range index back to the centre, so the
+  // order claims one authority while the map enforces another). billEnactment
+  // fixed the same class of bug on the bill path; this is the order path.
+  // A type with no options ladder keeps the legacy 0–6 behaviour.
+  const legType = await db
+    .collection<LegislationType>("legislationTypes")
+    .findOne({ _id: legislationTypeId });
+  const { maxIndex, centerIndex } = ladderBounds(legType?.policyOptions?.length);
+  const before = clamp(priorPolicy?.policyOptionIndex ?? centerIndex, 0, maxIndex);
   const desired = before + effectDirection * steps;
-  const after = clamp(desired, 0, 6);
+  const after = clamp(desired, 0, maxIndex);
   if (after === before) {
     return {
       status: 400,
@@ -114,12 +129,9 @@ export async function issueOrder(db: Db, input: IssueOrderInput): Promise<IssueO
     };
   }
 
-  // Look up the real policyOption at the new index so the upsert writes a
-  // valid id and axis values rather than sentinels. Falls back to the prior
-  // values if the LegislationType row is missing policy options.
-  const legType = await db
-    .collection<LegislationType>("legislationTypes")
-    .findOne({ _id: legislationTypeId });
+  // The real policyOption at the new index, so the upsert writes a valid id and
+  // axis values rather than sentinels. Falls back to the prior values if the
+  // LegislationType row is missing policy options.
   const newOption = legType?.policyOptions?.[after];
   const resolvedPolicyOptionId = newOption?.id ?? priorPolicy?.policyOptionId ?? "order-shift";
   const resolvedEconomic = newOption?.economic ?? priorPolicy?.economic ?? 0;

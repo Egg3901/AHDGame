@@ -37,14 +37,9 @@ export async function seedStatePolicies(
   // deploy preset the OLD US/UK/RU/DD catalogs are unseeded, so their
   // basePolicies records must not seed either (they would write conflicting
   // statePolicies alongside the §7 new-generation baseline).
-  const { POLITICAL_LEGISLATION_EXCLUDED_SCOPES: excludedScopes } =
-    await import("@/lib/politicalMetrics/pipelinePreset");
+  const { isOldLegislationTypeExcluded } = await import("@/lib/politicalMetrics/pipelinePreset");
   const excludedOldIds = isPoliticalLegislationPreset(preset)
-    ? new Set(
-        legislationTypes
-          .filter((lt) => excludedScopes.has(lt.countryScope ?? "us"))
-          .map((lt) => lt._id)
-      )
+    ? new Set(legislationTypes.filter((lt) => isOldLegislationTypeExcluded(lt)).map((lt) => lt._id))
     : new Set<string>();
 
   const basePolicies = (await getBasePolicies(preset)).filter(

@@ -4,6 +4,7 @@ import { bulkOps, createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { getAllNewGenerationLawIds, getCatalog } from "@/lib/politicalLegislation/catalog";
 import { lawTargets } from "@/lib/politicalLegislation/dynamics";
 import { LAW_COUNTRY_IDS } from "@/lib/politicalLegislation/types";
+import { POLITICAL_LEGISLATION_RETAINED_OLD_IDS } from "@/lib/politicalMetrics/pipelinePreset";
 import {
   baselineEnactedLawId,
   getProjectedPoliticalLegislationTypes,
@@ -61,14 +62,25 @@ describe("seedLegislationTypes — exclusion sweep + generation-aware deleter", 
     );
   }
 
+  /**
+   * The old playable-country catalogs must not seed — with the one deliberate
+   * carve-out for the state redistricting levers, which have no new-generation
+   * equivalent and are read by id by the redistricting caps
+   * (POLITICAL_LEGISLATION_RETAINED_OLD_IDS, ticket #1189). Asserting the
+   * surviving set EXACTLY keeps this a real guard: an old id that starts
+   * seeding again still fails here.
+   */
+  function expectOnlyRetainedOldIdsSurvive(ids: string[]) {
+    const survivors = ids.filter((id) => /^(us|uk|su|dd)_/.test(id)).sort();
+    expect(survivors).toEqual([...POLITICAL_LEGISLATION_RETAINED_OLD_IDS].sort());
+  }
+
   it("seeds projected new-generation docs instead of old US/UK/RU/DD catalogs on the 1953 preset", async () => {
     await seedLegislationTypes(db as unknown as Db, false, vi.fn(), "1953-default");
     const ids = bulkWrittenIds();
     expect(ids).toContain("uk.health.universalCare.primary");
     expect(ids).toContain("ru.tax.salesTax");
-    expect(ids.some((id) => id.startsWith("us_"))).toBe(false);
-    expect(ids.some((id) => id.startsWith("uk_"))).toBe(false);
-    expect(ids.some((id) => id.startsWith("su_"))).toBe(false);
+    expectOnlyRetainedOldIdsSurvive(ids);
     // The prune keeps the seeded set (incl. every projected id) as valid.
     const deleteCall = (
       db.collectionMocks.legislationTypes.deleteMany as ReturnType<typeof vi.fn>
@@ -86,9 +98,7 @@ describe("seedLegislationTypes — exclusion sweep + generation-aware deleter", 
     // produced the split state where a non-1953 world ran political metrics
     // alongside the old stateMetrics-targeting legislation.
     expect(ids).toContain("uk.health.universalCare.primary");
-    expect(ids.some((id) => id.startsWith("us_"))).toBe(false);
-    expect(ids.some((id) => id.startsWith("uk_"))).toBe(false);
-    expect(ids.some((id) => id.startsWith("su_"))).toBe(false);
+    expectOnlyRetainedOldIdsSurvive(ids);
     // Non-playable catalogs are untouched by any of this.
     expect(ids.some((id) => id.startsWith("jp_"))).toBe(true);
   });
