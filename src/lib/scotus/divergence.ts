@@ -56,8 +56,10 @@ export interface CaseDivergenceResult {
   /**
    * The sitting majority's side on the tagged axis: 1 (positive majority), -1
    * (negative majority), or 0 when positive/negative counts are tied (or when
-   * no justices are seated at all). A tie among SEATED justices diverges; an
-   * entirely vacant bench instead affirms — see the outcome computation.
+   * no justices are seated at all). A court that fails to produce a clear
+   * majority — tied seated justices, or an empty bench — cannot hand down a
+   * ruling at all, so it always affirms (upholds the existing/lower result,
+   * no history divergence) — see the outcome computation.
    */
   majoritySide: MajorityDirection | 0;
   outcome: CaseOutcome;
@@ -104,14 +106,14 @@ export function decideCaseOutcome(
   const majoritySide: MajorityDirection | 0 =
     positiveCount > negativeCount ? 1 : negativeCount > positiveCount ? -1 : 0;
 
-  // An empty bench cannot overrule history. With every seat vacant (the 1.0
-  // seeded starting state) there is no court to produce a contrary majority,
-  // so the historical outcome stands as context. Without this guard an
-  // all-vacant court reads majoritySide 0, which never equals the authored
-  // ±1 direction, and every effect-bearing docket case would fire as a
-  // "divergence" no player or NPP caused.
+  // A court with no clear majority cannot hand down a ruling (ticket 1187): a
+  // tied headcount (e.g. 4-4) has to affirm — uphold the existing/lower
+  // result — the same as an empty bench, which also cannot overrule history.
+  // Without this guard, `majoritySide` 0 never equals the authored ±1
+  // direction, so a tied court would fire as a "divergence" no player or NPP
+  // actually caused.
   const outcome: CaseOutcome =
-    options?.historicalOutcomeLocked || seatedJustices.length === 0
+    options?.historicalOutcomeLocked || majoritySide === 0
       ? "affirmed"
       : majoritySide === historicalMajorityDirection
         ? "affirmed"

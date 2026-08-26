@@ -44,14 +44,34 @@ describe("decideCaseOutcome", () => {
     expect(result.outcome).toBe("affirmed");
   });
 
-  it("treats a tie as a divergence from either authored direction", () => {
+  it("treats a tie (ticket 1187: a 4-4 court) as no decision — always affirms, never diverges", () => {
     const seated = [justice(1, 1), justice(-1, -1)];
     const resultVsPositive = decideCaseOutcome(seated, "economic", 1);
     const resultVsNegative = decideCaseOutcome(seated, "economic", -1);
     expect(resultVsPositive.majoritySide).toBe(0);
-    expect(resultVsPositive.outcome).toBe("diverged");
+    expect(resultVsPositive.outcome).toBe("affirmed");
     expect(resultVsNegative.majoritySide).toBe(0);
-    expect(resultVsNegative.outcome).toBe("diverged");
+    expect(resultVsNegative.outcome).toBe("affirmed");
+  });
+
+  it("issues a decision for a clear (non-tied) majority, e.g. 5-3", () => {
+    const seated = [
+      justice(1, 1),
+      justice(1, 1),
+      justice(1, 1),
+      justice(1, 1),
+      justice(1, 1),
+      justice(-1, -1),
+      justice(-1, -1),
+      justice(-1, -1),
+    ];
+    const affirming = decideCaseOutcome(seated, "economic", 1);
+    expect(affirming.majoritySide).toBe(1);
+    expect(affirming.outcome).toBe("affirmed");
+
+    const diverging = decideCaseOutcome(seated, "economic", -1);
+    expect(diverging.majoritySide).toBe(1);
+    expect(diverging.outcome).toBe("diverged");
   });
 
   it("counts a lean of exactly 0 as neutral, not toward either side", () => {
@@ -61,9 +81,9 @@ describe("decideCaseOutcome", () => {
     expect(result.positiveCount).toBe(1);
     expect(result.negativeCount).toBe(1);
     expect(result.seatedCount).toBe(3);
-    // 1 vs 1 with one neutral is still a tie -> diverges regardless of authored direction.
+    // 1 vs 1 with one neutral is still a tie -> no decision, affirms regardless of authored direction.
     expect(result.majoritySide).toBe(0);
-    expect(result.outcome).toBe("diverged");
+    expect(result.outcome).toBe("affirmed");
   });
 
   it("affirms history on a fully vacant court (no bench, no contrary majority)", () => {
