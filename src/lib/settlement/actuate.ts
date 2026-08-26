@@ -41,6 +41,8 @@ import { getCountryStateCollection } from "@/lib/db/collections/countryState";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { blocOrgFor } from "@/lib/world/blocMembership";
 import { admitMember } from "@/lib/internationalOrganizations/joinApplication";
+import { withdrawFromOrg } from "@/lib/internationalOrganizations/service";
+import type { InternationalOrganizationId } from "@/lib/constants/internationalOrganizations";
 
 export interface ActuationResult {
   actuated: boolean;
@@ -161,5 +163,28 @@ async function adoptChallengerSettlement(
   // existed in this world's year.
   if (pactOrg) {
     await admitMember(db, pactOrg, params.survivor, params.currentTurn);
+  }
+
+  // AND OUT OF THE WESTERN ONE. `admitMember` only ever inserts, so without this
+  // a surviving shell that was already in NATO — which DE is, in the 1953 era —
+  // would come out of reunification holding a row in BOTH poles. That is not a
+  // cosmetic duplicate: `loadBlocMembership` writes `out[countryId] = bloc` per
+  // row with no precedence, so which bloc a unified Germany reads as would come
+  // down to the order Mongo happened to return two documents in, and every
+  // military and alignment call downstream reads that map. The outcome is "one
+  // Germany, in the Warsaw Pact"; it has to be the only alliance it is in.
+  //
+  // Ordered AFTER the admission so a failure between the two leaves the country
+  // in an alliance rather than in none.
+  const westOrg = blocOrgFor(preset, "west");
+  if (westOrg && westOrg !== pactOrg) {
+    await withdrawFromOrg(
+      db,
+      westOrg as InternationalOrganizationId,
+      params.survivor,
+      null,
+      null,
+      params.currentTurn
+    );
   }
 }

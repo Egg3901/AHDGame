@@ -181,6 +181,40 @@ function widenHosts(c: ConflictDoc): WorldEntityId[] {
   return hosts;
 }
 
+/** An evenly split front: neither Germany holds more of the ground than the other. */
+const MERGED_THEATRE_CONTROL = 50;
+
+/**
+ * Re-baseline the front when the theatre becomes BOTH Germanies.
+ *
+ * `initialControl` opens an interstate war with the defender holding all of its
+ * own soil, which is right for a war fought over one country: the United States
+ * declaring on East Germany starts with East Germany holding East Germany. It is
+ * wrong the moment this attachment widens the ground to both Germanies. The war
+ * is then being fought over a divided country whose halves each start in a
+ * different bloc's hands, and a roster-derived 100 would hand the anchor's side
+ * the whole of a theatre that includes its opponent's own territory — a front
+ * the West has to fight across the Federal Republic just to draw level on.
+ *
+ * ONLY ON AN UNMOVED FRONT. A war already under way when the question attaches
+ * has a front that belligerents fought for; slamming it to even would erase that
+ * and hand back ground somebody took. `control === controlStart` is the exact
+ * test for "nobody has moved this yet", and it is true on the same-tick case
+ * this rule is really about, where the declaration and the attachment land in
+ * one turn.
+ *
+ * NOT undone by `detachCrisisFromWar`, deliberately, and unlike the name and the
+ * host roster. Those are labels the settlement borrowed; this is the line the
+ * fighting has since been happening on. Restoring a stale 100 to a war that has
+ * been running for fifty turns would be the erasure this guard exists to refuse.
+ */
+function mergedTheatreControl(c: ConflictDoc): Partial<ConflictDoc> {
+  const start = c.controlStart ?? c.control;
+  if (c.control !== start) return {};
+  if (c.control === MERGED_THEATRE_CONTROL) return {};
+  return { control: MERGED_THEATRE_CONTROL, controlStart: MERGED_THEATRE_CONTROL };
+}
+
 /**
  * Freeze an open crisis onto a qualifying live war, if there is one.
  *
@@ -313,7 +347,13 @@ export async function attachCrisisToLiveWar(
 
   await conflicts.updateOne(
     { _id: war._id },
-    { $set: { name: WAR_FOR_GERMANY_NAME, hostEntities: widenHosts(war) } }
+    {
+      $set: {
+        name: WAR_FOR_GERMANY_NAME,
+        hostEntities: widenHosts(war),
+        ...mergedTheatreControl(war),
+      },
+    }
   );
 
   return { attached: true, conflictId: qualified.conflictId };
