@@ -140,4 +140,32 @@ describe("buildSourcingDocs", () => {
     expect(networkDoc.freightCharges).toEqual({ A1: { coal: 400.01 } });
     expect(networkDoc.freightHaulRevenue).toEqual({ A2: 400.01 });
   });
+
+  it("scales billing charge and haul revenue by the ramp fraction, conserving both sides", () => {
+    const result = baseResult({
+      freightChargesByDestState: new Map([["A1", new Map([["coal" as CommodityType, 400]])]]),
+      haulRevenueByOriginState: new Map([["A2", 400]]),
+    });
+    const { networkDoc } = buildSourcingDocs(result, 10, new Date(), {
+      includeFreightBilling: true,
+      billingRampFraction: 0.25,
+    });
+    // Both sides scaled by the same 0.25, so the charge/credit totals still match.
+    expect(networkDoc.freightCharges).toEqual({ A1: { coal: 100 } });
+    expect(networkDoc.freightHaulRevenue).toEqual({ A2: 100 });
+  });
+
+  it("at ramp fraction 0 writes no billing (fully phased out)", () => {
+    const result = baseResult({
+      freightChargesByDestState: new Map([["A1", new Map([["coal" as CommodityType, 400]])]]),
+      haulRevenueByOriginState: new Map([["A2", 400]]),
+    });
+    const { networkDoc } = buildSourcingDocs(result, 10, new Date(), {
+      includeFreightBilling: true,
+      billingRampFraction: 0,
+    });
+    // 400 * 0 rounds to 0 -> omitted on both sides.
+    expect(networkDoc.freightCharges).toEqual({});
+    expect(networkDoc.freightHaulRevenue).toEqual({});
+  });
 });

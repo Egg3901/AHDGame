@@ -42,6 +42,26 @@ export interface FreightSettlement {
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 
 /**
+ * Freight-settlement ramp fraction R in [0,1] for `turn`. Linear fade-in from
+ * `freightSettlementRampStartTurn` over `freightSettlementRampTurns`. Unset or a
+ * non-positive window → 1 (instant activation, the pre-ramp behavior). Callers
+ * apply R only while the settlement mode / canonical billing is already active;
+ * R scales the MAGNITUDE of the effect, never gates it on.
+ */
+export function freightSettlementRampFraction(
+  cfg:
+    | { freightSettlementRampStartTurn?: number; freightSettlementRampTurns?: number }
+    | null
+    | undefined,
+  turn: number
+): number {
+  const start = cfg?.freightSettlementRampStartTurn;
+  const rampTurns = cfg?.freightSettlementRampTurns;
+  if (start == null || rampTurns == null || !(rampTurns > 0)) return 1;
+  return clamp01((turn - start) / rampTurns);
+}
+
+/**
  * Resolve local production first, then use the landed-price freight network
  * for the residual.  The result does not alter the caller's balances.
  */
