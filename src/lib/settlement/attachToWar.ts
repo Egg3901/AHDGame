@@ -33,6 +33,7 @@ import type {
   SettlementGermanAnchor,
 } from "@/lib/db/types/settlementCrisis";
 import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { blocOf, type BlocLookup } from "@/lib/military/bloc";
 import { loadMilitaryBlocs } from "@/lib/military/blocLookup";
 import { hostEntitiesOf } from "@/lib/military/hostEntities";
@@ -188,14 +189,20 @@ function widenHosts(c: ConflictDoc): WorldEntityId[] {
  * the claim leaves the crisis correctly frozen on a war that merely kept its own
  * name, which is recoverable; the reverse would rename a war no crisis points at.
  */
-export async function attachCrisisToLiveWar(
-  db: Db,
-  crisis: SettlementCrisisDoc
-): Promise<AttachResult> {
-  if (crisis.status !== "open") return NOT_ATTACHED;
+export interface QualifyingWarMatch {
+  war: ConflictDoc;
+  qualified: QualifyingWar;
+}
 
-  const conflicts = getConflictsCollection(db);
-  const candidates = await conflicts
+/**
+ * The live war that would settle the question by force, if there is one.
+ *
+ * Separate from the attaching so it can be asked WITHOUT freezing anything —
+ * `openSettlementCrisis` uses it to warn an operator that the question they are
+ * about to open will freeze on the next tick.
+ */
+export async function findQualifyingWar(db: Db): Promise<QualifyingWarMatch | null> {
+  const candidates = await getConflictsCollection(db)
     .find({
       // Mirrors `qualifyWar`'s own gate; that one is authoritative, this one just
       // keeps proxy wars out of the result set.
@@ -204,7 +211,7 @@ export async function attachCrisisToLiveWar(
       $or: [{ "sideA.countries": { $in: GERMANIES } }, { "sideB.countries": { $in: GERMANIES } }],
     } as Filter<ConflictDoc>)
     .toArray();
-  if (candidates.length === 0) return NOT_ATTACHED;
+  if (candidates.length === 0) return null;
 
   // One read for the whole sweep, and only once a candidate exists.
   const blocs = await loadMilitaryBlocs(db);
@@ -213,17 +220,66 @@ export async function attachCrisisToLiveWar(
   // over a handful of documents and this keeps the cursor untouched.
   const ordered = [...candidates].sort((a, b) => (a.startTurn ?? 0) - (b.startTurn ?? 0));
 
-  let war: ConflictDoc | null = null;
-  let qualified: QualifyingWar | null = null;
   for (const candidate of ordered) {
-    const q = qualifyWar(candidate, blocs);
-    if (q) {
-      war = candidate;
-      qualified = q;
-      break;
-    }
+    const qualified = qualifyWar(candidate, blocs);
+    if (qualified) return { war: candidate, qualified };
   }
-  if (!war || !qualified) return NOT_ATTACHED;
+  return null;
+}
+
+export interface PendingWarFreeze {
+  /** The war's name, as the Conflicts board shows it. */
+  warName: string;
+  /** The Germany whose belligerency would anchor the attachment. */
+  anchorName: string;
+}
+
+/**
+ * The war that would take a question opened right now, described for an operator.
+ *
+ * Structured rather than pre-worded because it is read at two different moments —
+ * before the question is opened and after — and those want different tenses. The
+ * wording for both lives in `warFreezeNotice`.
+ */
+export async function describeQualifyingWar(db: Db): Promise<PendingWarFreeze | null> {
+  const match = await findQualifyingWar(db);
+  if (!match) return null;
+  const anchor = match.qualified.anchor;
+  return {
+    warName: match.war.name,
+    anchorName: COUNTRY_CONFIGS[anchor as CountryId]?.name ?? anchor,
+  };
+}
+
+/**
+ * What to tell an operator about a question that is about to meet a war.
+ *
+ * ONE place for this copy, used by the admin board before the question is opened
+ * and by `openSettlementCrisis` after. The two differ only in tense and in what
+ * they suggest doing about it.
+ */
+export function warFreezeNotice(d: PendingWarFreeze, when: "before" | "after"): string {
+  const fact =
+    `${d.warName} is already being fought, with ${d.anchorName} a declared belligerent ` +
+    "against the opposing bloc.";
+  return when === "before"
+    ? `${fact} A question opened now will freeze onto that war on the next turn tick and be ` +
+        "decided by whoever wins it, with no play on the board at all."
+    : `${fact} The question will freeze onto that war on the next turn tick and be decided by ` +
+        "whoever wins it, with no play on the board at all. Close it now if that is not what " +
+        "you intended.";
+}
+
+export async function attachCrisisToLiveWar(
+  db: Db,
+  crisis: SettlementCrisisDoc
+): Promise<AttachResult> {
+  if (crisis.status !== "open") return NOT_ATTACHED;
+
+  const match = await findQualifyingWar(db);
+  if (!match) return NOT_ATTACHED;
+  const { war, qualified } = match;
+  const conflicts = getConflictsCollection(db);
 
   // Absent and empty both mean "just the anchor" to `hostEntitiesOf`, so both are
   // stored as null and restored by unsetting the field.

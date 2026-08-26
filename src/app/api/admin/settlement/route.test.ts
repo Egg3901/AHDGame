@@ -144,6 +144,7 @@ describe("/api/admin/settlement", () => {
     vi.mocked(openSettlementCrisis).mockResolvedValue({
       opened: true,
       reason: null,
+      warning: null,
       crisisId: CRISIS_ID.toString(),
     });
     const { POST } = await import("./route");
@@ -157,6 +158,7 @@ describe("/api/admin/settlement", () => {
     vi.mocked(openSettlementCrisis).mockResolvedValue({
       opened: false,
       reason: "A settlement crisis is already live.",
+      warning: null,
       crisisId: null,
     });
     const { POST } = await import("./route");
@@ -172,6 +174,7 @@ describe("/api/admin/settlement", () => {
     vi.mocked(openSettlementCrisis).mockResolvedValue({
       opened: false,
       reason: "A settlement crisis is already live.",
+      warning: null,
       crisisId: null,
     });
     const { POST } = await import("./route");
@@ -280,6 +283,102 @@ describe("/api/admin/settlement", () => {
     const { POST } = await import("./route");
     expect((await POST(post({ action: "resolve", outcome: "incumbent" }))).status).toBe(409);
     expect(prime(db, "conflicts").updateOne).not.toHaveBeenCalled();
+  });
+
+  describe("the pre-flight warning on the board itself", () => {
+    /** A live interstate war declared on East Germany by a NATO member. */
+    function primeWar(db: MockDb) {
+      // `loadMilitaryBlocs` reads the gameState COLLECTION, not the mocked
+      // `getGameState` lib function, and `DEFAULT_SEED_PRESET` is 2019 — an era
+      // with no Warsaw Pact, where East Germany reads non-aligned and no war
+      // qualifies. The preset has to be stated.
+      prime(db, "gameState").findOne.mockResolvedValue({
+        _id: "current",
+        preset: "1953-default",
+      });
+      prime(db, "organizationMemberships").find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          { organizationId: "NATO", countryId: "US" },
+          { organizationId: "WARSAW_PACT", countryId: "DD" },
+        ]),
+      });
+      prime(db, "conflicts").find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            _id: "war_us_dd_412",
+            name: "United States vs East Germany",
+            type: "interstate",
+            status: "active",
+            startTurn: 410,
+            hostCountry: "DD",
+            sideA: { label: "United States", countries: ["US"], kind: "state" },
+            sideB: { label: "East Germany", countries: ["DD"], kind: "state" },
+          },
+        ]),
+      });
+    }
+
+    it("warns BEFORE anything is pressed, while it can still change a mind", async () => {
+      primeWar(db);
+      const { GET } = await import("./route");
+      const body = await (await GET()).json();
+      expect(body.openWarning).toContain("United States vs East Germany");
+      expect(body.openWarning).toContain("A question opened now will freeze");
+    });
+
+    it("says nothing when no war would take the question", async () => {
+      const { GET } = await import("./route");
+      const body = await (await GET()).json();
+      expect(body.openWarning).toBeNull();
+    });
+
+    it("does not ask at all once a question is already live", async () => {
+      // The Open button is not on screen, so the answer changes nothing an
+      // operator can act on, and this is a scan on every poll of the board.
+      primeWar(db);
+      prime(db, "settlementCrises").findOne.mockResolvedValue(liveCrisis());
+      const { GET } = await import("./route");
+      const body = await (await GET()).json();
+      expect(body.openWarning).toBeNull();
+      expect(prime(db, "conflicts").find).not.toHaveBeenCalled();
+    });
+
+    it("never lets a failed lookup take the whole board down", async () => {
+      prime(db, "conflicts").find.mockImplementation(() => {
+        throw new Error("conflicts unavailable");
+      });
+      const { GET } = await import("./route");
+      const res = await GET();
+      expect(res.status).toBe(200);
+      expect((await res.json()).openWarning).toBeNull();
+    });
+  });
+
+  it("passes an open warning through to the operator", async () => {
+    const { openSettlementCrisis } = await import("@/lib/settlement/openCrisis");
+    vi.mocked(openSettlementCrisis).mockResolvedValue({
+      opened: true,
+      reason: null,
+      crisisId: "abc",
+      warning: "The War for Germany is already being fought.",
+    });
+    const { POST } = await import("./route");
+    const res = await POST(post({ action: "open" }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).warning).toBe("The War for Germany is already being fought.");
+  });
+
+  it("omits the warning key entirely when there is nothing to warn about", async () => {
+    const { openSettlementCrisis } = await import("@/lib/settlement/openCrisis");
+    vi.mocked(openSettlementCrisis).mockResolvedValue({
+      opened: true,
+      reason: null,
+      crisisId: "abc",
+      warning: null,
+    });
+    const { POST } = await import("./route");
+    const body = await (await POST(post({ action: "open" }))).json();
+    expect("warning" in body).toBe(false);
   });
 
   it("refuses every action but open when no crisis is live", async () => {

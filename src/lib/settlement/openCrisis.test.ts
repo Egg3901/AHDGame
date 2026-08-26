@@ -133,6 +133,78 @@ describe("openSettlementCrisis", () => {
       "disk full"
     );
   });
+
+  describe("opening into a war already being fought", () => {
+    /** A live interstate war declared on East Germany by a NATO member. */
+    function primeWar(db: MockDb) {
+      prime(db, "gameState").findOne.mockResolvedValue({
+        _id: "current",
+        preset: "1953-default",
+      });
+      prime(db, "organizationMemberships").find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          { organizationId: "NATO", countryId: "US" },
+          { organizationId: "WARSAW_PACT", countryId: "DD" },
+        ]),
+      });
+      prime(db, "conflicts").find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            _id: "war_us_dd_412",
+            name: "United States vs East Germany",
+            type: "interstate",
+            status: "active",
+            startTurn: 410,
+            hostCountry: "DD",
+            sideA: { label: "United States", countries: ["US"], kind: "state" },
+            sideB: { label: "East Germany", countries: ["DD"], kind: "state" },
+          },
+        ]),
+      });
+    }
+
+    it("opens anyway, but warns what the next tick will do to it", async () => {
+      // Warned, NOT refused: freezing onto a war already in progress may be
+      // exactly what the operator wants.
+      primeWar(db);
+      const { openSettlementCrisis } = await import("./openCrisis");
+      const res = await openSettlementCrisis(db as unknown as Db, { turn: 412 });
+
+      expect(res.opened).toBe(true);
+      expect(res.warning).toContain("United States vs East Germany");
+      expect(res.warning).toContain("East Germany");
+      expect(res.warning).toContain("freeze");
+    });
+
+    it("says nothing when no war would take the question", async () => {
+      const { openSettlementCrisis } = await import("./openCrisis");
+      const res = await openSettlementCrisis(db as unknown as Db, { turn: 412 });
+      expect(res.opened).toBe(true);
+      expect(res.warning).toBeNull();
+    });
+
+    it("carries no warning on a question that did not open", async () => {
+      primeWar(db);
+      prime(db, "settlementCrises").findOne.mockImplementation(async (f: { status?: unknown }) =>
+        JSON.stringify(f?.status) === JSON.stringify({ $in: ["open", "frozen"] }) ? {} : null
+      );
+      const { openSettlementCrisis } = await import("./openCrisis");
+      const res = await openSettlementCrisis(db as unknown as Db, { turn: 412 });
+      expect(res.opened).toBe(false);
+      expect(res.warning).toBeNull();
+    });
+
+    it("never lets a failed warning sink a successful open", async () => {
+      primeWar(db);
+      prime(db, "conflicts").find.mockImplementation(() => {
+        throw new Error("conflicts unavailable");
+      });
+      const { openSettlementCrisis } = await import("./openCrisis");
+      const res = await openSettlementCrisis(db as unknown as Db, { turn: 412 });
+      expect(res.opened).toBe(true);
+      expect(res.warning).toBeNull();
+    });
+  });
 });
 
 describe("buildGermanQuestion", () => {

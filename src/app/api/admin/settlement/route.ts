@@ -6,7 +6,11 @@ import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getSettlementCrisesCollection } from "@/lib/db/collections";
-import { endWarAttachment } from "@/lib/settlement/attachToWar";
+import {
+  describeQualifyingWar,
+  endWarAttachment,
+  warFreezeNotice,
+} from "@/lib/settlement/attachToWar";
 import type { SettlementCrisisDoc } from "@/lib/db/types/settlementCrisis";
 import { getGameState } from "@/lib/gameState";
 import {
@@ -80,9 +84,20 @@ export async function GET() {
       .limit(5)
       .toArray();
 
+    // Asked ONLY when the Open button is the one on screen. With a question
+    // already live the answer changes nothing an operator can act on, and this
+    // is a scan of the conflicts collection on every poll of the admin board.
+    const openWarning =
+      !live && gameState?.settlementCrisisEnabled === true
+        ? await describeQualifyingWar(db).catch(() => null)
+        : null;
+
     return NextResponse.json({
       enabled: gameState?.settlementCrisisEnabled === true,
       currentTurn,
+      // Present before anything is pressed, so the caution arrives while it can
+      // still change the operator's mind rather than after the fact.
+      openWarning: openWarning ? warFreezeNotice(openWarning, "before") : null,
       crisis: live
         ? {
             id: live._id.toString(),
@@ -138,7 +153,13 @@ export async function POST(request: Request) {
     if (body.action === "open") {
       const result = await openSettlementCrisis(db, { turn: currentTurn });
       return result.opened
-        ? NextResponse.json({ success: true, crisisId: result.crisisId })
+        ? NextResponse.json({
+            success: true,
+            crisisId: result.crisisId,
+            // Present only when the question opened INTO a war already being
+            // fought. The UI shows it as a warning, not as part of the success.
+            ...(result.warning ? { warning: result.warning } : {}),
+          })
         : NextResponse.json({ error: result.reason }, { status: 409 });
     }
 
