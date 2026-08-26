@@ -1,4 +1,5 @@
 import type { CountryId } from "../../constants/countries";
+import type { ActiveModifier } from "../../utils/approvalModifiers";
 
 /**
  * Country-level government approval rating.
@@ -33,5 +34,23 @@ export interface GovernmentApproval {
     approval: number;
     net: number;
   }>;
+  /**
+   * The war block's applied total as of the last snapshot.
+   *
+   * Persisted so the block can be damped as a block: national modifiers are
+   * applied after per-state damping and are otherwise unbounded in rate, and
+   * war exhaustion reaches -25. Absent is read as 0 rather than left undefined,
+   * so a war predating this feature ramps in at the damping step instead of
+   * landing whole on the first snapshot.
+   */
+  warApprovalTotal?: number;
+  /**
+   * The national modifiers behind `approvalRating`, as of the last snapshot.
+   *
+   * Stored rather than recomputed because the providers behind them are async
+   * and read conflicts, personnel and org state — work that belongs in the turn
+   * phase, not in a page render. Readers show these beside the stored rating.
+   */
+  activeNationalModifiers?: ActiveModifier[];
   updatedAt: Date;
 }

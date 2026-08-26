@@ -201,7 +201,7 @@ export async function declareWar(db: Db, input: DeclareWarInput): Promise<Declar
         currentTurn,
       });
       for (const d of defenders) {
-        await joinSide(db, live, d.countryId, defenderSide);
+        await joinSide(db, live, d.countryId, defenderSide, currentTurn);
       }
       if (defenders.length > 0) {
         const entries = toTreatyEntries(defenders, defender, currentTurn);
@@ -213,7 +213,7 @@ export async function declareWar(db: Db, input: DeclareWarInput): Promise<Declar
     }
 
     const target = defenderSide === "A" ? "B" : "A";
-    await joinSide(db, live, declarer, target);
+    await joinSide(db, live, declarer, target, currentTurn);
     return { conflict: live, joined: true };
   }
 

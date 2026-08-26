@@ -128,6 +128,27 @@ export interface ConflictDoc {
   /** Seeded supply values, preserved so live supply can be derived, not accumulated. */
   supplyBaseA?: number;
   supplyBaseB?: number;
+  /**
+   * Trailing `control` reading, for the war-effort momentum term.
+   *
+   * Refreshed by `applyOccupation` once it is older than the momentum window.
+   * Absent means "no history yet", which scores momentum at zero rather than
+   * undefined — the provider derives a default and never requires this field.
+   */
+  controlSample?: { turn: number; control: number };
+  /**
+   * When each belligerent entered, and where the front stood at the time.
+   *
+   * Written by `joinSide`, so BOTH the treaty path and the declare-into-an-
+   * existing-war path record one; `treatyEntries` covers only the former and is
+   * not a complete entry ledger. Founding belligerents are absent and fall back
+   * to `startTurn` / `controlStart`.
+   *
+   * `control` is what keeps a late joiner from inheriting the war record its
+   * side built before it arrived: war effort is scored from the front as it
+   * stood when THIS country entered, not from the conflict's opening line.
+   */
+  joinTurns?: Array<{ countryId: CountryId; turn: number; control: number }>;
   status: ConflictStatus;
   /**
    * Every third-party country in the theatre — the roster that changes bloc when the
