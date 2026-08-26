@@ -23,6 +23,10 @@ describe("loadGermanQuestionWarNotice", () => {
     db = createMockDb();
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    prime(db, "gameState").findOne.mockResolvedValue({
+      _id: "current",
+      settlementCrisisEnabled: true,
+    });
     prime(db, "conflicts").findOne.mockResolvedValue({
       _id: "war_us_dd_412",
       conflictId: 57,
@@ -64,5 +68,16 @@ describe("loadGermanQuestionWarNotice", () => {
     const { loadGermanQuestionWarNotice } = await import("./warNotice");
     const notice = await loadGermanQuestionWarNotice(db as unknown as Db);
     expect(notice).toEqual({ conflictNumber: null, name: "the war", attached: false });
+  });
+
+  it("says nothing while the feature is switched off", async () => {
+    prime(db, "gameState").findOne.mockResolvedValue({
+      _id: "current",
+      settlementCrisisEnabled: false,
+    });
+    prime(db, "settlementCrises").findOne.mockResolvedValue(frozen());
+    const { loadGermanQuestionWarNotice } = await import("./warNotice");
+    expect(await loadGermanQuestionWarNotice(db as unknown as Db)).toBeNull();
+    expect(prime(db, "settlementCrises").findOne).not.toHaveBeenCalled();
   });
 });

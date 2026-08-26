@@ -29,6 +29,7 @@ function war(over: Partial<ConflictDoc> = {}): WarInput {
   return {
     _id: "war_us_dd_412",
     name: "United States vs East Germany",
+    type: "interstate",
     hostCountry: "DD",
     sideA: { label: "United States", countries: ["US"], kind: "state" },
     sideB: { label: "East Germany", countries: ["DD"], kind: "state" },
@@ -113,6 +114,35 @@ describe("qualifyWar", () => {
     );
     expect(res?.anchor).toBe("DD");
     expect(res?.sides).toEqual({ challenger: "B", incumbent: "A" });
+  });
+
+  it("refuses a proxy war, however its rosters filled out", () => {
+    // A cold_war conflict's sides start as factions with backers, but `joinSide`
+    // puts real countries on them. East Germany intervening in somebody else's
+    // proxy war is not a war declared by or against a Germany.
+    const res = qualifyWar(
+      war({
+        type: "cold_war",
+        hostCountry: "AO",
+        sideA: { label: "MPLA", countries: ["US"], kind: "coalition" },
+        sideB: { label: "UNITA", countries: ["DD", "RU"], kind: "coalition" },
+      }),
+      BLOCS
+    );
+    expect(res).toBeNull();
+  });
+
+  it("survives a war whose rosters are missing rather than taking the phase down", () => {
+    // Read from documents this feature does not own. A throw here is swallowed by
+    // `runPhase` as a failed phase, taking the German Question offline every turn.
+    const res = qualifyWar(
+      war({
+        sideA: { label: "United States" },
+        sideB: { label: "East Germany" },
+      } as unknown as Partial<ConflictDoc>),
+      BLOCS
+    );
+    expect(res).toBeNull();
   });
 
   it("refuses a war with no Germany on either roster", () => {
@@ -239,6 +269,17 @@ describe("attachCrisisToLiveWar", () => {
     expect(set.hostEntities).toEqual(["US", "DE", "DD"]);
   });
 
+  it("never writes a junk host onto a war with no anchor of its own", async () => {
+    prime(db, "conflicts").find.mockReturnValue({
+      toArray: async () => [war({ hostCountry: undefined as unknown as string })],
+    });
+    const { attachCrisisToLiveWar } = await import("./attachToWar");
+    await attachCrisisToLiveWar(db as unknown as Db, crisis());
+
+    const set = prime(db, "conflicts").updateOne.mock.calls[0][1].$set;
+    expect(set.hostEntities).toEqual(["DE", "DD"]);
+  });
+
   it("records what it overwrote, so a detach can put the war back", async () => {
     const { attachCrisisToLiveWar } = await import("./attachToWar");
     await attachCrisisToLiveWar(db as unknown as Db, crisis());
@@ -246,6 +287,19 @@ describe("attachCrisisToLiveWar", () => {
     const set = prime(db, "settlementCrises").updateOne.mock.calls[0][1].$set;
     expect(set.conflictAttachment.previousName).toBe("United States vs East Germany");
     expect(set.conflictAttachment.previousHostEntities).toBeNull();
+  });
+
+  it("records a null previous name when the war already carries the settlement's", async () => {
+    // The state a crash between the freeze and the rename leaves behind. Storing
+    // "The War for Germany" as the war's own name would lose the real one for good.
+    prime(db, "conflicts").find.mockReturnValue({
+      toArray: async () => [war({ name: "The War for Germany" })],
+    });
+    const { attachCrisisToLiveWar } = await import("./attachToWar");
+    await attachCrisisToLiveWar(db as unknown as Db, crisis());
+
+    const set = prime(db, "settlementCrises").updateOne.mock.calls[0][1].$set;
+    expect(set.conflictAttachment.previousName).toBeNull();
   });
 
   it("leaves the crisis open when no live war qualifies", async () => {
@@ -331,6 +385,38 @@ describe("detachCrisisFromWar", () => {
     expect(set.conflictAttachment).toBeNull();
   });
 
+  it("un-stamps the war dispatch so a later war is announced too", async () => {
+    prime(db, "conflicts").findOne.mockResolvedValue(
+      war({ status: "active", sideB: { label: "East Germany", countries: [], kind: "state" } })
+    );
+    const { detachCrisisFromWar } = await import("./attachToWar");
+    await detachCrisisFromWar(db as unknown as Db, attached());
+
+    const update = prime(db, "settlementCrises").updateOne.mock.calls[0][1];
+    expect(update.$pull).toEqual({ postedWireEvents: "war" });
+  });
+
+  it("leaves the name alone when it recorded no name of its own", async () => {
+    prime(db, "conflicts").findOne.mockResolvedValue(
+      war({ status: "active", sideB: { label: "East Germany", countries: [], kind: "state" } })
+    );
+    const { detachCrisisFromWar } = await import("./attachToWar");
+    await detachCrisisFromWar(
+      db as unknown as Db,
+      attached({
+        conflictAttachment: {
+          anchor: "DD",
+          previousName: null,
+          previousHostEntities: null,
+        },
+      })
+    );
+
+    const update = prime(db, "conflicts").updateOne.mock.calls[0][1];
+    expect(update.$set).toBeUndefined();
+    expect(update.$unset).toEqual({ hostEntities: "" });
+  });
+
   it("puts the war's own name and hosts back when it detaches", async () => {
     prime(db, "conflicts").findOne.mockResolvedValue(
       war({
@@ -344,5 +430,27 @@ describe("detachCrisisFromWar", () => {
     const call = prime(db, "conflicts").updateOne.mock.calls[0][1];
     expect(call.$set.name).toBe("United States vs East Germany");
     expect(call.$unset).toEqual({ hostEntities: "" });
+  });
+
+  it("restores the war BEFORE releasing the crisis, so a crash self-heals", async () => {
+    // Released first, a crash in between is permanent: the stamp saying what to
+    // give back is gone and the war keeps marks nothing will ever undo.
+    const order: string[] = [];
+    prime(db, "conflicts").findOne.mockResolvedValue(
+      war({ status: "active", sideB: { label: "East Germany", countries: [], kind: "state" } })
+    );
+    prime(db, "conflicts").updateOne.mockImplementation(async () => {
+      order.push("restore");
+      return { matchedCount: 1 };
+    });
+    prime(db, "settlementCrises").updateOne.mockImplementation(async () => {
+      order.push("release");
+      return { matchedCount: 1 };
+    });
+
+    const { detachCrisisFromWar } = await import("./attachToWar");
+    await detachCrisisFromWar(db as unknown as Db, attached());
+
+    expect(order).toEqual(["restore", "release"]);
   });
 });

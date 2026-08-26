@@ -55,8 +55,15 @@ export interface SettlementConflictSides {
 export interface SettlementConflictAttachment {
   /** The Germany whose belligerency anchored the attachment. */
   anchor: SettlementGermanAnchor;
-  /** The war's name before the attachment renamed it. */
-  previousName: string;
+  /**
+   * The war's name before the attachment renamed it.
+   *
+   * Null means the sweep found it ALREADY carrying the settlement's name and did
+   * not rename it, so there is nothing of its own to restore. That case only
+   * arises after a crash between the freeze and the rename, and the null is what
+   * stops the next attachment recording the sentinel as the war's real name.
+   */
+  previousName: string | null;
   /** Its `hostEntities` before widening. Null when the field was absent or empty. */
   previousHostEntities: string[] | null;
 }

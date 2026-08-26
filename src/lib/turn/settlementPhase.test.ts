@@ -699,6 +699,7 @@ describe("processSettlementTurn — war attachment", () => {
   const war = (over: Record<string, unknown> = {}) => ({
     _id: "war_us_dd_412",
     name: "United States vs East Germany",
+    type: "interstate",
     hostCountry: "DD",
     status: "active",
     startTurn: 410,

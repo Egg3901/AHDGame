@@ -27,9 +27,16 @@
  * silently erase. Cancelling here does stop the conflict's result from ever
  * settling the question, because `settleFrozenCrisisFromConflict` only sweeps
  * `status: "frozen"`.
+ *
+ * An ATTACHED war is different, and IS put back. A crisis that froze itself onto
+ * somebody else's war renamed that war and added both Germanies to its hosts;
+ * closing the question has to undo those, or a US-East Germany war is left
+ * permanently called "The War for Germany" with no question pointing at it. The
+ * war itself still runs. Only the settlement's marks on it come off.
  */
 import type { Db, Filter } from "mongodb";
 import { getSettlementCrisesCollection } from "@/lib/db/collections";
+import { endWarAttachment } from "./attachToWar";
 import type { SettlementCrisisDoc } from "@/lib/db/types/settlementCrisis";
 
 export interface CloseCrisisResult {
@@ -78,6 +85,9 @@ export async function closeSettlementCrisis(
       orphanedConflictId: null,
     };
   }
+
+  // AFTER the claim, so only the runner that actually closed it touches the war.
+  await endWarAttachment(db, live);
 
   return { closed: true, reason: null, orphanedConflictId: live.conflictId ?? null };
 }

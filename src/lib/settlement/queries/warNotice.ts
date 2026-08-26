@@ -15,6 +15,7 @@
 import type { Db } from "mongodb";
 import { getSettlementCrisesCollection } from "@/lib/db/collections";
 import { getConflictsCollection } from "@/lib/db/collections/conflicts";
+import { isSettlementCrisisEnabled } from "../featureFlag";
 
 export interface SettlementWarNotice {
   /** The war's public number, for `/world/conflicts/<n>`. Null if it has none. */
@@ -29,6 +30,12 @@ export interface SettlementWarNotice {
 }
 
 export async function loadGermanQuestionWarNotice(db: Db): Promise<SettlementWarNotice | null> {
+  // Gated like every other read in the feature. With the flag off the turn phase
+  // does not tick, so a frozen crisis is inert — and a page still narrating a war
+  // that can never resolve the question is worse than saying nothing. Checked
+  // first so the common "feature is off" case costs one query, not two.
+  if (!(await isSettlementCrisisEnabled())) return null;
+
   const crises = await getSettlementCrisesCollection(db);
   const crisis = await crises.findOne({ status: "frozen" });
   if (!crisis?.conflictId) return null;

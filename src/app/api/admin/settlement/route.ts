@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getSettlementCrisesCollection } from "@/lib/db/collections";
+import { endWarAttachment } from "@/lib/settlement/attachToWar";
 import type { SettlementCrisisDoc } from "@/lib/db/types/settlementCrisis";
 import { getGameState } from "@/lib/gameState";
 import {
@@ -205,6 +206,13 @@ export async function POST(request: Request) {
     if (claimed.matchedCount !== 1) {
       return NextResponse.json({ error: "The crisis closed before this landed." }, { status: 409 });
     }
+
+    // A forced resolution ENDS an attachment, so the war the crisis had frozen
+    // itself onto gets its own name and hosts back — same reasoning as closing.
+    // A war the crisis DECLARED carries no attachment and is left alone. After
+    // the claim, so only the request that actually resolved it touches the war.
+    await endWarAttachment(db, live);
+
     return NextResponse.json({
       success: true,
       outcome: body.outcome,

@@ -232,6 +232,56 @@ describe("/api/admin/settlement", () => {
     });
   });
 
+  it("gives an attached war its own name back when the outcome is forced", async () => {
+    // Forcing an outcome ENDS the attachment. Leaving the marks on would keep a
+    // US-East Germany war called "The War for Germany" with the question over.
+    prime(db, "settlementCrises").findOne.mockResolvedValue(
+      liveCrisis({
+        status: "frozen",
+        conflictId: "war_us_dd_412",
+        conflictAttachment: {
+          anchor: "DD",
+          previousName: "United States vs East Germany",
+          previousHostEntities: null,
+        },
+      })
+    );
+    prime(db, "conflicts").updateOne.mockResolvedValue({ matchedCount: 1 });
+    const { POST } = await import("./route");
+    expect((await POST(post({ action: "resolve", outcome: "challenger" }))).status).toBe(200);
+
+    const [, update] = prime(db, "conflicts").updateOne.mock.calls[0];
+    expect(update.$set.name).toBe("United States vs East Germany");
+    expect(update.$unset).toEqual({ hostEntities: "" });
+  });
+
+  it("leaves a war the crisis DECLARED alone when the outcome is forced", async () => {
+    prime(db, "settlementCrises").findOne.mockResolvedValue(
+      liveCrisis({ status: "frozen", conflictId: "gq_de_400" })
+    );
+    const { POST } = await import("./route");
+    expect((await POST(post({ action: "resolve", outcome: "incumbent" }))).status).toBe(200);
+    expect(prime(db, "conflicts").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("does not touch the war when the forced resolve lost its race", async () => {
+    prime(db, "settlementCrises").findOne.mockResolvedValue(
+      liveCrisis({
+        status: "frozen",
+        conflictId: "war_us_dd_412",
+        conflictAttachment: {
+          anchor: "DD",
+          previousName: "United States vs East Germany",
+          previousHostEntities: null,
+        },
+      })
+    );
+    prime(db, "settlementCrises").updateOne.mockResolvedValue({ matchedCount: 0 });
+    const { POST } = await import("./route");
+    expect((await POST(post({ action: "resolve", outcome: "incumbent" }))).status).toBe(409);
+    expect(prime(db, "conflicts").updateOne).not.toHaveBeenCalled();
+  });
+
   it("refuses every action but open when no crisis is live", async () => {
     const { POST } = await import("./route");
     for (const body of [

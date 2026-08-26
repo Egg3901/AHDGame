@@ -27,6 +27,7 @@
 import type { Db, Filter } from "mongodb";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import type {
+  SettlementConflictAttachment,
   SettlementConflictSides,
   SettlementCrisisDoc,
   SettlementGermanAnchor,
@@ -61,7 +62,7 @@ export interface QualifyingWar {
 }
 
 /** The conflict fields the qualification test reads. Kept narrow so it stays pure. */
-type QualifyInput = Pick<ConflictDoc, "_id" | "sideA" | "sideB"> &
+type QualifyInput = Pick<ConflictDoc, "_id" | "type" | "sideA" | "sideB"> &
   Partial<Pick<ConflictDoc, "treatyEntries">>;
 
 const other = (side: WarSide): WarSide => (side === "A" ? "B" : "A");
@@ -76,8 +77,8 @@ const other = (side: WarSide): WarSide => (side === "A" ? "B" : "A");
  * qualify as having declared on East Germany the moment Washington did.
  */
 function rosterSideOf(c: QualifyInput, countryId: string): WarSide | null {
-  if ((c.sideA.countries as string[]).includes(countryId)) return "A";
-  if ((c.sideB.countries as string[]).includes(countryId)) return "B";
+  if (rosterFor(c, "A").includes(countryId)) return "A";
+  if (rosterFor(c, "B").includes(countryId)) return "B";
   return null;
 }
 
@@ -86,8 +87,16 @@ function draggedIn(c: QualifyInput, countryId: string): boolean {
   return (c.treatyEntries ?? []).some((e) => e.countryId === countryId);
 }
 
+/**
+ * One side's roster.
+ *
+ * `?? []` is not defensiveness for its own sake: this reads conflict documents
+ * this feature does not own, including seeded and admin-created ones, and a
+ * throw here is swallowed by `runPhase` as a failed phase — which would take the
+ * German Question offline every turn, silently, for one malformed war.
+ */
 function rosterFor(c: QualifyInput, side: WarSide): string[] {
-  return (side === "A" ? c.sideA.countries : c.sideB.countries) as string[];
+  return ((side === "A" ? c.sideA?.countries : c.sideB?.countries) ?? []) as string[];
 }
 
 /**
@@ -97,6 +106,16 @@ function rosterFor(c: QualifyInput, side: WarSide): string[] {
  * war" — the crisis keeps playing.
  */
 export function qualifyWar(c: QualifyInput, blocs: BlocLookup): QualifyingWar | null {
+  // DECLARED WARS ONLY. `interstate` is what `declareWar` creates, and a
+  // declaration is the whole premise of this rule.
+  //
+  // A `cold_war` proxy war would otherwise qualify the moment two rosters filled
+  // out: its sides start as FACTIONS with backers, but `joinSide` puts real
+  // countries on them when players intervene. East Germany sending troops to
+  // somebody else's proxy war on the far side of the world is not a war declared
+  // by or against a Germany, and must not settle the German Question.
+  if (c.type !== "interstate") return null;
+
   const challengerSide = rosterSideOf(c, GERMAN_QUESTION_CHALLENGER);
   const targetSide = rosterSideOf(c, GERMAN_QUESTION_TARGET);
 
@@ -146,9 +165,15 @@ export interface AttachResult {
 
 const NOT_ATTACHED: AttachResult = { attached: false, conflictId: null };
 
-/** The war's own hosts plus both Germanies, deduped, its anchor kept first. */
+/**
+ * The war's own hosts plus both Germanies, deduped, its anchor kept first.
+ *
+ * `filter(Boolean)` for the same reason `rosterFor` defaults to `[]`: on a
+ * conflict with no `hostCountry`, `hostEntitiesOf` yields `[undefined]`, and
+ * writing that back would put a junk entry into a real war's host roster.
+ */
 function widenHosts(c: ConflictDoc): WorldEntityId[] {
-  const hosts = [...hostEntitiesOf(c)];
+  const hosts = hostEntitiesOf(c).filter(Boolean);
   for (const germany of GERMANIES) {
     if (!hosts.includes(germany)) hosts.push(germany);
   }
@@ -172,6 +197,9 @@ export async function attachCrisisToLiveWar(
   const conflicts = getConflictsCollection(db);
   const candidates = await conflicts
     .find({
+      // Mirrors `qualifyWar`'s own gate; that one is authoritative, this one just
+      // keeps proxy wars out of the result set.
+      type: "interstate",
       status: { $ne: "resolved" },
       $or: [{ "sideA.countries": { $in: GERMANIES } }, { "sideB.countries": { $in: GERMANIES } }],
     } as Filter<ConflictDoc>)
@@ -201,6 +229,12 @@ export async function attachCrisisToLiveWar(
   // stored as null and restored by unsetting the field.
   const previousHostEntities =
     war.hostEntities && war.hostEntities.length > 0 ? war.hostEntities : null;
+  // NULL WHEN THE WAR ALREADY CARRIES THE SETTLEMENT'S NAME, so re-attaching can
+  // never record the sentinel as the war's "own" name. Without this, a crash
+  // between the two writes below leaves the war renamed and the crisis open, and
+  // the next attach would store "The War for Germany" as what to restore —
+  // losing the real name for good.
+  const previousName = war.name === WAR_FOR_GERMANY_NAME ? null : war.name;
 
   const crises = await getSettlementCrisesCollection(db);
   const claimed = await crises.updateOne(
@@ -212,7 +246,7 @@ export async function attachCrisisToLiveWar(
         conflictSides: qualified.sides,
         conflictAttachment: {
           anchor: qualified.anchor,
-          previousName: war.name,
+          previousName,
           previousHostEntities,
         },
         updatedAt: new Date(),
@@ -264,6 +298,18 @@ export async function detachCrisisFromWar(
   if (!war || war.status === "resolved") return NOT_DETACHED;
   if (rosterSideOf(war, attachment.anchor) !== null) return NOT_DETACHED;
 
+  // RESTORE FIRST, release second — the OPPOSITE order to `attachCrisisToLiveWar`,
+  // and deliberately so. Both orders err the same way: never leave the settlement's
+  // marks on a war that no question points at.
+  //
+  // Releasing first would make a crash in between permanent: the crisis is back on
+  // the board, the attachment stamp that says what to give back is gone, and the
+  // war keeps a name and a host roster nothing will ever undo. This way round a
+  // crash leaves the crisis still frozen with its stamp intact, and the next tick
+  // simply detaches again — the restore is idempotent, so replaying it costs
+  // nothing.
+  await restoreAttachedWar(db, war._id, attachment);
+
   const crises = await getSettlementCrisesCollection(db);
   const released = await crises.updateOne(
     { _id: crisis._id, status: "frozen" },
@@ -275,21 +321,70 @@ export async function detachCrisisFromWar(
         conflictAttachment: null,
         updatedAt: new Date(),
       },
+      // The stamp is what makes a one-off dispatch fire once, and until detach
+      // existed a crisis could never leave `frozen` — so "war" was posted at most
+      // once per crisis by construction. It can now go to war a SECOND time, and
+      // that one has to be announced too.
+      $pull: { postedWireEvents: "war" },
     }
   );
+  // Restoring a war whose crisis then refused to release is harmless: the stamp
+  // still records the same name, and the next detach writes it again.
   if (released.matchedCount !== 1) return NOT_DETACHED;
 
-  await conflicts.updateOne(
-    { _id: war._id },
-    attachment.previousHostEntities
-      ? {
-          $set: {
-            name: attachment.previousName,
-            hostEntities: attachment.previousHostEntities,
-          },
-        }
-      : { $set: { name: attachment.previousName }, $unset: { hostEntities: "" } }
-  );
-
   return { detached: true };
+}
+
+/**
+ * End an attachment: give the war back its identity, then drop the stamp.
+ *
+ * For the paths that take a crisis OUT of play without the war deciding it —
+ * closing the question, and forcing its outcome from the admin panel. Both leave
+ * the war running, and neither should leave it named "The War for Germany",
+ * carrying a Germany it was never fought over, with no question pointing at it.
+ *
+ * A no-op, returning false, for a crisis frozen by its OWN declaration: that war
+ * carries no attachment, was created under this name, and has nothing to give back.
+ *
+ * Call it AFTER whatever claim decides the crisis really is leaving play, so a
+ * request that lost its race does not strip a war another one still owns.
+ */
+export async function endWarAttachment(
+  db: Db,
+  crisis: Pick<SettlementCrisisDoc, "_id" | "conflictId" | "conflictAttachment">
+): Promise<boolean> {
+  if (!crisis.conflictAttachment || !crisis.conflictId) return false;
+
+  await restoreAttachedWar(db, crisis.conflictId, crisis.conflictAttachment);
+  // Cleared second, and only after the war is actually back: the stamp is the
+  // record of what is still owed, so dropping it first would strand the marks.
+  const crises = await getSettlementCrisesCollection(db);
+  await crises.updateOne({ _id: crisis._id }, { $set: { conflictAttachment: null } });
+  return true;
+}
+
+/**
+ * Put an attached war back the way the sweep found it. Idempotent, so replaying
+ * it after a crash costs nothing.
+ */
+export async function restoreAttachedWar(
+  db: Db,
+  conflictId: string,
+  attachment: SettlementConflictAttachment
+): Promise<void> {
+  const set: Record<string, unknown> = {};
+  const unset: Record<string, ""> = {};
+
+  // Null means the sweep found the war already carrying this name and did not
+  // rename it, so it has no name of its own to be given back.
+  if (attachment.previousName !== null) set.name = attachment.previousName;
+  if (attachment.previousHostEntities) set.hostEntities = attachment.previousHostEntities;
+  else unset.hostEntities = "";
+
+  const update: Record<string, unknown> = {};
+  if (Object.keys(set).length > 0) update.$set = set;
+  if (Object.keys(unset).length > 0) update.$unset = unset;
+  if (Object.keys(update).length === 0) return;
+
+  await getConflictsCollection(db).updateOne({ _id: conflictId }, update);
 }
