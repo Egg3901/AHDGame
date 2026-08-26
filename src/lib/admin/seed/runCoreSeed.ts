@@ -711,15 +711,13 @@ export async function runSeed(
   // Old-seed exclusion sweep (political-legislation spec §6): on the 1953
   // deploy preset the OLD US/UK/RU/DD catalogs stop seeding; the projected
   // new-generation catalogs seed instead (a missing countryScope = legacy US).
+  // The mechanical redistricting laws are exempt — see isOldCatalogSuperseded.
   const { getProjectedPoliticalLegislationTypes, isPoliticalLegislationPreset } =
     await import("./seedPoliticalLegislation");
   const politicalLegislation = isPoliticalLegislationPreset(preset);
-  const { POLITICAL_LEGISLATION_EXCLUDED_SCOPES } =
-    await import("@/lib/politicalMetrics/pipelinePreset");
+  const { isOldCatalogSuperseded } = await import("@/lib/politicalMetrics/pipelinePreset");
   const baseSeedTypes = politicalLegislation
-    ? legislationTypes.filter(
-        (lt) => !POLITICAL_LEGISLATION_EXCLUDED_SCOPES.has(lt.countryScope ?? "us")
-      )
+    ? legislationTypes.filter((lt) => !isOldCatalogSuperseded(lt))
     : legislationTypes;
   const allLegislationTypes = [
     ...baseSeedTypes.map((lt) => ({ ...lt, source: "seed" as const })),

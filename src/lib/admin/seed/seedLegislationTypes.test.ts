@@ -68,4 +68,22 @@ describe("seedLegislationTypes", () => {
     expect(committeeAssignments.drop).toHaveBeenCalled();
     expect(db.collection("stateBills").deleteMany).toHaveBeenCalledWith({});
   });
+
+  it("seeds the mechanical redistricting laws despite the old-catalog sweep (ticket #1189)", async () => {
+    const db = createMockDb() as unknown as MockDb;
+    const collection = db.collection("legislationTypes");
+
+    await seedLegislationTypes(db as never, false, vi.fn(), "2019-default");
+
+    const seededIds = (
+      collection.bulkWrite.mock.calls[0][0] as Array<{ replaceOne: { filter: { _id: string } } }>
+    ).map((op) => op.replaceOne.filter._id);
+    for (const id of [
+      "us_state_redistricting_authority",
+      "us_state_compactness",
+      "us_state_fairness",
+    ]) {
+      expect(seededIds).toContain(id);
+    }
+  });
 });

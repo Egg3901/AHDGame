@@ -10,6 +10,7 @@ import {
   seedPoliticalLegislationBaseline,
 } from "./seedPoliticalLegislation";
 import { seedLegislationTypes } from "./seedLegislationTypes";
+import { OLD_CATALOG_EXEMPT_TYPE_IDS } from "@/lib/politicalMetrics/pipelinePreset";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/budget/revenue", () => ({
@@ -61,14 +62,25 @@ describe("seedLegislationTypes — exclusion sweep + generation-aware deleter", 
     );
   }
 
+  /** No superseded old US/UK/RU/DD id may seed — the mechanical redistricting exemptions aside. */
+  function supersededPlayableOldIds(ids: string[]): string[] {
+    return ids.filter(
+      (id) =>
+        !OLD_CATALOG_EXEMPT_TYPE_IDS.has(id) &&
+        ["us_", "uk_", "su_", "dd_"].some((p) => id.startsWith(p))
+    );
+  }
+
   it("seeds projected new-generation docs instead of old US/UK/RU/DD catalogs on the 1953 preset", async () => {
     await seedLegislationTypes(db as unknown as Db, false, vi.fn(), "1953-default");
     const ids = bulkWrittenIds();
     expect(ids).toContain("uk.health.universalCare.primary");
     expect(ids).toContain("ru.tax.salesTax");
-    expect(ids.some((id) => id.startsWith("us_"))).toBe(false);
-    expect(ids.some((id) => id.startsWith("uk_"))).toBe(false);
-    expect(ids.some((id) => id.startsWith("su_"))).toBe(false);
+    // The three redistricting laws are deliberately exempt (ticket #1189):
+    for (const id of OLD_CATALOG_EXEMPT_TYPE_IDS) {
+      expect(ids).toContain(id);
+    }
+    expect(supersededPlayableOldIds(ids)).toEqual([]);
     // The prune keeps the seeded set (incl. every projected id) as valid.
     const deleteCall = (
       db.collectionMocks.legislationTypes.deleteMany as ReturnType<typeof vi.fn>
@@ -86,9 +98,10 @@ describe("seedLegislationTypes — exclusion sweep + generation-aware deleter", 
     // produced the split state where a non-1953 world ran political metrics
     // alongside the old stateMetrics-targeting legislation.
     expect(ids).toContain("uk.health.universalCare.primary");
-    expect(ids.some((id) => id.startsWith("us_"))).toBe(false);
-    expect(ids.some((id) => id.startsWith("uk_"))).toBe(false);
-    expect(ids.some((id) => id.startsWith("su_"))).toBe(false);
+    for (const id of OLD_CATALOG_EXEMPT_TYPE_IDS) {
+      expect(ids).toContain(id);
+    }
+    expect(supersededPlayableOldIds(ids)).toEqual([]);
     // Non-playable catalogs are untouched by any of this.
     expect(ids.some((id) => id.startsWith("jp_"))).toBe(true);
   });

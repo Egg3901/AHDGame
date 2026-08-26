@@ -52,6 +52,7 @@ import { migration as repairKazakhLawLevels } from "./entries/2026-08-23-repair-
 import { migration as crisesLivingEventPartialIndex } from "./entries/2026-08-25-crises-living-event-partial-index";
 import { migration as ukRegionalPartyOrgBackfill } from "./entries/2026-08-26-uk-regional-party-org-backfill";
 import { migration as easternDepositsCnSoeIron } from "./entries/2026-08-25-eastern-deposits-cn-soe-iron";
+import { migration as backfillRedistrictingLawTypes } from "./entries/2026-08-25-backfill-redistricting-law-types";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -144,6 +145,10 @@ export const MIGRATIONS: Migration[] = [
   // bloc countries (every state resources:{}), and the CN extraction SOE was
   // coal-locked in its four iron-rich states.
   easternDepositsCnSoeIron,
+  // Ticket #1189: the old-catalog exclusion sweep stripped the mechanical
+  // redistricting laws from every world, leaving no bill to change redistricting
+  // authority. Insert-missing only, so admin law-type edits are preserved.
+  backfillRedistrictingLawTypes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.

@@ -36,15 +36,11 @@ export async function seedStatePolicies(
   // Old-seed exclusion sweep (political-legislation spec §6): on the 1953
   // deploy preset the OLD US/UK/RU/DD catalogs are unseeded, so their
   // basePolicies records must not seed either (they would write conflicting
-  // statePolicies alongside the §7 new-generation baseline).
-  const { POLITICAL_LEGISLATION_EXCLUDED_SCOPES: excludedScopes } =
-    await import("@/lib/politicalMetrics/pipelinePreset");
+  // statePolicies alongside the §7 new-generation baseline). The mechanical
+  // redistricting laws are exempt — see isOldCatalogSuperseded.
+  const { isOldCatalogSuperseded } = await import("@/lib/politicalMetrics/pipelinePreset");
   const excludedOldIds = isPoliticalLegislationPreset(preset)
-    ? new Set(
-        legislationTypes
-          .filter((lt) => excludedScopes.has(lt.countryScope ?? "us"))
-          .map((lt) => lt._id)
-      )
+    ? new Set(legislationTypes.filter((lt) => isOldCatalogSuperseded(lt)).map((lt) => lt._id))
     : new Set<string>();
 
   const basePolicies = (await getBasePolicies(preset)).filter(

@@ -34,3 +34,34 @@ export function isPoliticalPipelinePreset(_preset: string | undefined): boolean 
 export const POLITICAL_LEGISLATION_EXCLUDED_SCOPES: ReadonlySet<string> = new Set(
   POLITICAL_METRIC_COUNTRY_IDS.map((id) => id.toLowerCase())
 );
+
+/**
+ * Old-catalog legislation type ids that are EXEMPT from the exclusion above.
+ *
+ * The three US state redistricting laws are mechanical inputs to the live
+ * districted-House engine (`src/lib/redistricting/caps.ts` resolves draw /
+ * auto-neutralize caps from them; census renormalization keys off the authority
+ * index), they have no new-generation replacement, and the era catalogs already
+ * register them "always" available. Excluding them from seeding made the
+ * authority change unproposable on every world (ticket #1189) and made reseed
+ * pruning delete any enacted rows.
+ */
+export const OLD_CATALOG_EXEMPT_TYPE_IDS: ReadonlySet<string> = new Set([
+  "us_state_redistricting_authority",
+  "us_state_compactness",
+  "us_state_fairness",
+]);
+
+/**
+ * Whether an old-catalog legislation type is superseded by the new-generation
+ * law book and must not seed. True for every type scoped to an excluded
+ * country EXCEPT the mechanical exemptions above. The single predicate all
+ * old-catalog exclusion sites share, so the exempt ids cannot drift out of one
+ * seeder while another keeps excluding them.
+ */
+export function isOldCatalogSuperseded(t: { _id: string; countryScope?: string }): boolean {
+  return (
+    POLITICAL_LEGISLATION_EXCLUDED_SCOPES.has(t.countryScope ?? "us") &&
+    !OLD_CATALOG_EXEMPT_TYPE_IDS.has(t._id)
+  );
+}

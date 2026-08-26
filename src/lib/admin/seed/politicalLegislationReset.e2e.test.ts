@@ -20,6 +20,10 @@ import { budgetKeyForLaw } from "@/lib/politicalLegislation/budgetKeys";
 import { LAW_COUNTRY_IDS } from "@/lib/politicalLegislation/types";
 import { seedLegislationTypes } from "./seedLegislationTypes";
 import { seedPoliticalLegislationBaseline } from "./seedPoliticalLegislation";
+import {
+  OLD_CATALOG_EXEMPT_TYPE_IDS,
+  isOldCatalogSuperseded,
+} from "@/lib/politicalMetrics/pipelinePreset";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/budget/revenue", () => ({
@@ -123,12 +127,12 @@ describe("1953 reset — end-to-end political-legislation verification", () => {
     // MockDb has no collection.drop for the reset-only wipe of unrelated colls.
     await seedLegislationTypes(db as unknown as Db, false, vi.fn(), "1953-default");
     await seedPoliticalLegislationBaseline(db as unknown as Db, vi.fn(), 1953);
-    // The statePolicies stale-cleanup mirrors seedStatePolicies' deleter set:
+    // The statePolicies stale-cleanup mirrors seedStatePolicies' deleter set
+    // (shared superseded predicate, so the mechanical redistricting exemptions
+    // stay in lockstep with the real seeder):
     const { getAllNewGenerationLawIds } = await import("@/lib/politicalLegislation/catalog");
     const excluded = new Set(
-      oldReferenceTypes
-        .filter((lt) => ["us", "uk", "ru", "dd"].includes(lt.countryScope ?? "us"))
-        .map((lt) => lt._id)
+      oldReferenceTypes.filter((lt) => isOldCatalogSuperseded(lt)).map((lt) => lt._id)
     );
     const valid = [
       ...oldReferenceTypes.filter((lt) => !excluded.has(lt._id)).map((lt) => lt._id),
@@ -141,7 +145,15 @@ describe("1953 reset — end-to-end political-legislation verification", () => {
     await runResetPass();
 
     const survivingIds = [...typeStore.keys()];
-    expect(survivingIds.some((id) => id.startsWith("us_"))).toBe(false);
+    // No SUPERSEDED old-generation US/UK/RU/DD doc survives — except the
+    // mechanical redistricting laws, which are deliberately exempt (they feed
+    // the districted-House engine and have no new-generation replacement).
+    expect(
+      survivingIds.some((id) => id.startsWith("us_") && !OLD_CATALOG_EXEMPT_TYPE_IDS.has(id))
+    ).toBe(false);
+    for (const id of OLD_CATALOG_EXEMPT_TYPE_IDS) {
+      expect(typeStore.has(id), `exempt ${id}`).toBe(true);
+    }
     expect(survivingIds.some((id) => id.startsWith("uk_"))).toBe(false);
     expect(survivingIds.some((id) => id.startsWith("su_"))).toBe(false);
     expect(survivingIds.some((id) => id.startsWith("dd_"))).toBe(false);
