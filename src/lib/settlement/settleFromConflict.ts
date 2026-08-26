@@ -14,7 +14,11 @@
  */
 import type { Db } from "mongodb";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
-import type { SettlementCrisisDoc, SettlementOutcome } from "@/lib/db/types/settlementCrisis";
+import type {
+  SettlementConflictSides,
+  SettlementCrisisDoc,
+  SettlementOutcome,
+} from "@/lib/db/types/settlementCrisis";
 import { getConflictsCollection } from "@/lib/db/collections/conflicts";
 import { getSettlementCrisesCollection } from "@/lib/db/collections";
 
@@ -26,11 +30,28 @@ export interface SettleFromConflictResult {
 const NOT_SETTLED: SettleFromConflictResult = { settled: false, outcome: null };
 
 /**
- * `sideA` is NATO and `sideB` is the Warsaw Pact — set that way by
- * `declareSettlementWar` and asserted here rather than assumed, because reading
- * the winner off the wrong side would hand Germany to the loser.
+ * Which settlement the winning roster carries.
+ *
+ * The STAMP first. `conflictSides` is written when the crisis freezes, by both
+ * roads into a war, and it is the only thing that works for an attached one: a
+ * player-declared war sets no `backer` on either side, so the fallback below
+ * would read two undefineds and leave the crisis frozen for ever.
+ *
+ * The fallback is for crises frozen before the stamp existed. There `sideA` is
+ * NATO and `sideB` is the Warsaw Pact — set that way by `declareSettlementWar`
+ * and asserted rather than assumed, because reading the winner off the wrong
+ * side would hand Germany to the loser.
  */
-function outcomeForWinner(conflict: ConflictDoc, winner: "A" | "B"): SettlementOutcome | null {
+function outcomeForWinner(
+  conflict: ConflictDoc,
+  winner: "A" | "B",
+  sides: SettlementConflictSides | null | undefined
+): SettlementOutcome | null {
+  if (sides) {
+    if (winner === sides.challenger) return "challenger";
+    if (winner === sides.incumbent) return "incumbent";
+    return null;
+  }
   const backer = winner === "A" ? conflict.sideA.backer : conflict.sideB.backer;
   if (backer === "west") return "incumbent";
   if (backer === "east") return "challenger";
@@ -52,7 +73,7 @@ export async function settleFrozenCrisisFromConflict(
   const winner = conflict.outcome?.winner;
   if (winner !== "A" && winner !== "B") return NOT_SETTLED;
 
-  const outcome = outcomeForWinner(conflict, winner);
+  const outcome = outcomeForWinner(conflict, winner, crisis.conflictSides);
   // A conflict whose winning side carries no backer cannot decide a bloc
   // question. Leave it frozen and visible rather than guessing.
   if (!outcome) return NOT_SETTLED;
