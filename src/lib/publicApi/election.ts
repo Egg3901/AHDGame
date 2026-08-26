@@ -7,8 +7,133 @@ import type {
   PoliticalParty,
   PrimarySnapshot,
 } from "@/lib/db/types";
+import { computeElectionPhase } from "@/lib/elections/phases";
+import { getGameTime, type GameTimeContext } from "@/lib/time/gameTime";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://ahousedividedgame.com";
+
+/**
+ * The phase a race is actually in. `Election.status` cannot answer this — it is
+ * "active" for the whole run of a race, primary and general alike — so the phase
+ * is derived from the turn/time bounds via the shared `computeElectionPhase`.
+ */
+export type PublicElectionPhase = "upcoming" | "primary" | "general" | "ended" | "cancelled";
+
+type ElectionPhaseFields = Pick<
+  Election,
+  "status" | "startTime" | "primaryEndTime" | "endTime" | "startTurn" | "primaryEndTurn" | "endTurn"
+>;
+
+/**
+ * Candidate rows are withdrawn, never deleted, and are deliberately kept as
+ * history. Entering a race withdraws any prior row for that character and
+ * inserts a fresh one, and the primary resolver withdraws the losers, so a race
+ * accumulates one dead row per departure.
+ *
+ * Publishing them in one flat list reads as though they are all still running:
+ * a character who re-entered appears once per attempt, and primary losers never
+ * leave the ballot. So the response splits them — `candidates` is who is still
+ * standing, `formerCandidates` is every departure, kept with its `withdrawnAt`.
+ * The same split applies to a finished race, whose general-election losers are
+ * still `active` and so remain in `candidates`.
+ *
+ * `!== "withdrawn"` rather than `=== "active"` so a legacy row with no status is
+ * treated as standing rather than silently reclassified as history.
+ */
+function isStandingCandidate(candidate: Pick<ElectionCandidate, "status">): boolean {
+  return candidate.status !== "withdrawn";
+}
+
+/**
+ * Whether the result is authoritative. The derived phase says a race is over the
+ * moment its end turn passes, but the resolver runs on a later turn and the
+ * totals can still move until it does. Only `status` records that it has run, so
+ * `finalized` must come from status rather than from the phase — otherwise a
+ * race reports final numbers that are still being counted.
+ */
+function hasResolvedResult(status: Election["status"]): boolean {
+  return status === "completed" || status === "resolved";
+}
+
+function toIso(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function toTime(value: Date | string | null | undefined): number {
+  if (!value) return 0;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+/** Most recent departure first, so the newest history reads at the top. */
+function byMostRecentDeparture(
+  a: Pick<ElectionCandidate, "withdrawnAt">,
+  b: Pick<ElectionCandidate, "withdrawnAt">
+): number {
+  return toTime(b.withdrawnAt) - toTime(a.withdrawnAt);
+}
+
+/**
+ * Resolve a race's phase plus the deadline of that phase. `startTime` alone is
+ * not actionable for a consumer — it only says when the race spawned — so the
+ * boundary that is actually approaching is surfaced as `phaseEndTurn` /
+ * `phaseEndTime` (primary close during a primary, poll close during a general,
+ * race open while upcoming).
+ */
+function resolveElectionPhase(election: ElectionPhaseFields, gameTime: GameTimeContext) {
+  // A cancelled race never runs, so it sits in none of the running phases and
+  // has no deadline left to report. Its turn bounds are still published on the
+  // row; they just no longer describe anything that will happen.
+  if (election.status === "cancelled") {
+    return {
+      phase: "cancelled" as const,
+      flags: { isUpcoming: false, inPrimary: false, inGeneral: false, isEnded: false },
+      phaseEndTurn: null,
+      phaseEndTime: null,
+    };
+  }
+
+  const flags = computeElectionPhase(
+    election.startTime ?? null,
+    election.primaryEndTime ?? null,
+    election.endTime ?? null,
+    election.status,
+    gameTime,
+    {
+      startTurn: election.startTurn,
+      primaryEndTurn: election.primaryEndTurn,
+      endTurn: election.endTurn,
+    }
+  );
+
+  let phase: PublicElectionPhase;
+  if (flags.isEnded) phase = "ended";
+  else if (flags.isUpcoming) phase = "upcoming";
+  else if (flags.inPrimary) phase = "primary";
+  else phase = "general";
+
+  let endTurn: number | null | undefined = null;
+  let endTime: Date | null | undefined = null;
+  if (phase === "upcoming") {
+    endTurn = election.startTurn;
+    endTime = election.startTime;
+  } else if (phase === "primary") {
+    endTurn = election.primaryEndTurn;
+    endTime = election.primaryEndTime;
+  } else if (phase === "general") {
+    endTurn = election.endTurn;
+    endTime = election.endTime;
+  }
+
+  return {
+    phase,
+    flags,
+    phaseEndTurn: endTurn ?? null,
+    phaseEndTime: toIso(endTime),
+  };
+}
 
 export async function queryElectionList(db: Db, params: { country: string; state?: string }) {
   const { country, state } = params;
@@ -61,23 +186,33 @@ export async function queryElectionList(db: Db, params: { country: string; state
     talliesByElection.set(t.electionId.toString(), t);
   }
 
-  const result = elections.map((e) => {
-    const candidates = (candidatesByElection.get(e._id.toString()) ?? []).map((c) => ({
-      characterId: c.characterId?.toString() ?? null,
-      characterName: c.characterName,
-      party: c.party,
-      partyColor: partyColorMap.get(c.party) ?? null,
-      isNPP: c.isNPP ?? false,
-    }));
+  const gameTime = await getGameTime();
 
-    const status = e.status as string;
-    const isEnded = status === "ended" || status === "completed" || status === "resolved";
+  const toListCandidate = (c: ElectionCandidate) => ({
+    characterId: c.characterId?.toString() ?? null,
+    characterName: c.characterName,
+    party: c.party,
+    partyColor: partyColorMap.get(c.party) ?? null,
+    isNPP: c.isNPP ?? false,
+    status: c.status ?? "active",
+  });
+
+  const result = elections.map((e) => {
+    const rows = candidatesByElection.get(e._id.toString()) ?? [];
+    const candidates = rows.filter(isStandingCandidate).map(toListCandidate);
+    const formerCandidates = rows
+      .filter((c) => !isStandingCandidate(c))
+      .sort(byMostRecentDeparture)
+      .map((c) => ({ ...toListCandidate(c), withdrawnAt: toIso(c.withdrawnAt) }));
+
+    const { phase, flags, phaseEndTurn, phaseEndTime } = resolveElectionPhase(e, gameTime);
+    const isEnded = flags.isEnded;
     const tally = talliesByElection.get(e._id.toString());
     const finalVotes =
       isEnded && tally
         ? {
             totalVotes: Object.values(tally.totalVotes ?? {}).reduce((a, b) => a + b, 0),
-            finalized: true,
+            finalized: hasResolvedResult(e.status),
           }
         : undefined;
 
@@ -88,9 +223,17 @@ export async function queryElectionList(db: Db, params: { country: string; state
       state: e.state,
       stateName: ((e as Record<string, unknown>).stateName as string) ?? e.state,
       status: e.status,
-      startTime: e.startTime?.toISOString() ?? null,
-      endTime: e.endTime?.toISOString() ?? null,
+      phase,
+      startTime: toIso(e.startTime),
+      primaryEndTime: toIso(e.primaryEndTime),
+      endTime: toIso(e.endTime),
+      startTurn: e.startTurn ?? null,
+      primaryEndTurn: e.primaryEndTurn ?? null,
+      endTurn: e.endTurn ?? null,
+      phaseEndTime,
+      phaseEndTurn,
       candidates,
+      formerCandidates,
       ...(finalVotes ? { finalVotes } : {}),
     };
   });
@@ -111,7 +254,7 @@ export async function queryElectionDetail(db: Db, electionId: string) {
 
   const electionOid = election._id;
 
-  const [candidates, tally, snapshots] = await Promise.all([
+  const [allCandidateRows, tally, snapshots] = await Promise.all([
     db
       .collection<ElectionCandidate>("electionCandidates")
       .find({ electionId: electionOid })
@@ -125,6 +268,11 @@ export async function queryElectionDetail(db: Db, electionId: string) {
       .toArray(),
   ]);
 
+  const candidates = allCandidateRows.filter(isStandingCandidate);
+  const departedRows = allCandidateRows
+    .filter((c) => !isStandingCandidate(c))
+    .sort(byMostRecentDeparture);
+
   // Resolve prior-cycle election to find incumbent
   const priorElection =
     election.cycle && election.cycle > 1
@@ -137,8 +285,11 @@ export async function queryElectionDetail(db: Db, electionId: string) {
 
   const incumbentCandidateId = (priorElection as Record<string, unknown> | null)?.winnerId as
     string | undefined;
+  // Searched across every row, standing or not: the incumbent holds the seat
+  // whether or not they are still on the ballot, so losing a primary or
+  // withdrawing must not erase who the sitting officeholder is.
   const incumbentCandidate = incumbentCandidateId
-    ? candidates.find((c) => c.characterId?.toString() === incumbentCandidateId)
+    ? allCandidateRows.find((c) => c.characterId?.toString() === incumbentCandidateId)
     : null;
 
   const incumbent = incumbentCandidate
@@ -146,7 +297,11 @@ export async function queryElectionDetail(db: Db, electionId: string) {
     : null;
 
   // Look up party info for candidates
-  const partySeqIds = [...new Set(candidates.map((c) => c.party))].map(Number).filter(Boolean);
+  // Departed rows are resolved too, so a former candidacy still reads with its
+  // party name and colour rather than a bare sequential id.
+  const partySeqIds = [...new Set(allCandidateRows.map((c) => c.party))]
+    .map(Number)
+    .filter(Boolean);
   const parties =
     partySeqIds.length > 0
       ? await db
@@ -167,11 +322,9 @@ export async function queryElectionDetail(db: Db, electionId: string) {
       .map((e) => ({ name: e.characterName, sharePct: e.sharePct })),
   }));
 
-  const electionStatus = election.status as string;
-  const inPrimary = electionStatus === "primary";
-  const inGeneral = electionStatus === "general" || electionStatus === "active";
-  const isEnded =
-    electionStatus === "ended" || electionStatus === "completed" || electionStatus === "resolved";
+  const gameTime = await getGameTime();
+  const { phase, flags, phaseEndTurn, phaseEndTime } = resolveElectionPhase(election, gameTime);
+  const { inPrimary, inGeneral, isUpcoming, isEnded } = flags;
 
   const isSingleSeat = !election.totalSeats || election.totalSeats === 1;
 
@@ -186,7 +339,7 @@ export async function queryElectionDetail(db: Db, electionId: string) {
         }
       : null;
 
-  const mappedCandidates = candidates.map((c) => {
+  const toDetailCandidate = (c: ElectionCandidate) => {
     const party = partyMap.get(c.party);
     return {
       id: c._id.toString(),
@@ -197,6 +350,7 @@ export async function queryElectionDetail(db: Db, electionId: string) {
       partyId: party?._id?.toString() ?? null,
       partyColor: party?.color ?? null,
       isNPP: c.isNPP ?? false,
+      status: c.status ?? "active",
       favorability: null,
       politicalInfluence: null,
       economicPosition: null,
@@ -209,7 +363,13 @@ export async function queryElectionDetail(db: Db, electionId: string) {
       campaignFunds: null,
       profileUrl: c.characterId ? `${BASE_URL}/character/${c.characterId}` : null,
     };
-  });
+  };
+
+  const mappedCandidates = candidates.map(toDetailCandidate);
+  const mappedFormerCandidates = departedRows.map((c) => ({
+    ...toDetailCandidate(c),
+    withdrawnAt: toIso(c.withdrawnAt),
+  }));
 
   return {
     election: {
@@ -222,22 +382,27 @@ export async function queryElectionDetail(db: Db, electionId: string) {
       countryId: ((election as unknown as Record<string, unknown>).countryId as string) ?? null,
       cycle: election.cycle,
       status: election.status,
+      phase,
       totalSeats: election.totalSeats ?? 1,
-      startTime: election.startTime?.toISOString() ?? null,
-      endTime: election.endTime?.toISOString() ?? null,
-      primaryEndTime: (election as unknown as Record<string, unknown>).primaryEndTime
-        ? ((election as unknown as Record<string, unknown>).primaryEndTime as Date).toISOString()
-        : null,
+      startTime: toIso(election.startTime),
+      endTime: toIso(election.endTime),
+      primaryEndTime: toIso(election.primaryEndTime),
+      startTurn: election.startTurn ?? null,
+      primaryEndTurn: election.primaryEndTurn ?? null,
+      endTurn: election.endTurn ?? null,
+      phaseEndTime,
+      phaseEndTurn,
       url: `${BASE_URL}/elections/${election._id}`,
     },
-    phase: { inPrimary, inGeneral, isUpcoming: election.status === "upcoming", isEnded },
+    phase: { current: phase, inPrimary, inGeneral, isUpcoming, isEnded },
     incumbent,
     candidates: mappedCandidates,
+    formerCandidates: mappedFormerCandidates,
     primarySnapshots,
     votes: tally
       ? {
           totalVotes: Object.values(tally.totalVotes ?? {}).reduce((a, b) => a + b, 0),
-          finalized: isEnded,
+          finalized: hasResolvedResult(election.status),
           latestSnapshot: latestTallySnapshot,
           ...(!isSingleSeat ? { seatsEstimate: tally.seatsEstimate ?? null } : {}),
         }
