@@ -294,51 +294,52 @@ describe("marketing settlement", () => {
       .filter((op) => op.updateOne.filter._id.equals(corp._id))
       .reduce((sum, op) => sum + (op.updateOne.update.$inc?.liquidCapital ?? 0), 0);
 
-  it("conserves the delivered settlement across every corp op", () => {
-    const buyer = makeCorp({ liquidCapital: 1_000, marketingBudget: 2_400 });
-    const sellerOne = makeCorp({
-      liquidCapital: 1_000,
-      // 432.5 per turn offsets the scenario's non-marketing corp income so an
-      // all-op conservation assertion remains sensitive to an unmatched leg.
-      logisticsBudget: 10_380,
-    });
-    const sellerTwo = makeCorp({
+  // #889 double-pay fix. A seller books the advertising it sells as ordinary
+  // sector revenue, so income/tax keep it; crediting the settlement receipt ON
+  // TOP would pay it twice in cash. The settlement now nets each seller's
+  // delivered value out of its cash leg (mirroring the buyer's cost add-back),
+  // so a FUNDED seller's settlement receipt exactly cancels the netted delivered
+  // value and its settlement cash contribution is zero. World-money conservation
+  // is the prod invariant delivered-value == booked-ad-revenue (the netted value
+  // re-enters as the seller's own sector revenue), which lives in the
+  // delivered-value module + integration path, not this decoupled fixture.
+  // Here we pin the mechanical contract, across two currencies.
+  it("nets each funded seller's settlement receipt out of its cash leg", () => {
+    // Buyer carries only a marketing budget (no sector), so its delta is exactly
+    // the marketing it pays, uncluttered by sector income.
+    const buyer = makeCorp({ liquidCapital: 1_000_000, marketingBudget: 2_400 });
+    const sellerUsd = makeCorp({ liquidCapital: 1_000_000 });
+    const sellerGbp = makeCorp({
       countryId: "UK",
       headquartersState: "UK-ENG",
       liquidCurrencyCode: "GBP",
-      liquidCapital: 2_000,
+      liquidCapital: 2_000_000,
     });
-    const buyerSector = makeSector(buyer._id, { revenue: 24_000, profitMargin: 50 });
-    const lookups = baseLookups([buyer, sellerOne, sellerTwo], [buyerSector]);
+    const lookups = baseLookups([buyer, sellerUsd, sellerGbp], []);
     lookups.exchangeRatesByCurrency = new Map<CurrencyCode, number>([
       ["USD", 1],
       ["GBP", 2],
     ]);
-    lookups.domesticCorpTaxRateByCountry = new Map([["US", 10]]);
-    lookups.domesticStateCorpTaxRateByState = new Map([["US-CA", 5]]);
     const market: MarketContext = {
       ...MARKET_DISABLED,
       clearingEnabled: true,
+      // Budget is 2_400/day = 100/turn, so a 50-unit delivered book is funded.
       advertisingSellerDeliveredValueAnchorByCorpId: new Map([
-        [sellerOne._id.toString(), 30],
-        [sellerTwo._id.toString(), 20],
+        [sellerUsd._id.toString(), 30],
+        [sellerGbp._id.toString(), 20],
       ]),
     };
 
-    const result = processSectors(lookups, 1, new Date(), false, 1953, undefined, market);
-    const actualOps = result.corpOps as CorpOp[];
-    const allCorpOpsDeltaAnchor = [buyer, sellerOne, sellerTwo].reduce((sum, corp) => {
-      const localDelta = liquidDeltaFor(actualOps, corp);
-      const fx = corp.liquidCurrencyCode === "GBP" ? 2 : 1;
-      return sum + localDelta / fx;
-    }, 0);
+    const ops = processSectors(lookups, 1, new Date(), false, 1953, undefined, market)
+      .corpOps as CorpOp[];
 
-    expect(
-      result.corpSnapshots.find((s) => s.corpId.equals(buyer._id))?.federalTaxPaid
-    ).toBeGreaterThan(0);
-    expect(liquidDeltaFor(actualOps, sellerOne)).toBe(-402.5);
-    expect(liquidDeltaFor(actualOps, sellerTwo)).toBe(40);
-    expect(allCorpOpsDeltaAnchor).toBeCloseTo(0, 10);
+    // Buyer pays only for the 50 units delivered (30 + 20 anchor), once.
+    expect(liquidDeltaFor(ops, buyer)).toBe(-50);
+    // Each funded seller: receipt (== delivered) is netted out, so the
+    // settlement contributes zero net cash — no double-pay. GBP seller nets in
+    // its own currency (20 anchor received, 20 anchor netted).
+    expect(liquidDeltaFor(ops, sellerUsd)).toBe(0);
+    expect(liquidDeltaFor(ops, sellerGbp)).toBe(0);
   });
 
   it("does not charge a buyer for unfilled advertising demand", () => {
@@ -361,11 +362,15 @@ describe("marketing settlement", () => {
     );
     const corpOps = result.corpOps as CorpOp[];
 
+    // Buyer is charged only for the 10 units delivered, not its full budget.
     expect(liquidDeltaFor(corpOps, buyer)).toBe(-10);
-    expect(liquidDeltaFor(corpOps, seller)).toBe(10);
+    // Seller's receipt (10) is netted against the delivered value it already
+    // booked as revenue, so the settlement nets to zero cash on a bare seller
+    // with no other income in this fixture.
+    expect(liquidDeltaFor(corpOps, seller)).toBe(0);
     expect(result.corpSnapshots.find((s) => s.corpId.equals(buyer._id))?.liquidCapital).toBe(990);
     expect(result.corpSnapshots.find((s) => s.corpId.equals(seller._id))?.liquidCapital).toBe(
-      1_010
+      1_000
     );
   });
 
