@@ -42,15 +42,32 @@ import {
   SETTLEMENT_SEATS,
 } from "@/lib/constants/settlementCrisis";
 import { recomputePosition } from "./position";
+import { describeQualifyingWar, warFreezeNotice } from "./attachToWar";
 
 export interface OpenCrisisResult {
   opened: boolean;
   /** Why it did not open. Null on success — shown to the admin who pressed it. */
   reason: string | null;
   crisisId: string | null;
+  /**
+   * Something the operator should know about a question that DID open.
+   *
+   * Distinct from `reason`, which explains a refusal. The one case today is a
+   * war already being fought over a Germany: the question opens normally and
+   * then freezes onto that war on the very next tick, which is the rule working
+   * as designed and still not what somebody pressing "Open" expects to see.
+   * Warned rather than refused, because freezing onto a war already in progress
+   * may be exactly what the operator wants.
+   */
+  warning: string | null;
 }
 
-const skip = (reason: string): OpenCrisisResult => ({ opened: false, reason, crisisId: null });
+const skip = (reason: string): OpenCrisisResult => ({
+  opened: false,
+  reason,
+  crisisId: null,
+  warning: null,
+});
 
 /** The authored opening board, before anyone has played or Bonn has drifted. */
 export function buildGermanQuestion(turn: number): Omit<SettlementCrisisDoc, "_id"> {
@@ -101,6 +118,22 @@ export function buildGermanQuestion(turn: number): Omit<SettlementCrisisDoc, "_i
   };
 }
 
+/**
+ * The warning text for a question opening into a war already being fought.
+ *
+ * Never throws the open: a warning is a courtesy, and a failure to compose one
+ * must not turn a successful open into a 500. Returns null when the board is
+ * clear, which is the ordinary case.
+ */
+async function warnAboutLiveWar(db: Db): Promise<string | null> {
+  try {
+    const pending = await describeQualifyingWar(db);
+    return pending ? warFreezeNotice(pending, "after") : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function openSettlementCrisis(
   db: Db,
   params: { turn: number }
@@ -134,7 +167,14 @@ export async function openSettlementCrisis(
 
   try {
     const inserted = await crises.insertOne(buildGermanQuestion(turn) as SettlementCrisisDoc);
-    return { opened: true, reason: null, crisisId: inserted.insertedId.toString() };
+    return {
+      opened: true,
+      reason: null,
+      crisisId: inserted.insertedId.toString(),
+      // Asked AFTER the insert, so a question that failed to open never carries
+      // a warning about what would have happened to it.
+      warning: await warnAboutLiveWar(db),
+    };
   } catch (error) {
     // Duplicate key on the partial unique index: another admin opened it between
     // the read and the write.
