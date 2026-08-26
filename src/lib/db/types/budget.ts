@@ -73,10 +73,21 @@ export interface FederalRevenue {
   /**
    * Political-legislation v2 law revenue (spec §5.1): Σ annualRevenueV2 over
    * unrepealed national enacted laws, RECOMPUTED FROM SCRATCH on every sync
-   * (idempotency rule — never folded into the carried-forward `other`). Sits
-   * INSIDE the era revenue cap (ruling #14).
+   * (idempotency rule: never folded into the carried-forward `other`). It is
+   * a legislated fiscal extraction, so it is tax-like and sits inside the era
+   * revenue cap (ruling #14).
    */
   lawRevenue?: number;
+  /**
+   * Gross receipts subject to the era Laffer cap: ordinary taxes plus
+   * tax-like enacted-law revenue, before compression. Exposed so fiscal UI can
+   * explain a cap without implying public-enterprise income was lost.
+   */
+  taxLikeRevenue?: number;
+  /** Tax-like receipts after the era Laffer cap; equals taxLikeRevenue when off/below knee. */
+  taxLikeRevenueAfterCap?: number;
+  /** Revenue removed by the era cap; zero when the cap is inactive or below its knee. */
+  revenueCapReduction?: number;
   other: number;
   total: number;
 }

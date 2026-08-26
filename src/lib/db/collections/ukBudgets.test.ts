@@ -2,36 +2,40 @@ import { describe, it, expect, vi } from "vitest";
 import {
   upsertBudgetDraft,
   tableBudget,
-  resolveBudgetVote,
   ensureBudgetDraftForFiscalYear,
   applyBudgetOutcome,
   createBudgetBill,
+  tableBudgetWithBill,
 } from "./ukBudgets";
 import { ObjectId } from "mongodb";
+import type { Db } from "mongodb";
 import type { UKBudget } from "../types/ukBudget";
 
 /** In-memory ukBudgets + ukGovernment (for the confidence hit) fake. */
-function fakeDb(seed?: Partial<UKBudget>) {
+function fakeDb(seed?: Partial<UKBudget>, confidenceGauge = 100) {
   const budgets: UKBudget[] = [];
   if (seed) budgets.push({ fiscalYear: 1953, status: "draft", ...seed } as UKBudget);
-  const gov: { confidenceGauge?: number } = { confidenceGauge: 100 };
+  const gov: { confidenceGauge?: number } = { confidenceGauge };
 
   const budgetsCol = {
     async findOne(f: { fiscalYear: number }) {
       return budgets.find((b) => b.fiscalYear === f.fiscalYear) ?? null;
     },
     async updateOne(
-      f: { fiscalYear: number },
+      f: { fiscalYear: number; status?: UKBudget["status"] },
       u: { $set?: Partial<UKBudget>; $setOnInsert?: Partial<UKBudget> },
       opts?: { upsert?: boolean }
     ) {
-      let b = budgets.find((x) => x.fiscalYear === f.fiscalYear);
+      let b = budgets.find(
+        (x) => x.fiscalYear === f.fiscalYear && (!f.status || x.status === f.status)
+      );
       if (!b && opts?.upsert) {
         b = { fiscalYear: f.fiscalYear } as UKBudget;
         Object.assign(b, u.$setOnInsert);
         budgets.push(b);
       }
       if (b) Object.assign(b, u.$set);
+      return { matchedCount: b ? 1 : 0 };
     },
     async insertOne(doc: UKBudget) {
       budgets.push(doc);
@@ -46,12 +50,12 @@ function fakeDb(seed?: Partial<UKBudget>) {
     },
   };
   const collection = vi.fn((name: string) => (name === "ukBudgets" ? budgetsCol : govCol));
-  return { db: { collection } as never, budgets, gov };
+  return { db: { collection } as unknown as Db, budgets, gov };
 }
 
 const valid = {
   taxRates: { "uk.tax.incomeTax": 25 },
-  spendingAllocations: { healthcare: 50, defense: 50 },
+  programLevels: { "uk.defense.armedForces.primary": 1 },
 };
 
 describe("upsertBudgetDraft", () => {
@@ -65,6 +69,7 @@ describe("upsertBudgetDraft", () => {
     });
     expect(r.ok).toBe(true);
     expect(budgets[0].status).toBe("draft");
+    expect(budgets[0].programLevels).toEqual(valid.programLevels);
   });
   it("refuses to edit a tabled budget", async () => {
     const { db } = fakeDb({ status: "tabled", ...valid } as Partial<UKBudget>);
@@ -104,50 +109,9 @@ describe("tableBudget", () => {
     const { db } = fakeDb({
       status: "draft",
       taxRates: {},
-      spendingAllocations: { healthcare: 40 }, // doesn't sum to 100
+      programLevels: { "uk.defense.armedForces.primary": 9 },
     } as Partial<UKBudget>);
     const r = await tableBudget(db, 1953, new Date());
-    expect(r.ok).toBe(false);
-  });
-});
-
-describe("resolveBudgetVote", () => {
-  it("passes when for > against, no confidence hit", async () => {
-    const { db, budgets, gov } = fakeDb({ status: "tabled", ...valid } as Partial<UKBudget>);
-    const r = await resolveBudgetVote(db, {
-      fiscalYear: 1953,
-      votesFor: 330,
-      votesAgainst: 300,
-      now: new Date(),
-    });
-    expect(r.passed).toBe(true);
-    expect(r.confidenceHit).toBe(false);
-    expect(budgets[0].status).toBe("passed");
-    expect(gov.confidenceGauge).toBe(100); // untouched
-  });
-
-  it("defeat sets status and fires the budgetDefeat confidence hit", async () => {
-    const { db, budgets, gov } = fakeDb({ status: "tabled", ...valid } as Partial<UKBudget>);
-    const r = await resolveBudgetVote(db, {
-      fiscalYear: 1953,
-      votesFor: 300,
-      votesAgainst: 330,
-      now: new Date(),
-    });
-    expect(r.passed).toBe(false);
-    expect(r.confidenceHit).toBe(true);
-    expect(budgets[0].status).toBe("defeated");
-    expect(gov.confidenceGauge).toBeLessThan(100); // gauge dented
-  });
-
-  it("refuses to resolve a budget that isn't tabled", async () => {
-    const { db } = fakeDb({ status: "draft", ...valid } as Partial<UKBudget>);
-    const r = await resolveBudgetVote(db, {
-      fiscalYear: 1953,
-      votesFor: 1,
-      votesAgainst: 0,
-      now: new Date(),
-    });
     expect(r.ok).toBe(false);
   });
 });
@@ -171,6 +135,14 @@ describe("createBudgetBill", () => {
       chancellorParty: null,
       currentTurn: 100,
       now: new Date("2026-01-01"),
+      provisions: [
+        {
+          legislationTypeId: "uk.tax.incomeTax",
+          policyOptionId: "rate:50",
+          proposedRate: 50,
+          effectDirection: 1,
+        },
+      ],
     });
     expect(id).toBe(insertedId);
     expect(inserted).toMatchObject({
@@ -181,11 +153,57 @@ describe("createBudgetBill", () => {
       budgetFiscalYear: 1953,
       adminProposed: true, // no chancellor
       votingEndsOnTurn: 124,
+      provisions: [
+        expect.objectContaining({
+          legislationTypeId: "uk.tax.incomeTax",
+          proposedRate: 50,
+        }),
+      ],
     });
   });
 });
 
+describe("tableBudgetWithBill", () => {
+  it("restores the draft when bill creation fails cleanly", async () => {
+    const { db, budgets } = fakeDb({ status: "draft", ...valid } as Partial<UKBudget>);
+    const originalCollection = db.collection;
+    db.collection = vi.fn((name: string) => {
+      if (name !== "bills") return originalCollection(name);
+      return {
+        insertOne: vi.fn().mockRejectedValue(new Error("insert failed")),
+        findOne: vi.fn().mockResolvedValue(null),
+      };
+    }) as never;
+
+    await expect(
+      tableBudgetWithBill(db, {
+        fiscalYear: 1953,
+        chancellorCharacterId: null,
+        chancellorName: null,
+        chancellorParty: null,
+        currentTurn: 100,
+        now: new Date("2026-01-01"),
+        provisions: [
+          {
+            legislationTypeId: "uk.tax.incomeTax",
+            policyOptionId: "rate:50",
+            proposedRate: 50,
+            effectDirection: 1,
+          },
+        ],
+      })
+    ).rejects.toThrow("insert failed");
+    expect(budgets[0]).toMatchObject({ status: "draft" });
+    expect(budgets[0].tabledAt).toBeNull();
+  });
+});
+
 describe("applyBudgetOutcome", () => {
+  it("a passed Budget restores government confidence once", async () => {
+    const { db, gov } = fakeDb({ status: "tabled", ...valid } as Partial<UKBudget>, 50);
+    await applyBudgetOutcome(db, { fiscalYear: 1953, passed: true, now: new Date() });
+    expect(gov.confidenceGauge).toBe(60);
+  });
   it("mirrors an explicit pass with no confidence hit", async () => {
     const { db, budgets, gov } = fakeDb({ status: "tabled", ...valid } as Partial<UKBudget>);
     const r = await applyBudgetOutcome(db, { fiscalYear: 1953, passed: true, now: new Date() });
