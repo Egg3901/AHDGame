@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { ladderBounds } from "@/lib/legislature/policyLadder";
 import { useToast } from "@/contexts/ToastContext";
 import { reserveManpowerLabel } from "@/lib/military/manpower";
 import {
@@ -1203,7 +1204,10 @@ export function ProposeBillModal({
                               options.find((o) => o.id === p.policyOptionId)?.groupApprovals
                             }
                             policyDomain={type?.policyDomain}
-                            currentPolicyIndex={currentPolicies[p.legislationTypeId] ?? 3}
+                            currentPolicyIndex={
+                              currentPolicies[p.legislationTypeId] ??
+                              ladderBounds(options.length).centerIndex
+                            }
                             proposedPolicyIndex={options.findIndex(
                               (o) => o.id === p.policyOptionId
                             )}
