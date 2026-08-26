@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { publicPageMetadata } from "@/lib/siteMetadata";
 import Link from "next/link";
+import { ELECTION_LIST_FIELDS, ELECTION_DETAIL_FIELDS } from "./electionFields";
 
 export const metadata: Metadata = publicPageMetadata({
   title: "API Documentation | A House Divided",
@@ -571,35 +572,10 @@ curl -X POST -H "X-API-Key: ahd_priv_..." \\
           </summary>
           <div className="px-4 pb-4 space-y-2">
             <p className="text-xs text-muted mt-2">
-              Active elections. Requires <Code>country</Code> param; optional <Code>state</Code>.
+              Elections for a country, newest first. Requires <Code>country</Code> param; optional{" "}
+              <Code>state</Code>. Read <Code>phase</Code> to tell a primary from a general.
             </p>
-            <FieldTable
-              rows={[
-                { name: "ok", type: "boolean", desc: "Always true" },
-                { name: "found", type: "boolean", desc: "Whether elections found" },
-                { name: "elections", type: "array", desc: "List of elections" },
-                { name: "elections[].id", type: "string", desc: "Election ObjectId" },
-                {
-                  name: "elections[].electionType",
-                  type: "string",
-                  desc: "Type (primary, general, etc.)",
-                },
-                { name: "elections[].state", type: "string", desc: "State code" },
-                { name: "elections[].status", type: "string", desc: "Status (open, closed, etc.)" },
-                { name: "elections[].candidates", type: "array", desc: "Candidate list" },
-                {
-                  name: "elections[].candidates[].characterName",
-                  type: "string",
-                  desc: "Candidate name",
-                },
-                { name: "elections[].candidates[].party", type: "string", desc: "Party name" },
-                {
-                  name: "elections[].candidates[].isNPP",
-                  type: "boolean",
-                  desc: "Non-party member",
-                },
-              ]}
-            />
+            <FieldTable rows={ELECTION_LIST_FIELDS} />
           </div>
         </details>
 
@@ -612,25 +588,7 @@ curl -X POST -H "X-API-Key: ahd_priv_..." \\
             <p className="text-xs text-muted mt-2">
               Detailed election info including candidates, votes, and phases.
             </p>
-            <FieldTable
-              rows={[
-                { name: "ok", type: "boolean", desc: "Always true" },
-                { name: "found", type: "boolean", desc: "Whether found" },
-                { name: "election", type: "object", desc: "Full election data" },
-                { name: "election.id", type: "string", desc: "Election ObjectId" },
-                { name: "election.electionType", type: "string", desc: "Type" },
-                { name: "election.status", type: "string", desc: "Current status" },
-                { name: "election.totalSeats", type: "number", desc: "Seats contested" },
-                {
-                  name: "phase",
-                  type: "object",
-                  desc: "{ inPrimary, inGeneral, isUpcoming, isEnded }",
-                },
-                { name: "incumbent", type: "object|null", desc: "{ name, party } or null" },
-                { name: "candidates", type: "array", desc: "Full candidate list with details" },
-                { name: "votes", type: "object|null", desc: "Vote tallies and snapshots" },
-              ]}
-            />
+            <FieldTable rows={ELECTION_DETAIL_FIELDS} />
           </div>
         </details>
 
