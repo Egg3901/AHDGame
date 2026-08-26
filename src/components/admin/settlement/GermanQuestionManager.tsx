@@ -43,6 +43,8 @@ interface CrisisState {
 interface AdminState {
   enabled: boolean;
   currentTurn: number;
+  /** Set when opening now would freeze the question onto a war already running. */
+  openWarning: string | null;
   crisis: CrisisState | null;
   history: {
     id: string;
@@ -66,6 +68,7 @@ export function GermanQuestionManager() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
@@ -98,18 +101,27 @@ export function GermanQuestionManager() {
     setBusy(true);
     setError(null);
     setMessage(null);
+    setWarning(null);
     try {
       const res = await fetch("/api/admin/settlement", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = (await res.json().catch(() => null)) as { error?: string; note?: string } | null;
+      const data = (await res.json().catch(() => null)) as {
+        error?: string;
+        note?: string;
+        warning?: string;
+      } | null;
       if (!res.ok) {
         setError(data?.error ?? "The action was refused.");
         return;
       }
       setMessage(data?.note ? `${ok} ${data.note}` : ok);
+      // Its own state, not appended to the success line: the action DID succeed,
+      // and a caution about what the next tick will do to it reads as neither a
+      // success nor a failure.
+      if (data?.warning) setWarning(data.warning);
       await load();
     } catch {
       setError("The action could not be sent.");
@@ -163,6 +175,14 @@ export function GermanQuestionManager() {
           {message}
         </p>
       )}
+      {warning && (
+        <p
+          role="alert"
+          className="rounded-md border border-warning/40 bg-warning/10 p-2.5 text-sm text-warning"
+        >
+          {warning}
+        </p>
+      )}
       {error && (
         <p
           role="alert"
@@ -175,6 +195,14 @@ export function GermanQuestionManager() {
       {!crisis ? (
         <section className="rounded-xl border border-card-border bg-card p-4 shadow-card">
           <h4 className="font-semibold text-foreground">Open the question</h4>
+          {state?.openWarning && (
+            <p
+              role="alert"
+              className="mt-2 rounded-md border border-warning/40 bg-warning/10 p-2.5 text-sm text-warning"
+            >
+              {state.openWarning}
+            </p>
+          )}
           <p className="mt-0.5 max-w-2xl text-sm text-muted">
             Nothing opens this on its own — the turn loop only advances a crisis that already
             exists. Open it whenever you judge the moment right. It will refuse only if a crisis is

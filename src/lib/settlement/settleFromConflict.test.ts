@@ -134,6 +134,69 @@ describe("settleFrozenCrisisFromConflict", () => {
     expect(filter).toMatchObject({ status: "frozen" });
   });
 
+  describe("an attached war, which carries no backer", () => {
+    /** What `declareWar` actually writes: rosters and labels, no `backer`. */
+    const declared = (over: Record<string, unknown> = {}) =>
+      conflict({
+        sideA: { label: "United States", countries: ["US"], kind: "state" },
+        sideB: { label: "East Germany", countries: ["DD"], kind: "state" },
+        ...over,
+      });
+
+    const attached = (over: Partial<SettlementCrisisDoc> = {}) =>
+      crisis({ conflictSides: { challenger: "B", incumbent: "A" }, ...over });
+
+    it("reunifies Germany when East Germany's side wins", async () => {
+      prime(db, "conflicts").findOne.mockResolvedValue(
+        declared({ outcome: { winner: "B", note: "" } })
+      );
+      const { settleFrozenCrisisFromConflict } = await import("./settleFromConflict");
+      const res = await settleFrozenCrisisFromConflict(db as unknown as Db, attached(), 412);
+      expect(res.outcome).toBe("challenger");
+    });
+
+    it("keeps West Germany sovereign when the other side wins", async () => {
+      prime(db, "conflicts").findOne.mockResolvedValue(
+        declared({ outcome: { winner: "A", note: "" } })
+      );
+      const { settleFrozenCrisisFromConflict } = await import("./settleFromConflict");
+      const res = await settleFrozenCrisisFromConflict(db as unknown as Db, attached(), 412);
+      expect(res.outcome).toBe("incumbent");
+    });
+
+    it("would have stalled for ever on the backer alone", async () => {
+      // The regression this whole stamp exists for: same war, no stamp, and the
+      // crisis stays frozen because neither roster carries a bloc.
+      prime(db, "conflicts").findOne.mockResolvedValue(
+        declared({ outcome: { winner: "B", note: "" } })
+      );
+      const { settleFrozenCrisisFromConflict } = await import("./settleFromConflict");
+      const res = await settleFrozenCrisisFromConflict(db as unknown as Db, crisis(), 412);
+      expect(res.settled).toBe(false);
+    });
+
+    it("still reads the backer for a crisis frozen before the stamp existed", async () => {
+      const { settleFrozenCrisisFromConflict } = await import("./settleFromConflict");
+      // `conflict()` is the crisis's OWN war: sideA NATO/west, sideB Pact/east.
+      const res = await settleFrozenCrisisFromConflict(db as unknown as Db, crisis(), 412);
+      expect(res.outcome).toBe("incumbent");
+    });
+
+    it("leaves it frozen when the winner matches neither stamped side", async () => {
+      prime(db, "conflicts").findOne.mockResolvedValue(
+        declared({ outcome: { winner: "B", note: "" } })
+      );
+      const { settleFrozenCrisisFromConflict } = await import("./settleFromConflict");
+      const res = await settleFrozenCrisisFromConflict(
+        db as unknown as Db,
+        attached({ conflictSides: { challenger: "A", incumbent: "A" } }),
+        412
+      );
+      expect(res.settled).toBe(false);
+      expect(res.outcome).toBeNull();
+    });
+  });
+
   it("decides on the war alone, never on where the index stood", async () => {
     // Frozen at 8% — hopeless on the board — but the Pact won the war.
     prime(db, "conflicts").findOne.mockResolvedValue(
