@@ -53,12 +53,21 @@ describe("living campaign model", () => {
     expect(result.eligible).toBe(false);
     expect(result.reasons).toEqual([
       "Available during Operations",
-      "Needs 3.00% of GDP in treasury capacity",
       "Needs military readiness 80",
       "Needs logistics 75",
       "Needs domestic mandate 65",
       "Needs intelligence confidence 60",
     ]);
+  });
+
+  it("lets treasury-funded responses borrow through an existing deficit", () => {
+    const result = assessCampaignRequirement(
+      { minTreasuryPctGdp: 0.03 },
+      capability({ treasuryPctGdp: -0.774 }),
+      "mobilization"
+    );
+
+    expect(result).toEqual({ eligible: true, reasons: [] });
   });
 
   it("records national commitments once and carries their consequences forward", () => {

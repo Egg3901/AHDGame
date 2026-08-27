@@ -88,6 +88,10 @@ function campaignLabel(value: string): string {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function formatEffectValue(value: number): string {
+  return Number(value.toFixed(2)).toString();
+}
+
 function roleLabel(role?: string): string | null {
   if (!role) return null;
   return role.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -169,7 +173,7 @@ function EffectChips({ effects, max = 4 }: { effects: CrisisEffect[]; max?: numb
           </span>
           <span className="font-mono font-semibold">
             {e.value > 0 ? "+" : ""}
-            {e.value}
+            {formatEffectValue(e.value)}
             {e.targetType === "profitMargin" ? "%" : ""}
           </span>
         </span>
@@ -234,6 +238,11 @@ function CampaignBriefPanel({ brief }: { brief: CampaignBrief }) {
     ["Intelligence", brief.capability.intelligence],
   ] as const;
   const scars = Object.entries(brief.consequenceBands).filter(([, band]) => band !== "low");
+  const treasuryPctGdp = Math.abs(brief.capability.treasuryPctGdp * 100).toFixed(2);
+  const treasuryLabel =
+    brief.capability.treasuryPctGdp < 0
+      ? `Treasury debt ${treasuryPctGdp}% GDP`
+      : `Treasury surplus ${treasuryPctGdp}% GDP`;
   return (
     <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -289,11 +298,9 @@ function CampaignBriefPanel({ brief }: { brief: CampaignBrief }) {
       <div>
         <div className="flex items-center justify-between gap-2">
           <p className="text-[10px] font-bold uppercase tracking-wide text-muted">
-            Available national capacity
+            National capacity
           </p>
-          <p className="text-[10px] text-muted">
-            Treasury {(brief.capability.treasuryPctGdp * 100).toFixed(2)}% GDP
-          </p>
+          <p className="text-[10px] text-muted">{treasuryLabel}</p>
         </div>
         <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-4">
           {capacity.map(([label, value]) => (
@@ -311,6 +318,12 @@ function CampaignBriefPanel({ brief }: { brief: CampaignBrief }) {
             </div>
           ))}
         </div>
+        <p className="mt-1.5 text-[10px] leading-relaxed text-muted">
+          Readiness comes from your formations. Logistics reflects support equipment across your
+          formations; refit them from military stores to raise it. Mandate is government approval;
+          intelligence combines readiness and logistics. Crisis spending uses treasury surplus
+          first, then adds debt.
+        </p>
       </div>
       {scars.length > 0 ? (
         <div className="flex flex-wrap gap-1">
