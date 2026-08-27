@@ -338,3 +338,53 @@ describe("who may negotiate", () => {
     expect((await POST(req(good), params)).status).toBe(200);
   });
 });
+
+describe("which party the deal removes", () => {
+  it("defaults to the sender leaving, so an existing client is unchanged", async () => {
+    const { POST } = await import("./route");
+    expect((await POST(req(good), params)).status).toBe(200);
+    const doc = db.collectionMocks.peaceOffers.insertOne.mock.calls[0][0];
+    expect(doc.leaver).toBe("UK");
+  });
+
+  it("records the recipient as the leaver when asked to withdraw", async () => {
+    // Side B must survive the departure, or this is a buy-out and the gate refuses
+    // it: the default fixture has CN alone on its side.
+    db.collectionMocks.conflicts.findOne.mockResolvedValue({
+      ...conflict,
+      sideB: { label: "PLA", countries: ["CN", "RU"], kind: "coalition" },
+    });
+    const { POST } = await import("./route");
+    const res = await POST(req({ ...good, leaver: "them" }), params);
+    expect(res.status).toBe(200);
+    const doc = db.collectionMocks.peaceOffers.insertOne.mock.calls[0][0];
+    expect(doc.leaver).toBe("CN");
+  });
+
+  it("refuses a withdrawal that would end the war from a standing start", () => {
+    // CN alone on its side, so its departure empties it and simply buys the war.
+    return (async () => {
+      const { POST } = await import("./route");
+      const res = await POST(req({ ...good, leaver: "them" }), params);
+      expect(res.status).toBe(400);
+    })();
+  });
+
+  it("allows that same withdrawal as a white peace", () => {
+    // No victor is recorded, so nothing is bought.
+    return (async () => {
+      const { POST } = await import("./route");
+      const res = await POST(
+        req({ ...good, leaver: "them", term: { kind: "white_peace" } }),
+        params
+      );
+      expect(res.status).toBe(200);
+    })();
+  });
+
+  it("refuses an unknown direction at the schema", async () => {
+    const { POST } = await import("./route");
+    const res = await POST(req({ ...good, leaver: "somebody-else" }), params);
+    expect(res.status).toBe(400);
+  });
+});

@@ -256,3 +256,41 @@ describe("choosing which term to offer", () => {
     });
   });
 });
+
+describe("which side the deal removes", () => {
+  async function ready() {
+    const fetchMock = mockGet({ currentTurn: 40, wars: [war], offers: [] });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<PeacePanel {...props} />);
+    fireEvent.change(await screen.findByLabelText(/country to negotiate with/i), {
+      target: { value: "CN" },
+    });
+    return fetchMock;
+  }
+
+  it("defaults to us leaving, the original shape", async () => {
+    const fetchMock = await ready();
+    fireEvent.click(screen.getByRole("button", { name: /send peace offer/i }));
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => c[1]?.method === "POST");
+      expect(JSON.parse(post![1].body).leaver).toBe("us");
+    });
+  });
+
+  it("can ask the other country to withdraw instead", async () => {
+    // Coalition-peeling: they leave, we keep fighting.
+    const fetchMock = await ready();
+    fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "them" } });
+    fireEvent.click(screen.getByRole("button", { name: /send peace offer/i }));
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => c[1]?.method === "POST");
+      expect(JSON.parse(post![1].body).leaver).toBe("them");
+    });
+  });
+
+  it("explains the buy-out gate when asking them to withdraw", async () => {
+    await ready();
+    fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "them" } });
+    expect(screen.getByText(/needs the front well in our favour/i)).toBeTruthy();
+  });
+});

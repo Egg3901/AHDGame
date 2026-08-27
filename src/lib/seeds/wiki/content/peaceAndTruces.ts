@@ -28,6 +28,7 @@ Two offices, no precedence between them: either may act. This is a deliberate co
 | --- | --- |
 | **The war** | Which conflict you are leaving. |
 | **The other party** | A single country on the opposing side. |
+| **Who leaves** | Yourself, or them. An offer can propose your own withdrawal, or ask theirs. |
 | **The term** | The one thing this settlement takes. Pick from the three below. |
 | **Justification** | An optional public note, moderated. Published on the conflict record once accepted. |
 
@@ -85,6 +86,24 @@ The country may award no new defence contracts, and no company may accept a new 
 
 **The bar is visible to the country under it**, with the turn it lapses named, rather than being discovered by a refusal.
 
+## Asking the other side to leave
+
+An offer does not have to be about your own withdrawal. You can ask a country on the other side to leave the war while **you stay in it**.
+
+**They still have to agree.** No government is ever removed from a war without its own consent. What changes is what you may put on the table: normally you would pay them to go.
+
+**This is how a coalition comes apart.** You do not have to beat an alliance. You have to make its cheapest member leave, and now you can ask.
+
+**A country dragged in by a treaty may also buy its own way out.** Mutual defence pulls an ally into the war, but it no longer holds them there until the member they came to defend settles. They can negotiate their own exit, at whatever price the other side will take.
+
+### The one thing you cannot simply buy
+
+**A withdrawal that would end the war outright needs the ground to justify it.** If the country you are asking to leave is the last one on its side, or takes its treaty allies with it, then its departure hands you the war. You may only demand that once the front has moved well into their territory, at the point the war is already visibly winding down in your favour.
+
+Short of that, you are not negotiating a settlement, you are buying a victory, and the answer is no.
+
+**A white peace is always allowed, whatever the ground looks like.** It records no winner and moves nothing, so there is nothing to buy. A war fought over an open question ends with the question still open.
+
 ## The rules an offer must clear
 
 1. **The war must not already be over.**
@@ -92,7 +111,8 @@ The country may award no new defence contracts, and no company may accept a new 
 3. **Both countries must be belligerents in that war**, by explicit roster membership. Bloc affinity is not enough: a country pulled toward a side by its alliance has not declared war on anyone, and cannot be offered a settlement for a war it never joined.
 4. **You must be on opposite sides.** You cannot make peace with an ally.
 5. **The term must be valid.** A white peace carries no fields and is always valid. An indemnity must not be negative, must not exceed twice the payer's annual GDP, and its payer must be one of the two parties. A regime change must name a system the country does not already have, and cannot install a monarchy. A demilitarisation must last at least one whole turn.
-6. **The war must not already have been won outright.** Once a front reaches the end of the track there is nothing left to negotiate: the victor is choosing what to take.
+6. **A withdrawal you are asking of them must not end the war**, unless the front has moved well into their ground, or the term is a white peace.
+7. **The war must not already have been won outright.** Once a front reaches the end of the track there is nothing left to negotiate: the victor is choosing what to take.
 
 ## The 72-turn window
 

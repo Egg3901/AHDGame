@@ -79,6 +79,8 @@ export function PeacePanel({
   const [enemy, setEnemy] = useState<string>("");
   const [payer, setPayer] = useState<CountryId>(countryId);
   const [amount, setAmount] = useState<string>("0");
+  /** Who this deal removes: us, or the country we are addressing. */
+  const [leaver, setLeaver] = useState<"us" | "them">("us");
   const [termKind, setTermKind] = useState<
     "white_peace" | "indemnity" | "regime_change" | "demilitarisation"
   >("indemnity");
@@ -161,6 +163,7 @@ export function PeacePanel({
         conflictId: warId,
         toCountry: enemy,
         term: buildTerm(),
+        leaver,
         ...(justification.trim() ? { justification: justification.trim() } : {}),
       },
       "Offer sent."
@@ -315,6 +318,15 @@ export function PeacePanel({
               ))}
             </select>
             <select
+              aria-label="Who leaves"
+              value={leaver}
+              onChange={(e) => setLeaver(e.target.value as "us" | "them")}
+              className="min-w-[150px] flex-1 rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px]"
+            >
+              <option value="us">We leave the war</option>
+              <option value="them">They leave the war</option>
+            </select>
+            <select
               aria-label="Term offered"
               value={termKind}
               onChange={(e) => setTermKind(e.target.value as typeof termKind)}
@@ -368,6 +380,13 @@ export function PeacePanel({
                 <option value="onePartyState">One-party state</option>
               </select>
             </label>
+          )}
+
+          {leaver === "them" && (
+            <p className="text-[11px] text-muted">
+              They withdraw and we keep fighting. A withdrawal that would end the war outright needs
+              the front well in our favour first, unless it is a white peace.
+            </p>
           )}
 
           {termKind === "white_peace" && (

@@ -34,6 +34,11 @@ const bodySchema = z.object({
   // `parliamentaryMonarchy` is deliberately ABSENT: a settlement cannot install a
   // crown, and refusing it at the schema is stronger than refusing it in the
   // validator alone.
+  /**
+   * Which party this deal removes. Omitted means the sender, which is the original
+   * shape and what every existing client sends.
+   */
+  leaver: z.enum(["us", "them"]).optional(),
   term: z.discriminatedUnion("kind", [
     // A white peace carries no fields: it is the absence of a term, and the whole of
     // its effect is that the war resolves with no victor recorded.
@@ -135,6 +140,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
         fromCountry: o.fromCountry,
         toCountry: o.toCountry,
         term: o.term,
+        leaver: o.leaver,
         justification: o.justification ?? null,
         // Derived, not the stored field: a row can say "pending" and be expired.
         status: isOfferLive(o, currentTurn)
@@ -207,11 +213,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     // refused before it is ever offered.
     const targetState = await getCountryState(db, toCountry);
 
+    // "them" asks the recipient to withdraw while we stay in the war; the default
+    // keeps the original shape, where the sender is the one leaving.
+    const leaver = parsed.data.leaver === "them" ? toCountry : countryId;
+
     const check = validatePeaceOffer(
       conflict,
       countryId,
       toCountry,
       term,
+      leaver,
       maxAmount,
       targetState.governmentType
     );
@@ -232,6 +243,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       conflictId: conflict._id,
       fromCountry: countryId,
       toCountry,
+      leaver,
       term,
       ...(parsed.data.justification ? { justification: parsed.data.justification } : {}),
       status: "pending" as const,
