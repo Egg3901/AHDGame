@@ -749,6 +749,17 @@ export function terrainFactor(
  * Only `Carrier Strike Group` carries `strategic` among naval types (the other holders
  * are air, rocket and space domain), so scoping to the naval domain makes that trait a
  * clean carrier test without inventing new data.
+ *
+ * `marine` is deliberately NOT covered. Marines are amphibious GROUND troops and fight
+ * ashore perfectly well, so they take no reach penalty; the terrain table already
+ * weights them where it should (`maritime` 1.15, `highland` 0.95). Do not "fix" this by
+ * folding marine in with the hulls.
+ *
+ * `Amphibious Group` lands on the escort side of the split, which is a deliberate
+ * simplification rather than an oversight: it puts troops ashore, so it is worth more
+ * than a frigate on a coastal front and nothing at all inland, and one number cannot say
+ * both. If amphibious assault ever needs its own band, that is a third class, not a
+ * reclassification of this one.
  */
 export function navalReach(
   front: Pick<Front, "seaAccess"> | undefined,
