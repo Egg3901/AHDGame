@@ -109,9 +109,18 @@ export function CommandChainPanel({
               {h.href && (
                 <>
                   {" "}
-                  <Link href={h.href} style={{ color: "#7ba3ec", textDecoration: "underline" }}>
-                    {h.linkLabel ?? "Go"}
-                  </Link>
+                  {/* An in-page anchor is a plain <a>: it scrolls to a section of
+                      THIS record (the posted-generals roster) rather than routing
+                      anywhere, and next/link has no navigation to do for it. */}
+                  {h.href.startsWith("#") ? (
+                    <a href={h.href} style={{ color: "#7ba3ec", textDecoration: "underline" }}>
+                      {h.linkLabel ?? "Go"}
+                    </a>
+                  ) : (
+                    <Link href={h.href} style={{ color: "#7ba3ec", textDecoration: "underline" }}>
+                      {h.linkLabel ?? "Go"}
+                    </Link>
+                  )}
                 </>
               )}
             </span>

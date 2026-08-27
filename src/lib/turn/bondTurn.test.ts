@@ -458,6 +458,118 @@ describe("processBondTurn", () => {
     );
   });
 
+  describe("ticket #1198: corporation actions paused", () => {
+    // The pause skips `corporationTurn` (sector revenue, operating income,
+    // dividends) but not bond servicing, so a paused corp keeps paying coupons
+    // with its income switched off. Declaring it insolvent for the resulting
+    // cash hole blames the corp for the admin's pause — corporation #624 was
+    // defaulted twice that way at turns 416 and 418. Settlement still runs;
+    // only the decision to liquidate waits for corporations to be live again.
+    function arrangeCashNegativeIssuer(paused: boolean) {
+      const issuerCorpId = new ObjectId();
+      const bond = {
+        _id: new ObjectId(),
+        couponRate: 5,
+        maturityTurn: 100,
+        matured: false,
+        defaulted: false,
+        isCorporate: true,
+        holders: [],
+        publicFloat: 0,
+        corporationId: issuerCorpId,
+      };
+      let bondFindCount = 0;
+      db.collectionMocks["bonds"]!.find.mockImplementation(() => {
+        bondFindCount++;
+        if (bondFindCount === 1) return makeCursor([bond]);
+        const cursor = makeCursor([{ _id: bond._id, marketPrice: 0.1 }]);
+        cursor.project = vi.fn().mockReturnValue(cursor);
+        return cursor;
+      });
+      db.collectionMocks["corporations"]!.find.mockReturnValue(
+        makeCursor([
+          { _id: issuerCorpId, liquidCapital: -100, countryId: "US", name: "Paused Corp" },
+        ])
+      );
+      db.collectionMocks["centralBanks"]!.find.mockReturnValue(makeCursor([]));
+      db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      });
+      db.collection("gameState");
+      db.collectionMocks["gameState"]!.findOne.mockResolvedValue({
+        _id: "current",
+        currentTurn: 10,
+        corporationActionsPaused: paused,
+      });
+      return issuerCorpId;
+    }
+
+    it("does NOT default a cash-negative issuer while paused", async () => {
+      arrangeCashNegativeIssuer(true);
+      const { processBondTurn } = await import("./bondTurn");
+      const result = await processBondTurn(10);
+
+      expect(result.bondsDefaulted).toBe(0);
+      const { fireBondDefaultPulse } = await import("@/lib/corporations/sentimentEvents");
+      expect(vi.mocked(fireBondDefaultPulse)).not.toHaveBeenCalled();
+    });
+
+    it("does NOT stamp a credit penalty while paused", async () => {
+      arrangeCashNegativeIssuer(true);
+      const { processBondTurn } = await import("./bondTurn");
+      await processBondTurn(10);
+
+      // The only corporations.updateMany is the expiry sweep at the top of the
+      // turn; no penalty is written while paused.
+      const penaltyWrites = db.collectionMocks["corporations"]!.bulkWrite.mock.calls.filter(
+        (call) => JSON.stringify(call[0] ?? "").includes("bondDefaultCreditPenaltyUntilTurn")
+      );
+      expect(penaltyWrites).toHaveLength(0);
+    });
+
+    it("still settles the turn's bond obligations while paused", async () => {
+      arrangeCashNegativeIssuer(true);
+      const { processBondTurn } = await import("./bondTurn");
+      const result = await processBondTurn(10);
+
+      // Settlement is contractual and must not be skipped: sovereign holders
+      // would lose income for an unrelated corporation pause.
+      expect(result.bondsProcessed).toBeGreaterThan(0);
+    });
+
+    it("DOES default the same issuer once corporations are live again", async () => {
+      arrangeCashNegativeIssuer(false);
+      const { processBondTurn } = await import("./bondTurn");
+      const result = await processBondTurn(10);
+
+      expect(result.bondsDefaulted).toBe(1);
+      const { fireBondDefaultPulse } = await import("@/lib/corporations/sentimentEvents");
+      expect(vi.mocked(fireBondDefaultPulse)).toHaveBeenCalledTimes(1);
+    });
+
+    it("does NOT auto-resolve lingering defaults while paused", async () => {
+      // Phase 7 can sell a corp's sectors. It justifies that by saying the CEO
+      // had a turn to act, but all four cure routes are pause-gated, so during
+      // a pause they were locked out of the very window being held against them.
+      arrangeCashNegativeIssuer(true);
+      const { processBondTurn } = await import("./bondTurn");
+      const result = await processBondTurn(10);
+
+      expect(result.bondsAutoRestructured).toBe(0);
+      expect(result.bondsAutoRefinanced).toBe(0);
+      expect(db.collectionMocks["bonds"]!.distinct).not.toHaveBeenCalled();
+    });
+
+    it("treats a missing gameState as not paused, so detection is never silently disabled", async () => {
+      arrangeCashNegativeIssuer(false);
+      db.collectionMocks["gameState"]!.findOne.mockResolvedValue(null);
+      const { processBondTurn } = await import("./bondTurn");
+      const result = await processBondTurn(10);
+
+      expect(result.bondsDefaulted).toBe(1);
+    });
+  });
+
   it("clears expired bond default credit penalties", async () => {
     // bonds.find returns empty (no active bonds)
     const { processBondTurn } = await import("./bondTurn");
