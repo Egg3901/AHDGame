@@ -518,6 +518,7 @@ export default function CabinetOfficePage() {
                 units={(data.units ?? []) as unknown as MilitaryUnit[]}
                 commanders={data.commanders ?? []}
                 conflictAssignments={data.conflictAssignments ?? []}
+                conflicts={data.conflicts ?? []}
                 corps={data.corps ?? []}
                 commissionCandidates={data.commissionCandidates ?? []}
                 regionThreats={data.regionThreats ?? {}}

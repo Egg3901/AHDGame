@@ -42,7 +42,7 @@ import {
 import { listPendingDeclarations } from "@/lib/db/collections/battleDeclarations";
 import { listRecentBattleReports } from "@/lib/db/collections/battleReports";
 import { listTheaterStates } from "@/lib/db/collections/theaterState";
-import { listActiveConflicts } from "@/lib/db/collections/conflicts";
+import { listActiveConflicts, listConflictsForCountry } from "@/lib/db/collections/conflicts";
 import { getNationalManpower } from "@/lib/db/collections/nationalManpower";
 import { resolveConscriptionStanceFor } from "@/lib/military/conscriptionLaw";
 import { ATTRITION } from "@/lib/military/config";
@@ -338,6 +338,15 @@ export async function GET(_request: Request, { params }: RouteParams) {
     let commands: MilitaryCommand[] | undefined;
     let commanders: CommanderRef[] | undefined;
     let conflictAssignments: ConflictAssignment[] | undefined;
+    /**
+     * Defence seat only: the conflicts this country may post a general to.
+     *
+     * The Commands tab builds its posting dropdown from this and names an existing
+     * posting by looking the theatre id up in it, so without it the seat cannot send
+     * anyone to a war and the posting badge prints the raw id. The Commanding General
+     * page has always sourced it this way; the cabinet office simply never did.
+     */
+    let conflicts: { id: string; name: string }[] | undefined;
     let corps: CorpsMember[] | undefined;
     let commissionCandidates: { characterId: string; name: string }[] | undefined;
     let regionThreats: Record<string, ThreatLevel> | undefined;
@@ -483,6 +492,10 @@ export async function GET(_request: Request, { params }: RouteParams) {
       commands = await getMilitaryCommands(db, countryId);
       commanders = await listCountryGenerals(db, countryId);
       conflictAssignments = (await getMilitaryFormations(db, countryId)).conflictAssignments;
+      conflicts = (await listConflictsForCountry(db, countryId)).map((c) => ({
+        id: c._id,
+        name: c.name,
+      }));
       // The SecDef's personnel view: the corps (incl. unspecced + dismissed) and who
       // they could still commission.
       [corps, commissionCandidates] = await Promise.all([
@@ -762,6 +775,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       commands,
       commanders,
       conflictAssignments,
+      conflicts,
       corps,
       commissionCandidates,
       regionThreats,
