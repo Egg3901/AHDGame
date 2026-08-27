@@ -5,6 +5,14 @@ import { convertLocal } from "@/lib/internationalOrganizations/organizationFund"
 import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import { ensureFederalBudget } from "@/lib/turn/ensureFederalBudget";
 import { recordProcurementRestriction } from "@/lib/db/collections/procurementRestrictions";
+import { updateCountryState } from "@/lib/countryState";
+import { installOnePartyState } from "@/lib/onePartyState/installOnePartyState";
+import {
+  triggerSystemConversion,
+  FORCED_ELECTION_DELAY_TURNS,
+  FORCED_LEGACY_RESERVATION,
+  FORCED_VOTE_SHARE_PENALTY,
+} from "@/lib/onePartyState/systemConversion";
 import type { PeaceTerm } from "./peaceTerm";
 
 export interface ApplyTermContext {
@@ -50,10 +58,70 @@ export async function applyPeaceTerm(
     return;
   }
 
-  // The remaining branch lands in a later task. Throwing rather than silently
-  // doing nothing: a settlement that reports success and changes nothing is worse
-  // than one that fails loudly, because the war resolves either way.
-  throw new Error(`applyPeaceTerm: unsupported term ${term.kind}`);
+  if (term.kind === "regime_change") {
+    await convertRegime(db, term.targetSystem, ctx);
+    return;
+  }
+
+  // Exhaustive. If a fourth term is ever added, this line stops compiling rather
+  // than letting a settlement report success and change nothing.
+  const unreachable: never = term;
+  throw new Error(`applyPeaceTerm: unsupported term ${JSON.stringify(unreachable)}`);
+}
+
+/**
+ * Convert the target's system of government, then queue the election that follows.
+ *
+ * TWO DIRECTIONS, ONE SHAPE. Converting out of a one-party state is the shipped
+ * `triggerSystemConversion`; converting into one is `installOnePartyState`, its
+ * mirror. Both end with `pendingPostConversionElection` set, and neither dissolves
+ * anything itself.
+ *
+ * THE ELECTION IS NOT FIRED HERE, deliberately. This runs on a request path, and
+ * `processPostConversionElections` is the turn step that reads the marker and calls
+ * the snap. Spawning elections from a request would spawn them again on a retry,
+ * which is the same reason the settlement wire posts from a tick rather than from
+ * the command that caused it.
+ */
+async function convertRegime(
+  db: Db,
+  targetSystem: Extract<PeaceTerm, { kind: "regime_change" }>["targetSystem"],
+  ctx: ApplyTermContext
+): Promise<void> {
+  // A visible interregnum rather than an instant handover: the country spends the
+  // delay under a fallen government before the campaign opens.
+  const electionAtTurn = ctx.currentTurn + FORCED_ELECTION_DELAY_TURNS;
+
+  if (targetSystem === "onePartyState") {
+    await installOnePartyState(db, ctx.target, ctx.currentTurn);
+    // `installOnePartyState` mirrors the FIELDS `triggerSystemConversion` clears and
+    // deliberately schedules nothing, so the marker is written here to bring the two
+    // directions back to the same end state.
+    await updateCountryState(db, ctx.target, {
+      pendingPostConversionElection: {
+        atTurn: electionAtTurn,
+        legacyReservation: FORCED_LEGACY_RESERVATION,
+        // The party that has just been installed is the one that would carry a
+        // legacy reservation, and it needs no help. Recorded as absent rather than
+        // as a party id so the election engine has nothing to award.
+        formerRulingPartyId: null,
+        forcedVoteSharePenalty: FORCED_VOTE_SHARE_PENALTY,
+        path: "forced",
+      },
+    });
+    return;
+  }
+
+  // The shipped path out of a one-party state. It writes the marker itself, via
+  // `bootstrapNewSystem`, capturing the former ruling party before the flip clears
+  // it.
+  await triggerSystemConversion(db, ctx.target, ctx.currentTurn, {
+    targetSystem,
+    legacyReservation: FORCED_LEGACY_RESERVATION,
+    path: "forced",
+    forcedVoteSharePenalty: FORCED_VOTE_SHARE_PENALTY,
+    electionAtTurn,
+  });
 }
 
 /**

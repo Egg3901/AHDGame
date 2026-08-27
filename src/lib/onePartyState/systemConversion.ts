@@ -26,11 +26,11 @@ import { clearAllRegimeStatusForCountry } from "./regimeStatusReset";
 import { bootstrapNewSystem } from "./conversionBootstrap";
 
 /** Forced-path defaults — design § Stage 4 forced conversion. */
-const FORCED_LEGACY_RESERVATION = 5;
+export const FORCED_LEGACY_RESERVATION = 5;
 const FORCED_LEGACY_RESERVATION_HALVED = 3; // 5 / 2 rounded
-const FORCED_VOTE_SHARE_PENALTY = -0.2;
+export const FORCED_VOTE_SHARE_PENALTY = -0.2;
 /** Snap-election delay (turns) after a forced conversion. */
-const FORCED_ELECTION_DELAY_TURNS = 12;
+export const FORCED_ELECTION_DELAY_TURNS = 12;
 
 export interface ConversionInputs {
   targetSystem: GovernmentType;
