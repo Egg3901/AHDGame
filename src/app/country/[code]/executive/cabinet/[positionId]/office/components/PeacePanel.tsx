@@ -11,6 +11,8 @@ interface OfferView {
   conflictId: string;
   fromCountry: CountryId;
   toCountry: CountryId;
+  /** Which party the deal removes. Absent on rows written before offers ran both ways. */
+  leaver?: CountryId;
   term: PeaceTerm;
   justification: string | null;
   status: "pending" | "accepted" | "rejected" | "withdrawn" | "expired";
@@ -60,6 +62,27 @@ function offerTermText(term: PeaceTerm): string {
     return " in return for a change of government and fresh elections";
   }
   return ` in return for freezing new defence procurement for ${term.turns} turns`;
+}
+
+/**
+ * What this offer is proposing, from the reader's side of it.
+ *
+ * An offer runs in both directions now, so describing every one as the sender
+ * offering to leave would state a withdrawal demand backwards: "East Germany offers
+ * to leave" when what East Germany actually said was "you leave".
+ *
+ * `leaver` is optional because a row written before offers ran both ways carries
+ * none; those all meant the sender, which is the fallback.
+ */
+function offerDirectionText(o: OfferView): string {
+  const senderLeaves = (o.leaver ?? o.fromCountry) === o.fromCountry;
+  if (senderLeaves) {
+    return o.incoming ? " offers to leave the war" : ", our offer to leave the war";
+  }
+  const leaverName = COUNTRY_CONFIGS[o.leaver ?? o.toCountry]?.name ?? o.leaver;
+  return o.incoming
+    ? ` asks us to leave the war, staying in it themselves`
+    : `, our request that ${leaverName} leave the war`;
 }
 
 export function PeacePanel({
@@ -253,7 +276,7 @@ export function PeacePanel({
             <div key={o.id} className="rounded-lg border border-card-border bg-card-elevated p-3">
               <p className="text-[12px]">
                 <strong>{COUNTRY_CONFIGS[o.fromCountry]?.name ?? o.fromCountry}</strong>
-                {o.incoming ? " offers to leave the war" : " — your offer to leave the war"}
+                {offerDirectionText(o)}
                 {offerTermText(o.term)}.
               </p>
               {o.justification && (

@@ -294,3 +294,28 @@ describe("which side the deal removes", () => {
     expect(screen.getByText(/needs the front well in our favour/i)).toBeTruthy();
   });
 });
+
+describe("how an offer on the table is described", () => {
+  it("says the sender is leaving when that is what they proposed", async () => {
+    vi.stubGlobal("fetch", mockGet({ currentTurn: 40, wars: [war], offers: [incoming] }));
+    render(<PeacePanel {...props} />);
+    expect(await screen.findByText(/offers to leave the war/)).toBeTruthy();
+  });
+
+  it("says they are asking US to leave when the deal removes us", async () => {
+    // Describing this as the sender offering to leave would state it backwards.
+    const demand = { ...incoming, leaver: "UK" as const };
+    vi.stubGlobal("fetch", mockGet({ currentTurn: 40, wars: [war], offers: [demand] }));
+    render(<PeacePanel {...props} />);
+    expect(await screen.findByText(/asks us to leave the war/)).toBeTruthy();
+  });
+
+  it("treats an offer with no direction recorded as the sender leaving", async () => {
+    // Rows written before offers ran both ways carry no `leaver`.
+    const legacy = { ...incoming };
+    delete (legacy as { leaver?: string }).leaver;
+    vi.stubGlobal("fetch", mockGet({ currentTurn: 40, wars: [war], offers: [legacy] }));
+    render(<PeacePanel {...props} />);
+    expect(await screen.findByText(/offers to leave the war/)).toBeTruthy();
+  });
+});
