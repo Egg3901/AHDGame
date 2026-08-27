@@ -246,7 +246,13 @@ describe("resolveBattleDeclarations — occupation", () => {
   };
 
   // US on side A, CN on side B, hosted in CN — CN starts holding all its own soil.
-  const warConflict = {
+  //
+  // Rebuilt per test rather than shared: resolution mutates the conflict document it
+  // is handed (`joinSide` the roster, `applyOccupation` the front and supplies) so the
+  // rest of the tick sees a consistent picture. A single literal shared across cases
+  // therefore carries one test's advance into the next.
+  let warConflict: Record<string, unknown>;
+  const makeWarConflict = () => ({
     _id: "afghan",
     name: "Central Asian Front",
     hostCountry: "CN",
@@ -267,10 +273,11 @@ describe("resolveBattleDeclarations — occupation", () => {
     control: 100,
     controlStart: 100,
     status: "active",
-  };
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
+    warConflict = makeWarConflict();
     db = createMockDb();
     db.collection("militaryUnits");
     db.collection("militaryFormations");
@@ -581,7 +588,9 @@ describe("resolveBattleDeclarations — supply at the front", () => {
     declaredTurn: 40,
     status: "pending",
   };
-  const warConflict = {
+  // Rebuilt per test — see the note on the occupation block's fixture.
+  let warConflict: Record<string, unknown>;
+  const makeWarConflict = () => ({
     _id: "afghan",
     name: "Central Asian Front",
     hostCountry: "CN",
@@ -602,10 +611,11 @@ describe("resolveBattleDeclarations — supply at the front", () => {
     control: 60,
     controlStart: 100,
     status: "active",
-  };
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
+    warConflict = makeWarConflict();
     db = createMockDb();
     db.collection("militaryUnits");
     db.collection("militaryFormations");
@@ -887,5 +897,214 @@ describe("resolveBattleDeclarations — coalitions", () => {
     );
     expect(ops.length).toBeGreaterThan(0);
     expect(new Set(ops.map((o) => o.updateOne.filter.countryId)).size).toBeGreaterThan(1);
+  });
+});
+
+describe("resolveBattleDeclarations — opposing offensives in one tick", () => {
+  let db: MockDb;
+  // Rebuilt per test: `joinSide` mutates the roster of whatever document
+  // `conflicts.findOne` hands back, so a shared literal leaks between cases.
+  let contested: Record<string, unknown>;
+  const makeContested = (id: string): Record<string, unknown> => ({
+    _id: id,
+    name: "Central Asian Front",
+    hostCountry: "CN",
+    region: "cas",
+    terrain: "Arid / mountainous",
+    bloc: "contested",
+    severity: "HIGH",
+    baseStrength: 470,
+    terr: 1.15,
+    infra: 34,
+    enemyMix: ["armor", "mech", "infantry"],
+    sideA: { label: "NATO", countries: ["US"], kind: "state", backer: "west" },
+    sideB: { label: "PLA", countries: ["CN"], kind: "state", backer: "east" },
+    control: 50,
+    status: "active",
+    supplyA: 60,
+    supplyB: 60,
+  });
+
+  // Fixed ids, not `new ObjectId()`: the battle seed is `hashStr(principal._id +
+  // turn)`, so a freshly generated id would reseed every engagement on every run and
+  // these cases would assert against a different battle each time.
+  const declFrom = (country: string, target: string, id: string) => ({
+    _id: new ObjectId(id),
+    declarerCountry: country,
+    targetCountry: target,
+    theaterId: "afghan",
+    declaredByCharacterId: "c1",
+    declaredTurn: 40,
+    status: "pending",
+  });
+
+  /** Every `conflicts.updateOne` that moved `control`, in the order written. */
+  const controlWrites = () =>
+    db.collectionMocks.conflicts.updateOne.mock.calls
+      .filter((c) => c[1]?.$set && "control" in c[1].$set)
+      .map((c) => c[1].$set as { control: number; controlStart: number });
+
+  const reports = () =>
+    db.collectionMocks.battleReports.insertOne.mock.calls.map(
+      (c) => c[0] as { controlBefore: number; controlAfter: number }
+    );
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    for (const c of [
+      "militaryUnits",
+      "militaryFormations",
+      "nationalDoctrine",
+      "battleDeclarations",
+      "battleReports",
+      "conflicts",
+      "characterGenerals",
+    ]) {
+      db.collection(c);
+    }
+    db.collectionMocks.militaryFormations.findOne.mockResolvedValue(null);
+    db.collectionMocks.nationalDoctrine.findOne.mockResolvedValue(null);
+    contested = makeContested("afghan");
+    db.collectionMocks.conflicts.findOne.mockResolvedValue(contested);
+    // Both sides declare on the same turn, so both resolve in this tick as their
+    // own offensive — `mergeOffensives` groups by (front, attacking side).
+    db.collectionMocks.battleDeclarations.find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([
+          declFrom("US", "CN", "aaaaaaaaaaaaaaaaaaaaaaa1"),
+          declFrom("CN", "US", "aaaaaaaaaaaaaaaaaaaaaaa2"),
+        ]),
+    });
+    // US overwhelms CN, so side A takes the ground in BOTH engagements: it wins
+    // its own offensive and it holds against the counter-attack.
+    wireUnits(
+      db,
+      [unit({ countryId: "US", theaterId: "afghan", basePower: 4000 })],
+      [unit({ countryId: "CN", theaterId: "afghan", basePower: 10 })]
+    );
+  });
+
+  it("resolves the second offensive against the front the first one left", async () => {
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    const [first, second] = reports();
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
+    expect(first.controlAfter).toBeLessThan(50);
+    expect(second.controlBefore).toBe(first.controlAfter);
+  });
+
+  it("keeps the ground both offensives took, not just the last one's", async () => {
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    const writes = controlWrites();
+    expect(writes).toHaveLength(2);
+    expect(writes[1].control).toBeLessThan(writes[0].control);
+    expect(writes[1].control).toBe(reports()[1].controlAfter);
+  });
+
+  it("pins controlStart once for the conflict, not once per offensive", async () => {
+    // A document predating `controlStart` — the first write pins it to where the
+    // front stood, and the second must not re-pin it to the ground just taken.
+    delete contested.controlStart;
+
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    for (const w of controlWrites()) expect(w.controlStart).toBe(50);
+  });
+
+  it("carries the first engagement's casualties into the second", async () => {
+    // An even matchup, so both formations are still bleeding in the second battle.
+    wireUnits(
+      db,
+      [unit({ countryId: "US", theaterId: "afghan" })],
+      [unit({ countryId: "CN", theaterId: "afghan" })]
+    );
+
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    type Res = { id: string; casualties: number };
+    const [first, second] = db.collectionMocks.battleReports.insertOne.mock.calls.map(
+      (c) =>
+        c[0] as {
+          result: { attacker: { unitResults: Res[] }; defender: { unitResults: Res[] } };
+        }
+    );
+    // The US formation attacks in the first engagement and defends in the second,
+    // so it fights twice in this one tick.
+    const hitA = first.result.attacker.unitResults[0];
+    const hitB = second.result.defender.unitResults.find((r) => r.id === hitA.id);
+    expect(hitB).toBeDefined();
+    expect(hitA.casualties).toBeGreaterThan(0);
+    expect(hitB!.casualties).toBeGreaterThan(0);
+
+    const writes = db.collectionMocks.militaryUnits.bulkWrite.mock.calls
+      .flatMap(
+        (c) =>
+          c[0] as Array<{
+            updateOne: { filter: { _id: unknown }; update: { $set: { personnel: number } } };
+          }>
+      )
+      .filter((o) => String(o.updateOne.filter._id) === hitA.id);
+    expect(writes).toHaveLength(2);
+    // Both writes are absolute `$set`s, so the second must be computed from what the
+    // first left behind or it silently restores the men killed in the first battle.
+    expect(writes[1].updateOne.update.$set.personnel).toBe(
+      15000 - hitA.casualties - hitB!.casualties
+    );
+  });
+
+  it("does not let one front ending its war fizzle another front's offensive", async () => {
+    // The stand-down flag is per conflict. If it ever leaked across the theater loop,
+    // one war finishing would silently cancel every other front's fighting that tick.
+    contested.control = 1; // afghan ends this tick
+    const korea = makeContested("korea");
+    db.collectionMocks.conflicts.findOne.mockImplementation((q: { _id?: string }) =>
+      Promise.resolve(q?._id === "korea" ? korea : contested)
+    );
+    db.collectionMocks.battleDeclarations.find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([
+          declFrom("US", "CN", "aaaaaaaaaaaaaaaaaaaaaaa1"),
+          declFrom("CN", "US", "aaaaaaaaaaaaaaaaaaaaaaa2"),
+          { ...declFrom("US", "CN", "aaaaaaaaaaaaaaaaaaaaaaa3"), theaterId: "korea" },
+        ]),
+    });
+    wireUnits(
+      db,
+      [
+        unit({ countryId: "US", theaterId: "afghan", basePower: 4000 }),
+        unit({ countryId: "US", theaterId: "korea" }),
+      ],
+      [
+        unit({ countryId: "CN", theaterId: "afghan", basePower: 10 }),
+        unit({ countryId: "CN", theaterId: "korea" }),
+      ]
+    );
+
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    const theaters = db.collectionMocks.battleReports.insertOne.mock.calls.map(
+      (c) => (c[0] as { theaterId: string }).theaterId
+    );
+    expect(theaters).toContain("korea");
+  });
+
+  it("stops resolving offensives once the front has ended the war", async () => {
+    // One point off the pole: the first offensive clears it and stands the war down,
+    // which recalls every unit at the front to reserve. Nothing may fight after that.
+    contested.control = 1;
+
+    const out = await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    const stoodDown = db.collectionMocks.conflicts.updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.status === "resolved"
+    );
+    expect(stoodDown).toBeDefined();
+    expect(db.collectionMocks.battleReports.insertOne).toHaveBeenCalledTimes(1);
+    expect(out).toEqual({ resolved: 1, fizzled: 1 });
   });
 });
