@@ -24,7 +24,7 @@ import { getCabinetEligibleOfficeTypes } from "@/lib/legislature/chamberOfficeTy
  * is none. Guarded — a holder whose `currentOffice` has already moved on (no
  * longer the cabinet office type) is left untouched, never clobbered.
  */
-async function notifyAndRestoreClearedHolders(
+export async function notifyAndRestoreClearedHolders(
   db: Db,
   countryId: CountryId,
   memberIds: ObjectId[]
