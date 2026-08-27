@@ -181,14 +181,44 @@ function widenHosts(c: ConflictDoc): WorldEntityId[] {
   return hosts;
 }
 
+/** Exactly the two fields the re-baseline writes. Narrow so it cannot carry more. */
+type MergedTheatreControl = Pick<ConflictDoc, "control" | "controlStart">;
+
+/** An evenly split front: neither Germany holds more of the ground than the other. */
+const MERGED_THEATRE_CONTROL = 50;
+
 /**
- * Freeze an open crisis onto a qualifying live war, if there is one.
+ * Re-baseline the front when the theatre becomes BOTH Germanies.
  *
- * ORDER: claim the freeze FIRST, then rename and widen the war — the same
- * ordering `declareSettlementWar` uses, and for the same reason. A failure after
- * the claim leaves the crisis correctly frozen on a war that merely kept its own
- * name, which is recoverable; the reverse would rename a war no crisis points at.
+ * `initialControl` opens an interstate war with the defender holding all of its
+ * own soil, which is right for a war fought over one country: the United States
+ * declaring on East Germany starts with East Germany holding East Germany. It is
+ * wrong the moment this attachment widens the ground to both Germanies. The war
+ * is then being fought over a divided country whose halves each start in a
+ * different bloc's hands, and a roster-derived 100 would hand the anchor's side
+ * the whole of a theatre that includes its opponent's own territory — a front
+ * the West has to fight across the Federal Republic just to draw level on.
+ *
+ * ONLY ON AN UNMOVED FRONT. A war already under way when the question attaches
+ * has a front that belligerents fought for; slamming it to even would erase that
+ * and hand back ground somebody took. `control === controlStart` is the exact
+ * test for "nobody has moved this yet", and it is true on the same-tick case
+ * this rule is really about, where the declaration and the attachment land in
+ * one turn.
+ *
+ * NOT undone by `detachCrisisFromWar`, deliberately, and unlike the name and the
+ * host roster. Those are labels the settlement borrowed; this is the line the
+ * fighting has since been happening on. Restoring a stale 100 to a war that has
+ * been running for fifty turns would be the erasure this guard exists to refuse.
  */
+function mergedTheatreControl(c: ConflictDoc): MergedTheatreControl | null {
+  const start = c.controlStart ?? c.control;
+  if (c.control !== start) return null;
+  if (c.control === MERGED_THEATRE_CONTROL) return null;
+  return { control: MERGED_THEATRE_CONTROL, controlStart: MERGED_THEATRE_CONTROL };
+}
+
+/** A live war that qualifies, paired with the reading `qualifyWar` took of it. */
 export interface QualifyingWarMatch {
   war: ConflictDoc;
   qualified: QualifyingWar;
@@ -270,6 +300,19 @@ export function warFreezeNotice(d: PendingWarFreeze, when: "before" | "after"): 
         "you intended.";
 }
 
+/**
+ * Freeze an open crisis onto a qualifying live war, if there is one.
+ *
+ * ORDER: claim the freeze FIRST, then rename, widen and re-baseline the war — the
+ * same ordering `declareSettlementWar` uses, and for the same reason. A failure
+ * after the claim leaves the crisis correctly frozen on a war that merely kept its
+ * own name and its own opening front, which is recoverable; the reverse would
+ * rename a war no crisis points at.
+ *
+ * The second write never runs again for this crisis: a retry finds the crisis
+ * already `frozen` and returns above. So a war that lost the rename also keeps
+ * `initialControl`'s lopsided opening — an admin fix, not a self-healing one.
+ */
 export async function attachCrisisToLiveWar(
   db: Db,
   crisis: SettlementCrisisDoc
@@ -311,9 +354,20 @@ export async function attachCrisisToLiveWar(
   );
   if (claimed.matchedCount !== 1) return NOT_ATTACHED;
 
+  const rebaselined = mergedTheatreControl(war);
   await conflicts.updateOne(
     { _id: war._id },
-    { $set: { name: WAR_FOR_GERMANY_NAME, hostEntities: widenHosts(war) } }
+    {
+      $set: { name: WAR_FOR_GERMANY_NAME, hostEntities: widenHosts(war), ...rebaselined },
+      // The momentum sample describes a starting line that no longer exists.
+      // `applyOccupation` writes one even on a battle that does NOT move the
+      // front, so a war can reach this point unmoved and still carry a reading
+      // taken against the old baseline; `warEffort` would then score the
+      // re-baseline itself as fifty points of advance somebody made. Dropped
+      // ONLY when we actually moved the line — a war we left alone keeps a
+      // sample that is still measured against its own, unchanged, start.
+      ...(rebaselined ? { $unset: { controlSample: "" } } : {}),
+    }
   );
 
   return { attached: true, conflictId: qualified.conflictId };
