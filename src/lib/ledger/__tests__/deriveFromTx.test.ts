@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ObjectId } from "mongodb";
-import { deriveLedgerEntry } from "@/lib/ledger/deriveFromTx";
+import { deriveLedgerEntry, reasonForTxType } from "@/lib/ledger/deriveFromTx";
 import { isAnchorBalanced, nativeImbalance } from "@/lib/ledger/epsilon";
 import type { DerivableTx } from "@/lib/ledger/deriveFromTx";
 
@@ -145,6 +145,13 @@ describe("Phase 3 coverage — semantic mint/sink reasons", () => {
       tx({ type: "corp_revenue", subjectType: "corporation", amount: 2000, anchorAmount: 2000 })
     );
     expect(entry!.legs[1].account).toBe("mint:sector_revenue:GBP");
+  });
+
+  it("attributes common asset transfers and modeled income channels", () => {
+    expect(reasonForTxType("bond_purchase")).toBe("bond_principal_investment");
+    expect(reasonForTxType("index_fund_subscribe")).toBe("fund_subscription");
+    expect(reasonForTxType("corp_dividend")).toBe("corporate_dividend");
+    expect(reasonForTxType("office_income")).toBe("public_salary");
   });
 
   it("routes a state-party dues row (no subjectId) to a state_party account via meta", () => {
