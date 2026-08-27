@@ -95,6 +95,23 @@ interface RouteParams {
 }
 
 /**
+ * The slice of a rival corporation the market-position panel needs: enough to
+ * name and colour it, plus the two fields that decide whether it is player-owned
+ * or part of the NPP field.
+ */
+type SiblingCorpProjection = Pick<
+  Corporation,
+  | "_id"
+  | "name"
+  | "sequentialId"
+  | "brandColor"
+  | "countryId"
+  | "liquidCurrencyCode"
+  | "ceoType"
+  | "caretakerCeo"
+>;
+
+/**
  * GET /api/corporations/[id]/sectors/[sectorId]
  * Full sector detail with margin modifier breakdown and market context.
  */
@@ -395,26 +412,22 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         ? db
             .collection<Corporation>("corporations")
             .find({ _id: { $in: siblingCorpIds } })
-            .project<
-              Pick<
-                Corporation,
-                "_id" | "name" | "sequentialId" | "brandColor" | "countryId" | "liquidCurrencyCode"
-              >
-            >({
+            .project<SiblingCorpProjection>({
               _id: 1,
               name: 1,
               sequentialId: 1,
               brandColor: 1,
               countryId: 1,
               liquidCurrencyCode: 1,
+              // Who actually OWNS the corp, for the market panel's player/NPP
+              // split. `caretakerCeo` rides along because an NPP caretaker runs
+              // a corp whose owner is still a player, and that corp belongs with
+              // the player corps.
+              ceoType: 1,
+              caretakerCeo: 1,
             })
             .toArray()
-        : Promise.resolve(
-            [] as Pick<
-              Corporation,
-              "_id" | "name" | "sequentialId" | "brandColor" | "countryId" | "liquidCurrencyCode"
-            >[]
-          ),
+        : Promise.resolve([] as SiblingCorpProjection[]),
       loadFxRatesByCurrency(db),
       db.collection<UnownedSector>("unownedSectors").findOne({
         stateId: sector.stateId,
