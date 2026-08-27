@@ -60,6 +60,14 @@ export interface TensionPressures {
   activeCrises: number;
   /** Total warheads across all programmes. */
   totalWarheads: number;
+  /**
+   * Summed intensity (0-100 each) of active wars with the two superpowers on
+   * opposing sides. A direct US-USSR shooting war is the hottest thing the
+   * world can hold short of launch, and must dominate the floor.
+   */
+  superpowerWarIntensity: number;
+  /** Summed intensity of every other active war. */
+  otherWarIntensity: number;
 }
 
 /** Player-facing explanation of the standing pressure floor. */
@@ -68,6 +76,7 @@ export interface TensionPressureBreakdown {
   escalation: number;
   activeCrises: number;
   arsenal: number;
+  wars: number;
   floor: number;
 }
 
@@ -75,13 +84,56 @@ export function tensionPressureBreakdown(p: TensionPressures): TensionPressureBr
   const escalation = Math.min(30, p.escalationLevel * 4);
   const activeCrises = Math.min(12, p.activeCrises * 3);
   const arsenal = Math.min(18, Math.sqrt(Math.max(0, p.totalWarheads)) * 1.2);
+  // A full-intensity superpower clash contributes 45 on its own: baseline 12
+  // + 45 parks the floor deep in CRISIS before counting the arsenal that war
+  // implies, and BRINK is reachable with the rest of the world's pressure.
+  const wars = Math.min(
+    45,
+    Math.max(0, p.superpowerWarIntensity) * 0.45 + Math.max(0, p.otherWarIntensity) * 0.12
+  );
   return {
     baseline: TENSION_BASELINE,
     escalation: clampTension(escalation),
     activeCrises: clampTension(activeCrises),
     arsenal: clampTension(arsenal),
-    floor: clampTension(TENSION_BASELINE + escalation + activeCrises + arsenal),
+    wars: clampTension(wars),
+    floor: clampTension(TENSION_BASELINE + escalation + activeCrises + arsenal + wars),
   };
+}
+
+/** The two sides of a war as the pressure model needs them: who and how hot. */
+export interface WarPressureInput {
+  sideACountries: string[];
+  sideBCountries: string[];
+  /** 0-100. */
+  intensity: number;
+}
+
+const SUPERPOWERS = ["US", "RU"] as const;
+
+/** True when the two superpowers stand on opposing sides of this war. */
+export function isSuperpowerClash(
+  war: Pick<WarPressureInput, "sideACountries" | "sideBCountries">
+): boolean {
+  const [a, b] = SUPERPOWERS;
+  return (
+    (war.sideACountries.includes(a) && war.sideBCountries.includes(b)) ||
+    (war.sideACountries.includes(b) && war.sideBCountries.includes(a))
+  );
+}
+
+/** Fold active wars into the two intensity sums the pressure floor reads. */
+export function warPressures(
+  wars: WarPressureInput[]
+): Pick<TensionPressures, "superpowerWarIntensity" | "otherWarIntensity"> {
+  let superpowerWarIntensity = 0;
+  let otherWarIntensity = 0;
+  for (const war of wars) {
+    const intensity = Math.max(0, Math.min(100, war.intensity));
+    if (isSuperpowerClash(war)) superpowerWarIntensity += intensity;
+    else otherWarIntensity += intensity;
+  }
+  return { superpowerWarIntensity, otherWarIntensity };
 }
 
 /**

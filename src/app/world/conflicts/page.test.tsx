@@ -78,7 +78,9 @@ vi.mock("@/lib/coldwar/tension", () => ({
     vietnam: 0,
     crises: 0,
     nuclear: 0,
+    wars: 0,
   })),
+  warPressures: vi.fn(() => ({ superpowerWarIntensity: 0, otherWarIntensity: 0 })),
 }));
 vi.mock("@/lib/coldwar/dials", () => ({
   getColdWarDials: vi.fn(async () => ({ defcon: 4 })),

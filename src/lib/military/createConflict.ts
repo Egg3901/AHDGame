@@ -19,6 +19,7 @@ import { OCCUPATION } from "./config";
 import { planOpeningForceDeployment } from "./openingForces";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
+import { applyTensionEvent, isSuperpowerClash } from "@/lib/coldwar/tension";
 
 /**
  * Birth-data generation for a conflict — the flavor the 4 static theaters hardcoded
@@ -193,6 +194,18 @@ export async function createConflict(
   const doc = buildConflict({ ...input, conflictId });
   await getConflictsCollection(db).insertOne(doc);
   await deployOpeningForces(db, doc);
+  // The outbreak spike. The standing-pressure floor picks the war up from the
+  // next tension turn, but relaxation toward a raised floor takes ~10 turns —
+  // too slow for the day war breaks out. Seed-created conflicts skip it: a
+  // world seeded mid-war starts at whatever its preset tension says.
+  if (input.createdBy !== "seed") {
+    const clash = isSuperpowerClash({
+      sideACountries: doc.sideA.countries,
+      sideBCountries: doc.sideB.countries,
+    });
+    const delta = clash ? 20 : doc.type === "interstate" ? 10 : 5;
+    await applyTensionEvent(db, doc.startTurn, "escalation", `War declared: ${doc.name}`, delta);
+  }
   return doc;
 }
 

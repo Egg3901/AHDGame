@@ -37,6 +37,7 @@ export interface TensionPressureView extends TensionPressureBreakdown {
   escalationLevel: number;
   activeCrisisCount: number;
   totalWarheads: number;
+  activeWarCount: number;
 }
 
 export function ColdWarHelp({ label, children }: { label: string; children: React.ReactNode }) {
@@ -195,9 +196,10 @@ export function TensionHeader({
           </h1>
         </div>
         <ColdWarHelp label="How world tension works">
-          Tension is a shared 0 to 100 measure. Tests and crisis outcomes move it immediately. Each
-          turn it moves toward a pressure floor set by the Vietnam ladder, active crises, and the
-          world nuclear stockpile. Tension alone can reach DEFCON 2, but never DEFCON 1.
+          Tension is a shared 0 to 100 measure. Tests, war declarations, and crisis outcomes move it
+          immediately. Each turn it moves toward a pressure floor set by the Vietnam ladder, active
+          crises, the wars on this board, and the world nuclear stockpile. Tension alone can reach
+          DEFCON 2, but never DEFCON 1.
         </ColdWarHelp>
       </header>
 
@@ -309,7 +311,7 @@ export function TensionHeader({
               style={{
                 marginTop: 9,
                 display: "grid",
-                gridTemplateColumns: "repeat(4,minmax(0,1fr))",
+                gridTemplateColumns: "repeat(5,minmax(0,1fr))",
                 gap: 8,
               }}
             >
@@ -336,6 +338,12 @@ export function TensionHeader({
                 value={pressures.arsenal}
                 detail={`${fmtN(pressures.totalWarheads)} warheads`}
                 help="All national warheads count. The contribution grows with the square root of the stockpile and caps at 18, so early buildup matters most."
+              />
+              <PressureCard
+                label="WARS"
+                value={pressures.wars}
+                detail={`${pressures.activeWarCount} active`}
+                help="Every active war on the Conflicts board pushes the floor by its intensity. A war with the two superpowers on opposing sides weighs far more than any other, capped at 45 in total."
               />
             </div>
           </div>

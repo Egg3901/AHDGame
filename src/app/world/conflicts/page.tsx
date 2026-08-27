@@ -8,7 +8,12 @@ import { toConflictView } from "./_coldwar/conflictView";
 import { VietnamEscalationPanel } from "./_coldwar/VietnamEscalationPanel";
 import { getVietnamEscalationSummary, VIETNAM_RUNGS } from "@/lib/crises/vietnamEscalation";
 import { TensionHeader, type NuclearPowerView } from "./_coldwar/TensionHeader";
-import { getColdWarTension, tensionBand, tensionPressureBreakdown } from "@/lib/coldwar/tension";
+import {
+  getColdWarTension,
+  tensionBand,
+  tensionPressureBreakdown,
+  warPressures,
+} from "@/lib/coldwar/tension";
 import { getColdWarDials } from "@/lib/coldwar/dials";
 import { listNuclearPrograms } from "@/lib/db/collections/nuclearPrograms";
 import { NUCLEAR_NODES } from "@/lib/military/nuclearProgram";
@@ -60,6 +65,13 @@ export default async function ConflictsPage() {
     escalationLevel: vietnam.level,
     activeCrises: activeCrisisCount,
     totalWarheads,
+    ...warPressures(
+      docs.map((d) => ({
+        sideACountries: d.sideA?.countries ?? [],
+        sideBCountries: d.sideB?.countries ?? [],
+        intensity: d.intensity ?? 0,
+      }))
+    ),
   });
 
   // Who holds the bomb: any programme with a stockpile or an adopted node.
@@ -94,6 +106,7 @@ export default async function ConflictsPage() {
             escalationLevel: vietnam.level,
             activeCrisisCount,
             totalWarheads,
+            activeWarCount: docs.length,
           }}
           dials={dials}
         />
