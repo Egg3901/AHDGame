@@ -51,6 +51,7 @@ function sourcingDoc(
     tariffPaid: 0,
     toleranceBoundUnits: 0,
     capacityBoundUnits: 0,
+    shortageResponsiveUnits: 0,
     flows: [],
     itemizedFlowCount: 0,
     totalFlowCount: 0,

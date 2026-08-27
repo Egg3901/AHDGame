@@ -9,6 +9,18 @@ import { handleRouteError } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Impeachment } from "@/lib/db/types/impeachment";
 import { fileArticlesOfImpeachment } from "@/lib/impeachment/fileArticles";
+import {
+  countChamberSeats,
+  houseImpeachmentVotesNeeded,
+  senateConvictionVotesNeeded,
+  impeachmentStageChamberOfficeType,
+} from "@/lib/impeachment/impeachmentTally";
+
+/** The all-seats bar a player needs to read a vote in progress. */
+export interface ImpeachmentChamberInfo {
+  seats: number;
+  needed: number;
+}
 
 const fileSchema = z.object({
   countryId: z.string().min(1),
@@ -50,7 +62,39 @@ export async function GET(request: Request) {
       .limit(20)
       .toArray();
 
-    return NextResponse.json({ impeachments });
+    // Attach the all-seats bar (chamber size + ayes needed) for every open
+    // case so the panel can show what passage actually takes. Seat counts are
+    // memoized per chamber; most requests touch one or two. Cache the PROMISE,
+    // not the resolved count: these callbacks all run to their first await
+    // before any of them resolves, so caching the number would let every case
+    // in the same chamber issue its own duplicate seat scan.
+    const seatCache = new Map<string, Promise<number>>();
+    const chambers = await Promise.all(
+      impeachments.map(async (imp): Promise<ImpeachmentChamberInfo | null> => {
+        if (imp.stage !== "house" && imp.stage !== "senate") return null;
+        const officeType = impeachmentStageChamberOfficeType(imp);
+        if (!officeType) return null;
+        const stateScope = imp.targetOffice === "governor" ? (imp.state ?? "") : "";
+        const cacheKey = `${officeType}|${stateScope}`;
+        let pending = seatCache.get(cacheKey);
+        if (!pending) {
+          pending = countChamberSeats(db, imp.countryId, officeType, stateScope || undefined);
+          seatCache.set(cacheKey, pending);
+        }
+        const seats = await pending;
+        return {
+          seats,
+          needed:
+            imp.stage === "house"
+              ? houseImpeachmentVotesNeeded(seats)
+              : senateConvictionVotesNeeded(seats),
+        };
+      })
+    );
+
+    return NextResponse.json({
+      impeachments: impeachments.map((imp, i) => ({ ...imp, chamber: chambers[i] })),
+    });
   } catch (error) {
     return handleRouteError(error);
   }

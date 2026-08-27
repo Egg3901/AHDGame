@@ -4,11 +4,12 @@ import { useState } from "react";
 import { Button } from "@/components/ui";
 import { MonetaryCard } from "./monetaryUi";
 import type { MonetaryView } from "../../useCabinetOffice";
+import { ActingLockNote, useActingLock } from "../ActingLock";
 
 export function DebtOperationPanel({
   countryCode,
   positionId,
-  canAct,
+  canAct: canActProp,
   currentTurn,
   m,
   onUpdate,
@@ -20,6 +21,10 @@ export function DebtOperationPanel({
   m: MonetaryView;
   onUpdate: () => void;
 }) {
+  // An acting secretary reads this surface but does not move it.
+  const actingLockReason = useActingLock("treasury");
+  const canAct = canActProp && !actingLockReason;
+
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(
     null
@@ -60,6 +65,8 @@ export function DebtOperationPanel({
       title="Debt Management Operation"
       hint="Costs 1 ministerial action. Accelerates investor-confidence recovery, lowering the sovereign premium."
     >
+      <ActingLockNote reason={actingLockReason} />
+
       {m.debtOp.active ? (
         <p className="text-sm text-success">Active — concludes on turn {m.debtOp.expiresTurn}.</p>
       ) : inCooldown ? (

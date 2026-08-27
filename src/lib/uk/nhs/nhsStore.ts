@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 import type { UKNhsState } from "@/lib/db/types/ukNhsState";
-import { getBudgetForFiscalYear } from "@/lib/db/collections/ukBudgets";
+import type { FederalBudget } from "@/lib/db/types/budget";
 import {
   NHS_QUALITY_START,
   NHS_BASELINE_HEALTHCARE_SHARE,
@@ -11,10 +11,9 @@ import {
 /**
  * Persistence + per-turn drive for the UK NHS quality score (epic #856).
  *
- * The score is driven by the Budget: the healthcare share of the current
- * PASSED Budget sets the funding ratio, which pulls quality gradually toward its
- * target each turn. With no passed Budget, funding sits at the baseline
- * (neutral ratio 1.0). Quality feeds approval + manifesto salience elsewhere.
+ * The score is driven by the enacted fiscal ledger. Annual Budgets and ordinary
+ * laws both update that same ledger, so neither authority gets a private NHS
+ * funding channel. With no ledger, funding sits at the neutral baseline.
  */
 
 export function getUKNhsCollection(db: Db) {
@@ -31,18 +30,20 @@ export async function getNhsState(db: Db): Promise<UKNhsState | null> {
 }
 
 /**
- * Advance NHS quality one turn from the current PASSED Budget's healthcare
- * share. Returns the new quality. Pure inputs are resolved here so the caller
- * just supplies the fiscal year + time.
+ * Advance NHS quality one turn from health's share of enacted annual spending.
  */
 export async function tickNhsFromBudget(
   db: Db,
   args: { fiscalYear: number; now: Date }
 ): Promise<number> {
-  const budget = await getBudgetForFiscalYear(db, args.fiscalYear);
+  const budget = await db
+    .collection<FederalBudget>("federalBudget")
+    .findOne({ _id: "UK" }, { projection: { spending: 1 } });
+  const healthSpending =
+    budget?.spending.byCategory.health ?? budget?.spending.byCategory.healthcare;
   const healthcareShare =
-    budget?.status === "passed"
-      ? (budget.spendingAllocations?.healthcare ?? NHS_BASELINE_HEALTHCARE_SHARE)
+    budget && budget.spending.total > 0 && typeof healthSpending === "number"
+      ? (healthSpending / budget.spending.total) * 100
       : NHS_BASELINE_HEALTHCARE_SHARE;
 
   const current = await getNhsQuality(db);

@@ -7,8 +7,18 @@ const TYPE_RANK: Record<GameIteration["type"], number> = {
   Iteration: 2,
 };
 
+/**
+ * Display-name overrides for specific iterations. The iteration system stores
+ * iterations as `{type, number}` (e.g. `Iteration 4`), but the current run is
+ * branded to players with a version number. Keyed by `type:number`.
+ * Past iterations (Alpha 1, Beta 1/2) are intentionally left as-is.
+ */
+const ITERATION_DISPLAY_OVERRIDES: Record<string, string> = {
+  "Iteration:4": "1.0",
+};
+
 export function iterationLabel(it: GameIteration): string {
-  return `${it.type} ${it.number}`;
+  return ITERATION_DISPLAY_OVERRIDES[`${it.type}:${it.number}`] ?? `${it.type} ${it.number}`;
 }
 
 export function iterationKey(it: GameIteration): string {

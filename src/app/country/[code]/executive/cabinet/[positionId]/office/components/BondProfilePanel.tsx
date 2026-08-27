@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { Button } from "@/components/ui";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
+import { ActingLockNote, useActingLock } from "./ActingLock";
 
 const MATURITY_OPTIONS = [
   { turns: 48, label: "1-Year" },
@@ -24,12 +25,16 @@ interface Props {
 export function BondProfilePanel({
   countryCode,
   positionId,
-  canAct,
+  canAct: canActProp,
   currentProfile,
   debtPrincipal,
   sovereignBondsOutstanding,
   onUpdate,
 }: Props) {
+  // An acting secretary reads this surface but does not move it.
+  const actingLockReason = useActingLock("treasury");
+  const canAct = canActProp && !actingLockReason;
+
   const countryId = countryCode.toUpperCase() as CountryId;
   const sym = CURRENCY_SYMBOLS[COUNTRY_CURRENCY_MAP[countryId]] ?? "$";
 
@@ -106,6 +111,8 @@ export function BondProfilePanel({
 
   return (
     <section className="rounded-xl border border-card-border bg-card p-6 shadow-sm">
+      <ActingLockNote reason={actingLockReason} />
+
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-foreground">Sovereign Bond Maturity Profile</h2>
         <p className="text-sm text-muted mt-1">

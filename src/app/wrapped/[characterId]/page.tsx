@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { iterationLabel } from "@/lib/wiki/officeIteration";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { RetiredCharacter } from "@/lib/db/types/retiredCharacter";
@@ -35,7 +36,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const recap = await loadRecap(characterId);
   if (!recap) return { title: "Season Wrapped | A House Divided" };
 
-  const season = recap.iteration ? `${recap.iteration.type} ${recap.iteration.number}` : "Season";
+  const season = recap.iteration ? iterationLabel(recap.iteration) : "Season";
   const title = `${recap.name}'s ${season} Wrapped`;
   const bits = [
     recap.highestOffice,

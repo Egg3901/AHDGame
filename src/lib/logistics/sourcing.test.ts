@@ -11,6 +11,8 @@ import {
   FREIGHT_CONGESTION_OVERFLOW,
   GRID_LOSS_PER_HOP,
   GRID_WHEELING_PER_HOP_FRACTION,
+  shortageResponsiveToleranceSlack,
+  SHORTAGE_TOLERANCE_MAX_EXTRA,
 } from "./sourcing";
 import { FREIGHT_CLASS_BY_COMMODITY } from "./freightClass";
 import { COMMODITY_TYPES } from "@/lib/constants/commodities";
@@ -63,6 +65,21 @@ describe("freight classes", () => {
 });
 
 describe("runSourcingPass", () => {
+  it("widens willingness to pay only for severe local shortage", () => {
+    expect(
+      shortageResponsiveToleranceSlack({ localSupply: 0, localDemand: 100, enabled: false })
+    ).toBe(BUYER_TOLERANCE_SLACK);
+    expect(
+      shortageResponsiveToleranceSlack({ localSupply: 50, localDemand: 100, enabled: true })
+    ).toBe(BUYER_TOLERANCE_SLACK);
+    expect(
+      shortageResponsiveToleranceSlack({ localSupply: 25, localDemand: 100, enabled: true })
+    ).toBe(BUYER_TOLERANCE_SLACK + SHORTAGE_TOLERANCE_MAX_EXTRA / 2);
+    expect(
+      shortageResponsiveToleranceSlack({ localSupply: 0, localDemand: 100, enabled: true })
+    ).toBe(BUYER_TOLERANCE_SLACK + SHORTAGE_TOLERANCE_MAX_EXTRA);
+  });
+
   it("fills intra-state demand free before sourcing interstate", () => {
     const r = runSourcingPass(
       makeInputs({
@@ -224,6 +241,24 @@ describe("runSourcingPass", () => {
     expect(coalFlow(r)).toHaveLength(0);
     expect(coal.unmetUnits).toBeCloseTo(100);
     expect(coal.toleranceBoundUnits).toBeCloseTo(100);
+  });
+
+  it("clears an otherwise refused route when severe shortage enables the wider ceiling", () => {
+    const expensive = makeInputs({
+      statePricesFor: () => ({ A1: 100, A2: 150 }),
+      nationalPricesFor: () => ({ UK: 160 }),
+    });
+    const dark = runSourcingPass(expensive);
+    const treatment = runSourcingPass({
+      ...expensive,
+      shortageResponsiveSourcingEnabled: true,
+    });
+
+    expect(coalFlow(dark)).toHaveLength(0);
+    expect(coalFlow(treatment)).toHaveLength(1);
+    const coal = treatment.summaries.find((row) => row.commodity === "coal")!;
+    expect(coal.unmetUnits).toBe(0);
+    expect(coal.shortageResponsiveUnits).toBe(100);
   });
 
   it("caps interstate shipping at the origin state's shared freight capacity", () => {

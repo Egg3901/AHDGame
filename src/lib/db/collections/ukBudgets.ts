@@ -1,6 +1,6 @@
 import type { Db, ObjectId } from "mongodb";
 import type { UKBudget, UKBudgetStatus } from "../types/ukBudget";
-import type { Bill } from "../types/legislation";
+import type { Bill, BillProvision } from "../types/legislation";
 import { validateBudget } from "@/lib/uk/budget/budgetValidation";
 import { applyConfidenceEventToGov } from "@/lib/uk/confidence/confidenceGaugeStore";
 import { getNationalDocId } from "@/lib/constants/nationalScope";
@@ -29,7 +29,7 @@ export async function getBudgetForFiscalYear(db: Db, fiscalYear: number): Promis
  * Ensure a draft Budget exists for a fiscal year so the Chancellor has something
  * to author when the annual cycle opens. Idempotent: a no-op if any budget
  * (draft or resolved) already exists for the year. Returns true if it created one.
- * Seeds empty tax/spend maps for the Chancellor to fill.
+ * Seeds empty tax/programme maps for the Chancellor to fill.
  */
 export async function ensureBudgetDraftForFiscalYear(
   db: Db,
@@ -44,7 +44,7 @@ export async function ensureBudgetDraftForFiscalYear(
     status: "draft",
     chancellorCharacterId: null,
     taxRates: {},
-    spendingAllocations: {},
+    programLevels: {},
     createdAt: now,
     updatedAt: now,
   } as UKBudget);
@@ -55,13 +55,17 @@ export interface UpsertBudgetDraftInput {
   fiscalYear: number;
   chancellorCharacterId: ObjectId | null;
   taxRates: Record<string, number>;
-  spendingAllocations: Record<string, number>;
+  programLevels: Record<string, number>;
   now: Date;
 }
 
 export interface BudgetOpResult {
   ok: boolean;
   error?: string;
+}
+
+export interface TabledBudgetResult extends BudgetOpResult {
+  billId?: ObjectId;
 }
 
 /**
@@ -77,13 +81,13 @@ export async function upsertBudgetDraft(
   if (existing && existing.status !== "draft") {
     return { ok: false, error: "budget already tabled" };
   }
-  await col.updateOne(
-    { fiscalYear: input.fiscalYear },
+  const updated = await col.updateOne(
+    existing ? { fiscalYear: input.fiscalYear, status: "draft" } : { fiscalYear: input.fiscalYear },
     {
       $set: {
         chancellorCharacterId: input.chancellorCharacterId,
         taxRates: input.taxRates,
-        spendingAllocations: input.spendingAllocations,
+        programLevels: input.programLevels,
         updatedAt: input.now,
       },
       $setOnInsert: {
@@ -94,6 +98,9 @@ export async function upsertBudgetDraft(
     },
     { upsert: true }
   );
+  if (existing && updated.matchedCount === 0) {
+    return { ok: false, error: "budget already tabled" };
+  }
   return { ok: true };
 }
 
@@ -104,21 +111,25 @@ export async function tableBudget(db: Db, fiscalYear: number, now: Date): Promis
   if (!budget) return { ok: false, error: "no budget to table" };
   if (budget.status !== "draft") return { ok: false, error: "budget already tabled" };
 
-  const valid = validateBudget(budget);
+  const valid = validateBudget({
+    taxRates: budget.taxRates ?? {},
+    programLevels: budget.programLevels ?? {},
+  });
   if (!valid.ok) return valid;
 
-  await col.updateOne(
-    { fiscalYear },
+  const updated = await col.updateOne(
+    { fiscalYear, status: "draft" },
     { $set: { status: "tabled", tabledAt: now, updatedAt: now } }
   );
+  if (updated.matchedCount === 0) return { ok: false, error: "budget already tabled" };
   return { ok: true };
 }
 
 /**
  * Create the Budget's vote-vehicle bill so MPs vote on it through the normal UK
- * Commons lifecycle (whip and all). The bill carries no policy provisions — the
- * budget's tax/spend content lives on the UKBudget doc; `budgetFiscalYear` links
- * them so the notifier applies the outcome on resolution. Returns the bill id.
+ * Commons lifecycle, including whips. Its ordinary policy provisions are the
+ * executable Budget. `budgetFiscalYear` links the vote outcome back to the
+ * annual Budget document. Returns the bill id.
  */
 export async function createBudgetBill(
   db: Db,
@@ -129,6 +140,7 @@ export async function createBudgetBill(
     chancellorParty: string | null;
     currentTurn: number;
     now: Date;
+    provisions: BillProvision[];
   }
 ): Promise<ObjectId> {
   const countryId = "UK" as const;
@@ -136,7 +148,7 @@ export async function createBudgetBill(
     countryId,
     stateId: getNationalDocId(countryId) ?? "uk_national",
     title: `Budget ${args.fiscalYear}`,
-    summary: `The annual Budget for fiscal year ${args.fiscalYear}, tabled by the Chancellor.`,
+    summary: `The annual Budget for fiscal year ${args.fiscalYear}, tabled by HM Treasury.`,
     originChamber: "commons",
     currentChamber: "commons",
     sponsorId: args.chancellorCharacterId,
@@ -150,6 +162,7 @@ export async function createBudgetBill(
     votes: {},
     category: "budget",
     budgetFiscalYear: args.fiscalYear,
+    provisions: args.provisions,
     proposedAt: args.now,
     proposedTurn: args.currentTurn,
     votingStartedAt: args.now,
@@ -162,31 +175,52 @@ export async function createBudgetBill(
   return res.insertedId;
 }
 
+/**
+ * Move a draft before the Commons and create its bill as one lifecycle action.
+ * On standalone Mongo, where transactions are unavailable, a clean insert
+ * failure reopens the draft. An ambiguous insert is detected by reading the
+ * fiscal-year bill before deciding whether rollback is safe.
+ */
+export async function tableBudgetWithBill(
+  db: Db,
+  args: Parameters<typeof createBudgetBill>[1]
+): Promise<TabledBudgetResult> {
+  const tabled = await tableBudget(db, args.fiscalYear, args.now);
+  if (!tabled.ok) return tabled;
+
+  try {
+    const billId = await createBudgetBill(db, args);
+    return { ok: true, billId };
+  } catch (error) {
+    let existingBill: Pick<Bill, "_id"> | null;
+    try {
+      existingBill = await db.collection<Bill>("bills").findOne(
+        {
+          countryId: "UK",
+          budgetFiscalYear: args.fiscalYear,
+          status: { $nin: ["failed", "signed"] },
+        },
+        { projection: { _id: 1 } }
+      );
+    } catch {
+      throw error;
+    }
+    if (existingBill?._id) return { ok: true, billId: existingBill._id };
+
+    await getUKBudgetsCollection(db).updateOne(
+      { fiscalYear: args.fiscalYear, status: "tabled" },
+      { $set: { status: "draft", tabledAt: null, updatedAt: args.now } }
+    );
+    throw error;
+  }
+}
+
 export interface BudgetResolution {
   ok: boolean;
   passed: boolean;
   /** True when the defeat produced a confidence hit. */
   confidenceHit: boolean;
   error?: string;
-}
-
-/**
- * Resolve a tabled Budget's confidence vote. Passes when votesFor > votesAgainst;
- * a defeat sets status "defeated" AND fires the budgetDefeat confidence event.
- */
-export async function resolveBudgetVote(
-  db: Db,
-  args: { fiscalYear: number; votesFor: number; votesAgainst: number; now: Date }
-): Promise<BudgetResolution> {
-  const col = getUKBudgetsCollection(db);
-  const budget = await col.findOne({ fiscalYear: args.fiscalYear });
-  if (!budget) return { ok: false, passed: false, confidenceHit: false, error: "no budget" };
-  if (budget.status !== "tabled") {
-    return { ok: false, passed: false, confidenceHit: false, error: "budget not tabled" };
-  }
-
-  const passed = args.votesFor > args.votesAgainst;
-  return applyBudgetOutcome(db, { ...args, passed });
 }
 
 /**
@@ -228,5 +262,6 @@ export async function applyBudgetOutcome(
     await applyConfidenceEventToGov(db, { kind: "budgetDefeat" }, args.now);
     return { ok: true, passed: false, confidenceHit: true };
   }
+  await applyConfidenceEventToGov(db, { kind: "budgetPass" }, args.now);
   return { ok: true, passed: true, confidenceHit: false };
 }

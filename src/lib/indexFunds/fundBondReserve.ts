@@ -32,6 +32,15 @@ export type DeployBondReserveResult = {
   countryId: CountryId;
 };
 
+/** Equal-notional auction slice, recomputed as issues fill so leftovers redistribute. */
+export function bondAllocationBudgetForIssue(
+  remainingBudgetAnchor: number,
+  remainingIssueCount: number
+): number {
+  if (!(remainingBudgetAnchor > 0) || remainingIssueCount <= 0) return 0;
+  return remainingBudgetAnchor / remainingIssueCount;
+}
+
 function costPerUnitAnchor(bond: Bond, fxRates: Record<string, number>): number {
   const bondCurrency = bond.currencyCode ?? "USD";
   const fx = fxRates[bondCurrency] && fxRates[bondCurrency]! > 0 ? fxRates[bondCurrency]! : 1;
@@ -76,13 +85,15 @@ export async function deployBondReserveFromCash(
   let deployedAnchor = 0;
   let unitsPurchased = 0;
 
-  for (const bond of bonds) {
+  for (let index = 0; index < bonds.length; index++) {
+    const bond = bonds[index]!;
     if (budgetAnchor <= 0) break;
 
     const unitCostAnchor = costPerUnitAnchor(bond, fxRates);
     if (unitCostAnchor <= 0) continue;
 
-    const maxUnitsByBudget = Math.floor(budgetAnchor / unitCostAnchor);
+    const issueBudgetAnchor = bondAllocationBudgetForIssue(budgetAnchor, bonds.length - index);
+    const maxUnitsByBudget = Math.floor(issueBudgetAnchor / unitCostAnchor);
     const maxUnitsByFloat = Math.floor(bond.publicFloat ?? 0);
     const units = Math.min(maxUnitsByBudget, maxUnitsByFloat);
     if (units <= 0) continue;

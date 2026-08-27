@@ -6,13 +6,14 @@ import { getPortfolioCatalog } from "@/lib/constants/cabinetEstates";
 import { AggTile, EstateIcon, fmtMoneyM } from "./estatesUi";
 import { EstateCard } from "./EstateCard";
 import { OpenEstatePanel } from "./OpenEstatePanel";
+import { ActingLockNote, useActingLock } from "../ActingLock";
 
 export function EstatesRosterTab({
   countryCode,
   positionId,
   portfolioKey,
   estates,
-  canAct,
+  canAct: canActProp,
   currencySymbol,
   isForeign,
   sites,
@@ -30,6 +31,10 @@ export function EstatesRosterTab({
   siteName: Record<string, string>;
   onUpdate: () => void;
 }) {
+  // An acting secretary reads this surface but does not move it.
+  const actingLockReason = useActingLock("assets");
+  const canAct = canActProp && !actingLockReason;
+
   const catalog = getPortfolioCatalog(portfolioKey);
   const [archetypeId, setArchetypeId] = useState(catalog[0]?.id ?? "");
   const [opening, setOpening] = useState(false);
@@ -79,6 +84,8 @@ export function EstatesRosterTab({
 
   return (
     <div className="space-y-4">
+      <ActingLockNote reason={actingLockReason} />
+
       {/* archetype sub-tabs */}
       <div className="rounded-xl border border-card-border bg-card p-2">
         <div className="flex flex-wrap gap-1.5">

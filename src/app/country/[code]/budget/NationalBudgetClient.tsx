@@ -14,6 +14,8 @@ import { EconomicIndicators } from "@/components/budget/treasury/EconomicIndicat
 import { SovereignHealthPanel } from "@/components/budget/treasury/SovereignHealthPanel";
 import { GrantsPanel } from "@/components/budget/treasury/GrantsPanel";
 import { MinisterCallouts } from "@/components/budget/treasury/MinisterCallouts";
+import { FiscalMechanicsNote } from "@/components/budget/treasury/FiscalMechanicsNote";
+import { BudgetAuthoringPanel } from "@/components/uk/budget/BudgetAuthoringPanel";
 import { PlannedEconomyPanel } from "@/components/economy/PlannedEconomyPanel";
 import { Button, Skeleton, CardSkeleton, StatGridSkeleton, ListRowSkeleton } from "@/components/ui";
 import type { FederalBudget, EnactedLaw } from "@/lib/db/types/budget";
@@ -1010,6 +1012,20 @@ export function NationalBudgetClient() {
             />
           }
         />
+
+        <FiscalMechanicsNote
+          sym={moneyPrefix}
+          debtPrincipal={budget.debt.principal}
+          rawGdp={budget.gdp}
+          smoothedGdp={budget.gdpSmoothed}
+          revenue={budget.revenue.total}
+          spending={budget.spending.total}
+          debtInterest={budget.spending.debtInterest ?? 0}
+        />
+
+        {isLive && countryId === COUNTRY_CONFIGS.UK.id ? (
+          <BudgetAuthoringPanel countryCode="uk" />
+        ) : null}
 
         {!isLive && (
           <div className="flex items-center gap-2.5 rounded-xl border border-warning/30 bg-warning/[0.06] px-4 py-3">
