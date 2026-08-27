@@ -740,6 +740,65 @@ describe("computeRawSupplyDemand — suppressRetailConsumerDemand (Household Led
   });
 });
 
+describe("computeRawSupplyDemand - sector output demand modifiers", () => {
+  const run = (
+    sector: { sectorType: string; revenue: number; stateId: string; countryId: string },
+    modifier?: Map<string, number>,
+    gdp?: GdpGrowthData
+  ) =>
+    computeRawSupplyDemand(
+      [sector],
+      gdp,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      false,
+      undefined,
+      false,
+      false,
+      1,
+      modifier
+    );
+
+  it("raises defense output demand and its seller-margin bonus", () => {
+    const sector = {
+      sectorType: "defense",
+      revenue: 1_000_000,
+      stateId: "S1",
+      countryId: "US",
+    };
+    const baseline = run(sector);
+    const mobilized = run(sector, new Map([["US:defense", 10]]));
+
+    expect(mobilized.global.get("ordnance")!.demand).toBeGreaterThan(
+      baseline.global.get("ordnance")!.demand
+    );
+    expect(computeCommoditySurplusBonus("defense", mobilized.global)).toBeGreaterThan(
+      computeCommoditySurplusBonus("defense", baseline.global)
+    );
+  });
+
+  it("lowers retail output demand and its seller-margin bonus", () => {
+    const sector = {
+      sectorType: "retail",
+      revenue: 1_000_000,
+      stateId: "S1",
+      countryId: "US",
+    };
+    const gdp: GdpGrowthData = { nationalAverage: 0, byState: new Map([["S1", 0]]) };
+    const baseline = run(sector, undefined, gdp);
+    const rationed = run(sector, new Map([["US:retail", -10]]), gdp);
+
+    expect(rationed.global.get("retail")!.demand).toBeLessThan(
+      baseline.global.get("retail")!.demand
+    );
+    expect(computeCommoditySurplusBonus("retail", rationed.global)).toBeLessThan(
+      computeCommoditySurplusBonus("retail", baseline.global)
+    );
+  });
+});
+
 describe("computeRawSupplyDemand — plants tier (real production, P3b)", () => {
   const plants = (
     sectors: Parameters<typeof computeRawSupplyDemand>[0]

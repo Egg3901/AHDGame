@@ -1,6 +1,9 @@
 import type { Db } from "mongodb";
 import { runTensionTurn, type ColdWarTensionState } from "@/lib/coldwar/tension";
-import { readStandingPressureSnapshot } from "@/lib/coldwar/standingPressure";
+import {
+  readStandingPressureSnapshot,
+  syncLimitedWarPressureClocks,
+} from "@/lib/coldwar/standingPressure";
 
 /**
  * Turn phase for global cold-war tension: read the world's standing pressure
@@ -24,6 +27,7 @@ export async function processColdWarTensionTurn(
 ): Promise<ColdWarTensionState | null> {
   if (gameState.coldWarEnabled !== true) return null;
 
-  const snapshot = await readStandingPressureSnapshot(db, gameState);
+  await syncLimitedWarPressureClocks(db, turn);
+  const snapshot = await readStandingPressureSnapshot(db, gameState, turn);
   return runTensionTurn(db, turn, snapshot.pressures);
 }

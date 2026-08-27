@@ -41,6 +41,25 @@ export type EventEffect =
   | { type: "approvalDelta"; delta: number }
   /** Temporary demand modifier consumed by the commodity engine; expires by turn. */
   | { type: "sectorDemandModifier"; sectorType: string; pct: number; durationTurns: number }
+  /** Temporary demand for a sector's outputs, directly moving its commodity margins. */
+  | {
+      type: "sectorOutputDemandModifier";
+      sectorType: string;
+      pct: number;
+      durationTurns: number;
+    }
+  /**
+   * Temporary domestic relief from repeated war-scare events. Stacks only to
+   * a hard cap and lengthens the shared crisis interval; it cannot disable the
+   * events or lower global tension.
+   */
+  | { type: "warEmergencyMitigation"; pct: number; durationTurns: number }
+  /**
+   * Civil-liberties change applied across the institutional basket that feeds
+   * the Governance Style democratic-health score. Negative values make strong
+   * emergency powers politically costly beyond their approval hit.
+   */
+  | { type: "civilLibertiesDelta"; delta: number }
   /** Pure news — no mechanical effect. */
   | { type: "wireOnly" };
 
@@ -185,7 +204,7 @@ export interface EventCooldownLedger {
  * `getActiveSectorDemandModifierPct` and expires by turn number rather than
  * a sweep deletion (lazily filtered — see countryModifiers.ts).
  */
-export interface CountryModifier {
+export interface SectorDemandCountryModifier {
   _id: ObjectId;
   countryId: string;
   kind: "sectorDemandModifier";
@@ -196,3 +215,29 @@ export interface CountryModifier {
   sourceInstanceId?: ObjectId;
   createdAt: Date;
 }
+
+export interface SectorOutputDemandCountryModifier {
+  _id: ObjectId;
+  countryId: string;
+  kind: "sectorOutputDemandModifier";
+  sectorType: string;
+  pct: number;
+  appliedAtTurn: number;
+  expiresAtTurn: number;
+  sourceInstanceId?: ObjectId;
+  createdAt: Date;
+}
+
+export interface WarEmergencyMitigationModifier {
+  _id: ObjectId;
+  countryId: string;
+  kind: "warEmergencyMitigation";
+  pct: number;
+  appliedAtTurn: number;
+  expiresAtTurn: number;
+  sourceInstanceId?: ObjectId;
+  createdAt: Date;
+}
+
+export type CountryModifier =
+  SectorDemandCountryModifier | SectorOutputDemandCountryModifier | WarEmergencyMitigationModifier;

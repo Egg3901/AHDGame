@@ -171,6 +171,28 @@ describe("PREE driver", () => {
     expect(db.collectionMocks.eventInstances!.insertOne).toHaveBeenCalled();
   });
 
+  it("never loads world-event definitions into the player random-event pool", async () => {
+    registerTestHandler();
+    wireCharacter();
+
+    db.collection("eventInstances");
+    db.collectionMocks.eventInstances!.findOne.mockResolvedValue(null);
+    db.collection("eventDefinitions");
+    db.collectionMocks.eventDefinitions!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+
+    await processPlayerRandomEventsTurn(db as never, 10, {
+      playerRandomEventsEnabled: true,
+    });
+
+    expect(db.collectionMocks.eventDefinitions!.find).toHaveBeenCalledWith({
+      status: "approved",
+      kind: { $not: /^worldEvents\./ },
+    });
+    expect(db.collectionMocks.eventInstances!.insertOne).not.toHaveBeenCalled();
+  });
+
   it("auto-defaults expired pending instances on sweep", async () => {
     registerTestHandler();
 

@@ -65,6 +65,18 @@ const scenarios: Array<{ name: string; pressures: TensionPressures }> = [
       otherWarIntensity: 0,
     },
   },
+  {
+    name: "Germany after maximum limited-war acclimation",
+    pressures: {
+      escalationLevel: 1,
+      activeCrises: 6,
+      totalWarheads: 1214,
+      nuclearWarIntensity: 42,
+      nuclearWarCount: 1,
+      nuclearWarMinimumPressure: 30,
+      otherWarIntensity: 0,
+    },
+  },
 ];
 
 console.log("TENSION SCENARIOS");
