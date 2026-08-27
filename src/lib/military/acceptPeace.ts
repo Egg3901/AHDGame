@@ -78,6 +78,25 @@ export async function acceptPeace(
     currentTurn,
   });
 
+  // Stamp what this settlement took, so the war wire can report it. Written here
+  // rather than posted here: this runs on a request path, and a news post made from
+  // a request would fire again on a retry, which is the same reason the settlement
+  // crisis posts from a tick. `emitWarWire` sweeps the stamp on the next turn.
+  await getConflictsCollection(db).updateOne(
+    { _id: conflict._id },
+    {
+      $set: {
+        settlement: {
+          term: offer.term,
+          path: "negotiated" as const,
+          imposedBy: offer.fromCountry,
+          target: offer.toCountry,
+          turn: currentTurn,
+        },
+      },
+    }
+  );
+
   // Treaty release: an ally pulled in to defend this country leaves with it. The war it
   // was brought into is over for the country it came for, and leaving it to fight on
   // alone would be a guarantee that outlives its own cause.

@@ -28,8 +28,18 @@ Two offices, no precedence between them: either may act. This is a deliberate co
 | --- | --- |
 | **The war** | Which conflict you are leaving. |
 | **The other party** | A single country on the opposing side. |
-| **Indemnity** | Who pays whom, and how much. |
+| **The term** | The one thing this settlement takes. Pick from the three below. |
 | **Justification** | An optional public note, moderated. Published on the conflict record once accepted. |
+
+## The three terms
+
+A settlement carries **exactly one** term. Not two, not none: you choose what this war was for.
+
+| Term | What it does |
+| --- | --- |
+| **Indemnity** | The payer hands over money, in their own currency. |
+| **Regime change** | The other country changes its system of government. Its legislature is dissolved and fresh elections are called. |
+| **Demilitarisation** | The other country may award no new defence contracts for a set number of turns. |
 
 ### The indemnity
 
@@ -44,13 +54,34 @@ Two offices, no precedence between them: either may act. This is a deliberate co
 
 **There is no affordability check.** A payment can push the payer into the red, which is what national debt is. Requiring a surplus would mean a country already in debt could never buy peace, which is most of the countries that would want to.
 
+**An indemnity is capped at twice the payer's annual GDP.** A reparation can be ruinous; it cannot be arbitrary.
+
+### Regime change
+
+The country changes its system of government. A one-party state becomes a democracy, or a democracy becomes a one-party state: the conversion runs both ways.
+
+**Its legislature is dissolved and fresh elections are called.** The sitting government falls with it. There is a short interregnum before the campaign opens, so the fall is visible rather than instant.
+
+**A crown survives.** A parliamentary monarchy that loses a war loses its government, not its monarch. A settlement can also never install a monarchy: there is no dynasty for a treaty to seat.
+
+**The rest of the calendar is left alone.** The dissolution brings one election forward. Every later election stays on the date it already had, and where that date now falls too close to run a nomination period, that election waits for the following cycle instead.
+
+### Demilitarisation
+
+The country may award no new defence contracts, and no company may accept a new order from it, for a set number of turns.
+
+**What it has already bought still arrives.** Live contracts keep delivering and orders already placed can still be wound down. This is a bar on re-arming, not a teardown: the army decays through ordinary upkeep while nothing new comes in to replace it.
+
+**The bar is visible to the country under it**, with the turn it lapses named, rather than being discovered by a refusal.
+
 ## The rules an offer must clear
 
 1. **The war must not already be over.**
 2. **Neither side may be a generated force.** You cannot negotiate with an insurgency: there is no government on the other end to address an offer to. The panel says exactly that rather than a confusing "must be a belligerent" message.
 3. **Both countries must be belligerents in that war**, by explicit roster membership. Bloc affinity is not enough: a country pulled toward a side by its alliance has not declared war on anyone, and cannot be offered a settlement for a war it never joined.
 4. **You must be on opposite sides.** You cannot make peace with an ally.
-5. **The indemnity must not be negative**, and the payer must be one of the two parties.
+5. **The term must be valid.** An indemnity must not be negative, must not exceed twice the payer's annual GDP, and its payer must be one of the two parties. A regime change must name a system the country does not already have, and cannot install a monarchy. A demilitarisation must last at least one whole turn.
+6. **The war must not already have been won outright.** Once a front reaches the end of the track there is nothing left to negotiate: the victor is choosing what to take.
 
 ## The 72-turn window
 
@@ -86,6 +117,25 @@ In order:
 6. **If the leaver was the last country on their side, the war ends outright**: the other side wins, and every remaining cross-side pair is truced too.
 
 That last point is how most negotiated wars actually finish. A two-country war has one country per side, so **the first accepted peace offer ends it**.
+
+## Winning outright: dictating terms
+
+A war does not only end by agreement. If your front runs all the way to the end of the track, you have taken every inch of contested ground and the war is won.
+
+**Winning does not end the war on the spot.** The fighting stops, every unit goes back to reserve, and the war moves into a state where it is waiting on one thing: your terms.
+
+**You get 24 turns to name them.** The same three terms are available, and you still pick exactly one. The difference is that nobody has to agree: a country with no ground left is not in a position to refuse.
+
+**If the window lapses, the war ends with nothing taken.** Miss it and you get the victory and the truce, and no term at all. The war record will say so.
+
+**Only one country can impose.** The country that started the war on the winning side is the one that names the terms, and they land on the country that started it on the losing side. Allies who joined a war somebody else began get the truce and nothing else. A coalition of five does not get five settlements.
+
+**Where to do it:** the war's own record page, at **World → Conflicts**. A banner appears under the navigation on your country's pages while the window is open, counting down the turns.
+
+**There are two exceptions**, and in both the war simply ends the moment the front runs out, exactly as it always did:
+
+- **An insurgency.** There is no government on the other side to impose anything on.
+- **A war whose founder already left.** If the country that started the losing side has already taken a separate peace, nobody is left holding the claim, and it does not pass to whoever joined later.
 
 ## Why it is country-by-country, not side-by-side
 

@@ -191,8 +191,10 @@ describe("leaving the war", () => {
 
   it("pulls the leaver off the roster of the side it fought on", async () => {
     await acceptPeace(db, offer(), makeConflict(), 40, "c1");
-    const [, update] = conflictUpdateSpy.mock.calls[0];
-    expect(update).toEqual({ $pull: { "sideA.countries": "UK" } });
+    // Found rather than indexed: the settlement stamp is also a conflicts write, and
+    // asserting on call order would break the moment another one is added.
+    const pull = conflictUpdateSpy.mock.calls.find((c) => c[1]?.$pull);
+    expect(pull?.[1]).toEqual({ $pull: { "sideA.countries": "UK" } });
   });
 
   it("records the truce between the two parties", async () => {
@@ -342,5 +344,27 @@ describe("treaty release", () => {
     await acceptPeace(db, ddLeaves(), conflict, 100, "c1");
     expect(recordTruceSpy).toHaveBeenCalledWith(expect.anything(), "RU", "US", 100);
     expect(recordTruceSpy).toHaveBeenCalledWith(expect.anything(), "RU", "UK", 100);
+  });
+});
+
+describe("the settlement stamp", () => {
+  it("records the term, so the war wire can report what was taken", async () => {
+    await acceptPeace(db, offer(), makeConflict(), 40, "c1");
+    const stamp = conflictUpdateSpy.mock.calls.find((c) => c[1]?.$set?.settlement);
+    expect(stamp?.[1].$set.settlement).toMatchObject({
+      path: "negotiated",
+      imposedBy: "UK",
+      target: "CN",
+      turn: 40,
+    });
+  });
+
+  it("posts nothing itself, because this runs on a request path", async () => {
+    // A news post made from a request would fire again on a retry. The turn sweep
+    // reads the stamp instead.
+    await acceptPeace(db, offer(), makeConflict(), 40, "c1");
+    const stamp = conflictUpdateSpy.mock.calls.find((c) => c[1]?.$set?.settlement);
+    expect(stamp).toBeTruthy();
+    expect(JSON.stringify(conflictUpdateSpy.mock.calls)).not.toContain("postedWireEvents");
   });
 });
