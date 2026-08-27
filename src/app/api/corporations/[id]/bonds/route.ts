@@ -20,6 +20,7 @@ import {
   BOND_ISSUANCE_COOLDOWN_TURNS_PRIVATE,
   BOND_ISSUANCE_MIN_HEADROOM,
   MAX_BOND_ISSUANCE_FRACTION,
+  MAX_BOND_ISSUANCE_EXIT_EQUITY_FRACTION,
   MAX_BOND_ISSUANCE_REVENUE_FRACTION,
   MIN_BOND_ISSUANCE_PER_ISSUE,
   effectiveBondIssuanceWindow,
@@ -40,6 +41,7 @@ import {
 } from "@/lib/corporations/ceoOwnership";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { isBondDefaultCreditPenaltyActive } from "@/lib/bonds/corporateBondDefault";
+import { loadCorpExitEquityAnchor } from "@/lib/bonds/corpExitEquity";
 import { logWireEvent, wireHeadlineBond } from "@/lib/wireEvent";
 import { shouldRedactCorporation } from "@/lib/corporations/redaction";
 import { isSittingCeoOfControllingParent } from "@/lib/corporations/reservedCorporateHoldings";
@@ -304,18 +306,46 @@ export async function GET(request: Request, { params }: RouteParams) {
       MIN_BOND_ISSUANCE_PER_ISSUE,
       annualRevenueGet * MAX_BOND_ISSUANCE_REVENUE_FRACTION
     );
+    // Ticket #1198: the ceiling is also capped by realizable (exit-basis)
+    // equity, so the headroom quoted here cannot exceed the assets
+    // `filterInsolventCorps` would count if this debt went unpaid.
+    const { exitEquityAnchor } = await loadCorpExitEquityAnchor(db, {
+      liquidCapitalAnchor,
+      sectors,
+      corporationId: corporation._id,
+      corp: corporation,
+      fxByCurrency,
+      primeRateByCountry,
+      plantsEnabled,
+    });
+
     // Effective issuance window the POST handler enforces: the flat minimum is
-    // clamped to the corp's own 2x-equity headroom so min never exceeds max
+    // clamped to the corp's own headroom so min never exceeds max
     // (ticket #1083). `bondsAvailable` is false below the dust floor.
     const {
       maxAllowed: maxAllowedIssuance,
       effectiveMin: minIssuance,
       available: bondsAvailable,
+      limitedBy: issuanceLimitedBy,
     } = effectiveBondIssuanceWindow({
       maxPerIssuance,
       totalEquity,
       existingDebt: totalDebt,
+      exitEquity: exitEquityAnchor,
     });
+
+    // Remaining DEBT-CEILING room, before the per-issuance cap is applied: the
+    // lower of the two ceilings the POST enforces. Sent so the Bonds tab can
+    // render the same number the server would enforce instead of re-deriving
+    // one of the two rules client-side, which is how #1198's quoted-vs-enforced
+    // gap survived a server-side fix in the first place.
+    const debtHeadroom = Math.max(
+      0,
+      Math.min(
+        totalEquity * MAX_BOND_ISSUANCE_FRACTION - totalDebt,
+        exitEquityAnchor * MAX_BOND_ISSUANCE_EXIT_EQUITY_FRACTION - totalDebt
+      )
+    );
 
     const imfBailoutActive = corporation.imfBailoutActive === true;
     const imfFacility = imfBailoutActive
@@ -372,6 +402,12 @@ export async function GET(request: Request, { params }: RouteParams) {
       maxAllowedIssuance: Math.round(maxAllowedIssuance),
       minIssuance: Math.round(minIssuance),
       bondsAvailable,
+      // #1198: what the corp could realize by selling up, and the remaining
+      // debt-ceiling room derived from it. `issuanceLimitedBy` names which of
+      // the three rules is currently binding.
+      exitEquity: Math.round(exitEquityAnchor),
+      debtHeadroom: Math.round(debtHeadroom),
+      issuanceLimitedBy,
       isCeo,
       cooldownTurnsRemaining,
       currentTurn,
@@ -538,22 +574,42 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // The flat ₳100,000 minimum is clamped to the corp's own ceiling (smaller of
-    // the per-issuance cap and remaining 2x-equity headroom), so a small corp is
-    // never locked out by min > max (ticket #1083). Below the dust floor, bonds
-    // are unavailable entirely.
+    // the smallest of the three ceilings below), so a small corp is never
+    // locked out by min > max (ticket #1083). Below the dust floor, bonds are
+    // unavailable entirely.
+    //
+    // Ticket #1198: same exit-equity cap the GET preview quotes. Recomputed
+    // here rather than trusted from the client, and from the same post-lock
+    // corp snapshot the rest of this handler uses.
+    const { exitEquityAnchor: exitEquityPost } = await loadCorpExitEquityAnchor(db, {
+      liquidCapitalAnchor: postLiquidCapitalAnchor,
+      sectors,
+      corporationId: corporation._id,
+      corp: corporation,
+      fxByCurrency,
+      primeRateByCountry,
+      plantsEnabled: postPlantsEnabled,
+    });
+
     const {
       maxAllowed: maxAllowedIssuance,
       effectiveMin: effectiveMinIssuance,
       available: bondsAvailablePost,
+      limitedBy,
     } = effectiveBondIssuanceWindow({
       maxPerIssuance: maxPerIssuancePost,
       totalEquity,
       existingDebt,
+      exitEquity: exitEquityPost,
     });
     if (!bondsAvailablePost) {
+      const shortfallReason =
+        limitedBy === "exitEquity"
+          ? "Its realizable assets do not support any more debt"
+          : "It needs more equity headroom";
       return NextResponse.json(
         {
-          error: `This corporation is too small to issue bonds yet. It needs more equity headroom (currently ₳${Math.round(maxAllowedIssuance).toLocaleString()}, minimum ₳${BOND_ISSUANCE_MIN_HEADROOM.toLocaleString()}).`,
+          error: `This corporation is too small to issue bonds yet. ${shortfallReason} (currently ₳${Math.round(maxAllowedIssuance).toLocaleString()}, minimum ₳${BOND_ISSUANCE_MIN_HEADROOM.toLocaleString()}).`,
         },
         { status: 400 }
       );
@@ -565,11 +621,34 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    // Max debt: 2x equity (all ₳)
+    // Max debt: 2x going-concern equity (all ₳)
     if (existingDebt + faceValue > totalEquity * MAX_BOND_ISSUANCE_FRACTION) {
       return NextResponse.json(
         {
           error: `Total debt would exceed ${MAX_BOND_ISSUANCE_FRACTION}x equity. Current debt: ₳${existingDebt.toLocaleString()}, equity: ₳${Math.round(totalEquity).toLocaleString()}`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Ticket #1198: and never more than the corp could actually realize by
+    // selling up. Without this a CEO can borrow against going-concern value
+    // that the insolvency test does not recognise, then be liquidated for it.
+    //
+    // `exitEquityPost` deliberately excludes the proceeds of THIS issuance,
+    // even though they would land in `liquidCapital` and lift exit equity by
+    // the face value a moment later. Counting them would make the rule
+    // circular: an assetless shell could borrow any amount at all, since the
+    // cash it was handed would always cover the debt that created it, right up
+    // until it spent the cash on something that is not an asset. The test is
+    // whether what the corp ALREADY owns covers what it will owe.
+    //
+    // The invariant survives the issuance either way: proceeds add `face` to
+    // both sides, so a corp inside the ceiling before is inside it after.
+    if (existingDebt + faceValue > exitEquityPost * MAX_BOND_ISSUANCE_EXIT_EQUITY_FRACTION) {
+      return NextResponse.json(
+        {
+          error: `Total debt would exceed what this corporation could realize by selling up. Current debt: ₳${Math.round(existingDebt).toLocaleString()}, realizable assets: ₳${Math.round(exitEquityPost).toLocaleString()}. Building capacity, holding cash, or buying bonds all raise that figure.`,
         },
         { status: 400 }
       );

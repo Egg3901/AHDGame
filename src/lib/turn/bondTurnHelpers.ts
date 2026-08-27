@@ -9,8 +9,8 @@ import {
   fxRateForCorpFromMap,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
-import { sectorExitValueAnchor } from "@/lib/bonds/sectorExitBasis";
-import { buildPrimeRateMap, totalEquityForBonds } from "@/lib/bonds/corporateBondDefault";
+import { corpExitEquityAnchor } from "@/lib/bonds/corpExitEquity";
+import { buildPrimeRateMap } from "@/lib/bonds/corporateBondDefault";
 import { sumBondPrincipalAnchor } from "@/lib/bonds/bondPrincipalSum";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { getGameState } from "@/lib/gameState";
@@ -64,11 +64,20 @@ export async function coverBondShortfallsFromEscrow(
  * into plant and is waiting for it to come online — the second is the normal
  * borrow-and-build pattern the game asks players to follow.
  *
- * Assets are valued on the same exit basis the restructure planner uses when it
- * decides what to sell ({@link sectorExitValueAnchor}). That equivalence is the
- * point: if selling assets could have covered the debt, the corp was never
- * insolvent, and the default ladder — which would have attempted exactly that
- * sale — should not start.
+ * Assets are valued on the shared exit basis ({@link corpExitEquityAnchor}) —
+ * the same one the restructure planner uses when it decides what to sell, and
+ * the same one the issuance ceiling is capped by. That equivalence is the
+ * point, in both directions: if selling assets could have covered the debt, the
+ * corp was never insolvent and the default ladder — which would have attempted
+ * exactly that sale — should not start; and a corp that borrowed inside its
+ * ceiling cannot land here at all, because the ceiling was measured against
+ * this figure (ticket #1198).
+ *
+ * The basis includes the corp's own bond PORTFOLIO at face. It is not a
+ * courtesy: `executeCorporationBondDefaultDissolution` redeems those holdings
+ * into `liquidCapital` before settling, so refusing to count them here meant
+ * declaring a corp unable to pay with assets the resulting liquidation would
+ * have spent paying.
  *
  * Returns the subset that should actually default. Anything filtered out stays
  * cash-negative and under real pressure; it simply is not liquidated for it.
@@ -129,20 +138,37 @@ export async function filterInsolventCorps(
       continue;
     }
 
-    const assetsAnchor = sectorExitValueAnchor(
-      sectorsByCorp.get(idStr) ?? [],
-      primeMap,
-      corp,
-      ctx.fxByCurrency,
-      { plantsEnabled, currentYear: gameState?.currentYear, eraUnitScale }
-    );
     const cashAnchor = corpCapitalToAnchor(
       corp.liquidCapital,
       resolveCorpLiquidCurrencyCode(corp),
       fxRateForCorpFromMap(corp, ctx.fxByCurrency)
     );
 
-    if (totalEquityForBonds(cashAnchor, assetsAnchor) < debtAnchor) {
+    // `ctx.activeBonds` is every non-matured bond in the world, so this picks
+    // up the corp's creditor holdings as well as its own issues. `defaulted`
+    // on that snapshot is the PRE-turn state, which is the right basis for
+    // initial detection: a counterparty failing in this same turn is a cascade,
+    // and cascades are resolved in Phase 3.5 rather than here (see
+    // `rollbackDefaultedIssuerMaturityFlows`).
+    //
+    // Rescanning the bond list per candidate is O(candidates x bonds), and
+    // deliberately left un-indexed: `candidates` is only the corps that went
+    // cash-negative on bond obligations this turn, which is a handful even in a
+    // bad turn. No allocation here beats a map rebuilt every turn for it.
+    const { exitEquityAnchor } = corpExitEquityAnchor({
+      liquidCapitalAnchor: cashAnchor,
+      sectors: sectorsByCorp.get(idStr) ?? [],
+      corporationId: idStr,
+      corp,
+      fxByCurrency: ctx.fxByCurrency,
+      primeRateByCountry: primeMap,
+      bonds: ctx.activeBonds,
+      plantsEnabled,
+      currentYear: gameState?.currentYear,
+      eraUnitScale,
+    });
+
+    if (exitEquityAnchor < debtAnchor) {
       insolvent.add(idStr);
     }
   }
