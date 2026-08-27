@@ -19,6 +19,8 @@ import {
   reapExpiredOffers,
 } from "@/lib/db/collections/peaceOffers";
 import { validatePeaceOffer, isOfferLive, maxIndemnityForGdp } from "@/lib/military/peaceOffer";
+import type { PeaceTerm } from "@/lib/military/peaceTerm";
+import { getCountryState } from "@/lib/countryState";
 import type { FederalBudget } from "@/lib/db/types";
 import { opposedBelligerents } from "@/lib/military/occupation";
 import { PEACE_OFFER_DURATION_TURNS, type PeaceOfferDoc } from "@/lib/db/types/peaceOffer";
@@ -27,10 +29,25 @@ import { moderatedBillText } from "@/lib/api/schemas/congress";
 const bodySchema = z.object({
   conflictId: z.string().min(1),
   toCountry: z.string().min(2).max(3),
-  indemnity: z.object({
-    payer: z.string().min(2).max(3),
-    amount: z.number().finite().min(0),
-  }),
+  // A discriminated union, so a body carrying two terms cannot parse. Note
+  // `parliamentaryMonarchy` is deliberately ABSENT: a settlement cannot install a
+  // crown, and refusing it at the schema is stronger than refusing it in the
+  // validator alone.
+  term: z.discriminatedUnion("kind", [
+    z.object({
+      kind: z.literal("indemnity"),
+      payer: z.string().min(2).max(3),
+      amount: z.number().finite().min(0),
+    }),
+    z.object({
+      kind: z.literal("regime_change"),
+      targetSystem: z.enum(["presidential", "parliamentaryRepublic", "onePartyState"]),
+    }),
+    z.object({
+      kind: z.literal("demilitarisation"),
+      turns: z.number().int().positive(),
+    }),
+  ]),
   // Player-authored text another player reads, so it takes the body-copy policy —
   // not the stricter name filter reserved for public page titles.
   justification: moderatedBillText(z.string().max(1000)).optional(),
@@ -109,7 +126,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
         conflictId: o.conflictId,
         fromCountry: o.fromCountry,
         toCountry: o.toCountry,
-        indemnity: o.indemnity,
+        term: o.term,
         justification: o.justification ?? null,
         // Derived, not the stored field: a row can say "pending" and be expired.
         status: isOfferLive(o, currentTurn)
@@ -140,8 +157,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
     const toCountry = parsed.data.toCountry.toUpperCase() as CountryId;
-    const payer = parsed.data.indemnity.payer.toUpperCase() as CountryId;
-    const indemnity = { payer, amount: parsed.data.indemnity.amount };
+    // Country codes arrive in whatever case the client sent. Normalised here so the
+    // validator's payer comparison against `from`/`to` is not case-sensitive.
+    const term: PeaceTerm =
+      parsed.data.term.kind === "indemnity"
+        ? {
+            kind: "indemnity",
+            payer: parsed.data.term.payer.toUpperCase() as CountryId,
+            amount: parsed.data.term.amount,
+          }
+        : parsed.data.term;
 
     const conflict = await getConflict(db, parsed.data.conflictId);
     if (!conflict) {
@@ -152,18 +177,36 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     // bounded only by `>= 0`, and accept would move an arbitrary sum. Reject a
     // payer with no usable GDP rather than assume one (an assumed GDP is an
     // uncapped indemnity by the back door).
-    const payerBudget = await db
-      .collection<FederalBudget>("federalBudget")
-      .findOne({ countryId: payer }, { projection: { gdp: 1 } });
-    const maxAmount = maxIndemnityForGdp(payerBudget?.gdp);
-    if (maxAmount == null) {
-      return NextResponse.json(
-        { error: "The paying country has no GDP on record to size an indemnity against." },
-        { status: 400 }
-      );
+    //
+    // Only read for an indemnity: a GDP ceiling is meaningless for the other terms,
+    // and refusing a regime change because the target has no GDP on record would be
+    // a bar with no reason behind it.
+    let maxAmount: number | null = null;
+    if (term.kind === "indemnity") {
+      const payerBudget = await db
+        .collection<FederalBudget>("federalBudget")
+        .findOne({ countryId: term.payer }, { projection: { gdp: 1 } });
+      maxAmount = maxIndemnityForGdp(payerBudget?.gdp);
+      if (maxAmount == null) {
+        return NextResponse.json(
+          { error: "The paying country has no GDP on record to size an indemnity against." },
+          { status: 400 }
+        );
+      }
     }
 
-    const check = validatePeaceOffer(conflict, countryId, toCountry, indemnity, maxAmount);
+    // The target's live system, so a conversion that would change nothing is
+    // refused before it is ever offered.
+    const targetState = await getCountryState(db, toCountry);
+
+    const check = validatePeaceOffer(
+      conflict,
+      countryId,
+      toCountry,
+      term,
+      maxAmount,
+      targetState.governmentType
+    );
     if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
 
     // One live offer per (conflict, from, to). Re-offering means withdrawing first,
@@ -181,7 +224,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       conflictId: conflict._id,
       fromCountry: countryId,
       toCountry,
-      indemnity,
+      term,
       ...(parsed.data.justification ? { justification: parsed.data.justification } : {}),
       status: "pending" as const,
       offeredTurn: currentTurn,

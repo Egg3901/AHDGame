@@ -85,7 +85,7 @@ const offer = (o: Partial<PeaceOfferDoc> = {}): PeaceOfferDoc =>
     conflictId: "t1",
     fromCountry: "UK",
     toCountry: "CN",
-    indemnity: { payer: "UK", amount: 100 },
+    term: { kind: "indemnity" as const, payer: "UK", amount: 100 },
     status: "pending",
     offeredTurn: 1,
     expiresTurn: 99,
@@ -138,7 +138,7 @@ describe("the indemnity", () => {
     // Either party may pay: a winning country may pay to disengage.
     await acceptPeace(
       db,
-      offer({ indemnity: { payer: "CN", amount: 50 } }),
+      offer({ term: { kind: "indemnity" as const, payer: "CN", amount: 50 } }),
       makeConflict(),
       40,
       "c1"
@@ -160,7 +160,7 @@ describe("the indemnity", () => {
     // be able to buy peace.
     const r = await acceptPeace(
       db,
-      offer({ indemnity: { payer: "UK", amount: 1e12 } }),
+      offer({ term: { kind: "indemnity" as const, payer: "UK", amount: 1e12 } }),
       makeConflict(),
       40,
       "c1"
@@ -172,7 +172,7 @@ describe("the indemnity", () => {
   it("moves no money for a white peace", async () => {
     await acceptPeace(
       db,
-      offer({ indemnity: { payer: "UK", amount: 0 } }),
+      offer({ term: { kind: "indemnity" as const, payer: "UK", amount: 0 } }),
       makeConflict(),
       40,
       "c1"
@@ -226,7 +226,11 @@ describe("when the leaver was the last of its side", () => {
     // CN is alone on side B; it leaving hands the war to side A.
     const r = await acceptPeace(
       db,
-      offer({ fromCountry: "CN", toCountry: "UK", indemnity: { payer: "CN", amount: 0 } }),
+      offer({
+        fromCountry: "CN",
+        toCountry: "UK",
+        term: { kind: "indemnity" as const, payer: "CN", amount: 0 },
+      }),
       makeConflict(),
       40,
       "c1"
@@ -289,7 +293,11 @@ describe("treaty release", () => {
   }
 
   const ddLeaves = () =>
-    offer({ fromCountry: "DD", toCountry: "US", indemnity: { payer: "DD", amount: 0 } });
+    offer({
+      fromCountry: "DD",
+      toCountry: "US",
+      term: { kind: "indemnity" as const, payer: "DD", amount: 0 },
+    });
 
   it("takes the ally out when the country it defended makes peace", async () => {
     const conflict = pactConflict();

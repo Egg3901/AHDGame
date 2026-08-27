@@ -1,3 +1,4 @@
+import type { PeaceTerm } from "@/lib/military/peaceTerm";
 import type { ReactNode } from "react";
 import { FrontLineMap } from "../combat/components/FrontLineMap";
 import type { ConflictTier } from "@/lib/military/conflictVisibility";
@@ -86,7 +87,7 @@ export interface ConflictRecordView {
     id: string;
     leaver: string;
     other: string;
-    indemnity: { payer: string; amount: number };
+    term: PeaceTerm;
     justification: string | null;
     turn: number;
   }>;
@@ -246,6 +247,25 @@ function Panel({ children }: { children: ReactNode }) {
  *
  * Spec: docs/superpowers/specs/2026-07-26-conflict-ids-and-pages-design.md
  */
+/**
+ * One line describing what a settlement took.
+ *
+ * Player-facing copy, so no em or en dashes and no anchor units: an indemnity is
+ * quoted in the payer's own currency and is printed as a plain figure beside the
+ * country that paid it, never converted to a unit players do not use.
+ */
+function settlementTermText(term: PeaceTerm): string {
+  if (term.kind === "indemnity") {
+    return term.amount > 0
+      ? `${term.payer} paid an indemnity of ${term.amount.toLocaleString("en-US")}.`
+      : "A white peace. No money changed hands.";
+  }
+  if (term.kind === "regime_change") {
+    return "The government fell and fresh elections were called.";
+  }
+  return `New defence procurement was frozen for ${term.turns} turns.`;
+}
+
 export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }) {
   const statusColor = STATUS_COLOR[c.status] ?? "#8a8a9a";
   const pctB = Math.round(c.control);
@@ -431,11 +451,8 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
                 }}
               >
                 <div style={{ font: `500 12px ${mono}`, color: "#c9c9d6" }}>
-                  {s.leaver} left the war on turn {s.turn}, settling with {s.other}
-                  {s.indemnity.amount > 0
-                    ? ` — ${s.indemnity.payer} paid ${s.indemnity.amount.toLocaleString("en-US")}`
-                    : " — a white peace"}
-                  .
+                  {s.leaver} left the war on turn {s.turn}, settling with {s.other}:{" "}
+                  {settlementTermText(s.term)}
                 </div>
                 {s.justification && (
                   <div

@@ -635,7 +635,7 @@ export default async function ConflictRecordPage({
       id: o._id.toString(),
       leaver: o.fromCountry,
       other: o.toCountry,
-      indemnity: o.indemnity,
+      term: o.term,
       justification: o.justification ?? null,
       turn: o.resolvedTurn ?? o.offeredTurn,
     })),

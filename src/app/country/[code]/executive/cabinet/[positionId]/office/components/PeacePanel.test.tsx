@@ -15,7 +15,7 @@ const incoming = {
   conflictId: "war1",
   fromCountry: "CN",
   toCountry: "UK",
-  indemnity: { payer: "CN", amount: 5000 },
+  term: { kind: "indemnity" as const, payer: "CN", amount: 5000 },
   justification: "We seek terms.",
   status: "pending",
   offeredTurn: 10,
@@ -82,7 +82,7 @@ describe("PeacePanel", () => {
   });
 
   it("calls a white peace what it is", async () => {
-    const zero = { ...incoming, indemnity: { payer: "CN", amount: 0 } };
+    const zero = { ...incoming, term: { kind: "indemnity" as const, payer: "CN", amount: 0 } };
     vi.stubGlobal("fetch", mockGet({ currentTurn: 40, wars: [war], offers: [zero] }));
     const { container } = render(<PeacePanel {...props} />);
     // Matched on the whole rendered string: the sentence is split across elements,
@@ -114,7 +114,7 @@ describe("PeacePanel", () => {
       expect(JSON.parse(post![1].body)).toMatchObject({
         conflictId: "war1",
         toCountry: "CN",
-        indemnity: { payer: "UK", amount: 250 },
+        term: { kind: "indemnity" as const, payer: "UK", amount: 250 },
       });
     });
   });
@@ -159,7 +159,7 @@ describe("changing the counterparty", () => {
     fireEvent.click(screen.getByRole("button", { name: /send peace offer/i }));
     await waitFor(() => {
       const post = fetchMock.mock.calls.find((c) => c[1]?.method === "POST");
-      expect(JSON.parse(post![1].body).indemnity.payer).toBe("UK");
+      expect(JSON.parse(post![1].body).term.payer).toBe("UK");
     });
   });
 

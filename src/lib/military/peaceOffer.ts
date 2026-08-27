@@ -1,6 +1,7 @@
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import type { PeaceOfferDoc } from "@/lib/db/types/peaceOffer";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, type CountryId, type GovernmentType } from "@/lib/constants/countries";
+import { validatePeaceTerm, type PeaceTerm } from "@/lib/military/peaceTerm";
 import { INTERNATIONAL_ORGANIZATIONS } from "@/lib/constants/internationalOrganizations";
 import { opposedBelligerents, type Side } from "@/lib/military/occupation";
 
@@ -86,12 +87,16 @@ export function validatePeaceOffer(
   conflict: Pick<ConflictDoc, "status" | "sideA" | "sideB" | "treatyEntries">,
   from: CountryId,
   to: CountryId,
-  indemnity: { payer: CountryId; amount: number },
+  term: PeaceTerm,
   // The payer's indemnity ceiling (see `maxIndemnityForGdp`). Optional so a caller
   // without the payer's GDP to hand can still run the roster/side checks, but the
   // POST (offer) and accept paths both pass it so an over-cap amount is refused at
   // creation AND re-refused at acceptance in case GDP has since fallen.
-  maxAmount?: number | null
+  maxAmount?: number | null,
+  // The target's CURRENT government type, so a regime change that would change
+  // nothing can be refused. Optional for the same reason `maxAmount` is: a caller
+  // running only the roster checks need not load it.
+  targetSystem?: GovernmentType
 ): PeaceOfferCheck {
   if (conflict.status === "resolved") {
     return { ok: false, error: "That war is already over." };
@@ -150,18 +155,20 @@ export function validatePeaceOffer(
     };
   }
 
-  if (!(indemnity.amount >= 0)) {
-    return { ok: false, error: "An indemnity cannot be negative." };
-  }
-  if (indemnity.payer !== from && indemnity.payer !== to) {
-    return { ok: false, error: "Only one of the two parties can pay the indemnity." };
-  }
-  if (maxAmount != null && indemnity.amount > maxAmount) {
-    return {
-      ok: false,
-      error: "An indemnity cannot exceed twice the paying country's annual GDP.",
-    };
-  }
-
-  return { ok: true };
+  // The term's own rules live in `validatePeaceTerm`, shared with the impose route
+  // so a term refused when it is offered is refused again when it is applied. The
+  // checks above are about the WAR and stay here; the checks below are about the
+  // TERM and belong to it.
+  return validatePeaceTerm(term, {
+    from,
+    to,
+    // The term always lands on the country being offered to. `from` is the leaver,
+    // and a settlement it proposes is a settlement imposed on the other party.
+    target: to,
+    // Defaulted only when the caller ran without loading it. `validatePeaceTerm`
+    // uses it solely to refuse a no-op conversion, so the fallback can never turn
+    // an invalid term into a valid one, only the reverse.
+    targetSystem: targetSystem ?? "presidential",
+    maxIndemnity: maxAmount ?? null,
+  });
 }

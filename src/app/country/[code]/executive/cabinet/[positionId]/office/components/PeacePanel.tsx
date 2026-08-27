@@ -4,13 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import { SectionCard, Badge } from "./dossier";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { PEACE_OFFER_DURATION_TURNS, TRUCE_TURNS } from "@/lib/db/types/peaceOffer";
+import type { PeaceTerm } from "@/lib/military/peaceTerm";
 
 interface OfferView {
   id: string;
   conflictId: string;
   fromCountry: CountryId;
   toCountry: CountryId;
-  indemnity: { payer: CountryId; amount: number };
+  term: PeaceTerm;
   justification: string | null;
   status: "pending" | "accepted" | "rejected" | "withdrawn" | "expired";
   offeredTurn: number;
@@ -38,6 +39,28 @@ export interface PeaceWar {
  *
  * Spec: docs/superpowers/specs/2026-08-04-suing-for-peace-design.md
  */
+/**
+ * What an offer is asking for, as one clause appended to who is offering.
+ *
+ * Handles EVERY term, not only an indemnity: the routes accept all three, so an
+ * incoming offer can carry any of them and a panel that only knew about money
+ * would render an empty demand. Player-facing copy, so no em or en dashes.
+ *
+ * An indemnity names whose currency the figure is in, because the amount is
+ * quoted in the PAYER's currency, which is not always the reader's.
+ */
+function offerTermText(term: PeaceTerm): string {
+  if (term.kind === "indemnity") {
+    if (!(term.amount > 0)) return " with no indemnity, a white peace";
+    const payerName = COUNTRY_CONFIGS[term.payer]?.name ?? term.payer;
+    return ` for ${term.amount.toLocaleString("en-US")} from ${payerName} (in ${payerName} currency)`;
+  }
+  if (term.kind === "regime_change") {
+    return " in return for a change of government and fresh elections";
+  }
+  return ` in return for freezing new defence procurement for ${term.turns} turns`;
+}
+
 export function PeacePanel({
   countryCode,
   countryId,
@@ -131,7 +154,7 @@ export function PeacePanel({
       {
         conflictId: warId,
         toCountry: enemy,
-        indemnity: { payer, amount: Number(amount) || 0 },
+        term: { kind: "indemnity", payer, amount: Number(amount) || 0 },
         ...(justification.trim() ? { justification: justification.trim() } : {}),
       },
       "Offer sent."
@@ -208,24 +231,7 @@ export function PeacePanel({
               <p className="text-[12px]">
                 <strong>{COUNTRY_CONFIGS[o.fromCountry]?.name ?? o.fromCountry}</strong>
                 {o.incoming ? " offers to leave the war" : " — your offer to leave the war"}
-                {o.indemnity.amount > 0 ? (
-                  <>
-                    {" "}
-                    for{" "}
-                    <strong>
-                      {o.indemnity.amount.toLocaleString("en-US")} from{" "}
-                      {COUNTRY_CONFIGS[o.indemnity.payer]?.name ?? o.indemnity.payer}
-                    </strong>{" "}
-                    {/* The amount is in the PAYER's currency, which is not always the
-                        viewer's — saying whose money it is stops it being misread. */}
-                    <span className="text-muted">
-                      (in {COUNTRY_CONFIGS[o.indemnity.payer]?.name ?? o.indemnity.payer} currency)
-                    </span>
-                  </>
-                ) : (
-                  <> with no indemnity — a white peace</>
-                )}
-                .
+                {offerTermText(o.term)}.
               </p>
               {o.justification && (
                 <p className="mt-1 border-l-2 border-card-border pl-2 text-[11px] italic text-muted">

@@ -606,7 +606,7 @@ describe("separate peace on the record", () => {
         id: "o1",
         leaver: "UK",
         other: "CN",
-        indemnity: { payer: "UK", amount: 5000 },
+        term: { kind: "indemnity" as const, payer: "UK" as const, amount: 5000 },
         justification: "We could not sustain the campaign.",
         turn: 90,
       },
@@ -620,7 +620,41 @@ describe("separate peace on the record", () => {
 
   it("shows the indemnity and who paid it", () => {
     const { container } = render(<ConflictRecord conflict={settled} />);
-    expect(container.textContent).toMatch(/UK paid 5,000/);
+    expect(container.textContent).toMatch(/UK paid an indemnity of 5,000/);
+  });
+
+  it("uses no em dash or en dash in the settlement line", () => {
+    // Project-wide rule for player-facing copy. Scoped to the settlement line
+    // deliberately: other copy in this component predates the rule and is not
+    // this change's to rewrite.
+    render(<ConflictRecord conflict={settled} />);
+    const line = screen.getByText(/UK left the war on turn 90/);
+    expect(line.textContent ?? "").not.toMatch(/[—–]/);
+  });
+
+  it("describes a regime change settlement", () => {
+    const regime: ConflictRecordView = {
+      ...settled,
+      settlements: [
+        {
+          ...settled.settlements![0],
+          term: { kind: "regime_change" as const, targetSystem: "presidential" as const },
+        },
+      ],
+    };
+    const { container } = render(<ConflictRecord conflict={regime} />);
+    expect(container.textContent).toMatch(/government fell/);
+  });
+
+  it("describes a demilitarisation settlement in turns", () => {
+    const demil: ConflictRecordView = {
+      ...settled,
+      settlements: [
+        { ...settled.settlements![0], term: { kind: "demilitarisation" as const, turns: 240 } },
+      ],
+    };
+    const { container } = render(<ConflictRecord conflict={demil} />);
+    expect(container.textContent).toMatch(/frozen for 240 turns/);
   });
 
   it("publishes the justification, so the war's history says WHY it ended", () => {
@@ -631,10 +665,15 @@ describe("separate peace on the record", () => {
   it("calls a zero indemnity a white peace", () => {
     const white: ConflictRecordView = {
       ...settled,
-      settlements: [{ ...settled.settlements![0], indemnity: { payer: "UK", amount: 0 } }],
+      settlements: [
+        {
+          ...settled.settlements![0],
+          term: { kind: "indemnity" as const, payer: "UK" as const, amount: 0 },
+        },
+      ],
     };
     const { container } = render(<ConflictRecord conflict={white} />);
-    expect(container.textContent).toMatch(/a white peace/);
+    expect(container.textContent).toMatch(/a white peace/i);
   });
 
   it("renders no settlement section on a war nobody has settled", () => {
