@@ -208,6 +208,102 @@ export function computeRealizedRevenueGrowthRate(
   return clamp(raw, SECTOR_SIGNAL_MIN, SECTOR_SIGNAL_MAX);
 }
 
+// ── Trailing revenue trend (the one-turn amplifier fix) ─────────────
+//
+// Annualizing a single turn's realized-revenue delta multiplies ordinary
+// revenue churn by turnsPerYear: a ±10% settlement-timing wobble becomes a
+// ±480% annualized print, saturating the [-10, 15] signal clamp. Because the
+// clamp runs BEFORE the node EMA, the information is destroyed and the
+// asymmetric bounds bias the smoothed signal upward, parking the output gap
+// open and turning every dip into a deep negative print (the US sawtooth).
+//
+// The trailing trend measures growth the only way a ±10%-noisy level series
+// supports: EMA-smooth the level, log a snapshot of that EMA every few turns,
+// and compare the current EMA against a snapshot ~a year back. Both endpoints
+// are smoothed and the span divides the noise instead of multiplying it.
+
+/** EMA weight on the CURRENT turn's revenue sum (lag ≈ (1-α)/α ≈ 5.7 turns). */
+export const REVENUE_EMA_ALPHA = 0.15;
+/** Log an EMA snapshot every N turns. */
+export const REVENUE_SNAPSHOT_EVERY = 8;
+/** Snapshots retained (7 × 8 = 56 turns ≈ 14 months of baseline depth). */
+export const REVENUE_SNAPSHOT_KEEP = 7;
+/** Preferred measurement span: one game year. */
+export const REVENUE_TREND_TARGET_SPAN = 48;
+/** Youngest usable baseline; below this the one-turn fallback still applies. */
+export const REVENUE_TREND_MIN_SPAN = 8;
+
+export interface RevenueSnapshot {
+  turn: number;
+  value: number;
+}
+
+/** One turn of revenue-level smoothing. No prior EMA ⇒ seed at the level. */
+export function advanceRevenueEma(prevEma: number | undefined, now: number): number {
+  if (typeof prevEma !== "number" || !Number.isFinite(prevEma) || prevEma <= 0) return now;
+  if (!Number.isFinite(now) || now < 0) return prevEma;
+  return prevEma + REVENUE_EMA_ALPHA * (now - prevEma);
+}
+
+/**
+ * Append the current EMA to the snapshot log when due (first write, or
+ * `REVENUE_SNAPSHOT_EVERY` turns since the newest entry), trimming to the
+ * retention cap. Entries are kept newest-last.
+ */
+export function updateRevenueSnapshots(
+  snapshots: RevenueSnapshot[] | undefined,
+  turn: number,
+  emaNow: number
+): RevenueSnapshot[] {
+  const log = (snapshots ?? []).filter(
+    (s) => Number.isFinite(s.turn) && Number.isFinite(s.value) && s.turn < turn
+  );
+  const newest = log[log.length - 1];
+  if (newest !== undefined && turn - newest.turn < REVENUE_SNAPSHOT_EVERY) return log;
+  return [...log, { turn, value: emaNow }].slice(-REVENUE_SNAPSHOT_KEEP);
+}
+
+/**
+ * The baseline the trend measures against: the snapshot whose age is closest
+ * to the target span, at least `REVENUE_TREND_MIN_SPAN` turns old. Null while
+ * the log is too young — the caller falls back to the one-turn signal.
+ */
+export function selectRevenueTrendBaseline(
+  snapshots: RevenueSnapshot[] | undefined,
+  turn: number
+): { value: number; spanTurns: number } | null {
+  let best: { value: number; spanTurns: number } | null = null;
+  for (const s of snapshots ?? []) {
+    const span = turn - s.turn;
+    if (span < REVENUE_TREND_MIN_SPAN || !Number.isFinite(s.value) || s.value <= 0) continue;
+    if (
+      best === null ||
+      Math.abs(span - REVENUE_TREND_TARGET_SPAN) <
+        Math.abs(best.spanTurns - REVENUE_TREND_TARGET_SPAN)
+    ) {
+      best = { value: s.value, spanTurns: span };
+    }
+  }
+  return best;
+}
+
+/**
+ * Annualized growth of the smoothed revenue level over the baseline span,
+ * clamped to the same signal bounds as every other sector-signal source.
+ */
+export function computeTrailingRevenueGrowthRate(
+  emaNow: number | undefined,
+  baseline: { value: number; spanTurns: number } | null | undefined,
+  turnsPerYear: number
+): number | null {
+  if (typeof emaNow !== "number" || !Number.isFinite(emaNow) || emaNow < 0) return null;
+  if (!baseline || !Number.isFinite(baseline.value) || baseline.value <= 0) return null;
+  if (!Number.isFinite(baseline.spanTurns) || baseline.spanTurns <= 0) return null;
+  const raw = (emaNow / baseline.value - 1) * 100 * (turnsPerYear / baseline.spanTurns);
+  if (!Number.isFinite(raw)) return null;
+  return clamp(raw, SECTOR_SIGNAL_MIN, SECTOR_SIGNAL_MAX);
+}
+
 /**
  * Σ owned-sector REALIZED revenue for a region (the plants-mode realized rollup).
  *

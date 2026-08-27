@@ -13,10 +13,14 @@ import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getCountryConfig } from "@/lib/constants/countries";
 import { getBankId } from "@/lib/centralBank/helpers";
 import {
+  advanceRevenueEma,
   getNeutralFederalSalesTaxRate,
   getNeutralStateSalesTaxRate,
+  selectRevenueTrendBaseline,
   sumHostRealizedRevenue,
   sumRealizedRevenue,
+  updateRevenueSnapshots,
+  type RevenueSnapshot,
 } from "@/lib/turn/gdpGrowth";
 import { evaluateRegistry } from "./evaluate";
 import { compoundGdpLevel } from "./gdpLevel";
@@ -348,7 +352,10 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
   // engine compounds state.gdp each turn by the region's freshly-computed
   // gdpGrowth, so the GDP LEVEL (not just the rate) moves over time.
   const stateOps: Array<{
-    updateOne: { filter: { _id: string }; update: { $set: Record<string, number | string> } };
+    updateOne: {
+      filter: { _id: string };
+      update: { $set: Record<string, number | string | RevenueSnapshot[]> };
+    };
   }> = [];
 
   // Active organization directives nudge a curated metric across every member
@@ -491,12 +498,31 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     const useHostRealized = state.sectorRealizedRevenueUnit === "host";
     const nowHost = sumHostRealizedRevenue(ownedForState);
     const nowAnchor = sumRealizedRevenue(ownedForState, sectorTax.plantsEnabled);
+    // Trailing revenue trend (host currency only, so FX cannot leak into it —
+    // same rule as the one-turn snapshot, ticket #1084). On the legacy→host
+    // flip turn the EMA seeds fresh from this turn's host sum and the snapshot
+    // log restarts; until a snapshot matures past the minimum span the node
+    // keeps using the one-turn fallback.
+    const trendActive = sectorTax.plantsEnabled && useHostRealized;
+    const revenueEmaNow = trendActive
+      ? advanceRevenueEma(finite(state.sectorRevenueEma), nowHost)
+      : undefined;
+    const priorSnapshots = trendActive ? state.sectorRevenueSnapshots : undefined;
+    const revenueTrendBaseline = trendActive
+      ? selectRevenueTrendBaseline(priorSnapshots, turn)
+      : null;
+    const nextSnapshots =
+      trendActive && revenueEmaNow !== undefined
+        ? updateRevenueSnapshots(priorSnapshots, turn, revenueEmaNow)
+        : undefined;
     const payload: SectorRevenueTaxPayload = {
       owned: ownedForState,
       plantsEnabled: sectorTax.plantsEnabled,
       realizedRevenueNow: useHostRealized ? nowHost : nowAnchor,
       realizedRevenuePrev: prevRealized,
       turnsSincePrev: prevRealizedTurn !== undefined ? turn - prevRealizedTurn : undefined,
+      revenueEmaNow,
+      revenueTrendBaseline,
       unowned: sectorTax.unownedByState.get(state._id) ?? [],
       federalSalesTax:
         sectorTax.federalSalesTaxByCountry.get(countryId) ??
@@ -858,6 +884,11 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
               : sumRealizedRevenue(ownedForState, false),
             sectorRealizedRevenueTurn: turn,
             ...(sectorTax.plantsEnabled ? { sectorRealizedRevenueUnit: "host" as const } : {}),
+            // Trailing-trend state (host-tagged plants worlds only). The first
+            // plants turn is unit-untagged, so this starts one turn later with
+            // a clean host-only series.
+            ...(revenueEmaNow !== undefined ? { sectorRevenueEma: revenueEmaNow } : {}),
+            ...(nextSnapshots !== undefined ? { sectorRevenueSnapshots: nextSnapshots } : {}),
           },
         },
       },

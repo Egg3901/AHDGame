@@ -1,6 +1,7 @@
 import {
   computeConsumptionTaxAdjustedGrowthRate,
   computeRealizedRevenueGrowthRate,
+  computeTrailingRevenueGrowthRate,
   computeWeightedGrowthRate,
   sumRealizedRevenue,
   SECTOR_SIGNAL_MIN,
@@ -68,6 +69,14 @@ export interface SectorRevenueTaxPayload {
    * omitted the node falls back to summing `owned` (legacy ₳ path).
    */
   realizedRevenueNow?: number;
+  /**
+   * Trailing revenue trend (plants + host only): this turn's revenue-level EMA
+   * and the matured snapshot baseline the phase selected. When both are present
+   * the node measures growth over the baseline span instead of annualizing one
+   * turn's delta by 48 — the one-turn path stays as the cold-start fallback.
+   */
+  revenueEmaNow?: number;
+  revenueTrendBaseline?: { value: number; spanTurns: number } | null;
 }
 
 /**
@@ -115,14 +124,21 @@ export const sectorGrowthNode: RegistryNode = {
       typeof p.realizedRevenueNow === "number" && Number.isFinite(p.realizedRevenueNow)
         ? p.realizedRevenueNow
         : sumRealizedRevenue(p.owned, true);
-    const plantsSignal = p.plantsEnabled
-      ? computeRealizedRevenueGrowthRate(
-          realizedNow,
-          p.realizedRevenuePrev,
-          p.turnsSincePrev,
-          TURNS_PER_YEAR
-        )
+    // Trailing trend first (noise-proof), one-turn delta as the cold-start
+    // fallback while the snapshot log matures, legacy weighted average last.
+    const trailingSignal = p.plantsEnabled
+      ? computeTrailingRevenueGrowthRate(p.revenueEmaNow, p.revenueTrendBaseline, TURNS_PER_YEAR)
       : null;
+    const plantsSignal =
+      trailingSignal ??
+      (p.plantsEnabled
+        ? computeRealizedRevenueGrowthRate(
+            realizedNow,
+            p.realizedRevenuePrev,
+            p.turnsSincePrev,
+            TURNS_PER_YEAR
+          )
+        : null);
     const sector = plantsSignal ?? legacySector;
     const taxAdjusted = computeConsumptionTaxAdjustedGrowthRate(
       sector,
