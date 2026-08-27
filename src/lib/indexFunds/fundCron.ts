@@ -20,6 +20,7 @@ import type { ClientSession, Db } from "mongodb";
 import type {
   Corporation,
   ExchangeRate,
+  GameConfig,
   IndexFund,
   IndexFundHolding,
   IndexFundTargetConstituent,
@@ -916,6 +917,10 @@ export async function runIndexFundCron(
   };
 
   const currentTurn = options?.currentTurn ?? 0;
+  const liquidityConfig = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { indexFundBondLiquidityEnabled: 1 } });
+  const bondLiquidityEnabled = liquidityConfig?.indexFundBondLiquidityEnabled === true;
   const forexEnabled = await isForexEnabled();
   const exchangeRates = await loadExchangeRates(db);
   const candidateCorps = await loadIndexFundCandidateCorporations(db);
@@ -1016,9 +1021,15 @@ export async function runIndexFundCron(
         refreshedFund,
         exchangeRates
       );
-      const bondDeploy = await deployBondReserveFromCash(db, refreshedFund, bondPrincipalAfterNav);
-      if (bondDeploy.deployedAnchor > 0) {
-        result.bondDeployments++;
+      if (bondLiquidityEnabled) {
+        const bondDeploy = await deployBondReserveFromCash(
+          db,
+          refreshedFund,
+          bondPrincipalAfterNav
+        );
+        if (bondDeploy.deployedAnchor > 0) {
+          result.bondDeployments++;
+        }
       }
 
       navReadyFundIds.push(workingFund._id);

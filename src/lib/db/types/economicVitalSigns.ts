@@ -6,6 +6,24 @@ export interface EconomicMetric {
   basis: string;
 }
 
+export interface RelevantMarketVitalSign {
+  commodity: string;
+  pooledFillRate: number | null;
+  supplyUnits: number;
+  demandUnits: number;
+  priceAnchorPerUnit: number | null;
+  participantSellerUnits: number;
+  sellerCount: number;
+  buyerCount: number;
+  sellerHhi: number | null;
+  buyerHhi: number | null;
+  ownershipAdjustedSellerHhi: number | null;
+  ownershipAdjustedBuyerHhi: number | null;
+  largestOwnershipAdjustedSellerShare: number | null;
+  largestOwnershipAdjustedSellerUnits: number | null;
+  highConcentrationLowFill: boolean;
+}
+
 export interface EconomicVitalSigns {
   _id: string;
   schemaVersion: 1;
@@ -46,13 +64,32 @@ export interface EconomicVitalSigns {
     marketCapHhi: EconomicMetric;
     topFourMarketCapShare: EconomicMetric;
   };
+  competition: {
+    markets: RelevantMarketVitalSign[];
+    medianSellerHhi: EconomicMetric;
+    medianBuyerHhi: EconomicMetric;
+    medianOwnershipAdjustedSellerHhi: EconomicMetric;
+    medianOwnershipAdjustedBuyerHhi: EconomicMetric;
+    highConcentrationLowFillShare: EconomicMetric;
+  };
   securities: {
     equityTrades48Turns: number;
     equityNotionalAnchor48Turns: number;
     activeTradedListingShare: EconomicMetric;
     activeBonds: number;
     noHolderBondShare: EconomicMetric;
+    sovereignNoHolderBondShare: EconomicMetric;
+    corporateNoHolderBondShare: EconomicMetric;
     medianBondHolders: EconomicMetric;
+    bondSubscriptionRate: EconomicMetric;
+    openBuyOrders: number;
+    openSellOrders: number;
+    twoSidedListingShare: EconomicMetric;
+    medianQuotedSpreadPct: EconomicMetric;
+    openOrderDepthAnchor: number;
+    depthToMarketCap: EconomicMetric;
+    medianFilledOrderExecutionHours: EconomicMetric;
+    medianAmihudIlliquidity48: EconomicMetric;
   };
   households: {
     householdsObserved: number;
@@ -67,6 +104,20 @@ export interface EconomicVitalSigns {
     medianInflationPct: EconomicMetric;
     moneyGrowthInflationCorrelation: EconomicMetric;
     creditToM2: EconomicMetric;
+    transactionalMoneyShare: EconomicMetric;
+    externalBroadMoneyShare: EconomicMetric;
+    bankDepositShare: EconomicMetric;
+    activeModeledBalanceShare48: EconomicMetric;
+    dormantModeledBalanceShare48: EconomicMetric;
+    modeledGrossVelocity48: EconomicMetric;
+    householdGrossVelocity48: EconomicMetric;
+    corporateGrossVelocity48: EconomicMetric;
+    partyGrossVelocity48: EconomicMetric;
+    governmentGrossVelocity48: EconomicMetric;
+  };
+  measurement: {
+    confidence: "low" | "medium" | "high";
+    reasons: string[];
   };
   reconciliation: {
     status: ReconcileStatus | "unavailable";
