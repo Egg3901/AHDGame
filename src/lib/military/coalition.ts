@@ -103,7 +103,16 @@ export function mergeOffensives(
     const lead = o.principal.declarerCountry;
     o.attackers = [lead, ...o.attackers.filter((c) => c !== lead).sort()];
   }
-  return [...groups.values()];
+  // Order the offensives themselves for the same reason the roster is ordered, and
+  // with more riding on it: the resolver fights them in sequence, and each one leaves
+  // the front moved and both armies bled for the next. Whichever goes first therefore
+  // fights at full strength and takes its ground first, which is not something to
+  // leave to the order Mongo happened to return the declarations in. Earliest
+  // declaration wins, tie-broken by id — the rule `outranks` already applies to pick
+  // the principal within a group.
+  return [...groups.values()].sort((a, b) =>
+    a.principal === b.principal ? 0 : outranks(a.principal, b.principal) ? -1 : 1
+  );
 }
 
 /**
