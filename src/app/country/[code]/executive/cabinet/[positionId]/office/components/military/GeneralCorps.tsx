@@ -6,6 +6,7 @@ import { useState } from "react";
 import type { CorpsMember } from "@/lib/db/collections/characterGenerals";
 import { rankProgress } from "@/lib/military/generals";
 import { SectionCard, Badge } from "../dossier";
+import { ActingLockNote, useActingLock } from "../ActingLock";
 
 const STATE_LABEL: Record<CorpsMember["state"], { text: string; tone: "up" | "muted" }> = {
   serving: { text: "Serving", tone: "up" },
@@ -46,14 +47,23 @@ export function GeneralCorps({
   candidates,
   countryCode,
   positionId,
+  lockReason,
 }: {
   corps: CorpsMember[];
   candidates: { characterId: string; name: string }[];
   countryCode: string;
   positionId: string;
+  /**
+   * Set when an acting secretary may not commission or dismiss. The corps stays
+   * fully readable (a caretaker still needs to know who they have), and only
+   * the two writes close.
+   */
+  lockReason?: string | null;
 }) {
   const router = useRouter();
-  const canWrite = !!positionId;
+  const contextLock = useActingLock("personnel");
+  const lock = lockReason ?? contextLock;
+  const canWrite = !!positionId && !lock;
   const [pick, setPick] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,8 +107,14 @@ export function GeneralCorps({
     <SectionCard
       title="General corps"
       sub="Commission officers into the corps; they specialise through what they train, and promote by leading units in battle"
-      right={!canWrite ? <Badge tone="muted">Read-only</Badge> : undefined}
+      right={
+        !canWrite ? (
+          <Badge tone="muted">{lock ? "Acting - read-only" : "Read-only"}</Badge>
+        ) : undefined
+      }
     >
+      <ActingLockNote reason={lock} />
+
       {canWrite && (
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <select

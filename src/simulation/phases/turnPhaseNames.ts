@@ -132,6 +132,7 @@ export const BASE_TURN_PHASE_NAMES = [
   "moneySupplySnapshot",
   "ledgerBalanceSnapshot",
   "ledgerReconcile",
+  "economicVitalSigns",
 ] as const;
 
 export const TURN_PHASE_NAMES = [

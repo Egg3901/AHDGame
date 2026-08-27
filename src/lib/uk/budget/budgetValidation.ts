@@ -1,4 +1,3 @@
-import { KNOWN_SPENDING_CATEGORIES } from "@/lib/constants/economicModels";
 import { UK_LAWS } from "@/lib/politicalLegislation/laws/ukLaws";
 
 /**
@@ -10,41 +9,42 @@ import { UK_LAWS } from "@/lib/politicalLegislation/laws/ukLaws";
 export const UK_TAX_LEVER_IDS = new Set(
   UK_LAWS.filter((l) => l.id.startsWith("uk.tax.")).map((l) => l.id)
 );
-
-/** Spending shares must sum to within this tolerance of 100. */
-export const SPENDING_SUM_TOLERANCE = 0.5;
-/** Maximum permitted tax rate (percent). */
-export const MAX_TAX_RATE = 100;
+const UK_TAX_LAWS_BY_ID = new Map(
+  UK_LAWS.filter((law) => law.kind === "tax").map((law) => [law.id, law])
+);
 
 export interface ValidationResult {
   ok: boolean;
   error?: string;
 }
 
-export function validateSpendingAllocations(allocations: Record<string, number>): ValidationResult {
-  let sum = 0;
-  for (const [category, share] of Object.entries(allocations)) {
-    if (!KNOWN_SPENDING_CATEGORIES.has(category)) {
-      return { ok: false, error: `unknown spending category: ${category}` };
+export function validateTaxRates(rates: Record<string, number>): ValidationResult {
+  for (const [leverId, rate] of Object.entries(rates)) {
+    const law = UK_TAX_LAWS_BY_ID.get(leverId);
+    if (!law?.taxPolicy) {
+      return { ok: false, error: `unknown tax lever: ${leverId}` };
     }
-    if (!Number.isFinite(share) || share < 0) {
-      return { ok: false, error: `invalid share for ${category}` };
+    const { minRate, maxRate, step } = law.taxPolicy;
+    if (!Number.isFinite(rate) || rate < minRate || rate > maxRate) {
+      return { ok: false, error: `invalid rate for ${leverId}` };
     }
-    sum += share;
-  }
-  if (Math.abs(sum - 100) > SPENDING_SUM_TOLERANCE) {
-    return { ok: false, error: `spending shares must sum to 100 (got ${sum.toFixed(1)})` };
+    const gridSteps = (rate - minRate) / step;
+    if (Math.abs(gridSteps - Math.round(gridSteps)) > 1e-9) {
+      return { ok: false, error: `${leverId} must move in steps of ${step}` };
+    }
   }
   return { ok: true };
 }
 
-export function validateTaxRates(rates: Record<string, number>): ValidationResult {
-  for (const [leverId, rate] of Object.entries(rates)) {
-    if (!UK_TAX_LEVER_IDS.has(leverId)) {
-      return { ok: false, error: `unknown tax lever: ${leverId}` };
+export function validateProgramLevels(levels: Record<string, number>): ValidationResult {
+  const lawsById = new Map(UK_LAWS.map((law) => [law.id, law]));
+  for (const [lawId, level] of Object.entries(levels)) {
+    const law = lawsById.get(lawId);
+    if (!law || law.kind === "tax" || law.allowedScope === "regional") {
+      return { ok: false, error: `unknown UK national programme: ${lawId}` };
     }
-    if (!Number.isFinite(rate) || rate < 0 || rate > MAX_TAX_RATE) {
-      return { ok: false, error: `invalid rate for ${leverId}` };
+    if (!Number.isInteger(level) || level < 0 || level > 4) {
+      return { ok: false, error: `${law.title} level must be between 0 and 4` };
     }
   }
   return { ok: true };
@@ -52,9 +52,9 @@ export function validateTaxRates(rates: Record<string, number>): ValidationResul
 
 export function validateBudget(args: {
   taxRates: Record<string, number>;
-  spendingAllocations: Record<string, number>;
+  programLevels: Record<string, number>;
 }): ValidationResult {
   const tax = validateTaxRates(args.taxRates);
   if (!tax.ok) return tax;
-  return validateSpendingAllocations(args.spendingAllocations);
+  return validateProgramLevels(args.programLevels);
 }

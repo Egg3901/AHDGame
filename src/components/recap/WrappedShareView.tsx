@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { iterationLabel } from "@/lib/wiki/officeIteration";
 import Link from "next/link";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
@@ -55,7 +56,7 @@ function tiles(r: CharacterRecap): Array<[string, string]> {
  */
 export function WrappedShareView({ recap }: { recap: CharacterRecap }) {
   const [playing, setPlaying] = useState(false);
-  const season = recap.iteration ? `${recap.iteration.type} ${recap.iteration.number}` : "Season";
+  const season = recap.iteration ? iterationLabel(recap.iteration) : "Season";
 
   return (
     <div

@@ -86,6 +86,7 @@ export const ECONOMY_ONLY_PHASES: ReadonlySet<string> = new Set<string>([
   "moneySupplySnapshot",
   "ledgerBalanceSnapshot",
   "ledgerReconcile",
+  "economicVitalSigns",
 ]);
 
 /**
@@ -195,6 +196,7 @@ export const ELECTIONS_SKIP_PHASES: ReadonlySet<string> = new Set<string>([
   "indexFunds",
   "ledgerBalanceSnapshot",
   "ledgerReconcile",
+  "economicVitalSigns",
 ]);
 
 /**

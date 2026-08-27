@@ -12,6 +12,7 @@ import { getAuthUserWithCharacter } from "@/lib/auth";
 import { handleRouteError } from "@/lib/api/errors";
 import { getCabinetMechanics, getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { resolveDepartment, resolveSeatName } from "@/lib/cabinet/rosterEra";
+import { barredScopesFor, isActingMember } from "@/lib/cabinet/actingScope";
 import {
   resolveCabinetOfficeVisibility,
   cabinetOfficeViewerTitles,
@@ -211,6 +212,12 @@ export async function GET(_request: Request, { params }: RouteParams) {
             partyLogoUrl: partyDoc?.logoUrl ?? null,
             ...(includeActions ? { ministerialActions: member.ministerialActions ?? 2 } : {}),
             bannerImageUrl: member.bannerImageUrl ?? null,
+            // Whether the seat is held in an acting capacity is a roster fact, so
+            // it rides along even on a withheld office. `barredScopes` is derived
+            // from it rather than left for the client to hardcode, so the disabled
+            // controls and the API's 403s can never drift apart.
+            acting: isActingMember(member),
+            barredScopes: barredScopesFor(member),
           }
         : null;
 

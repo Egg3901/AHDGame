@@ -145,10 +145,12 @@ describe("appointCaretakerCeo (I/O)", () => {
       underlyingCharacterId: ObjectId;
       underlyingUserId: ObjectId;
       appointedTurn: number;
+      appointmentSource: "owner" | "vacancy";
     };
     expect(caretaker.underlyingCharacterId.equals(ceoId)).toBe(true);
     expect(caretaker.underlyingUserId.equals(userId)).toBe(true);
     expect(caretaker.appointedTurn).toBe(42);
+    expect(caretaker.appointmentSource).toBe("owner");
   });
 
   it("refuses when the corp already has a caretaker (no write)", async () => {
@@ -184,7 +186,12 @@ describe("dismissCaretakerCeo (I/O)", () => {
     const c = corp({
       ceoId: new ObjectId(), // currently the NPP
       ceoType: "npp",
-      caretakerCeo: { underlyingCharacterId, underlyingUserId, appointedTurn: 10 },
+      caretakerCeo: {
+        underlyingCharacterId,
+        underlyingUserId,
+        appointedTurn: 10,
+        appointmentSource: "owner",
+      },
     });
 
     const result = await dismissCaretakerCeo(db as unknown as Db, { corp: c, turn: 20, now });
@@ -204,13 +211,48 @@ describe("dismissCaretakerCeo (I/O)", () => {
     expect(call.$set.caretakerCooldownUntilTurn).toBe(20 + CARETAKER_REAPPOINT_COOLDOWN_TURNS);
   });
 
-  it("returns an auto-installed caretaker (no underlying character) to a vacant seat", async () => {
+  it("restores a CEO who resigned into an automatic caretaker without a cooldown", async () => {
+    const db = createMockDb();
+    const underlyingCharacterId = new ObjectId();
+    const underlyingUserId = new ObjectId();
+    const c = corp({
+      ceoId: new ObjectId(),
+      ceoType: "npp",
+      caretakerCooldownUntilTurn: 99,
+      caretakerCeo: {
+        underlyingCharacterId,
+        underlyingUserId,
+        appointedTurn: 10,
+        appointmentSource: "vacancy",
+      },
+    });
+
+    const result = await dismissCaretakerCeo(db as unknown as Db, { corp: c, turn: 20, now });
+
+    expect(result).toMatchObject({
+      ok: true,
+      restoredCharacterId: underlyingCharacterId.toString(),
+    });
+    const call = db.collectionMocks["corporations"]!.updateOne.mock.calls[0]![1] as {
+      $set: Record<string, unknown>;
+      $unset: Record<string, unknown>;
+    };
+    expect((call.$set.ceoId as ObjectId).equals(underlyingCharacterId)).toBe(true);
+    expect(call.$set).not.toHaveProperty("caretakerCooldownUntilTurn");
+    expect(call.$unset.caretakerCooldownUntilTurn).toBe("");
+  });
+
+  it("returns an auto-installed caretaker (no underlying character) to a vacant seat without a reappointment cooldown", async () => {
     const db = createMockDb();
     const underlyingUserId = new ObjectId();
     const c = corp({
       ceoId: new ObjectId(), // currently the NPP
       ceoType: "npp",
-      caretakerCeo: { underlyingUserId, appointedTurn: 10 }, // no underlyingCharacterId
+      caretakerCeo: {
+        underlyingUserId,
+        appointedTurn: 10,
+        appointmentSource: "vacancy",
+      }, // no underlyingCharacterId
     });
 
     const result = await dismissCaretakerCeo(db as unknown as Db, { corp: c, turn: 20, now });
@@ -226,7 +268,7 @@ describe("dismissCaretakerCeo (I/O)", () => {
     expect(call.$set).not.toHaveProperty("ceoId");
     expect(call.$unset.caretakerCeo).toBe("");
     expect(call.$unset.ceoId).toBe("");
-    expect(call.$set.caretakerCooldownUntilTurn).toBe(20 + CARETAKER_REAPPOINT_COOLDOWN_TURNS);
+    expect(call.$set).not.toHaveProperty("caretakerCooldownUntilTurn");
   });
 
   it("is a no-op error when there is no caretaker", async () => {

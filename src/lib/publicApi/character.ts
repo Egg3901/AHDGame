@@ -388,3 +388,47 @@ export async function queryCharacterAchievements(
 
   return { characterId: char._id.toString(), characterName: char.name, achievements };
 }
+
+/**
+ * Bulk lookup by public sequential ids (comma-separated, e.g. "1,7,42").
+ * Caps at 100 ids per call so a dashboard can hydrate a full view in one
+ * request instead of one quota-consuming call per character. Unknown and
+ * invalid ids are skipped, not errors: callers match on what came back.
+ */
+export async function queryCharactersBulk(
+  db: Db,
+  idsParam: string
+): Promise<{ found: boolean; characters: PublicCharacter[]; requested: number; returned: number }> {
+  const tokens = idsParam
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .slice(0, 100);
+  const sequentialIds = new Set<number>();
+  const objectIds: ObjectId[] = [];
+  for (const token of tokens) {
+    const parsed = parseCharacterId(token);
+    if (parsed?.type === "sequential") sequentialIds.add(parsed.value);
+    else if (parsed?.type === "objectId") objectIds.push(new ObjectId(parsed.value));
+  }
+
+  const filters = [];
+  if (sequentialIds.size > 0) filters.push({ sequentialId: { $in: [...sequentialIds] } });
+  if (objectIds.length > 0) filters.push({ _id: { $in: objectIds } });
+  const characters =
+    filters.length > 0
+      ? await db
+          .collection<Character>("characters")
+          .find(filters.length === 1 ? filters[0] : { $or: filters })
+          .limit(100)
+          .toArray()
+      : [];
+
+  const results = await enrichPublicCharacters(db, characters);
+  return {
+    found: results.length > 0,
+    characters: results,
+    requested: tokens.length,
+    returned: results.length,
+  };
+}

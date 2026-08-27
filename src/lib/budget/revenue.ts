@@ -390,8 +390,11 @@ export async function calculateFederalRevenue(
   // Political-legislation v2 (spec §5.1): Σ annualRevenueV2 over unrepealed
   // national enacted laws, recomputed FROM SCRATCH on every call — mirrors the
   // spending side's full byCategory recompute, so syncs/heals never compound.
-  // Never folded into `other`. Ruling #14: joins the PRE-CAP total below so the
-  // era revenue cap compresses revenue-law stacks like any other receipt.
+  // Never folded into `other`. These are legislated fiscal extractions, not
+  // enterprise income, so they are tax-like and face the same base-erosion cap
+  // as ordinary tax receipts. Persisted `other` and public-enterprise income
+  // remain outside that cap: a Laffer curve must not erase hospital fees,
+  // dividends, or unrelated non-tax receipts.
   const lawRevenueDocs = await db
     .collection<EnactedLaw>("enactedLaws")
     .find(
@@ -405,6 +408,30 @@ export async function calculateFederalRevenue(
     )
     .toArray();
   const lawRevenue = lawRevenueDocs.reduce((sum, law) => sum + (law.annualRevenueV2 ?? 0), 0);
+
+  const taxLikeRevenue =
+    incomeTax +
+    domesticCorporateTax +
+    foreignCorporateTax +
+    payrollTax +
+    tariffs +
+    salesTax +
+    solidaritySurcharge +
+    landValueAddedTax +
+    urbanMaintenanceTax +
+    stampDuty +
+    universalSocialCharge +
+    capitalGainsTax +
+    exciseDuty +
+    propertyTax +
+    lawRevenue;
+  const taxLikeRevenueAfterCap = applyEraRevenueCap(
+    taxLikeRevenue,
+    federalBudget?.gdp,
+    eraYear,
+    budgetCountryId
+  );
+  const revenueCapReduction = taxLikeRevenue - taxLikeRevenueAfterCap;
 
   return {
     incomeTax,
@@ -423,29 +450,11 @@ export async function calculateFederalRevenue(
     propertyTax,
     healthcareIncome,
     lawRevenue,
+    taxLikeRevenue,
+    taxLikeRevenueAfterCap,
+    revenueCapReduction,
     other: otherWithPublicEnterprise,
-    total: applyEraRevenueCap(
-      incomeTax +
-        domesticCorporateTax +
-        foreignCorporateTax +
-        payrollTax +
-        tariffs +
-        salesTax +
-        solidaritySurcharge +
-        landValueAddedTax +
-        urbanMaintenanceTax +
-        stampDuty +
-        universalSocialCharge +
-        capitalGainsTax +
-        exciseDuty +
-        propertyTax +
-        healthcareIncome +
-        lawRevenue +
-        otherWithPublicEnterprise,
-      federalBudget?.gdp,
-      eraYear,
-      budgetCountryId
-    ),
+    total: taxLikeRevenueAfterCap + healthcareIncome + otherWithPublicEnterprise,
   };
 }
 

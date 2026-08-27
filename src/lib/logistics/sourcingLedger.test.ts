@@ -33,6 +33,7 @@ describe("buildSourcingDocs", () => {
           unmetUnits: 40,
           toleranceBoundUnits: 5,
           capacityBoundUnits: 6,
+          shortageResponsiveUnits: 7,
           congestionUnits: 0,
           congestionSurchargePaid: 0,
           gridLossUnits: 0,
@@ -54,6 +55,7 @@ describe("buildSourcingDocs", () => {
     expect(persisted.basis).toBe("buyer_intent_sourcing");
     expect(persisted.demandUnitsIntent).toBe(100);
     expect(persisted.unmetUnits).toBe(40);
+    expect(persisted.shortageResponsiveUnits).toBe(7);
   });
 
   it("rounds premiumPerUnit to 4 decimals and omits zero/negative entries", () => {

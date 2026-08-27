@@ -11,7 +11,7 @@ import { z } from "zod";
 import { createNotification } from "@/lib/notifications";
 import { CONGRESS_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getCabinetPositionById } from "@/lib/constants";
-import { resetCabinetSettingCooldowns } from "@/lib/db/collections/cabinetSettings";
+import { initialMinisterialActionFields } from "@/lib/cabinet/ministerialActionPool";
 import type { CabinetMember, CabinetNomination, ElectedOfficial, Character } from "@/lib/db/types";
 
 const actingSchema = z.object({
@@ -107,6 +107,10 @@ export async function POST(request: Request) {
       appointedByPresidentId: presidentOfficial.characterId,
       acting: true,
       confirmedAt: now,
+      // Seeded like every other appointment path. An acting secretary's whole
+      // purpose is to keep the department's day-to-day levers moving, and those
+      // levers spend from this pool.
+      ...initialMinisterialActionFields(now),
       createdAt: now,
       updatedAt: now,
     };
@@ -115,9 +119,12 @@ export async function POST(request: Request) {
       .collection<CabinetMember>("cabinetMembers")
       .insertOne(member as unknown as CabinetMember);
 
-    // Clear the predecessor's setting cooldowns so the acting secretary can change
-    // settings immediately (cabinetSettings is keyed by position, not holder).
-    await resetCabinetSettingCooldowns(db, "US", positionId);
+    // Deliberately NOT resetting the position's setting cooldowns here, unlike the
+    // confirmation path. An acting secretary cannot change the department's stance
+    // at all (see `actingScope`), so the reset would buy them nothing. And because
+    // cabinetSettings is keyed by position rather than holder, handing one out on
+    // every acting appointment would let a president wipe a stance cooldown at will
+    // by seating a throwaway acting holder. Confirmation still resets it.
 
     const posName = getCabinetPositionById(positionId)?.name ?? positionId;
     if (appointee.userId) {

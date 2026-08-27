@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import type { TierSettingConfig } from "@/lib/constants/cabinetMechanicsTypes";
+import { ActingLockNote, useActingLock } from "./ActingLock";
 
 interface TierSettingPanelProps {
   config: TierSettingConfig;
@@ -16,17 +17,30 @@ interface TierSettingPanelProps {
    * `tierSettings[tierKey]`. Omit for the seat's primary `tierSetting`.
    */
   tierKey?: string;
+  /**
+   * Set when an acting secretary may not move this lever. Folds into `canAct`
+   * and renders as the explanation under the button, so the reason travels with
+   * the disabled state instead of only living in the API's 403.
+   */
+  lockReason?: string | null;
 }
 
 export function TierSettingPanel({
   config,
   currentValue,
-  canAct,
+  canAct: canActProp,
   positionId,
   countryCode,
   onUpdate,
   tierKey,
+  lockReason,
 }: TierSettingPanelProps) {
+  // One gate from here down: the seat's own permission and the acting bar read
+  // the same way to every control below, so none can disagree with another.
+  const contextLock = useActingLock("stance");
+  const lock = lockReason ?? contextLock;
+  const canAct = canActProp && !lock;
+
   const [selected, setSelected] = useState(currentValue);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(
@@ -122,6 +136,8 @@ export function TierSettingPanel({
           </span>
         )}
       </div>
+
+      <ActingLockNote reason={lock} />
     </div>
   );
 }
