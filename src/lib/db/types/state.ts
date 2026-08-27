@@ -69,6 +69,18 @@ export interface State {
   sectorRealizedRevenueTurn?: number;
   sectorRealizedRevenueUnit?: "host";
   /**
+   * Trailing revenue-trend state for the cyclical sector signal (plants mode,
+   * host currency only). `sectorRevenueEma` is an EMA of the per-turn realized
+   * host-revenue sum; `sectorRevenueSnapshots` logs that EMA every
+   * `REVENUE_SNAPSHOT_EVERY` turns so the signal can measure growth over a
+   * trailing ~year instead of annualizing a single turn's churn by 48, which
+   * saturated the signal clamp on ordinary revenue noise and produced the
+   * recurring sharp negative GDP prints. Reset on the legacy→host unit flip.
+   * Absent ⇒ the signal uses the one-turn fallback until the log matures.
+   */
+  sectorRevenueEma?: number;
+  sectorRevenueSnapshots?: Array<{ turn: number; value: number }>;
+  /**
    * O1c (design §5, macroGrowthV1): the paid corporate growth cost (₳, per turn)
    * summed over this region's sectors, written by the corp turn. The metric
    * engine converts it to local-millions, caps it at 5% of region GDP/yr, and

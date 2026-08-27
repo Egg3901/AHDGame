@@ -10,7 +10,6 @@ import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { handleRouteError } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
-import type { Corporation } from "@/lib/db/types";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import type { CurrencyCode } from "@/lib/constants/currencies";
