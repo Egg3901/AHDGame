@@ -272,6 +272,18 @@ const RUNTIME: CollectionEntry[] = [
     notes:
       "Per-turn shadow-ledger trial-balance, stock-flow, and money-supply reconciliation reports.",
   },
+  {
+    name: "ledgerEntries",
+    category: "runtime",
+    notes:
+      "Shadow double-entry ledger rows retained for audit, reconciliation, and velocity analysis.",
+  },
+  {
+    name: "balanceSnapshots",
+    category: "runtime",
+    notes:
+      "Per-turn anchor-valued account balances used for stock-flow and money-activity analysis.",
+  },
   // Elections + officials
   { name: "elections", category: "runtime" },
   { name: "electionCandidates", category: "runtime" },
