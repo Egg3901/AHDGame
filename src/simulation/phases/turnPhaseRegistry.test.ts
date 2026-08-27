@@ -20,6 +20,7 @@ describe("turn phase registry", () => {
       "moneySupplySnapshot",
       "ledgerBalanceSnapshot",
       "ledgerReconcile",
+      "economicVitalSigns",
     ]);
   });
 
