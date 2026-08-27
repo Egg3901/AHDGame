@@ -6,7 +6,7 @@ import {
   deployOpeningForces,
   type BuildConflictInput,
 } from "./createConflict";
-import type { ConflictSide } from "@/lib/db/types/conflict";
+import type { ConflictDoc, ConflictSide } from "@/lib/db/types/conflict";
 import { OCCUPATION } from "./config";
 
 const west: ConflictSide = {
@@ -231,5 +231,92 @@ describe("cold_war conflicts", () => {
     expect(c.sideA.factionEntity).toBe("SVN");
     expect(c.sideB.factionEntity).toBe("NVN");
     expect(c.sideB.tokenStrength).toBe(40);
+  });
+});
+
+/** The live German war, trimmed to the fields conflictToFront reads. */
+const germanWar = {
+  _id: "war_us_dd_415",
+  name: "The War for Germany",
+  region: "eeu",
+  terrain: "Plain / forest",
+  bloc: "contested",
+  terr: 0.95,
+  infra: 70,
+  severity: "HIGH",
+  baseStrength: 440,
+  hostCountry: "DD",
+  hostEntities: ["DD", "DE"],
+  sideA: { label: "United States" },
+  sideB: { label: "East Germany" },
+} as unknown as ConflictDoc;
+
+describe("conflictToFront sea access", () => {
+  it("derives sea access from the host when the conflict does not say", () => {
+    // DD and DE both hold naval branches, so the German front reaches the Baltic.
+    expect(conflictToFront(germanWar).seaAccess).toBe(true);
+  });
+
+  it("derives inland for a landlocked host", () => {
+    const czech = { ...germanWar, hostCountry: "CS", hostEntities: ["CS"] } as ConflictDoc;
+    expect(conflictToFront(czech).seaAccess).toBe(false);
+  });
+
+  it("lets an explicit conflict override win over the derivation", () => {
+    // A war fought inland in a coastal country.
+    const bavaria = { ...germanWar, seaAccess: false } as ConflictDoc;
+    expect(conflictToFront(bavaria).seaAccess).toBe(false);
+  });
+
+  it("honours an explicit true as well, so the override is not one-way", () => {
+    const czech = {
+      ...germanWar,
+      hostCountry: "CS",
+      hostEntities: ["CS"],
+      seaAccess: true,
+    } as ConflictDoc;
+    expect(conflictToFront(czech).seaAccess).toBe(true);
+  });
+
+  it("falls back to the anchor when hostEntities is absent", () => {
+    const anchored = { ...germanWar, hostEntities: undefined } as ConflictDoc;
+    expect(conflictToFront(anchored).seaAccess).toBe(true);
+  });
+});
+
+describe("buildConflict sea access override", () => {
+  const base = (over: Partial<BuildConflictInput> = {}): BuildConflictInput => ({
+    id: "war_test",
+    conflictId: 1,
+    hostCountry: "DD" as BuildConflictInput["hostCountry"],
+    type: "interstate",
+    sideA: west,
+    sideB: east,
+    startTurn: 1,
+    createdBy: "seed",
+    ...over,
+  });
+
+  it("writes no seaAccess at all when the caller does not override", () => {
+    // Storing the derived answer would freeze it into the document and stop it
+    // tracking the branch table.
+    const doc = buildConflict(base());
+    expect("seaAccess" in doc).toBe(false);
+    // ...and it still resolves coastal through the derivation.
+    expect(conflictToFront(doc).seaAccess).toBe(true);
+  });
+
+  it("stores an explicit override and lets it beat the derivation", () => {
+    // A war fought inland of a coastal nation.
+    const doc = buildConflict(base({ seaAccess: false }));
+    expect(doc.seaAccess).toBe(false);
+    expect(conflictToFront(doc).seaAccess).toBe(false);
+  });
+
+  it("stores an explicit true for a landlocked host", () => {
+    const doc = buildConflict(
+      base({ hostCountry: "CS" as BuildConflictInput["hostCountry"], seaAccess: true })
+    );
+    expect(conflictToFront(doc).seaAccess).toBe(true);
   });
 });

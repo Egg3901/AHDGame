@@ -28,13 +28,14 @@ import {
 } from "@/lib/military/battle";
 import { buildCoalitionSide } from "@/lib/military/battleSides";
 import { loadMilitaryBlocs } from "@/lib/military/blocLookup";
-import { mergeOffensives } from "@/lib/military/coalition";
+import { mergeOffensives, autoJoinersAtFront } from "@/lib/military/coalition";
 import { joinSide } from "@/lib/military/joinSide";
 import { isFactionEntity } from "@/lib/military/factionEntity";
 import { resolveDefendingSides } from "@/lib/military/defendingSides";
 import { buildFactionSide } from "@/lib/military/factionSide";
 import type { Front } from "@/lib/military/combat";
 import { getConflict, getConflictsCollection } from "@/lib/db/collections/conflicts";
+import { listTheaterStates } from "@/lib/db/collections/theaterState";
 import { conflictToFront } from "@/lib/military/createConflict";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import { resolveConflict } from "@/lib/military/resolveConflict";
@@ -356,6 +357,38 @@ export async function resolveBattleDeclarations(
       const list = unitsByCountry.get(u.countryId) ?? [];
       list.push(u);
       unitsByCountry.set(u.countryId, list);
+    }
+
+    // Standing orders: allies who fight in an offensive here without declaring one of
+    // their own. Loaded once for the whole front, because the set cannot change between
+    // offensives inside a tick.
+    const optedIn = new Set(
+      (await listTheaterStates(db))
+        .filter((st) => st.autoJoin?.[theaterId])
+        .map((st) => String(st.countryId))
+    );
+    if (optedIn.size > 0) {
+      for (const off of offensives) {
+        // A matchup that resolves to no side enrols nobody -- the same rule that stops
+        // it moving ground. Auto-join must not become the way around that.
+        if (!off.side) continue;
+        for (const c of autoJoinersAtFront(
+          conflict,
+          atFront,
+          theaterId,
+          off.side,
+          blocs,
+          optedIn
+        )) {
+          if (!off.attackers.includes(c)) off.attackers.push(c);
+        }
+        // Re-apply `mergeOffensives`' ordering. Auto-joiners arrive in whatever order
+        // Mongo returned the theatre states, and the roster is written into the battle
+        // report, so leaving it unsorted would make the report vary between ticks on
+        // identical input.
+        const lead = off.principal.declarerCountry;
+        off.attackers = [lead, ...off.attackers.filter((c) => c !== lead).sort()];
+      }
     }
 
     // Set once an offensive drives the front to a pole and ends the war, which can

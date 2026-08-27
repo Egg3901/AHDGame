@@ -157,8 +157,15 @@ export const MISSING_SYNERGY =
 
 /** Attrition, manpower and retreat tuning (first-pass — expected to move in playtest). */
 export const ATTRITION = {
-  /** A side breaks when its round track falls below this (of 100). */
-  retreatTrack: 25,
+  /**
+   * A side breaks when its round track falls below this (of 100).
+   *
+   * Was 25, which fired in 88-92% of battles -- so `retreatYield` and
+   * `retreatCasualtyMult` were flat taxes the code described as conditional. At 9 a
+   * break is roughly one battle in three: uncommon without being rare, which is what
+   * makes both modifiers mean something again.
+   */
+  retreatTrack: 9,
   /** Casualty multiplier for the side that broke off. */
   retreatCasualtyMult: 0.6,
   /** Max fraction of establishment refilled per turn, by mode. */
@@ -171,6 +178,92 @@ export const ATTRITION = {
   manpowerRegenFraction: 0.0005,
   /** Pool ceiling = population × this × stance multiplier. */
   manpowerPoolCapFraction: 0.02,
+} as const;
+
+/**
+ * How much of a naval formation's combat value reaches a LAND battle.
+ *
+ * A carrier air wing genuinely strikes inland; escorts exist to screen the carrier and
+ * hold sea lanes, and contribute almost nothing to a division fighting inland of them.
+ * Before this, `temperate` and `arid` -- the two families covering every inland front in
+ * the game -- carried no naval multiplier at all, so a carrier strike group defended a
+ * German forest at full strength and an attack submarine did it at 1.05.
+ */
+/**
+ * What one engagement takes out of a formation's readiness, before modifiers.
+ *
+ * Readiness used to be ASSIGNED a level rather than subtracted, which inverted two of
+ * its own terms: `armorMit` and the role's casualty weight both correctly reduce
+ * CASUALTIES, and applied to a level they left armour and safe roles MORE exhausted. A
+ * carrier that lost three men ended a battle at 8 readiness while an infantry division
+ * that lost thousands ended at 25.
+ */
+/**
+ * How much combat value a front can hold in contact at once, on open ground.
+ *
+ * A front has finite width. Value beyond this is in DEPTH: it neither fights nor bleeds
+ * this turn. Bounds the casualty growth at its source -- side totals used to go as
+ * roughly `0.6N + 1`, so committing more men cost more men even when they could not all
+ * reach the line -- and makes the ground cap a consequence of frontage rather than an
+ * arbitrary rule.
+ *
+ * Calibrated so a normal national army fits entirely (East Germany's eleven formations
+ * are 731 combat value) while a thirty-six-formation superstack is cut to about twelve.
+ * Tightening this to 550 starts punishing a nation for fielding its own army, which is
+ * the wrong behaviour.
+ */
+export const FRONT_CAPACITY_BASE = 900;
+
+/**
+ * Share of a formation's strength that the worst possible engagement takes.
+ *
+ * Was an unnamed `0.5` inline in the casualty formula, which this file's own opening
+ * line forbids: all balance values live here. Named so it can be tuned against a
+ * simulation rather than found by reading the calc layer.
+ *
+ * DELIBERATELY UNCHANGED at 0.5. The design expected to cut this by about 11%, to absorb
+ * the casualty discount that stopped being near-universal once `retreatTrack` made a
+ * break uncommon. Measured after front capacity and the readiness ledger landed, the
+ * compensation is not needed and would overshoot: casualties FELL rather than rose,
+ * because capacity removed the formations that were bleeding without ever reaching the
+ * line. A solo offensive costs 5.4% of the attacking force against 7.8% before this
+ * work. Revisit only against a fresh simulation.
+ */
+export const CASUALTY_RATE_SCALE = 0.5;
+
+/** How much of that width each terrain family actually offers. */
+export const TERRAIN_CAPACITY = {
+  /** The armoured corridor. The calibration case. */
+  temperate: 1.0,
+  /** Open desert, the widest frontage there is. */
+  arid: 1.1,
+  /** No land frontage to constrict. */
+  maritime: 1.0,
+  /** Canopy, swamp and delta break up a line. */
+  littoral: 0.8,
+  /** Passes constrict everything. */
+  highland: 0.65,
+} as const;
+
+export const READINESS_DROP_BASE = 12;
+
+/**
+ * How much harder a worn formation is worked than a rested one, at full depletion.
+ *
+ * The operational-tempo escalator. A rested formation pays the base cost; one that has
+ * been fighting without rest pays up to `1 + K` times as much for the same battle, so a
+ * continuous pace genuinely leaves little room for rest.
+ *
+ * This term, not a smaller base, is what creates a cadence tradeoff. Measured: cutting
+ * the cost from 77 to 8 with no escalator still made attacking every single turn the
+ * best play by a wide margin. At K = 3 the optimum is every third turn and attacking
+ * every turn goes NEGATIVE on ground taken.
+ */
+export const READINESS_TEMPO_K = 3;
+
+export const NAVAL_REACH = {
+  coastal: { carrier: 1.0, escort: 0.4 },
+  inland: { carrier: 0.5, escort: 0.1 },
 } as const;
 
 /**
