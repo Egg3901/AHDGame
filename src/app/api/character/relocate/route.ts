@@ -137,6 +137,10 @@ export async function POST(request: Request) {
     if (outcome.chairResignedFrom)
       notes.push(`Resigned as central bank chair (${outcome.chairResignedFrom}).`);
     if (outcome.leftPartyName) notes.push(`Left ${outcome.leftPartyName}; now independent.`);
+    // A general who moves abroad loses the command, and the move has to say so:
+    // it is the one consequence with units and a war attached to it.
+    if (outcome.relinquishedCommands.length > 0)
+      notes.push(`Gave up command of ${outcome.relinquishedCommands.join(", ")}.`);
     const totalWithdrawals =
       outcome.withdrawnGeneralElections +
       outcome.withdrawnStatePartyElections +
@@ -157,6 +161,7 @@ export async function POST(request: Request) {
       ceoResignedFrom: outcome.ceoResignedFrom,
       chairResignedFrom: outcome.chairResignedFrom,
       leftPartyName: outcome.leftPartyName,
+      relinquishedCommands: outcome.relinquishedCommands,
       withdrawnGeneralElections: outcome.withdrawnGeneralElections,
       withdrawnStatePartyElections: outcome.withdrawnStatePartyElections,
       withdrawnNationalPartyElections: outcome.withdrawnNationalPartyElections,

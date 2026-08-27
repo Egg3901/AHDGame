@@ -48,8 +48,13 @@ vi.mock("@/lib/caucus/cleanupCaucusParticipationForCharacters", () => ({
   }),
 }));
 
+vi.mock("@/lib/military/severFromChainOfCommand", () => ({
+  severFromChainOfCommand: vi.fn().mockResolvedValue({ led: [], changed: false }),
+}));
+
 import { performRelocation } from "./performRelocation";
 import { cleanupCaucusParticipationForCharacters } from "@/lib/caucus/cleanupCaucusParticipationForCharacters";
+import { severFromChainOfCommand } from "@/lib/military/severFromChainOfCommand";
 
 function makeCharacter(overrides: Partial<Character> = {}): Character {
   const now = new Date();
@@ -131,6 +136,53 @@ describe("performRelocation", () => {
     expect(setOp.party).toBe("independent");
     expect(setOp.nationalInfluence).toBe(0);
     expect(setOp.partyInfluence).toBe(0);
+  });
+
+  /**
+   * A saved command holds a CHARACTER id and `requireCommandingGeneral` reads
+   * authority straight off it, so a commanding general who moved abroad kept
+   * posting their old country's generals — the same class of stale-appointment
+   * bug the cabinet-record deletion above already guards against.
+   */
+  describe("leaving the old country's chain of command", () => {
+    // The outer beforeEach rebuilds the db but not the module mocks, and the
+    // cross-country cases above have already called this one.
+    beforeEach(() => vi.mocked(severFromChainOfCommand).mockClear());
+
+    it("severs the character from the country they left, not the one they joined", async () => {
+      const character = makeCharacter({ countryId: "US" });
+
+      const outcome = await performRelocation(
+        db as unknown as Db,
+        character,
+        makeState("LON", "UK")
+      );
+
+      expect(severFromChainOfCommand).toHaveBeenCalledWith(db, "US", character._id.toString());
+      expect(outcome.relinquishedCommands).toEqual([]);
+    });
+
+    it("reports the commands they led so the move can say what it cost", async () => {
+      vi.mocked(severFromChainOfCommand).mockResolvedValueOnce({
+        led: ["USINDCOM"],
+        changed: true,
+      });
+
+      const outcome = await performRelocation(
+        db as unknown as Db,
+        makeCharacter({ countryId: "US" }),
+        makeState("LON", "UK")
+      );
+
+      expect(outcome.relinquishedCommands).toEqual(["USINDCOM"]);
+    });
+
+    // Moving house does not cost you your command; moving country does.
+    it("leaves the chain of command alone on a same-country move", async () => {
+      await performRelocation(db as unknown as Db, makeCharacter(), makeState("TX"));
+
+      expect(severFromChainOfCommand).not.toHaveBeenCalled();
+    });
   });
 
   it("always appends a careerHistory entry for the move", async () => {
