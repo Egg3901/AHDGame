@@ -17,9 +17,11 @@ import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers
 import { getPendingDeclaration } from "@/lib/db/collections/battleDeclarations";
 import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
 import { theaterCommanderOf } from "@/lib/military/assignments";
+import { rank } from "@/lib/military/generals";
 import { getMilitaryCommands } from "@/lib/db/collections/militaryCommands";
 import { loadGeneralsById } from "@/lib/db/collections/characterGenerals";
 import { resolveCommandChain } from "@/lib/military/commandChain";
+import type { PostedGeneralRow } from "./PostedGeneralsPanel";
 import { getCabinetSettingsCollection } from "@/lib/db/collections/cabinetSettings";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import { conflictTier, belligerentSideOf } from "@/lib/military/conflictVisibility";
@@ -134,6 +136,15 @@ export default async function ConflictRecordPage({
   let theaterCommander: string | null = null;
   let theaterCommanderName: string | null = null;
   let employ: ConflictRecordView["employ"] = null;
+  // The viewer nation's postings at this front, resolved here where the org doc and
+  // the general roster are already loaded, and turned into rows once the unit query
+  // below has run (a general's divisions travel with them).
+  let postingsHere: {
+    generalCharacterId: string;
+    name: string;
+    level: number;
+    inCharge: boolean;
+  }[] = [];
   if (viewerCountry && ownSide && viewerCharacterId) {
     const [org, seatHolder, hog, commands, generalsById] = await Promise.all([
       getMilitaryFormations(db, viewerCountry),
@@ -147,17 +158,43 @@ export default async function ConflictRecordPage({
       getMilitaryCommands(db, viewerCountry),
       loadGeneralsById(db, viewerCountry),
     ]);
-    isPostedGeneral = org.conflictAssignments.some(
+    // Postings held by someone the country's roster no longer contains are not real
+    // postings: they cannot fight, the assignments PUT drops them on the next save,
+    // and counting them here would have the page name a Theater Commander it then
+    // could not list. Filtered once so every reader below agrees.
+    const liveAssignments = org.conflictAssignments.filter(
+      (a) => generalsById[a.generalCharacterId]
+    );
+    isPostedGeneral = liveAssignments.some(
       (a) => a.theaterId === doc._id && a.generalCharacterId === viewerCharacterId
     );
     isDefenseHolder = seatHolder?.characterId?.toString() === viewerCharacterId;
     isHeadOfGovernment = hog?.toString() === viewerCharacterId;
-    const ownCommand = commands.find((c) => c.commandingGeneralId === viewerCharacterId) ?? null;
+    // Leading a command is only authority while its lead is still a commissioned
+    // general of this country: `requireCommandingGeneral` re-checks exactly this, so
+    // trusting the stored id alone would render an Employ panel whose every button
+    // the route then refuses.
+    const ownCommand =
+      (generalsById[viewerCharacterId]
+        ? commands.find((c) => c.commandingGeneralId === viewerCharacterId)
+        : undefined) ?? null;
     isCommandingGeneral = ownCommand !== null;
-    theaterCommander = theaterCommanderOf(org.conflictAssignments, doc._id);
+    theaterCommander = theaterCommanderOf(liveAssignments, doc._id);
     // Who holds a theater is public — the designation is an act of state — so the
     // name is resolved for every seat, not only the ones that can act on it.
     theaterCommanderName = theaterCommander ? (generalsById[theaterCommander]?.name ?? null) : null;
+
+    // Every general of this nation standing at this front, Theater Commander first.
+    // Their own country's only: the record's rule is that who is standing where is
+    // not public, and the enemy's dispositions are never itemised anywhere.
+    postingsHere = liveAssignments
+      .filter((a) => a.theaterId === doc._id)
+      .map((a) => ({
+        generalCharacterId: a.generalCharacterId,
+        name: generalsById[a.generalCharacterId].name ?? "Unnamed general",
+        level: generalsById[a.generalCharacterId].level,
+        inCharge: a.inCharge,
+      }));
 
     // The Commanding General's lever, brought to the front it applies to. Their
     // whole posting set is sent, not just this conflict's: the route merges other
@@ -171,18 +208,24 @@ export default async function ConflictRecordPage({
       employ = {
         countryCode: viewerCountry.toLowerCase(),
         theaterId: doc._id,
-        generals: ownCommand.commanderIds.map((id) => {
-          // A general's force is DERIVED from assignedGeneralId — it is never
-          // listed on the posting, and it travels with them.
-          const led = ownUnits.filter((u) => u.assignedGeneralId === id);
-          return {
-            id,
-            name: generalsById[id]?.name ?? "Unnamed general",
-            divisions: led.length,
-            men: led.reduce((s, u) => s + u.personnel, 0).toLocaleString("en-US"),
-          };
-        }),
-        ownAssignments: org.conflictAssignments.filter((a) => ownIds.has(a.generalCharacterId)),
+        // Filtered to generals the country's roster still holds. A commander who
+        // emigrated or was dismissed stays in `commanderIds` (see
+        // reconcileCommandCommanders), and offering them here would render an
+        // "Unnamed general" whose Post-here button the assignments PUT refuses.
+        generals: ownCommand.commanderIds
+          .filter((id) => generalsById[id])
+          .map((id) => {
+            // A general's force is DERIVED from assignedGeneralId — it is never
+            // listed on the posting, and it travels with them.
+            const led = ownUnits.filter((u) => u.assignedGeneralId === id);
+            return {
+              id,
+              name: generalsById[id]?.name ?? "Unnamed general",
+              divisions: led.length,
+              men: led.reduce((s, u) => s + u.personnel, 0).toLocaleString("en-US"),
+            };
+          }),
+        ownAssignments: liveAssignments.filter((a) => ownIds.has(a.generalCharacterId)),
       };
     }
   }
@@ -239,6 +282,27 @@ export default async function ConflictRecordPage({
           .find({ countryId: { $in: belligerentCountries } })
           .toArray()
       : [];
+
+  // Gated on a MILITARY seat, not merely on `command` tier. The tier also admits the
+  // head of government, whom `resolveCommandChain` reads as a citizen — and the
+  // citizen panel says outright that who is standing where is not public. Showing
+  // them the roster would have the page contradict its own copy.
+  const holdsMilitarySeat = isDefenseHolder || isCommandingGeneral || isPostedGeneral;
+  const postedHere: PostedGeneralRow[] | null =
+    tier === "command" && holdsMilitarySeat && viewerCountry
+      ? postingsHere
+          .map((a) => ({
+            id: a.generalCharacterId,
+            name: a.name,
+            rank: rank(a.level),
+            divisions: units.filter(
+              (u) => u.countryId === viewerCountry && u.assignedGeneralId === a.generalCharacterId
+            ).length,
+            inCharge: a.inCharge,
+            isViewer: a.generalCharacterId === viewerCharacterId,
+          }))
+          .sort((a, b) => Number(b.inCharge) - Number(a.inCharge) || a.name.localeCompare(b.name))
+      : null;
 
   // The opposing side's state members are the only legal targets here; the declare
   // route re-checks side membership against the same rosters, so this only shapes the
@@ -571,6 +635,7 @@ export default async function ConflictRecordPage({
     // record does not need to be told they hold none.
     chain: viewerCharacterId ? chain : null,
     actions,
+    postedHere,
     employ,
     whoDeclares,
     committedCountry,

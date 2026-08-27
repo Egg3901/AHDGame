@@ -4,6 +4,7 @@ import type { ConflictTier } from "@/lib/military/conflictVisibility";
 import type { ForceRow, RecordBattleRow, SideForce } from "./conflictRecordView";
 import { ConflictActions } from "./ConflictActions";
 import { CommandChainPanel, CommandLockedPanel, HowThisFrontMoves } from "./CommandChainPanel";
+import { PostedGeneralsPanel, type PostedGeneralRow } from "./PostedGeneralsPanel";
 import { EmployCommandPanel, type EmployableGeneral } from "./EmployCommandPanel";
 import { MomentumPanel, type MomentumView } from "./MomentumPanel";
 import { ForcePanel } from "./ForcePanel";
@@ -104,6 +105,12 @@ export interface ConflictRecordView {
     targets: string[];
     pendingTarget: string | null;
   } | null;
+  /**
+   * The viewer nation's generals standing at this front, most senior posting
+   * first. Null outside `command` tier: who is standing where is not public, which
+   * is the same rule `ownForces` follows.
+   */
+  postedHere: PostedGeneralRow[] | null;
   /** The Commanding General's own generals + postings; null for every other seat. */
   employ: {
     countryCode: string;
@@ -628,6 +635,11 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
             ) : (
               c.chain?.locked && <CommandLockedPanel note={c.chain.locked} />
             )}
+
+            {/* Above the CG's own lever, because it is the state that lever acts on
+                — and it is the answer the chain panel's "Who is posted here" link
+                now scrolls to. */}
+            {c.postedHere && <PostedGeneralsPanel generals={c.postedHere} />}
 
             {c.employ && <EmployCommandPanel {...c.employ} />}
 
