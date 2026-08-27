@@ -258,6 +258,12 @@ async function leaveBloc(
   // Bloc organisations are always built-in — `loadBlocMembership` drops any
   // channel whose id is not in this table, so `blocOrgFor` cannot return a custom
   // one and the constant lookup needs no database read.
-  const name = INTERNATIONAL_ORGANIZATIONS[org]?.name ?? org;
+  //
+  // The `keyof` cast is load-bearing: `InternationalOrganizationId` also covers
+  // player-founded organisations, which this table does not key, so indexing it
+  // with the wider type is an implicit `any`. The `?? org` below is what makes the
+  // cast safe rather than merely quiet.
+  const name =
+    INTERNATIONAL_ORGANIZATIONS[org as keyof typeof INTERNATIONAL_ORGANIZATIONS]?.name ?? org;
   await removeOrganizationMembership(db, params.countryId, org, name, params.currentTurn);
 }
