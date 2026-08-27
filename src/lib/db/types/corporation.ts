@@ -337,6 +337,8 @@ export interface Corporation {
     underlyingUserId: ObjectId;
     /** Turn the caretaker was installed. */
     appointedTurn: number;
+    /** Whether the owner chose the caretaker or the turn loop filled a vacancy. */
+    appointmentSource?: "owner" | "vacancy";
   };
   /**
    * Turn until which a new caretaker may NOT be installed, stamped when the owner
