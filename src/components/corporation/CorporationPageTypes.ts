@@ -795,12 +795,23 @@ export interface BondInfo {
   totalDebt: number;
   /** Per-issuance cap in ₳: 25% of annual revenue, floored at $100M */
   maxPerIssuance?: number;
-  /** Effective issuance ceiling in ₳: min(per-issuance cap, 2x-equity headroom). */
+  /**
+   * Effective issuance ceiling in ₳: the smallest of the per-issuance cap, the
+   * 2x going-concern equity headroom, and the 1x exit-equity headroom (#1198).
+   * Authoritative — the POST enforces exactly this, so render it rather than
+   * re-deriving any one of the three rules here.
+   */
   maxAllowedIssuance?: number;
   /** Effective minimum issuance in ₳: the flat minimum clamped to the corp's ceiling. */
   minIssuance?: number;
   /** False when the corp's headroom is below the dust floor and bonds are unavailable. */
   bondsAvailable?: boolean;
+  /** What the corp could realize by selling up, in ₳ (#1198). */
+  exitEquity?: number;
+  /** Remaining debt-ceiling room in ₳, before the per-issuance cap (#1198). */
+  debtHeadroom?: number;
+  /** Which rule is currently binding on `maxAllowedIssuance` (#1198). */
+  issuanceLimitedBy?: "perIssuance" | "leverage" | "exitEquity";
   isCeo: boolean;
   cooldownTurnsRemaining: number;
   /** ISO instant until which issuance is frozen for the launch window, else null. */
