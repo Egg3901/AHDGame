@@ -116,11 +116,18 @@ const REFUSAL: Record<CabinetCapability, string> = {
  * Answers one question only. It never decides whether the caller HOLDS the
  * seat: that stays with each route's own holder check, which already refuses a
  * vacant seat. So a null member, or a confirmed one, is always allowed here.
+ *
+ * `isAdmin` exists because every cabinet route admits an admin who does NOT
+ * hold the seat. Without the exemption, an admin operating on a seat that
+ * happens to be acting-held would be refused for a limit that was never meant
+ * to apply to them: the caretaker rule binds the caretaker, not the operator.
  */
 export function assertActingAllowed(
   member: { acting?: boolean } | null | undefined,
-  capability: CabinetCapability
+  capability: CabinetCapability,
+  { isAdmin = false }: { isAdmin?: boolean } = {}
 ): { ok: true } | { ok: false; response: NextResponse } {
+  if (isAdmin) return { ok: true };
   if (!member?.acting) return { ok: true };
   if (!ACTING_RESTRICTED.has(capability)) return { ok: true };
   return {

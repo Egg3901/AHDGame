@@ -8,6 +8,7 @@ import { requireAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
+import { assertActingAllowed } from "@/lib/cabinet/actingScope";
 import { getEnergyPlantsCollection } from "@/lib/db/collections/energyPlants";
 import { resolveEnergyPosition } from "@/lib/constants/cabinetEnergy";
 
@@ -47,6 +48,11 @@ export async function POST(_request: Request, { params }: RouteParams) {
         { status: 403 }
       );
     }
+
+    const actingCheck = assertActingAllowed(member, "capitalProject", {
+      isAdmin: auth.user.isAdmin === true,
+    });
+    if (!actingCheck.ok) return actingCheck.response;
 
     const plant = await plantsCol.findOne({ _id: new ObjectId(plantId), countryId, positionId });
     if (!plant) {

@@ -12,6 +12,7 @@ import { getGameState } from "@/lib/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
+import { assertActingAllowed } from "@/lib/cabinet/actingScope";
 import { getCabinetEstatesCollection } from "@/lib/db/collections/cabinetEstates";
 import {
   resolveEstatePortfolio,
@@ -92,6 +93,11 @@ export async function POST(request: Request, { params }: RouteParams) {
         { status: 403 }
       );
     }
+
+    const actingCheck = assertActingAllowed(member, "capitalProject", {
+      isAdmin: auth.user.isAdmin === true,
+    });
+    if (!actingCheck.ok) return actingCheck.response;
 
     // Backfill legacy members missing the action fields (mirrors the order route).
     if (member && member.ministerialActions == null) {

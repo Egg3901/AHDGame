@@ -31,7 +31,9 @@ const testSchema = z.object({ nodeKey: z.string().min(1) });
 export async function POST(request: Request, { params }: NuclearRouteParams) {
   try {
     const { code, positionId } = await params;
-    const guard = await requireDefenceHolder(code, positionId);
+    const guard = await requireDefenceHolder(code, positionId, {
+      capability: "strategicCommitment",
+    });
     if ("error" in guard) return guard.error;
     const { db, countryId } = guard;
 

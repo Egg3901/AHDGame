@@ -9,6 +9,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { getGameState } from "@/lib/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
+import { assertActingAllowed } from "@/lib/cabinet/actingScope";
 import { getTreasuryOperationsCollection } from "@/lib/db/collections/treasuryOperations";
 import {
   resolveFinancePosition,
@@ -49,6 +50,11 @@ export async function POST(_request: Request, { params }: RouteParams) {
         { status: 403 }
       );
     }
+
+    const actingCheck = assertActingAllowed(member, "capitalProject", {
+      isAdmin: auth.user.isAdmin === true,
+    });
+    if (!actingCheck.ok) return actingCheck.response;
 
     const gameState = await getGameState();
     const currentTurn = gameState?.currentTurn ?? 1;

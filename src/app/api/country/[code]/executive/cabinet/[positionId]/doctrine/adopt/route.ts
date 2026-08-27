@@ -10,6 +10,7 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
+import { assertActingAllowed } from "@/lib/cabinet/actingScope";
 import { getGameStateCollection } from "@/lib/db/collections/gameState";
 import {
   getNationalDoctrine,
@@ -68,6 +69,11 @@ export async function POST(request: Request, { params }: RouteParams) {
         { status: 403 }
       );
     }
+
+    const actingCheck = assertActingAllowed(member, "strategicCommitment", {
+      isAdmin: auth.user.isAdmin === true,
+    });
+    if (!actingCheck.ok) return actingCheck.response;
 
     const currentEra = await resolveDoctrineEra(db);
     const year = resolveGameYear(gs);

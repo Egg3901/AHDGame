@@ -10,6 +10,7 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
+import { assertActingAllowed } from "@/lib/cabinet/actingScope";
 import { getGameState } from "@/lib/gameState";
 import { SOVEREIGN_BOND_MATURITY_ADMIN_OPTIONS } from "@/lib/db/types/bond";
 import type { BondMaturityTurns } from "@/lib/db/types/bond";
@@ -83,6 +84,10 @@ export async function POST(request: Request, { params }: RouteParams) {
           { status: 403 }
         );
       }
+
+      // No isAdmin argument needed: this branch only runs for non-admins.
+      const actingCheck = assertActingAllowed(member, "capitalProject");
+      if (!actingCheck.ok) return actingCheck.response;
     }
 
     const gameState = await getGameState();

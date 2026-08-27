@@ -18,6 +18,7 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
+import { assertActingAllowed, type CabinetCapability } from "@/lib/cabinet/actingScope";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import type { Corporation, CorporateSector } from "@/lib/db/types/corporation";
 import type { UnitDomain } from "@/lib/db/types/militaryUnit";
@@ -100,8 +101,19 @@ interface RouteParams {
   params: Promise<{ code: string; positionId: string }>;
 }
 
-/** Shared guard: valid country, real defence seat, caller holds it (or is admin). */
-async function requireDefenceHolder(code: string, positionId: string) {
+/**
+ * Shared guard: valid country, real defence seat, caller holds it (or is admin).
+ *
+ * `capability` additionally applies the acting-holder scope rule. Signing a NEW
+ * contract is a capital commitment an acting minister may not make; cancelling
+ * one is winding down, so DELETE passes no capability. That split mirrors the
+ * procurement freeze below, which stops new orders and leaves cancel open.
+ */
+async function requireDefenceHolder(
+  code: string,
+  positionId: string,
+  capability?: CabinetCapability
+) {
   const auth = await requireAuth();
   if (!auth.ok) return { error: auth.response } as const;
 
@@ -129,6 +141,12 @@ async function requireDefenceHolder(code: string, positionId: string) {
       ),
     } as const;
   }
+  if (capability) {
+    const actingCheck = assertActingAllowed(member, capability, {
+      isAdmin: !!auth.user.isAdmin,
+    });
+    if (!actingCheck.ok) return { error: actingCheck.response } as const;
+  }
   // The holder's identity rides along: self-dealing disclosure needs to know who signed, and
   // resolving it a second time from the route would be a second chance to resolve it wrongly.
   return { db, countryId, member, user: auth.user } as const;
@@ -137,7 +155,7 @@ async function requireDefenceHolder(code: string, positionId: string) {
 export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { code, positionId } = await params;
-    const guard = await requireDefenceHolder(code, positionId);
+    const guard = await requireDefenceHolder(code, positionId, "capitalProject");
     if ("error" in guard) return guard.error;
     const { db, countryId } = guard;
 

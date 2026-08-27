@@ -49,6 +49,20 @@ describe("assertActingAllowed", () => {
     expect(assertActingAllowed(null, "policyStance").ok).toBe(true);
     expect(assertActingAllowed({}, "policyStance").ok).toBe(true);
   });
+
+  it("exempts admins, who act on seats they do not hold", () => {
+    // Every cabinet route admits a non-holding admin. The caretaker rule binds
+    // the caretaker, not the operator, so an admin must not inherit the limit
+    // merely because the seat happens to be acting-held.
+    for (const capability of [
+      "policyStance",
+      "personnel",
+      "strategicCommitment",
+      "capitalProject",
+    ] as const) {
+      expect(assertActingAllowed({ acting: true }, capability, { isAdmin: true }).ok).toBe(true);
+    }
+  });
 });
 
 describe("CABINET_ROUTE_CAPABILITIES", () => {
