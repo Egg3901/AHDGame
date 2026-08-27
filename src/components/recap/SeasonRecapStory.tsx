@@ -169,9 +169,7 @@ interface Slide {
 
 function buildSlides(recap: CharacterRecap): Slide[] {
   const s: Slide[] = [];
-  const season = recap.iteration
-    ? iterationLabel(recap.iteration)
-    : "this season";
+  const season = recap.iteration ? iterationLabel(recap.iteration) : "this season";
 
   s.push({
     key: "intro",
@@ -383,9 +381,7 @@ export function SeasonRecapStory({ recap, onClose }: SeasonRecapStoryProps) {
 
   const isFinale = index >= slides.length;
   const slide = isFinale ? null : slides[index];
-  const season = recap.iteration
-    ? iterationLabel(recap.iteration)
-    : "this season";
+  const season = recap.iteration ? iterationLabel(recap.iteration) : "this season";
 
   const countTarget = slide?.value ?? 0;
   const counted = useCountUp(countTarget, index, motion && slide?.value != null);
@@ -434,9 +430,7 @@ export function SeasonRecapStory({ recap, onClose }: SeasonRecapStoryProps) {
     // Share a link to the public recap page — it unfurls with an OG image on
     // Discord/social. Fall back to copying the URL to the clipboard.
     const url = `${window.location.origin}/wrapped/${recap.characterId}`;
-    const seasonName = recap.iteration
-      ? iterationLabel(recap.iteration)
-      : "season";
+    const seasonName = recap.iteration ? iterationLabel(recap.iteration) : "season";
     const data: ShareData = {
       title: `${recap.name}'s ${seasonName} Wrapped`,
       text: "My A House Divided season, wrapped.",

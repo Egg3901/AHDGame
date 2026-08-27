@@ -13,9 +13,7 @@ import { SeasonRecapStory } from "@/components/recap/SeasonRecapStory";
  */
 export function MaintenanceRecapLauncher({ recap }: { recap: CharacterRecap }) {
   const [open, setOpen] = useState(false);
-  const season = recap.iteration
-    ? iterationLabel(recap.iteration)
-    : "last season";
+  const season = recap.iteration ? iterationLabel(recap.iteration) : "last season";
 
   return (
     <>
