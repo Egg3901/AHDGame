@@ -157,3 +157,49 @@ export function createCommand(
   };
   return { command };
 }
+
+/**
+ * Drop commanders who are no longer commissioned generals of this country.
+ *
+ * A commander id is a character id, and a character can leave: emigrate to another
+ * country, or be dismissed as a general. Neither event touches the saved command,
+ * so the id stays in `commanderIds` pointing at somebody this country's roster no
+ * longer contains. Live data has exactly this — Russia's only command listed a
+ * general who had moved to the United Kingdom.
+ *
+ * The result was a command nobody could edit again. The detail panel renders a
+ * commander by looking them up in the roster and skipping a miss, so the row was
+ * invisible while the header still counted it ("COMMANDERS · 1" above an empty
+ * list) — there was no ✕ to click. Meanwhile the commands PUT re-checks every
+ * commanderId against that same roster and 400s the whole array, so every later
+ * edit (a region, a unit, a new command entirely) was refused because of a name
+ * the Secretary could not see and had never chosen.
+ *
+ * So the state that LOADS has to be a state that can be SAVED, the same rule
+ * `dedupeCommandIds` and the `commandingGeneralId` back-compat already keep. The
+ * route also requires the lead to be one of the command's own commanders, so a
+ * lead is cleared whenever they are not on the kept list — whether they were the
+ * one who left, or a stored orphan from before the reducer learned to clear the
+ * lead alongside the commander it removes.
+ *
+ * Returns the input array unchanged when nothing was stale, so a reducer seeded
+ * from it does not see a new identity on every render.
+ */
+export function reconcileCommandCommanders(
+  commands: MilitaryCommand[],
+  validCommanderIds: Iterable<string>
+): { commands: MilitaryCommand[]; removed: number } {
+  const roster = new Set(validCommanderIds);
+  let removed = 0;
+  let changed = false;
+  const out = commands.map((c) => {
+    const kept = c.commanderIds.filter((id) => roster.has(id));
+    const lead =
+      c.commandingGeneralId && kept.includes(c.commandingGeneralId) ? c.commandingGeneralId : null;
+    if (kept.length === c.commanderIds.length && lead === c.commandingGeneralId) return c;
+    removed += c.commanderIds.length - kept.length;
+    changed = true;
+    return { ...c, commanderIds: kept, commandingGeneralId: lead };
+  });
+  return changed ? { commands: out, removed } : { commands, removed: 0 };
+}
