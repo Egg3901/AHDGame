@@ -28,7 +28,7 @@ import {
 } from "@/lib/constants/capacityEconomy";
 import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
-import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import { foundingStarterUnits } from "@/lib/corporations/foundingPlant";
 
 const noPrices: CommodityPriceRatioFn = () => null;
 const noState = new Set<string>();
@@ -138,7 +138,14 @@ function pushedOrder(write: ReturnType<typeof queueWrites>[number]) {
 }
 
 describe("NPP capacity reinvestment — fires on a selling-out sector with headroom", () => {
-  it("queues a build sized to replace depreciation plus the chosen growth", () => {
+  it("buys at least one whole factory when discretionary growth is justified", () => {
+    const decision = decide(corp(), [sector()], [pool()]);
+    const growthUnits = decision.unownedDraws?.[0]?.units ?? 0;
+
+    expect(growthUnits).toBeGreaterThanOrEqual(foundingStarterUnits("manufacturing"));
+  });
+
+  it("queues replacement plus at least one whole factory of chosen growth", () => {
     const s = sector();
     const decision = decide(corp(), [s], [pool()]);
 
@@ -148,7 +155,7 @@ describe("NPP capacity reinvestment — fires on a selling-out sector with headr
 
     // fill == 1 ⇒ fillScale 1; AGGRESSION 1.
     const expectedUnits =
-      (s.capitalStock ?? 0) * (CAPITAL_DEPRECIATION_PER_TURN + 3 / 100 / TURNS_PER_YEAR);
+      (s.capitalStock ?? 0) * CAPITAL_DEPRECIATION_PER_TURN + foundingStarterUnits("manufacturing");
     expect(order.unitsOrdered).toBeCloseTo(expectedUnits, 6);
     expect(order.startTurn).toBe(TURN);
     expect(order.onlineTurn).toBe(TURN + CAPACITY_BUILD_TURNS("manufacturing"));
@@ -189,9 +196,9 @@ describe("NPP capacity reinvestment — fires on a selling-out sector with headr
     expect(writes[0].filter._id).toEqual(strong._id);
   });
 
-  it("never takes more than a quarter of the bucket's remaining headroom", () => {
-    // A huge plant next to a nearly-exhausted pool. Only the GROWTH leg is
-    // headroom-scoped, so the clamp is asserted on the pool draw.
+  it("does not buy fractional growth when the bucket cannot fit one factory", () => {
+    // A huge plant next to a nearly exhausted pool. Maintenance still runs,
+    // but discretionary growth waits until a whole facility fits.
     const tinyPool = pool({ headroomUnits: 4, revenue: 1 });
     const decision = decide(
       corp(),
@@ -200,8 +207,8 @@ describe("NPP capacity reinvestment — fires on a selling-out sector with headr
     );
     const order = pushedOrder(queueWrites(decision)[0]);
     const replacement = 1_000 * CAPITAL_DEPRECIATION_PER_TURN;
-    expect(order.unitsOrdered).toBeCloseTo(replacement + 1, 6); // growth: 4 × 0.25
-    expect(decision.unownedDraws![0].units).toBeCloseTo(1, 6);
+    expect(order.unitsOrdered).toBeCloseTo(replacement, 6);
+    expect(decision.unownedDraws).toBeUndefined();
   });
 });
 
@@ -259,6 +266,31 @@ describe("NPP capacity reinvestment — does not fire", () => {
     });
   }
 
+  it("does not add growth to a plant whose canonical physical P&L is negative", () => {
+    const losing = sector({
+      plantsPnl: {
+        revenue: 1_000,
+        inventoryRevenue: 0,
+        inventoryCarry: 0,
+        inputs: 700,
+        labour: 300,
+        upkeep: 100,
+        compliance: 0,
+        otherOpex: 0,
+        financialLegs: 0,
+        policyCredit: 0,
+        policyPp: 0,
+        operatingCost: 1_000,
+        totalCost: 1_100,
+        profit: -100,
+        turn: TURN - 1,
+      },
+    });
+    const decision = decide(corp(), [losing], [pool()]);
+
+    expect(decision.unownedDraws).toBeUndefined();
+  });
+
   // SUPERSEDED. This used to assert "an SOE MAY build into its own nationalized
   // bucket" — the carve-out that let a state enterprise through the private,
   // cash-rationed path. It cannot any more: an SOE has no operating cash of its
@@ -292,7 +324,7 @@ describe("NPP capacity reinvestment — conservation and pricing", () => {
       sectorType: "manufacturing",
       countryId: "US",
     });
-    const growth = (s.capitalStock ?? 0) * (3 / 100 / TURNS_PER_YEAR);
+    const growth = foundingStarterUnits("manufacturing");
     const replacement = (s.producedUnits ?? 0) * CAPITAL_DEPRECIATION_PER_TURN;
     expect(order.unitsOrdered).toBeCloseTo(growth + replacement, 10);
     // Replacement buys back capacity that already existed in this market and
