@@ -4,6 +4,7 @@ import type { FederalBudget } from "@/lib/db/types";
 import { convertLocal } from "@/lib/internationalOrganizations/organizationFund";
 import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import { ensureFederalBudget } from "@/lib/turn/ensureFederalBudget";
+import { recordProcurementRestriction } from "@/lib/db/collections/procurementRestrictions";
 import type { PeaceTerm } from "./peaceTerm";
 
 export interface ApplyTermContext {
@@ -37,7 +38,19 @@ export async function applyPeaceTerm(
     await moveIndemnity(db, term, ctx);
     return;
   }
-  // The remaining branches land in later tasks. Throwing rather than silently
+  if (term.kind === "demilitarisation") {
+    // The bar lands on the TARGET. The imposer is the one taking the term, not the
+    // one bound by it.
+    await recordProcurementRestriction(
+      db,
+      ctx.target,
+      ctx.currentTurn + term.turns,
+      ctx.conflictId
+    );
+    return;
+  }
+
+  // The remaining branch lands in a later task. Throwing rather than silently
   // doing nothing: a settlement that reports success and changes nothing is worse
   // than one that fails loudly, because the war resolves either way.
   throw new Error(`applyPeaceTerm: unsupported term ${term.kind}`);

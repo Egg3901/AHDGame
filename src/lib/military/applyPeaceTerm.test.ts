@@ -1,17 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Db } from "mongodb";
 
-const { convertLocal, ensureFederalBudget, loadWorldPreset } = vi.hoisted(() => ({
-  // A deliberately non-identity rate, so a test asserting the credited figure
-  // fails if the conversion is skipped or applied twice.
-  convertLocal: vi.fn((_from: string, _to: string, amount: number) => amount * 2),
-  ensureFederalBudget: vi.fn(async () => {}),
-  loadWorldPreset: vi.fn(async () => "1953-default"),
-}));
+const { convertLocal, ensureFederalBudget, loadWorldPreset, recordProcurementRestriction } =
+  vi.hoisted(() => ({
+    recordProcurementRestriction: vi.fn(async () => {}),
+    // A deliberately non-identity rate, so a test asserting the credited figure
+    // fails if the conversion is skipped or applied twice.
+    convertLocal: vi.fn((_from: string, _to: string, amount: number) => amount * 2),
+    ensureFederalBudget: vi.fn(async () => {}),
+    loadWorldPreset: vi.fn(async () => "1953-default"),
+  }));
 
 vi.mock("@/lib/internationalOrganizations/organizationFund", () => ({ convertLocal }));
 vi.mock("@/lib/currency/gdpAnchorRate", () => ({ loadWorldPreset }));
 vi.mock("@/lib/turn/ensureFederalBudget", () => ({ ensureFederalBudget }));
+vi.mock("@/lib/db/collections/procurementRestrictions", () => ({ recordProcurementRestriction }));
 
 import { applyPeaceTerm, type ApplyTermContext } from "./applyPeaceTerm";
 
@@ -38,6 +41,7 @@ const ctx: ApplyTermContext = {
 beforeEach(() => {
   convertLocal.mockClear();
   ensureFederalBudget.mockClear();
+  recordProcurementRestriction.mockClear();
 });
 
 describe("applyPeaceTerm: indemnity", () => {
@@ -91,6 +95,26 @@ describe("applyPeaceTerm: indemnity", () => {
     const { db } = mockDb();
     await applyPeaceTerm(db, { kind: "indemnity", payer: "TR", amount: 100 }, ctx);
     expect(convertLocal).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("applyPeaceTerm: demilitarisation", () => {
+  it("bars the TARGET, not the imposer", async () => {
+    const { db } = mockDb();
+    await applyPeaceTerm(db, { kind: "demilitarisation", turns: 240 }, ctx);
+    expect(recordProcurementRestriction).toHaveBeenCalledWith(expect.anything(), "TR", 340, "t1");
+  });
+
+  it("counts the duration from the current turn", async () => {
+    const { db } = mockDb();
+    await applyPeaceTerm(db, { kind: "demilitarisation", turns: 10 }, { ...ctx, currentTurn: 5 });
+    expect(recordProcurementRestriction).toHaveBeenCalledWith(expect.anything(), "TR", 15, "t1");
+  });
+
+  it("moves no money", async () => {
+    const { db, updates } = mockDb();
+    await applyPeaceTerm(db, { kind: "demilitarisation", turns: 240 }, ctx);
+    expect(updates).toHaveLength(0);
   });
 });
 
