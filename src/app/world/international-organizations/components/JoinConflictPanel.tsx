@@ -8,6 +8,11 @@ import type { ConflictOption } from "@/lib/military/dto/conflictOption";
 import type { OrgSummary, OrgViewerInfo } from "../orgTypes";
 import { VoteButtons } from "../VoteButtons";
 import { VoteRoster } from "../VoteRoster";
+import {
+  dedupeOrganizationVotes,
+  requiresUnanimity,
+  votesNeeded,
+} from "@/lib/internationalOrganizations/resolutionRules";
 
 interface Props {
   org: OrgSummary;
@@ -38,6 +43,12 @@ export function JoinConflictPanel({
   const viewerFmCountry = viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
   const viewerIsMember =
     viewerFmCountry != null && org.members.some((m) => m.countryId === viewerFmCountry);
+  // Tabling only needs membership, but voting needs a ballot: the route enforces
+  // isVotingMember, so an enabled button for a silent member promises a vote the
+  // server will refuse.
+  const viewerHoldsVote =
+    viewerFmCountry != null &&
+    org.members.some((m) => m.countryId === viewerFmCountry && m.hasVote);
 
   const pending = org.pendingLegislation.filter((l) => l.type === "join_conflict");
 
@@ -125,9 +136,10 @@ export function JoinConflictPanel({
         <div>
           <h3 className="text-lg font-semibold text-foreground">Entry into a conflict</h3>
           <p className="text-xs text-muted">
-            Call the bloc into a war already being fought. If the members carry it, every
-            player-enabled member puts the question to both chambers of its own legislature at once,
-            and each one decides for itself.
+            Call the bloc into a war already being fought. Entry needs unanimous consent from every
+            member that holds a vote. If they carry it, every player-enabled member puts the
+            question to both chambers of its own legislature at once, and each one decides for
+            itself.
           </p>
           <p className="mt-1 text-xs text-muted">
             Defence of a member is not voted on. If a member is attacked, every player-led member of
@@ -220,15 +232,29 @@ export function JoinConflictPanel({
         ) : (
           pending.map((l) => {
             const turnsLeft = Math.max(0, l.closesOnTurn - currentTurn);
-            const memberCount = org.members.length;
-            const yesCount = l.votes.filter(
-              (v) => v.vote === "yes" && org.members.some((m) => m.countryId === v.countryId)
+            const ballotSize = org.members.filter((m) => m.hasVote).length;
+            // Fold duplicate rows first: the resolver tallies the folded ballot,
+            // so anything counted here must be counted the same way.
+            const votes = dedupeOrganizationVotes(l.votes);
+            const yesCount = votes.filter(
+              (v) =>
+                v.vote === "yes" &&
+                org.members.some((m) => m.countryId === v.countryId && m.hasVote)
             ).length;
             const myVote =
               viewerFmCountry != null
-                ? (l.votes.find((v) => v.countryId === viewerFmCountry)?.vote ?? null)
+                ? (votes.find((v) => v.countryId === viewerFmCountry)?.vote ?? null)
                 : null;
-            const progress = memberCount > 0 ? (yesCount / memberCount) * 100 : 0;
+            const needed = votesNeeded(l.type, ballotSize);
+            const progress = needed > 0 ? (yesCount / needed) * 100 : 0;
+            // Derived, never hardcoded: an org with nobody eligible cannot carry
+            // anything, and the wording must follow whatever the rule says today.
+            const requirement =
+              ballotSize === 0
+                ? "no members hold a vote"
+                : requiresUnanimity(l.type)
+                  ? "unanimous consent required"
+                  : `${needed} needed`;
             return (
               <article
                 key={l._id.toString()}
@@ -249,7 +275,7 @@ export function JoinConflictPanel({
                 <div className="mb-3">
                   <div className="mb-1 flex items-center justify-between text-xs text-muted">
                     <span>
-                      {yesCount} / {memberCount} members in favour, majority required
+                      {yesCount} / {ballotSize} members in favour, {requirement}
                     </span>
                     <span className="tabular-nums">
                       {votingWindowTurns - turnsLeft}/{votingWindowTurns} turns
@@ -264,10 +290,12 @@ export function JoinConflictPanel({
                 </div>
                 <VoteButtons
                   onVote={(v) => vote(l._id.toString(), v)}
-                  disabled={!viewerIsMember}
+                  disabled={!viewerHoldsVote}
                   disabledReason={
-                    !viewerIsMember
-                      ? "Only foreign ministers of member states may vote."
+                    !viewerHoldsVote
+                      ? !viewerIsMember
+                        ? "Only foreign ministers of member states may vote."
+                        : "Your country holds no vote in this organization."
                       : undefined
                   }
                   currentVote={myVote}

@@ -10,9 +10,7 @@ import { ceoArchetypeModifiers } from "@/lib/turn/ceoArchetype";
 import { issueRelocationBond } from "@/lib/corporations/issueRelocationBond";
 import {
   makeNppCorpDecision,
-  NPP_BASE_SECTOR_CAP,
   NPP_SHORTAGE_ENTRIES_PER_TURN,
-  NPP_SHORTAGE_SECTOR_HARD_CAP,
   type NppPlantsContext,
 } from "./nppCorporationBehavior";
 
@@ -29,7 +27,7 @@ const plants: NppPlantsContext = {
   costOfLivingOf: () => null,
 };
 
-function corp(liquidCapital = 500_000_000): Corporation {
+function corp(liquidCapital = 500_000_000, logisticsStrength = 0): Corporation {
   return {
     _id: new ObjectId(),
     name: "Shortage Industries",
@@ -38,11 +36,12 @@ function corp(liquidCapital = 500_000_000): Corporation {
     headquartersState: "NY",
     liquidCurrencyCode: "USD",
     liquidCapital,
+    logisticsStrength,
     ceoType: "npp",
   } as unknown as Corporation;
 }
 
-function sectors(corporationId: ObjectId, count = NPP_BASE_SECTOR_CAP): CorporateSector[] {
+function sectors(corporationId: ObjectId, count = 8): CorporateSector[] {
   return Array.from({ length: count }, (_, index) => ({
     _id: new ObjectId(),
     corporationId,
@@ -84,6 +83,7 @@ function decide(args: {
   pools?: UnownedSector[];
   sectorCount?: number;
   shortageEntryCreditLocal?: number;
+  ordinaryEntryEligible?: boolean;
 }) {
   return makeNppCorpDecision(
     {
@@ -94,6 +94,7 @@ function decide(args: {
       fxRate: 1,
       modifiers: ceoArchetypeModifiers("cautious"),
       shortageEntryEligible: args.eligible ?? true,
+      ordinaryEntryEligible: args.ordinaryEntryEligible,
       shortageEntryCreditLocal: args.shortageEntryCreditLocal,
     },
     new Map([["US", args.pools ?? [pool()]]]),
@@ -104,11 +105,59 @@ function decide(args: {
 }
 
 describe("NPP shortage-responsive market entry", () => {
-  it("lets a corporation at the old cap enter a deep-shortage commodity", () => {
+  it("has no fixed corporation-size ceiling when logistics can support the footprint", () => {
+    const decision = decide({
+      corporation: corp(500_000_000, 1_000),
+      prices: balancedPrices,
+      sectorCount: 40,
+    });
+
+    expect(decision.newSectors).toHaveLength(1);
+  });
+
+  it("stops at the logistics-supported footprint until logistics strength grows", () => {
+    const decision = decide({
+      corporation: corp(500_000_000, 0),
+      prices: shortagePrices,
+      sectorCount: 15,
+    });
+
+    expect(decision.newSectors).toBeUndefined();
+  });
+
+  it("opens ordinary diversification slots beyond five sectors", () => {
+    const decision = decide({ corporation: corp(), prices: balancedPrices, sectorCount: 5 });
+
+    expect(decision.newSectors).toHaveLength(1);
+  });
+
+  it("paces ordinary entry on the corporation cohort slot", () => {
+    const decision = decide({
+      corporation: corp(),
+      prices: balancedPrices,
+      sectorCount: 4,
+      ordinaryEntryEligible: false,
+    });
+
+    expect(decision.newSectors).toBeUndefined();
+  });
+
+  it("does not grant shortages a second market-entry cohort slot", () => {
+    const decision = decide({
+      corporation: corp(),
+      prices: shortagePrices,
+      eligible: true,
+      ordinaryEntryEligible: false,
+    });
+
+    expect(decision.newSectors).toBeUndefined();
+    expect(decision.shortageCreditRequest).toBeUndefined();
+  });
+
+  it("lets a logistically capable corporation enter a deep-shortage commodity", () => {
     const corporation = corp();
     const decision = decide({ corporation, prices: shortagePrices });
 
-    expect(NPP_SHORTAGE_SECTOR_HARD_CAP).toBeGreaterThan(NPP_BASE_SECTOR_CAP);
     expect(decision.newSectors).toHaveLength(1);
     expect(decision.newSectors?.[0].sectorType).toBe("manufacturing");
   });
@@ -116,8 +165,8 @@ describe("NPP shortage-responsive market entry", () => {
   it.each([
     ["balanced", balancedPrices],
     ["glutted", glutPrices],
-  ] as const)("does not exceed the old cap for a %s commodity", (_label, prices) => {
-    const decision = decide({ corporation: corp(), prices });
+  ] as const)("does not exceed logistics capacity in a %s market", (_label, prices) => {
+    const decision = decide({ corporation: corp(), prices, sectorCount: 15 });
 
     expect(decision.newSectors).toBeUndefined();
     expect(decision.shortageCreditRequest).toBeUndefined();
@@ -125,7 +174,12 @@ describe("NPP shortage-responsive market entry", () => {
 
   it("enforces the cohort slot and one-entry per-turn limit", () => {
     const corporation = corp();
-    const blocked = decide({ corporation, prices: shortagePrices, eligible: false });
+    const blocked = decide({
+      corporation,
+      prices: shortagePrices,
+      eligible: false,
+      ordinaryEntryEligible: false,
+    });
     const eligible = decide({
       corporation,
       prices: (commodity) =>
@@ -139,14 +193,27 @@ describe("NPP shortage-responsive market entry", () => {
     expect(eligible.newSectors).toHaveLength(NPP_SHORTAGE_ENTRIES_PER_TURN);
   });
 
-  it("stops exceptional entry at the higher hard ceiling", () => {
+  it("allows exceptional entry for a large corporation with enough logistics", () => {
     const decision = decide({
-      corporation: corp(),
+      corporation: corp(500_000_000, 1_000),
       prices: shortagePrices,
-      sectorCount: NPP_SHORTAGE_SECTOR_HARD_CAP,
+      sectorCount: 40,
     });
 
-    expect(decision.newSectors).toBeUndefined();
+    expect(decision.newSectors).toHaveLength(1);
+  });
+
+  it("expands to an adjacent state before a larger distant market", () => {
+    const distant = pool("manufacturing", "CA");
+    distant.revenue = 1e12;
+    distant.headroomUnits = computeUnownedHeadroomUnits("manufacturing", distant.revenue, 1);
+    const decision = decide({
+      corporation: corp(),
+      prices: balancedPrices,
+      pools: [pool("manufacturing", "PA"), distant],
+    });
+
+    expect(decision.newSectors?.[0].stateId).toBe("PA");
   });
 
   it("funds entry with recorded corporate debt, crediting the proceeds exactly once", async () => {
@@ -205,14 +272,12 @@ describe("NPP shortage-responsive market entry", () => {
     );
   });
 
-  it("leaves an under-cap corporation on the ordinary cash-funded path", () => {
-    // The cap exception is only for corps that have hit the ordinary limit. A
-    // corp below it with a real shortage in front of it must still save up
-    // rather than borrow, which is the pre-existing behaviour.
+  it("does not borrow for a shortage outside its shortage cohort slot", () => {
     const decision = decide({
       corporation: corp(0),
       prices: shortagePrices,
-      sectorCount: NPP_BASE_SECTOR_CAP - 2,
+      sectorCount: 6,
+      eligible: false,
     });
 
     expect(decision.newSectors).toBeUndefined();

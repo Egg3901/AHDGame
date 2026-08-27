@@ -3,6 +3,7 @@
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { CountryFlag } from "@/components/CountryFlag";
 import type { ProposalVoteRecord } from "@/lib/db/types/internationalOrganization";
+import { dedupeOrganizationVotes } from "@/lib/internationalOrganizations/resolutionRules";
 
 interface Props {
   votes: ProposalVoteRecord[];
@@ -37,7 +38,10 @@ const VOTE_LABEL: Record<ProposalVoteRecord["vote"], string> = {
  * flag, country, character name, and vote choice. When `expectedVoters` is
  * provided, members who haven't cast a ballot yet are listed at the bottom.
  */
-export function VoteRoster({ votes, expectedVoters }: Props) {
+export function VoteRoster({ votes: rawVotes, expectedVoters }: Props) {
+  // Historical rows can list a country twice. Folding here keeps the roster
+  // agreeing with the tally beside it, and stops two <li> sharing a React key.
+  const votes = dedupeOrganizationVotes(rawVotes);
   const votedCountries = new Set<string>(votes.map((v) => v.countryId));
   const pendingVoters = (expectedVoters ?? []).filter((c) => !votedCountries.has(c));
 

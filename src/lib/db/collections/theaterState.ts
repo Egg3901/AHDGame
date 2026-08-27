@@ -13,12 +13,16 @@ export function getTheaterStateCollection(db: Db) {
 export async function getTheaterState(
   db: Db,
   countryId: string
-): Promise<{ cohesion: number; committed: Record<string, number> }> {
+): Promise<{
+  cohesion: number;
+  committed: Record<string, number>;
+  autoJoin?: Record<string, boolean>;
+}> {
   const doc = await getTheaterStateCollection(db).findOne({
     countryId: countryId as CountryId,
   });
   if (!doc) return { cohesion: 85, committed: {} };
-  return { cohesion: doc.cohesion, committed: doc.committed };
+  return { cohesion: doc.cohesion, committed: doc.committed, autoJoin: doc.autoJoin };
 }
 
 /** Every country's situation state (all committed forces) — for region-threat. */

@@ -104,6 +104,7 @@ function decide(debtServiceAnchor?: number) {
       fxRate: 1,
       modifiers: ceoArchetypeModifiers("cautious"),
       debtServiceAnchor,
+      ordinaryEntryEligible: false,
     },
     new Map<string, UnownedSector[]>([["US", [pool()]]]),
     noState,

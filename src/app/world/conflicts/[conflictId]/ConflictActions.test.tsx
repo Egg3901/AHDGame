@@ -211,3 +211,53 @@ describe("ConflictActions", () => {
     expect(screen.getByText(/offensive pending against CN/i)).toBeTruthy();
   });
 });
+
+describe("ConflictActions - allied auto-join", () => {
+  const box = () => document.querySelector("[data-auto-join] input") as HTMLInputElement;
+
+  it("reflects the standing order the server already holds", () => {
+    render(<ConflictActions {...base} autoJoin />);
+    expect(box().checked).toBe(true);
+  });
+
+  it("defaults to off, which is the old behaviour", () => {
+    render(<ConflictActions {...base} />);
+    expect(box().checked).toBe(false);
+  });
+
+  it("says what it does without jargon", () => {
+    render(<ConflictActions {...base} />);
+    expect(screen.getByText(/Join allied offensives automatically/)).toBeTruthy();
+    // The one thing a commander must not misread: this spends their men unprompted.
+    expect(screen.getByText(/without a separate order from you/)).toBeTruthy();
+  });
+
+  it("saves the order for this front", async () => {
+    render(<ConflictActions {...base} />);
+    fireEvent.click(box());
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => String(c[0]).includes("/battle/auto-join"));
+      expect(call).toBeTruthy();
+      expect(call![1].method).toBe("PUT");
+      expect(JSON.parse(call![1].body)).toEqual({ theaterId: "front-1", enabled: true });
+    });
+    expect(box().checked).toBe(true);
+  });
+
+  it("reverts and explains when the server refuses", async () => {
+    fetchMock.mockImplementation((url: string) =>
+      String(url).includes("/battle/auto-join")
+        ? Promise.resolve({ ok: false, json: async () => ({ error: "Nope" }) })
+        : Promise.resolve({
+            ok: true,
+            json: async () => ({ oddsPct: 46, counterOddsPct: 52, unopposed: false }),
+          })
+    );
+    render(<ConflictActions {...base} />);
+    fireEvent.click(box());
+    // An optimistic toggle that silently stayed on would tell the commander their army
+    // is committed when it is not.
+    await waitFor(() => expect(screen.getByText("Nope")).toBeTruthy());
+    expect(box().checked).toBe(false);
+  });
+});

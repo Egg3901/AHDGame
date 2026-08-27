@@ -21,6 +21,29 @@ const ratios =
     map[commodity] ?? 1;
 
 describe("state-resolution placement signals (supply dislocation, t202)", () => {
+  it("prefers an adjacent frontier state and allows the same sector type there", () => {
+    const pool = new Map([
+      ["US", [us("manufacturing", "AZ", 100_000), us("manufacturing", "TX", 10_000_000)]],
+    ]);
+    const pick = findBestUnownedSector(
+      "US",
+      "CA",
+      "manufacturing",
+      null,
+      new Set(["CA:manufacturing"]),
+      pool,
+      new Set(),
+      ratios({}),
+      false,
+      1,
+      undefined,
+      new Set(["AZ", "NV", "OR"])
+    );
+
+    expect(pick?.stateId).toBe("AZ");
+    expect(pick?.sectorType).toBe("manufacturing");
+  });
+
   it("a starved non-HQ state outscores the HQ state", () => {
     // Two open manufacturing buckets, same size. NY's state prices show a real
     // shortage; the HQ state (PA) is at base. The old unconditional HQ pick

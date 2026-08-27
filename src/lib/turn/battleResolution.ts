@@ -18,6 +18,7 @@ import type { BattleDeclarationDoc } from "@/lib/db/types/battleDeclaration";
 import type { CountryId } from "@/lib/constants/countries";
 import {
   applyOutcome,
+  contingentsOf,
   resolvePvpBattle,
   hashStr,
   type BattleContext,
@@ -27,13 +28,14 @@ import {
 } from "@/lib/military/battle";
 import { buildCoalitionSide } from "@/lib/military/battleSides";
 import { loadMilitaryBlocs } from "@/lib/military/blocLookup";
-import { mergeOffensives } from "@/lib/military/coalition";
+import { mergeOffensives, autoJoinersAtFront } from "@/lib/military/coalition";
 import { joinSide } from "@/lib/military/joinSide";
 import { isFactionEntity } from "@/lib/military/factionEntity";
 import { resolveDefendingSides } from "@/lib/military/defendingSides";
 import { buildFactionSide } from "@/lib/military/factionSide";
 import type { Front } from "@/lib/military/combat";
 import { getConflict, getConflictsCollection } from "@/lib/db/collections/conflicts";
+import { listTheaterStates } from "@/lib/db/collections/theaterState";
 import { conflictToFront } from "@/lib/military/createConflict";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import { resolveConflict } from "@/lib/military/resolveConflict";
@@ -55,6 +57,26 @@ import { nextControlSample } from "@/lib/military/warApproval";
  * second engagement built from the pre-tick roster does not merely ignore the first
  * one's losses — it writes them back out of existence.
  */
+/**
+ * The faction's own dead out of a defending side's outcome.
+ *
+ * `SideOutcome.loss` is the whole DEFENDING SIDE's total. When a real nation defends
+ * alongside the faction, charging all of it to `tokenStrength` ground the token force
+ * down by its ally's casualties as well as its own — a proxy force that evaporated at
+ * a rate nothing on the front could account for.
+ *
+ * `contingentsOf` covers the pre-coalition case on its own: those outcomes name one
+ * country per side, so a side that IS the faction yields its whole loss and a side
+ * that is not yields no entry for it.
+ */
+export function factionLoss(defender: SideOutcome, factionCountry: string): number {
+  const own = contingentsOf(defender).find((c) => c.country === factionCountry);
+  // No entry means the faction took no part in this engagement. Charge it nothing —
+  // falling through to the side total here would bill it for its allies' dead, which
+  // is the whole bug this function exists to prevent.
+  return own ? Math.max(0, Math.round(own.loss)) : 0;
+}
+
 async function persistSide(
   db: Db,
   side: BattleSide,
@@ -337,6 +359,38 @@ export async function resolveBattleDeclarations(
       unitsByCountry.set(u.countryId, list);
     }
 
+    // Standing orders: allies who fight in an offensive here without declaring one of
+    // their own. Loaded once for the whole front, because the set cannot change between
+    // offensives inside a tick.
+    const optedIn = new Set(
+      (await listTheaterStates(db))
+        .filter((st) => st.autoJoin?.[theaterId])
+        .map((st) => String(st.countryId))
+    );
+    if (optedIn.size > 0) {
+      for (const off of offensives) {
+        // A matchup that resolves to no side enrols nobody -- the same rule that stops
+        // it moving ground. Auto-join must not become the way around that.
+        if (!off.side) continue;
+        for (const c of autoJoinersAtFront(
+          conflict,
+          atFront,
+          theaterId,
+          off.side,
+          blocs,
+          optedIn
+        )) {
+          if (!off.attackers.includes(c)) off.attackers.push(c);
+        }
+        // Re-apply `mergeOffensives`' ordering. Auto-joiners arrive in whatever order
+        // Mongo returned the theatre states, and the roster is written into the battle
+        // report, so leaving it unsorted would make the report vary between ticks on
+        // identical input.
+        const lead = off.principal.declarerCountry;
+        off.attackers = [lead, ...off.attackers.filter((c) => c !== lead).sort()];
+      }
+    }
+
     // Set once an offensive drives the front to a pole and ends the war, which can
     // happen partway through a tick that has more offensives queued behind it.
     let standDown = false;
@@ -490,7 +544,7 @@ export async function resolveBattleDeclarations(
       // hold is about. A stalemated front would grind the token force every turn and
       // record none of it, which is the immortal wall this mechanism removes.
       if (factionSide && factionSide.units.length > 0) {
-        const lost = Math.max(0, Math.round(result.defender.loss));
+        const lost = factionLoss(result.defender, factionSide.country);
         if (lost > 0) {
           const key = defending.factionDefends === "A" ? "sideA" : "sideB";
           const before =

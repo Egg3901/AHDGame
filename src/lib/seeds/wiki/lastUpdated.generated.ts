@@ -139,7 +139,7 @@ export const WIKI_LAST_UPDATED: Record<string, string> = {
   "peace-and-truces": "2026-08-11",
   pensions: "2026-08-20",
   "planned-economies": "2026-08-21",
-  "plants-corp-guide": "2026-08-18",
+  "plants-corp-guide": "2026-08-26",
   "player-events": "2026-08-21",
   "player-progression": "2026-08-21",
   "policy-effects": "2026-08-20",
