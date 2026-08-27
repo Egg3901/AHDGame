@@ -9,6 +9,11 @@ import type { GameConfig } from "@/lib/db/types";
 import { getMarketSystemMode, type MarketSystemMode } from "@/lib/market/featureFlag";
 import { MARKET_MODE_INFO, MARKET_MODE_ORDER } from "@/lib/market/modes";
 import { getCurrentTurn } from "@/lib/currentTurn";
+import {
+  economicInterventionPlanSchema,
+  validateInterventionActivation,
+  type EconomicInterventionPlan,
+} from "@/lib/economy/interventionGovernance";
 
 // Enum derived from the canonical order so route validation can never drift
 // from the client selector or the engine.
@@ -40,6 +45,9 @@ const patchSchema = z.object({
   qualityPremiumPricingEnabled: z.boolean().optional(),
   supplyAgreementsEnabled: z.boolean().optional(),
   shortageResponsiveSourcingEnabled: z.boolean().optional(),
+  intervention: economicInterventionPlanSchema.optional(),
+  indexFundBondLiquidityEnabled: z.boolean().optional(),
+  bondLiquidityIntervention: economicInterventionPlanSchema.optional(),
   demographicsDemandEnabled: z.boolean().optional(),
   nppCorpsAttackable: z.boolean().optional(),
   nppCorporateAttacksEnabled: z.boolean().optional(),
@@ -77,6 +85,7 @@ export async function GET() {
           qualityPremiumPricingEnabled: 1,
           supplyAgreementsEnabled: 1,
           shortageResponsiveSourcingEnabled: 1,
+          indexFundBondLiquidityEnabled: 1,
           extractionOutputScaleEnabled: 1,
           commandEconomyEnabled: 1,
           commandEconomySecondEconomyTolerance: 1,
@@ -95,6 +104,7 @@ export async function GET() {
       qualityPremiumPricingEnabled: config?.qualityPremiumPricingEnabled === true,
       supplyAgreementsEnabled: config?.supplyAgreementsEnabled === true,
       shortageResponsiveSourcingEnabled: config?.shortageResponsiveSourcingEnabled === true,
+      indexFundBondLiquidityEnabled: config?.indexFundBondLiquidityEnabled === true,
       extractionOutputScaleEnabled: config?.extractionOutputScaleEnabled === true,
       commandEconomyEnabled: config?.commandEconomyEnabled === true,
       commandEconomySecondEconomyTolerance:
@@ -139,6 +149,9 @@ export async function PATCH(request: Request) {
       qualityPremiumPricingEnabled,
       supplyAgreementsEnabled,
       shortageResponsiveSourcingEnabled,
+      intervention,
+      indexFundBondLiquidityEnabled,
+      bondLiquidityIntervention,
       demographicsDemandEnabled,
       nppCorpsAttackable,
       nppCorporateAttacksEnabled,
@@ -158,6 +171,9 @@ export async function PATCH(request: Request) {
       qualityPremiumPricingEnabled?: boolean;
       supplyAgreementsEnabled?: boolean;
       shortageResponsiveSourcingEnabled?: boolean;
+      intervention?: EconomicInterventionPlan;
+      indexFundBondLiquidityEnabled?: boolean;
+      bondLiquidityIntervention?: EconomicInterventionPlan;
       demographicsDemandEnabled?: boolean;
       nppCorpsAttackable?: boolean;
       nppCorporateAttacksEnabled?: boolean;
@@ -190,6 +206,33 @@ export async function PATCH(request: Request) {
     // on a world whose cadence paused. Read before the write so the recorded
     // turn is the one the world was on when the operator acted.
     const currentTurn = await getCurrentTurn(db);
+    if (shortageResponsiveSourcingEnabled === true) {
+      if (!intervention) {
+        return NextResponse.json(
+          { error: "An economic intervention plan is required to enable shortage sourcing." },
+          { status: 400 }
+        );
+      }
+      const activationError = validateInterventionActivation(intervention, currentTurn);
+      if (activationError) {
+        return NextResponse.json({ error: activationError }, { status: 400 });
+      }
+    }
+    if (indexFundBondLiquidityEnabled === true) {
+      if (!bondLiquidityIntervention) {
+        return NextResponse.json(
+          { error: "An economic intervention plan is required to enable bond liquidity." },
+          { status: 400 }
+        );
+      }
+      const activationError = validateInterventionActivation(
+        bondLiquidityIntervention,
+        currentTurn
+      );
+      if (activationError) {
+        return NextResponse.json({ error: activationError }, { status: 400 });
+      }
+    }
 
     const governorSet: Partial<GameConfig> = {};
     if (typeof governorCap === "number") governorSet.marketGovernorCap = governorCap;
@@ -209,8 +252,18 @@ export async function PATCH(request: Request) {
       governorSet.qualityPremiumPricingEnabled = qualityPremiumPricingEnabled;
     if (typeof supplyAgreementsEnabled === "boolean")
       governorSet.supplyAgreementsEnabled = supplyAgreementsEnabled;
-    if (typeof shortageResponsiveSourcingEnabled === "boolean")
+    if (typeof shortageResponsiveSourcingEnabled === "boolean") {
       governorSet.shortageResponsiveSourcingEnabled = shortageResponsiveSourcingEnabled;
+      if (shortageResponsiveSourcingEnabled && intervention) {
+        governorSet.shortageResponsiveSourcingIntervention = intervention;
+      }
+    }
+    if (typeof indexFundBondLiquidityEnabled === "boolean") {
+      governorSet.indexFundBondLiquidityEnabled = indexFundBondLiquidityEnabled;
+      if (indexFundBondLiquidityEnabled && bondLiquidityIntervention) {
+        governorSet.indexFundBondLiquidityIntervention = bondLiquidityIntervention;
+      }
+    }
     if (typeof demographicsDemandEnabled === "boolean")
       governorSet.demographicsDemandEnabled = demographicsDemandEnabled;
     if (typeof nppCorpsAttackable === "boolean")

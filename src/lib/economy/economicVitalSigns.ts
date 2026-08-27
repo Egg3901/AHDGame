@@ -196,7 +196,15 @@ function relevantMarketDiagnostics(
   const fillByCommodity = new Map(
     flows.map((flow) => {
       const demand = flow.demandUnitsLedger ?? flow.demandUnits;
-      return [flow.commodity, ratio(flow.clearedUnitsPooled ?? flow.clearedUnits, demand)] as const;
+      return [
+        flow.commodity,
+        {
+          fill: ratio(flow.clearedUnitsPooled ?? flow.clearedUnits, demand),
+          supply: flow.supplyUnits,
+          demand,
+          price: finite(flow.price) && flow.price >= 0 ? flow.price : null,
+        },
+      ] as const;
     })
   );
   const byCommodity = new Map<CommodityType, CommodityParticipant[]>();
@@ -210,7 +218,12 @@ function relevantMarketDiagnostics(
     rows: CommodityParticipant[],
     side: "sellerUnits" | "buyerUnits",
     ownershipAdjusted: boolean
-  ): { hhi: number | null; count: number } => {
+  ): {
+    hhi: number | null;
+    count: number;
+    largestShare: number | null;
+    largestUnits: number | null;
+  } => {
     const totals = new Map<string, number>();
     for (const row of rows) {
       const value = nonnegative(row[side]);
@@ -218,7 +231,14 @@ function relevantMarketDiagnostics(
       const key = ownershipAdjusted ? row.ownershipRootId : row.corporationId;
       totals.set(key, (totals.get(key) ?? 0) + value);
     }
-    return { hhi: concentration([...totals.values()]).hhi, count: totals.size };
+    const values = [...totals.values()];
+    const total = values.reduce((sum, value) => sum + value, 0);
+    return {
+      hhi: concentration(values).hhi,
+      count: totals.size,
+      largestShare: total > 0 ? Math.max(...values) / total : null,
+      largestUnits: total > 0 ? Math.max(...values) : null,
+    };
   };
 
   const markets = [...byCommodity.entries()]
@@ -227,16 +247,25 @@ function relevantMarketDiagnostics(
       const buyers = hhiFor(rows, "buyerUnits", false);
       const ownershipSellers = hhiFor(rows, "sellerUnits", true);
       const ownershipBuyers = hhiFor(rows, "buyerUnits", true);
-      const pooledFillRate = fillByCommodity.get(commodity) ?? null;
+      const flow = fillByCommodity.get(commodity);
+      const pooledFillRate = flow?.fill ?? null;
       return {
         commodity,
         pooledFillRate,
+        supplyUnits:
+          flow?.supply ?? rows.reduce((sum, row) => sum + nonnegative(row.sellerUnits), 0),
+        demandUnits:
+          flow?.demand ?? rows.reduce((sum, row) => sum + nonnegative(row.buyerUnits), 0),
+        priceAnchorPerUnit: flow?.price ?? null,
+        participantSellerUnits: rows.reduce((sum, row) => sum + nonnegative(row.sellerUnits), 0),
         sellerCount: sellers.count,
         buyerCount: buyers.count,
         sellerHhi: sellers.hhi,
         buyerHhi: buyers.hhi,
         ownershipAdjustedSellerHhi: ownershipSellers.hhi,
         ownershipAdjustedBuyerHhi: ownershipBuyers.hhi,
+        largestOwnershipAdjustedSellerShare: ownershipSellers.largestShare,
+        largestOwnershipAdjustedSellerUnits: ownershipSellers.largestUnits,
         highConcentrationLowFill:
           pooledFillRate != null &&
           pooledFillRate < 0.8 &&
@@ -435,6 +464,18 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
   const competition = relevantMarketDiagnostics(input.commodityParticipants, input.currentFlows);
   const tradedCorporations = new Set(economicTrades.map((trade) => trade.corporationId.toString()));
   const activeBonds = input.bonds.filter((bond) => !bond.matured);
+  const sovereignBonds = activeBonds.filter((bond) => bond.issuerType === "sovereign");
+  const corporateBonds = activeBonds.filter((bond) => bond.issuerType !== "sovereign");
+  const noHolderShare = (bonds: Bond[]) =>
+    metric(
+      ratio(
+        bonds.filter((bond) => bond.holders.filter((holder) => holder.units > 0).length === 0)
+          .length,
+        bonds.length
+      ),
+      bonds.length,
+      "unmatured_bond_count"
+    );
   const bondHolderCounts = activeBonds.map(
     (bond) => bond.holders.filter((holder) => holder.units > 0).length
   );
@@ -644,6 +685,8 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         activeBonds.length,
         "unmatured_bond_count"
       ),
+      sovereignNoHolderBondShare: noHolderShare(sovereignBonds),
+      corporateNoHolderBondShare: noHolderShare(corporateBonds),
       medianBondHolders: metric(
         median(bondHolderCounts),
         activeBonds.length,
