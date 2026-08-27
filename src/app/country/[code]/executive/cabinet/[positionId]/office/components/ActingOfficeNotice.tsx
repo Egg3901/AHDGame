@@ -1,10 +1,10 @@
 /**
- * Caretaker notice for an office held by an acting secretary.
+ * How long this office stays in caretaker hands.
  *
- * The API refuses an acting holder's restricted levers with a 403. Without
- * this the holder would only discover the limit by pressing a button and
- * getting an error, so the office states the rule up front and says what
- * confirmation would unlock.
+ * Complements `ActingLock`, which disables the individual levers and says why.
+ * That covers WHAT an acting secretary cannot do; this covers how long they
+ * remain one, which no lock can express because it is a property of the
+ * appointment rather than of any control.
  */
 export function ActingOfficeNotice({
   turnsRemaining,
@@ -29,17 +29,10 @@ export function ActingOfficeNotice({
           This department is being run by an acting secretary.
         </p>
       </div>
-      <p className="mt-2 text-sm text-muted">
-        Day to day work continues as normal: deployments, recruitment, standing orders, and funding
-        for projects already under way. Setting department policy or budget allocations, appointing
-        or dismissing personnel, adopting doctrine or nuclear programmes, and opening new estates,
-        infrastructure, or energy projects all need a confirmed secretary, so those controls will be
-        refused until the Senate confirms one.
-      </p>
       {turnsRemaining !== null && (
         <p className="mt-2 text-sm text-muted">
           {turnsRemaining > 0
-            ? `${turnsRemaining} turns remain before this appointment lapses. Senate confirmation ends it early and lifts every limit above.`
+            ? `${turnsRemaining} turns remain before this appointment lapses, and the locked controls below stay locked until then. Senate confirmation ends it early and lifts every one of them.`
             : "This appointment lapses at the next turn."}
         </p>
       )}

@@ -21,23 +21,24 @@ function belligerents(c: ConflictDoc): CountryId[] {
 export async function resolveConflict(
   db: Db,
   conflict: ConflictDoc,
-  winner: "A" | "B",
+  winner: "A" | "B" | "stalemate",
   currentTurn: number
 ): Promise<void> {
-  const victor = winner === "A" ? conflict.sideA.label : conflict.sideB.label;
+  const hosts = hostEntitiesOf(conflict).join(" and ");
+  // Every host, not just the map anchor: a proxy war can be fought over two
+  // countries and both change hands, so naming one of them reads as a partial
+  // victory the record does not mean.
+  const note =
+    winner === "stalemate"
+      ? `Neither side prevailed. ${hosts} stands as it did before the war.`
+      : `${winner === "A" ? conflict.sideA.label : conflict.sideB.label} took full control of ${hosts}.`;
   await getConflictsCollection(db).updateOne(
     { _id: conflict._id },
     {
       $set: {
         status: "resolved" as const,
         endTurn: currentTurn,
-        outcome: {
-          winner,
-          // Every host, not just the map anchor: a proxy war can be fought over two
-          // countries and both change hands, so naming one of them reads as a
-          // partial victory the record does not mean.
-          note: `${victor} took full control of ${hostEntitiesOf(conflict).join(" and ")}.`,
-        },
+        outcome: { winner, note },
       },
     }
   );

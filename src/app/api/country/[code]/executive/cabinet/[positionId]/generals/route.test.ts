@@ -64,6 +64,31 @@ describe("POST commission a general", () => {
     expect(update.$setOnInsert.general).not.toHaveProperty("spec");
   });
 
+  it("403s an acting secretary, and does not touch the corps", async () => {
+    // Suggestion #315: the general corps outlasts a caretaker appointment, so
+    // commissioning is closed until the Senate confirms. Asserted at the route
+    // rather than only on the guard, because the guard is only worth anything
+    // if it actually sits in this path.
+    db.collectionMocks.cabinetMembers.findOne.mockResolvedValue({
+      _id: "m1",
+      characterId: "secdef",
+      acting: true,
+    });
+    const { POST } = await import(ROUTE);
+    const res = await POST(req({ characterId: RECRUIT }), call);
+    expect(res.status).toBe(403);
+    expect(db.collectionMocks.characterGenerals.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("still commissions for a confirmed secretary with no acting flag", async () => {
+    // The absent-field case is the one that matters: every member seated before
+    // acting appointments existed lacks it, and reading absent as acting would
+    // lock every sitting cabinet in the world.
+    const { POST } = await import(ROUTE);
+    const res = await POST(req({ characterId: RECRUIT }), call);
+    expect(res.status).toBe(200);
+  });
+
   it("400s commissioning a character of another country", async () => {
     db.collectionMocks.characters.findOne.mockResolvedValue({
       _id: RECRUIT,

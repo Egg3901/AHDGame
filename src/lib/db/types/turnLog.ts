@@ -760,11 +760,19 @@ export interface TurnLog {
     ledgerBalanceSnapshot?: {
       accountsSnapshotted: number;
     } | null;
+    /** Snap elections fired for countries whose system conversion promised one. */
+    postConversionElections?: {
+      fired: number;
+    } | null;
     ledgerReconcile?: {
       status: "green" | "amber" | "red";
       entriesChecked: number;
       unbalancedCount: number;
       stockVsFlowDivergences: number;
+    } | null;
+    economicVitalSigns?: {
+      snapshotTurn: number;
+      domainsAvailable: number;
     } | null;
   };
 

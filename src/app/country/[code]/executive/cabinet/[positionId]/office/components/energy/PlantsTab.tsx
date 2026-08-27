@@ -6,12 +6,13 @@ import { ENERGY_SOURCES } from "@/lib/constants/cabinetEnergy";
 import { AggTile, EnergyIcon, fmtMoneyM, fmtCapacity } from "./energyUi";
 import { PlantCard } from "./PlantCard";
 import { BuildPlantPanel } from "./BuildPlantPanel";
+import { ActingLockNote, useActingLock } from "../ActingLock";
 
 export function PlantsTab({
   countryCode,
   positionId,
   plants,
-  canAct,
+  canAct: canActProp,
   currencySymbol,
   regions,
   siteName,
@@ -26,6 +27,10 @@ export function PlantsTab({
   siteName: Record<string, string>;
   onUpdate: () => void;
 }) {
+  // An acting secretary reads this surface but does not move it.
+  const actingLockReason = useActingLock("assets");
+  const canAct = canActProp && !actingLockReason;
+
   const [source, setSource] = useState(ENERGY_SOURCES[0].id);
   const [building, setBuilding] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -53,6 +58,8 @@ export function PlantsTab({
 
   return (
     <div className="space-y-4">
+      <ActingLockNote reason={actingLockReason} />
+
       {/* source sub-tabs */}
       <div className="rounded-xl border border-card-border bg-card p-2">
         <div className="flex flex-wrap gap-1.5">

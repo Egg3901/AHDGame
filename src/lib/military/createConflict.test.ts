@@ -2,12 +2,14 @@ import { describe, it, expect, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import {
   buildConflict,
+  createConflict,
   conflictToFront,
   deployOpeningForces,
   type BuildConflictInput,
 } from "./createConflict";
 import type { ConflictDoc, ConflictSide } from "@/lib/db/types/conflict";
 import { OCCUPATION } from "./config";
+import { createMockDb } from "@/lib/test-utils/mockDb";
 
 const west: ConflictSide = {
   label: "United States",
@@ -131,6 +133,56 @@ describe("buildConflict front seeding", () => {
 describe("conflict numbering", () => {
   it("carries the supplied conflict number onto the document", () => {
     expect(buildConflict(base({ conflictId: 7 })).conflictId).toBe(7);
+  });
+});
+
+describe("createConflict tension event", () => {
+  it("treats any two opposing live nuclear powers as a nuclear-war declaration", async () => {
+    const db = createMockDb();
+    for (const name of [
+      "counters",
+      "conflicts",
+      "militaryUnits",
+      "nuclearPrograms",
+      "coldWarTension",
+    ]) {
+      db.collection(name);
+    }
+    db.collectionMocks.counters!.findOneAndUpdate.mockResolvedValue({ seq: 1 });
+    db.collectionMocks.nuclearPrograms!.find.mockReturnValue({
+      toArray: vi.fn(async () => [
+        { _id: "US", adopted: {}, warheads: 522, productionRate: 0, updatedAt: new Date() },
+        { _id: "UK", adopted: {}, warheads: 578, productionRate: 0, updatedAt: new Date() },
+      ]),
+    } as never);
+    db.collectionMocks.coldWarTension!.findOne.mockResolvedValue({
+      _id: "current",
+      value: 40,
+      pressureFloor: 12,
+      updatedTurn: 10,
+      events: [],
+      updatedAt: new Date(),
+    });
+    const { conflictId: _conflictId, ...input } = base({
+      id: "war_us_uk_11",
+      hostCountry: "UK",
+      sideA: west,
+      sideB: { label: "United Kingdom", countries: ["UK"], kind: "state" },
+      startTurn: 11,
+    });
+
+    await createConflict(db as unknown as Db, input);
+
+    expect(db.collectionMocks.coldWarTension!.updateOne).toHaveBeenCalledWith(
+      { _id: "current" },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          value: 60,
+          events: [expect.objectContaining({ label: expect.stringContaining("War declared") })],
+        }),
+      }),
+      { upsert: true }
+    );
   });
 });
 

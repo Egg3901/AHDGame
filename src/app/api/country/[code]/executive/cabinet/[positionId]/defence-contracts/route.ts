@@ -14,11 +14,11 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
+import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
-import { assertActingAllowed, type CabinetCapability } from "@/lib/cabinet/actingScope";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import type { Corporation, CorporateSector } from "@/lib/db/types/corporation";
 import type { UnitDomain } from "@/lib/db/types/militaryUnit";
@@ -67,10 +67,7 @@ import { COUNTRY_CONFIGS as COUNTRIES } from "@/lib/constants/countries";
 import { ensureFederalBudget } from "@/lib/turn/ensureFederalBudget";
 import { getGameState } from "@/lib/gameState";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
-import {
-  isDefenceProcurementPaused,
-  DEFENCE_PROCUREMENT_PAUSED_MESSAGE,
-} from "@/lib/military/procurementGate";
+import { isProcurementBlocked } from "@/lib/military/procurementGate";
 import { resolveDefenseLineFrom } from "@/lib/turn/defenseEnvelope";
 import {
   getDefenceContractAvailability,
@@ -101,19 +98,8 @@ interface RouteParams {
   params: Promise<{ code: string; positionId: string }>;
 }
 
-/**
- * Shared guard: valid country, real defence seat, caller holds it (or is admin).
- *
- * `capability` additionally applies the acting-holder scope rule. Signing a NEW
- * contract is a capital commitment an acting minister may not make; cancelling
- * one is winding down, so DELETE passes no capability. That split mirrors the
- * procurement freeze below, which stops new orders and leaves cancel open.
- */
-async function requireDefenceHolder(
-  code: string,
-  positionId: string,
-  capability?: CabinetCapability
-) {
+/** Shared guard: valid country, real defence seat, caller holds it (or is admin). */
+async function requireDefenceHolder(code: string, positionId: string) {
   const auth = await requireAuth();
   if (!auth.ok) return { error: auth.response } as const;
 
@@ -141,12 +127,13 @@ async function requireDefenceHolder(
       ),
     } as const;
   }
-  if (capability) {
-    const actingCheck = assertActingAllowed(member, capability, {
-      isAdmin: !!auth.user.isAdmin,
-    });
-    if (!actingCheck.ok) return { error: actingCheck.response } as const;
-  }
+  // Procurement is the clearest case of a lever that outlives its holder: an awarded
+  // contract obligates money across a 12-turn window, and a cancellation exposes the
+  // country to damages the confirmed successor has to pay. Guarding the shared helper
+  // covers both the award and the cancel.
+  const actingDenied = requireConfirmedSecretary(member, "procurement", !!auth.user.isAdmin);
+  if (actingDenied) return { error: actingDenied } as const;
+
   // The holder's identity rides along: self-dealing disclosure needs to know who signed, and
   // resolving it a second time from the route would be a second chance to resolve it wrongly.
   return { db, countryId, member, user: auth.user } as const;
@@ -155,14 +142,18 @@ async function requireDefenceHolder(
 export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { code, positionId } = await params;
-    const guard = await requireDefenceHolder(code, positionId, "capitalProject");
+    const guard = await requireDefenceHolder(code, positionId);
     if ("error" in guard) return guard.error;
     const { db, countryId } = guard;
 
-    // Kill switch: no NEW contracts while procurement is frozen. Cancel (DELETE) stays open so
-    // a minister can still wind down open orders, and active contracts keep delivering.
-    if (await isDefenceProcurementPaused(db)) {
-      return NextResponse.json({ error: DEFENCE_PROCUREMENT_PAUSED_MESSAGE }, { status: 409 });
+    // No NEW contracts while procurement is frozen, either by the world kill switch
+    // or by a peace settlement barring this country specifically. Cancel (DELETE)
+    // stays open so a minister can still wind down open orders, and active
+    // contracts keep delivering.
+    const procurementGateState = await getGameState();
+    const gate = await isProcurementBlocked(db, countryId, procurementGateState?.currentTurn ?? 0);
+    if (gate.blocked) {
+      return NextResponse.json({ error: gate.reason }, { status: 409 });
     }
 
     const parsed = await parseJsonBody(request, awardSchema);

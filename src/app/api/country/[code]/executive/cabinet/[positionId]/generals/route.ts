@@ -11,9 +11,9 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
+import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
-import { assertActingAllowed } from "@/lib/cabinet/actingScope";
 import { getGameStateCollection } from "@/lib/db/collections/gameState";
 import { getCharacterGeneralsCollection } from "@/lib/db/collections/characterGenerals";
 import { isCommissioned } from "@/lib/db/types/characterGeneral";
@@ -66,10 +66,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const actingCheck = assertActingAllowed(member, "personnel", {
-      isAdmin: auth.user.isAdmin === true,
-    });
-    if (!actingCheck.ok) return actingCheck.response;
+    // A commission stands until revoked, long past this tenure.
+    const actingDenied = requireConfirmedSecretary(member, "personnel", !!auth.user.isAdmin);
+    if (actingDenied) return actingDenied;
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {

@@ -6,11 +6,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
+import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
-import { assertActingAllowed } from "@/lib/cabinet/actingScope";
 import { getGameState } from "@/lib/gameState";
 import { SOVEREIGN_BOND_MATURITY_ADMIN_OPTIONS } from "@/lib/db/types/bond";
 import type { BondMaturityTurns } from "@/lib/db/types/bond";
@@ -84,10 +84,10 @@ export async function POST(request: Request, { params }: RouteParams) {
           { status: 403 }
         );
       }
-
-      // No isAdmin argument needed: this branch only runs for non-admins.
-      const actingCheck = assertActingAllowed(member, "capitalProject");
-      if (!actingCheck.ok) return actingCheck.response;
+      // The maturity mix decides what the country owes and when, for up to 240
+      // turns. The admin arm above never reaches here, which is the exemption.
+      const actingDenied = requireConfirmedSecretary(member, "treasury");
+      if (actingDenied) return actingDenied;
     }
 
     const gameState = await getGameState();

@@ -1,106 +1,94 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
-  ACTING_TENURE_TURNS,
-  CABINET_ROUTE_CAPABILITIES,
-  assertActingAllowed,
+  actingScopeRefusal,
+  barredScopeMessage,
+  barredScopesFor,
+  isActingMember,
+  isScopeBarredWhenActing,
+  type CabinetLeverScope,
 } from "./actingScope";
 
-describe("ACTING_TENURE_TURNS", () => {
-  it("is 24 turns", () => {
-    expect(ACTING_TENURE_TURNS).toBe(24);
+const ALL_SCOPES: CabinetLeverScope[] = [
+  "stance",
+  "personnel",
+  "doctrine",
+  "procurement",
+  "treasury",
+  "assets",
+];
+
+describe("isActingMember", () => {
+  it("treats a member with acting:true as acting", () => {
+    expect(isActingMember({ acting: true })).toBe(true);
+  });
+
+  it("treats a missing acting field as confirmed, not as acting", () => {
+    // Every member seated before acting appointments existed lacks the field, and
+    // the confirmation path inserts a fresh document rather than clearing it. If
+    // absent read as acting, confirming someone would silently lock their office.
+    expect(isActingMember({})).toBe(false);
+    expect(isActingMember({ acting: false })).toBe(false);
+  });
+
+  it("treats a missing member as not acting", () => {
+    // A vacant seat has no holder to restrict; the holder check upstream refuses first.
+    expect(isActingMember(null)).toBe(false);
+    expect(isActingMember(undefined)).toBe(false);
   });
 });
 
-describe("assertActingAllowed", () => {
-  it("allows a confirmed holder every capability", () => {
-    const member = { acting: false };
-    expect(assertActingAllowed(member, "policyStance").ok).toBe(true);
-    expect(assertActingAllowed(member, "personnel").ok).toBe(true);
-    expect(assertActingAllowed(member, "strategicCommitment").ok).toBe(true);
-    expect(assertActingAllowed(member, "capitalProject").ok).toBe(true);
-    expect(assertActingAllowed(member, "operational").ok).toBe(true);
-  });
-
-  it("allows an acting holder operational actions", () => {
-    expect(assertActingAllowed({ acting: true }, "operational").ok).toBe(true);
-  });
-
-  it("refuses an acting holder the four restricted capabilities", () => {
-    for (const capability of [
-      "policyStance",
-      "personnel",
-      "strategicCommitment",
-      "capitalProject",
-    ] as const) {
-      const result = assertActingAllowed({ acting: true }, capability);
-      expect(result.ok).toBe(false);
+describe("actingScopeRefusal", () => {
+  it("refuses every barred scope for an acting holder", () => {
+    for (const scope of ALL_SCOPES) {
+      expect(actingScopeRefusal({ acting: true }, scope)).toBe(barredScopeMessage(scope));
     }
   });
 
-  it("refuses with a 403 and copy free of dashes", async () => {
-    const result = assertActingAllowed({ acting: true }, "policyStance");
-    if (result.ok) throw new Error("expected refusal");
-    expect(result.response.status).toBe(403);
-    const body = await result.response.json();
-    expect(body.error).not.toMatch(/[–—]/);
+  it("refuses nothing for a confirmed holder", () => {
+    for (const scope of ALL_SCOPES) {
+      expect(actingScopeRefusal({ acting: false }, scope)).toBeNull();
+      expect(actingScopeRefusal({}, scope)).toBeNull();
+    }
   });
 
-  it("treats a null or non-acting member as unrestricted", () => {
-    expect(assertActingAllowed(null, "policyStance").ok).toBe(true);
-    expect(assertActingAllowed({}, "policyStance").ok).toBe(true);
+  it("names the Senate as the unlock rather than only refusing", () => {
+    // The refusal is read by someone who was just handed the seat, so it has to
+    // say what changes it, not merely that they cannot.
+    expect(actingScopeRefusal({ acting: true }, "stance")).toMatch(/Senate confirms/);
+  });
+});
+
+describe("barredScopesFor", () => {
+  it("returns every scope for an acting holder", () => {
+    expect(barredScopesFor({ acting: true }).sort()).toEqual([...ALL_SCOPES].sort());
   });
 
-  it("exempts admins, who act on seats they do not hold", () => {
-    // Every cabinet route admits a non-holding admin. The caretaker rule binds
-    // the caretaker, not the operator, so an admin must not inherit the limit
-    // merely because the seat happens to be acting-held.
-    for (const capability of [
-      "policyStance",
-      "personnel",
-      "strategicCommitment",
-      "capitalProject",
-    ] as const) {
-      expect(assertActingAllowed({ acting: true }, capability, { isAdmin: true }).ok).toBe(true);
+  it("returns nothing for a confirmed holder, which the client reads as unrestricted", () => {
+    expect(barredScopesFor({})).toEqual([]);
+    expect(barredScopesFor(null)).toEqual([]);
+  });
+
+  it("agrees with actingScopeRefusal on every scope", () => {
+    // The client disables from this list and the API refuses from the refusal
+    // helper. If they ever disagree a control renders live over a guaranteed 403.
+    const acting = { acting: true };
+    const barred = barredScopesFor(acting);
+    for (const scope of ALL_SCOPES) {
+      expect(barred.includes(scope)).toBe(actingScopeRefusal(acting, scope) !== null);
     }
   });
 });
 
-describe("CABINET_ROUTE_CAPABILITIES", () => {
-  it("blocks policy stance levers", () => {
-    expect(CABINET_ROUTE_CAPABILITIES["setting"]).toBe("policyStance");
-    expect(CABINET_ROUTE_CAPABILITIES["allocation"]).toBe("policyStance");
-  });
-
-  it("blocks personnel levers", () => {
-    expect(CABINET_ROUTE_CAPABILITIES["generals"]).toBe("personnel");
-    expect(CABINET_ROUTE_CAPABILITIES["generals/[characterId]"]).toBe("personnel");
-  });
-
-  it("blocks irreversible national commitments", () => {
-    expect(CABINET_ROUTE_CAPABILITIES["doctrine/adopt"]).toBe("strategicCommitment");
-    expect(CABINET_ROUTE_CAPABILITIES["nuclear/adopt"]).toBe("strategicCommitment");
-    expect(CABINET_ROUTE_CAPABILITIES["nuclear/test"]).toBe("strategicCommitment");
-  });
-
-  it("blocks new capital commitments but allows funding a running project", () => {
-    expect(CABINET_ROUTE_CAPABILITIES["estates/open"]).toBe("capitalProject");
-    expect(CABINET_ROUTE_CAPABILITIES["infra/start"]).toBe("capitalProject");
-    expect(CABINET_ROUTE_CAPABILITIES["estates/[estateId]/fund"]).toBe("operational");
-    expect(CABINET_ROUTE_CAPABILITIES["infra/[projectId]/funding"]).toBe("operational");
-  });
-
-  it("allows the operational tier", () => {
-    for (const key of [
-      "military/recruit",
-      "military/[unitId]/posture",
-      "formations",
-      "theaters",
-      "commands",
-      "battle/declare",
-      "manpower",
-      "order",
-    ]) {
-      expect(CABINET_ROUTE_CAPABILITIES[key]).toBe("operational");
+describe("isScopeBarredWhenActing", () => {
+  it("covers every declared scope", () => {
+    for (const scope of ALL_SCOPES) {
+      expect(isScopeBarredWhenActing(scope)).toBe(true);
     }
+  });
+
+  it("gives every scope a distinct player-facing sentence", () => {
+    const messages = ALL_SCOPES.map(barredScopeMessage);
+    expect(new Set(messages).size).toBe(ALL_SCOPES.length);
+    for (const m of messages) expect(m.length).toBeGreaterThan(0);
   });
 });

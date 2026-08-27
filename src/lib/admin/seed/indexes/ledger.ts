@@ -49,5 +49,13 @@ export async function seedLedgerIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
+  await ensureIndex(
+    db,
+    "economicVitalSigns",
+    { turn: -1 },
+    { name: "economicVitalSigns_turn_desc", unique: true, background: true },
+    log
+  );
+
   log("Shadow ledger indexes ensured");
 }

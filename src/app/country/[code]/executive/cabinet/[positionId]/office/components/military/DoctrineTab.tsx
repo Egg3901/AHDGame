@@ -19,6 +19,7 @@ import {
 } from "@/lib/military/doctrineTree";
 import { SectionCard, Badge, Meter } from "../dossier";
 import { useDoctrineState } from "./useDoctrineState";
+import { ActingLockNote, useActingLock } from "../ActingLock";
 
 const STATUS_TONE: Record<NodeStatus, "success" | "gov" | "muted"> = {
   adopted: "success",
@@ -254,6 +255,9 @@ function DetailCard({
   adopted: Record<string, number>;
   onAdopt: () => void;
 }) {
+  // Before the early return below: a hook cannot sit behind a conditional.
+  const actingLockReason = useActingLock("doctrine");
+
   const f = findNode(selKey);
   if (!f) return null;
   const st = nodeStatus(adopted, f.path, f.node, currentEra);
@@ -263,7 +267,7 @@ function DetailCard({
     ok: isAdoptedByName(adopted, r),
   }));
   const missing = missingPrerequisites(adopted, f.path, f.node);
-  const canAdopt = st === "available" && points >= f.node.cost;
+  const canAdopt = st === "available" && points >= f.node.cost && !actingLockReason;
 
   const statusTone = STATUS_TONE[st];
   const statusLabel =
@@ -356,6 +360,8 @@ function DetailCard({
                   : "Insufficient doctrine points"}
           </button>
         )}
+        <ActingLockNote reason={actingLockReason} />
+
         {/* Name what is actually blocking the node. The button stays on one line,
             so the prerequisite list goes underneath it. */}
         {st === "locked" && missing.length > 0 && (

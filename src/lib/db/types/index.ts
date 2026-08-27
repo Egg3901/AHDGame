@@ -35,6 +35,7 @@ export * from "./policy";
 export * from "./gameConfig";
 export * from "./gameState";
 export * from "./moneySupply";
+export type { EconomicMetric, EconomicVitalSigns } from "./economicVitalSigns";
 export * from "./organizationFund";
 export * from "./adminLog";
 export * from "./events";

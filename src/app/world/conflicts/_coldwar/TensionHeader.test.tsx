@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
 import { TensionHeader } from "./TensionHeader";
+import enWorldConflicts from "../../../../../messages/en/worldConflicts.json";
 
 afterEach(cleanup);
 
@@ -22,25 +24,30 @@ const powers = [
 
 function setup(over: Partial<React.ComponentProps<typeof TensionHeader>> = {}) {
   return render(
-    <TensionHeader
-      tension={42.5}
-      band="ELEVATED"
-      defcon={4}
-      events={events}
-      powers={powers}
-      pressures={{
-        baseline: 12,
-        escalation: 4,
-        activeCrises: 6,
-        arsenal: 5.9,
-        floor: 27.9,
-        escalationLevel: 1,
-        activeCrisisCount: 2,
-        totalWarheads: 24,
-      }}
-      dials={{ source: "tension", procurementMultiplier: 1.15, detenteGoodwillPenalty: 6 }}
-      {...over}
-    />
+    <NextIntlClientProvider locale="en" messages={enWorldConflicts}>
+      <TensionHeader
+        tension={42.5}
+        band="ELEVATED"
+        defcon={4}
+        events={events}
+        powers={powers}
+        pressures={{
+          baseline: 12,
+          escalation: 4,
+          activeCrises: 6,
+          arsenal: 5.9,
+          wars: 0,
+          floor: 27.9,
+          escalationLevel: 1,
+          activeCrisisCount: 2,
+          totalWarheads: 24,
+          activeWarCount: 0,
+          nuclearWarCount: 0,
+        }}
+        dials={{ source: "tension", procurementMultiplier: 1.15, detenteGoodwillPenalty: 6 }}
+        {...over}
+      />
+    </NextIntlClientProvider>
   );
 }
 

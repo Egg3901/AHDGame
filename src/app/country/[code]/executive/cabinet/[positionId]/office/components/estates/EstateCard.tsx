@@ -4,13 +4,16 @@ import { useState } from "react";
 import type { EstateView } from "../../useCabinetOffice";
 import { FUNDING_LEVELS, TIER_LABELS, getEstateArchetype } from "@/lib/constants/cabinetEstates";
 import { Stat, EstateIcon, ConfirmDialog, fmtMoneyM } from "./estatesUi";
+// The tab above these cards carries the explanation; a note on every card would
+// only repeat it. The lock still reaches here so the card's own buttons disable.
+import { useActingLock } from "../ActingLock";
 
 const TIER_COLOR = ["#94a3b8", "#c9a24b", "#4ade80", "#22d3ee"];
 
 export function EstateCard({
   estate,
   basePath,
-  canAct,
+  canAct: canActProp,
   currencySymbol,
   siteLabel,
   busy,
@@ -24,6 +27,10 @@ export function EstateCard({
   busy: boolean;
   onAction: (method: "POST" | "DELETE", path: string, body?: unknown) => void;
 }) {
+  // An acting secretary reads this surface but does not move it.
+  const actingLockReason = useActingLock("assets");
+  const canAct = canActProp && !actingLockReason;
+
   const [open, setOpen] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const condTone = estate.condition >= 70 ? "up" : estate.condition >= 50 ? "warning" : "down";

@@ -8,11 +8,11 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
+import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { getGameState } from "@/lib/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
-import { assertActingAllowed } from "@/lib/cabinet/actingScope";
 import { getCabinetEstatesCollection } from "@/lib/db/collections/cabinetEstates";
 import {
   resolveEstatePortfolio,
@@ -94,10 +94,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const actingCheck = assertActingAllowed(member, "capitalProject", {
-      isAdmin: auth.user.isAdmin === true,
-    });
-    if (!actingCheck.ok) return actingCheck.response;
+    // Opening an estate commits the department to running it after this tenure.
+    const actingDenied = requireConfirmedSecretary(member, "assets", !!auth.user.isAdmin);
+    if (actingDenied) return actingDenied;
 
     // Backfill legacy members missing the action fields (mirrors the order route).
     if (member && member.ministerialActions == null) {

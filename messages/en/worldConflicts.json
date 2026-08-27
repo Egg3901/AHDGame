@@ -1,0 +1,12 @@
+{
+  "worldConflicts": {
+    "tension": {
+      "howWorldTensionWorksLabel": "How world tension works",
+      "howWorldTensionWorksHelp": "Tension is a shared 0 to 100 measure. Tests, war declarations, and crisis outcomes move it immediately. Each turn it moves toward a pressure floor set by the Vietnam ladder, active crises, the wars on this board, and the world nuclear stockpile. Tension alone can reach DEFCON 2, but never DEFCON 1.",
+      "pressureFloorHelp": "One-off spikes fade. These standing pressures do not. The index cannot fall below this floor and cools 8 percent of the remaining gap each turn when it is above it.",
+      "warsLabel": "WARS",
+      "warsDetail": "{active, plural, one {# active} other {# active}}, {nuclear, plural, one {# nuclear} other {# nuclear}}",
+      "warsHelp": "Every active war on the Conflicts board pushes the floor by its intensity. Any war with nuclear-armed countries on opposing sides guarantees a crisis-grade floor. Other wars are weighted by intensity."
+    }
+  }
+}

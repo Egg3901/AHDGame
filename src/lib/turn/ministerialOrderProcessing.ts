@@ -28,6 +28,8 @@ import { resolveMetricPath } from "@/lib/cabinet/resolveMetricPath";
 import { applyMilitaryForceEffects } from "./militaryForceEffects";
 import { resolveBattleDeclarations } from "./battleResolution";
 import { resolveColdWarHolds } from "./coldWarHolds";
+import { resolvePeaceWindows } from "./peaceWindows";
+import { emitWarWire } from "@/lib/military/emitWarWire";
 import { processGeneralTenure } from "./generalTenure";
 import { applyReinforcement } from "./reinforcement";
 import { applyDefenseAppropriation } from "./defenseAppropriationTurn";
@@ -443,6 +445,18 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
   // to be measured on turns where nobody fought at all. It reads `conflictsEnabled`
   // itself — it is the only conflict step with no declaration upstream to gate it.
   await resolveColdWarHolds(db, currentTurn);
+
+  // 4b-ii-a-ii. White-peace any won war whose dictate window has lapsed. A real
+  // sweep rather than lazy expiry: nothing forces a victor to open the conflict
+  // document, so a window nobody answered would leave the war frozen for ever with
+  // both rosters already stood down.
+  await resolvePeaceWindows(db, currentTurn);
+
+  // 4b-ii-a-iii. Report every war that has settled since the last tick. Reached from
+  // a STAMP rather than from the command that settled the war: both roads to a
+  // settlement are request paths, and a news post made from a request would put a
+  // network call on a player's request and fire again on a retry.
+  await emitWarWire(db, currentTurn);
 
   // 4b-ii-b. Tenure skill points for commissioned generals. Placed AFTER battle
   // resolution so a general promoted by this turn's fighting is already at their new

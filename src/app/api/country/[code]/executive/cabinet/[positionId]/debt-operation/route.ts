@@ -6,10 +6,10 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
+import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { getGameState } from "@/lib/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
-import { assertActingAllowed } from "@/lib/cabinet/actingScope";
 import { getTreasuryOperationsCollection } from "@/lib/db/collections/treasuryOperations";
 import {
   resolveFinancePosition,
@@ -51,10 +51,9 @@ export async function POST(_request: Request, { params }: RouteParams) {
       );
     }
 
-    const actingCheck = assertActingAllowed(member, "capitalProject", {
-      isAdmin: auth.user.isAdmin === true,
-    });
-    if (!actingCheck.ok) return actingCheck.response;
+    // A debt operation reshapes the country's borrowing well past this tenure.
+    const actingDenied = requireConfirmedSecretary(member, "treasury", !!auth.user.isAdmin);
+    if (actingDenied) return actingDenied;
 
     const gameState = await getGameState();
     const currentTurn = gameState?.currentTurn ?? 1;

@@ -15,6 +15,7 @@ import { getConflict } from "@/lib/db/collections/conflicts";
 import { getPeaceOffersCollection } from "@/lib/db/collections/peaceOffers";
 import { isOfferLive, validatePeaceOffer, maxIndemnityForGdp } from "@/lib/military/peaceOffer";
 import { acceptPeace } from "@/lib/military/acceptPeace";
+import { getCountryState } from "@/lib/countryState";
 import type { FederalBudget } from "@/lib/db/types";
 
 const bodySchema = z.object({ action: z.enum(["accept", "reject", "withdraw"]) });
@@ -116,15 +117,25 @@ export async function POST(
     // payer has no GDP, which validatePeaceOffer treats as "no ceiling passed";
     // that mirrors the pre-cap behaviour for the (unexpected) no-GDP payer and
     // never loosens a real cap.
-    const payerBudget = await db
-      .collection<FederalBudget>("federalBudget")
-      .findOne({ countryId: offer.indemnity.payer }, { projection: { gdp: 1 } });
+    // Only an indemnity has a GDP ceiling to re-check. The other terms carry no
+    // figure that could have drifted while the offer sat.
+    let maxAmount: number | null = null;
+    if (offer.term.kind === "indemnity") {
+      const payerBudget = await db
+        .collection<FederalBudget>("federalBudget")
+        .findOne({ countryId: offer.term.payer }, { projection: { gdp: 1 } });
+      maxAmount = maxIndemnityForGdp(payerBudget?.gdp);
+    }
+    // The target's system is re-read too: a country converted by some other route
+    // while this offer sat must not be converted again to what it already is.
+    const targetState = await getCountryState(db, offer.toCountry);
     const still = validatePeaceOffer(
       conflict,
       offer.fromCountry,
       offer.toCountry,
-      offer.indemnity,
-      maxIndemnityForGdp(payerBudget?.gdp)
+      offer.term,
+      maxAmount,
+      targetState.governmentType
     );
     if (!still.ok) {
       return NextResponse.json({ error: still.error }, { status: 409 });

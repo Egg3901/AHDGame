@@ -20,9 +20,7 @@ const productionSchema = z.object({ rate: z.number().int().min(0) });
 export async function POST(request: Request, { params }: NuclearRouteParams) {
   try {
     const { code, positionId } = await params;
-    const guard = await requireDefenceHolder(code, positionId, {
-      capability: "strategicCommitment",
-    });
+    const guard = await requireDefenceHolder(code, positionId);
     if ("error" in guard) return guard.error;
     const { db, countryId } = guard;
 

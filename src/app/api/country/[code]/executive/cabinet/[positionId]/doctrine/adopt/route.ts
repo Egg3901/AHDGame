@@ -8,9 +8,9 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
+import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
-import { assertActingAllowed } from "@/lib/cabinet/actingScope";
 import { getGameStateCollection } from "@/lib/db/collections/gameState";
 import {
   getNationalDoctrine,
@@ -70,10 +70,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const actingCheck = assertActingAllowed(member, "strategicCommitment", {
-      isAdmin: auth.user.isAdmin === true,
-    });
-    if (!actingCheck.ok) return actingCheck.response;
+    // Doctrine outlives the appointment: an adopted node stays adopted after the
+    // acting holder is replaced.
+    const actingDenied = requireConfirmedSecretary(member, "doctrine", !!auth.user.isAdmin);
+    if (actingDenied) return actingDenied;
 
     const currentEra = await resolveDoctrineEra(db);
     const year = resolveGameYear(gs);

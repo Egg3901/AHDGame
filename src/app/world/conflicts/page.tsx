@@ -9,6 +9,10 @@ import { VietnamEscalationPanel } from "./_coldwar/VietnamEscalationPanel";
 import { getVietnamEscalationSummary, VIETNAM_RUNGS } from "@/lib/crises/vietnamEscalation";
 import { TensionHeader, type NuclearPowerView } from "./_coldwar/TensionHeader";
 import { getColdWarTension, tensionBand, tensionPressureBreakdown } from "@/lib/coldwar/tension";
+import {
+  buildStandingPressureSnapshot,
+  conflictWarPressureInput,
+} from "@/lib/coldwar/standingPressure";
 import { getColdWarDials } from "@/lib/coldwar/dials";
 import { listNuclearPrograms } from "@/lib/db/collections/nuclearPrograms";
 import { NUCLEAR_NODES } from "@/lib/military/nuclearProgram";
@@ -37,30 +41,31 @@ export default async function ConflictsPage() {
     toConflictView(d, { startingYear, casualties: casualties[d._id] ?? 0, preIterationTurns })
   );
 
-  const [vietnam, tension, dials, programs, responseCrisisDocs] = await Promise.all([
-    getVietnamEscalationSummary(db),
-    getColdWarTension(db),
-    getColdWarDials(db),
-    listNuclearPrograms(db),
-    db
-      .collection<Crisis>("crises")
-      .find({ status: "active", globalResponse: { $exists: true } })
-      .sort({ startTurn: -1 })
-      .toArray(),
-  ]);
+  const [vietnam, tension, dials, programs, responseCrisisDocs, activeCrisisCount] =
+    await Promise.all([
+      getVietnamEscalationSummary(db),
+      getColdWarTension(db),
+      getColdWarDials(db),
+      listNuclearPrograms(db),
+      db
+        .collection<Crisis>("crises")
+        .find({ status: "active", globalResponse: { $exists: true } })
+        .sort({ startTurn: -1 })
+        .toArray(),
+      db.collection<Crisis>("crises").countDocuments({ status: "active" }),
+    ]);
 
   // Response scope answers who owns the decision, not how far the crisis reaches.
   // Living-conflict events are stored as country-scoped because every government
   // answers separately; globalResponse is the canonical international marker.
   const responseCrises = responseCrisisDocs.filter((crisis) => crisis.globalResponse != null);
-  const activeCrisisCount = responseCrises.length;
-
-  const totalWarheads = programs.reduce((sum, program) => sum + Math.max(0, program.warheads), 0);
-  const pressureBreakdown = tensionPressureBreakdown({
+  const pressureSnapshot = buildStandingPressureSnapshot({
     escalationLevel: vietnam.level,
     activeCrises: activeCrisisCount,
-    totalWarheads,
+    programs,
+    conflicts: docs.map(conflictWarPressureInput),
   });
+  const pressureBreakdown = tensionPressureBreakdown(pressureSnapshot.pressures);
 
   // Who holds the bomb: any programme with a stockpile or an adopted node.
   // A country that never opened one has no document and never appears.
@@ -93,7 +98,9 @@ export default async function ConflictsPage() {
             ...pressureBreakdown,
             escalationLevel: vietnam.level,
             activeCrisisCount,
-            totalWarheads,
+            totalWarheads: pressureSnapshot.totalWarheads,
+            activeWarCount: pressureSnapshot.warSummary.activeWarCount,
+            nuclearWarCount: pressureSnapshot.warSummary.nuclearWarCount,
           }}
           dials={dials}
         />

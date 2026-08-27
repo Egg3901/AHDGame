@@ -5,9 +5,9 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
+import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
-import { assertActingAllowed } from "@/lib/cabinet/actingScope";
 import { getEnergyPlantsCollection } from "@/lib/db/collections/energyPlants";
 import { resolveEnergyPosition } from "@/lib/constants/cabinetEnergy";
 
@@ -46,10 +46,9 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       );
     }
 
-    const actingCheck = assertActingAllowed(member, "capitalProject", {
-      isAdmin: auth.user.isAdmin === true,
-    });
-    if (!actingCheck.ok) return actingCheck.response;
+    // Retiring a plant is not something the successor can undo.
+    const actingDenied = requireConfirmedSecretary(member, "assets", !!auth.user.isAdmin);
+    if (actingDenied) return actingDenied;
 
     const result = await getEnergyPlantsCollection(db).deleteOne({
       _id: new ObjectId(plantId),

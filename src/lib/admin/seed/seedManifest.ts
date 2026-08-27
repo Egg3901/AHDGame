@@ -260,6 +260,30 @@ const RUNTIME: CollectionEntry[] = [
     category: "runtime",
     notes: "Per-turn M1/M2, credit, sovereign-debt, and central-bank holdings by issuing currency.",
   },
+  {
+    name: "economicVitalSigns",
+    category: "runtime",
+    notes:
+      "Versioned per-turn aggregate market, production, distribution, money, and reconciliation indicators for economic evaluation.",
+  },
+  {
+    name: "ledgerReconciliations",
+    category: "runtime",
+    notes:
+      "Per-turn shadow-ledger trial-balance, stock-flow, and money-supply reconciliation reports.",
+  },
+  {
+    name: "ledgerEntries",
+    category: "runtime",
+    notes:
+      "Shadow double-entry ledger rows retained for audit, reconciliation, and velocity analysis.",
+  },
+  {
+    name: "balanceSnapshots",
+    category: "runtime",
+    notes:
+      "Per-turn anchor-valued account balances used for stock-flow and money-activity analysis.",
+  },
   // Elections + officials
   { name: "elections", category: "runtime" },
   { name: "electionCandidates", category: "runtime" },

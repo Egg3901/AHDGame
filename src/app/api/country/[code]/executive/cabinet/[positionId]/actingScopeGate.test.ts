@@ -6,6 +6,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+// Asserted against the message source rather than a copied string, so the
+// refusal a route actually returns cannot drift from the one players are shown.
+import { barredScopeMessage } from "@/lib/cabinet/actingScope";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireAuth: vi.fn() }));
@@ -78,7 +81,7 @@ describe("acting scope gate: policyStance", () => {
     const res = await POST(json({ tierSetting: "expanded" }), params);
     expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.error).toMatch(/acting secretary cannot set department policy/i);
+    expect(body.error).toBe(barredScopeMessage("stance"));
   });
 
   it("lets a confirmed holder past the acting gate", async () => {
@@ -122,7 +125,7 @@ describe("acting scope gate: personnel", () => {
     const res = await DELETE(new Request("http://localhost", { method: "DELETE" }), params);
     expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.error).toMatch(/cannot appoint or dismiss personnel/i);
+    expect(body.error).toBe(barredScopeMessage("personnel"));
   });
 
   it("lets a confirmed holder past the acting gate", async () => {
@@ -142,7 +145,7 @@ describe("acting scope gate: strategicCommitment", () => {
     const res = await POST(json({ key: "nuclear-deterrence" }), params);
     expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.error).toMatch(/cannot make permanent national commitments/i);
+    expect(body.error).toBe(barredScopeMessage("doctrine"));
   });
 
   it("lets a confirmed holder past the acting gate", async () => {
@@ -168,7 +171,7 @@ describe("acting scope gate: capitalProject", () => {
     const res = await DELETE(new Request("http://localhost", { method: "DELETE" }), params);
     expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.error).toMatch(/cannot open new projects/i);
+    expect(body.error).toBe(barredScopeMessage("assets"));
   });
 
   it("lets a confirmed holder past the acting gate", async () => {

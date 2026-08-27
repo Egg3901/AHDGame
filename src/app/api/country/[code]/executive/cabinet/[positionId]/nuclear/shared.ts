@@ -5,10 +5,10 @@ import { NextResponse } from "next/server";
 import type { Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
+import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { resolveCabinetOfficeVisibility } from "@/lib/cabinet/officeVisibility";
-import { assertActingAllowed, type CabinetCapability } from "@/lib/cabinet/actingScope";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import { getNationalDoctrine } from "@/lib/db/collections/nationalDoctrine";
 import { getNuclearProgram } from "@/lib/db/collections/nuclearPrograms";
@@ -35,10 +35,7 @@ export interface NuclearRouteParams {
 export async function requireDefenceHolder(
   code: string,
   positionId: string,
-  {
-    intent = "manage",
-    capability,
-  }: { intent?: "manage" | "read"; capability?: CabinetCapability } = {}
+  { intent = "manage" }: { intent?: "manage" | "read" } = {}
 ) {
   const auth = await requireAuth();
   if (!auth.ok) return { error: auth.response } as const;
@@ -79,14 +76,14 @@ export async function requireDefenceHolder(
       ),
     } as const;
   }
-  // Acting scope, applied after the permission check so a non-holder still
-  // gets the permission refusal rather than a scope one. Read intents pass no
-  // capability: a caretaker may read their own office freely.
-  if (capability) {
-    const actingCheck = assertActingAllowed(member, capability, {
-      isAdmin: !!auth.user.isAdmin,
-    });
-    if (!actingCheck.ok) return { error: actingCheck.response } as const;
+
+  // An acting defence secretary reads the programme but does not move it. Every
+  // mutation route funnels through `intent: "manage"`, so the whole console is
+  // covered here rather than five times over; the GET surfaces take the read
+  // path above and stay open to them.
+  if (intent === "manage") {
+    const denied = requireConfirmedSecretary(member, "doctrine", !!auth.user.isAdmin);
+    if (denied) return { error: denied } as const;
   }
 
   return { db, countryId, member, user: auth.user } as const;
