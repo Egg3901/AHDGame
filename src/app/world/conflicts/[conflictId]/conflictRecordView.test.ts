@@ -128,8 +128,8 @@ describe("buildRecordExtras — public tier", () => {
   it("still reports the verdict and both loss totals", () => {
     const b = buildRecordExtras(input()).battles[0];
     expect(b.verdict).toBe("Victory");
-    expect(b.declarerLoss).toBe(300);
-    expect(b.targetLoss).toBe(900);
+    expect(b.attackerLosses).toEqual([{ country: "US", loss: 300 }]);
+    expect(b.defenderLosses).toEqual([{ country: "CN", loss: 900 }]);
   });
 });
 
@@ -203,8 +203,8 @@ describe("buildRecordExtras — engagements", () => {
     expect(x.battles[0]).toMatchObject({
       verdict: "Unopposed advance",
       unopposed: true,
-      declarerLoss: 0,
-      targetLoss: 0,
+      attackerLosses: [],
+      defenderLosses: [],
     });
     // Nobody fought, so there is no roster to unlock at any tier.
     expect(x.battles[0].rosters).toBeUndefined();
@@ -379,5 +379,127 @@ describe("declarationOutcome", () => {
       label: "resolved",
       declarerWon: null,
     });
+  });
+});
+
+/**
+ * The live T420 report (6a8fb6a1715ff52ed01059ce): DD and RU attacked US together.
+ * The side result named DD alone and carried the coalition's 16,299 dead, so the war
+ * log read "DD 16,299" when DD lost 5,360 and RU lost 10,939.
+ */
+function coalitionReport(over: Record<string, unknown> = {}): BattleReportDoc {
+  const u = (id: string, name: string, country: string, casualties: number) => ({
+    id,
+    name,
+    country,
+    role: "line",
+    dom: "ground",
+    type: "Rifle Division",
+    casualties,
+    readiness: 50,
+    xp: 4,
+    promo: false,
+  });
+  return {
+    _id: "rc",
+    theaterId: THEATER,
+    declarerCountry: "DD",
+    targetCountry: "US",
+    attackers: ["DD", "RU"],
+    defenders: ["US"],
+    turn: 420,
+    result: {
+      theaterId: THEATER,
+      theaterName: "Front",
+      verdict: "Victory",
+      win: true,
+      margin: 20,
+      rounds: [],
+      retreat: null,
+      attacker: {
+        country: "DD",
+        power: 5000,
+        loss: 16299,
+        unitResults: [
+          u("d1", "1. Mot-Schützendivision", "DD", 5360),
+          u("r1", "3rd Guards Tank", "RU", 10939),
+        ],
+        contingents: [
+          { country: "DD", power: 1650, loss: 5360 },
+          { country: "RU", power: 3350, loss: 10939 },
+        ],
+      },
+      defender: {
+        country: "US",
+        power: 2000,
+        loss: 2313,
+        unitResults: [u("a1", "3rd Infantry", "US", 2313)],
+        contingents: [{ country: "US", power: 2000, loss: 2313 }],
+      },
+    },
+    ...over,
+  } as unknown as BattleReportDoc;
+}
+
+const coalitionInput = (over: Partial<RecordExtrasInput> = {}): RecordExtrasInput => ({
+  tier: "public",
+  ownSide: null,
+  theaterId: THEATER,
+  sideACountries: ["DD", "RU"],
+  sideBCountries: ["US"],
+  units: [],
+  reports: [coalitionReport()],
+  ...over,
+});
+
+describe("buildRecordExtras — coalition attribution", () => {
+  it("names every belligerent's own dead, not the principal's flag on all of them", () => {
+    const b = buildRecordExtras(coalitionInput()).battles[0];
+    expect(b.attackerLosses).toEqual([
+      { country: "DD", loss: 5360 },
+      { country: "RU", loss: 10939 },
+    ]);
+    expect(b.defenderLosses).toEqual([{ country: "US", loss: 2313 }]);
+  });
+
+  it("falls back to the principal on a report written before contingents existed", () => {
+    const legacy = coalitionReport();
+    // Strip what the pre-coalition documents never carried.
+    delete (legacy.result!.attacker as unknown as Record<string, unknown>).contingents;
+    delete (legacy.result!.defender as unknown as Record<string, unknown>).contingents;
+    const b = buildRecordExtras(coalitionInput({ reports: [legacy] })).battles[0];
+    expect(b.attackerLosses).toEqual([{ country: "DD", loss: 16299 }]);
+    expect(b.defenderLosses).toEqual([{ country: "US", loss: 2313 }]);
+  });
+
+  it("gives an allied non-principal its own roster at command tier", () => {
+    // RU fought this battle and is on side A, but DD is the principal. Filtering
+    // rosters by the side's scalar country handed RU nothing at all.
+    const x = buildRecordExtras(
+      coalitionInput({ tier: "command", ownSide: "A", sideACountries: ["RU"] })
+    );
+    const rosters = x.battles[0].rosters!;
+    expect(rosters.map((r) => r.country)).toEqual(["RU"]);
+    expect(rosters[0].units[0].name).toBe("3rd Guards Tank");
+    expect(JSON.stringify(rosters)).not.toMatch(/3rd Infantry/);
+  });
+
+  it("splits the archive tier's rosters per nation, each with its own strength", () => {
+    const x = buildRecordExtras(coalitionInput({ tier: "archive", ownSide: null }));
+    const rosters = x.battles[0].rosters!;
+    expect(rosters.map((r) => r.country)).toEqual(["DD", "RU", "US"]);
+    expect(rosters.find((r) => r.country === "RU")!.power).toBe(3350);
+    expect(x.battles[0].rostersWithheld).toBe(false);
+  });
+
+  it("flags the enemy roster as withheld at command tier even when own side has two", () => {
+    // The old renderer inferred "withheld" from a roster count of 1, which a
+    // two-nation coalition breaks: it would show both allies and claim nothing
+    // was hidden.
+    const x = buildRecordExtras(
+      coalitionInput({ tier: "command", ownSide: "A", sideACountries: ["DD", "RU"] })
+    );
+    expect(x.battles[0].rosters!.map((r) => r.country)).toEqual(["DD", "RU"]);
+    expect(x.battles[0].rostersWithheld).toBe(true);
   });
 });

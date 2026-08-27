@@ -2,6 +2,7 @@ import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import type { BattleReportDoc } from "@/lib/db/types/battleReport";
 import type { BattleDeclarationStatus } from "@/lib/db/types/battleDeclaration";
 import type { ConflictTier } from "@/lib/military/conflictVisibility";
+import { contingentsOf } from "@/lib/military/battle";
 import { strengthPct } from "@/lib/military/strength";
 import { theaterPool } from "@/lib/military/theaterPool";
 import { enemyBand } from "@/lib/military/forecastFog";
@@ -37,6 +38,12 @@ export interface EngagementRoster {
   units: { id: string; name: string; type: string; casualties: number }[];
 }
 
+/** One belligerent's own dead in a single engagement. */
+export interface CountryLoss {
+  country: string;
+  loss: number;
+}
+
 export interface RecordBattleRow {
   id: string;
   turn: number;
@@ -47,8 +54,17 @@ export interface RecordBattleRow {
    *  reports, which named only one country per side. */
   attackers: string[];
   defenders: string[];
-  declarerLoss: number;
-  targetLoss: number;
+  /**
+   * Dead per attacking nation, principal first — NOT a side total under the
+   * principal's flag, which is what this used to be. A DD+RU offensive reported
+   * "DD 16,299" when DD had lost 5,360 and RU 10,939.
+   *
+   * One entry per side on a pre-coalition report, carrying that side's whole loss:
+   * accurate, because those reports describe bilateral battles.
+   */
+  attackerLosses: CountryLoss[];
+  /** Dead per defending nation, principal first. */
+  defenderLosses: CountryLoss[];
   /**
    * True when the offensive met nothing — the front still moved, but no
    * engagement was fought. The war log tells the two apart; both are events.
@@ -60,8 +76,16 @@ export interface RecordBattleRow {
    * position was recorded — unknown, which must not read as a stalemate.
    */
   groundPct?: number | null;
-  /** Omitted for `public`; own side only for `command`; both for `archive`. */
+  /** Omitted for `public`; own side only for `command`; both for `archive`.
+   *  One entry PER NATION, so a coalition ally gets its own. */
   rosters?: EngagementRoster[];
+  /**
+   * True when rosters are present but the opposing side's were filtered out.
+   *
+   * The renderer used to infer this from a roster count of 1, which a two-nation
+   * coalition breaks — it would list both allies and imply nothing was hidden.
+   */
+  rostersWithheld?: boolean;
 }
 
 export interface RecordExtras {
@@ -194,6 +218,12 @@ export function casualtiesBySide(
   return out;
 }
 
+/** A contingent's public half: who, and how many of theirs died. Strength is not
+ *  public, so it is dropped here rather than filtered downstream. */
+function toCountryLoss(c: { country: string; loss: number }): CountryLoss {
+  return { country: c.country, loss: c.loss };
+}
+
 function toForceRow(u: MilitaryUnit): ForceRow {
   return {
     id: String(u._id),
@@ -242,8 +272,8 @@ export function buildRecordExtras(input: RecordExtrasInput): RecordExtras {
         target: r.targetCountry,
         attackers: r.attackers ?? [r.declarerCountry],
         defenders: r.defenders ?? [r.targetCountry],
-        declarerLoss: res?.attacker.loss ?? 0,
-        targetLoss: res?.defender.loss ?? 0,
+        attackerLosses: res ? contingentsOf(res.attacker).map(toCountryLoss) : [],
+        defenderLosses: res ? contingentsOf(res.defender).map(toCountryLoss) : [],
         groundPct: groundOf(r),
       };
       if (!res) {
@@ -252,19 +282,30 @@ export function buildRecordExtras(input: RecordExtrasInput): RecordExtras {
       }
       if (tier === "public") return row;
 
-      const sides: EngagementRoster[] = [res.attacker, res.defender].map((s) => ({
-        country: s.country,
-        power: s.power,
-        units: s.unitResults.map((u) => ({
-          id: u.id,
-          name: u.name,
-          type: u.type,
-          casualties: u.casualties,
-        })),
-      }));
+      // One roster PER NATION. Building one per SIDE labelled the whole coalition
+      // with its principal, so `command` tier handed an allied non-principal nothing
+      // (its own country never matched the side's scalar) and the archive credited
+      // an ally's formations to the coalition leader.
+      const sides: EngagementRoster[] = [res.attacker, res.defender].flatMap((s) =>
+        contingentsOf(s).map((c) => ({
+          country: c.country,
+          power: c.power,
+          // A pre-coalition report has no per-unit country, so every unit belongs to
+          // the one country the side names — which is exactly right for those reports.
+          units: s.unitResults
+            .filter((u) => (u.country ?? s.country) === c.country)
+            .map((u) => ({
+              id: u.id,
+              name: u.name,
+              type: u.type,
+              casualties: u.casualties,
+            })),
+        }))
+      );
 
       row.rosters =
         tier === "archive" ? sides : sides.filter((s) => ownCountries.includes(s.country));
+      row.rostersWithheld = row.rosters.length < sides.length;
       return row;
     });
 
