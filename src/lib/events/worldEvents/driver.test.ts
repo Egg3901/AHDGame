@@ -265,6 +265,39 @@ describe("processWorldEventsTurn (World Events v1 Phase 1 scheduler)", () => {
       expect(misclassifiedRandomEvents).toHaveLength(0);
     }
   );
+
+  it("creates a due wartime crisis even when a pending card blocks an earlier generic definition", async () => {
+    const generic = makeDefinition({ kind: "worldEvents.papalVisit" });
+    const bankRun = makeDefinition({
+      kind: "worldEvents.bankRun",
+      minTension: 65,
+      requiresCountryIds: ["US"] as EventDefinition["requiresCountryIds"],
+      schedule: { kind: "window", minGapTurns: 14, maxGapTurns: 28 },
+    });
+    db.collectionMocks.eventDefinitions!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([generic, bankRun]),
+    });
+    db.collectionMocks.eventInstances!.findOne.mockResolvedValue({ _id: new ObjectId() });
+    db.collectionMocks.eventCooldownLedger!.findOne.mockResolvedValue(null);
+    db.collectionMocks.coldWarTension!.findOne.mockResolvedValue({
+      _id: "current",
+      value: 100,
+      pressureFloor: 100,
+      updatedTurn: 100,
+      events: [],
+      updatedAt: new Date(),
+    });
+    db.collectionMocks.countryModifiers!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+
+    await processWorldEventsTurn(db as never, 100, { worldEventsEnabled: true });
+
+    expect(createCrisisFromTemplate).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ templateKey: "war_bank_run", countryIds: ["US"] })
+    );
+  });
 });
 
 describe("processWorldEventsTurn — global host events (World Events v1 Phase 3, rewritten)", () => {

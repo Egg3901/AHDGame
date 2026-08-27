@@ -4,15 +4,15 @@ import { createMockDb } from "@/lib/test-utils/mockDb";
 import { applyWarEmergencyResponse } from "./warEmergencyResponse";
 
 const dependencies = vi.hoisted(() => ({
-  spendFromTreasury: vi.fn().mockResolvedValue(undefined),
+  applyCountryTreasuryDelta: vi.fn().mockResolvedValue(undefined),
   writeSectorOutputDemandModifier: vi.fn().mockResolvedValue(undefined),
   writeWarEmergencyMitigation: vi.fn().mockResolvedValue(undefined),
   applyCivilLibertiesDelta: vi.fn().mockResolvedValue(1),
   logWireEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("@/lib/budget/treasurySpend", () => ({
-  spendFromTreasury: dependencies.spendFromTreasury,
+vi.mock("@/lib/events/substrate/applyEffects", () => ({
+  applyCountryTreasuryDelta: dependencies.applyCountryTreasuryDelta,
 }));
 vi.mock("@/lib/events/substrate/countryModifiers", () => ({
   writeSectorOutputDemandModifier: dependencies.writeSectorOutputDemandModifier,
@@ -74,9 +74,16 @@ describe("war emergency crisis responses", () => {
 
     await applyWarEmergencyResponse(ctx, "bank_guarantee");
 
-    expect(dependencies.spendFromTreasury).toHaveBeenCalledWith(db, "US", 20_000, {
-      resyncDerived: true,
-    });
+    expect(dependencies.applyCountryTreasuryDelta).toHaveBeenCalledWith(
+      db,
+      "US",
+      438,
+      -20_000,
+      expect.objectContaining({
+        source: "war_emergency_crisis",
+        responseId: "bank_guarantee",
+      })
+    );
     expect(dependencies.writeWarEmergencyMitigation).toHaveBeenCalledWith(
       db,
       expect.objectContaining({ countryId: "US", pct: 10, durationTurns: 12 })

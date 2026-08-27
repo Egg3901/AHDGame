@@ -54,6 +54,9 @@ export async function POST(request: Request) {
     if (definition.status === "retired") {
       throw badRequest("Cannot trigger a retired event definition");
     }
+    if (kind.startsWith("worldEvents.")) {
+      throw badRequest("World events cannot be triggered as character random events");
+    }
 
     const handler = getEventHandler(kind);
     if (!handler) {

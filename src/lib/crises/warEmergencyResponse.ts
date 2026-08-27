@@ -1,6 +1,6 @@
 import type { CountryId } from "@/lib/constants/countries";
 import type { CrisisOptionAction } from "@/lib/db/types/crisis";
-import { spendFromTreasury } from "@/lib/budget/treasurySpend";
+import { applyCountryTreasuryDelta } from "@/lib/events/substrate/applyEffects";
 import {
   writeSectorOutputDemandModifier,
   writeWarEmergencyMitigation,
@@ -150,7 +150,11 @@ export async function applyWarEmergencyResponse(
       );
   }
   if (effects.treasuryCost) {
-    await spendFromTreasury(ctx.db, countryId, effects.treasuryCost, { resyncDerived: true });
+    await applyCountryTreasuryDelta(ctx.db, countryId, ctx.currentTurn, -effects.treasuryCost, {
+      source: "war_emergency_crisis",
+      crisisId: ctx.crisis._id.toHexString(),
+      responseId,
+    });
   }
   if (effects.mitigation) {
     await writeWarEmergencyMitigation(ctx.db, {

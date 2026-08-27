@@ -262,7 +262,9 @@ async function offerScheduledEventForCountry(
     // Generic world-event cards retain the one-pending-per-country cap. Crisis
     // creation above is deliberately independent from the random-event slot.
     if (await hasPendingEvent(db, "country", scopeId)) {
-      return "skipped";
+      // A generic card cannot claim this country's event slot, but it must not
+      // prevent a later high-tension definition from becoming a crisis.
+      continue;
     }
 
     const roll = seededRoll(countryId, currentTurn, definition.kind, "worldEventScheduler");
