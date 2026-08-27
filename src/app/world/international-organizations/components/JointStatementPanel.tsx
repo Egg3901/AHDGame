@@ -8,6 +8,7 @@ import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
 import type { OrgSummary, OrgViewerInfo } from "../orgTypes";
 import { VoteButtons } from "../VoteButtons";
 import { VoteRoster } from "../VoteRoster";
+import { votesNeeded } from "@/lib/internationalOrganizations/resolutionRules";
 
 interface Props {
   org: OrgSummary;
@@ -103,9 +104,9 @@ export function JointStatementPanel({
         <div>
           <h3 className="text-lg font-semibold text-foreground">Joint statements</h3>
           <p className="text-xs text-muted">
-            A bloc declaration about a country — an endorsement lifts that government&apos;s
-            approval, a condemnation hurts it, for a limited time. Passes by a simple majority of
-            members.
+            A bloc declaration about a country. An endorsement lifts that government&apos;s
+            approval, a condemnation hurts it, for a limited time. Passes by a majority of the
+            members that hold a vote.
           </p>
         </div>
         {viewerIsMember && viewerFmCountry && canTable && (
@@ -229,15 +230,18 @@ export function JointStatementPanel({
         ) : (
           pending.map((l) => {
             const turnsLeft = Math.max(0, l.closesOnTurn - currentTurn);
-            const memberCount = org.members.length;
+            const ballotSize = org.members.filter((m) => m.hasVote).length;
             const yesCount = l.votes.filter(
-              (v) => v.vote === "yes" && org.members.some((m) => m.countryId === v.countryId)
+              (v) =>
+                v.vote === "yes" &&
+                org.members.some((m) => m.countryId === v.countryId && m.hasVote)
             ).length;
             const myVote =
               viewerFmCountry != null
                 ? (l.votes.find((v) => v.countryId === viewerFmCountry)?.vote ?? null)
                 : null;
-            const progress = memberCount > 0 ? (yesCount / memberCount) * 100 : 0;
+            const needed = votesNeeded(l.type, ballotSize);
+            const progress = needed > 0 ? (yesCount / needed) * 100 : 0;
             return (
               <article
                 key={l._id.toString()}
@@ -261,7 +265,7 @@ export function JointStatementPanel({
                 <div className="mb-3">
                   <div className="mb-1 flex items-center justify-between text-xs text-muted">
                     <span>
-                      {yesCount} / {memberCount} members in favour — majority required
+                      {yesCount} / {ballotSize} members in favour, {needed} needed
                     </span>
                     <span className="tabular-nums">
                       {votingWindowTurns - turnsLeft}/{votingWindowTurns} turns

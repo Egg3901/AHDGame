@@ -53,6 +53,28 @@ const viewer = {
   diplomaticActionsCountryId: "DE",
 } as unknown as OrgViewerInfo;
 
+/** The EU with a voting roll of DE + IE + FR, plus one silent client state. */
+const orgWithPendingSanctions = {
+  ...(org as unknown as Record<string, unknown>),
+  members: [
+    { countryId: "DE", countryName: "Germany", status: "founding", joinedTurn: 0, hasVote: true },
+    { countryId: "IE", countryName: "Ireland", status: "founding", joinedTurn: 0, hasVote: true },
+    { countryId: "FR", countryName: "France", status: "member", joinedTurn: 0, hasVote: true },
+    { countryId: "PL", countryName: "Poland", status: "member", joinedTurn: 0, hasVote: false },
+  ],
+  pendingLegislation: [
+    {
+      _id: "s1",
+      type: "sanctions",
+      title: "Embargo on oil",
+      proposedByCharacterName: "A Minister",
+      closesOnTurn: 213,
+      parties: [],
+      votes: [{ countryId: "DE", vote: "yes" }],
+    },
+  ],
+} as unknown as OrgSummary;
+
 describe("SanctionsPanel", () => {
   it("a member can open the table-sanctions form", () => {
     render(
@@ -69,5 +91,20 @@ describe("SanctionsPanel", () => {
     fireEvent.click(btn);
     expect(screen.getByText("Target country")).toBeTruthy();
     expect(screen.getByText("Commodity")).toBeTruthy();
+  });
+  it("shows the majority a resolution must clear, measured against the voting roll", () => {
+    // Three members hold a ballot and Poland does not, so the bar is two of
+    // three. Counting Poland would advertise a threshold the resolver never
+    // applies.
+    render(
+      <SanctionsPanel
+        org={orgWithPendingSanctions}
+        viewer={viewer}
+        currentTurn={200}
+        votingWindowTurns={24}
+        onChange={() => {}}
+      />
+    );
+    expect(screen.getByText(/1 \/ 3 members in favour, 2 needed/)).toBeTruthy();
   });
 });

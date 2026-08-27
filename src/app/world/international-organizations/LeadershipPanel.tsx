@@ -9,6 +9,7 @@ import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
 import type { OrgSummary, OrgViewerInfo } from "./orgTypes";
 import { VoteButtons } from "./VoteButtons";
 import { VoteRoster } from "./VoteRoster";
+import { votesNeeded } from "@/lib/internationalOrganizations/resolutionRules";
 
 interface Props {
   org: OrgSummary;
@@ -183,7 +184,7 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
           </h4>
           <p className="mt-1 text-xs text-muted">
             Candidates must be a sitting head of government or foreign minister of a member country.
-            Election runs {votingWindowTurns} turns; simple majority elects.
+            Election runs {votingWindowTurns} turns; a majority of the voting members elects.
           </p>
           {candidatesLoading ? (
             <div className="mt-3 h-24 animate-pulse rounded-lg bg-card-border" />
@@ -257,9 +258,16 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
           </div>
 
           {(() => {
-            const yesCount = election.votes.filter((v) => v.vote === "yes").length;
-            const noCount = election.votes.filter((v) => v.vote === "no").length;
-            const abstainCount = election.votes.filter((v) => v.vote === "abstain").length;
+            // Only members holding a ballot are counted, and the bar is a
+            // majority of that roll rather than of whoever turned out.
+            const ballotSize = org.members.filter((m) => m.hasVote).length;
+            const countedVotes = election.votes.filter((v) =>
+              org.members.some((m) => m.countryId === v.countryId && m.hasVote)
+            );
+            const yesCount = countedVotes.filter((v) => v.vote === "yes").length;
+            const noCount = countedVotes.filter((v) => v.vote === "no").length;
+            const abstainCount = countedVotes.filter((v) => v.vote === "abstain").length;
+            const needed = votesNeeded("leadership_election", ballotSize);
             const myVote =
               viewerFmCountry != null
                 ? (election.votes.find((v) => v.countryId === viewerFmCountry)?.vote ?? null)
@@ -267,8 +275,8 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
             return (
               <>
                 <p className="mb-3 text-xs text-muted">
-                  {yesCount} yes · {noCount} no · {abstainCount} abstain — simple majority of votes
-                  cast elects.
+                  {yesCount} yes · {noCount} no · {abstainCount} abstain · {needed} of {ballotSize}{" "}
+                  needed to elect.
                 </p>
                 <VoteButtons
                   onVote={(v) => vote(election._id.toString(), v)}

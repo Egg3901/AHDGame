@@ -182,11 +182,17 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
               viewerFmCountry != null
                 ? (p.votes.find((v) => v.countryId === viewerFmCountry)?.vote ?? null)
                 : null;
-            const yesCount = p.votes.filter((v) => v.vote === "yes").length;
-            const noCount = p.votes.filter((v) => v.vote === "no").length;
-            const eligibleVoterCount = org.members.filter(
-              (m) => m.countryId !== p.proposingCountryId
-            ).length;
+            // The applicant does not vote on its own accession, and a member
+            // that holds no ballot cannot withhold the consent unanimity needs.
+            const eligibleVoters = org.members.filter(
+              (m) => m.hasVote && m.countryId !== p.proposingCountryId
+            );
+            const eligibleVoterCount = eligibleVoters.length;
+            const countedVotes = p.votes.filter((v) =>
+              eligibleVoters.some((m) => m.countryId === v.countryId)
+            );
+            const yesCount = countedVotes.filter((v) => v.vote === "yes").length;
+            const noCount = countedVotes.filter((v) => v.vote === "no").length;
             const progress = eligibleVoterCount > 0 ? (yesCount / eligibleVoterCount) * 100 : 0;
 
             const canVote =
@@ -245,7 +251,7 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
                     <div className="mb-3">
                       <div className="mb-1 flex items-center justify-between text-xs text-muted">
                         <span>
-                          {yesCount} / {eligibleVoterCount} yes ({noCount} no) — unanimous required
+                          {yesCount} / {eligibleVoterCount} yes ({noCount} no), unanimous required
                         </span>
                         <span className="tabular-nums">
                           {votingWindowTurns - turnsLeft}/{votingWindowTurns} turns

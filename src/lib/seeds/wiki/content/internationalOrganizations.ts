@@ -46,11 +46,11 @@ Each org has a **charter**: a text document describing its purpose, rules, and g
 
 ## Membership proposals
 
-New countries join an org through a **membership proposal**, which is voted on by existing members for **24 turns**. If the proposal passes within that window, the applicant becomes a member. If it fails or expires, the country is not admitted.
+New countries join an org through a **membership proposal**, which is voted on by existing members for **24 turns**. Admission is unanimous: every member entitled to vote must cast a "yes" within the window. If the proposal falls short or expires, the country is not admitted.
 
 ## Leadership elections
 
-When a leadership term (96 turns) expires, the org holds a **leadership election**. Eligible candidates compete for the leadership office, and the winner serves the next full term. Holding leadership of a major org like the EU or NATO is a significant source of political influence on the international stage.
+When a leadership term (96 turns) expires, the org holds a **leadership election**. A candidate is seated by a majority of the members entitled to vote. Eligible candidates compete for the leadership office, and the winner serves the next full term. Holding leadership of a major org like the EU or NATO is a significant source of political influence on the international stage.
 
 ## Organization legislation
 
@@ -60,6 +60,13 @@ International organizations can pass legislation that binds their members. Key l
 - **FTA legislation**: establishing a free trade agreement between members (see [International Trade](/wiki/trade-system))
 
 Org legislation is voted on by members, typically over the same 24-turn voting window used for membership proposals.
+
+Only members a player can act for hold a ballot. Client states are bound by whatever their bloc decides, but they do not vote on it.
+
+Two thresholds apply, and both are measured against the members entitled to vote rather than against turnout. Abstaining, or never voting at all, withholds consent exactly as a "no" does.
+
+- **Unanimous**: entering a conflict at the bloc's call, free trade agreements, and admitting a new member. Any one member can refuse simply by declining to consent.
+- **Majority**: everything else, including sanctions, directives, aid packages, dues, posture, agency funding and joint statements. More than half the voting members must vote "yes".
 
 ## Custom organizations
 

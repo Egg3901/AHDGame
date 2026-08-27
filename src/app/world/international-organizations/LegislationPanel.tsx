@@ -301,7 +301,9 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
             const votingParties = parties.filter((p) =>
               org.members.some((m) => m.countryId === p && m.hasVote)
             );
-            const partyVotes = l.votes.filter((v) => parties.includes(v.countryId as CountryId));
+            const partyVotes = l.votes.filter((v) =>
+              votingParties.includes(v.countryId as CountryId)
+            );
             const turnsLeft = Math.max(0, l.closesOnTurn - currentTurn);
             const yesCount = partyVotes.filter((v) => v.vote === "yes").length;
             const myVote =
@@ -309,7 +311,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
                 ? (l.votes.find((v) => v.countryId === viewerFmCountry)?.vote ?? null)
                 : null;
             const viewerIsParty = viewerFmCountry != null && parties.includes(viewerFmCountry);
-            const progress = parties.length > 0 ? (yesCount / parties.length) * 100 : 0;
+            const progress = votingParties.length > 0 ? (yesCount / votingParties.length) * 100 : 0;
 
             return (
               <article
@@ -338,7 +340,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
                 <div className="mb-3">
                   <div className="mb-1 flex items-center justify-between text-xs text-muted">
                     <span>
-                      {yesCount} / {parties.length} parties yes — unanimous required
+                      {yesCount} / {votingParties.length} parties yes, unanimous required
                     </span>
                     <span className="tabular-nums">
                       {votingWindowTurns - turnsLeft}/{votingWindowTurns} turns
