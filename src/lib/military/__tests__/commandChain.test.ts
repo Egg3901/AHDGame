@@ -124,6 +124,65 @@ describe("resolveCommandChain", () => {
     expect(v.can).toEqual([]);
   });
 
+  // The bug: every "Who is posted here" and "Your profile" link pointed at
+  // /world/conflicts/generals, a directory of profile COMPONENTS with no page.tsx
+  // behind it. Clicking either one answered 404.
+  describe("where the handoffs actually lead", () => {
+    const everySeat = [
+      at({ isDefenseHolder: true }),
+      at({ isDefenseHolder: true, hasTheaterCommander: true }),
+      at({ isCommandingGeneral: true }),
+      at({ isCommandingGeneral: true, hasTheaterCommander: true }),
+      at({ isPostedGeneral: true }),
+      at({ isPostedGeneral: true, hasTheaterCommander: true }),
+      at({ isTheaterCommander: true, hasTheaterCommander: true }),
+      at({}),
+      at({ ownSide: null }),
+      at({ resolved: true, isPostedGeneral: true, hasTheaterCommander: true }),
+    ];
+
+    it("never links to a route that does not exist", () => {
+      for (const who of everySeat) {
+        for (const h of resolveCommandChain(who).handoffs) {
+          expect(h.href, `${h.what} points at a dead route`).not.toBe("/world/conflicts/generals");
+        }
+      }
+    });
+
+    it("sends a seat asking who is posted here to the roster on this page", () => {
+      const v = resolveCommandChain(at({ isPostedGeneral: true, hasTheaterCommander: true }));
+      const declares = v.handoffs.find((h) => /declare an offensive/i.test(h.what));
+      expect(declares?.linkLabel).toBe("Who is posted here");
+      expect(declares?.href).toBe("#posted-here");
+    });
+
+    it("sends a posted general asking to move to their own profile", () => {
+      const v = resolveCommandChain(at({ isPostedGeneral: true }));
+      const move = v.handoffs.find((h) => /post yourself/i.test(h.what));
+      expect(move?.href).toBe("/profile");
+    });
+
+    // Who declares is public; who is standing where is not — the citizen branch's
+    // own locked line says so, so it must not link to the roster that shows it.
+    it("offers a citizen the sentence but not the roster", () => {
+      const v = resolveCommandChain(at({ hasTheaterCommander: true }));
+      expect(v.role).toBe("belligerent");
+      const declares = v.handoffs.find((h) => /declare an offensive/i.test(h.what));
+      expect(declares?.who).toMatch(/Theater Commander/i);
+      expect(declares?.href).toBeUndefined();
+    });
+
+    // The roster is withheld on a resolved war like every other force detail, so
+    // an anchor into it would scroll to nothing.
+    it("drops the roster link once the war has resolved", () => {
+      const v = resolveCommandChain(
+        at({ isPostedGeneral: true, hasTheaterCommander: true, resolved: true })
+      );
+      const declares = v.handoffs.find((h) => /declare an offensive/i.test(h.what));
+      expect(declares?.href).toBeUndefined();
+    });
+  });
+
   it("tells a citizen of a belligerent nation they hold no seat", () => {
     const v = resolveCommandChain(at({}));
     expect(v.role).toBe("belligerent");

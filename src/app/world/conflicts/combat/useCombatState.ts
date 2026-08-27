@@ -65,8 +65,11 @@ export interface ConflictView {
   ownSpectrum?: "west" | "east" | "neutral";
   /** A country on the occupying side, used to orient the advance. Null if generated. */
   occupierCountry: string | null;
-  /** The host's own drawable region codes. `useRegionGeometry` resolves the
-   *  shards holding them, so the page does not ship URLs. */
+  /** Every entity the war is fought over, anchor first — the conflict zone.
+   *  Absent means "just the anchor", as it does on the document. */
+  hostEntities?: string[];
+  /** The zone's drawable region codes, across every host. `useRegionGeometry`
+   *  resolves the shards holding them, so the page does not ship URLs. */
   hostRegionCodes: string[];
 }
 

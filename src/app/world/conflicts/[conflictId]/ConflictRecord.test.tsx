@@ -30,6 +30,7 @@ const base: ConflictRecordView = {
   ownSide: null,
   chain: null,
   actions: null,
+  postedHere: null,
   employ: null,
   whoDeclares: "The defense secretary — no Theater Commander is designated at this front.",
   committedCountry: null,
@@ -478,6 +479,76 @@ describe("ConflictRecord command surface", () => {
     // refused rather than offered and then rejected by the route.
     expect(screen.getByRole("button", { name: /designate/i }).hasAttribute("disabled")).toBe(true);
     expect(screen.getByText("None designated")).toBeTruthy();
+  });
+
+  // The chain panel's "Who is posted here" link scrolls to this roster. It used to
+  // point at /world/conflicts/generals, which has no page and answered 404.
+  it("answers who is posted here for a seat in a live war", () => {
+    render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          tier: "command",
+          ownSide: "A",
+          postedHere: [
+            {
+              id: "g1",
+              name: "Gen. Rodin",
+              rank: "General",
+              divisions: 2,
+              inCharge: true,
+              isViewer: false,
+            },
+          ],
+        }}
+      />
+    );
+    expect(screen.getByText(/POSTED AT THIS FRONT/)).toBeTruthy();
+    expect(screen.getByText("Gen. Rodin")).toBeTruthy();
+  });
+
+  // Guards the 404 class this branch fixed: the chain panel's link has to resolve
+  // to something. An in-page anchor is a plain <a>, not a route.
+  it("links the chain panel's roster handoff at the roster on this page", () => {
+    render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          tier: "command",
+          ownSide: "A",
+          chain: {
+            ...chain,
+            role: "postedGeneral",
+            handoffs: [
+              {
+                what: "Declare an offensive at this front",
+                who: "Gen. Rodin, the Theater Commander designated for this conflict.",
+                href: "#posted-here",
+                linkLabel: "Who is posted here",
+              },
+            ],
+          },
+          postedHere: [
+            {
+              id: "g1",
+              name: "Gen. Rodin",
+              rank: "General",
+              divisions: 2,
+              inCharge: true,
+              isViewer: false,
+            },
+          ],
+        }}
+      />
+    );
+    const link = screen.getByRole("link", { name: /who is posted here/i });
+    expect(link.getAttribute("href")).toBe("#posted-here");
+    expect(document.querySelector("#posted-here")).toBeTruthy();
+  });
+
+  it("withholds the roster from a reader who holds no seat", () => {
+    render(<ConflictRecord conflict={base} />);
+    expect(screen.queryByText(/POSTED AT THIS FRONT/)).toBeNull();
   });
 });
 

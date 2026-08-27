@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { createCommand, dedupeCommandIds, validateDraft, type CommandDraft } from "../commands";
+import {
+  createCommand,
+  dedupeCommandIds,
+  reconcileCommandCommanders,
+  validateDraft,
+  type CommandDraft,
+} from "../commands";
 import type { MilitaryCommand, MilitaryState } from "../types";
 
 function cmd(over: Partial<MilitaryCommand> = {}): MilitaryCommand {
@@ -182,5 +188,70 @@ describe("validateDraft", () => {
     expect(
       validateDraft(draft, stateWith([])).some((m) => m.includes("naval command structure"))
     ).toBe(true);
+  });
+});
+
+/**
+ * Live data really did this: Russia's only command listed a general who had since
+ * moved to the United Kingdom. The panel skipped the unresolvable row, so the
+ * Secretary saw "COMMANDERS - 1" over an empty list with no way to remove anyone,
+ * and the commands PUT refused every later edit because of that same id.
+ */
+describe("reconcileCommandCommanders", () => {
+  it("leaves a clean org untouched, and returns the same array", () => {
+    const commands = [cmd({ commanderIds: ["g1"], commandingGeneralId: "g1" })];
+    const out = reconcileCommandCommanders(commands, ["g1", "g2"]);
+    expect(out.commands).toBe(commands);
+    expect(out.removed).toBe(0);
+  });
+
+  it("drops a commander the country's roster no longer contains", () => {
+    const commands = [cmd({ commanderIds: ["g1", "gone"] })];
+    const out = reconcileCommandCommanders(commands, ["g1"]);
+    expect(out.commands[0].commanderIds).toEqual(["g1"]);
+    expect(out.removed).toBe(1);
+  });
+
+  // The route also requires the lead to be one of the command's own commanders, so
+  // leaving a dangling lead would swap one unsavable state for another.
+  it("clears the lead when the lead is who left", () => {
+    const commands = [cmd({ commanderIds: ["gone"], commandingGeneralId: "gone" })];
+    const out = reconcileCommandCommanders(commands, ["g1"]);
+    expect(out.commands[0].commanderIds).toEqual([]);
+    expect(out.commands[0].commandingGeneralId).toBeNull();
+  });
+
+  it("keeps a lead who is still on the roster while dropping a colleague", () => {
+    const commands = [cmd({ commanderIds: ["g1", "gone"], commandingGeneralId: "g1" })];
+    const out = reconcileCommandCommanders(commands, ["g1"]);
+    expect(out.commands[0].commandingGeneralId).toBe("g1");
+  });
+
+  it("counts every dropped commander across every command", () => {
+    const commands = [
+      cmd({ id: "a", commanderIds: ["gone1"] }),
+      cmd({ id: "b", commanderIds: ["g1", "gone2"] }),
+      cmd({ id: "c", commanderIds: ["g1"] }),
+    ];
+    const out = reconcileCommandCommanders(commands, ["g1"]);
+    expect(out.removed).toBe(2);
+    expect(out.commands.map((c) => c.commanderIds)).toEqual([[], ["g1"], ["g1"]]);
+  });
+
+  // A lead who was never on the command's own list is the same unsavable state by
+  // another route: the PUT requires the lead to be one of its commanders.
+  it("clears a lead who is not on the command's own list, dropping nobody", () => {
+    const commands = [cmd({ commanderIds: ["g1"], commandingGeneralId: "orphan" })];
+    const out = reconcileCommandCommanders(commands, ["g1", "orphan"]);
+    expect(out.commands[0].commanderIds).toEqual(["g1"]);
+    expect(out.commands[0].commandingGeneralId).toBeNull();
+    expect(out.removed).toBe(0);
+  });
+
+  it("empties every command when the roster is empty", () => {
+    const commands = [cmd({ commanderIds: ["g1"], commandingGeneralId: "g1" })];
+    const out = reconcileCommandCommanders(commands, []);
+    expect(out.commands[0].commanderIds).toEqual([]);
+    expect(out.commands[0].commandingGeneralId).toBeNull();
   });
 });

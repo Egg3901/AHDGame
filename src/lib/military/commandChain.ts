@@ -80,7 +80,18 @@ export interface CommandChainView {
 }
 
 const COMMANDS_HREF = "/world/conflicts/combat";
-const GENERALS_HREF = "/world/conflicts/generals";
+/**
+ * The roster of this nation's generals standing at this front, on the conflict
+ * record itself. An in-page anchor rather than a route: who is posted where is a
+ * per-front fact, and the record is the page that holds it.
+ *
+ * It replaces `/world/conflicts/generals`, which never resolved — that directory
+ * holds the general-profile COMPONENTS, mounted inside the profile page's Military
+ * tab, and has no `page.tsx` of its own. Every link to it answered 404.
+ */
+const POSTED_HERE_HREF = "#posted-here";
+/** The profile page, whose Military tab carries the viewer's own posting. */
+const PROFILE_HREF = "/profile";
 
 /** How units reach a front. The single most-missed rule, so every belligerent sees it. */
 const UNITS_FOLLOW: ChainHandoff = {
@@ -138,8 +149,25 @@ export function resolveCommandChain(input: CommandChainInput): CommandChainView 
     who: tc
       ? `${tc}, the Theater Commander designated for this conflict.`
       : "The defense secretary, while no Theater Commander is designated here.",
-    href: hasTheaterCommander ? GENERALS_HREF : COMMANDS_HREF,
-    linkLabel: hasTheaterCommander ? "Who is posted here" : "Your commands",
+    // A seat's link, and only while the war still takes orders. The posted roster
+    // is withheld on a resolved war like every other force detail, so pointing at
+    // it there would scroll to nothing.
+    ...(resolved
+      ? {}
+      : hasTheaterCommander
+        ? { href: POSTED_HERE_HREF, linkLabel: "Who is posted here" }
+        : { href: COMMANDS_HREF, linkLabel: "Your commands" }),
+  };
+
+  /**
+   * The same handoff for a reader who holds no seat. Who declares is public — the
+   * designation is an act of state — but who is standing where is not, which this
+   * branch's own `locked` line says outright. So the sentence stays and the link,
+   * which leads to exactly that withheld roster, does not.
+   */
+  const declaresInsteadPublic: ChainHandoff = {
+    what: declaresInstead.what,
+    who: declaresInstead.who,
   };
 
   // A resolved war takes no orders from anyone; that is a fact about the war, not
@@ -174,7 +202,7 @@ export function resolveCommandChain(input: CommandChainInput): CommandChainView 
         {
           what: "Post yourself somewhere else",
           who: "Your Command's Commanding General decides where its generals serve.",
-          href: GENERALS_HREF,
+          href: PROFILE_HREF,
           linkLabel: "Your profile",
         },
       ],
@@ -250,7 +278,7 @@ export function resolveCommandChain(input: CommandChainInput): CommandChainView 
       "Your nation is fighting this war. You hold no seat in its command structure, so you cannot move this line — and you see it the way the newspapers do.",
     can: [],
     handoffs: [
-      declaresInstead,
+      declaresInsteadPublic,
       {
         what: "Take a seat in the command structure",
         who: "Appointment by the head of government, or election.",

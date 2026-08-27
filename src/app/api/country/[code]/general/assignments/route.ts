@@ -16,7 +16,6 @@ import {
   getMilitaryFormations,
   getMilitaryFormationsCollection,
 } from "@/lib/db/collections/militaryFormations";
-import { listCountryGenerals } from "@/lib/db/collections/characterGenerals";
 import { validateAssignments } from "@/lib/military/assignments";
 import { reconcileUnitTheaters } from "@/lib/military/reconcileTheaters";
 import { verifyPosting } from "@/lib/military/rosterGate";
@@ -95,10 +94,19 @@ export async function PUT(request: Request, { params }: RouteParams) {
     // rewriting it wholesale would wipe the other commands' postings. Drop only the
     // rows this CG owns, then splice their submission back in.
     const { conflictAssignments: stored } = await getMilitaryFormations(db, countryId);
-    const others = stored.filter((a) => !ownGenerals.has(a.generalCharacterId));
+    // The roster this caller was authorized against, so "who is a general here" has
+    // one answer per request.
+    const validGenerals = new Set(cg.roster.map((g) => g.id));
+    // Rows belonging to another commanding general are carried through — but only
+    // for generals the country still has. A general who emigrated or was dismissed
+    // keeps their posting row until somebody saves, and validating the merged whole
+    // against the live roster would then refuse EVERY commanding general's save
+    // over a name none of them owns and none of them can reach. They cannot hold a
+    // front any more, so the row goes.
+    const others = stored.filter(
+      (a) => !ownGenerals.has(a.generalCharacterId) && validGenerals.has(a.generalCharacterId)
+    );
     const merged = [...others, ...submitted];
-
-    const validGenerals = new Set((await listCountryGenerals(db, countryId)).map((g) => g.id));
 
     // Validate the merged whole: invariants like one-TC-per-conflict span commands.
     const error = validateAssignments(merged, { validGenerals });

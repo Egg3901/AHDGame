@@ -18,6 +18,7 @@ import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import type { CountryId } from "@/lib/constants/countries";
 import { occupationOf } from "@/lib/military/occupation";
 import { regionCodesOfCountry } from "@/lib/maps/regionOwnership";
+import { hostEntitiesOf } from "@/lib/military/hostEntities";
 import { CombatCommandClient } from "./CombatCommandClient";
 import type { BattleReportView, ConflictView } from "./useCombatState";
 
@@ -134,19 +135,29 @@ export default async function CombatCommandPage() {
   // conflict record page, and the war room's target picker has to be built from it.
   const engagedIds = new Set(units.map((u) => u.theaterId));
   const engagedConflicts = activeConflicts.filter((c) => engagedIds.has(c._id));
-  // Resolve each distinct host country's region codes once — repeated hosts
-  // previously issued one states query per conflict.
-  const hostCountries = [...new Set(engagedConflicts.map((c) => c.hostCountry))];
+  // Every host of every engaged war, not just each war's anchor: a conflict is
+  // fought over `hostEntities`, and the front line is placed as a share of the land
+  // the map can see. Resolving the anchor alone drew half a two-host theatre and
+  // measured the line against that half.
+  //
+  // Still deduped across the whole page, which is what the anchor-keyed version was
+  // for: two wars hosted in the same country previously issued one states query each.
+  const zoneHosts = [...new Set(engagedConflicts.flatMap((c) => hostEntitiesOf(c)))];
   const regionCodesByHost = new Map(
     await Promise.all(
-      hostCountries.map(async (host) => [host, await regionCodesOfCountry(db, host)] as const)
+      zoneHosts.map(async (host) => [host, await regionCodesOfCountry(db, host)] as const)
     )
   );
   const conflictViews: ConflictView[] = await Promise.all(
     engagedConflicts.map(async (c) => {
       const occ = occupationOf(c);
       const occupyingSide = occ.occupier === "A" ? c.sideA : occ.occupier === "B" ? c.sideB : null;
-      const hostRegionCodes = regionCodesByHost.get(c.hostCountry) ?? [];
+      const hostEntities = hostEntitiesOf(c) as string[];
+      // Deduped: two hosts never share a region today, but the union is what the
+      // map filters features against and a repeat would draw one Land twice.
+      const hostRegionCodes = [
+        ...new Set(hostEntities.flatMap((host) => regionCodesByHost.get(host) ?? [])),
+      ];
       // Roster membership only — deliberately NOT `sideOf`'s backer fallback, which
       // would hand a non-belligerent a target list at a war it has no part in. The
       // declare route applies the same rule, so the picker cannot offer a target the
@@ -177,6 +188,7 @@ export default async function CombatCommandPage() {
         occupier: occ.occupier,
         occupierCountry: occupyingSide?.countries[0] ?? null,
         ownSpectrum,
+        hostEntities,
         hostRegionCodes,
       };
     })

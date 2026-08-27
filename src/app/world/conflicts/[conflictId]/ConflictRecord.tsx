@@ -4,8 +4,10 @@ import type { ConflictTier } from "@/lib/military/conflictVisibility";
 import type { ForceRow, RecordBattleRow, SideForce } from "./conflictRecordView";
 import { ConflictActions } from "./ConflictActions";
 import { CommandChainPanel, CommandLockedPanel, HowThisFrontMoves } from "./CommandChainPanel";
+import { PostedGeneralsPanel, type PostedGeneralRow } from "./PostedGeneralsPanel";
 import { EmployCommandPanel, type EmployableGeneral } from "./EmployCommandPanel";
 import { MomentumPanel, type MomentumView } from "./MomentumPanel";
+import { BelligerentsPanel, type BelligerentsView } from "./BelligerentsPanel";
 import { ForcePanel } from "./ForcePanel";
 import { OrderOfBattlePanel } from "./OrderOfBattlePanel";
 import { WarLog } from "./WarLog";
@@ -47,7 +49,10 @@ export interface ConflictRecordView {
   /** Side B's share of the host, 0–100, and where it opened. */
   control: number;
   controlStart: number;
-  /** The host's own drawable regions — geometry only, never ownership. */
+  /** Every entity the war is fought over, anchor first — the conflict zone.
+   *  Absent means "just the anchor", as it does on the document. */
+  hostEntities?: string[];
+  /** The zone's drawable regions — geometry only, never ownership. */
   hostRegionCodes: string[];
   /** Whether the host itself fights on either side. */
   hostIsBelligerent: boolean;
@@ -68,6 +73,10 @@ export interface ConflictRecordView {
   /** What resolves on the next tick. */
   pending: PendingChip[];
   momentum: MomentumView;
+  /** Who is at this war and what put them there — see `belligerentRoll`.
+   *  Optional for the same reason `hostEntities` is: a page rendered before this
+   *  shipped carries no roll, and the record must still render without it. */
+  belligerents?: BelligerentsView;
 
   /**
    * Settlements already agreed in this war, oldest first. Public: the war's
@@ -104,6 +113,12 @@ export interface ConflictRecordView {
     targets: string[];
     pendingTarget: string | null;
   } | null;
+  /**
+   * The viewer nation's generals standing at this front, most senior posting
+   * first. Null outside `command` tier: who is standing where is not public, which
+   * is the same rule `ownForces` follows.
+   */
+  postedHere: PostedGeneralRow[] | null;
   /** The Commanding General's own generals + postings; null for every other seat. */
   employ: {
     countryCode: string;
@@ -591,6 +606,7 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
           <div className="cw-front-map">
             <FrontLineMap
               hostCountry={c.hostCountry}
+              hostEntities={c.hostEntities}
               hostRegionCodes={c.hostRegionCodes}
               control={c.control}
               sideACountries={c.sideACountries}
@@ -603,6 +619,8 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
           </div>
 
           <div className="cw-front-rail">
+            <BelligerentsPanel view={c.belligerents} />
+
             <MomentumPanel view={c.momentum} />
 
             <ForcePanel
@@ -628,6 +646,11 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
             ) : (
               c.chain?.locked && <CommandLockedPanel note={c.chain.locked} />
             )}
+
+            {/* Above the CG's own lever, because it is the state that lever acts on
+                — and it is the answer the chain panel's "Who is posted here" link
+                now scrolls to. */}
+            {c.postedHere && <PostedGeneralsPanel generals={c.postedHere} />}
 
             {c.employ && <EmployCommandPanel {...c.employ} />}
 
