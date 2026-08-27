@@ -11,6 +11,16 @@ import type { CountryId, GovernmentType } from "@/lib/constants/countries";
  * Spec: docs/superpowers/specs/2026-08-27-peace-terms-design.md
  */
 export type PeaceTerm =
+  /**
+   * Status quo ante. Neither side prevails, nothing changes hands, and the war
+   * record shows no victor.
+   *
+   * DISTINCT from an indemnity of zero, which is a settlement one side imposed and
+   * chose to take nothing from: that one still names a winner. A white peace names
+   * none, and that difference is load-bearing where a war is being fought over a
+   * question, because a question decided by nobody goes back to being a question.
+   */
+  | { kind: "white_peace" }
   | { kind: "indemnity"; payer: CountryId; amount: number }
   | { kind: "regime_change"; targetSystem: GovernmentType }
   | { kind: "demilitarisation"; turns: number };
@@ -63,6 +73,11 @@ export type PeaceTermCheck = { ok: true } | { ok: false; error: string };
  * never buy peace, which rules out most of the countries that would want to.
  */
 export function validatePeaceTerm(term: PeaceTerm, ctx: PeaceTermContext): PeaceTermCheck {
+  // A white peace carries no fields, so there is nothing about it that can be
+  // invalid. Always available: walking away unchanged is a legitimate end to any
+  // war, including one you are winning.
+  if (term.kind === "white_peace") return { ok: true };
+
   if (term.kind === "indemnity") {
     // `>= 0` rather than `!(< 0)`: NaN fails both comparisons, and the negated
     // form would let it through to become a NaN treasury balance.

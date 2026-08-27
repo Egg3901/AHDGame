@@ -55,6 +55,7 @@ function settledTitle(conflict: ConflictDoc): string {
   const loser = conflict.settlement?.target;
   if (!term || !loser) return `${conflict.name} is over`;
 
+  if (term.kind === "white_peace") return `${conflict.name} ends where it began`;
   if (term.kind === "regime_change") return `${name(loser)} is made to change its government`;
   if (term.kind === "demilitarisation") return `${name(loser)} is disarmed by treaty`;
   if (term.amount > 0) return `${name(loser)} pays for the peace`;
@@ -78,6 +79,13 @@ function settledBody(conflict: ConflictDoc): string {
       ? "was in no position to refuse"
       : "agreed to the terms rather than fight on";
 
+  if (s.term.kind === "white_peace") {
+    return (
+      `${conflict.name} is over on the terms it started with. Neither government ` +
+      "prevailed, no border moved, and whatever the war was meant to settle is still " +
+      "there to be argued over."
+    );
+  }
   if (s.term.kind === "regime_change") {
     return (
       `${conflict.name} is over, and ${loser} ${how}. Its government falls with the war, ` +
@@ -104,6 +112,7 @@ function settledBody(conflict: ConflictDoc): string {
 
 /** The term as one labelled field value. */
 export function termFieldValue(term: PeaceTerm): string {
+  if (term.kind === "white_peace") return "White peace, status quo";
   if (term.kind === "indemnity") {
     return term.amount > 0
       ? `Indemnity: ${term.amount.toLocaleString("en-US")} from ${name(term.payer)}`
@@ -128,7 +137,10 @@ export function buildSettledDispatch(conflict: ConflictDoc): WarDispatch {
   const fields: NonNullable<DiscordEmbed["fields"]> = [
     {
       name: "Outcome",
-      value: s ? `${name(s.imposedBy)} prevailed` : "The front line held",
+      value:
+        s && s.term.kind !== "white_peace"
+          ? `${name(s.imposedBy)} prevailed`
+          : "The front line held",
       inline: true,
     },
     { name: "Terms", value: s ? termFieldValue(s.term) : "None taken", inline: true },

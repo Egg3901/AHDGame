@@ -24,6 +24,9 @@ const bodySchema = z.object({
   // is absent from it for the same reason: a settlement cannot install a crown, and
   // refusing it at the schema is stronger than refusing it in the validator alone.
   term: z.discriminatedUnion("kind", [
+    // A white peace carries no fields: it is the absence of a term, and the whole of
+    // its effect is that the war resolves with no victor recorded.
+    z.object({ kind: z.literal("white_peace") }),
     z.object({
       kind: z.literal("indemnity"),
       payer: z.string().min(2).max(3),
@@ -159,10 +162,19 @@ export async function POST(
       currentTurn,
     });
 
-    // Stamps the winner and the outcome note, and records a 240-turn truce for every
-    // cross-side pair. Runs AFTER the term so a regime change lands on the country
-    // while it is still a belligerent on the record.
-    await resolveConflict(db, conflict, conflict.termsWindow.victor, currentTurn);
+    // Stamps the outcome and records a 240-turn truce for every cross-side pair. Runs
+    // AFTER the term so a regime change lands on the country while it is still a
+    // belligerent on the record.
+    //
+    // A WHITE PEACE names no victor, even here where one plainly won the ground: the
+    // point of choosing it is that the war is recorded as settling nothing. That is
+    // what lets a question being fought over go back to being a question.
+    await resolveConflict(
+      db,
+      conflict,
+      term.kind === "white_peace" ? "stalemate" : conflict.termsWindow.victor,
+      currentTurn
+    );
 
     return NextResponse.json({ success: true, term });
   } catch (error) {

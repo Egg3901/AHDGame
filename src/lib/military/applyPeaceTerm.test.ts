@@ -199,3 +199,17 @@ describe("applyPeaceTerm: regime change", () => {
     expect(patch).toContain("pendingPostConversionElection");
   });
 });
+
+describe("applyPeaceTerm: white peace", () => {
+  it("changes nothing about the world", async () => {
+    // Its whole effect is in how the war RESOLVES: the caller stamps a stalemate
+    // rather than a victor. Nothing here should move.
+    const { db, updates } = mockDb();
+    await applyPeaceTerm(db, { kind: "white_peace" }, ctx);
+    expect(updates).toHaveLength(0);
+    expect(recordProcurementRestriction).not.toHaveBeenCalled();
+    expect(installOnePartyState).not.toHaveBeenCalled();
+    expect(triggerSystemConversion).not.toHaveBeenCalled();
+    expect(ensureFederalBudget).not.toHaveBeenCalled();
+  });
+});

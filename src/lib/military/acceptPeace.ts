@@ -162,7 +162,14 @@ export async function acceptPeace(
     // truces every remaining cross-side pair, which is why the roster edit above has
     // to have happened first: the leaver already has its truce and must not be
     // included again with a later expiry.
-    await resolveConflict(db, conflict, emptied === "A" ? "B" : "A", currentTurn);
+    // A negotiated WHITE PEACE names no victor, even though one side's roster is the
+    // one that emptied. Both governments walked away, and the record should say so.
+    await resolveConflict(
+      db,
+      conflict,
+      offer.term.kind === "white_peace" ? "stalemate" : emptied === "A" ? "B" : "A",
+      currentTurn
+    );
     return { applied: true, resolved: true };
   }
   return { applied: true, resolved: false };

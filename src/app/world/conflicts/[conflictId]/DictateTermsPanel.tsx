@@ -15,7 +15,7 @@ export interface DictateTermsView {
   turnsLeft: number;
 }
 
-type TermKind = "indemnity" | "regime_change" | "demilitarisation";
+type TermKind = "white_peace" | "indemnity" | "regime_change" | "demilitarisation";
 
 /** Systems a settlement may install. A crown cannot be created by treaty. */
 const SYSTEMS = [
@@ -71,6 +71,9 @@ export function DictateTermsPanel({ view }: { view: DictateTermsView }) {
   }
 
   function impose() {
+    if (kind === "white_peace") {
+      return submit({ kind: "white_peace" });
+    }
     if (kind === "indemnity") {
       return submit({ kind: "indemnity", payer: view.target, amount: Number(amount) || 0 });
     }
@@ -80,9 +83,15 @@ export function DictateTermsPanel({ view }: { view: DictateTermsView }) {
     return submit({ kind: "demilitarisation", turns: Number(turns) || 0 });
   }
 
-  /** End the war taking nothing. The same mechanism dialled to zero. */
+  /**
+   * End the war taking nothing AND recording no victor.
+   *
+   * Distinct from an indemnity of zero, which still names a winner. This one says
+   * the war settled nothing, which is what releases a question being fought over
+   * back to the diplomatic track.
+   */
   function whitePeace() {
-    return submit({ kind: "indemnity", payer: view.target, amount: 0 });
+    return submit({ kind: "white_peace" });
   }
 
   return (
@@ -98,6 +107,17 @@ export function DictateTermsPanel({ view }: { view: DictateTermsView }) {
 
       <fieldset className="mt-3 space-y-2">
         <legend className="sr-only">Term imposed on {view.targetName}</legend>
+
+        <Option
+          checked={kind === "white_peace"}
+          onSelect={() => setKind("white_peace")}
+          title="White peace"
+          blurb={`The war ends where it began. Neither side is recorded as having won, and nothing changes hands.`}
+        >
+          <p className="mt-1 text-[11px] text-muted">
+            Anything the war was being fought over goes back to being an open question.
+          </p>
+        </Option>
 
         <Option
           checked={kind === "indemnity"}
@@ -175,7 +195,7 @@ export function DictateTermsPanel({ view }: { view: DictateTermsView }) {
           onClick={whitePeace}
           className="rounded border border-card-border px-3 py-1.5 text-[12px] text-muted disabled:opacity-50"
         >
-          End the war with no terms
+          Sign a white peace
         </button>
       </div>
       <p className="mt-2 text-[11px] text-muted">

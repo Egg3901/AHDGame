@@ -50,6 +50,7 @@ export interface PeaceWar {
  * quoted in the PAYER's currency, which is not always the reader's.
  */
 function offerTermText(term: PeaceTerm): string {
+  if (term.kind === "white_peace") return " on white peace terms, with nothing changing hands";
   if (term.kind === "indemnity") {
     if (!(term.amount > 0)) return " with no indemnity, a white peace";
     const payerName = COUNTRY_CONFIGS[term.payer]?.name ?? term.payer;
@@ -78,9 +79,9 @@ export function PeacePanel({
   const [enemy, setEnemy] = useState<string>("");
   const [payer, setPayer] = useState<CountryId>(countryId);
   const [amount, setAmount] = useState<string>("0");
-  const [termKind, setTermKind] = useState<"indemnity" | "regime_change" | "demilitarisation">(
-    "indemnity"
-  );
+  const [termKind, setTermKind] = useState<
+    "white_peace" | "indemnity" | "regime_change" | "demilitarisation"
+  >("indemnity");
   const [targetSystem, setTargetSystem] = useState<string>("parliamentaryRepublic");
   const [demilTurns, setDemilTurns] = useState<string>("240");
   const [justification, setJustification] = useState("");
@@ -189,6 +190,9 @@ export function PeacePanel({
 
   /** The one term this offer carries, matching the server's discriminated union. */
   function buildTerm(): PeaceTerm {
+    if (termKind === "white_peace") {
+      return { kind: "white_peace" };
+    }
     if (termKind === "regime_change") {
       return { kind: "regime_change", targetSystem: targetSystem as GovernmentType };
     }
@@ -316,6 +320,7 @@ export function PeacePanel({
               onChange={(e) => setTermKind(e.target.value as typeof termKind)}
               className="min-w-[150px] flex-1 rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px]"
             >
+              <option value="white_peace">White peace</option>
               <option value="indemnity">Indemnity</option>
               <option value="regime_change">Regime change</option>
               <option value="demilitarisation">Demilitarisation</option>
@@ -363,6 +368,13 @@ export function PeacePanel({
                 <option value="onePartyState">One-party state</option>
               </select>
             </label>
+          )}
+
+          {termKind === "white_peace" && (
+            <p className="text-[11px] text-muted">
+              The war ends where it began. Neither side is recorded as having won, nothing changes
+              hands, and anything it was being fought over goes back to being an open question.
+            </p>
           )}
 
           {termKind === "demilitarisation" && (

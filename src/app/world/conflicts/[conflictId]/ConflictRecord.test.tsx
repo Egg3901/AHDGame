@@ -765,9 +765,10 @@ describe("the dictate panel on a won war", () => {
     expect(screen.queryByText(/NAME YOUR TERMS/)).toBeNull();
   });
 
-  it("offers all three terms to the country that won the war", () => {
+  it("offers every term to the country that won the war", () => {
     render(<ConflictRecord conflict={{ ...base, dictate }} />);
     expect(screen.getByText(/NAME YOUR TERMS/)).toBeTruthy();
+    expect(screen.getByText("White peace")).toBeTruthy();
     expect(screen.getByText("Indemnity")).toBeTruthy();
     expect(screen.getByText("Regime change")).toBeTruthy();
     expect(screen.getByText("Demilitarisation")).toBeTruthy();
@@ -779,9 +780,10 @@ describe("the dictate panel on a won war", () => {
     expect(screen.getByText(/Turkey has no ground left to hold/)).toBeTruthy();
   });
 
-  it("offers a way to end the war taking nothing", () => {
+  it("offers a white peace, which records no victor at all", () => {
     render(<ConflictRecord conflict={{ ...base, dictate }} />);
-    expect(screen.getByRole("button", { name: /End the war with no terms/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Sign a white peace/ })).toBeTruthy();
+    expect(screen.getByText("White peace")).toBeTruthy();
   });
 
   it("lets exactly one term be selected at a time", () => {

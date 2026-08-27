@@ -182,14 +182,29 @@ describe("choosing which term to offer", () => {
     return fetchMock;
   }
 
-  it("offers all three terms", async () => {
+  it("offers every term, white peace included", async () => {
     await ready();
     const select = screen.getByLabelText(/term offered/i) as HTMLSelectElement;
     expect(Array.from(select.options).map((o) => o.value)).toEqual([
+      "white_peace",
       "indemnity",
       "regime_change",
       "demilitarisation",
     ]);
+  });
+
+  it("posts a white peace as a term of its own, not as a zero indemnity", async () => {
+    // The distinction is load-bearing: a zero indemnity still names a winner, and a
+    // white peace does not.
+    const fetchMock = await ready();
+    fireEvent.change(screen.getByLabelText(/term offered/i), {
+      target: { value: "white_peace" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /send peace offer/i }));
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => c[1]?.method === "POST");
+      expect(JSON.parse(post![1].body).term).toEqual({ kind: "white_peace" });
+    });
   });
 
   it("shows the amount field only for an indemnity", async () => {

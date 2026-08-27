@@ -267,6 +267,9 @@ function Panel({ children }: { children: ReactNode }) {
  * country that paid it, never converted to a unit players do not use.
  */
 function settlementTermText(term: PeaceTerm): string {
+  if (term.kind === "white_peace") {
+    return "A white peace. Neither side prevailed and nothing changed hands.";
+  }
   if (term.kind === "indemnity") {
     return term.amount > 0
       ? `${term.payer} paid an indemnity of ${term.amount.toLocaleString("en-US")}.`

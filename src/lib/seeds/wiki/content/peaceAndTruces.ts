@@ -37,9 +37,20 @@ A settlement carries **exactly one** term. Not two, not none: you choose what th
 
 | Term | What it does |
 | --- | --- |
+| **White peace** | The war ends where it began. No victor is recorded and nothing changes hands. |
 | **Indemnity** | The payer hands over money, in their own currency. |
 | **Regime change** | The other country changes its system of government. Its legislature is dissolved and fresh elections are called. |
 | **Demilitarisation** | The other country may award no new defence contracts for a set number of turns. |
+
+### The white peace
+
+Status quo ante. Neither side is recorded as having won, no money moves, no government falls, and no army is barred from re-arming. Everybody goes home and the truce runs.
+
+**It is not the same as an indemnity of zero.** That is a settlement one side imposed and chose to take nothing from, and the war record still names a winner. A white peace names none. If you are choosing between them, ask whether you want the history to say you won.
+
+**It is available even to a side that has won outright.** Running your front to the end of the track and then signing a white peace is a real choice: you take nothing and the record shows nothing was settled.
+
+**Where a war was being fought over a question, a white peace hands the question back.** The German Question is the case that exists today: a war fought over Germany that ends in a white peace does not decide it. The crisis comes off ice and resumes on the diplomatic track exactly where it stopped, with the same index, the same institutions and the same ladder position it had when the shooting started. Win that war and you take the settlement outright; draw it and you are back to arguing.
 
 ### The indemnity
 
@@ -80,7 +91,7 @@ The country may award no new defence contracts, and no company may accept a new 
 2. **Neither side may be a generated force.** You cannot negotiate with an insurgency: there is no government on the other end to address an offer to. The panel says exactly that rather than a confusing "must be a belligerent" message.
 3. **Both countries must be belligerents in that war**, by explicit roster membership. Bloc affinity is not enough: a country pulled toward a side by its alliance has not declared war on anyone, and cannot be offered a settlement for a war it never joined.
 4. **You must be on opposite sides.** You cannot make peace with an ally.
-5. **The term must be valid.** An indemnity must not be negative, must not exceed twice the payer's annual GDP, and its payer must be one of the two parties. A regime change must name a system the country does not already have, and cannot install a monarchy. A demilitarisation must last at least one whole turn.
+5. **The term must be valid.** A white peace carries no fields and is always valid. An indemnity must not be negative, must not exceed twice the payer's annual GDP, and its payer must be one of the two parties. A regime change must name a system the country does not already have, and cannot install a monarchy. A demilitarisation must last at least one whole turn.
 6. **The war must not already have been won outright.** Once a front reaches the end of the track there is nothing left to negotiate: the victor is choosing what to take.
 
 ## The 72-turn window

@@ -42,6 +42,11 @@ export async function applyPeaceTerm(
   term: PeaceTerm,
   ctx: ApplyTermContext
 ): Promise<void> {
+  // A white peace changes nothing about the world. It is the ABSENCE of a term, and
+  // the whole of its effect is in how the war resolves: the caller stamps a
+  // stalemate rather than a victor.
+  if (term.kind === "white_peace") return;
+
   if (term.kind === "indemnity") {
     await moveIndemnity(db, term, ctx);
     return;

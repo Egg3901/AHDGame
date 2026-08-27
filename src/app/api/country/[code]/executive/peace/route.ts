@@ -35,6 +35,9 @@ const bodySchema = z.object({
   // crown, and refusing it at the schema is stronger than refusing it in the
   // validator alone.
   term: z.discriminatedUnion("kind", [
+    // A white peace carries no fields: it is the absence of a term, and the whole of
+    // its effect is that the war resolves with no victor recorded.
+    z.object({ kind: z.literal("white_peace") }),
     z.object({
       kind: z.literal("indemnity"),
       payer: z.string().min(2).max(3),

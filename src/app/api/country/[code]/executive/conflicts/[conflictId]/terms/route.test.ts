@@ -209,4 +209,25 @@ describe("POST impose terms", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it("accepts a white peace and resolves the war for nobody", async () => {
+    // The victor is choosing to record that the war settled nothing, which is what
+    // releases a question being fought over back to the diplomatic track.
+    const { POST } = await import("./route");
+    const res = await POST(req({ term: { kind: "white_peace" } }), params);
+    expect(res.status).toBe(200);
+    expect(resolveConflict).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "stalemate",
+      40
+    );
+  });
+
+  it("resolves for the victor on every other term", async () => {
+    // Guards the check above from being vacuous.
+    const { POST } = await import("./route");
+    await POST(req(indemnity), params);
+    expect(resolveConflict).toHaveBeenCalledWith(expect.anything(), expect.anything(), "B", 40);
+  });
 });

@@ -19,8 +19,9 @@ const INDEMNITY: PeaceTerm = { kind: "indemnity", payer: "TR", amount: 2400 };
 const WHITE: PeaceTerm = { kind: "indemnity", payer: "TR", amount: 0 };
 const REGIME: PeaceTerm = { kind: "regime_change", targetSystem: "presidential" };
 const DEMIL: PeaceTerm = { kind: "demilitarisation", turns: 240 };
+const WHITE_PEACE: PeaceTerm = { kind: "white_peace" };
 
-const ALL = [war(INDEMNITY), war(WHITE), war(REGIME), war(DEMIL), war(null)];
+const ALL = [war(INDEMNITY), war(WHITE), war(REGIME), war(DEMIL), war(WHITE_PEACE), war(null)];
 
 describe("buildSettledDispatch: house style", () => {
   it("carries no digits in the prose, which is the desk style", () => {
@@ -110,5 +111,35 @@ describe("termFieldValue", () => {
 
   it("states a demilitarisation in turns", () => {
     expect(termFieldValue(DEMIL)).toContain("240 turns");
+  });
+});
+
+describe("buildSettledDispatch: a white peace", () => {
+  it("names no victor in the outcome field, because none is recorded", () => {
+    // An indemnity of zero still has a winner; a white peace does not, and the
+    // dispatch must not credit one. Asserted on the FIELD rather than the whole
+    // embed: the prose legitimately uses the word while negating it.
+    const d = buildSettledDispatch(war(WHITE_PEACE));
+    const outcome = d.embed.fields?.find((f) => f.name === "Outcome");
+    expect(outcome?.value).toBe("The front line held");
+    expect(outcome?.value).not.toMatch(/United Kingdom|Turkey/);
+  });
+
+  it("credits the winner on any other term, so the check above is not vacuous", () => {
+    const d = buildSettledDispatch(war(INDEMNITY));
+    const outcome = d.embed.fields?.find((f) => f.name === "Outcome");
+    expect(outcome?.value).toMatch(/prevailed/);
+  });
+
+  it("says the question it was fought over is still open", () => {
+    expect(buildSettledDispatch(war(WHITE_PEACE)).body).toMatch(/still there to be argued over/i);
+  });
+
+  it("titles it as ending where it began", () => {
+    expect(buildSettledDispatch(war(WHITE_PEACE)).title).toMatch(/ends where it began/i);
+  });
+
+  it("labels the term as a status quo", () => {
+    expect(termFieldValue(WHITE_PEACE)).toMatch(/status quo/i);
   });
 });

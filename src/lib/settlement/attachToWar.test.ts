@@ -525,3 +525,104 @@ describe("detachCrisisFromWar", () => {
     expect(order).toEqual(["restore", "release"]);
   });
 });
+
+describe("resumeCrisisAfterWhitePeace", () => {
+  let db: MockDb;
+
+  const attached = (over: Partial<SettlementCrisisDoc> = {}) =>
+    crisis({
+      status: "frozen",
+      conflictId: "war_us_dd_412",
+      conflictSides: { challenger: "B", incumbent: "A" },
+      conflictAttachment: {
+        anchor: "DD",
+        previousName: "United States vs East Germany",
+        previousHostEntities: null,
+      },
+      ...over,
+    });
+
+  const whitePeacedWar = () =>
+    war({ status: "resolved", outcome: { winner: "stalemate", note: "Neither side prevailed." } });
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    prime(db, "conflicts").updateOne.mockResolvedValue({ matchedCount: 1 });
+    prime(db, "settlementCrises").updateOne.mockResolvedValue({ matchedCount: 1 });
+  });
+
+  it("puts the question back on the board when its war ends in a white peace", async () => {
+    prime(db, "conflicts").findOne.mockResolvedValue(whitePeacedWar());
+    const { resumeCrisisAfterWhitePeace } = await import("./attachToWar");
+    const res = await resumeCrisisAfterWhitePeace(db as unknown as Db, attached());
+    expect(res.detached).toBe(true);
+    // Found rather than indexed: handing the borrowed war back writes to this
+    // collection first, so the release is not necessarily call zero.
+    const release = prime(db, "settlementCrises").updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.status === "open"
+    );
+    expect(release?.[1].$set).toMatchObject({ status: "open", conflictId: null });
+  });
+
+  it("resumes a crisis fighting its OWN declared war, which has nothing to hand back", async () => {
+    // detachCrisisFromWar refuses this case. A war declared to settle Germany that
+    // settled nothing still leaves Germany unsettled.
+    prime(db, "conflicts").findOne.mockResolvedValue(whitePeacedWar());
+    const { resumeCrisisAfterWhitePeace } = await import("./attachToWar");
+    const res = await resumeCrisisAfterWhitePeace(
+      db as unknown as Db,
+      attached({ conflictAttachment: null })
+    );
+    expect(res.detached).toBe(true);
+  });
+
+  it("clears the war stamp, so a second war is announced too", async () => {
+    prime(db, "conflicts").findOne.mockResolvedValue(whitePeacedWar());
+    const { resumeCrisisAfterWhitePeace } = await import("./attachToWar");
+    await resumeCrisisAfterWhitePeace(db as unknown as Db, attached());
+    const release = prime(db, "settlementCrises").updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.status === "open"
+    );
+    expect(release?.[1].$pull).toMatchObject({ postedWireEvents: "war" });
+  });
+
+  it("leaves a war that somebody actually won to the settle sweep", async () => {
+    prime(db, "conflicts").findOne.mockResolvedValue(
+      war({ status: "resolved", outcome: { winner: "B", note: "took full control" } })
+    );
+    const { resumeCrisisAfterWhitePeace } = await import("./attachToWar");
+    const res = await resumeCrisisAfterWhitePeace(db as unknown as Db, attached());
+    expect(res.detached).toBe(false);
+    expect(prime(db, "settlementCrises").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("leaves a war still being fought alone", async () => {
+    prime(db, "conflicts").findOne.mockResolvedValue(war({ status: "active" }));
+    const { resumeCrisisAfterWhitePeace } = await import("./attachToWar");
+    expect((await resumeCrisisAfterWhitePeace(db as unknown as Db, attached())).detached).toBe(
+      false
+    );
+  });
+
+  it("ignores a crisis that is not frozen", async () => {
+    prime(db, "conflicts").findOne.mockResolvedValue(whitePeacedWar());
+    const { resumeCrisisAfterWhitePeace } = await import("./attachToWar");
+    const res = await resumeCrisisAfterWhitePeace(
+      db as unknown as Db,
+      attached({ status: "open" })
+    );
+    expect(res.detached).toBe(false);
+  });
+
+  it("does not resume when another runner released it first", async () => {
+    prime(db, "conflicts").findOne.mockResolvedValue(whitePeacedWar());
+    prime(db, "settlementCrises").updateOne.mockResolvedValue({ matchedCount: 0 });
+    const { resumeCrisisAfterWhitePeace } = await import("./attachToWar");
+    expect((await resumeCrisisAfterWhitePeace(db as unknown as Db, attached())).detached).toBe(
+      false
+    );
+  });
+});

@@ -122,3 +122,17 @@ describe("validatePeaceTerm: demilitarisation", () => {
     expect(validatePeaceTerm({ kind: "demilitarisation", turns: 2.5 }, ctx).ok).toBe(false);
   });
 });
+
+describe("validatePeaceTerm: white peace", () => {
+  it("is always valid, carrying no fields that could be wrong", () => {
+    expect(validatePeaceTerm({ kind: "white_peace" }, ctx)).toEqual({ ok: true });
+  });
+
+  it("is valid even against a country with no GDP on record", () => {
+    // Nothing is being sized against anything, so the indemnity ceiling that would
+    // refuse a payer with no GDP has nothing to say here.
+    expect(validatePeaceTerm({ kind: "white_peace" }, { ...ctx, maxIndemnity: null })).toEqual({
+      ok: true,
+    });
+  });
+});
