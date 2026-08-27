@@ -4,7 +4,9 @@ import { snapAnchorEndTime } from "./snapShift";
 
 const at = (ms: number) => new Date(ms);
 
-function prev(over: Partial<Election> = {}): Partial<Election> {
+type PriorElection = Pick<Election, "electionType" | "endTime" | "imposedSnap">;
+
+function prev(over: Partial<PriorElection> = {}): PriorElection {
   return { electionType: "snap_commons", endTime: at(1000), ...over };
 }
 

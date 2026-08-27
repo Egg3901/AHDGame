@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
-import type { CountryId } from "@/lib/constants/countries";
 import { updateCountryState } from "@/lib/countryState";
+import { getCountryStateCollection } from "@/lib/db/collections/countryState";
 import { triggerSnapElection } from "@/lib/turn/snapElection";
 
 /**
@@ -31,14 +31,13 @@ export async function processPostConversionElections(
   // history of conversions, every country carries a spent marker field, and
   // reading them all back every tick to discard most of them is work the index
   // can do instead.
-  const rows = await db
-    .collection("countryState")
+  const rows = await getCountryStateCollection(db)
     .find({ "pendingPostConversionElection.atTurn": { $lte: currentTurn } })
     .toArray();
 
   let fired = 0;
   for (const row of rows) {
-    const countryId = row._id as CountryId;
+    const countryId = row._id;
     try {
       await triggerSnapElection(db, countryId, now, {
         reason: "regime-change",
