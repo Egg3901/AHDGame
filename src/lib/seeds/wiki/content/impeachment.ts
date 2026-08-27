@@ -9,14 +9,16 @@ Live targets:
 
 ## President (two chambers)
 
-1. **House (or lower chamber).** Seat-weighted simple majority of votes **cast** (more ayes than nays). Voting window: **6 turns**. Abstentions do not count toward either side.
-2. **Senate (or upper chamber).** Seat-weighted **two-thirds of votes cast**. Voting window: **6 turns**. No votes cast fails.
+1. **House (or lower chamber).** Seat-weighted majority of **all seats** in the chamber, not of votes cast. Voting window: **6 turns**. Abstentions and seats that never vote count against passage.
+2. **Senate (or upper chamber).** Seat-weighted **two-thirds of all seats**. Voting window: **6 turns**. Same rule: abstentions and empty seats count against conviction.
+
+NPP blocs holding seats vote alongside players. The target's party defends them, opposition blocs weigh the ideology, and unaligned blocs abstain rather than guess.
 
 If the House does not impeach, the case ends. If the Senate convicts, the executive is removed.
 
 ## Governor (one chamber)
 
-The case starts at the conviction stage. The state legislature needs two-thirds of votes cast, same Senate rule, over **6 turns**.
+The case starts at the conviction stage. The state legislature needs two-thirds of all seats, same Senate rule, over **6 turns**.
 
 ## Cooldown
 

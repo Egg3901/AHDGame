@@ -14,10 +14,11 @@ export type ImpeachmentVoteValue = "aye" | "nay" | "abstain";
 
 /**
  * A two-chamber presidential impeachment. Modeled on {@link NoConfidenceVote}
- * but with a sequential House (impeach — simple majority) → Senate (convict —
- * seat-weighted two-thirds) state machine. On conviction the target executive
- * seat is vacated and the existing `presidentialSuccession` turn phase promotes
- * the VP. Presidential systems only (parliamentary countries use no-confidence).
+ * but with a sequential House (impeach on a seat-weighted majority of ALL
+ * seats) then Senate (convict on a seat-weighted two-thirds of ALL seats) state
+ * machine. On conviction the target executive seat is vacated and the existing
+ * `presidentialSuccession` turn phase promotes the VP. Presidential systems
+ * only (parliamentary countries use no-confidence).
  */
 export interface Impeachment {
   _id: ObjectId;

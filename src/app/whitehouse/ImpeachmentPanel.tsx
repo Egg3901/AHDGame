@@ -18,6 +18,8 @@ interface ImpeachmentDoc {
   senateVotesAgainst: number;
   senateVotesAbstain: number;
   senateVotingEndsOnTurn: number | null;
+  /** All-seats bar for the open stage: chamber size + ayes needed to pass. */
+  chamber?: { seats: number; needed: number } | null;
 }
 
 type Office = "president" | "governor";
@@ -187,16 +189,26 @@ export default function ImpeachmentPanel({
         <div className="mt-3 space-y-3">
           <p className="text-xs text-muted">
             {active.stage === "house"
-              ? "The lower chamber is voting on articles of impeachment. A simple majority advances to a Senate trial."
+              ? "The lower chamber is voting on articles of impeachment. Passage needs a majority of ALL seats, not just votes cast."
               : isGovernor
-                ? "The state legislature is voting on conviction. A two-thirds supermajority removes the Governor."
-                : "The upper chamber is voting on conviction. A two-thirds supermajority removes the president."}
+                ? "The state legislature is voting on conviction. Removal needs two-thirds of ALL seats, not just votes cast."
+                : "The upper chamber is voting on conviction. Removal needs two-thirds of ALL seats, not just votes cast."}{" "}
+            Abstentions and seats that never vote count against passage.
           </p>
           {votes && (
             <div className="flex gap-4 text-sm">
               <Tally label="For" value={votes.for} tone="success" />
               <Tally label="Against" value={votes.against} tone="error" />
               <Tally label="Abstain" value={votes.abstain} tone="muted" />
+            </div>
+          )}
+          {active.chamber && (
+            <div className="text-xs text-muted">
+              <span className="font-semibold text-foreground">
+                {active.chamber.needed} of {active.chamber.seats} seats
+              </span>{" "}
+              needed to {active.stage === "house" ? "impeach" : "convict"}. Currently{" "}
+              {votes?.for ?? 0} aye.
             </div>
           )}
           <div className="flex gap-2">
