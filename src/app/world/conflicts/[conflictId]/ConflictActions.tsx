@@ -45,6 +45,7 @@ export function ConflictActions({
   pendingTarget,
   declarationHistory = [],
   ownSpectrum = "west",
+  autoJoin = false,
 }: {
   theaterId: string;
   countryCode: string;
@@ -57,12 +58,45 @@ export function ConflictActions({
   declarationHistory?: DeclarationHistoryItem[];
   /** Cold War spectrum of the viewer's side, used for odds coloring. */
   ownSpectrum?: "west" | "east" | "neutral";
+  /** Whether this nation already holds a standing order to join allied offensives here. */
+  autoJoin?: boolean;
 }) {
   const [target, setTarget] = useState<string>(targets[0] ?? "");
   const [pending, setPending] = useState<string | null>(pendingTarget);
   const [refusal, setRefusal] = useState<string | null>(null);
+  const [joining, setJoining] = useState(autoJoin);
+  const [savingJoin, setSavingJoin] = useState(false);
 
   const base = `/api/country/${countryCode}/executive/cabinet/${positionId}`;
+
+  /**
+   * Standing order, not an action: it changes what the next tick does with an ally's
+   * declaration and nothing about this turn. Optimistic, because the only failure worth
+   * showing is a refusal, and it reverts on one.
+   */
+  async function toggleAutoJoin() {
+    const next = !joining;
+    setJoining(next);
+    setSavingJoin(true);
+    setRefusal(null);
+    try {
+      const res = await fetch(`${base}/battle/auto-join`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theaterId, enabled: next }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        setJoining(!next);
+        setRefusal(body?.error ?? "Could not save that order.");
+      }
+    } catch {
+      setJoining(!next);
+      setRefusal("Could not save that order.");
+    } finally {
+      setSavingJoin(false);
+    }
+  }
 
   // Project the offensive that is actually FILED once one is, not whatever the picker
   // happens to hold. The odds used to be shown only before declaring and hidden the
@@ -266,6 +300,47 @@ export function ConflictActions({
           {refusal}
         </div>
       )}
+
+      {/* A standing order sits above the one-shot controls: it governs every turn, not
+          this one, and reading it after the declare button would imply otherwise. */}
+      <label
+        data-auto-join
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 9,
+          marginBottom: 13,
+          paddingBottom: 13,
+          borderBottom: `1px solid ${MIL_COLOR.borderSoft}`,
+          cursor: savingJoin ? "wait" : "pointer",
+          opacity: savingJoin ? 0.6 : 1,
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={joining}
+          disabled={savingJoin}
+          onChange={toggleAutoJoin}
+          style={{ marginTop: 2, accentColor: MIL_COLOR.blue, cursor: "inherit" }}
+        />
+        <span>
+          <span style={{ font: `600 11px ${mono}`, color: MIL_COLOR.text }}>
+            Join allied offensives automatically
+          </span>
+          <span
+            style={{
+              display: "block",
+              font: `500 10px ${mono}`,
+              color: MIL_COLOR.textMuted,
+              marginTop: 3,
+              lineHeight: 1.5,
+            }}
+          >
+            Your forces at this front will fight in any offensive an ally declares here, without a
+            separate order from you.
+          </span>
+        </span>
+      </label>
 
       {targets.length === 0 ? (
         <div style={{ font: `500 11px ${mono}`, color: MIL_COLOR.textFaint }}>

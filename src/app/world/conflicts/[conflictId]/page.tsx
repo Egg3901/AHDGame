@@ -46,6 +46,8 @@ import { verdictOf, openingLine, momentumOf } from "./recordCopy";
 import type { MomentumMark } from "./MomentumPanel";
 import type { PendingChip } from "./NextTickStrip";
 import { ConflictRecord, type ConflictRecordView } from "./ConflictRecord";
+import { conflictToFront } from "@/lib/military/createConflict";
+import { getTheaterState } from "@/lib/db/collections/theaterState";
 
 /** How many engagements the record lists, newest first. */
 const BATTLE_LIMIT = 50;
@@ -402,6 +404,9 @@ export default async function ConflictRecordPage({
             };
           }),
           ownSpectrum,
+          // The viewer's own standing order at this front. Read from theatre state, so
+          // it survives a change of Theater Commander the way the deployment does.
+          autoJoin: Boolean((await getTheaterState(db, viewerCountry)).autoJoin?.[doc._id]),
         }
       : null;
 
@@ -413,6 +418,8 @@ export default async function ConflictRecordPage({
     sideBCountries: [...doc.sideB.countries],
     units,
     reports,
+    // So this page's enemy band and the war room's odds read the same fleet the same way.
+    seaAccess: conflictToFront(doc).seaAccess,
   });
 
   // The whole conflict zone, not the anchor alone: the front line is placed as a
