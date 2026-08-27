@@ -30,10 +30,6 @@ const INTENT_METER = {
   warn: "var(--warning)",
   error: "var(--error)",
 } as const;
-// A posting's conflict is a dynamic id; its display name is threaded in with the
-// live-conflict list in sub-D. Here the raw id stands in.
-const theaterName = (id: string) => id;
-
 const THREAT_TONE = {
   Severe: "down",
   High: "warning",
