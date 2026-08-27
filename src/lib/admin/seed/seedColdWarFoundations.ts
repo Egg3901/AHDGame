@@ -7,7 +7,10 @@ import { emptyConflictState } from "@/lib/livingConflict/engine";
 import { normalizeCampaignState } from "@/lib/livingConflict/campaign";
 import { DEFAULT_ADOPTED, DEFAULT_POINTS, keyOf } from "@/lib/military/doctrineTree";
 import { tensionPressureBreakdown } from "@/lib/coldwar/tension";
-import { buildStandingPressureSnapshot } from "@/lib/coldwar/standingPressure";
+import {
+  buildStandingPressureSnapshot,
+  conflictWarPressureInput,
+} from "@/lib/coldwar/standingPressure";
 import { listActiveConflicts } from "@/lib/db/collections/conflicts";
 import {
   historicalAdoptedNodes,
@@ -177,11 +180,7 @@ export async function seedColdWarFoundations(
         _id: countryId,
         warheads,
       })),
-      conflicts: conflictWars.map((conflict) => ({
-        sideACountries: conflict.sideA?.countries ?? [],
-        sideBCountries: conflict.sideB?.countries ?? [],
-        intensity: conflict.intensity ?? 0,
-      })),
+      conflicts: conflictWars.map(conflictWarPressureInput),
     });
     const pressureFloor = tensionPressureBreakdown(pressureSnapshot.pressures).floor;
     await db.collection<TensionSeedDocument>("coldWarTension").updateOne(

@@ -27,6 +27,93 @@ const expected = {
   },
 } as const;
 
+const expectedEffects: Record<string, Record<string, unknown[][]>> = {
+  "worldEvents.panicBuying": {
+    ration: [
+      [
+        { type: "approvalDelta", delta: -3 },
+        { type: "sectorDemandModifier", sectorType: "retail", pct: -5, durationTurns: 6 },
+        { type: "wireOnly" },
+      ],
+    ],
+    calm: [
+      [
+        { type: "approvalDelta", delta: -3 },
+        { type: "sectorDemandModifier", sectorType: "retail", pct: 10, durationTurns: 4 },
+        { type: "sectorDemandModifier", sectorType: "agriculture", pct: 8, durationTurns: 4 },
+        { type: "wireOnly" },
+      ],
+      [
+        { type: "approvalDelta", delta: 1 },
+        { type: "sectorDemandModifier", sectorType: "retail", pct: 4, durationTurns: 4 },
+        { type: "wireOnly" },
+      ],
+    ],
+    release: [
+      [
+        { type: "approvalDelta", delta: 2 },
+        { type: "treasuryDelta", deltaAnchor: -10_000 },
+        { type: "sectorDemandModifier", sectorType: "retail", pct: 2, durationTurns: 4 },
+        { type: "wireOnly" },
+      ],
+    ],
+  },
+  "worldEvents.bankRun": {
+    guarantee: [
+      [
+        { type: "approvalDelta", delta: 3 },
+        { type: "treasuryDelta", deltaAnchor: -20_000 },
+        { type: "sectorDemandModifier", sectorType: "financial", pct: 3, durationTurns: 6 },
+        { type: "wireOnly" },
+      ],
+    ],
+    holiday: [
+      [
+        { type: "approvalDelta", delta: -4 },
+        { type: "sectorDemandModifier", sectorType: "financial", pct: -8, durationTurns: 6 },
+        { type: "wireOnly" },
+      ],
+    ],
+    standBy: [
+      [
+        { type: "approvalDelta", delta: -4 },
+        { type: "sectorDemandModifier", sectorType: "financial", pct: -10, durationTurns: 8 },
+        { type: "wireOnly" },
+      ],
+      [
+        { type: "sectorDemandModifier", sectorType: "financial", pct: -3, durationTurns: 4 },
+        { type: "wireOnly" },
+      ],
+    ],
+  },
+  "worldEvents.civilDefenseFever": {
+    fund: [
+      [
+        { type: "approvalDelta", delta: 2 },
+        { type: "treasuryDelta", deltaAnchor: -15_000 },
+        { type: "sectorDemandModifier", sectorType: "construction", pct: 8, durationTurns: 8 },
+        { type: "wireOnly" },
+      ],
+    ],
+    drills: [
+      [
+        { type: "approvalDelta", delta: 1 },
+        { type: "sectorDemandModifier", sectorType: "construction", pct: 3, durationTurns: 6 },
+        { type: "wireOnly" },
+      ],
+    ],
+    dismiss: [[{ type: "approvalDelta", delta: -2 }, { type: "wireOnly" }]],
+  },
+  "worldEvents.warScareProtests": {
+    address: [
+      [{ type: "approvalDelta", delta: -2 }, { type: "wireOnly" }],
+      [{ type: "approvalDelta", delta: 3 }, { type: "wireOnly" }],
+    ],
+    acknowledge: [[{ type: "approvalDelta", delta: -2 }, { type: "wireOnly" }]],
+    crackdown: [[{ type: "approvalDelta", delta: -6 }, { type: "wireOnly" }]],
+  },
+};
+
 describe("high-tension society event handlers", () => {
   it("registers every authored option and fallback outcome", () => {
     for (const [kind, contract] of Object.entries(expected)) {
@@ -50,6 +137,10 @@ describe("high-tension society event handlers", () => {
             tier.effects.some((effect) => effect.type === "wireOnly")
           )
         ).toBe(true);
+        expect(
+          option.outcomeTable.map((tier) => tier.effects),
+          `${kind}:${option.id}`
+        ).toEqual(expectedEffects[kind]?.[option.id]);
       }
     }
   });

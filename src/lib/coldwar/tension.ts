@@ -94,12 +94,16 @@ export function tensionPressureBreakdown(p: TensionPressures): TensionPressureBr
   const arsenal = Math.min(18, Math.sqrt(Math.max(0, p.totalWarheads)) * 1.2);
   // Any nuclear-opponent war contributes at least 48: baseline 12 plus 48
   // guarantees CRISIS before the arsenal and other pressures are counted.
-  // Conventional wars retain the intensity weight and the original 45 cap.
-  const weightedWars =
-    Math.max(0, p.nuclearWarIntensity) * 0.45 + Math.max(0, p.otherWarIntensity) * 0.12;
+  // Intensity remains additive above that minimum, so every active war still
+  // changes the floor. Conventional wars retain their lower weight and cap.
+  const nuclearIntensity = Math.max(0, p.nuclearWarIntensity) * 0.15;
+  const conventionalIntensity = Math.max(0, p.otherWarIntensity) * 0.12;
   const nuclearWarMinimum =
     p.nuclearWarCount > 0 ? NUCLEAR_WAR_MINIMUM_TENSION - TENSION_BASELINE : 0;
-  const wars = Math.min(nuclearWarMinimum > 0 ? 48 : 45, Math.max(weightedWars, nuclearWarMinimum));
+  const wars =
+    nuclearWarMinimum > 0
+      ? Math.min(70, nuclearWarMinimum + nuclearIntensity + conventionalIntensity)
+      : Math.min(45, conventionalIntensity);
   return {
     baseline: TENSION_BASELINE,
     escalation: clampTension(escalation),

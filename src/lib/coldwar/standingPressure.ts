@@ -3,6 +3,7 @@ import { getVietnamEscalation } from "@/lib/crises/vietnamEscalation";
 import { livingVietnamAsLegacyState } from "@/lib/livingConflict/vietnamCompat";
 import { listNuclearPrograms } from "@/lib/db/collections/nuclearPrograms";
 import { listActiveConflicts } from "@/lib/db/collections/conflicts";
+import type { ConflictDoc } from "@/lib/db/types/conflict";
 import {
   nuclearArmedCountryIds,
   warPressures,
@@ -23,6 +24,17 @@ export interface StandingPressureSnapshot {
   pressures: TensionPressures;
   warSummary: WarPressureSummary;
   totalWarheads: number;
+}
+
+/** Adapt the canonical conflict document to the pressure model in one place. */
+export function conflictWarPressureInput(
+  conflict: Pick<ConflictDoc, "sideA" | "sideB" | "intensity">
+): WarPressureInput {
+  return {
+    sideACountries: conflict.sideA?.countries ?? [],
+    sideBCountries: conflict.sideB?.countries ?? [],
+    intensity: conflict.intensity ?? 0,
+  };
 }
 
 /** Build the one strategic-pressure snapshot shared by the turn, UI, and seeds. */
@@ -63,10 +75,6 @@ export async function readStandingPressureSnapshot(
     escalationLevel: vietnam.level,
     activeCrises,
     programs,
-    conflicts: conflicts.map((conflict) => ({
-      sideACountries: conflict.sideA?.countries ?? [],
-      sideBCountries: conflict.sideB?.countries ?? [],
-      intensity: conflict.intensity ?? 0,
-    })),
+    conflicts: conflicts.map(conflictWarPressureInput),
   });
 }

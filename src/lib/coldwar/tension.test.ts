@@ -80,7 +80,7 @@ describe("tensionFloor", () => {
     });
     // Nuclear opposition guarantees a crisis-grade floor.
     expect(floor).toBeGreaterThanOrEqual(60);
-    expect(tensionBand(floor)).toBe("CRISIS");
+    expect(["CRISIS", "BRINK"]).toContain(tensionBand(floor));
   });
 
   it("weighs a proxy war far lighter than a nuclear war of equal intensity", () => {
@@ -111,6 +111,32 @@ describe("tensionFloor", () => {
     });
     expect(floor).toBeGreaterThanOrEqual(60);
     expect(tensionBand(floor)).toBe("CRISIS");
+  });
+
+  it("keeps every war intensity additive above the nuclear-war minimum", () => {
+    const base = {
+      escalationLevel: 0,
+      activeCrises: 0,
+      totalWarheads: 0,
+      nuclearWarCount: 1,
+    };
+    const low = tensionPressureBreakdown({
+      ...base,
+      nuclearWarIntensity: 1,
+      otherWarIntensity: 0,
+    }).wars;
+    const hotter = tensionPressureBreakdown({
+      ...base,
+      nuclearWarIntensity: 70,
+      otherWarIntensity: 0,
+    }).wars;
+    const withAnotherWar = tensionPressureBreakdown({
+      ...base,
+      nuclearWarIntensity: 70,
+      otherWarIntensity: 40,
+    }).wars;
+    expect(hotter).toBeGreaterThan(low);
+    expect(withAnotherWar).toBeGreaterThan(hotter);
   });
 });
 

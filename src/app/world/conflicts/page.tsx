@@ -9,7 +9,10 @@ import { VietnamEscalationPanel } from "./_coldwar/VietnamEscalationPanel";
 import { getVietnamEscalationSummary, VIETNAM_RUNGS } from "@/lib/crises/vietnamEscalation";
 import { TensionHeader, type NuclearPowerView } from "./_coldwar/TensionHeader";
 import { getColdWarTension, tensionBand, tensionPressureBreakdown } from "@/lib/coldwar/tension";
-import { buildStandingPressureSnapshot } from "@/lib/coldwar/standingPressure";
+import {
+  buildStandingPressureSnapshot,
+  conflictWarPressureInput,
+} from "@/lib/coldwar/standingPressure";
 import { getColdWarDials } from "@/lib/coldwar/dials";
 import { listNuclearPrograms } from "@/lib/db/collections/nuclearPrograms";
 import { NUCLEAR_NODES } from "@/lib/military/nuclearProgram";
@@ -60,11 +63,7 @@ export default async function ConflictsPage() {
     escalationLevel: vietnam.level,
     activeCrises: activeCrisisCount,
     programs,
-    conflicts: docs.map((doc) => ({
-      sideACountries: doc.sideA?.countries ?? [],
-      sideBCountries: doc.sideB?.countries ?? [],
-      intensity: doc.intensity ?? 0,
-    })),
+    conflicts: docs.map(conflictWarPressureInput),
   });
   const pressureBreakdown = tensionPressureBreakdown(pressureSnapshot.pressures);
 
