@@ -11,12 +11,25 @@ interface OfferView {
   conflictId: string;
   fromCountry: CountryId;
   toCountry: CountryId;
+  /** Which party the deal removes. Absent on rows written before offers ran both ways. */
+  leaver?: CountryId;
   term: PeaceTerm;
   justification: string | null;
   status: "pending" | "accepted" | "rejected" | "withdrawn" | "expired";
   offeredTurn: number;
   expiresTurn: number;
   incoming: boolean;
+}
+
+/** One country that can be offered terms, with the withdrawal gate's verdict. */
+export interface EnemyView {
+  country: CountryId;
+  /** Asking them to withdraw would empty their side and end the war. */
+  endsWar: boolean;
+  /** That withdrawal is refused at the current front. A white peace escapes it. */
+  withdrawalBlocked: boolean;
+  progressPct: number;
+  requiredPct: number;
 }
 
 export interface PeaceWar {
@@ -26,7 +39,7 @@ export interface PeaceWar {
   conflictNumber: number;
   name: string;
   /** Countries on the OTHER side, the only ones an offer can be made to. */
-  enemies: CountryId[];
+  enemies: EnemyView[];
 }
 
 /**
@@ -62,6 +75,27 @@ function offerTermText(term: PeaceTerm): string {
   return ` in return for freezing new defence procurement for ${term.turns} turns`;
 }
 
+/**
+ * What this offer is proposing, from the reader's side of it.
+ *
+ * An offer runs in both directions now, so describing every one as the sender
+ * offering to leave would state a withdrawal demand backwards: "East Germany offers
+ * to leave" when what East Germany actually said was "you leave".
+ *
+ * `leaver` is optional because a row written before offers ran both ways carries
+ * none; those all meant the sender, which is the fallback.
+ */
+function offerDirectionText(o: OfferView): string {
+  const senderLeaves = (o.leaver ?? o.fromCountry) === o.fromCountry;
+  if (senderLeaves) {
+    return o.incoming ? " offers to leave the war" : ", our offer to leave the war";
+  }
+  const leaverName = COUNTRY_CONFIGS[o.leaver ?? o.toCountry]?.name ?? o.leaver;
+  return o.incoming
+    ? ` asks us to leave the war, staying in it themselves`
+    : `, our request that ${leaverName} leave the war`;
+}
+
 export function PeacePanel({
   countryCode,
   countryId,
@@ -79,6 +113,8 @@ export function PeacePanel({
   const [enemy, setEnemy] = useState<string>("");
   const [payer, setPayer] = useState<CountryId>(countryId);
   const [amount, setAmount] = useState<string>("0");
+  /** Who this deal removes: us, or the country we are addressing. */
+  const [leaver, setLeaver] = useState<"us" | "them">("us");
   const [termKind, setTermKind] = useState<
     "white_peace" | "indemnity" | "regime_change" | "demilitarisation"
   >("indemnity");
@@ -90,6 +126,14 @@ export function PeacePanel({
   const [note, setNote] = useState<string | null>(null);
 
   const war = wars.find((w) => w.conflictId === warId);
+  const selectedEnemy = war?.enemies.find((e) => e.country === enemy) ?? null;
+  /**
+   * The gate bites only when we are asking THEM to leave and the term is not a white
+   * peace. A white peace records no victor, so there is nothing to buy and nothing to
+   * gate: the form must not block the one route that is always open.
+   */
+  const withdrawalBarred =
+    leaver === "them" && termKind !== "white_peace" && selectedEnemy?.withdrawalBlocked === true;
 
   /**
    * Changing who we are negotiating with resets who pays.
@@ -161,6 +205,7 @@ export function PeacePanel({
         conflictId: warId,
         toCountry: enemy,
         term: buildTerm(),
+        leaver,
         ...(justification.trim() ? { justification: justification.trim() } : {}),
       },
       "Offer sent."
@@ -250,7 +295,7 @@ export function PeacePanel({
             <div key={o.id} className="rounded-lg border border-card-border bg-card-elevated p-3">
               <p className="text-[12px]">
                 <strong>{COUNTRY_CONFIGS[o.fromCountry]?.name ?? o.fromCountry}</strong>
-                {o.incoming ? " offers to leave the war" : " — your offer to leave the war"}
+                {offerDirectionText(o)}
                 {offerTermText(o.term)}.
               </p>
               {o.justification && (
@@ -308,11 +353,24 @@ export function PeacePanel({
               className="min-w-[150px] flex-1 rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px]"
             >
               <option value="">Select a country…</option>
-              {(war?.enemies ?? []).map((c) => (
-                <option key={c} value={c}>
-                  {COUNTRY_CONFIGS[c]?.name ?? c}
+              {(war?.enemies ?? []).map((e) => (
+                <option key={e.country} value={e.country}>
+                  {COUNTRY_CONFIGS[e.country]?.name ?? e.country}
+                  {/* Named in the option itself, so the constraint is visible while
+                      choosing rather than only after choosing. The option stays
+                      selectable: a white peace with this country is always allowed. */}
+                  {e.withdrawalBlocked ? " (cannot be made to leave yet)" : ""}
                 </option>
               ))}
+            </select>
+            <select
+              aria-label="Who leaves"
+              value={leaver}
+              onChange={(e) => setLeaver(e.target.value as "us" | "them")}
+              className="min-w-[150px] flex-1 rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px]"
+            >
+              <option value="us">We leave the war</option>
+              <option value="them">They leave the war</option>
             </select>
             <select
               aria-label="Term offered"
@@ -370,6 +428,26 @@ export function PeacePanel({
             </label>
           )}
 
+          {leaver === "them" && !withdrawalBarred && (
+            <p className="text-[11px] text-muted">
+              They withdraw and we keep fighting. A withdrawal that would end the war outright needs
+              the front well in our favour first, unless it is a white peace.
+            </p>
+          )}
+
+          {withdrawalBarred && selectedEnemy && (
+            <p
+              role="alert"
+              className="rounded-lg border border-warning/40 bg-warning/10 p-2 text-[11px] text-warning"
+            >
+              {COUNTRY_CONFIGS[selectedEnemy.country]?.name ?? selectedEnemy.country} leaving would
+              end this war outright, so it cannot simply be bought. The front is{" "}
+              <strong>{selectedEnemy.progressPct}%</strong> of the way into their ground and must
+              reach <strong>{selectedEnemy.requiredPct}%</strong> before you can demand it. A white
+              peace is allowed at any point, and ends the war with no winner recorded.
+            </p>
+          )}
+
           {termKind === "white_peace" && (
             <p className="text-[11px] text-muted">
               The war ends where it began. Neither side is recorded as having won, nothing changes
@@ -404,7 +482,7 @@ export function PeacePanel({
           <button
             type="button"
             onClick={offer}
-            disabled={busy || !enemy || !warId}
+            disabled={busy || !enemy || !warId || withdrawalBarred}
             className="w-full rounded-lg bg-[var(--gov)] py-2.5 text-[12px] font-bold text-[#1a1200] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? "Sending…" : "Send peace offer"}

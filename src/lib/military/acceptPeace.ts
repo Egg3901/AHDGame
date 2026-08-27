@@ -24,10 +24,14 @@ export interface AcceptPeaceResult {
 /**
  * Apply an accepted peace deal.
  *
- * The LEAVER is the country the deal takes out of the war. An offer is always a
- * proposal to end the offerer's own participation, so the leaver is `fromCountry` —
- * `indemnity.payer` is a separate question, because either party may be the one
- * paying.
+ * The LEAVER is the country the deal takes out of the war, and it is now recorded on
+ * the offer rather than assumed: an offer runs in both directions, so the sender may
+ * be proposing to leave themselves OR asking the recipient to withdraw while they
+ * stay in. The term's `payer` is a third, separate question, because either party
+ * may be the one paying whichever way the deal runs.
+ *
+ * The RECIPIENT accepts either way. No government is removed from a war without its
+ * own consent.
  *
  * Spec: docs/superpowers/specs/2026-08-04-suing-for-peace-design.md
  */
@@ -57,8 +61,10 @@ export async function acceptPeace(
   currentTurn: number,
   acceptedBy: string
 ): Promise<AcceptPeaceResult> {
-  const leaver = offer.fromCountry;
-  const other = offer.toCountry;
+  const leaver = offer.leaver;
+  // The party that stays. Read off the leaver rather than hardcoded, because either
+  // of the two may be the one leaving.
+  const other = leaver === offer.fromCountry ? offer.toCountry : offer.fromCountry;
 
   // Claiming the offer is the FIRST thing that happens, and it is conditional on the
   // offer still being pending. That single write is what stops a double-accept: two
@@ -89,6 +95,10 @@ export async function acceptPeace(
         settlement: {
           term: offer.term,
           path: "negotiated" as const,
+          // The term is always what was asked OF THE RECIPIENT, whichever party the
+          // deal removes: "I leave and you demilitarise" and "you leave and you
+          // demilitarise" both land on the same country. That keeps the stamp, the
+          // wire and `applyPeaceTerm` reading the term the same way.
           imposedBy: offer.fromCountry,
           target: offer.toCountry,
           turn: currentTurn,

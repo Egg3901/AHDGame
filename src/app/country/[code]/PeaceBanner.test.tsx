@@ -5,16 +5,16 @@ import { PeaceBanner } from "./PeaceBanner";
 import type { CountryPeaceNotice } from "@/lib/military/countryPeaceNotice";
 
 function show(notice: CountryPeaceNotice) {
-  return render(<PeaceBanner notice={notice} countryName="the United States" countryCode="US" />);
+  return render(<PeaceBanner notice={notice} countryName="the United States" />);
 }
 
 afterEach(() => cleanup());
 
 const ALL: CountryPeaceNotice[] = [
   { kind: "window_open", warName: "The War for Germany", conflictNumber: 14, turnsLeft: 18 },
-  { kind: "offer_incoming", count: 1 },
-  { kind: "offer_incoming", count: 3 },
-  { kind: "can_offer" },
+  { kind: "offer_incoming", count: 1, href: "/country/us/executive?tab=foreign" },
+  { kind: "offer_incoming", count: 3, href: "/country/us/executive?tab=foreign" },
+  { kind: "can_offer", href: "/country/us/executive?tab=foreign" },
 ];
 
 describe("PeaceBanner: a won war", () => {
@@ -57,27 +57,27 @@ describe("PeaceBanner: a won war", () => {
 
 describe("PeaceBanner: an incoming offer", () => {
   it("asks the recipient to review it", () => {
-    show({ kind: "offer_incoming", count: 1 });
+    show({ kind: "offer_incoming", count: 1, href: "/country/us/executive?tab=foreign" });
     expect(screen.getByText(/Peace terms have been offered to the United States/)).toBeTruthy();
     expect(screen.getByRole("link", { name: /Review the terms/ })).toBeTruthy();
   });
 
   it("counts several offers rather than naming one", () => {
-    show({ kind: "offer_incoming", count: 3 });
+    show({ kind: "offer_incoming", count: 3, href: "/country/us/executive?tab=foreign" });
     expect(screen.getByText(/3 peace offers are waiting/)).toBeTruthy();
   });
 
   it("links to the executive surface that answers offers", () => {
-    show({ kind: "offer_incoming", count: 1 });
+    show({ kind: "offer_incoming", count: 1, href: "/country/us/executive?tab=foreign" });
     expect(screen.getByRole("link", { name: /Review the terms/ }).getAttribute("href")).toBe(
-      "/country/us/executive"
+      "/country/us/executive?tab=foreign"
     );
   });
 });
 
 describe("PeaceBanner: an ordinary war", () => {
   it("offers to open talks", () => {
-    show({ kind: "can_offer" });
+    show({ kind: "can_offer", href: "/country/us/executive?tab=foreign" });
     expect(screen.getByText(/can open peace talks in this war/)).toBeTruthy();
     expect(screen.getByRole("link", { name: /Offer terms/ })).toBeTruthy();
   });

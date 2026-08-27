@@ -79,19 +79,26 @@ function makeConflict(): ConflictDoc {
   } as unknown as ConflictDoc;
 }
 
-const offer = (o: Partial<PeaceOfferDoc> = {}): PeaceOfferDoc =>
-  ({
+const offer = (o: Partial<PeaceOfferDoc> = {}): PeaceOfferDoc => {
+  const fromCountry = o.fromCountry ?? "UK";
+  return {
     _id: "o1",
     conflictId: "t1",
-    fromCountry: "UK",
+    fromCountry,
     toCountry: "CN",
+    // Defaults to the original direction, the sender leaving, so every case written
+    // before offers ran both ways still means what it meant. Derived from
+    // `fromCountry` rather than pinned, so a case that overrides the sender does not
+    // silently keep the previous sender as the one who leaves.
+    leaver: o.leaver ?? fromCountry,
     term: { kind: "indemnity" as const, payer: "UK", amount: 100 },
     status: "pending",
     offeredTurn: 1,
     expiresTurn: 99,
     offeredBy: "c0",
     ...o,
-  }) as unknown as PeaceOfferDoc;
+  } as unknown as PeaceOfferDoc;
+};
 
 /** The $inc applied to a country treasuryBalance, or undefined. */
 function budgetInc(country: string): number | undefined {
@@ -366,5 +373,38 @@ describe("the settlement stamp", () => {
     const stamp = conflictUpdateSpy.mock.calls.find((c) => c[1]?.$set?.settlement);
     expect(stamp).toBeTruthy();
     expect(JSON.stringify(conflictUpdateSpy.mock.calls)).not.toContain("postedWireEvents");
+  });
+});
+
+describe("a withdrawal asked of the recipient", () => {
+  it("removes the RECIPIENT and leaves the sender in the war", async () => {
+    // "You get out": the sender stays and fights on. This is how a coalition is
+    // peeled apart by negotiation rather than by battle.
+    await acceptPeace(db, offer({ leaver: "CN" }), makeConflict(), 40, "c1");
+    const pull = conflictUpdateSpy.mock.calls.find((c) => c[1]?.$pull);
+    expect(pull?.[1]).toEqual({ $pull: { "sideB.countries": "CN" } });
+  });
+
+  it("stands the RECIPIENT down, not the sender", async () => {
+    await acceptPeace(db, offer({ leaver: "CN" }), makeConflict(), 40, "c1");
+    expect(standDownSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "CN");
+    expect(standDownSpy).not.toHaveBeenCalledWith(expect.anything(), expect.anything(), "UK");
+  });
+
+  it("truces the same pair whichever way the deal runs", async () => {
+    await acceptPeace(db, offer({ leaver: "CN" }), makeConflict(), 40, "c1");
+    expect(recordTruceSpy).toHaveBeenCalledWith(expect.anything(), "CN", "UK", 40);
+  });
+
+  it("releases the LEAVER's treaty guests, not the sender's", async () => {
+    // The guarantee follows the country that leaves: an ally pulled in to defend the
+    // departing country goes with it.
+    const c = makeConflict();
+    c.treatyEntries = [
+      { countryId: "RU", organizationId: "WARSAW_PACT", defending: "CN", joinedTurn: 1 },
+    ] as never;
+    c.sideB.countries = ["CN", "RU"] as never;
+    await acceptPeace(db, offer({ leaver: "CN" }), c, 40, "c1");
+    expect(standDownSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "RU");
   });
 });
