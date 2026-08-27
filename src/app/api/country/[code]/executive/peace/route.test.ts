@@ -252,7 +252,9 @@ describe("GET offers", () => {
     const body = await (await GET(getReq(), params)).json();
     expect(body.wars).toHaveLength(1);
     expect(body.wars[0].conflictId).toBe("war1");
-    expect(body.wars[0].enemies).toEqual(["CN"]);
+    // Each enemy now carries the withdrawal gate's verdict alongside its id, so the
+    // form can say what may be asked of them before an offer is composed.
+    expect(body.wars[0].enemies.map((e: { country: string }) => e.country)).toEqual(["CN"]);
   });
 
   it("does NOT offer an ally as a country to negotiate with", async () => {
@@ -386,5 +388,32 @@ describe("which party the deal removes", () => {
     const { POST } = await import("./route");
     const res = await POST(req({ ...good, leaver: "somebody-else" }), params);
     expect(res.status).toBe(400);
+  });
+});
+
+describe("GET tells the form what it may ask for", () => {
+  it("marks an enemy whose departure would end the war", async () => {
+    // CN is alone on its side in the fixture, so asking it to leave empties the side.
+    // Computed by the same `withdrawalGate` the POST runs, so the form and the route
+    // cannot disagree about what is allowed.
+    db.collectionMocks.conflicts.find.mockReturnValue({
+      toArray: async () => [{ ...conflict, control: 50, controlStart: 50 }],
+    });
+    const { GET } = await import("./route");
+    const body = await (await GET(getReq(), params)).json();
+    const cn = body.wars[0].enemies.find((e: { country: string }) => e.country === "CN");
+    expect(cn).toMatchObject({ endsWar: true, withdrawalBlocked: true, requiredPct: 75 });
+  });
+
+  it("clears the block once the front is deep enough", async () => {
+    // Side A (US, UK) wins as control falls toward 0.
+    db.collectionMocks.conflicts.find.mockReturnValue({
+      toArray: async () => [{ ...conflict, control: 10, controlStart: 100 }],
+    });
+    const { GET } = await import("./route");
+    const body = await (await GET(getReq(), params)).json();
+    const cn = body.wars[0].enemies.find((e: { country: string }) => e.country === "CN");
+    expect(cn).toMatchObject({ endsWar: true, withdrawalBlocked: false });
+    expect(cn.progressPct).toBeGreaterThanOrEqual(75);
   });
 });

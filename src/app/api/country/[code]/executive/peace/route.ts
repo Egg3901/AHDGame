@@ -18,7 +18,12 @@ import {
   listOffersForCountry,
   reapExpiredOffers,
 } from "@/lib/db/collections/peaceOffers";
-import { validatePeaceOffer, isOfferLive, maxIndemnityForGdp } from "@/lib/military/peaceOffer";
+import {
+  validatePeaceOffer,
+  isOfferLive,
+  maxIndemnityForGdp,
+  withdrawalGate,
+} from "@/lib/military/peaceOffer";
 import type { PeaceTerm } from "@/lib/military/peaceTerm";
 import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
 import { getCountryState } from "@/lib/countryState";
@@ -129,9 +134,25 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
           name: w.name,
           // Only countries that can actually be offered terms: the opposing roster,
           // which is empty for a generated force and correctly offers nobody.
-          enemies: (onA ? w.sideB.countries : w.sideA.countries).filter((e) =>
-            opposedBelligerents(w, countryId, e)
-          ),
+          //
+          // Each carries the withdrawal gate's verdict, so the form can say why a
+          // country cannot simply be asked to leave BEFORE a player composes an offer
+          // the route would refuse. Computed by the same `withdrawalGate` the POST
+          // runs, so the two cannot drift; the server stays the authority.
+          enemies: (onA ? w.sideB.countries : w.sideA.countries)
+            .filter((e) => opposedBelligerents(w, countryId, e))
+            .map((e) => {
+              const gate = withdrawalGate(w, countryId, e);
+              return {
+                country: e,
+                endsWar: gate.endsWar,
+                withdrawalBlocked: gate.blocked,
+                // Whole percents, for copy. The form shows the reader how far off
+                // they are rather than only that they are.
+                progressPct: Math.round(gate.progress * 100),
+                requiredPct: Math.round(gate.required * 100),
+              };
+            }),
         };
       }),
       offers: offers.map((o) => ({

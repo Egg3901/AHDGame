@@ -94,6 +94,57 @@ export function sideWouldEmpty(
   return null;
 }
 
+export interface WithdrawalGate {
+  /** True when this departure would empty their side, handing the asker the war. */
+  endsWar: boolean;
+  /** Front progress in the ASKER's favour, 0..1. */
+  progress: number;
+  /** Progress a war-ending withdrawal requires. */
+  required: number;
+  /**
+   * True when a withdrawal this deep would be refused. A white peace is exempt and
+   * is NOT considered here: the caller decides whether the term escapes the gate,
+   * because the offer form needs to say "blocked, unless you offer a white peace".
+   */
+  blocked: boolean;
+}
+
+/**
+ * Whether asking `leaver` to withdraw would end the war, and whether the asker has
+ * the ground to demand it.
+ *
+ * SHARED BY THE VALIDATOR AND THE OFFER FORM, deliberately. The form has to grey the
+ * option out and say why before a player composes a whole offer that the route would
+ * refuse, and a rule with two implementations is a rule that drifts. The server stays
+ * the authority: this is the same function the POST runs.
+ */
+export function withdrawalGate(
+  conflict: Pick<ConflictDoc, "sideA" | "sideB" | "treatyEntries" | "control" | "controlStart">,
+  asker: CountryId,
+  leaver: CountryId
+): WithdrawalGate {
+  // Treaty guests go out with the country they came to defend, so a departure can
+  // empty a side even when the roster looks like it has people left on it.
+  const guests = (conflict.treatyEntries ?? [])
+    .filter((e) => e.defending === leaver)
+    .map((e) => e.countryId as CountryId);
+  const endsWar = sideWouldEmpty(conflict, [leaver, ...guests]) !== null;
+
+  const side: Side = (conflict.sideA.countries as string[]).includes(asker) ? "A" : "B";
+  const progress = progressForSide(
+    side,
+    conflict.control ?? 50,
+    conflict.controlStart ?? conflict.control ?? 50
+  );
+
+  return {
+    endsWar,
+    progress,
+    required: PRINCIPAL_BUYOUT_PROGRESS,
+    blocked: endsWar && progress < PRINCIPAL_BUYOUT_PROGRESS,
+  };
+}
+
 /**
  * Every rule an offer must clear, with a reason the offerer can act on.
  *
@@ -181,26 +232,13 @@ export function validatePeaceOffer(
   // A WHITE PEACE IS ALWAYS EXEMPT. It records no victor and moves nothing, so
   // nothing is bought: a war fought over a question ends with the question still
   // open rather than answered in the buyer's favour.
-  if (leaver === to && term.kind !== "white_peace") {
-    const guests = (conflict.treatyEntries ?? [])
-      .filter((e) => e.defending === leaver)
-      .map((e) => e.countryId as CountryId);
-    if (sideWouldEmpty(conflict, [leaver, ...guests])) {
-      const side = (conflict.sideA.countries as string[]).includes(from) ? "A" : "B";
-      const progress = progressForSide(
-        side,
-        conflict.control ?? 50,
-        conflict.controlStart ?? conflict.control ?? 50
-      );
-      if (progress < PRINCIPAL_BUYOUT_PROGRESS) {
-        return {
-          ok: false,
-          error:
-            "That withdrawal would end the war outright, and your armies are not far " +
-            "enough forward to demand it. Push the front further, or offer a white peace.",
-        };
-      }
-    }
+  if (leaver === to && term.kind !== "white_peace" && withdrawalGate(conflict, from, to).blocked) {
+    return {
+      ok: false,
+      error:
+        "That withdrawal would end the war outright, and your armies are not far " +
+        "enough forward to demand it. Push the front further, or offer a white peace.",
+    };
   }
 
   // The term's own rules live in `validatePeaceTerm`, shared with the impose route

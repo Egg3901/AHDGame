@@ -7,7 +7,9 @@ const war = {
   conflictId: "war1",
   conflictNumber: 3,
   name: "UK–CN War",
-  enemies: ["CN"],
+  enemies: [
+    { country: "CN", endsWar: false, withdrawalBlocked: false, progressPct: 10, requiredPct: 75 },
+  ],
 };
 
 const incoming = {
@@ -144,7 +146,13 @@ describe("PeacePanel", () => {
 });
 
 describe("changing the counterparty", () => {
-  const twoEnemies = { ...war, enemies: ["CN", "RU"] };
+  const twoEnemies = {
+    ...war,
+    enemies: [
+      { country: "CN", endsWar: false, withdrawalBlocked: false, progressPct: 10, requiredPct: 75 },
+      { country: "RU", endsWar: false, withdrawalBlocked: false, progressPct: 10, requiredPct: 75 },
+    ],
+  };
 
   it("resets who pays, so a stale country cannot be billed", async () => {
     // "They pay" names the CURRENT enemy. Leaving payer alone would keep the
@@ -317,5 +325,86 @@ describe("how an offer on the table is described", () => {
     vi.stubGlobal("fetch", mockGet({ currentTurn: 40, wars: [war], offers: [legacy] }));
     render(<PeacePanel {...props} />);
     expect(await screen.findByText(/offers to leave the war/)).toBeTruthy();
+  });
+});
+
+describe("the withdrawal gate in the offer form", () => {
+  /** A war where asking CN to leave would end it, and we have taken no ground. */
+  const gatedWar = {
+    ...war,
+    enemies: [
+      { country: "CN", endsWar: true, withdrawalBlocked: true, progressPct: 42, requiredPct: 75 },
+    ],
+  };
+
+  async function ready(w = gatedWar) {
+    const fetchMock = mockGet({ currentTurn: 40, wars: [w], offers: [] });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<PeacePanel {...props} />);
+    fireEvent.change(await screen.findByLabelText(/country to negotiate with/i), {
+      target: { value: "CN" },
+    });
+    return fetchMock;
+  }
+
+  it("marks the country in the dropdown before it is even chosen", async () => {
+    await ready();
+    expect(screen.getByRole("option", { name: /cannot be made to leave yet/i })).toBeTruthy();
+  });
+
+  it("says how far short the front is when asking them to leave", async () => {
+    await ready();
+    fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "them" } });
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toMatch(/would end this war outright/i);
+    expect(alert.textContent).toMatch(/42%/);
+    expect(alert.textContent).toMatch(/75%/);
+  });
+
+  it("blocks sending it", async () => {
+    await ready();
+    fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "them" } });
+    expect(
+      (screen.getByRole("button", { name: /send peace offer/i }) as HTMLButtonElement).disabled
+    ).toBe(true);
+  });
+
+  it("lifts the block for a white peace, which buys nothing", async () => {
+    await ready();
+    fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "them" } });
+    fireEvent.change(screen.getByLabelText(/term offered/i), {
+      target: { value: "white_peace" },
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(
+      (screen.getByRole("button", { name: /send peace offer/i }) as HTMLButtonElement).disabled
+    ).toBe(false);
+  });
+
+  it("does not warn when WE are the ones leaving", async () => {
+    // Walking away is always ours to propose, whatever the ground looks like.
+    await ready();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(
+      (screen.getByRole("button", { name: /send peace offer/i }) as HTMLButtonElement).disabled
+    ).toBe(false);
+  });
+
+  it("does not warn about a country whose departure leaves their side standing", async () => {
+    const peelable = {
+      ...war,
+      enemies: [
+        {
+          country: "CN",
+          endsWar: false,
+          withdrawalBlocked: false,
+          progressPct: 5,
+          requiredPct: 75,
+        },
+      ],
+    };
+    await ready(peelable);
+    fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "them" } });
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });
