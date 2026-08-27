@@ -11,6 +11,7 @@ import {
 } from "@/lib/elections/cycleAnchorContext";
 import { electionToLarpYear } from "@/lib/utils/formatters";
 import { generateLandeslistenForCycle } from "@/lib/elections/germanyLandesliste";
+import { snapAnchorEndTime } from "@/lib/elections/snapShift";
 
 /**
  * Convert a prior endTime to a LARP turn number, anchored on `nowRef`'s
@@ -174,10 +175,10 @@ export async function spawnCommonsElection(
   const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
   // See foundingPhaseActive: the founding cycle re-spawn loop lives here.
   if (foundingPhaseActive(ctx)) return;
-  const priorEndTurn =
-    fromElection.electionType === "snap_commons" && fromElection.endTime
-      ? endTimeToLarpTurn(fromElection.endTime, now, currentTurn)
-      : null;
+  // See `snapAnchorEndTime`: a regular prior race and an IMPOSED snap both
+  // yield null, so neither drags the LARP calendar.
+  const snapAnchor = snapAnchorEndTime(fromElection, "snap_commons");
+  const priorEndTurn = snapAnchor ? endTimeToLarpTurn(snapAnchor, now, currentTurn) : null;
 
   const spawn = pickNextCanonicalCycle({
     electionType: "commons",

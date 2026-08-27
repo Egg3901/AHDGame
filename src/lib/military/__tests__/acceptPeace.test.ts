@@ -85,7 +85,7 @@ const offer = (o: Partial<PeaceOfferDoc> = {}): PeaceOfferDoc =>
     conflictId: "t1",
     fromCountry: "UK",
     toCountry: "CN",
-    indemnity: { payer: "UK", amount: 100 },
+    term: { kind: "indemnity" as const, payer: "UK", amount: 100 },
     status: "pending",
     offeredTurn: 1,
     expiresTurn: 99,
@@ -138,7 +138,7 @@ describe("the indemnity", () => {
     // Either party may pay: a winning country may pay to disengage.
     await acceptPeace(
       db,
-      offer({ indemnity: { payer: "CN", amount: 50 } }),
+      offer({ term: { kind: "indemnity" as const, payer: "CN", amount: 50 } }),
       makeConflict(),
       40,
       "c1"
@@ -160,7 +160,7 @@ describe("the indemnity", () => {
     // be able to buy peace.
     const r = await acceptPeace(
       db,
-      offer({ indemnity: { payer: "UK", amount: 1e12 } }),
+      offer({ term: { kind: "indemnity" as const, payer: "UK", amount: 1e12 } }),
       makeConflict(),
       40,
       "c1"
@@ -172,7 +172,7 @@ describe("the indemnity", () => {
   it("moves no money for a white peace", async () => {
     await acceptPeace(
       db,
-      offer({ indemnity: { payer: "UK", amount: 0 } }),
+      offer({ term: { kind: "indemnity" as const, payer: "UK", amount: 0 } }),
       makeConflict(),
       40,
       "c1"
@@ -191,8 +191,10 @@ describe("leaving the war", () => {
 
   it("pulls the leaver off the roster of the side it fought on", async () => {
     await acceptPeace(db, offer(), makeConflict(), 40, "c1");
-    const [, update] = conflictUpdateSpy.mock.calls[0];
-    expect(update).toEqual({ $pull: { "sideA.countries": "UK" } });
+    // Found rather than indexed: the settlement stamp is also a conflicts write, and
+    // asserting on call order would break the moment another one is added.
+    const pull = conflictUpdateSpy.mock.calls.find((c) => c[1]?.$pull);
+    expect(pull?.[1]).toEqual({ $pull: { "sideA.countries": "UK" } });
   });
 
   it("records the truce between the two parties", async () => {
@@ -226,7 +228,11 @@ describe("when the leaver was the last of its side", () => {
     // CN is alone on side B; it leaving hands the war to side A.
     const r = await acceptPeace(
       db,
-      offer({ fromCountry: "CN", toCountry: "UK", indemnity: { payer: "CN", amount: 0 } }),
+      offer({
+        fromCountry: "CN",
+        toCountry: "UK",
+        term: { kind: "indemnity" as const, payer: "CN", amount: 0 },
+      }),
       makeConflict(),
       40,
       "c1"
@@ -289,7 +295,11 @@ describe("treaty release", () => {
   }
 
   const ddLeaves = () =>
-    offer({ fromCountry: "DD", toCountry: "US", indemnity: { payer: "DD", amount: 0 } });
+    offer({
+      fromCountry: "DD",
+      toCountry: "US",
+      term: { kind: "indemnity" as const, payer: "DD", amount: 0 },
+    });
 
   it("takes the ally out when the country it defended makes peace", async () => {
     const conflict = pactConflict();
@@ -334,5 +344,27 @@ describe("treaty release", () => {
     await acceptPeace(db, ddLeaves(), conflict, 100, "c1");
     expect(recordTruceSpy).toHaveBeenCalledWith(expect.anything(), "RU", "US", 100);
     expect(recordTruceSpy).toHaveBeenCalledWith(expect.anything(), "RU", "UK", 100);
+  });
+});
+
+describe("the settlement stamp", () => {
+  it("records the term, so the war wire can report what was taken", async () => {
+    await acceptPeace(db, offer(), makeConflict(), 40, "c1");
+    const stamp = conflictUpdateSpy.mock.calls.find((c) => c[1]?.$set?.settlement);
+    expect(stamp?.[1].$set.settlement).toMatchObject({
+      path: "negotiated",
+      imposedBy: "UK",
+      target: "CN",
+      turn: 40,
+    });
+  });
+
+  it("posts nothing itself, because this runs on a request path", async () => {
+    // A news post made from a request would fire again on a retry. The turn sweep
+    // reads the stamp instead.
+    await acceptPeace(db, offer(), makeConflict(), 40, "c1");
+    const stamp = conflictUpdateSpy.mock.calls.find((c) => c[1]?.$set?.settlement);
+    expect(stamp).toBeTruthy();
+    expect(JSON.stringify(conflictUpdateSpy.mock.calls)).not.toContain("postedWireEvents");
   });
 });

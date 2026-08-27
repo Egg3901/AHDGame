@@ -237,7 +237,10 @@ export async function findQualifyingWar(db: Db): Promise<QualifyingWarMatch | nu
       // Mirrors `qualifyWar`'s own gate; that one is authoritative, this one just
       // keeps proxy wars out of the result set.
       type: "interstate",
-      status: { $ne: "resolved" },
+      // Neither resolved NOR awaiting terms. A war whose front has already run to a
+      // pole has been decided, and freezing the question onto it would attach the
+      // crisis to a fight it had no part in and that settles on the next tick.
+      status: { $nin: ["resolved", "terms_pending"] },
       $or: [{ "sideA.countries": { $in: GERMANIES } }, { "sideB.countries": { $in: GERMANIES } }],
     } as Filter<ConflictDoc>)
     .toArray();
@@ -378,6 +381,69 @@ export interface DetachResult {
 }
 
 const NOT_DETACHED: DetachResult = { detached: false };
+
+/**
+ * Put a frozen crisis back on the board when its war ended in a WHITE PEACE.
+ *
+ * A frozen question is waiting for a war to answer it. A white peace answers
+ * nothing: neither government prevailed, so there is no result to read the
+ * settlement off, and the question goes back to the diplomatic track it left,
+ * exactly where it stopped. The index, the institutions and the ladder are all
+ * still on the document; only the freeze is lifted.
+ *
+ * WITHOUT THIS THE CRISIS WOULD FREEZE FOR EVER. `settleFrozenCrisisFromConflict`
+ * settles on a winner of "A" or "B" and correctly refuses a stalemate, so a
+ * white-peaced war would leave the question frozen against a finished war with
+ * nothing left to decide it.
+ *
+ * Handles BOTH kinds of frozen crisis, unlike `detachCrisisFromWar`:
+ *
+ *   - One that ATTACHED itself to somebody else's war gets that war's name and host
+ *     roster handed back, through the same `endWarAttachment` the resolution path
+ *     uses.
+ *   - One fighting its OWN declared war has nothing to give back, and
+ *     `endWarAttachment` no-ops for it. The question still resumes: a war declared
+ *     to settle Germany that settled nothing leaves Germany unsettled.
+ *
+ * Restore first, release second, the same way round as `detachCrisisFromWar` and for
+ * the same reason: a crash in between leaves the crisis frozen with its stamp
+ * intact, and the next tick simply tries again, because the restore is idempotent.
+ */
+export async function resumeCrisisAfterWhitePeace(
+  db: Db,
+  crisis: SettlementCrisisDoc
+): Promise<DetachResult> {
+  if (crisis.status !== "frozen" || !crisis.conflictId) return NOT_DETACHED;
+
+  const war = await getConflictsCollection(db).findOne({ _id: crisis.conflictId });
+  // A vanished war is an admin problem, not a resumption. A war still being fought
+  // belongs to `detachCrisisFromWar`, and one with a real winner to the settle sweep.
+  if (!war || war.status !== "resolved") return NOT_DETACHED;
+  if (war.outcome?.winner !== "stalemate") return NOT_DETACHED;
+
+  await endWarAttachment(db, crisis);
+
+  const crises = await getSettlementCrisesCollection(db);
+  const released = await crises.updateOne(
+    { _id: crisis._id, status: "frozen" },
+    {
+      $set: {
+        status: "open",
+        conflictId: null,
+        conflictSides: null,
+        conflictAttachment: null,
+        updatedAt: new Date(),
+      },
+      // The stamp is what makes a one-off dispatch fire once. A question that goes
+      // back on the board can go to war a second time, and that one has to be
+      // announced too.
+      $pull: { postedWireEvents: "war" },
+    }
+  );
+  if (released.matchedCount !== 1) return NOT_DETACHED;
+
+  return { detached: true };
+}
 
 /**
  * Give a crisis back to the board when the war it attached to stops being about

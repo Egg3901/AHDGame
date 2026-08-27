@@ -30,6 +30,7 @@ import { sweepExpiredCountryModifiers } from "@/lib/events/substrate/countryModi
 import { processWorldEventsTurn } from "@/lib/events/worldEvents/driver";
 import { processCampaignSpendReset } from "@/lib/turn/elections/campaignSpendReset";
 import { resolveGeneralElections } from "@/lib/turn/electionResolution";
+import { processPostConversionElections } from "@/lib/turn/postConversionElections";
 import {
   resolvePrimariesIfNeeded,
   recordPrimarySnapshots,
@@ -1098,6 +1099,18 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         await runtime.runPhase("parliamentaryVacancyWatcher", () =>
           runParliamentaryVacancyWatcher(gameNow, newTurn)
         );
+        // Fire the election a system conversion promised. Sits beside the vacancy
+        // watcher because it is the same kind of operation, a snap triggered from
+        // a stamp rather than from a player, and it needs the same prerequisites:
+        // elections already resolved and any government formed this turn already
+        // seated. Ahead of `ensurePerpetualElections`, which is correct because a
+        // live snap suppresses the regular ensurer for that chamber.
+        const postConversion = await runtime.runPhase("postConversionElections", () =>
+          processPostConversionElections(db, newTurn, gameNow)
+        );
+        if (postConversion && postConversion.fired > 0) {
+          phaseResults.postConversionElections = postConversion;
+        }
         // NPP Autonomy V1 governing brain, runs after executives are seated so
         // the agenda computation sees a formed government. Self-gates per
         // country on nppAutonomyAtLeast(v1); a cheap no-op below v1.

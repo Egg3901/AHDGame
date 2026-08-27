@@ -35,7 +35,11 @@ import { isArmed, nextHeat, outcomeFor } from "@/lib/settlement/outcome";
 import { isSettlementCrisisEnabled } from "@/lib/settlement/featureFlag";
 import { levyMobilisation } from "@/lib/settlement/mobilisation";
 import { settleFrozenCrisisFromConflict } from "@/lib/settlement/settleFromConflict";
-import { attachCrisisToLiveWar, detachCrisisFromWar } from "@/lib/settlement/attachToWar";
+import {
+  attachCrisisToLiveWar,
+  detachCrisisFromWar,
+  resumeCrisisAfterWhitePeace,
+} from "@/lib/settlement/attachToWar";
 import { actuateSettlementOutcome } from "@/lib/settlement/actuate";
 import { emitSettlementWire } from "@/lib/settlement/emitWire";
 import { claimStatusTransition } from "@/lib/turn/atomicClaim";
@@ -106,6 +110,14 @@ export async function processSettlementTurn(
     // if the Germany it attached through leaves that war. Checked before the
     // settle sweep, which would otherwise be reasoning about a war that has
     // stopped being about Germany at all.
+    // A war that ended in a WHITE PEACE decided nothing, so the question goes back
+    // on the board rather than settling or staying frozen against a finished war.
+    // Checked first: it is the only branch that applies to an already-resolved war,
+    // and the settle sweep below would otherwise refuse it and leave it frozen for
+    // ever.
+    const resumed = await resumeCrisisAfterWhitePeace(db, frozen);
+    if (resumed.detached) return idle();
+
     const released = await detachCrisisFromWar(db, frozen);
     if (released.detached) return idle();
 

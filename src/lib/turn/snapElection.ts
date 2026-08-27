@@ -49,7 +49,15 @@ import type { Election, ElectionStatus, GameState, Seat } from "@/lib/db/types";
 export const SNAP_ELECTION_LIMIT = 2;
 export const SNAP_ELECTION_COOLDOWN_TURNS = 336;
 
-export type SnapReason = "pm-trigger" | "auto-snap" | "admin";
+/**
+ * Why a snap was called.
+ *
+ * `regime-change` is the only reason not initiated from inside the country: a
+ * peace settlement imposed it from outside. It clears the parliamentary-only
+ * gate, spends none of the head of government's snap allowance, and leaves the
+ * LARP calendar on its canonical dates.
+ */
+export type SnapReason = "pm-trigger" | "auto-snap" | "admin" | "regime-change";
 
 export interface TriggerSnapOptions {
   reason: SnapReason;
@@ -84,7 +92,17 @@ export async function triggerSnapElection(
     throw new SnapElectionError(`Invalid country: ${countryId}`);
   }
   const config = getCountryConfig(countryId);
-  if (!supportsSnapElections(config)) {
+  // A regime change imposed by a peace settlement is not a strategic dissolution,
+  // so the parliamentary-only rule does not apply to it. Scoped to the REASON and
+  // deliberately NOT to `bypassLimits`: admin tools and the auto-snap watcher keep
+  // obeying the shipped rule exactly as they do today.
+  //
+  // Note this reads the STATIC config, which still carries the pre-conversion
+  // government type at the moment a settlement runs. That is why the override is
+  // needed rather than something to fix: the check would otherwise refuse a country
+  // that has already been converted, on the strength of what it used to be.
+  const imposed = opts.reason === "regime-change";
+  if (!imposed && !supportsSnapElections(config)) {
     throw new SnapElectionError(`Snap elections are not allowed in ${countryId}`);
   }
   const lowerChamberKey = config.legislature.lowerChamber.key;
@@ -210,6 +228,11 @@ export async function triggerSnapElection(
       cycle,
       electionYear: electionToLarpYear(snapElectionType, cycle, undefined, undefined, ctx),
       status: "active" as ElectionStatus,
+      // Read by the perpetual spawner. A PM snap drags the LARP calendar forward
+      // for the next regular race; an imposed one must not, because dissolving a
+      // chamber is the settlement's business and rescheduling every future
+      // election is not.
+      ...(imposed && { imposedSnap: true }),
       totalSeats: seatsByRegion.get(regionId) ?? 1,
       startTime: now,
       primaryEndTime: new Date(now.getTime() + snapDur.primaryDurationHours * 3_600_000),
@@ -231,11 +254,16 @@ export async function triggerSnapElection(
   // 4. Increment counters. Auto-snap still increments so operators can see
   //    that an auto-snap fired; the only difference is that the limit was
   //    not enforced on entry.
+  //
+  //    An IMPOSED snap is the exception: `snapElectionsUsed` is a budget the head
+  //    of government spends on strategic dissolutions, and a settlement forced on
+  //    the country from outside must not spend it. The turn is still stamped, so
+  //    operators can still see that a snap fired here.
   await govCol.updateOne(
     { _id: countryId },
     {
       $set: {
-        snapElectionsUsed: snapUsed + 1,
+        ...(imposed ? {} : { snapElectionsUsed: snapUsed + 1 }),
         lastSnapElectionTurn: currentTurn,
         updatedAt: now,
       },
@@ -250,21 +278,28 @@ export async function triggerSnapElection(
   // 6. Reset government cycle/seat counters.
   await resetParliamentaryGovernmentAfterElection(db, countryId, now);
 
+  const chamberName = config.legislature.lowerChamber.name;
   sendCountryGameEvent(countryId, {
-    title: `${config.executiveTitle} Dissolves ${config.legislature.lowerChamber.name}`,
-    description:
-      opts.reason === "auto-snap"
-        ? `**No ${config.executiveTitle}** was appointed within the ${config.legislature.lowerChamber.name} vacancy window. The ${config.legislature.lowerChamber.name} is automatically dissolved and a snap election called.`
-        : `**${opts.actorName ?? config.executiveTitle}** has dissolved the ${config.legislature.lowerChamber.name} and called a snap election. All active legislation has been cancelled.`,
+    // An imposed dissolution is not the executive's doing, and a headline
+    // crediting them for it would misdescribe what happened to the country.
+    title: imposed
+      ? `${chamberName} Dissolved Under a Peace Settlement`
+      : `${config.executiveTitle} Dissolves ${chamberName}`,
+    description: imposed
+      ? `The terms of a peace settlement dissolve the ${chamberName} and call fresh elections. All active legislation has been cancelled.`
+      : opts.reason === "auto-snap"
+        ? `**No ${config.executiveTitle}** was appointed within the ${chamberName} vacancy window. The ${chamberName} is automatically dissolved and a snap election called.`
+        : `**${opts.actorName ?? config.executiveTitle}** has dissolved the ${chamberName} and called a snap election. All active legislation has been cancelled.`,
     color: DISCORD_COLORS.govCollapsed,
     footer: { text: "A House Divided" },
     timestamp: now.toISOString(),
   }).catch(() => {});
 
+  const usedAfter = imposed ? snapUsed : snapUsed + 1;
   return {
     electionsSpawned: snapElections.length,
-    snapElectionsUsed: snapUsed + 1,
-    snapElectionsRemaining: Math.max(0, SNAP_ELECTION_LIMIT - (snapUsed + 1)),
+    snapElectionsUsed: usedAfter,
+    snapElectionsRemaining: Math.max(0, SNAP_ELECTION_LIMIT - usedAfter),
     snapElectionType,
     currentTurn,
   };

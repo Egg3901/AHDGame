@@ -16,7 +16,7 @@ const conflict = {
   sideB: { label: "PLA", countries: ["CN"], kind: "state" },
 } as unknown as ConflictDoc;
 
-const indemnity = { payer: "UK" as const, amount: 100 };
+const term = { kind: "indemnity", payer: "UK", amount: 100 } as const;
 
 describe("isOfferLive", () => {
   it("is live while pending and inside the window", () => {
@@ -41,22 +41,26 @@ describe("isOfferLive", () => {
 
 describe("validatePeaceOffer", () => {
   it("accepts opposed belligerents", () => {
-    expect(validatePeaceOffer(conflict, "UK", "CN", indemnity)).toEqual({ ok: true });
+    expect(validatePeaceOffer(conflict, "UK", "CN", term)).toEqual({ ok: true });
   });
 
   it("refuses a resolved war", () => {
     const done = { ...conflict, status: "resolved" } as ConflictDoc;
-    expect(validatePeaceOffer(done, "UK", "CN", indemnity).ok).toBe(false);
+    expect(validatePeaceOffer(done, "UK", "CN", term).ok).toBe(false);
   });
 
   it("refuses two countries on the SAME side", () => {
-    const r = validatePeaceOffer(conflict, "US", "UK", { payer: "US", amount: 0 });
+    const r = validatePeaceOffer(conflict, "US", "UK", {
+      kind: "indemnity" as const,
+      payer: "US",
+      amount: 0,
+    });
     expect(r.ok).toBe(false);
     expect((r as { error: string }).error).toMatch(/same side/i);
   });
 
   it("refuses a country that is not in the war", () => {
-    const r = validatePeaceOffer(conflict, "UK", "RU", indemnity);
+    const r = validatePeaceOffer(conflict, "UK", "RU", term);
     expect(r.ok).toBe(false);
     // Its own message: "not in this war" is a different problem from "same side",
     // and an offerer can only act on the right one.
@@ -69,7 +73,7 @@ describe("validatePeaceOffer", () => {
       ...conflict,
       sideB: { label: "Insurgents", countries: [], kind: "generated" },
     } as unknown as ConflictDoc;
-    const r = validatePeaceOffer(gen, "UK", "CN", indemnity);
+    const r = validatePeaceOffer(gen, "UK", "CN", term);
     expect(r.ok).toBe(false);
     expect((r as { error: string }).error).toMatch(/no government/i);
   });
@@ -82,35 +86,65 @@ describe("validatePeaceOffer", () => {
       ...conflict,
       sideB: { label: "Insurgents", countries: [], kind: "generated" },
     } as unknown as ConflictDoc;
-    const r = validatePeaceOffer(gen, "UK", "CN", indemnity);
+    const r = validatePeaceOffer(gen, "UK", "CN", term);
     expect((r as { error: string }).error).not.toMatch(/belligerent/i);
   });
 
   it("refuses a negative indemnity", () => {
-    expect(validatePeaceOffer(conflict, "UK", "CN", { payer: "UK", amount: -1 }).ok).toBe(false);
+    expect(
+      validatePeaceOffer(conflict, "UK", "CN", {
+        kind: "indemnity" as const,
+        payer: "UK",
+        amount: -1,
+      }).ok
+    ).toBe(false);
   });
 
   it("refuses a NaN indemnity", () => {
     // `amount < 0` would let NaN through, and NaN would then be $inc'd into a
     // treasury. The check is written as !(amount >= 0) precisely for this.
-    expect(validatePeaceOffer(conflict, "UK", "CN", { payer: "UK", amount: NaN }).ok).toBe(false);
+    expect(
+      validatePeaceOffer(conflict, "UK", "CN", {
+        kind: "indemnity" as const,
+        payer: "UK",
+        amount: NaN,
+      }).ok
+    ).toBe(false);
   });
 
   it("refuses a payer who is not one of the two parties", () => {
     // US is a belligerent, but not a party to THIS offer — it cannot be billed for
     // a deal it is not in.
-    expect(validatePeaceOffer(conflict, "UK", "CN", { payer: "US", amount: 5 }).ok).toBe(false);
+    expect(
+      validatePeaceOffer(conflict, "UK", "CN", {
+        kind: "indemnity" as const,
+        payer: "US",
+        amount: 5,
+      }).ok
+    ).toBe(false);
   });
 
   it("accepts a zero indemnity — that is a white peace", () => {
-    expect(validatePeaceOffer(conflict, "UK", "CN", { payer: "UK", amount: 0 })).toEqual({
+    expect(
+      validatePeaceOffer(conflict, "UK", "CN", {
+        kind: "indemnity" as const,
+        payer: "UK",
+        amount: 0,
+      })
+    ).toEqual({
       ok: true,
     });
   });
 
   it("accepts EITHER party as payer", () => {
     // A winning country may pay to disengage from a war it no longer wants.
-    expect(validatePeaceOffer(conflict, "UK", "CN", { payer: "CN", amount: 5 })).toEqual({
+    expect(
+      validatePeaceOffer(conflict, "UK", "CN", {
+        kind: "indemnity" as const,
+        payer: "CN",
+        amount: 5,
+      })
+    ).toEqual({
       ok: true,
     });
   });
@@ -119,7 +153,13 @@ describe("validatePeaceOffer", () => {
     // Deliberate: treasuryBalance is a signed position, and a country already in
     // debt must still be able to buy peace. (No cap passed — affordability and the
     // GDP ceiling are separate concerns; the ceiling is exercised below.)
-    expect(validatePeaceOffer(conflict, "UK", "CN", { payer: "UK", amount: 1e15 })).toEqual({
+    expect(
+      validatePeaceOffer(conflict, "UK", "CN", {
+        kind: "indemnity" as const,
+        payer: "UK",
+        amount: 1e15,
+      })
+    ).toEqual({
       ok: true,
     });
   });
@@ -128,13 +168,27 @@ describe("validatePeaceOffer", () => {
     // The exploit: without a ceiling, `amount: 1e15` is accepted and moved on
     // accept, draining the payer treasury arbitrarily. With the GDP cap it is
     // rejected at offer time.
-    const r = validatePeaceOffer(conflict, "UK", "CN", { payer: "UK", amount: 1e15 }, 1000);
+    const r = validatePeaceOffer(
+      conflict,
+      "UK",
+      "CN",
+      { kind: "indemnity" as const, payer: "UK", amount: 1e15 },
+      1000
+    );
     expect(r.ok).toBe(false);
     expect((r as { error: string }).error).toMatch(/GDP/i);
   });
 
   it("accepts an indemnity exactly at the ceiling", () => {
-    expect(validatePeaceOffer(conflict, "UK", "CN", { payer: "UK", amount: 1000 }, 1000)).toEqual({
+    expect(
+      validatePeaceOffer(
+        conflict,
+        "UK",
+        "CN",
+        { kind: "indemnity" as const, payer: "UK", amount: 1000 },
+        1000
+      )
+    ).toEqual({
       ok: true,
     });
   });
@@ -218,7 +272,11 @@ describe("validatePeaceOffer treaty bar", () => {
   } as unknown as ConflictDoc;
 
   it("refuses an auto-joined ally while the country it defends still fights", () => {
-    const res = validatePeaceOffer(pact, "RU", "US", { payer: "RU", amount: 0 });
+    const res = validatePeaceOffer(pact, "RU", "US", {
+      kind: "indemnity" as const,
+      payer: "RU",
+      amount: 0,
+    });
     expect(res.ok).toBe(false);
     if (!res.ok) {
       expect(res.error).toContain("Warsaw Pact");
@@ -233,23 +291,38 @@ describe("validatePeaceOffer treaty bar", () => {
       ...pact,
       sideB: { label: "Pact", countries: ["RU"], kind: "coalition" },
     } as unknown as ConflictDoc;
-    expect(validatePeaceOffer(settled, "RU", "US", { payer: "RU", amount: 0 }).ok).toBe(true);
+    expect(
+      validatePeaceOffer(settled, "RU", "US", {
+        kind: "indemnity" as const,
+        payer: "RU",
+        amount: 0,
+      }).ok
+    ).toBe(true);
   });
 
   it("never bars the defended country itself", () => {
-    expect(validatePeaceOffer(pact, "DD", "US", { payer: "DD", amount: 0 }).ok).toBe(true);
+    expect(
+      validatePeaceOffer(pact, "DD", "US", { kind: "indemnity" as const, payer: "DD", amount: 0 })
+        .ok
+    ).toBe(true);
   });
 
   // The OFFERER is the country that leaves (acceptPeace sets leaver = offer.fromCountry).
   // An attacker offering peace to an auto-joined ally is the attacker giving up, and must
   // not be refused.
   it("never bars the attacker from offering peace to an ally", () => {
-    expect(validatePeaceOffer(pact, "US", "RU", { payer: "US", amount: 0 }).ok).toBe(true);
+    expect(
+      validatePeaceOffer(pact, "US", "RU", { kind: "indemnity" as const, payer: "US", amount: 0 })
+        .ok
+    ).toBe(true);
   });
 
   it("leaves a conflict with no treaty entries unaffected", () => {
     const plain = { ...pact, treatyEntries: undefined } as unknown as ConflictDoc;
-    expect(validatePeaceOffer(plain, "RU", "US", { payer: "RU", amount: 0 }).ok).toBe(true);
+    expect(
+      validatePeaceOffer(plain, "RU", "US", { kind: "indemnity" as const, payer: "RU", amount: 0 })
+        .ok
+    ).toBe(true);
   });
 });
 

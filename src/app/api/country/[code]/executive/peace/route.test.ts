@@ -35,7 +35,7 @@ const params = { params: Promise.resolve({ code: "uk" }) };
 const good = {
   conflictId: "war1",
   toCountry: "CN",
-  indemnity: { payer: "UK", amount: 100 },
+  term: { kind: "indemnity", payer: "UK", amount: 100 },
 };
 
 /** Allow or refuse the negotiator gate, optionally naming which office authorized. */
@@ -117,13 +117,13 @@ describe("POST offer", () => {
   it("uppercases the target and payer, so a lowercase body still matches rosters", async () => {
     const { POST } = await import("./route");
     const res = await POST(
-      req({ ...good, toCountry: "cn", indemnity: { payer: "uk", amount: 5 } }),
+      req({ ...good, toCountry: "cn", term: { kind: "indemnity", payer: "uk", amount: 5 } }),
       params
     );
     expect(res.status).toBe(200);
     const doc = db.collectionMocks.peaceOffers.insertOne.mock.calls[0][0];
     expect(doc.toCountry).toBe("CN");
-    expect(doc.indemnity.payer).toBe("UK");
+    expect((doc.term as { payer: string }).payer).toBe("UK");
   });
 
   it("refuses an offer to a country on the same side", async () => {
@@ -135,7 +135,10 @@ describe("POST offer", () => {
 
   it("refuses a negative indemnity at the schema", async () => {
     const { POST } = await import("./route");
-    const res = await POST(req({ ...good, indemnity: { payer: "UK", amount: -5 } }), params);
+    const res = await POST(
+      req({ ...good, term: { kind: "indemnity", payer: "UK", amount: -5 } }),
+      params
+    );
     expect(res.status).toBe(400);
   });
 
@@ -143,7 +146,10 @@ describe("POST offer", () => {
     // 2x GDP is the cap; 1e15 against a 1,000,000 GDP is far past it. Pre-fix this
     // was accepted and drained the payer treasury on accept.
     const { POST } = await import("./route");
-    const res = await POST(req({ ...good, indemnity: { payer: "UK", amount: 1e15 } }), params);
+    const res = await POST(
+      req({ ...good, term: { kind: "indemnity", payer: "UK", amount: 1e15 } }),
+      params
+    );
     expect(res.status).toBe(400);
     expect((await res.json()).error).toMatch(/GDP/i);
     expect(db.collectionMocks.peaceOffers.insertOne).not.toHaveBeenCalled();
@@ -217,7 +223,7 @@ describe("GET offers", () => {
       conflictId: "war1",
       fromCountry: "CN",
       toCountry: "UK",
-      indemnity: { payer: "CN", amount: 10 },
+      term: { kind: "indemnity", payer: "CN", amount: 10 },
       status: "pending",
       offeredTurn: 1,
       expiresTurn: 999,
@@ -227,7 +233,7 @@ describe("GET offers", () => {
       conflictId: "war1",
       fromCountry: "UK",
       toCountry: "CN",
-      indemnity: { payer: "UK", amount: 20 },
+      term: { kind: "indemnity", payer: "UK", amount: 20 },
       status: "pending",
       offeredTurn: 1,
       expiresTurn: 5,

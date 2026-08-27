@@ -30,6 +30,7 @@ const base: ConflictRecordView = {
   ownSide: null,
   chain: null,
   actions: null,
+  dictate: null,
   postedHere: null,
   employ: null,
   whoDeclares: "The defense secretary — no Theater Commander is designated at this front.",
@@ -606,7 +607,7 @@ describe("separate peace on the record", () => {
         id: "o1",
         leaver: "UK",
         other: "CN",
-        indemnity: { payer: "UK", amount: 5000 },
+        term: { kind: "indemnity" as const, payer: "UK" as const, amount: 5000 },
         justification: "We could not sustain the campaign.",
         turn: 90,
       },
@@ -620,7 +621,41 @@ describe("separate peace on the record", () => {
 
   it("shows the indemnity and who paid it", () => {
     const { container } = render(<ConflictRecord conflict={settled} />);
-    expect(container.textContent).toMatch(/UK paid 5,000/);
+    expect(container.textContent).toMatch(/UK paid an indemnity of 5,000/);
+  });
+
+  it("uses no em dash or en dash in the settlement line", () => {
+    // Project-wide rule for player-facing copy. Scoped to the settlement line
+    // deliberately: other copy in this component predates the rule and is not
+    // this change's to rewrite.
+    render(<ConflictRecord conflict={settled} />);
+    const line = screen.getByText(/UK left the war on turn 90/);
+    expect(line.textContent ?? "").not.toMatch(/[—–]/);
+  });
+
+  it("describes a regime change settlement", () => {
+    const regime: ConflictRecordView = {
+      ...settled,
+      settlements: [
+        {
+          ...settled.settlements![0],
+          term: { kind: "regime_change" as const, targetSystem: "presidential" as const },
+        },
+      ],
+    };
+    const { container } = render(<ConflictRecord conflict={regime} />);
+    expect(container.textContent).toMatch(/government fell/);
+  });
+
+  it("describes a demilitarisation settlement in turns", () => {
+    const demil: ConflictRecordView = {
+      ...settled,
+      settlements: [
+        { ...settled.settlements![0], term: { kind: "demilitarisation" as const, turns: 240 } },
+      ],
+    };
+    const { container } = render(<ConflictRecord conflict={demil} />);
+    expect(container.textContent).toMatch(/frozen for 240 turns/);
   });
 
   it("publishes the justification, so the war's history says WHY it ended", () => {
@@ -631,10 +666,15 @@ describe("separate peace on the record", () => {
   it("calls a zero indemnity a white peace", () => {
     const white: ConflictRecordView = {
       ...settled,
-      settlements: [{ ...settled.settlements![0], indemnity: { payer: "UK", amount: 0 } }],
+      settlements: [
+        {
+          ...settled.settlements![0],
+          term: { kind: "indemnity" as const, payer: "UK" as const, amount: 0 },
+        },
+      ],
     };
     const { container } = render(<ConflictRecord conflict={white} />);
-    expect(container.textContent).toMatch(/a white peace/);
+    expect(container.textContent).toMatch(/a white peace/i);
   });
 
   it("renders no settlement section on a war nobody has settled", () => {
@@ -706,5 +746,51 @@ describe("ConflictRecord — coalition engagements", () => {
     );
     expect(container.textContent).toMatch(/3rd Guards Tank/);
     expect(container.textContent).toMatch(/Roster withheld/);
+  });
+});
+
+describe("the dictate panel on a won war", () => {
+  const dictate = {
+    conflictId: "w1",
+    countryCode: "uk",
+    target: "TR",
+    targetName: "Turkey",
+    turnsLeft: 18,
+  };
+
+  it("is absent for a viewer the server did not authorize", () => {
+    // The server returns null for everyone but the winning principal's negotiator,
+    // so the losing side and the winning side's allies never see it.
+    render(<ConflictRecord conflict={base} />);
+    expect(screen.queryByText(/NAME YOUR TERMS/)).toBeNull();
+  });
+
+  it("offers every term to the country that won the war", () => {
+    render(<ConflictRecord conflict={{ ...base, dictate }} />);
+    expect(screen.getByText(/NAME YOUR TERMS/)).toBeTruthy();
+    expect(screen.getByText("White peace")).toBeTruthy();
+    expect(screen.getByText("Indemnity")).toBeTruthy();
+    expect(screen.getByText("Regime change")).toBeTruthy();
+    expect(screen.getByText("Demilitarisation")).toBeTruthy();
+  });
+
+  it("counts the window down in turns and names who it lands on", () => {
+    render(<ConflictRecord conflict={{ ...base, dictate }} />);
+    expect(screen.getByText(/closes in 18 turns/)).toBeTruthy();
+    expect(screen.getByText(/Turkey has no ground left to hold/)).toBeTruthy();
+  });
+
+  it("offers a white peace, which records no victor at all", () => {
+    render(<ConflictRecord conflict={{ ...base, dictate }} />);
+    expect(screen.getByRole("button", { name: /Sign a white peace/ })).toBeTruthy();
+    expect(screen.getByText("White peace")).toBeTruthy();
+  });
+
+  it("lets exactly one term be selected at a time", () => {
+    // The payload is a discriminated union server-side; the radio group is what
+    // makes that visible rather than merely enforced.
+    render(<ConflictRecord conflict={{ ...base, dictate }} />);
+    const radios = screen.getAllByRole("radio");
+    expect(radios.filter((r) => (r as HTMLInputElement).checked)).toHaveLength(1);
   });
 });

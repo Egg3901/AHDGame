@@ -71,6 +71,16 @@ export interface Election {
   rulesetVersion?: number;
   /** Campaign Here boosts: districtIndex → partySeqId → active boost % (0..7.5). */
   districtCampaignBoosts?: Record<string, Record<string, number>>;
+  /**
+   * True when this snap was IMPOSED by a peace settlement's regime change rather
+   * than called from inside the country.
+   *
+   * Read by the perpetual spawner. A prime minister's snap drags the LARP calendar
+   * forward, so the next regular race anchors to the snap's end turn; an imposed
+   * one must not, because dissolving a chamber is the settlement's business and
+   * rescheduling every future election is not. Absent on every other election.
+   */
+  imposedSnap?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
