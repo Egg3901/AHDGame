@@ -82,6 +82,7 @@ vi.mock("@/lib/coldwar/tension", () => ({
   })),
 }));
 vi.mock("@/lib/coldwar/standingPressure", () => ({
+  conflictWarPressureInput: vi.fn((conflict) => conflict),
   buildStandingPressureSnapshot: vi.fn(() => ({
     totalWarheads: 0,
     pressures: {

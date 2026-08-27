@@ -64,7 +64,5 @@ import "./handlers/ukEraEvents";
 import "./handlers/ruEraEvents";
 import "./handlers/ddEraEvents";
 import "../worldEvents/handlers/coldWarWorldEvents";
-// High-tension society events (4), gated on the global tension reading.
-import "../worldEvents/handlers/highTensionEvents";
 // Broadcast events (5) — shared historic moments offered to everyone at once.
 import "./handlers/broadcastEvents";

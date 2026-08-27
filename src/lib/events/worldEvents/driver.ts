@@ -30,8 +30,6 @@ import { getEventHandler } from "@/lib/events/substrate/registry";
 import { hashToUint32, seededRoll } from "@/lib/events/substrate/rng";
 import { getLastFiredTurn, recordScheduledCountryFire } from "@/lib/events/substrate/cooldown";
 import { isWithinYearWindow } from "@/lib/events/substrate/yearWindow";
-import { isWithinTensionWindow } from "@/lib/events/substrate/tensionWindow";
-import { getColdWarTension } from "@/lib/coldwar/tension";
 import { isRecurringDue, isScheduleDue } from "./scheduler";
 import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
 import { notifyCountryExecutiveEventOffered } from "@/lib/events/pree/notifications";
@@ -162,8 +160,7 @@ async function offerScheduledEventForCountry(
   countryId: CountryId,
   currentTurn: number,
   definitions: EventDefinition[],
-  currentYear?: number,
-  currentTension?: number
+  currentYear?: number
 ): Promise<"offered" | "skipped"> {
   const scopeId = countryScopeId(countryId);
 
@@ -186,9 +183,6 @@ async function offerScheduledEventForCountry(
       continue;
     }
     if (!isWithinYearWindow(definition, currentYear)) {
-      continue;
-    }
-    if (!isWithinTensionWindow(definition, currentTension)) {
       continue;
     }
     const handler = getEventHandler(definition.kind);
@@ -292,14 +286,6 @@ export async function processWorldEventsTurn(
     return { offered: 0, skipped: 0, globalHostEventsOffered };
   }
 
-  // One shared reading for every country this turn. The tension phase runs
-  // earlier in the same turn, so this is the fresh value. A world with the
-  // cold-war subsystem off holds the baseline, which keeps tension-gated
-  // definitions dormant there, which is intentional.
-  const currentTension = definitions.some((d) => d.minTension != null || d.maxTension != null)
-    ? (await getColdWarTension(db)).value
-    : undefined;
-
   const activeCountries = COUNTRY_ORDER.filter((id) => COUNTRY_CONFIGS[id].status === "active");
 
   let offered = 0;
@@ -310,8 +296,7 @@ export async function processWorldEventsTurn(
       countryId,
       currentTurn,
       definitions,
-      currentYear,
-      currentTension
+      currentYear
     );
     if (result === "offered") {
       offered++;
