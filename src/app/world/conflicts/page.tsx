@@ -64,6 +64,7 @@ export default async function ConflictsPage() {
     activeCrises: activeCrisisCount,
     programs,
     conflicts: docs.map(conflictWarPressureInput),
+    currentTurn,
   });
   const pressureBreakdown = tensionPressureBreakdown(pressureSnapshot.pressures);
 

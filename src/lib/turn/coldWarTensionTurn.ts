@@ -24,6 +24,6 @@ export async function processColdWarTensionTurn(
 ): Promise<ColdWarTensionState | null> {
   if (gameState.coldWarEnabled !== true) return null;
 
-  const snapshot = await readStandingPressureSnapshot(db, gameState);
+  const snapshot = await readStandingPressureSnapshot(db, gameState, turn);
   return runTensionTurn(db, turn, snapshot.pressures);
 }

@@ -35,6 +35,12 @@ import { getColdWarTension } from "@/lib/coldwar/tension";
 import { isRecurringDue, isScheduleDue } from "./scheduler";
 import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
 import { notifyCountryExecutiveEventOffered } from "@/lib/events/pree/notifications";
+import { loadActiveWarEmergencyMitigationPctMap } from "@/lib/events/substrate/countryModifiers";
+import {
+  HIGH_TENSION_SHARED_LEDGER_KIND,
+  isHighTensionSharedDue,
+  isHighTensionSocietyEvent,
+} from "./warEmergency";
 
 export interface WorldEventsTurnResult {
   offered: number;
@@ -163,7 +169,8 @@ async function offerScheduledEventForCountry(
   currentTurn: number,
   definitions: EventDefinition[],
   currentYear?: number,
-  currentTension?: number
+  currentTension?: number,
+  warEmergencyMitigationPct = 0
 ): Promise<"offered" | "skipped"> {
   const scopeId = countryScopeId(countryId);
 
@@ -177,6 +184,7 @@ async function offerScheduledEventForCountry(
     scope: "country",
     scopeId,
   });
+  const lastHighTensionEventTurn = getLastFiredTurn(ledger, HIGH_TENSION_SHARED_LEDGER_KIND);
 
   for (const definition of definitions) {
     if (!definition.schedule) {
@@ -189,6 +197,18 @@ async function offerScheduledEventForCountry(
       continue;
     }
     if (!isWithinTensionWindow(definition, currentTension)) {
+      continue;
+    }
+    const highTensionEvent = isHighTensionSocietyEvent(definition.kind);
+    if (
+      highTensionEvent &&
+      !isHighTensionSharedDue(
+        currentTurn,
+        countryId,
+        lastHighTensionEventTurn,
+        warEmergencyMitigationPct
+      )
+    ) {
       continue;
     }
     const handler = getEventHandler(definition.kind);
@@ -233,6 +253,9 @@ async function offerScheduledEventForCountry(
     }
 
     await recordScheduledCountryFire(db, scopeId, definition.kind, currentTurn);
+    if (highTensionEvent) {
+      await recordScheduledCountryFire(db, scopeId, HIGH_TENSION_SHARED_LEDGER_KIND, currentTurn);
+    }
 
     // Notify the sitting executive; a vacant office is a silent no-op, same
     // as the Phase 0 admin-trigger route — the timeout default (safe/neutral
@@ -299,6 +322,11 @@ export async function processWorldEventsTurn(
   const currentTension = definitions.some((d) => d.minTension != null || d.maxTension != null)
     ? (await getColdWarTension(db)).value
     : undefined;
+  const mitigationByCountry = definitions.some((definition) =>
+    isHighTensionSocietyEvent(definition.kind)
+  )
+    ? await loadActiveWarEmergencyMitigationPctMap(db, currentTurn)
+    : new Map<string, number>();
 
   const activeCountries = COUNTRY_ORDER.filter((id) => COUNTRY_CONFIGS[id].status === "active");
 
@@ -311,7 +339,8 @@ export async function processWorldEventsTurn(
       currentTurn,
       definitions,
       currentYear,
-      currentTension
+      currentTension,
+      mitigationByCountry.get(countryId) ?? 0
     );
     if (result === "offered") {
       offered++;

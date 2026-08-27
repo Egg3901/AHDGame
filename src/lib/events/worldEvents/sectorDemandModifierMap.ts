@@ -42,6 +42,9 @@ export async function loadActiveSectorDemandModifierPctMap(
 
   const map = new Map<string, number>();
   for (const m of modifiers) {
+    // `sectorType` also keeps pre-discriminator rows and older test fixtures
+    // readable while excluding war-emergency mitigation rows.
+    if (!("sectorType" in m)) continue;
     const key = `${m.countryId}:${m.sectorType}`;
     map.set(key, (map.get(key) ?? 0) + m.pct);
   }

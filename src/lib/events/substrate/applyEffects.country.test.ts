@@ -174,6 +174,32 @@ describe("applyDeclarativeEffects — country scope (World Events v1 Phase 0)", 
     expect(doc.expiresAtTurn).toBe(106);
   });
 
+  it("warEmergencyMitigation writes bounded domestic relief without changing global tension", async () => {
+    db.collection("countryModifiers");
+    const instance = makeInstance();
+    const tier: OutcomeTier = {
+      minRoll: 1,
+      maxRoll: 100,
+      label: "mobilization",
+      effects: [{ type: "warEmergencyMitigation", pct: 18, durationTurns: 24 }],
+    };
+
+    await applyDeclarativeEffects(makeCtx(db, instance, tier), tier.effects);
+
+    const doc = db.collectionMocks.countryModifiers!.insertOne.mock.calls[0][0];
+    expect(doc).toEqual(
+      expect.objectContaining({
+        countryId: "US",
+        kind: "warEmergencyMitigation",
+        pct: 18,
+        appliedAtTurn: 100,
+        expiresAtTurn: 124,
+        sourceInstanceId: instance._id,
+      })
+    );
+    expect(db.collectionMocks.coldWarTension).toBeUndefined();
+  });
+
   it("wireOnly is a pure no-op — no collection writes", async () => {
     const instance = makeInstance();
     const tier: OutcomeTier = {

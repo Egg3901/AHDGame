@@ -26,7 +26,8 @@ registerEventHandler({
     {
       id: "ration",
       label: "Impose emergency rationing",
-      description: "Cap purchases of staples by decree until the scare passes.",
+      description:
+        "Cap purchases by decree. Slows repeat crises, shifts demand into industry and defense, and damages civil liberties.",
       outcomeTable: [
         {
           minRoll: 1,
@@ -34,7 +35,22 @@ registerEventHandler({
           label: "Rationing imposed",
           effects: [
             { type: "approvalDelta", delta: -3 },
-            { type: "sectorDemandModifier", sectorType: "retail", pct: -5, durationTurns: 6 },
+            { type: "warEmergencyMitigation", pct: 12, durationTurns: 18 },
+            { type: "civilLibertiesDelta", delta: -2 },
+            { type: "sectorDemandModifier", sectorType: "retail", pct: -8, durationTurns: 8 },
+            {
+              type: "sectorDemandModifier",
+              sectorType: "entertainment",
+              pct: -5,
+              durationTurns: 8,
+            },
+            {
+              type: "sectorDemandModifier",
+              sectorType: "manufacturing",
+              pct: 6,
+              durationTurns: 8,
+            },
+            { type: "sectorDemandModifier", sectorType: "defense", pct: 8, durationTurns: 8 },
             { type: "wireOnly" },
           ],
           newsWire: {
@@ -90,7 +106,8 @@ registerEventHandler({
     {
       id: "release",
       label: "Release strategic stockpiles",
-      description: "Move government reserves into the shops to keep shelves full.",
+      description:
+        "Spend reserves to keep shelves full and buy limited relief without emergency powers.",
       outcomeTable: [
         {
           minRoll: 1,
@@ -99,7 +116,15 @@ registerEventHandler({
           effects: [
             { type: "approvalDelta", delta: 2 },
             { type: "treasuryDelta", deltaAnchor: -10_000 },
+            { type: "warEmergencyMitigation", pct: 8, durationTurns: 10 },
             { type: "sectorDemandModifier", sectorType: "retail", pct: 2, durationTurns: 4 },
+            {
+              type: "sectorDemandModifier",
+              sectorType: "manufacturing",
+              pct: 3,
+              durationTurns: 6,
+            },
+            { type: "sectorDemandModifier", sectorType: "defense", pct: 2, durationTurns: 6 },
             { type: "wireOnly" },
           ],
           newsWire: {
@@ -122,7 +147,7 @@ registerEventHandler({
     {
       id: "guarantee",
       label: "Guarantee all deposits",
-      description: "Put the treasury behind every account to stop the run cold.",
+      description: "Spend heavily to stop the run and buy limited relief.",
       outcomeTable: [
         {
           minRoll: 1,
@@ -131,6 +156,7 @@ registerEventHandler({
           effects: [
             { type: "approvalDelta", delta: 3 },
             { type: "treasuryDelta", deltaAnchor: -20_000 },
+            { type: "warEmergencyMitigation", pct: 10, durationTurns: 12 },
             { type: "sectorDemandModifier", sectorType: "financial", pct: 3, durationTurns: 6 },
             { type: "wireOnly" },
           ],
@@ -146,7 +172,8 @@ registerEventHandler({
     {
       id: "holiday",
       label: "Declare a bank holiday",
-      description: "Close the banks for a cooling-off period by decree.",
+      description:
+        "Close banks by decree. Slows repeat crises, suppresses consumer demand, and damages democratic health.",
       outcomeTable: [
         {
           minRoll: 1,
@@ -154,7 +181,17 @@ registerEventHandler({
           label: "The banks are shuttered",
           effects: [
             { type: "approvalDelta", delta: -4 },
+            { type: "warEmergencyMitigation", pct: 14, durationTurns: 18 },
+            { type: "civilLibertiesDelta", delta: -3 },
             { type: "sectorDemandModifier", sectorType: "financial", pct: -8, durationTurns: 6 },
+            { type: "sectorDemandModifier", sectorType: "retail", pct: -6, durationTurns: 8 },
+            {
+              type: "sectorDemandModifier",
+              sectorType: "manufacturing",
+              pct: 6,
+              durationTurns: 8,
+            },
+            { type: "sectorDemandModifier", sectorType: "defense", pct: 7, durationTurns: 8 },
             { type: "wireOnly" },
           ],
           newsWire: {
@@ -216,7 +253,8 @@ registerEventHandler({
     {
       id: "fund",
       label: "Fund a national shelter program",
-      description: "Pay for public shelters and stocked basements in every city.",
+      description:
+        "Fund shelters and wartime production. Buys limited relief while shifting demand toward industry and defense.",
       outcomeTable: [
         {
           minRoll: 1,
@@ -225,7 +263,16 @@ registerEventHandler({
           effects: [
             { type: "approvalDelta", delta: 2 },
             { type: "treasuryDelta", deltaAnchor: -15_000 },
+            { type: "warEmergencyMitigation", pct: 10, durationTurns: 14 },
+            { type: "sectorDemandModifier", sectorType: "retail", pct: -3, durationTurns: 8 },
             { type: "sectorDemandModifier", sectorType: "construction", pct: 8, durationTurns: 8 },
+            {
+              type: "sectorDemandModifier",
+              sectorType: "manufacturing",
+              pct: 6,
+              durationTurns: 8,
+            },
+            { type: "sectorDemandModifier", sectorType: "defense", pct: 8, durationTurns: 8 },
             { type: "wireOnly" },
           ],
           newsWire: {
@@ -240,7 +287,8 @@ registerEventHandler({
     {
       id: "drills",
       label: "Order drills and leaflets",
-      description: "Run civil defense drills and mail preparedness leaflets.",
+      description:
+        "Mobilize civil defense. Slows repeat crises modestly and slightly erodes civil liberties.",
       isDefault: true,
       outcomeTable: [
         {
@@ -249,7 +297,17 @@ registerEventHandler({
           label: "Drills and leaflets",
           effects: [
             { type: "approvalDelta", delta: 1 },
+            { type: "warEmergencyMitigation", pct: 8, durationTurns: 12 },
+            { type: "civilLibertiesDelta", delta: -1 },
+            { type: "sectorDemandModifier", sectorType: "retail", pct: -2, durationTurns: 6 },
             { type: "sectorDemandModifier", sectorType: "construction", pct: 3, durationTurns: 6 },
+            {
+              type: "sectorDemandModifier",
+              sectorType: "manufacturing",
+              pct: 3,
+              durationTurns: 6,
+            },
+            { type: "sectorDemandModifier", sectorType: "defense", pct: 4, durationTurns: 6 },
             { type: "wireOnly" },
           ],
           newsWire: {
@@ -291,13 +349,17 @@ registerEventHandler({
     {
       id: "address",
       label: "Address the nation",
-      description: "Speak directly to the fear and make the case for the course.",
+      description: "Speak directly to the fear and buy a little breathing room.",
       outcomeTable: [
         {
           minRoll: 1,
           maxRoll: 30,
           label: "The speech falls flat",
-          effects: [{ type: "approvalDelta", delta: -2 }, { type: "wireOnly" }],
+          effects: [
+            { type: "approvalDelta", delta: -2 },
+            { type: "warEmergencyMitigation", pct: 4, durationTurns: 8 },
+            { type: "wireOnly" },
+          ],
           newsWire: {
             category: "general",
             title: "{leader}'s Address Fails to Quiet {country}",
@@ -309,7 +371,11 @@ registerEventHandler({
           minRoll: 31,
           maxRoll: 100,
           label: "The nation rallies",
-          effects: [{ type: "approvalDelta", delta: 3 }, { type: "wireOnly" }],
+          effects: [
+            { type: "approvalDelta", delta: 3 },
+            { type: "warEmergencyMitigation", pct: 4, durationTurns: 8 },
+            { type: "wireOnly" },
+          ],
           newsWire: {
             category: "general",
             title: "{leader} Rallies {country} Amid War Scare",
@@ -342,13 +408,33 @@ registerEventHandler({
     {
       id: "crackdown",
       label: "Disperse the marches",
-      description: "Order police to clear the squares.",
+      description:
+        "Clear the squares. Strongly slows repeat crises and mobilizes wartime industry at a severe democratic cost.",
       outcomeTable: [
         {
           minRoll: 1,
           maxRoll: 100,
           label: "The squares are cleared",
-          effects: [{ type: "approvalDelta", delta: -6 }, { type: "wireOnly" }],
+          effects: [
+            { type: "approvalDelta", delta: -6 },
+            { type: "warEmergencyMitigation", pct: 18, durationTurns: 24 },
+            { type: "civilLibertiesDelta", delta: -7 },
+            { type: "sectorDemandModifier", sectorType: "retail", pct: -8, durationTurns: 10 },
+            {
+              type: "sectorDemandModifier",
+              sectorType: "entertainment",
+              pct: -10,
+              durationTurns: 10,
+            },
+            {
+              type: "sectorDemandModifier",
+              sectorType: "manufacturing",
+              pct: 8,
+              durationTurns: 10,
+            },
+            { type: "sectorDemandModifier", sectorType: "defense", pct: 10, durationTurns: 10 },
+            { type: "wireOnly" },
+          ],
           newsWire: {
             category: "general",
             title: "Police Clear Peace Marches in {country}",

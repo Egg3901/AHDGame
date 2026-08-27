@@ -21,6 +21,7 @@ describe("processColdWarTensionTurn", () => {
         otherWarIntensity: 0,
         activeWarCount: 1,
         nuclearWarCount: 1,
+        nuclearWarMinimumPressure: 48,
       },
       pressures: {
         escalationLevel: 1,
@@ -28,6 +29,7 @@ describe("processColdWarTensionTurn", () => {
         totalWarheads: 1214,
         nuclearWarIntensity: 70,
         nuclearWarCount: 1,
+        nuclearWarMinimumPressure: 48,
         otherWarIntensity: 0,
       },
     });
@@ -40,13 +42,14 @@ describe("processColdWarTensionTurn", () => {
 
     await processColdWarTensionTurn(db as unknown as Db, 436, gameState);
 
-    expect(readStandingPressureSnapshot).toHaveBeenCalledWith(db, gameState);
+    expect(readStandingPressureSnapshot).toHaveBeenCalledWith(db, gameState, 436);
     expect(runTensionTurn).toHaveBeenCalledWith(db, 436, {
       escalationLevel: 1,
       activeCrises: 6,
       totalWarheads: 1214,
       nuclearWarIntensity: 70,
       nuclearWarCount: 1,
+      nuclearWarMinimumPressure: 48,
       otherWarIntensity: 0,
     });
   });

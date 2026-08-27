@@ -20,6 +20,12 @@ export const COLD_WAR_TENSION_ID = "current";
 
 export const TENSION_BASELINE = 12;
 export const NUCLEAR_WAR_MINIMUM_TENSION = 60;
+export const WAR_ACCLIMATION_GRACE_TURNS = 12;
+export const WAR_ACCLIMATION_MAX_REDUCTION = 0.4;
+export const WAR_ACCLIMATION_TURNS_TO_MAX = 40;
+export const WAR_ACCLIMATION_FULL_INTENSITY = 70;
+export const WAR_ACCLIMATION_HOT_INTENSITY = 85;
+export const NUCLEAR_WAR_RESIDUAL_PRESSURE = 30;
 /** Fraction of the gap to the floor closed each turn. */
 export const TENSION_RELAXATION = 0.08;
 const LEDGER_CAP = 24;
@@ -74,6 +80,13 @@ export interface TensionPressures {
   nuclearWarIntensity: number;
   /** Number of active wars with nuclear-armed countries on opposing sides. */
   nuclearWarCount: number;
+  /**
+   * Crisis-grade shock retained by the most alarming nuclear-opponent war
+   * after limited-war acclimation. Fresh and hot wars hold the full 48-point
+   * contribution; long wars that remain below hot intensity can ease only to
+   * the residual danger floor.
+   */
+  nuclearWarMinimumPressure?: number;
   /** Summed intensity of every other active war. */
   otherWarIntensity: number;
 }
@@ -99,7 +112,12 @@ export function tensionPressureBreakdown(p: TensionPressures): TensionPressureBr
   const nuclearIntensity = Math.max(0, p.nuclearWarIntensity) * 0.15;
   const conventionalIntensity = Math.max(0, p.otherWarIntensity) * 0.12;
   const nuclearWarMinimum =
-    p.nuclearWarCount > 0 ? NUCLEAR_WAR_MINIMUM_TENSION - TENSION_BASELINE : 0;
+    p.nuclearWarCount > 0
+      ? Math.max(
+          NUCLEAR_WAR_RESIDUAL_PRESSURE,
+          p.nuclearWarMinimumPressure ?? NUCLEAR_WAR_MINIMUM_TENSION - TENSION_BASELINE
+        )
+      : 0;
   const wars =
     nuclearWarMinimum > 0
       ? Math.min(70, nuclearWarMinimum + nuclearIntensity + conventionalIntensity)
@@ -120,6 +138,8 @@ export interface WarPressureInput {
   sideBCountries: CountryId[];
   /** 0-100. */
   intensity: number;
+  /** Opening turn. Absent keeps the full fresh-war pressure for old callers. */
+  startTurn?: number;
 }
 
 export interface NuclearProgramPressureInput {
@@ -150,23 +170,62 @@ export interface WarPressureSummary {
   otherWarIntensity: number;
   activeWarCount: number;
   nuclearWarCount: number;
+  nuclearWarMinimumPressure: number;
+}
+
+/**
+ * Public alarm slowly normalizes around a long limited war. The reduction
+ * starts after twelve turns, reaches at most 40 percent after another forty,
+ * and disappears as intensity climbs from 70 toward the hot-war threshold at
+ * 85. This changes pressure, never the conflict's actual combat intensity.
+ */
+export function warAcclimationMultiplier(
+  war: Pick<WarPressureInput, "intensity" | "startTurn">,
+  currentTurn?: number
+): number {
+  if (currentTurn == null || war.startTurn == null) return 1;
+  const age = Math.max(0, currentTurn - war.startTurn);
+  const acclimationTurns = age - WAR_ACCLIMATION_GRACE_TURNS;
+  if (acclimationTurns <= 0) return 1;
+
+  const intensity = Math.max(0, Math.min(100, war.intensity));
+  if (intensity >= WAR_ACCLIMATION_HOT_INTENSITY) return 1;
+  const coolness =
+    intensity <= WAR_ACCLIMATION_FULL_INTENSITY
+      ? 1
+      : (WAR_ACCLIMATION_HOT_INTENSITY - intensity) /
+        (WAR_ACCLIMATION_HOT_INTENSITY - WAR_ACCLIMATION_FULL_INTENSITY);
+  const ageReduction =
+    Math.min(1, acclimationTurns / WAR_ACCLIMATION_TURNS_TO_MAX) * WAR_ACCLIMATION_MAX_REDUCTION;
+  return Math.max(1 - WAR_ACCLIMATION_MAX_REDUCTION, 1 - ageReduction * coolness);
 }
 
 /** Fold active wars into the two intensity sums the pressure floor reads. */
 export function warPressures(
   wars: WarPressureInput[],
-  nuclearCountries: ReadonlySet<CountryId>
+  nuclearCountries: ReadonlySet<CountryId>,
+  currentTurn?: number
 ): WarPressureSummary {
   let nuclearWarIntensity = 0;
   let otherWarIntensity = 0;
   let nuclearWarCount = 0;
+  let nuclearWarMinimumPressure = 0;
   for (const war of wars) {
     const intensity = Math.max(0, Math.min(100, war.intensity));
+    const multiplier = warAcclimationMultiplier(war, currentTurn);
+    const pressureIntensity = intensity * multiplier;
     if (isNuclearWar(war, nuclearCountries)) {
-      nuclearWarIntensity += intensity;
+      nuclearWarIntensity += pressureIntensity;
       nuclearWarCount += 1;
+      nuclearWarMinimumPressure = Math.max(
+        nuclearWarMinimumPressure,
+        Math.max(
+          NUCLEAR_WAR_RESIDUAL_PRESSURE,
+          (NUCLEAR_WAR_MINIMUM_TENSION - TENSION_BASELINE) * multiplier
+        )
+      );
     } else {
-      otherWarIntensity += intensity;
+      otherWarIntensity += pressureIntensity;
     }
   }
   return {
@@ -174,6 +233,7 @@ export function warPressures(
     otherWarIntensity,
     activeWarCount: wars.length,
     nuclearWarCount,
+    nuclearWarMinimumPressure: clampTension(nuclearWarMinimumPressure),
   };
 }
 

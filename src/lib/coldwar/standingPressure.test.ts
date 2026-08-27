@@ -46,6 +46,7 @@ describe("readStandingPressureSnapshot", () => {
         otherWarIntensity: 0,
         activeWarCount: 1,
         nuclearWarCount: 1,
+        nuclearWarMinimumPressure: 48,
       },
       pressures: {
         escalationLevel: 1,
@@ -53,6 +54,7 @@ describe("readStandingPressureSnapshot", () => {
         totalWarheads: 1214,
         nuclearWarIntensity: 70,
         nuclearWarCount: 1,
+        nuclearWarMinimumPressure: 48,
         otherWarIntensity: 0,
       },
     });

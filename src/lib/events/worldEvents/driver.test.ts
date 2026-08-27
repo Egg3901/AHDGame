@@ -7,6 +7,7 @@ import "./handlers/royalEvent";
 import "./handlers/papalVisit";
 import "./handlers/olympics";
 import "./handlers/worldsFair";
+import "./handlers/highTensionEvents";
 import { processWorldEventsTurn } from "./driver";
 import { hashToUint32 } from "@/lib/events/substrate/rng";
 import { COUNTRY_CONFIGS, COUNTRY_ORDER } from "@/lib/constants/countries";
@@ -45,6 +46,8 @@ describe("processWorldEventsTurn (World Events v1 Phase 1 scheduler)", () => {
     db.collection("eventCooldownLedger");
     db.collection("characters");
     db.collection("governmentApprovals");
+    db.collection("coldWarTension");
+    db.collection("countryModifiers");
   });
 
   it("is a no-op when worldEventsEnabled is false (default)", async () => {
@@ -159,6 +162,51 @@ describe("processWorldEventsTurn (World Events v1 Phase 1 scheduler)", () => {
     // UK is eligible for both papalVisit and royalEvent, but the cap means
     // only one instance is ever created for UK this turn.
     expect(ukInserts.length).toBe(1);
+  });
+
+  it("records a shared fire marker so high-tension crises stagger across kinds", async () => {
+    const def = makeDefinition({
+      kind: "worldEvents.panicBuying",
+      minTension: 60,
+      schedule: { kind: "window", minGapTurns: 10, maxGapTurns: 24 },
+      defaultOptionId: "calm",
+      options: [
+        { id: "ration", label: "Ration", description: "" },
+        { id: "calm", label: "Calm", description: "", isDefault: true },
+        { id: "release", label: "Release", description: "" },
+      ],
+    });
+    db.collectionMocks.eventDefinitions!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([def]),
+    });
+    db.collectionMocks.eventInstances!.findOne.mockResolvedValue(null);
+    db.collectionMocks.eventCooldownLedger!.findOne.mockResolvedValue(null);
+    db.collectionMocks.coldWarTension!.findOne.mockResolvedValue({
+      _id: "current",
+      value: 100,
+      pressureFloor: 100,
+      updatedTurn: 100,
+      events: [],
+      updatedAt: new Date(),
+    });
+    db.collectionMocks.countryModifiers!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+
+    await processWorldEventsTurn(db as never, 100, { worldEventsEnabled: true });
+
+    expect(db.collectionMocks.eventCooldownLedger!.updateOne.mock.calls).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining([
+          expect.anything(),
+          expect.objectContaining({
+            $set: expect.objectContaining({
+              "lastFiredTurnByKind.worldEvents.highTensionShared": 100,
+            }),
+          }),
+        ]),
+      ])
+    );
   });
 });
 

@@ -18,6 +18,8 @@ export interface StandingPressureInputs {
   activeCrises: number;
   programs: NuclearProgramPressureInput[];
   conflicts: WarPressureInput[];
+  /** Current turn enables limited-war acclimation. Omit for seed compatibility. */
+  currentTurn?: number;
 }
 
 export interface StandingPressureSnapshot {
@@ -28,12 +30,13 @@ export interface StandingPressureSnapshot {
 
 /** Adapt the canonical conflict document to the pressure model in one place. */
 export function conflictWarPressureInput(
-  conflict: Pick<ConflictDoc, "sideA" | "sideB" | "intensity">
+  conflict: Pick<ConflictDoc, "sideA" | "sideB" | "intensity" | "startTurn">
 ): WarPressureInput {
   return {
     sideACountries: conflict.sideA?.countries ?? [],
     sideBCountries: conflict.sideB?.countries ?? [],
     intensity: conflict.intensity ?? 0,
+    startTurn: conflict.startTurn,
   };
 }
 
@@ -45,7 +48,11 @@ export function buildStandingPressureSnapshot(
     (sum, program) => sum + Math.max(0, program.warheads),
     0
   );
-  const warSummary = warPressures(input.conflicts, nuclearArmedCountryIds(input.programs));
+  const warSummary = warPressures(
+    input.conflicts,
+    nuclearArmedCountryIds(input.programs),
+    input.currentTurn
+  );
   return {
     totalWarheads,
     warSummary,
@@ -55,6 +62,7 @@ export function buildStandingPressureSnapshot(
       totalWarheads,
       nuclearWarIntensity: warSummary.nuclearWarIntensity,
       nuclearWarCount: warSummary.nuclearWarCount,
+      nuclearWarMinimumPressure: warSummary.nuclearWarMinimumPressure,
       otherWarIntensity: warSummary.otherWarIntensity,
     },
   };
@@ -63,7 +71,8 @@ export function buildStandingPressureSnapshot(
 /** Read current standing pressure, including all active crises and conflicts. */
 export async function readStandingPressureSnapshot(
   db: Db,
-  gameState: { livingConflictsEnabled?: boolean }
+  gameState: { livingConflictsEnabled?: boolean },
+  currentTurn?: number
 ): Promise<StandingPressureSnapshot> {
   const [vietnam, activeCrises, programs, conflicts] = await Promise.all([
     gameState.livingConflictsEnabled ? livingVietnamAsLegacyState(db) : getVietnamEscalation(db),
@@ -76,5 +85,6 @@ export async function readStandingPressureSnapshot(
     activeCrises,
     programs,
     conflicts: conflicts.map(conflictWarPressureInput),
+    currentTurn,
   });
 }

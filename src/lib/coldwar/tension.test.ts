@@ -12,6 +12,7 @@ import {
   tensionBand,
   tensionFloor,
   tensionPressureBreakdown,
+  warAcclimationMultiplier,
   warDeclarationTensionDelta,
   warPressures,
   TENSION_BASELINE,
@@ -156,6 +157,7 @@ describe("warPressures", () => {
       otherWarIntensity: 40,
       activeWarCount: 2,
       nuclearWarCount: 1,
+      nuclearWarMinimumPressure: 48,
     });
   });
 
@@ -197,6 +199,7 @@ describe("warPressures", () => {
       otherWarIntensity: 0,
       activeWarCount: 2,
       nuclearWarCount: 1,
+      nuclearWarMinimumPressure: 48,
     });
   });
 
@@ -213,6 +216,29 @@ describe("warPressures", () => {
         nuclearCountries
       )
     ).toBe(10);
+  });
+
+  it("slowly acclimates to a long limited war after the grace period", () => {
+    const war = {
+      sideACountries: ["US" as CountryId],
+      sideBCountries: ["RU" as CountryId],
+      intensity: 70,
+      startTurn: 100,
+    };
+    expect(warAcclimationMultiplier(war, 112)).toBe(1);
+    expect(warAcclimationMultiplier(war, 132)).toBe(0.8);
+    expect(warAcclimationMultiplier(war, 152)).toBe(0.6);
+
+    const fresh = warPressures([war], nuclearCountries, 112);
+    const old = warPressures([war], nuclearCountries, 152);
+    expect(old.nuclearWarIntensity).toBeLessThan(fresh.nuclearWarIntensity);
+    expect(old.nuclearWarMinimumPressure).toBeLessThan(fresh.nuclearWarMinimumPressure);
+    expect(old.nuclearWarMinimumPressure).toBeGreaterThanOrEqual(30);
+  });
+
+  it("restores full pressure when a prolonged war becomes hot", () => {
+    expect(warAcclimationMultiplier({ intensity: 85, startTurn: 1 }, 200)).toBe(1);
+    expect(warAcclimationMultiplier({ intensity: 100, startTurn: 1 }, 200)).toBe(1);
   });
 });
 
