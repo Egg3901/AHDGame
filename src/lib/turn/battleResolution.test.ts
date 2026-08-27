@@ -1108,3 +1108,113 @@ describe("resolveBattleDeclarations — opposing offensives in one tick", () => 
     expect(out).toEqual({ resolved: 1, fizzled: 1 });
   });
 });
+
+describe("resolveBattleDeclarations - allied auto-join", () => {
+  let db: MockDb;
+
+  /** A two-nation coalition so `sideOf` resolves off the roster, not the bloc table. */
+  const coalitionConflict = {
+    _id: "afghan",
+    name: "Central Asian Front",
+    hostCountry: "RU",
+    region: "cas",
+    terrain: "Arid / mountainous",
+    bloc: "contested",
+    severity: "HIGH",
+    baseStrength: 470,
+    terr: 1.15,
+    infra: 34,
+    enemyMix: ["armor", "mech", "infantry"],
+    // Supply is REQUIRED. Without it `conflictSupply` is undefined, the supply state
+    // resolves to NaN and every casualty, power and readiness figure in the battle comes
+    // out NaN. The older fixture in this file omits it and nothing noticed, because no
+    // test there asserts a numeric outcome.
+    supplyA: 60,
+    supplyB: 60,
+    supplyBaseA: 60,
+    supplyBaseB: 60,
+    sideA: { label: "Allies", countries: ["US", "UK"], kind: "coalition" },
+    sideB: { label: "Gov't", countries: ["CN"], kind: "state" },
+  };
+
+  const usDeclares = {
+    _id: new ObjectId(),
+    declarerCountry: "US",
+    targetCountry: "CN",
+    theaterId: "afghan",
+    declaredByCharacterId: "char_1",
+    declaredTurn: 40,
+    status: "pending",
+  };
+
+  /** Only UK's standing order varies between these cases. */
+  function setup(ukAutoJoin: boolean) {
+    vi.clearAllMocks();
+    db = createMockDb();
+    for (const c of [
+      "militaryUnits",
+      "militaryFormations",
+      "nationalDoctrine",
+      "battleDeclarations",
+      "battleReports",
+      "conflicts",
+      "theaterState",
+    ]) {
+      db.collection(c);
+    }
+    db.collectionMocks.militaryFormations.findOne.mockResolvedValue(null);
+    db.collectionMocks.nationalDoctrine.findOne.mockResolvedValue(null);
+    db.collectionMocks.conflicts.findOne.mockResolvedValue(coalitionConflict);
+    db.collectionMocks.battleDeclarations.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([usDeclares]),
+    });
+    db.collectionMocks.theaterState.find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue(
+          ukAutoJoin
+            ? [{ countryId: "UK", cohesion: 85, committed: {}, autoJoin: { afghan: true } }]
+            : []
+        ),
+    });
+    wireUnits(
+      db,
+      [unit({ countryId: "US" }), unit({ countryId: "UK", theaterId: "afghan" })],
+      [unit({ countryId: "CN", theaterId: "afghan" })]
+    );
+  }
+
+  const reportOf = () =>
+    db.collectionMocks.battleReports.insertOne.mock.calls[0]?.[0] as {
+      attackers?: string[];
+      result?: { attacker?: { contingents?: { country: string; loss: number }[] } };
+    };
+
+  it("pulls an opted-in ally into an offensive it never declared", async () => {
+    setup(true);
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+    expect(reportOf().attackers).toEqual(["US", "UK"]);
+  });
+
+  it("leaves the ally out when it has no standing order", async () => {
+    // The whole contract: silence is the old behaviour.
+    setup(false);
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+    expect(reportOf().attackers).toEqual(["US"]);
+  });
+
+  it("attributes the auto-joined ally's dead to the ally, not the declarer", async () => {
+    // Auto-join makes multi-nation offensives routine, so per-nation attribution stops
+    // being an edge case. Without it this feature would file UK's dead under the US.
+    setup(true);
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+    const contingents = reportOf().result?.attacker?.contingents ?? [];
+    // Names only. This harness mocks militaryFormations and nationalDoctrine to null and
+    // never registers characterGenerals, so the battle math it produces is not numerically
+    // meaningful -- which is why no test in this file asserts a figure, only that the
+    // writes happened. The numbers for a multi-nation offensive are verified against the
+    // live world by `scripts/sim/combatBalance2026-08-27.ts`, which resolves DD+RU as a
+    // real coalition and checks the per-contingent losses sum to the side.
+    expect(contingents.map((c) => c.country).sort()).toEqual(["UK", "US"]);
+  });
+});

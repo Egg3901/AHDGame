@@ -9,6 +9,7 @@ import type {
   TreatyEntry,
 } from "@/lib/db/types/conflict";
 import type { Front } from "@/lib/military/combat";
+import { capacityOfTerrain } from "@/lib/military/combat";
 import { homeRegionOf } from "@/lib/military/regionTopology";
 import { getRegion } from "@/lib/military/regions";
 import { getConflictsCollection } from "@/lib/db/collections/conflicts";
@@ -16,6 +17,8 @@ import { getNextSequentialId } from "@/lib/db/sequentialId";
 import type { WarGoal } from "@/lib/military/warGoals";
 import { initialControl } from "./occupation";
 import { OCCUPATION } from "./config";
+import { deriveSeaAccess } from "./seaAccess";
+import { hostEntitiesOf } from "./hostEntities";
 import { planOpeningForceDeployment } from "./openingForces";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
@@ -71,6 +74,13 @@ export interface BuildConflictInput {
   declaredByBillId?: string;
   /** Countries pulled in by a mutual-defence treaty at declaration time. */
   treatyEntries?: TreatyEntry[];
+  /**
+   * Override whether the front reaches the sea. Omit it and `conflictToFront` derives
+   * the answer from the host's naval branches, which is right for almost every war.
+   * Set it for the case the derivation cannot see: fighting inland of a coastal nation,
+   * or a landlocked theatre inside a country that does have a coast.
+   */
+  seaAccess?: boolean;
 }
 
 /**
@@ -124,6 +134,9 @@ export function buildConflict(input: BuildConflictInput): ConflictDoc {
     sideB: input.sideB,
     bloc: blocOfSides(input.sideA, input.sideB),
     terrain,
+    // Written only when the caller overrides. Storing the derived value instead would
+    // freeze today's answer into the document and stop it tracking the branch table.
+    ...(input.seaAccess === undefined ? {} : { seaAccess: input.seaAccess }),
     severity,
     baseStrength,
     supplyA: SEED_SUPPLY,
@@ -206,6 +219,11 @@ export function conflictToFront(c: ConflictDoc): Front {
     contested: c.bloc === "contested",
     terr: c.terr,
     infra: c.infra,
+    // Absent on every conflict written before sea access existed, so derive rather than
+    // default: a stored `false` would quietly beach every navy in the game.
+    seaAccess: c.seaAccess ?? deriveSeaAccess(hostEntitiesOf(c), c.terrain),
+    // How much can stand in the line here. Derived from the ground, like `terr`.
+    capacity: capacityOfTerrain(c.terrain),
     sev: c.severity,
     west: c.sideA.label,
     east: c.sideB.label,
