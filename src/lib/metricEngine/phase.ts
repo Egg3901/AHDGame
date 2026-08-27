@@ -354,7 +354,10 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
   const stateOps: Array<{
     updateOne: {
       filter: { _id: string };
-      update: { $set: Record<string, number | string | RevenueSnapshot[]> };
+      update: {
+        $set: Record<string, number | string | RevenueSnapshot[]>;
+        $unset?: Record<string, "">;
+      };
     };
   }> = [];
 
@@ -503,11 +506,13 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     // flip turn the EMA seeds fresh from this turn's host sum and the snapshot
     // log restarts; until a snapshot matures past the minimum span the node
     // keeps using the one-turn fallback.
-    const trendActive = sectorTax.plantsEnabled && useHostRealized;
+    const startsHostTrend = sectorTax.plantsEnabled && !useHostRealized;
+    const trendActive = sectorTax.plantsEnabled;
     const revenueEmaNow = trendActive
-      ? advanceRevenueEma(finite(state.sectorRevenueEma), nowHost)
+      ? advanceRevenueEma(startsHostTrend ? undefined : finite(state.sectorRevenueEma), nowHost)
       : undefined;
-    const priorSnapshots = trendActive ? state.sectorRevenueSnapshots : undefined;
+    const priorSnapshots =
+      trendActive && !startsHostTrend ? state.sectorRevenueSnapshots : undefined;
     const revenueTrendBaseline = trendActive
       ? selectRevenueTrendBaseline(priorSnapshots, turn)
       : null;
@@ -890,6 +895,18 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
             ...(revenueEmaNow !== undefined ? { sectorRevenueEma: revenueEmaNow } : {}),
             ...(nextSnapshots !== undefined ? { sectorRevenueSnapshots: nextSnapshots } : {}),
           },
+          // Dropping below plants returns the stored one-turn baseline to the
+          // legacy unit. Remove the host tag and trend state so a later flip
+          // starts a fresh host-only EMA and snapshot log on that exact turn.
+          ...(!sectorTax.plantsEnabled
+            ? {
+                $unset: {
+                  sectorRealizedRevenueUnit: "" as const,
+                  sectorRevenueEma: "" as const,
+                  sectorRevenueSnapshots: "" as const,
+                },
+              }
+            : {}),
         },
       },
     });

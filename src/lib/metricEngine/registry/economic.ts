@@ -15,6 +15,7 @@ import {
   UNEMPLOYMENT_INERTIA,
   UNEMPLOYMENT_MAX,
   UNEMPLOYMENT_MIN,
+  type RevenueTrendBaseline,
 } from "@/lib/turn/gdpGrowth";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import type { CorporationType } from "@/lib/constants/corporations";
@@ -76,7 +77,7 @@ export interface SectorRevenueTaxPayload {
    * turn's delta by 48 — the one-turn path stays as the cold-start fallback.
    */
   revenueEmaNow?: number;
-  revenueTrendBaseline?: { value: number; spanTurns: number } | null;
+  revenueTrendBaseline?: RevenueTrendBaseline | null;
 }
 
 /**

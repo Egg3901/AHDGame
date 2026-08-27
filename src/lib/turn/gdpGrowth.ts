@@ -238,6 +238,11 @@ export interface RevenueSnapshot {
   value: number;
 }
 
+export interface RevenueTrendBaseline {
+  value: number;
+  spanTurns: number;
+}
+
 /** One turn of revenue-level smoothing. No prior EMA ⇒ seed at the level. */
 export function advanceRevenueEma(prevEma: number | undefined, now: number): number {
   if (typeof prevEma !== "number" || !Number.isFinite(prevEma) || prevEma <= 0) return now;
@@ -271,8 +276,8 @@ export function updateRevenueSnapshots(
 export function selectRevenueTrendBaseline(
   snapshots: RevenueSnapshot[] | undefined,
   turn: number
-): { value: number; spanTurns: number } | null {
-  let best: { value: number; spanTurns: number } | null = null;
+): RevenueTrendBaseline | null {
+  let best: RevenueTrendBaseline | null = null;
   for (const s of snapshots ?? []) {
     const span = turn - s.turn;
     if (span < REVENUE_TREND_MIN_SPAN || !Number.isFinite(s.value) || s.value <= 0) continue;
@@ -293,7 +298,7 @@ export function selectRevenueTrendBaseline(
  */
 export function computeTrailingRevenueGrowthRate(
   emaNow: number | undefined,
-  baseline: { value: number; spanTurns: number } | null | undefined,
+  baseline: RevenueTrendBaseline | null | undefined,
   turnsPerYear: number
 ): number | null {
   if (typeof emaNow !== "number" || !Number.isFinite(emaNow) || emaNow < 0) return null;
