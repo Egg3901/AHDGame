@@ -1,8 +1,12 @@
+import type { PeaceTerm } from "@/lib/military/peaceTerm";
 import type { ReactNode } from "react";
 import { FrontLineMap } from "../combat/components/FrontLineMap";
 import type { ConflictTier } from "@/lib/military/conflictVisibility";
 import type { ForceRow, RecordBattleRow, SideForce } from "./conflictRecordView";
 import { ConflictActions } from "./ConflictActions";
+import { DictateTermsPanel, type DictateTermsView } from "./DictateTermsPanel";
+import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
+import type { ConflictStatus } from "@/lib/db/types/conflict";
 import { CommandChainPanel, CommandLockedPanel, HowThisFrontMoves } from "./CommandChainPanel";
 import { PostedGeneralsPanel, type PostedGeneralRow } from "./PostedGeneralsPanel";
 import { EmployCommandPanel, type EmployableGeneral } from "./EmployCommandPanel";
@@ -86,7 +90,7 @@ export interface ConflictRecordView {
     id: string;
     leaver: string;
     other: string;
-    indemnity: { payer: string; amount: number };
+    term: PeaceTerm;
     justification: string | null;
     turn: number;
   }>;
@@ -105,6 +109,12 @@ export interface ConflictRecordView {
    * reader of the public record does not need to be told they hold none.
    */
   chain: CommandChainView | null;
+  /**
+   * The dictate panel's props, or null. Non-null only for the negotiator of the
+   * country that won this war outright, so the winning side's allies and the losing
+   * side never see it.
+   */
+  dictate: DictateTermsView | null;
   /** Everything ConflictActions needs; null when the viewer may not act here. */
   actions: {
     theaterId: string;
@@ -156,6 +166,9 @@ const STATUS_COLOR: Record<string, string> = {
   active: "#eab308",
   escalating: "#ff5a3c",
   winding_down: "#86d978",
+  // Amber, like `active`: a war awaiting terms is not over and something is still
+  // owed. Without an entry it fell back to the resolved grey and read as finished.
+  terms_pending: "#eab308",
   resolved: "#8a8a9a",
 };
 
@@ -246,16 +259,40 @@ function Panel({ children }: { children: ReactNode }) {
  *
  * Spec: docs/superpowers/specs/2026-07-26-conflict-ids-and-pages-design.md
  */
+/**
+ * One line describing what a settlement took.
+ *
+ * Player-facing copy, so no em or en dashes and no anchor units: an indemnity is
+ * quoted in the payer's own currency and is printed as a plain figure beside the
+ * country that paid it, never converted to a unit players do not use.
+ */
+function settlementTermText(term: PeaceTerm): string {
+  if (term.kind === "white_peace") {
+    return "A white peace. Neither side prevailed and nothing changed hands.";
+  }
+  if (term.kind === "indemnity") {
+    return term.amount > 0
+      ? `${term.payer} paid an indemnity of ${term.amount.toLocaleString("en-US")}.`
+      : "A white peace. No money changed hands.";
+  }
+  if (term.kind === "regime_change") {
+    return "The government fell and fresh elections were called.";
+  }
+  return `New defence procurement was frozen for ${term.turns} turns.`;
+}
+
 export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }) {
   const statusColor = STATUS_COLOR[c.status] ?? "#8a8a9a";
   const pctB = Math.round(c.control);
   const pctA = 100 - pctB;
   const publicOnly = c.tier === "public";
   // "Nothing opposes you here" is a claim about a LIVE front seen from a side. A
-  // resolved war has returned every unit to reserve, so both sides read as zero —
-  // which would otherwise invite the reader to take ground in a finished war.
+  // concluded war has returned every unit to reserve, so both sides read as zero,
+  // which would otherwise invite the reader to take ground in a finished war. A war
+  // awaiting terms stands its rosters down exactly as a resolved one does, so it has
+  // to be excluded here too.
   const unopposed =
-    c.status !== "resolved" &&
+    !isConflictConcluded(c.status as ConflictStatus) &&
     c.ownSide !== null &&
     (c.ownSide === "A" ? c.forceB : c.forceA).divisions === 0;
 
@@ -431,11 +468,8 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
                 }}
               >
                 <div style={{ font: `500 12px ${mono}`, color: "#c9c9d6" }}>
-                  {s.leaver} left the war on turn {s.turn}, settling with {s.other}
-                  {s.indemnity.amount > 0
-                    ? ` — ${s.indemnity.payer} paid ${s.indemnity.amount.toLocaleString("en-US")}`
-                    : " — a white peace"}
-                  .
+                  {s.leaver} left the war on turn {s.turn}, settling with {s.other}:{" "}
+                  {settlementTermText(s.term)}
                 </div>
                 {s.justification && (
                   <div
@@ -637,6 +671,11 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
             />
 
             {c.chain && <CommandChainPanel chain={c.chain} viewerCountry={c.viewerCountry} />}
+
+            {/* Above the command surface, not below it: a war awaiting terms takes
+                no more orders, so the one decision still open should be the first
+                thing its holder sees. */}
+            {c.dictate && <DictateTermsPanel view={c.dictate} />}
 
             {/* The command surface — only for a viewer canActAtTheater would admit,
                 and never on a resolved war. The routes enforce it again

@@ -28,7 +28,7 @@ const baseOffer = {
   conflictId: "war1",
   fromCountry: "CN",
   toCountry: "UK",
-  indemnity: { payer: "CN", amount: 100 },
+  term: { kind: "indemnity", payer: "CN", amount: 100 },
   status: "pending",
   offeredTurn: 1,
   expiresTurn: 999,

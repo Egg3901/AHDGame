@@ -32,7 +32,13 @@ export function yearOfTurn(turn: number, startingYear: number, clock?: CalendarC
 
 /** The board's severity rung. A winding-down war reads as that whatever its weight. */
 function severityOf(doc: ConflictDoc): Severity {
-  if (doc.status === "winding_down") return "WINDING DOWN";
+  // A war awaiting terms has stopped: its front reached a pole and every unit went
+  // back to reserve. Left to fall through, its stored `severity` would put a
+  // finished war on the board as CRITICAL. It shares the winding-down rung rather
+  // than getting its own, because the board's four rungs are about how hot a war is
+  // and this one is cold; the record page names the exact state for anyone who opens
+  // it.
+  if (doc.status === "winding_down" || doc.status === "terms_pending") return "WINDING DOWN";
   return doc.severity === "HIGH" ? "CRITICAL" : doc.severity === "MEDIUM" ? "MAJOR" : "ACTIVE";
 }
 

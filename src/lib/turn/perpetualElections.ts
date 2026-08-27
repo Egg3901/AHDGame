@@ -63,6 +63,7 @@ import {
   getUKRegionalCouncilCycle1EndTurn,
   getUKRegionalCouncilElectionYear,
 } from "@/lib/elections/ukRegionalCouncilStagger";
+import { snapAnchorEndTime } from "@/lib/elections/snapShift";
 
 // Re-export so existing consumers (sync-date, snapElection, admin routes,
 // etc.) that import DEFAULT_DURATIONS from this module keep working.
@@ -1049,13 +1050,11 @@ export async function ensureUKElections(now: Date): Promise<void> {
     if (justResolvedInSameTurn(prev, now, currentTurn)) continue;
 
     // Snap shift: only the immediate post-snap regular inherits the snap's
-    // endTurn as its anchor. If prev is a regular (even an admin-accelerated
-    // one), we deliberately DO NOT pass priorEndTurn — admin edits must not
-    // drag the LARP calendar.
-    const priorEndTurn =
-      prev?.electionType === "snap_commons" && prev.endTime
-        ? endTimeToLarpTurn(prev.endTime, now, currentTurn)
-        : null;
+    // endTurn as its anchor, and only when the country called the snap itself.
+    // See `snapAnchorEndTime` for why a regular and an IMPOSED snap both yield
+    // null here.
+    const snapAnchor = snapAnchorEndTime(prev, "snap_commons");
+    const priorEndTurn = snapAnchor ? endTimeToLarpTurn(snapAnchor, now, currentTurn) : null;
 
     const spawn = pickNextCanonicalCycle({
       electionType: "commons",
@@ -1326,13 +1325,10 @@ export async function ensureJPElections(now: Date): Promise<void> {
     const prev = lastCompleted(regionId);
     if (justResolvedInSameTurn(prev, now, currentTurn)) continue;
 
-    // Snap shift: only when prev is a snap does the snap's endTurn anchor the
-    // next regular's LARP schedule. Admin-accelerated regulars must NOT drag
-    // the LARP calendar.
-    const priorEndTurn =
-      prev?.electionType === "snap_shugiin" && prev.endTime
-        ? endTimeToLarpTurn(prev.endTime, now, currentTurn)
-        : null;
+    // Snap shift: only when prev is a snap the country called itself does its
+    // endTurn anchor the next regular's LARP schedule. See `snapAnchorEndTime`.
+    const snapAnchor = snapAnchorEndTime(prev, "snap_shugiin");
+    const priorEndTurn = snapAnchor ? endTimeToLarpTurn(snapAnchor, now, currentTurn) : null;
 
     const spawn = pickNextCanonicalCycle({
       electionType: "shugiin",
@@ -1794,10 +1790,8 @@ export async function ensureDEElections(now: Date): Promise<void> {
     // Snap shift: only the immediate post-snap regular inherits the snap's
     // endTurn as its anchor. Regular-to-regular transitions use pure canonical
     // LARP to keep admin edits from dragging the calendar.
-    const priorEndTurn =
-      prev?.electionType === "snap_bundestag" && prev.endTime
-        ? endTimeToLarpTurn(prev.endTime, now, currentTurn)
-        : null;
+    const snapAnchor = snapAnchorEndTime(prev, "snap_bundestag");
+    const priorEndTurn = snapAnchor ? endTimeToLarpTurn(snapAnchor, now, currentTurn) : null;
 
     const spawn = pickNextCanonicalCycle({
       electionType: "bundestag",
@@ -2921,12 +2915,12 @@ async function ensureBetaParliamentElections(
     const prev = lastCompleted(regionId);
     if (justResolvedInSameTurn(prev, now, currentTurn)) continue;
 
-    // Snap shift: only a resolved snap drags the anchor (priorEndTurn +
-    // period); admin-accelerated regulars must NOT move the LARP calendar.
-    const priorEndTurn =
-      prev?.electionType === snapType && prev.endTime
-        ? endTimeToLarpTurn(prev.endTime, now, currentTurn)
-        : null;
+    // Snap shift: only a resolved snap the country called itself drags the
+    // anchor (priorEndTurn + period). Admin-accelerated regulars must NOT move
+    // the LARP calendar, and neither must an IMPOSED snap. See
+    // `snapAnchorEndTime`.
+    const snapAnchor = snapAnchorEndTime(prev, snapType);
+    const priorEndTurn = snapAnchor ? endTimeToLarpTurn(snapAnchor, now, currentTurn) : null;
 
     const spawn = pickNextCanonicalCycle({
       electionType,
