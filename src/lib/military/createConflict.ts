@@ -1,5 +1,4 @@
 import type { Db } from "mongodb";
-import type { CountryId } from "@/lib/constants/countries";
 import type { RegionCode } from "@/lib/military/types";
 import type {
   ConflictDoc,

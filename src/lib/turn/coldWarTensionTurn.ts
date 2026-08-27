@@ -1,15 +1,6 @@
 import type { Db } from "mongodb";
-import { getVietnamEscalation } from "@/lib/crises/vietnamEscalation";
-import { livingVietnamAsLegacyState } from "@/lib/livingConflict/vietnamCompat";
-import { listNuclearPrograms } from "@/lib/db/collections/nuclearPrograms";
-import { listActiveConflicts } from "@/lib/db/collections/conflicts";
-import {
-  nuclearArmedCountryIds,
-  runTensionTurn,
-  warPressures,
-  type ColdWarTensionState,
-  type TensionPressures,
-} from "@/lib/coldwar/tension";
+import { runTensionTurn, type ColdWarTensionState } from "@/lib/coldwar/tension";
+import { readStandingPressureSnapshot } from "@/lib/coldwar/standingPressure";
 
 /**
  * Turn phase for global cold-war tension: read the world's standing pressure
@@ -33,27 +24,6 @@ export async function processColdWarTensionTurn(
 ): Promise<ColdWarTensionState | null> {
   if (gameState.coldWarEnabled !== true) return null;
 
-  const [vietnam, activeCrises, programs, conflicts] = await Promise.all([
-    gameState.livingConflictsEnabled ? livingVietnamAsLegacyState(db) : getVietnamEscalation(db),
-    db.collection("crises").countDocuments({ status: "active", globalResponse: { $exists: true } }),
-    listNuclearPrograms(db),
-    listActiveConflicts(db),
-  ]);
-
-  const warSummary = warPressures(
-    conflicts.map((conflict) => ({
-      sideACountries: conflict.sideA?.countries ?? [],
-      sideBCountries: conflict.sideB?.countries ?? [],
-      intensity: conflict.intensity ?? 0,
-    })),
-    nuclearArmedCountryIds(programs)
-  );
-  const pressures: TensionPressures = {
-    escalationLevel: vietnam.level,
-    activeCrises,
-    totalWarheads: programs.reduce((sum, p) => sum + Math.max(0, p.warheads ?? 0), 0),
-    nuclearWarIntensity: warSummary.nuclearWarIntensity,
-    otherWarIntensity: warSummary.otherWarIntensity,
-  };
-  return runTensionTurn(db, turn, pressures);
+  const snapshot = await readStandingPressureSnapshot(db, gameState);
+  return runTensionTurn(db, turn, snapshot.pressures);
 }

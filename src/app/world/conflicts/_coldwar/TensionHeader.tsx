@@ -5,6 +5,7 @@ import type { TensionBand, TensionPressureBreakdown } from "@/lib/coldwar/tensio
 import type { ColdWarDials } from "@/lib/coldwar/dials";
 import { defconColor } from "./defcon";
 import { fmtN } from "./orgForces";
+import { useTranslations } from "next-intl";
 
 const mono = "'IBM Plex Mono',monospace";
 const serif = "Lora,Georgia,serif";
@@ -147,6 +148,7 @@ export function TensionHeader({
   pressures: TensionPressureView;
   dials: Pick<ColdWarDials, "source" | "procurementMultiplier" | "detenteGoodwillPenalty">;
 }) {
+  const t = useTranslations("worldConflicts.tension");
   const color = BAND_COLOR[band];
   const recent = events.slice(0, EVENTS_SHOWN);
   const direction =
@@ -196,11 +198,8 @@ export function TensionHeader({
             World tension
           </h1>
         </div>
-        <ColdWarHelp label="How world tension works">
-          Tension is a shared 0 to 100 measure. Tests, war declarations, and crisis outcomes move it
-          immediately. Each turn it moves toward a pressure floor set by the Vietnam ladder, active
-          crises, the wars on this board, and the world nuclear stockpile. Tension alone can reach
-          DEFCON 2, but never DEFCON 1.
+        <ColdWarHelp label={t("howWorldTensionWorksLabel")}>
+          {t("howWorldTensionWorksHelp")}
         </ColdWarHelp>
       </header>
 
@@ -302,10 +301,7 @@ export function TensionHeader({
               >
                 WHAT HOLDS THE FLOOR AT {pressures.floor}
               </h2>
-              <ColdWarHelp label="Pressure floor">
-                One-off spikes fade. These standing pressures do not. The index cannot fall below
-                this floor and cools 8 percent of the remaining gap each turn when it is above it.
-              </ColdWarHelp>
+              <ColdWarHelp label="Pressure floor">{t("pressureFloorHelp")}</ColdWarHelp>
             </div>
             <div
               className="cw-pressure-grid"
@@ -341,10 +337,13 @@ export function TensionHeader({
                 help="All national warheads count. The contribution grows with the square root of the stockpile and caps at 18, so early buildup matters most."
               />
               <PressureCard
-                label="WARS"
+                label={t("warsLabel")}
                 value={pressures.wars}
-                detail={`${pressures.activeWarCount} active, ${pressures.nuclearWarCount} nuclear`}
-                help="Every active war on the Conflicts board pushes the floor by its intensity. A war with nuclear-armed countries on opposing sides weighs far more than any other, capped at 45 in total."
+                detail={t("warsDetail", {
+                  active: pressures.activeWarCount,
+                  nuclear: pressures.nuclearWarCount,
+                })}
+                help={t("warsHelp")}
               />
             </div>
           </div>

@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import type { CountryId } from "@/lib/constants/countries";
 import { describe, expect, it } from "vitest";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import {
@@ -16,7 +17,7 @@ import {
   TENSION_BASELINE,
 } from "./tension";
 
-const NO_WARS = { nuclearWarIntensity: 0, otherWarIntensity: 0 };
+const NO_WARS = { nuclearWarIntensity: 0, nuclearWarCount: 0, otherWarIntensity: 0 };
 
 describe("tensionBand", () => {
   it("maps the full range to the five bands", () => {
@@ -61,9 +62,10 @@ describe("tensionFloor", () => {
       activeCrises: 99,
       totalWarheads: 1e6,
       nuclearWarIntensity: 999,
+      nuclearWarCount: 1,
       otherWarIntensity: 999,
     });
-    // 12 + 30 + 12 + 18 + 45 = 117, clamped to the scale's ceiling.
+    // 12 + 30 + 12 + 18 + 48 = 120, clamped to the scale's ceiling.
     expect(hot).toBe(100);
   });
 
@@ -73,9 +75,10 @@ describe("tensionFloor", () => {
       activeCrises: 0,
       totalWarheads: 400,
       nuclearWarIntensity: 70,
+      nuclearWarCount: 1,
       otherWarIntensity: 0,
     });
-    // 12 baseline + 18 arsenal cap-ish + 31.5 war term.
+    // Nuclear opposition guarantees a crisis-grade floor.
     expect(floor).toBeGreaterThanOrEqual(60);
     expect(tensionBand(floor)).toBe("CRISIS");
   });
@@ -85,25 +88,40 @@ describe("tensionFloor", () => {
     const clash = tensionPressureBreakdown({
       ...base,
       nuclearWarIntensity: 70,
+      nuclearWarCount: 1,
       otherWarIntensity: 0,
     }).wars;
     const proxy = tensionPressureBreakdown({
       ...base,
       nuclearWarIntensity: 0,
+      nuclearWarCount: 0,
       otherWarIntensity: 70,
     }).wars;
     expect(clash).toBeGreaterThan(proxy * 3);
   });
+
+  it("keeps even a low-intensity war between small nuclear powers in CRISIS", () => {
+    const floor = tensionFloor({
+      escalationLevel: 0,
+      activeCrises: 0,
+      totalWarheads: 2,
+      nuclearWarIntensity: 1,
+      nuclearWarCount: 1,
+      otherWarIntensity: 0,
+    });
+    expect(floor).toBeGreaterThanOrEqual(60);
+    expect(tensionBand(floor)).toBe("CRISIS");
+  });
 });
 
 describe("warPressures", () => {
-  const nuclearCountries = new Set(["US", "RU", "UK"]);
+  const nuclearCountries = new Set<CountryId>(["US", "RU", "UK"]);
 
   it("splits wars with nuclear belligerents on opposing sides from every other war", () => {
     const result = warPressures(
       [
         { sideACountries: ["US"], sideBCountries: ["DD", "RU"], intensity: 70 },
-        { sideACountries: ["UK"], sideBCountries: ["EG"], intensity: 40 },
+        { sideACountries: ["UK"], sideBCountries: ["DE"], intensity: 40 },
       ],
       nuclearCountries
     );
@@ -144,7 +162,7 @@ describe("warPressures", () => {
     const result = warPressures(
       [
         { sideACountries: ["US"], sideBCountries: ["RU"], intensity: 250 },
-        { sideACountries: ["UK"], sideBCountries: ["EG"], intensity: -10 },
+        { sideACountries: ["UK"], sideBCountries: ["DE"], intensity: -10 },
       ],
       nuclearCountries
     );
@@ -193,13 +211,13 @@ describe("stepTension", () => {
 });
 
 describe("stored pressure floor", () => {
-  it("prevents a detente event from dropping tension below ongoing wartime pressure", async () => {
+  it("uses a freshly supplied floor when cached pressure predates the war", async () => {
     const db = createMockDb();
     db.collection("coldWarTension");
     db.collectionMocks.coldWarTension!.findOne.mockResolvedValue({
       _id: "current",
       value: 72,
-      pressureFloor: 68.5,
+      pressureFloor: 12,
       updatedTurn: 435,
       events: [],
       updatedAt: new Date(),
@@ -210,10 +228,12 @@ describe("stored pressure floor", () => {
       435,
       "detente",
       "Negotiated settlement",
-      -8
+      -8,
+      { minimumValue: 68.5 }
     );
 
     expect(next.value).toBe(68.5);
+    expect(next.pressureFloor).toBe(68.5);
     expect(next.events[0]?.delta).toBe(-3.5);
   });
 
@@ -232,6 +252,7 @@ describe("stored pressure floor", () => {
       activeCrises: 1,
       totalWarheads: 1214,
       nuclearWarIntensity: 70,
+      nuclearWarCount: 1,
       otherWarIntensity: 0,
     };
 

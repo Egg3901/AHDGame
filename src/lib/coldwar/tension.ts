@@ -1,4 +1,6 @@
 import type { Db } from "mongodb";
+import type { CountryId } from "@/lib/constants/countries";
+import type { ConflictType } from "@/lib/db/types/conflict";
 
 /**
  * Global cold-war tension: one 0-100 number the whole world shares, with a
@@ -17,6 +19,7 @@ export const COLD_WAR_TENSION_COLLECTION = "coldWarTension";
 export const COLD_WAR_TENSION_ID = "current";
 
 export const TENSION_BASELINE = 12;
+export const NUCLEAR_WAR_MINIMUM_TENSION = 60;
 /** Fraction of the gap to the floor closed each turn. */
 export const TENSION_RELAXATION = 0.08;
 const LEDGER_CAP = 24;
@@ -69,6 +72,8 @@ export interface TensionPressures {
    * can hold short of launch, and must dominate the floor.
    */
   nuclearWarIntensity: number;
+  /** Number of active wars with nuclear-armed countries on opposing sides. */
+  nuclearWarCount: number;
   /** Summed intensity of every other active war. */
   otherWarIntensity: number;
 }
@@ -87,13 +92,14 @@ export function tensionPressureBreakdown(p: TensionPressures): TensionPressureBr
   const escalation = Math.min(30, p.escalationLevel * 4);
   const activeCrises = Math.min(12, p.activeCrises * 3);
   const arsenal = Math.min(18, Math.sqrt(Math.max(0, p.totalWarheads)) * 1.2);
-  // A full-intensity nuclear war contributes 45 on its own: baseline 12
-  // + 45 parks the floor deep in CRISIS before counting the arsenal that war
-  // implies, and BRINK is reachable with the rest of the world's pressure.
-  const wars = Math.min(
-    45,
-    Math.max(0, p.nuclearWarIntensity) * 0.45 + Math.max(0, p.otherWarIntensity) * 0.12
-  );
+  // Any nuclear-opponent war contributes at least 48: baseline 12 plus 48
+  // guarantees CRISIS before the arsenal and other pressures are counted.
+  // Conventional wars retain the intensity weight and the original 45 cap.
+  const weightedWars =
+    Math.max(0, p.nuclearWarIntensity) * 0.45 + Math.max(0, p.otherWarIntensity) * 0.12;
+  const nuclearWarMinimum =
+    p.nuclearWarCount > 0 ? NUCLEAR_WAR_MINIMUM_TENSION - TENSION_BASELINE : 0;
+  const wars = Math.min(nuclearWarMinimum > 0 ? 48 : 45, Math.max(weightedWars, nuclearWarMinimum));
   return {
     baseline: TENSION_BASELINE,
     escalation: clampTension(escalation),
@@ -106,28 +112,28 @@ export function tensionPressureBreakdown(p: TensionPressures): TensionPressureBr
 
 /** The two sides of a war as the pressure model needs them: who and how hot. */
 export interface WarPressureInput {
-  sideACountries: string[];
-  sideBCountries: string[];
+  sideACountries: CountryId[];
+  sideBCountries: CountryId[];
   /** 0-100. */
   intensity: number;
 }
 
 export interface NuclearProgramPressureInput {
-  _id: string;
+  _id: CountryId;
   warheads: number;
 }
 
 /** Countries with a usable live stockpile, rather than a hardcoded power list. */
 export function nuclearArmedCountryIds(
   programs: NuclearProgramPressureInput[]
-): ReadonlySet<string> {
+): ReadonlySet<CountryId> {
   return new Set(programs.filter((program) => program.warheads > 0).map((program) => program._id));
 }
 
 /** True when at least one nuclear-armed country stands on each side. */
 export function isNuclearWar(
   war: Pick<WarPressureInput, "sideACountries" | "sideBCountries">,
-  nuclearCountries: ReadonlySet<string>
+  nuclearCountries: ReadonlySet<CountryId>
 ): boolean {
   return (
     war.sideACountries.some((countryId) => nuclearCountries.has(countryId)) &&
@@ -145,7 +151,7 @@ export interface WarPressureSummary {
 /** Fold active wars into the two intensity sums the pressure floor reads. */
 export function warPressures(
   wars: WarPressureInput[],
-  nuclearCountries: ReadonlySet<string>
+  nuclearCountries: ReadonlySet<CountryId>
 ): WarPressureSummary {
   let nuclearWarIntensity = 0;
   let otherWarIntensity = 0;
@@ -169,8 +175,8 @@ export function warPressures(
 
 /** Immediate outbreak spike before the next standing-pressure turn runs. */
 export function warDeclarationTensionDelta(
-  war: Pick<WarPressureInput, "sideACountries" | "sideBCountries"> & { type: string },
-  nuclearCountries: ReadonlySet<string>
+  war: Pick<WarPressureInput, "sideACountries" | "sideBCountries"> & { type: ConflictType },
+  nuclearCountries: ReadonlySet<CountryId>
 ): number {
   if (isNuclearWar(war, nuclearCountries)) return 20;
   return war.type === "interstate" ? 10 : 5;
@@ -233,16 +239,19 @@ export async function applyTensionEvent(
   turn: number,
   kind: TensionEventKind,
   label: string,
-  delta: number
+  delta: number,
+  options: { minimumValue?: number } = {}
 ): Promise<ColdWarTensionState> {
   const state = await getColdWarTension(db);
+  const minimumValue = clampTension(options.minimumValue ?? state.pressureFloor);
   const value = clampTension(
-    delta < 0 ? Math.max(state.pressureFloor, state.value + delta) : state.value + delta
+    delta < 0 ? Math.max(minimumValue, state.value + delta) : state.value + delta
   );
   const appliedDelta = Math.round((value - state.value) * 10) / 10;
   const next: ColdWarTensionState = {
     ...state,
     value,
+    pressureFloor: options.minimumValue == null ? state.pressureFloor : minimumValue,
     events: [{ turn, kind, label, delta: appliedDelta, at: new Date() }, ...state.events].slice(
       0,
       LEDGER_CAP

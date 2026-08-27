@@ -22,7 +22,7 @@ Tension climbs when the world gives it a reason:
 - **Escalation.** Climbing the rungs of an active proxy war raises the standing pressure, not just a one-off spike.
 - **Crises.** Each active world crisis keeps the temperature up while it burns.
 - **The world's arsenals.** The total warhead count across all programmes sets part of the floor. An armed world is a tense world even on a quiet week.
-- **Shooting wars.** Every active war contributes according to its intensity. A war with nuclear-armed countries on opposing sides carries the heaviest weight.
+- **Shooting wars.** Every active war contributes according to its intensity. A war with nuclear-armed countries on opposing sides guarantees at least a CRISIS reading while it remains active.
 
 ## What lowers it
 
