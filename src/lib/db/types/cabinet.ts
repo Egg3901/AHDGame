@@ -13,7 +13,18 @@ export interface CabinetMember extends IterationStampFields {
   characterId: ObjectId;
   characterName: string;
   party?: string;
+  /**
+   * @deprecated Legacy name, written only by the US confirmation path. The
+   * collection's canonical field is `appointedByCharacterId` on
+   * {@link UnifiedCabinetMember}, which the UK, NPP and acting paths all write
+   * and which `caretakerMinister` queries. Write both until the two types are
+   * unified.
+   */
   appointedByPresidentId: ObjectId;
+  /** Canonical appointer field, mirroring {@link UnifiedCabinetMember}. */
+  appointedByCharacterId?: ObjectId | null;
+  /** When the seat was filled, mirroring {@link UnifiedCabinetMember}. */
+  appointedAt?: Date;
   /** True when appointed directly by the executive without legislative confirmation. */
   acting?: boolean;
   /** Turn the acting appointment was seated. Absent on confirmed holders. */

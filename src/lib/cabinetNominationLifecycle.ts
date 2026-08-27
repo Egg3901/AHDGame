@@ -368,6 +368,11 @@ export async function processCabinetNominationLifecycle(
           characterName: nom.nomineeCharacterName,
           party: nom.nomineeParty,
           appointedByPresidentId: nom.proposedByPresidentId,
+          // Also written under the collection's canonical name, which the UK,
+          // NPP and acting paths use and `caretakerMinister` queries. Without
+          // it a US-confirmed secretary is invisible to those readers.
+          appointedByCharacterId: nom.proposedByPresidentId,
+          appointedAt: now,
           confirmedAt: now,
           ...initialMinisterialActionFields(now),
           createdAt: now,
