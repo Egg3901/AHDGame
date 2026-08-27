@@ -21,7 +21,8 @@ import { spendFromTreasury } from "@/lib/budget/treasurySpend";
 import { applyCrisisEffects } from "@/lib/crises/applyEffects";
 import { getGameState } from "@/lib/gameState";
 import { logWireEvent } from "@/lib/wireEvent";
-import { applyTensionEvent } from "@/lib/coldwar/tension";
+import { applyTensionEvent, tensionFloor } from "@/lib/coldwar/tension";
+import { readStandingPressureSnapshot } from "@/lib/coldwar/standingPressure";
 import { EQUIPMENT_TRACK_MAX } from "@/lib/military/arsenal";
 import { adjustIntensity, applyCommitment, relieveCommitment } from "./engine";
 import { livingConflictDef } from "./registry";
@@ -413,13 +414,17 @@ async function applyOutcomeTrajectory(
   }
   await saveConflictState(db, state);
   if (campaignResult.applied && outcome.tensionDelta) {
-    const gameState = await getGameState(db);
+    const minimumValue =
+      outcome.tensionDelta < 0
+        ? tensionFloor((await readStandingPressureSnapshot(db, gameState ?? {})).pressures)
+        : undefined;
     await applyTensionEvent(
       db,
       gameState?.currentTurn ?? crisis.startTurn,
       outcome.tensionDelta > 0 ? "escalation" : "detente",
       outcome.label,
-      outcome.tensionDelta
+      outcome.tensionDelta,
+      { minimumValue }
     );
   }
   return campaignResult;

@@ -22,6 +22,7 @@ Tension climbs when the world gives it a reason:
 - **Escalation.** Climbing the rungs of an active proxy war raises the standing pressure, not just a one-off spike.
 - **Crises.** Each active world crisis keeps the temperature up while it burns.
 - **The world's arsenals.** The total warhead count across all programmes sets part of the floor. An armed world is a tense world even on a quiet week.
+- **Shooting wars.** Every active war contributes according to its intensity. A war with nuclear-armed countries on opposing sides guarantees at least a CRISIS reading while it remains active.
 
 ## What lowers it
 
@@ -29,7 +30,7 @@ Tension climbs when the world gives it a reason:
 - **Detente moves.** Deliberate de-escalation, stand-downs, and diplomatic thaw apply relief directly.
 - **Standing down.** Descending the escalation ladder and resolving crises lowers the floor that tension decays toward.
 
-Note the shape of that: spikes fade, but tension never decays toward zero. It decays toward a floor set by how armed and embroiled the world actually is. If the arsenals are huge and the proxy war is hot, no amount of waiting reads as peace.
+Note the shape of that: spikes fade, but tension never falls below the floor set by how armed and embroiled the world actually is. Several settlements can cool the index to that floor, but cannot erase the pressure of an unrelated shooting war. If the arsenals are huge and the proxy war is hot, no amount of waiting reads as peace.
 
 ## What it does
 
