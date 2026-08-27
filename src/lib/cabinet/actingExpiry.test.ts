@@ -61,7 +61,12 @@ describe("expireLapsedActingAppointments", () => {
     await expireLapsedActingAppointments(db as never, 430);
 
     const { notifyAndRestoreClearedHolders } = await import("@/lib/cabinetTransition");
-    expect(notifyAndRestoreClearedHolders).toHaveBeenCalledWith(db, "US", [row.characterId]);
+    expect(notifyAndRestoreClearedHolders).toHaveBeenCalledWith(
+      db,
+      "US",
+      [row.characterId],
+      expect.anything()
+    );
   });
 
   it("leaves an acting holder still inside their tenure alone", async () => {
@@ -82,28 +87,35 @@ describe("expireLapsedActingAppointments", () => {
     });
   });
 
-  it("ignores a lapsed row in a country that does not run acting appointments", async () => {
-    findReturns([lapsed({ countryId: "UK" })]);
+  it("expires a lapsed row even in a country that no longer runs acting appointments", async () => {
+    // The tenure stamp is a promise made when the seat was taken. Gating expiry
+    // on current country eligibility would strand an existing caretaker as
+    // immortal the moment that country stopped running acting appointments.
+    const row = lapsed({ countryId: "UK" });
+    findReturns([row]);
     const { expireLapsedActingAppointments } = await import("./actingExpiry");
     const result = await expireLapsedActingAppointments(db as never, 424);
-    expect(result.expired).toBe(0);
-    expect(db.collectionMocks["cabinetMembers"]!.deleteMany).not.toHaveBeenCalled();
+    expect(result.expired).toBe(1);
+    expect(db.collectionMocks["cabinetMembers"]!.deleteMany).toHaveBeenCalledWith({
+      _id: { $in: [row._id] },
+    });
   });
 
-  it("notifies the lapsed holder by user id", async () => {
+  it("tells the lapsed holder their appointment expired, not that the government fell", async () => {
+    // The restore helper does the notifying, so the wording has to be passed
+    // in. Its default says the government changed, which is not what happened.
     const row = lapsed();
-    const userId = new ObjectId();
     findReturns([row]);
-    db.collectionMocks["characters"]!.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([{ _id: row.characterId, userId }]),
-    });
 
     const { expireLapsedActingAppointments } = await import("./actingExpiry");
     await expireLapsedActingAppointments(db as never, 424);
 
-    const { createNotifications } = await import("@/lib/notifications");
-    expect(createNotifications).toHaveBeenCalledWith([
-      expect.objectContaining({ userId, type: "system" }),
-    ]);
+    const { notifyAndRestoreClearedHolders } = await import("@/lib/cabinetTransition");
+    expect(notifyAndRestoreClearedHolders).toHaveBeenCalledWith(
+      db,
+      "US",
+      [row.characterId],
+      expect.objectContaining({ title: "Acting Appointment Ended" })
+    );
   });
 });

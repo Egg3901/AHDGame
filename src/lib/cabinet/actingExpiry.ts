@@ -1,10 +1,7 @@
 import type { Db, ObjectId } from "mongodb";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { notifyAndRestoreClearedHolders } from "@/lib/cabinetTransition";
-import { createNotifications, type NotificationInput } from "@/lib/notifications";
-import { actingAppointmentsEnabled } from "./actingEligibility";
 import type { CountryId } from "@/lib/constants/countries";
-import type { Character } from "@/lib/db/types";
 
 /**
  * Clear acting cabinet holders whose tenure has run out.
@@ -23,13 +20,14 @@ export async function expireLapsedActingAppointments(
   currentTurn: number
 ): Promise<{ expired: number }> {
   const members = getCabinetMembersCollection(db);
-  const lapsed = await members
+  // Every lapsed appointment expires, with no country filter. `actingExpiresOnTurn`
+  // is a promise made when the seat was taken, and honouring it cannot depend on
+  // what the country config says later: gating here would strand an existing
+  // caretaker as immortal the moment a country stopped running acting
+  // appointments. Eligibility is enforced where it belongs, at appointment time.
+  const inScope = await members
     .find({ acting: true, actingExpiresOnTurn: { $lte: currentTurn } })
     .toArray();
-
-  // A country that no longer runs acting appointments keeps whatever it has
-  // rather than having seats yanked by a rule that no longer applies to it.
-  const inScope = lapsed.filter((m) => actingAppointmentsEnabled(m.countryId));
   if (inScope.length === 0) return { expired: 0 };
 
   await members.deleteMany({ _id: { $in: inScope.map((m) => m._id) } });
@@ -43,30 +41,16 @@ export async function expireLapsedActingAppointments(
     bucket.push(member.characterId);
     byCountry.set(member.countryId, bucket);
   }
+  // The helper also notifies, so it carries the wording. Letting it use its
+  // default would tell a lapsed caretaker their government had fallen, and
+  // sending a second notice of our own would double up.
   for (const [countryId, characterIds] of byCountry) {
-    await notifyAndRestoreClearedHolders(db, countryId, characterIds);
-  }
-
-  // Notifications are keyed by user, so resolve the holders' accounts. One
-  // query rather than one per holder.
-  const characterIds = [...byCountry.values()].flat();
-  const characters = characterIds.length
-    ? await db
-        .collection<Character>("characters")
-        .find({ _id: { $in: characterIds } }, { projection: { _id: 1, userId: 1 } })
-        .toArray()
-    : [];
-
-  const notifications: NotificationInput[] = characters
-    .filter((c) => c.userId)
-    .map((c) => ({
-      userId: c.userId,
-      type: "system",
+    await notifyAndRestoreClearedHolders(db, countryId, characterIds, {
       title: "Acting Appointment Ended",
       message:
         "Your acting cabinet appointment has lapsed. The seat is vacant until the Senate confirms a nominee.",
-    }));
-  await createNotifications(notifications);
+    });
+  }
 
   return { expired: inScope.length };
 }
