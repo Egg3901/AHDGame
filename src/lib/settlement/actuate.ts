@@ -41,8 +41,12 @@ import { getCountryStateCollection } from "@/lib/db/collections/countryState";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { blocOrgFor } from "@/lib/world/blocMembership";
 import { admitMember } from "@/lib/internationalOrganizations/joinApplication";
-import { withdrawFromOrg } from "@/lib/internationalOrganizations/service";
-import type { InternationalOrganizationId } from "@/lib/constants/internationalOrganizations";
+import { isMember } from "@/lib/internationalOrganizations/service";
+import { removeOrganizationMembership } from "@/lib/internationalOrganizations/withdrawalBills";
+import {
+  INTERNATIONAL_ORGANIZATIONS,
+  type InternationalOrganizationId,
+} from "@/lib/constants/internationalOrganizations";
 
 export interface ActuationResult {
   actuated: boolean;
@@ -142,8 +146,13 @@ export async function actuateSettlementOutcome(
  *
  * `countryState.governmentType` is read at runtime by `getHeadOfGovernment` and
  * `isSittingLeader`, so flipping it moves the whole executive-resolution path
- * over in a single write. Bloc membership is an organisation row, so the
- * unified state joins the Pact the same way any country does.
+ * over in a single write.
+ *
+ * Bloc membership is an organisation row, so the re-alignment is three ordinary
+ * membership writes rather than anything bespoke: the survivor LEAVES the western
+ * alliance, JOINS the eastern one, and the dissolved challenger comes off both
+ * rolls. Each step's ordering is argued at its call site — all three are
+ * unretryable, because the cooldown is claimed before any of them run.
  */
 async function adoptChallengerSettlement(
   db: Db,
@@ -161,30 +170,94 @@ async function adoptChallengerSettlement(
   // Silent no-op when the era has no eastern accession organisation — the
   // honest answer rather than inventing a membership in a body that never
   // existed in this world's year.
-  if (pactOrg) {
-    await admitMember(db, pactOrg, params.survivor, params.currentTurn);
-  }
+  //
+  // EVERYTHING BELOW HANGS OFF THAT SAME GATE. Stripping the western alliance in
+  // an era with no eastern one to join would leave a unified Germany aligned
+  // with nobody, which is not "the honest answer" — it is a third outcome the
+  // design never described, reached silently. No Pact, no re-alignment.
+  if (!pactOrg) return;
 
-  // AND OUT OF THE WESTERN ONE. `admitMember` only ever inserts, so without this
-  // a surviving shell that was already in NATO — which DE is, in the 1953 era —
-  // would come out of reunification holding a row in BOTH poles. That is not a
+  const westOrg = blocOrgFor(preset, "west");
+  // ONE GERMANY, ONE ALLIANCE. `admitMember` only ever inserts, so without the
+  // withdrawal a surviving shell already in NATO — which DE is, in the 1953 era —
+  // comes out of reunification holding a row in BOTH poles. That is not a
   // cosmetic duplicate: `loadBlocMembership` writes `out[countryId] = bloc` per
   // row with no precedence, so which bloc a unified Germany reads as would come
   // down to the order Mongo happened to return two documents in, and every
-  // military and alignment call downstream reads that map. The outcome is "one
-  // Germany, in the Warsaw Pact"; it has to be the only alliance it is in.
+  // military and alignment call downstream reads that map.
   //
-  // Ordered AFTER the admission so a failure between the two leaves the country
-  // in an alliance rather than in none.
-  const westOrg = blocOrgFor(preset, "west");
-  if (westOrg && westOrg !== pactOrg) {
-    await withdrawFromOrg(
-      db,
-      westOrg as InternationalOrganizationId,
-      params.survivor,
-      null,
-      null,
-      params.currentTurn
-    );
+  // WEST FIRST, THEN EAST, and the order is load-bearing. `actuateSettlementOutcome`
+  // claims the cooldown before any of this runs, so it never retries: whatever
+  // state a throw in the middle leaves behind is permanent. Ending up in NEITHER
+  // pole is wrong but deterministic and legible to an admin; ending up in BOTH is
+  // the non-deterministic read above. Fail toward the one somebody can see.
+  await leaveBloc(db, westOrg, pactOrg, {
+    countryId: params.survivor,
+    currentTurn: params.currentTurn,
+  });
+  await admitMember(db, pactOrg, params.survivor, params.currentTurn);
+
+  // The absorbed state is dissolved, and `mergeCountry` does not touch
+  // organisation rows — it moves regions and retires the shell. Left alone, the
+  // GDR stays on the Warsaw Pact roll for ever: `getMembers` keeps listing it and
+  // `loadBlocMembership` keeps answering "east" for a country that no longer
+  // exists. `votingMembers` already drops it (the retirement clears
+  // `enabledForPlayers`), so this is about the roll a player reads, and about not
+  // leaving a dissolved country holding a chair it can never vacate.
+  //
+  // Bloc organisations ONLY. A dissolved country lingering in COMECON or the UN is
+  // the same defect, but it belongs to `mergeCountry` — every merge has it, not
+  // just this one — and inventing a general cleanup here would hide it.
+  //
+  // LAST, and after the admission, by the same argument as the ordering above: a
+  // throw here leaves the survivor correctly in the Pact with a stale GDR row
+  // beside it, which is untidy. Moving it earlier would trade that for a survivor
+  // in no alliance at all, which is the state the design has no name for.
+  //
+  // A Set because the two poles can resolve to the same organisation in a
+  // misconfigured era, and withdrawing twice would write the history entry twice.
+  for (const orgId of new Set([pactOrg, westOrg])) {
+    await leaveBloc(db, orgId, null, {
+      countryId: params.absorbed,
+      currentTurn: params.currentTurn,
+    });
   }
+}
+
+/**
+ * Take a country out of one bloc organisation, if it is actually in it.
+ *
+ * `removeOrganizationMembership` and NOT `withdrawFromOrg`, which is the other
+ * function in this codebase with this shape. That one is unreferenced, takes a
+ * character it only uses for a history detail, terminates every affected
+ * agreement outright, and never touches pending leadership elections. This one
+ * is the path a real withdrawal already goes through — its own header says it is
+ * shared by the two live leave routes "so both behave identically" — and it
+ * additionally rejects leadership elections the leaver is standing in or
+ * nominating, and tells the REMAINING members somebody left. A settlement that
+ * dissolved a country should not leave it on a ballot inside the alliance it
+ * just left.
+ *
+ * The membership test is not belt-and-braces. Every side effect above fires
+ * unconditionally, including a history entry written to each remaining member —
+ * so calling this for a country that was never in the organisation would tell
+ * the whole alliance about a withdrawal that never happened.
+ *
+ * `skip` guards the degenerate era where one organisation carries both poles:
+ * withdrawing from the alliance we are about to join would undo the admission.
+ */
+async function leaveBloc(
+  db: Db,
+  orgId: string | null,
+  skip: string | null,
+  params: { countryId: CountryId; currentTurn: number }
+): Promise<void> {
+  if (!orgId || orgId === skip) return;
+  const org = orgId as InternationalOrganizationId;
+  if (!(await isMember(db, org, params.countryId))) return;
+  // Bloc organisations are always built-in — `loadBlocMembership` drops any
+  // channel whose id is not in this table, so `blocOrgFor` cannot return a custom
+  // one and the constant lookup needs no database read.
+  const name = INTERNATIONAL_ORGANIZATIONS[org]?.name ?? org;
+  await removeOrganizationMembership(db, params.countryId, org, name, params.currentTurn);
 }

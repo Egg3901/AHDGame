@@ -310,6 +310,77 @@ describe("attachCrisisToLiveWar", () => {
     expect(res.attached).toBe(false);
     expect(prime(db, "settlementCrises").updateOne).not.toHaveBeenCalled();
   });
+
+  it("evens an unmoved front, because the theatre is now both Germanies", async () => {
+    prime(db, "conflicts").find.mockReturnValue({
+      toArray: async () => [war({ control: 100, controlStart: 100 })],
+    });
+    const { attachCrisisToLiveWar } = await import("./attachToWar");
+    await attachCrisisToLiveWar(db as unknown as Db, crisis());
+
+    const set = prime(db, "conflicts").updateOne.mock.calls[0][1].$set;
+    // `initialControl` gave the defender all of its own soil, which is right for a
+    // war over ONE country and wrong once the ground is both halves of a divided one.
+    expect(set.control).toBe(50);
+    expect(set.controlStart).toBe(50);
+  });
+
+  it("drops the momentum sample it just invalidated", async () => {
+    prime(db, "conflicts").find.mockReturnValue({
+      toArray: async () => [
+        war({ control: 100, controlStart: 100, controlSample: { turn: 410, control: 100 } }),
+      ],
+    });
+    const { attachCrisisToLiveWar } = await import("./attachToWar");
+    await attachCrisisToLiveWar(db as unknown as Db, crisis());
+
+    // `applyOccupation` writes a sample even on a battle that does NOT move the
+    // front, so an unmoved war can carry one. Kept, `warEffort` would read the
+    // re-baseline itself as fifty points of advance somebody made.
+    const update = prime(db, "conflicts").updateOne.mock.calls[0][1];
+    expect(update.$unset).toEqual({ controlSample: "" });
+  });
+
+  it("refuses to erase a front belligerents have already fought over", async () => {
+    prime(db, "conflicts").find.mockReturnValue({
+      toArray: async () => [
+        war({ control: 72, controlStart: 100, controlSample: { turn: 410, control: 80 } }),
+      ],
+    });
+    const { attachCrisisToLiveWar } = await import("./attachToWar");
+    await attachCrisisToLiveWar(db as unknown as Db, crisis());
+
+    // A crisis can attach to a war that was already running. Twenty-eight points
+    // of ground are somebody's; evening them up would hand them back.
+    const update = prime(db, "conflicts").updateOne.mock.calls[0][1];
+    expect(update.$set.control).toBeUndefined();
+    expect(update.$set.controlStart).toBeUndefined();
+    expect(update.$unset).toBeUndefined();
+  });
+
+  it("writes no control at all when the front is already even", async () => {
+    prime(db, "conflicts").find.mockReturnValue({
+      toArray: async () => [war({ control: 50, controlStart: 50 })],
+    });
+    const { attachCrisisToLiveWar } = await import("./attachToWar");
+    await attachCrisisToLiveWar(db as unknown as Db, crisis());
+
+    const update = prime(db, "conflicts").updateOne.mock.calls[0][1];
+    expect(update.$set.control).toBeUndefined();
+    expect(update.$unset).toBeUndefined();
+  });
+
+  it("evens a conflict document that carries no front at all", async () => {
+    // Absent on both fields reads as unmoved, and 50 is what `derivedSupplies`
+    // already falls back to for a missing starting line. Pinned so the behaviour
+    // is a decision rather than an accident of two undefineds comparing equal.
+    const { attachCrisisToLiveWar } = await import("./attachToWar");
+    await attachCrisisToLiveWar(db as unknown as Db, crisis());
+
+    const set = prime(db, "conflicts").updateOne.mock.calls[0][1].$set;
+    expect(set.control).toBe(50);
+    expect(set.controlStart).toBe(50);
+  });
 });
 
 describe("detachCrisisFromWar", () => {

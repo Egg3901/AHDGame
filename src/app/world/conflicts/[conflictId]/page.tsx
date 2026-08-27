@@ -10,6 +10,7 @@ import { listDeclarationHistory } from "@/lib/db/collections/battleDeclarations"
 import { getGameTime } from "@/lib/time/gameTime";
 import { toConflictView, yearOfTurn } from "../_coldwar/conflictView";
 import { regionCodesOfCountry } from "@/lib/maps/regionOwnership";
+import { hostEntitiesOf } from "@/lib/military/hostEntities";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import { getMilitaryFormations } from "@/lib/db/collections/militaryFormations";
@@ -316,7 +317,15 @@ export default async function ConflictRecordPage({
     reports,
   });
 
-  const hostRegionCodes = await regionCodesOfCountry(db, doc.hostCountry);
+  // The whole conflict zone, not the anchor alone: the front line is placed as a
+  // share of the land the map can see, so a war hosted in two countries has to
+  // project both or the line is measured against half a theatre.
+  const hostEntities = hostEntitiesOf(doc) as string[];
+  const hostRegionCodes = [
+    ...new Set(
+      (await Promise.all(hostEntities.map((host) => regionCodesOfCountry(db, host)))).flat()
+    ),
+  ];
 
   // --- both sides' live force, at the resolution the tier allows ----------------
   const sideACountries = [...doc.sideA.countries] as string[];
@@ -517,6 +526,7 @@ export default async function ConflictRecordPage({
       })),
     control: doc.control,
     controlStart,
+    hostEntities,
     hostRegionCodes,
     hostIsBelligerent,
     verdict: verdict.headline,

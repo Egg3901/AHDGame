@@ -14,6 +14,10 @@ vi.mock("@/lib/db/collections/gameState", () => ({
 }));
 vi.mock("@/lib/world/blocMembership", () => ({ blocOrgFor: vi.fn() }));
 vi.mock("@/lib/internationalOrganizations/joinApplication", () => ({ admitMember: vi.fn() }));
+vi.mock("@/lib/internationalOrganizations/service", () => ({ isMember: vi.fn() }));
+vi.mock("@/lib/internationalOrganizations/withdrawalBills", () => ({
+  removeOrganizationMembership: vi.fn(),
+}));
 
 function prime(db: MockDb, name: string): MockCollection {
   return db.collection(name) as unknown as MockCollection;
@@ -58,7 +62,16 @@ describe("actuateSettlementOutcome", () => {
       updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
     } as never);
     const { blocOrgFor } = await import("@/lib/world/blocMembership");
-    vi.mocked(blocOrgFor).mockReturnValue("WARSAW_PACT");
+    // Pole-aware, unlike a flat return: the two alliances have to be DIFFERENT
+    // organisations for the withdrawal to be exercised at all.
+    vi.mocked(blocOrgFor).mockImplementation((_preset, bloc) =>
+      bloc === "east" ? "WARSAW_PACT" : "NATO"
+    );
+    const { isMember } = await import("@/lib/internationalOrganizations/service");
+    vi.mocked(isMember).mockResolvedValue(true);
+    const { removeOrganizationMembership } =
+      await import("@/lib/internationalOrganizations/withdrawalBills");
+    vi.mocked(removeOrganizationMembership).mockResolvedValue(undefined);
   });
 
   it("ignores a crisis that has not resolved", async () => {
@@ -188,5 +201,87 @@ describe("actuateSettlementOutcome", () => {
     expect(res.actuated).toBe(false);
     const { recordCountryEvent } = await import("@/lib/turn/history/recordCountryEvent");
     expect(vi.mocked(recordCountryEvent)).not.toHaveBeenCalled();
+  });
+  it("leaves the western alliance so a unified Germany sits in one bloc only", async () => {
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 412);
+    const { removeOrganizationMembership } =
+      await import("@/lib/internationalOrganizations/withdrawalBills");
+    expect(vi.mocked(removeOrganizationMembership)).toHaveBeenCalledWith(
+      expect.anything(),
+      "DE",
+      "NATO",
+      expect.any(String),
+      412
+    );
+  });
+
+  it("leaves the West BEFORE joining the East, so a failure lands in neither pole", async () => {
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 412);
+    const { removeOrganizationMembership } =
+      await import("@/lib/internationalOrganizations/withdrawalBills");
+    const { admitMember } = await import("@/lib/internationalOrganizations/joinApplication");
+    const left = vi
+      .mocked(removeOrganizationMembership)
+      .mock.calls.findIndex((c) => c[1] === "DE" && c[2] === "NATO");
+    expect(left).toBeGreaterThanOrEqual(0);
+    // `actuateSettlementOutcome` claims the cooldown first and never retries, so
+    // whichever state a throw leaves behind is permanent. In BOTH poles is the
+    // non-deterministic one; this ordering is what keeps it unreachable.
+    expect(vi.mocked(removeOrganizationMembership).mock.invocationCallOrder[left]).toBeLessThan(
+      vi.mocked(admitMember).mock.invocationCallOrder[0]!
+    );
+  });
+
+  it("records no withdrawal for a survivor that was never in the western alliance", async () => {
+    const { isMember } = await import("@/lib/internationalOrganizations/service");
+    vi.mocked(isMember).mockResolvedValue(false);
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 412);
+    const { removeOrganizationMembership } =
+      await import("@/lib/internationalOrganizations/withdrawalBills");
+    // It tombstones and writes history to EVERY remaining member unconditionally,
+    // so calling it here would tell the whole alliance about a withdrawal that
+    // never happened.
+    expect(vi.mocked(removeOrganizationMembership)).not.toHaveBeenCalled();
+  });
+
+  it("re-aligns nobody in an era with no eastern alliance to join", async () => {
+    const { blocOrgFor } = await import("@/lib/world/blocMembership");
+    vi.mocked(blocOrgFor).mockImplementation((_preset, bloc) => (bloc === "east" ? null : "NATO"));
+    const { actuateSettlementOutcome } = await import("./actuate");
+    const res = await actuateSettlementOutcome(
+      db as unknown as Db,
+      crisis({ outcome: "challenger" }),
+      412
+    );
+    // The merge still happens; only the bloc swap is off. Stripping NATO with no
+    // Pact to join would invent a non-aligned Germany the design never described.
+    expect(res.actuated).toBe(true);
+    const { removeOrganizationMembership } =
+      await import("@/lib/internationalOrganizations/withdrawalBills");
+    const { admitMember } = await import("@/lib/internationalOrganizations/joinApplication");
+    expect(vi.mocked(removeOrganizationMembership)).not.toHaveBeenCalled();
+    expect(vi.mocked(admitMember)).not.toHaveBeenCalled();
+  });
+
+  it("takes the dissolved challenger off both bloc rolls", async () => {
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 412);
+    const { removeOrganizationMembership } =
+      await import("@/lib/internationalOrganizations/withdrawalBills");
+    // `mergeCountry` retires the shell but never touches organisation rows, so
+    // without this the GDR stays on the Warsaw Pact roll for ever.
+    const forDD = vi.mocked(removeOrganizationMembership).mock.calls.filter((c) => c[1] === "DD");
+    expect(forDD.map((c) => c[2]).sort()).toEqual(["NATO", "WARSAW_PACT"]);
+  });
+
+  it("moves nobody between alliances on a Western win", async () => {
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "incumbent" }), 412);
+    const { removeOrganizationMembership } =
+      await import("@/lib/internationalOrganizations/withdrawalBills");
+    expect(vi.mocked(removeOrganizationMembership)).not.toHaveBeenCalled();
   });
 });

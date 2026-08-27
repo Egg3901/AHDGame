@@ -47,7 +47,10 @@ export interface ConflictRecordView {
   /** Side B's share of the host, 0–100, and where it opened. */
   control: number;
   controlStart: number;
-  /** The host's own drawable regions — geometry only, never ownership. */
+  /** Every entity the war is fought over, anchor first — the conflict zone.
+   *  Absent means "just the anchor", as it does on the document. */
+  hostEntities?: string[];
+  /** The zone's drawable regions — geometry only, never ownership. */
   hostRegionCodes: string[];
   /** Whether the host itself fights on either side. */
   hostIsBelligerent: boolean;
@@ -591,6 +594,7 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
           <div className="cw-front-map">
             <FrontLineMap
               hostCountry={c.hostCountry}
+              hostEntities={c.hostEntities}
               hostRegionCodes={c.hostRegionCodes}
               control={c.control}
               sideACountries={c.sideACountries}
