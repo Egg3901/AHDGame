@@ -256,6 +256,7 @@ describe("processWorldEventsTurn (World Events v1 Phase 1 scheduler)", () => {
           scope: "country",
           countryIds: ["US"],
           currentTurn: 101,
+          deferInteractionUntilStart: true,
         })
       );
       const misclassifiedRandomEvents =

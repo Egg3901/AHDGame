@@ -54,6 +54,7 @@ describe("POST /api/admin/events/trigger-country", () => {
         templateKey: "war_bank_run",
         countryIds: ["US"],
         currentTurn: 439,
+        deferInteractionUntilStart: true,
       })
     );
     expect(db.collectionMocks.eventInstances!.insertOne).not.toHaveBeenCalled();
