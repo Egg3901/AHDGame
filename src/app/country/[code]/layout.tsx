@@ -8,6 +8,8 @@ import { getGameState } from "@/lib/gameState";
 import { getDb } from "@/lib/mongodb";
 import { loadCountryWarNotice } from "@/lib/military/countryAtWar";
 import { WartimeBanner } from "./WartimeBanner";
+import { PeaceBanner } from "./PeaceBanner";
+import { loadCountryPeaceNotice } from "@/lib/military/countryPeaceNotice";
 
 interface Props {
   params: Promise<{ code: string }>;
@@ -41,6 +43,21 @@ export default async function CountryLayout({ params, children }: Props) {
     getDb().then((db) => loadCountryWarNotice(db, countryId)),
   ]);
 
+  // NOT in the batch above, because it needs the viewer resolved: the peace strip is
+  // seat gated and there is nobody to check until `getAuthUserWithCharacter` has
+  // returned. Skipped entirely in peacetime, so the common case costs nothing.
+  const peace = war
+    ? await getDb().then((db) =>
+        loadCountryPeaceNotice(
+          db,
+          countryId,
+          user?.character?._id ?? null,
+          user?.isAdmin === true,
+          gameState?.currentTurn ?? 0
+        )
+      )
+    : null;
+
   // Null in peacetime, which renders nothing. Declared once and used by all three
   // viewable branches below: a war is a fact about the COUNTRY, so which of them a
   // given reader lands in must not change whether they are told about it.
@@ -50,6 +67,13 @@ export default async function CountryLayout({ params, children }: Props) {
   // Era-aware display name (e.g. "West Germany" in 1979) for the banners/headings.
   const name = getCountryDisplayName(countryId, gameState?.preset);
 
+  // Declared here with the war strip and used by all three viewable branches below,
+  // for the same reason: which branch a reader lands in must not change whether they
+  // are told a decision is waiting on them.
+  const peacetime = peace ? (
+    <PeaceBanner notice={peace} countryName={name} countryCode={code} />
+  ) : null;
+
   // Admins always see everything — just show a banner when the country is not
   // yet enabled for regular players.
   if (isAdmin) {
@@ -57,6 +81,7 @@ export default async function CountryLayout({ params, children }: Props) {
     return (
       <>
         {wartime}
+        {peacetime}
         {showAdminBanner && (
           <div className="bg-warning/10 border-b border-warning/30 px-4 py-2 text-center text-sm text-warning">
             {access.econOnly
@@ -74,6 +99,7 @@ export default async function CountryLayout({ params, children }: Props) {
     return (
       <>
         {wartime}
+        {peacetime}
         {children}
       </>
     );
@@ -89,6 +115,7 @@ export default async function CountryLayout({ params, children }: Props) {
     return (
       <>
         {wartime}
+        {peacetime}
         <div className="bg-primary/10 border-b border-primary/20 px-4 py-2 text-center text-sm text-primary">
           {name} is an econ-only nation. You can view every page here, but you cannot run for
           office, join a party, or vote.
