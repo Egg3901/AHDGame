@@ -99,6 +99,7 @@ import { projectStrategyRevenuePerTurn } from "@/lib/corporations/strategyRevenu
 import type { SectorBuildOrder } from "@/lib/db/types";
 import { STRIKE_REVENUE_THROTTLE } from "@/lib/labour/strikes";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
+import { isNppOwned } from "@/lib/corporations/nppOwned";
 import {
   CAPACITY_BUILD_TURNS,
   capacityRescaleRatio,
@@ -692,7 +693,14 @@ export function computeSectorMarketPosition(args: {
   corporation: Corporation;
   siblingCorps: Pick<
     Corporation,
-    "_id" | "name" | "sequentialId" | "brandColor" | "countryId" | "liquidCurrencyCode"
+    | "_id"
+    | "name"
+    | "sequentialId"
+    | "brandColor"
+    | "countryId"
+    | "liquidCurrencyCode"
+    | "ceoType"
+    | "caretakerCeo"
   >[];
   siblingsSectors: CorporateSector[];
   siblingFxByCurrency: Awaited<ReturnType<typeof loadFxRatesByCurrency>>;
@@ -757,6 +765,12 @@ export function computeSectorMarketPosition(args: {
         corporationId: comp?._id.toString(),
         corporationSequentialId: comp?.sequentialId,
         brandColor: comp?.brandColor,
+        // Which side of the market this rival sits on. The panel groups the NPP
+        // field into one arc so a player's own share is legible against it; an
+        // unresolved corp (`comp` missing) is treated as player-owned rather
+        // than swept into the NPP mass, because guessing the other way would
+        // quietly hide a real rival.
+        isNpp: isNppOwned(comp),
         // Return revenue in ₳ so the UI's `formatAmountIn(value, sectorCurrency)`
         // formats to the sector's country-home currency consistently across
         // cross-currency competitors. Pre-fix this was LOCAL (each competitor's
