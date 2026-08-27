@@ -157,8 +157,15 @@ export const MISSING_SYNERGY =
 
 /** Attrition, manpower and retreat tuning (first-pass — expected to move in playtest). */
 export const ATTRITION = {
-  /** A side breaks when its round track falls below this (of 100). */
-  retreatTrack: 25,
+  /**
+   * A side breaks when its round track falls below this (of 100).
+   *
+   * Was 25, which fired in 88-92% of battles -- so `retreatYield` and
+   * `retreatCasualtyMult` were flat taxes the code described as conditional. At 9 a
+   * break is roughly one battle in three: uncommon without being rare, which is what
+   * makes both modifiers mean something again.
+   */
+  retreatTrack: 9,
   /** Casualty multiplier for the side that broke off. */
   retreatCasualtyMult: 0.6,
   /** Max fraction of establishment refilled per turn, by mode. */
@@ -206,6 +213,23 @@ export const ATTRITION = {
  * the wrong behaviour.
  */
 export const FRONT_CAPACITY_BASE = 900;
+
+/**
+ * Share of a formation's strength that the worst possible engagement takes.
+ *
+ * Was an unnamed `0.5` inline in the casualty formula, which this file's own opening
+ * line forbids: all balance values live here. Named so it can be tuned against a
+ * simulation rather than found by reading the calc layer.
+ *
+ * DELIBERATELY UNCHANGED at 0.5. The design expected to cut this by about 11%, to absorb
+ * the casualty discount that stopped being near-universal once `retreatTrack` made a
+ * break uncommon. Measured after front capacity and the readiness ledger landed, the
+ * compensation is not needed and would overshoot: casualties FELL rather than rose,
+ * because capacity removed the formations that were bleeding without ever reaching the
+ * line. A solo offensive costs 5.4% of the attacking force against 7.8% before this
+ * work. Revisit only against a fresh simulation.
+ */
+export const CASUALTY_RATE_SCALE = 0.5;
 
 /** How much of that width each terrain family actually offers. */
 export const TERRAIN_CAPACITY = {

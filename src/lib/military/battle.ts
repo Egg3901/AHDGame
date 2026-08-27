@@ -12,6 +12,7 @@ import {
   OCCUPATION,
   READINESS_DROP_BASE,
   READINESS_TEMPO_K,
+  CASUALTY_RATE_SCALE,
 } from "./config";
 import { readinessBaselineOf } from "./readinessDrift";
 import { EQUIPMENT_TRACK_MAX } from "./arsenal";
@@ -703,7 +704,7 @@ function unitOutcomes(
     const gcas = generalMods(genForUnit(binding, u)).cas;
     const intensity = ((1 - ratio) * 0.5 + r() * 0.25) * armorMit * moraleMit * rc * sustain * gcas;
     const casualties = Math.round(
-      u.personnel * Math.min(0.4, Math.max(0, intensity) * 0.5) * (0.6 + share)
+      u.personnel * Math.min(0.4, Math.max(0, intensity) * CASUALTY_RATE_SCALE) * (0.6 + share)
     );
     /**
      * Readiness is SUBTRACTED, not assigned.
