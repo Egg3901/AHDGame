@@ -70,7 +70,21 @@ export function getLastFiredTurn(
   ledger: Pick<EventCooldownLedger, "lastFiredTurnByKind"> | null,
   kind: string
 ): number | undefined {
-  return ledger?.lastFiredTurnByKind?.[kind];
+  const recorded = ledger?.lastFiredTurnByKind as unknown as Record<string, unknown> | undefined;
+  if (!recorded) return undefined;
+
+  const direct = recorded[kind];
+  if (typeof direct === "number") return direct;
+
+  // MongoDB interprets dots in an update path as nested document segments.
+  // Keep accepting the literal-key shape used by older callers and tests, but
+  // also follow the nested shape produced by recordScheduledCountryFire.
+  let nested: unknown = recorded;
+  for (const segment of kind.split(".")) {
+    if (!nested || typeof nested !== "object") return undefined;
+    nested = (nested as Record<string, unknown>)[segment];
+  }
+  return typeof nested === "number" ? nested : undefined;
 }
 
 /**
