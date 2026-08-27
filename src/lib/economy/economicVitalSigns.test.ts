@@ -122,6 +122,8 @@ describe("computeEconomicVitalSigns", () => {
       sellerCount: 3,
       sellerHhi: 4400,
       ownershipAdjustedSellerHhi: 6800,
+      largestOwnershipAdjustedSellerShare: 0.8,
+      largestOwnershipAdjustedSellerUnits: 80,
       highConcentrationLowFill: true,
     });
     expect(snapshot.competition.highConcentrationLowFillShare.value).toBe(1);
