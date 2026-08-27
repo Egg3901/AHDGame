@@ -62,3 +62,46 @@ describe("DICTATE_WINDOW_TURNS", () => {
     expect(DICTATE_WINDOW_TURNS).toBeLessThan(72);
   });
 });
+
+describe("principalOf: treaty allies in an opening roster", () => {
+  it("skips a treaty ally that carries no join stamp", () => {
+    // A war CREATED with treaty defenders puts them straight into the opening
+    // roster: `declareWar` resolves them BEFORE `createConflict` so they drive
+    // initialControl, deployOpeningForces and baseStrength, which means `joinSide`
+    // never runs and no join stamp is written. Read by joinTurns alone they look
+    // like founders. The live War for Germany is exactly this shape.
+    const c = {
+      sideA: { label: "US", countries: ["US"], kind: "state" },
+      sideB: { label: "East Germany", countries: ["DD", "RU"], kind: "coalition" },
+      treatyEntries: [
+        { countryId: "RU", organizationId: "WARSAW_PACT", defending: "DD", joinedTurn: 415 },
+      ],
+    } as unknown as ConflictDoc;
+    expect(principalOf(c, "B")).toBe("DD");
+  });
+
+  it("names the founder even when the ally is listed FIRST", () => {
+    // The live case resolves correctly today only because `createConflict` writes
+    // `[defender, ...defenders]`. That array order is not a stated contract, so the
+    // treaty stamp is what this should actually read.
+    const c = {
+      sideA: { label: "US", countries: ["US"], kind: "state" },
+      sideB: { label: "East Germany", countries: ["RU", "DD"], kind: "coalition" },
+      treatyEntries: [
+        { countryId: "RU", organizationId: "WARSAW_PACT", defending: "DD", joinedTurn: 415 },
+      ],
+    } as unknown as ConflictDoc;
+    expect(principalOf(c, "B")).toBe("DD");
+  });
+
+  it("returns null when every country on the side is a guest", () => {
+    const c = {
+      sideA: { label: "US", countries: ["US"], kind: "state" },
+      sideB: { label: "Pact", countries: ["RU"], kind: "coalition" },
+      treatyEntries: [
+        { countryId: "RU", organizationId: "WARSAW_PACT", defending: "DD", joinedTurn: 415 },
+      ],
+    } as unknown as ConflictDoc;
+    expect(principalOf(c, "B")).toBeNull();
+  });
+});

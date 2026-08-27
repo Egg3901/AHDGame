@@ -25,13 +25,11 @@ import type { CountryPeaceNotice } from "@/lib/military/countryPeaceNotice";
 export function PeaceBanner({
   notice,
   countryName,
-  countryCode,
 }: {
   notice: CountryPeaceNotice;
   countryName: string;
-  countryCode: string;
 }) {
-  const { href, label, sentence, tone } = describe(notice, countryName, countryCode);
+  const { href, label, sentence, tone } = describe(notice, countryName);
   const palette =
     tone === "urgent"
       ? "border-warning/30 bg-warning/10 text-warning"
@@ -49,11 +47,8 @@ export function PeaceBanner({
 
 function describe(
   notice: CountryPeaceNotice,
-  countryName: string,
-  countryCode: string
+  countryName: string
 ): { href: string; label: string; sentence: string; tone: "urgent" | "info" } {
-  const foreignOffice = `/country/${countryCode.toLowerCase()}/executive`;
-
   if (notice.kind === "window_open") {
     // Links to the war record, where the terms are chosen, rather than to the peace
     // panel: imposing is not negotiating and does not happen in the same place.
@@ -73,7 +68,9 @@ function describe(
 
   if (notice.kind === "offer_incoming") {
     return {
-      href: foreignOffice,
+      // Resolved server-side from WHICH seat authorized this reader: the head of
+      // government and the foreign minister act on different surfaces.
+      href: notice.href,
       label: "Review the terms",
       sentence:
         notice.count > 1
@@ -84,7 +81,7 @@ function describe(
   }
 
   return {
-    href: foreignOffice,
+    href: notice.href,
     label: "Offer terms",
     sentence: `${countryName} can open peace talks in this war.`,
     tone: "info",

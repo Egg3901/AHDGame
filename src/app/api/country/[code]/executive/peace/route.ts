@@ -18,7 +18,12 @@ import {
   listOffersForCountry,
   reapExpiredOffers,
 } from "@/lib/db/collections/peaceOffers";
-import { validatePeaceOffer, isOfferLive, maxIndemnityForGdp } from "@/lib/military/peaceOffer";
+import {
+  validatePeaceOffer,
+  isOfferLive,
+  maxIndemnityForGdp,
+  withdrawalGate,
+} from "@/lib/military/peaceOffer";
 import type { PeaceTerm } from "@/lib/military/peaceTerm";
 import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
 import { getCountryState } from "@/lib/countryState";
@@ -34,6 +39,11 @@ const bodySchema = z.object({
   // `parliamentaryMonarchy` is deliberately ABSENT: a settlement cannot install a
   // crown, and refusing it at the schema is stronger than refusing it in the
   // validator alone.
+  /**
+   * Which party this deal removes. Omitted means the sender, which is the original
+   * shape and what every existing client sends.
+   */
+  leaver: z.enum(["us", "them"]).optional(),
   term: z.discriminatedUnion("kind", [
     // A white peace carries no fields: it is the absence of a term, and the whole of
     // its effect is that the war resolves with no victor recorded.
@@ -124,9 +134,25 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
           name: w.name,
           // Only countries that can actually be offered terms: the opposing roster,
           // which is empty for a generated force and correctly offers nobody.
-          enemies: (onA ? w.sideB.countries : w.sideA.countries).filter((e) =>
-            opposedBelligerents(w, countryId, e)
-          ),
+          //
+          // Each carries the withdrawal gate's verdict, so the form can say why a
+          // country cannot simply be asked to leave BEFORE a player composes an offer
+          // the route would refuse. Computed by the same `withdrawalGate` the POST
+          // runs, so the two cannot drift; the server stays the authority.
+          enemies: (onA ? w.sideB.countries : w.sideA.countries)
+            .filter((e) => opposedBelligerents(w, countryId, e))
+            .map((e) => {
+              const gate = withdrawalGate(w, countryId, e);
+              return {
+                country: e,
+                endsWar: gate.endsWar,
+                withdrawalBlocked: gate.blocked,
+                // Whole percents, for copy. The form shows the reader how far off
+                // they are rather than only that they are.
+                progressPct: Math.round(gate.progress * 100),
+                requiredPct: Math.round(gate.required * 100),
+              };
+            }),
         };
       }),
       offers: offers.map((o) => ({
@@ -135,6 +161,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
         fromCountry: o.fromCountry,
         toCountry: o.toCountry,
         term: o.term,
+        leaver: o.leaver,
         justification: o.justification ?? null,
         // Derived, not the stored field: a row can say "pending" and be expired.
         status: isOfferLive(o, currentTurn)
@@ -207,11 +234,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     // refused before it is ever offered.
     const targetState = await getCountryState(db, toCountry);
 
+    // "them" asks the recipient to withdraw while we stay in the war; the default
+    // keeps the original shape, where the sender is the one leaving.
+    const leaver = parsed.data.leaver === "them" ? toCountry : countryId;
+
     const check = validatePeaceOffer(
       conflict,
       countryId,
       toCountry,
       term,
+      leaver,
       maxAmount,
       targetState.governmentType
     );
@@ -232,6 +264,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       conflictId: conflict._id,
       fromCountry: countryId,
       toCountry,
+      leaver,
       term,
       ...(parsed.data.justification ? { justification: parsed.data.justification } : {}),
       status: "pending" as const,

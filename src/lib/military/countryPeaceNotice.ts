@@ -4,6 +4,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { getConflictsCollection } from "@/lib/db/collections/conflicts";
 import { getPeaceOffersCollection } from "@/lib/db/collections/peaceOffers";
 import { requirePeaceNegotiator } from "@/lib/api/requirePeaceNegotiator";
+import { FOREIGN_AFFAIRS_POSITION_BY_COUNTRY } from "@/lib/constants/internationalOrganizations";
 import { isOfferLive } from "@/lib/military/peaceOffer";
 
 /**
@@ -25,10 +26,13 @@ export type CountryPeaceNotice =
       /** Somebody has offered us terms and is waiting on an answer. */
       kind: "offer_incoming";
       count: number;
+      /** Where this reader answers it. Differs by which seat they hold. */
+      href: string;
     }
   | {
       /** We are at war and could open talks. Nothing is pending. */
       kind: "can_offer";
+      href: string;
     };
 
 /**
@@ -50,12 +54,32 @@ export async function loadCountryPeaceNotice(
   db: Db,
   countryId: CountryId,
   characterId: ObjectId | null,
-  isAdmin: boolean,
   currentTurn: number
 ): Promise<CountryPeaceNotice | null> {
   if (!characterId) return null;
-  const gate = await requirePeaceNegotiator(db, countryId, characterId, isAdmin);
+  // `isAdmin: false`, DELIBERATELY, and this is the one place that departs from the
+  // routes. Their admin bypass is right: an admin should be able to act anywhere.
+  // But this strip is a call to action addressed to whoever's job it is, and an
+  // admin browsing the world is not the government of every country they open. With
+  // the bypass on, a staff account saw "the United States can open peace talks" on
+  // United States pages while holding no seat there at all.
+  //
+  // An admin who genuinely holds the seat still sees it: they pass the real check
+  // below on their own merits.
+  const gate = await requirePeaceNegotiator(db, countryId, characterId, false);
   if (!gate.ok) return null;
+
+  // WHERE this reader acts depends on WHICH seat authorized them, which is exactly
+  // what `via` records. The head of government has their own surface on the
+  // executive shell's Foreign Affairs tab; the foreign minister's is inside their
+  // own cabinet office. Sending either to the other's is sending them somewhere they
+  // have no controls.
+  const seat = FOREIGN_AFFAIRS_POSITION_BY_COUNTRY[countryId];
+  const code = countryId.toLowerCase();
+  const href =
+    gate.via === "foreign_minister" && seat
+      ? `/country/${code}/executive/cabinet/${seat}/office`
+      : `/country/${code}/executive?tab=foreign`;
 
   const live = await getConflictsCollection(db)
     .find({
@@ -87,10 +111,10 @@ export async function loadCountryPeaceNotice(
   // Derived liveness, never the stored status: a row can say "pending" and be long
   // expired, which is the rule `isOfferLive` exists to enforce.
   const incoming = offers.filter((o) => isOfferLive(o, currentTurn));
-  if (incoming.length > 0) return { kind: "offer_incoming", count: incoming.length };
+  if (incoming.length > 0) return { kind: "offer_incoming", count: incoming.length, href };
 
   // At war with nothing pending. Only offered while a war is actually negotiable:
   // a war awaiting terms has already been decided.
   const negotiable = live.some((c) => c.status !== "terms_pending");
-  return negotiable ? { kind: "can_offer" } : null;
+  return negotiable ? { kind: "can_offer", href } : null;
 }

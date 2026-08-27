@@ -1,10 +1,9 @@
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import type { PeaceOfferDoc } from "@/lib/db/types/peaceOffer";
-import { COUNTRY_CONFIGS, type CountryId, type GovernmentType } from "@/lib/constants/countries";
+import type { CountryId, GovernmentType } from "@/lib/constants/countries";
 import { validatePeaceTerm, type PeaceTerm } from "@/lib/military/peaceTerm";
 import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
-import { INTERNATIONAL_ORGANIZATIONS } from "@/lib/constants/internationalOrganizations";
-import { opposedBelligerents, type Side } from "@/lib/military/occupation";
+import { opposedBelligerents, progressForSide, type Side } from "@/lib/military/occupation";
 
 export type PeaceOfferCheck = { ok: true } | { ok: false; error: string };
 
@@ -22,6 +21,25 @@ export type PeaceOfferCheck = { ok: true } | { ok: false; error: string };
  * large but bounded reparation.
  */
 export const PEACE_INDEMNITY_MAX_GDP_SHARE = 2;
+
+/**
+ * How far the front must have moved in your favour before you may demand a
+ * withdrawal that would END the war.
+ *
+ * Front progress from the STARTING line, 0..1, not absolute ground: an interstate
+ * war opens with the defender holding all of its own soil, so an absolute reading
+ * would call every invasion deep before the first shot.
+ *
+ * Set to the same value as `OCCUPATION.deepPushDepth`, so the rule reads as "once
+ * the war is visibly winding down in your favour, you may ask them to quit" and a
+ * player can see the threshold coming on the conflicts board. Kept as its OWN
+ * constant rather than reusing that one: they answer different questions, and tuning
+ * when a war looks like it is ending should not silently move who can be bought out
+ * of it.
+ *
+ * BALANCE CONSTANT. Changing it needs an issue and a simulation report.
+ */
+export const PRINCIPAL_BUYOUT_PROGRESS = 0.75;
 
 /**
  * The indemnity ceiling for a payer with the given GDP, or null when GDP is
@@ -76,6 +94,57 @@ export function sideWouldEmpty(
   return null;
 }
 
+export interface WithdrawalGate {
+  /** True when this departure would empty their side, handing the asker the war. */
+  endsWar: boolean;
+  /** Front progress in the ASKER's favour, 0..1. */
+  progress: number;
+  /** Progress a war-ending withdrawal requires. */
+  required: number;
+  /**
+   * True when a withdrawal this deep would be refused. A white peace is exempt and
+   * is NOT considered here: the caller decides whether the term escapes the gate,
+   * because the offer form needs to say "blocked, unless you offer a white peace".
+   */
+  blocked: boolean;
+}
+
+/**
+ * Whether asking `leaver` to withdraw would end the war, and whether the asker has
+ * the ground to demand it.
+ *
+ * SHARED BY THE VALIDATOR AND THE OFFER FORM, deliberately. The form has to grey the
+ * option out and say why before a player composes a whole offer that the route would
+ * refuse, and a rule with two implementations is a rule that drifts. The server stays
+ * the authority: this is the same function the POST runs.
+ */
+export function withdrawalGate(
+  conflict: Pick<ConflictDoc, "sideA" | "sideB" | "treatyEntries" | "control" | "controlStart">,
+  asker: CountryId,
+  leaver: CountryId
+): WithdrawalGate {
+  // Treaty guests go out with the country they came to defend, so a departure can
+  // empty a side even when the roster looks like it has people left on it.
+  const guests = (conflict.treatyEntries ?? [])
+    .filter((e) => e.defending === leaver)
+    .map((e) => e.countryId as CountryId);
+  const endsWar = sideWouldEmpty(conflict, [leaver, ...guests]) !== null;
+
+  const side: Side = (conflict.sideA.countries as string[]).includes(asker) ? "A" : "B";
+  const progress = progressForSide(
+    side,
+    conflict.control ?? 50,
+    conflict.controlStart ?? conflict.control ?? 50
+  );
+
+  return {
+    endsWar,
+    progress,
+    required: PRINCIPAL_BUYOUT_PROGRESS,
+    blocked: endsWar && progress < PRINCIPAL_BUYOUT_PROGRESS,
+  };
+}
+
 /**
  * Every rule an offer must clear, with a reason the offerer can act on.
  *
@@ -85,10 +154,15 @@ export function sideWouldEmpty(
  * countries that would want to.
  */
 export function validatePeaceOffer(
-  conflict: Pick<ConflictDoc, "status" | "sideA" | "sideB" | "treatyEntries">,
+  conflict: Pick<
+    ConflictDoc,
+    "status" | "sideA" | "sideB" | "treatyEntries" | "control" | "controlStart"
+  >,
   from: CountryId,
   to: CountryId,
   term: PeaceTerm,
+  /** Which of the two this deal removes. `from` is the original "let me out" shape. */
+  leaver: CountryId,
   // The payer's indemnity ceiling (see `maxIndemnityForGdp`). Optional so a caller
   // without the payer's GDP to hand can still run the roster/side checks, but the
   // POST (offer) and accept paths both pass it so an over-cap amount is refused at
@@ -128,35 +202,42 @@ export function validatePeaceOffer(
     return { ok: false, error: "You are on the same side of that war." };
   }
 
-  // Enforced mutual defence: a country pulled in by a treaty cannot buy its way out while
-  // the member it came to defend is still fighting. Without this an aggressor peels the
-  // coalition apart one member at a time and the guarantee is theatre.
+  // THE SEPARATE-PEACE TREATY BAR IS GONE, deliberately, and this is where it stood.
   //
-  // Checked on `from` and not `to`: acceptPeace sets `leaver = offer.fromCountry`, so the
-  // OFFERER is the one who leaves the war. Barring `to` would refuse an attacker's
-  // surrender to an ally, which is exactly the deal that should be allowed.
+  // It refused any offer from a country a treaty had dragged in, so a guarantee it
+  // never chose kept it in the war until the member it came to defend settled. Its
+  // stated worry was that "an aggressor peels the coalition apart one member at a
+  // time and the guarantee is theatre" — but peeling is now a thing the aggressor
+  // must PAY for and the guest must AGREE to, which is a price rather than a
+  // formality. Enforced mutual defence still drags you in; it no longer holds you
+  // there with no way out.
   //
-  // Reported ahead of the indemnity rules below because it is the durable bar of the two:
-  // a player refused here needs to be told about the treaty, not about the money.
+  // What replaces it is the buy-out gate below, which stops the one case the bar was
+  // really protecting: ending a war outright by cheque.
+
+  if (leaver !== from && leaver !== to) {
+    return { ok: false, error: "Only one of the two parties can leave under a deal." };
+  }
+
+  // THE BUY-OUT GATE. Asking the other side to withdraw is ordinary coalition
+  // politics right up until the withdrawal would EMPTY their side, at which point it
+  // is not a settlement at all, it is buying the war. Gated on the ground rather than
+  // forbidden: once the front is deep enough that the war is visibly going your way,
+  // demanding they quit is a real thing to demand.
   //
-  // ANY entry binding this country, not merely the first: `resolveTreatyDefenders`
-  // excludes anyone already rostered, so today a country holds at most one entry per
-  // conflict — but a `find` would silently release the bar on the wrong obligation if
-  // that ever stopped holding, and the invariant is not enforced here.
-  const bound = conflict.treatyEntries?.find(
-    // A live roster read, never a stored flag, so the bar lifts by itself the moment the
-    // defended member takes its own peace.
-    (e) => e.countryId === from && rosters.includes(e.defending)
-  );
-  if (bound) {
-    const org =
-      INTERNATIONAL_ORGANIZATIONS[bound.organizationId as keyof typeof INTERNATIONAL_ORGANIZATIONS]
-        ?.name ?? bound.organizationId;
-    const fromName = COUNTRY_CONFIGS[from]?.name ?? from;
-    const defendedName = COUNTRY_CONFIGS[bound.defending]?.name ?? bound.defending;
+  // Keyed on what the departure DOES, not on who it names. Gating on "is the target
+  // the principal" would wave through the case where the target is a mere ally who
+  // happens to be the last one standing, which wins the war just as completely.
+  //
+  // A WHITE PEACE IS ALWAYS EXEMPT. It records no victor and moves nothing, so
+  // nothing is bought: a war fought over a question ends with the question still
+  // open rather than answered in the buyer's favour.
+  if (leaver === to && term.kind !== "white_peace" && withdrawalGate(conflict, from, to).blocked) {
     return {
       ok: false,
-      error: `${fromName} entered this war under the ${org}. It cannot make a separate peace while ${defendedName} is still fighting.`,
+      error:
+        "That withdrawal would end the war outright, and your armies are not far " +
+        "enough forward to demand it. Push the front further, or offer a white peace.",
     };
   }
 

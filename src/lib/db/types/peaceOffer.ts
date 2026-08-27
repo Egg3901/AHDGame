@@ -36,6 +36,23 @@ export interface PeaceOfferDoc {
   fromCountry: CountryId;
   toCountry: CountryId;
   /**
+   * Which of the two parties this deal takes OUT of the war. Always `fromCountry`
+   * or `toCountry`.
+   *
+   * Explicit rather than implied, because an offer now runs in both directions:
+   *
+   *   - `leaver === fromCountry` is "let me out", the original shape. The sender
+   *     proposes to end their own participation.
+   *   - `leaver === toCountry` is "you get out": the sender asks the recipient to
+   *     withdraw and stays in the war themselves. This is how a coalition is peeled
+   *     apart by negotiation, which the player wiki has advised as strategy since
+   *     before it was possible.
+   *
+   * Either way the RECIPIENT is the one who accepts or refuses. Nobody is ever
+   * removed from a war without their own government agreeing to it.
+   */
+  leaver: CountryId;
+  /**
    * What this settlement takes. Exactly ONE term, enforced by the union rather
    * than by the UI: a discriminated union makes a deal carrying two terms
    * unrepresentable, so it cannot be stored or hand-rolled over the API.
