@@ -555,9 +555,8 @@ export async function withdrawFromOrg(
   db: Db,
   organizationId: InternationalOrganizationId,
   countryId: CountryId,
-  /** The character who withdrew, or null when the world did it — see below. */
-  characterId: ObjectId | null,
-  characterName: string | null,
+  characterId: ObjectId,
+  characterName: string,
   currentTurn: number
 ): Promise<void> {
   const [membershipsCol, legislationCol, leadershipCol] = await Promise.all([
@@ -598,14 +597,7 @@ export async function withdrawFromOrg(
     db,
     countryId,
     currentTurn,
-    characterId === null
-      ? `${getCountryConfig(countryId).name} left ${orgName}.`
-      : `${getCountryConfig(countryId).name} withdrew from ${orgName}.`,
-    // Omitted rather than stubbed when the world drove this. A placeholder id
-    // would read back as a real character having done it, and the history entry
-    // is the only record of who did.
-    characterId === null
-      ? { organizationId }
-      : { organizationId, characterId: characterId.toString(), characterName }
+    `${getCountryConfig(countryId).name} withdrew from ${orgName}.`,
+    { organizationId, characterId: characterId.toString(), characterName }
   );
 }

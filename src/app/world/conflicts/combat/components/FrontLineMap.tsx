@@ -42,7 +42,20 @@ const FRONT_BOX: Record<string, FrontBox> = {
 const DEFAULT_FRONT_BOX: FrontBox = { w: 620, h: 837 };
 
 export interface FrontLineMapProps {
+  /** The zone's anchor — picks the projection box, and nothing else. */
   hostCountry: string;
+  /**
+   * Every entity the war is fought over (`ConflictDoc.hostEntities`), anchor first.
+   * The front line is placed as a share of THIS land, so a war hosted in two
+   * countries puts its line on the border between them rather than through one.
+   *
+   * Absent or empty means "just the anchor", exactly as it does on the document
+   * itself — see `hostEntitiesOf`, which is the same fallback on the server. These
+   * props cross a serialization boundary, so a page rendered before this shipped
+   * can still arrive without the field, and the map must draw rather than throw.
+   */
+  hostEntities?: string[];
+  /** Drawable region codes across the whole zone, not just the anchor. */
   hostRegionCodes: string[];
   /** Side B's share of the host, 0–100 (`ConflictDoc.control`). */
   control: number;
@@ -99,6 +112,7 @@ interface FrontGeometry {
  */
 export function FrontLineMap({
   hostCountry,
+  hostEntities,
   hostRegionCodes,
   control,
   sideACountries,
@@ -110,11 +124,19 @@ export function FrontLineMap({
 }: FrontLineMapProps) {
   const uid = useId().replace(/:/g, "");
   const regionGeometry = useRegionGeometry(hostRegionCodes);
-  // A proxy war's host has no region codes at all, so the shard machinery returns
-  // nothing for it. Its static feature AND its roster code are merged in — the
-  // filter below drops any feature whose code is not in `codeKey`, so supplying
-  // one without the other renders an empty box.
-  const staticHost = useStaticHostGeometry(hostCountry);
+  // Absent or empty means "just the anchor", the same fallback `hostEntitiesOf`
+  // applies on the server and for the same reason.
+  const zone = useMemo(
+    () => (hostEntities && hostEntities.length > 0 ? hostEntities : [hostCountry]),
+    [hostEntities, hostCountry]
+  );
+  // A proxy war's hosts have no region codes at all, so the shard machinery returns
+  // nothing for them. Their static features AND their roster codes are merged in —
+  // the filter below drops any feature whose code is not in `codeKey`, so supplying
+  // one without the other renders an empty box. Resolved across the whole ZONE:
+  // projecting the anchor alone left a second host off the map, and the front line
+  // is placed as a share of the land that got projected.
+  const staticHost = useStaticHostGeometry(zone);
   const features = useMemo(
     () => [...(regionGeometry.features ?? []), ...(staticHost.features ?? [])],
     [regionGeometry.features, staticHost.features]
