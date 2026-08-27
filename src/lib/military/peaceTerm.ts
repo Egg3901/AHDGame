@@ -102,20 +102,3 @@ export function validatePeaceTerm(term: PeaceTerm, ctx: PeaceTermContext): Peace
   }
   return { ok: true };
 }
-
-/**
- * One line of player-facing copy for a term.
- *
- * No em or en dashes, no calendar years, and no anchor units: an indemnity's
- * figure is deliberately absent here because it is denominated in the payer's own
- * currency and needs the caller's formatter to render honestly.
- */
-export function describePeaceTerm(term: PeaceTerm): string {
-  if (term.kind === "indemnity") {
-    return term.amount > 0 ? "An indemnity is paid." : "A white peace. No money changes hands.";
-  }
-  if (term.kind === "regime_change") {
-    return "The government falls and fresh elections are called.";
-  }
-  return `New defence procurement is frozen for ${term.turns} turns.`;
-}

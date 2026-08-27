@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   validatePeaceTerm,
-  describePeaceTerm,
   DEMILITARISATION_DEFAULT_TURNS,
   DEMILITARISATION_MAX_TURNS,
   type PeaceTerm,
@@ -121,36 +120,5 @@ describe("validatePeaceTerm: demilitarisation", () => {
 
   it("refuses a fractional duration, because a turn is a whole thing", () => {
     expect(validatePeaceTerm({ kind: "demilitarisation", turns: 2.5 }, ctx).ok).toBe(false);
-  });
-});
-
-describe("describePeaceTerm", () => {
-  const terms: PeaceTerm[] = [
-    { kind: "indemnity", payer: "TR", amount: 100 },
-    { kind: "indemnity", payer: "TR", amount: 0 },
-    { kind: "regime_change", targetSystem: "presidential" },
-    { kind: "demilitarisation", turns: 240 },
-  ];
-
-  it("describes every kind", () => {
-    for (const term of terms) {
-      expect(describePeaceTerm(term).length).toBeGreaterThan(0);
-    }
-  });
-
-  it("uses no em dash or en dash, which player-facing copy bars", () => {
-    for (const term of terms) {
-      expect(describePeaceTerm(term)).not.toMatch(/[—–]/);
-    }
-  });
-
-  it("names a white peace as one rather than as a payment of nothing", () => {
-    expect(describePeaceTerm({ kind: "indemnity", payer: "TR", amount: 0 })).toMatch(
-      /white peace/i
-    );
-  });
-
-  it("states the demilitarisation length in turns", () => {
-    expect(describePeaceTerm({ kind: "demilitarisation", turns: 240 })).toContain("240 turns");
   });
 });

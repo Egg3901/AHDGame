@@ -25,7 +25,13 @@ import type { ConflictDoc } from "@/lib/db/types/conflict";
 import { getConflictsCollection } from "@/lib/db/collections/conflicts";
 import { createSystemNewsPost } from "@/lib/news";
 import { sendNewsEvent } from "@/lib/discordWebhooks";
-import { buildSettledDispatch, type WarDispatch } from "./warWire";
+import { buildSettledDispatch, type WarDispatch, type WarWireEvent } from "./warWire";
+
+/**
+ * The stamp this sweep writes. Typed rather than inlined so the query filter and the
+ * `$addToSet` below cannot drift apart on a typo, which would repost a war for ever.
+ */
+const SETTLED: WarWireEvent = "settled";
 
 /** How many settled wars one tick will report. A tick never settles many. */
 const MAX_PER_TICK = 20;
@@ -57,7 +63,7 @@ export async function emitWarWire(db: Db, _currentTurn: number): Promise<{ posts
       // previously resolved wars carries no `endTurn`-adjacent stamp and must not be
       // reported now as though it had just happened.
       settlement: { $exists: true },
-      postedWireEvents: { $ne: "settled" },
+      postedWireEvents: { $ne: SETTLED },
     } as Filter<ConflictDoc>)
     .limit(MAX_PER_TICK)
     .toArray();
@@ -67,8 +73,8 @@ export async function emitWarWire(db: Db, _currentTurn: number): Promise<{ posts
     // Claim the stamp FIRST, and conditionally. Two turn runners reading the same
     // document would both see it unstamped, so a read-then-write would post twice.
     const claimed = await getConflictsCollection(db).updateOne(
-      { _id: conflict._id, postedWireEvents: { $ne: "settled" } } as Filter<ConflictDoc>,
-      { $addToSet: { postedWireEvents: "settled" } }
+      { _id: conflict._id, postedWireEvents: { $ne: SETTLED } } as Filter<ConflictDoc>,
+      { $addToSet: { postedWireEvents: SETTLED } }
     );
     if (claimed.modifiedCount !== 1) continue;
 
