@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { Tooltip } from "@/components/Tooltip";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import MarketPie from "../components/MarketPie";
-import { DEFAULT_CORP_COLORS } from "../lib/helpers";
-import type { Market, SectorData, CorporationRef, Financials } from "../types";
+import { playerSlotColor, NPP_ARC_COLOR } from "../lib/marketColors";
+import type { Market, SectorData, CorporationRef, Financials, Competitor } from "../types";
 
 interface MarketPositionPanelProps {
   market: Market;
@@ -36,6 +37,55 @@ interface MarketPositionPanelProps {
   room?: { headroomUnits: number; demandGapUnits?: number } | null;
 }
 
+/**
+ * Percentages arrive already rounded per corp, so a group total is summed from
+ * rounded parts and can land on 94.30000000000001. Round the sum once for
+ * display rather than letting the float reach the screen.
+ */
+function roundShare(v: number): number {
+  return Math.round(v * 100) / 100;
+}
+
+/** One rival's row. Same shape whether it is a player or an NPP, so the two
+ *  groups stay visually comparable and only the colour and weight differ. */
+function CompetitorRow({
+  comp,
+  color,
+  dim = false,
+}: {
+  comp: Competitor;
+  color: string;
+  /** NPP rows sit inside an opened group and stay recessive. */
+  dim?: boolean;
+}) {
+  const linkable = comp.corporationSequentialId != null || comp.corporationId;
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+        style={{ backgroundColor: color, opacity: dim ? 0.55 : 1 }}
+      />
+      {linkable ? (
+        <Link
+          href={`/corporation/${comp.corporationSequentialId ?? comp.corporationId}`}
+          className={`truncate hover:underline ${dim ? "text-muted" : "text-primary"}`}
+        >
+          {comp.corporationName}
+        </Link>
+      ) : (
+        <span className={`truncate ${dim ? "text-muted" : "text-foreground"}`}>
+          {comp.corporationName}
+        </span>
+      )}
+      <span
+        className={`ml-auto tabular-nums font-medium ${dim ? "text-muted" : "text-foreground"}`}
+      >
+        {comp.marketShare}%
+      </span>
+    </div>
+  );
+}
+
 export default function MarketPositionPanel({
   market,
   sector,
@@ -48,6 +98,17 @@ export default function MarketPositionPanel({
 }: MarketPositionPanelProps) {
   const { formatAmount, formatAmountChip, toInternalFrom } = useCurrency();
   const pieSize = compact ? 160 : 120;
+
+  // The NPP field is collapsed by default. In a sector where the autonomous
+  // corps hold most of the market, showing them expanded is what buried the
+  // player-owned rivals in the first place.
+  const [nppOpen, setNppOpen] = useState(false);
+
+  // `isNpp` is absent on payloads served before this shipped, which reads as
+  // player-owned and renders the list exactly the way it did before.
+  const playerRivals = market.competitors.filter((c) => !c.isNpp);
+  const nppRivals = market.competitors.filter((c) => c.isNpp);
+  const nppShare = nppRivals.reduce((sum, c) => sum + c.marketShare, 0);
 
   // Market totals anchor on the sector's country economy, not the viewer's
   // wallet — otherwise a forex shift on the viewer's preferred currency makes
@@ -116,31 +177,64 @@ export default function MarketPositionPanel({
               {market.marketShare}%
             </span>
           </div>
-          {/* Competitors */}
-          {market.competitors.map((comp, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span
-                className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{
-                  backgroundColor:
-                    comp.brandColor || DEFAULT_CORP_COLORS[i % DEFAULT_CORP_COLORS.length],
-                }}
-              />
-              {comp.corporationSequentialId != null || comp.corporationId ? (
-                <Link
-                  href={`/corporation/${comp.corporationSequentialId ?? comp.corporationId}`}
-                  className="truncate text-primary hover:underline"
-                >
-                  {comp.corporationName}
-                </Link>
-              ) : (
-                <span className="truncate text-foreground">{comp.corporationName}</span>
-              )}
-              <span className="ml-auto tabular-nums font-medium text-foreground">
-                {comp.marketShare}%
-              </span>
-            </div>
+          {/* Other players first: these are the rivals a player can actually
+              negotiate, undercut or be attacked by. */}
+          {playerRivals.map((comp, i) => (
+            <CompetitorRow
+              key={comp.corporationId ?? comp.corporationName}
+              comp={comp}
+              color={comp.brandColor || playerSlotColor(comp.corporationId, i)}
+            />
           ))}
+
+          {/* The NPP field, folded. Seventeen near-equal rows of autonomous
+              corps buried the handful that matter; the group keeps the total
+              honest and on screen, and opens for anyone who wants the roster. */}
+          {nppRivals.length > 0 && (
+            <div className="space-y-1.5">
+              <button
+                type="button"
+                onClick={() => setNppOpen((v) => !v)}
+                aria-expanded={nppOpen}
+                className="flex w-full items-center gap-2 rounded text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+              >
+                <span
+                  className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: NPP_ARC_COLOR, opacity: 0.55 }}
+                />
+                <span className="truncate text-muted">
+                  NPP field
+                  <span className="ml-1 text-[10px] text-muted">
+                    ({nppRivals.length} corp{nppRivals.length === 1 ? "" : "s"})
+                  </span>
+                </span>
+                <svg
+                  className={`h-3 w-3 shrink-0 text-muted transition-transform ${nppOpen ? "rotate-90" : ""}`}
+                  viewBox="0 0 12 12"
+                  fill="currentColor"
+                  aria-hidden
+                >
+                  <path d="M4 2l4 4-4 4z" />
+                </svg>
+                <span className="ml-auto tabular-nums font-medium text-foreground">
+                  {roundShare(nppShare)}%
+                </span>
+              </button>
+
+              {nppOpen && (
+                <div className="space-y-1.5 border-l border-card-border/60 pl-3">
+                  {nppRivals.map((comp) => (
+                    <CompetitorRow
+                      key={comp.corporationId ?? comp.corporationName}
+                      comp={comp}
+                      color={NPP_ARC_COLOR}
+                      dim
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {/* Unclaimed share vs room to build — the two numbers players kept
               reading as one. Named apart, with the gap explained. */}
           {room != null && buyersRoomUnits != null && (

@@ -14,11 +14,8 @@ import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 import type { StateMetrics, MetricCategoryId, State } from "@/lib/db/types";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
 import type { StateApprovalHistory } from "@/lib/db/types/stateApproval";
-import {
-  getCountryConfig,
-  supportsActingAppointments,
-  type CountryId,
-} from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
+import { actingAppointmentsEnabled } from "@/lib/cabinet/actingEligibility";
 import {
   evaluateModifiers,
   applyModifiers,
@@ -82,7 +79,10 @@ export function buildCabinetApprovalModifiers(
 
   // Parliamentary and one-party systems fill cabinet posts directly, so there is
   // no confirmation gap for an acting appointment to bridge and nothing to charge.
-  if (supportsActingAppointments(getCountryConfig(countryId))) {
+  // Narrower than `supportsActingAppointments`, which is true for every
+  // presidential country: NG is presidential but fills its cabinet directly, so
+  // it would otherwise carry a penalty for a state it can never enter.
+  if (actingAppointmentsEnabled(countryId)) {
     const actingCount = cabinetMembers.filter((m) => m.acting === true).length;
     if (actingCount > 0) {
       mods.push({

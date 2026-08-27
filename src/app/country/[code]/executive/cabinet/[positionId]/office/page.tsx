@@ -19,6 +19,7 @@ import { CabinetBannerUploader } from "./components/CabinetBannerUploader";
 import { RegionalBreakdownTable } from "./components/RegionalBreakdownTable";
 import { TierSettingPanel } from "./components/TierSettingPanel";
 import { ActingLockProvider } from "./components/ActingLock";
+import { ActingOfficeNotice } from "./components/ActingOfficeNotice";
 import { RegionalTargetPanel } from "./components/RegionalTargetPanel";
 import { AdvocacyTogglePanel } from "./components/AdvocacyTogglePanel";
 import { MinisterialOrderPanel } from "./components/MinisterialOrderPanel";
@@ -219,6 +220,15 @@ export default function CabinetOfficePage() {
     <ActingLockProvider member={data.member}>
       <div className="min-h-screen bg-background pb-16">
         <main className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
+          {data.member?.acting && (
+            <ActingOfficeNotice
+              turnsRemaining={
+                data.member.actingExpiresOnTurn != null
+                  ? Math.max(0, data.member.actingExpiresOnTurn - data.currentTurn)
+                  : null
+              }
+            />
+          )}
           <CabinetOfficeLayout
             positionName={data.position?.name ?? positionConfig.name}
             department={data.position?.department ?? mechanics.department}

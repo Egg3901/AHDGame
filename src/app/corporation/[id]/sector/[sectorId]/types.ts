@@ -382,6 +382,13 @@ export interface Competitor {
   brandColor?: string;
   revenue: number;
   marketShare: number;
+  /**
+   * True when this rival is part of the autonomous NPP field rather than another
+   * player's company. The market panel folds these into one arc and one
+   * collapsed list group. Absent on payloads served before that shipped, which
+   * reads as player-owned and renders the way it always did.
+   */
+  isNpp?: boolean;
 }
 
 export interface SplitSizeInfo {

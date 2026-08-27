@@ -1,18 +1,5 @@
 import type { CorporationType } from "@/lib/constants/corporations";
 
-export const DEFAULT_CORP_COLORS = [
-  "#3b82f6",
-  "#ef4444",
-  "#10b981",
-  "#f59e0b",
-  "#8b5cf6",
-  "#ec4899",
-  "#06b6d4",
-  "#f97316",
-  "#14b8a6",
-  "#6366f1",
-];
-
 export function getTypeColor(type: CorporationType): string {
   const colors: Partial<Record<CorporationType, string>> = {
     financial: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
