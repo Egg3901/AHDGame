@@ -22,13 +22,14 @@ Tension climbs when the world gives it a reason:
 - **Escalation.** Climbing the rungs of an active proxy war raises the standing pressure, not just a one-off spike.
 - **Crises.** Each active world crisis keeps the temperature up while it burns.
 - **The world's arsenals.** The total warhead count across all programmes sets part of the floor. An armed world is a tense world even on a quiet week.
-- **Shooting wars.** Every active war contributes according to its intensity. A war with nuclear-armed countries on opposing sides guarantees at least a CRISIS reading while it remains active.
+- **Shooting wars.** Every active war contributes according to its intensity. A fresh war between nuclear-armed countries creates a crisis-grade shock. If a war remains limited for many turns, part of that initial panic slowly fades; heating the war back up restores the full pressure immediately, and the active conflict always leaves a substantial floor.
 
 ## What lowers it
 
 - **Time.** With no new provocations, tension relaxes turn by turn.
 - **Detente moves.** Deliberate de-escalation, stand-downs, and diplomatic thaw apply relief directly.
 - **Standing down.** Descending the escalation ladder and resolving crises lowers the floor that tension decays toward.
+- **Limited-war acclimation.** After twelve turns, a war that stays below hot-war intensity slowly sheds part of its initial public alarm. This never removes the war's residual danger, and escalation cancels the relief.
 
 Note the shape of that: spikes fade, but tension never falls below the floor set by how armed and embroiled the world actually is. Several settlements can cool the index to that floor, but cannot erase the pressure of an unrelated shooting war. If the arsenals are huge and the proxy war is hot, no amount of waiting reads as peace.
 
@@ -39,6 +40,7 @@ Tension is a cause, not a scoreboard:
 - **Readiness.** Higher bands tighten the world's defence condition; militaries sit closer to alert.
 - **Procurement demand.** A frightened world buys arms. Defence contractors and [procurement](/wiki/defence-procurement) both feel the band.
 - **Detente goodwill.** Thaw is a resource. High tension burns the goodwill that cooperative diplomacy needs.
+- **Domestic crises.** Panic buying, bank runs, civil-defense fever, and war-scare protests recur while tension remains high. Governments can stagger them with spending, rationing, mobilization, or emergency powers, but cannot suppress them completely. Strong measures shift demand away from consumer industries and toward manufacturing, construction, and defense while damaging civil liberties and Democratic Health.
 
 ## Playing it
 

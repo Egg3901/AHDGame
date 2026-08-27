@@ -556,7 +556,8 @@ export const WORLD_EVENT_SEED_DEFINITIONS: Omit<
       {
         id: "ration",
         label: "Impose emergency rationing",
-        description: "Cap purchases of staples by decree until the scare passes.",
+        description:
+          "Cap purchases by decree. Slows repeat crises, shifts demand into industry and defense, and damages civil liberties.",
       },
       {
         id: "calm",
@@ -567,7 +568,8 @@ export const WORLD_EVENT_SEED_DEFINITIONS: Omit<
       {
         id: "release",
         label: "Release strategic stockpiles",
-        description: "Move government reserves into the shops to keep shelves full.",
+        description:
+          "Spend reserves to keep shelves full and buy limited relief without emergency powers.",
       },
     ],
     minTension: 60,
@@ -590,12 +592,13 @@ export const WORLD_EVENT_SEED_DEFINITIONS: Omit<
       {
         id: "guarantee",
         label: "Guarantee all deposits",
-        description: "Put the treasury behind every account to stop the run cold.",
+        description: "Spend heavily to stop the run and buy limited relief.",
       },
       {
         id: "holiday",
         label: "Declare a bank holiday",
-        description: "Close the banks for a cooling-off period by decree.",
+        description:
+          "Close banks by decree. Slows repeat crises, suppresses consumer demand, and damages democratic health.",
       },
       {
         id: "standBy",
@@ -624,12 +627,14 @@ export const WORLD_EVENT_SEED_DEFINITIONS: Omit<
       {
         id: "fund",
         label: "Fund a national shelter program",
-        description: "Pay for public shelters and stocked basements in every city.",
+        description:
+          "Fund shelters and wartime production. Buys limited relief while shifting demand toward industry and defense.",
       },
       {
         id: "drills",
         label: "Order drills and leaflets",
-        description: "Run civil defense drills and mail preparedness leaflets.",
+        description:
+          "Mobilize civil defense. Slows repeat crises modestly and slightly erodes civil liberties.",
         isDefault: true,
       },
       {
@@ -658,7 +663,7 @@ export const WORLD_EVENT_SEED_DEFINITIONS: Omit<
       {
         id: "address",
         label: "Address the nation",
-        description: "Speak directly to the fear and make the case for the course.",
+        description: "Speak directly to the fear and buy a little breathing room.",
       },
       {
         id: "acknowledge",
@@ -669,7 +674,8 @@ export const WORLD_EVENT_SEED_DEFINITIONS: Omit<
       {
         id: "crackdown",
         label: "Disperse the marches",
-        description: "Order police to clear the squares.",
+        description:
+          "Clear the squares. Strongly slows repeat crises and mobilizes wartime industry at a severe democratic cost.",
       },
     ],
     minTension: 60,

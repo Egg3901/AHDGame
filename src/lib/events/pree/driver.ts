@@ -52,7 +52,9 @@ interface CharacterEligibilityMaps {
 }
 
 async function loadApprovedDefinitions(db: Db): Promise<EventDefinition[]> {
-  return getEventDefinitionsCollection(db).find({ status: "approved" }).toArray();
+  return getEventDefinitionsCollection(db)
+    .find({ status: "approved", kind: { $not: /^worldEvents\./ } })
+    .toArray();
 }
 
 async function loadEligibilityMaps(

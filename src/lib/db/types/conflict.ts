@@ -132,6 +132,12 @@ export interface ConflictDoc {
   // Live state (seeded here; evolved by sub-project C):
   intensity: number;
   /**
+   * First consecutive turn below the hot-war threshold used by Cold War
+   * tension. Cleared while the war is hot, then restarted when it cools, so
+   * hot turns never count toward public acclimation.
+   */
+  limitedWarSinceTurn?: number;
+  /**
    * Share of the HOST country's territory held by side B: 0 = side A holds all of
    * it, 100 = side B holds all of it. Moved by battles; reaching a pole ends the war.
    * See src/lib/military/occupation.ts.

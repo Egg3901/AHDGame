@@ -42,6 +42,7 @@ import { ALL_CRISIS_TEMPLATES } from "@/lib/crises/templates";
 import { createCrisisFromTemplate } from "@/lib/crises/createCrisisFromTemplate";
 import { WARSAW_PACT_SATELLITE_COUNTRY_IDS } from "@/lib/crises/warsawPactSatellites";
 import { runUnionBanStrikeResponse } from "@/lib/crises/unionBanStrike";
+import { applyWarEmergencyResponse } from "@/lib/crises/warEmergencyResponse";
 
 /**
  * Context handed to every crisis option-action handler. The crisis is
@@ -734,6 +735,9 @@ export async function runCrisisOptionAction(ctx: CrisisActionContext): Promise<C
         });
         return result.nextNodeId ? { nextNodeId: result.nextNodeId } : {};
       }
+      case "warEmergencyResponse":
+        await applyWarEmergencyResponse(ctx, action.response);
+        break;
     }
   } catch (err) {
     console.error(

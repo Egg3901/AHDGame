@@ -3,13 +3,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import { getVietnamEscalation } from "@/lib/crises/vietnamEscalation";
 import { listNuclearPrograms } from "@/lib/db/collections/nuclearPrograms";
-import { listActiveConflicts } from "@/lib/db/collections/conflicts";
-import { readStandingPressureSnapshot } from "./standingPressure";
+import { getConflictsCollection, listActiveConflicts } from "@/lib/db/collections/conflicts";
+import { readStandingPressureSnapshot, syncLimitedWarPressureClocks } from "./standingPressure";
 
 vi.mock("@/lib/crises/vietnamEscalation", () => ({ getVietnamEscalation: vi.fn() }));
 vi.mock("@/lib/livingConflict/vietnamCompat", () => ({ livingVietnamAsLegacyState: vi.fn() }));
 vi.mock("@/lib/db/collections/nuclearPrograms", () => ({ listNuclearPrograms: vi.fn() }));
-vi.mock("@/lib/db/collections/conflicts", () => ({ listActiveConflicts: vi.fn() }));
+vi.mock("@/lib/db/collections/conflicts", () => ({
+  getConflictsCollection: vi.fn(),
+  listActiveConflicts: vi.fn(),
+}));
 
 describe("readStandingPressureSnapshot", () => {
   beforeEach(() => {
@@ -29,6 +32,33 @@ describe("readStandingPressureSnapshot", () => {
     ] as never);
   });
 
+  it("resets the limited-war clock while hot and starts it when a war cools", async () => {
+    const db = createMockDb();
+    const conflicts = db.collection("conflicts");
+    vi.mocked(getConflictsCollection).mockReturnValue(conflicts as never);
+
+    await syncLimitedWarPressureClocks(db as unknown as Db, 436);
+
+    expect(conflicts.updateMany).toHaveBeenNthCalledWith(
+      1,
+      {
+        status: { $ne: "resolved" },
+        intensity: { $gte: 85 },
+        limitedWarSinceTurn: { $exists: true },
+      },
+      { $unset: { limitedWarSinceTurn: "" } }
+    );
+    expect(conflicts.updateMany).toHaveBeenNthCalledWith(
+      2,
+      {
+        status: { $ne: "resolved" },
+        intensity: { $lt: 85 },
+        limitedWarSinceTurn: { $exists: false },
+      },
+      { $set: { limitedWarSinceTurn: 436 } }
+    );
+  });
+
   it("keeps Vietnam separate and counts every active crisis and live war", async () => {
     const db = createMockDb();
     db.collection("crises");
@@ -46,6 +76,7 @@ describe("readStandingPressureSnapshot", () => {
         otherWarIntensity: 0,
         activeWarCount: 1,
         nuclearWarCount: 1,
+        nuclearWarMinimumPressure: 48,
       },
       pressures: {
         escalationLevel: 1,
@@ -53,6 +84,7 @@ describe("readStandingPressureSnapshot", () => {
         totalWarheads: 1214,
         nuclearWarIntensity: 70,
         nuclearWarCount: 1,
+        nuclearWarMinimumPressure: 48,
         otherWarIntensity: 0,
       },
     });

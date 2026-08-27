@@ -124,6 +124,25 @@ export type CrisisOptionAction =
   | {
       kind: "unionBanStrikeResponse";
       response: "army" | "negotiate" | "rideOut" | "backDown";
+    }
+  /** A government's response to a recurring high-tension wartime emergency.
+   *  These options alter the real mitigation, sector-demand, treasury, approval,
+   *  and democratic-health systems rather than resolving as random events. */
+  | {
+      kind: "warEmergencyResponse";
+      response:
+        | "panic_ration"
+        | "panic_calm"
+        | "panic_release"
+        | "bank_guarantee"
+        | "bank_holiday"
+        | "bank_stand_by"
+        | "civil_defense_fund"
+        | "civil_defense_drills"
+        | "civil_defense_dismiss"
+        | "protests_address"
+        | "protests_march"
+        | "protests_crackdown";
     };
 
 export interface CrisisDecisionOption {
