@@ -585,7 +585,13 @@ describe("runMetricEngine — P2/D7 plants-mode realized-revenue sector signal",
   }
 
   type Ops = Array<{
-    updateOne: { filter: { _id: string }; update: { $set: Record<string, number | string> } };
+    updateOne: {
+      filter: { _id: string };
+      update: {
+        $set: Record<string, number | string | Array<{ turn: number; value: number }>>;
+        $unset?: Record<string, "">;
+      };
+    };
   }>;
 
   /**
@@ -599,6 +605,8 @@ describe("runMetricEngine — P2/D7 plants-mode realized-revenue sector signal",
     prevRealized?: number;
     prevRealizedTurn?: number;
     prevRealizedUnit?: "host";
+    prevRevenueEma?: number;
+    prevRevenueSnapshots?: Array<{ turn: number; value: number }>;
     prevMetrics?: unknown[];
     realizedRevenue?: number;
     countryId?: string;
@@ -620,6 +628,10 @@ describe("runMetricEngine — P2/D7 plants-mode realized-revenue sector signal",
                 ? { sectorRealizedRevenueUnit: opts.prevRealizedUnit }
                 : {}),
             }
+          : {}),
+        ...(opts.prevRevenueEma !== undefined ? { sectorRevenueEma: opts.prevRevenueEma } : {}),
+        ...(opts.prevRevenueSnapshots !== undefined
+          ? { sectorRevenueSnapshots: opts.prevRevenueSnapshots }
           : {}),
       },
     ]);
@@ -760,6 +772,44 @@ describe("runMetricEngine — P2/D7 plants-mode realized-revenue sector signal",
     await runMetricEngine(db as unknown as Db, 10);
     expect(stateOps[0].updateOne.update.$set.sectorRealizedRevenue).toBe(900);
     expect(stateOps[0].updateOne.update.$set.sectorRealizedRevenueUnit).toBe("host");
+  });
+
+  it("seeds a fresh host trend on the legacy-to-host flip", async () => {
+    seedWorld({
+      mode: "plants",
+      revenue: 1010,
+      realizedRevenue: 900,
+      currentGrowthRate: 3,
+      prevRealized: 1000,
+      prevRealizedTurn: 9,
+      prevRevenueEma: 50_000,
+      prevRevenueSnapshots: [{ turn: 1, value: 40_000 }],
+    });
+    const { stateOps } = captureOps();
+    await runMetricEngine(db as unknown as Db, 10);
+    expect(stateOps[0].updateOne.update.$set.sectorRevenueEma).toBe(900);
+    expect(stateOps[0].updateOne.update.$set.sectorRevenueSnapshots).toEqual([
+      { turn: 10, value: 900 },
+    ]);
+  });
+
+  it("clears host trend state below plants so a later flip cannot reuse it", async () => {
+    seedWorld({
+      mode: "capital",
+      revenue: 1010,
+      currentGrowthRate: 3,
+      prevRealized: 900,
+      prevRealizedUnit: "host",
+      prevRevenueEma: 900,
+      prevRevenueSnapshots: [{ turn: 8, value: 900 }],
+    });
+    const { stateOps } = captureOps();
+    await runMetricEngine(db as unknown as Db, 10);
+    expect(stateOps[0].updateOne.update.$unset).toEqual({
+      sectorRealizedRevenueUnit: "",
+      sectorRevenueEma: "",
+      sectorRevenueSnapshots: "",
+    });
   });
 
   it("does not treat an FX-only restatement as GDP growth once the host unit is tagged", async () => {
