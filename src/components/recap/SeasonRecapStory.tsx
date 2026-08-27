@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { iterationLabel } from "@/lib/wiki/officeIteration";
 import { createPortal } from "react-dom";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
@@ -169,7 +170,7 @@ interface Slide {
 function buildSlides(recap: CharacterRecap): Slide[] {
   const s: Slide[] = [];
   const season = recap.iteration
-    ? `${recap.iteration.type} ${recap.iteration.number}`
+    ? iterationLabel(recap.iteration)
     : "this season";
 
   s.push({
@@ -383,7 +384,7 @@ export function SeasonRecapStory({ recap, onClose }: SeasonRecapStoryProps) {
   const isFinale = index >= slides.length;
   const slide = isFinale ? null : slides[index];
   const season = recap.iteration
-    ? `${recap.iteration.type} ${recap.iteration.number}`
+    ? iterationLabel(recap.iteration)
     : "this season";
 
   const countTarget = slide?.value ?? 0;
@@ -434,7 +435,7 @@ export function SeasonRecapStory({ recap, onClose }: SeasonRecapStoryProps) {
     // Discord/social. Fall back to copying the URL to the clipboard.
     const url = `${window.location.origin}/wrapped/${recap.characterId}`;
     const seasonName = recap.iteration
-      ? `${recap.iteration.type} ${recap.iteration.number}`
+      ? iterationLabel(recap.iteration)
       : "season";
     const data: ShareData = {
       title: `${recap.name}'s ${seasonName} Wrapped`,

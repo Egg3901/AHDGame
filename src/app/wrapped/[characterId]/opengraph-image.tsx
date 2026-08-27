@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { ObjectId } from "mongodb";
+import { iterationLabel } from "@/lib/wiki/officeIteration";
 import { getDb } from "@/lib/mongodb";
 import type { RetiredCharacter } from "@/lib/db/types/retiredCharacter";
 import type { CharacterRecap } from "@/lib/recap/types";
@@ -33,7 +34,7 @@ export default async function Image({ params }: { params: Promise<{ characterId:
   const { characterId } = await params;
   const recap = await loadRecap(characterId);
 
-  const season = recap?.iteration ? `${recap.iteration.type} ${recap.iteration.number}` : "Season";
+  const season = recap?.iteration ? iterationLabel(recap.iteration) : "Season";
   const name = recap?.name ?? "A House Divided";
   const office = recap?.highestOffice ?? "";
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { iterationLabel } from "@/lib/wiki/officeIteration";
 import type { CharacterRecap } from "@/lib/recap/types";
 import { SeasonRecapStory } from "@/components/recap/SeasonRecapStory";
 
@@ -13,7 +14,7 @@ import { SeasonRecapStory } from "@/components/recap/SeasonRecapStory";
 export function MaintenanceRecapLauncher({ recap }: { recap: CharacterRecap }) {
   const [open, setOpen] = useState(false);
   const season = recap.iteration
-    ? `${recap.iteration.type} ${recap.iteration.number}`
+    ? iterationLabel(recap.iteration)
     : "last season";
 
   return (
