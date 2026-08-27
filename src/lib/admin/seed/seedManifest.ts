@@ -260,6 +260,12 @@ const RUNTIME: CollectionEntry[] = [
     category: "runtime",
     notes: "Per-turn M1/M2, credit, sovereign-debt, and central-bank holdings by issuing currency.",
   },
+  {
+    name: "economicVitalSigns",
+    category: "runtime",
+    notes:
+      "Versioned per-turn aggregate market, production, distribution, money, and reconciliation indicators for economic evaluation.",
+  },
   // Elections + officials
   { name: "elections", category: "runtime" },
   { name: "electionCandidates", category: "runtime" },

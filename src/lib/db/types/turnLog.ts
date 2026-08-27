@@ -766,6 +766,10 @@ export interface TurnLog {
       unbalancedCount: number;
       stockVsFlowDivergences: number;
     } | null;
+    economicVitalSigns?: {
+      snapshotTurn: number;
+      domainsAvailable: number;
+    } | null;
   };
 
   // TTL index field - MongoDB will auto-delete 24 hours after this timestamp

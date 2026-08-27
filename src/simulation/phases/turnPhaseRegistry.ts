@@ -119,6 +119,7 @@ import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
 import { writeBalanceSnapshot } from "@/lib/ledger/balanceSnapshot";
 import { snapshotMoneySupply } from "@/lib/moneySupply/snapshot";
 import { reconcileTurn } from "@/lib/ledger/reconcile";
+import { snapshotEconomicVitalSigns } from "@/lib/economy/economicVitalSigns";
 import { runAutoReelectionEntry } from "@/lib/turn/autoReelectionEntry";
 import { withdrawInactiveCandidates } from "@/lib/turn/withdrawInactiveCandidates";
 import { stateEffectsAndNationalAggregationPhase } from "./stateEffectsPhase";
@@ -1334,6 +1335,28 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
                 `${report.trialBalance.unbalancedCount === 1 ? "y" : "ies"} at turn ${newTurn}`
             );
           }
+        }
+      },
+    },
+    {
+      key: "economicVitalSigns",
+      async execute(context, runtime) {
+        const snapshot = await runtime.runPhase("economicVitalSigns", () =>
+          snapshotEconomicVitalSigns(context.db, context.newTurn)
+        );
+        if (snapshot) {
+          context.phaseResults.economicVitalSigns = {
+            snapshotTurn: snapshot.turn,
+            domainsAvailable: [
+              snapshot.goods.pooledFillRate,
+              snapshot.trade.intentFulfillmentRate,
+              snapshot.production.physicalSellThrough,
+              snapshot.firms.marketCapHhi,
+              snapshot.securities.activeTradedListingShare,
+              snapshot.households.wealthGini,
+              snapshot.money.medianAnnualizedM2GrowthPct,
+            ].filter((item) => item.value !== null).length,
+          };
         }
       },
     },
