@@ -26,6 +26,11 @@ describe("marketAccessMetricsFromSnapshot", () => {
       },
       production: { physicalSellThrough: value(0.9), labourStaffingRate: value(0.55) },
       firms: { marketCapHhi: value(2500) },
+      competition: {
+        medianOwnershipAdjustedSellerHhi: value(3000),
+        medianOwnershipAdjustedBuyerHhi: value(2000),
+        highConcentrationLowFillShare: value(0.4),
+      },
       securities: {
         activeTradedListingShare: value(0.3),
         noHolderBondShare: value(0.6),
@@ -61,6 +66,9 @@ describe("marketAccessMetricsFromSnapshot", () => {
       physicalSellThrough: 0.9,
       labourStaffingRate: 0.55,
       marketCapHhi: 2500,
+      medianOwnershipAdjustedSellerHhi: 3000,
+      medianOwnershipAdjustedBuyerHhi: 2000,
+      highConcentrationLowFillShare: 0.4,
       activeTradedListingShare: 0.3,
       noHolderBondShare: 0.6,
       bondSubscriptionRate: 0.4,

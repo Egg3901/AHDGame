@@ -6,6 +6,18 @@ export interface EconomicMetric {
   basis: string;
 }
 
+export interface RelevantMarketVitalSign {
+  commodity: string;
+  pooledFillRate: number | null;
+  sellerCount: number;
+  buyerCount: number;
+  sellerHhi: number | null;
+  buyerHhi: number | null;
+  ownershipAdjustedSellerHhi: number | null;
+  ownershipAdjustedBuyerHhi: number | null;
+  highConcentrationLowFill: boolean;
+}
+
 export interface EconomicVitalSigns {
   _id: string;
   schemaVersion: 1;
@@ -45,6 +57,14 @@ export interface EconomicVitalSigns {
     lossMakingShare: EconomicMetric;
     marketCapHhi: EconomicMetric;
     topFourMarketCapShare: EconomicMetric;
+  };
+  competition: {
+    markets: RelevantMarketVitalSign[];
+    medianSellerHhi: EconomicMetric;
+    medianBuyerHhi: EconomicMetric;
+    medianOwnershipAdjustedSellerHhi: EconomicMetric;
+    medianOwnershipAdjustedBuyerHhi: EconomicMetric;
+    highConcentrationLowFillShare: EconomicMetric;
   };
   securities: {
     equityTrades48Turns: number;

@@ -5,6 +5,7 @@ import type {
   CorporateSector,
   EconomicMetric,
   EconomicVitalSigns,
+  ExchangeRate,
   GameHealthSnapshot,
   MoneySupplySnapshot,
   ShareOrder,
@@ -17,6 +18,10 @@ import type { LedgerReconciliation } from "@/lib/ledger/types";
 import type { BalanceSnapshot, LedgerEntry } from "@/lib/ledger/types";
 import { accountKind, isRealAccount } from "@/lib/ledger/accounts";
 import type { CommoditySourcingDoc } from "@/lib/logistics/sourcingLedger";
+import { computeSectorCommodityUnits } from "@/lib/corporations/corpCommodityFlows";
+import { resolveFormalizedGroups } from "@/lib/corporations/groups/groupMembership";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import type { CommodityType } from "@/lib/constants/commodities";
 
 export const ECONOMIC_VITAL_SIGNS_COLLECTION = "economicVitalSigns";
 export const ECONOMIC_VITAL_SIGNS_WINDOW_TURNS = 48 as const;
@@ -39,6 +44,15 @@ type Inputs = {
   reconciliation: LedgerReconciliation | null;
   balanceSnapshot: BalanceSnapshot | null;
   ledgerEntries: LedgerEntry[];
+  commodityParticipants: CommodityParticipant[];
+};
+
+type CommodityParticipant = {
+  commodity: CommodityType;
+  corporationId: string;
+  ownershipRootId: string;
+  sellerUnits: number;
+  buyerUnits: number;
 };
 
 const finite = (value: unknown): value is number =>
@@ -172,6 +186,98 @@ function marketQuality(
     depthAnchor,
     executionHours,
     amihud,
+  };
+}
+
+function relevantMarketDiagnostics(
+  participants: CommodityParticipant[],
+  flows: CommodityFlow[]
+): EconomicVitalSigns["competition"] {
+  const fillByCommodity = new Map(
+    flows.map((flow) => {
+      const demand = flow.demandUnitsLedger ?? flow.demandUnits;
+      return [flow.commodity, ratio(flow.clearedUnitsPooled ?? flow.clearedUnits, demand)] as const;
+    })
+  );
+  const byCommodity = new Map<CommodityType, CommodityParticipant[]>();
+  for (const participant of participants) {
+    const rows = byCommodity.get(participant.commodity) ?? [];
+    rows.push(participant);
+    byCommodity.set(participant.commodity, rows);
+  }
+
+  const hhiFor = (
+    rows: CommodityParticipant[],
+    side: "sellerUnits" | "buyerUnits",
+    ownershipAdjusted: boolean
+  ): { hhi: number | null; count: number } => {
+    const totals = new Map<string, number>();
+    for (const row of rows) {
+      const value = nonnegative(row[side]);
+      if (value <= 0) continue;
+      const key = ownershipAdjusted ? row.ownershipRootId : row.corporationId;
+      totals.set(key, (totals.get(key) ?? 0) + value);
+    }
+    return { hhi: concentration([...totals.values()]).hhi, count: totals.size };
+  };
+
+  const markets = [...byCommodity.entries()]
+    .map(([commodity, rows]) => {
+      const sellers = hhiFor(rows, "sellerUnits", false);
+      const buyers = hhiFor(rows, "buyerUnits", false);
+      const ownershipSellers = hhiFor(rows, "sellerUnits", true);
+      const ownershipBuyers = hhiFor(rows, "buyerUnits", true);
+      const pooledFillRate = fillByCommodity.get(commodity) ?? null;
+      return {
+        commodity,
+        pooledFillRate,
+        sellerCount: sellers.count,
+        buyerCount: buyers.count,
+        sellerHhi: sellers.hhi,
+        buyerHhi: buyers.hhi,
+        ownershipAdjustedSellerHhi: ownershipSellers.hhi,
+        ownershipAdjustedBuyerHhi: ownershipBuyers.hhi,
+        highConcentrationLowFill:
+          pooledFillRate != null &&
+          pooledFillRate < 0.8 &&
+          (ownershipSellers.hhi ?? sellers.hhi ?? 0) >= 2_500,
+      };
+    })
+    .sort((a, b) => a.commodity.localeCompare(b.commodity));
+
+  const sellerHhi = markets.flatMap((market) =>
+    market.sellerHhi == null ? [] : [market.sellerHhi]
+  );
+  const buyerHhi = markets.flatMap((market) => (market.buyerHhi == null ? [] : [market.buyerHhi]));
+  const ownershipSellerHhi = markets.flatMap((market) =>
+    market.ownershipAdjustedSellerHhi == null ? [] : [market.ownershipAdjustedSellerHhi]
+  );
+  const ownershipBuyerHhi = markets.flatMap((market) =>
+    market.ownershipAdjustedBuyerHhi == null ? [] : [market.ownershipAdjustedBuyerHhi]
+  );
+  const marketsWithFill = markets.filter((market) => market.pooledFillRate != null);
+  return {
+    markets,
+    medianSellerHhi: metric(median(sellerHhi), sellerHhi.length, "commodity_corporation_output"),
+    medianBuyerHhi: metric(median(buyerHhi), buyerHhi.length, "commodity_corporation_input"),
+    medianOwnershipAdjustedSellerHhi: metric(
+      median(ownershipSellerHhi),
+      ownershipSellerHhi.length,
+      "commodity_formalized_group_output"
+    ),
+    medianOwnershipAdjustedBuyerHhi: metric(
+      median(ownershipBuyerHhi),
+      ownershipBuyerHhi.length,
+      "commodity_formalized_group_input"
+    ),
+    highConcentrationLowFillShare: metric(
+      ratio(
+        marketsWithFill.filter((market) => market.highConcentrationLowFill).length,
+        marketsWithFill.length
+      ),
+      marketsWithFill.length,
+      "commodity_markets_with_pooled_fill"
+    ),
   };
 }
 
@@ -326,6 +432,7 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
   ]);
   const economicTrades = input.trades.filter((trade) => economicTradeKinds.has(trade.kind));
   const quality = marketQuality(listings, input.shareOrders, economicTrades);
+  const competition = relevantMarketDiagnostics(input.commodityParticipants, input.currentFlows);
   const tradedCorporations = new Set(economicTrades.map((trade) => trade.corporationId.toString()));
   const activeBonds = input.bonds.filter((bond) => !bond.matured);
   const bondHolderCounts = activeBonds.map(
@@ -381,6 +488,9 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
   if (!input.balanceSnapshot) measurementReasons.push("balance_snapshot_unavailable");
   if (quality.spreads.length < 5) measurementReasons.push("fewer_than_five_two_sided_books");
   if (input.currentFlows.length === 0) measurementReasons.push("commodity_flow_sample_empty");
+  if (input.commodityParticipants.length === 0) {
+    measurementReasons.push("commodity_participant_sample_empty");
+  }
   const measurementConfidence: EconomicVitalSigns["measurement"]["confidence"] =
     measurementReasons.length === 0
       ? "high"
@@ -516,6 +626,7 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         "market_cap_anchor"
       ),
     },
+    competition,
     securities: {
       equityTrades48Turns: economicTrades.length,
       equityNotionalAnchor48Turns: economicTrades.reduce(
@@ -692,6 +803,8 @@ export async function snapshotEconomicVitalSigns(
     reconciliation,
     balanceSnapshot,
     ledgerEntries,
+    groupMembership,
+    exchangeRates,
   ] = await Promise.all([
     db.collection<CommodityFlow>("commodityFlows").find({ turn }).toArray(),
     db
@@ -717,7 +830,36 @@ export async function snapshotEconomicVitalSigns(
       .collection<LedgerEntry>("ledgerEntries")
       .find({ turn: { $gte: windowStart, $lte: turn } })
       .toArray(),
+    resolveFormalizedGroups(db),
+    db.collection<ExchangeRate>("exchangeRates").find({}).toArray(),
   ]);
+  const fxByCurrency = new Map(exchangeRates.map((row) => [row.currencyCode, row.rate]));
+  if (!fxByCurrency.has("USD")) fxByCurrency.set("USD", 1);
+  const commodityParticipants: CommodityParticipant[] = [];
+  for (const sector of sectors) {
+    const corporationId = sector.corporationId.toString();
+    const currencyCode = COUNTRY_CURRENCY_MAP[sector.countryId];
+    const fxRate = fxByCurrency.get(currencyCode) ?? 1;
+    const { supply, demand } = computeSectorCommodityUnits(
+      {
+        ...sector,
+        revenueAnchor: fxRate > 0 ? sector.revenue / fxRate : sector.revenue,
+        capacityUnits: sector.capitalStock,
+      },
+      turn,
+      { plantsEnabled: true }
+    );
+    const commodities = new Set([...supply.keys(), ...demand.keys()]);
+    for (const commodity of commodities) {
+      commodityParticipants.push({
+        commodity,
+        corporationId,
+        ownershipRootId: groupMembership.rootByCorpId.get(corporationId) ?? corporationId,
+        sellerUnits: supply.get(commodity) ?? 0,
+        buyerUnits: demand.get(commodity) ?? 0,
+      });
+    }
+  }
   const snapshot = computeEconomicVitalSigns({
     turn,
     now: new Date(),
@@ -736,6 +878,7 @@ export async function snapshotEconomicVitalSigns(
     reconciliation,
     balanceSnapshot,
     ledgerEntries,
+    commodityParticipants,
   });
   await db
     .collection<EconomicVitalSigns>(ECONOMIC_VITAL_SIGNS_COLLECTION)
