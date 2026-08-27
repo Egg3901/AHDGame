@@ -16,6 +16,7 @@ import {
   statObj,
   computeCard,
   terrainFactor,
+  navalReach,
   getRole,
   roleDef,
   effUpkeep,
@@ -444,7 +445,11 @@ function ownSideProfile(ctxs: BattleContext[], frontId: string): OwnSideProfile 
   for (const ctx of ctxs) {
     for (const u of ctx.units.filter((x) => x.theaterId === frontId)) {
       const base = cv(ctx, u);
-      const adj = base * terrainFactor(front, u.domain, computeCard(u).traitKeys);
+      const card = computeCard(u);
+      const adj =
+        base *
+        terrainFactor(front, u.domain, card.traitKeys) *
+        navalReach(front, u.domain, card.traitKeys);
       rawTot += base;
       tfTot += adj;
       const role = getRole(ctx.positions, u);
@@ -488,7 +493,7 @@ export function forecast(ctx: BattleContext, frontId: string, seed: number): For
   const P = ownSideProfile([ctx], frontId);
   const enemy = buildEnemy(front, seed);
   const enemyAgg = enemy.map((e) => ({
-    cv: e.cv * terrainFactor(front, e.domain, e.traits),
+    cv: e.cv * terrainFactor(front, e.domain, e.traits) * navalReach(front, e.domain, e.traits),
     s: e.s,
     domain: e.domain,
   }));
