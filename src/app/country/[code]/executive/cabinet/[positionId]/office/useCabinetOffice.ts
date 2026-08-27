@@ -49,6 +49,8 @@ export interface CabinetOfficeData {
      * payload served before acting scope shipped) means no restriction.
      */
     barredScopes?: CabinetLeverScope[];
+    /** Turn the acting appointment lapses. Null on a confirmed holder. */
+    actingExpiresOnTurn?: number | null;
   } | null;
   currentSettings: {
     tierSetting: string | null;

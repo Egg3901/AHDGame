@@ -16,6 +16,7 @@ import { getOfficeLabel } from "@/lib/utils/politics";
 import { getGameState } from "@/lib/gameState";
 import { resetCabinetSettingCooldowns } from "@/lib/db/collections/cabinetSettings";
 import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilters";
+import { expireLapsedActingAppointments } from "@/lib/cabinet/actingExpiry";
 import type {
   CabinetNomination,
   CabinetMember,
@@ -356,7 +357,9 @@ export async function processCabinetNominationLifecycle(
         // Confirm: create or replace cabinet member
         await db
           .collection<CabinetMember>("cabinetMembers")
-          .deleteOne({ positionId: nom.positionId });
+          // Country-scoped: position ids are not unique across countries, so an
+          // unscoped delete here could evict another country's seat holder.
+          .deleteOne({ countryId: nom.countryId, positionId: nom.positionId });
 
         const member: Omit<CabinetMember, "_id"> & {
           ministerialActions: number;
@@ -368,6 +371,11 @@ export async function processCabinetNominationLifecycle(
           characterName: nom.nomineeCharacterName,
           party: nom.nomineeParty,
           appointedByPresidentId: nom.proposedByPresidentId,
+          // Also written under the collection's canonical name, which the UK,
+          // NPP and acting paths use and `caretakerMinister` queries. Without
+          // it a US-confirmed secretary is invisible to those readers.
+          appointedByCharacterId: nom.proposedByPresidentId,
+          appointedAt: now,
           confirmedAt: now,
           ...initialMinisterialActionFields(now),
           createdAt: now,
@@ -507,6 +515,11 @@ export async function processCabinetNominationLifecycle(
   }
 
   await createNotifications(notificationInputs);
+
+  // Acting appointments lapse on the same cadence as confirmations resolve, so
+  // they share this phase rather than adding one to the registry (whose result
+  // indices are computed by arithmetic).
+  await expireLapsedActingAppointments(db, currentTurn);
 
   return {
     nominationsProcessed: activeNominations.length + expired.length,

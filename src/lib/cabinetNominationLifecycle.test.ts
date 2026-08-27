@@ -179,4 +179,57 @@ describe("processCabinetNominationLifecycle — holder seating", () => {
       expect.objectContaining({ countryId: "NG", isNPP: true })
     );
   });
+
+  it("replaces an acting holder on confirmation, carrying no acting fields, and never refunds the charge", async () => {
+    db.collection("actingAppointmentCharges");
+    const nomination = {
+      _id: new ObjectId(),
+      status: "active",
+      countryId: "US",
+      positionId: "secretary_of_treasury",
+      nomineeCharacterId: new ObjectId(),
+      nomineeCharacterName: "Confirmed Secretary",
+      nomineeParty: "democrat",
+      proposedByPresidentId: new ObjectId(),
+      votes: {},
+    };
+    db.collectionMocks.cabinetNominations.find.mockImplementation(
+      (query: Record<string, unknown>) => {
+        const orClause = (query?.$or as Array<{ votingEndsOnTurn?: Record<string, unknown> }>)?.[0]
+          ?.votingEndsOnTurn;
+        const isExpiredQuery = !!orClause && "$lte" in orClause;
+        return {
+          toArray: vi.fn().mockResolvedValue(isExpiredQuery ? [nomination] : []),
+        } as never;
+      }
+    );
+
+    const { computeCabinetNominationTally } =
+      await import("@/lib/congress/governmentVoteBreakdown");
+    vi.mocked(computeCabinetNominationTally).mockResolvedValue({
+      votesFor: 60,
+      votesAgainst: 40,
+      votesAbstain: 0,
+    } as never);
+
+    const { processCabinetNominationLifecycle } = await import("./cabinetNominationLifecycle");
+    await processCabinetNominationLifecycle(new Date(0));
+
+    // Confirmation ends any acting term for the seat: the seat is cleared
+    // country-scoped (position ids repeat across countries) and the incoming
+    // holder carries none of the acting tenure stamps.
+    expect(db.collectionMocks.cabinetMembers.deleteOne).toHaveBeenCalledWith({
+      countryId: "US",
+      positionId: "secretary_of_treasury",
+    });
+    const inserted = db.collectionMocks.cabinetMembers.insertOne.mock.calls[0][0];
+    expect(inserted.acting).toBeUndefined();
+    expect(inserted.actingSinceTurn).toBeUndefined();
+    expect(inserted.actingExpiresOnTurn).toBeUndefined();
+
+    // The charge stays spent, so the seat cannot be acting-filled again this
+    // presidency even though confirmation has now happened.
+    expect(db.collectionMocks.actingAppointmentCharges.deleteOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.actingAppointmentCharges.deleteMany).not.toHaveBeenCalled();
+  });
 });

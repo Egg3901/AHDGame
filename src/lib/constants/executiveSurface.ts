@@ -19,7 +19,8 @@ export interface ExecutiveClockConfig {
   countdownNoun: string;
 }
 
-export type ExecutiveActKind = "signed" | "vetoed" | "onDesk" | "order" | "confirmed" | "nominated";
+export type ExecutiveActKind =
+  "signed" | "vetoed" | "onDesk" | "order" | "confirmed" | "nominated" | "acting";
 
 export interface ExecutiveSurfaceConfig {
   clock: ExecutiveClockConfig;
@@ -40,6 +41,7 @@ const PRESIDENTIAL_ACTS: Record<ExecutiveActKind, string> = {
   order: "EX. ORDER",
   confirmed: "CONFIRMED",
   nominated: "NOMINATED",
+  acting: "ACTING",
 };
 
 const PARLIAMENTARY_ACTS: Record<ExecutiveActKind, string> = {
@@ -49,6 +51,7 @@ const PARLIAMENTARY_ACTS: Record<ExecutiveActKind, string> = {
   order: "ORDER",
   confirmed: "APPOINTED",
   nominated: "NOMINATED",
+  acting: "ACTING",
 };
 
 const EXECUTIVE_SURFACE: Record<CountryId, ExecutiveSurfaceConfig> = {
