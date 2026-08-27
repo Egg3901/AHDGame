@@ -61,15 +61,15 @@ describe("essential-shortage founding override (freight valve)", () => {
     expect(pick?.sectorType).toBe("manufacturing");
   });
 
-  it("does not re-found a type the corp already runs, even when critical", () => {
-    // logistics excluded by existingTypes → the override has nothing to pick and
-    // the corp falls back to its own type.
+  it("does not re-found the same type in the same state", () => {
+    // The NY logistics bucket is occupied, so the corp falls back to the open
+    // manufacturing bucket in PA. The same type remains legal in other states.
     const pick = findBestUnownedSector(
       "US",
       "PA",
       "manufacturing",
       null,
-      new Set(["logistics"]),
+      new Set(["NY:logistics"]),
       pool,
       new Set(),
       ratios({ freight: 2.0 }),

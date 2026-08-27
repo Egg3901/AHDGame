@@ -1,7 +1,9 @@
 // POST /api/country/[code]/international-organizations/legislation/[legislationId]/vote
 // Foreign minister of `code` votes on a pending org-level legislation item.
-// Only countries named as parties to the legislation may vote — non-party
-// members of the host org are not bound by it and have no say.
+// A free-trade agreement is decided only by the countries named as parties to
+// it; every other resolution type is decided by the host org's voting roll.
+// Either way the voter must still hold a vote in the org, because that is the
+// roll the resolver tallies.
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { NextResponse } from "next/server";
@@ -73,6 +75,16 @@ export async function POST(
       if (!(legislation.parties as CountryId[]).includes(countryId)) {
         return NextResponse.json(
           badRequest(`${countryId} is not a party to this legislation.`).toJson(),
+          { status: 400 }
+        );
+      }
+      // Parties are checked against membership when the agreement is tabled, but
+      // a country can withdraw, or lose player-enablement, before the vote
+      // closes. The resolver narrows the ballot to voting members either way, so
+      // refuse here rather than accept a vote that will be discarded.
+      if (!(await isVotingMember(db, legislation.organizationId, countryId))) {
+        return NextResponse.json(
+          badRequest(`${countryId} has no vote in ${legislation.organizationId}.`).toJson(),
           { status: 400 }
         );
       }

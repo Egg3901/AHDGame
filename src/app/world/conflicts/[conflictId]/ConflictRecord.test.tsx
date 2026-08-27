@@ -84,8 +84,8 @@ const base: ConflictRecordView = {
       target: "CN",
       attackers: ["US"],
       defenders: ["CN"],
-      declarerLoss: 300,
-      targetLoss: 900,
+      attackerLosses: [{ country: "US", loss: 300 }],
+      defenderLosses: [{ country: "CN", loss: 900 }],
       groundPct: null,
     },
   ],
@@ -379,6 +379,7 @@ describe("ConflictRecord tiers", () => {
           battles: [
             {
               ...base.battles[0],
+              rostersWithheld: true,
               rosters: [
                 {
                   country: "US",
@@ -639,5 +640,71 @@ describe("separate peace on the record", () => {
   it("renders no settlement section on a war nobody has settled", () => {
     render(<ConflictRecord conflict={base} />);
     expect(screen.queryByText(/SEPARATE PEACE/)).toBeNull();
+  });
+});
+
+describe("ConflictRecord — coalition engagements", () => {
+  /** The live T420 shape: DD and RU attacked US together. */
+  const coalitionBattle = {
+    ...base.battles[0],
+    turn: 420,
+    declarer: "DD",
+    target: "US",
+    attackers: ["DD", "RU"],
+    defenders: ["US"],
+    attackerLosses: [
+      { country: "DD", loss: 5360 },
+      { country: "RU", loss: 10939 },
+    ],
+    defenderLosses: [{ country: "US", loss: 2313 }],
+  };
+
+  it("names all three belligerents' casualties, not two", () => {
+    const { container } = render(
+      <ConflictRecord
+        conflict={{ ...base, sideACountries: ["DD", "RU"], battles: [coalitionBattle] }}
+      />
+    );
+    const row = container.querySelector("[data-battle]")!;
+    expect(row.textContent).toMatch(/DD 5,360/);
+    expect(row.textContent).toMatch(/RU 10,939/);
+    expect(row.textContent).toMatch(/US 2,313/);
+    // The bug: the coalition's whole loss printed under the principal's flag.
+    expect(row.textContent).not.toMatch(/16,299/);
+  });
+
+  it("keeps showing both allies while still flagging the enemy roster as withheld", () => {
+    const { container } = render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          tier: "command",
+          ownSide: "A",
+          sideACountries: ["DD", "RU"],
+          battles: [
+            {
+              ...coalitionBattle,
+              rostersWithheld: true,
+              rosters: [
+                {
+                  country: "DD",
+                  power: 1650,
+                  units: [
+                    { id: "d1", name: "1. Mot-Schützendivision", type: "Rifle", casualties: 5360 },
+                  ],
+                },
+                {
+                  country: "RU",
+                  power: 3350,
+                  units: [{ id: "r1", name: "3rd Guards Tank", type: "Tank", casualties: 10939 }],
+                },
+              ],
+            },
+          ],
+        }}
+      />
+    );
+    expect(container.textContent).toMatch(/3rd Guards Tank/);
+    expect(container.textContent).toMatch(/Roster withheld/);
   });
 });

@@ -29,7 +29,7 @@ import {
   type SupplyAgreement,
 } from "@/lib/db/types/supplyAgreement";
 import { computeSupplierCommodityCapacityUnits } from "@/lib/corporations/supplyAgreementCapacity";
-import { glutStaggerEligible } from "@/lib/turn/nppCorporationBehavior";
+import { glutStaggerEligible } from "@/lib/turn/npp/cohort";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
 import { supportsCorporationWideSupplyAgreement } from "@/lib/market/commodityMarketScope";
