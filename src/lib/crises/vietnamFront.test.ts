@@ -2,9 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Db } from "mongodb";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 
-// The conflict factory is exercised for real. Only its two outside dependencies
-// are stubbed: the shared sequential counter and the reserve-unit sweep, neither
-// of which is what this test is about.
+// The conflict factory is exercised for real. Its shared counter, reserve-unit
+// sweep, and live nuclear-program query are stubbed because this suite owns the
+// Vietnam front lifecycle, not those integrations.
 vi.mock("@/lib/db/sequentialId", () => ({
   getNextSequentialId: vi.fn().mockResolvedValue(7),
 }));
@@ -13,6 +13,9 @@ vi.mock("@/lib/db/collections/militaryUnits", () => ({
     find: () => ({ project: () => ({ toArray: async () => [] }) }),
     updateMany: async () => undefined,
   }),
+}));
+vi.mock("@/lib/db/collections/nuclearPrograms", () => ({
+  listNuclearPrograms: vi.fn().mockResolvedValue([]),
 }));
 
 import {

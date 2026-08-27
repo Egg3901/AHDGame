@@ -1,4 +1,6 @@
 import type { Db } from "mongodb";
+import type { CountryId } from "@/lib/constants/countries";
+import type { ConflictType } from "@/lib/db/types/conflict";
 
 /**
  * Global cold-war tension: one 0-100 number the whole world shares, with a
@@ -7,15 +9,17 @@ import type { Db } from "mongodb";
  * Discrete events (a nuclear test, an escalation rung, a stand-down) apply
  * spikes through `applyTensionEvent`. Each turn, the tension phase relaxes the
  * value toward a floor set by the world's standing pressure: the Vietnam
- * rung, active crises, how many warheads exist: so spikes fade but a hot
- * world never reads calm. The dials layer (lib/coldwar/dials.ts) turns the
- * reading into consequences: DEFCON, procurement demand, detente goodwill.
+ * rung, active crises, how many warheads exist, and active shooting wars.
+ * Discrete relief cannot cross that floor, so a hot world never reads calm.
+ * The dials layer (lib/coldwar/dials.ts) turns the reading into consequences:
+ * DEFCON, procurement demand, detente goodwill.
  */
 
 export const COLD_WAR_TENSION_COLLECTION = "coldWarTension";
 export const COLD_WAR_TENSION_ID = "current";
 
 export const TENSION_BASELINE = 12;
+export const NUCLEAR_WAR_MINIMUM_TENSION = 60;
 /** Fraction of the gap to the floor closed each turn. */
 export const TENSION_RELAXATION = 0.08;
 const LEDGER_CAP = 24;
@@ -33,6 +37,8 @@ export interface TensionEvent {
 
 export interface ColdWarTensionState {
   value: number;
+  /** Last standing-pressure floor computed by the turn phase. */
+  pressureFloor: number;
   updatedTurn: number;
   events: TensionEvent[];
   updatedAt: Date;
@@ -60,6 +66,16 @@ export interface TensionPressures {
   activeCrises: number;
   /** Total warheads across all programmes. */
   totalWarheads: number;
+  /**
+   * Summed intensity (0-100 each) of active wars with nuclear-armed countries
+   * on opposing sides. A nuclear shooting war is the hottest thing the world
+   * can hold short of launch, and must dominate the floor.
+   */
+  nuclearWarIntensity: number;
+  /** Number of active wars with nuclear-armed countries on opposing sides. */
+  nuclearWarCount: number;
+  /** Summed intensity of every other active war. */
+  otherWarIntensity: number;
 }
 
 /** Player-facing explanation of the standing pressure floor. */
@@ -68,6 +84,7 @@ export interface TensionPressureBreakdown {
   escalation: number;
   activeCrises: number;
   arsenal: number;
+  wars: number;
   floor: number;
 }
 
@@ -75,13 +92,98 @@ export function tensionPressureBreakdown(p: TensionPressures): TensionPressureBr
   const escalation = Math.min(30, p.escalationLevel * 4);
   const activeCrises = Math.min(12, p.activeCrises * 3);
   const arsenal = Math.min(18, Math.sqrt(Math.max(0, p.totalWarheads)) * 1.2);
+  // Any nuclear-opponent war contributes at least 48: baseline 12 plus 48
+  // guarantees CRISIS before the arsenal and other pressures are counted.
+  // Intensity remains additive above that minimum, so every active war still
+  // changes the floor. Conventional wars retain their lower weight and cap.
+  const nuclearIntensity = Math.max(0, p.nuclearWarIntensity) * 0.15;
+  const conventionalIntensity = Math.max(0, p.otherWarIntensity) * 0.12;
+  const nuclearWarMinimum =
+    p.nuclearWarCount > 0 ? NUCLEAR_WAR_MINIMUM_TENSION - TENSION_BASELINE : 0;
+  const wars =
+    nuclearWarMinimum > 0
+      ? Math.min(70, nuclearWarMinimum + nuclearIntensity + conventionalIntensity)
+      : Math.min(45, conventionalIntensity);
   return {
     baseline: TENSION_BASELINE,
     escalation: clampTension(escalation),
     activeCrises: clampTension(activeCrises),
     arsenal: clampTension(arsenal),
-    floor: clampTension(TENSION_BASELINE + escalation + activeCrises + arsenal),
+    wars: clampTension(wars),
+    floor: clampTension(TENSION_BASELINE + escalation + activeCrises + arsenal + wars),
   };
+}
+
+/** The two sides of a war as the pressure model needs them: who and how hot. */
+export interface WarPressureInput {
+  sideACountries: CountryId[];
+  sideBCountries: CountryId[];
+  /** 0-100. */
+  intensity: number;
+}
+
+export interface NuclearProgramPressureInput {
+  _id: CountryId;
+  warheads: number;
+}
+
+/** Countries with a usable live stockpile, rather than a hardcoded power list. */
+export function nuclearArmedCountryIds(
+  programs: NuclearProgramPressureInput[]
+): ReadonlySet<CountryId> {
+  return new Set(programs.filter((program) => program.warheads > 0).map((program) => program._id));
+}
+
+/** True when at least one nuclear-armed country stands on each side. */
+export function isNuclearWar(
+  war: Pick<WarPressureInput, "sideACountries" | "sideBCountries">,
+  nuclearCountries: ReadonlySet<CountryId>
+): boolean {
+  return (
+    war.sideACountries.some((countryId) => nuclearCountries.has(countryId)) &&
+    war.sideBCountries.some((countryId) => nuclearCountries.has(countryId))
+  );
+}
+
+export interface WarPressureSummary {
+  nuclearWarIntensity: number;
+  otherWarIntensity: number;
+  activeWarCount: number;
+  nuclearWarCount: number;
+}
+
+/** Fold active wars into the two intensity sums the pressure floor reads. */
+export function warPressures(
+  wars: WarPressureInput[],
+  nuclearCountries: ReadonlySet<CountryId>
+): WarPressureSummary {
+  let nuclearWarIntensity = 0;
+  let otherWarIntensity = 0;
+  let nuclearWarCount = 0;
+  for (const war of wars) {
+    const intensity = Math.max(0, Math.min(100, war.intensity));
+    if (isNuclearWar(war, nuclearCountries)) {
+      nuclearWarIntensity += intensity;
+      nuclearWarCount += 1;
+    } else {
+      otherWarIntensity += intensity;
+    }
+  }
+  return {
+    nuclearWarIntensity,
+    otherWarIntensity,
+    activeWarCount: wars.length,
+    nuclearWarCount,
+  };
+}
+
+/** Immediate outbreak spike before the next standing-pressure turn runs. */
+export function warDeclarationTensionDelta(
+  war: Pick<WarPressureInput, "sideACountries" | "sideBCountries"> & { type: ConflictType },
+  nuclearCountries: ReadonlySet<CountryId>
+): number {
+  if (isNuclearWar(war, nuclearCountries)) return 20;
+  return war.type === "interstate" ? 10 : 5;
 }
 
 /**
@@ -95,11 +197,18 @@ export function tensionFloor(p: TensionPressures): number {
 /** One turn of relaxation toward the pressure floor. */
 export function stepTension(value: number, p: TensionPressures): number {
   const floor = tensionFloor(p);
-  return clampTension(value + (floor - value) * TENSION_RELAXATION * (value > floor ? 1 : 2));
+  if (value <= floor) return floor;
+  return clampTension(Math.max(floor, value + (floor - value) * TENSION_RELAXATION));
 }
 
 export function emptyTensionState(): ColdWarTensionState {
-  return { value: TENSION_BASELINE, updatedTurn: 0, events: [], updatedAt: new Date(0) };
+  return {
+    value: TENSION_BASELINE,
+    pressureFloor: TENSION_BASELINE,
+    updatedTurn: 0,
+    events: [],
+    updatedAt: new Date(0),
+  };
 }
 
 type StoredState = ColdWarTensionState & { _id: string };
@@ -111,6 +220,7 @@ export async function getColdWarTension(db: Db): Promise<ColdWarTensionState> {
   if (!doc) return emptyTensionState();
   return {
     value: clampTension(doc.value ?? TENSION_BASELINE),
+    pressureFloor: clampTension(doc.pressureFloor ?? TENSION_BASELINE),
     updatedTurn: doc.updatedTurn ?? 0,
     events: doc.events ?? [],
     updatedAt: doc.updatedAt ?? new Date(0),
@@ -133,13 +243,23 @@ export async function applyTensionEvent(
   turn: number,
   kind: TensionEventKind,
   label: string,
-  delta: number
+  delta: number,
+  options: { minimumValue?: number } = {}
 ): Promise<ColdWarTensionState> {
   const state = await getColdWarTension(db);
+  const minimumValue = clampTension(options.minimumValue ?? state.pressureFloor);
+  const value = clampTension(
+    delta < 0 ? Math.max(minimumValue, state.value + delta) : state.value + delta
+  );
+  const appliedDelta = Math.round((value - state.value) * 10) / 10;
   const next: ColdWarTensionState = {
     ...state,
-    value: clampTension(state.value + delta),
-    events: [{ turn, kind, label, delta, at: new Date() }, ...state.events].slice(0, LEDGER_CAP),
+    value,
+    pressureFloor: options.minimumValue == null ? state.pressureFloor : minimumValue,
+    events: [{ turn, kind, label, delta: appliedDelta, at: new Date() }, ...state.events].slice(
+      0,
+      LEDGER_CAP
+    ),
   };
   await putColdWarTension(db, next);
   return next;
@@ -156,9 +276,11 @@ export async function runTensionTurn(
 ): Promise<ColdWarTensionState> {
   const state = await getColdWarTension(db);
   if (state.updatedTurn >= turn) return state;
+  const pressureFloor = tensionFloor(pressures);
   const next: ColdWarTensionState = {
     ...state,
     value: stepTension(state.value, pressures),
+    pressureFloor,
     updatedTurn: turn,
   };
   await putColdWarTension(db, next);
