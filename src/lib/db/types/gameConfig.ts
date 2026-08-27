@@ -1,3 +1,5 @@
+import type { EconomicInterventionPlan } from "@/lib/economy/interventionGovernance";
+
 export interface GameConfig {
   _id: string;
   /**
@@ -212,6 +214,8 @@ export interface GameConfig {
   freightSettlementModeUpdatedAt?: string;
   /** World turn at which the freight-settlement rollout was last changed. */
   freightSettlementModeUpdatedTurn?: number;
+  /** Governance record required for active freight settlement. */
+  freightSettlementIntervention?: EconomicInterventionPlan;
   /**
    * Gradual freight-settlement ramp (markets plan Phase 4). When set, the
    * ACTIVE effect fades in linearly instead of landing at full strength on the
@@ -296,6 +300,18 @@ export interface GameConfig {
    * simulation report from scripts/sim/ per CONTRIBUTING.md.
    */
   canonicalFreightBillingEnabled?: boolean;
+  /**
+   * When true, states below 50 percent local fill accept a progressively wider
+   * landed-price range, capped at 75 percent above the local price anchor.
+   * Default false until controlled simulation and rollout gates pass.
+   */
+  shortageResponsiveSourcingEnabled?: boolean;
+  /** Governance record required when shortage-responsive sourcing is enabled. */
+  shortageResponsiveSourcingIntervention?: EconomicInterventionPlan;
+  /** Dark gate for the index-fund 20 percent sovereign-bond allocation target. */
+  indexFundBondLiquidityEnabled?: boolean;
+  /** Governance record required when the sovereign-bond allocation target is enabled. */
+  indexFundBondLiquidityIntervention?: EconomicInterventionPlan;
   /**
    * Legacy-stockpile cover cap (week-1 clearing balance pass): when true,
    * shadow-inventory stock above STOCK_COVER_CAP_TURNS × current demand takes

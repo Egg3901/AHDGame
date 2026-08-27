@@ -32,6 +32,8 @@ export interface CommoditySourcingDoc {
   unmetUnits: number;
   toleranceBoundUnits: number;
   capacityBoundUnits: number;
+  /** Units cleared only through the shortage-responsive willingness-to-pay margin. */
+  shortageResponsiveUnits: number;
   /** Largest flows first, capped at SOURCING_FLOW_MAX_ITEMIZED. */
   flows: Omit<SourcingFlow, "commodity">[];
   itemizedFlowCount: number;
@@ -126,6 +128,7 @@ export function buildSourcingDocs(
       unmetUnits: s.unmetUnits,
       toleranceBoundUnits: s.toleranceBoundUnits,
       capacityBoundUnits: s.capacityBoundUnits,
+      shortageResponsiveUnits: s.shortageResponsiveUnits,
       flows: itemized,
       itemizedFlowCount: itemized.length,
       totalFlowCount: all.length,

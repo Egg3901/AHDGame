@@ -160,9 +160,11 @@ export function reconcileLedger(input: ReconcileInput): ReconcileReport {
       sink: r.sink,
     })),
   }));
-  const supplyStatus: ReconcileStatus = supplyFindings.some((f) => Math.abs(f.netDrift) >= 0.01)
-    ? "amber"
-    : "green";
+  // Net creation or retirement is an economic outcome, not a failed
+  // reconciliation. The confidence failure is an unexplained mint/sink leg.
+  // Keep reporting net drift by currency and reason, but turn amber only while
+  // the semantic attribution backlog is non-empty.
+  const supplyStatus: ReconcileStatus = unattributed.size > 0 ? "amber" : "green";
 
   const status = worseStatus(worseStatus(trialStatus, stockStatus), supplyStatus);
 

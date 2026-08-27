@@ -114,6 +114,22 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   // is not a ledger account yet, so the character credit is attributed rather
   // than left in the unattributed backlog.
   union_contribution: "union_pac",
+  // Asset exchanges and modeled transfers whose contra account is outside the
+  // current money-balance snapshot. Naming them keeps the money-supply report
+  // honest without pretending the unmodeled asset account is a mint or sink.
+  bond_purchase: "bond_principal_investment",
+  corp_dividend: "corporate_dividend",
+  loc_repay: "credit_principal",
+  loc_interest: "credit_interest",
+  index_fund_subscribe: "fund_subscription",
+  index_fund_dividend: "fund_distribution",
+  corp_escrow_funding: "escrow_transfer",
+  caucus_tax_debit: "party_internal_transfer",
+  pension_benefit: "pension_transfer",
+  // One-directional modeled income channels with no payer account in the
+  // current balance-snapshot scope.
+  office_income: "public_salary",
+  fundraise_credit: "political_fundraising",
 };
 
 /** Semantic mint/sink reason for a single-sided row; `unattributed` when unmapped. */

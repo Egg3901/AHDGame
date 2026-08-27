@@ -225,8 +225,44 @@ describe("reconcileLedger", () => {
     });
     expect(report.moneySupply.findings[0].currencyCode).toBe("USD");
     expect(report.moneySupply.findings[0].minted).toBeCloseTo(5200);
+    expect(report.moneySupply.status).toBe("amber");
     expect(report.unattributed[0].emitSite).toBe("sectorRevenue"); // ranked by |anchor|
     expect(report.unattributed[0].anchorAmount).toBeCloseTo(5000);
+  });
+
+  it("reports attributed net money creation without calling it a reconciliation failure", () => {
+    const entries: LedgerEntry[] = [
+      entry({
+        txType: "corp_revenue",
+        emitSite: "sectorRevenue",
+        legs: [
+          {
+            account: "corporation:a:USD",
+            amount: 5000,
+            currencyCode: "USD",
+            anchorAmount: 5000,
+            role: "primary",
+          },
+          {
+            account: "mint:sector_revenue:USD",
+            amount: -5000,
+            currencyCode: "USD",
+            anchorAmount: -5000,
+            role: "contra",
+          },
+        ],
+      }),
+    ];
+    const report = reconcileLedger({
+      turn: 10,
+      entries,
+      openingBalances: { "corporation:a:USD": 10_000 },
+      closingBalances: { "corporation:a:USD": 15_000 },
+    });
+
+    expect(report.moneySupply.findings[0].netDrift).toBe(5000);
+    expect(report.moneySupply.status).toBe("green");
+    expect(report.status).toBe("green");
   });
 
   it("skips stock-vs-flow when told to (reset/reseed epoch)", () => {

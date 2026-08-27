@@ -107,13 +107,30 @@ export interface MarketAccessMetrics {
   importShare: number | null;
   toleranceBoundShareOfUnmet: number | null;
   capacityBoundShareOfUnmet: number | null;
+  shortageResponsiveShareOfFulfillment: number | null;
   physicalSellThrough: number | null;
   labourStaffingRate: number | null;
   marketCapHhi: number | null;
+  medianOwnershipAdjustedSellerHhi: number | null;
+  medianOwnershipAdjustedBuyerHhi: number | null;
+  highConcentrationLowFillShare: number | null;
   activeTradedListingShare: number | null;
   noHolderBondShare: number | null;
+  sovereignNoHolderBondShare: number | null;
+  corporateNoHolderBondShare: number | null;
+  bondSubscriptionRate: number | null;
+  twoSidedListingShare: number | null;
+  medianQuotedSpreadPct: number | null;
+  depthToMarketCap: number | null;
+  medianFilledOrderExecutionHours: number | null;
+  medianAmihudIlliquidity48: number | null;
   wealthGini: number | null;
   annualizedM2GrowthPct: number | null;
+  transactionalMoneyShare: number | null;
+  externalBroadMoneyShare: number | null;
+  activeModeledBalanceShare48: number | null;
+  modeledGrossVelocity48: number | null;
+  measurementConfidence: string;
   reconciliationStatus: string;
 }
 
@@ -129,13 +146,35 @@ export function marketAccessMetricsFromSnapshot(
     importShare: snapshot?.trade.importShare.value ?? null,
     toleranceBoundShareOfUnmet: snapshot?.trade.toleranceBoundShareOfUnmet.value ?? null,
     capacityBoundShareOfUnmet: snapshot?.trade.capacityBoundShareOfUnmet.value ?? null,
+    shortageResponsiveShareOfFulfillment:
+      snapshot?.trade.shortageResponsiveShareOfFulfillment.value ?? null,
     physicalSellThrough: snapshot?.production.physicalSellThrough.value ?? null,
     labourStaffingRate: snapshot?.production.labourStaffingRate.value ?? null,
     marketCapHhi: snapshot?.firms.marketCapHhi.value ?? null,
+    medianOwnershipAdjustedSellerHhi:
+      snapshot?.competition?.medianOwnershipAdjustedSellerHhi.value ?? null,
+    medianOwnershipAdjustedBuyerHhi:
+      snapshot?.competition?.medianOwnershipAdjustedBuyerHhi.value ?? null,
+    highConcentrationLowFillShare:
+      snapshot?.competition?.highConcentrationLowFillShare.value ?? null,
     activeTradedListingShare: snapshot?.securities.activeTradedListingShare.value ?? null,
     noHolderBondShare: snapshot?.securities.noHolderBondShare.value ?? null,
+    sovereignNoHolderBondShare: snapshot?.securities.sovereignNoHolderBondShare?.value ?? null,
+    corporateNoHolderBondShare: snapshot?.securities.corporateNoHolderBondShare?.value ?? null,
+    bondSubscriptionRate: snapshot?.securities.bondSubscriptionRate.value ?? null,
+    twoSidedListingShare: snapshot?.securities.twoSidedListingShare.value ?? null,
+    medianQuotedSpreadPct: snapshot?.securities.medianQuotedSpreadPct.value ?? null,
+    depthToMarketCap: snapshot?.securities.depthToMarketCap.value ?? null,
+    medianFilledOrderExecutionHours:
+      snapshot?.securities.medianFilledOrderExecutionHours.value ?? null,
+    medianAmihudIlliquidity48: snapshot?.securities.medianAmihudIlliquidity48.value ?? null,
     wealthGini: snapshot?.households.wealthGini.value ?? null,
     annualizedM2GrowthPct: snapshot?.money.medianAnnualizedM2GrowthPct.value ?? null,
+    transactionalMoneyShare: snapshot?.money.transactionalMoneyShare.value ?? null,
+    externalBroadMoneyShare: snapshot?.money.externalBroadMoneyShare.value ?? null,
+    activeModeledBalanceShare48: snapshot?.money.activeModeledBalanceShare48.value ?? null,
+    modeledGrossVelocity48: snapshot?.money.modeledGrossVelocity48.value ?? null,
+    measurementConfidence: snapshot?.measurement.confidence ?? "unavailable",
     reconciliationStatus: snapshot?.reconciliation.status ?? "unavailable",
   };
 }

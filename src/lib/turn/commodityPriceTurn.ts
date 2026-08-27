@@ -1250,6 +1250,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       projection: {
         freightSettlementMode: 1,
         canonicalFreightBillingEnabled: 1,
+        shortageResponsiveSourcingEnabled: 1,
         freightSettlementRampStartTurn: 1,
         freightSettlementRampTurns: 1,
       },
@@ -1305,6 +1306,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       // affinity 0 ⇔ a blocking embargo matches the directed flow.
       isBlocked: (commodity, exporter, importer) =>
         affinityFor(commodity, exporter, importer) === 0,
+      shortageResponsiveSourcingEnabled:
+        freightSettlementConfig?.shortageResponsiveSourcingEnabled === true,
     });
     const { commodityDocs, networkDoc } = buildSourcingDocs(freightSettlement.sourcing, turn, now, {
       includeFreightBilling: canonicalFreightBillingEnabled,

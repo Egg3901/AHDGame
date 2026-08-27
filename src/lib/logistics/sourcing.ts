@@ -170,6 +170,29 @@ export const UNREACHABLE_HOP_EQUIV = SEA_FREIGHT_HOP_EQUIV;
  */
 export const BUYER_TOLERANCE_SLACK = 0.35;
 
+/**
+ * A severely short local market is willing to search farther up the landed
+ * supply curve. The extra ceiling starts only below 50 percent local fill and
+ * rises linearly to 40 percentage points when no local supply exists. The
+ * feature remains dark unless the caller opts in.
+ */
+export const SHORTAGE_TOLERANCE_TRIGGER_FILL = 0.5;
+export const SHORTAGE_TOLERANCE_MAX_EXTRA = 0.4;
+
+export function shortageResponsiveToleranceSlack(args: {
+  localSupply: number;
+  localDemand: number;
+  enabled: boolean;
+}): number {
+  if (!args.enabled || !(args.localDemand > 0)) return BUYER_TOLERANCE_SLACK;
+  const localFill = Math.max(0, Math.min(1, args.localSupply / args.localDemand));
+  const severity = Math.max(
+    0,
+    Math.min(1, (SHORTAGE_TOLERANCE_TRIGGER_FILL - localFill) / SHORTAGE_TOLERANCE_TRIGGER_FILL)
+  );
+  return BUYER_TOLERANCE_SLACK + SHORTAGE_TOLERANCE_MAX_EXTRA * severity;
+}
+
 /** Flows below this many units are summed into the doc totals but not itemized. */
 export const FLOW_RECORD_FLOOR_UNITS = 1;
 
@@ -206,6 +229,8 @@ export interface SourcingCommoditySummary {
   toleranceBoundUnits: number;
   /** Units that could not ship because the origin state's shared freight capacity ran dry. */
   capacityBoundUnits: number;
+  /** Units accepted only because severe local shortage raised willingness to pay. */
+  shortageResponsiveUnits: number;
   /** Units that shipped only by pushing a state's network past nominal capacity. */
   congestionUnits: number;
   /** Extra shipping charge those overflow units paid. */
@@ -346,6 +371,8 @@ export interface SourcingInputs {
   tariffRatePct: (commodity: CommodityType, exporter: CountryId, importer: CountryId) => number;
   /** True when an embargo blocks the directed flow exporter→importer. */
   isBlocked: (commodity: CommodityType, exporter: CountryId, importer: CountryId) => boolean;
+  /** Raise the landed-price ceiling only for states below 50 percent local fill. */
+  shortageResponsiveSourcingEnabled?: boolean;
 }
 
 // ── Pass ─────────────────────────────────────────────────────────────────────
@@ -366,6 +393,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     shippingCostMultiplier,
     tariffRatePct,
     isBlocked,
+    shortageResponsiveSourcingEnabled = false,
   } = inputs;
 
   // Deterministic iteration: states sorted by id, countries sorted by id.
@@ -502,6 +530,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
       unmetUnits: 0,
       toleranceBoundUnits: 0,
       capacityBoundUnits: 0,
+      shortageResponsiveUnits: 0,
       congestionUnits: 0,
       congestionSurchargePaid: 0,
       gridLossUnits: 0,
@@ -512,7 +541,16 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
       let unmet = unmetByState.get(buyer.stateId) ?? 0;
       if (unmet <= 0) continue;
       const buyerPrice = statePrices[buyer.stateId] ?? basePrice;
-      const ceiling = buyerPrice * (1 + BUYER_TOLERANCE_SLACK);
+      const localBalance = byState.get(buyer.stateId)?.get(commodity);
+      const baseCeiling = buyerPrice * (1 + BUYER_TOLERANCE_SLACK);
+      const ceiling =
+        buyerPrice *
+        (1 +
+          shortageResponsiveToleranceSlack({
+            localSupply: localBalance?.supply ?? 0,
+            localDemand: localBalance?.demand ?? 0,
+            enabled: shortageResponsiveSourcingEnabled,
+          }));
 
       // Candidate sellers: same-country states with spare + foreign countries.
       type Candidate = {
@@ -662,6 +700,16 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         }
         if (deliver <= 0) continue;
         const take = deliver;
+        if (shortageResponsiveSourcingEnabled) {
+          if (cand.landed > baseCeiling) {
+            summary.shortageResponsiveUnits += take;
+          } else if (
+            overflowDispatch > 0 &&
+            congestedLandedPrice(cand.landed, cand.shippingPerUnit) > baseCeiling
+          ) {
+            summary.shortageResponsiveUnits += overflowDispatch * deliveryFactor;
+          }
+        }
         summary.gridLossUnits += Math.max(0, dispatch - deliver);
         summary.congestionUnits += overflowDispatch * deliveryFactor;
         summary.congestionSurchargePaid += congestionSurchargePaid;
@@ -769,6 +817,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     summary.unmetUnits = round2(summary.unmetUnits);
     summary.toleranceBoundUnits = round2(summary.toleranceBoundUnits);
     summary.capacityBoundUnits = round2(summary.capacityBoundUnits);
+    summary.shortageResponsiveUnits = round2(summary.shortageResponsiveUnits);
     summary.congestionUnits = round2(summary.congestionUnits);
     summary.congestionSurchargePaid = round2(summary.congestionSurchargePaid);
     summary.gridLossUnits = round2(summary.gridLossUnits);

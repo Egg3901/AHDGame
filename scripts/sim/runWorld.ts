@@ -64,6 +64,7 @@ interface SimRunDoc {
   economicExperiment?: {
     freightSettlementMode?: FreightSettlementExperimentMode;
     canonicalFreightBillingEnabled?: boolean;
+    shortageResponsiveSourcingEnabled?: boolean;
   };
 }
 
@@ -137,6 +138,14 @@ const freightSettlementMode = freightSettlementRaw as FreightSettlementExperimen
 const canonicalFreightBillingEnabled = parseOptionalBoolean(
   arg("canonical-freight-billing"),
   "canonical-freight-billing"
+);
+const shortageResponsiveSourcingEnabled = parseOptionalBoolean(
+  arg("shortage-responsive-sourcing"),
+  "shortage-responsive-sourcing"
+);
+const indexFundBondLiquidityEnabled = parseOptionalBoolean(
+  arg("index-fund-bond-liquidity"),
+  "index-fund-bond-liquidity"
 );
 // Clone mode: the sandbox DB was pre-loaded with a restore of the LIVE world
 // (mongorestore), so skip bootstrap AND the "real world" users guardrail, and
@@ -605,6 +614,8 @@ async function main() {
   const economicExperiment = {
     freightSettlementMode,
     canonicalFreightBillingEnabled,
+    shortageResponsiveSourcingEnabled,
+    indexFundBondLiquidityEnabled,
   };
   const economicExperimentSet = economicExperimentConfigSet(economicExperiment);
   if (Object.keys(economicExperimentSet).length > 0) {

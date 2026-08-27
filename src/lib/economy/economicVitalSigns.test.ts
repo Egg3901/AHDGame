@@ -67,6 +67,7 @@ describe("computeEconomicVitalSigns", () => {
           unmetUnits: 50,
           toleranceBoundUnits: 40,
           capacityBoundUnits: 10,
+          shortageResponsiveUnits: 5,
           flows: [],
           itemizedFlowCount: 0,
           totalFlowCount: 0,
@@ -76,11 +77,37 @@ describe("computeEconomicVitalSigns", () => {
       sectors: [],
       globalExchange: null,
       trades: [],
+      shareOrders: [],
       bonds: [],
       globalWealth: null,
       money: [],
       health: null,
       reconciliation: null,
+      balanceSnapshot: null,
+      ledgerEntries: [],
+      commodityParticipants: [
+        {
+          commodity: "steel",
+          corporationId: "seller-a",
+          ownershipRootId: "group-a",
+          sellerUnits: 60,
+          buyerUnits: 0,
+        },
+        {
+          commodity: "steel",
+          corporationId: "seller-b",
+          ownershipRootId: "group-a",
+          sellerUnits: 20,
+          buyerUnits: 0,
+        },
+        {
+          commodity: "steel",
+          corporationId: "seller-c",
+          ownershipRootId: "seller-c",
+          sellerUnits: 20,
+          buyerUnits: 0,
+        },
+      ],
     });
 
     expect(snapshot.goods.pooledFillRate.value).toBe(0.5);
@@ -89,6 +116,17 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.trade.intentFulfillmentRate.value).toBe(0.5);
     expect(snapshot.trade.localShare.value).toBe(0.6);
     expect(snapshot.trade.toleranceBoundShareOfUnmet.value).toBe(0.8);
+    expect(snapshot.trade.shortageResponsiveShareOfFulfillment.value).toBe(0.1);
+    expect(snapshot.competition.markets[0]).toMatchObject({
+      commodity: "steel",
+      sellerCount: 3,
+      sellerHhi: 4400,
+      ownershipAdjustedSellerHhi: 6800,
+      largestOwnershipAdjustedSellerShare: 0.8,
+      largestOwnershipAdjustedSellerUnits: 80,
+      highConcentrationLowFill: true,
+    });
+    expect(snapshot.competition.highConcentrationLowFillShare.value).toBe(1);
     expect(snapshot.goods.pooledFillRate.basis).not.toBe(
       snapshot.trade.intentFulfillmentRate.basis
     );
@@ -149,6 +187,47 @@ describe("computeEconomicVitalSigns", () => {
           totalAnchor: 10,
           to: null,
           from: null,
+        },
+      ],
+      shareOrders: [
+        {
+          _id: new ObjectId(),
+          corporationId: corpId,
+          characterId: new ObjectId(),
+          type: "buy",
+          shares: 5,
+          sharesRemaining: 5,
+          pricePerShare: 4,
+          escrowAmount: 20,
+          status: "open",
+          createdAt: new Date("2026-08-26T00:00:00.000Z"),
+          updatedAt: new Date("2026-08-26T00:00:00.000Z"),
+        },
+        {
+          _id: new ObjectId(),
+          corporationId: corpId,
+          characterId: new ObjectId(),
+          type: "sell",
+          shares: 5,
+          sharesRemaining: 5,
+          pricePerShare: 6,
+          escrowAmount: 0,
+          status: "open",
+          createdAt: new Date("2026-08-26T00:00:00.000Z"),
+          updatedAt: new Date("2026-08-26T00:00:00.000Z"),
+        },
+        {
+          _id: new ObjectId(),
+          corporationId: corpId,
+          characterId: new ObjectId(),
+          type: "buy",
+          shares: 1,
+          sharesRemaining: 0,
+          pricePerShare: 5,
+          escrowAmount: 0,
+          status: "filled",
+          createdAt: new Date("2026-08-26T00:00:00.000Z"),
+          updatedAt: new Date("2026-08-26T06:00:00.000Z"),
         },
       ],
       bonds: [
@@ -264,15 +343,75 @@ describe("computeEconomicVitalSigns", () => {
         },
       },
       reconciliation: null,
+      balanceSnapshot: {
+        _id: new ObjectId(),
+        turn: 100,
+        createdAt: new Date(),
+        balances: {
+          "character:active:USD": 40,
+          "character:dormant:USD": 60,
+          "corporation:active:USD": 100,
+        },
+      },
+      ledgerEntries: [
+        {
+          _id: new ObjectId(),
+          turn: 99,
+          createdAt: new Date(),
+          txType: "fund_credit",
+          emitSite: "test",
+          balanced: true,
+          legs: [
+            {
+              account: "character:active:USD",
+              amount: 20,
+              anchorAmount: 20,
+              currencyCode: "USD",
+              role: "primary",
+            },
+            {
+              account: "mint:test:USD",
+              amount: -20,
+              anchorAmount: -20,
+              currencyCode: "USD",
+              role: "contra",
+            },
+            {
+              account: "corporation:active:USD",
+              amount: -50,
+              anchorAmount: -50,
+              currencyCode: "USD",
+              role: "primary",
+            },
+            {
+              account: "sink:test:USD",
+              amount: 50,
+              anchorAmount: 50,
+              currencyCode: "USD",
+              role: "contra",
+            },
+          ],
+        },
+      ],
+      commodityParticipants: [],
     });
 
     expect(snapshot.firms.marketCapHhi.value).toBe(4200);
     expect(snapshot.firms.lossMakingShare.value).toBe(0.25);
     expect(snapshot.securities.activeTradedListingShare.value).toBe(0.25);
     expect(snapshot.securities.noHolderBondShare.value).toBe(1);
+    expect(snapshot.securities.bondSubscriptionRate.value).toBe(0);
+    expect(snapshot.securities.twoSidedListingShare.value).toBe(0.25);
+    expect(snapshot.securities.medianQuotedSpreadPct.value).toBe(40);
+    expect(snapshot.securities.openOrderDepthAnchor).toBe(50);
+    expect(snapshot.securities.medianFilledOrderExecutionHours.value).toBe(6);
     expect(snapshot.households.topTenWealthShare.value).toBe(1);
     expect(snapshot.households.wealthGini.value).toBeCloseTo(0.72);
     expect(snapshot.money.creditToM2.value).toBe(0.25);
+    expect(snapshot.money.transactionalMoneyShare.value).toBe(0.5);
+    expect(snapshot.money.activeModeledBalanceShare48.value).toBe(0.7);
+    expect(snapshot.money.dormantModeledBalanceShare48.value).toBe(0.3);
+    expect(snapshot.money.modeledGrossVelocity48.value).toBe(0.35);
     expect(snapshot.reconciliation.status).toBe("unavailable");
   });
 });

@@ -89,6 +89,8 @@ export const gameConfig: GameConfig = {
   // balance change (a world-scale shipping bill becomes real money) and
   // requires a simulation report per CONTRIBUTING.md before any world enables it.
   canonicalFreightBillingEnabled: false,
+  shortageResponsiveSourcingEnabled: false,
+  indexFundBondLiquidityEnabled: false,
   regionalConditionsOverviewEnabled: true,
 
   // Market launch guard: armed by default now that the market boots at the top
