@@ -185,6 +185,9 @@ const TOOLS: ToolDef[] = [
         shortageResponsiveSourcingEnabled: bool(
           "Whether severe local shortages widen the landed-price ceiling in this sandbox only. Explicit false is retained for control runs."
         ),
+        indexFundBondLiquidityEnabled: bool(
+          "Whether index funds target 20 percent sovereign bonds while retaining a 5 percent cash buffer in this sandbox only."
+        ),
       },
       ["preset", "turns", "seed"]
     ),
@@ -216,6 +219,12 @@ const TOOLS: ToolDef[] = [
       ) {
         throw new Error("shortageResponsiveSourcingEnabled must be boolean");
       }
+      if (
+        a.indexFundBondLiquidityEnabled !== undefined &&
+        typeof a.indexFundBondLiquidityEnabled !== "boolean"
+      ) {
+        throw new Error("indexFundBondLiquidityEnabled must be boolean");
+      }
       const res = await enqueue(db, {
         preset,
         turns,
@@ -230,6 +239,9 @@ const TOOLS: ToolDef[] = [
         ...(a.shortageResponsiveSourcingEnabled !== undefined
           ? { shortageResponsiveSourcingEnabled: a.shortageResponsiveSourcingEnabled }
           : {}),
+        ...(a.indexFundBondLiquidityEnabled !== undefined
+          ? { indexFundBondLiquidityEnabled: a.indexFundBondLiquidityEnabled }
+          : {}),
       });
       return {
         ...res,
@@ -241,6 +253,7 @@ const TOOLS: ToolDef[] = [
         freightSettlementMode: a.freightSettlementMode || "preset default",
         canonicalFreightBillingEnabled: a.canonicalFreightBillingEnabled ?? "preset default",
         shortageResponsiveSourcingEnabled: a.shortageResponsiveSourcingEnabled ?? "preset default",
+        indexFundBondLiquidityEnabled: a.indexFundBondLiquidityEnabled ?? "preset default",
         note: 'Poll with sim_run_status. The local worker claims queued jobs within ~15s — if status stays "queued" for minutes, the worker is not running (check sim_worker_health).',
       };
     },

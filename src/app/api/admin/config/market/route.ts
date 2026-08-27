@@ -46,6 +46,8 @@ const patchSchema = z.object({
   supplyAgreementsEnabled: z.boolean().optional(),
   shortageResponsiveSourcingEnabled: z.boolean().optional(),
   intervention: economicInterventionPlanSchema.optional(),
+  indexFundBondLiquidityEnabled: z.boolean().optional(),
+  bondLiquidityIntervention: economicInterventionPlanSchema.optional(),
   demographicsDemandEnabled: z.boolean().optional(),
   nppCorpsAttackable: z.boolean().optional(),
   nppCorporateAttacksEnabled: z.boolean().optional(),
@@ -83,6 +85,7 @@ export async function GET() {
           qualityPremiumPricingEnabled: 1,
           supplyAgreementsEnabled: 1,
           shortageResponsiveSourcingEnabled: 1,
+          indexFundBondLiquidityEnabled: 1,
           extractionOutputScaleEnabled: 1,
           commandEconomyEnabled: 1,
           commandEconomySecondEconomyTolerance: 1,
@@ -101,6 +104,7 @@ export async function GET() {
       qualityPremiumPricingEnabled: config?.qualityPremiumPricingEnabled === true,
       supplyAgreementsEnabled: config?.supplyAgreementsEnabled === true,
       shortageResponsiveSourcingEnabled: config?.shortageResponsiveSourcingEnabled === true,
+      indexFundBondLiquidityEnabled: config?.indexFundBondLiquidityEnabled === true,
       extractionOutputScaleEnabled: config?.extractionOutputScaleEnabled === true,
       commandEconomyEnabled: config?.commandEconomyEnabled === true,
       commandEconomySecondEconomyTolerance:
@@ -146,6 +150,8 @@ export async function PATCH(request: Request) {
       supplyAgreementsEnabled,
       shortageResponsiveSourcingEnabled,
       intervention,
+      indexFundBondLiquidityEnabled,
+      bondLiquidityIntervention,
       demographicsDemandEnabled,
       nppCorpsAttackable,
       nppCorporateAttacksEnabled,
@@ -166,6 +172,8 @@ export async function PATCH(request: Request) {
       supplyAgreementsEnabled?: boolean;
       shortageResponsiveSourcingEnabled?: boolean;
       intervention?: EconomicInterventionPlan;
+      indexFundBondLiquidityEnabled?: boolean;
+      bondLiquidityIntervention?: EconomicInterventionPlan;
       demographicsDemandEnabled?: boolean;
       nppCorpsAttackable?: boolean;
       nppCorporateAttacksEnabled?: boolean;
@@ -210,6 +218,21 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ error: activationError }, { status: 400 });
       }
     }
+    if (indexFundBondLiquidityEnabled === true) {
+      if (!bondLiquidityIntervention) {
+        return NextResponse.json(
+          { error: "An economic intervention plan is required to enable bond liquidity." },
+          { status: 400 }
+        );
+      }
+      const activationError = validateInterventionActivation(
+        bondLiquidityIntervention,
+        currentTurn
+      );
+      if (activationError) {
+        return NextResponse.json({ error: activationError }, { status: 400 });
+      }
+    }
 
     const governorSet: Partial<GameConfig> = {};
     if (typeof governorCap === "number") governorSet.marketGovernorCap = governorCap;
@@ -233,6 +256,12 @@ export async function PATCH(request: Request) {
       governorSet.shortageResponsiveSourcingEnabled = shortageResponsiveSourcingEnabled;
       if (shortageResponsiveSourcingEnabled && intervention) {
         governorSet.shortageResponsiveSourcingIntervention = intervention;
+      }
+    }
+    if (typeof indexFundBondLiquidityEnabled === "boolean") {
+      governorSet.indexFundBondLiquidityEnabled = indexFundBondLiquidityEnabled;
+      if (indexFundBondLiquidityEnabled && bondLiquidityIntervention) {
+        governorSet.indexFundBondLiquidityIntervention = bondLiquidityIntervention;
       }
     }
     if (typeof demographicsDemandEnabled === "boolean")

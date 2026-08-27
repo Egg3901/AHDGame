@@ -9,12 +9,18 @@ export interface EconomicMetric {
 export interface RelevantMarketVitalSign {
   commodity: string;
   pooledFillRate: number | null;
+  supplyUnits: number;
+  demandUnits: number;
+  priceAnchorPerUnit: number | null;
+  participantSellerUnits: number;
   sellerCount: number;
   buyerCount: number;
   sellerHhi: number | null;
   buyerHhi: number | null;
   ownershipAdjustedSellerHhi: number | null;
   ownershipAdjustedBuyerHhi: number | null;
+  largestOwnershipAdjustedSellerShare: number | null;
+  largestOwnershipAdjustedSellerUnits: number | null;
   highConcentrationLowFill: boolean;
 }
 
@@ -72,6 +78,8 @@ export interface EconomicVitalSigns {
     activeTradedListingShare: EconomicMetric;
     activeBonds: number;
     noHolderBondShare: EconomicMetric;
+    sovereignNoHolderBondShare: EconomicMetric;
+    corporateNoHolderBondShare: EconomicMetric;
     medianBondHolders: EconomicMetric;
     bondSubscriptionRate: EconomicMetric;
     openBuyOrders: number;
