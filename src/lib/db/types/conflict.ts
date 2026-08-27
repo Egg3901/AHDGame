@@ -2,6 +2,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { RegionCode } from "@/lib/military/types";
 import type { WarGoal } from "@/lib/military/warGoals";
 import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
+import type { PeaceTerm } from "@/lib/military/peaceTerm";
 
 /**
  * A conflict — a dynamic, first-class battleground that generalizes the retired
@@ -20,7 +21,15 @@ export type ConflictType =
   | "independence"
   /** A proxy war fought on third-party soil; the sides are internal factions. */
   | "cold_war";
-export type ConflictStatus = "active" | "escalating" | "winding_down" | "resolved";
+/**
+ * `terms_pending` is a WON war that has not ended yet: the front has reached a pole,
+ * every belligerent has stood down, and the victor holds a window in which to impose
+ * one term. It is deliberately NOT "resolved", so every reader that treats a live war
+ * as `status !== "resolved"` keeps counting it, and no second war can be declared
+ * between the same pair while terms are outstanding.
+ */
+export type ConflictStatus =
+  "active" | "escalating" | "winding_down" | "terms_pending" | "resolved";
 export type SideKind = "state" | "coalition" | "generated";
 export type ConflictBloc = "west" | "east" | "internal" | "contested";
 
@@ -170,6 +179,44 @@ export interface ConflictDoc {
   warGoal?: WarGoal;
   /** The bill that declared it, for the record page. */
   declaredByBillId?: string;
+  /**
+   * Set when the front reaches a pole and the victor may impose one term.
+   *
+   * Cleared implicitly by the war resolving: a resolved conflict's window is spent
+   * whether it was used or it lapsed.
+   */
+  termsWindow?: {
+    victor: "A" | "B";
+    /** Founding belligerent of the winning side. The ONLY country that may impose. */
+    imposer: CountryId;
+    /** Founding belligerent of the losing side. The country the term lands on. */
+    target: CountryId;
+    /** Lapses ON this turn, the same boundary convention as an offer and a truce. */
+    closesTurn: number;
+  };
+  /**
+   * The term a settlement took, once one is reached. Read by the news wire, which
+   * builds its copy from this rather than parsing the outcome prose.
+   *
+   * Absent on a war that ended with no terms, which includes every war resolved
+   * before this feature and every lapsed window.
+   */
+  settlement?: {
+    term: PeaceTerm;
+    /** "dictated" via a war won outright, "negotiated" via an accepted offer. */
+    path: "dictated" | "negotiated";
+    imposedBy: CountryId;
+    target: CountryId;
+    turn: number;
+  };
+  /**
+   * Wire dispatches already filed for this conflict, so each posts exactly once.
+   *
+   * The STAMP, not the state, is what makes a one-off post one-off: a settled war
+   * stays settled for ever, and a sweeper keyed on the state alone would repost it
+   * every tick.
+   */
+  postedWireEvents?: string[];
   createdBy: "player" | "event" | "seed";
   startTurn: number;
   endTurn?: number;

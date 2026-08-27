@@ -2,6 +2,7 @@ import type { ConflictDoc } from "@/lib/db/types/conflict";
 import type { PeaceOfferDoc } from "@/lib/db/types/peaceOffer";
 import { COUNTRY_CONFIGS, type CountryId, type GovernmentType } from "@/lib/constants/countries";
 import { validatePeaceTerm, type PeaceTerm } from "@/lib/military/peaceTerm";
+import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
 import { INTERNATIONAL_ORGANIZATIONS } from "@/lib/constants/internationalOrganizations";
 import { opposedBelligerents, type Side } from "@/lib/military/occupation";
 
@@ -98,7 +99,11 @@ export function validatePeaceOffer(
   // running only the roster checks need not load it.
   targetSystem?: GovernmentType
 ): PeaceOfferCheck {
-  if (conflict.status === "resolved") {
+  // Concluded covers a war awaiting terms as well as a resolved one. A front that
+  // has reached a pole is not a war anyone can still negotiate their way out of:
+  // the victor is choosing what to take, and an offer accepted underneath that
+  // would settle a war that has already been won.
+  if (isConflictConcluded(conflict.status)) {
     return { ok: false, error: "That war is already over." };
   }
 

@@ -59,6 +59,7 @@ import {
   resolveJoinApplication,
 } from "@/lib/internationalOrganizations/joinApplication";
 import { castAutonomousOrgVotes } from "@/lib/nppAutonomy/autonomousOrgVoting";
+import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
 import type {
   OrganizationLegislation,
   ProposalVoteRecord,
@@ -759,7 +760,10 @@ async function applyResolutionEffect(
       // A resolution sits for 24 turns; the war it was about can end inside that
       // window. Mirrors declareWar, which re-runs findWarBetween at enactment.
       const conflict = await getConflict(db, theaterId);
-      if (!conflict || conflict.status === "resolved") {
+      // Concluded, not merely resolved: a war awaiting terms is over for every
+      // purpose except the victor's choice, and admitting a new belligerent to it
+      // would put a country into a fight that has already stopped.
+      if (!conflict || isConflictConcluded(conflict.status)) {
         await recordOrgHistoryEvent(
           db,
           resolution.proposingCountryId,
