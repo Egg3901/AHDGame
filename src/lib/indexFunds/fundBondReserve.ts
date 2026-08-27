@@ -52,9 +52,13 @@ function costPerUnitAnchor(bond: Bond, fxRates: Record<string, number>): number 
 export async function deployBondReserveFromCash(
   db: Db,
   fund: IndexFund,
-  bondPrincipalAnchor: number
+  bondPrincipalAnchor: number,
+  options?: { liquidityTargetEnabled?: boolean }
 ): Promise<DeployBondReserveResult> {
-  const breakdown = computeFundAllocationBreakdown(fund, { bondPrincipalAnchor });
+  const breakdown = computeFundAllocationBreakdown(fund, {
+    bondPrincipalAnchor,
+    bondLiquidityTargetEnabled: options?.liquidityTargetEnabled,
+  });
   let budgetAnchor = Math.min(
     breakdown.bondDeploymentNeededAnchor,
     breakdown.cashAvailableForBondDeployAnchor
@@ -92,7 +96,9 @@ export async function deployBondReserveFromCash(
     const unitCostAnchor = costPerUnitAnchor(bond, fxRates);
     if (unitCostAnchor <= 0) continue;
 
-    const issueBudgetAnchor = bondAllocationBudgetForIssue(budgetAnchor, bonds.length - index);
+    const issueBudgetAnchor = options?.liquidityTargetEnabled
+      ? bondAllocationBudgetForIssue(budgetAnchor, bonds.length - index)
+      : budgetAnchor;
     const maxUnitsByBudget = Math.floor(issueBudgetAnchor / unitCostAnchor);
     const maxUnitsByFloat = Math.floor(bond.publicFloat ?? 0);
     const units = Math.min(maxUnitsByBudget, maxUnitsByFloat);

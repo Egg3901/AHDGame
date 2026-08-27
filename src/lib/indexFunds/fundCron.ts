@@ -1021,15 +1021,11 @@ export async function runIndexFundCron(
         refreshedFund,
         exchangeRates
       );
-      if (bondLiquidityEnabled) {
-        const bondDeploy = await deployBondReserveFromCash(
-          db,
-          refreshedFund,
-          bondPrincipalAfterNav
-        );
-        if (bondDeploy.deployedAnchor > 0) {
-          result.bondDeployments++;
-        }
+      const bondDeploy = await deployBondReserveFromCash(db, refreshedFund, bondPrincipalAfterNav, {
+        liquidityTargetEnabled: bondLiquidityEnabled,
+      });
+      if (bondDeploy.deployedAnchor > 0) {
+        result.bondDeployments++;
       }
 
       navReadyFundIds.push(workingFund._id);

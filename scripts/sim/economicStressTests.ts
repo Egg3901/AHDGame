@@ -15,26 +15,33 @@ if (!uri || !dbName) {
   );
 }
 
-const client = new MongoClient(uri);
-try {
-  await client.connect();
-  const snapshot = await client
-    .db(dbName)
-    .collection<EconomicVitalSigns>("economicVitalSigns")
-    .findOne({}, { sort: { turn: -1 } });
-  if (!snapshot) throw new Error(`No economic vital-sign snapshot found in ${dbName}`);
-  process.stdout.write(
-    `${JSON.stringify(
-      {
-        dbName,
-        turn: snapshot.turn,
-        measurementConfidence: snapshot.measurement.confidence,
-        findings: runEconomicStressTests(snapshot),
-      },
-      null,
-      2
-    )}\n`
-  );
-} finally {
-  await client.close();
+async function main(): Promise<void> {
+  const client = new MongoClient(uri);
+  try {
+    await client.connect();
+    const snapshot = await client
+      .db(dbName)
+      .collection<EconomicVitalSigns>("economicVitalSigns")
+      .findOne({}, { sort: { turn: -1 } });
+    if (!snapshot) throw new Error(`No economic vital-sign snapshot found in ${dbName}`);
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          dbName,
+          turn: snapshot.turn,
+          measurementConfidence: snapshot.measurement.confidence,
+          findings: runEconomicStressTests(snapshot),
+        },
+        null,
+        2
+      )}\n`
+    );
+  } finally {
+    await client.close();
+  }
 }
+
+void main().catch((error: unknown) => {
+  console.error(error);
+  process.exitCode = 1;
+});
