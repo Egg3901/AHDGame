@@ -7,6 +7,11 @@ import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
 import type { OrgSummary, OrgViewerInfo } from "../orgTypes";
 import { VoteButtons } from "../VoteButtons";
 import { VoteRoster } from "../VoteRoster";
+import {
+  dedupeOrganizationVotes,
+  requiresUnanimity,
+  votesNeeded,
+} from "@/lib/internationalOrganizations/resolutionRules";
 
 interface Props {
   org: OrgSummary;
@@ -26,6 +31,12 @@ export function PosturePanel({ org, viewer, currentTurn, votingWindowTurns, onCh
   const viewerFmCountry = viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
   const viewerIsMember =
     viewerFmCountry != null && org.members.some((m) => m.countryId === viewerFmCountry);
+  // Tabling only needs membership, but voting needs a ballot: the route enforces
+  // isVotingMember, so an enabled button for a silent member promises a vote the
+  // server will refuse.
+  const viewerHoldsVote =
+    viewerFmCountry != null &&
+    org.members.some((m) => m.countryId === viewerFmCountry && m.hasVote);
 
   const pending = org.pendingLegislation.filter((l) => l.type === "set_posture");
   const current = org.posture;
@@ -86,8 +97,8 @@ export function PosturePanel({ org, viewer, currentTurn, votingWindowTurns, onCh
           <p className="text-xs text-muted">
             The alliance is at{" "}
             <span className="font-semibold text-foreground">{POSTURE_META[current].label}</span>{" "}
-            posture. {POSTURE_META[current].blurb} Changing it is voted by a simple majority of
-            members.
+            posture. {POSTURE_META[current].blurb} Changing it needs a majority of the members that
+            hold a vote.
           </p>
         </div>
         {viewerIsMember && viewerFmCountry && (
@@ -145,15 +156,29 @@ export function PosturePanel({ org, viewer, currentTurn, votingWindowTurns, onCh
         ) : (
           pending.map((l) => {
             const turnsLeft = Math.max(0, l.closesOnTurn - currentTurn);
-            const memberCount = org.members.length;
-            const yesCount = l.votes.filter(
-              (v) => v.vote === "yes" && org.members.some((m) => m.countryId === v.countryId)
+            const ballotSize = org.members.filter((m) => m.hasVote).length;
+            // Fold duplicate rows first: the resolver tallies the folded ballot,
+            // so anything counted here must be counted the same way.
+            const votes = dedupeOrganizationVotes(l.votes);
+            const yesCount = votes.filter(
+              (v) =>
+                v.vote === "yes" &&
+                org.members.some((m) => m.countryId === v.countryId && m.hasVote)
             ).length;
             const myVote =
               viewerFmCountry != null
-                ? (l.votes.find((v) => v.countryId === viewerFmCountry)?.vote ?? null)
+                ? (votes.find((v) => v.countryId === viewerFmCountry)?.vote ?? null)
                 : null;
-            const progress = memberCount > 0 ? (yesCount / memberCount) * 100 : 0;
+            const needed = votesNeeded(l.type, ballotSize);
+            const progress = needed > 0 ? (yesCount / needed) * 100 : 0;
+            // Derived, never hardcoded: an org with nobody eligible cannot carry
+            // anything, and the wording must follow whatever the rule says today.
+            const requirement =
+              ballotSize === 0
+                ? "no members hold a vote"
+                : requiresUnanimity(l.type)
+                  ? "unanimous consent required"
+                  : `${needed} needed`;
             const target = l.postureValue ? POSTURE_META[l.postureValue].label : "—";
             return (
               <article
@@ -175,7 +200,7 @@ export function PosturePanel({ org, viewer, currentTurn, votingWindowTurns, onCh
                 <div className="mb-3">
                   <div className="mb-1 flex items-center justify-between text-xs text-muted">
                     <span>
-                      {yesCount} / {memberCount} members in favour — majority required
+                      {yesCount} / {ballotSize} members in favour, {requirement}
                     </span>
                     <span className="tabular-nums">
                       {votingWindowTurns - turnsLeft}/{votingWindowTurns} turns
@@ -190,10 +215,12 @@ export function PosturePanel({ org, viewer, currentTurn, votingWindowTurns, onCh
                 </div>
                 <VoteButtons
                   onVote={(v) => vote(l._id.toString(), v)}
-                  disabled={!viewerIsMember}
+                  disabled={!viewerHoldsVote}
                   disabledReason={
-                    !viewerIsMember
-                      ? "Only foreign ministers of member states may vote."
+                    !viewerHoldsVote
+                      ? !viewerIsMember
+                        ? "Only foreign ministers of member states may vote."
+                        : "Your country holds no vote in this organization."
                       : undefined
                   }
                   currentVote={myVote}
