@@ -98,6 +98,7 @@ const int = (description: string, minimum?: number, maximum?: number) => ({
   ...(minimum !== undefined ? { minimum } : {}),
   ...(maximum !== undefined ? { maximum } : {}),
 });
+const bool = (description: string) => ({ type: "boolean", description });
 
 function schema(properties: Record<string, unknown>, required: string[] = []) {
   return { type: "object", properties, required, additionalProperties: false };
@@ -172,6 +173,21 @@ const TOOLS: ToolDef[] = [
           description:
             'NPP autonomy tier. Omit for the harness default (v3). "v4" adds global economic behaviour and is what long full-world runs want.',
         },
+        freightSettlementMode: {
+          type: "string",
+          enum: ["shadow", "active"],
+          description:
+            "Geographic freight effect for this sandbox only. Use shadow for control and active for treatment.",
+        },
+        canonicalFreightBillingEnabled: bool(
+          "Whether accepted domestic hauls debit buyers and credit freight suppliers in this sandbox only. Explicit false is retained for control runs."
+        ),
+        shortageResponsiveSourcingEnabled: bool(
+          "Whether severe local shortages widen the landed-price ceiling in this sandbox only. Explicit false is retained for control runs."
+        ),
+        indexFundBondLiquidityEnabled: bool(
+          "Whether index funds target 20 percent sovereign bonds while retaining a 5 percent cash buffer in this sandbox only."
+        ),
       },
       ["preset", "turns", "seed"]
     ),
@@ -185,6 +201,30 @@ const TOOLS: ToolDef[] = [
       if (a.autonomyLevel && !AUTONOMY_LEVELS.includes(a.autonomyLevel as never)) {
         throw new Error(`invalid autonomyLevel "${a.autonomyLevel}"`);
       }
+      if (
+        a.freightSettlementMode &&
+        !["shadow", "active"].includes(String(a.freightSettlementMode))
+      ) {
+        throw new Error(`invalid freightSettlementMode "${a.freightSettlementMode}"`);
+      }
+      if (
+        a.canonicalFreightBillingEnabled !== undefined &&
+        typeof a.canonicalFreightBillingEnabled !== "boolean"
+      ) {
+        throw new Error("canonicalFreightBillingEnabled must be boolean");
+      }
+      if (
+        a.shortageResponsiveSourcingEnabled !== undefined &&
+        typeof a.shortageResponsiveSourcingEnabled !== "boolean"
+      ) {
+        throw new Error("shortageResponsiveSourcingEnabled must be boolean");
+      }
+      if (
+        a.indexFundBondLiquidityEnabled !== undefined &&
+        typeof a.indexFundBondLiquidityEnabled !== "boolean"
+      ) {
+        throw new Error("indexFundBondLiquidityEnabled must be boolean");
+      }
       const res = await enqueue(db, {
         preset,
         turns,
@@ -192,6 +232,16 @@ const TOOLS: ToolDef[] = [
         dbName: `ahd_sim_${seed}`,
         ...(a.marketSystemMode ? { marketSystemMode: a.marketSystemMode } : {}),
         ...(a.autonomyLevel ? { autonomyLevel: a.autonomyLevel } : {}),
+        ...(a.freightSettlementMode ? { freightSettlementMode: a.freightSettlementMode } : {}),
+        ...(a.canonicalFreightBillingEnabled !== undefined
+          ? { canonicalFreightBillingEnabled: a.canonicalFreightBillingEnabled }
+          : {}),
+        ...(a.shortageResponsiveSourcingEnabled !== undefined
+          ? { shortageResponsiveSourcingEnabled: a.shortageResponsiveSourcingEnabled }
+          : {}),
+        ...(a.indexFundBondLiquidityEnabled !== undefined
+          ? { indexFundBondLiquidityEnabled: a.indexFundBondLiquidityEnabled }
+          : {}),
       });
       return {
         ...res,
@@ -200,6 +250,10 @@ const TOOLS: ToolDef[] = [
         seed,
         marketSystemMode: a.marketSystemMode || "off (preset default)",
         autonomyLevel: a.autonomyLevel || "v3 (harness default)",
+        freightSettlementMode: a.freightSettlementMode || "preset default",
+        canonicalFreightBillingEnabled: a.canonicalFreightBillingEnabled ?? "preset default",
+        shortageResponsiveSourcingEnabled: a.shortageResponsiveSourcingEnabled ?? "preset default",
+        indexFundBondLiquidityEnabled: a.indexFundBondLiquidityEnabled ?? "preset default",
         note: 'Poll with sim_run_status. The local worker claims queued jobs within ~15s — if status stays "queued" for minutes, the worker is not running (check sim_worker_health).',
       };
     },

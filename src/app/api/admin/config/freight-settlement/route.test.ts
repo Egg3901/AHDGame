@@ -14,6 +14,24 @@ function makePatchRequest(body: Record<string, unknown>) {
   });
 }
 
+const intervention = {
+  id: "issue-968-freight-settlement",
+  issueId: 968,
+  owner: "operator",
+  objective: "Improve delivered input availability.",
+  targets: [{ metric: "intentFulfillmentRate", direction: "increase", minimumImprovement: 0.05 }],
+  guardrails: [
+    { metric: "physicalSellThrough", direction: "increase", maximumDeterioration: 0.05 },
+  ],
+  cohort: { initialShare: 0.1, maximumShare: 1, rampTurns: 24 },
+  review: { startTurn: 482, reviewTurn: 530 },
+  rollback: {
+    owner: "operator",
+    trigger: "A guardrail breaches.",
+    action: "Return freight settlement to shadow.",
+  },
+} as const;
+
 describe("GET/PATCH /api/admin/config/freight-settlement", () => {
   let db: MockDb;
 
@@ -55,7 +73,7 @@ describe("GET/PATCH /api/admin/config/freight-settlement", () => {
     });
 
     const { PATCH } = await import("./route");
-    const res = await PATCH(makePatchRequest({ mode: "active" }));
+    const res = await PATCH(makePatchRequest({ mode: "active", intervention }));
 
     expect(res.status).toBe(200);
     expect(db.collectionMocks.gameConfig!.updateOne).toHaveBeenCalledWith(
@@ -65,10 +83,25 @@ describe("GET/PATCH /api/admin/config/freight-settlement", () => {
           freightSettlementMode: "active",
           freightSettlementModeUpdatedBy: "operator",
           freightSettlementModeUpdatedTurn: 482,
+          freightSettlementIntervention: intervention,
         }),
       },
       { upsert: true }
     );
+  });
+
+  it("requires a governed intervention before activation", async () => {
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "plants",
+      freightSettlementMode: "shadow",
+    });
+
+    const { PATCH } = await import("./route");
+    const res = await PATCH(makePatchRequest({ mode: "active" }));
+
+    expect(res.status).toBe(400);
+    expect(db.collectionMocks.gameConfig!.updateOne).not.toHaveBeenCalled();
   });
 
   it("refuses active mode below market clearing", async () => {
@@ -78,7 +111,7 @@ describe("GET/PATCH /api/admin/config/freight-settlement", () => {
     });
 
     const { PATCH } = await import("./route");
-    const res = await PATCH(makePatchRequest({ mode: "active" }));
+    const res = await PATCH(makePatchRequest({ mode: "active", intervention }));
 
     expect(res.status).toBe(409);
     expect((await res.json()) as { error: string }).toEqual({

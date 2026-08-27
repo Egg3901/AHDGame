@@ -8,9 +8,14 @@ import { createAdminLog } from "@/lib/adminLog";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import type { GameConfig } from "@/lib/db/types";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
+import {
+  economicInterventionPlanSchema,
+  validateInterventionActivation,
+} from "@/lib/economy/interventionGovernance";
 
 const patchSchema = z.object({
   mode: z.enum(["shadow", "active"]),
+  intervention: economicInterventionPlanSchema.optional(),
 });
 
 type FreightSettlementMode = "shadow" | "active";
@@ -50,7 +55,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
 
-    const { mode } = parsed.data;
+    const { mode, intervention } = parsed.data;
     const db = await getDb();
     const gameConfig = db.collection<GameConfig>("gameConfig");
     const priorConfig = await gameConfig.findOne(
@@ -71,6 +76,18 @@ export async function PATCH(request: Request) {
     }
 
     const currentTurn = await getCurrentTurn(db);
+    if (mode === "active") {
+      if (!intervention) {
+        return NextResponse.json(
+          { error: "An economic intervention plan is required to activate freight settlement." },
+          { status: 400 }
+        );
+      }
+      const activationError = validateInterventionActivation(intervention, currentTurn);
+      if (activationError) {
+        return NextResponse.json({ error: activationError }, { status: 400 });
+      }
+    }
     const changedAt = new Date().toISOString();
     await gameConfig.updateOne(
       { _id: "default" },
@@ -80,6 +97,9 @@ export async function PATCH(request: Request) {
           freightSettlementModeUpdatedBy: auth.admin.username,
           freightSettlementModeUpdatedAt: changedAt,
           freightSettlementModeUpdatedTurn: currentTurn,
+          ...(mode === "active" && intervention
+            ? { freightSettlementIntervention: intervention }
+            : {}),
         },
       },
       { upsert: true }
