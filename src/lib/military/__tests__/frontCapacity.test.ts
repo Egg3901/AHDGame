@@ -102,6 +102,24 @@ describe("planEngagement", () => {
   });
 });
 
+describe("planEngagement and reach", () => {
+  it("does not let a fleet that cannot reach the front hold the line against an army", () => {
+    // Frontage is about what can actually fight for the ground. A carrier group off a
+    // landlocked war contributes a tenth of itself; ordering by paper strength would let
+    // it displace an infantry division that would really be there.
+    const army = force("US", 4, "Infantry Division");
+    const fleet = force("US", 4, "Carrier Strike Group");
+    fleet.units = fleet.units.map((u) => ({ ...u, domain: "naval" }));
+    const s = { ...army, units: [...army.units, ...fleet.units] };
+    const inland = { ...FRONTS_MAP, [T]: { ...FRONTS_MAP[T]!, seaAccess: false } };
+    const plan = planEngagement([{ ...ctxOf(s), fronts: inland }], T, 250);
+
+    const armyIn = army.units.filter((u) => plan.inContact.has(String(u._id))).length;
+    const fleetIn = fleet.units.filter((u) => plan.inContact.has(String(u._id))).length;
+    expect(armyIn).toBeGreaterThan(fleetIn);
+  });
+});
+
 describe("front capacity in the battle math", () => {
   it("stops a superstack from bringing everything to bear", () => {
     const enemy = force("CN", 3);

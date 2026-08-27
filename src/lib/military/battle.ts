@@ -472,9 +472,19 @@ export function planEngagement(
   capacity: number
 ): EngagementPlan {
   const rows: { id: string; role: string; cv: number }[] = [];
+  const front = frontById(frontId, ctxs.find((c) => c.fronts?.[frontId])?.fronts);
   for (const ctx of ctxs) {
     for (const u of ctx.units.filter((x) => x.theaterId === frontId)) {
-      rows.push({ id: String(u._id), role: getRole(ctx.positions, u), cv: cv(ctx, u) });
+      // The value this formation can actually bring to THIS ground, not its paper
+      // strength: terrain and reach both apply. A carrier off a landlocked front
+      // contributes a tenth of itself, so it must neither claim a tenth of the frontage
+      // nor outrank an infantry division for a place in the line.
+      const card = computeCard(u);
+      const effective =
+        cv(ctx, u) *
+        terrainFactor(front, u.domain, card.traitKeys) *
+        navalReach(front, u.domain, card.traitKeys);
+      rows.push({ id: String(u._id), role: getRole(ctx.positions, u), cv: effective });
     }
   }
   rows.sort((a, b) => {

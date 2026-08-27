@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { resolvePvpBattle } from "../battle";
-import { side, unit, FRONTS_MAP } from "./battleFixtures";
+import { side, unit } from "./battleFixtures";
 import type { CountryId } from "@/lib/constants/countries";
 import { ObjectId } from "mongodb";
 
