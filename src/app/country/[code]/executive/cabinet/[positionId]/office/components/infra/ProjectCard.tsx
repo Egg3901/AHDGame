@@ -5,11 +5,14 @@ import type { ProjectView } from "../../useCabinetOffice";
 import { BUILD_FUNDING } from "@/lib/constants/cabinetInfra";
 import { Stat, InfraIcon, ConfirmDialog, fmtMoneyM } from "./infraUi";
 import { ProgressBar } from "./ProgressBar";
+// The tab above these cards carries the explanation; a note on every card would
+// only repeat it. The lock still reaches here so the card's own buttons disable.
+import { useActingLock } from "../ActingLock";
 
 export function ProjectCard({
   project,
   basePath,
-  canAct,
+  canAct: canActProp,
   currencySymbol,
   regionName,
   busy,
@@ -23,6 +26,10 @@ export function ProjectCard({
   busy: boolean;
   onAction: (method: "POST" | "DELETE", path: string, body?: unknown) => void;
 }) {
+  // An acting secretary reads this surface but does not move it.
+  const actingLockReason = useActingLock("assets");
+  const canAct = canActProp && !actingLockReason;
+
   const [confirmDelete, setConfirmDelete] = useState(false);
   const isOperational = project.status === "operational";
 

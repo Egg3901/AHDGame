@@ -34,6 +34,16 @@ export interface UnifiedCabinetMember extends IterationStampFields {
   appointedAt: Date;
   /** When the appointment was confirmed (US: senate vote; UK: immediate) */
   confirmedAt?: Date;
+  /**
+   * True when the executive seated this holder directly, without the legislative
+   * confirmation the country's government type otherwise requires. Absent means
+   * confirmed: the confirmation path inserts a fresh document rather than
+   * clearing the flag, and every member predating acting appointments lacks it.
+   *
+   * Costs national approval each turn (`governmentApproval`) and closes the
+   * lever scopes in `@/lib/cabinet/actingScope`.
+   */
+  acting?: boolean;
 
   /** Ministerial action pool (0-2, refills daily at midnight Eastern Time) */
   ministerialActions: number;

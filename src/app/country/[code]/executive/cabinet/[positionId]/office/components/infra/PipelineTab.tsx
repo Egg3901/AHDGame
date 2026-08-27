@@ -5,12 +5,13 @@ import type { ProjectView } from "../../useCabinetOffice";
 import { AggTile, fmtMoneyM } from "./infraUi";
 import { ProjectCard } from "./ProjectCard";
 import { StartProjectPanel } from "./StartProjectPanel";
+import { ActingLockNote, useActingLock } from "../ActingLock";
 
 export function PipelineTab({
   countryCode,
   positionId,
   projects,
-  canAct,
+  canAct: canActProp,
   currencySymbol,
   regions,
   siteName,
@@ -27,6 +28,10 @@ export function PipelineTab({
   committedSpend: number;
   onUpdate: () => void;
 }) {
+  // An acting secretary reads this surface but does not move it.
+  const actingLockReason = useActingLock("assets");
+  const canAct = canActProp && !actingLockReason;
+
   const [starting, setStarting] = useState(false);
   const [busy, setBusy] = useState(false);
   const basePath = `/api/country/${countryCode}/executive/cabinet/${positionId}/infra`;
@@ -66,6 +71,8 @@ export function PipelineTab({
 
   return (
     <div className="space-y-4">
+      <ActingLockNote reason={actingLockReason} />
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <AggTile label="Under construction" value={building.length} tone="gov" />
         <AggTile label="Operational" value={operational.length} />

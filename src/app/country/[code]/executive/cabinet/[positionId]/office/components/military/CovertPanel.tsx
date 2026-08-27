@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { CovertFunding, CovertStage } from "@/lib/military/covertNuclear";
 import { AggTile, fmtMoneyAbs } from "./militaryUi";
+import { ActingLockNote, useActingLock } from "../ActingLock";
 
 /** The covert GET route's payload, as the flagship fetches it. */
 export interface CovertStatusView {
@@ -52,7 +53,7 @@ const SUSPICION_TONE: Record<string, "gov" | "warning" | undefined> = {
 export function CovertPanel({
   status,
   currencySymbol,
-  canAct,
+  canAct: canActProp,
   busy,
   onSetFunding,
   onBreakout,
@@ -65,6 +66,10 @@ export function CovertPanel({
   onSetFunding: (funding: CovertFunding) => Promise<boolean>;
   onBreakout: () => Promise<boolean>;
 }) {
+  // An acting secretary reads this surface but does not move it.
+  const actingLockReason = useActingLock("doctrine");
+  const canAct = canActProp && !actingLockReason;
+
   // Breakout is once and cannot be taken back, so it takes two clicks.
   const [confirmingBreakout, setConfirmingBreakout] = useState(false);
 
@@ -82,6 +87,8 @@ export function CovertPanel({
 
   return (
     <div className="space-y-4">
+      <ActingLockNote reason={actingLockReason} />
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <AggTile
           label="Soviet suspicion"

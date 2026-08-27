@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import type { Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
+import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { resolveCabinetOfficeVisibility } from "@/lib/cabinet/officeVisibility";
@@ -75,6 +76,16 @@ export async function requireDefenceHolder(
       ),
     } as const;
   }
+
+  // An acting defence secretary reads the programme but does not move it. Every
+  // mutation route funnels through `intent: "manage"`, so the whole console is
+  // covered here rather than five times over; the GET surfaces take the read
+  // path above and stay open to them.
+  if (intent === "manage") {
+    const denied = requireConfirmedSecretary(member, "doctrine", !!auth.user.isAdmin);
+    if (denied) return { error: denied } as const;
+  }
+
   return { db, countryId, member, user: auth.user } as const;
 }
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { NuclearNode, NuclearNodeStatus } from "@/lib/military/nuclearProgram";
 import { NUCLEAR_ENTRY_DOCTRINE_NODE } from "@/lib/military/nuclearProgram";
 import { AggTile, fmtMoneyAbs } from "./militaryUi";
+import { ActingLockNote, useActingLock } from "../ActingLock";
 
 /** The GET nuclear route's payload, as the flagship fetches it. */
 export interface NuclearStatusView {
@@ -61,7 +62,7 @@ function Gate({ met, label }: { met: boolean; label: string }) {
 export function NuclearTab({
   status,
   currencySymbol,
-  canAct,
+  canAct: canActProp,
   busy,
   onConductTest,
   onAdoptDelivery,
@@ -76,6 +77,10 @@ export function NuclearTab({
   onAdoptDelivery: (nodeKey: string) => Promise<boolean>;
   onSetProduction: (rate: number) => Promise<boolean>;
 }) {
+  // An acting secretary reads this surface but does not move it.
+  const actingLockReason = useActingLock("doctrine");
+  const canAct = canActProp && !actingLockReason;
+
   // Testing is a world event that cannot be taken back, so it takes two clicks.
   const [confirming, setConfirming] = useState<string | null>(null);
   const [rateInput, setRateInput] = useState<string>("");
@@ -99,6 +104,8 @@ export function NuclearTab({
   if (!eligibility.eligible) {
     return (
       <div className="rounded-xl border border-card-border bg-card">
+        <ActingLockNote reason={actingLockReason} />
+
         <div className="border-b border-card-border px-4 py-2.5">
           <h3 className="text-sm font-semibold text-foreground">Nuclear programme</h3>
           <p className="mt-0.5 text-[11px] text-muted">

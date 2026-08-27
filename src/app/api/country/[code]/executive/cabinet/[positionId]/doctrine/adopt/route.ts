@@ -8,6 +8,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
+import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { getGameStateCollection } from "@/lib/db/collections/gameState";
@@ -68,6 +69,11 @@ export async function POST(request: Request, { params }: RouteParams) {
         { status: 403 }
       );
     }
+
+    // Doctrine outlives the appointment: an adopted node stays adopted after the
+    // acting holder is replaced.
+    const actingDenied = requireConfirmedSecretary(member, "doctrine", !!auth.user.isAdmin);
+    if (actingDenied) return actingDenied;
 
     const currentEra = await resolveDoctrineEra(db);
     const year = resolveGameYear(gs);
