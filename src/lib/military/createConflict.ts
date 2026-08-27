@@ -73,6 +73,13 @@ export interface BuildConflictInput {
   declaredByBillId?: string;
   /** Countries pulled in by a mutual-defence treaty at declaration time. */
   treatyEntries?: TreatyEntry[];
+  /**
+   * Override whether the front reaches the sea. Omit it and `conflictToFront` derives
+   * the answer from the host's naval branches, which is right for almost every war.
+   * Set it for the case the derivation cannot see: fighting inland of a coastal nation,
+   * or a landlocked theatre inside a country that does have a coast.
+   */
+  seaAccess?: boolean;
 }
 
 /**
@@ -126,6 +133,9 @@ export function buildConflict(input: BuildConflictInput): ConflictDoc {
     sideB: input.sideB,
     bloc: blocOfSides(input.sideA, input.sideB),
     terrain,
+    // Written only when the caller overrides. Storing the derived value instead would
+    // freeze today's answer into the document and stop it tracking the branch table.
+    ...(input.seaAccess === undefined ? {} : { seaAccess: input.seaAccess }),
     severity,
     baseStrength,
     supplyA: SEED_SUPPLY,

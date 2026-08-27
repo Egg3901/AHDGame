@@ -283,3 +283,40 @@ describe("conflictToFront sea access", () => {
     expect(conflictToFront(anchored).seaAccess).toBe(true);
   });
 });
+
+describe("buildConflict sea access override", () => {
+  const base = (over: Partial<BuildConflictInput> = {}): BuildConflictInput => ({
+    id: "war_test",
+    conflictId: 1,
+    hostCountry: "DD" as BuildConflictInput["hostCountry"],
+    type: "interstate",
+    sideA: west,
+    sideB: east,
+    startTurn: 1,
+    createdBy: "seed",
+    ...over,
+  });
+
+  it("writes no seaAccess at all when the caller does not override", () => {
+    // Storing the derived answer would freeze it into the document and stop it
+    // tracking the branch table.
+    const doc = buildConflict(base());
+    expect("seaAccess" in doc).toBe(false);
+    // ...and it still resolves coastal through the derivation.
+    expect(conflictToFront(doc).seaAccess).toBe(true);
+  });
+
+  it("stores an explicit override and lets it beat the derivation", () => {
+    // A war fought inland of a coastal nation.
+    const doc = buildConflict(base({ seaAccess: false }));
+    expect(doc.seaAccess).toBe(false);
+    expect(conflictToFront(doc).seaAccess).toBe(false);
+  });
+
+  it("stores an explicit true for a landlocked host", () => {
+    const doc = buildConflict(
+      base({ hostCountry: "CS" as BuildConflictInput["hostCountry"], seaAccess: true })
+    );
+    expect(conflictToFront(doc).seaAccess).toBe(true);
+  });
+});
