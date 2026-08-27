@@ -32,6 +32,7 @@ import {
 import { evaluateSovereignAuctionForCountry } from "@/lib/sovereignDefault/crisisDetection";
 import { applyAusterityCap } from "@/lib/sovereignDefault/austerity";
 import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
+import { ensureBudgetDraftForFiscalYear } from "@/lib/db/collections/ukBudgets";
 
 // The current turn engine still processes fiscal-year rollover as one shared phase.
 // Pulling the anchor from country-systems makes the rule source explicit now, while
@@ -87,6 +88,12 @@ export async function processFiscalYear(
   if (federalBudgets.length === 0) {
     console.log("[FiscalYear] No federal budget found, skipping fiscal year processing");
     return;
+  }
+
+  // Open the UK's annual authoring window only in worlds with a UK ledger. The
+  // helper is idempotent, so a retried fiscal turn cannot replace a saved draft.
+  if (federalBudgets.some((budget) => resolveBudgetCountryId(budget) === "UK")) {
+    await ensureBudgetDraftForFiscalYear(db, newFiscalYear, new Date());
   }
 
   const [states, allStateMetrics] = await Promise.all([

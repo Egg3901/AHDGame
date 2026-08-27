@@ -3,6 +3,7 @@ import { escapeRegex } from "@/lib/utils/escapeRegex";
 import type { Corporation, Character } from "@/lib/db/types";
 import type { CorporateSector } from "@/lib/db/types/corporation";
 import type { Bond } from "@/lib/db/types/bond";
+import type { ShareTradeHistory } from "@/lib/db/types/shareTradeHistory";
 import { getRoundedPublicMarketCap } from "@/lib/corporations/marketQuote";
 import {
   loadValuationFxRates,
@@ -193,4 +194,61 @@ export async function queryCorporationList(db: Db) {
     type: c.type,
     countryId: c.countryId,
   }));
+}
+
+/**
+ * Public share-trade tape for one corporation (same data the in-game corp page
+ * serves at /api/corporations/[id]/shares/history), resolved by sequentialId or
+ * name to match queryCorporation's addressing. Newest first, paginated.
+ */
+export async function queryShareHistory(
+  db: Db,
+  params: { name?: string; id?: string; page?: number; pageSize?: number }
+) {
+  const { name, id } = params;
+  const page = Math.max(params.page ?? 1, 1);
+  const pageSize = Math.min(Math.max(params.pageSize ?? 50, 1), 200);
+
+  const corp = await db
+    .collection<Corporation>("corporations")
+    .findOne(
+      id
+        ? ({ sequentialId: parseInt(id, 10) } as Record<string, unknown>)
+        : { name: { $regex: escapeRegex(name ?? ""), $options: "i" } }
+    );
+  if (!corp) return null;
+
+  const filter = { corporationId: corp._id };
+  const [total, entries] = await Promise.all([
+    db.collection<ShareTradeHistory>("shareTradeHistory").countDocuments(filter),
+    db
+      .collection<ShareTradeHistory>("shareTradeHistory")
+      .find(filter)
+      .sort({ createdAt: -1, _id: -1 })
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
+      .toArray(),
+  ]);
+
+  return {
+    found: true,
+    corporation: { id: corp.sequentialId ?? corp._id.toString(), name: corp.name },
+    page,
+    pageSize,
+    total,
+    pageCount: total === 0 ? 1 : Math.ceil(total / pageSize),
+    entries: entries.map((e) => ({
+      id: e._id.toString(),
+      kind: e.kind,
+      turn: e.turn,
+      createdAt: e.createdAt instanceof Date ? e.createdAt.toISOString() : (e.createdAt ?? null),
+      shares: e.shares,
+      pricePerShareAnchor: e.pricePerShareAnchor,
+      totalAnchor: e.totalAnchor,
+      corpCurrencyCode: e.corpCurrencyCode ?? null,
+      from: e.from ? { name: e.from.name } : null,
+      to: e.to ? { name: e.to.name } : null,
+      note: e.note ?? null,
+    })),
+  };
 }

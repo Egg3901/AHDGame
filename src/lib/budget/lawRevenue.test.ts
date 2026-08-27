@@ -2,6 +2,7 @@ import type { Db } from "mongodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { calculateFederalRevenue } from "./revenue";
+import { calculateCountryOwnedBudgetRevenue } from "./publicEnterpriseRevenue";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("./publicEnterpriseRevenue", () => ({
@@ -48,6 +49,10 @@ describe("revenue.lawRevenue (§5.1) + fallback guard", () => {
   let db: MockDb;
   beforeEach(() => {
     db = createMockDb();
+    vi.mocked(calculateCountryOwnedBudgetRevenue).mockResolvedValue({
+      healthcareIncome: 0,
+      other: 0,
+    });
   });
 
   function wire(budget: unknown, enactedLaws: unknown[]) {
@@ -126,6 +131,29 @@ describe("revenue.lawRevenue (§5.1) + fallback guard", () => {
     expect(rawSum / UK_GDP).toBeGreaterThan(0.4);
     expect(revenue.total).toBeLessThan(rawSum);
     expect(revenue.other).toBe(1_200_000_000);
+  });
+
+  it("caps tax-like receipts only, leaving other and public-enterprise income intact", async () => {
+    // Worked UK-1953 example. Tax-like receipts are £3.6288B ordinary tax
+    // plus £3.0B revenue-law extraction = £6.6288B (46.033...% of GDP).
+    // The 40% knee and 40% compression yield £6.10752B after cap. Persisted
+    // other (£1.2B), NHS income (£0.8B), and SOE income (£0.4B) are non-tax
+    // receipts and must be added after that cap: £8.50752B total.
+    vi.mocked(calculateCountryOwnedBudgetRevenue).mockResolvedValue({
+      healthcareIncome: 800_000_000,
+      other: 400_000_000,
+    });
+    wire(ukBudget(1_200_000_000), [{ annualRevenueV2: 3_000_000_000 }]);
+
+    const revenue = await calculateFederalRevenue(db as unknown as Db, UK_RATES, "UK");
+
+    expect(revenue.lawRevenue).toBe(3_000_000_000);
+    expect(revenue.other).toBe(1_600_000_000);
+    expect(revenue.healthcareIncome).toBe(800_000_000);
+    expect(revenue.taxLikeRevenue).toBe(6_628_800_000);
+    expect(revenue.taxLikeRevenueAfterCap).toBe(6_107_520_000);
+    expect(revenue.revenueCapReduction).toBe(521_280_000);
+    expect(revenue.total).toBe(8_507_520_000);
   });
 
   it("budgets without v2 laws report lawRevenue 0 and an unchanged mix", async () => {

@@ -82,6 +82,7 @@ describe("buildVacantCaretakerCeoUpdate", () => {
       underlyingCharacterId: char,
       underlyingUserId: user,
       appointedTurn: 5,
+      appointmentSource: "vacancy",
     });
   });
 
@@ -93,7 +94,11 @@ describe("buildVacantCaretakerCeoUpdate", () => {
       5,
       now
     );
-    expect(set.caretakerCeo).toEqual({ underlyingUserId: user, appointedTurn: 5 });
+    expect(set.caretakerCeo).toEqual({
+      underlyingUserId: user,
+      appointedTurn: 5,
+      appointmentSource: "vacancy",
+    });
     expect(set.caretakerCeo).not.toHaveProperty("underlyingCharacterId");
   });
 
