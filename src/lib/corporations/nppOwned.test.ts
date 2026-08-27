@@ -30,6 +30,33 @@ describe("isNppOwned", () => {
     expect(isNppOwned({ ceoType: "npp", caretakerCeo: { ceoId: "x" } })).toBe(false);
   });
 
+  it("keeps a corp with an AUTOMATIC vacancy caretaker with the players too", () => {
+    // #814 added `appointmentSource`, splitting an owner-chosen caretaker from one
+    // the turn loop installs on a vacant corp. Neither changes the answer, and the
+    // reason is load-bearing: `autoCaretakerVacantCorps` only writes `caretakerCeo`
+    // at all `if (prevUserId != null)`, so its presence still means exactly "a real
+    // player is behind this corp". If that guard is ever dropped, ownerless corps
+    // would start arriving with a caretaker block and this test should fail.
+    expect(
+      isNppOwned({
+        ceoType: "npp",
+        caretakerCeo: { underlyingUserId: "u1", appointedTurn: 5, appointmentSource: "vacancy" },
+      })
+    ).toBe(false);
+    expect(
+      isNppOwned({
+        ceoType: "npp",
+        caretakerCeo: { underlyingUserId: "u1", appointedTurn: 5, appointmentSource: "owner" },
+      })
+    ).toBe(false);
+  });
+
+  it("counts a vacant corp with no owner behind it as NPP field", () => {
+    // The other side of that guard: no underlying user means no caretaker block is
+    // written, so the corp is a plain autonomous NPP and belongs in the arc.
+    expect(isNppOwned({ ceoType: "npp", caretakerCeo: undefined })).toBe(true);
+  });
+
   it("is false for a missing corp rather than guessing NPP", () => {
     // An unresolved rival is shown as a real competitor. Guessing the other way
     // would silently hide someone from the market panel.
