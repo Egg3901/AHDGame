@@ -174,6 +174,37 @@ describe("applyDeclarativeEffects — country scope (World Events v1 Phase 0)", 
     expect(doc.expiresAtTurn).toBe(106);
   });
 
+  it("sectorOutputDemandModifier writes an output-demand shift for seller margins", async () => {
+    db.collection("countryModifiers");
+    const instance = makeInstance();
+    const tier: OutcomeTier = {
+      minRoll: 1,
+      maxRoll: 100,
+      label: "mobilization",
+      effects: [
+        {
+          type: "sectorOutputDemandModifier",
+          sectorType: "defense",
+          pct: 10,
+          durationTurns: 8,
+        },
+      ],
+    };
+
+    await applyDeclarativeEffects(makeCtx(db, instance, tier), tier.effects);
+
+    expect(db.collectionMocks.countryModifiers!.insertOne.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        countryId: "US",
+        kind: "sectorOutputDemandModifier",
+        sectorType: "defense",
+        pct: 10,
+        appliedAtTurn: 100,
+        expiresAtTurn: 108,
+      })
+    );
+  });
+
   it("warEmergencyMitigation writes bounded domestic relief without changing global tension", async () => {
     db.collection("countryModifiers");
     const instance = makeInstance();

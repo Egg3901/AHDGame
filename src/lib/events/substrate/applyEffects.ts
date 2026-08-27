@@ -14,7 +14,11 @@ import { buildPersonalBalanceInc, getHomeCurrency } from "@/lib/currency/charact
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { creditTreasury, spendFromTreasury } from "@/lib/budget/treasurySpend";
 import { emitTx } from "@/lib/financialTxLog/emit";
-import { writeSectorDemandModifier, writeWarEmergencyMitigation } from "./countryModifiers";
+import {
+  writeSectorDemandModifier,
+  writeSectorOutputDemandModifier,
+  writeWarEmergencyMitigation,
+} from "./countryModifiers";
 import { applyCivilLibertiesDelta } from "@/lib/events/worldEvents/warEmergency";
 import type { EventResolveContext } from "./types";
 
@@ -85,6 +89,17 @@ async function applyCountryEffects(
       }
       case "sectorDemandModifier": {
         await writeSectorDemandModifier(ctx.db, {
+          countryId,
+          sectorType: effect.sectorType,
+          pct: effect.pct,
+          durationTurns: effect.durationTurns,
+          appliedAtTurn: ctx.currentTurn,
+          sourceInstanceId: ctx.instance._id,
+        });
+        break;
+      }
+      case "sectorOutputDemandModifier": {
+        await writeSectorOutputDemandModifier(ctx.db, {
           countryId,
           sectorType: effect.sectorType,
           pct: effect.pct,

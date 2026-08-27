@@ -41,6 +41,13 @@ export type EventEffect =
   | { type: "approvalDelta"; delta: number }
   /** Temporary demand modifier consumed by the commodity engine; expires by turn. */
   | { type: "sectorDemandModifier"; sectorType: string; pct: number; durationTurns: number }
+  /** Temporary demand for a sector's outputs, directly moving its commodity margins. */
+  | {
+      type: "sectorOutputDemandModifier";
+      sectorType: string;
+      pct: number;
+      durationTurns: number;
+    }
   /**
    * Temporary domestic relief from repeated war-scare events. Stacks only to
    * a hard cap and lengthens the shared crisis interval; it cannot disable the
@@ -209,6 +216,18 @@ export interface SectorDemandCountryModifier {
   createdAt: Date;
 }
 
+export interface SectorOutputDemandCountryModifier {
+  _id: ObjectId;
+  countryId: string;
+  kind: "sectorOutputDemandModifier";
+  sectorType: string;
+  pct: number;
+  appliedAtTurn: number;
+  expiresAtTurn: number;
+  sourceInstanceId?: ObjectId;
+  createdAt: Date;
+}
+
 export interface WarEmergencyMitigationModifier {
   _id: ObjectId;
   countryId: string;
@@ -220,4 +239,5 @@ export interface WarEmergencyMitigationModifier {
   createdAt: Date;
 }
 
-export type CountryModifier = SectorDemandCountryModifier | WarEmergencyMitigationModifier;
+export type CountryModifier =
+  SectorDemandCountryModifier | SectorOutputDemandCountryModifier | WarEmergencyMitigationModifier;

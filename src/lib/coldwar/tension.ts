@@ -138,8 +138,8 @@ export interface WarPressureInput {
   sideBCountries: CountryId[];
   /** 0-100. */
   intensity: number;
-  /** Opening turn. Absent keeps the full fresh-war pressure for old callers. */
-  startTurn?: number;
+  /** First consecutive below-hot turn. Absent keeps full fresh-war pressure. */
+  limitedWarSinceTurn?: number;
 }
 
 export interface NuclearProgramPressureInput {
@@ -180,16 +180,15 @@ export interface WarPressureSummary {
  * 85. This changes pressure, never the conflict's actual combat intensity.
  */
 export function warAcclimationMultiplier(
-  war: Pick<WarPressureInput, "intensity" | "startTurn">,
+  war: Pick<WarPressureInput, "intensity" | "limitedWarSinceTurn">,
   currentTurn?: number
 ): number {
-  if (currentTurn == null || war.startTurn == null) return 1;
-  const age = Math.max(0, currentTurn - war.startTurn);
-  const acclimationTurns = age - WAR_ACCLIMATION_GRACE_TURNS;
-  if (acclimationTurns <= 0) return 1;
-
   const intensity = Math.max(0, Math.min(100, war.intensity));
   if (intensity >= WAR_ACCLIMATION_HOT_INTENSITY) return 1;
+  if (currentTurn == null || war.limitedWarSinceTurn == null) return 1;
+  const limitedWarAge = Math.max(0, currentTurn - war.limitedWarSinceTurn);
+  const acclimationTurns = limitedWarAge - WAR_ACCLIMATION_GRACE_TURNS;
+  if (acclimationTurns <= 0) return 1;
   const coolness =
     intensity <= WAR_ACCLIMATION_FULL_INTENSITY
       ? 1

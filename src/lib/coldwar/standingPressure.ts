@@ -2,11 +2,12 @@ import type { Db } from "mongodb";
 import { getVietnamEscalation } from "@/lib/crises/vietnamEscalation";
 import { livingVietnamAsLegacyState } from "@/lib/livingConflict/vietnamCompat";
 import { listNuclearPrograms } from "@/lib/db/collections/nuclearPrograms";
-import { listActiveConflicts } from "@/lib/db/collections/conflicts";
+import { getConflictsCollection, listActiveConflicts } from "@/lib/db/collections/conflicts";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import {
   nuclearArmedCountryIds,
   warPressures,
+  WAR_ACCLIMATION_HOT_INTENSITY,
   type NuclearProgramPressureInput,
   type TensionPressures,
   type WarPressureInput,
@@ -30,14 +31,40 @@ export interface StandingPressureSnapshot {
 
 /** Adapt the canonical conflict document to the pressure model in one place. */
 export function conflictWarPressureInput(
-  conflict: Pick<ConflictDoc, "sideA" | "sideB" | "intensity" | "startTurn">
+  conflict: Pick<ConflictDoc, "sideA" | "sideB" | "intensity" | "limitedWarSinceTurn">
 ): WarPressureInput {
   return {
     sideACountries: conflict.sideA?.countries ?? [],
     sideBCountries: conflict.sideB?.countries ?? [],
     intensity: conflict.intensity ?? 0,
-    startTurn: conflict.startTurn,
+    limitedWarSinceTurn: conflict.limitedWarSinceTurn,
   };
+}
+
+/**
+ * Keep the consecutive limited-war clock honest. Hot turns clear it; the first
+ * later limited turn starts a new grace period. Both writes are idempotent.
+ */
+export async function syncLimitedWarPressureClocks(db: Db, currentTurn: number): Promise<void> {
+  const conflicts = getConflictsCollection(db);
+  await Promise.all([
+    conflicts.updateMany(
+      {
+        status: { $ne: "resolved" },
+        intensity: { $gte: WAR_ACCLIMATION_HOT_INTENSITY },
+        limitedWarSinceTurn: { $exists: true },
+      },
+      { $unset: { limitedWarSinceTurn: "" } }
+    ),
+    conflicts.updateMany(
+      {
+        status: { $ne: "resolved" },
+        intensity: { $lt: WAR_ACCLIMATION_HOT_INTENSITY },
+        limitedWarSinceTurn: { $exists: false },
+      },
+      { $set: { limitedWarSinceTurn: currentTurn } }
+    ),
+  ]);
 }
 
 /** Build the one strategic-pressure snapshot shared by the turn, UI, and seeds. */

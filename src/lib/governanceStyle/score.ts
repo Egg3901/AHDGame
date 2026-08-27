@@ -54,9 +54,12 @@ const DEMOCRATIC_HEALTH_WEIGHTS = {
   "society.civicLife": 0.025,
 } as const satisfies Partial<Record<PoliticalMetricId, number>>;
 
-const DEMOCRATIC_HEALTH_IDS = new Set<PoliticalMetricId>(
+/** Canonical political-metric basket used by the Democratic Health score. */
+export const DEMOCRATIC_HEALTH_METRIC_IDS = Object.freeze(
   Object.keys(DEMOCRATIC_HEALTH_WEIGHTS) as PoliticalMetricId[]
 );
+
+const DEMOCRATIC_HEALTH_IDS = new Set<PoliticalMetricId>(DEMOCRATIC_HEALTH_METRIC_IDS);
 
 function leftRightScore(values: MetricValues): number {
   let weightedContrast = 0;

@@ -64,7 +64,10 @@ import {
   countryCommodityDemandMultiplier,
 } from "@/lib/constants/commodities";
 import { updateScarcityMultiplier } from "@/lib/market/scarcityDrift";
-import { loadActiveSectorDemandModifierPctMap } from "@/lib/events/worldEvents/sectorDemandModifierMap";
+import {
+  loadActiveSectorDemandModifierPctMap,
+  loadActiveSectorOutputDemandModifierPctMap,
+} from "@/lib/events/worldEvents/sectorDemandModifierMap";
 import {
   getMarketSystemMode,
   marketAtLeast,
@@ -734,7 +737,10 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
 
   // World Events v1 Phase 1: active sectorDemandModifier world-event
   // effects (e.g. royal-event's tourism bump), batch-loaded once per turn.
-  const sectorDemandModifierPct = await loadActiveSectorDemandModifierPctMap(db, turn);
+  const [sectorDemandModifierPct, sectorOutputDemandModifierPct] = await Promise.all([
+    loadActiveSectorDemandModifierPctMap(db, turn),
+    loadActiveSectorOutputDemandModifierPctMap(db, turn),
+  ]);
 
   // Compute raw supply/demand in units (retail demand scaled by GDP growth)
   // EXTRACTION SUPPLY = REAL RATIONED OUTPUT (plants).
@@ -772,7 +778,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     // ledger leg (intermediate inputs, macro GDP demand, legacy nameplate
     // supply) in the SAME era unit basis plants `producedUnits` uses. Below
     // plants, and on modern worlds (eraUnitScale 1), this is a pure no-op.
-    plantsLedgerEnabled ? ledgerEraUnitScale : 1
+    plantsLedgerEnabled ? ledgerEraUnitScale : 1,
+    sectorOutputDemandModifierPct
   );
 
   // Plants tier: per-commodity produced/sold units from corporate plants, split

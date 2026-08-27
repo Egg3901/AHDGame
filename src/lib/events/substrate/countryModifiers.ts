@@ -39,6 +39,32 @@ export async function writeSectorDemandModifier(
   await getCountryModifiersCollection(db).insertOne(doc);
 }
 
+/** Write temporary demand for a sector's outputs, affecting its seller margin. */
+export async function writeSectorOutputDemandModifier(
+  db: Db,
+  input: {
+    countryId: string;
+    sectorType: string;
+    pct: number;
+    durationTurns: number;
+    appliedAtTurn: number;
+    sourceInstanceId?: ObjectId;
+  }
+): Promise<void> {
+  const doc: CountryModifier = {
+    _id: new ObjectId(),
+    countryId: input.countryId,
+    kind: "sectorOutputDemandModifier",
+    sectorType: input.sectorType,
+    pct: input.pct,
+    appliedAtTurn: input.appliedAtTurn,
+    expiresAtTurn: input.appliedAtTurn + Math.max(0, input.durationTurns),
+    sourceInstanceId: input.sourceInstanceId,
+    createdAt: new Date(),
+  };
+  await getCountryModifiersCollection(db).insertOne(doc);
+}
+
 /** Country measures can slow domestic crisis recurrence, never suppress it. */
 export async function writeWarEmergencyMitigation(
   db: Db,

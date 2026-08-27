@@ -3,6 +3,9 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
 import type { PoliticalMetricId } from "@/lib/politicalMetrics/types";
 import { hashToUint32 } from "@/lib/events/substrate/rng";
+import { DEMOCRATIC_HEALTH_METRIC_IDS } from "@/lib/governanceStyle/score";
+
+export { DEMOCRATIC_HEALTH_METRIC_IDS } from "@/lib/governanceStyle/score";
 
 export const HIGH_TENSION_EVENT_KINDS = new Set([
   "worldEvents.panicBuying",
@@ -49,23 +52,6 @@ export function isHighTensionSharedDue(
     lastFiredTurn + highTensionSharedGapTurns(countryId, lastFiredTurn, mitigationPct)
   );
 }
-
-/**
- * These are the exact inputs to Governance Style's democratic-health score.
- * Moving every member by the same amount moves the weighted basket by that
- * amount before the separate party-competition penalty is applied.
- */
-export const DEMOCRATIC_HEALTH_METRIC_IDS = [
-  "governance.participation",
-  "governance.openness",
-  "governance.integrity",
-  "governance.administration",
-  "order.dueProcess",
-  "order.courts",
-  "order.communityTrust",
-  "order.safety",
-  "society.civicLife",
-] as const satisfies readonly PoliticalMetricId[];
 
 const clampMetric = (value: number): number => Math.max(0, Math.min(100, value));
 

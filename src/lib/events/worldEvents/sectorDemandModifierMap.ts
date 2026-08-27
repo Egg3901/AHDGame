@@ -57,3 +57,37 @@ export async function loadActiveSectorDemandModifierPctMap(
   }
   return map;
 }
+
+/**
+ * Batch-load output-demand shifts. Unlike `sectorDemandModifier`, these move
+ * demand for what the sector sells, so positive values improve seller margins
+ * and negative values depress them.
+ */
+export async function loadActiveSectorOutputDemandModifierPctMap(
+  db: Db,
+  currentTurn: number
+): Promise<Map<string, number>> {
+  const modifiers = await getCountryModifiersCollection(db)
+    .find({
+      kind: "sectorOutputDemandModifier",
+      expiresAtTurn: { $gt: currentTurn },
+    })
+    .toArray();
+
+  const map = new Map<string, number>();
+  for (const modifier of modifiers) {
+    if (modifier.kind !== "sectorOutputDemandModifier") continue;
+    const key = `${modifier.countryId}:${modifier.sectorType}`;
+    map.set(key, (map.get(key) ?? 0) + modifier.pct);
+  }
+  for (const [key, pct] of map) {
+    map.set(
+      key,
+      Math.max(
+        -SECTOR_DEMAND_MODIFIER_TOTAL_CAP_PCT,
+        Math.min(SECTOR_DEMAND_MODIFIER_TOTAL_CAP_PCT, pct)
+      )
+    );
+  }
+  return map;
+}

@@ -223,7 +223,7 @@ describe("warPressures", () => {
       sideACountries: ["US" as CountryId],
       sideBCountries: ["RU" as CountryId],
       intensity: 70,
-      startTurn: 100,
+      limitedWarSinceTurn: 100,
     };
     expect(warAcclimationMultiplier(war, 112)).toBe(1);
     expect(warAcclimationMultiplier(war, 132)).toBe(0.8);
@@ -237,8 +237,14 @@ describe("warPressures", () => {
   });
 
   it("restores full pressure when a prolonged war becomes hot", () => {
-    expect(warAcclimationMultiplier({ intensity: 85, startTurn: 1 }, 200)).toBe(1);
-    expect(warAcclimationMultiplier({ intensity: 100, startTurn: 1 }, 200)).toBe(1);
+    expect(warAcclimationMultiplier({ intensity: 85, limitedWarSinceTurn: 1 }, 200)).toBe(1);
+    expect(warAcclimationMultiplier({ intensity: 100, limitedWarSinceTurn: 1 }, 200)).toBe(1);
+  });
+
+  it("starts a fresh grace period after a hot war cools", () => {
+    const cooled = { intensity: 70, limitedWarSinceTurn: 188 };
+    expect(warAcclimationMultiplier(cooled, 200)).toBe(1);
+    expect(warAcclimationMultiplier(cooled, 220)).toBe(0.8);
   });
 });
 
