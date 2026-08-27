@@ -38,6 +38,7 @@ export interface TensionPressureView extends TensionPressureBreakdown {
   activeCrisisCount: number;
   totalWarheads: number;
   activeWarCount: number;
+  nuclearWarCount: number;
 }
 
 export function ColdWarHelp({ label, children }: { label: string; children: React.ReactNode }) {
@@ -302,8 +303,8 @@ export function TensionHeader({
                 WHAT HOLDS THE FLOOR AT {pressures.floor}
               </h2>
               <ColdWarHelp label="Pressure floor">
-                One-off spikes fade. These standing pressures do not. The index moves 8 percent of
-                the gap toward this floor each turn, with upward movement occurring twice as fast.
+                One-off spikes fade. These standing pressures do not. The index cannot fall below
+                this floor and cools 8 percent of the remaining gap each turn when it is above it.
               </ColdWarHelp>
             </div>
             <div
@@ -342,8 +343,8 @@ export function TensionHeader({
               <PressureCard
                 label="WARS"
                 value={pressures.wars}
-                detail={`${pressures.activeWarCount} active`}
-                help="Every active war on the Conflicts board pushes the floor by its intensity. A war with the two superpowers on opposing sides weighs far more than any other, capped at 45 in total."
+                detail={`${pressures.activeWarCount} active, ${pressures.nuclearWarCount} nuclear`}
+                help="Every active war on the Conflicts board pushes the floor by its intensity. A war with nuclear-armed countries on opposing sides weighs far more than any other, capped at 45 in total."
               />
             </div>
           </div>

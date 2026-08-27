@@ -99,7 +99,7 @@ export const WIKI_LAST_UPDATED: Record<string, string> = {
   "imperial-characters": "2026-08-21",
   "index-funds": "2026-08-12",
   "interbank-lending": "2026-08-20",
-  "international-organizations": "2026-08-11",
+  "international-organizations": "2026-08-27",
   "jp-overview": "2026-08-20",
   "labour-and-wages": "2026-08-21",
   "line-of-credit": "2026-08-21",

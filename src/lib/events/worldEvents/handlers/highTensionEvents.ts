@@ -1,14 +1,14 @@
 /**
- * High-tension society events — four executive decision events (panicBuying,
+ * High-tension society events: four executive decision events (panicBuying,
  * bankRun, civilDefenseFever, warScareProtests), each gated by `minTension`
  * bounds in their definitions (see lib/coldwar/tension.ts bands) so they only
  * fire while the world is genuinely frightened. Per plan §2.2, country events
- * skip the primaryStat roll branch — gamble options use multi-tier outcome
+ * skip the primaryStat roll branch. Gamble options use multi-tier outcome
  * tables over the instance's raw 1-100 roll, exactly like the era-gated Cold
  * War handlers in coldWarWorldEvents.ts.
  *
  * Vacant-executive safety (plan §7): every `defaultOptionId` below is
- * treasury-neutral — the treasury-negative options (release, guarantee, fund)
+ * treasury-neutral. The treasury-negative options (release, guarantee, fund)
  * are never the default.
  */
 import type { EventHandler } from "@/lib/events/substrate/types";

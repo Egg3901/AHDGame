@@ -1,16 +1,22 @@
+import type { Db } from "mongodb";
 import { describe, expect, it } from "vitest";
+import { createMockDb } from "@/lib/test-utils/mockDb";
 import {
+  applyTensionEvent,
   clampTension,
-  isSuperpowerClash,
+  isNuclearWar,
+  nuclearArmedCountryIds,
+  runTensionTurn,
   stepTension,
   tensionBand,
   tensionFloor,
   tensionPressureBreakdown,
+  warDeclarationTensionDelta,
   warPressures,
   TENSION_BASELINE,
 } from "./tension";
 
-const NO_WARS = { superpowerWarIntensity: 0, otherWarIntensity: 0 };
+const NO_WARS = { nuclearWarIntensity: 0, otherWarIntensity: 0 };
 
 describe("tensionBand", () => {
   it("maps the full range to the five bands", () => {
@@ -54,19 +60,19 @@ describe("tensionFloor", () => {
       escalationLevel: 99,
       activeCrises: 99,
       totalWarheads: 1e6,
-      superpowerWarIntensity: 999,
+      nuclearWarIntensity: 999,
       otherWarIntensity: 999,
     });
     // 12 + 30 + 12 + 18 + 45 = 117, clamped to the scale's ceiling.
     expect(hot).toBe(100);
   });
 
-  it("a superpower shooting war alone parks the floor in CRISIS", () => {
+  it("a nuclear shooting war alone parks the floor in CRISIS", () => {
     const floor = tensionFloor({
       escalationLevel: 0,
       activeCrises: 0,
       totalWarheads: 400,
-      superpowerWarIntensity: 70,
+      nuclearWarIntensity: 70,
       otherWarIntensity: 0,
     });
     // 12 baseline + 18 arsenal cap-ish + 31.5 war term.
@@ -74,16 +80,16 @@ describe("tensionFloor", () => {
     expect(tensionBand(floor)).toBe("CRISIS");
   });
 
-  it("weighs a proxy war far lighter than a superpower clash of equal intensity", () => {
+  it("weighs a proxy war far lighter than a nuclear war of equal intensity", () => {
     const base = { escalationLevel: 0, activeCrises: 0, totalWarheads: 0 };
     const clash = tensionPressureBreakdown({
       ...base,
-      superpowerWarIntensity: 70,
+      nuclearWarIntensity: 70,
       otherWarIntensity: 0,
     }).wars;
     const proxy = tensionPressureBreakdown({
       ...base,
-      superpowerWarIntensity: 0,
+      nuclearWarIntensity: 0,
       otherWarIntensity: 70,
     }).wars;
     expect(clash).toBeGreaterThan(proxy * 3);
@@ -91,29 +97,78 @@ describe("tensionFloor", () => {
 });
 
 describe("warPressures", () => {
-  it("splits superpower clashes from every other war", () => {
-    const result = warPressures([
-      { sideACountries: ["US"], sideBCountries: ["DD", "RU"], intensity: 70 },
-      { sideACountries: ["UK"], sideBCountries: ["EG"], intensity: 40 },
+  const nuclearCountries = new Set(["US", "RU", "UK"]);
+
+  it("splits wars with nuclear belligerents on opposing sides from every other war", () => {
+    const result = warPressures(
+      [
+        { sideACountries: ["US"], sideBCountries: ["DD", "RU"], intensity: 70 },
+        { sideACountries: ["UK"], sideBCountries: ["EG"], intensity: 40 },
+      ],
+      nuclearCountries
+    );
+    expect(result).toEqual({
+      nuclearWarIntensity: 70,
+      otherWarIntensity: 40,
+      activeWarCount: 2,
+      nuclearWarCount: 1,
+    });
+  });
+
+  it("detects any opposing nuclear powers, not only the US and Russia", () => {
+    expect(isNuclearWar({ sideACountries: ["RU"], sideBCountries: ["US"] }, nuclearCountries)).toBe(
+      true
+    );
+    expect(isNuclearWar({ sideACountries: ["US"], sideBCountries: ["UK"] }, nuclearCountries)).toBe(
+      true
+    );
+  });
+
+  it("does not classify a war as nuclear when the nuclear powers share a side", () => {
+    expect(
+      isNuclearWar({ sideACountries: ["US", "RU"], sideBCountries: ["DE"] }, nuclearCountries)
+    ).toBe(false);
+  });
+
+  it("uses the live stockpile instead of assuming a named country is nuclear armed", () => {
+    const armed = nuclearArmedCountryIds([
+      { _id: "US", warheads: 522 },
+      { _id: "RU", warheads: 0 },
+      { _id: "UK", warheads: 12 },
     ]);
-    expect(result).toEqual({ superpowerWarIntensity: 70, otherWarIntensity: 40 });
-  });
-
-  it("detects the clash in either side order", () => {
-    expect(isSuperpowerClash({ sideACountries: ["RU"], sideBCountries: ["US"] })).toBe(true);
-    expect(isSuperpowerClash({ sideACountries: ["US", "UK"], sideBCountries: ["RU"] })).toBe(true);
-  });
-
-  it("both superpowers on the SAME side is not a clash", () => {
-    expect(isSuperpowerClash({ sideACountries: ["US", "RU"], sideBCountries: ["DE"] })).toBe(false);
+    expect(isNuclearWar({ sideACountries: ["US"], sideBCountries: ["RU"] }, armed)).toBe(false);
+    expect(isNuclearWar({ sideACountries: ["US"], sideBCountries: ["UK"] }, armed)).toBe(true);
   });
 
   it("clamps intensity into [0, 100] per war", () => {
-    const result = warPressures([
-      { sideACountries: ["US"], sideBCountries: ["RU"], intensity: 250 },
-      { sideACountries: ["UK"], sideBCountries: ["EG"], intensity: -10 },
-    ]);
-    expect(result).toEqual({ superpowerWarIntensity: 100, otherWarIntensity: 0 });
+    const result = warPressures(
+      [
+        { sideACountries: ["US"], sideBCountries: ["RU"], intensity: 250 },
+        { sideACountries: ["UK"], sideBCountries: ["EG"], intensity: -10 },
+      ],
+      nuclearCountries
+    );
+    expect(result).toEqual({
+      nuclearWarIntensity: 100,
+      otherWarIntensity: 0,
+      activeWarCount: 2,
+      nuclearWarCount: 1,
+    });
+  });
+
+  it("gives a nuclear war the largest declaration spike", () => {
+    expect(
+      warDeclarationTensionDelta(
+        { type: "interstate", sideACountries: ["US"], sideBCountries: ["DD", "RU"] },
+        nuclearCountries
+      )
+    ).toBe(20);
+    expect(
+      warDeclarationTensionDelta(
+        { type: "interstate", sideACountries: ["US"], sideBCountries: ["DD"] },
+        nuclearCountries
+      )
+    ).toBe(10);
   });
 });
 
@@ -126,15 +181,64 @@ describe("stepTension", () => {
     expect(next).toBeGreaterThan(TENSION_BASELINE);
   });
 
-  it("rises toward a higher floor when standing pressure exceeds the value", () => {
+  it("enforces a newly higher standing-pressure floor immediately", () => {
     const hot = { escalationLevel: 5, activeCrises: 2, totalWarheads: 100, ...NO_WARS };
     const next = stepTension(TENSION_BASELINE, hot);
-    expect(next).toBeGreaterThan(TENSION_BASELINE);
-    expect(next).toBeLessThanOrEqual(tensionFloor(hot));
+    expect(next).toBe(tensionFloor(hot));
   });
 
   it("is a fixed point exactly at the floor", () => {
     expect(stepTension(TENSION_BASELINE, quiet)).toBe(TENSION_BASELINE);
+  });
+});
+
+describe("stored pressure floor", () => {
+  it("prevents a detente event from dropping tension below ongoing wartime pressure", async () => {
+    const db = createMockDb();
+    db.collection("coldWarTension");
+    db.collectionMocks.coldWarTension!.findOne.mockResolvedValue({
+      _id: "current",
+      value: 72,
+      pressureFloor: 68.5,
+      updatedTurn: 435,
+      events: [],
+      updatedAt: new Date(),
+    });
+
+    const next = await applyTensionEvent(
+      db as unknown as Db,
+      435,
+      "detente",
+      "Negotiated settlement",
+      -8
+    );
+
+    expect(next.value).toBe(68.5);
+    expect(next.events[0]?.delta).toBe(-3.5);
+  });
+
+  it("stores the current floor and lifts legacy low tension to it in one turn", async () => {
+    const db = createMockDb();
+    db.collection("coldWarTension");
+    db.collectionMocks.coldWarTension!.findOne.mockResolvedValue({
+      _id: "current",
+      value: 20.5,
+      updatedTurn: 435,
+      events: [],
+      updatedAt: new Date(),
+    });
+    const pressures = {
+      escalationLevel: 1,
+      activeCrises: 1,
+      totalWarheads: 1214,
+      nuclearWarIntensity: 70,
+      otherWarIntensity: 0,
+    };
+
+    const next = await runTensionTurn(db as unknown as Db, 436, pressures);
+
+    expect(next.pressureFloor).toBe(tensionFloor(pressures));
+    expect(next.value).toBe(next.pressureFloor);
   });
 });
 

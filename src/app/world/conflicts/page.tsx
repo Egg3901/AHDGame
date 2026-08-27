@@ -10,6 +10,7 @@ import { getVietnamEscalationSummary, VIETNAM_RUNGS } from "@/lib/crises/vietnam
 import { TensionHeader, type NuclearPowerView } from "./_coldwar/TensionHeader";
 import {
   getColdWarTension,
+  nuclearArmedCountryIds,
   tensionBand,
   tensionPressureBreakdown,
   warPressures,
@@ -61,17 +62,20 @@ export default async function ConflictsPage() {
   const activeCrisisCount = responseCrises.length;
 
   const totalWarheads = programs.reduce((sum, program) => sum + Math.max(0, program.warheads), 0);
+  const warSummary = warPressures(
+    docs.map((doc) => ({
+      sideACountries: doc.sideA?.countries ?? [],
+      sideBCountries: doc.sideB?.countries ?? [],
+      intensity: doc.intensity ?? 0,
+    })),
+    nuclearArmedCountryIds(programs)
+  );
   const pressureBreakdown = tensionPressureBreakdown({
     escalationLevel: vietnam.level,
     activeCrises: activeCrisisCount,
     totalWarheads,
-    ...warPressures(
-      docs.map((d) => ({
-        sideACountries: d.sideA?.countries ?? [],
-        sideBCountries: d.sideB?.countries ?? [],
-        intensity: d.intensity ?? 0,
-      }))
-    ),
+    nuclearWarIntensity: warSummary.nuclearWarIntensity,
+    otherWarIntensity: warSummary.otherWarIntensity,
   });
 
   // Who holds the bomb: any programme with a stockpile or an adopted node.
@@ -106,7 +110,8 @@ export default async function ConflictsPage() {
             escalationLevel: vietnam.level,
             activeCrisisCount,
             totalWarheads,
-            activeWarCount: docs.length,
+            activeWarCount: warSummary.activeWarCount,
+            nuclearWarCount: warSummary.nuclearWarCount,
           }}
           dials={dials}
         />

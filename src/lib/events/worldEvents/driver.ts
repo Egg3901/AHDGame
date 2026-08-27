@@ -295,7 +295,7 @@ export async function processWorldEventsTurn(
   // One shared reading for every country this turn. The tension phase runs
   // earlier in the same turn, so this is the fresh value. A world with the
   // cold-war subsystem off holds the baseline, which keeps tension-gated
-  // definitions dormant there — correct, not a gap.
+  // definitions dormant there, which is intentional.
   const currentTension = definitions.some((d) => d.minTension != null || d.maxTension != null)
     ? (await getColdWarTension(db)).value
     : undefined;

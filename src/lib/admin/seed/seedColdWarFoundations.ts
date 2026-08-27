@@ -6,7 +6,11 @@ import { allLivingConflictDefs } from "@/lib/livingConflict/registry";
 import { emptyConflictState } from "@/lib/livingConflict/engine";
 import { normalizeCampaignState } from "@/lib/livingConflict/campaign";
 import { DEFAULT_ADOPTED, DEFAULT_POINTS, keyOf } from "@/lib/military/doctrineTree";
-import { tensionPressureBreakdown, warPressures } from "@/lib/coldwar/tension";
+import {
+  nuclearArmedCountryIds,
+  tensionPressureBreakdown,
+  warPressures,
+} from "@/lib/coldwar/tension";
 import { listActiveConflicts } from "@/lib/db/collections/conflicts";
 import {
   historicalAdoptedNodes,
@@ -29,6 +33,7 @@ type BaselineProgram = Omit<NuclearProgram, "updatedAt">;
 type TensionSeedDocument = {
   _id: string;
   value: number;
+  pressureFloor: number;
   updatedTurn: number;
   events: unknown[];
   updatedAt: Date;
@@ -158,7 +163,9 @@ export async function seedColdWarFoundations(
   }
 
   if (!tensionExists) {
-    const activeCrises = await db.collection("crises").countDocuments({ status: "active" });
+    const activeCrises = await db
+      .collection("crises")
+      .countDocuments({ status: "active", globalResponse: { $exists: true } });
     const escalationLevel =
       existingConflicts.find((conflict) => conflict.defKey === "vietnam")?.phaseLevel ?? 0;
     const warheadsByCountry = new Map(
@@ -172,25 +179,36 @@ export async function seedColdWarFoundations(
       0
     );
     const conflictWars = await listActiveConflicts(db);
-    const value = tensionPressureBreakdown({
+    const warSummary = warPressures(
+      conflictWars.map((conflict) => ({
+        sideACountries: conflict.sideA?.countries ?? [],
+        sideBCountries: conflict.sideB?.countries ?? [],
+        intensity: conflict.intensity ?? 0,
+      })),
+      nuclearArmedCountryIds(
+        [...warheadsByCountry].map(([countryId, warheads]) => ({ _id: countryId, warheads }))
+      )
+    );
+    const pressureFloor = tensionPressureBreakdown({
       escalationLevel,
       activeCrises,
       totalWarheads,
-      ...warPressures(
-        conflictWars.map((c) => ({
-          sideACountries: c.sideA?.countries ?? [],
-          sideBCountries: c.sideB?.countries ?? [],
-          intensity: c.intensity ?? 0,
-        }))
-      ),
+      nuclearWarIntensity: warSummary.nuclearWarIntensity,
+      otherWarIntensity: warSummary.otherWarIntensity,
     }).floor;
-    await db
-      .collection<TensionSeedDocument>("coldWarTension")
-      .updateOne(
-        { _id: "current" },
-        { $setOnInsert: { value, updatedTurn: turn, events: [], updatedAt: now } },
-        { upsert: true }
-      );
+    await db.collection<TensionSeedDocument>("coldWarTension").updateOne(
+      { _id: "current" },
+      {
+        $setOnInsert: {
+          value: pressureFloor,
+          pressureFloor,
+          updatedTurn: turn,
+          events: [],
+          updatedAt: now,
+        },
+      },
+      { upsert: true }
+    );
   }
 
   await db.collection<GameState>("gameState").updateOne(

@@ -39,6 +39,7 @@ function setup(over: Partial<React.ComponentProps<typeof TensionHeader>> = {}) {
         activeCrisisCount: 2,
         totalWarheads: 24,
         activeWarCount: 0,
+        nuclearWarCount: 0,
       }}
       dials={{ source: "tension", procurementMultiplier: 1.15, detenteGoodwillPenalty: 6 }}
       {...over}

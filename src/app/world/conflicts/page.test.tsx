@@ -71,6 +71,7 @@ vi.mock("@/lib/crises/vietnamEscalation", () => ({
 }));
 vi.mock("@/lib/coldwar/tension", () => ({
   getColdWarTension: vi.fn(async () => ({ value: 12, events: [] })),
+  nuclearArmedCountryIds: vi.fn(() => new Set()),
   tensionBand: vi.fn(() => "detente"),
   tensionPressureBreakdown: vi.fn(() => ({
     floor: 12,
@@ -80,7 +81,12 @@ vi.mock("@/lib/coldwar/tension", () => ({
     nuclear: 0,
     wars: 0,
   })),
-  warPressures: vi.fn(() => ({ superpowerWarIntensity: 0, otherWarIntensity: 0 })),
+  warPressures: vi.fn(() => ({
+    nuclearWarIntensity: 0,
+    otherWarIntensity: 0,
+    activeWarCount: 0,
+    nuclearWarCount: 0,
+  })),
 }));
 vi.mock("@/lib/coldwar/dials", () => ({
   getColdWarDials: vi.fn(async () => ({ defcon: 4 })),
