@@ -9,6 +9,7 @@ import type {
   TreatyEntry,
 } from "@/lib/db/types/conflict";
 import type { Front } from "@/lib/military/combat";
+import { capacityOfTerrain } from "@/lib/military/combat";
 import { homeRegionOf } from "@/lib/military/regionTopology";
 import { getRegion } from "@/lib/military/regions";
 import { getConflictsCollection } from "@/lib/db/collections/conflicts";
@@ -221,6 +222,8 @@ export function conflictToFront(c: ConflictDoc): Front {
     // Absent on every conflict written before sea access existed, so derive rather than
     // default: a stored `false` would quietly beach every navy in the game.
     seaAccess: c.seaAccess ?? deriveSeaAccess(hostEntitiesOf(c), c.terrain),
+    // How much can stand in the line here. Derived from the ground, like `terr`.
+    capacity: capacityOfTerrain(c.terrain),
     sev: c.severity,
     west: c.sideA.label,
     east: c.sideB.label,

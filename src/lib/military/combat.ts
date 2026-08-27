@@ -6,7 +6,7 @@ import type { NatMods } from "./doctrineTree";
 import type { GenMods } from "./generals";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import { VETM, eqAvg, computeEffectivePower } from "@/lib/constants/military";
-import { NAVAL_REACH } from "./config";
+import { NAVAL_REACH, FRONT_CAPACITY_BASE, TERRAIN_CAPACITY } from "./config";
 
 // VETM + eqAvg live canonically in constants/military.ts (the one power model);
 // re-exported here so combat-suite consumers keep importing from "./combat".
@@ -578,6 +578,11 @@ export interface Front {
    * `navalReach` treats as inland.
    */
   seaAccess?: boolean;
+  /**
+   * Combat value this front can hold in contact at once. Set by `conflictToFront` from
+   * the terrain. Absent means unknown, which `planEngagement` treats as the base width.
+   */
+  capacity?: number;
   sev?: string;
   west?: string;
   east?: string;
@@ -761,6 +766,18 @@ export function terrainFactor(
  * both. If amphibious assault ever needs its own band, that is a third class, not a
  * reclassification of this one.
  */
+/**
+ * How much combat value this ground can hold in contact, from its terrain.
+ *
+ * Unrecognised terrain falls back to the base rather than inventing a family, matching
+ * `terrainFactor`, which returns 1 for the same reason.
+ */
+export function capacityOfTerrain(terrain: string | undefined): number {
+  const family = terrainFamilyOf(terrain);
+  const mult = family ? TERRAIN_CAPACITY[family] : 1;
+  return FRONT_CAPACITY_BASE * mult;
+}
+
 export function navalReach(
   front: Pick<Front, "seaAccess"> | undefined,
   domain: string,

@@ -28,6 +28,7 @@ import {
   roleDef,
   effUpkeep,
   frontById,
+  capacityOfTerrain,
 } from "./combat";
 
 /**
@@ -428,7 +429,81 @@ function theaterCommandBuff(ctxs: BattleContext[], frontId: string): number {
  * generals — because `cv()` applies those per unit. That is what lets a coalition
  * fight as one army without any nation's doctrine leaking onto another's troops.
  */
-function ownSideProfile(ctxs: BattleContext[], frontId: string): OwnSideProfile {
+/** Which formations stand in the line at a front, and which are held in depth. */
+export interface EngagementPlan {
+  inContact: Set<string>;
+  /** unit id -> effective role, for the overflow only. Empty when the side fits. */
+  roleOf: Map<string, string>;
+}
+
+/** Who stands in the line first. The player's own role choice leads. */
+const ENGAGE_PRIORITY: Record<string, number> = {
+  frontline: 0,
+  flank: 1,
+  support: 2,
+  deepstrike: 3,
+  reserve: 4,
+  rear: 5,
+};
+
+/**
+ * Fill a front to `capacity` in combat value; hold everything past it in depth.
+ *
+ * Computed ONCE for a whole side and consumed by both the strength path
+ * (`ownSideProfile`) and the casualty path (`unitOutcomes`). Those were independent, and
+ * that is exactly how a formation could be out of contact for strength purposes and go
+ * on bleeding anyway.
+ *
+ * Order: the player's own role assignment first, so the existing role system is the
+ * control surface and there is no new concept to learn; then combat value, so the best
+ * formations hold the line; then unit id, so a tie never depends on the order Mongo
+ * returned the units in. That last tiebreak is not cosmetic -- the roster reaches the
+ * battle report.
+ *
+ * Deliberately NOT applied to `supplyState`: a formation held in depth really is doing
+ * rear-area work, and its logistics presence is not the question the cap is asking.
+ *
+ * One formation is always in contact. A side that fielded nothing would not be a battle.
+ */
+export function planEngagement(
+  ctxs: BattleContext[],
+  frontId: string,
+  capacity: number
+): EngagementPlan {
+  const rows: { id: string; role: string; cv: number }[] = [];
+  for (const ctx of ctxs) {
+    for (const u of ctx.units.filter((x) => x.theaterId === frontId)) {
+      rows.push({ id: String(u._id), role: getRole(ctx.positions, u), cv: cv(ctx, u) });
+    }
+  }
+  rows.sort((a, b) => {
+    const pa = ENGAGE_PRIORITY[a.role] ?? 9;
+    const pb = ENGAGE_PRIORITY[b.role] ?? 9;
+    if (pa !== pb) return pa - pb;
+    if (b.cv !== a.cv) return b.cv - a.cv;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+
+  const inContact = new Set<string>();
+  const roleOf = new Map<string, string>();
+  let used = 0;
+  for (const row of rows) {
+    if (inContact.size === 0 || used + row.cv <= capacity) {
+      used += row.cv;
+      inContact.add(row.id);
+    } else {
+      // The rear treatment: engage 0.10, casualties 0.15. In depth, not deleted.
+      roleOf.set(row.id, "rear");
+    }
+  }
+  return { inContact, roleOf };
+}
+
+function ownSideProfile(
+  ctxs: BattleContext[],
+  frontId: string,
+  plan?: EngagementPlan
+): OwnSideProfile {
   // Terrain is a property of the front, not of its id. Resolved once here off the
   // first context that knows this front — every contingent is fighting on the same
   // ground, so they must all be weighted by the same terrain.
@@ -459,7 +534,7 @@ function ownSideProfile(ctxs: BattleContext[], frontId: string): OwnSideProfile 
         navalReach(front, u.domain, card.traitKeys);
       rawTot += base;
       tfTot += adj;
-      const role = getRole(ctx.positions, u);
+      const role = plan?.roleOf.get(String(u._id)) ?? getRole(ctx.positions, u);
       roleMass[role] += adj;
       engaged.push({ cv: adj * roleDef(role).engage, s: statObj(u), domain: u.domain });
       if (role === "deepstrike") {
@@ -607,7 +682,8 @@ function unitOutcomes(
   ratio: number,
   r: () => number,
   rearShare: number,
-  reserveRes: number
+  reserveRes: number,
+  plan?: EngagementPlan
 ): { unitResults: UnitResult[]; loss: number } {
   const att = units.filter((u) => u.theaterId === frontId);
   const cvOf = (u: CombatUnit) => combatValue(u, natMods, generalMods(genForUnit(binding, u)));
@@ -619,7 +695,8 @@ function unitOutcomes(
   let loss = 0;
   const unitResults: UnitResult[] = att.map((u) => {
     const st = statObj(u);
-    const rc = roleDef(getRole(positions, u)).cas;
+    const role = plan?.roleOf.get(String(u._id)) ?? getRole(positions, u);
+    const rc = roleDef(role).cas;
     const share = cvOf(u) / rawTotal;
     const armorMit = 1 - (st.ar / 100) * 0.45;
     const moraleMit = 1 - ((st.mo - 50) / 100) * 0.3;
@@ -674,7 +751,7 @@ function unitOutcomes(
     return {
       id: String(u._id),
       name: u.name,
-      role: getRole(positions, u),
+      role,
       dom: u.domain,
       type: u.type,
       casualties,
@@ -858,6 +935,10 @@ function sideCtx(side: BattleSide): BattleContext {
  *  the engagement that will be resolved. Pure — no rng, no seed. */
 export interface PvpForecast {
   front: Front;
+  /** Who each side actually got into the line. Reused by `resolvePvpBattle` so the
+   *  strength and casualty paths cannot disagree about who fought. */
+  attackerPlan: EngagementPlan;
+  defenderPlan: EngagementPlan;
   attStr: number;
   defStr: number;
   /** Attacker perspective, reserve-adjusted, clamped 0.02..0.98. */
@@ -877,8 +958,13 @@ export function battleForecast(
   // Either coalition carries the same fronts map; take whichever is populated so an
   // empty side cannot silently drop the battle onto RESERVE_FRONT.
   const front = frontById(theaterId, attackers[0]?.fronts ?? defenders[0]?.fronts);
-  const PA = ownSideProfile(attackers.map(sideCtx), theaterId);
-  const PD = ownSideProfile(defenders.map(sideCtx), theaterId);
+  // The front holds only so much in contact. Planned per side, before any strength is
+  // measured, so depth never counts toward the fight nor bleeds for it.
+  const capacity = front.capacity ?? capacityOfTerrain(front.terrain);
+  const attackerPlan = planEngagement(attackers.map(sideCtx), theaterId, capacity);
+  const defenderPlan = planEngagement(defenders.map(sideCtx), theaterId, capacity);
+  const PA = ownSideProfile(attackers.map(sideCtx), theaterId, attackerPlan);
+  const PD = ownSideProfile(defenders.map(sideCtx), theaterId, defenderPlan);
   const aggA = sideAgg(PA.engaged);
   const aggD = sideAgg(PD.engaged);
   const am = sideMults(aggA, aggD);
@@ -921,6 +1007,8 @@ export function battleForecast(
     oddsPct: Math.round(ratio * 100),
     attackerProfile: PA,
     defenderProfile: PD,
+    attackerPlan,
+    defenderPlan,
   };
 }
 
@@ -1014,7 +1102,8 @@ export function resolvePvpBattle(
   const sideOutcomes = (
     sides: BattleSide[],
     profile: OwnSideProfile,
-    sideRatio: number
+    sideRatio: number,
+    plan: EngagementPlan
   ): { unitResults: UnitResult[]; loss: number } => {
     const unitResults: UnitResult[] = [];
     let loss = 0;
@@ -1028,7 +1117,8 @@ export function resolvePvpBattle(
         sideRatio,
         r,
         profile.rearShare,
-        profile.reserveRes
+        profile.reserveRes,
+        plan
       );
       // Stamp attribution on the way into the shared list. This is the only point
       // that still knows which contingent produced these results — once they are
@@ -1038,8 +1128,8 @@ export function resolvePvpBattle(
     }
     return { unitResults, loss };
   };
-  const attOut = sideOutcomes(attackers, PA, ratio);
-  const defOut = sideOutcomes(defenders, PD, 1 - ratio);
+  const attOut = sideOutcomes(attackers, PA, ratio, fc.attackerPlan);
+  const defOut = sideOutcomes(defenders, PD, 1 - ratio, fc.defenderPlan);
 
   // Breaking off saves men: the side that disengaged takes a fraction of the
   // casualties it would have fighting the engagement out.

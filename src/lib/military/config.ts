@@ -191,6 +191,36 @@ export const ATTRITION = {
  * carrier that lost three men ended a battle at 8 readiness while an infantry division
  * that lost thousands ended at 25.
  */
+/**
+ * How much combat value a front can hold in contact at once, on open ground.
+ *
+ * A front has finite width. Value beyond this is in DEPTH: it neither fights nor bleeds
+ * this turn. Bounds the casualty growth at its source -- side totals used to go as
+ * roughly `0.6N + 1`, so committing more men cost more men even when they could not all
+ * reach the line -- and makes the ground cap a consequence of frontage rather than an
+ * arbitrary rule.
+ *
+ * Calibrated so a normal national army fits entirely (East Germany's eleven formations
+ * are 731 combat value) while a thirty-six-formation superstack is cut to about twelve.
+ * Tightening this to 550 starts punishing a nation for fielding its own army, which is
+ * the wrong behaviour.
+ */
+export const FRONT_CAPACITY_BASE = 900;
+
+/** How much of that width each terrain family actually offers. */
+export const TERRAIN_CAPACITY = {
+  /** The armoured corridor. The calibration case. */
+  temperate: 1.0,
+  /** Open desert, the widest frontage there is. */
+  arid: 1.1,
+  /** No land frontage to constrict. */
+  maritime: 1.0,
+  /** Canopy, swamp and delta break up a line. */
+  littoral: 0.8,
+  /** Passes constrict everything. */
+  highland: 0.65,
+} as const;
+
 export const READINESS_DROP_BASE = 12;
 
 /**
