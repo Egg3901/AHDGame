@@ -51,6 +51,7 @@ vi.mock("@/lib/character/performRelocation", () => ({
     withdrawnNationalPartyElections: 0,
     withdrawnCommitteeElections: 0,
     countryChanged: false,
+    relinquishedCommands: [],
   }),
 }));
 vi.mock("@/lib/corporations/issueRelocationBond", () => ({
