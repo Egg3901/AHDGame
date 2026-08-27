@@ -66,10 +66,7 @@ import { COUNTRY_CONFIGS as COUNTRIES } from "@/lib/constants/countries";
 import { ensureFederalBudget } from "@/lib/turn/ensureFederalBudget";
 import { getGameState } from "@/lib/gameState";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
-import {
-  isDefenceProcurementPaused,
-  DEFENCE_PROCUREMENT_PAUSED_MESSAGE,
-} from "@/lib/military/procurementGate";
+import { isProcurementBlocked } from "@/lib/military/procurementGate";
 import { resolveDefenseLineFrom } from "@/lib/turn/defenseEnvelope";
 import {
   getDefenceContractAvailability,
@@ -141,10 +138,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     if ("error" in guard) return guard.error;
     const { db, countryId } = guard;
 
-    // Kill switch: no NEW contracts while procurement is frozen. Cancel (DELETE) stays open so
-    // a minister can still wind down open orders, and active contracts keep delivering.
-    if (await isDefenceProcurementPaused(db)) {
-      return NextResponse.json({ error: DEFENCE_PROCUREMENT_PAUSED_MESSAGE }, { status: 409 });
+    // No NEW contracts while procurement is frozen, either by the world kill switch
+    // or by a peace settlement barring this country specifically. Cancel (DELETE)
+    // stays open so a minister can still wind down open orders, and active
+    // contracts keep delivering.
+    const procurementGateState = await getGameState();
+    const gate = await isProcurementBlocked(db, countryId, procurementGateState?.currentTurn ?? 0);
+    if (gate.blocked) {
+      return NextResponse.json({ error: gate.reason }, { status: 409 });
     }
 
     const parsed = await parseJsonBody(request, awardSchema);

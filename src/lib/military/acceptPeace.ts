@@ -2,16 +2,13 @@ import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import type { PeaceOfferDoc } from "@/lib/db/types/peaceOffer";
-import type { FederalBudget } from "@/lib/db/types";
 import { getConflictsCollection } from "@/lib/db/collections/conflicts";
 import { getPeaceOffersCollection } from "@/lib/db/collections/peaceOffers";
-import { convertLocal } from "@/lib/internationalOrganizations/organizationFund";
-import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
-import { ensureFederalBudget } from "@/lib/turn/ensureFederalBudget";
 import { standDownCountry } from "./leaveConflict";
 import { recordTruce } from "./truce";
 import { resolveConflict } from "./resolveConflict";
 import { sideWouldEmpty } from "./peaceOffer";
+import { applyPeaceTerm } from "./applyPeaceTerm";
 import type { Side } from "./occupation";
 
 export interface AcceptPeaceResult {
@@ -74,7 +71,31 @@ export async function acceptPeace(
   );
   if (claim.modifiedCount === 0) return { applied: false, resolved: false };
 
-  await moveIndemnity(db, offer);
+  await applyPeaceTerm(db, offer.term, {
+    imposer: offer.fromCountry,
+    target: offer.toCountry,
+    conflictId: conflict._id,
+    currentTurn,
+  });
+
+  // Stamp what this settlement took, so the war wire can report it. Written here
+  // rather than posted here: this runs on a request path, and a news post made from
+  // a request would fire again on a retry, which is the same reason the settlement
+  // crisis posts from a tick. `emitWarWire` sweeps the stamp on the next turn.
+  await getConflictsCollection(db).updateOne(
+    { _id: conflict._id },
+    {
+      $set: {
+        settlement: {
+          term: offer.term,
+          path: "negotiated" as const,
+          imposedBy: offer.fromCountry,
+          target: offer.toCountry,
+          turn: currentTurn,
+        },
+      },
+    }
+  );
 
   // Treaty release: an ally pulled in to defend this country leaves with it. The war it
   // was brought into is over for the country it came for, and leaving it to fight on
@@ -141,52 +162,15 @@ export async function acceptPeace(
     // truces every remaining cross-side pair, which is why the roster edit above has
     // to have happened first: the leaver already has its truce and must not be
     // included again with a later expiry.
-    await resolveConflict(db, conflict, emptied === "A" ? "B" : "A", currentTurn);
+    // A negotiated WHITE PEACE names no victor, even though one side's roster is the
+    // one that emptied. Both governments walked away, and the record should say so.
+    await resolveConflict(
+      db,
+      conflict,
+      offer.term.kind === "white_peace" ? "stalemate" : emptied === "A" ? "B" : "A",
+      currentTurn
+    );
     return { applied: true, resolved: true };
   }
   return { applied: true, resolved: false };
-}
-
-/**
- * Move the indemnity, once.
- *
- * The amount is quoted in the PAYER's local currency, so it is debited as quoted and
- * CONVERTED before it is credited — every treasury is denominated locally, and moving
- * the raw number would invent or destroy value at the exchange rate. `convertLocal`
- * is a no-op for a same-currency pair, so it is called unconditionally rather than
- * guarded; guarding is how a double conversion gets written.
- *
- * `$inc` on `treasuryBalance` only. `debt.principal` is a DERIVED mirror
- * (`max(0, −treasuryBalance)`) that `treasuryTurn` owns; writing both would create
- * two sources of truth.
- *
- * No affordability check — a payment may push the payer negative, which is what
- * national debt is. Requiring a surplus would mean a country already in debt could
- * never buy peace, which is most of the countries that would want to.
- */
-async function moveIndemnity(db: Db, offer: PeaceOfferDoc): Promise<void> {
-  const { payer, amount } = offer.indemnity;
-  if (!(amount > 0)) return; // A white peace moves no money at all.
-
-  const recipient: CountryId = payer === offer.fromCountry ? offer.toCountry : offer.fromCountry;
-  const preset = await loadWorldPreset(db);
-  const credited = convertLocal(payer, recipient, amount, preset);
-  const now = new Date();
-
-  // Both non-upserting `updateOne`s below match by countryId. If the recipient
-  // has no federalBudget doc (the partial-seed gap ensureFederalBudget exists to
-  // close), the debit lands but the credit matches zero documents and the
-  // indemnity silently vanishes. Heal both parties first so both writes land.
-  await ensureFederalBudget(db, payer, preset);
-  await ensureFederalBudget(db, recipient, preset);
-
-  const budgets = db.collection<FederalBudget>("federalBudget");
-  await budgets.updateOne(
-    { countryId: payer },
-    { $inc: { treasuryBalance: -amount }, $set: { updatedAt: now } }
-  );
-  await budgets.updateOne(
-    { countryId: recipient },
-    { $inc: { treasuryBalance: credited }, $set: { updatedAt: now } }
-  );
 }

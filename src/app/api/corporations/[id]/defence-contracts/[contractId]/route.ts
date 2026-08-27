@@ -19,10 +19,7 @@ import type { CorporateSector } from "@/lib/db/types/corporation";
 import { resolveFillEligibility, FILL_REASON_TEXT } from "@/lib/military/defenceFillEligibility";
 import { getGameState } from "@/lib/gameState";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
-import {
-  isDefenceProcurementPaused,
-  DEFENCE_PROCUREMENT_PAUSED_MESSAGE,
-} from "@/lib/military/procurementGate";
+import { isProcurementBlocked } from "@/lib/military/procurementGate";
 
 const bodySchema = z.object({ action: z.enum(["accept", "decline"]) });
 
@@ -112,8 +109,16 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Accepting turns a pending offer into a live, billing order - a NEW obligation, so it is
     // frozen with awards. Declining only closes an offer and stays open, so a CEO can still
     // clear their board while procurement is paused.
-    if (accept && (await isDefenceProcurementPaused(db))) {
-      return NextResponse.json({ error: DEFENCE_PROCUREMENT_PAUSED_MESSAGE }, { status: 409 });
+    if (accept) {
+      // Barred by the world kill switch, or by a peace settlement that named the
+      // BUYING country. The buyer is the contract's country, not the corporation's
+      // owner: a settlement bars a government from ordering, not a firm from
+      // trading.
+      const gateState = await getGameState();
+      const gate = await isProcurementBlocked(db, contract.countryId, gateState?.currentTurn ?? 0);
+      if (gate.blocked) {
+        return NextResponse.json({ error: gate.reason }, { status: 409 });
+      }
     }
     // The write is guarded on `pending` too, so a double-click or an accept racing the
     // minister's cancel resolves to one winner rather than reviving a withdrawn order.

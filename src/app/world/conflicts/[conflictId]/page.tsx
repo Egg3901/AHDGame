@@ -28,6 +28,8 @@ import { getCabinetSettingsCollection } from "@/lib/db/collections/cabinetSettin
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import { conflictTier, belligerentSideOf } from "@/lib/military/conflictVisibility";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
+import { requirePeaceNegotiator } from "@/lib/api/requirePeaceNegotiator";
 import { INTERNATIONAL_ORGANIZATIONS } from "@/lib/constants/internationalOrganizations";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import { READINESS_DRIFT_STEP } from "@/lib/military/readinessDrift";
@@ -204,7 +206,9 @@ export default async function ConflictRecordPage({
     // whole posting set is sent, not just this conflict's: the route merges other
     // commands' rows back but replaces this CG's own wholesale, so omitting the
     // rest would recall every general they have posted elsewhere.
-    if (ownCommand && doc.status !== "resolved") {
+    // Concluded, not merely resolved: a war awaiting terms takes no more postings,
+    // so offering the lever there would be a control that cannot do anything.
+    if (ownCommand && !isConflictConcluded(doc.status)) {
       const ownUnits = await getMilitaryUnitsCollection(db)
         .find({ countryId: viewerCountry })
         .toArray();
@@ -273,7 +277,10 @@ export default async function ConflictRecordPage({
   // anyone, and a non-belligerent has nothing to declare with. Being strictly
   // narrower, this can never offer an action the route would refuse.
   const canAct =
-    doc.status !== "resolved" &&
+    // Concluded, not merely resolved. A war awaiting terms has stood both rosters
+    // down and the turn phase now fizzles anything declared at it, so offering the
+    // panel here would be a button that cannot work.
+    !isConflictConcluded(doc.status) &&
     ownSide !== null &&
     defensePosition !== "" &&
     (theaterCommander ? theaterCommander === viewerCharacterId : isDefenseHolder);
@@ -329,6 +336,32 @@ export default async function ConflictRecordPage({
       : ownSide === "B"
         ? (doc.sideB.backer ?? "neutral")
         : "neutral";
+  // The dictate panel, shown ONLY to the negotiator of the country that won this
+  // war outright. Null for everyone else, including the losing side and the winning
+  // side's allies: a coalition victory yields one term, and the panel is where that
+  // is visible rather than only enforced by the route.
+  const dictate =
+    doc.status === "terms_pending" &&
+    doc.termsWindow &&
+    viewerCountry === doc.termsWindow.imposer &&
+    authUser?.character?._id &&
+    (
+      await requirePeaceNegotiator(
+        db,
+        viewerCountry,
+        authUser.character._id,
+        authUser.isAdmin === true
+      )
+    ).ok
+      ? {
+          conflictId: doc._id,
+          countryCode: viewerCountry.toLowerCase(),
+          target: doc.termsWindow.target,
+          targetName: COUNTRY_CONFIGS[doc.termsWindow.target]?.name ?? doc.termsWindow.target,
+          turnsLeft: Math.max(0, doc.termsWindow.closesTurn - currentTurn),
+        }
+      : null;
+
   const pendingDecl =
     canAct && viewerCountry ? await getPendingDeclaration(db, viewerCountry, doc._id) : null;
   const actions =
@@ -642,7 +675,7 @@ export default async function ConflictRecordPage({
       id: o._id.toString(),
       leaver: o.fromCountry,
       other: o.toCountry,
-      indemnity: o.indemnity,
+      term: o.term,
       justification: o.justification ?? null,
       turn: o.resolvedTurn ?? o.offeredTurn,
     })),
@@ -654,6 +687,7 @@ export default async function ConflictRecordPage({
     // record does not need to be told they hold none.
     chain: viewerCharacterId ? chain : null,
     actions,
+    dictate,
     postedHere,
     employ,
     whoDeclares,

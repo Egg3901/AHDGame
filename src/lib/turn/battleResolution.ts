@@ -39,6 +39,8 @@ import { listTheaterStates } from "@/lib/db/collections/theaterState";
 import { conflictToFront } from "@/lib/military/createConflict";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import { resolveConflict } from "@/lib/military/resolveConflict";
+import { standDownCountry } from "@/lib/military/leaveConflict";
+import { principalOf, DICTATE_WINDOW_TURNS } from "@/lib/military/principal";
 import { OCCUPATION } from "@/lib/military/config";
 import {
   frontProgress,
@@ -47,6 +49,7 @@ import {
   type Side,
 } from "@/lib/military/occupation";
 import { nextControlSample } from "@/lib/military/warApproval";
+import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
 
 /**
  * Apply a side's outcome to its live units + the generals who led them.
@@ -274,12 +277,30 @@ async function applyOccupation(
   // `resolveColdWarHolds` owns that, because the hold has to be measured on turns
   // where nobody fought — and this function only runs when a battle MOVES the front.
   if (atPole && !isProxyWar) {
-    await resolveConflict(
-      db,
-      { ...moved, supplyA, supplyB },
-      control === 0 ? "A" : "B",
-      currentTurn
-    );
+    const settled = { ...moved, supplyA, supplyB };
+    const victor = control === 0 ? ("A" as const) : ("B" as const);
+    const imposer = principalOf(settled, victor);
+    const target = principalOf(settled, victor === "A" ? "B" : "A");
+
+    // A DICTATE WINDOW rather than an outright resolve, when there are two
+    // governments to address. The fighting stops either way; what the window adds
+    // is the victor's choice of term.
+    //
+    // Both principals must resolve. A generated side has an empty roster and no
+    // government to impose terms on, and a side whose founder has already taken a
+    // separate peace has nobody left holding the claim. In either case this falls
+    // through to the original behaviour, which is a plain resolve.
+    if (imposer && target) {
+      await openTermsWindow(db, settled, victor, imposer, target, currentTurn);
+      // The rosters have gone home even though the war has not ended, so the
+      // in-memory document must say so: an offensive still queued for this tick
+      // would otherwise fight with troops that are already in reserve. This is the
+      // same reason the resolve branch below sets it.
+      conflict.status = "terms_pending";
+      return { control, standDown: true };
+    }
+
+    await resolveConflict(db, settled, victor, currentTurn);
     // Stand-down is part of what this write did, so the in-memory document has to
     // show it too. `resolveConflict` recalls every unit at the front to reserve, so
     // any offensive still queued for this tick would otherwise fight a war that is
@@ -288,6 +309,47 @@ async function applyOccupation(
     return { control, standDown: true };
   }
   return { control, standDown: false };
+}
+
+/**
+ * Stop the fighting and hand the victor a window to name their terms.
+ *
+ * Everything `resolveConflict` does to the ARMIES, and nothing it does to the war's
+ * record: every belligerent stands down through the same `standDownCountry` the
+ * separate-peace path uses, but no winner is stamped, no truce is written, and the
+ * status becomes `terms_pending` rather than `resolved`.
+ *
+ * The truces are deliberately left to the resolve that follows. Writing them here
+ * would start the 240 turns from the moment the shooting stopped rather than from
+ * the settlement, which would quietly shorten every truce by the length of the
+ * window.
+ */
+async function openTermsWindow(
+  db: Db,
+  conflict: ConflictDoc,
+  victor: "A" | "B",
+  imposer: CountryId,
+  target: CountryId,
+  currentTurn: number
+): Promise<void> {
+  await getConflictsCollection(db).updateOne(
+    { _id: conflict._id },
+    {
+      $set: {
+        status: "terms_pending" as const,
+        termsWindow: {
+          victor,
+          imposer,
+          target,
+          closesTurn: currentTurn + DICTATE_WINDOW_TURNS,
+        },
+      },
+    }
+  );
+
+  for (const countryId of new Set([...conflict.sideA.countries, ...conflict.sideB.countries])) {
+    await standDownCountry(db, conflict, countryId);
+  }
 }
 
 export async function resolveBattleDeclarations(
@@ -316,12 +378,14 @@ export async function resolveBattleDeclarations(
   }
 
   for (const [theaterId, decls] of byTheater) {
-    // The conflict must still be live. `getConflict` returns resolved documents too,
-    // so without the status check a stale declaration would keep fighting a war that
-    // is already over.
+    // The conflict must still be live. `getConflict` returns concluded documents
+    // too, so without the status check a stale declaration would keep fighting a war
+    // that is already over. `isConflictConcluded` rather than a bare "resolved"
+    // check: a war awaiting terms has already stood its rosters down, and an
+    // offensive queued against it would fight with troops that have gone home.
     const conflict = await getConflict(db, theaterId);
     const eligible = decls.filter((d) => d.declaredTurn < currentTurn);
-    if (!conflict || conflict.status === "resolved") {
+    if (!conflict || isConflictConcluded(conflict.status)) {
       for (const d of eligible) {
         await mark(db, d, "fizzled", currentTurn);
         fizzled++;

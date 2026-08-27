@@ -355,9 +355,62 @@ describe("resolveBattleDeclarations — occupation", () => {
     expect(controlWrite()).toBeUndefined();
   });
 
-  it("stands the conflict down when the front reaches a pole", async () => {
-    // One point off the pole: even a drag-halved step clears it.
+  it("opens a terms window when the front reaches a pole", async () => {
+    // One point off the pole: even a drag-halved step clears it. The war no longer
+    // ends on the tick; the victor gets a window in which to name one term.
     db.collectionMocks.conflicts.findOne.mockResolvedValue({ ...warConflict, control: 1 });
+    wireWalkover();
+
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    const windowWrite = db.collectionMocks.conflicts.updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.status === "terms_pending"
+    );
+    expect(windowWrite).toBeDefined();
+    expect(windowWrite![1].$set.termsWindow.victor).toBe("A");
+    expect(windowWrite![1].$set.termsWindow.closesTurn).toBeGreaterThan(41);
+  });
+
+  it("names both principals on the window, so exactly one country may impose", async () => {
+    db.collectionMocks.conflicts.findOne.mockResolvedValue({ ...warConflict, control: 1 });
+    wireWalkover();
+
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    const windowWrite = db.collectionMocks.conflicts.updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.status === "terms_pending"
+    );
+    const { imposer, target } = windowWrite![1].$set.termsWindow;
+    expect(imposer).toBeTruthy();
+    expect(target).toBeTruthy();
+    expect(imposer).not.toBe(target);
+  });
+
+  it("stamps no winner while terms are outstanding", async () => {
+    // The war is not over until the term is taken or the window lapses, so nothing
+    // may record an outcome yet.
+    db.collectionMocks.conflicts.findOne.mockResolvedValue({ ...warConflict, control: 1 });
+    wireWalkover();
+
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    const resolvedWrite = db.collectionMocks.conflicts.updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.status === "resolved"
+    );
+    expect(resolvedWrite).toBeUndefined();
+  });
+
+  it("still resolves outright when a side has no principal left", async () => {
+    // Every country on the losing side joined after the war opened, so its founder
+    // has already taken a separate peace and nobody holds the claim. Handing it to
+    // a late joiner would award the war to a country that did not start it, so the
+    // original resolve is the honest outcome. The generated-side case reaches the
+    // same branch through an empty roster; `principalOf` covers that directly.
+    db.collectionMocks.conflicts.findOne.mockResolvedValue({
+      ...warConflict,
+      control: 1,
+      joinTurns: [{ countryId: "CN", turn: 5, control: 100 }],
+    });
     wireWalkover();
 
     await resolveBattleDeclarations(db as unknown as Db, 41);
@@ -1101,7 +1154,7 @@ describe("resolveBattleDeclarations — opposing offensives in one tick", () => 
     const out = await resolveBattleDeclarations(db as unknown as Db, 41);
 
     const stoodDown = db.collectionMocks.conflicts.updateOne.mock.calls.find(
-      (c) => c[1]?.$set?.status === "resolved"
+      (c) => c[1]?.$set?.status === "terms_pending" || c[1]?.$set?.status === "resolved"
     );
     expect(stoodDown).toBeDefined();
     expect(db.collectionMocks.battleReports.insertOne).toHaveBeenCalledTimes(1);

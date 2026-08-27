@@ -2,15 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { SectionCard, Badge } from "./dossier";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, type CountryId, type GovernmentType } from "@/lib/constants/countries";
 import { PEACE_OFFER_DURATION_TURNS, TRUCE_TURNS } from "@/lib/db/types/peaceOffer";
+import type { PeaceTerm } from "@/lib/military/peaceTerm";
 
 interface OfferView {
   id: string;
   conflictId: string;
   fromCountry: CountryId;
   toCountry: CountryId;
-  indemnity: { payer: CountryId; amount: number };
+  term: PeaceTerm;
   justification: string | null;
   status: "pending" | "accepted" | "rejected" | "withdrawn" | "expired";
   offeredTurn: number;
@@ -38,6 +39,29 @@ export interface PeaceWar {
  *
  * Spec: docs/superpowers/specs/2026-08-04-suing-for-peace-design.md
  */
+/**
+ * What an offer is asking for, as one clause appended to who is offering.
+ *
+ * Handles EVERY term, not only an indemnity: the routes accept all three, so an
+ * incoming offer can carry any of them and a panel that only knew about money
+ * would render an empty demand. Player-facing copy, so no em or en dashes.
+ *
+ * An indemnity names whose currency the figure is in, because the amount is
+ * quoted in the PAYER's currency, which is not always the reader's.
+ */
+function offerTermText(term: PeaceTerm): string {
+  if (term.kind === "white_peace") return " on white peace terms, with nothing changing hands";
+  if (term.kind === "indemnity") {
+    if (!(term.amount > 0)) return " with no indemnity, a white peace";
+    const payerName = COUNTRY_CONFIGS[term.payer]?.name ?? term.payer;
+    return ` for ${term.amount.toLocaleString("en-US")} from ${payerName} (in ${payerName} currency)`;
+  }
+  if (term.kind === "regime_change") {
+    return " in return for a change of government and fresh elections";
+  }
+  return ` in return for freezing new defence procurement for ${term.turns} turns`;
+}
+
 export function PeacePanel({
   countryCode,
   countryId,
@@ -55,6 +79,11 @@ export function PeacePanel({
   const [enemy, setEnemy] = useState<string>("");
   const [payer, setPayer] = useState<CountryId>(countryId);
   const [amount, setAmount] = useState<string>("0");
+  const [termKind, setTermKind] = useState<
+    "white_peace" | "indemnity" | "regime_change" | "demilitarisation"
+  >("indemnity");
+  const [targetSystem, setTargetSystem] = useState<string>("parliamentaryRepublic");
+  const [demilTurns, setDemilTurns] = useState<string>("240");
   const [justification, setJustification] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -131,7 +160,7 @@ export function PeacePanel({
       {
         conflictId: warId,
         toCountry: enemy,
-        indemnity: { payer, amount: Number(amount) || 0 },
+        term: buildTerm(),
         ...(justification.trim() ? { justification: justification.trim() } : {}),
       },
       "Offer sent."
@@ -158,6 +187,20 @@ export function PeacePanel({
   const live = forWar.filter((o) => o.status === "pending");
   const past = forWar.filter((o) => o.status !== "pending");
   const payerName = COUNTRY_CONFIGS[payer]?.name ?? payer;
+
+  /** The one term this offer carries, matching the server's discriminated union. */
+  function buildTerm(): PeaceTerm {
+    if (termKind === "white_peace") {
+      return { kind: "white_peace" };
+    }
+    if (termKind === "regime_change") {
+      return { kind: "regime_change", targetSystem: targetSystem as GovernmentType };
+    }
+    if (termKind === "demilitarisation") {
+      return { kind: "demilitarisation", turns: Number(demilTurns) || 0 };
+    }
+    return { kind: "indemnity", payer, amount: Number(amount) || 0 };
+  }
 
   return (
     <SectionCard
@@ -208,24 +251,7 @@ export function PeacePanel({
               <p className="text-[12px]">
                 <strong>{COUNTRY_CONFIGS[o.fromCountry]?.name ?? o.fromCountry}</strong>
                 {o.incoming ? " offers to leave the war" : " — your offer to leave the war"}
-                {o.indemnity.amount > 0 ? (
-                  <>
-                    {" "}
-                    for{" "}
-                    <strong>
-                      {o.indemnity.amount.toLocaleString("en-US")} from{" "}
-                      {COUNTRY_CONFIGS[o.indemnity.payer]?.name ?? o.indemnity.payer}
-                    </strong>{" "}
-                    {/* The amount is in the PAYER's currency, which is not always the
-                        viewer's — saying whose money it is stops it being misread. */}
-                    <span className="text-muted">
-                      (in {COUNTRY_CONFIGS[o.indemnity.payer]?.name ?? o.indemnity.payer} currency)
-                    </span>
-                  </>
-                ) : (
-                  <> with no indemnity — a white peace</>
-                )}
-                .
+                {offerTermText(o.term)}.
               </p>
               {o.justification && (
                 <p className="mt-1 border-l-2 border-card-border pl-2 text-[11px] italic text-muted">
@@ -289,26 +315,81 @@ export function PeacePanel({
               ))}
             </select>
             <select
-              aria-label="Who pays"
-              value={payer}
-              onChange={(e) => setPayer(e.target.value as CountryId)}
+              aria-label="Term offered"
+              value={termKind}
+              onChange={(e) => setTermKind(e.target.value as typeof termKind)}
               className="min-w-[150px] flex-1 rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px]"
             >
-              <option value={countryId}>We pay</option>
-              {enemy && <option value={enemy}>They pay</option>}
+              <option value="white_peace">White peace</option>
+              <option value="indemnity">Indemnity</option>
+              <option value="regime_change">Regime change</option>
+              <option value="demilitarisation">Demilitarisation</option>
             </select>
           </div>
 
-          <label className="block text-[11px] text-muted">
-            Indemnity, in {payerName} currency — zero is a white peace
-            <input
-              type="number"
-              min={0}
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px]"
-            />
-          </label>
+          {/* Exactly one term travels. The server payload is a discriminated union,
+              so the fields below are the branch, not extra options alongside it. */}
+          {termKind === "indemnity" && (
+            <>
+              <select
+                aria-label="Who pays"
+                value={payer}
+                onChange={(e) => setPayer(e.target.value as CountryId)}
+                className="w-full rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px]"
+              >
+                <option value={countryId}>We pay</option>
+                {enemy && <option value={enemy}>They pay</option>}
+              </select>
+              <label className="block text-[11px] text-muted">
+                Indemnity, in {payerName} currency. Zero is a white peace.
+                <input
+                  type="number"
+                  min={0}
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px]"
+                />
+              </label>
+            </>
+          )}
+
+          {termKind === "regime_change" && (
+            <label className="block text-[11px] text-muted">
+              System they would adopt. Their legislature is dissolved and fresh elections are
+              called.
+              <select
+                aria-label="New system"
+                value={targetSystem}
+                onChange={(e) => setTargetSystem(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px]"
+              >
+                <option value="parliamentaryRepublic">Parliamentary republic</option>
+                <option value="presidential">Presidential republic</option>
+                <option value="onePartyState">One-party state</option>
+              </select>
+            </label>
+          )}
+
+          {termKind === "white_peace" && (
+            <p className="text-[11px] text-muted">
+              The war ends where it began. Neither side is recorded as having won, nothing changes
+              hands, and anything it was being fought over goes back to being an open question.
+            </p>
+          )}
+
+          {termKind === "demilitarisation" && (
+            <label className="block text-[11px] text-muted">
+              Turns they may award no new defence contracts. Existing orders keep delivering.
+              <input
+                type="number"
+                min={1}
+                aria-label="Demilitarisation turns"
+                value={demilTurns}
+                onChange={(e) => setDemilTurns(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px]"
+              />
+            </label>
+          )}
 
           <textarea
             aria-label="Justification"

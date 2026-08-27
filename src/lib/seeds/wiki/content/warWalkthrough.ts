@@ -334,7 +334,7 @@ Ashford, whose army is fresh but who never raised the **Territorial and Reserve 
 
 ## Britain's turn
 
-**Turn 1,690.** Britain, unable to sustain the front alone, negotiates its own **white peace**: indemnity **zero**. Same mechanism, dialled to nothing.
+**Turn 1,690.** Britain, unable to sustain the front alone, negotiates its own **white peace**: an indemnity of **zero**, the same mechanism dialled to nothing. It could have offered a harsher term and been refused, or accepted one and been made to pay it.
 
 Britain was the last country on side A. **The side empties, so the war ends outright**, with China recorded as the winner. Every remaining cross-side pair is truced.
 
