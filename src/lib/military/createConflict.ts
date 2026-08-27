@@ -152,6 +152,7 @@ export function buildConflict(input: BuildConflictInput): ConflictDoc {
     infra,
     enemyMix,
     intensity,
+    limitedWarSinceTurn: input.startTurn,
     control,
     controlStart: control,
     status: "active",

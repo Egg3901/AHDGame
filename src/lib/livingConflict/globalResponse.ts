@@ -416,7 +416,15 @@ async function applyOutcomeTrajectory(
   if (campaignResult.applied && outcome.tensionDelta) {
     const minimumValue =
       outcome.tensionDelta < 0
-        ? tensionFloor((await readStandingPressureSnapshot(db, gameState ?? {})).pressures)
+        ? tensionFloor(
+            (
+              await readStandingPressureSnapshot(
+                db,
+                gameState ?? {},
+                gameState?.currentTurn ?? crisis.startTurn
+              )
+            ).pressures
+          )
         : undefined;
     await applyTensionEvent(
       db,

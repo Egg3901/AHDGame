@@ -27,6 +27,9 @@ export interface CreateCrisisParams {
   durationTurns?: number | null;
   /** Dynamic role map and aggregate outcomes for a living-conflict event. */
   globalResponse?: Crisis["globalResponse"];
+  /** Let crisisTurn create the interaction on startTurn. Use when a crisis is
+   *  inserted ahead of its onset so decisions cannot be submitted early. */
+  deferInteractionUntilStart?: boolean;
   /** Deterministic event id used to suppress replay duplicates. */
   livingConflictEventId?: string;
 }
@@ -97,7 +100,11 @@ export async function createCrisisFromTemplate(
 
   const result = await db.collection<Crisis>("crises").insertOne(crisis as Crisis);
 
-  if (crisis.interactionDefinition && (await isCrisisInteractionEnabled())) {
+  if (
+    crisis.interactionDefinition &&
+    !params.deferInteractionUntilStart &&
+    (await isCrisisInteractionEnabled())
+  ) {
     await createCrisisInteraction(db, { ...(crisis as Crisis), _id: result.insertedId });
   }
 
