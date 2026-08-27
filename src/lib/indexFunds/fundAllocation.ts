@@ -16,6 +16,7 @@ export type FundAllocationBreakdown = {
   reserveShare: number;
   maxEquityValueAnchor: number;
   minReserveValueAnchor: number;
+  targetBondValueAnchor: number;
   equityHeadroomAnchor: number;
   reserveShortfallAnchor: number;
   bondDeploymentNeededAnchor: number;
@@ -68,6 +69,7 @@ export function computeFundAllocationBreakdown(
       reserveShare: 0,
       maxEquityValueAnchor: 0,
       minReserveValueAnchor: 0,
+      targetBondValueAnchor: 0,
       equityHeadroomAnchor: 0,
       reserveShortfallAnchor: 0,
       bondDeploymentNeededAnchor: 0,
@@ -85,11 +87,12 @@ export function computeFundAllocationBreakdown(
     cashAnchor,
     INDEX_FUND_RESERVE_CASH_BUFFER_FRACTION * totalBackingAnchor
   );
+  const targetBondValueAnchor = Math.max(0, minReserveValueAnchor - minCashBufferAnchor);
+  const bondDeploymentNeededAnchor = Math.max(0, targetBondValueAnchor - bondPrincipalAnchor);
   const cashAvailableForBondDeployAnchor = Math.max(
     0,
-    Math.min(reserveShortfallAnchor, cashAnchor - minCashBufferAnchor)
+    Math.min(bondDeploymentNeededAnchor, cashAnchor - minCashBufferAnchor)
   );
-  const bondDeploymentNeededAnchor = reserveShortfallAnchor;
   const cashAfterBondDeploy = cashAnchor - cashAvailableForBondDeployAnchor;
   const stockPurchaseBudgetAnchor = Math.min(
     equityHeadroomAnchor,
@@ -105,6 +108,7 @@ export function computeFundAllocationBreakdown(
     reserveShare: reserveValueAnchor / totalBackingAnchor,
     maxEquityValueAnchor,
     minReserveValueAnchor,
+    targetBondValueAnchor,
     equityHeadroomAnchor,
     reserveShortfallAnchor,
     bondDeploymentNeededAnchor,

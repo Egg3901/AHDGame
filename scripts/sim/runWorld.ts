@@ -143,6 +143,10 @@ const shortageResponsiveSourcingEnabled = parseOptionalBoolean(
   arg("shortage-responsive-sourcing"),
   "shortage-responsive-sourcing"
 );
+const indexFundBondLiquidityEnabled = parseOptionalBoolean(
+  arg("index-fund-bond-liquidity"),
+  "index-fund-bond-liquidity"
+);
 // Clone mode: the sandbox DB was pre-loaded with a restore of the LIVE world
 // (mongorestore), so skip bootstrap AND the "real world" users guardrail, and
 // instead autonomize the human players' corporations so the whole economy runs
@@ -611,6 +615,7 @@ async function main() {
     freightSettlementMode,
     canonicalFreightBillingEnabled,
     shortageResponsiveSourcingEnabled,
+    indexFundBondLiquidityEnabled,
   };
   const economicExperimentSet = economicExperimentConfigSet(economicExperiment);
   if (Object.keys(economicExperimentSet).length > 0) {

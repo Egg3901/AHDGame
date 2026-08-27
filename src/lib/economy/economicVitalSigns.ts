@@ -464,6 +464,18 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
   const competition = relevantMarketDiagnostics(input.commodityParticipants, input.currentFlows);
   const tradedCorporations = new Set(economicTrades.map((trade) => trade.corporationId.toString()));
   const activeBonds = input.bonds.filter((bond) => !bond.matured);
+  const sovereignBonds = activeBonds.filter((bond) => bond.issuerType === "sovereign");
+  const corporateBonds = activeBonds.filter((bond) => bond.issuerType !== "sovereign");
+  const noHolderShare = (bonds: Bond[]) =>
+    metric(
+      ratio(
+        bonds.filter((bond) => bond.holders.filter((holder) => holder.units > 0).length === 0)
+          .length,
+        bonds.length
+      ),
+      bonds.length,
+      "unmatured_bond_count"
+    );
   const bondHolderCounts = activeBonds.map(
     (bond) => bond.holders.filter((holder) => holder.units > 0).length
   );
@@ -673,6 +685,8 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         activeBonds.length,
         "unmatured_bond_count"
       ),
+      sovereignNoHolderBondShare: noHolderShare(sovereignBonds),
+      corporateNoHolderBondShare: noHolderShare(corporateBonds),
       medianBondHolders: metric(
         median(bondHolderCounts),
         activeBonds.length,

@@ -78,6 +78,8 @@ export interface EconomicVitalSigns {
     activeTradedListingShare: EconomicMetric;
     activeBonds: number;
     noHolderBondShare: EconomicMetric;
+    sovereignNoHolderBondShare: EconomicMetric;
+    corporateNoHolderBondShare: EconomicMetric;
     medianBondHolders: EconomicMetric;
     bondSubscriptionRate: EconomicMetric;
     openBuyOrders: number;

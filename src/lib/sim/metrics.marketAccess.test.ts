@@ -34,6 +34,8 @@ describe("marketAccessMetricsFromSnapshot", () => {
       securities: {
         activeTradedListingShare: value(0.3),
         noHolderBondShare: value(0.6),
+        sovereignNoHolderBondShare: value(0.4),
+        corporateNoHolderBondShare: value(0.7),
         bondSubscriptionRate: value(0.4),
         twoSidedListingShare: value(0.2),
         medianQuotedSpreadPct: value(5),
@@ -71,6 +73,8 @@ describe("marketAccessMetricsFromSnapshot", () => {
       highConcentrationLowFillShare: 0.4,
       activeTradedListingShare: 0.3,
       noHolderBondShare: 0.6,
+      sovereignNoHolderBondShare: 0.4,
+      corporateNoHolderBondShare: 0.7,
       bondSubscriptionRate: 0.4,
       twoSidedListingShare: 0.2,
       medianQuotedSpreadPct: 5,
