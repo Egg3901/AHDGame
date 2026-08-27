@@ -44,6 +44,18 @@ export interface UnifiedCabinetMember extends IterationStampFields {
   /** Custom banner image for office page */
   bannerImageUrl?: string;
 
+  /**
+   * True when the executive installed this holder directly, without the
+   * legislative confirmation the seat normally requires. Acting holders are
+   * restricted to the operational capability tier (see
+   * `src/lib/cabinet/actingScope.ts`) and lapse after `ACTING_TENURE_TURNS`.
+   */
+  acting?: boolean;
+  /** Turn the acting appointment was seated. Absent on confirmed holders. */
+  actingSinceTurn?: number;
+  /** Turn the acting appointment lapses: `actingSinceTurn + ACTING_TENURE_TURNS`. */
+  actingExpiresOnTurn?: number;
+
   createdAt: Date;
   updatedAt: Date;
 }

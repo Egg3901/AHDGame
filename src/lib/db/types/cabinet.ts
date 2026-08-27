@@ -16,6 +16,10 @@ export interface CabinetMember extends IterationStampFields {
   appointedByPresidentId: ObjectId;
   /** True when appointed directly by the executive without legislative confirmation. */
   acting?: boolean;
+  /** Turn the acting appointment was seated. Absent on confirmed holders. */
+  actingSinceTurn?: number;
+  /** Turn the acting appointment lapses: `actingSinceTurn + ACTING_TENURE_TURNS`. */
+  actingExpiresOnTurn?: number;
   confirmedAt: Date;
   createdAt: Date;
   updatedAt: Date;
