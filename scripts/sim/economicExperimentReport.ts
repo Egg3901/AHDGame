@@ -1,7 +1,13 @@
 import { MongoClient } from "mongodb";
 import type { Bond, CommodityFlow, EconomicVitalSigns, GameState, IndexFund } from "@/lib/db/types";
-import type { LedgerReconciliation } from "@/lib/ledger/types";
+import type {
+  BalanceSnapshot,
+  LedgerEntry,
+  LedgerReconciliation,
+  ReconcileReport,
+} from "@/lib/ledger/types";
 import { snapshotEconomicVitalSigns } from "@/lib/economy/economicVitalSigns";
+import { reconcileLedger } from "@/lib/ledger/reconcile";
 
 function argument(name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -148,26 +154,64 @@ function countryFillGuardrail(
     .sort((a, b) => a.delta - b.delta);
 }
 
+function reconciliationSummary(reconciliation: ReconcileReport | null) {
+  return reconciliation
+    ? {
+        status: reconciliation.status,
+        entriesChecked: reconciliation.entriesChecked,
+        trialBalance: {
+          status: reconciliation.trialBalance.status,
+          unbalancedCount: reconciliation.trialBalance.unbalancedCount,
+        },
+        stockVsFlow: {
+          status: reconciliation.stockVsFlow.status,
+          divergentCount: reconciliation.stockVsFlow.divergentCount,
+        },
+        moneySupply: {
+          status: reconciliation.moneySupply.status,
+          findingCount: reconciliation.moneySupply.findings.length,
+        },
+        unattributedCount: reconciliation.unattributed.length,
+        topUnattributed: reconciliation.unattributed.slice(0, 12),
+      }
+    : null;
+}
+
 async function summarizeDatabase(client: MongoClient, dbName: string, refresh: boolean) {
   const db = client.db(dbName);
   const state = await db.collection<GameState>("gameState").findOne({ _id: "current" });
   const terminalTurn = state?.currentTurn ?? 0;
   if (refresh) await snapshotEconomicVitalSigns(db, terminalTurn);
   const startTurn = Math.max(0, terminalTurn - 11);
-  const [snapshots, flows, bonds, funds, reconciliation] = await Promise.all([
-    db
-      .collection<EconomicVitalSigns>("economicVitalSigns")
-      .find({ turn: { $gte: startTurn, $lte: terminalTurn } })
-      .sort({ turn: 1 })
-      .toArray(),
-    db
-      .collection<CommodityFlow>("commodityFlows")
-      .find({ turn: { $gte: startTurn, $lte: terminalTurn } })
-      .toArray(),
-    db.collection<Bond>("bonds").find({ matured: false }).toArray(),
-    db.collection<IndexFund>("indexFunds").find({ status: "active" }).toArray(),
-    db.collection<LedgerReconciliation>("ledgerReconciliations").findOne({ turn: terminalTurn }),
-  ]);
+  const [snapshots, flows, bonds, funds, reconciliation, entries, balanceSnapshots] =
+    await Promise.all([
+      db
+        .collection<EconomicVitalSigns>("economicVitalSigns")
+        .find({ turn: { $gte: startTurn, $lte: terminalTurn } })
+        .sort({ turn: 1 })
+        .toArray(),
+      db
+        .collection<CommodityFlow>("commodityFlows")
+        .find({ turn: { $gte: startTurn, $lte: terminalTurn } })
+        .toArray(),
+      db.collection<Bond>("bonds").find({ matured: false }).toArray(),
+      db.collection<IndexFund>("indexFunds").find({ status: "active" }).toArray(),
+      db.collection<LedgerReconciliation>("ledgerReconciliations").findOne({ turn: terminalTurn }),
+      db.collection<LedgerEntry>("ledgerEntries").find({ turn: terminalTurn }).toArray(),
+      db
+        .collection<BalanceSnapshot>("balanceSnapshots")
+        .find({ turn: { $in: [terminalTurn - 1, terminalTurn] } })
+        .toArray(),
+    ]);
+  const opening = balanceSnapshots.find((row) => row.turn === terminalTurn - 1);
+  const closing = balanceSnapshots.find((row) => row.turn === terminalTurn);
+  const recomputedReconciliation = reconcileLedger({
+    turn: terminalTurn,
+    entries,
+    openingBalances: opening?.balances ?? {},
+    closingBalances: closing?.balances ?? {},
+    skipStockVsFlow: !opening || Boolean(closing?.rebaselined),
+  });
   const bondGroups = Object.fromEntries(
     ["sovereign", "corporate"].map((kind) => {
       const rows = bonds.filter((bond) =>
@@ -217,26 +261,10 @@ async function summarizeDatabase(client: MongoClient, dbName: string, refresh: b
       activeFunds: funds.length,
       cashAnchor: funds.reduce((sum, fund) => sum + Math.max(0, fund.cashAnchor ?? 0), 0),
     },
-    reconciliation: reconciliation
-      ? {
-          status: reconciliation.status,
-          entriesChecked: reconciliation.entriesChecked,
-          trialBalance: {
-            status: reconciliation.trialBalance.status,
-            unbalancedCount: reconciliation.trialBalance.unbalancedCount,
-          },
-          stockVsFlow: {
-            status: reconciliation.stockVsFlow.status,
-            divergentCount: reconciliation.stockVsFlow.divergentCount,
-          },
-          moneySupply: {
-            status: reconciliation.moneySupply.status,
-            findingCount: reconciliation.moneySupply.findings.length,
-          },
-          unattributedCount: reconciliation.unattributed.length,
-          topUnattributed: reconciliation.unattributed.slice(0, 12),
-        }
-      : null,
+    reconciliation: {
+      persisted: reconciliationSummary(reconciliation),
+      recomputedWithCandidate: reconciliationSummary(recomputedReconciliation),
+    },
   };
 }
 
