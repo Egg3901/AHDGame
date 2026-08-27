@@ -111,6 +111,7 @@ interface SimJob {
   labourSystemMode?: string;
   freightSettlementMode?: "shadow" | "active";
   canonicalFreightBillingEnabled?: boolean;
+  shortageResponsiveSourcingEnabled?: boolean;
   autonomyLevel?: string;
   /** Sim turn-phase profile: "elections-only" skips the economy phases. Default full. */
   mode?: "full" | "elections-only";
@@ -301,6 +302,14 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
       }
       runWorldArgs.push(
         `--canonical-freight-billing=${String(job.canonicalFreightBillingEnabled)}`
+      );
+    }
+    if (job.shortageResponsiveSourcingEnabled !== undefined) {
+      if (typeof job.shortageResponsiveSourcingEnabled !== "boolean") {
+        throw new Error("shortageResponsiveSourcingEnabled must be boolean");
+      }
+      runWorldArgs.push(
+        `--shortage-responsive-sourcing=${String(job.shortageResponsiveSourcingEnabled)}`
       );
     }
     // NPP autonomy tier. Without this an MCP-launched run silently used the

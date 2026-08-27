@@ -149,6 +149,10 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
   const unmet = input.sourcing.reduce((sum, row) => sum + row.unmetUnits, 0);
   const toleranceBound = input.sourcing.reduce((sum, row) => sum + row.toleranceBoundUnits, 0);
   const capacityBound = input.sourcing.reduce((sum, row) => sum + row.capacityBoundUnits, 0);
+  const shortageResponsive = input.sourcing.reduce(
+    (sum, row) => sum + (row.shortageResponsiveUnits ?? 0),
+    0
+  );
   const fulfilled = local + interstate + imported;
 
   const throughputObserved = input.sectors.filter((sector) => finite(sector.throughputFactor));
@@ -287,6 +291,11 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         ratio(capacityBound, unmet),
         input.sourcing.length,
         "unmet_buyer_intent"
+      ),
+      shortageResponsiveShareOfFulfillment: metric(
+        ratio(shortageResponsive, fulfilled),
+        input.sourcing.length,
+        "fulfilled_buyer_intent"
       ),
     },
     production: {

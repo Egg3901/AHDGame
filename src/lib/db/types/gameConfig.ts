@@ -297,6 +297,12 @@ export interface GameConfig {
    */
   canonicalFreightBillingEnabled?: boolean;
   /**
+   * When true, states below 50 percent local fill accept a progressively wider
+   * landed-price range, capped at 75 percent above the local price anchor.
+   * Default false until controlled simulation and rollout gates pass.
+   */
+  shortageResponsiveSourcingEnabled?: boolean;
+  /**
    * Legacy-stockpile cover cap (week-1 clearing balance pass): when true,
    * shadow-inventory stock above STOCK_COVER_CAP_TURNS × current demand takes
    * an additional EXCESS_STOCK_SPOILAGE_RATE per-turn spoilage on the excess

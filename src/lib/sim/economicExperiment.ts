@@ -3,6 +3,7 @@ export type FreightSettlementExperimentMode = "shadow" | "active";
 export interface EconomicExperimentConfig {
   freightSettlementMode?: FreightSettlementExperimentMode;
   canonicalFreightBillingEnabled?: boolean;
+  shortageResponsiveSourcingEnabled?: boolean;
 }
 
 export function parseOptionalBoolean(value: string | undefined, flag: string): boolean | undefined {
@@ -22,6 +23,9 @@ export function economicExperimentConfigSet(
     ...(config.canonicalFreightBillingEnabled !== undefined
       ? { canonicalFreightBillingEnabled: config.canonicalFreightBillingEnabled }
       : {}),
+    ...(config.shortageResponsiveSourcingEnabled !== undefined
+      ? { shortageResponsiveSourcingEnabled: config.shortageResponsiveSourcingEnabled }
+      : {}),
   };
 }
 
@@ -31,6 +35,9 @@ export function economicExperimentCliArgs(config: EconomicExperimentConfig): str
     ...(set.freightSettlementMode ? [`--freight-settlement=${set.freightSettlementMode}`] : []),
     ...(set.canonicalFreightBillingEnabled !== undefined
       ? [`--canonical-freight-billing=${String(set.canonicalFreightBillingEnabled)}`]
+      : []),
+    ...(set.shortageResponsiveSourcingEnabled !== undefined
+      ? [`--shortage-responsive-sourcing=${String(set.shortageResponsiveSourcingEnabled)}`]
       : []),
   ];
 }

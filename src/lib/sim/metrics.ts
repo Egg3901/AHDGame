@@ -107,6 +107,7 @@ export interface MarketAccessMetrics {
   importShare: number | null;
   toleranceBoundShareOfUnmet: number | null;
   capacityBoundShareOfUnmet: number | null;
+  shortageResponsiveShareOfFulfillment: number | null;
   physicalSellThrough: number | null;
   labourStaffingRate: number | null;
   marketCapHhi: number | null;
@@ -129,6 +130,8 @@ export function marketAccessMetricsFromSnapshot(
     importShare: snapshot?.trade.importShare.value ?? null,
     toleranceBoundShareOfUnmet: snapshot?.trade.toleranceBoundShareOfUnmet.value ?? null,
     capacityBoundShareOfUnmet: snapshot?.trade.capacityBoundShareOfUnmet.value ?? null,
+    shortageResponsiveShareOfFulfillment:
+      snapshot?.trade.shortageResponsiveShareOfFulfillment.value ?? null,
     physicalSellThrough: snapshot?.production.physicalSellThrough.value ?? null,
     labourStaffingRate: snapshot?.production.labourStaffingRate.value ?? null,
     marketCapHhi: snapshot?.firms.marketCapHhi.value ?? null,

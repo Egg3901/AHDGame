@@ -182,6 +182,9 @@ const TOOLS: ToolDef[] = [
         canonicalFreightBillingEnabled: bool(
           "Whether accepted domestic hauls debit buyers and credit freight suppliers in this sandbox only. Explicit false is retained for control runs."
         ),
+        shortageResponsiveSourcingEnabled: bool(
+          "Whether severe local shortages widen the landed-price ceiling in this sandbox only. Explicit false is retained for control runs."
+        ),
       },
       ["preset", "turns", "seed"]
     ),
@@ -207,6 +210,12 @@ const TOOLS: ToolDef[] = [
       ) {
         throw new Error("canonicalFreightBillingEnabled must be boolean");
       }
+      if (
+        a.shortageResponsiveSourcingEnabled !== undefined &&
+        typeof a.shortageResponsiveSourcingEnabled !== "boolean"
+      ) {
+        throw new Error("shortageResponsiveSourcingEnabled must be boolean");
+      }
       const res = await enqueue(db, {
         preset,
         turns,
@@ -218,6 +227,9 @@ const TOOLS: ToolDef[] = [
         ...(a.canonicalFreightBillingEnabled !== undefined
           ? { canonicalFreightBillingEnabled: a.canonicalFreightBillingEnabled }
           : {}),
+        ...(a.shortageResponsiveSourcingEnabled !== undefined
+          ? { shortageResponsiveSourcingEnabled: a.shortageResponsiveSourcingEnabled }
+          : {}),
       });
       return {
         ...res,
@@ -228,6 +240,7 @@ const TOOLS: ToolDef[] = [
         autonomyLevel: a.autonomyLevel || "v3 (harness default)",
         freightSettlementMode: a.freightSettlementMode || "preset default",
         canonicalFreightBillingEnabled: a.canonicalFreightBillingEnabled ?? "preset default",
+        shortageResponsiveSourcingEnabled: a.shortageResponsiveSourcingEnabled ?? "preset default",
         note: 'Poll with sim_run_status. The local worker claims queued jobs within ~15s — if status stays "queued" for minutes, the worker is not running (check sim_worker_health).',
       };
     },

@@ -67,6 +67,7 @@ describe("computeEconomicVitalSigns", () => {
           unmetUnits: 50,
           toleranceBoundUnits: 40,
           capacityBoundUnits: 10,
+          shortageResponsiveUnits: 5,
           flows: [],
           itemizedFlowCount: 0,
           totalFlowCount: 0,
@@ -89,6 +90,7 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.trade.intentFulfillmentRate.value).toBe(0.5);
     expect(snapshot.trade.localShare.value).toBe(0.6);
     expect(snapshot.trade.toleranceBoundShareOfUnmet.value).toBe(0.8);
+    expect(snapshot.trade.shortageResponsiveShareOfFulfillment.value).toBe(0.1);
     expect(snapshot.goods.pooledFillRate.basis).not.toBe(
       snapshot.trade.intentFulfillmentRate.basis
     );

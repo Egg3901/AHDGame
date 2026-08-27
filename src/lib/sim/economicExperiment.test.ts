@@ -11,17 +11,24 @@ describe("economic experiment configuration", () => {
       economicExperimentConfigSet({
         freightSettlementMode: "shadow",
         canonicalFreightBillingEnabled: false,
+        shortageResponsiveSourcingEnabled: false,
       })
     ).toEqual({
       freightSettlementMode: "shadow",
       canonicalFreightBillingEnabled: false,
+      shortageResponsiveSourcingEnabled: false,
     });
     expect(
       economicExperimentCliArgs({
         freightSettlementMode: "shadow",
         canonicalFreightBillingEnabled: false,
+        shortageResponsiveSourcingEnabled: false,
       })
-    ).toEqual(["--freight-settlement=shadow", "--canonical-freight-billing=false"]);
+    ).toEqual([
+      "--freight-settlement=shadow",
+      "--canonical-freight-billing=false",
+      "--shortage-responsive-sourcing=false",
+    ]);
   });
 
   it("omits unspecified fields so existing simulation behavior is unchanged", () => {

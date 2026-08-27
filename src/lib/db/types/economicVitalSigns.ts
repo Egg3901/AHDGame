@@ -27,6 +27,7 @@ export interface EconomicVitalSigns {
     importShare: EconomicMetric;
     toleranceBoundShareOfUnmet: EconomicMetric;
     capacityBoundShareOfUnmet: EconomicMetric;
+    shortageResponsiveShareOfFulfillment: EconomicMetric;
   };
   production: {
     sectorsObserved: number;

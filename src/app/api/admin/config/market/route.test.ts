@@ -98,6 +98,42 @@ describe("GET/PATCH /api/admin/config/market — extractionOutputScaleEnabled", 
     >;
     expect(setArg).not.toHaveProperty("extractionOutputScaleEnabled");
   });
+
+  it("GET reflects shortage-responsive sourcing and defaults it off", async () => {
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "capital",
+      shortageResponsiveSourcingEnabled: true,
+    });
+    const { GET } = await import("./route");
+    const enabled = (await (await GET()).json()) as {
+      shortageResponsiveSourcingEnabled: boolean;
+    };
+    expect(enabled.shortageResponsiveSourcingEnabled).toBe(true);
+
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "capital",
+    });
+    const absent = (await (await GET()).json()) as {
+      shortageResponsiveSourcingEnabled: boolean;
+    };
+    expect(absent.shortageResponsiveSourcingEnabled).toBe(false);
+  });
+
+  it("PATCH writes the dark sourcing gate only when explicitly provided", async () => {
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "capital",
+    });
+    const { PATCH } = await import("./route");
+    await PATCH(makePatchRequest({ mode: "capital", shortageResponsiveSourcingEnabled: true }));
+    const setArg = db.collectionMocks.gameConfig!.updateOne.mock.calls[0]?.[1]?.$set as Record<
+      string,
+      unknown
+    >;
+    expect(setArg.shortageResponsiveSourcingEnabled).toBe(true);
+  });
 });
 
 // MARKET_MODE_INFO[mode].live was enforced ONLY by the admin selector disabling

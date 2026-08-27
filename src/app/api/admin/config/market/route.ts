@@ -39,6 +39,7 @@ const patchSchema = z.object({
   // Package B: quality → premium pricing coupling (requires sectorQualityEnabled).
   qualityPremiumPricingEnabled: z.boolean().optional(),
   supplyAgreementsEnabled: z.boolean().optional(),
+  shortageResponsiveSourcingEnabled: z.boolean().optional(),
   demographicsDemandEnabled: z.boolean().optional(),
   nppCorpsAttackable: z.boolean().optional(),
   nppCorporateAttacksEnabled: z.boolean().optional(),
@@ -75,6 +76,7 @@ export async function GET() {
           sectorQualityEnabled: 1,
           qualityPremiumPricingEnabled: 1,
           supplyAgreementsEnabled: 1,
+          shortageResponsiveSourcingEnabled: 1,
           extractionOutputScaleEnabled: 1,
           commandEconomyEnabled: 1,
           commandEconomySecondEconomyTolerance: 1,
@@ -92,6 +94,7 @@ export async function GET() {
       sectorQualityEnabled: config?.sectorQualityEnabled === true,
       qualityPremiumPricingEnabled: config?.qualityPremiumPricingEnabled === true,
       supplyAgreementsEnabled: config?.supplyAgreementsEnabled === true,
+      shortageResponsiveSourcingEnabled: config?.shortageResponsiveSourcingEnabled === true,
       extractionOutputScaleEnabled: config?.extractionOutputScaleEnabled === true,
       commandEconomyEnabled: config?.commandEconomyEnabled === true,
       commandEconomySecondEconomyTolerance:
@@ -135,6 +138,7 @@ export async function PATCH(request: Request) {
       sectorQualityEnabled,
       qualityPremiumPricingEnabled,
       supplyAgreementsEnabled,
+      shortageResponsiveSourcingEnabled,
       demographicsDemandEnabled,
       nppCorpsAttackable,
       nppCorporateAttacksEnabled,
@@ -153,6 +157,7 @@ export async function PATCH(request: Request) {
       sectorQualityEnabled?: boolean;
       qualityPremiumPricingEnabled?: boolean;
       supplyAgreementsEnabled?: boolean;
+      shortageResponsiveSourcingEnabled?: boolean;
       demographicsDemandEnabled?: boolean;
       nppCorpsAttackable?: boolean;
       nppCorporateAttacksEnabled?: boolean;
@@ -204,6 +209,8 @@ export async function PATCH(request: Request) {
       governorSet.qualityPremiumPricingEnabled = qualityPremiumPricingEnabled;
     if (typeof supplyAgreementsEnabled === "boolean")
       governorSet.supplyAgreementsEnabled = supplyAgreementsEnabled;
+    if (typeof shortageResponsiveSourcingEnabled === "boolean")
+      governorSet.shortageResponsiveSourcingEnabled = shortageResponsiveSourcingEnabled;
     if (typeof demographicsDemandEnabled === "boolean")
       governorSet.demographicsDemandEnabled = demographicsDemandEnabled;
     if (typeof nppCorpsAttackable === "boolean")
