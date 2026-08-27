@@ -6,9 +6,11 @@ import type { BondMaturityTurns } from "@/lib/db/types/bond";
 import {
   BOND_ISSUANCE_COOLDOWN_TURNS,
   MAX_BOND_ISSUANCE_FRACTION,
+  MAX_BOND_ISSUANCE_EXIT_EQUITY_FRACTION,
   calculateCreditScore,
   getBondCouponRate,
 } from "@/lib/constants/bonds";
+import { loadCorpExitEquityAnchor } from "@/lib/bonds/corpExitEquity";
 import {
   sumCorporateSectorNpv,
   sumCorporateSectorConstructionInProgress,
@@ -112,9 +114,25 @@ export async function previewRelocationBond(
     liquidCapitalAnchor +
     sectorNPV +
     sumCorporateSectorConstructionInProgress(sectors, corporation._id);
+  // Ticket #1198: a relocation bond is new borrowing, so it answers to the same
+  // exit-equity ceiling as an ordinary issuance. Without it this route stayed
+  // the open door to the going-concern-vs-realizable gap the ordinary route
+  // just closed.
+  const { exitEquityAnchor } = await loadCorpExitEquityAnchor(db, {
+    liquidCapitalAnchor,
+    sectors,
+    corporationId: corporation._id,
+    corp: corporation,
+    fxByCurrency,
+    primeRateByCountry,
+    plantsEnabled,
+  });
   const availableBondCapacity = Math.max(
     0,
-    totalEquity * MAX_BOND_ISSUANCE_FRACTION - existingDebt
+    Math.min(
+      totalEquity * MAX_BOND_ISSUANCE_FRACTION - existingDebt,
+      exitEquityAnchor * MAX_BOND_ISSUANCE_EXIT_EQUITY_FRACTION - existingDebt
+    )
   );
 
   const latestHistory = await db
@@ -144,7 +162,9 @@ export async function previewRelocationBond(
   );
 
   const withinLeverage =
-    existingDebt + relocationCostAnchor <= totalEquity * MAX_BOND_ISSUANCE_FRACTION;
+    existingDebt + relocationCostAnchor <= totalEquity * MAX_BOND_ISSUANCE_FRACTION &&
+    existingDebt + relocationCostAnchor <=
+      exitEquityAnchor * MAX_BOND_ISSUANCE_EXIT_EQUITY_FRACTION;
   const ok = cooldownTurnsRemaining === null && withinLeverage;
 
   return {
@@ -201,8 +221,13 @@ export async function issueRelocationBond(
       ok: false,
       response: NextResponse.json(
         {
-          error: `Bond issuance would exceed leverage limit (${MAX_BOND_ISSUANCE_FRACTION}x equity). Current debt: $${preflight.existingDebt.toLocaleString()}, equity: $${Math.round(
-            preflight.totalEquity
+          // #1198: capacity is now the lower of the two ceilings, so the
+          // message reports the remaining capacity rather than naming a limit
+          // that may not be the one that bound.
+          error: `Bond issuance would exceed this corporation's debt capacity (the lower of ${MAX_BOND_ISSUANCE_FRACTION}x equity and what it could realize by selling up). Current debt: $${Math.round(
+            preflight.existingDebt
+          ).toLocaleString()}, remaining capacity: $${Math.round(
+            preflight.availableBondCapacity
           ).toLocaleString()}.`,
         },
         { status: 400 }

@@ -149,22 +149,35 @@ export default function BondsTab({
                   bondInfo.creditRating.couponRatesByDuration?.[
                     bondIssueMaturity as 96 | 240 | 336
                   ] ?? bondInfo.creditRating.effectiveCouponRate;
-                // Max issuable (total debt headroom) = 2× equity − existing debt, rounded to $1,000 units
-                const maxIssuableDebt = bondInfo.creditDiagnostics
-                  ? Math.max(
-                      0,
-                      Math.floor(
-                        (bondInfo.creditDiagnostics.totalEquity * 2 - bondInfo.totalDebt) / 1_000
-                      ) * 1_000
-                    )
-                  : null;
+                // Debt headroom and the issuance ceiling both come from the
+                // server, which is the only place all three rules live
+                // (per-issuance cap, 2x going-concern equity, 1x exit equity).
+                // Re-deriving one of them here is what let the quoted ceiling
+                // drift from the enforced one in ticket #1198. The local
+                // fallbacks only cover a response from an older deploy.
+                const toBondUnits = (v: number) => Math.max(0, Math.floor(v / 1_000) * 1_000);
+                const maxIssuableDebt =
+                  bondInfo.debtHeadroom !== undefined
+                    ? toBondUnits(bondInfo.debtHeadroom)
+                    : bondInfo.creditDiagnostics
+                      ? toBondUnits(bondInfo.creditDiagnostics.totalEquity * 2 - bondInfo.totalDebt)
+                      : null;
                 // Per-issuance cap: 25% of annual revenue, floored at $100M
                 const perIssuanceCap = bondInfo.maxPerIssuance ?? 100_000_000;
 
+                // NOT floored to bond units: the server guarantees
+                // `minIssuance <= maxAllowedIssuance`, and flooring the ceiling
+                // alone can push it under the minimum for a corp whose headroom
+                // sits between the dust floor and the flat minimum, leaving it
+                // with no legal issuance at all. The slider still steps in
+                // A1,000 units; only its endpoint is exact.
                 const effectiveCap =
-                  maxIssuableDebt !== null
-                    ? Math.min(perIssuanceCap, maxIssuableDebt)
-                    : perIssuanceCap;
+                  bondInfo.maxAllowedIssuance !== undefined
+                    ? Math.max(0, bondInfo.maxAllowedIssuance)
+                    : maxIssuableDebt !== null
+                      ? Math.min(perIssuanceCap, maxIssuableDebt)
+                      : perIssuanceCap;
+                const limitedByExitEquity = bondInfo.issuanceLimitedBy === "exitEquity";
                 // Minimum is clamped to the corp's own ceiling server-side, so a
                 // small corp can issue below ₳100,000 rather than being locked out
                 // (ticket #1083). `bondsAvailable` is false below the dust floor.
@@ -262,6 +275,16 @@ export default function BondsTab({
                       )}
                     </div>
 
+                    {limitedByExitEquity && bondInfo.exitEquity !== undefined && (
+                      <p className="text-[11px] text-muted mb-3">
+                        Your headroom is set by what this corporation could realize by selling up (
+                        {formatFull(bondInfo.exitEquity)}), not by what it is worth as a going
+                        concern. Debt beyond that could not be repaid out of assets, so it is not
+                        offered. Building capacity, holding cash, or buying bonds all raise that
+                        figure.
+                      </p>
+                    )}
+
                     {bondActionError && (
                       <div className="rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error mb-3">
                         {bondActionError}
@@ -304,7 +327,9 @@ export default function BondsTab({
                         <p className="text-[11px] text-muted">
                           {bondsUnavailable ? (
                             <span className="text-error">
-                              Too small to issue bonds yet — build more equity headroom.
+                              {limitedByExitEquity
+                                ? "No borrowing capacity yet. Build capacity this corporation could sell."
+                                : "Too small to issue bonds yet. Build more equity headroom."}
                             </span>
                           ) : parsedFaceValue >= effectiveMin ? (
                             <span className="text-foreground font-medium">

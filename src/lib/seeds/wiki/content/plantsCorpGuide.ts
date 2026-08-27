@@ -13,6 +13,7 @@ import {
 } from "@/lib/constants/corporations";
 import {
   MAX_BOND_ISSUANCE_FRACTION,
+  MAX_BOND_ISSUANCE_EXIT_EQUITY_FRACTION,
   MAX_BOND_ISSUANCE_REVENUE_FRACTION,
   BOND_ISSUANCE_COOLDOWN_TURNS,
   BOND_ISSUANCE_COOLDOWN_TURNS_PRIVATE,
@@ -157,7 +158,7 @@ Mothballing beats idling on cost by design. If your selling share is very low an
 
 Building plants takes cash, and bonds are how a corporation raises it. The essentials:
 
-- **Caps.** A single issuance is limited to ${MAX_BOND_ISSUANCE_FRACTION}x your liquid capital and ${pct(MAX_BOND_ISSUANCE_REVENUE_FRACTION)} of your annual revenue. You cannot lever an empty shell into a war chest.
+- **Caps.** A single issuance is limited to ${pct(MAX_BOND_ISSUANCE_REVENUE_FRACTION)} of your annual revenue. Total debt is limited to ${MAX_BOND_ISSUANCE_FRACTION}x your equity, and separately to ${MAX_BOND_ISSUANCE_EXIT_EQUITY_FRACTION}x what you could realize by selling up: your plants at book, your cash, and any bonds you hold. The second cap is usually the binding one for a built-out corporation, and it is deliberate. You are never lent more than your creditors could recover, which is also the test that decides whether you have defaulted. You cannot lever an empty shell into a war chest.
 - **Cooldowns.** After an issuance, public corporations wait ${BOND_ISSUANCE_COOLDOWN_TURNS} turns before issuing again, private ones ${BOND_ISSUANCE_COOLDOWN_TURNS_PRIVATE}.
 - **The coupon scales with your standing.** The rate you pay is your country's prime rate, plus a spread for your credit rating, plus a ${CORPORATE_BOND_SPREAD_PREMIUM} point corporate premium, plus a term premium on longer maturities. Coupons are paid every turn, and more debt means more coupons: your credit rating is scored on debt against equity, so borrowing heavily makes the next borrowing dearer.
 - **Principal comes due.** At maturity the face value is debited from cash. Defaulting craters your credit rating and your bonds trade at pennies.
