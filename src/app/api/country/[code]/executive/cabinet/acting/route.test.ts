@@ -15,6 +15,10 @@ vi.mock("@/lib/api/rateLimit", () => ({
 vi.mock("@/lib/gameState", () => ({
   getGameState: vi.fn().mockResolvedValue({ currentTurn: 400 }),
 }));
+vi.mock("@/lib/cabinet/liveGameYear", () => ({
+  getLiveGameYear: vi.fn().mockResolvedValue(1953),
+  getManuallyEnabledSeats: vi.fn().mockResolvedValue(new Set<string>()),
+}));
 
 let db: MockDb;
 const userId = new ObjectId();
@@ -165,6 +169,27 @@ describe("POST /api/country/[code]/executive/cabinet/acting", () => {
       characterId: appointeeId.toString(),
     });
     expect(res.status).toBe(409);
+    expect(db.collectionMocks["cabinetMembers"]!.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("refuses a seat that does not exist in the current era", async () => {
+    // Homeland Security is a post-2002 department; in 1953 it is not a seat a
+    // President can fill by any route. The nomination route already enforces
+    // this, and acting must not be the way around it.
+    const res = await post({
+      positionId: "secretary_of_homeland",
+      characterId: appointeeId.toString(),
+    });
+    expect(res.status).toBe(400);
+    expect(db.collectionMocks["cabinetMembers"]!.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("refuses a position id that belongs to another country's cabinet", async () => {
+    const res = await post({
+      positionId: "defence_secretary",
+      characterId: appointeeId.toString(),
+    });
+    expect(res.status).toBe(400);
     expect(db.collectionMocks["cabinetMembers"]!.insertOne).not.toHaveBeenCalled();
   });
 

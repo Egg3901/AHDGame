@@ -222,7 +222,6 @@ export default function CabinetOfficePage() {
                 ? Math.max(0, data.member.actingExpiresOnTurn - data.currentTurn)
                 : null
             }
-            viewerIsHolder={data.canAct}
           />
         )}
         <CabinetOfficeLayout

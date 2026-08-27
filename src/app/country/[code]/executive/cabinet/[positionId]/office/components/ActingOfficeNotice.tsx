@@ -8,12 +8,9 @@
  */
 export function ActingOfficeNotice({
   turnsRemaining,
-  viewerIsHolder,
 }: {
   /** Turns left on the appointment, or null when the turn is unknown. */
   turnsRemaining: number | null;
-  /** Whether the reader is the acting holder, which changes the wording. */
-  viewerIsHolder: boolean;
 }) {
   return (
     <section
@@ -25,17 +22,19 @@ export function ActingOfficeNotice({
         <span className="rounded bg-warning/20 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-warning">
           Acting
         </span>
+        {/* States a fact about the office rather than addressing the reader:
+            this page is also reachable by the head of government, the head of
+            state, and admins, none of whom are the acting holder. */}
         <p className="text-sm font-medium text-foreground">
-          {viewerIsHolder
-            ? "You are running this department as an acting secretary."
-            : "This department is being run by an acting secretary."}
+          This department is being run by an acting secretary.
         </p>
       </div>
       <p className="mt-2 text-sm text-muted">
         Day to day work continues as normal: deployments, recruitment, standing orders, and funding
         for projects already under way. Setting department policy or budget allocations, appointing
         or dismissing personnel, adopting doctrine or nuclear programmes, and opening new estates,
-        infrastructure, or energy projects all need a confirmed secretary.
+        infrastructure, or energy projects all need a confirmed secretary, so those controls will be
+        refused until the Senate confirms one.
       </p>
       {turnsRemaining !== null && (
         <p className="mt-2 text-sm text-muted">

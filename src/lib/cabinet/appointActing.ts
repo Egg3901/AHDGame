@@ -7,7 +7,9 @@ import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { z } from "zod";
 import { createNotification } from "@/lib/notifications";
 import { CONGRESS_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
-import { getCabinetPositionById } from "@/lib/constants";
+import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
+import { isSeatActive } from "@/lib/cabinet/rosterEra";
+import { getLiveGameYear, getManuallyEnabledSeats } from "@/lib/cabinet/liveGameYear";
 import { getGameState } from "@/lib/gameState";
 import { type CountryId } from "@/lib/constants/countries";
 import { actingAppointmentsEnabled } from "./actingEligibility";
@@ -22,10 +24,9 @@ import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers
 import type { CabinetNomination, ElectedOfficial, Character } from "@/lib/db/types";
 
 const actingSchema = z.object({
-  positionId: z
-    .string()
-    .min(1, "positionId required")
-    .refine((id) => !!getCabinetPositionById(id), { message: "Invalid positionId" }),
+  // Validated against the country's own roster below, not here: a bare id
+  // lookup is global and would accept another country's seat.
+  positionId: z.string().min(1, "positionId required"),
   characterId: schemas.objectId,
 });
 
@@ -65,8 +66,26 @@ export async function appointActingCabinetMember(
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     const { positionId, characterId } = parsed.data;
 
+    // Country-scoped seat lookup, mirroring the nomination route. A global
+    // `getCabinetPositionById` would accept a seat belonging to another
+    // country's cabinet.
+    const positionDef = getCabinetPositions(countryId).find((p) => p.id === positionId);
+    if (!positionDef) {
+      return NextResponse.json({ error: "Invalid positionId" }, { status: 400 });
+    }
+
     const db = await getDb();
     const now = new Date();
+
+    // Era gating, same rule the nomination route enforces: a seat outside its
+    // yearEnabled/yearRetired range does not exist yet and cannot be filled,
+    // by confirmation or by an acting appointment.
+    if (!isSeatActive(positionDef, await getLiveGameYear(db), await getManuallyEnabledSeats(db))) {
+      return NextResponse.json(
+        { error: "This cabinet position does not exist in the current era" },
+        { status: 400 }
+      );
+    }
 
     const presidentOfficial = await db
       .collection<ElectedOfficial>("electedOfficials")
@@ -186,7 +205,9 @@ export async function appointActingCabinetMember(
       updatedAt: now,
     } as never);
 
-    const posName = getCabinetPositionById(positionId)?.name ?? positionId;
+    // From the country's own roster, resolved above, rather than the global
+    // lookup: two countries may share a position id with different names.
+    const posName = positionDef.name;
     await createNotification({
       userId: appointee.userId,
       type: "system",
