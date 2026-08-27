@@ -31,7 +31,6 @@ function depthFor(optionId: string): ResponseDepth {
   const military = (side?: "a" | "b", scale = 15): ResponseDepth => ({
     campaignRequirement: {
       allowedStages: ["posture", "mobilization", "operations"],
-      minTreasuryPctGdp: 0.0002,
       minMilitaryReadiness: 44,
       minLogistics: 40,
       minDomesticSupport: 42,
@@ -53,7 +52,6 @@ function depthFor(optionId: string): ResponseDepth {
     return {
       campaignRequirement: {
         allowedStages: ["posture", "mobilization", "operations"],
-        minTreasuryPctGdp: 0.0001,
         minIntelligence: 52,
         minLogistics: 30,
       },
@@ -70,7 +68,7 @@ function depthFor(optionId: string): ResponseDepth {
   }
   if (["humanitarian_aid", "relief"].includes(optionId)) {
     return {
-      campaignRequirement: { minTreasuryPctGdp: 0.00005, minLogistics: 20 },
+      campaignRequirement: { minLogistics: 20 },
       campaignCommitment: {
         kind: "humanitarian",
         scale: 12,
