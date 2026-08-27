@@ -1,7 +1,7 @@
 import type { ObjectId } from "mongodb";
 
 /**
- * UK annual Budget (epic #856, ticket #858 — Cluster B).
+ * UK annual Budget (epic #856, ticket #858, Cluster B).
  *
  * A dedicated Budget subsystem: the Chancellor authors an annual bundle of tax
  * levers + departmental spending allocations, tables it, and the Commons votes
@@ -18,14 +18,14 @@ export type UKBudgetStatus =
   | "tabled"
   /** Passed the confidence vote. */
   | "passed"
-  /** Defeated — triggers the budget-defeat confidence hit. */
+  /** Defeated, which triggers the budget-defeat confidence hit. */
   | "defeated";
 
 export interface UKBudget {
   _id?: ObjectId;
   fiscalYear: number;
   status: UKBudgetStatus;
-  /** Authoring Chancellor (null if authored by an NPP government / admin). */
+  /** Authoring Chancellor or acting Prime Minister (null for an NPP government). */
   chancellorCharacterId: ObjectId | null;
   /**
    * Tax levers: UK tax legislation id → rate (percent). Keys validated against
@@ -33,11 +33,13 @@ export interface UKBudget {
    */
   taxRates: Record<string, number>;
   /**
-   * Departmental spending split: spending category → share of the budget
-   * (percent). Categories validated against KNOWN_SPENDING_CATEGORIES; shares
-   * sum to ~100.
+   * Statutory programme changes bundled into this Budget: political-law id to
+   * target level (0-4). These compile into ordinary policy provisions so the
+   * enacted-law ledger remains authoritative.
    */
-  spendingAllocations: Record<string, number>;
+  programLevels: Record<string, number>;
+  /** Legacy unshipped v1 field. Never execute these percentages. */
+  spendingAllocations?: Record<string, number>;
   tabledAt?: Date | null;
   resolvedAt?: Date | null;
   votesFor?: number;

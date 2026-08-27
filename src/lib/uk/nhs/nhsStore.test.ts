@@ -2,18 +2,15 @@ import { describe, it, expect, vi } from "vitest";
 import { getNhsQuality, tickNhsFromBudget } from "./nhsStore";
 import { NHS_QUALITY_START, NHS_BASELINE_HEALTHCARE_SHARE } from "./nhsQuality";
 
-/** In-memory ukBudgets + ukNhsState fake. */
-function fakeDb(opts: { budget?: unknown; nhsQuality?: number } = {}) {
+/** In-memory federalBudget + ukNhsState fake. */
+function fakeDb(opts: { federalBudget?: unknown; nhsQuality?: number } = {}) {
   const nhs: { quality?: number; lastHealthcareShare?: number } =
     opts.nhsQuality !== undefined ? { quality: opts.nhsQuality } : {};
-  const budgets = opts.budget ? [opts.budget] : [];
   const collection = vi.fn((name: string) => {
-    if (name === "ukBudgets") {
+    if (name === "federalBudget") {
       return {
-        async findOne(f: { fiscalYear: number }) {
-          return (
-            (budgets as { fiscalYear: number }[]).find((b) => b.fiscalYear === f.fiscalYear) ?? null
-          );
+        async findOne() {
+          return opts.federalBudget ?? null;
         },
       };
     }
@@ -41,10 +38,10 @@ describe("getNhsQuality", () => {
 });
 
 describe("tickNhsFromBudget", () => {
-  it("rises when a passed Budget funds healthcare above baseline", async () => {
+  it("rises when enacted fiscal policy funds healthcare above baseline", async () => {
     const { db, nhs } = fakeDb({
       nhsQuality: 60,
-      budget: { fiscalYear: 1953, status: "passed", spendingAllocations: { healthcare: 40 } },
+      federalBudget: { _id: "UK", spending: { byCategory: { health: 40 }, total: 100 } },
     });
     const q = await tickNhsFromBudget(db, { fiscalYear: 1953, now: new Date() });
     expect(q).toBeGreaterThan(60); // 40% >> 18% baseline → target high → quality climbs
@@ -52,27 +49,18 @@ describe("tickNhsFromBudget", () => {
     expect(nhs.lastHealthcareShare).toBe(40);
   });
 
-  it("falls when a passed Budget underfunds healthcare", async () => {
+  it("falls when enacted fiscal policy underfunds healthcare", async () => {
     const { db } = fakeDb({
       nhsQuality: 60,
-      budget: { fiscalYear: 1953, status: "passed", spendingAllocations: { healthcare: 4 } },
+      federalBudget: { _id: "UK", spending: { byCategory: { health: 4 }, total: 100 } },
     });
     const q = await tickNhsFromBudget(db, { fiscalYear: 1953, now: new Date() });
     expect(q).toBeLessThan(60);
   });
 
-  it("uses the neutral baseline when no passed Budget exists", async () => {
+  it("uses the neutral baseline when the fiscal ledger is unavailable", async () => {
     const { db, nhs } = fakeDb({ nhsQuality: 60 }); // no budget
     await tickNhsFromBudget(db, { fiscalYear: 1953, now: new Date() });
     expect(nhs.lastHealthcareShare).toBe(NHS_BASELINE_HEALTHCARE_SHARE);
-  });
-
-  it("ignores an unpassed (draft/tabled) Budget", async () => {
-    const { db, nhs } = fakeDb({
-      nhsQuality: 60,
-      budget: { fiscalYear: 1953, status: "tabled", spendingAllocations: { healthcare: 40 } },
-    });
-    await tickNhsFromBudget(db, { fiscalYear: 1953, now: new Date() });
-    expect(nhs.lastHealthcareShare).toBe(NHS_BASELINE_HEALTHCARE_SHARE); // not the tabled 40
   });
 });
