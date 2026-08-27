@@ -20,6 +20,7 @@ import {
 } from "@/lib/db/collections/peaceOffers";
 import { validatePeaceOffer, isOfferLive, maxIndemnityForGdp } from "@/lib/military/peaceOffer";
 import type { PeaceTerm } from "@/lib/military/peaceTerm";
+import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
 import { getCountryState } from "@/lib/countryState";
 import type { FederalBudget } from "@/lib/db/types";
 import { opposedBelligerents } from "@/lib/military/occupation";
@@ -91,10 +92,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     // Wars this country is actually FIGHTING, not merely hosting.
     // `listConflictsForCountry` also matches `hostCountry`, and a country can host a
     // war it is not a belligerent in — there is nothing for it to negotiate there.
+    // A war awaiting terms is excluded too: it has already been won, the POST would
+    // refuse an offer for it, and listing it would put a choice in the dropdown that
+    // cannot go anywhere.
     const wars = (await listConflictsForCountry(db, countryId)).filter(
       (c) =>
-        (c.sideA.countries as string[]).includes(countryId) ||
-        (c.sideB.countries as string[]).includes(countryId)
+        !isConflictConcluded(c.status) &&
+        ((c.sideA.countries as string[]).includes(countryId) ||
+          (c.sideB.countries as string[]).includes(countryId))
     );
 
     const offers = await listOffersForCountry(

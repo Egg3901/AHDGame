@@ -204,7 +204,9 @@ export default async function ConflictRecordPage({
     // whole posting set is sent, not just this conflict's: the route merges other
     // commands' rows back but replaces this CG's own wholesale, so omitting the
     // rest would recall every general they have posted elsewhere.
-    if (ownCommand && doc.status !== "resolved") {
+    // Concluded, not merely resolved: a war awaiting terms takes no more postings,
+    // so offering the lever there would be a control that cannot do anything.
+    if (ownCommand && !isConflictConcluded(doc.status)) {
       const ownUnits = await getMilitaryUnitsCollection(db)
         .find({ countryId: viewerCountry })
         .toArray();

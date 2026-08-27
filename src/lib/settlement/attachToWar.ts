@@ -237,7 +237,10 @@ export async function findQualifyingWar(db: Db): Promise<QualifyingWarMatch | nu
       // Mirrors `qualifyWar`'s own gate; that one is authoritative, this one just
       // keeps proxy wars out of the result set.
       type: "interstate",
-      status: { $ne: "resolved" },
+      // Neither resolved NOR awaiting terms. A war whose front has already run to a
+      // pole has been decided, and freezing the question onto it would attach the
+      // crisis to a fight it had no part in and that settles on the next tick.
+      status: { $nin: ["resolved", "terms_pending"] },
       $or: [{ "sideA.countries": { $in: GERMANIES } }, { "sideB.countries": { $in: GERMANIES } }],
     } as Filter<ConflictDoc>)
     .toArray();

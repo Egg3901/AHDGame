@@ -5,6 +5,8 @@ import type { ConflictTier } from "@/lib/military/conflictVisibility";
 import type { ForceRow, RecordBattleRow, SideForce } from "./conflictRecordView";
 import { ConflictActions } from "./ConflictActions";
 import { DictateTermsPanel, type DictateTermsView } from "./DictateTermsPanel";
+import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
+import type { ConflictStatus } from "@/lib/db/types/conflict";
 import { CommandChainPanel, CommandLockedPanel, HowThisFrontMoves } from "./CommandChainPanel";
 import { PostedGeneralsPanel, type PostedGeneralRow } from "./PostedGeneralsPanel";
 import { EmployCommandPanel, type EmployableGeneral } from "./EmployCommandPanel";
@@ -164,6 +166,9 @@ const STATUS_COLOR: Record<string, string> = {
   active: "#eab308",
   escalating: "#ff5a3c",
   winding_down: "#86d978",
+  // Amber, like `active`: a war awaiting terms is not over and something is still
+  // owed. Without an entry it fell back to the resolved grey and read as finished.
+  terms_pending: "#eab308",
   resolved: "#8a8a9a",
 };
 
@@ -279,10 +284,12 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
   const pctA = 100 - pctB;
   const publicOnly = c.tier === "public";
   // "Nothing opposes you here" is a claim about a LIVE front seen from a side. A
-  // resolved war has returned every unit to reserve, so both sides read as zero —
-  // which would otherwise invite the reader to take ground in a finished war.
+  // concluded war has returned every unit to reserve, so both sides read as zero,
+  // which would otherwise invite the reader to take ground in a finished war. A war
+  // awaiting terms stands its rosters down exactly as a resolved one does, so it has
+  // to be excluded here too.
   const unopposed =
-    c.status !== "resolved" &&
+    !isConflictConcluded(c.status as ConflictStatus) &&
     c.ownSide !== null &&
     (c.ownSide === "A" ? c.forceB : c.forceA).divisions === 0;
 
