@@ -20,7 +20,7 @@ import {
   recommendRole,
   TERRAIN,
 } from "@/lib/military/combat";
-import { computeEffectivePower } from "@/lib/constants/military";
+import { computeEffectivePower, getUnitArchetype } from "@/lib/constants/military";
 import { ATTRITION } from "@/lib/military/config";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
@@ -151,8 +151,13 @@ async function main() {
     );
     for (const [c, us] of byCountry) {
       const men = us.reduce((a, u) => a + u.personnel, 0);
-      // Establishment is the unit's full table; personnel is what is actually present.
-      const est = us.reduce((a, u) => a + (u.establishment ?? u.personnel), 0);
+      // Establishment is the archetype's full table, NOT a field on the unit -- that is
+      // where `reinforceUnit` reads it from, so the refill ratios below have to use the
+      // same source or they describe a flow the turn processor does not run.
+      const est = us.reduce(
+        (a, u) => a + (getUnitArchetype(u.domain, u.type)?.personnel ?? u.personnel),
+        0
+      );
       let dead = 0;
       const enemy = c === "US" ? [DD] : [usAll];
       const own = await mk(
