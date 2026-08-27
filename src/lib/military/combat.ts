@@ -6,6 +6,7 @@ import type { NatMods } from "./doctrineTree";
 import type { GenMods } from "./generals";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import { VETM, eqAvg, computeEffectivePower } from "@/lib/constants/military";
+import { NAVAL_REACH } from "./config";
 
 // VETM + eqAvg live canonically in constants/military.ts (the one power model);
 // re-exported here so combat-suite consumers keep importing from "./combat".
@@ -571,6 +572,12 @@ export interface Front {
   contested: boolean;
   terr: number;
   infra: number;
+  /**
+   * Whether this front reaches the sea. Set by `conflictToFront`, which derives it from
+   * the host's geography unless the conflict overrides it. Absent means unknown, which
+   * `navalReach` treats as inland.
+   */
+  seaAccess?: boolean;
   sev?: string;
   west?: string;
   east?: string;
@@ -730,6 +737,27 @@ export function terrainFactor(
   if (T.domain && T.domain[domain]) m *= T.domain[domain];
   if (T.trait) for (const k of traitKeys || []) if (T.trait[k]) m *= T.trait[k];
   return Math.max(0.6, Math.min(1.4, m));
+}
+
+/**
+ * How much of a naval formation reaches a land battle, by hull class and sea access.
+ *
+ * Deliberately NOT folded into `terrainFactor`. That function clamps to 0.6..1.4, which
+ * encodes a rule worth keeping -- terrain never swings a unit more than +/-40%. Whether
+ * a hull can touch the battle at all is a different question and has to go below 0.6.
+ *
+ * Only `Carrier Strike Group` carries `strategic` among naval types (the other holders
+ * are air, rocket and space domain), so scoping to the naval domain makes that trait a
+ * clean carrier test without inventing new data.
+ */
+export function navalReach(
+  front: Pick<Front, "seaAccess"> | undefined,
+  domain: string,
+  traitKeys: string[]
+): number {
+  if (domain !== "naval") return 1;
+  const band = front?.seaAccess ? NAVAL_REACH.coastal : NAVAL_REACH.inland;
+  return (traitKeys || []).includes("strategic") ? band.carrier : band.escort;
 }
 
 /** Recommended battle role from a unit's profile (design recommendRole). */

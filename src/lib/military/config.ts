@@ -174,6 +174,20 @@ export const ATTRITION = {
 } as const;
 
 /**
+ * How much of a naval formation's combat value reaches a LAND battle.
+ *
+ * A carrier air wing genuinely strikes inland; escorts exist to screen the carrier and
+ * hold sea lanes, and contribute almost nothing to a division fighting inland of them.
+ * Before this, `temperate` and `arid` -- the two families covering every inland front in
+ * the game -- carried no naval multiplier at all, so a carrier strike group defended a
+ * German forest at full strength and an attack submarine did it at 1.05.
+ */
+export const NAVAL_REACH = {
+  coastal: { carrier: 1.0, escort: 0.4 },
+  inland: { carrier: 0.5, escort: 0.1 },
+} as const;
+
+/**
  * Territorial control. `ConflictDoc.control` is the share of the HOST country's
  * territory held by side B (0 = side A holds all of it, 100 = side B holds all).
  * Battles move it; reaching a pole ends the war.
