@@ -218,6 +218,9 @@ export async function GET(_request: Request, { params }: RouteParams) {
             // controls and the API's 403s can never drift apart.
             acting: isActingMember(member),
             barredScopes: barredScopesFor(member),
+            // The tenure is a separate fact from the scope: the locks say what a
+            // caretaker cannot do, this says how long they remain one.
+            actingExpiresOnTurn: member.actingExpiresOnTurn ?? null,
           }
         : null;
 

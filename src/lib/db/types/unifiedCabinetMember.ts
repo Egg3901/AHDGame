@@ -54,6 +54,11 @@ export interface UnifiedCabinetMember extends IterationStampFields {
   /** Custom banner image for office page */
   bannerImageUrl?: string;
 
+  /** Turn the acting appointment was seated. Absent on confirmed holders. */
+  actingSinceTurn?: number;
+  /** Turn the acting appointment lapses: `actingSinceTurn + ACTING_TENURE_TURNS`. */
+  actingExpiresOnTurn?: number;
+
   createdAt: Date;
   updatedAt: Date;
 }

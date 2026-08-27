@@ -20,6 +20,10 @@ import { getManuallyEnabledSeats } from "@/lib/cabinet/liveGameYear";
 import { getLiveGameYear } from "@/lib/cabinet/liveGameYear";
 import { getPartyHex } from "@/lib/utils/politics";
 import { resolvePresidentialCountry } from "@/lib/executive/presidentialCountry";
+import { getGameState } from "@/lib/gameState";
+import { actingAppointmentsEnabled } from "@/lib/cabinet/actingEligibility";
+import { ACTING_TENURE_TURNS } from "@/lib/cabinet/actingScope";
+import { getActingChargesCollection } from "@/lib/db/collections/actingAppointmentCharges";
 
 // GET /api/whitehouse/cabinet — Returns all cabinet positions with current members, pending nominations, and the caller's senator/president status.
 // Country-scoped via ?country= (default US).
@@ -77,6 +81,22 @@ export async function GET(request: Request) {
       presidentOfficial.characterId.equals(myCharacter._id);
     const isSenator = !!senatorOfficial;
 
+    // Which seats this President has already spent their acting appointment
+    // on, this presidency. Only loaded where the mechanic applies at all.
+    const gameState = await getGameState();
+    const currentTurn = gameState?.currentTurn ?? 1;
+    const spentChargePositions = new Set<string>();
+    if (actingAppointmentsEnabled(countryId) && presidentOfficial?.characterId) {
+      const charges = await getActingChargesCollection(db)
+        .find({
+          countryId,
+          presidentCharacterId: presidentOfficial.characterId,
+          presidencyStartedAt: presidentOfficial.electedAt ?? null,
+        })
+        .toArray();
+      for (const charge of charges) spentChargePositions.add(charge.positionId);
+    }
+
     const memberByPosition = new Map(cabinetMembers.map((m) => [m.positionId, m]));
     const nominationByPosition = new Map(nominations.map((n) => [n.positionId, n]));
     const myCharId = myCharacter?._id.toString();
@@ -116,7 +136,11 @@ export async function GET(request: Request) {
               avatarUrl: member.characterId
                 ? charMap.get(member.characterId.toString())?.avatarUrl
                 : undefined,
-              acting: member.isNPP ? true : false,
+              // The real flag. This used to report `isNPP`, which both hid
+              // genuine acting holders and mislabelled NPP-held seats as
+              // acting. `isNPP` is already reported separately above.
+              acting: member.acting === true,
+              actingExpiresOnTurn: member.actingExpiresOnTurn ?? null,
               confirmedAt: (member.confirmedAt ?? member.createdAt).toISOString(),
             }
           : null,
@@ -147,6 +171,10 @@ export async function GET(request: Request) {
               myVote,
             }
           : null,
+        // Whether this President has already spent their one acting
+        // appointment for this seat. Drives the disabled state on the appoint
+        // control, so the rule is visible before it is hit.
+        actingChargeSpent: spentChargePositions.has(pos.id),
       };
     });
 
@@ -155,6 +183,9 @@ export async function GET(request: Request) {
       isPresident,
       isSenator,
       isAdmin: authUser?.isAdmin ?? false,
+      currentTurn,
+      actingEnabled: actingAppointmentsEnabled(countryId),
+      actingTenureTurns: ACTING_TENURE_TURNS,
     });
   } catch (error) {
     return handleRouteError(error);

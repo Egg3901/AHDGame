@@ -373,6 +373,10 @@ const RUNTIME: CollectionEntry[] = [
   { name: "cabinetMembers", category: "runtime" },
   { name: "cabinetNominations", category: "runtime" },
   { name: "cabinetSettings", category: "runtime" },
+  // Spent acting-appointment charges (one per seat, per presidency). Runtime:
+  // written only when a President installs an acting secretary, and it must
+  // outlive the cabinetMembers row it authorised, which is deleted on expiry.
+  { name: "actingAppointmentCharges", category: "runtime" },
 
   // SCOTUS (#3598) — Justice office stored off-currentOffice (mirrors
   // centralBanks); Senate-confirmation lifecycle mirrors cabinetNominations.

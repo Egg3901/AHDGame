@@ -85,7 +85,11 @@ async function loadExecutiveActInputs(db: Db, countryId: CountryId): Promise<Exe
     db
       .collection<CabinetMember>("cabinetMembers")
       .find({ countryId })
-      .sort({ confirmedAt: -1 })
+      // By _id rather than confirmedAt: acting holders have no confirmedAt, and
+      // a descending sort on a missing field would push every acting
+      // appointment past the limit and out of the ledger entirely. Every
+      // document has an _id, and its timestamp is the seating order.
+      .sort({ _id: -1 })
       .limit(14)
       .toArray(),
     loadCountryLegislationTypes(db, countryId),
@@ -122,7 +126,10 @@ async function loadExecutiveActInputs(db: Db, countryId: CountryId): Promise<Exe
       _id: member._id.toString(),
       characterName: member.characterName,
       positionLabel: humanizePositionId(member.positionId),
-      confirmedAt: member.confirmedAt,
+      // Acting holders carry no confirmedAt, and the ledger sorts on this
+      // date, so fall back rather than hand it undefined.
+      confirmedAt: member.confirmedAt ?? member.appointedAt ?? member.createdAt,
+      acting: member.acting === true,
     })),
   };
 }

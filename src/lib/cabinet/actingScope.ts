@@ -1,11 +1,11 @@
 /**
  * What an acting secretary may and may not do.
  *
- * An acting appointment (`POST /api/whitehouse/cabinet/acting`) exists to stop a
- * department going dark between a president taking office and the Senate getting
- * round to a confirmation vote. It is a caretaker post, not a short confirmation:
- * the holder keeps the lights on, and the levers that bind the department past
- * their own tenure stay locked until the Senate votes.
+ * An acting appointment exists to stop a department going dark between a
+ * president taking office and the Senate getting round to a confirmation vote.
+ * It is a caretaker post, not a short confirmation: the holder keeps the lights
+ * on, and the levers that bind the department past their own tenure stay locked
+ * until the Senate votes.
  *
  * The split is operations vs commitments:
  *
@@ -23,6 +23,11 @@
  *
  * Only the executive's own restriction lives here. Whether the caller holds the
  * seat at all is a separate, earlier check every route already does.
+ *
+ * The appointment is also bounded in TIME and in COUNT, which is what stops a
+ * caretaker post becoming a permanent one: see `ACTING_TENURE_TURNS` and
+ * `ACTING_CHARGES_PER_SEAT` below, and `CABINET_ROUTE_SCOPES` for the manifest
+ * that keeps every mutating route accounted for.
  */
 
 /** A class of cabinet lever, grouped by what confirmation is protecting. */
@@ -100,3 +105,95 @@ export function barredScopesFor(member: ActingScopeMember): CabinetLeverScope[] 
   if (!isActingMember(member)) return [];
   return Object.keys(BARRED_SCOPES) as CabinetLeverScope[];
 }
+
+/**
+ * How long an acting appointment lasts before it lapses.
+ *
+ * Matches `SETTING_CHANGE_COOLDOWN_TURNS`, so an acting holder could make at
+ * most one policy change in a full tenure even if policy were open to them.
+ */
+export const ACTING_TENURE_TURNS = 24;
+
+/**
+ * Acting appointments a President may make per cabinet seat, per presidency.
+ *
+ * `hasUnspentActingCharge` implements this as "no charge row exists", which is
+ * only equivalent while the value is 1. Raising it means changing that helper
+ * to compare a count against this constant.
+ */
+export const ACTING_CHARGES_PER_SEAT = 1;
+
+/**
+ * Every mutating cabinet route, keyed by its path below
+ * `/api/country/[code]/executive/cabinet/[positionId]/`, mapped to the lever
+ * scope it exercises. `"operational"` means an acting holder may use it.
+ *
+ * This table is the completeness guarantee. The routes themselves call
+ * `requireConfirmedSecretary(member, scope)` with a literal, which is readable
+ * at the call site but says nothing about the routes that DON'T call it. The
+ * manifest closes that gap: `actingScope.manifest.test.ts` walks the route tree
+ * and fails when a mutating route is missing here, or when the scope a route
+ * passes disagrees with the scope recorded here. A new cabinet route therefore
+ * cannot ship without someone deciding, in writing, what an acting secretary may
+ * do with it.
+ *
+ * GET handlers are never gated: who may READ a cabinet office is decided by
+ * `resolveCabinetOfficeVisibility` instead.
+ */
+export const CABINET_ROUTE_SCOPES: Record<string, CabinetLeverScope | "operational"> = {
+  // Operational: reversible, and spent within a tenure.
+  "military/recruit": "operational",
+  "military/[unitId]": "operational",
+  "military/[unitId]/assign": "operational",
+  "military/[unitId]/posture": "operational",
+  "military/[unitId]/upgrade": "operational",
+  "military/assign-branch": "operational",
+  formations: "operational",
+  theaters: "operational",
+  commands: "operational",
+  "battle/declare": "operational",
+  "battle/auto-join": "operational",
+  manpower: "operational",
+  order: "operational",
+  banner: "operational",
+  // Funding something already running keeps a department alive; starting
+  // something new does not.
+  "infra/[projectId]/funding": "operational",
+  "estates/[estateId]/fund": "operational",
+  // Splitting an already-appropriated budget is operations, not direction: the
+  // appropriation itself was decided elsewhere. Deliberately open, matching the
+  // allowed list in this file's header.
+  allocation: "operational",
+
+  // The department's declared policy direction, which is what confirmation is
+  // a vote on.
+  setting: "stance",
+
+  // Who serves, which outlasts whoever appointed them.
+  generals: "personnel",
+  "generals/[characterId]": "personnel",
+
+  // Irreversible, and permanent at national scale.
+  "doctrine/adopt": "doctrine",
+  "nuclear/adopt": "doctrine",
+  // `nuclear/covert` itself is a GET surface; its mutations are the two below.
+  "nuclear/covert/breakout": "doctrine",
+  "nuclear/covert/funding": "doctrine",
+  "nuclear/production": "doctrine",
+  "nuclear/test": "doctrine",
+
+  // Commits money past the appointment.
+  "defence-contracts": "procurement",
+  "debt-operation": "treasury",
+  "bond-profile": "treasury",
+
+  // What the department owns, as opposed to what it funds.
+  "estates/open": "assets",
+  "estates/[estateId]/expand": "assets",
+  "estates/[estateId]": "assets",
+  "infra/start": "assets",
+  "infra/[projectId]": "assets",
+  "energy/build": "assets",
+  "energy/[plantId]": "assets",
+  "energy/[plantId]/upgrade": "assets",
+};

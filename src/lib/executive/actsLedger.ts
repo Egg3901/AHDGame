@@ -38,7 +38,14 @@ export interface LedgerCabinetMemberInput {
   _id: string;
   characterName: string;
   positionLabel: string;
+  /**
+   * When the seat was taken. Acting holders are never confirmed, so callers
+   * must fall back to the appointment date rather than passing `undefined`:
+   * the ledger sorts on this and would throw on a missing value.
+   */
   confirmedAt: Date;
+  /** Seated directly by the executive, with no confirmation vote. */
+  acting?: boolean;
 }
 
 export interface ExecutiveActInputs {
@@ -130,8 +137,11 @@ export function mergeExecutiveActs(
 
   for (const member of inputs.cabinetMembers) {
     acts.push({
-      kind: "confirmed",
-      title: `${member.characterName} — ${member.positionLabel}`,
+      // An acting holder was never confirmed, so labelling them CONFIRMED
+      // would misreport how they took the seat.
+      kind: member.acting ? "acting" : "confirmed",
+      title: `${member.characterName}, ${member.positionLabel}`,
+      detail: member.acting ? "acting appointment, no confirmation vote" : undefined,
       at: member.confirmedAt,
       refId: member._id,
     });

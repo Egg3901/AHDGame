@@ -68,6 +68,7 @@ export * from "./ticket";
 export * from "./legislation";
 export * from "./leadership";
 export * from "./cabinet";
+export * from "./actingAppointmentCharge";
 export * from "./scotus";
 export * from "./newsPost";
 export * from "./userSubscription";
