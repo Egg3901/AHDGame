@@ -18,7 +18,7 @@ import { getExtractionStrategyResources } from "@/lib/corporations/extractionStr
 import { launchCorpProspect } from "@/lib/extraction/commands/launchCorpProspect";
 import { getStateResourceCapacityCollection } from "@/lib/db/collections/stateResourceCapacity";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
-import { glutStaggerEligible } from "@/lib/turn/nppCorporationBehavior";
+import { glutStaggerEligible } from "@/lib/turn/npp/cohort";
 import { prospectCostAnchor } from "@/lib/constants/prospecting";
 import {
   anchorToCorpCapital,

@@ -23,6 +23,7 @@ import {
 } from "@/lib/constants/capacityEconomy";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
 import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
+import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
 
 const noPrices: CommodityPriceRatioFn = () => null;
 const noState = new Set<string>();
@@ -88,6 +89,15 @@ const plantsCtx: NppPlantsContext = {
   costOfLivingOf: () => null,
 };
 
+const plants1953Ctx: NppPlantsContext = {
+  enabled: true,
+  eraUnitScale: getEraUnitScale("1953-default"),
+  year: 1960,
+  preset: "1953-default",
+  primeRateOf: () => 5,
+  costOfLivingOf: () => 100,
+};
+
 function decide(
   c: Corporation,
   sectors: CorporateSector[],
@@ -123,6 +133,51 @@ const EXPECTED_BUILD = computeBuildCost({
 }).totalAnchor;
 
 describe("NPP expansion under plants — price parity", () => {
+  it("uses the real era-priced founding quote instead of a modern flat cash gate", () => {
+    const c = corp({ liquidCapital: 10_000 });
+    const decision = decide(
+      c,
+      [sector({ revenue: 1_000, realizedRevenue: 1_000 })],
+      [unownedPool()],
+      plants1953Ctx
+    );
+
+    expect(decision.newSectors).toHaveLength(1);
+    expect((c.liquidCapital ?? 0) - (decision.updates.liquidCapital as number)).toBeLessThan(2_000);
+  });
+
+  it("uses canonical physical P&L to block a loss-making expansion", () => {
+    const losing = sector({
+      plantsPnl: {
+        revenue: 1_000,
+        inventoryRevenue: 0,
+        inventoryCarry: 0,
+        inputs: 700,
+        labour: 300,
+        upkeep: 100,
+        compliance: 0,
+        otherOpex: 0,
+        financialLegs: 0,
+        policyCredit: 0,
+        policyPp: 0,
+        operatingCost: 1_000,
+        totalCost: 1_100,
+        profit: -100,
+        turn: TURN - 1,
+      },
+    });
+    const decision = decide(corp(), [losing], [unownedPool()], plantsCtx);
+
+    expect(decision.newSectors).toBeUndefined();
+  });
+
+  it("retains earnings on a turn that commits new productive investment", () => {
+    const decision = decide(corp({ dividendRate: 8 }), [sector()], [unownedPool()], plantsCtx);
+
+    expect(decision.newSectors).toHaveLength(1);
+    expect(decision.updates.dividendRate).toBe(0);
+  });
+
   it("charges the entry fee plus a real founding build, not a flat 500k", () => {
     const c = corp();
     const decision = decide(c, [sector()], [unownedPool()], plantsCtx);

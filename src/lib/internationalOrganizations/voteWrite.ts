@@ -1,5 +1,4 @@
 import type { Collection, Document, Filter, ObjectId, UpdateResult } from "mongodb";
-import type { CountryId } from "@/lib/constants/countries";
 import type { ProposalVoteRecord } from "@/lib/db/types/internationalOrganization";
 
 interface PendingVoteContainer {
@@ -47,14 +46,6 @@ export async function upsertPendingOrganizationVote<T extends PendingVoteContain
   );
 }
 
-/**
- * Fold historical duplicate rows down to the latest vote per country so stale
- * corruption cannot keep affecting unanimous or majority vote resolution.
- */
-export function dedupeOrganizationVotes(votes: ProposalVoteRecord[]): ProposalVoteRecord[] {
-  const latestByCountry = new Map<CountryId, ProposalVoteRecord>();
-  for (const vote of votes) {
-    latestByCountry.set(vote.countryId, vote);
-  }
-  return [...latestByCountry.values()];
-}
+// Re-exported so the existing server-side importers keep one import path; the
+// implementation lives in resolutionRules.ts because the client panels tally too.
+export { dedupeOrganizationVotes } from "./resolutionRules";

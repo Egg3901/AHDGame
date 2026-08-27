@@ -8,6 +8,11 @@ import type { OrgSummary, OrgViewerInfo } from "./orgTypes";
 import { VoteButtons } from "./VoteButtons";
 import { VoteRoster } from "./VoteRoster";
 import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
+import {
+  dedupeOrganizationVotes,
+  requiresUnanimity,
+  votesNeeded,
+} from "@/lib/internationalOrganizations/resolutionRules";
 
 interface Props {
   org: OrgSummary;
@@ -25,6 +30,11 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
   const viewerFmCountry = viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
   const viewerIsMember =
     viewerFmCountry != null && org.members.some((m) => m.countryId === viewerFmCountry);
+  // Casting a ballot goes through isVotingMember on the server; membership alone
+  // is not enough.
+  const viewerHoldsVote =
+    viewerFmCountry != null &&
+    org.members.some((m) => m.countryId === viewerFmCountry && m.hasVote);
   const viewerHasPendingWithdrawal =
     viewerFmCountry != null &&
     org.pendingWithdrawalMeasures.some(
@@ -178,26 +188,44 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
             // so there is no member tally to show — only the domestic bill.
             const isFoundingApplication = p.orgVoteExempt === true;
             const turnsLeft = Math.max(0, p.closesOnTurn - currentTurn);
+            const votes = dedupeOrganizationVotes(p.votes);
             const myVote =
               viewerFmCountry != null
-                ? (p.votes.find((v) => v.countryId === viewerFmCountry)?.vote ?? null)
+                ? (votes.find((v) => v.countryId === viewerFmCountry)?.vote ?? null)
                 : null;
-            const yesCount = p.votes.filter((v) => v.vote === "yes").length;
-            const noCount = p.votes.filter((v) => v.vote === "no").length;
-            const eligibleVoterCount = org.members.filter(
-              (m) => m.countryId !== p.proposingCountryId
-            ).length;
-            const progress = eligibleVoterCount > 0 ? (yesCount / eligibleVoterCount) * 100 : 0;
+            // The applicant does not vote on its own accession, and a member
+            // that holds no ballot cannot withhold the consent unanimity needs.
+            const eligibleVoters = org.members.filter(
+              (m) => m.hasVote && m.countryId !== p.proposingCountryId
+            );
+            const eligibleVoterCount = eligibleVoters.length;
+            const countedVotes = votes.filter((v) =>
+              eligibleVoters.some((m) => m.countryId === v.countryId)
+            );
+            const yesCount = countedVotes.filter((v) => v.vote === "yes").length;
+            const noCount = countedVotes.filter((v) => v.vote === "no").length;
+            const needed = votesNeeded("membership_proposal", eligibleVoterCount);
+            const progress = needed > 0 ? (yesCount / needed) * 100 : 0;
+            const requirement =
+              eligibleVoterCount === 0
+                ? "no members hold a vote"
+                : requiresUnanimity("membership_proposal")
+                  ? "unanimous required"
+                  : `${needed} needed`;
 
             const canVote =
-              viewerFmCountry != null && viewerIsMember && viewerFmCountry !== p.proposingCountryId;
+              viewerFmCountry != null &&
+              viewerHoldsVote &&
+              viewerFmCountry !== p.proposingCountryId;
             const reason = !viewerFmCountry
               ? "Sign in as a foreign minister to vote."
               : !viewerIsMember
                 ? `${COUNTRY_CONFIGS[viewerFmCountry].name} must be a member to vote.`
-                : viewerFmCountry === p.proposingCountryId
-                  ? "Applicants cannot vote on their own application."
-                  : undefined;
+                : !viewerHoldsVote
+                  ? "Your country holds no vote in this organization."
+                  : viewerFmCountry === p.proposingCountryId
+                    ? "Applicants cannot vote on their own application."
+                    : undefined;
 
             return (
               <article
@@ -245,7 +273,7 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
                     <div className="mb-3">
                       <div className="mb-1 flex items-center justify-between text-xs text-muted">
                         <span>
-                          {yesCount} / {eligibleVoterCount} yes ({noCount} no) — unanimous required
+                          {yesCount} / {eligibleVoterCount} yes ({noCount} no), {requirement}
                         </span>
                         <span className="tabular-nums">
                           {votingWindowTurns - turnsLeft}/{votingWindowTurns} turns

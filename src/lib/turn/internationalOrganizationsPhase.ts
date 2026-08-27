@@ -20,7 +20,7 @@ import {
 import { getAllCountryAccess } from "@/lib/countryAccess";
 import type { OrgMemberId } from "@/lib/db/types/internationalOrganization";
 import { dedupeOrganizationVotes } from "@/lib/internationalOrganizations/voteWrite";
-import { resolutionPasses } from "@/lib/internationalOrganizations/resolutionRules";
+import { ballotPasses, resolutionPasses } from "@/lib/internationalOrganizations/resolutionRules";
 import {
   applyOrganizationSanctions,
   liftOrganizationSanctions,
@@ -377,7 +377,8 @@ async function resolveExpiredMembershipProposals(db: Db, currentTurn: number): P
 
     // Unanimous current members must vote "yes". Abstain or no-vote counts as
     // non-approval. Empty voter set (e.g., applying to a 0-member org) cannot
-    // succeed under unanimity — block instead of silently admitting.
+    // succeed under unanimity — `ballotPasses` blocks a zero-size ballot rather
+    // than silently admitting, so only the founding waiver reads through.
     let approved = false;
     if (voters.length === 0) {
       approved = members.includes(proposingCountryId);
@@ -387,7 +388,8 @@ async function resolveExpiredMembershipProposals(db: Db, currentTurn: number): P
           .filter((v: ProposalVoteRecord) => v.vote === "yes")
           .map((v: ProposalVoteRecord) => v.countryId)
       );
-      approved = voters.every((c: string) => yesVoters.has(c));
+      const yes = voters.filter((c: string) => yesVoters.has(c)).length;
+      approved = ballotPasses("membership_proposal", voters.length, yes);
     }
 
     // Parallel join (has a linked domestic Join bill): record the member-vote
@@ -562,6 +564,18 @@ async function resolveExpiredOrganizationLegislation(db: Db, currentTurn: number
           },
         }
       );
+      // A resolution that fails leaves the pending list without explanation
+      // otherwise, and under a roll-based threshold failing is ordinary. The
+      // proposer is the one country guaranteed to have a page to log it on.
+      if (item.proposingCountryId in COUNTRY_CONFIGS) {
+        await recordOrgHistoryEvent(
+          db,
+          item.proposingCountryId,
+          currentTurn,
+          `${item.organizationId} rejected ${item.title}.`,
+          { organizationId: item.organizationId, legislationId: item._id.toString() }
+        );
+      }
     }
     resolved++;
   }
@@ -585,18 +599,18 @@ async function resolveExpiredLeadershipElections(db: Db, currentTurn: number): P
     // count toward turnout it can never supply.
     const members = await votingMembers(db, election.organizationId);
     const uniqueVotes = dedupeOrganizationVotes(election.votes as ProposalVoteRecord[]);
-    // Tally yes/no/abstain. Members who didn't vote are treated as abstain.
+    // Only an active "yes" counts. A member who abstains or never votes withholds
+    // consent exactly as a "no" does, so the denominator is the roll rather than
+    // the turnout.
     let yes = 0;
-    let no = 0;
     for (const v of uniqueVotes) {
       if (!members.includes(v.countryId)) continue;
       if (v.vote === "yes") yes++;
-      else if (v.vote === "no") no++;
     }
-    // Simple majority of votes cast (excluding abstain). Tie or zero turnout
-    // leaves the seat unchanged — the org continues operating with the prior
-    // holder (or vacant) until a future election decides.
-    const elected = yes > no && yes > 0;
+    // A majority of the voting roll seats the chair. Falling short leaves the
+    // seat unchanged — the org continues operating with the prior holder (or
+    // vacant) until a future election decides.
+    const elected = ballotPasses("leadership_election", members.length, yes);
 
     if (elected) {
       const orgDef = await loadOrganizationDef(db, election.organizationId);
@@ -644,6 +658,16 @@ async function resolveExpiredLeadershipElections(db: Db, currentTurn: number): P
           },
         }
       );
+      const orgDef = await loadOrganizationDef(db, election.organizationId);
+      if (election.candidateCountryId in COUNTRY_CONFIGS) {
+        await recordOrgHistoryEvent(
+          db,
+          election.candidateCountryId as CountryId,
+          currentTurn,
+          `${election.candidateCharacterName} was not elected ${orgDef?.leadership.title ?? "leader"} of ${election.organizationId}.`,
+          { organizationId: election.organizationId, electionId: election._id.toString() }
+        );
+      }
     }
     resolved++;
   }

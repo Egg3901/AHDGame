@@ -538,6 +538,15 @@ export interface UnitResult {
   role: string;
   dom: string;
   type: string;
+  /**
+   * The nation that owns this formation.
+   *
+   * A coalition side's results are concatenated into one list, so without this the
+   * only country on the record is the principal's and an ally's dead are filed under
+   * the coalition leader's flag. Absent on results from the synthetic (PvE) path,
+   * which has no contingents, and on reports written before this existed.
+   */
+  country?: string;
   casualties: number;
   readiness: number;
   /** Equipment tracks destroyed (0..EQUIPMENT_TRACK_MAX). Replaced from the arsenal. */
@@ -729,11 +738,48 @@ export interface BattleSide extends GeneralBinding {
  */
 export const MATERIEL_LOSS_SCALE = 1.6;
 
+/** One nation's share of a coalition side's engagement. */
+export interface ContingentOutcome {
+  country: string;
+  /**
+   * This nation's share of the side's combat power, apportioned by the combat mass
+   * it brought to the front. Sums to the side's `power` up to per-entry rounding.
+   */
+  power: number;
+  /** This nation's own dead — never the coalition's. */
+  loss: number;
+}
+
 export interface SideOutcome {
+  /** The principal, which names the side. Kept because every pre-coalition reader
+   *  expects it; it is NOT the only belligerent — see `contingents`. */
   country: string;
   power: number;
+  /** The WHOLE side's dead, coalition included. Per-nation figures are on
+   *  `contingents`; quoting this beside `country` credits allies' dead to the
+   *  principal, which is exactly the bug `contingents` exists to fix. */
   loss: number;
   unitResults: UnitResult[];
+  /**
+   * Per-nation attribution, principal first. Absent on reports written before
+   * coalitions were attributed — read it through `contingentsOf`, never directly.
+   */
+  contingents?: ContingentOutcome[];
+}
+
+/**
+ * A side's per-nation breakdown, falling back to the principal on reports written
+ * before contingents were recorded.
+ *
+ * Every reader of a stored `SideOutcome` goes through this. A pre-coalition report
+ * names one country per side and that country carries the whole loss, which is
+ * accurate for the bilateral battles those reports actually describe.
+ */
+export function contingentsOf(
+  side: Pick<SideOutcome, "country" | "power" | "loss" | "contingents">
+): ContingentOutcome[] {
+  if (side.contingents?.length) return side.contingents;
+  return [{ country: side.country, power: side.power, loss: side.loss }];
 }
 export interface PvpBattleResult {
   theaterId: string;
@@ -842,6 +888,43 @@ export function battleForecast(
   };
 }
 
+/**
+ * Break a side's result down per nation.
+ *
+ * Losses come from the FINAL unit results, so the retreat discount is already in
+ * them and the contingents always sum to the side. Power cannot be summed the same
+ * way -- `attStr`/`defStr` are products over the whole side's profile, not a total of
+ * per-nation figures -- so it is apportioned by the combat mass each nation brought,
+ * which is the term those products are built on.
+ */
+function contingentOutcomes(
+  sides: BattleSide[],
+  theaterId: string,
+  sidePower: number,
+  unitResults: UnitResult[]
+): ContingentOutcome[] {
+  // Keyed by country rather than by contingent: two BattleSides under one flag would
+  // otherwise each claim the whole nation's dead.
+  const order: string[] = [];
+  const mass = new Map<string, number>();
+  for (const c of sides) {
+    if (!mass.has(c.country)) order.push(c.country);
+    const m = ownSideProfile([sideCtx(c)], theaterId).combatMass;
+    mass.set(c.country, (mass.get(c.country) ?? 0) + m);
+  }
+  const loss = new Map<string, number>();
+  for (const u of unitResults) {
+    if (!u.country) continue;
+    loss.set(u.country, (loss.get(u.country) ?? 0) + u.casualties);
+  }
+  const total = [...mass.values()].reduce((a, m) => a + m, 0);
+  return order.map((country) => ({
+    country,
+    power: total > 0 ? Math.round((sidePower * (mass.get(country) ?? 0)) / total) : 0,
+    loss: loss.get(country) ?? 0,
+  }));
+}
+
 export function resolvePvpBattle(
   attackers: BattleSide[],
   defenders: BattleSide[],
@@ -911,7 +994,10 @@ export function resolvePvpBattle(
         profile.rearShare,
         profile.reserveRes
       );
-      unitResults.push(...out.unitResults);
+      // Stamp attribution on the way into the shared list. This is the only point
+      // that still knows which contingent produced these results — once they are
+      // concatenated the country is unrecoverable from the report alone.
+      for (const u of out.unitResults) unitResults.push({ ...u, country: c.country });
       loss += out.loss;
     }
     return { unitResults, loss };
@@ -944,17 +1030,30 @@ export function resolvePvpBattle(
     rounds,
     retreat,
     attacker: {
-      // The principal leads the coalition roster, so it names the side.
+      // The principal leads the coalition roster, so it names the side -- but it does
+      // NOT own the side's casualties. `contingents` is who actually bled.
       country: attackers[0]?.country ?? "",
       power: Math.round(attStr),
       loss: attFinal.loss,
       unitResults: attFinal.unitResults,
+      contingents: contingentOutcomes(
+        attackers,
+        theaterId,
+        Math.round(attStr),
+        attFinal.unitResults
+      ),
     },
     defender: {
       country: defenders[0]?.country ?? "",
       power: Math.round(defStr),
       loss: defFinal.loss,
       unitResults: defFinal.unitResults,
+      contingents: contingentOutcomes(
+        defenders,
+        theaterId,
+        Math.round(defStr),
+        defFinal.unitResults
+      ),
     },
   };
 }
