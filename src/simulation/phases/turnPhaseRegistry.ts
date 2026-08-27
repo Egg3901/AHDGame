@@ -195,6 +195,13 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         // Bond servicing (processBondTurn) is intentionally NOT skipped here: it
         // settles existing contractual coupons/maturities, including sovereign
         // bonds held by players, which are not "corporation actions".
+        //
+        // That is still true of SETTLEMENT, but processBondTurn now gates its own
+        // default DETECTION on this same flag (ticket #1198). Paying a coupon out
+        // of a corp whose revenue this pause just switched off is contractual;
+        // liquidating it for the resulting cash hole is the pause's own doing.
+        // Corporation #624 was defaulted twice that way. See Phase 3 in
+        // `bondTurn.ts` for the full argument.
         const corpActionsPaused = gameState.corporationActionsPaused === true;
         // Skip the disaster spawner while corporate actions are paused: the
         // corporation turn (which applies the onset margin penalty) is skipped
