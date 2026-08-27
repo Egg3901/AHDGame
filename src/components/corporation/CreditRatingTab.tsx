@@ -211,6 +211,13 @@ function WhatIfDebtPanel({
 
   const debtSliderBounds = useMemo(() => {
     if (!bondInfo.creditDiagnostics) return { min: 0, max: 0 };
+    // The ceiling the POST actually enforces, straight from the server (#1198).
+    // Modelling a raise this panel would refuse is worse than not modelling it:
+    // the going-concern headroom alone can be ~75x the enforced one.
+    if (bondInfo.maxAllowedIssuance !== undefined) {
+      return { min: -bondInfo.totalDebt, max: Math.max(0, bondInfo.maxAllowedIssuance) };
+    }
+    // Fallback for a response from an older deploy.
     const maxIssue = Math.max(
       0,
       bondInfo.creditDiagnostics.totalEquity * MAX_BOND_ISSUANCE_FRACTION - bondInfo.totalDebt
@@ -289,7 +296,13 @@ function WhatIfDebtPanel({
         <div className="flex flex-wrap justify-between gap-2 text-[11px] text-muted tabular-nums">
           <span>Repay up to {formatAmount(bondInfo.totalDebt)}</span>
           <span>
-            Issue up to ~{formatAmount(debtSliderBounds.max)} (per-issuance cap or equity headroom)
+            Issue up to ~{formatAmount(debtSliderBounds.max)} (
+            {bondInfo.issuanceLimitedBy === "exitEquity"
+              ? "capped by what you could realize by selling up"
+              : bondInfo.issuanceLimitedBy === "perIssuance"
+                ? "per-issuance cap"
+                : "equity headroom"}
+            )
           </span>
         </div>
         <div className="rounded-lg border border-card-border bg-card-elevated/50 px-4 py-3 flex flex-wrap gap-6 items-baseline">

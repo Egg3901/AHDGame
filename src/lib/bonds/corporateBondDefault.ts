@@ -241,6 +241,16 @@ export function previewRefinanceIssuance(params: {
   return { creditRating, couponRate };
 }
 
+/**
+ * Ticket #1198 deliberately does NOT apply its exit-equity ceiling here. That
+ * cap governs NEW borrowing; a refinance is a like-for-like roll of principal
+ * that already exists, adds no debt, and hands the corp no cash (see
+ * `executeCorporationBondRefinance`). Capping the roll by realizable assets
+ * would lock a defaulted corp out of the only cure available to it, which is
+ * the #1130 failure mode in a new costume: the cure becoming worse than the
+ * disease. New issuance answers to the exit cap; rolling existing paper does
+ * not.
+ */
 export function canRefinanceDefaultedDebt(params: {
   equity: number;
   existingDebtAllNonMatured: number;

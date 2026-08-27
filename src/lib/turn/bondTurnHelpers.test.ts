@@ -42,6 +42,22 @@ function makeBond(corpId: ObjectId, totalIssued: number): Bond {
   } as unknown as Bond;
 }
 
+/** A bond some OTHER issuer sold, held as a creditor by `holderCorpId`. */
+function heldBy(holderCorpId: ObjectId, units: number, overrides: Partial<Bond> = {}): Bond {
+  return {
+    _id: new ObjectId(),
+    corporationId: new ObjectId(),
+    totalIssued: units * 1000,
+    matured: false,
+    defaulted: false,
+    couponRate: 5,
+    currencyCode: "USD",
+    publicFloat: 0,
+    holders: [{ corporationId: holderCorpId, units }],
+    ...overrides,
+  } as unknown as Bond;
+}
+
 describe("filterInsolventCorps", () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -123,6 +139,86 @@ describe("filterInsolventCorps", () => {
       activeBonds: [makeBond(corpId, 10000)],
     });
     expect(out.has(corpId.toString())).toBe(true);
+  });
+
+  describe("ticket #1198: the bond portfolio is an asset", () => {
+    // The corp is short on sectors alone but holds other issuers' bonds, which
+    // `executeCorporationBondDefaultDissolution` redeems at face into
+    // liquidCapital. Refusing to count them here declared a corp unable to pay
+    // using assets the resulting liquidation would have spent paying.
+    const thinSector = (corpId: ObjectId) => [
+      {
+        corporationId: corpId,
+        capitalStock: 1,
+        capacityBookAnchor: 500,
+        constructionInProgressAnchor: 0,
+      },
+    ];
+
+    it("rescues a corp whose creditor holdings cover the shortfall", async () => {
+      const corpId = new ObjectId();
+      const out = await filterInsolventCorps(
+        makeDb(thinSector(corpId)),
+        new Set([corpId.toString()]),
+        {
+          corpMap: new Map([[corpId.toString(), makeCorp(corpId, -200)]]),
+          fxByCurrency: FX,
+          centralBanks: [{ countryId: "US", primeRate: 4.42 }],
+          activeBonds: [
+            makeBond(corpId, 163_000),
+            // 500 units x ₳1,000 = ₳500,000 of face held as a creditor.
+            heldBy(corpId, 500),
+          ],
+        }
+      );
+      expect(out.size).toBe(0);
+    });
+
+    it("still defaults when the holdings are not enough", async () => {
+      const corpId = new ObjectId();
+      const out = await filterInsolventCorps(
+        makeDb(thinSector(corpId)),
+        new Set([corpId.toString()]),
+        {
+          corpMap: new Map([[corpId.toString(), makeCorp(corpId, -200)]]),
+          fxByCurrency: FX,
+          centralBanks: [{ countryId: "US", primeRate: 4.42 }],
+          activeBonds: [makeBond(corpId, 163_000), heldBy(corpId, 10)],
+        }
+      );
+      expect(out.has(corpId.toString())).toBe(true);
+    });
+
+    it("does not count a DEFAULTED holding, which will never pay face", async () => {
+      const corpId = new ObjectId();
+      const out = await filterInsolventCorps(
+        makeDb(thinSector(corpId)),
+        new Set([corpId.toString()]),
+        {
+          corpMap: new Map([[corpId.toString(), makeCorp(corpId, -200)]]),
+          fxByCurrency: FX,
+          centralBanks: [{ countryId: "US", primeRate: 4.42 }],
+          activeBonds: [makeBond(corpId, 163_000), heldBy(corpId, 500, { defaulted: true })],
+        }
+      );
+      expect(out.has(corpId.toString())).toBe(true);
+    });
+
+    it("does not credit one corp with another corp's holdings", async () => {
+      const corpId = new ObjectId();
+      const neighbour = new ObjectId();
+      const out = await filterInsolventCorps(
+        makeDb(thinSector(corpId)),
+        new Set([corpId.toString()]),
+        {
+          corpMap: new Map([[corpId.toString(), makeCorp(corpId, -200)]]),
+          fxByCurrency: FX,
+          centralBanks: [{ countryId: "US", primeRate: 4.42 }],
+          activeBonds: [makeBond(corpId, 163_000), heldBy(neighbour, 500)],
+        }
+      );
+      expect(out.has(corpId.toString())).toBe(true);
+    });
   });
 
   it("returns an empty set unchanged without touching the database", async () => {
