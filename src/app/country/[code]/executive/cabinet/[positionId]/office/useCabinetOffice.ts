@@ -117,6 +117,8 @@ export interface CabinetOfficeData {
   /** Defense seat only: the country's commissioned generals (command commander pool). */
   commanders?: CommanderRef[];
   conflictAssignments?: ConflictAssignment[];
+  /** Defense seat only: the live conflicts a general can be posted to. */
+  conflicts?: { id: string; name: string }[];
   corps?: CorpsMember[];
   commissionCandidates?: { characterId: string; name: string }[];
   /** Defense seat only: live conflict-driven threat per strategic region (viewer-relative). */

@@ -66,7 +66,12 @@ describe("a proxy war moves control", () => {
     status: "pending",
   };
 
-  const vietnam = {
+  // Rebuilt per test: resolution mutates the conflict document it is handed, so the
+  // rest of the tick sees a consistent picture — the roster (`joinSide`), the front
+  // and supplies (`applyOccupation`), and the faction's `tokenStrength`. A single
+  // literal shared across cases would carry one test's grinding into the next.
+  let vietnam: ReturnType<typeof makeVietnam>;
+  const makeVietnam = () => ({
     _id: "vietnam",
     name: "Vietnam War",
     hostCountry: "SVN",
@@ -104,10 +109,11 @@ describe("a proxy war moves control", () => {
     control: 50,
     controlStart: 50,
     status: "active",
-  };
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vietnam = makeVietnam();
     db = createMockDb();
     for (const c of [
       "militaryUnits",

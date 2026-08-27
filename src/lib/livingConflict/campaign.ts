@@ -166,14 +166,9 @@ export function assessCampaignRequirement(
       `Available during ${requirement.allowedStages.map((s) => CAMPAIGN_STAGE_LABELS[s]).join(" or ")}`
     );
   }
-  if (
-    requirement.minTreasuryPctGdp !== undefined &&
-    capability.treasuryPctGdp < requirement.minTreasuryPctGdp
-  ) {
-    reasons.push(
-      `Needs ${(requirement.minTreasuryPctGdp * 100).toFixed(2)}% of GDP in treasury capacity`
-    );
-  }
+  // Legacy crisis documents may still carry minTreasuryPctGdp. Response costs use
+  // spendFromTreasury, which spends any surplus first and finances the remainder
+  // as debt, so a cash-balance gate would contradict the actual fiscal write path.
   if (
     requirement.minMilitaryReadiness !== undefined &&
     capability.militaryReadiness < requirement.minMilitaryReadiness

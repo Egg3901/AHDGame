@@ -17,6 +17,7 @@ export function CommandsTab({
   units,
   commanders,
   conflictAssignments,
+  conflicts,
   corps,
   commissionCandidates,
   regionThreats,
@@ -27,6 +28,18 @@ export function CommandsTab({
   units: MilitaryUnit[];
   commanders: CommanderRef[];
   conflictAssignments: ConflictAssignment[];
+  /**
+   * The live conflicts a general can be posted to. The builder's posting dropdown is
+   * built from this, and an existing posting is NAMED by looking its theatre id up in
+   * it — so an empty list is not a quiet degradation: the seat cannot send anyone to a
+   * war at all, and the posting badge falls back to printing the raw id at the player.
+   *
+   * Required, unlike the same prop further down the tree. This tab is where the chain
+   * broke: the builder below it defaults to an empty list, so the caller that forgot
+   * to pass one type-checked cleanly and the seat simply lost the ability to post
+   * anyone. Making it mandatory here turns that back into a compile error.
+   */
+  conflicts: { id: string; name: string }[];
   corps: CorpsMember[];
   commissionCandidates: { characterId: string; name: string }[];
   regionThreats: Record<string, ThreatLevel>;
@@ -46,6 +59,7 @@ export function CommandsTab({
         units={units}
         commanders={commanders}
         conflictAssignments={conflictAssignments}
+        conflicts={conflicts}
         regionThreats={regionThreats}
         countryCode={countryCode}
         positionId={positionId}

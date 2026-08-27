@@ -22,6 +22,7 @@ import { applyCrisisEffects } from "@/lib/crises/applyEffects";
 import { getGameState } from "@/lib/gameState";
 import { logWireEvent } from "@/lib/wireEvent";
 import { applyTensionEvent } from "@/lib/coldwar/tension";
+import { EQUIPMENT_TRACK_MAX } from "@/lib/military/arsenal";
 import { adjustIntensity, applyCommitment, relieveCommitment } from "./engine";
 import { livingConflictDef } from "./registry";
 import { loadConflictState, saveConflictState } from "./driver";
@@ -108,7 +109,9 @@ export async function loadCampaignCapability(
     totalPersonnel > 0
       ? units.reduce(
           (sum, unit) =>
-            sum + clamp(unit.equipment?.support ?? 0) * Math.max(1, unit.personnel ?? 0),
+            sum +
+            clamp(((unit.equipment?.support ?? 0) / EQUIPMENT_TRACK_MAX) * 100) *
+              Math.max(1, unit.personnel ?? 0),
           0
         ) / totalPersonnel
       : 20;

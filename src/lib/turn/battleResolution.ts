@@ -46,8 +46,21 @@ import {
 } from "@/lib/military/occupation";
 import { nextControlSample } from "@/lib/military/warApproval";
 
-/** Apply a side's outcome to its live units + the generals who led them. */
-async function persistSide(db: Db, side: BattleSide, outcome: SideOutcome, sideWon: boolean) {
+/**
+ * Apply a side's outcome to its live units + the generals who led them.
+ *
+ * Returns the units as this battle left them, so a caller resolving more than one
+ * engagement in a tick can fight the next from the survivors. The unit write is an
+ * absolute `$set` of `personnel`/`readiness`/`equipment`, not an increment, so a
+ * second engagement built from the pre-tick roster does not merely ignore the first
+ * one's losses — it writes them back out of existence.
+ */
+async function persistSide(
+  db: Db,
+  side: BattleSide,
+  outcome: SideOutcome,
+  sideWon: boolean
+): Promise<BattleSide["units"]> {
   const ctx: BattleContext = {
     units: side.units,
     positions: side.positions,
@@ -105,6 +118,7 @@ async function persistSide(db: Db, side: BattleSide, outcome: SideOutcome, sideW
     })
     .filter((op): op is NonNullable<typeof op> => op !== null);
   if (genOps.length) await getCharacterGeneralsCollection(db).bulkWrite(genOps);
+  return units;
 }
 
 async function mark(
@@ -123,7 +137,22 @@ async function mark(
 /**
  * Move the front after an engagement: shift `control`, re-derive both supplies from
  * the front's displacement, track the winding-down threshold, and stand the conflict
- * down at a pole. Returns the resulting `control`, unchanged when nothing moved.
+ * down at a pole. Returns the resulting `control` (unchanged when nothing moved) and
+ * whether this engagement ended the war.
+ *
+ * `standDown` is reported rather than read back off `conflict.status` because the
+ * caller has already narrowed that field by testing it before the loop, so the
+ * compiler cannot see that this function widens it again — and a cast to get around
+ * that would be hiding the very mutation the caller needs to react to.
+ *
+ * Mutates the in-memory `conflict` with everything it writes, exactly as `joinSide`
+ * does with the roster, so the rest of the tick sees a consistent document. This is
+ * load-bearing, not tidiness: a tick can resolve SEVERAL offensives at one front —
+ * `mergeOffensives` groups by (front, attacking side), so an attack and the enemy's
+ * counter-attack are two separate offensives resolved in the same loop. Without the
+ * write-back, the second one shifted from the tick's opening `control` and its write
+ * overwrote the first's rather than compounding on it, so a front that was fought
+ * over twice moved as if it had been fought over once.
  */
 async function applyOccupation(
   db: Db,
@@ -132,7 +161,7 @@ async function applyOccupation(
   margin: number,
   loserRetreated: boolean,
   currentTurn: number
-): Promise<number> {
+): Promise<{ control: number; standDown: boolean }> {
   const control = occupationShift({ control: conflict.control, winner, margin, loserRetreated });
 
   // Age out the war-approval momentum sample BEFORE the no-move early return.
@@ -149,7 +178,7 @@ async function applyOccupation(
     );
   }
 
-  if (control === conflict.control) return conflict.control;
+  if (control === conflict.control) return { control: conflict.control, standDown: false };
 
   // Pin the front's starting line and supply baselines on the first write. A conflict
   // document predating these fields would otherwise re-derive supply off its own
@@ -203,6 +232,22 @@ async function applyOccupation(
     }
   );
 
+  // Carry the write back onto the in-memory document. `controlStart` and the supply
+  // baselines are included deliberately: they are pinned with `?? conflict.control`
+  // / `?? conflict.supplyX`, so a second offensive reading them still unset would
+  // re-pin the starting line to the ground the FIRST offensive had just taken.
+  //
+  // Field by field rather than `Object.assign` with a literal: that helper's `U` is
+  // unconstrained, so a mistyped key or a wrong value type would compile silently.
+  conflict.control = control;
+  conflict.controlStart = controlStart;
+  conflict.supplyA = supplyA;
+  conflict.supplyB = supplyB;
+  conflict.supplyBaseA = supplyBaseA;
+  conflict.supplyBaseB = supplyBaseB;
+  if (tracksDepth) conflict.status = status;
+  Object.assign(conflict, poleFields);
+
   // An interstate war ends the moment the front hits a pole. A proxy war does not:
   // `resolveColdWarHolds` owns that, because the hold has to be measured on turns
   // where nobody fought — and this function only runs when a battle MOVES the front.
@@ -213,8 +258,14 @@ async function applyOccupation(
       control === 0 ? "A" : "B",
       currentTurn
     );
+    // Stand-down is part of what this write did, so the in-memory document has to
+    // show it too. `resolveConflict` recalls every unit at the front to reserve, so
+    // any offensive still queued for this tick would otherwise fight a war that is
+    // over, with a roster that has already gone home.
+    conflict.status = "resolved";
+    return { control, standDown: true };
   }
-  return control;
+  return { control, standDown: false };
 }
 
 export async function resolveBattleDeclarations(
@@ -273,6 +324,12 @@ export async function resolveBattleDeclarations(
     const atFront = (await unitsCol.find({ theaterId }).toArray()).filter(
       (u) => u.readyAtTurn == null || u.readyAtTurn <= currentTurn
     );
+    // Two views of the same force, and they diverge once the first offensive of the
+    // tick is fought. `atFront` stays the opening ROSTER — who was here, which is all
+    // `resolveDefendingSides` asks of it, and `countryId`/`theaterId` do not change in
+    // battle. `unitsByCountry` is the LIVE pool each offensive builds its sides from,
+    // and every battle replaces a contingent's entry with its survivors. Read strength
+    // from the map, never from `atFront`.
     const unitsByCountry = new Map<string, typeof atFront>();
     for (const u of atFront) {
       const list = unitsByCountry.get(u.countryId) ?? [];
@@ -280,7 +337,19 @@ export async function resolveBattleDeclarations(
       unitsByCountry.set(u.countryId, list);
     }
 
+    // Set once an offensive drives the front to a pole and ends the war, which can
+    // happen partway through a tick that has more offensives queued behind it.
+    let standDown = false;
+
     for (const off of offensives) {
+      // Everything still queued after that fizzles: `resolveConflict` has already
+      // walked every belligerent out of the theater, so there is no army left here to
+      // fight with, and the war it was declared against is over.
+      if (standDown) {
+        for (const d of off.declarations) await mark(db, d, "fizzled", currentTurn);
+        fizzled++;
+        continue;
+      }
       const principal = off.principal;
       // A resolvable offensive pools every ally defending that side. An unresolvable
       // one has no sides to pool, so it fights the named target alone and moves no
@@ -311,7 +380,7 @@ export async function resolveBattleDeclarations(
         let walkoverAfter = walkoverBefore;
         if (off.side) {
           for (const c of off.attackers) await joinSide(db, conflict, c, off.side, currentTurn);
-          walkoverAfter = await applyOccupation(
+          const occupied = await applyOccupation(
             db,
             conflict,
             off.side,
@@ -319,6 +388,8 @@ export async function resolveBattleDeclarations(
             false,
             currentTurn
           );
+          walkoverAfter = occupied.control;
+          standDown = occupied.standDown;
         }
         const advanced = walkoverAfter !== walkoverBefore;
         await getBattleReportsCollection(db).insertOne({
@@ -396,13 +467,21 @@ export async function resolveBattleDeclarations(
       // Persist per contingent: `persistSide` scopes its unit filter to that
       // contingent's country and credits only its own generals, so each nation
       // bleeds its own troops and earns its own experience.
-      for (const c of attackerSides) await persistSide(db, c, result.attacker, result.win);
+      //
+      // The survivors go back into `unitsByCountry`, which is the pool every later
+      // offensive in this tick builds its sides from. A nation that attacks and is
+      // then counter-attacked fights the second engagement with the army the first
+      // one left it, and its losses accumulate instead of the later write undoing
+      // the earlier one.
+      for (const c of attackerSides) {
+        unitsByCountry.set(c.country, await persistSide(db, c, result.attacker, result.win));
+      }
       for (const c of defenderSides) {
         // The synthetic side has no `militaryUnits` rows and no generals — persisting
         // it would bulk-write against a countryId that owns nothing. Its casualties go
         // onto the conflict's `tokenStrength` below instead.
         if (factionSide && c.country === factionSide.country) continue;
-        await persistSide(db, c, result.defender, !result.win);
+        unitsByCountry.set(c.country, await persistSide(db, c, result.defender, !result.win));
       }
 
       // ⚠️ Deliberately its own write, NOT folded into `applyOccupation`'s `$set`:
@@ -423,6 +502,10 @@ export async function resolveBattleDeclarations(
             { _id: conflict._id },
             { $set: { [`${key}.tokenStrength`]: after } }
           );
+          // In memory too, like every other write this tick makes: `buildFactionSide`
+          // fields the token force from this number, so a later offensive would
+          // otherwise re-mint the men just killed.
+          conflict[key].tokenStrength = after;
         }
       }
 
@@ -469,7 +552,15 @@ export async function resolveBattleDeclarations(
       for (const d of off.declarations) await mark(db, d, "resolved", currentTurn);
 
       if (winner) {
-        await applyOccupation(db, conflict, winner, result.margin, loserRetreated, currentTurn);
+        const occupied = await applyOccupation(
+          db,
+          conflict,
+          winner,
+          result.margin,
+          loserRetreated,
+          currentTurn
+        );
+        standDown = occupied.standDown;
       }
       resolved++;
     }
