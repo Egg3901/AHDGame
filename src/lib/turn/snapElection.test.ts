@@ -429,3 +429,90 @@ describe("triggerSnapElection — VONC-active gate (Goal 2)", () => {
     ).resolves.toBeDefined();
   });
 });
+
+describe("regime-change snaps", () => {
+  async function setupFor(
+    countryId: string,
+    regions: Array<{ _id: string }>,
+    seats: Array<{ state: string; totalSeats: number }>,
+    snapElectionsUsed = 0
+  ) {
+    setupMocks({
+      currentTurn: 100,
+      govDoc: {
+        _id: countryId,
+        countryId,
+        status: "formed",
+        pmCharacterId: new ObjectId(),
+        snapElectionsUsed,
+      },
+      regions,
+      seats,
+    });
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+  }
+
+  it("runs against a presidential country, which cannot normally snap", async () => {
+    // supportsSnapElections is false for presidential, and US additionally sets
+    // an explicit snapElectionsAllowed: false. A war-imposed settlement is not a
+    // strategic dissolution, so that rule does not apply to it.
+    await setupFor("US", [{ _id: "CA" }], [{ state: "CA", totalSeats: 52 }]);
+    const result = await triggerSnapElection(db as unknown as Db, "US", new Date(), {
+      reason: "regime-change",
+      bypassLimits: true,
+    });
+    expect(result.snapElectionType).toBe("snap_house");
+    expect(result.electionsSpawned).toBe(1);
+  });
+
+  it("runs against a one-party state", async () => {
+    await setupFor("RU", [{ _id: "RSFSR" }], [{ state: "RSFSR", totalSeats: 300 }]);
+    const result = await triggerSnapElection(db as unknown as Db, "RU", new Date(), {
+      reason: "regime-change",
+      bypassLimits: true,
+    });
+    expect(result.snapElectionType).toBe("snap_sovietOfTheUnion");
+  });
+
+  it("still refuses a PM-triggered snap in a presidential country", async () => {
+    // The override is scoped to the REASON. The shipped rule is untouched for
+    // every other caller.
+    await setupFor("US", [{ _id: "CA" }], [{ state: "CA", totalSeats: 52 }]);
+    await expect(
+      triggerSnapElection(db as unknown as Db, "US", new Date(), { reason: "pm-trigger" })
+    ).rejects.toThrow(/not allowed/i);
+  });
+
+  it("does not consume the head of government's snap allowance", async () => {
+    // snapElectionsUsed is a budget the PM spends on strategic dissolutions. A
+    // settlement imposed from outside must not spend it.
+    await setupFor("UK", [{ _id: "ENG" }], [{ state: "ENG", totalSeats: 500 }], 1);
+    const result = await triggerSnapElection(db as unknown as Db, "UK", new Date(), {
+      reason: "regime-change",
+      bypassLimits: true,
+    });
+    expect(result.snapElectionsUsed).toBe(1);
+    const govUpdate = db.collectionMocks["governmentFormations"]!.updateOne.mock.calls[0]?.[1];
+    expect(JSON.stringify(govUpdate)).not.toContain("snapElectionsUsed");
+  });
+
+  it("stamps imposedSnap on the elections it spawns", async () => {
+    // Read by the perpetual spawner, which must not shift the LARP calendar
+    // after a snap the target did not call.
+    await setupFor("US", [{ _id: "CA" }], [{ state: "CA", totalSeats: 52 }]);
+    await triggerSnapElection(db as unknown as Db, "US", new Date(), {
+      reason: "regime-change",
+      bypassLimits: true,
+    });
+    const inserted = db.collectionMocks["elections"]!.insertMany.mock.calls[0]?.[0];
+    expect(inserted[0].imposedSnap).toBe(true);
+  });
+
+  it("does not stamp imposedSnap on a PM-triggered snap", async () => {
+    await setupFor("UK", [{ _id: "ENG" }], [{ state: "ENG", totalSeats: 500 }]);
+    await triggerSnapElection(db as unknown as Db, "UK", new Date(), { reason: "pm-trigger" });
+    const inserted = db.collectionMocks["elections"]!.insertMany.mock.calls[0]?.[0];
+    expect(inserted[0].imposedSnap).toBeUndefined();
+  });
+});
