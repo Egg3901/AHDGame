@@ -266,6 +266,12 @@ const RUNTIME: CollectionEntry[] = [
     notes:
       "Versioned per-turn aggregate market, production, distribution, money, and reconciliation indicators for economic evaluation.",
   },
+  {
+    name: "ledgerReconciliations",
+    category: "runtime",
+    notes:
+      "Per-turn shadow-ledger trial-balance, stock-flow, and money-supply reconciliation reports.",
+  },
   // Elections + officials
   { name: "elections", category: "runtime" },
   { name: "electionCandidates", category: "runtime" },
