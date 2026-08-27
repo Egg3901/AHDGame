@@ -7,23 +7,15 @@ import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { handleRouteError, badRequest, notFound } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { CentralBank } from "@/lib/db/types/centralBank";
-import type { Character, Corporation, Bond, ExchangeRate } from "@/lib/db/types";
-import type { CurrencyCode } from "@/lib/constants/currencies";
-import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
+import type { Character } from "@/lib/db/types";
 import { CENTRAL_BANK_LOBBY_MIN_AMOUNT } from "@/lib/constants/centralBankLobby";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { getTotalPersonalWealth } from "@/lib/currency/characterFunds";
 import {
   atomicallyDebitCharacterCash,
   refundCharacterCash,
 } from "@/lib/financialTxLog/atomicCashGuard";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
-import {
-  corpLiquidCapitalToAnchor,
-  fxRateForCorpFromMap,
-  loadFxRatesByCurrency,
-} from "@/lib/currency/corporationCapital";
 import { autoConvertForPurchase } from "@/lib/currency/autoConvert";
 import { getGameState } from "@/lib/gameState";
 import { getCentralBankScope } from "@/lib/centralBank/helpers";
@@ -74,11 +66,6 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json(notFound("Central bank not found").toJson(), { status: 404 });
 
     const forexEnabled = await isForexEnabled();
-    let fxRates: Partial<Record<CurrencyCode, number>> | undefined;
-    if (forexEnabled) {
-      const rateDocs = await db.collection<ExchangeRate>("exchangeRates").find({}).toArray();
-      fxRates = Object.fromEntries(rateDocs.map((r) => [r.currencyCode, r.rate])) as typeof fxRates;
-    }
 
     // With the market/wealth candidate pool removed, lobbying only makes sense
     // for someone actually in the running: a nominated candidate.

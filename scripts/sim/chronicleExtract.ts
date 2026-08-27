@@ -52,11 +52,6 @@ async function main() {
       }
     )
     .toArray();
-  const pKey = (c: string, sid: unknown) => `${c}:${sid}`;
-  const partyByKey = new Map(
-    parties.map((p: any) => [pKey(String(p.countryId), p.sequentialId), p])
-  );
-
   // ── Elections + tallies ─────────────────────────────────────────────────
   const elections = await C("elections").find({}).toArray();
   const tallies = await C("electionVoteTallies").find({}).toArray();
