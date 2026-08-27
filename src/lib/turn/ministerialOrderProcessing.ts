@@ -28,6 +28,7 @@ import { resolveMetricPath } from "@/lib/cabinet/resolveMetricPath";
 import { applyMilitaryForceEffects } from "./militaryForceEffects";
 import { resolveBattleDeclarations } from "./battleResolution";
 import { resolveColdWarHolds } from "./coldWarHolds";
+import { resolvePeaceWindows } from "./peaceWindows";
 import { processGeneralTenure } from "./generalTenure";
 import { applyReinforcement } from "./reinforcement";
 import { applyDefenseAppropriation } from "./defenseAppropriationTurn";
@@ -443,6 +444,12 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
   // to be measured on turns where nobody fought at all. It reads `conflictsEnabled`
   // itself — it is the only conflict step with no declaration upstream to gate it.
   await resolveColdWarHolds(db, currentTurn);
+
+  // 4b-ii-a-ii. White-peace any won war whose dictate window has lapsed. A real
+  // sweep rather than lazy expiry: nothing forces a victor to open the conflict
+  // document, so a window nobody answered would leave the war frozen for ever with
+  // both rosters already stood down.
+  await resolvePeaceWindows(db, currentTurn);
 
   // 4b-ii-b. Tenure skill points for commissioned generals. Placed AFTER battle
   // resolution so a general promoted by this turn's fighting is already at their new
