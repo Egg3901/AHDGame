@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
 import { fetchJson } from "@/lib/observability/fetchJson";
@@ -33,6 +33,7 @@ import { ExecutiveActivitySection } from "@/app/country/[code]/executive/compone
 import { approvalApiUrl, approvalUrl, scotusUrl } from "@/lib/urls";
 import { ApprovalTooltip } from "@/components/ApprovalTooltip";
 import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
+import { useSearchParams } from "next/navigation";
 
 interface ExecutiveData {
   id: string;
@@ -238,6 +239,13 @@ function ExecutiveCard({
 
 type TabKey = "overview" | "address" | "orders" | "endorsements" | "foreign" | "admin";
 
+const TAB_KEYS = ["overview", "address", "orders", "endorsements", "foreign", "admin"] as const;
+
+/** Narrows an untrusted `?tab=` value. Anything else falls back to the overview. */
+function isTabKey(value: string | null): value is TabKey {
+  return value !== null && (TAB_KEYS as readonly string[]).includes(value);
+}
+
 /**
  * Presidential executive surface. Defaults to the US White House; any other
  * presidential country renders the same shell with its own identity, hero,
@@ -246,6 +254,31 @@ type TabKey = "overview" | "address" | "orders" | "endorsements" | "foreign" | "
 export default function WhiteHouseClient({ countryId = "US" }: { countryId?: CountryId }) {
   const { showToast } = useToast();
   const [data, setData] = useState<WhiteHouseResponse | null>(null);
+  /**
+   * Apply a `?tab=` that names a PRIVATE tab, once the viewer's flags have loaded.
+   *
+   * The seed above can only honour the public tabs, because on the first render
+   * `data` is null and there is no way to know whether this viewer may open the
+   * rest. Without this the peace strip's link would land the president on the
+   * overview, which is the bug it exists to fix.
+   *
+   * Guarded by a ref so it runs once: after that the viewer owns the tab, and a
+   * later re-render must not yank them back to whatever the URL said.
+   */
+  const searchParams = useSearchParams();
+  const urlTabApplied = useRef(false);
+  useEffect(() => {
+    if (urlTabApplied.current || !data) return;
+    urlTabApplied.current = true;
+    const requested = searchParams.get("tab");
+    if (!isTabKey(requested)) return;
+    // Mirrors the tab nav's own gating exactly. A URL must not open a tab the
+    // viewer has no button for: the `address` and `orders` bodies below carry no
+    // guard of their own, because until now `activeTab` could only be set by
+    // clicking.
+    const openable = requested === "admin" ? data.isAdmin : data.isPresident || data.isAdmin;
+    if (openable) setActiveTab(requested);
+  }, [data, searchParams]);
   const [bills, setBills] = useState<PendingBill[]>([]);
   const [activeNominationsCount, setActiveNominationsCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -255,7 +288,22 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
   const [submitting, setSubmitting] = useState(false);
   const [resignLoading, setResignLoading] = useState(false);
   const [billActionId, setBillActionId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  // Seeded from `?tab=`, so a link can open a specific tab. Follows the pattern
+  // `CentralBankClient` and `CongressClient` already use. Initial state only: once
+  // the page is open, clicking a tab keeps working exactly as before without
+  // rewriting the URL.
+  //
+  // GATED THE SAME WAY THE NAV IS, for the reason the sibling shell spells out: the
+  // `address` and `orders` bodies carry no guard of their own because `activeTab`
+  // used to be reachable only by clicking a button the viewer could see. The
+  // viewer's own flags are not loaded yet on the first render, so the seed is
+  // re-checked once `data` arrives.
+  const [activeTab, setActiveTab] = useState<TabKey>(() => {
+    const requested = searchParams.get("tab");
+    return isTabKey(requested) && (requested === "overview" || requested === "endorsements")
+      ? requested
+      : "overview";
+  });
   const conflictsEnabled = useConflictsEnabled();
   const [approval, setApproval] = useState<number | null>(null);
   const [approvalModifiers, setApprovalModifiers] = useState<ActiveModifier[]>([]);

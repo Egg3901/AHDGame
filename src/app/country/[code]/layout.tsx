@@ -52,7 +52,6 @@ export default async function CountryLayout({ params, children }: Props) {
           db,
           countryId,
           user?.character?._id ?? null,
-          user?.isAdmin === true,
           gameState?.currentTurn ?? 0
         )
       )
@@ -70,9 +69,7 @@ export default async function CountryLayout({ params, children }: Props) {
   // Declared here with the war strip and used by all three viewable branches below,
   // for the same reason: which branch a reader lands in must not change whether they
   // are told a decision is waiting on them.
-  const peacetime = peace ? (
-    <PeaceBanner notice={peace} countryName={name} countryCode={code} />
-  ) : null;
+  const peacetime = peace ? <PeaceBanner notice={peace} countryName={name} /> : null;
 
   // Admins always see everything — just show a banner when the country is not
   // yet enabled for regular players.
