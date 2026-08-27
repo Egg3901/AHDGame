@@ -5,6 +5,9 @@ import { CountryFlag } from "@/components/CountryFlag";
 import { getCountryAccess } from "@/lib/countryAccess";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { getGameState } from "@/lib/gameState";
+import { getDb } from "@/lib/mongodb";
+import { loadCountryWarNotice } from "@/lib/military/countryAtWar";
+import { WartimeBanner } from "./WartimeBanner";
 
 interface Props {
   params: Promise<{ code: string }>;
@@ -28,11 +31,20 @@ export default async function CountryLayout({ params, children }: Props) {
   if (!config) notFound();
 
   // Parallelize independent DB lookups
-  const [access, user, gameState] = await Promise.all([
+  const [access, user, gameState, war] = await Promise.all([
     getCountryAccess(countryId),
     getAuthUserWithCharacter(),
     getGameState(),
+    // One indexed read against a collection that holds a handful of documents.
+    // Joined to the batch above rather than awaited after it, so the banner costs
+    // no extra round trip on any country page.
+    getDb().then((db) => loadCountryWarNotice(db, countryId)),
   ]);
+
+  // Null in peacetime, which renders nothing. Declared once and used by all three
+  // viewable branches below: a war is a fact about the COUNTRY, so which of them a
+  // given reader lands in must not change whether they are told about it.
+  const wartime = war ? <WartimeBanner notice={war} /> : null;
 
   const isAdmin = user?.isAdmin === true;
   // Era-aware display name (e.g. "West Germany" in 1979) for the banners/headings.
@@ -44,6 +56,7 @@ export default async function CountryLayout({ params, children }: Props) {
     const showAdminBanner = !access.enabledForPlayers;
     return (
       <>
+        {wartime}
         {showAdminBanner && (
           <div className="bg-warning/10 border-b border-warning/30 px-4 py-2 text-center text-sm text-warning">
             {access.econOnly
@@ -56,9 +69,14 @@ export default async function CountryLayout({ params, children }: Props) {
     );
   }
 
-  // Fully enabled — render normally.
+  // Fully enabled — render normally, save for the war strip.
   if (access.enabledForPlayers) {
-    return <>{children}</>;
+    return (
+      <>
+        {wartime}
+        {children}
+      </>
+    );
   }
 
   // Econ-only nation: a registered country that is not open for play. Every page
@@ -70,6 +88,7 @@ export default async function CountryLayout({ params, children }: Props) {
   if (access.econOnly) {
     return (
       <>
+        {wartime}
         <div className="bg-primary/10 border-b border-primary/20 px-4 py-2 text-center text-sm text-primary">
           {name} is an econ-only nation. You can view every page here, but you cannot run for
           office, join a party, or vote.

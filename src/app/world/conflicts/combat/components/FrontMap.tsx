@@ -51,7 +51,16 @@ export function FrontMap({ conflict }: { conflict: ConflictView }) {
   // shard machinery finds nothing for it. Its static feature is merged in here —
   // and its code into the ROSTER below, without which RegionalGeoMap filters the
   // feature straight back out and draws an empty box.
-  const staticHost = useStaticHostGeometry(conflict.hostCountry);
+  // Absent or empty means "just the anchor", the same fallback `hostEntitiesOf`
+  // applies on the server — these props cross a serialization boundary.
+  const zone = useMemo(
+    () =>
+      conflict.hostEntities && conflict.hostEntities.length > 0
+        ? conflict.hostEntities
+        : [conflict.hostCountry],
+    [conflict.hostEntities, conflict.hostCountry]
+  );
+  const staticHost = useStaticHostGeometry(zone);
   // Null means LOADING, as it does in `useRegionGeometry` — so both sources have to
   // have resolved before this is an answer. Collapsing an unresolved source to []
   // would report "no geometry" while a shard was still in flight, and the map would
