@@ -104,6 +104,26 @@ export function frontProgress(control: number, controlStart: number): number {
   return span > 0 ? Math.abs(control - controlStart) / span : 0;
 }
 
+/**
+ * How far the front has moved in ONE side's favour, 0..1.
+ *
+ * `frontProgress` above is direction-agnostic: it measures the distance travelled
+ * from the starting line whichever way the line went. That is the right answer to
+ * "how deep is this war", and the wrong answer to "am I winning", which is the
+ * question a side asks before demanding anything of the other. A side the line has
+ * moved AGAINST reads zero here rather than reading its opponent's gains as its own.
+ *
+ * Measured from the starting line for the same reason `frontProgress` is: an
+ * interstate war opens with the defender holding all of its own soil, so an
+ * absolute-share reading would call every invasion deep before the first shot.
+ */
+export function progressForSide(side: Side, control: number, controlStart: number): number {
+  // Side A wins as control falls toward 0; side B as it rises toward 100.
+  const gained = side === "A" ? controlStart - control : control - controlStart;
+  if (gained <= 0) return 0;
+  return frontProgress(control, controlStart);
+}
+
 export interface ShiftInput {
   control: number;
   winner: Side;

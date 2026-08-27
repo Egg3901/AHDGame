@@ -7,7 +7,9 @@ const war = {
   conflictId: "war1",
   conflictNumber: 3,
   name: "UK–CN War",
-  enemies: ["CN"],
+  enemies: [
+    { country: "CN", endsWar: false, withdrawalBlocked: false, progressPct: 10, requiredPct: 75 },
+  ],
 };
 
 const incoming = {
@@ -144,7 +146,13 @@ describe("PeacePanel", () => {
 });
 
 describe("changing the counterparty", () => {
-  const twoEnemies = { ...war, enemies: ["CN", "RU"] };
+  const twoEnemies = {
+    ...war,
+    enemies: [
+      { country: "CN", endsWar: false, withdrawalBlocked: false, progressPct: 10, requiredPct: 75 },
+      { country: "RU", endsWar: false, withdrawalBlocked: false, progressPct: 10, requiredPct: 75 },
+    ],
+  };
 
   it("resets who pays, so a stale country cannot be billed", async () => {
     // "They pay" names the CURRENT enemy. Leaving payer alone would keep the
@@ -254,5 +262,149 @@ describe("choosing which term to offer", () => {
         turns: 120,
       });
     });
+  });
+});
+
+describe("which side the deal removes", () => {
+  async function ready() {
+    const fetchMock = mockGet({ currentTurn: 40, wars: [war], offers: [] });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<PeacePanel {...props} />);
+    fireEvent.change(await screen.findByLabelText(/country to negotiate with/i), {
+      target: { value: "CN" },
+    });
+    return fetchMock;
+  }
+
+  it("defaults to us leaving, the original shape", async () => {
+    const fetchMock = await ready();
+    fireEvent.click(screen.getByRole("button", { name: /send peace offer/i }));
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => c[1]?.method === "POST");
+      expect(JSON.parse(post![1].body).leaver).toBe("us");
+    });
+  });
+
+  it("can ask the other country to withdraw instead", async () => {
+    // Coalition-peeling: they leave, we keep fighting.
+    const fetchMock = await ready();
+    fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "them" } });
+    fireEvent.click(screen.getByRole("button", { name: /send peace offer/i }));
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => c[1]?.method === "POST");
+      expect(JSON.parse(post![1].body).leaver).toBe("them");
+    });
+  });
+
+  it("explains the buy-out gate when asking them to withdraw", async () => {
+    await ready();
+    fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "them" } });
+    expect(screen.getByText(/needs the front well in our favour/i)).toBeTruthy();
+  });
+});
+
+describe("how an offer on the table is described", () => {
+  it("says the sender is leaving when that is what they proposed", async () => {
+    vi.stubGlobal("fetch", mockGet({ currentTurn: 40, wars: [war], offers: [incoming] }));
+    render(<PeacePanel {...props} />);
+    expect(await screen.findByText(/offers to leave the war/)).toBeTruthy();
+  });
+
+  it("says they are asking US to leave when the deal removes us", async () => {
+    // Describing this as the sender offering to leave would state it backwards.
+    const demand = { ...incoming, leaver: "UK" as const };
+    vi.stubGlobal("fetch", mockGet({ currentTurn: 40, wars: [war], offers: [demand] }));
+    render(<PeacePanel {...props} />);
+    expect(await screen.findByText(/asks us to leave the war/)).toBeTruthy();
+  });
+
+  it("treats an offer with no direction recorded as the sender leaving", async () => {
+    // Rows written before offers ran both ways carry no `leaver`.
+    const legacy = { ...incoming };
+    delete (legacy as { leaver?: string }).leaver;
+    vi.stubGlobal("fetch", mockGet({ currentTurn: 40, wars: [war], offers: [legacy] }));
+    render(<PeacePanel {...props} />);
+    expect(await screen.findByText(/offers to leave the war/)).toBeTruthy();
+  });
+});
+
+describe("the withdrawal gate in the offer form", () => {
+  /** A war where asking CN to leave would end it, and we have taken no ground. */
+  const gatedWar = {
+    ...war,
+    enemies: [
+      { country: "CN", endsWar: true, withdrawalBlocked: true, progressPct: 42, requiredPct: 75 },
+    ],
+  };
+
+  async function ready(w = gatedWar) {
+    const fetchMock = mockGet({ currentTurn: 40, wars: [w], offers: [] });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<PeacePanel {...props} />);
+    fireEvent.change(await screen.findByLabelText(/country to negotiate with/i), {
+      target: { value: "CN" },
+    });
+    return fetchMock;
+  }
+
+  it("marks the country in the dropdown before it is even chosen", async () => {
+    await ready();
+    expect(screen.getByRole("option", { name: /cannot be made to leave yet/i })).toBeTruthy();
+  });
+
+  it("says how far short the front is when asking them to leave", async () => {
+    await ready();
+    fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "them" } });
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toMatch(/would end this war outright/i);
+    expect(alert.textContent).toMatch(/42%/);
+    expect(alert.textContent).toMatch(/75%/);
+  });
+
+  it("blocks sending it", async () => {
+    await ready();
+    fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "them" } });
+    expect(
+      (screen.getByRole("button", { name: /send peace offer/i }) as HTMLButtonElement).disabled
+    ).toBe(true);
+  });
+
+  it("lifts the block for a white peace, which buys nothing", async () => {
+    await ready();
+    fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "them" } });
+    fireEvent.change(screen.getByLabelText(/term offered/i), {
+      target: { value: "white_peace" },
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(
+      (screen.getByRole("button", { name: /send peace offer/i }) as HTMLButtonElement).disabled
+    ).toBe(false);
+  });
+
+  it("does not warn when WE are the ones leaving", async () => {
+    // Walking away is always ours to propose, whatever the ground looks like.
+    await ready();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(
+      (screen.getByRole("button", { name: /send peace offer/i }) as HTMLButtonElement).disabled
+    ).toBe(false);
+  });
+
+  it("does not warn about a country whose departure leaves their side standing", async () => {
+    const peelable = {
+      ...war,
+      enemies: [
+        {
+          country: "CN",
+          endsWar: false,
+          withdrawalBlocked: false,
+          progressPct: 5,
+          requiredPct: 75,
+        },
+      ],
+    };
+    await ready(peelable);
+    fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "them" } });
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

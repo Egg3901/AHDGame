@@ -28,6 +28,8 @@ const baseOffer = {
   conflictId: "war1",
   fromCountry: "CN",
   toCountry: "UK",
+  // The original direction: the sender is the one leaving.
+  leaver: "CN",
   term: { kind: "indemnity", payer: "CN", amount: 100 },
   status: "pending",
   offeredTurn: 1,

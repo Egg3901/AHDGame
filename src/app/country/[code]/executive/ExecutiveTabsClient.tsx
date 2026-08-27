@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { WhiteHouseAddressTab } from "@/app/whitehouse/WhiteHouseAddressTab";
 import { WhiteHouseOrdersTab } from "@/app/whitehouse/WhiteHouseOrdersTab";
 import { WhiteHouseEndorsementsTab } from "@/app/whitehouse/WhiteHouseEndorsementsTab";
@@ -17,6 +18,21 @@ import { ForeignAffairsTab } from "./components/ForeignAffairsTab";
 import { useConflictsEnabled } from "@/contexts/AuthDataContext";
 
 type TabKey = "overview" | "address" | "orders" | "endorsements" | "regime" | "foreign" | "admin";
+
+const TAB_KEYS = [
+  "overview",
+  "address",
+  "orders",
+  "endorsements",
+  "regime",
+  "foreign",
+  "admin",
+] as const;
+
+/** Narrows an untrusted `?tab=` value. Anything else falls back to the overview. */
+function isTabKey(value: string | null): value is TabKey {
+  return value !== null && (TAB_KEYS as readonly string[]).includes(value);
+}
 
 interface Props {
   countryId: CountryId;
@@ -48,8 +64,26 @@ export function ExecutiveTabsClient({
   viewerIsAdmin,
   isOnePartyState,
 }: Props) {
-  const [active, setActive] = useState<TabKey>("overview");
   const canSeePrivateTabs = viewerIsLeader || viewerIsAdmin;
+  // Seeded from `?tab=`, so a link can open a specific tab. Follows the pattern
+  // `CentralBankClient` and `CongressClient` already use. Initial state only: once
+  // the page is open, clicking a tab keeps working exactly as before without
+  // rewriting the URL.
+  //
+  // GATED THE SAME WAY THE NAV IS. `active` used to be reachable only by clicking a
+  // button the viewer could see, which is why the `address` and `orders` bodies
+  // below carry no guard of their own. A URL that could set it directly would route
+  // around that, so an unopenable tab falls back to the overview here instead.
+  const searchParams = useSearchParams();
+  const [active, setActive] = useState<TabKey>(() => {
+    const requested = searchParams.get("tab");
+    if (!isTabKey(requested)) return "overview";
+    const openable =
+      requested === "overview" ||
+      requested === "endorsements" ||
+      (requested === "admin" ? viewerIsAdmin : canSeePrivateTabs);
+    return openable ? requested : "overview";
+  });
   const conflictsEnabled = useConflictsEnabled();
   const ordersLabel = getExecutiveOrderNamePlural(countryId);
 

@@ -134,6 +134,7 @@ export async function POST(
       offer.fromCountry,
       offer.toCountry,
       offer.term,
+      offer.leaver,
       maxAmount,
       targetState.governmentType
     );
