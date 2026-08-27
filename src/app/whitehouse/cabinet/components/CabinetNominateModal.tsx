@@ -28,6 +28,10 @@ export function CabinetNominateModal({
   onCharChange,
   onSubmit,
   onCancel,
+  title = "Propose Cabinet Nomination",
+  description = "Nominees require Senate confirmation. Only player characters can be nominated.",
+  submitLabel = "Propose",
+  nomineeLabel = "Nominee",
 }: {
   open: boolean;
   positions: Position[];
@@ -40,14 +44,17 @@ export function CabinetNominateModal({
   onCharChange: (id: string) => void;
   onSubmit: () => void;
   onCancel: () => void;
+  /** Overridable so the acting-appointment flow can reuse this picker. */
+  title?: string;
+  description?: string;
+  submitLabel?: string;
+  nomineeLabel?: string;
 }) {
   const vacantPositions = positions.filter((p) => !p.member);
 
   return (
-    <Modal open={open} title="Propose Cabinet Nomination" onClose={onCancel}>
-      <p className="text-sm text-muted mb-4">
-        Nominees require Senate confirmation. Only player characters can be nominated.
-      </p>
+    <Modal open={open} title={title} onClose={onCancel}>
+      <p className="text-sm text-muted mb-4">{description}</p>
       <label htmlFor="cabinet-position" className="block text-sm font-medium mb-2">
         Position
       </label>
@@ -71,7 +78,7 @@ export function CabinetNominateModal({
         )}
       </select>
       <label htmlFor="cabinet-nominee" className="block text-sm font-medium mb-2">
-        Nominee
+        {nomineeLabel}
       </label>
       <select
         id="cabinet-nominee"
@@ -82,7 +89,7 @@ export function CabinetNominateModal({
         <option value="">Select character</option>
         {characters.map((c) => (
           <option key={c._id} value={c._id}>
-            {c.name} ({c.party}) — {c.homeState}
+            {c.name} ({c.party}), {c.homeState}
           </option>
         ))}
       </select>
@@ -106,7 +113,7 @@ export function CabinetNominateModal({
           disabled={submitting || !selectedPositionId || !selectedCharId}
           className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
         >
-          Propose
+          {submitLabel}
         </button>
       </div>
     </Modal>

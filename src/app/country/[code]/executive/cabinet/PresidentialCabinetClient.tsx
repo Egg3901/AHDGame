@@ -26,6 +26,10 @@ interface PositionMember {
   partyLogoUrl?: string | null;
   avatarUrl?: string | null;
   confirmedAt: string;
+  /** Seated directly by the President, without Senate confirmation. */
+  acting?: boolean;
+  /** Turn the acting appointment lapses. Null on a confirmed holder. */
+  actingExpiresOnTurn?: number | null;
 }
 
 interface PositionNomination {
@@ -49,6 +53,8 @@ interface Position {
   order: number;
   member: PositionMember | null;
   nomination: PositionNomination | null;
+  /** True once this President has used their one acting appointment here. */
+  actingChargeSpent?: boolean;
 }
 
 interface CabinetResponse {
@@ -56,6 +62,10 @@ interface CabinetResponse {
   isPresident: boolean;
   isSenator: boolean;
   isAdmin: boolean;
+  currentTurn?: number;
+  /** False in countries that fill their cabinet without confirmation. */
+  actingEnabled?: boolean;
+  actingTenureTurns?: number;
 }
 
 interface Character {
@@ -92,6 +102,9 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nominateModal, setNominateModal] = useState(false);
+  // The acting flow reuses the nominee picker, so it shares the selection
+  // state and only differs in which endpoint the submit hits.
+  const [actingModal, setActingModal] = useState(false);
   const [selectedPositionId, setSelectedPositionId] = useState("");
   const [selectedCharId, setSelectedCharId] = useState("");
   const [characters, setCharacters] = useState<Character[]>([]);
@@ -122,12 +135,12 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
   }, [fetchData]);
 
   useEffect(() => {
-    if (!nominateModal || !data?.isPresident) return;
+    if ((!nominateModal && !actingModal) || !data?.isPresident) return;
     fetch(`/api/whitehouse/cabinet/characters${countryQuery}`)
       .then((response) => (response.ok ? response.json() : { characters: [] }))
       .then((json) => setCharacters((json as { characters?: Character[] }).characters ?? []))
       .catch(() => setCharacters([]));
-  }, [nominateModal, data?.isPresident, countryQuery]);
+  }, [nominateModal, actingModal, data?.isPresident, countryQuery]);
 
   const activeNominations = useMemo(
     () => data?.positions.filter((position) => position.nomination?.status === "active") ?? [],
@@ -167,6 +180,75 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
     } finally {
       setSubmitting(false);
     }
+  }
+
+  /**
+   * Install an acting secretary. Distinct from nominating: the seat is filled
+   * at once, without a Senate vote, but the caretaker is limited in what they
+   * may do and the appointment lapses on its own.
+   */
+  async function handleAppointActing() {
+    if (!selectedPositionId || !selectedCharId) {
+      setNominateError("Select a position and an appointee");
+      return;
+    }
+    setSubmitting(true);
+    setNominateError("");
+    try {
+      const response = await fetch(`/api/country/${code}/executive/cabinet/acting`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          positionId: selectedPositionId,
+          characterId: selectedCharId,
+        }),
+      });
+      const json = (await response.json()) as { message?: string; error?: string };
+      if (!response.ok) {
+        setNominateError(json.error ?? "Failed to appoint an acting secretary");
+        return;
+      }
+      showToast(json.message ?? "Acting secretary appointed", "success");
+      setActingModal(false);
+      setSelectedPositionId("");
+      setSelectedCharId("");
+      await fetchData();
+    } catch {
+      setNominateError("Network error - please try again");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  /** Open the appointee picker for a seat, in acting mode. */
+  function openActingModal(positionId: string) {
+    setSelectedPositionId(positionId);
+    setActingModal(true);
+    setSelectedCharId("");
+    setNominateError("");
+  }
+
+  /** Turns left on an acting appointment, or null if it is not acting. */
+  function actingTurnsLeft(member: PositionMember): number | null {
+    if (!member.acting || member.actingExpiresOnTurn == null) return null;
+    const turn = data?.currentTurn;
+    if (turn == null) return null;
+    return Math.max(0, member.actingExpiresOnTurn - turn);
+  }
+
+  /**
+   * The appoint-acting control for an unfilled seat. Rendered disabled rather
+   * than hidden once the charge is spent, so the one-per-seat rule is visible
+   * before a President runs into it.
+   */
+  function renderActingControl(position: Position) {
+    if (!data?.actingEnabled) return null;
+    const spent = position.actingChargeSpent === true;
+    return (
+      <Button variant="secondary" disabled={spent} onClick={() => openActingModal(position.id)}>
+        Appoint Acting
+      </Button>
+    );
   }
 
   async function handleVote(nominationId: string, vote: "for" | "against" | "abstain") {
@@ -460,6 +542,16 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
                                   />
                                 </div>
                               )}
+                              {position.member.acting && (
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                  <Badge color="warning">Acting</Badge>
+                                  {actingTurnsLeft(position.member) !== null && (
+                                    <span className="text-xs text-muted">
+                                      {actingTurnsLeft(position.member)} turns remaining
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
                         ) : position.nomination ? (
@@ -478,36 +570,46 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
                               <Badge color="warning">Senate Vote</Badge>
                             </div>
                             {data.isPresident && (
-                              <Button
-                                variant="secondary"
-                                onClick={() => {
-                                  setSelectedPositionId(position.id);
-                                  setNominateModal(true);
-                                  setSelectedCharId("");
-                                  setNominateError("");
-                                }}
-                                className="mt-3"
-                              >
-                                Replace Nomination
-                              </Button>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <Button
+                                  variant="secondary"
+                                  onClick={() => {
+                                    setSelectedPositionId(position.id);
+                                    setNominateModal(true);
+                                    setSelectedCharId("");
+                                    setNominateError("");
+                                  }}
+                                >
+                                  Replace Nomination
+                                </Button>
+                                {renderActingControl(position)}
+                              </div>
                             )}
                           </div>
                         ) : (
                           <div className="mt-3">
                             <p className="text-sm italic text-muted">Vacant</p>
                             {data.isPresident && (
-                              <Button
-                                variant="secondary"
-                                onClick={() => {
-                                  setSelectedPositionId(position.id);
-                                  setNominateModal(true);
-                                  setSelectedCharId("");
-                                  setNominateError("");
-                                }}
-                                className="mt-2"
-                              >
-                                Nominate
-                              </Button>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <Button
+                                  variant="secondary"
+                                  onClick={() => {
+                                    setSelectedPositionId(position.id);
+                                    setNominateModal(true);
+                                    setSelectedCharId("");
+                                    setNominateError("");
+                                  }}
+                                >
+                                  Nominate
+                                </Button>
+                                {renderActingControl(position)}
+                              </div>
+                            )}
+                            {data.isPresident && position.actingChargeSpent && (
+                              <p className="mt-2 text-xs text-muted">
+                                You have already used your acting appointment for this office. It
+                                can only be filled by confirmation now.
+                              </p>
                             )}
                           </div>
                         )}
@@ -541,6 +643,29 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
         onSubmit={handleNominate}
         onCancel={() => {
           setNominateModal(false);
+          setSelectedPositionId("");
+          setSelectedCharId("");
+          setNominateError("");
+        }}
+      />
+
+      <CabinetNominateModal
+        open={actingModal}
+        positions={data.positions}
+        characters={characters}
+        selectedPositionId={selectedPositionId}
+        selectedCharId={selectedCharId}
+        message={nominateError}
+        submitting={submitting}
+        onPositionChange={setSelectedPositionId}
+        onCharChange={setSelectedCharId}
+        onSubmit={handleAppointActing}
+        title="Appoint an Acting Secretary"
+        description={`An acting secretary takes the seat at once, with no Senate vote. They may run the department day to day but cannot set policy, move personnel, or commit the nation to anything lasting. The appointment ends after ${data.actingTenureTurns ?? 24} turns, and you get only one per office per term.`}
+        submitLabel="Appoint"
+        nomineeLabel="Appointee"
+        onCancel={() => {
+          setActingModal(false);
           setSelectedPositionId("");
           setSelectedCharId("");
           setNominateError("");
