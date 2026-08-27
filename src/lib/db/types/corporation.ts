@@ -1018,11 +1018,12 @@ export interface CorporateSector {
    * are outside the margin's scope but inside the profit.
    *
    * Every field is on the DAILY basis and in the same stored currency as
-   * `revenue` and `laborCost`. Display and analytics only, exactly like
-   * `laborCost`: nothing in the engine reads it back, so it cannot feed the
-   * economy. Written on every physical-P&L turn, absent below plants and on
-   * sectors that have not run a plants turn since this shipped, and readers
-   * keep their old margin-inversion path as the fallback.
+   * `revenue` and `laborCost`. The NPP decision engine reads the persisted
+   * revenue, profit, and margin as its lagged profitability signal; the values
+   * never feed physical settlement itself. Written on every physical-P&L turn,
+   * absent below plants and on sectors that have not run a plants turn since
+   * this shipped, and readers keep their old margin-inversion path as the
+   * fallback.
    */
   plantsPnl?: {
     /**

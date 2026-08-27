@@ -1464,6 +1464,16 @@ export const LOGISTICS_BUDGET_DENOM = 500_000;
 export const LOGISTICS_MAX_SPRAWL_EFFECT = 200;
 
 /**
+ * Sector footprint that current logistics strength can support without a
+ * sprawl penalty. Unlike a fixed corporation cap, this grows without bound as
+ * the corporation invests in logistics.
+ */
+export function getLogisticsSupportedSectorCount(logisticsStrength?: number): number {
+  const lsFraction = Math.max(0, logisticsStrength ?? 0) / LOGISTICS_MAX_SPRAWL_EFFECT;
+  return Math.floor(SPRAWL_SECTOR_THRESHOLD * (1 + lsFraction));
+}
+
+/**
  * Calculate logistics strength growth per turn.
  * Unlike marketing, logistics has no diminishing returns from stored strength —
  * the 5% per-turn decay naturally limits accumulation.

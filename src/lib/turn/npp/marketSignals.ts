@@ -11,6 +11,8 @@
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import type { CorporationType } from "@/lib/constants/corporations";
+import type { CountryId } from "@/lib/constants/countries";
+import { adjacentStates } from "@/lib/constants/stateAdjacency";
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
 import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
 import { SECTOR_SUPPLY, type CommodityType } from "@/lib/constants/commodities";
@@ -37,8 +39,8 @@ const PRODUCTION_POLICY_DEADBAND = 0.05;
  * (observed on prod 2026-08-16: freight 2.0x base, 19% US coverage, and no NPP
  * founding it). 1.6 clears genuine multi-turn shortages without firing on a
  * mild 1.1x premium, and self-disarms: as capacity lands the ratio falls back
- * under the bar. Ordinary entry keeps the established cash and sector-cap
- * gates; exceptional entry adds its own stagger and hard ceiling.
+ * under the bar. Both ordinary and exceptional entry remain paced and bounded
+ * by the corporation's logistics-supported footprint.
  */
 export const ESSENTIAL_SHORTAGE_SCORE = 1.6;
 
@@ -68,6 +70,33 @@ export interface PlacementSignals {
 }
 
 /**
+ * Neighboring states on the corporation's current geographic frontier.
+ * Expansion radiates from every occupied home-country state. A corporation
+ * with no sectors starts from its headquarters.
+ */
+export function expansionFrontierStates(
+  countryId: CountryId,
+  headquartersState: string,
+  sectors: readonly CorporateSector[]
+): ReadonlySet<string> {
+  const occupied = new Set(
+    sectors
+      .filter((sector) => (sector.countryId ?? countryId) === countryId)
+      .map((sector) => sector.stateId)
+  );
+  const origins = occupied.size > 0 ? occupied : new Set([headquartersState]);
+  const frontier = new Set<string>();
+
+  for (const stateId of origins) {
+    for (const adjacentState of adjacentStates(countryId, stateId)) {
+      if (!occupied.has(adjacentState)) frontier.add(adjacentState);
+    }
+  }
+
+  return frontier;
+}
+
+/**
  * Score multiplier for a candidate in the corp's HQ state. Replaces the old
  * unconditional HQ-first pick, which returned any open HQ bucket before scoring
  * ran at all — every NPP corp piled supply into its HQ state regardless of
@@ -91,18 +120,21 @@ export function hasEnterableHeadroom(
   plantsEnabled: boolean,
   eraUnitScale: number
 ): boolean {
+  const frontier = expansionFrontierStates(corp.countryId, corp.headquartersState, sectors);
   return (
     findBestUnownedSector(
       corp.countryId,
       corp.headquartersState,
       corp.type,
       corp.secondaryType,
-      new Set(sectors.map((sec) => sec.sectorType)),
+      new Set(sectors.map((sec) => bucketKey(sec.stateId, sec.sectorType))),
       unownedByCountry,
       stateControlled,
       () => null,
       plantsEnabled,
-      eraUnitScale
+      eraUnitScale,
+      undefined,
+      frontier
     ) !== null
   );
 }
@@ -119,17 +151,18 @@ export function hasEnterableHeadroom(
  * shortage fills, so the herd self-disperses.
  */
 export function findBestUnownedSector(
-  countryId: string,
+  countryId: CountryId,
   hqState: string,
   primaryType: string,
   secondaryType: string | null | undefined,
-  existingTypes: Set<string>,
+  existingBuckets: ReadonlySet<string>,
   unownedByCountry: Map<string, UnownedSector[]>,
   stateControlled: ReadonlySet<string>,
   priceRatioOf: CommodityPriceRatioFn,
   plantsEnabled: boolean = false,
   eraUnitScale: number = 1,
-  signals?: PlacementSignals
+  signals?: PlacementSignals,
+  preferredStateIds?: ReadonlySet<string>
 ): UnownedSector | null {
   const countryUnowned = unownedByCountry.get(countryId);
   if (!countryUnowned || countryUnowned.length === 0) return null;
@@ -149,12 +182,12 @@ export function findBestUnownedSector(
         )
       : us.revenue;
 
-  // Filter to non-overlapping types with a positive pool, excluding buckets a
+  // Filter to unoccupied buckets with a positive pool, excluding buckets a
   // National Corporation controls (don't expand into a nationalized sector) and
   // extraction buckets whose state has zero unclaimed deposit capacity.
   const candidates = countryUnowned.filter(
     (us) =>
-      !existingTypes.has(us.sectorType) &&
+      !existingBuckets.has(bucketKey(us.stateId, us.sectorType)) &&
       sizeOf(us) > 0 &&
       !stateControlled.has(bucketKey(us.stateId, us.sectorType)) &&
       !(
@@ -165,6 +198,16 @@ export function findBestUnownedSector(
   );
 
   if (candidates.length === 0) return null;
+
+  // Prefer the adjacent frontier when it has an enterable market. If topology
+  // data is absent, an island has no open neighbor, or every neighboring pool
+  // is blocked, fall back to the country pool so geography does not become a
+  // permanent ceiling.
+  const frontierCandidates =
+    preferredStateIds && preferredStateIds.size > 0
+      ? candidates.filter((candidate) => preferredStateIds.has(candidate.stateId))
+      : [];
+  const rankedCandidates = frontierCandidates.length > 0 ? frontierCandidates : candidates;
 
   // Shortage at the candidate's own state when a state price exists, country
   // otherwise. This is what routes a founding to the state that is actually
@@ -200,21 +243,21 @@ export function findBestUnownedSector(
   // cash-healthy NPP can, instead of waiting for a same-type corp that may not
   // exist. Highest size×shortage wins; disarms once capacity pulls the ratio
   // back under ESSENTIAL_SHORTAGE_SCORE. See the constant for the full rationale.
-  const critical = candidates.filter((c) => peakShortageOf(c) >= ESSENTIAL_SHORTAGE_SCORE);
+  const critical = rankedCandidates.filter((c) => peakShortageOf(c) >= ESSENTIAL_SHORTAGE_SCORE);
   if (critical.length > 0) return critical.sort((a, b) => score(b) - score(a))[0];
 
   // Tier 1: primary type match
-  const primaryMatch = candidates.filter((c) => c.sectorType === primaryType);
+  const primaryMatch = rankedCandidates.filter((c) => c.sectorType === primaryType);
   if (primaryMatch.length > 0) return best(primaryMatch);
 
   // Tier 2: secondary type match
   if (secondaryType) {
-    const secondaryMatch = candidates.filter((c) => c.sectorType === secondaryType);
+    const secondaryMatch = rankedCandidates.filter((c) => c.sectorType === secondaryType);
     if (secondaryMatch.length > 0) return best(secondaryMatch);
   }
 
   // Tier 3: open market — market-weighted score across all types
-  return best(candidates);
+  return best(rankedCandidates);
 }
 
 /**
