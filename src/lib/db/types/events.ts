@@ -105,6 +105,17 @@ export interface EventDefinition {
   /** Era gating: latest in-game year this event may fire (inclusive). Absent = no upper bound. */
   maxYear?: number;
   /**
+   * Cold-war tension gating: lowest global tension reading (0-100, see
+   * lib/coldwar/tension.ts) at which this event may fire (inclusive). Lets
+   * war-scare society events (panic buying, bank runs, shelter fever) exist
+   * only while the world is actually frightened. Evaluated in the
+   * world-events scheduler; admin manual triggers bypass it, same as era
+   * bounds. Absent = no lower bound.
+   */
+  minTension?: number;
+  /** Tension gating: highest tension reading at which this event may fire (inclusive). Absent = no upper bound. */
+  maxTension?: number;
+  /**
    * Broadcast events: shared historic moments (the moon landing, the Wall
    * coming down) offered to EVERY eligible character at once when the in-game
    * year enters the event's window — "country" = every character in
