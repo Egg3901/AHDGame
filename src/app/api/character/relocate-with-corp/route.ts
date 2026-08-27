@@ -313,6 +313,10 @@ export async function POST(request: Request) {
     if (outcome.chairResignedFrom)
       notes.push(`Resigned as central bank chair (${outcome.chairResignedFrom}).`);
     if (outcome.leftPartyName) notes.push(`Left ${outcome.leftPartyName}; now independent.`);
+    // A general who moves abroad loses the command, and the move has to say so:
+    // it is the one consequence with units and a war attached to it.
+    if (outcome.relinquishedCommands.length > 0)
+      notes.push(`Gave up command of ${outcome.relinquishedCommands.join(", ")}.`);
 
     // Cooldown begins now (72 turns). Project from real time → drift-immune.
     return NextResponse.json({

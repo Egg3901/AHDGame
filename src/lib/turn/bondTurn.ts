@@ -19,6 +19,7 @@ import {
 } from "@/lib/bonds/sovereign";
 import { buildPersonalBalanceBulkOp, getHomeCurrency } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
+import { getGameState } from "@/lib/gameState";
 import { executeMarketMakerTrade, distributeConversionSpread } from "@/lib/currency/marketMaker";
 import { garnishLocFromIncome } from "@/lib/lineOfCredit/garnishment";
 import {
@@ -72,6 +73,10 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   const db = await getDb();
   const now = new Date();
   const forexEnabled = await isForexEnabled();
+  // #1198: gates default DETECTION only, in Phase 3. Coupon and maturity
+  // settlement runs regardless — see the comment there for why the two are
+  // treated differently.
+  const corporationActionsPaused = (await getGameState(db))?.corporationActionsPaused === true;
 
   await db
     .collection("corporations")
@@ -512,7 +517,31 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   // Re-fetch corporations after Phase 2 deltas. Detection only — credit
   // penalty application is deferred until after Phase 3.5 cascade resolution
   // so newly-cascaded defaults pick up the same penalty.
-  if (corpIds.length > 0) {
+  //
+  // SKIPPED ENTIRELY WHILE CORPORATION ACTIONS ARE PAUSED (ticket #1198).
+  // The pause skips `corporationTurn` — sector revenue, operating income,
+  // dividends — but deliberately not this phase, because coupons and maturities
+  // are contractual and sovereign bondholders should not lose income because an
+  // admin paused corporations. Settling those obligations is right. LIQUIDATING
+  // a corporation for the cash hole that settlement opens is not: the pause
+  // switched the corp's income off, so the shortfall is the pause's doing, not
+  // the corp's. Corporation #624 was defaulted at turns 416 and 418 exactly this
+  // way, paying a A10.2m coupon per turn against revenue the pause had removed.
+  //
+  // So coupon and maturity settlement above still runs; only the decision to
+  // declare a corp insolvent is held until corporations are live again. A corp
+  // that is genuinely insolvent will still be caught on the first unpaused turn.
+  // Escrow cover is inside the skip on purpose — it exists only as a pre-default
+  // mitigation, so with no default possible there is no reason to move a
+  // player's buyback escrow.
+  if (corporationActionsPaused && corpIds.length > 0) {
+    console.log(
+      `[bondTurn] corporation actions paused — skipping default detection and ` +
+        `auto-resolution for ${corpIds.length} bond-issuing corp(s). ` +
+        `Coupons and maturities still settled.`
+    );
+  }
+  if (!corporationActionsPaused && corpIds.length > 0) {
     const updatedCorps = await db
       .collection<Corporation>("corporations")
       .find({ _id: { $in: corpIds.map((id) => new ObjectId(id)) } })
@@ -1115,11 +1144,19 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   // See autoResolveLingeringDefaults in ./bondTurnAutoResolve for the
   // refinance → restructure → stand-for-dissolution resolution order. Flushes
   // its own CEO notifications before returning.
-  const { bondsAutoRestructured, bondsAutoRefinanced } = await autoResolveLingeringDefaults({
-    db,
-    turn,
-    now,
-  });
+  //
+  // Also skipped while corporation actions are paused (#1198), and for a
+  // sharper reason than Phase 3. This phase can SELL a corporation's sectors,
+  // and it justifies that by saying the CEO "has already had at least one turn"
+  // to act in the crisis modal. During a pause they have had no such turn: all
+  // four cure routes (cash, refinance, restructure, dissolve) are gated on
+  // `requireCorporationActionsEnabled` and return an error. Counting paused
+  // turns against the CEO's response window, then force-selling their assets
+  // for missing a deadline they were locked out of, is not a defensible
+  // outcome. The clock resumes when corporations do.
+  const { bondsAutoRestructured, bondsAutoRefinanced } = corporationActionsPaused
+    ? { bondsAutoRestructured: 0, bondsAutoRefinanced: 0 }
+    : await autoResolveLingeringDefaults({ db, turn, now });
 
   return {
     bondsProcessed: activeBonds.length,

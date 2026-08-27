@@ -54,6 +54,8 @@ import { migration as ukRegionalPartyOrgBackfill } from "./entries/2026-08-26-uk
 import { migration as easternDepositsCnSoeIron } from "./entries/2026-08-25-eastern-deposits-cn-soe-iron";
 import { migration as backfillRedistrictingAuthorityTypes } from "./entries/2026-08-26-backfill-redistricting-authority-types";
 import { migration as repairOutOfRangePolicyLevels } from "./entries/2026-08-26-repair-out-of-range-policy-levels";
+import { migration as dropOffRosterCommandCommanders } from "./entries/2026-08-26-drop-off-roster-command-commanders";
+import { migration as severEmigratedGenerals } from "./entries/2026-08-26-sever-emigrated-generals";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -155,6 +157,14 @@ export const MIGRATIONS: Migration[] = [
   // bloc countries (every state resources:{}), and the CN extraction SOE was
   // coal-locked in its four iron-rich states.
   easternDepositsCnSoeIron,
+  // Ticket 1200: a commander who emigrated or was dismissed stayed in the saved
+  // command, and the commands PUT then refused every edit in that country.
+  dropOffRosterCommandCommanders,
+  // The other half of the same gap: the rosters above are cleared, but the units
+  // and postings those generals held are not, and a unit led by a foreign national
+  // can never be sent to a front. Runs AFTER the roster clear, on purpose — that
+  // one shrinks the set of holders this has to sever.
+  severEmigratedGenerals,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.
