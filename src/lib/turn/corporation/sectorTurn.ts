@@ -1799,8 +1799,9 @@ export function processSector(
     );
   }
   // Persist the physical P&L the turn actually booked (ticket 1122). Display
-  // and analytics only, on the same daily basis and in the same currency as
-  // `revenue` / `laborCost`; nothing in the engine reads it back.
+  // and decision telemetry, on the same daily basis and in the same currency as
+  // `revenue` / `laborCost`. NPP behavior reads it on the following turn, but
+  // it never feeds physical settlement back into itself.
   //
   // Read surfaces used to rebuild these numbers by inverting
   // `effectiveProfitMargin`, which is this P&L's OUTPUT and is capped at 100.

@@ -90,7 +90,7 @@ function sector(): CorporateSector {
   } as unknown as CorporateSector;
 }
 
-function decide(liquidCapital: number, archetype: CeoArchetype) {
+function decide(liquidCapital: number, archetype: CeoArchetype, ordinaryEntryEligible = false) {
   return makeNppCorpDecision(
     {
       corp: corp(liquidCapital),
@@ -99,6 +99,7 @@ function decide(liquidCapital: number, archetype: CeoArchetype) {
       now: new Date(),
       fxRate: 1,
       modifiers: ceoArchetypeModifiers(archetype),
+      ordinaryEntryEligible,
     },
     new Map<string, UnownedSector[]>([["US", [pool()]]]),
     noState,
@@ -137,7 +138,7 @@ describe("NPP cash rails at 1953 scale", () => {
     // cautious expansion needs surplus > EXPANSION_MIN_CASH × 1.5 = ₳937,500
     // on top of the ₳375,000 floor. Under the old constants that was ₳7,500,000
     // of surplus over a ₳3,000,000 floor, unreachable for most of the cohort.
-    const decision = decide(4_000_000, "cautious");
+    const decision = decide(4_000_000, "cautious", true);
     expect(decision.newSectors).toHaveLength(1);
   });
 });

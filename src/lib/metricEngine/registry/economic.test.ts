@@ -85,6 +85,51 @@ describe("sectorGrowthNode (the cyclical signal — old gdpGrowth logic)", () =>
     expect(out.value).toBe(15);
   });
 
+  it("prefers the trailing revenue trend over the one-turn delta under plants", () => {
+    // One-turn delta says +4.8 annualized (1001/1000 × 48); trailing trend says
+    // +10 over a year. The trend wins; the one-turn path is fallback only.
+    const out = evalNode(
+      sectorGrowthNode,
+      ctx({
+        providers: {
+          sectorRevenueTax: payload({
+            plantsEnabled: true,
+            realizedRevenueNow: 1001,
+            realizedRevenuePrev: 1000,
+            turnsSincePrev: 1,
+            revenueEmaNow: 1100,
+            revenueTrendBaseline: { value: 1000, spanTurns: 48 },
+            unowned: [],
+          }),
+        },
+      }),
+      "s1"
+    );
+    // US neutral taxes in the default payload → no tax wedge. 10 − 0 = 10.
+    expect(out.value).toBe(10);
+  });
+
+  it("falls back to the one-turn delta while the trend baseline is immature", () => {
+    const out = evalNode(
+      sectorGrowthNode,
+      ctx({
+        providers: {
+          sectorRevenueTax: payload({
+            plantsEnabled: true,
+            realizedRevenueNow: 1001,
+            realizedRevenuePrev: 1000,
+            turnsSincePrev: 1,
+            revenueEmaNow: 1100,
+            revenueTrendBaseline: null,
+            unowned: [],
+          }),
+        },
+      }),
+      "s1"
+    );
+    expect(out.value).toBeCloseTo(4.8, 2);
+  });
+
   it("uses realizedRevenueNow for the plants delta (ticket #1084 host/host)", () => {
     // Identical host revenue both turns → 0% even if ₳ restatement would jig.
     const out = evalNode(

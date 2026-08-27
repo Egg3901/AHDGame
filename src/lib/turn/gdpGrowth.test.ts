@@ -1,10 +1,18 @@
 import { describe, it, expect } from "vitest";
 import {
+  advanceRevenueEma,
   computeConsumptionTaxAdjustedGrowthRate,
   computeRealizedRevenueGrowthRate,
+  computeTrailingRevenueGrowthRate,
   computeWeightedGrowthRate,
+  selectRevenueTrendBaseline,
   sumHostRealizedRevenue,
   sumRealizedRevenue,
+  updateRevenueSnapshots,
+  REVENUE_EMA_ALPHA,
+  REVENUE_SNAPSHOT_EVERY,
+  REVENUE_SNAPSHOT_KEEP,
+  REVENUE_TREND_MIN_SPAN,
   SECTOR_SIGNAL_MAX,
   SECTOR_SIGNAL_MIN,
 } from "./gdpGrowth";
@@ -222,5 +230,108 @@ describe("computeRealizedRevenueGrowthRate FX contamination (ticket #1084)", () 
 
   it("the same local revenue compared host-to-host is zero growth", () => {
     expect(computeRealizedRevenueGrowthRate(1000, 1000, 1, 48)).toBe(0);
+  });
+});
+
+// ── Trailing revenue trend (one-turn amplifier fix) ───────────────────────────
+
+describe("advanceRevenueEma", () => {
+  it("seeds at the level when no prior EMA exists", () => {
+    expect(advanceRevenueEma(undefined, 1000)).toBe(1000);
+    expect(advanceRevenueEma(0, 1000)).toBe(1000);
+  });
+
+  it("moves REVENUE_EMA_ALPHA of the way toward the new level", () => {
+    expect(advanceRevenueEma(1000, 2000)).toBeCloseTo(1000 + REVENUE_EMA_ALPHA * 1000, 10);
+  });
+
+  it("holds the EMA on a garbage level", () => {
+    expect(advanceRevenueEma(1000, NaN)).toBe(1000);
+    expect(advanceRevenueEma(1000, -5)).toBe(1000);
+  });
+
+  it("attenuates one-turn churn instead of passing it through", () => {
+    // A ±10% level wobble moves the EMA by ±1.5%, not ±10%.
+    const ema = advanceRevenueEma(1000, 1100);
+    expect(ema).toBeCloseTo(1015, 10);
+  });
+});
+
+describe("updateRevenueSnapshots", () => {
+  it("logs the first snapshot immediately", () => {
+    expect(updateRevenueSnapshots(undefined, 100, 1000)).toEqual([{ turn: 100, value: 1000 }]);
+  });
+
+  it("skips while the newest entry is younger than the cadence", () => {
+    const log = [{ turn: 100, value: 1000 }];
+    expect(updateRevenueSnapshots(log, 100 + REVENUE_SNAPSHOT_EVERY - 1, 1100)).toEqual(log);
+  });
+
+  it("appends at the cadence and trims to the retention cap", () => {
+    let log: { turn: number; value: number }[] = [];
+    for (let t = 0; t <= REVENUE_SNAPSHOT_EVERY * 12; t++) {
+      log = updateRevenueSnapshots(log, t, 1000 + t);
+    }
+    expect(log.length).toBe(REVENUE_SNAPSHOT_KEEP);
+    expect(log[log.length - 1]!.turn).toBe(REVENUE_SNAPSHOT_EVERY * 12);
+  });
+
+  it("drops future-turn entries (a rolled-back world cannot poison the baseline)", () => {
+    const log = [{ turn: 200, value: 1000 }];
+    expect(updateRevenueSnapshots(log, 150, 900)).toEqual([{ turn: 150, value: 900 }]);
+  });
+});
+
+describe("selectRevenueTrendBaseline", () => {
+  it("returns null while every snapshot is younger than the minimum span", () => {
+    const log = [{ turn: 100, value: 1000 }];
+    expect(selectRevenueTrendBaseline(log, 100 + REVENUE_TREND_MIN_SPAN - 1)).toBeNull();
+  });
+
+  it("prefers the snapshot closest to the one-year target span", () => {
+    const log = [
+      { turn: 40, value: 900 }, // span 56
+      { turn: 48, value: 950 }, // span 48 ← target
+      { turn: 80, value: 990 }, // span 16
+    ];
+    expect(selectRevenueTrendBaseline(log, 96)).toEqual({ value: 950, spanTurns: 48 });
+  });
+
+  it("skips non-positive baselines", () => {
+    const log = [{ turn: 0, value: 0 }];
+    expect(selectRevenueTrendBaseline(log, 48)).toBeNull();
+  });
+});
+
+describe("computeTrailingRevenueGrowthRate", () => {
+  it("annualizes growth over the baseline span", () => {
+    // +10% over 48 turns (one year) = 10% annualized.
+    const out = computeTrailingRevenueGrowthRate(1100, { value: 1000, spanTurns: 48 }, 48);
+    expect(out).toBeCloseTo(10, 10);
+  });
+
+  it("clamps to the shared signal bounds", () => {
+    expect(computeTrailingRevenueGrowthRate(3000, { value: 1000, spanTurns: 48 }, 48)).toBe(
+      SECTOR_SIGNAL_MAX
+    );
+    expect(computeTrailingRevenueGrowthRate(100, { value: 1000, spanTurns: 48 }, 48)).toBe(
+      SECTOR_SIGNAL_MIN
+    );
+  });
+
+  it("returns null without a usable baseline or EMA", () => {
+    expect(
+      computeTrailingRevenueGrowthRate(undefined, { value: 1000, spanTurns: 48 }, 48)
+    ).toBeNull();
+    expect(computeTrailingRevenueGrowthRate(1100, null, 48)).toBeNull();
+    expect(computeTrailingRevenueGrowthRate(1100, { value: 0, spanTurns: 48 }, 48)).toBeNull();
+  });
+
+  it("a one-turn ±10% churn stays inside single digits instead of ±480", () => {
+    // Level noise hits one endpoint attenuated by the EMA; over a year span it
+    // annualizes by 1, not 48. EMA endpoint moved by alpha·10%:
+    const emaNow = advanceRevenueEma(1000, 1100); // 1015
+    const out = computeTrailingRevenueGrowthRate(emaNow, { value: 1000, spanTurns: 48 }, 48);
+    expect(Math.abs(out!)).toBeLessThan(2);
   });
 });
