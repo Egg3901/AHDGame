@@ -6,7 +6,14 @@ import type { NatMods } from "./doctrineTree";
 import { WIN_BONUS_XP, LOSS_BONUS_XP, type GenMods } from "./generals";
 import { type ProfileGeneral, generalMods } from "./generalsTree";
 import { type ConflictAssignment, generalLeadingUnit, theaterCommanderOf } from "./assignments";
-import { THEATER_COMMAND, ATTRITION, OCCUPATION } from "./config";
+import {
+  THEATER_COMMAND,
+  ATTRITION,
+  OCCUPATION,
+  READINESS_DROP_BASE,
+  READINESS_TEMPO_K,
+} from "./config";
+import { readinessBaselineOf } from "./readinessDrift";
 import { EQUIPMENT_TRACK_MAX } from "./arsenal";
 import {
   type CombatUnit,
@@ -621,7 +628,29 @@ function unitOutcomes(
     const casualties = Math.round(
       u.personnel * Math.min(0.4, Math.max(0, intensity) * 0.5) * (0.6 + share)
     );
-    const readiness = Math.round((12 + (1 - ratio) * 22 + r() * 8) * armorMit * Math.min(1.2, rc));
+    /**
+     * Readiness is SUBTRACTED, not assigned.
+     *
+     * `armorMit` and `rc` are the same terms the casualty line above uses, and they are
+     * correct for a subtraction: armour reduces what a battle takes out of a crew, and a
+     * more exposed role increases it. Assigning them to a LEVEL inverted both, which is
+     * why an armoured division used to end a battle more exhausted than the infantry
+     * beside it, and a carrier that lost three men ended more exhausted than either.
+     *
+     * `depletion` is measured against the NOMINAL posture baseline, not the arrears- or
+     * tier-suppressed one: it asks how worn this formation is against what its posture
+     * normally holds, and an unfunded army must not read as fresher merely because its
+     * target sagged.
+     */
+    const baseline = readinessBaselineOf(u.posture);
+    const depletion = Math.max(0, Math.min(1, 1 - u.readiness / Math.max(1, baseline)));
+    const drop =
+      READINESS_DROP_BASE *
+      armorMit *
+      rc *
+      (0.6 + 0.8 * (1 - ratio)) *
+      (1 + READINESS_TEMPO_K * depletion);
+    const readiness = Math.round(u.readiness - drop);
     const xp = Math.round((16 + ratio * 20) * natMods.xp);
     const willPromote = u.vet < 4 && u.xp + xp >= 100;
     loss += casualties;
@@ -649,7 +678,9 @@ function unitOutcomes(
       dom: u.domain,
       type: u.type,
       casualties,
-      readiness: Math.max(3, Math.min(u.readiness, readiness)),
+      // A subtraction is monotone downward already, so the old `min(current, ...)` cap
+      // is gone. The floor stays: a formation is spent, never erased.
+      readiness: Math.max(3, readiness),
       materiel,
       xp,
       promo: willPromote,

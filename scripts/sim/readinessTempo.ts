@@ -17,6 +17,13 @@
  * an interior optimum rather than merely shaving the top.
  *
  *   npx tsx scripts/sim/readinessTempo.ts
+ *
+ * SUPERSEDED. This was the PRE-implementation prototype: it modelled the drop itself,
+ * because the engine still assigned readiness as a level. The engine now owns that
+ * formula, so running this applies it twice and the numbers below are not the shipped
+ * behaviour. Kept because it is the evidence behind the chosen constants -- it is what
+ * showed the tempo term, not a smaller base, is what creates a cadence tradeoff. For the
+ * shipped behaviour read `readinessEconomy.ts`, which measures the engine.
  */
 import { MongoClient } from "mongodb";
 import * as dotenv from "dotenv";

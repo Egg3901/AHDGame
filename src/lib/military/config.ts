@@ -182,6 +182,31 @@ export const ATTRITION = {
  * the game -- carried no naval multiplier at all, so a carrier strike group defended a
  * German forest at full strength and an attack submarine did it at 1.05.
  */
+/**
+ * What one engagement takes out of a formation's readiness, before modifiers.
+ *
+ * Readiness used to be ASSIGNED a level rather than subtracted, which inverted two of
+ * its own terms: `armorMit` and the role's casualty weight both correctly reduce
+ * CASUALTIES, and applied to a level they left armour and safe roles MORE exhausted. A
+ * carrier that lost three men ended a battle at 8 readiness while an infantry division
+ * that lost thousands ended at 25.
+ */
+export const READINESS_DROP_BASE = 12;
+
+/**
+ * How much harder a worn formation is worked than a rested one, at full depletion.
+ *
+ * The operational-tempo escalator. A rested formation pays the base cost; one that has
+ * been fighting without rest pays up to `1 + K` times as much for the same battle, so a
+ * continuous pace genuinely leaves little room for rest.
+ *
+ * This term, not a smaller base, is what creates a cadence tradeoff. Measured: cutting
+ * the cost from 77 to 8 with no escalator still made attacking every single turn the
+ * best play by a wide margin. At K = 3 the optimum is every third turn and attacking
+ * every turn goes NEGATIVE on ground taken.
+ */
+export const READINESS_TEMPO_K = 3;
+
 export const NAVAL_REACH = {
   coastal: { carrier: 1.0, escort: 0.4 },
   inland: { carrier: 0.5, escort: 0.1 },
