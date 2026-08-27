@@ -4,6 +4,7 @@ export interface EconomicExperimentConfig {
   freightSettlementMode?: FreightSettlementExperimentMode;
   canonicalFreightBillingEnabled?: boolean;
   shortageResponsiveSourcingEnabled?: boolean;
+  indexFundBondLiquidityEnabled?: boolean;
 }
 
 export function parseOptionalBoolean(value: string | undefined, flag: string): boolean | undefined {
@@ -26,6 +27,9 @@ export function economicExperimentConfigSet(
     ...(config.shortageResponsiveSourcingEnabled !== undefined
       ? { shortageResponsiveSourcingEnabled: config.shortageResponsiveSourcingEnabled }
       : {}),
+    ...(config.indexFundBondLiquidityEnabled !== undefined
+      ? { indexFundBondLiquidityEnabled: config.indexFundBondLiquidityEnabled }
+      : {}),
   };
 }
 
@@ -38,6 +42,9 @@ export function economicExperimentCliArgs(config: EconomicExperimentConfig): str
       : []),
     ...(set.shortageResponsiveSourcingEnabled !== undefined
       ? [`--shortage-responsive-sourcing=${String(set.shortageResponsiveSourcingEnabled)}`]
+      : []),
+    ...(set.indexFundBondLiquidityEnabled !== undefined
+      ? [`--index-fund-bond-liquidity=${String(set.indexFundBondLiquidityEnabled)}`]
       : []),
   ];
 }

@@ -308,6 +308,10 @@ export interface GameConfig {
   shortageResponsiveSourcingEnabled?: boolean;
   /** Governance record required when shortage-responsive sourcing is enabled. */
   shortageResponsiveSourcingIntervention?: EconomicInterventionPlan;
+  /** Dark gate for the index-fund 20 percent sovereign-bond allocation target. */
+  indexFundBondLiquidityEnabled?: boolean;
+  /** Governance record required when the sovereign-bond allocation target is enabled. */
+  indexFundBondLiquidityIntervention?: EconomicInterventionPlan;
   /**
    * Legacy-stockpile cover cap (week-1 clearing balance pass): when true,
    * shadow-inventory stock above STOCK_COVER_CAP_TURNS × current demand takes
