@@ -26,9 +26,12 @@ export async function hasUnspentActingCharge(db: Db, key: ActingChargeKey): Prom
 }
 
 /**
- * Burn the seat's charge. Never refunded: not on expiry, not on early
- * dismissal, not when the Senate later confirms somebody. That permanence is
- * what turns the tenure cap into pressure to seek confirmation.
+ * Burn the seat's charge. Not refunded by any in-game event: not on expiry,
+ * not on early dismissal, not when the Senate later confirms somebody. That
+ * permanence is what turns the tenure cap into pressure to seek confirmation.
+ *
+ * The single exception is {@link refundActingCharge}, which exists only to
+ * undo a charge whose appointment never happened.
  */
 export async function spendActingCharge(
   db: Db,
@@ -46,4 +49,20 @@ export async function spendActingCharge(
     spentOnTurn: turn,
     createdAt: now,
   } as ActingAppointmentCharge);
+}
+
+/**
+ * Undo a charge whose appointment failed to seat.
+ *
+ * NOT a game mechanic: nothing a player does refunds a charge. This exists
+ * purely so a write that failed halfway does not bill a President for an
+ * appointment that never happened.
+ */
+export async function refundActingCharge(db: Db, key: ActingChargeKey): Promise<void> {
+  await getActingChargesCollection(db).deleteOne({
+    countryId: key.countryId,
+    positionId: key.positionId,
+    presidentCharacterId: key.presidentCharacterId,
+    presidencyStartedAt: key.presidencyStartedAt,
+  });
 }

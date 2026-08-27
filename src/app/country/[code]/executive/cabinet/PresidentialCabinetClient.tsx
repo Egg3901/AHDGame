@@ -251,6 +251,21 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
     );
   }
 
+  /**
+   * Why the appoint control is disabled. Kept separate from the button so it
+   * can sit below the button row rather than inside it, and shared by both
+   * unfilled-seat branches so the rule reads the same either way.
+   */
+  function renderActingChargeNote(position: Position) {
+    if (!data?.actingEnabled || !data.isPresident || !position.actingChargeSpent) return null;
+    return (
+      <p className="mt-2 text-xs text-muted">
+        You have already used your acting appointment for this office. It can only be filled by
+        confirmation now.
+      </p>
+    );
+  }
+
   async function handleVote(nominationId: string, vote: "for" | "against" | "abstain") {
     setVotingId(nominationId);
     try {
@@ -585,6 +600,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
                                 {renderActingControl(position)}
                               </div>
                             )}
+                            {renderActingChargeNote(position)}
                           </div>
                         ) : (
                           <div className="mt-3">
@@ -605,12 +621,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
                                 {renderActingControl(position)}
                               </div>
                             )}
-                            {data.isPresident && position.actingChargeSpent && (
-                              <p className="mt-2 text-xs text-muted">
-                                You have already used your acting appointment for this office. It
-                                can only be filled by confirmation now.
-                              </p>
-                            )}
+                            {renderActingChargeNote(position)}
                           </div>
                         )}
 
@@ -664,6 +675,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
         description={`An acting secretary takes the seat at once, with no Senate vote. They may run the department day to day but cannot set policy, move personnel, or commit the nation to anything lasting. The appointment ends after ${data.actingTenureTurns ?? 24} turns, and you get only one per office per term.`}
         submitLabel="Appoint"
         nomineeLabel="Appointee"
+        pendingNominationLabel=" (confirmation pending)"
         onCancel={() => {
           setActingModal(false);
           setSelectedPositionId("");

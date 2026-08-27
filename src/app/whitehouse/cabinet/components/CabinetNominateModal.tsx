@@ -32,6 +32,7 @@ export function CabinetNominateModal({
   description = "Nominees require Senate confirmation. Only player characters can be nominated.",
   submitLabel = "Propose",
   nomineeLabel = "Nominee",
+  pendingNominationLabel = " (replace pending)",
 }: {
   open: boolean;
   positions: Position[];
@@ -49,6 +50,12 @@ export function CabinetNominateModal({
   description?: string;
   submitLabel?: string;
   nomineeLabel?: string;
+  /**
+   * Suffix on a seat that already has a nomination running. Nominating
+   * replaces that nomination; an acting appointment does not, so the two flows
+   * must not share the same wording.
+   */
+  pendingNominationLabel?: string;
 }) {
   const vacantPositions = positions.filter((p) => !p.member);
 
@@ -68,7 +75,7 @@ export function CabinetNominateModal({
         {vacantPositions.map((p) => (
           <option key={p.id} value={p.id}>
             {p.name}
-            {p.nomination ? " (replace pending)" : ""}
+            {p.nomination ? pendingNominationLabel : ""}
           </option>
         ))}
         {vacantPositions.length === 0 && (

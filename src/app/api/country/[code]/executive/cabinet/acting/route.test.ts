@@ -193,6 +193,23 @@ describe("POST /api/country/[code]/executive/cabinet/acting", () => {
     expect(db.collectionMocks["cabinetMembers"]!.insertOne).not.toHaveBeenCalled();
   });
 
+  it("gives the charge back when seating fails, so a lost race is not billed", async () => {
+    db.collectionMocks["cabinetMembers"]!.insertOne.mockRejectedValue(
+      Object.assign(new Error("E11000 duplicate key"), { code: 11000 })
+    );
+    const res = await post({
+      positionId: "secretary_of_treasury",
+      characterId: appointeeId.toString(),
+    });
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(db.collectionMocks["actingAppointmentCharges"]!.deleteOne).toHaveBeenCalledWith({
+      countryId: "US",
+      positionId: "secretary_of_treasury",
+      presidentCharacterId: presidentId,
+      presidencyStartedAt: electedAt,
+    });
+  });
+
   it("404s for a country that does not confirm cabinet picks", async () => {
     const res = await post(
       { positionId: "secretary_of_treasury", characterId: appointeeId.toString() },

@@ -17,6 +17,7 @@ import { ACTING_TENURE_TURNS } from "./actingScope";
 import { initialMinisterialActionFields } from "./ministerialActionPool";
 import {
   hasUnspentActingCharge,
+  refundActingCharge,
   spendActingCharge,
   type ActingChargeKey,
 } from "@/lib/db/collections/actingAppointmentCharges";
@@ -189,21 +190,30 @@ export async function appointActingCabinetMember(
       throw error;
     }
 
-    await members.insertOne({
-      countryId,
-      positionId,
-      characterId: appointeeOid,
-      characterName: appointee.name,
-      party: appointee.party,
-      appointedByCharacterId: presidentOfficial.characterId,
-      appointedAt: now,
-      acting: true,
-      actingSinceTurn: currentTurn,
-      actingExpiresOnTurn: currentTurn + ACTING_TENURE_TURNS,
-      ...initialMinisterialActionFields(now),
-      createdAt: now,
-      updatedAt: now,
-    } as never);
+    try {
+      await members.insertOne({
+        countryId,
+        positionId,
+        characterId: appointeeOid,
+        characterName: appointee.name,
+        party: appointee.party,
+        appointedByCharacterId: presidentOfficial.characterId,
+        appointedAt: now,
+        acting: true,
+        actingSinceTurn: currentTurn,
+        actingExpiresOnTurn: currentTurn + ACTING_TENURE_TURNS,
+        ...initialMinisterialActionFields(now),
+        createdAt: now,
+        updatedAt: now,
+      } as never);
+    } catch (error) {
+      // Seating failed after the charge was spent, so give it back: the
+      // President never got the appointment they paid for. Reachable when a
+      // concurrent request wins the seat between the vacancy check and here,
+      // which the seat's own unique index rejects.
+      await refundActingCharge(db, chargeKey).catch(() => undefined);
+      throw error;
+    }
 
     // From the country's own roster, resolved above, rather than the global
     // lookup: two countries may share a position id with different names.
