@@ -41,7 +41,7 @@ for (const kind of eventKinds) {
       kind,
       minTension: definition.minTension,
       meanGapTurns: meanGap,
-      expectedFiresPer100HighTensionTurns: Number((100 / meanGap).toFixed(2)),
+      steadyStateRatePer100EligibleTurns: Number((100 / meanGap).toFixed(2)),
       fallback: handler.defaultOptionId,
       expectedApproval: Number(expectedApproval.toFixed(2)),
       expectedTreasuryAnchor: Number(expectedTreasuryAnchor.toFixed(2)),
