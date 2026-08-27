@@ -6,6 +6,7 @@ import { ConflictActions } from "./ConflictActions";
 import { CommandChainPanel, CommandLockedPanel, HowThisFrontMoves } from "./CommandChainPanel";
 import { EmployCommandPanel, type EmployableGeneral } from "./EmployCommandPanel";
 import { MomentumPanel, type MomentumView } from "./MomentumPanel";
+import { BelligerentsPanel, type BelligerentsView } from "./BelligerentsPanel";
 import { ForcePanel } from "./ForcePanel";
 import { OrderOfBattlePanel } from "./OrderOfBattlePanel";
 import { WarLog } from "./WarLog";
@@ -71,6 +72,10 @@ export interface ConflictRecordView {
   /** What resolves on the next tick. */
   pending: PendingChip[];
   momentum: MomentumView;
+  /** Who is at this war and what put them there — see `belligerentRoll`.
+   *  Optional for the same reason `hostEntities` is: a page rendered before this
+   *  shipped carries no roll, and the record must still render without it. */
+  belligerents?: BelligerentsView;
 
   /**
    * Settlements already agreed in this war, oldest first. Public: the war's
@@ -607,6 +612,8 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
           </div>
 
           <div className="cw-front-rail">
+            <BelligerentsPanel view={c.belligerents} />
+
             <MomentumPanel view={c.momentum} />
 
             <ForcePanel

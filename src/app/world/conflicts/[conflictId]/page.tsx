@@ -11,6 +11,7 @@ import { getGameTime } from "@/lib/time/gameTime";
 import { toConflictView, yearOfTurn } from "../_coldwar/conflictView";
 import { regionCodesOfCountry } from "@/lib/maps/regionOwnership";
 import { hostEntitiesOf } from "@/lib/military/hostEntities";
+import { belligerentRoll } from "@/lib/military/belligerentRoll";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import { getMilitaryFormations } from "@/lib/db/collections/militaryFormations";
@@ -528,6 +529,7 @@ export default async function ConflictRecordPage({
     controlStart,
     hostEntities,
     hostRegionCodes,
+    belligerents: belligerentRoll(doc),
     hostIsBelligerent,
     verdict: verdict.headline,
     verdictDetail: verdict.detail,
