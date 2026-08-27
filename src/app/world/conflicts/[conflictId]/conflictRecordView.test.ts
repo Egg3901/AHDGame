@@ -503,3 +503,34 @@ describe("buildRecordExtras — coalition attribution", () => {
     expect(x.battles[0].rostersWithheld).toBe(true);
   });
 });
+
+describe("buildRecordExtras - enemy band and naval reach", () => {
+  /** A defender whose force at the front is mostly hulls. */
+  const navalInput = (seaAccess: boolean | undefined) =>
+    input({
+      tier: "command",
+      ownSide: "A",
+      seaAccess,
+      units: [
+        unit({ _id: "own1", countryId: "US", domain: "ground", type: "Armored Division" }),
+        unit({ _id: "cn1", countryId: "CN", domain: "naval", type: "Carrier Strike Group" }),
+        unit({ _id: "cn2", countryId: "CN", domain: "naval", type: "Frigate Squadron" }),
+        unit({ _id: "cn3", countryId: "CN", domain: "naval", type: "Frigate Squadron" }),
+      ],
+    });
+
+  it("reads an enemy fleet as weaker at a front it cannot reach", () => {
+    // The war room's odds come from battleForecast and are reach-aware. If this page
+    // kept reading raw power, the two surfaces would disagree about the same fleet.
+    const coastal = buildRecordExtras(navalInput(true)).enemyBand;
+    const inland = buildRecordExtras(navalInput(false)).enemyBand;
+    expect(coastal).toBeDefined();
+    expect(inland).toBeDefined();
+    expect(inland).not.toBe(coastal);
+  });
+
+  it("still produces a band when the caller omits sea access", () => {
+    // Older callers pass nothing; that must degrade to the inland read, not throw.
+    expect(buildRecordExtras(navalInput(undefined)).enemyBand).toBeDefined();
+  });
+});

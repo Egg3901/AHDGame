@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import { computeEffectivePower } from "@/lib/constants/military";
-import { theaterPool } from "../theaterPool";
+import { theaterPool, engageablePool } from "../theaterPool";
 
 function unit(basePower: number): MilitaryUnit {
   return {
@@ -40,5 +40,47 @@ describe("theaterPool", () => {
 
   it("is zero for an empty force", () => {
     expect(theaterPool([])).toBe(0);
+  });
+});
+
+const hull = (type: string, over: Partial<MilitaryUnit> = {}) =>
+  ({
+    _id: `u-${type}`,
+    countryId: "US",
+    domain: "naval",
+    type,
+    basePower: 90,
+    personnel: 1000,
+    posture: "standard",
+    techTier: 2,
+    vet: 1,
+    readiness: 80,
+    equipment: { firepower: 1, protection: 1, support: 1 },
+    ...over,
+  }) as unknown as MilitaryUnit;
+
+describe("engageablePool", () => {
+  it("matches theaterPool exactly when nothing is naval", () => {
+    const army = [hull("Armored Division", { domain: "ground" })];
+    expect(engageablePool(army, false)).toBe(theaterPool(army));
+    expect(engageablePool(army, true)).toBe(theaterPool(army));
+  });
+
+  it("discounts a fleet that cannot reach an inland front", () => {
+    const fleet = [hull("Frigate Squadron"), hull("Guided-Missile Destroyer")];
+    expect(engageablePool(fleet, false)).toBeLessThan(engageablePool(fleet, true));
+    expect(engageablePool(fleet, false)).toBeLessThan(theaterPool(fleet));
+  });
+
+  it("keeps a carrier at full weight on a coastal front", () => {
+    const cvn = [hull("Carrier Strike Group")];
+    expect(engageablePool(cvn, true)).toBe(theaterPool(cvn));
+  });
+
+  it("degrades a carrier less than an escort inland", () => {
+    const cvn = [hull("Carrier Strike Group")];
+    const frigate = [hull("Frigate Squadron")];
+    const keeps = (us: MilitaryUnit[]) => engageablePool(us, false) / engageablePool(us, true);
+    expect(keeps(cvn)).toBeGreaterThan(keeps(frigate));
   });
 });

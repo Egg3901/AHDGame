@@ -101,6 +101,12 @@ export interface ConflictDoc {
   // Generated at birth (was hardcoded across BOTH old static datasets — the Theater
   // situation flavor AND the combat.ts Front battle-math data):
   terrain: string;
+  /**
+   * Whether this front reaches the sea. Absent means derive it from the host's
+   * geography (`deriveSeaAccess`); set it only to override that, which is the case of a
+   * war fought inland in a country that does have a coast.
+   */
+  seaAccess?: boolean;
   severity: "HIGH" | "MEDIUM" | "LOW";
   /** The generated side's weight (= old Theater.enemyBase). */
   baseStrength: number;
