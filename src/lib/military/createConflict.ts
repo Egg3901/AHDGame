@@ -16,6 +16,8 @@ import { getNextSequentialId } from "@/lib/db/sequentialId";
 import type { WarGoal } from "@/lib/military/warGoals";
 import { initialControl } from "./occupation";
 import { OCCUPATION } from "./config";
+import { deriveSeaAccess } from "./seaAccess";
+import { hostEntitiesOf } from "./hostEntities";
 import { planOpeningForceDeployment } from "./openingForces";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
@@ -206,6 +208,9 @@ export function conflictToFront(c: ConflictDoc): Front {
     contested: c.bloc === "contested",
     terr: c.terr,
     infra: c.infra,
+    // Absent on every conflict written before sea access existed, so derive rather than
+    // default: a stored `false` would quietly beach every navy in the game.
+    seaAccess: c.seaAccess ?? deriveSeaAccess(hostEntitiesOf(c), c.terrain),
     sev: c.severity,
     west: c.sideA.label,
     east: c.sideB.label,
