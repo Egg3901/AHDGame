@@ -29,9 +29,22 @@ describe("marketAccessMetricsFromSnapshot", () => {
       securities: {
         activeTradedListingShare: value(0.3),
         noHolderBondShare: value(0.6),
+        bondSubscriptionRate: value(0.4),
+        twoSidedListingShare: value(0.2),
+        medianQuotedSpreadPct: value(5),
+        depthToMarketCap: value(0.01),
+        medianFilledOrderExecutionHours: value(8),
+        medianAmihudIlliquidity48: value(2),
       },
       households: { wealthGini: value(0.9) },
-      money: { medianAnnualizedM2GrowthPct: value(8) },
+      money: {
+        medianAnnualizedM2GrowthPct: value(8),
+        transactionalMoneyShare: value(0.3),
+        externalBroadMoneyShare: value(0.4),
+        activeModeledBalanceShare48: value(0.25),
+        modeledGrossVelocity48: value(0.75),
+      },
+      measurement: { confidence: "medium", reasons: ["test"] },
       reconciliation: { status: "amber" },
     } as EconomicVitalSigns;
 
@@ -50,8 +63,19 @@ describe("marketAccessMetricsFromSnapshot", () => {
       marketCapHhi: 2500,
       activeTradedListingShare: 0.3,
       noHolderBondShare: 0.6,
+      bondSubscriptionRate: 0.4,
+      twoSidedListingShare: 0.2,
+      medianQuotedSpreadPct: 5,
+      depthToMarketCap: 0.01,
+      medianFilledOrderExecutionHours: 8,
+      medianAmihudIlliquidity48: 2,
       wealthGini: 0.9,
       annualizedM2GrowthPct: 8,
+      transactionalMoneyShare: 0.3,
+      externalBroadMoneyShare: 0.4,
+      activeModeledBalanceShare48: 0.25,
+      modeledGrossVelocity48: 0.75,
+      measurementConfidence: "medium",
       reconciliationStatus: "amber",
     });
   });

@@ -53,6 +53,15 @@ export interface EconomicVitalSigns {
     activeBonds: number;
     noHolderBondShare: EconomicMetric;
     medianBondHolders: EconomicMetric;
+    bondSubscriptionRate: EconomicMetric;
+    openBuyOrders: number;
+    openSellOrders: number;
+    twoSidedListingShare: EconomicMetric;
+    medianQuotedSpreadPct: EconomicMetric;
+    openOrderDepthAnchor: number;
+    depthToMarketCap: EconomicMetric;
+    medianFilledOrderExecutionHours: EconomicMetric;
+    medianAmihudIlliquidity48: EconomicMetric;
   };
   households: {
     householdsObserved: number;
@@ -67,6 +76,20 @@ export interface EconomicVitalSigns {
     medianInflationPct: EconomicMetric;
     moneyGrowthInflationCorrelation: EconomicMetric;
     creditToM2: EconomicMetric;
+    transactionalMoneyShare: EconomicMetric;
+    externalBroadMoneyShare: EconomicMetric;
+    bankDepositShare: EconomicMetric;
+    activeModeledBalanceShare48: EconomicMetric;
+    dormantModeledBalanceShare48: EconomicMetric;
+    modeledGrossVelocity48: EconomicMetric;
+    householdGrossVelocity48: EconomicMetric;
+    corporateGrossVelocity48: EconomicMetric;
+    partyGrossVelocity48: EconomicMetric;
+    governmentGrossVelocity48: EconomicMetric;
+  };
+  measurement: {
+    confidence: "low" | "medium" | "high";
+    reasons: string[];
   };
   reconciliation: {
     status: ReconcileStatus | "unavailable";
