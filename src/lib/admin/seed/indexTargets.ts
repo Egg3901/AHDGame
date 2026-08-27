@@ -49,7 +49,7 @@ export const INDEX_TARGETS = [
     id: "indexesCabinet",
     label: "Indexes — Cabinet",
     description:
-      "Unified cabinetMembers + UK cabinet cooldowns/members indexes (TTL on cooldownUntil)",
+      "Unified cabinetMembers, acting-appointment charge ledger, and UK cabinet cooldowns. All turn-based, so none carry a TTL index",
   },
   {
     id: "indexesPerf",

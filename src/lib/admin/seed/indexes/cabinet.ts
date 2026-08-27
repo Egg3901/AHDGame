@@ -45,5 +45,16 @@ export async function seedCabinetIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
+  // One acting appointment per seat, per presidency. NO TTL index: like the
+  // ukCabinetCooldowns above, this lifetime is turn-based, and a wall-clock TTL
+  // would refund a spent charge during a turn-system pause.
+  await ensureIndex(
+    db,
+    "actingAppointmentCharges",
+    { countryId: 1, positionId: 1, presidentCharacterId: 1, presidencyStartedAt: 1 },
+    { unique: true, name: "actingAppointmentCharges_seat_presidency" },
+    log
+  );
+
   log("Cabinet indexes ensured");
 }
