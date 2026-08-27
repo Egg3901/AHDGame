@@ -9,6 +9,11 @@ import type { GameConfig } from "@/lib/db/types";
 import { getMarketSystemMode, type MarketSystemMode } from "@/lib/market/featureFlag";
 import { MARKET_MODE_INFO, MARKET_MODE_ORDER } from "@/lib/market/modes";
 import { getCurrentTurn } from "@/lib/currentTurn";
+import {
+  economicInterventionPlanSchema,
+  validateInterventionActivation,
+  type EconomicInterventionPlan,
+} from "@/lib/economy/interventionGovernance";
 
 // Enum derived from the canonical order so route validation can never drift
 // from the client selector or the engine.
@@ -40,6 +45,7 @@ const patchSchema = z.object({
   qualityPremiumPricingEnabled: z.boolean().optional(),
   supplyAgreementsEnabled: z.boolean().optional(),
   shortageResponsiveSourcingEnabled: z.boolean().optional(),
+  intervention: economicInterventionPlanSchema.optional(),
   demographicsDemandEnabled: z.boolean().optional(),
   nppCorpsAttackable: z.boolean().optional(),
   nppCorporateAttacksEnabled: z.boolean().optional(),
@@ -139,6 +145,7 @@ export async function PATCH(request: Request) {
       qualityPremiumPricingEnabled,
       supplyAgreementsEnabled,
       shortageResponsiveSourcingEnabled,
+      intervention,
       demographicsDemandEnabled,
       nppCorpsAttackable,
       nppCorporateAttacksEnabled,
@@ -158,6 +165,7 @@ export async function PATCH(request: Request) {
       qualityPremiumPricingEnabled?: boolean;
       supplyAgreementsEnabled?: boolean;
       shortageResponsiveSourcingEnabled?: boolean;
+      intervention?: EconomicInterventionPlan;
       demographicsDemandEnabled?: boolean;
       nppCorpsAttackable?: boolean;
       nppCorporateAttacksEnabled?: boolean;
@@ -190,6 +198,18 @@ export async function PATCH(request: Request) {
     // on a world whose cadence paused. Read before the write so the recorded
     // turn is the one the world was on when the operator acted.
     const currentTurn = await getCurrentTurn(db);
+    if (shortageResponsiveSourcingEnabled === true) {
+      if (!intervention) {
+        return NextResponse.json(
+          { error: "An economic intervention plan is required to enable shortage sourcing." },
+          { status: 400 }
+        );
+      }
+      const activationError = validateInterventionActivation(intervention, currentTurn);
+      if (activationError) {
+        return NextResponse.json({ error: activationError }, { status: 400 });
+      }
+    }
 
     const governorSet: Partial<GameConfig> = {};
     if (typeof governorCap === "number") governorSet.marketGovernorCap = governorCap;
@@ -209,8 +229,12 @@ export async function PATCH(request: Request) {
       governorSet.qualityPremiumPricingEnabled = qualityPremiumPricingEnabled;
     if (typeof supplyAgreementsEnabled === "boolean")
       governorSet.supplyAgreementsEnabled = supplyAgreementsEnabled;
-    if (typeof shortageResponsiveSourcingEnabled === "boolean")
+    if (typeof shortageResponsiveSourcingEnabled === "boolean") {
       governorSet.shortageResponsiveSourcingEnabled = shortageResponsiveSourcingEnabled;
+      if (shortageResponsiveSourcingEnabled && intervention) {
+        governorSet.shortageResponsiveSourcingIntervention = intervention;
+      }
+    }
     if (typeof demographicsDemandEnabled === "boolean")
       governorSet.demographicsDemandEnabled = demographicsDemandEnabled;
     if (typeof nppCorpsAttackable === "boolean")

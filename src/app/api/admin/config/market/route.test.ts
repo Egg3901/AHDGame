@@ -127,12 +127,62 @@ describe("GET/PATCH /api/admin/config/market — extractionOutputScaleEnabled", 
       marketSystemMode: "capital",
     });
     const { PATCH } = await import("./route");
-    await PATCH(makePatchRequest({ mode: "capital", shortageResponsiveSourcingEnabled: true }));
+    await PATCH(
+      makePatchRequest({
+        mode: "capital",
+        shortageResponsiveSourcingEnabled: true,
+        intervention: {
+          id: "issue-968-shortage-sourcing",
+          issueId: 968,
+          owner: "operator",
+          objective: "Increase buyer intent fulfillment.",
+          targets: [
+            {
+              metric: "intentFulfillmentRate",
+              direction: "increase",
+              minimumImprovement: 0.05,
+            },
+          ],
+          guardrails: [
+            {
+              metric: "physicalSellThrough",
+              direction: "increase",
+              maximumDeterioration: 0.05,
+            },
+          ],
+          cohort: { initialShare: 0.1, maximumShare: 1, rampTurns: 24 },
+          review: { startTurn: 0, reviewTurn: 10_000 },
+          rollback: {
+            owner: "operator",
+            trigger: "A guardrail breaches.",
+            action: "Disable shortage sourcing.",
+          },
+        },
+      })
+    );
     const setArg = db.collectionMocks.gameConfig!.updateOne.mock.calls[0]?.[1]?.$set as Record<
       string,
       unknown
     >;
     expect(setArg.shortageResponsiveSourcingEnabled).toBe(true);
+    expect(setArg.shortageResponsiveSourcingIntervention).toMatchObject({
+      id: "issue-968-shortage-sourcing",
+      issueId: 968,
+    });
+  });
+
+  it("refuses an ungoverned shortage-sourcing activation", async () => {
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "capital",
+    });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(
+      makePatchRequest({ mode: "capital", shortageResponsiveSourcingEnabled: true })
+    );
+
+    expect(res.status).toBe(400);
+    expect(db.collectionMocks.gameConfig!.updateOne).not.toHaveBeenCalled();
   });
 });
 
