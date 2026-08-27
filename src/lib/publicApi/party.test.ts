@@ -99,3 +99,55 @@ describe("queryParty", () => {
     expect(result!.economicLabel.length).toBeGreaterThan(0);
   });
 });
+
+describe("queryPartyList", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    ["politicalParties", "electedOfficials"].forEach((n) => db.collection(n));
+  });
+
+  it("returns parties with seat counts from elected officials", async () => {
+    db.collectionMocks.politicalParties!.find.mockReturnValue({
+      sort: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: new ObjectId(),
+          sequentialId: 1,
+          countryId: "US",
+          name: "Democrats",
+          abbreviation: "DEM",
+          color: "#00f",
+          economicPosition: -30,
+          socialPosition: -40,
+          memberCount: 50,
+          treasury: 10000,
+          isDefault: true,
+        },
+      ]),
+    } as never);
+    db.collectionMocks.electedOfficials!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "1", seats: 25 }]),
+    } as never);
+
+    const { queryPartyList } = await import("./party");
+    const result = await queryPartyList(db as unknown as Db, { country: "us" });
+    expect(result.found).toBe(true);
+    const p = (result.parties as Record<string, unknown>[])[0];
+    expect(p.seatCount).toBe(25);
+    expect(p.memberCount).toBe(50);
+  });
+
+  it("returns found:false when the country has no parties", async () => {
+    db.collectionMocks.politicalParties!.find.mockReturnValue({
+      sort: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([]),
+    } as never);
+
+    const { queryPartyList } = await import("./party");
+    const result = await queryPartyList(db as unknown as Db, { country: "ZZ" });
+    expect(result.found).toBe(false);
+  });
+});
