@@ -154,6 +154,20 @@ describe("POST /api/country/[code]/executive/cabinet/acting", () => {
     expect(db.collectionMocks["cabinetSettings"]!.updateOne).not.toHaveBeenCalled();
   });
 
+  it("refuses without seating anyone when the charge ledger reports a duplicate", async () => {
+    // The ledger's unique index is the real lock against a double submit: the
+    // pre-check can be raced, so a duplicate key must refuse rather than seat.
+    db.collectionMocks["actingAppointmentCharges"]!.insertOne.mockRejectedValue(
+      Object.assign(new Error("E11000 duplicate key"), { code: 11000 })
+    );
+    const res = await post({
+      positionId: "secretary_of_treasury",
+      characterId: appointeeId.toString(),
+    });
+    expect(res.status).toBe(409);
+    expect(db.collectionMocks["cabinetMembers"]!.insertOne).not.toHaveBeenCalled();
+  });
+
   it("404s for a country that does not confirm cabinet picks", async () => {
     const res = await post(
       { positionId: "secretary_of_treasury", characterId: appointeeId.toString() },

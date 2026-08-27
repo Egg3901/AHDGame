@@ -10,6 +10,54 @@ describe("mergeExecutiveActs", () => {
     expect(mergeExecutiveActs(inputs())).toEqual([]);
   });
 
+  it("marks an acting holder as acting rather than confirmed", () => {
+    const acts = mergeExecutiveActs(
+      inputs({
+        cabinetMembers: [
+          {
+            _id: "c1",
+            characterName: "A. Caretaker",
+            positionLabel: "Secretary of the Treasury",
+            confirmedAt: new Date("2026-02-10"),
+            acting: true,
+          },
+          {
+            _id: "c2",
+            characterName: "M. Ruiz",
+            positionLabel: "Secretary of State",
+            confirmedAt: new Date("2026-02-11"),
+          },
+        ],
+      })
+    );
+    const acting = acts.find((a) => a.refId === "c1");
+    const confirmed = acts.find((a) => a.refId === "c2");
+    expect(acting?.kind).toBe("acting");
+    expect(acting?.detail).toMatch(/no confirmation vote/i);
+    expect(confirmed?.kind).toBe("confirmed");
+  });
+
+  it("sorts without throwing when a cabinet row carries only an appointment date", () => {
+    // Regression: acting holders have no confirmedAt. The route falls back to
+    // appointedAt/createdAt, but if a caller ever passes a missing date the
+    // sort's `b.at.getTime()` would throw and take out the whole ledger.
+    expect(() =>
+      mergeExecutiveActs(
+        inputs({
+          cabinetMembers: [
+            {
+              _id: "c1",
+              characterName: "A. Caretaker",
+              positionLabel: "Secretary of the Treasury",
+              confirmedAt: new Date("2026-02-10"),
+              acting: true,
+            },
+          ],
+        })
+      )
+    ).not.toThrow();
+  });
+
   it("maps signed, vetoed, and on-desk bills with their best timestamp", () => {
     const acts = mergeExecutiveActs(
       inputs({

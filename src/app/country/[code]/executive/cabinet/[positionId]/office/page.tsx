@@ -6,6 +6,7 @@ import { useCabinetOffice } from "./useCabinetOffice";
 import { useMergerReviewQueue } from "./useMergerReviewQueue";
 import { MergerReviewQueuePanel } from "./components/MergerReviewQueuePanel";
 import { CabinetOfficeLayout } from "./components/CabinetOfficeLayout";
+import { ActingOfficeNotice } from "./components/ActingOfficeNotice";
 import { RestrictedOfficeNotice } from "./components/RestrictedOfficeNotice";
 import { CabinetStatStrip } from "./components/CabinetStatStrip";
 import { CabinetPositionRail } from "./components/CabinetPositionRail";
@@ -214,6 +215,16 @@ export default function CabinetOfficePage() {
   return (
     <div className="min-h-screen bg-background pb-16">
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
+        {data.member?.acting && (
+          <ActingOfficeNotice
+            turnsRemaining={
+              data.member.actingExpiresOnTurn != null
+                ? Math.max(0, data.member.actingExpiresOnTurn - data.currentTurn)
+                : null
+            }
+            viewerIsHolder={data.canAct}
+          />
+        )}
         <CabinetOfficeLayout
           positionName={data.position?.name ?? positionConfig.name}
           department={data.position?.department ?? mechanics.department}

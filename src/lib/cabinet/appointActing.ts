@@ -148,6 +148,28 @@ export async function appointActingCabinetMember(
     const gameState = await getGameState();
     const currentTurn = gameState?.currentTurn ?? 1;
 
+    // Charge first, seat second. The ledger's unique index is the real lock:
+    // the `hasUnspentActingCharge` check above can be raced by a double submit,
+    // and a duplicate key here means the charge was already spent. Seating
+    // first would let a losing race keep the seat but skip the charge, which is
+    // exactly the unlimited-appointments hole this whole change closes. The
+    // reverse failure (charge spent, seat not filled) costs one appointment and
+    // is recoverable by confirmation, so it is the safer way to fail.
+    try {
+      await spendActingCharge(db, chargeKey, appointeeOid, currentTurn);
+    } catch (error) {
+      if ((error as { code?: number }).code === 11000) {
+        return NextResponse.json(
+          {
+            error:
+              "You have already used your acting appointment for this office. It can only be filled by confirmation now.",
+          },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
+
     await members.insertOne({
       countryId,
       positionId,
@@ -163,8 +185,6 @@ export async function appointActingCabinetMember(
       createdAt: now,
       updatedAt: now,
     } as never);
-
-    await spendActingCharge(db, chargeKey, appointeeOid, currentTurn);
 
     const posName = getCabinetPositionById(positionId)?.name ?? positionId;
     await createNotification({

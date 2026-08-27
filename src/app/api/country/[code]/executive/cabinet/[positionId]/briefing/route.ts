@@ -211,6 +211,11 @@ export async function GET(_request: Request, { params }: RouteParams) {
             partyLogoUrl: partyDoc?.logoUrl ?? null,
             ...(includeActions ? { ministerialActions: member.ministerialActions ?? 2 } : {}),
             bannerImageUrl: member.bannerImageUrl ?? null,
+            // Drives the caretaker notice in the office: an acting holder's
+            // restricted levers are refused by the API, so the office has to
+            // say so rather than let them find out by hitting a 403.
+            acting: member.acting === true,
+            actingExpiresOnTurn: member.actingExpiresOnTurn ?? null,
           }
         : null;
 

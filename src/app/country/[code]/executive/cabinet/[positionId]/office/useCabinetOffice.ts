@@ -40,6 +40,10 @@ export interface CabinetOfficeData {
     /** Absent on a withheld office: the server does not send it to outsiders. */
     ministerialActions?: number;
     bannerImageUrl: string | null;
+    /** Seated directly by the executive, without a confirmation vote. */
+    acting?: boolean;
+    /** Turn the acting appointment lapses. Null on a confirmed holder. */
+    actingExpiresOnTurn?: number | null;
   } | null;
   currentSettings: {
     tierSetting: string | null;
