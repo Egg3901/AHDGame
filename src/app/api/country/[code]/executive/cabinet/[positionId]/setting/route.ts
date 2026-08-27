@@ -6,6 +6,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
+import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { getCabinetMechanics } from "@/lib/constants/cabinetMechanics";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
@@ -69,6 +70,11 @@ export async function POST(request: Request, { params }: RouteParams) {
         { status: 403 }
       );
     }
+
+    // A stance is the department's declared policy direction, which is the thing the
+    // Senate's confirmation vote is actually about.
+    const actingDenied = requireConfirmedSecretary(member, "stance", !!isAdmin);
+    if (actingDenied) return actingDenied;
 
     const gameState = await getGameState();
     const currentTurn = gameState?.currentTurn ?? 1;

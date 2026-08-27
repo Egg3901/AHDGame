@@ -13,6 +13,7 @@ import { lotsRequired, lotsToFillUnit } from "@/lib/military/arsenal";
 import { lotPriceBand } from "@/lib/military/defenceLotEconomics";
 import { DEFENCE_TERMINATION_CAUSE_TURNS } from "@/lib/military/defenceTermination";
 import { AggTile, MilIcon, domainIcon, fmtMoneyAbs } from "./militaryUi";
+import { ActingLockNote, useActingLock } from "../ActingLock";
 
 /** Presentation order — the arms of the service as a minister would list them. */
 // Typed to `UnitDomain` rather than `string` so this table cannot drift from the six
@@ -42,7 +43,7 @@ export function ArsenalTab({
   lotPricePerLot,
   units,
   currencySymbol,
-  canAct,
+  canAct: canActProp,
   busy,
   onAwardContract,
   onCancelContract,
@@ -62,6 +63,10 @@ export function ArsenalTab({
   ) => Promise<boolean>;
   onCancelContract: (contractId: string) => void;
 }) {
+  // An acting secretary reads this surface but does not move it.
+  const actingLockReason = useActingLock("procurement");
+  const canAct = canActProp && !actingLockReason;
+
   const [confirming, setConfirming] = useState<string | null>(null);
   const [awardSectorId, setAwardSectorId] = useState("");
   const [awardLots, setAwardLots] = useState("");
@@ -151,6 +156,8 @@ export function ArsenalTab({
 
   return (
     <div className="space-y-4">
+      <ActingLockNote reason={actingLockReason} />
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <AggTile label="Lots in store" value={totalStock.toLocaleString("en-US")} tone="gov" />
         <AggTile

@@ -4,13 +4,16 @@ import { useState } from "react";
 import type { PlantView } from "../../useCabinetOffice";
 import { TIER_LABELS } from "@/lib/constants/cabinetEnergy";
 import { Stat, EnergyIcon, ConfirmDialog, fmtMoneyM, fmtCapacity } from "./energyUi";
+// The tab above these cards carries the explanation; a note on every card would
+// only repeat it. The lock still reaches here so the card's own buttons disable.
+import { useActingLock } from "../ActingLock";
 
 const TIER_COLOR = ["#94a3b8", "#c9a24b", "#4ade80", "#22d3ee"];
 
 export function PlantCard({
   plant,
   basePath,
-  canAct,
+  canAct: canActProp,
   currencySymbol,
   regionName,
   busy,
@@ -24,6 +27,10 @@ export function PlantCard({
   busy: boolean;
   onAction: (method: "POST" | "DELETE", path: string, body?: unknown) => void;
 }) {
+  // An acting secretary reads this surface but does not move it.
+  const actingLockReason = useActingLock("assets");
+  const canAct = canActProp && !actingLockReason;
+
   const [open, setOpen] = useState(false);
   const [confirmRetire, setConfirmRetire] = useState(false);
 

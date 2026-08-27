@@ -14,6 +14,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
+import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -129,6 +130,13 @@ async function requireDefenceHolder(code: string, positionId: string) {
       ),
     } as const;
   }
+  // Procurement is the clearest case of a lever that outlives its holder: an awarded
+  // contract obligates money across a 12-turn window, and a cancellation exposes the
+  // country to damages the confirmed successor has to pay. Guarding the shared helper
+  // covers both the award and the cancel.
+  const actingDenied = requireConfirmedSecretary(member, "procurement", !!auth.user.isAdmin);
+  if (actingDenied) return { error: actingDenied } as const;
+
   // The holder's identity rides along: self-dealing disclosure needs to know who signed, and
   // resolving it a second time from the route would be a second chance to resolve it wrongly.
   return { db, countryId, member, user: auth.user } as const;
