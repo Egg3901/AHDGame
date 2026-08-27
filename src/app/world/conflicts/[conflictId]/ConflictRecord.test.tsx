@@ -30,6 +30,7 @@ const base: ConflictRecordView = {
   ownSide: null,
   chain: null,
   actions: null,
+  dictate: null,
   postedHere: null,
   employ: null,
   whoDeclares: "The defense secretary — no Theater Commander is designated at this front.",
@@ -745,5 +746,49 @@ describe("ConflictRecord — coalition engagements", () => {
     );
     expect(container.textContent).toMatch(/3rd Guards Tank/);
     expect(container.textContent).toMatch(/Roster withheld/);
+  });
+});
+
+describe("the dictate panel on a won war", () => {
+  const dictate = {
+    conflictId: "w1",
+    countryCode: "uk",
+    target: "TR",
+    targetName: "Turkey",
+    turnsLeft: 18,
+  };
+
+  it("is absent for a viewer the server did not authorize", () => {
+    // The server returns null for everyone but the winning principal's negotiator,
+    // so the losing side and the winning side's allies never see it.
+    render(<ConflictRecord conflict={base} />);
+    expect(screen.queryByText(/NAME YOUR TERMS/)).toBeNull();
+  });
+
+  it("offers all three terms to the country that won the war", () => {
+    render(<ConflictRecord conflict={{ ...base, dictate }} />);
+    expect(screen.getByText(/NAME YOUR TERMS/)).toBeTruthy();
+    expect(screen.getByText("Indemnity")).toBeTruthy();
+    expect(screen.getByText("Regime change")).toBeTruthy();
+    expect(screen.getByText("Demilitarisation")).toBeTruthy();
+  });
+
+  it("counts the window down in turns and names who it lands on", () => {
+    render(<ConflictRecord conflict={{ ...base, dictate }} />);
+    expect(screen.getByText(/closes in 18 turns/)).toBeTruthy();
+    expect(screen.getByText(/Turkey has no ground left to hold/)).toBeTruthy();
+  });
+
+  it("offers a way to end the war taking nothing", () => {
+    render(<ConflictRecord conflict={{ ...base, dictate }} />);
+    expect(screen.getByRole("button", { name: /End the war with no terms/ })).toBeTruthy();
+  });
+
+  it("lets exactly one term be selected at a time", () => {
+    // The payload is a discriminated union server-side; the radio group is what
+    // makes that visible rather than merely enforced.
+    render(<ConflictRecord conflict={{ ...base, dictate }} />);
+    const radios = screen.getAllByRole("radio");
+    expect(radios.filter((r) => (r as HTMLInputElement).checked)).toHaveLength(1);
   });
 });

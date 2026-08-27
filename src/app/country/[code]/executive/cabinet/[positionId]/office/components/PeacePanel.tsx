@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { SectionCard, Badge } from "./dossier";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, type CountryId, type GovernmentType } from "@/lib/constants/countries";
 import { PEACE_OFFER_DURATION_TURNS, TRUCE_TURNS } from "@/lib/db/types/peaceOffer";
 import type { PeaceTerm } from "@/lib/military/peaceTerm";
 
@@ -78,6 +78,11 @@ export function PeacePanel({
   const [enemy, setEnemy] = useState<string>("");
   const [payer, setPayer] = useState<CountryId>(countryId);
   const [amount, setAmount] = useState<string>("0");
+  const [termKind, setTermKind] = useState<"indemnity" | "regime_change" | "demilitarisation">(
+    "indemnity"
+  );
+  const [targetSystem, setTargetSystem] = useState<string>("parliamentaryRepublic");
+  const [demilTurns, setDemilTurns] = useState<string>("240");
   const [justification, setJustification] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -154,7 +159,7 @@ export function PeacePanel({
       {
         conflictId: warId,
         toCountry: enemy,
-        term: { kind: "indemnity", payer, amount: Number(amount) || 0 },
+        term: buildTerm(),
         ...(justification.trim() ? { justification: justification.trim() } : {}),
       },
       "Offer sent."
@@ -181,6 +186,17 @@ export function PeacePanel({
   const live = forWar.filter((o) => o.status === "pending");
   const past = forWar.filter((o) => o.status !== "pending");
   const payerName = COUNTRY_CONFIGS[payer]?.name ?? payer;
+
+  /** The one term this offer carries, matching the server's discriminated union. */
+  function buildTerm(): PeaceTerm {
+    if (termKind === "regime_change") {
+      return { kind: "regime_change", targetSystem: targetSystem as GovernmentType };
+    }
+    if (termKind === "demilitarisation") {
+      return { kind: "demilitarisation", turns: Number(demilTurns) || 0 };
+    }
+    return { kind: "indemnity", payer, amount: Number(amount) || 0 };
+  }
 
   return (
     <SectionCard
@@ -295,26 +311,73 @@ export function PeacePanel({
               ))}
             </select>
             <select
-              aria-label="Who pays"
-              value={payer}
-              onChange={(e) => setPayer(e.target.value as CountryId)}
+              aria-label="Term offered"
+              value={termKind}
+              onChange={(e) => setTermKind(e.target.value as typeof termKind)}
               className="min-w-[150px] flex-1 rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px]"
             >
-              <option value={countryId}>We pay</option>
-              {enemy && <option value={enemy}>They pay</option>}
+              <option value="indemnity">Indemnity</option>
+              <option value="regime_change">Regime change</option>
+              <option value="demilitarisation">Demilitarisation</option>
             </select>
           </div>
 
-          <label className="block text-[11px] text-muted">
-            Indemnity, in {payerName} currency — zero is a white peace
-            <input
-              type="number"
-              min={0}
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px]"
-            />
-          </label>
+          {/* Exactly one term travels. The server payload is a discriminated union,
+              so the fields below are the branch, not extra options alongside it. */}
+          {termKind === "indemnity" && (
+            <>
+              <select
+                aria-label="Who pays"
+                value={payer}
+                onChange={(e) => setPayer(e.target.value as CountryId)}
+                className="w-full rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px]"
+              >
+                <option value={countryId}>We pay</option>
+                {enemy && <option value={enemy}>They pay</option>}
+              </select>
+              <label className="block text-[11px] text-muted">
+                Indemnity, in {payerName} currency. Zero is a white peace.
+                <input
+                  type="number"
+                  min={0}
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px]"
+                />
+              </label>
+            </>
+          )}
+
+          {termKind === "regime_change" && (
+            <label className="block text-[11px] text-muted">
+              System they would adopt. Their legislature is dissolved and fresh elections are
+              called.
+              <select
+                aria-label="New system"
+                value={targetSystem}
+                onChange={(e) => setTargetSystem(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px]"
+              >
+                <option value="parliamentaryRepublic">Parliamentary republic</option>
+                <option value="presidential">Presidential republic</option>
+                <option value="onePartyState">One-party state</option>
+              </select>
+            </label>
+          )}
+
+          {termKind === "demilitarisation" && (
+            <label className="block text-[11px] text-muted">
+              Turns they may award no new defence contracts. Existing orders keep delivering.
+              <input
+                type="number"
+                min={1}
+                aria-label="Demilitarisation turns"
+                value={demilTurns}
+                onChange={(e) => setDemilTurns(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px]"
+              />
+            </label>
+          )}
 
           <textarea
             aria-label="Justification"

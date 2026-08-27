@@ -4,6 +4,7 @@ import { FrontLineMap } from "../combat/components/FrontLineMap";
 import type { ConflictTier } from "@/lib/military/conflictVisibility";
 import type { ForceRow, RecordBattleRow, SideForce } from "./conflictRecordView";
 import { ConflictActions } from "./ConflictActions";
+import { DictateTermsPanel, type DictateTermsView } from "./DictateTermsPanel";
 import { CommandChainPanel, CommandLockedPanel, HowThisFrontMoves } from "./CommandChainPanel";
 import { PostedGeneralsPanel, type PostedGeneralRow } from "./PostedGeneralsPanel";
 import { EmployCommandPanel, type EmployableGeneral } from "./EmployCommandPanel";
@@ -106,6 +107,12 @@ export interface ConflictRecordView {
    * reader of the public record does not need to be told they hold none.
    */
   chain: CommandChainView | null;
+  /**
+   * The dictate panel's props, or null. Non-null only for the negotiator of the
+   * country that won this war outright, so the winning side's allies and the losing
+   * side never see it.
+   */
+  dictate: DictateTermsView | null;
   /** Everything ConflictActions needs; null when the viewer may not act here. */
   actions: {
     theaterId: string;
@@ -654,6 +661,11 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
             />
 
             {c.chain && <CommandChainPanel chain={c.chain} viewerCountry={c.viewerCountry} />}
+
+            {/* Above the command surface, not below it: a war awaiting terms takes
+                no more orders, so the one decision still open should be the first
+                thing its holder sees. */}
+            {c.dictate && <DictateTermsPanel view={c.dictate} />}
 
             {/* The command surface — only for a viewer canActAtTheater would admit,
                 and never on a resolved war. The routes enforce it again

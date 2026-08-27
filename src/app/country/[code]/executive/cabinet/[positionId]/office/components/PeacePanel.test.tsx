@@ -169,3 +169,75 @@ describe("changing the counterparty", () => {
     expect(link.getAttribute("href")).toBe("/world/conflicts/3");
   });
 });
+
+describe("choosing which term to offer", () => {
+  /** Mount with no offers on the table and pick an enemy, ready to compose. */
+  async function ready() {
+    const fetchMock = mockGet({ currentTurn: 40, wars: [war], offers: [] });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<PeacePanel {...props} />);
+    fireEvent.change(await screen.findByLabelText(/country to negotiate with/i), {
+      target: { value: "CN" },
+    });
+    return fetchMock;
+  }
+
+  it("offers all three terms", async () => {
+    await ready();
+    const select = screen.getByLabelText(/term offered/i) as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.value)).toEqual([
+      "indemnity",
+      "regime_change",
+      "demilitarisation",
+    ]);
+  });
+
+  it("shows the amount field only for an indemnity", async () => {
+    // The payload is a discriminated union, so the fields ARE the branch rather
+    // than options sitting alongside it.
+    await ready();
+    expect(screen.queryByLabelText(/who pays/i)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/term offered/i), {
+      target: { value: "demilitarisation" },
+    });
+    expect(screen.queryByLabelText(/who pays/i)).toBeNull();
+    expect(screen.getByLabelText(/demilitarisation turns/i)).toBeTruthy();
+  });
+
+  it("posts a regime change as the one term it carries", async () => {
+    const fetchMock = await ready();
+    fireEvent.change(screen.getByLabelText(/term offered/i), {
+      target: { value: "regime_change" },
+    });
+    fireEvent.change(screen.getByLabelText(/new system/i), {
+      target: { value: "onePartyState" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /send peace offer/i }));
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => c[1]?.method === "POST");
+      expect(post).toBeTruthy();
+      expect(JSON.parse(post![1].body).term).toEqual({
+        kind: "regime_change",
+        targetSystem: "onePartyState",
+      });
+    });
+  });
+
+  it("posts a demilitarisation in turns", async () => {
+    const fetchMock = await ready();
+    fireEvent.change(screen.getByLabelText(/term offered/i), {
+      target: { value: "demilitarisation" },
+    });
+    fireEvent.change(screen.getByLabelText(/demilitarisation turns/i), {
+      target: { value: "120" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /send peace offer/i }));
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => c[1]?.method === "POST");
+      expect(JSON.parse(post![1].body).term).toEqual({
+        kind: "demilitarisation",
+        turns: 120,
+      });
+    });
+  });
+});
