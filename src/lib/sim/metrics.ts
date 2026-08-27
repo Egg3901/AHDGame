@@ -111,8 +111,13 @@ export interface MarketAccessMetrics {
   physicalSellThrough: number | null;
   labourStaffingRate: number | null;
   marketCapHhi: number | null;
+  medianOwnershipAdjustedSellerHhi: number | null;
+  medianOwnershipAdjustedBuyerHhi: number | null;
+  highConcentrationLowFillShare: number | null;
   activeTradedListingShare: number | null;
   noHolderBondShare: number | null;
+  sovereignNoHolderBondShare: number | null;
+  corporateNoHolderBondShare: number | null;
   bondSubscriptionRate: number | null;
   twoSidedListingShare: number | null;
   medianQuotedSpreadPct: number | null;
@@ -146,8 +151,16 @@ export function marketAccessMetricsFromSnapshot(
     physicalSellThrough: snapshot?.production.physicalSellThrough.value ?? null,
     labourStaffingRate: snapshot?.production.labourStaffingRate.value ?? null,
     marketCapHhi: snapshot?.firms.marketCapHhi.value ?? null,
+    medianOwnershipAdjustedSellerHhi:
+      snapshot?.competition?.medianOwnershipAdjustedSellerHhi.value ?? null,
+    medianOwnershipAdjustedBuyerHhi:
+      snapshot?.competition?.medianOwnershipAdjustedBuyerHhi.value ?? null,
+    highConcentrationLowFillShare:
+      snapshot?.competition?.highConcentrationLowFillShare.value ?? null,
     activeTradedListingShare: snapshot?.securities.activeTradedListingShare.value ?? null,
     noHolderBondShare: snapshot?.securities.noHolderBondShare.value ?? null,
+    sovereignNoHolderBondShare: snapshot?.securities.sovereignNoHolderBondShare?.value ?? null,
+    corporateNoHolderBondShare: snapshot?.securities.corporateNoHolderBondShare?.value ?? null,
     bondSubscriptionRate: snapshot?.securities.bondSubscriptionRate.value ?? null,
     twoSidedListingShare: snapshot?.securities.twoSidedListingShare.value ?? null,
     medianQuotedSpreadPct: snapshot?.securities.medianQuotedSpreadPct.value ?? null,

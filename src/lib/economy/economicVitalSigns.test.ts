@@ -85,6 +85,29 @@ describe("computeEconomicVitalSigns", () => {
       reconciliation: null,
       balanceSnapshot: null,
       ledgerEntries: [],
+      commodityParticipants: [
+        {
+          commodity: "steel",
+          corporationId: "seller-a",
+          ownershipRootId: "group-a",
+          sellerUnits: 60,
+          buyerUnits: 0,
+        },
+        {
+          commodity: "steel",
+          corporationId: "seller-b",
+          ownershipRootId: "group-a",
+          sellerUnits: 20,
+          buyerUnits: 0,
+        },
+        {
+          commodity: "steel",
+          corporationId: "seller-c",
+          ownershipRootId: "seller-c",
+          sellerUnits: 20,
+          buyerUnits: 0,
+        },
+      ],
     });
 
     expect(snapshot.goods.pooledFillRate.value).toBe(0.5);
@@ -94,6 +117,16 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.trade.localShare.value).toBe(0.6);
     expect(snapshot.trade.toleranceBoundShareOfUnmet.value).toBe(0.8);
     expect(snapshot.trade.shortageResponsiveShareOfFulfillment.value).toBe(0.1);
+    expect(snapshot.competition.markets[0]).toMatchObject({
+      commodity: "steel",
+      sellerCount: 3,
+      sellerHhi: 4400,
+      ownershipAdjustedSellerHhi: 6800,
+      largestOwnershipAdjustedSellerShare: 0.8,
+      largestOwnershipAdjustedSellerUnits: 80,
+      highConcentrationLowFill: true,
+    });
+    expect(snapshot.competition.highConcentrationLowFillShare.value).toBe(1);
     expect(snapshot.goods.pooledFillRate.basis).not.toBe(
       snapshot.trade.intentFulfillmentRate.basis
     );
@@ -360,6 +393,7 @@ describe("computeEconomicVitalSigns", () => {
           ],
         },
       ],
+      commodityParticipants: [],
     });
 
     expect(snapshot.firms.marketCapHhi.value).toBe(4200);

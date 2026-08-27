@@ -112,6 +112,7 @@ interface SimJob {
   freightSettlementMode?: "shadow" | "active";
   canonicalFreightBillingEnabled?: boolean;
   shortageResponsiveSourcingEnabled?: boolean;
+  indexFundBondLiquidityEnabled?: boolean;
   autonomyLevel?: string;
   /** Sim turn-phase profile: "elections-only" skips the economy phases. Default full. */
   mode?: "full" | "elections-only";
@@ -311,6 +312,12 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
       runWorldArgs.push(
         `--shortage-responsive-sourcing=${String(job.shortageResponsiveSourcingEnabled)}`
       );
+    }
+    if (job.indexFundBondLiquidityEnabled !== undefined) {
+      if (typeof job.indexFundBondLiquidityEnabled !== "boolean") {
+        throw new Error("indexFundBondLiquidityEnabled must be boolean");
+      }
+      runWorldArgs.push(`--index-fund-bond-liquidity=${String(job.indexFundBondLiquidityEnabled)}`);
     }
     // NPP autonomy tier. Without this an MCP-launched run silently used the
     // harness default (v3) while hand-launched runs used v4, so the two were not
