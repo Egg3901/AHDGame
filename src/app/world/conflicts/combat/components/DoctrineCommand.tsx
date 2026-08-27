@@ -4,10 +4,6 @@ import { rank } from "@/lib/military/generals";
 import { MIL_COLOR, MIL_FONT } from "../../military/theme";
 import type { CombatState } from "../useCombatState";
 
-// A posting's conflict is a dynamic id now; its display name is threaded in by the
-// conflict board (sub-D). Here the raw id stands in.
-const theaterName = (id: string) => id;
-
 const mono = MIL_FONT.mono;
 
 /** Readable force-wide doctrine effects derived from the adopted national doctrine. */
@@ -27,6 +23,9 @@ function doctrineLines(nm: NatMods): string[] {
 
 export function DoctrineCommand({ state, natMods }: { state: CombatState; natMods: NatMods }) {
   const lines = doctrineLines(natMods);
+  // The conflicts are already on the state this panel is handed, so a posting is
+  // named from them rather than showing the player its internal id.
+  const theaterName = (id: string) => state.conflicts.find((c) => c.id === id)?.name ?? id;
 
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "flex-start" }}>

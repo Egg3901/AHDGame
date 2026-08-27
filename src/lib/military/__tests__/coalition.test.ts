@@ -28,6 +28,38 @@ const decl = (o: DeclOverrides) =>
   }) as unknown as BattleDeclarationDoc;
 
 describe("mergeOffensives", () => {
+  // Order is not cosmetic. The resolver fights the offensives it is handed in order,
+  // and each one leaves the front and both armies changed for the next, so whichever
+  // comes first fights at full strength and takes its ground first. Declarations
+  // arrive in database order, which is not specified — the same rule the attacker
+  // roster is already normalised by decides this too: earliest declaration wins.
+  it("orders offensives by the earliest declaration, not by database order", () => {
+    const out = mergeOffensives(
+      conflict,
+      [
+        decl({ _id: "d9", declarerCountry: "CN", targetCountry: "US", declaredTurn: 40 }),
+        decl({ _id: "d2", declarerCountry: "US", targetCountry: "CN", declaredTurn: 39 }),
+      ],
+      41,
+      BLOCS
+    );
+    expect(out).toHaveLength(2);
+    expect(out.map((o) => o.side)).toEqual(["A", "B"]);
+  });
+
+  it("breaks an order tie on the same turn by declaration id", () => {
+    const out = mergeOffensives(
+      conflict,
+      [
+        decl({ _id: "d9", declarerCountry: "CN", targetCountry: "US" }),
+        decl({ _id: "d2", declarerCountry: "US", targetCountry: "CN" }),
+      ],
+      41,
+      BLOCS
+    );
+    expect(out.map((o) => o.side)).toEqual(["A", "B"]);
+  });
+
   it("merges two allies attacking the same enemy side at the same front", () => {
     const out = mergeOffensives(
       conflict,

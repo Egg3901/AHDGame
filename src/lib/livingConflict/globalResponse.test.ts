@@ -9,9 +9,10 @@ import type {
   GlobalResponseOutcome,
 } from "@/lib/db/types/crisis";
 import { ApiError } from "@/lib/api/errors";
-import { createMockDb } from "@/lib/test-utils/mockDb";
+import { createAsyncIterableCursor, createMockDb } from "@/lib/test-utils/mockDb";
 import {
   globalResponseRoleFor,
+  loadCampaignCapability,
   optionsForGlobalResponder,
   prepareGlobalResponseOption,
   scoresForResponses,
@@ -19,6 +20,7 @@ import {
   selectGlobalResponseOutcome,
   visibleGlobalResponses,
 } from "./globalResponse";
+import { EQUIPMENT_TRACK_MAX } from "@/lib/military/arsenal";
 import { VIETNAM_DEF } from "./defs/vietnam";
 import { allLivingConflictDefs } from "./registry";
 
@@ -295,5 +297,33 @@ describe("prepareGlobalResponseOption — capacity refusals", () => {
     } as unknown as CrisisDecisionOption);
 
     expect(capability.domesticSupport).toBe(60);
+  });
+});
+
+describe("loadCampaignCapability — national logistics", () => {
+  it("normalizes the military equipment track to the 0–100 capacity scale", async () => {
+    const db = createMockDb();
+    ["federalBudget", "governmentApprovals", "militaryUnits"].forEach((name) =>
+      db.collection(name)
+    );
+    db.collectionMocks["federalBudget"]!.findOne.mockResolvedValue({
+      countryId: "US",
+      gdp: 1_000_000,
+      treasuryBalance: -774_000,
+    });
+    db.collectionMocks["governmentApprovals"]!.findOne.mockResolvedValue({ approvalRating: 48 });
+    db.collectionMocks["militaryUnits"]!.find.mockReturnValue(
+      createAsyncIterableCursor([
+        {
+          personnel: 10_000,
+          readiness: 67,
+          equipment: { support: EQUIPMENT_TRACK_MAX },
+        },
+      ])
+    );
+
+    const result = await loadCampaignCapability(db as unknown as Db, "US");
+
+    expect(result.logistics).toBe(100);
   });
 });
