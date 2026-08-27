@@ -78,6 +78,27 @@ vi.mock("@/lib/coldwar/tension", () => ({
     vietnam: 0,
     crises: 0,
     nuclear: 0,
+    wars: 0,
+  })),
+}));
+vi.mock("@/lib/coldwar/standingPressure", () => ({
+  conflictWarPressureInput: vi.fn((conflict) => conflict),
+  buildStandingPressureSnapshot: vi.fn(() => ({
+    totalWarheads: 0,
+    pressures: {
+      escalationLevel: 0,
+      activeCrises: 2,
+      totalWarheads: 0,
+      nuclearWarIntensity: 0,
+      nuclearWarCount: 0,
+      otherWarIntensity: 0,
+    },
+    warSummary: {
+      nuclearWarIntensity: 0,
+      otherWarIntensity: 0,
+      activeWarCount: 0,
+      nuclearWarCount: 0,
+    },
   })),
 }));
 vi.mock("@/lib/coldwar/dials", () => ({

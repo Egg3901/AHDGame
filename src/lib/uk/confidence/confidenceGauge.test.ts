@@ -11,6 +11,9 @@ import {
 } from "./confidenceGauge";
 
 describe("applyConfidenceEvent", () => {
+  it("passing the annual Budget restores confidence", () => {
+    expect(applyConfidenceEvent(50, { kind: "budgetPass" })).toBe(60);
+  });
   it("budget defeat is the biggest single hit", () => {
     const budget =
       CONFIDENCE_START - applyConfidenceEvent(CONFIDENCE_START, { kind: "budgetDefeat" });

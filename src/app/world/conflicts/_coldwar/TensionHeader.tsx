@@ -5,6 +5,7 @@ import type { TensionBand, TensionPressureBreakdown } from "@/lib/coldwar/tensio
 import type { ColdWarDials } from "@/lib/coldwar/dials";
 import { defconColor } from "./defcon";
 import { fmtN } from "./orgForces";
+import { useTranslations } from "next-intl";
 
 const mono = "'IBM Plex Mono',monospace";
 const serif = "Lora,Georgia,serif";
@@ -37,6 +38,8 @@ export interface TensionPressureView extends TensionPressureBreakdown {
   escalationLevel: number;
   activeCrisisCount: number;
   totalWarheads: number;
+  activeWarCount: number;
+  nuclearWarCount: number;
 }
 
 export function ColdWarHelp({ label, children }: { label: string; children: React.ReactNode }) {
@@ -145,6 +148,7 @@ export function TensionHeader({
   pressures: TensionPressureView;
   dials: Pick<ColdWarDials, "source" | "procurementMultiplier" | "detenteGoodwillPenalty">;
 }) {
+  const t = useTranslations("worldConflicts.tension");
   const color = BAND_COLOR[band];
   const recent = events.slice(0, EVENTS_SHOWN);
   const direction =
@@ -194,10 +198,8 @@ export function TensionHeader({
             World tension
           </h1>
         </div>
-        <ColdWarHelp label="How world tension works">
-          Tension is a shared 0 to 100 measure. Tests and crisis outcomes move it immediately. Each
-          turn it moves toward a pressure floor set by the Vietnam ladder, active crises, and the
-          world nuclear stockpile. Tension alone can reach DEFCON 2, but never DEFCON 1.
+        <ColdWarHelp label={t("howWorldTensionWorksLabel")}>
+          {t("howWorldTensionWorksHelp")}
         </ColdWarHelp>
       </header>
 
@@ -299,17 +301,14 @@ export function TensionHeader({
               >
                 WHAT HOLDS THE FLOOR AT {pressures.floor}
               </h2>
-              <ColdWarHelp label="Pressure floor">
-                One-off spikes fade. These standing pressures do not. The index moves 8 percent of
-                the gap toward this floor each turn, with upward movement occurring twice as fast.
-              </ColdWarHelp>
+              <ColdWarHelp label="Pressure floor">{t("pressureFloorHelp")}</ColdWarHelp>
             </div>
             <div
               className="cw-pressure-grid"
               style={{
                 marginTop: 9,
                 display: "grid",
-                gridTemplateColumns: "repeat(4,minmax(0,1fr))",
+                gridTemplateColumns: "repeat(5,minmax(0,1fr))",
                 gap: 8,
               }}
             >
@@ -336,6 +335,15 @@ export function TensionHeader({
                 value={pressures.arsenal}
                 detail={`${fmtN(pressures.totalWarheads)} warheads`}
                 help="All national warheads count. The contribution grows with the square root of the stockpile and caps at 18, so early buildup matters most."
+              />
+              <PressureCard
+                label={t("warsLabel")}
+                value={pressures.wars}
+                detail={t("warsDetail", {
+                  active: pressures.activeWarCount,
+                  nuclear: pressures.nuclearWarCount,
+                })}
+                help={t("warsHelp")}
               />
             </div>
           </div>

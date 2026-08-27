@@ -102,6 +102,7 @@ export async function installCaretakersForVacantCorps(
           ...(prevCeoId != null ? { underlyingCharacterId: prevCeoId } : {}),
           underlyingUserId: prevUserId,
           appointedTurn: turn,
+          appointmentSource: "vacancy",
         };
       }
 

@@ -30,7 +30,7 @@ beforeEach(async () => {
 });
 
 describe("POST /api/whitehouse/cabinet/acting", () => {
-  it("resets the position's setting cooldowns so the acting secretary can act immediately", async () => {
+  it("does NOT reset the position's setting cooldowns, and seats a full action pool", async () => {
     const userId = new ObjectId();
     const presidentId = new ObjectId();
     const appointeeId = new ObjectId();
@@ -70,17 +70,27 @@ describe("POST /api/whitehouse/cabinet/acting", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(db.collectionMocks.cabinetSettings.updateOne).toHaveBeenCalledWith(
-      { _id: "US_secretary_of_treasury" },
-      {
-        $unset: {
-          lastChangedTurn: "",
-          lastAllocationChangedTurn: "",
-          lastRegionChangedTurn: "",
-          lastTargetCountryChangedTurn: "",
-          lastAidPriorityChangedTurn: "",
-        },
-      }
-    );
+
+    // The reset used to happen here so an acting secretary could change settings
+    // immediately. They can no longer change the department's stance at all, so
+    // the reset buys them nothing. And because cabinetSettings is keyed by
+    // POSITION rather than holder, handing one out per acting appointment would
+    // let a president wipe a stance cooldown at will by seating a throwaway
+    // acting holder and then confirming who they wanted all along. Confirmation
+    // still resets it.
+    expect(db.collectionMocks.cabinetSettings.updateOne).not.toHaveBeenCalled();
+
+    // Seeded like every other appointment path. Without it the atomic `$gte: 1`
+    // spend in the action-costing routes cannot match (Mongo does not match $gte
+    // against a missing field), which is why each of those routes carries its own
+    // backfill. This stops the acting path relying on that safety net.
+    const inserted = db.collectionMocks.cabinetMembers.insertOne.mock.calls[0]?.[0] as {
+      acting?: boolean;
+      ministerialActions?: number;
+      lastMinisterialActionResetDay?: string;
+    };
+    expect(inserted.acting).toBe(true);
+    expect(inserted.ministerialActions).toBeGreaterThan(0);
+    expect(inserted.lastMinisterialActionResetDay).toBeTruthy();
   });
 });

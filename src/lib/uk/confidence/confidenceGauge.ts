@@ -29,6 +29,11 @@ export const CONFIDENCE_HITS = {
   ministerResigned: 12,
 } as const;
 
+export const CONFIDENCE_GAINS = {
+  /** Passing the government's central annual programme restores authority. */
+  budgetPass: 10,
+} as const;
+
 /** Great Offices of State (Chancellor, Foreign, Home) hit harder on departure. */
 export const GREAT_OFFICE_MULTIPLIER = 2;
 
@@ -40,6 +45,7 @@ export const GREAT_OFFICE_POSITION_IDS = new Set([
 ]);
 
 export type ConfidenceEvent =
+  | { kind: "budgetPass" }
   | { kind: "budgetDefeat" }
   | { kind: "lostVonc" }
   | { kind: "lostKeyVote" }
@@ -54,6 +60,9 @@ function clamp(v: number): number {
 export function applyConfidenceEvent(gauge: number, event: ConfidenceEvent): number {
   let hit: number;
   switch (event.kind) {
+    case "budgetPass":
+      hit = -CONFIDENCE_GAINS.budgetPass;
+      break;
     case "budgetDefeat":
       hit = CONFIDENCE_HITS.budgetDefeat;
       break;

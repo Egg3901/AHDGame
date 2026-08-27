@@ -5,6 +5,7 @@ import type { UnitDomain } from "@/lib/db/types/militaryUnit";
 import type { MilitaryCommand, CommanderRef, ThreatLevel } from "@/lib/military/types";
 import type { ConflictAssignment } from "@/lib/military/assignments";
 import type { CorpsMember } from "@/lib/db/collections/characterGenerals";
+import type { CabinetLeverScope } from "@/lib/cabinet/actingScope";
 
 export interface CabinetOfficeData {
   /** Live in-game year for era-resolved roster chrome (null/absent = unavailable).
@@ -40,6 +41,14 @@ export interface CabinetOfficeData {
     /** Absent on a withheld office: the server does not send it to outsiders. */
     ministerialActions?: number;
     bannerImageUrl: string | null;
+    /** True when the seat is held without legislative confirmation. */
+    acting?: boolean;
+    /**
+     * Lever scopes closed to this holder, straight from the server so a disabled
+     * control and the 403 behind it cannot disagree. Empty (or absent, on a
+     * payload served before acting scope shipped) means no restriction.
+     */
+    barredScopes?: CabinetLeverScope[];
   } | null;
   currentSettings: {
     tierSetting: string | null;

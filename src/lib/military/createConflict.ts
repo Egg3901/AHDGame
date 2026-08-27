@@ -1,5 +1,4 @@
 import type { Db } from "mongodb";
-import type { CountryId } from "@/lib/constants/countries";
 import type { RegionCode } from "@/lib/military/types";
 import type {
   ConflictDoc,
@@ -9,6 +8,7 @@ import type {
   TreatyEntry,
 } from "@/lib/db/types/conflict";
 import type { Front } from "@/lib/military/combat";
+import { capacityOfTerrain } from "@/lib/military/combat";
 import { homeRegionOf } from "@/lib/military/regionTopology";
 import { getRegion } from "@/lib/military/regions";
 import { getConflictsCollection } from "@/lib/db/collections/conflicts";
@@ -16,18 +16,26 @@ import { getNextSequentialId } from "@/lib/db/sequentialId";
 import type { WarGoal } from "@/lib/military/warGoals";
 import { initialControl } from "./occupation";
 import { OCCUPATION } from "./config";
+import { deriveSeaAccess } from "./seaAccess";
+import { hostEntitiesOf } from "./hostEntities";
 import { planOpeningForceDeployment } from "./openingForces";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
+import { listNuclearPrograms } from "@/lib/db/collections/nuclearPrograms";
+import {
+  applyTensionEvent,
+  nuclearArmedCountryIds,
+  warDeclarationTensionDelta,
+} from "@/lib/coldwar/tension";
 
 /**
- * Birth-data generation for a conflict — the flavor the 4 static theaters hardcoded
+ * Birth-data generation for a conflict: the flavor the 4 static theaters hardcoded
  * (across both the old Theater and combat.ts Front datasets), now derived from the
  * host and the two sides. First-pass heuristics; all tunable in playtest.
  * Spec: docs/superpowers/specs/2026-07-23-conflict-model-sub-a-design.md
  */
 
-/** Terrain keyword → (combat factor, plausible enemy composition). */
+/** Terrain keyword to (combat factor, plausible enemy composition). */
 function terrainProfile(terrain: string): { terr: number; enemyMix: string[] } {
   const t = terrain.toLowerCase();
   if (/mountain|arid|ice|tundra/.test(t))
@@ -55,7 +63,7 @@ export interface BuildConflictInput {
   id: string;
   /** Public number, allocated by createConflict from the shared counter. */
   conflictId: number;
-  /** The map anchor. A world entity — a proxy war's host is not a playable country. */
+  /** The map anchor. A proxy war's host is a world entity, not a playable country. */
   hostCountry: WorldEntityId;
   type: ConflictType;
   sideA: ConflictSide;
@@ -71,6 +79,13 @@ export interface BuildConflictInput {
   declaredByBillId?: string;
   /** Countries pulled in by a mutual-defence treaty at declaration time. */
   treatyEntries?: TreatyEntry[];
+  /**
+   * Override whether the front reaches the sea. Omit it and `conflictToFront` derives
+   * the answer from the host's naval branches, which is right for almost every war.
+   * Set it for the case the derivation cannot see: fighting inland of a coastal nation,
+   * or a landlocked theatre inside a country that does have a coast.
+   */
+  seaAccess?: boolean;
 }
 
 /**
@@ -78,7 +93,7 @@ export interface BuildConflictInput {
  *
  * Both sides start at the neutral value deliberately. The retired static Theater
  * dataset carried an asymmetric 65/55 (west/east supply) which was harmless while
- * nothing read these fields — but sideA/sideB are list order under the dynamic model,
+ * nothing read these fields, but sideA/sideB are list order under the dynamic model,
  * not blocs, so once supply reached the battle math that asymmetry became a permanent
  * combat advantage handed to whichever side happened to be listed first. Every supply
  * difference must come from the front's displacement instead.
@@ -88,7 +103,7 @@ const SEED_SUPPLY = OCCUPATION.supplyNeutral;
 export function buildConflict(input: BuildConflictInput): ConflictDoc {
   const home = homeRegionOf(input.hostCountry);
   // A proxy war's host is a world entity supplied by an admin, not a validated CountryId
-  // arriving from a declaration — so the `?? "noa"` fallback below is a silent mis-file
+  // arriving from a declaration, so the `?? "noa"` fallback below is a silent mis-file
   // (a Vietnam war pinned in North America) rather than a safe default. Fail loudly; the
   // admin route surfaces it as a validation message.
   if (!home && input.type === "cold_war") {
@@ -109,7 +124,7 @@ export function buildConflict(input: BuildConflictInput): ConflictDoc {
   const severity: ConflictDoc["severity"] =
     baseStrength >= 420 ? "HIGH" : baseStrength >= 320 ? "MEDIUM" : "LOW";
   const intensity = severity === "HIGH" ? 70 : severity === "MEDIUM" ? 50 : 30;
-  // The front opens at the host's own pole — a nation begins a war holding all of
+  // The front opens at the host's own pole. A nation begins a war holding all of
   // its own soil. Only ground neither side owns starts genuinely split.
   const control = initialControl(input.hostCountry, input.sideA, input.sideB);
 
@@ -124,6 +139,9 @@ export function buildConflict(input: BuildConflictInput): ConflictDoc {
     sideB: input.sideB,
     bloc: blocOfSides(input.sideA, input.sideB),
     terrain,
+    // Written only when the caller overrides. Storing the derived value instead would
+    // freeze today's answer into the document and stop it tracking the branch table.
+    ...(input.seaAccess === undefined ? {} : { seaAccess: input.seaAccess }),
     severity,
     baseStrength,
     supplyA: SEED_SUPPLY,
@@ -193,6 +211,21 @@ export async function createConflict(
   const doc = buildConflict({ ...input, conflictId });
   await getConflictsCollection(db).insertOne(doc);
   await deployOpeningForces(db, doc);
+  // The outbreak spike. The standing-pressure floor picks the war up from the
+  // next tension turn. Seed-created conflicts skip it: a world seeded mid-war
+  // starts at the standing floor computed by the seed pass.
+  if (input.createdBy !== "seed") {
+    const programs = await listNuclearPrograms(db);
+    const delta = warDeclarationTensionDelta(
+      {
+        type: doc.type,
+        sideACountries: doc.sideA.countries,
+        sideBCountries: doc.sideB.countries,
+      },
+      nuclearArmedCountryIds(programs)
+    );
+    await applyTensionEvent(db, doc.startTurn, "escalation", `War declared: ${doc.name}`, delta);
+  }
   return doc;
 }
 
@@ -206,6 +239,11 @@ export function conflictToFront(c: ConflictDoc): Front {
     contested: c.bloc === "contested",
     terr: c.terr,
     infra: c.infra,
+    // Absent on every conflict written before sea access existed, so derive rather than
+    // default: a stored `false` would quietly beach every navy in the game.
+    seaAccess: c.seaAccess ?? deriveSeaAccess(hostEntitiesOf(c), c.terrain),
+    // How much can stand in the line here. Derived from the ground, like `terr`.
+    capacity: capacityOfTerrain(c.terrain),
     sev: c.severity,
     west: c.sideA.label,
     east: c.sideB.label,

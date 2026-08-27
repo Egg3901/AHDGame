@@ -4,7 +4,7 @@ import type { BattleDeclarationStatus } from "@/lib/db/types/battleDeclaration";
 import type { ConflictTier } from "@/lib/military/conflictVisibility";
 import { contingentsOf } from "@/lib/military/battle";
 import { strengthPct } from "@/lib/military/strength";
-import { theaterPool } from "@/lib/military/theaterPool";
+import { engageablePool } from "@/lib/military/theaterPool";
 import { enemyBand } from "@/lib/military/forecastFog";
 import { READINESS_DRIFT_STEP, readinessBaselineOf } from "@/lib/military/readinessDrift";
 
@@ -116,6 +116,12 @@ export interface RecordExtrasInput {
   sideBCountries: string[];
   /** Every unit of both sides' countries (the caller scopes the query). */
   units: MilitaryUnit[];
+  /**
+   * Whether the front reaches the sea. Feeds the enemy band through
+   * `engageablePool`, so this page's coarse read of the enemy and the war room's odds
+   * agree about a fleet that cannot reach the fighting.
+   */
+  seaAccess?: boolean;
   reports: BattleReportDoc[];
 }
 
@@ -237,7 +243,8 @@ function toForceRow(u: MilitaryUnit): ForceRow {
 }
 
 export function buildRecordExtras(input: RecordExtrasInput): RecordExtras {
-  const { tier, ownSide, theaterId, sideACountries, sideBCountries, units, reports } = input;
+  const { tier, ownSide, theaterId, sideACountries, sideBCountries, units, reports, seaAccess } =
+    input;
 
   const ownCountries = ownSide === "A" ? sideACountries : ownSide === "B" ? sideBCountries : [];
   const enemyCountries = ownSide === "A" ? sideBCountries : ownSide === "B" ? sideACountries : [];
@@ -312,9 +319,11 @@ export function buildRecordExtras(input: RecordExtrasInput): RecordExtras {
   const extras: RecordExtras = { battles };
   if (showsLiveForces) {
     extras.ownForces = ownAtFront.map(toForceRow);
-    extras.enemyBand = enemyBand(theaterPool(ownAtFront), theaterPool(enemyAtFront), {
-      unopposed: enemyAtFront.length === 0,
-    });
+    extras.enemyBand = enemyBand(
+      engageablePool(ownAtFront, seaAccess),
+      engageablePool(enemyAtFront, seaAccess),
+      { unopposed: enemyAtFront.length === 0 }
+    );
   }
   return extras;
 }

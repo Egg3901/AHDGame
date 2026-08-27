@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
+import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -83,6 +84,10 @@ export async function POST(request: Request, { params }: RouteParams) {
           { status: 403 }
         );
       }
+      // The maturity mix decides what the country owes and when, for up to 240
+      // turns. The admin arm above never reaches here, which is the exemption.
+      const actingDenied = requireConfirmedSecretary(member, "treasury");
+      if (actingDenied) return actingDenied;
     }
 
     const gameState = await getGameState();

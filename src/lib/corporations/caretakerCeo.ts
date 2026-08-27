@@ -155,6 +155,7 @@ export async function appointCaretakerCeo(
           underlyingCharacterId: corp.ceoId,
           underlyingUserId: corp.userId,
           appointedTurn: turn,
+          appointmentSource: "owner",
         },
         updatedAt: now,
       },
@@ -187,7 +188,15 @@ export async function dismissCaretakerCeo(
   const { corp, turn, now } = args;
   if (!corp.caretakerCeo) return { ok: false, error: "not-caretaker" };
 
-  const { underlyingCharacterId, underlyingUserId } = corp.caretakerCeo;
+  const { underlyingCharacterId, underlyingUserId, appointmentSource } = corp.caretakerCeo;
+  // Only an owner-initiated handoff can be cycled for an advantage. An NPP that
+  // filled a resignation vacancy must be immediately recoverable and must not
+  // leave a blanket reappointment ban behind. Missing provenance predates this
+  // field, so it is treated as the safer vacancy recovery case.
+  const reappointmentCooldown =
+    appointmentSource === "owner"
+      ? { caretakerCooldownUntilTurn: turn + CARETAKER_REAPPOINT_COOLDOWN_TURNS }
+      : {};
 
   if (!underlyingCharacterId) {
     // Auto-installed caretaker with no human to restore: return the corp to a
@@ -199,10 +208,14 @@ export async function dismissCaretakerCeo(
           ceoType: "character",
           userId: underlyingUserId,
           ceoVacant: true,
-          caretakerCooldownUntilTurn: turn + CARETAKER_REAPPOINT_COOLDOWN_TURNS,
+          ...reappointmentCooldown,
           updatedAt: now,
         },
-        $unset: { caretakerCeo: "", ceoId: "" },
+        $unset: {
+          caretakerCeo: "",
+          ceoId: "",
+          ...(appointmentSource === "owner" ? {} : { caretakerCooldownUntilTurn: "" }),
+        },
       }
     );
     // Close the caretaker NPP's tenure; there is no human tenure to reopen.
@@ -218,10 +231,13 @@ export async function dismissCaretakerCeo(
         ceoType: "character",
         userId: underlyingUserId,
         ceoVacant: false,
-        caretakerCooldownUntilTurn: turn + CARETAKER_REAPPOINT_COOLDOWN_TURNS,
+        ...reappointmentCooldown,
         updatedAt: now,
       },
-      $unset: { caretakerCeo: "" },
+      $unset: {
+        caretakerCeo: "",
+        ...(appointmentSource === "owner" ? {} : { caretakerCooldownUntilTurn: "" }),
+      },
     }
   );
 
@@ -267,6 +283,7 @@ export function buildVacantCaretakerCeoUpdate(
       ...(corp.ceoId != null ? { underlyingCharacterId: corp.ceoId } : {}),
       underlyingUserId: corp.userId,
       appointedTurn: turn,
+      appointmentSource: "vacancy",
     };
   }
   return { set, unset };

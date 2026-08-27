@@ -8,6 +8,11 @@ import { normalizeCampaignState } from "@/lib/livingConflict/campaign";
 import { DEFAULT_ADOPTED, DEFAULT_POINTS, keyOf } from "@/lib/military/doctrineTree";
 import { tensionPressureBreakdown } from "@/lib/coldwar/tension";
 import {
+  buildStandingPressureSnapshot,
+  conflictWarPressureInput,
+} from "@/lib/coldwar/standingPressure";
+import { listActiveConflicts } from "@/lib/db/collections/conflicts";
+import {
   historicalAdoptedNodes,
   historicalWarheads,
   seedNuclearPrograms,
@@ -28,6 +33,7 @@ type BaselineProgram = Omit<NuclearProgram, "updatedAt">;
 type TensionSeedDocument = {
   _id: string;
   value: number;
+  pressureFloor: number;
   updatedTurn: number;
   events: unknown[];
   updatedAt: Date;
@@ -166,22 +172,30 @@ export async function seedColdWarFoundations(
     for (const program of missingPrograms) {
       warheadsByCountry.set(program._id, Math.max(0, program.warheads));
     }
-    const totalWarheads = [...warheadsByCountry.values()].reduce(
-      (sum, warheads) => sum + warheads,
-      0
-    );
-    const value = tensionPressureBreakdown({
+    const conflictWars = await listActiveConflicts(db);
+    const pressureSnapshot = buildStandingPressureSnapshot({
       escalationLevel,
       activeCrises,
-      totalWarheads,
-    }).floor;
-    await db
-      .collection<TensionSeedDocument>("coldWarTension")
-      .updateOne(
-        { _id: "current" },
-        { $setOnInsert: { value, updatedTurn: turn, events: [], updatedAt: now } },
-        { upsert: true }
-      );
+      programs: [...warheadsByCountry].map(([countryId, warheads]) => ({
+        _id: countryId,
+        warheads,
+      })),
+      conflicts: conflictWars.map(conflictWarPressureInput),
+    });
+    const pressureFloor = tensionPressureBreakdown(pressureSnapshot.pressures).floor;
+    await db.collection<TensionSeedDocument>("coldWarTension").updateOne(
+      { _id: "current" },
+      {
+        $setOnInsert: {
+          value: pressureFloor,
+          pressureFloor,
+          updatedTurn: turn,
+          events: [],
+          updatedAt: now,
+        },
+      },
+      { upsert: true }
+    );
   }
 
   await db.collection<GameState>("gameState").updateOne(

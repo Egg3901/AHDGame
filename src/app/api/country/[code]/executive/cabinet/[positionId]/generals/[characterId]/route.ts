@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
+import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { getGameStateCollection } from "@/lib/db/collections/gameState";
@@ -57,6 +58,10 @@ export async function DELETE(request: Request, { params }: RouteParams) {
         { status: 403 }
       );
     }
+
+    // A dismissal cascades through the chain of command and cannot be cleanly undone.
+    const actingDenied = requireConfirmedSecretary(member, "personnel", !!auth.user.isAdmin);
+    if (actingDenied) return actingDenied;
 
     const commission = await getCharacterCommission(db, characterId);
     if (!commission.commissioned) {
