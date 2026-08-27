@@ -1,11 +1,7 @@
-import type { Db } from "mongodb";
-import type { CountryId } from "@/lib/constants/countries";
-import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
-import type { PoliticalMetricId } from "@/lib/politicalMetrics/types";
 import { hashToUint32 } from "@/lib/events/substrate/rng";
-import { DEMOCRATIC_HEALTH_METRIC_IDS } from "@/lib/governanceStyle/score";
 
 export { DEMOCRATIC_HEALTH_METRIC_IDS } from "@/lib/governanceStyle/score";
+export { applyCivilLibertiesDelta } from "@/lib/politicalMetrics/civilLiberties";
 
 export const HIGH_TENSION_EVENT_KINDS = new Set([
   "worldEvents.panicBuying",
@@ -51,46 +47,4 @@ export function isHighTensionSharedDue(
     currentTurn >=
     lastFiredTurn + highTensionSharedGapTurns(countryId, lastFiredTurn, mitigationPct)
   );
-}
-
-const clampMetric = (value: number): number => Math.max(0, Math.min(100, value));
-
-/**
- * Civil-liberties decisions alter both current scores and structural residuals.
- * The latter is the political-metrics engine's documented future-event hook,
- * so the cost persists instead of vanishing on the next dynamics turn.
- */
-export async function applyCivilLibertiesDelta(
-  db: Db,
-  countryId: CountryId,
-  delta: number
-): Promise<number> {
-  if (delta === 0) return 0;
-  const docs = await db
-    .collection<PoliticalMetricsDoc>("politicalMetrics")
-    .find({ countryId })
-    .toArray();
-  if (docs.length === 0) return 0;
-
-  const now = new Date();
-  const operations = docs.map((doc) => {
-    const values = { ...doc.values };
-    const residuals = { ...(doc.residuals ?? {}) } as Record<PoliticalMetricId, number>;
-    for (const metricId of DEMOCRATIC_HEALTH_METRIC_IDS) {
-      const previous = values[metricId];
-      if (typeof previous !== "number" || !Number.isFinite(previous)) continue;
-      const next = clampMetric(previous + delta);
-      const applied = next - previous;
-      values[metricId] = next;
-      residuals[metricId] = (residuals[metricId] ?? 0) + applied;
-    }
-    return {
-      updateOne: {
-        filter: { _id: doc._id },
-        update: { $set: { values, residuals, lastUpdated: now } },
-      },
-    };
-  });
-  await db.collection<PoliticalMetricsDoc>("politicalMetrics").bulkWrite(operations);
-  return operations.length;
 }

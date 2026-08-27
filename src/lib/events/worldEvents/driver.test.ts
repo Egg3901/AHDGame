@@ -12,6 +12,12 @@ import { processWorldEventsTurn } from "./driver";
 import { hashToUint32 } from "@/lib/events/substrate/rng";
 import { COUNTRY_CONFIGS, COUNTRY_ORDER } from "@/lib/constants/countries";
 
+const { createCrisisFromTemplate } = vi.hoisted(() => ({
+  createCrisisFromTemplate: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/crises/createCrisisFromTemplate", () => ({ createCrisisFromTemplate }));
+
 function makeDefinition(overrides: Partial<EventDefinition> = {}): EventDefinition {
   return {
     _id: new ObjectId(),
@@ -208,6 +214,57 @@ describe("processWorldEventsTurn (World Events v1 Phase 1 scheduler)", () => {
       ])
     );
   });
+
+  it.each([
+    ["worldEvents.panicBuying", "war_panic_buying"],
+    ["worldEvents.bankRun", "war_bank_run"],
+    ["worldEvents.civilDefenseFever", "war_civil_defense_fever"],
+    ["worldEvents.warScareProtests", "war_scare_protests"],
+  ] as const)(
+    "creates %s as a crisis, never as a player random event",
+    async (kind, templateKey) => {
+      const def = makeDefinition({
+        kind,
+        title: "Wartime emergency",
+        minTension: 65,
+        requiresCountryIds: ["US"] as EventDefinition["requiresCountryIds"],
+        schedule: { kind: "window", minGapTurns: 14, maxGapTurns: 28 },
+      });
+      db.collectionMocks.eventDefinitions!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([def]),
+      });
+      db.collectionMocks.eventInstances!.findOne.mockResolvedValue(null);
+      db.collectionMocks.eventCooldownLedger!.findOne.mockResolvedValue(null);
+      db.collectionMocks.coldWarTension!.findOne.mockResolvedValue({
+        _id: "current",
+        value: 100,
+        pressureFloor: 100,
+        updatedTurn: 100,
+        events: [],
+        updatedAt: new Date(),
+      });
+      db.collectionMocks.countryModifiers!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      });
+
+      await processWorldEventsTurn(db as never, 100, { worldEventsEnabled: true });
+
+      expect(createCrisisFromTemplate).toHaveBeenCalledWith(
+        db,
+        expect.objectContaining({
+          templateKey,
+          scope: "country",
+          countryIds: ["US"],
+          currentTurn: 101,
+        })
+      );
+      const misclassifiedRandomEvents =
+        db.collectionMocks.eventInstances!.insertOne.mock.calls.filter(
+          ([instance]) => instance.kind === kind
+        );
+      expect(misclassifiedRandomEvents).toHaveLength(0);
+    }
+  );
 });
 
 describe("processWorldEventsTurn — global host events (World Events v1 Phase 3, rewritten)", () => {

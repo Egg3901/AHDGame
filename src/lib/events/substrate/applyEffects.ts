@@ -19,7 +19,7 @@ import {
   writeSectorOutputDemandModifier,
   writeWarEmergencyMitigation,
 } from "./countryModifiers";
-import { applyCivilLibertiesDelta } from "@/lib/events/worldEvents/warEmergency";
+import { applyCivilLibertiesDelta } from "@/lib/politicalMetrics/civilLiberties";
 import type { EventResolveContext } from "./types";
 
 function clampStat(value: number): number {
