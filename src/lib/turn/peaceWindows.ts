@@ -38,10 +38,12 @@ export async function resolvePeaceWindows(
 
   let resolved = 0;
   for (const conflict of lapsed as ConflictDoc[]) {
-    const victor = conflict.termsWindow?.victor;
+    const win = conflict.termsWindow;
     // A window with no victor stamped cannot be resolved for anyone. Leave it and
-    // let an admin see it rather than picking a winner arbitrarily.
-    if (victor !== "A" && victor !== "B") continue;
+    // let an admin see it rather than picking a winner arbitrarily. Captured into a
+    // local so the checks below narrow the whole object, not just the one field.
+    if (!win || (win.victor !== "A" && win.victor !== "B")) continue;
+    const victor = win.victor;
 
     // CLAIM the war before resolving it, exactly as `resolveColdWarHolds` does and
     // for the same reason: the find above and the writes below are not atomic, and
@@ -54,8 +56,26 @@ export async function resolvePeaceWindows(
     );
     if (claim.modifiedCount !== 1) continue;
 
-    // No `settlement` is stamped: the window lapsed, so no term was taken. The wire
-    // reads that absence as a white peace rather than as a missing record.
+    // Stamp the settlement as a WHITE PEACE rather than leaving it absent. The war
+    // did end in a settlement; that settlement simply took nothing, and a zero
+    // indemnity is how the rest of the system already says so ("the same mechanism
+    // dialled to nothing"). Leaving it absent would also hide the war from the news
+    // wire, which only reports conflicts carrying a settlement.
+    await getConflictsCollection(db).updateOne(
+      { _id: conflict._id },
+      {
+        $set: {
+          settlement: {
+            term: { kind: "indemnity" as const, amount: 0, payer: win.target },
+            path: "dictated" as const,
+            imposedBy: win.imposer,
+            target: win.target,
+            turn: currentTurn,
+          },
+        },
+      }
+    );
+
     await resolveConflict(db, conflict, victor, currentTurn);
     resolved++;
   }

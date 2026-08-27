@@ -62,10 +62,19 @@ describe("resolvePeaceWindows", () => {
     expect(resolveConflict).not.toHaveBeenCalled();
   });
 
-  it("stamps no settlement, because no term was taken", async () => {
+  it("stamps the settlement as a white peace, so the war reaches the news wire", async () => {
+    // The war did end in a settlement; it simply took nothing. Leaving it absent
+    // would hide it from the wire, which only reports conflicts carrying one.
     const { db, updates } = mockDb({ lapsed: [lapsedWar] });
     await resolvePeaceWindows(db, 100);
-    expect(JSON.stringify(updates)).not.toContain("settlement");
+    const stamp = updates.find(
+      (u) => (u.update as { $set?: { settlement?: unknown } }).$set?.settlement
+    );
+    expect(stamp).toBeTruthy();
+    const settlement = (stamp!.update as { $set: { settlement: Record<string, unknown> } }).$set
+      .settlement;
+    expect(settlement).toMatchObject({ path: "dictated", imposedBy: "UK", target: "TR" });
+    expect(settlement.term).toMatchObject({ kind: "indemnity", amount: 0 });
   });
 
   it("skips a window with no victor rather than picking one", async () => {
