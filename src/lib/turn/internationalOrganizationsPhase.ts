@@ -564,6 +564,18 @@ async function resolveExpiredOrganizationLegislation(db: Db, currentTurn: number
           },
         }
       );
+      // A resolution that fails leaves the pending list without explanation
+      // otherwise, and under a roll-based threshold failing is ordinary. The
+      // proposer is the one country guaranteed to have a page to log it on.
+      if (item.proposingCountryId in COUNTRY_CONFIGS) {
+        await recordOrgHistoryEvent(
+          db,
+          item.proposingCountryId,
+          currentTurn,
+          `${item.organizationId} rejected ${item.title}.`,
+          { organizationId: item.organizationId, legislationId: item._id.toString() }
+        );
+      }
     }
     resolved++;
   }
@@ -646,6 +658,16 @@ async function resolveExpiredLeadershipElections(db: Db, currentTurn: number): P
           },
         }
       );
+      const orgDef = await loadOrganizationDef(db, election.organizationId);
+      if (election.candidateCountryId in COUNTRY_CONFIGS) {
+        await recordOrgHistoryEvent(
+          db,
+          election.candidateCountryId as CountryId,
+          currentTurn,
+          `${election.candidateCharacterName} was not elected ${orgDef?.leadership.title ?? "leader"} of ${election.organizationId}.`,
+          { organizationId: election.organizationId, electionId: election._id.toString() }
+        );
+      }
     }
     resolved++;
   }

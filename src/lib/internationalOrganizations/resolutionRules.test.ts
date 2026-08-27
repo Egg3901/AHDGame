@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { ObjectId } from "mongodb";
-import { ballotPasses, requiresUnanimity, resolutionPasses, votesNeeded } from "./resolutionRules";
+import {
+  ballotPasses,
+  dedupeOrganizationVotes,
+  requiresUnanimity,
+  resolutionPasses,
+  votesNeeded,
+} from "./resolutionRules";
 import type { ProposalVoteRecord } from "@/lib/db/types/internationalOrganization";
 import type { CountryId } from "@/lib/constants/countries";
 
@@ -41,6 +47,25 @@ describe("requiresUnanimity", () => {
     expect(requiresUnanimity("sanctions")).toBe(false);
     expect(requiresUnanimity("aid_package")).toBe(false);
     expect(requiresUnanimity("leadership_election")).toBe(false);
+  });
+});
+
+describe("dedupeOrganizationVotes", () => {
+  it("keeps only the latest row for a country that voted more than once", () => {
+    // Historical rows in the live data carry duplicates. The resolver has always
+    // folded them; the panels must fold them the same way or they disagree.
+    const folded = dedupeOrganizationVotes([
+      vote("US", "yes"),
+      vote("UK", "yes"),
+      vote("US", "no"),
+    ]);
+
+    expect(folded).toHaveLength(2);
+    expect(folded.find((v) => v.countryId === "US")?.vote).toBe("no");
+  });
+
+  it("leaves a clean ballot untouched", () => {
+    expect(dedupeOrganizationVotes([vote("US", "yes"), vote("UK", "no")])).toHaveLength(2);
   });
 });
 

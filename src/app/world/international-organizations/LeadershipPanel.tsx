@@ -9,7 +9,10 @@ import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
 import type { OrgSummary, OrgViewerInfo } from "./orgTypes";
 import { VoteButtons } from "./VoteButtons";
 import { VoteRoster } from "./VoteRoster";
-import { votesNeeded } from "@/lib/internationalOrganizations/resolutionRules";
+import {
+  dedupeOrganizationVotes,
+  votesNeeded,
+} from "@/lib/internationalOrganizations/resolutionRules";
 
 interface Props {
   org: OrgSummary;
@@ -35,6 +38,11 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
   const viewerFmCountry = viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
   const viewerIsMember =
     viewerFmCountry != null && org.members.some((m) => m.countryId === viewerFmCountry);
+  // Voting and nominating both go through isVotingMember on the server, so a
+  // member without a ballot must not be offered either.
+  const viewerHoldsVote =
+    viewerFmCountry != null &&
+    org.members.some((m) => m.countryId === viewerFmCountry && m.hasVote);
 
   const leader = org.leadership;
   // Permanent-leadership orgs: the office is held ex officio by the leader
@@ -114,7 +122,7 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-lg font-semibold text-foreground">{org.def.leadership.title}</h3>
-        {!isPermanent && viewerIsMember && !election && !seatStillFilled && (
+        {!isPermanent && viewerHoldsVote && !election && !seatStillFilled && (
           <Button
             size="md"
             variant={showForm ? "ghost" : "primary"}
@@ -177,7 +185,7 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
       </div>
 
       {/* Nominate form */}
-      {!isPermanent && showForm && viewerIsMember && (
+      {!isPermanent && showForm && viewerHoldsVote && (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-5">
           <h4 className="text-sm font-semibold text-foreground">
             Nominate a candidate for {org.def.leadership.title}
@@ -261,29 +269,35 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
             // Only members holding a ballot are counted, and the bar is a
             // majority of that roll rather than of whoever turned out.
             const ballotSize = org.members.filter((m) => m.hasVote).length;
-            const countedVotes = election.votes.filter((v) =>
+            const votes = dedupeOrganizationVotes(election.votes);
+            const countedVotes = votes.filter((v) =>
               org.members.some((m) => m.countryId === v.countryId && m.hasVote)
             );
             const yesCount = countedVotes.filter((v) => v.vote === "yes").length;
             const noCount = countedVotes.filter((v) => v.vote === "no").length;
             const abstainCount = countedVotes.filter((v) => v.vote === "abstain").length;
             const needed = votesNeeded("leadership_election", ballotSize);
+            const requirement =
+              ballotSize === 0
+                ? "no members hold a vote"
+                : `${needed} of ${ballotSize} needed to elect`;
             const myVote =
               viewerFmCountry != null
-                ? (election.votes.find((v) => v.countryId === viewerFmCountry)?.vote ?? null)
+                ? (votes.find((v) => v.countryId === viewerFmCountry)?.vote ?? null)
                 : null;
             return (
               <>
                 <p className="mb-3 text-xs text-muted">
-                  {yesCount} yes · {noCount} no · {abstainCount} abstain · {needed} of {ballotSize}{" "}
-                  needed to elect.
+                  {yesCount} yes · {noCount} no · {abstainCount} abstain · {requirement}.
                 </p>
                 <VoteButtons
                   onVote={(v) => vote(election._id.toString(), v)}
-                  disabled={!viewerIsMember}
+                  disabled={!viewerHoldsVote}
                   disabledReason={
-                    !viewerIsMember
-                      ? "Only foreign ministers of member countries may vote."
+                    !viewerHoldsVote
+                      ? !viewerIsMember
+                        ? "Only foreign ministers of member countries may vote."
+                        : "Your country holds no vote in this organization."
                       : undefined
                   }
                   currentVote={myVote}

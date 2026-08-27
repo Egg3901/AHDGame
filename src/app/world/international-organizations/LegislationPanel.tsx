@@ -10,6 +10,11 @@ import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
 import type { OrgSummary, OrgViewerInfo } from "./orgTypes";
 import { VoteButtons } from "./VoteButtons";
 import { VoteRoster } from "./VoteRoster";
+import {
+  dedupeOrganizationVotes,
+  requiresUnanimity,
+  votesNeeded,
+} from "@/lib/internationalOrganizations/resolutionRules";
 
 interface Props {
   org: OrgSummary;
@@ -301,17 +306,30 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
             const votingParties = parties.filter((p) =>
               org.members.some((m) => m.countryId === p && m.hasVote)
             );
-            const partyVotes = l.votes.filter((v) =>
+            const votes = dedupeOrganizationVotes(l.votes);
+            const partyVotes = votes.filter((v) =>
               votingParties.includes(v.countryId as CountryId)
             );
             const turnsLeft = Math.max(0, l.closesOnTurn - currentTurn);
             const yesCount = partyVotes.filter((v) => v.vote === "yes").length;
             const myVote =
               viewerFmCountry != null
-                ? (l.votes.find((v) => v.countryId === viewerFmCountry)?.vote ?? null)
+                ? (votes.find((v) => v.countryId === viewerFmCountry)?.vote ?? null)
                 : null;
-            const viewerIsParty = viewerFmCountry != null && parties.includes(viewerFmCountry);
-            const progress = votingParties.length > 0 ? (yesCount / votingParties.length) * 100 : 0;
+            // A party that has since withdrawn, or lost player-enablement, is
+            // refused by the route and dropped by the resolver alike.
+            const viewerIsParty =
+              viewerFmCountry != null &&
+              parties.includes(viewerFmCountry) &&
+              votingParties.includes(viewerFmCountry);
+            const needed = votesNeeded("free_trade_agreement", votingParties.length);
+            const progress = needed > 0 ? (yesCount / needed) * 100 : 0;
+            const requirement =
+              votingParties.length === 0
+                ? "no parties hold a vote"
+                : requiresUnanimity("free_trade_agreement")
+                  ? "unanimous required"
+                  : `${needed} needed`;
 
             return (
               <article
@@ -340,7 +358,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
                 <div className="mb-3">
                   <div className="mb-1 flex items-center justify-between text-xs text-muted">
                     <span>
-                      {yesCount} / {votingParties.length} parties yes, unanimous required
+                      {yesCount} / {votingParties.length} parties yes, {requirement}
                     </span>
                     <span className="tabular-nums">
                       {votingWindowTurns - turnsLeft}/{votingWindowTurns} turns

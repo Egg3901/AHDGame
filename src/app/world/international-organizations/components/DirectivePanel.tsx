@@ -8,7 +8,11 @@ import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
 import type { OrgSummary, OrgViewerInfo } from "../orgTypes";
 import { VoteButtons } from "../VoteButtons";
 import { VoteRoster } from "../VoteRoster";
-import { votesNeeded } from "@/lib/internationalOrganizations/resolutionRules";
+import {
+  dedupeOrganizationVotes,
+  requiresUnanimity,
+  votesNeeded,
+} from "@/lib/internationalOrganizations/resolutionRules";
 
 interface Props {
   org: OrgSummary;
@@ -28,6 +32,12 @@ export function DirectivePanel({ org, viewer, currentTurn, votingWindowTurns, on
   const viewerFmCountry = viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
   const viewerIsMember =
     viewerFmCountry != null && org.members.some((m) => m.countryId === viewerFmCountry);
+  // Tabling only needs membership, but voting needs a ballot: the route enforces
+  // isVotingMember, so an enabled button for a silent member promises a vote the
+  // server will refuse.
+  const viewerHoldsVote =
+    viewerFmCountry != null &&
+    org.members.some((m) => m.countryId === viewerFmCountry && m.hasVote);
   const canTable = canTableResolutionType(org.def.category, "directive");
 
   const pending = org.pendingLegislation.filter((l) => l.type === "directive");
@@ -192,17 +202,28 @@ export function DirectivePanel({ org, viewer, currentTurn, votingWindowTurns, on
             const def = getDirectiveDef(l.directiveKey);
             const turnsLeft = Math.max(0, l.closesOnTurn - currentTurn);
             const ballotSize = org.members.filter((m) => m.hasVote).length;
-            const yesCount = l.votes.filter(
+            // Fold duplicate rows first: the resolver tallies the folded ballot,
+            // so anything counted here must be counted the same way.
+            const votes = dedupeOrganizationVotes(l.votes);
+            const yesCount = votes.filter(
               (v) =>
                 v.vote === "yes" &&
                 org.members.some((m) => m.countryId === v.countryId && m.hasVote)
             ).length;
             const myVote =
               viewerFmCountry != null
-                ? (l.votes.find((v) => v.countryId === viewerFmCountry)?.vote ?? null)
+                ? (votes.find((v) => v.countryId === viewerFmCountry)?.vote ?? null)
                 : null;
             const needed = votesNeeded(l.type, ballotSize);
             const progress = needed > 0 ? (yesCount / needed) * 100 : 0;
+            // Derived, never hardcoded: an org with nobody eligible cannot carry
+            // anything, and the wording must follow whatever the rule says today.
+            const requirement =
+              ballotSize === 0
+                ? "no members hold a vote"
+                : requiresUnanimity(l.type)
+                  ? "unanimous consent required"
+                  : `${needed} needed`;
             return (
               <article
                 key={l._id.toString()}
@@ -225,7 +246,7 @@ export function DirectivePanel({ org, viewer, currentTurn, votingWindowTurns, on
                 <div className="mb-3">
                   <div className="mb-1 flex items-center justify-between text-xs text-muted">
                     <span>
-                      {yesCount} / {ballotSize} members in favour, {needed} needed
+                      {yesCount} / {ballotSize} members in favour, {requirement}
                     </span>
                     <span className="tabular-nums">
                       {votingWindowTurns - turnsLeft}/{votingWindowTurns} turns
@@ -240,10 +261,12 @@ export function DirectivePanel({ org, viewer, currentTurn, votingWindowTurns, on
                 </div>
                 <VoteButtons
                   onVote={(v) => vote(l._id.toString(), v)}
-                  disabled={!viewerIsMember}
+                  disabled={!viewerHoldsVote}
                   disabledReason={
-                    !viewerIsMember
-                      ? "Only foreign ministers of member states may vote."
+                    !viewerHoldsVote
+                      ? !viewerIsMember
+                        ? "Only foreign ministers of member states may vote."
+                        : "Your country holds no vote in this organization."
                       : undefined
                   }
                   currentVote={myVote}

@@ -162,3 +162,135 @@ describe("free trade agreement tally", () => {
     expect(screen.queryByText(/\/ 3 parties yes/)).toBeNull();
   });
 });
+
+describe("duplicate vote rows", () => {
+  it("membership counts a country's latest row only", () => {
+    render(
+      <MembershipPanel
+        org={orgWith({
+          pendingMembershipProposals: [
+            {
+              _id: "p1",
+              proposingCountryId: "DE",
+              closesOnTurn: 213,
+              votes: [
+                { countryId: "US", vote: "yes" },
+                { countryId: "UK", vote: "yes" },
+                { countryId: "US", vote: "no" },
+              ],
+            },
+          ],
+        })}
+        {...props}
+      />
+    );
+
+    // The United States ends on "no", so one yes and one no, never two yeses.
+    expect(screen.getByText(/1 \/ 3 yes \(1 no\)/)).toBeTruthy();
+  });
+
+  it("a trade agreement counts a party's latest row only", () => {
+    render(
+      <LegislationPanel
+        org={orgWith({
+          pendingLegislation: [
+            {
+              _id: "f1",
+              type: "free_trade_agreement",
+              title: "Atlantic Trade Pact",
+              proposedByCharacterName: "A Minister",
+              closesOnTurn: 213,
+              parties: ["US", "UK"],
+              votes: [
+                { countryId: "US", vote: "yes" },
+                { countryId: "UK", vote: "yes" },
+                { countryId: "US", vote: "no" },
+              ],
+            },
+          ],
+        })}
+        {...props}
+      />
+    );
+
+    expect(screen.getByText(/1 \/ 2 parties yes/)).toBeTruthy();
+  });
+});
+
+describe("the viewer's own vote", () => {
+  it("highlights a trade agreement voter's latest choice, not their first", () => {
+    // myVote drives which button reads as selected. Reading it off the raw list
+    // shows the player the vote they changed away from.
+    render(
+      <LegislationPanel
+        org={orgWith({
+          pendingLegislation: [
+            {
+              _id: "f1",
+              type: "free_trade_agreement",
+              title: "Atlantic Trade Pact",
+              proposedByCharacterName: "A Minister",
+              closesOnTurn: 213,
+              parties: ["US", "UK"],
+              votes: [
+                { countryId: "US", vote: "yes" },
+                { countryId: "US", vote: "no" },
+              ],
+            },
+          ],
+        })}
+        {...props}
+      />
+    );
+
+    // "destructive" is the selected styling for No.
+    expect(screen.getByRole("button", { name: "Vote No" }).className).toContain("bg-error");
+  });
+});
+
+describe("an organization where nobody holds a vote", () => {
+  const silentOrg = (extra: Record<string, unknown>) =>
+    orgWith({
+      members: [
+        { countryId: "PL", countryName: "Poland", status: "member", joinedTurn: 0, hasVote: false },
+      ],
+      ...extra,
+    });
+
+  it("says so on a chair election rather than advertising a bar of zero", () => {
+    render(
+      <LeadershipPanel
+        org={silentOrg({
+          pendingLeadershipElections: [
+            {
+              _id: "e1",
+              candidateCharacterName: "A Candidate",
+              candidateCountryId: "US",
+              nominatedByCharacterName: "A Nominator",
+              closesOnTurn: 213,
+              votes: [],
+            },
+          ],
+        })}
+        {...props}
+      />
+    );
+
+    expect(screen.getByText(/no members hold a vote/)).toBeTruthy();
+  });
+
+  it("says so on an admission rather than advertising a bar of zero", () => {
+    render(
+      <MembershipPanel
+        org={silentOrg({
+          pendingMembershipProposals: [
+            { _id: "p1", proposingCountryId: "DE", closesOnTurn: 213, votes: [] },
+          ],
+        })}
+        {...props}
+      />
+    );
+
+    expect(screen.getByText(/no members hold a vote/)).toBeTruthy();
+  });
+});

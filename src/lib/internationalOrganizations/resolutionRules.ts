@@ -54,6 +54,22 @@ export function ballotPasses(kind: OrgBallotKind, ballotSize: number, yes: numbe
   return yes >= votesNeeded(kind, ballotSize);
 }
 
+/**
+ * Fold historical duplicate rows down to the latest vote per country.
+ *
+ * Live data carries rows from before the write path became an upsert, so one
+ * country can appear twice on the same ballot. Lives here rather than beside the
+ * write path because the panels tally votes too, and a panel that counted the
+ * duplicates would show a total the resolver would never reach.
+ */
+export function dedupeOrganizationVotes<T extends { countryId: string }>(votes: T[]): T[] {
+  const latestByCountry = new Map<string, T>();
+  for (const vote of votes) {
+    latestByCountry.set(vote.countryId, vote);
+  }
+  return [...latestByCountry.values()];
+}
+
 export interface ResolutionPassageInput {
   type: OrganizationResolutionType;
   /** Current members of the host org. */
