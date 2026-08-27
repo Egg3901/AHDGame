@@ -14,11 +14,8 @@ import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 import type { StateMetrics, MetricCategoryId, State } from "@/lib/db/types";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
 import type { StateApprovalHistory } from "@/lib/db/types/stateApproval";
-import {
-  getCountryConfig,
-  supportsActingAppointments,
-  type CountryId,
-} from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
+import { actingAppointmentsEnabled } from "@/lib/cabinet/actingEligibility";
 import {
   evaluateModifiers,
   applyModifiers,
@@ -703,7 +700,7 @@ export async function snapshotApprovalHistory(
 
   // Penalise approval for acting (unconfirmed) appointments when the country
   // uses Senate confirmation — each acting member costs 0.5 approval points.
-  if (supportsActingAppointments(getCountryConfig(countryId))) {
+  if (actingAppointmentsEnabled(countryId)) {
     const actingCount = cabinetMembers.filter(
       (m) => (m as { acting?: boolean }).acting === true
     ).length;
