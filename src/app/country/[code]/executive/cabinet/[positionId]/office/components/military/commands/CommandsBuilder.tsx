@@ -51,9 +51,14 @@ export function CommandsBuilder({
     unitsById,
     pool,
     saveError: commandsSaveError,
+    droppedCommanders,
   } = useMilitaryState({
     commands,
     units,
+    // The roster the PUT validates against. Passing it lets the seed drop
+    // commanders who have left the country, which is the difference between an
+    // editable command and one the route refuses on every save.
+    commanderIds: commanders.map((c) => c.id),
     countryCode,
     positionId,
   });
@@ -126,6 +131,17 @@ export function CommandsBuilder({
       {(saveError || commandsSaveError) && (
         <p role="alert" className="text-[11px] text-error">
           {saveError ?? commandsSaveError}
+        </p>
+      )}
+      {/* Without this the roster simply comes back shorter than the Secretary left
+          it, with no explanation — and the count they saw before the fix was a
+          commander they could not see and could not remove. */}
+      {droppedCommanders > 0 && (
+        <p role="status" className="text-[11px] text-warning">
+          {droppedCommanders === 1
+            ? "One commander was removed: they are no longer a commissioned general of this country."
+            : `${droppedCommanders} commanders were removed: they are no longer commissioned generals of this country.`}{" "}
+          Assign a replacement below.
         </p>
       )}
       <SectionCard

@@ -324,4 +324,42 @@ describe("one command per commanding general", () => {
       screen.getByRole("button", { name: /make gen\. real commanding general/i })
     ).toBeTruthy();
   });
+
+  /**
+   * Live data: Russia's only command listed a general who had moved to the United
+   * Kingdom. The row could not render (the roster no longer held them), so the
+   * header counted a commander with no line to remove, and the commands PUT then
+   * refused every later edit over that same id.
+   */
+  describe("a commander who has left the country", () => {
+    const stale = [command({ commanderIds: ["char_9", "char_gone"], commandingGeneralId: null })];
+
+    it("does not count a commander it cannot show", () => {
+      render(<CommandsBuilder commands={stale} {...base} />);
+      expect(screen.getByText(/Commanders . 1/)).toBeTruthy();
+      expect(screen.queryByText(/Commanders . 2/)).toBeNull();
+    });
+
+    it("says why the roster came back shorter", () => {
+      render(<CommandsBuilder commands={stale} {...base} />);
+      expect(screen.getByRole("status").textContent).toMatch(
+        /no longer a commissioned general of this country/i
+      );
+    });
+
+    it("clears a lead who is the one who left, so the save is not refused twice", () => {
+      render(
+        <CommandsBuilder
+          commands={[command({ commanderIds: ["char_gone"], commandingGeneralId: "char_gone" })]}
+          {...base}
+        />
+      );
+      expect(screen.getByText(/none . −10% efficiency/i)).toBeTruthy();
+    });
+
+    it("says nothing when every commander is still on the roster", () => {
+      render(<CommandsBuilder commands={[command({ commanderIds: ["char_9"] })]} {...base} />);
+      expect(screen.queryByRole("status")).toBeNull();
+    });
+  });
 });
