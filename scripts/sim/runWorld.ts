@@ -37,6 +37,11 @@ import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import {
+  economicExperimentConfigSet,
+  parseOptionalBoolean,
+  type FreightSettlementExperimentMode,
+} from "@/lib/sim/economicExperiment";
 
 interface SimRunDoc {
   _id: string;
@@ -56,6 +61,10 @@ interface SimRunDoc {
   simTurnPhaseMode?: "full" | "elections-only" | "economy-only" | "macro-only";
   electionScope?: string[] | null;
   emptyCandidateSupplyCountries?: string[];
+  economicExperiment?: {
+    freightSettlementMode?: FreightSettlementExperimentMode;
+    canonicalFreightBillingEnabled?: boolean;
+  };
 }
 
 function arg(flag: string): string | undefined {
@@ -120,6 +129,15 @@ if (labourModeRaw && !LABOUR_MODE_ORDER.includes(labourModeRaw as LabourSystemMo
   process.exit(1);
 }
 const labourMode = labourModeRaw as LabourSystemMode | undefined;
+const freightSettlementRaw = arg("freight-settlement");
+if (freightSettlementRaw && !["shadow", "active"].includes(freightSettlementRaw)) {
+  throw new Error(`--freight-settlement must be shadow or active (got "${freightSettlementRaw}")`);
+}
+const freightSettlementMode = freightSettlementRaw as FreightSettlementExperimentMode | undefined;
+const canonicalFreightBillingEnabled = parseOptionalBoolean(
+  arg("canonical-freight-billing"),
+  "canonical-freight-billing"
+);
 // Clone mode: the sandbox DB was pre-loaded with a restore of the LIVE world
 // (mongorestore), so skip bootstrap AND the "real world" users guardrail, and
 // instead autonomize the human players' corporations so the whole economy runs
@@ -584,6 +602,22 @@ async function main() {
   // on a known-clean world is the reconciler's acceptance test — every turn
   // mirrors financialTxLog into ledgerEntries, snapshots balances, and runs the
   // per-turn reconciler. See docs/plans/2026-07-05-shadow-ledger-plan.md §3.
+  const economicExperiment = {
+    freightSettlementMode,
+    canonicalFreightBillingEnabled,
+  };
+  const economicExperimentSet = economicExperimentConfigSet(economicExperiment);
+  if (Object.keys(economicExperimentSet).length > 0) {
+    await db
+      .collection<GameConfig>("gameConfig")
+      .updateOne({ _id: "default" }, { $set: economicExperimentSet }, { upsert: true });
+    await simRuns.updateOne(
+      { _id: runId },
+      { $set: { economicExperiment: economicExperimentSet, updatedAt: new Date() } }
+    );
+    log(`Economic experiment overrides: ${JSON.stringify(economicExperimentSet)}`);
+  }
+
   await db
     .collection<{ _id: string; ledgerShadow?: boolean }>("gameConfig")
     .updateOne({ _id: "default" }, { $set: { ledgerShadow: true } }, { upsert: true });

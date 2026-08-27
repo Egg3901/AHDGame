@@ -109,6 +109,8 @@ interface SimJob {
   dbName: string;
   marketSystemMode?: string;
   labourSystemMode?: string;
+  freightSettlementMode?: "shadow" | "active";
+  canonicalFreightBillingEnabled?: boolean;
   autonomyLevel?: string;
   /** Sim turn-phase profile: "elections-only" skips the economy phases. Default full. */
   mode?: "full" | "elections-only";
@@ -286,6 +288,20 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
         throw new Error(`invalid labourSystemMode "${job.labourSystemMode}"`);
       }
       runWorldArgs.push(`--labour-mode=${job.labourSystemMode}`);
+    }
+    if (job.freightSettlementMode) {
+      if (!(["shadow", "active"] as const).includes(job.freightSettlementMode)) {
+        throw new Error(`invalid freightSettlementMode "${job.freightSettlementMode}"`);
+      }
+      runWorldArgs.push(`--freight-settlement=${job.freightSettlementMode}`);
+    }
+    if (job.canonicalFreightBillingEnabled !== undefined) {
+      if (typeof job.canonicalFreightBillingEnabled !== "boolean") {
+        throw new Error("canonicalFreightBillingEnabled must be boolean");
+      }
+      runWorldArgs.push(
+        `--canonical-freight-billing=${String(job.canonicalFreightBillingEnabled)}`
+      );
     }
     // NPP autonomy tier. Without this an MCP-launched run silently used the
     // harness default (v3) while hand-launched runs used v4, so the two were not

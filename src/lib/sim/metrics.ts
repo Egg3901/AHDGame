@@ -12,6 +12,7 @@ import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import { loadExchangeRatesMap } from "@/lib/lineOfCredit/netWorth";
 import { toInternalUnits } from "@/lib/lineOfCredit/locMath";
+import type { EconomicVitalSigns } from "@/lib/db/types/economicVitalSigns";
 
 /**
  * Read-only balance-metric aggregations over a (sandbox) world DB, for the
@@ -34,6 +35,7 @@ export interface BalanceReport {
   crises: CrisisMetrics;
   economy: EconomyMetrics;
   capacity: CapacityMetrics;
+  marketAccess: MarketAccessMetrics;
 }
 
 export interface WealthMetrics {
@@ -94,6 +96,48 @@ export interface EconomyMetrics {
   inflationIndex: number;
   /** Population stdev of (globalPrice/basePrice) across commodities — cross-sectional price dispersion, not a time series. */
   priceVolatility: number;
+}
+
+export interface MarketAccessMetrics {
+  pooledFillRate: number | null;
+  countryScopedFillRate: number | null;
+  intentFulfillmentRate: number | null;
+  localShare: number | null;
+  interstateShare: number | null;
+  importShare: number | null;
+  toleranceBoundShareOfUnmet: number | null;
+  capacityBoundShareOfUnmet: number | null;
+  physicalSellThrough: number | null;
+  labourStaffingRate: number | null;
+  marketCapHhi: number | null;
+  activeTradedListingShare: number | null;
+  noHolderBondShare: number | null;
+  wealthGini: number | null;
+  annualizedM2GrowthPct: number | null;
+  reconciliationStatus: string;
+}
+
+export function marketAccessMetricsFromSnapshot(
+  snapshot: EconomicVitalSigns | null
+): MarketAccessMetrics {
+  return {
+    pooledFillRate: snapshot?.goods.pooledFillRate.value ?? null,
+    countryScopedFillRate: snapshot?.goods.countryScopedFillRate.value ?? null,
+    intentFulfillmentRate: snapshot?.trade.intentFulfillmentRate.value ?? null,
+    localShare: snapshot?.trade.localShare.value ?? null,
+    interstateShare: snapshot?.trade.interstateShare.value ?? null,
+    importShare: snapshot?.trade.importShare.value ?? null,
+    toleranceBoundShareOfUnmet: snapshot?.trade.toleranceBoundShareOfUnmet.value ?? null,
+    capacityBoundShareOfUnmet: snapshot?.trade.capacityBoundShareOfUnmet.value ?? null,
+    physicalSellThrough: snapshot?.production.physicalSellThrough.value ?? null,
+    labourStaffingRate: snapshot?.production.labourStaffingRate.value ?? null,
+    marketCapHhi: snapshot?.firms.marketCapHhi.value ?? null,
+    activeTradedListingShare: snapshot?.securities.activeTradedListingShare.value ?? null,
+    noHolderBondShare: snapshot?.securities.noHolderBondShare.value ?? null,
+    wealthGini: snapshot?.households.wealthGini.value ?? null,
+    annualizedM2GrowthPct: snapshot?.money.medianAnnualizedM2GrowthPct.value ?? null,
+    reconciliationStatus: snapshot?.reconciliation.status ?? "unavailable",
+  };
 }
 
 /** Gini coefficient over non-negative values. 0 = perfect equality, ~1 = max concentration. */
@@ -515,14 +559,27 @@ export async function collectBalanceMetrics(db: Db): Promise<BalanceReport> {
   const gameState = await db.collection("gameState").findOne({ _id: "current" as never });
   const turn = (gameState?.currentTurn as number | undefined) ?? 0;
 
-  const [wealth, electoral, officeTurnover, crises, economy, capacity] = await Promise.all([
-    collectWealthMetrics(db),
-    collectElectoralMetrics(db),
-    collectOfficeTurnoverMetrics(db),
-    collectCrisisMetrics(db),
-    collectEconomyMetrics(db),
-    collectCapacityMetrics(db),
-  ]);
+  const [wealth, electoral, officeTurnover, crises, economy, capacity, vitalSigns] =
+    await Promise.all([
+      collectWealthMetrics(db),
+      collectElectoralMetrics(db),
+      collectOfficeTurnoverMetrics(db),
+      collectCrisisMetrics(db),
+      collectEconomyMetrics(db),
+      collectCapacityMetrics(db),
+      db
+        .collection<EconomicVitalSigns>("economicVitalSigns")
+        .findOne({ turn }, { sort: { turn: -1 } }),
+    ]);
 
-  return { turn, wealth, electoral, officeTurnover, crises, economy, capacity };
+  return {
+    turn,
+    wealth,
+    electoral,
+    officeTurnover,
+    crises,
+    economy,
+    capacity,
+    marketAccess: marketAccessMetricsFromSnapshot(vitalSigns),
+  };
 }
