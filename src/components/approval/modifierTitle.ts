@@ -29,6 +29,8 @@ const WAR_TITLES: Record<string, string> = {
     "How long the public has carried the war. Opens as a rally behind the government, becomes a cost after about a year of fighting, and heals back toward zero at the same pace once the fighting stops. Carries over into your next war. Affects approval only.",
   alliance_contribution:
     "What you are fielding in this theatre against what your co-belligerents are fielding. Only applies to a country pulled into the war by treaty. Affects approval only.",
+  naval_losses:
+    "What the naval war is costing you at home. A navy is the most visible thing a country owns, so ships that stop coming back are a public event. A cost only, never a bonus, and nothing at all for a country with no fleet. Affects approval only.",
 };
 
 const WAR_FALLBACK_TITLE =

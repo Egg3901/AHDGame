@@ -126,6 +126,17 @@ vi.mock("@/lib/events", () => ({
 vi.mock("@/lib/turn/commodityPriceTurn", () => ({
   processCommodityPriceTurn: vi.fn(),
 }));
+vi.mock("@/lib/navair/turn", () => ({
+  processNavairTurn: vi.fn().mockResolvedValue({
+    countriesProcessed: 0,
+    regionsContested: 0,
+    channelsWritten: 0,
+    unitsStationed: 0,
+    engagementsFought: 0,
+    formationsLost: 0,
+    formationsUpdated: 0,
+  }),
+}));
 
 describe("processTurn() — full turn flow", () => {
   let db: MockDb;

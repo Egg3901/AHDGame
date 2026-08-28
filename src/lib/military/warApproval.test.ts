@@ -406,7 +406,13 @@ describe("stepWarExhaustion", () => {
 });
 
 describe("buildWarModifiers", () => {
-  const live = { exhaustion: -1.2, effort: 0.4, contribution: null, phase: "live" as const };
+  const live = {
+    exhaustion: -1.2,
+    effort: 0.4,
+    contribution: null,
+    naval: null,
+    phase: "live" as const,
+  };
 
   it("emits one chip per term rather than a single combined total", () => {
     const ids = buildWarModifiers({ ...live, contribution: 0.7 }).map((m) => m.id);
@@ -423,6 +429,7 @@ describe("buildWarModifiers", () => {
       exhaustion: -2,
       effort: 1.2,
       contribution: null,
+      naval: null,
       phase: "live" as const,
     });
     expect(chips.find((m) => m.id === "war_effort")?.effect).toBe(1.2);
@@ -434,6 +441,7 @@ describe("buildWarModifiers", () => {
       exhaustion: -2,
       effort: 1.2,
       contribution: 0.5,
+      naval: null,
       phase: "live" as const,
     });
     expect(chips.reduce((s, m) => s + m.effect, 0)).toBeCloseTo(-0.3, 5);
@@ -478,6 +486,7 @@ describe("buildWarModifiers", () => {
       exhaustion: 0,
       effort: 0,
       contribution: null,
+      naval: null,
       phase: "live" as const,
     });
     expect(chips.map((m) => m.id)).toEqual(["war_exhaustion", "war_effort"]);
@@ -488,6 +497,7 @@ describe("buildWarModifiers", () => {
       exhaustion: -1,
       effort: 0.5,
       contribution: 0.5,
+      naval: null,
       phase: "peace" as const,
     });
     expect(chips.map((m) => m.id)).toEqual(["war_exhaustion"]);
@@ -498,6 +508,7 @@ describe("buildWarModifiers", () => {
       exhaustion: -1,
       effort: null,
       contribution: null,
+      naval: null,
       phase: "peace" as const,
     });
     expect(chips[0]!.label).toBe("War exhaustion (recovering)");
@@ -508,6 +519,7 @@ describe("buildWarModifiers", () => {
       exhaustion: -1,
       effort: null,
       contribution: null,
+      naval: null,
       phase: "live" as const,
     });
     expect(chips[0]!.label).toBe("War exhaustion");
@@ -519,6 +531,7 @@ describe("buildWarModifiers", () => {
         exhaustion: 0,
         effort: null,
         contribution: null,
+        naval: null,
         phase: "peace" as const,
       })
     ).toEqual([]);
@@ -529,6 +542,7 @@ describe("buildWarModifiers", () => {
       exhaustion: -0.4,
       effort: null,
       contribution: null,
+      naval: null,
       phase: "peace" as const,
     });
     expect(chips).toHaveLength(1);
@@ -539,11 +553,55 @@ describe("buildWarModifiers", () => {
     expect(buildWarModifiers(live).map((m) => m.id)).not.toContain("alliance_contribution");
   });
 
+  /**
+   * The naval term arrived from the naval and air subsystem, which added it to
+   * the old combined block. It survives the split as a fourth chip, with its own
+   * label: the situation it names changes ("Naval losses" once hulls are gone,
+   * "Fleet condition" while they are only damaged).
+   */
+  it("carries the naval term as its own chip, with the label it was given", () => {
+    const chips = buildWarModifiers({ ...live, naval: { label: "Naval losses", effect: -0.7 } });
+    const naval = chips.find((m) => m.id === "naval_losses");
+    expect(naval?.label).toBe("Naval losses");
+    expect(naval?.effect).toBe(-0.7);
+    expect(naval?.marginEffect).toBe(0);
+    expect(naval?.source).toBe("war");
+  });
+
+  it("rounds the naval term to a tenth like every other chip", () => {
+    // navalApprovalEffect is continuous, so it arrives as a long fraction.
+    const chips = buildWarModifiers({
+      ...live,
+      naval: { label: "Fleet condition", effect: -0.4285714285714286 },
+    });
+    expect(chips.find((m) => m.id === "naval_losses")?.effect).toBe(-0.4);
+  });
+
+  /**
+   * Zero here means a healthy fleet, or no fleet at all. Neither is worth a line,
+   * so this is the one war term that stays absent at zero while the war is live.
+   */
+  it("shows no naval chip when there is nothing to report", () => {
+    expect(buildWarModifiers(live).map((m) => m.id)).not.toContain("naval_losses");
+  });
+
+  it("drops the naval term at peace along with the other front terms", () => {
+    const chips = buildWarModifiers({
+      exhaustion: -1,
+      effort: 0.5,
+      contribution: 0.5,
+      naval: { label: "Naval losses", effect: -0.7 },
+      phase: "peace",
+    });
+    expect(chips.map((m) => m.id)).toEqual(["war_exhaustion"]);
+  });
+
   it("never emits a non finite effect", () => {
     const chips = buildWarModifiers({
       exhaustion: Number.NaN,
       effort: Number.NaN,
       contribution: Number.NaN,
+      naval: null,
       phase: "live" as const,
     });
     expect(chips).toEqual([]);
@@ -554,6 +612,7 @@ describe("buildWarModifiers", () => {
       exhaustion: -1 / 3,
       effort: null,
       contribution: null,
+      naval: null,
       phase: "live" as const,
     });
     expect(chips[0]!.effect).toBe(-0.3);

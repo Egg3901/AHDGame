@@ -1,4 +1,6 @@
 import type { Db } from "mongodb";
+import { navalApprovalEffect, navalApprovalLabel } from "@/lib/navair/navalApproval";
+import type { NavairUnit } from "@/lib/navair/types";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import type { CountryId } from "@/lib/constants/countries";
 import { listConflictsForCountry } from "@/lib/db/collections/conflicts";
@@ -357,6 +359,13 @@ export interface WarModifierInput {
   effort: number | null;
   /** Alliance contribution, or null when it does not apply. */
   contribution: number | null;
+  /**
+   * The naval war's cost at home, with its own label, or null when there is
+   * nothing to show. It carries a label because it names a situation rather than
+   * a fixed term: "Naval losses" once hulls are gone, "Fleet condition" while
+   * they are only damaged.
+   */
+  naval: { label: string; effect: number } | null;
   phase: WarPhase;
 }
 
@@ -384,7 +393,7 @@ export interface WarModifierInput {
  * multiplies that trap rather than removing it.
  */
 export function buildWarModifiers(input: WarModifierInput): ActiveModifier[] {
-  const { exhaustion, effort, contribution, phase } = input;
+  const { exhaustion, effort, contribution, naval, phase } = input;
   const live = phase === "live";
   const chip = (id: string, label: string, value: number): ActiveModifier => ({
     id,
@@ -419,6 +428,12 @@ export function buildWarModifiers(input: WarModifierInput): ActiveModifier[] {
   }
   if (live && contribution !== null && Number.isFinite(contribution)) {
     modifiers.push(chip("alliance_contribution", "Alliance contribution", contribution));
+  }
+  // Unlike the other three, this one is absent at zero even while the fighting
+  // is live: zero here means the fleet is healthy, or that the country has no
+  // navy at all, and neither is a fact worth a line in the breakdown.
+  if (live && naval !== null && Number.isFinite(naval.effect)) {
+    modifiers.push(chip("naval_losses", naval.label, naval.effect));
   }
 
   return modifiers;
@@ -523,6 +538,7 @@ export async function computeWarApproval(
         }),
         effort: null,
         contribution: null,
+        naval: null,
         phase: "peace",
         conflictId: null,
       });
@@ -562,10 +578,28 @@ export async function computeWarApproval(
       });
     }
 
+    // The naval war has a political cost at home. Without it a government can
+    // have its fleet destroyed and pay nothing, which makes the whole naval
+    // layer a private number between the admiralty and the engine.
+    //
+    // Read for the country, not the theatre: a fleet lost anywhere is a fleet
+    // the public can see is gone. `navalApprovalEffect` is a cost only, bounded
+    // at -1, and returns 0 for a country with no navy, so a landlocked power is
+    // neither rewarded nor punished for ships it never had.
+    const navalUnits = (await getMilitaryUnitsCollection(db)
+      .find({ countryId, domain: "naval" })
+      .toArray()) as unknown as NavairUnit[];
+    const navalEffect = navalApprovalEffect(navalUnits);
+
     return settle({
       exhaustion,
       effort,
       contribution,
+      // The label moves with the situation ("Naval losses" once hulls are lost,
+      // "Fleet condition" while they are merely damaged), so it is passed in
+      // rather than fixed in the chip builder like the other three.
+      naval:
+        navalEffect === 0 ? null : { label: navalApprovalLabel(navalUnits), effect: navalEffect },
       phase: "live",
       conflictId: conflict._id,
     });
@@ -578,6 +612,7 @@ export async function computeWarApproval(
       exhaustion: prevExhaustion ?? 0,
       effort: null,
       contribution: null,
+      naval: null,
       phase: "unknown",
       conflictId: prevConflictId,
     });

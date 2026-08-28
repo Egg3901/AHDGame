@@ -1,3 +1,5 @@
+import { canLandMarines } from "@/lib/navair/frontSupport";
+import type { FrontSupport } from "@/lib/navair/types";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import type { BattleReportDoc } from "@/lib/db/types/battleReport";
 import type { BattleDeclarationStatus } from "@/lib/db/types/battleDeclaration";
@@ -104,7 +106,42 @@ export interface RecordExtras {
   ownForces?: ForceRow[];
   /** `command` only — a coarse read of the opposing force, never a number. */
   enemyBand?: string;
+  /** `command` only — what the naval and air layer is delivering to this front. */
+  navalAir?: NavalAirPanel;
   battles: RecordBattleRow[];
+}
+
+/**
+ * The naval and air picture at a front, as the record states it.
+ *
+ * The viewer's own figures are exact, because a government knows its own dispositions.
+ * The enemy's is a BAND and never a number, matching how this page already treats force
+ * composition: a commander learns they have lost the sky, not by how much.
+ */
+export interface NavalAirPanel {
+  /** 0..100, this side's hold on the sky over the front. */
+  airSuperiority: number;
+  /** 0..100, this side's hold on the adjacent water. */
+  seaControl: number;
+  /** Ground weight close air support delivered this turn. */
+  casWeight: number;
+  /** 0..1 of the enemy's supply this side is cutting. */
+  interdiction: number;
+  /** Coarse read of who holds the air, never a number. */
+  airBand: string;
+  /** Whether marines could be put ashore here right now. */
+  canLandMarines: boolean;
+  /** Recent surface actions in this theatre, newest first. */
+  recentActions: NavalActionRow[];
+}
+
+/** One surface action, as the record states it. */
+export interface NavalActionRow {
+  turn: number;
+  regionName: string;
+  winner: string;
+  marginPct: number;
+  sunk: string[];
 }
 
 export interface RecordExtrasInput {
@@ -122,7 +159,29 @@ export interface RecordExtrasInput {
    * agree about a fleet that cannot reach the fighting.
    */
   seaAccess?: boolean;
+  /** This side's support profile, from the naval and air layer. */
+  navairSupport?: FrontSupport;
+  /** The opposing side's, used ONLY to derive a band. Never surfaced as a number. */
+  navairEnemySupport?: FrontSupport;
+  /** Recent surface actions across every region this war is fought in. */
+  navairActions?: NavalActionRow[];
   reports: BattleReportDoc[];
+}
+
+/**
+ * Who holds the air, as a phrase.
+ *
+ * Bands rather than a difference, because "you are 34 points down on air superiority" is
+ * a number a player cannot act on, while "the enemy holds the air" is a decision.
+ */
+export function airSuperiorityBand(own: number, enemy: number): string {
+  const gap = own - enemy;
+  if (own <= 0 && enemy <= 0) return "Air uncontested";
+  if (gap >= 40) return "You hold the air";
+  if (gap >= 12) return "Air advantage";
+  if (gap > -12) return "Air contested";
+  if (gap > -40) return "Enemy air advantage";
+  return "Enemy holds the air";
 }
 
 /** One side's live force at a front, as the FORCE panel states it. */
@@ -243,8 +302,19 @@ function toForceRow(u: MilitaryUnit): ForceRow {
 }
 
 export function buildRecordExtras(input: RecordExtrasInput): RecordExtras {
-  const { tier, ownSide, theaterId, sideACountries, sideBCountries, units, reports, seaAccess } =
-    input;
+  const {
+    tier,
+    ownSide,
+    theaterId,
+    sideACountries,
+    sideBCountries,
+    units,
+    reports,
+    seaAccess,
+    navairSupport,
+    navairEnemySupport,
+    navairActions,
+  } = input;
 
   const ownCountries = ownSide === "A" ? sideACountries : ownSide === "B" ? sideBCountries : [];
   const enemyCountries = ownSide === "A" ? sideBCountries : ownSide === "B" ? sideACountries : [];
@@ -324,6 +394,25 @@ export function buildRecordExtras(input: RecordExtrasInput): RecordExtras {
       engageablePool(enemyAtFront, seaAccess),
       { unopposed: enemyAtFront.length === 0 }
     );
+
+    // Same visibility rule as the force panel above: the viewer's own dispositions are
+    // exact, the enemy's are a band. Absent support means the naval and air layer has
+    // nothing to say about this front, which is different from holding nothing, so the
+    // panel is omitted rather than shown as zeros.
+    if (navairSupport) {
+      extras.navalAir = {
+        airSuperiority: navairSupport.airSuperiority,
+        seaControl: navairSupport.seaControl,
+        casWeight: navairSupport.casWeight,
+        interdiction: navairSupport.interdiction,
+        airBand: airSuperiorityBand(
+          navairSupport.airSuperiority,
+          navairEnemySupport?.airSuperiority ?? 0
+        ),
+        canLandMarines: canLandMarines(navairSupport.seaControl),
+        recentActions: navairActions ?? [],
+      };
+    }
   }
   return extras;
 }

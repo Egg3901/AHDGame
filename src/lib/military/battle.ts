@@ -32,6 +32,8 @@ import {
   frontById,
   capacityOfTerrain,
 } from "./combat";
+import { NO_SUPPORT } from "@/lib/navair/frontSupport";
+import type { FrontSupport } from "@/lib/navair/types";
 
 /**
  * The general↔units↔front binding used by battle math.
@@ -224,6 +226,18 @@ export interface AggItem {
   s: StatObj;
   domain: string;
 }
+/**
+ * Sea control a side needs to keep an amphibious force properly supplied ashore.
+ *
+ * Below the landing threshold on purpose: getting marines ashore against opposition is
+ * far harder than keeping them fed once they are. A side that can no longer land can
+ * still sustain what it already put there.
+ */
+export const MARINE_SUSTAINMENT_SEA_CONTROL = 40;
+
+/** What an unsupported marine formation is worth: light infantry, not a landing force. */
+export const MARINE_UNSUPPORTED_FRACTION = 0.6;
+
 export interface SideAgg {
   mass: number;
   fp: number;
@@ -234,9 +248,20 @@ export interface SideAgg {
   rn: number;
   aa: number;
   rc: number;
-  airShare: number;
+  /**
+   * This side's hold on the sky over the front, 0..100, from the naval and air layer.
+   *
+   * Replaces the old `airShare`, which was the share of a side's own mass that happened
+   * to be air or naval. That measured what you BROUGHT, not what you WON: a side could
+   * bring three air wings, lose the air war outright, and still read as having air
+   * superiority. Contesting the sky now happens in `navairOperations` before the battle,
+   * and this is its result.
+   */
+  airSuperiority: number;
+  /** Ground weight delivered by close air support this turn, already folded into mass. */
+  casWeight: number;
 }
-export function sideAgg(items: AggItem[]): SideAgg {
+export function sideAgg(items: AggItem[], support: FrontSupport = NO_SUPPORT): SideAgg {
   let mass = 0,
     fp = 0,
     ar = 0,
@@ -245,10 +270,21 @@ export function sideAgg(items: AggItem[]): SideAgg {
     mb = 0,
     rn = 0,
     aa = 0,
-    rc = 0,
-    air = 0;
+    rc = 0;
   for (const it of items) {
-    const w = it.cv;
+    // Marines ashore across water are only as good as the sea lane behind them. Without
+    // sea control they are cut off from the shipping that lands their heavy equipment and
+    // carries their casualties out, so they fight as light infantry rather than as an
+    // amphibious force.
+    //
+    // A sustainment penalty, deliberately NOT a deployment block: marines who have been
+    // holding a front for forty turns must not evaporate the moment this ships. It is
+    // also the only route sea control has into a land battle besides interdiction, which
+    // is what stops a total naval victory from being worth nothing on the ground.
+    const w =
+      it.domain === "marine" && support.seaControl < MARINE_SUSTAINMENT_SEA_CONTROL
+        ? it.cv * MARINE_UNSUPPORTED_FRACTION
+        : it.cv;
     mass += w;
     fp += it.s.fp * w;
     ar += it.s.ar * w;
@@ -258,11 +294,13 @@ export function sideAgg(items: AggItem[]): SideAgg {
     rn += it.s.rn * w;
     aa += it.s.aa * w;
     rc += it.s.rc * w;
-    if (it.domain === "air" || it.domain === "naval") air += w;
   }
+  // Per-stat averages weight by the FORMATIONS present, so `d` is unit mass and does not
+  // include close air support. A sortie contributes weight to the push; it does not drag
+  // the front's average armour or morale toward its own.
   const d = Math.max(1, mass);
   return {
-    mass,
+    mass: mass + support.casWeight,
     fp: fp / d,
     ar: ar / d,
     sh: sh / d,
@@ -271,7 +309,8 @@ export function sideAgg(items: AggItem[]): SideAgg {
     rn: rn / d,
     aa: aa / d,
     rc: rc / d,
-    airShare: air / d,
+    airSuperiority: support.airSuperiority,
+    casWeight: support.casWeight,
   };
 }
 export interface SideMults {
@@ -285,7 +324,12 @@ export interface SideMults {
 export function sideMults(A: SideAgg, B: SideAgg): SideMults {
   const cl = (x: number) => Math.max(-0.5, Math.min(0.5, x));
   const pen = 1 + 0.3 * cl((A.fp - B.ar) / 120);
-  const airm = 1 + 0.24 * cl((A.airShare * 100 - B.aa) / 120);
+  // Head to head hold on the sky, decided by `navairOperations` before this battle
+  // ran. The 0.24 coefficient and the 120 spread are UNCHANGED from the previous
+  // formula on purpose: the input changes, the magnitude does not, so the static
+  // replay isolates the effect of measuring air power properly from the effect of
+  // retuning it. Retune only once the replay says what the first change did.
+  const airm = 1 + 0.24 * cl((A.airSuperiority - B.airSuperiority) / 120);
   const rec = 1 + 0.15 * cl((A.rc - B.rc) / 120);
   const stand = 1 + 0.15 * cl((A.rn - B.rn) / 120);
   const shock = 1 + 0.12 * cl((A.sh - B.ar) / 120);
@@ -313,7 +357,13 @@ export interface SupplyState {
 export function supplyState(
   ctxs: BattleContext[],
   frontId: string,
-  plan?: EngagementPlan
+  plan?: EngagementPlan,
+  /**
+   * 0..1 of this side's throughput cut by ENEMY interdiction: bombers striking behind the
+   * line, and a blockade closing the sea lane that feeds the front. Optional, so a caller
+   * that predates the naval and air layer is unaffected.
+   */
+  interdiction = 0
 ): SupplyState {
   const front = frontById(frontId, ctxs[0]?.fronts);
   let demand = 0;
@@ -370,6 +420,12 @@ export function supplyState(
   }
   demand = Math.max(1, Math.round(demand));
   throughput = Math.round(throughput);
+  // Interdiction cuts what actually arrives, not what the front asks for. Applied here,
+  // after every source of throughput is summed and before anything derives from it, so a
+  // strangled front reads as short of supply through the SAME path as a front with poor
+  // infrastructure, rather than through a second mechanism nobody would think to check.
+  throughput *= 1 - Math.max(0, Math.min(1, interdiction));
+
   const level = Math.max(0, Math.min(100, Math.round((throughput / demand) * 100)));
   const state =
     level >= 85
@@ -537,7 +593,9 @@ export function planEngagement(
 function ownSideProfile(
   ctxs: BattleContext[],
   frontId: string,
-  plan?: EngagementPlan
+  plan?: EngagementPlan,
+  /** Enemy interdiction against THIS side. See `supplyState`. */
+  interdiction = 0
 ): OwnSideProfile {
   // Terrain is a property of the front, not of its id. Resolved once here off the
   // first context that knows this front — every contingent is fighting on the same
@@ -600,7 +658,7 @@ function ownSideProfile(
     deepShare: share("deepstrike"),
     deepBuff: deepMass ? deepWeighted / deepMass : 1,
     genEnemyMin: genEnemy,
-    sup: supplyState(ctxs, frontId, plan),
+    sup: supplyState(ctxs, frontId, plan, interdiction),
     ownTf,
   };
 }
@@ -988,7 +1046,15 @@ export interface PvpForecast {
 export function battleForecast(
   attackers: BattleSide[],
   defenders: BattleSide[],
-  theaterId: string
+  theaterId: string,
+  /**
+   * What the naval and air layer delivered to each side at this front this turn.
+   * Optional so every existing caller keeps its previous behaviour exactly: absent
+   * means no air superiority, no close air support and no interdiction, which is
+   * what a battle fought before this subsystem existed had.
+   */
+  supportA: FrontSupport = NO_SUPPORT,
+  supportD: FrontSupport = NO_SUPPORT
 ): PvpForecast {
   // Either coalition carries the same fronts map; take whichever is populated so an
   // empty side cannot silently drop the battle onto RESERVE_FRONT.
@@ -998,10 +1064,12 @@ export function battleForecast(
   const capacity = front.capacity ?? capacityOfTerrain(front.terrain);
   const attackerPlan = planEngagement(attackers.map(sideCtx), theaterId, capacity);
   const defenderPlan = planEngagement(defenders.map(sideCtx), theaterId, capacity);
-  const PA = ownSideProfile(attackers.map(sideCtx), theaterId, attackerPlan);
-  const PD = ownSideProfile(defenders.map(sideCtx), theaterId, defenderPlan);
-  const aggA = sideAgg(PA.engaged);
-  const aggD = sideAgg(PD.engaged);
+  // Each side's supply is cut by the OTHER side's interdiction. Reading your own here
+  // would have a fleet starve the front it is supporting.
+  const PA = ownSideProfile(attackers.map(sideCtx), theaterId, attackerPlan, supportD.interdiction);
+  const PD = ownSideProfile(defenders.map(sideCtx), theaterId, defenderPlan, supportA.interdiction);
+  const aggA = sideAgg(PA.engaged, supportA);
+  const aggD = sideAgg(PD.engaged, supportD);
   const am = sideMults(aggA, aggD);
   const dm = sideMults(aggD, aggA);
   // Deep-strike degrades the opponent (using the opponent's air-defense).
@@ -1088,9 +1156,11 @@ export function resolvePvpBattle(
   attackers: BattleSide[],
   defenders: BattleSide[],
   theaterId: string,
-  seed: number
+  seed: number,
+  supportA: FrontSupport = NO_SUPPORT,
+  supportD: FrontSupport = NO_SUPPORT
 ): PvpBattleResult {
-  const fc = battleForecast(attackers, defenders, theaterId);
+  const fc = battleForecast(attackers, defenders, theaterId, supportA, supportD);
   const { front, attStr, defStr, ratio } = fc;
   const PA = fc.attackerProfile;
   const PD = fc.defenderProfile;

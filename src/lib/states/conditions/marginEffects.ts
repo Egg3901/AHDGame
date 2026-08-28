@@ -81,6 +81,7 @@ export const MODIFIER_MARGIN_FACTOR: Record<string, number> = {
   war_exhaustion: 0,
   war_effort: 0,
   alliance_contribution: 0,
+  naval_losses: 0,
 };
 
 export function marginEffectForModifier(approvalEffect: number, modifierId: string): number {
