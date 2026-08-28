@@ -1,6 +1,7 @@
 "use client";
 
 import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
+import { buildModifierTitle, toneFor } from "./modifierTitle";
 
 function marginForModifier(modifier: ActiveModifier): number | null {
   if (modifier.source === "address" || modifier.source === "war") return null;
@@ -9,6 +10,20 @@ function marginForModifier(modifier: ActiveModifier): number | null {
 }
 
 function EffectIcon({ effect }: { effect: number }) {
+  // A war that nets to zero gets a flat bar rather than the falling arrow: it is
+  // neither costing nor earning the government approval this turn.
+  if (effect === 0) {
+    return (
+      <svg
+        className="h-3.5 w-3.5 text-slate-500 shrink-0"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        aria-hidden
+      >
+        <path d="M5.75 10.75a.75.75 0 010-1.5h8.5a.75.75 0 010 1.5h-8.5z" />
+      </svg>
+    );
+  }
   if (effect > 0) {
     return (
       <svg
@@ -43,10 +58,16 @@ function EffectIcon({ effect }: { effect: number }) {
   );
 }
 
+const TONE_CLASSES: Record<ReturnType<typeof toneFor>, string> = {
+  positive: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  neutral: "border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-300",
+  negative: "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400",
+};
+
 function ModifierChip({ modifier }: { modifier: ActiveModifier }) {
-  const positive = modifier.effect > 0;
+  const tone = toneFor(modifier.effect);
+  const positive = tone === "positive";
   const isAddress = modifier.source === "address";
-  const isWar = modifier.source === "war";
   const margin = marginForModifier(modifier);
   const marginPositive = margin != null && margin > 0;
 
@@ -54,18 +75,10 @@ function ModifierChip({ modifier }: { modifier: ActiveModifier }) {
     <span
       className={
         "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium " +
-        (positive
-          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-          : "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400") +
+        TONE_CLASSES[tone] +
         (isAddress ? " border-dashed" : "")
       }
-      title={
-        isAddress
-          ? "Temporary boost from an active State of the State address (approval only)"
-          : isWar
-            ? "How the war is going: the front line, whether allies are contributing, and how long the public has carried it. Fades gradually once the fighting ends. Affects approval only."
-            : "Derived from regional metric thresholds; affects approval and sector profit margins"
-      }
+      title={buildModifierTitle(modifier)}
     >
       <EffectIcon effect={modifier.effect} />
       <span>{modifier.label}</span>

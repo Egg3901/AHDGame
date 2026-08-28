@@ -50,7 +50,7 @@ import { processIndependenceDesireDrift } from "@/lib/turn/independenceDesireDri
 import { processReferendumLifecycle } from "@/lib/referendum/processReferendumLifecycle";
 import { reconcilePartyMemberCounts } from "@/lib/turn/partyOrg";
 import { snapshotMetricHistory } from "@/lib/metricHistory";
-import { snapshotApprovalHistory } from "@/lib/utils/governmentApproval";
+import { snapshotApprovalsForTurn } from "@/lib/utils/approvalSnapshotRun";
 import { snapshotInterestRateHistory } from "@/lib/turn/interestRateSnapshot";
 import { snapshotPartyHistory } from "@/lib/turn/partyHistorySnapshot";
 import {
@@ -69,7 +69,6 @@ import { processNppStanceDrift } from "@/lib/turn/nppStanceDrift";
 import { resetVicePresidentActions } from "@/lib/turn/vicePresidentActionReset";
 import { resetRunningMateSurrogateActions } from "@/lib/turn/runningMateSurrogateActionReset";
 import { resetJusticeActions } from "@/lib/turn/justiceActionReset";
-import { COUNTRY_ORDER, COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type { TurnPhaseAdapter } from "@/simulation/engine/types";
 
 export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
@@ -539,20 +538,21 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       phaseResults.partyMemberCountReconcile = memberCountReconcileResult;
     }
 
-    const [metricHistResult] = await Promise.all([
+    const [metricHistResult, approvalSnapshotResult] = await Promise.all([
       runtime.runPhase("metricHistory", () => snapshotMetricHistory(db, newTurn)),
-      runtime.runPhase("approvalSnapshot", async () => {
-        const activeIds = COUNTRY_ORDER.filter((id) => COUNTRY_CONFIGS[id].status === "active");
-        await Promise.all(activeIds.map((id) => snapshotApprovalHistory(db, id, newTurn)));
-      }),
+      // Covers the active countries plus any belligerent that is not one of
+      // them, so a war block is computed for every country actually fighting.
+      // The count is read back off the run rather than recomputed here: the
+      // roster is now turn-dependent, and a recomputed constant would report a
+      // number the phase did not do.
+      runtime.runPhase("approvalSnapshot", () => snapshotApprovalsForTurn(db, newTurn)),
       runtime.runPhase("interestRateSnapshot", () => snapshotInterestRateHistory(db, newTurn)),
       runtime.runPhase("partyHistorySnapshot", () => snapshotPartyHistory(db, newTurn)),
     ]);
     phaseResults.metricHistory = { snapshotsTaken: metricHistResult ?? 0 };
-    const activeCountryCount = COUNTRY_ORDER.filter(
-      (id) => COUNTRY_CONFIGS[id].status === "active"
-    ).length;
-    phaseResults.approvalSnapshot = { countriesProcessed: activeCountryCount };
+    phaseResults.approvalSnapshot = {
+      countriesProcessed: approvalSnapshotResult?.countriesProcessed ?? 0,
+    };
 
     const [portfolioSnapshotResult] = await Promise.all([
       runtime.runPhase("portfolioSnapshot", () => snapshotPortfolioValues(newTurn)),

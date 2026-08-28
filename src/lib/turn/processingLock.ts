@@ -3,6 +3,25 @@ import type { GameState } from "@/lib/db/types";
 export const TURN_LOCK_STALE_MS = 20 * 60 * 1000;
 export const TURN_LOCK_HEARTBEAT_MS = 30_000;
 
+/**
+ * Hard ceiling on a single turn phase. `runPhase` races every phase against
+ * this and rejects when it is exceeded, which fails the phase and aborts the
+ * turn.
+ *
+ * Lives here rather than in turnPhaseRuntime so the admin health check can
+ * measure phases against the same number the runtime enforces, instead of
+ * duplicating a literal that would drift. This module is deliberately
+ * dependency-light (types only) so route handlers can import it freely.
+ *
+ * Sizing note (2026-08-28): corporationTurn is the phase closest to this
+ * ceiling. It costs ~6ms per corporateSector and the sector population grows
+ * with NPP expansion, so its cost rises with the world rather than with any
+ * code change. Raising this constant is NOT the remedy for that — it is the
+ * backstop that turns an unbounded phase into a failed turn instead of a
+ * wedged one.
+ */
+export const PHASE_TIMEOUT_MS = 4 * 60 * 1000;
+
 export type ProcessingLockSnapshot = Pick<
   GameState,
   | "isProcessing"

@@ -10,12 +10,10 @@ import type { Db } from "mongodb";
 import { createTurnPhaseTelemetry } from "@/simulation/engine/phaseTelemetry";
 import { withSpan } from "@/lib/observability/spans";
 import type { TurnPhaseRuntime } from "@/simulation/engine/types";
-import { TURN_LOCK_HEARTBEAT_MS } from "@/lib/turn/processingLock";
+import { TURN_LOCK_HEARTBEAT_MS, PHASE_TIMEOUT_MS } from "@/lib/turn/processingLock";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { runInAuditContext, turnPhaseTraceId } from "@/lib/observability/context";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
-
-const PHASE_TIMEOUT_MS = 4 * 60 * 1000;
 
 /**
  * Phases that only READ state to produce a derivative/historical record

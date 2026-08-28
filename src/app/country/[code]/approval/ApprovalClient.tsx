@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
+import { netModifierEffect, type ActiveModifier } from "@/lib/utils/approvalModifiers";
 import { metricsApiUrl, approvalApiUrl, politicalMetricsUrl, regionApprovalUrl } from "@/lib/urls";
 import { POLITICAL_METRIC_COUNTRY_IDS } from "@/lib/politicalMetrics/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -122,7 +122,7 @@ export default function ApprovalClient({ initialMetrics, initialApproval }: Appr
 
   const history = approvalData?.history ?? [];
 
-  const netApproval = modifiers.reduce((s, m) => s + m.effect, 0);
+  const netApproval = netModifierEffect(modifiers);
   const netMargin = computeRegionalConditionMargin(modifiers);
 
   return (

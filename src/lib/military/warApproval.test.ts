@@ -1,11 +1,13 @@
 import { describe, it, expect } from "vitest";
 import {
   allianceContribution,
-  buildWarModifier,
+  buildWarModifiers,
   nextControlSample,
-  stepWarTotal,
+  stepWarExhaustion,
   warEffort,
   warExhaustion,
+  WAR_EXHAUSTION_FLOOR,
+  WAR_EXHAUSTION_RATE,
   type WarEffortInput,
 } from "./warApproval";
 
@@ -265,82 +267,355 @@ describe("allianceContribution", () => {
   });
 });
 
-describe("stepWarTotal", () => {
+describe("stepWarExhaustion", () => {
+  const at = (over: Partial<Parameters<typeof stepWarExhaustion>[0]> = {}) =>
+    stepWarExhaustion({
+      prev: 0,
+      conflictId: "war_1",
+      prevConflictId: "war_1",
+      turnsSinceEntry: 10,
+      ...over,
+    });
+
   /**
-   * dampApprovalStep adopts its target outright when there is no previous
-   * value. Conflicts predating this feature carry no entry record, so an
-   * original belligerent in a long war would otherwise land its whole
-   * accumulated exhaustion in a single turn the day this ships.
+   * A country already fighting when this shipped has no stored value. Seeding
+   * from the original closed-form curve keeps it exactly where it was; without
+   * it the rally below fires on an existing war and hands a nation forty turns
+   * deep a fresh +1.
    */
-  it("ramps in from zero rather than adopting a deep total on the first turn", () => {
-    expect(stepWarTotal(undefined, -25)).toBe(-2);
+  it("seeds an unscored country at war from the original curve", () => {
+    expect(at({ prev: undefined, prevConflictId: undefined, turnsSinceEntry: 0 })).toBe(1);
+    expect(at({ prev: undefined, prevConflictId: undefined, turnsSinceEntry: 48 })).toBe(0);
+    expect(at({ prev: undefined, prevConflictId: undefined, turnsSinceEntry: 96 })).toBe(-1);
   });
 
-  it("moves at most two points per turn toward the target", () => {
-    expect(stepWarTotal(-10, -25)).toBe(-12);
-    expect(stepWarTotal(0, 4)).toBe(2);
+  it("seeds from the curve rather than rallying, even though the war id is new", () => {
+    expect(at({ prev: undefined, prevConflictId: null, turnsSinceEntry: 192 })).toBe(-3);
   });
 
-  it("adopts the target once it is within a single step", () => {
-    expect(stepWarTotal(-1, 0)).toBe(0);
-    expect(stepWarTotal(-25, -24)).toBe(-24);
+  it("accrues one point per in-game year while the same war runs", () => {
+    expect(at({ prev: 0 })).toBeCloseTo(-WAR_EXHAUSTION_RATE, 6);
+    let value = 1;
+    for (let i = 0; i < 48; i += 1) value = at({ prev: value });
+    expect(value).toBeCloseTo(0, 4);
   });
 
-  /** At peace the target is zero, so the block has to walk back rather than vanish. */
-  it("retires gradually toward zero when the war has ended", () => {
-    expect(stepWarTotal(-10, 0)).toBe(-8);
-    expect(stepWarTotal(-8, 0)).toBe(-6);
+  it("never falls past the floor", () => {
+    expect(at({ prev: WAR_EXHAUSTION_FLOOR })).toBe(WAR_EXHAUSTION_FLOOR);
+  });
+
+  /**
+   * The cooldown. Ending a war used to reset exhaustion outright, so a
+   * government could sign a treaty and declare again the same turn with a clean
+   * slate and no cost that ever caught up with it.
+   */
+  it("heals toward zero at the same pace once the fighting stops", () => {
+    expect(at({ prev: -1, conflictId: null })).toBeCloseTo(WAR_EXHAUSTION_RATE - 1, 3);
+  });
+
+  it("takes an in-game year of peace to shed a point", () => {
+    let value = -1;
+    for (let i = 0; i < 48; i += 1) value = at({ prev: value, conflictId: null });
+    expect(value).toBe(0);
+  });
+
+  it("settles exactly on zero rather than overshooting into a peace bonus", () => {
+    expect(at({ prev: -WAR_EXHAUSTION_RATE, conflictId: null })).toBe(0);
+    expect(at({ prev: 0, conflictId: null })).toBe(0);
+  });
+
+  /**
+   * A war won inside its first year ends while the rally is still positive.
+   * Peace has to retire that at the same pace it retires a penalty: moving away
+   * from zero and then cutting it off would drop half a point of approval on the
+   * turn the treaty was signed.
+   */
+  it("retires a positive rally toward zero rather than away from it", () => {
+    expect(at({ prev: 0.5, conflictId: null })).toBeCloseTo(0.5 - WAR_EXHAUSTION_RATE, 5);
+  });
+
+  it("takes an in-game year of peace to shed a point of rally too", () => {
+    let value = 1;
+    for (let i = 0; i < 48; i += 1) value = at({ prev: value, conflictId: null });
+    expect(value).toBe(0);
+  });
+
+  it("never lets peace push exhaustion past zero into a bonus", () => {
+    for (const start of [0.4, -0.4, WAR_EXHAUSTION_RATE / 2, -WAR_EXHAUSTION_RATE / 2]) {
+      let value = start;
+      for (let i = 0; i < 200; i += 1) value = at({ prev: value, conflictId: null });
+      expect(value).toBe(0);
+    }
+  });
+
+  it("keeps a country that has never fought at zero", () => {
+    expect(at({ prev: undefined, conflictId: null, prevConflictId: undefined })).toBe(0);
+  });
+
+  it("rallies by one on entering a war from peace, capped at one", () => {
+    expect(at({ prev: 0, conflictId: "war_2", prevConflictId: null })).toBe(1);
+    expect(at({ prev: -3, conflictId: "war_2", prevConflictId: null })).toBe(-2);
+  });
+
+  /**
+   * A country fighting two wars whose older war resolves has its principal
+   * conflict change underneath it without the fighting ever stopping. Paying a
+   * rally there hands out +1 for ending a war while still at war, which is the
+   * cooldown's own exploit in miniature.
+   */
+  it("does not rally when one war ends while another is still being fought", () => {
+    expect(at({ prev: -2, conflictId: "war_b", prevConflictId: "war_a" })).toBeLessThan(-2);
+  });
+
+  it("does not rally going straight from one war into the next with no peace", () => {
+    expect(at({ prev: -3, conflictId: "war_2", prevConflictId: "war_1" })).toBeLessThan(-3);
+  });
+
+  it("treats a document written before the conflict id existed as peace", () => {
+    expect(at({ prev: -3, conflictId: "war_1", prevConflictId: undefined })).toBe(-2);
+  });
+
+  /**
+   * The exploit, stated as a test. A country that fought itself to -3 and
+   * immediately declares again opens at -2, not at +1.
+   */
+  it("carries residue into the next war instead of wiping it", () => {
+    // A turn of peace stores a null conflict id, which is what the next war sees.
+    const residue = at({ prev: -3, conflictId: null, prevConflictId: "war_1" });
+    expect(at({ prev: residue, conflictId: "war_2", prevConflictId: null })).toBeLessThan(0);
+  });
+
+  /**
+   * Keyed on the stored conflict id being null, not on turnsSinceEntry === 0: a
+   * turn the snapshot did not run for this country would otherwise swallow the
+   * transition and the rally would never be paid at all.
+   */
+  it("rallies on entering from peace however long that war has been running", () => {
+    expect(at({ prev: -2, conflictId: "war_2", prevConflictId: null, turnsSinceEntry: 90 })).toBe(
+      -1
+    );
+  });
+
+  it("does not rally again on a war it is already accruing against", () => {
+    expect(at({ prev: -2, conflictId: "war_1", prevConflictId: "war_1" })).toBeLessThan(-2);
+  });
+
+  it("recovers from a corrupt stored value by reseeding", () => {
+    expect(at({ prev: Number.NaN, turnsSinceEntry: 96 })).toBe(-1);
   });
 });
 
-describe("buildWarModifier", () => {
-  const parts = [
-    { id: "war_effort", label: "War effort", effect: -1 },
-    { id: "war_exhaustion", label: "War exhaustion", effect: -3 },
-  ];
+describe("buildWarModifiers", () => {
+  const live = {
+    exhaustion: -1.2,
+    effort: 0.4,
+    contribution: null,
+    naval: null,
+    phase: "live" as const,
+  };
 
-  it("carries the damped total as its effect, so chips cannot disagree with the rating", () => {
-    expect(buildWarModifier(-2, parts)?.effect).toBe(-2);
+  it("emits one chip per term rather than a single combined total", () => {
+    const ids = buildWarModifiers({ ...live, contribution: 0.7 }).map((m) => m.id);
+    expect(ids).toEqual(["war_exhaustion", "war_effort", "alliance_contribution"]);
   });
 
-  it("renders nothing when the block has retired to zero", () => {
-    expect(buildWarModifier(0, parts)).toBeNull();
+  /**
+   * The reason for the split. A long war going well reads as a positive effort
+   * chip beside a negative exhaustion chip; combined it read "War -0.8" and told
+   * the player their winning war was going badly.
+   */
+  it("keeps a winning front visible beside a tired public", () => {
+    const chips = buildWarModifiers({
+      exhaustion: -2,
+      effort: 1.2,
+      contribution: null,
+      naval: null,
+      phase: "live" as const,
+    });
+    expect(chips.find((m) => m.id === "war_effort")?.effect).toBe(1.2);
+    expect(chips.find((m) => m.id === "war_exhaustion")?.effect).toBe(-2);
+  });
+
+  it("sums to the applied total, since nothing is damped any more", () => {
+    const chips = buildWarModifiers({
+      exhaustion: -2,
+      effort: 1.2,
+      contribution: 0.5,
+      naval: null,
+      phase: "live" as const,
+    });
+    expect(chips.reduce((s, m) => s + m.effect, 0)).toBeCloseTo(-0.3, 5);
   });
 
   /**
    * An unregistered id falls through to a 0.75 factor in marginEffectForModifier,
    * which would push a deep war penalty into every region's profit margins.
+   * Splitting one chip into three multiplies that trap rather than removing it.
    */
-  it("declares no profit margin effect", () => {
-    expect(buildWarModifier(-2, parts)?.marginEffect).toBe(0);
+  it("declares no profit margin effect on any chip", () => {
+    for (const chip of buildWarModifiers({ ...live, contribution: 0.7 })) {
+      expect(chip.marginEffect).toBe(0);
+    }
   });
 
-  it("identifies itself as a war modifier so the UI can explain it correctly", () => {
-    expect(buildWarModifier(-2, parts)?.source).toBe("war");
+  it("identifies every chip as a war modifier", () => {
+    for (const chip of buildWarModifiers({ ...live, contribution: 0.7 })) {
+      expect(chip.source).toBe("war");
+    }
   });
 
-  it("labels itself in player-facing copy without dashes", () => {
-    const label = buildWarModifier(-2, parts)?.label ?? "";
-    expect(label.length).toBeGreaterThan(0);
-    expect(label).not.toMatch(/[–—]/);
+  it("gives every chip a distinct id, so they cannot collide on the React key", () => {
+    const ids = buildWarModifiers({ ...live, contribution: 0.7 }).map((m) => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("labels itself in player facing copy without dashes", () => {
+    for (const chip of buildWarModifiers({ ...live, contribution: 0.7 })) {
+      expect(chip.label).not.toMatch(/[–—]/);
+    }
   });
 
   /**
-   * The block retires at two points a turn, so a country can sit at peace for
-   * up to fourteen turns still carrying it. Labelling that "War" leaves a
-   * nation that is no longer fighting anyone showing a war penalty with
-   * nothing to explain it.
+   * The reported bug: at turn 457 the United States was forty two turns into the
+   * War for Germany with effort at -0.1 and exhaustion at +0.1, and the combined
+   * chip disappeared entirely. Every war term shows while the fighting is live,
+   * zero included.
    */
-  it("says it is winding down once the fighting has stopped", () => {
-    expect(buildWarModifier(-6, [], true)?.label).toBe("War (winding down)");
+  it("shows a war term at zero while the fighting is live", () => {
+    const chips = buildWarModifiers({
+      exhaustion: 0,
+      effort: 0,
+      contribution: null,
+      naval: null,
+      phase: "live" as const,
+    });
+    expect(chips.map((m) => m.id)).toEqual(["war_exhaustion", "war_effort"]);
   });
 
-  it("keeps the plain label while a war is still being fought", () => {
-    expect(buildWarModifier(-6, parts, false)?.label).toBe("War");
+  it("drops the front terms at peace, since there is no front to describe", () => {
+    const chips = buildWarModifiers({
+      exhaustion: -1,
+      effort: 0.5,
+      contribution: 0.5,
+      naval: null,
+      phase: "peace" as const,
+    });
+    expect(chips.map((m) => m.id)).toEqual(["war_exhaustion"]);
   });
 
-  it("keeps the winding down label free of dashes too", () => {
-    expect(buildWarModifier(-6, [], true)?.label).not.toMatch(/[–—]/);
+  it("says exhaustion is recovering once the fighting has stopped", () => {
+    const chips = buildWarModifiers({
+      exhaustion: -1,
+      effort: null,
+      contribution: null,
+      naval: null,
+      phase: "peace" as const,
+    });
+    expect(chips[0]!.label).toBe("War exhaustion (recovering)");
+  });
+
+  it("keeps the plain label while the war is still being fought", () => {
+    const chips = buildWarModifiers({
+      exhaustion: -1,
+      effort: null,
+      contribution: null,
+      naval: null,
+      phase: "live" as const,
+    });
+    expect(chips[0]!.label).toBe("War exhaustion");
+  });
+
+  it("renders nothing at all for a country at peace that has fully healed", () => {
+    expect(
+      buildWarModifiers({
+        exhaustion: 0,
+        effort: null,
+        contribution: null,
+        naval: null,
+        phase: "peace" as const,
+      })
+    ).toEqual([]);
+  });
+
+  it("still shows a residue that has not finished healing", () => {
+    const chips = buildWarModifiers({
+      exhaustion: -0.4,
+      effort: null,
+      contribution: null,
+      naval: null,
+      phase: "peace" as const,
+    });
+    expect(chips).toHaveLength(1);
+    expect(chips[0]!.effect).toBe(-0.4);
+  });
+
+  it("omits alliance contribution when it does not apply", () => {
+    expect(buildWarModifiers(live).map((m) => m.id)).not.toContain("alliance_contribution");
+  });
+
+  /**
+   * The naval term arrived from the naval and air subsystem, which added it to
+   * the old combined block. It survives the split as a fourth chip, with its own
+   * label: the situation it names changes ("Naval losses" once hulls are gone,
+   * "Fleet condition" while they are only damaged).
+   */
+  it("carries the naval term as its own chip, with the label it was given", () => {
+    const chips = buildWarModifiers({ ...live, naval: { label: "Naval losses", effect: -0.7 } });
+    const naval = chips.find((m) => m.id === "naval_losses");
+    expect(naval?.label).toBe("Naval losses");
+    expect(naval?.effect).toBe(-0.7);
+    expect(naval?.marginEffect).toBe(0);
+    expect(naval?.source).toBe("war");
+  });
+
+  it("rounds the naval term to a tenth like every other chip", () => {
+    // navalApprovalEffect is continuous, so it arrives as a long fraction.
+    const chips = buildWarModifiers({
+      ...live,
+      naval: { label: "Fleet condition", effect: -0.4285714285714286 },
+    });
+    expect(chips.find((m) => m.id === "naval_losses")?.effect).toBe(-0.4);
+  });
+
+  /**
+   * Zero here means a healthy fleet, or no fleet at all. Neither is worth a line,
+   * so this is the one war term that stays absent at zero while the war is live.
+   */
+  it("shows no naval chip when there is nothing to report", () => {
+    expect(buildWarModifiers(live).map((m) => m.id)).not.toContain("naval_losses");
+  });
+
+  it("drops the naval term at peace along with the other front terms", () => {
+    const chips = buildWarModifiers({
+      exhaustion: -1,
+      effort: 0.5,
+      contribution: 0.5,
+      naval: { label: "Naval losses", effect: -0.7 },
+      phase: "peace",
+    });
+    expect(chips.map((m) => m.id)).toEqual(["war_exhaustion"]);
+  });
+
+  it("never emits a non finite effect", () => {
+    const chips = buildWarModifiers({
+      exhaustion: Number.NaN,
+      effort: Number.NaN,
+      contribution: Number.NaN,
+      naval: null,
+      phase: "live" as const,
+    });
+    expect(chips).toEqual([]);
+  });
+
+  it("rounds each chip to a tenth so a repeating fraction cannot print in full", () => {
+    const chips = buildWarModifiers({
+      exhaustion: -1 / 3,
+      effort: null,
+      contribution: null,
+      naval: null,
+      phase: "live" as const,
+    });
+    expect(chips[0]!.effect).toBe(-0.3);
   });
 });
 
