@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import type { CountryId } from "@/lib/constants/countries";
 import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
-import { prioritizeModifiers } from "@/lib/utils/approvalModifiers";
+import { netModifierEffect, prioritizeModifiers } from "@/lib/utils/approvalModifiers";
 import { regionApprovalUrl } from "@/lib/urls";
 import { computeRegionalConditionMargin } from "@/lib/states/conditions/marginEffects";
 
@@ -208,7 +208,7 @@ export function RegionalConditionsCard({
 }) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
-  const netApproval = modifiers.reduce((sum, m) => sum + m.effect, 0);
+  const netApproval = netModifierEffect(modifiers);
   const netMargin = computeRegionalConditionMargin(modifiers);
   const href = regionApprovalUrl(countryId, stateId);
   const showScore = approval != null;

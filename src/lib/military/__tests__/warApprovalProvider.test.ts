@@ -55,11 +55,16 @@ beforeEach(() => {
 });
 
 describe("computeWarApproval", () => {
-  it("produces nothing for a country at peace", async () => {
+  const fresh = { exhaustion: undefined, conflictId: null };
+  const chipOf = (r: Awaited<ReturnType<typeof computeWarApproval>>, id: string) =>
+    r.modifiers.find((m) => m.id === id);
+
+  it("produces nothing for a country at peace that has never fought", async () => {
     wire([]);
-    const result = await computeWarApproval(db as unknown as Db, "US", 100, 0);
+    const result = await computeWarApproval(db as unknown as Db, "US", 100, fresh);
     expect(result.modifiers).toEqual([]);
     expect(result.total).toBe(0);
+    expect(result.exhaustion).toBe(0);
   });
 
   /**
@@ -69,7 +74,7 @@ describe("computeWarApproval", () => {
    */
   it("ignores wars that have already been resolved", async () => {
     wire([conflict({ status: "resolved", endTurn: 60 })]);
-    const result = await computeWarApproval(db as unknown as Db, "US", 5000, 0);
+    const result = await computeWarApproval(db as unknown as Db, "US", 5000, fresh);
     expect(result.modifiers).toEqual([]);
   });
 
@@ -77,49 +82,94 @@ describe("computeWarApproval", () => {
     wire([
       conflict({ hostCountry: "US", sideA: { label: "x", countries: ["FR"], kind: "state" } }),
     ]);
-    const result = await computeWarApproval(db as unknown as Db, "US", 100, 0);
+    const result = await computeWarApproval(db as unknown as Db, "US", 100, fresh);
     expect(result.modifiers).toEqual([]);
   });
 
-  it("scores a war and reports a single chip", async () => {
+  it("reports one chip per war term while the fighting is live", async () => {
     wire([conflict({ startTurn: 10 })]);
-    const result = await computeWarApproval(db as unknown as Db, "US", 500, 0);
-    expect(result.modifiers).toHaveLength(1);
-    expect(result.modifiers[0]!.id).toBe("war");
-    expect(result.modifiers[0]!.source).toBe("war");
+    const result = await computeWarApproval(db as unknown as Db, "US", 500, fresh);
+    expect(result.modifiers.map((m) => m.id)).toEqual(["war_exhaustion", "war_effort"]);
+    for (const modifier of result.modifiers) expect(modifier.source).toBe("war");
   });
 
-  it("damps the block rather than applying its full total at once", async () => {
+  /**
+   * The block total used to be damped as a block, which is what forced it into a
+   * single chip: a damped total cannot be attributed back across its parts
+   * without inverting. Exhaustion is now an integrator that cannot move faster
+   * than a point per in-game year, so nothing needs damping and the chips add up.
+   */
+  it("reports a total that is exactly the sum of its chips", async () => {
     wire([conflict({ startTurn: 10 })]);
-    const result = await computeWarApproval(db as unknown as Db, "US", 5000, 0);
-    // Raw would be deep in the floor; one turn moves at most two points.
-    expect(result.total).toBe(-2);
-    expect(result.modifiers[0]!.effect).toBe(-2);
+    const result = await computeWarApproval(db as unknown as Db, "US", 500, fresh);
+    const sum = result.modifiers.reduce((s, m) => s + m.effect, 0);
+    expect(result.total).toBeCloseTo(sum, 5);
   });
 
-  it("retires the block gradually once the war is over", async () => {
-    wire([]);
-    const result = await computeWarApproval(db as unknown as Db, "US", 100, -9);
-    expect(result.total).toBe(-7);
-    expect(result.modifiers[0]!.effect).toBe(-7);
+  it("seeds an existing war from the old curve rather than rallying it to plus one", async () => {
+    wire([conflict({ startTurn: 10 })]);
+    const result = await computeWarApproval(db as unknown as Db, "US", 490, fresh);
+    // 480 turns in: ten in-game years, so nine points of exhaustion spent.
+    expect(chipOf(result, "war_exhaustion")!.effect).toBe(-9);
   });
 
-  it("tells the player the block is winding down while it retires", async () => {
+  it("accrues exhaustion against the war it is already scoring", async () => {
+    wire([conflict({ _id: "war_us_ru_10", startTurn: 10 })]);
+    const result = await computeWarApproval(db as unknown as Db, "US", 500, {
+      exhaustion: -2,
+      conflictId: "war_us_ru_10",
+    });
+    expect(result.exhaustion).toBeLessThan(-2);
+    expect(result.conflictId).toBe("war_us_ru_10");
+  });
+
+  /**
+   * The cooldown, end to end. A country that fought itself to -3 and signs peace
+   * keeps the residue and heals it a point per in-game year, so declaring again
+   * next turn does not hand it a clean slate.
+   */
+  it("keeps healing exhaustion after the war is over", async () => {
     wire([]);
-    const result = await computeWarApproval(db as unknown as Db, "US", 100, -9);
-    expect(result.modifiers[0]!.label).toBe("War (winding down)");
+    const result = await computeWarApproval(db as unknown as Db, "US", 100, {
+      exhaustion: -3,
+      conflictId: "war_us_ru_10",
+    });
+    expect(result.exhaustion).toBeGreaterThan(-3);
+    expect(result.exhaustion).toBeLessThan(0);
+    expect(chipOf(result, "war_exhaustion")!.effect).toBe(-3);
+  });
+
+  it("drops the front terms the moment the fighting stops", async () => {
+    wire([]);
+    const result = await computeWarApproval(db as unknown as Db, "US", 100, {
+      exhaustion: -3,
+      conflictId: "war_us_ru_10",
+    });
+    expect(result.modifiers.map((m) => m.id)).toEqual(["war_exhaustion"]);
+  });
+
+  it("tells the player the exhaustion is recovering once the war is over", async () => {
+    wire([]);
+    const result = await computeWarApproval(db as unknown as Db, "US", 100, {
+      exhaustion: -3,
+      conflictId: "war_us_ru_10",
+    });
+    expect(result.modifiers[0]!.label).toBe("War exhaustion (recovering)");
   });
 
   /**
    * A failed read is not peace. The war may well still be running, so the
-   * held-over total must not tell the player the fighting has stopped.
+   * held-over exhaustion must not tell the player the fighting has stopped.
    */
   it("does not claim a war has ended when the read merely failed", async () => {
     db.collection("conflicts").find.mockImplementation(() => {
       throw new Error("mongo is having a day");
     });
-    const result = await computeWarApproval(db as unknown as Db, "US", 100, -6);
-    expect(result.modifiers[0]!.label).toBe("War");
+    const result = await computeWarApproval(db as unknown as Db, "US", 100, {
+      exhaustion: -6,
+      conflictId: "war_us_ru_10",
+    });
+    expect(result.modifiers[0]!.label).toBe("War exhaustion");
   });
 
   /** The exhaustion clock and the war-effort baseline both run from own entry. */
@@ -130,8 +180,8 @@ describe("computeWarApproval", () => {
       joinTurns: [{ countryId: "UK", turn: 900, control: 100 }],
     });
     wire([late]);
-    const founder = await computeWarApproval(db as unknown as Db, "US", 902, 0);
-    const joiner = await computeWarApproval(db as unknown as Db, "UK", 902, 0);
+    const founder = await computeWarApproval(db as unknown as Db, "US", 902, fresh);
+    const joiner = await computeWarApproval(db as unknown as Db, "UK", 902, fresh);
     expect(joiner.total).toBeGreaterThan(founder.total);
   });
 
@@ -143,11 +193,10 @@ describe("computeWarApproval", () => {
       joinTurns: [{ countryId: "US", turn: 800, control: 100 }],
     });
     wire([recent, old]);
-    const result = await computeWarApproval(db as unknown as Db, "US", 1000, 0);
-    expect(result.modifiers[0]!.breakdown?.some((p) => p.id === "war_exhaustion")).toBe(true);
+    const result = await computeWarApproval(db as unknown as Db, "US", 1000, fresh);
     // Scored against the older war, so exhaustion is deep rather than shallow.
-    const exhaustion = result.modifiers[0]!.breakdown!.find((p) => p.id === "war_exhaustion")!;
-    expect(exhaustion.effect).toBeLessThan(-15);
+    expect(chipOf(result, "war_exhaustion")!.effect).toBeLessThan(-15);
+    expect(result.conflictId).toBe("old");
   });
 
   /**
@@ -161,24 +210,19 @@ describe("computeWarApproval", () => {
     const a = conflict({ _id: "aaa", startTurn: 10, control: 100 });
     const b = conflict({ _id: "bbb", startTurn: 10, control: 0 });
 
-    const effortOf = (r: Awaited<ReturnType<typeof computeWarApproval>>) =>
-      r.modifiers[0]!.breakdown!.find((p) => p.id === "war_effort")!.effect;
-
     wire([a, b]);
-    const first = await computeWarApproval(db as unknown as Db, "US", 500, 0);
+    const first = await computeWarApproval(db as unknown as Db, "US", 500, fresh);
     wire([b, a]);
-    const second = await computeWarApproval(db as unknown as Db, "US", 500, 0);
+    const second = await computeWarApproval(db as unknown as Db, "US", 500, fresh);
 
-    // Compared on the undamped part: the block total is clamped to the damping
-    // step, which would hide a flip behind an identical -2 either way.
-    expect(effortOf(first)).toBe(effortOf(second));
+    expect(chipOf(first, "war_effort")!.effect).toBe(chipOf(second, "war_effort")!.effect);
+    expect(first.conflictId).toBe(second.conflictId);
   });
 
   it("does not score alliance contribution for a country that declared the war", async () => {
     wire([conflict({ startTurn: 10 })]);
-    const result = await computeWarApproval(db as unknown as Db, "US", 500, 0);
-    const ids = result.modifiers[0]!.breakdown!.map((p) => p.id);
-    expect(ids).not.toContain("alliance_contribution");
+    const result = await computeWarApproval(db as unknown as Db, "US", 500, fresh);
+    expect(result.modifiers.map((m) => m.id)).not.toContain("alliance_contribution");
   });
 
   it("scores alliance contribution for a treaty pulled ally", async () => {
@@ -196,20 +240,23 @@ describe("computeWarApproval", () => {
         { countryId: "PL", theaterId: "war_us_ru_10", personnel: 0 },
       ]
     );
-    const result = await computeWarApproval(db as unknown as Db, "PL", 500, 0);
-    const ids = result.modifiers[0]!.breakdown!.map((p) => p.id);
-    expect(ids).toContain("alliance_contribution");
+    const result = await computeWarApproval(db as unknown as Db, "PL", 500, fresh);
+    expect(result.modifiers.map((m) => m.id)).toContain("alliance_contribution");
   });
 
   /**
    * A corrupt conflict document must not put a NaN into governmentApprovals.
-   * NaN survives the clamps and the damping step, and once stored the rating
-   * arithmetic downstream is poisoned until something overwrites it.
+   * NaN survives the clamps, and once stored the rating arithmetic downstream is
+   * poisoned until something overwrites it.
    */
   it("never persists a non-finite total from a corrupt conflict", async () => {
     wire([conflict({ control: Number.NaN, controlStart: Number.NaN })]);
-    const result = await computeWarApproval(db as unknown as Db, "US", 500, -4);
+    const result = await computeWarApproval(db as unknown as Db, "US", 500, {
+      exhaustion: -4,
+      conflictId: "war_us_ru_10",
+    });
     expect(Number.isFinite(result.total)).toBe(true);
+    expect(Number.isFinite(result.exhaustion)).toBe(true);
     for (const modifier of result.modifiers) {
       expect(Number.isFinite(modifier.effect)).toBe(true);
     }
@@ -218,15 +265,19 @@ describe("computeWarApproval", () => {
   /**
    * The provider runs inside runPhase("approvalSnapshot") across every country in
    * one Promise.all, so a throw would kill the snapshot for all of them. Holding
-   * the previous total also stops a transient failure reading as "target zero"
-   * and walking the block down and back up again.
+   * the stored exhaustion also stops a transient failure from healing a war that
+   * is still being fought, or accruing against a front nobody could read.
    */
-  it("holds the previous total when the read fails", async () => {
+  it("holds the stored exhaustion when the read fails", async () => {
     db.collection("conflicts").find.mockImplementation(() => {
       throw new Error("mongo is having a day");
     });
-    const result = await computeWarApproval(db as unknown as Db, "US", 100, -6);
-    expect(result.total).toBe(-6);
+    const result = await computeWarApproval(db as unknown as Db, "US", 100, {
+      exhaustion: -6,
+      conflictId: "war_us_ru_10",
+    });
+    expect(result.exhaustion).toBe(-6);
+    expect(result.conflictId).toBe("war_us_ru_10");
     expect(result.modifiers[0]!.effect).toBe(-6);
   });
 });
