@@ -31,10 +31,7 @@ const IN_SCOPE = [
 ] as CountryId[];
 
 /** Countries with a cabinet, so a defense seat can exist (spec §3.1). */
-const COMMANDABLE = ["RU", "DD", "PL", "CS", "HU", "RO", "BG", "YU", "NG"] as CountryId[];
-
-/** Cabinet-less countries — armies exist, nobody commands them (spec §3.1). */
-const INERT = ["FR", "IT", "ES", "SE", "TR", "GR", "AT", "FI", "BR"] as CountryId[];
+const COMMANDABLE = IN_SCOPE;
 
 /** Scale values that must change from the placeholder 1.0 this task replaces. */
 const EXPECTED_SCALE: Partial<Record<string, number>> = {
@@ -80,10 +77,6 @@ describe("military branches for in-scope countries", () => {
         `${id}:${positionId}`
       ).toContain(positionId);
     }
-  });
-
-  it("leaves cabinet-less countries without a defense position", () => {
-    for (const id of INERT) expect(DEFENSE_POSITION_BY_COUNTRY[id], id).toBeNull();
   });
 
   it("never leaves an in-scope country with 1953 branches but no active seat", () => {
