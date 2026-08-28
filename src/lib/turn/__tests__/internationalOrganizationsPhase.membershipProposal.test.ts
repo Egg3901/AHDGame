@@ -3,7 +3,13 @@ import { ObjectId, type Db } from "mongodb";
 
 const stubDb = () =>
   ({
-    collection: () => ({ findOne: async () => ({ _id: "current", preset: "1953-default" }) }),
+    collection: () => ({
+      findOne: async () => ({
+        _id: "current",
+        preset: "1953-default",
+        nppForeignPolicyMode: "off",
+      }),
+    }),
   }) as unknown as Db;
 
 let roster: string[] = [];

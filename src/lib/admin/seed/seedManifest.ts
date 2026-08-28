@@ -122,6 +122,12 @@ const REFERENCE: CollectionEntry[] = [
       "Dynamic conflicts (the generalized-theater model, replacing the 4 static theaters). Created during play by player declarations / events; the world starts empty. Units/generals/battles run on these via unit.theaterId = a conflict id. Runtime — wiped on reset, rebuilt by play.",
   },
   {
+    name: "peaceOffers",
+    category: "runtime",
+    notes:
+      "Pending and resolved country peace proposals for dynamic conflicts. Runtime data is wiped on reset and rebuilt by play.",
+  },
+  {
     name: "nationalManpower",
     category: "runtime",
     seededBy: "runCoreSeed",

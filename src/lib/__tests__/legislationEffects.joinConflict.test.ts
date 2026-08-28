@@ -6,10 +6,14 @@ import { billRequiresExecutiveAction } from "@/lib/internationalOrganizations/wi
 import { billHasDeclareWar } from "@/lib/congress/billPassRule";
 
 const joinSide = vi.fn().mockResolvedValue(undefined);
+const prepareAutonomousWarEntry = vi.fn();
 let conflict: ConflictDoc | null = null;
 
 vi.mock("@/lib/military/joinSide", () => ({
   joinSide: (...args: unknown[]) => joinSide(...args),
+}));
+vi.mock("@/lib/nppAutonomy/autonomousWarCommands", () => ({
+  prepareAutonomousWarEntry: (...args: unknown[]) => prepareAutonomousWarEntry(...args),
 }));
 vi.mock("@/lib/db/collections/conflicts", () => ({ getConflict: vi.fn(async () => conflict) }));
 vi.mock("@/lib/turn/currentTurn", () => ({ getCurrentTurn: async () => 200 }));
@@ -57,7 +61,30 @@ function stubDb() {
 describe("join_conflict enactment effect", () => {
   beforeEach(() => {
     joinSide.mockClear();
+    prepareAutonomousWarEntry.mockReset().mockResolvedValue({
+      ready: true,
+      deployedUnits: 1,
+      reason: "Ready.",
+    });
     conflict = KOREA;
+  });
+
+  it("requires a fresh force-readiness check for an NPP-sponsored entry law", async () => {
+    prepareAutonomousWarEntry.mockResolvedValue({
+      ready: false,
+      deployedUnits: 0,
+      reason: "No ready force can deploy.",
+    });
+
+    await applyLegislationEffect(stubDb(), bill({ nppSponsored: true }));
+
+    expect(prepareAutonomousWarEntry).toHaveBeenCalledWith(
+      expect.anything(),
+      "US",
+      expect.objectContaining({ _id: "korea-1953" }),
+      200
+    );
+    expect(joinSide).not.toHaveBeenCalled();
   });
 
   it("enrols the country on the resolution's side", async () => {

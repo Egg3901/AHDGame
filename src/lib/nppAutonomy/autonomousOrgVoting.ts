@@ -36,6 +36,7 @@ import {
 import { getMembers } from "@/lib/internationalOrganizations/service";
 import { upsertPendingOrganizationVote } from "@/lib/internationalOrganizations/voteWrite";
 import { isNppAutonomyActive } from "./featureFlag";
+import { foreignPolicyModeFrom } from "./foreignPolicyRollout";
 
 /** Per-turn caches so we don't re-query autonomy state, members, or voter
  *  identity for the same country/org across multiple pending items. */
@@ -116,7 +117,7 @@ export async function castAutonomousOrgVotes(db: Db, currentTurn: number): Promi
   const rollout = await db
     .collection<{ _id: string; nppForeignPolicyMode?: NppForeignPolicyMode }>("gameState")
     .findOne({ _id: "current" }, { projection: { nppForeignPolicyMode: 1 } });
-  if (rollout?.nppForeignPolicyMode === "active") {
+  if (foreignPolicyModeFrom(rollout?.nppForeignPolicyMode) === "active") {
     // The opinion-driven planner owns autonomous ballots in active mode. Keep
     // the legacy cooperative voter only as the shadow-mode comparison baseline.
     return 0;

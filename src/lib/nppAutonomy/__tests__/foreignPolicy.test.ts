@@ -22,6 +22,7 @@ const headId = new ObjectId();
 
 interface PlannerFixture {
   mode?: "off" | "shadow" | "active";
+  stage?: "votes" | "proposals" | "trade" | "support" | "war";
   alignments?: Array<Record<string, unknown>>;
   spheres?: Array<Record<string, unknown>>;
   memberships?: Array<Record<string, unknown>>;
@@ -40,6 +41,8 @@ interface RecordedDecision {
   alternatives: ForeignPolicyChoice[];
   acted: boolean;
   mode: "shadow" | "active";
+  stage: "votes" | "proposals" | "trade" | "support" | "war";
+  executionStatus: "planned" | "claimed" | "executed" | "rejected" | "no_action";
 }
 
 function setFindRows(db: MockDb, collectionName: string, rows: Array<Record<string, unknown>>) {
@@ -51,6 +54,7 @@ function setup(fixture: PlannerFixture = {}): MockDb {
   db.collection("gameState").findOne.mockResolvedValue({
     _id: "current",
     nppForeignPolicyMode: fixture.mode ?? "shadow",
+    nppForeignPolicyStage: fixture.stage,
   });
   db.collection("governmentFormations").findOne.mockResolvedValue({
     _id: "FR",
@@ -98,6 +102,12 @@ function setup(fixture: PlannerFixture = {}): MockDb {
 function recordedDecision(db: MockDb): RecordedDecision {
   const updateOne = db.collection("nppForeignPolicyDecisions").updateOne;
   const update = updateOne.mock.calls.at(-1)?.[1] as { $setOnInsert: RecordedDecision };
+  return update.$setOnInsert;
+}
+
+function firstRecordedDecision(db: MockDb): RecordedDecision {
+  const updateOne = db.collection("nppForeignPolicyDecisions").updateOne;
+  const update = updateOne.mock.calls[0]?.[1] as { $setOnInsert: RecordedDecision };
   return update.$setOnInsert;
 }
 
@@ -227,14 +237,16 @@ describe("processAutonomousForeignPolicy", () => {
       },
     });
 
-    const noTrade = await processAutonomousForeignPolicy(noTradeDb as unknown as Db, "FR", 12, now);
-    const withTrade = await processAutonomousForeignPolicy(tradeDb as unknown as Db, "FR", 12, now);
+    await processAutonomousForeignPolicy(noTradeDb as unknown as Db, "FR", 12, now);
+    await processAutonomousForeignPolicy(tradeDb as unknown as Db, "FR", 12, now);
 
-    expect(noTrade.choice?.type).toBe("impose_embargo");
-    expect(withTrade.choice?.type).toBe("raise_tariff");
+    const noTradeEmbargo = recordedDecision(noTradeDb).alternatives.find(
+      (choice) => choice.type === "impose_embargo"
+    );
     const embargo = recordedDecision(tradeDb).alternatives.find(
       (choice) => choice.type === "impose_embargo"
     );
+    expect(noTradeEmbargo?.score).toBeGreaterThan(embargo?.score ?? 0);
     expect(embargo?.reasons.join(" ")).toContain("trade dependence applies a 15 point brake");
   });
 
@@ -334,7 +346,16 @@ describe("processAutonomousForeignPolicy", () => {
       alignments: [alignment("FR", 90, 0), alignment("US", 100, 0), alignment("RU", 0, 100)],
       memberships: [membership("FR"), membership("US")],
       conflicts: [conflict],
-      militaryUnits: [{ _id: new ObjectId(), countryId: "FR", readiness: 72, personnel: 10_000 }],
+      militaryUnits: [
+        {
+          _id: new ObjectId(),
+          countryId: "FR",
+          readiness: 72,
+          personnel: 10_000,
+          theaterId: "reserve",
+          basePower: 100,
+        },
+      ],
     };
     const readyDb = setup({ ...common, approvalRating: 60 });
     const opposedDb = setup({ ...common, approvalRating: 30 });
@@ -350,6 +371,62 @@ describe("processAutonomousForeignPolicy", () => {
     expect(
       recordedDecision(opposedDb).alternatives.some((choice) => choice.type === "join_war")
     ).toBe(false);
+  });
+
+  it("offers real operations or peace after an autonomous country enters a war", async () => {
+    const conflict = {
+      _id: "korea",
+      name: "Korean War",
+      status: "active",
+      sideA: { label: "UN Coalition", countries: ["FR", "US"] },
+      sideB: { label: "Communist Coalition", countries: ["RU"] },
+    };
+    const deployedUnit = {
+      _id: new ObjectId(),
+      countryId: "FR",
+      readiness: 70,
+      personnel: 10_000,
+      theaterId: "korea",
+      basePower: 100,
+    };
+    const fightingDb = setup({
+      conflicts: [conflict],
+      militaryUnits: [deployedUnit],
+      approvalRating: 60,
+    });
+    const exhaustedDb = setup({
+      conflicts: [conflict],
+      militaryUnits: [{ ...deployedUnit, readiness: 25 }],
+      approvalRating: 25,
+    });
+
+    const _fighting = await processAutonomousForeignPolicy(
+      fightingDb as unknown as Db,
+      "FR",
+      42,
+      now
+    );
+    const _exhausted = await processAutonomousForeignPolicy(
+      exhaustedDb as unknown as Db,
+      "FR",
+      42,
+      now
+    );
+
+    expect(recordedDecision(fightingDb).alternatives).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "conduct_war", conflictId: "korea" }),
+      ])
+    );
+    expect(recordedDecision(exhaustedDb).alternatives).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "seek_peace",
+          conflictId: "korea",
+          targetCountryId: "RU",
+        }),
+      ])
+    );
   });
 
   it("is idempotent for the same country and turn", async () => {
@@ -383,7 +460,11 @@ describe("processAutonomousForeignPolicy", () => {
     const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 15, now);
 
     expect(result).toMatchObject({ mode: "active", acted: false });
-    expect(recordedDecision(db)).toMatchObject({ mode: "active", acted: false });
+    expect(recordedDecision(db)).toMatchObject({
+      mode: "active",
+      acted: false,
+      executionStatus: "no_action",
+    });
     expect(executionMock).not.toHaveBeenCalled();
     expectNoGameplayWrites(db);
   });
@@ -418,6 +499,28 @@ describe("processAutonomousForeignPolicy", () => {
       acted: true,
       executionNote: "Executed test choice.",
     });
+  });
+
+  it("keeps active trade actions behind the trade rollout stage", async () => {
+    const common = {
+      mode: "active" as const,
+      alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
+    };
+    const votesDb = setup({ ...common, stage: "votes" });
+    const tradeDb = setup({ ...common, stage: "trade" });
+
+    await processAutonomousForeignPolicy(votesDb as unknown as Db, "FR", 18, now);
+    const tradeResult = await processAutonomousForeignPolicy(
+      tradeDb as unknown as Db,
+      "FR",
+      18,
+      now
+    );
+
+    expect(recordedDecision(votesDb).selected).toBeNull();
+    expect(recordedDecision(votesDb)).toMatchObject({ stage: "votes" });
+    expect(tradeResult.choice).toMatchObject({ type: "raise_tariff" });
+    expect(firstRecordedDecision(tradeDb)).toMatchObject({ stage: "trade" });
   });
 
   it("does not execute an active decision twice after a same-turn restart", async () => {

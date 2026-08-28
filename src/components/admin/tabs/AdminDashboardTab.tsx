@@ -6,6 +6,7 @@ import { TurnControls } from "@/components/TurnControls";
 import { TasksWidget } from "@/components/admin/tasks/TasksWidget";
 import { AdminRegistrationPanel } from "@/components/admin/players/AdminRegistrationPanel";
 import { FeatureGatesPanel } from "@/components/admin/FeatureGatesPanel";
+import { ForeignPolicyLedgerPanel } from "@/components/admin/ForeignPolicyLedgerPanel";
 import { ReferralLeaderboardPanel } from "@/components/admin/players/ReferralLeaderboardPanel";
 import { KillSwitchBoard } from "@/components/admin/dashboard/KillSwitchBoard";
 import { PendingQueuesCard } from "@/components/admin/dashboard/PendingQueuesCard";
@@ -105,6 +106,11 @@ export function AdminDashboardTab({ counts, onNavigate }: AdminDashboardTabProps
         <section>
           <SectionLabel>Feature gates</SectionLabel>
           <FeatureGatesPanel />
+        </section>
+
+        <section>
+          <SectionLabel>Foreign policy operations</SectionLabel>
+          <ForeignPolicyLedgerPanel />
         </section>
 
         {/* Quick access */}

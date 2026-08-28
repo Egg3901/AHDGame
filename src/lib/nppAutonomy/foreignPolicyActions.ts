@@ -17,6 +17,7 @@ import { upsertPendingOrganizationVote } from "@/lib/internationalOrganizations/
 import { imposeEmbargo, liftEmbargo } from "@/lib/trade/commands/embargoCommands";
 import { TRADE_EMBARGO_MAX_DURATION_TURNS } from "@/lib/trade/constants";
 import type { ForeignPolicyChoice } from "./foreignPolicy";
+import { executeAutonomousWarChoice } from "./autonomousWarCommands";
 import { proposeNppForeignPolicyBill } from "./proposeNppForeignPolicyBill";
 
 export interface ForeignPolicyExecutionResult {
@@ -205,6 +206,9 @@ export async function executeForeignPolicyChoice(
   try {
     if (choice.type === "vote_org_yes" || choice.type === "vote_org_no") {
       return executeVote(db, countryId, head, choice, currentTurn, now);
+    }
+    if (choice.type === "conduct_war" || choice.type === "seek_peace") {
+      return executeAutonomousWarChoice(db, countryId, head, choice, currentTurn);
     }
     if (
       choice.type === "propose_fta" ||
