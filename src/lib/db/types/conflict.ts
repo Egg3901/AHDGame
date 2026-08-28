@@ -94,8 +94,24 @@ export interface ConflictDoc {
    * check left — validation lives at the admin creation route, the only writer.
    */
   hostCountry: WorldEntityId;
-  /** Derived from the host country (map / regionThreat). */
+  /** Derived from the host country (map / regionThreat). The war's primary region. */
   region: RegionCode;
+  /**
+   * Additional regions this war has spread into, beyond `region`.
+   *
+   * A war does not stay in one country. As belligerents join, fronts extend into the
+   * ground next door: a Central European war reaches the North Atlantic when the US
+   * convoys start, and the Mediterranean when Italy joins.
+   *
+   * INVARIANT: every entry must be adjacent to `region` or to another entry, so the
+   * theatre is always one connected piece of map. A war cannot be simultaneously in
+   * Western Europe and the South Pacific with nothing in between; that is two wars.
+   * Enforced by `canExtendConflictTo`.
+   *
+   * Optional, so every conflict created before this reads as a single-region war and
+   * needs no migration.
+   */
+  extendedRegions?: RegionCode[];
   type: ConflictType;
   sideA: ConflictSide;
   sideB: ConflictSide;

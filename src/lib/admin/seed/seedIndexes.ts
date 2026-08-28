@@ -22,6 +22,7 @@ import { seedAltDetectionIndexes } from "./indexes/altDetection";
 import { seedAuditAnomaliesIndexes } from "./indexes/auditAnomalies";
 import { seedWatchlistIndexes } from "./indexes/watchlist";
 import { seedConflictIndexes } from "./indexes/conflicts";
+import { seedNavairIndexes } from "./indexes/navair";
 import { seedBankingIndexes } from "./indexes/banking";
 import { seedSettlementIndexes } from "./indexes/settlement";
 import { INDEX_TARGETS, type IndexTargetId, type IndexTargetMeta } from "./indexTargets";
@@ -70,6 +71,7 @@ const INDEX_RUNNERS: Record<IndexTargetId, IndexModule> = {
   indexesAuditAnomalies: seedAuditAnomaliesIndexes,
   indexesWatchlist: seedWatchlistIndexes,
   indexesConflict: seedConflictIndexes,
+  indexesNavair: seedNavairIndexes,
   indexesBanking: seedBankingIndexes,
   indexesSettlement: seedSettlementIndexes,
 };
