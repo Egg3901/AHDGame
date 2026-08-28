@@ -153,6 +153,11 @@ export const CABINET_ROUTE_SCOPES: Record<string, CabinetLeverScope | "operation
   commands: "operational",
   "battle/declare": "operational",
   "battle/auto-join": "operational",
+  // Moving a fleet and setting what it is doing is routine command, and plainly less
+  // consequential than declaring an offensive, which is already operational above. It
+  // commits no money, starts no war, and any order it sets can be changed next turn by
+  // whoever holds the seat properly.
+  "navair/mission": "operational",
   manpower: "operational",
   order: "operational",
   banner: "operational",
