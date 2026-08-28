@@ -178,4 +178,112 @@ describe("GET /api/admin/health/warnings", () => {
       }),
     ]);
   });
+
+  // Phase-budget pressure. runPhase kills a phase at PHASE_TIMEOUT_MS (240s),
+  // failing the phase and aborting the turn — so a phase creeping toward that
+  // ceiling is an outage with a lead time. A slow phase that still SUCCEEDS
+  // raises no warning, skip or error anywhere else, so nothing surfaced it.
+  describe("phaseBudget warnings", () => {
+    function seedTurnLog(phaseStatuses: Record<string, unknown>) {
+      db.collection("turnLogs");
+      db.collectionMocks.turnLogs.find.mockReturnValue({
+        sort: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue([
+          {
+            turn: 460,
+            realTime: new Date("2026-04-29T05:00:00.000Z"),
+            phaseStatuses,
+          },
+        ]),
+      });
+    }
+
+    /** A phase that ran for `ms`, expressed as the telemetry the turn writes. */
+    const ranFor = (ms: number) => ({
+      status: "completed",
+      startedAt: new Date("2026-04-29T05:00:00.000Z"),
+      completedAt: new Date(new Date("2026-04-29T05:00:00.000Z").getTime() + ms),
+    });
+
+    it("flags a phase past 75% of the timeout as an error", async () => {
+      seedTurnLog({ corporationTurn: ranFor(200_000) }); // 83% of 240s
+
+      const { GET } = await import("./route");
+      const res = await GET(
+        new Request("http://localhost/api/admin/health/warnings?source=phaseBudget")
+      );
+      const json = await res.json();
+
+      expect(json.warnings).toHaveLength(1);
+      expect(json.warnings[0]).toMatchObject({
+        turn: 460,
+        phase: "corporationTurn",
+        severity: "error",
+        source: "phaseBudget",
+      });
+      expect(json.warnings[0].message).toContain("83%");
+    });
+
+    it("flags a phase between 50% and 75% as a warning", async () => {
+      seedTurnLog({ corporationTurn: ranFor(132_000) }); // 55% of 240s
+
+      const { GET } = await import("./route");
+      const res = await GET(
+        new Request("http://localhost/api/admin/health/warnings?source=phaseBudget")
+      );
+      const json = await res.json();
+
+      expect(json.warnings).toHaveLength(1);
+      expect(json.warnings[0]).toMatchObject({ severity: "warning", source: "phaseBudget" });
+    });
+
+    it("stays quiet for a phase comfortably inside budget", async () => {
+      // 26s — the observed healthy corporationTurn median. Must not cry wolf.
+      seedTurnLog({ corporationTurn: ranFor(26_000) });
+
+      const { GET } = await import("./route");
+      const res = await GET(
+        new Request("http://localhost/api/admin/health/warnings?source=phaseBudget")
+      );
+      const json = await res.json();
+
+      expect(json.warnings).toHaveLength(0);
+    });
+
+    it("reports only the worst phase per turn, not every slow one", async () => {
+      seedTurnLog({
+        corporationTurn: ranFor(200_000),
+        indexFunds: ranFor(130_000),
+        bondTurn: ranFor(125_000),
+      });
+
+      const { GET } = await import("./route");
+      const res = await GET(
+        new Request("http://localhost/api/admin/health/warnings?source=phaseBudget")
+      );
+      const json = await res.json();
+
+      expect(json.warnings).toHaveLength(1);
+      expect(json.warnings[0].phase).toBe("corporationTurn");
+    });
+
+    it("ignores telemetry with no completedAt (phase still running)", async () => {
+      seedTurnLog({
+        corporationTurn: {
+          status: "running",
+          startedAt: new Date("2026-04-29T05:00:00.000Z"),
+          completedAt: null,
+        },
+      });
+
+      const { GET } = await import("./route");
+      const res = await GET(
+        new Request("http://localhost/api/admin/health/warnings?source=phaseBudget")
+      );
+      const json = await res.json();
+
+      expect(json.warnings).toHaveLength(0);
+    });
+  });
 });
