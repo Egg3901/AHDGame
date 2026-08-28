@@ -99,6 +99,7 @@ import {
   CAPACITY_BUILD_TURNS,
   computeBuildCost,
   MAX_BUILD_UNITS_PER_ORDER,
+  revenuePerCapacityUnit,
 } from "@/lib/constants/capacityEconomy";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
@@ -228,6 +229,16 @@ export const NPP_FOUNDING_DEPLOY_FRACTION = 0.6;
  * facility below.
  */
 export const NPP_FOUNDING_HEADROOM_SHARE = 0.5;
+
+/**
+ * Extraction founds against DEPOSITS, not local demand, so it has no
+ * demand-headroom cap. This bounds how big a single new-mine founding may be, in
+ * facility quanta, so a cash-rich miner seeds a real mine without dumping its
+ * whole treasury into one unproven deposit. The state deposit haircut caps
+ * actual output, and the reinvestment growth leg deepens the mine over turns if
+ * it sells. See the extraction branch of the founding sizing.
+ */
+const NPP_EXTRACTION_FOUNDING_MAX_FACILITIES = 8;
 
 // Archetypes may scale the rails but never remove the minimum buffer.
 const SAFE_CASH_FLOOR_MIN = 125_000; // an aggressive floor still leaves a buffer
@@ -1617,17 +1628,21 @@ export function makeNppCorpDecision(
       );
       const affordableUnits =
         perUnitFoundingLocal > 0 ? Math.floor(deployBudgetLocal / perUnitFoundingLocal) : 0;
+      const isExtraction = expansion.sectorType === "extraction";
+      // Extraction founds against a DEPOSIT, not local demand: its output is a
+      // traded commodity sold wherever the commodity is short, so it has no
+      // demand-headroom cap (headroomUnits is 0 for every extraction bucket by
+      // construction). Cash and a per-mine facility ceiling bound it instead;
+      // the state deposit haircut caps real output and the reinvestment growth
+      // leg deepens it over turns. Demand-side sectors keep the headroom cap.
+      const sizeCap = isExtraction
+        ? starterUnits * NPP_EXTRACTION_FOUNDING_MAX_FACILITIES
+        : headroomUnits * NPP_FOUNDING_HEADROOM_SHARE;
       const buildUnits =
         starterUnits > 0
           ? Math.max(
               starterUnits,
-              Math.floor(
-                Math.min(
-                  headroomUnits * NPP_FOUNDING_HEADROOM_SHARE,
-                  affordableUnits,
-                  MAX_BUILD_UNITS_PER_ORDER
-                )
-              )
+              Math.floor(Math.min(sizeCap, affordableUnits, MAX_BUILD_UNITS_PER_ORDER))
             )
           : 0;
       const buildAnchor = perUnitFoundingAnchor * buildUnits;
@@ -1644,20 +1659,26 @@ export function makeNppCorpDecision(
       // Affordability against the REAL cost. The generic surplus gate above is
       // a flat nominal band and cannot know what a build in this sector costs;
       // without this an NPP would commit to a plant it cannot pay for and drive
-      // itself under the cash floor. Also require the market have room for the
-      // facility — do not found into a zero-headroom bucket.
+      // itself under the cash floor. Demand-side sectors also require the market
+      // have room for the facility; extraction is deposit-gated (candidacy)
+      // rather than headroom-gated, so it skips that check.
       if (
         buildUnits > 0 &&
-        headroomUnits >= buildUnits &&
+        (isExtraction || headroomUnits >= buildUnits) &&
         entryCapital - foundingCost >= effectiveCashFloor
       ) {
         const buildTurns = Math.max(
           1,
           Math.ceil(CAPACITY_BUILD_TURNS(expansion.sectorType as CorporationType) / 2)
         );
-        // Legacy nameplate proportional to the built share of the pool;
-        // plants restates revenue from capacity on the next tick.
+        // Legacy nameplate: demand-side sectors take the built share of the
+        // pool; extraction has no pool, so it prices the nameplate off the units
+        // built (unit x revenue-per-unit), as the player founding path does.
         const nameplateShare = headroomUnits > 0 ? Math.min(1, buildUnits / headroomUnits) : 0;
+        const nameplateAnchor = isExtraction
+          ? buildUnits *
+            revenuePerCapacityUnit(expansion.sectorType as CorporationType, plants.eraUnitScale)
+          : expansion.revenue * nameplateShare;
         newSectors.push({
           stateId: expansion.stateId,
           countryId: expansion.countryId,
@@ -1669,7 +1690,7 @@ export function makeNppCorpDecision(
           // so an unconverted copy made the sector's stored nameplate 1/fx of
           // the value the very next turn would restate it to — a one-turn ×fx
           // step change in every non-anchor currency.
-          revenue: Math.round(toCorpLocal(expansion.revenue * nameplateShare)),
+          revenue: Math.round(toCorpLocal(nameplateAnchor)),
           profitMargin: 35,
           starterOrder: {
             unitsOrdered: buildUnits,

@@ -254,16 +254,23 @@ export function findBestUnownedSector(
   // Filter to unoccupied buckets with a positive pool, excluding buckets a
   // National Corporation controls (don't expand into a nationalized sector) and
   // extraction buckets whose state has zero unclaimed deposit capacity.
+  // "Market size" for ranking and candidacy. For a demand-side sector it is the
+  // unmet local-demand headroom. For EXTRACTION it is the state's unclaimed
+  // DEPOSIT instead: a mine's output is a traded commodity, so its founding
+  // value is deposit richness x how short that commodity is, NOT local
+  // consumption — which is ~0 in an export-oriented deposit and would otherwise
+  // exclude every rich deposit from candidacy (all extraction pools carry zero
+  // demand headroom). The deposit signal is `extractionHeadroomOf`.
+  const marketSizeOf = (us: UnownedSector) =>
+    us.sectorType === "extraction"
+      ? (signals?.extractionHeadroomOf?.(us.stateId) ?? 0)
+      : sizeOf(us);
+
   const candidates = countryUnowned.filter(
     (us) =>
       !existingBuckets.has(bucketKey(us.stateId, us.sectorType)) &&
-      sizeOf(us) > 0 &&
-      !stateControlled.has(bucketKey(us.stateId, us.sectorType)) &&
-      !(
-        us.sectorType === "extraction" &&
-        signals?.extractionHeadroomOf !== undefined &&
-        signals.extractionHeadroomOf(us.stateId) <= 0
-      )
+      marketSizeOf(us) > 0 &&
+      !stateControlled.has(bucketKey(us.stateId, us.sectorType))
   );
 
   if (candidates.length === 0) return null;
@@ -283,7 +290,10 @@ export function findBestUnownedSector(
       ? rankedCandidates.filter(
           (candidate) =>
             !activeMarketBuckets.has(bucketKey(candidate.stateId, candidate.sectorType)) &&
-            (!plantsEnabled ||
+            // Extraction is deposit-gated (candidacy above), not unit-sized, so
+            // it bypasses the demand-headroom facility-size floor.
+            (candidate.sectorType === "extraction" ||
+              !plantsEnabled ||
               sizeOf(candidate) >= foundingStarterUnits(candidate.sectorType as CorporationType))
         )
       : [];
@@ -298,10 +308,9 @@ export function findBestUnownedSector(
       return stateRatio ?? priceRatioOf(commodity, cid);
     });
   const score = (c: UnownedSector) => {
-    let s = sizeOf(c) * shortageOf(c);
-    if (c.sectorType === "extraction" && signals?.extractionHeadroomOf) {
-      s *= signals.extractionHeadroomOf(c.stateId);
-    }
+    // Extraction ranks on deposit x shortage (via marketSizeOf); demand-side
+    // sectors on demand-headroom x shortage.
+    let s = marketSizeOf(c) * shortageOf(c);
     if (c.stateId === hqState) s *= HQ_STATE_SCORE_BONUS;
     return s;
   };
@@ -318,10 +327,7 @@ export function findBestUnownedSector(
     );
     if (!commodity) return 0;
     const ratio = candidatePriceRatioOf(c)(commodity, c.countryId) ?? 0;
-    let result = sizeOf(c) * ratio;
-    if (c.sectorType === "extraction" && signals?.extractionHeadroomOf) {
-      result *= signals.extractionHeadroomOf(c.stateId);
-    }
+    let result = marketSizeOf(c) * ratio;
     if (c.stateId === hqState) result *= HQ_STATE_SCORE_BONUS;
     return result;
   };
