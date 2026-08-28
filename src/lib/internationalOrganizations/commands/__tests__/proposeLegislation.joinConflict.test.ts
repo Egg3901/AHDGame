@@ -80,6 +80,23 @@ describe("tabling a join_conflict resolution", () => {
     expect(insertOne.mock.calls[0]![0]).toMatchObject({ type: "join_conflict", status: "pending" });
   });
 
+  it("activates collective defense immediately on the host side", async () => {
+    conflict = {
+      ...CONFLICT,
+      hostCountry: "KP",
+    } as ConflictDoc;
+
+    const res = await propose({ type: "join_conflict", theaterId: "korea-1953", side: "B" });
+
+    expect(res.ok).toBe(true);
+    expect(insertOne.mock.calls[0]![0]).toMatchObject({
+      type: "join_conflict",
+      status: "active",
+      enactedOnTurn: 500,
+      closesOnTurn: 500,
+    });
+  });
+
   it("is refused at a security-category org", async () => {
     // loadOrganizationDefWithPowers resolves the world's EFFECTIVE category, so a
     // security alliance in a post-Cold-War preset is refused by canTableResolutionType

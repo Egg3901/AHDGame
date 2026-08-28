@@ -49,7 +49,6 @@ export {
 import {
   advanceStrategy,
   strategyLevers,
-  type NppStrategyState,
   type StrategySituation,
 } from "@/lib/turn/npp/corpStrategy";
 import { chooseNppStrategyRetool } from "@/lib/turn/npp/strategyRetooling";
@@ -71,7 +70,6 @@ import {
   deriveCeoArchetype,
   ceoArchetypeModifiers,
   type CeoArchetype,
-  type CeoArchetypeModifiers,
 } from "@/lib/turn/ceoArchetype";
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
@@ -132,6 +130,14 @@ import {
   setNppMarketEntryReason,
   type NppMarketEntryDiagnostic,
 } from "@/lib/turn/npp/entryDiagnostics";
+import type {
+  NppCorpDecision,
+  NppCorpDecisionContext,
+  NppPlantsContext,
+  NppSectorUpdateDoc,
+} from "@/lib/turn/npp/corpDecisionTypes";
+
+export type { NppPlantsContext } from "@/lib/turn/npp/corpDecisionTypes";
 
 export { computeExtractionHeadroomByState } from "@/lib/turn/nppExtractionOpportunity";
 
@@ -246,139 +252,6 @@ const NPP_WAGE_STEP = 0.02;
 const NPP_WAGE_BASELINE = 1;
 const NPP_WAGE_SHORTAGE_TARGET = 1.08;
 const NPP_WAGE_GLUT_TARGET = 0.95;
-
-interface NppCorpDecisionContext {
-  corp: Corporation;
-  sectors: CorporateSector[];
-  turn: number;
-  now: Date;
-  /** Behavior modifiers derived from the CEO NPP's personality. */
-  modifiers: CeoArchetypeModifiers;
-  /** Local units per anchor unit for the corporation's liquid currency. */
-  fxRate?: number;
-  /**
-   * Live local-per-₳ rates used to restate each sector's host-currency
-   * revenue into the corporation's home currency before combining sectors.
-   */
-  fxByCurrency?: ReadonlyMap<string, number>;
-  /**
-   * When true (labourSystemMode at least wages), section 2d writes wageLevel.
-   * Absent/false leaves wages untouched so pre-labour worlds stay byte-identical.
-   */
-  labourWagesEnabled?: boolean;
-  /**
-   * World year + tech-tree flag for section 2e's strategy availability gating
-   * (mirrors the player setSectorStrategy path). Absent → gating treats the
-   * world as tech-disabled, exactly like getStrategyAvailability does.
-   */
-  currentYear?: number;
-  techTreesEnabled?: boolean;
-  /** Net per-turn debt service in anchor currency; positive is a drag. */
-  debtServiceAnchor?: number;
-  /** Persisted strategy memory; absent adopts the legacy expand behavior. */
-  strategy?: NppStrategyState;
-  /** True on this corporation's cohort-stagger slot. */
-  strategyEligible?: boolean;
-  /** True on this corporation's shared market-entry cohort slot. */
-  ordinaryEntryEligible?: boolean;
-  /** Explicit false disables strategy memory and pins legacy expand levers. */
-  strategyLoopEnabled?: boolean;
-  /** True when shortage financing may use the shared market-entry cohort slot. */
-  shortageEntryEligible?: boolean;
-  /** Actual local-currency corporate-bond proceeds reserved for shortage entry. */
-  shortageEntryCreditLocal?: number;
-}
-
-/**
- * A sector write this module emits. `$set` is the common case (growth target,
- * production policy); capacity reinvestment additionally uses `$push`/`$inc`
- * so its build order composes with `sectorTurn`'s `$pull` of landed orders
- * instead of clobbering it — see the C4 note there and at the push site below.
- */
-type NppSectorUpdateDoc = {
-  $set: Record<string, unknown>;
-  $push?: Record<string, unknown>;
-  $inc?: Record<string, number>;
-};
-
-interface NppCorpDecision {
-  corpId: ObjectId;
-  updates: Record<string, unknown>;
-  sectorUpdates: Array<{
-    filter: { _id: ObjectId };
-    update: NppSectorUpdateDoc;
-  }>;
-  newSectors?: Array<{
-    stateId: string;
-    countryId: string;
-    sectorType: CorporationType;
-    revenue: number;
-    profitMargin: number;
-    /** Optional focused recipe for a diagnosed fragile commodity. */
-    strategyId?: string;
-    /**
-     * Plants only. The founding build the corp just paid for: the sector is
-     * created with `capitalStock` 0 and this order queued, exactly as
-     * `expandSector` founds a player sector.
-     */
-    starterOrder?: SectorBuildOrder;
-  }>;
-  divestedSectorIds?: ObjectId[];
-  /**
-   * Plants only. Headroom (in capacity units) this decision consumed from the
-   * unowned pool it expanded into, for the caller to draw down. Founding a
-   * sector CONSUMES market headroom; before this, NPP expansion minted capacity
-   * while leaving the pool untouched, double-counting the same demand.
-   */
-  unownedDraws?: Array<{
-    stateId: string;
-    sectorType: CorporationType;
-    units: number;
-    /** Needed by the drawdown's upsert scaffolding when the pool row is absent. */
-    countryId: string;
-  }>;
-  /**
-   * Plants only. Capacity builds this corp placed into EXISTING sectors this
-   * turn. The queue/CIP writes ride the normal `sectorUpdates` channel; this
-   * list exists so the caller can emit the matching capex ledger legs (the cash
-   * → CIP reclass), which need DB access.
-   */
-  /** v5 strategy memory to persist for this corp. */
-  strategy?: NppStrategyState;
-  reinvestments?: Array<{
-    sectorId: ObjectId;
-    sectorType: CorporationType;
-    units: number;
-    costAnchor: number;
-    costLocal: number;
-    onlineTurn: number;
-  }>;
-  /** Request for the processor to fund through the existing corporate bond path. */
-  shortageCreditRequest?: {
-    amountLocal: number;
-    sectorType: CorporationType;
-  };
-  entryDiagnostic?: NppMarketEntryDiagnostic;
-}
-
-/**
- * World facts an NPP needs to price a founding build the same way a player's
- * `expandSector` does. Absent (or `enabled: false`) ⇒ the legacy flat-cost path,
- * byte-identical to pre-plants behaviour.
- */
-export interface NppPlantsContext {
-  enabled: boolean;
-  /** World year — drives the capacity era price column. */
-  year: number;
-  /** The world's era unit-basis scale (`getEraUnitScale(preset)`). */
-  eraUnitScale: number;
-  /** Seed preset id — entry fee is era-scaled through the same helper players use. */
-  preset: string | undefined;
-  /** Host country's prime rate (%), for the build's financing multiplier. */
-  primeRateOf: (countryId: string) => number;
-  /** Host state's 100-centered costOfLiving, or null when unmetered. */
-  costOfLivingOf: (stateId: string) => number | null;
-}
 
 /**
  * Process all NPP-run corporations each turn.
