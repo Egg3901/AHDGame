@@ -125,3 +125,42 @@ function canReachFront(unit: NavairUnit, frontRegions: ReadonlySet<RegionCode>):
   }
   return false;
 }
+
+/** Every naval posture a commander may order. */
+export const NAVAL_MISSIONS_ORDERABLE: readonly NavalMission[] = [
+  "BLOCKADE",
+  "SEA_CONTROL",
+  "SEA_DENIAL",
+  "ESCORT",
+  "TRANSIT",
+  "PORT",
+];
+
+/** Every air mission a commander may order. */
+export const AIR_MISSIONS_ORDERABLE: readonly AirMission[] = [
+  "CAP",
+  "STRIKE_NAVAL",
+  "STRIKE_AIRBASE",
+  "CAS",
+  "PATROL",
+  "AIRLIFT",
+  "STANDDOWN",
+];
+
+/**
+ * Whether this mission may be ordered for this domain.
+ *
+ * Checked server side and never inferred from the client, because a naval formation on
+ * an air mission would fall through `navalPosture` to the flying-weights fallback and
+ * quietly fight at half value forever, with nothing in the UI to say why.
+ */
+export function isMissionValidFor(domain: string, mission: string): boolean {
+  if (domain === "naval") return (NAVAL_MISSIONS_ORDERABLE as readonly string[]).includes(mission);
+  if (domain === "air") return (AIR_MISSIONS_ORDERABLE as readonly string[]).includes(mission);
+  return false;
+}
+
+/** Missions that require a target region to mean anything. */
+export function missionNeedsTarget(mission: string): boolean {
+  return mission === "STRIKE_NAVAL" || mission === "STRIKE_AIRBASE";
+}
