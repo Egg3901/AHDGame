@@ -25,7 +25,7 @@ import {
 import { creditTreasuryProceeds } from "@/lib/nationalization/treasury";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { applyListingStandards } from "../listingStandards";
+import { applyListingStandards, isMateriallyInsolvent } from "../listingStandards";
 import type { IndexFundCandidate } from "../constituents";
 import { isEligibleIndexFundConstituent } from "../constituents";
 import {
@@ -284,7 +284,7 @@ export async function measurePetitioner(
         c.publicFloat !== undefined && (c.totalShares ?? 0) > 0
           ? c.publicFloat / (c.totalShares as number)
           : undefined,
-      insolvent: (c.liquidCapital ?? 0) < 0,
+      insolvent: isMateriallyInsolvent(c.liquidCapital, (c.sharePrice ?? 0) * (c.totalShares ?? 0)),
     }))
   );
 
