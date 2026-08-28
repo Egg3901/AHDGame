@@ -1,4 +1,6 @@
 import type { Db } from "mongodb";
+import { navalApprovalEffect, navalApprovalLabel } from "@/lib/navair/navalApproval";
+import type { NavairUnit } from "@/lib/navair/types";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import type { CountryId } from "@/lib/constants/countries";
 import { listConflictsForCountry } from "@/lib/db/collections/conflicts";
@@ -407,6 +409,21 @@ export async function computeWarApproval(
           effect: contribution,
         });
       }
+    }
+
+    // The naval war has a political cost at home. Without it a government can have its
+    // fleet destroyed and pay nothing, which makes the whole naval layer a private number
+    // between the admiralty and the engine.
+    const navalUnits = (await getMilitaryUnitsCollection(db)
+      .find({ countryId, domain: "naval" })
+      .toArray()) as unknown as NavairUnit[];
+    const navalEffect = navalApprovalEffect(navalUnits);
+    if (navalEffect !== 0) {
+      parts.push({
+        id: "naval_losses",
+        label: navalApprovalLabel(navalUnits),
+        effect: navalEffect,
+      });
     }
 
     const raw = parts.reduce((sum, part) => sum + part.effect, 0);

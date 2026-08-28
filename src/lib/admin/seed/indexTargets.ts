@@ -165,6 +165,12 @@ export const INDEX_TARGETS = [
       "UNIQUE partial index on conflicts.conflictId — the public number that resolves /world/conflicts/<n>. Two conflicts sharing a number would make one unreachable.",
   },
   {
+    id: "indexesNavair",
+    label: "Indexes — Naval and air",
+    description:
+      "UNIQUE index on navairChannels (countryId, region), which saveNavairChannels upserts on every turn: without it concurrent upserts insert duplicate rows and a country's sea control flickers between two histories. Plus militaryUnits (domain) and a sparse (station), which the navairOperations phase and battleResolution both read every turn.",
+  },
+  {
     // AHDGame-only module. It has no target in the a-house-divided lineage this
     // feature was written against, so the port adds one — INDEX_RUNNERS is a
     // Record over IndexTargetId, which makes a missing target a compile error
