@@ -312,6 +312,10 @@ export interface GameConfig {
   indexFundBondLiquidityEnabled?: boolean;
   /** Governance record required when the sovereign-bond allocation target is enabled. */
   indexFundBondLiquidityIntervention?: EconomicInterventionPlan;
+  /** Dark gate for bounded, index-fund-backed two-sided equity quotes. */
+  equityLiquidityFacilityEnabled?: boolean;
+  /** Governance record required when the equity-liquidity facility is enabled. */
+  equityLiquidityFacilityIntervention?: EconomicInterventionPlan;
   /** Route each existing NPP entry slot to a facility-ready empty market first. */
   nppMarketCoverageEnabled?: boolean;
   /** Governance record required when empty-market coverage routing is enabled. */

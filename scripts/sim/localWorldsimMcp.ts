@@ -188,6 +188,9 @@ const TOOLS: ToolDef[] = [
         indexFundBondLiquidityEnabled: bool(
           "Whether index funds target 20 percent sovereign bonds while retaining a 5 percent cash buffer in this sandbox only."
         ),
+        equityLiquidityFacilityEnabled: bool(
+          "Whether index funds place bounded executable bid and ask quotes for listed equities in this sandbox only."
+        ),
         nppMarketCoverageEnabled: bool(
           "Whether each existing NPP entry slot prioritizes a facility-ready empty state-sector cell in this sandbox only."
         ),
@@ -229,6 +232,12 @@ const TOOLS: ToolDef[] = [
         throw new Error("indexFundBondLiquidityEnabled must be boolean");
       }
       if (
+        a.equityLiquidityFacilityEnabled !== undefined &&
+        typeof a.equityLiquidityFacilityEnabled !== "boolean"
+      ) {
+        throw new Error("equityLiquidityFacilityEnabled must be boolean");
+      }
+      if (
         a.nppMarketCoverageEnabled !== undefined &&
         typeof a.nppMarketCoverageEnabled !== "boolean"
       ) {
@@ -251,6 +260,9 @@ const TOOLS: ToolDef[] = [
         ...(a.indexFundBondLiquidityEnabled !== undefined
           ? { indexFundBondLiquidityEnabled: a.indexFundBondLiquidityEnabled }
           : {}),
+        ...(a.equityLiquidityFacilityEnabled !== undefined
+          ? { equityLiquidityFacilityEnabled: a.equityLiquidityFacilityEnabled }
+          : {}),
         ...(a.nppMarketCoverageEnabled !== undefined
           ? { nppMarketCoverageEnabled: a.nppMarketCoverageEnabled }
           : {}),
@@ -266,6 +278,7 @@ const TOOLS: ToolDef[] = [
         canonicalFreightBillingEnabled: a.canonicalFreightBillingEnabled ?? "preset default",
         shortageResponsiveSourcingEnabled: a.shortageResponsiveSourcingEnabled ?? "preset default",
         indexFundBondLiquidityEnabled: a.indexFundBondLiquidityEnabled ?? "preset default",
+        equityLiquidityFacilityEnabled: a.equityLiquidityFacilityEnabled ?? "preset default",
         nppMarketCoverageEnabled: a.nppMarketCoverageEnabled ?? "preset default",
         note: 'Poll with sim_run_status. The local worker claims queued jobs within ~15s — if status stays "queued" for minutes, the worker is not running (check sim_worker_health).',
       };

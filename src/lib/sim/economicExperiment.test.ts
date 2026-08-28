@@ -13,6 +13,7 @@ describe("economic experiment configuration", () => {
         canonicalFreightBillingEnabled: false,
         shortageResponsiveSourcingEnabled: false,
         indexFundBondLiquidityEnabled: false,
+        equityLiquidityFacilityEnabled: false,
         nppMarketCoverageEnabled: false,
       })
     ).toEqual({
@@ -20,6 +21,7 @@ describe("economic experiment configuration", () => {
       canonicalFreightBillingEnabled: false,
       shortageResponsiveSourcingEnabled: false,
       indexFundBondLiquidityEnabled: false,
+      equityLiquidityFacilityEnabled: false,
       nppMarketCoverageEnabled: false,
     });
     expect(
@@ -28,6 +30,7 @@ describe("economic experiment configuration", () => {
         canonicalFreightBillingEnabled: false,
         shortageResponsiveSourcingEnabled: false,
         indexFundBondLiquidityEnabled: false,
+        equityLiquidityFacilityEnabled: false,
         nppMarketCoverageEnabled: false,
       })
     ).toEqual([
@@ -35,6 +38,7 @@ describe("economic experiment configuration", () => {
       "--canonical-freight-billing=false",
       "--shortage-responsive-sourcing=false",
       "--index-fund-bond-liquidity=false",
+      "--equity-liquidity=false",
       "--npp-market-coverage=false",
     ]);
   });

@@ -149,6 +149,10 @@ const indexFundBondLiquidityEnabled = parseOptionalBoolean(
   arg("index-fund-bond-liquidity"),
   "index-fund-bond-liquidity"
 );
+const equityLiquidityFacilityEnabled = parseOptionalBoolean(
+  arg("equity-liquidity"),
+  "equity-liquidity"
+);
 const nppMarketCoverageEnabled = parseOptionalBoolean(
   arg("npp-market-coverage"),
   "npp-market-coverage"
@@ -622,6 +626,7 @@ async function main() {
     canonicalFreightBillingEnabled,
     shortageResponsiveSourcingEnabled,
     indexFundBondLiquidityEnabled,
+    equityLiquidityFacilityEnabled,
     nppMarketCoverageEnabled,
   };
   const economicExperimentSet = economicExperimentConfigSet(economicExperiment);

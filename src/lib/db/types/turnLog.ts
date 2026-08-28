@@ -746,6 +746,8 @@ export interface TurnLog {
       rebalances: number;
       redemptionsPaid: number;
       bondDeployments: number;
+      equityLiquidityQuotePairs: number;
+      equityLiquidityDepthAnchor: number;
       nppsProcessed: number;
       nppInvested: number;
     } | null;

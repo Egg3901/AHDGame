@@ -113,6 +113,7 @@ interface SimJob {
   canonicalFreightBillingEnabled?: boolean;
   shortageResponsiveSourcingEnabled?: boolean;
   indexFundBondLiquidityEnabled?: boolean;
+  equityLiquidityFacilityEnabled?: boolean;
   nppMarketCoverageEnabled?: boolean;
   autonomyLevel?: string;
   /** Sim turn-phase profile: "elections-only" skips the economy phases. Default full. */
@@ -319,6 +320,12 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
         throw new Error("indexFundBondLiquidityEnabled must be boolean");
       }
       runWorldArgs.push(`--index-fund-bond-liquidity=${String(job.indexFundBondLiquidityEnabled)}`);
+    }
+    if (job.equityLiquidityFacilityEnabled !== undefined) {
+      if (typeof job.equityLiquidityFacilityEnabled !== "boolean") {
+        throw new Error("equityLiquidityFacilityEnabled must be boolean");
+      }
+      runWorldArgs.push(`--equity-liquidity=${String(job.equityLiquidityFacilityEnabled)}`);
     }
     if (job.nppMarketCoverageEnabled !== undefined) {
       if (typeof job.nppMarketCoverageEnabled !== "boolean") {

@@ -22,6 +22,7 @@ import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { computeAccountedShares } from "@/lib/corporations/shareInvariant";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { debitFundHoldingShares, upsertFundHoldingShares } from "@/lib/indexFunds/fundQueries";
 
 export const resolveCharName = async (
   db: Db,
@@ -94,6 +95,7 @@ export async function settleBuyOrderFill(args: {
     )?.avgCostPerShare ?? order.pricePerShare;
   let sellerSharesDebited = false;
   let buyerSharesCredited = false;
+  let buyerFundHoldingCredited = false;
   let fillerEscrowReleased = false;
   try {
     // Transfer shares from filler to buyer (fund, corp, or character)
@@ -134,6 +136,14 @@ export async function settleBuyOrderFill(args: {
         $set: { updatedAt: now },
       });
       buyerSharesCredited = true;
+      await upsertFundHoldingShares(
+        db,
+        order.placerFundId,
+        corporation._id,
+        shares,
+        fillPriceAnchor
+      );
+      buyerFundHoldingCredited = true;
     } else if (order.placerCorporationId) {
       const remaining = await debitFillerShares();
       if (remaining < 0) {
@@ -235,6 +245,15 @@ export async function settleBuyOrderFill(args: {
           { $set: { updatedAt: new Date() } },
           { requireSufficient: true }
         );
+        if (buyerFundHoldingCredited) {
+          await debitFundHoldingShares(
+            db,
+            order.placerFundId,
+            corporation._id,
+            shares,
+            shares > 0 ? total / shares : 0
+          );
+        }
       } else if (order.placerCorporationId) {
         await debitSharesFromCorp(
           db,

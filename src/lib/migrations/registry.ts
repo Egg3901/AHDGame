@@ -57,6 +57,7 @@ import { migration as repairOutOfRangePolicyLevels } from "./entries/2026-08-26-
 import { migration as dropOffRosterCommandCommanders } from "./entries/2026-08-26-drop-off-roster-command-commanders";
 import { migration as severEmigratedGenerals } from "./entries/2026-08-26-sever-emigrated-generals";
 import { migration as rescheduleEconCountryBills } from "./entries/2026-08-27-reschedule-econ-country-bills";
+import { migration as equityLiquidityIndexes } from "./entries/2026-08-28-equity-liquidity-indexes";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -169,6 +170,7 @@ export const MIGRATIONS: Migration[] = [
   // Issue #996: the new lifecycle registrations make these bills resolvable;
   // reopen their expired vote windows instead of replaying stale tallies.
   rescheduleEconCountryBills,
+  equityLiquidityIndexes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.

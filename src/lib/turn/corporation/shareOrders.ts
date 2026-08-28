@@ -15,6 +15,7 @@ import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import type { ShareTradeParty } from "@/lib/db/types/shareTradeHistory";
 import { resolveShareExecutionPrice } from "@/lib/corporations/marketExecution";
 import { creditSharesToFund } from "@/lib/corporations/shareholderOps";
+import { upsertFundHoldingShares } from "@/lib/indexFunds/fundQueries";
 
 /** Per-character delta for a corp, plus the fill price for new-entry cost basis. */
 interface ShareDelta {
@@ -254,6 +255,11 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
           },
         });
       } else if (order.type === "sell" && currentPrice >= order.pricePerShare) {
+        // Fund-owned asks are executable peer quotes. They intentionally do
+        // not auto-fill against the issuer treasury: doing so would guarantee
+        // the liquidity provider an exit and would bypass the guarded dual
+        // debit of its cap-table and fund holdings ledgers.
+        if (order.placerFundId) continue;
         // Fill sell order: add shares to public float, pay seller at limit price.
         // Character sell orders are not debited at placement, so a reverse split
         // (or any later sale) can leave sharesRemaining far above the live
@@ -542,6 +548,13 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
           delta,
           fillPriceAnchor,
           { $set: { updatedAt: now } }
+        );
+        await upsertFundHoldingShares(
+          db,
+          new ObjectId(fundIdStr),
+          new ObjectId(corpIdStr),
+          delta,
+          fillPriceAnchor
         );
       }
     }
