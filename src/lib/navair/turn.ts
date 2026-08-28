@@ -49,13 +49,14 @@ export interface NavairTurnResult {
 
 /** Who each country is currently shooting at, from active conflicts. */
 async function buildHostilityMap(db: Db): Promise<Map<string, Set<string>>> {
-  const conflicts = await getConflictsCollection(db)
-    .find({ status: "active" })
-    .project<{ sideA: { countries: string[] }; sideB: { countries: string[] } }>({
-      "sideA.countries": 1,
-      "sideB.countries": 1,
-    })
-    .toArray();
+  // Projection passed as a find option rather than via the cursor's .project(), which is
+  // this codebase's house style and does not require a cursor implementation of it.
+  const conflicts = (await getConflictsCollection(db)
+    .find({ status: "active" }, { projection: { "sideA.countries": 1, "sideB.countries": 1 } })
+    .toArray()) as unknown as Array<{
+    sideA?: { countries?: string[] };
+    sideB?: { countries?: string[] };
+  }>;
 
   const hostility = new Map<string, Set<string>>();
   const link = (a: string, b: string) => {

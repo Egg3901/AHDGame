@@ -1911,13 +1911,14 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
  * commodity prices resolve earlier in the turn and must not read stale dispositions.
  */
 async function loadBlockadeClosure(db: Db): Promise<Map<string, number>> {
-  const conflicts = await getConflictsCollection(db)
-    .find({ status: "active" })
-    .project<{ sideA: { countries: string[] }; sideB: { countries: string[] } }>({
-      "sideA.countries": 1,
-      "sideB.countries": 1,
-    })
-    .toArray();
+  // Projection passed as a find option rather than via the cursor's .project(), which is
+  // this codebase's house style and does not require a cursor implementation of it.
+  const conflicts = (await getConflictsCollection(db)
+    .find({ status: "active" }, { projection: { "sideA.countries": 1, "sideB.countries": 1 } })
+    .toArray()) as unknown as Array<{
+    sideA?: { countries?: string[] };
+    sideB?: { countries?: string[] };
+  }>;
   if (!conflicts.length) return new Map();
 
   const hostility = new Map<string, Set<string>>();
