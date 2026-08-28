@@ -1,4 +1,6 @@
 import type { PeaceTerm } from "@/lib/military/peaceTerm";
+import { NavalAirPanel } from "./NavalAirPanel";
+import type { NavalAirPanel as NavalAirPanelData } from "./conflictRecordView";
 import type { ReactNode } from "react";
 import { FrontLineMap } from "../combat/components/FrontLineMap";
 import type { ConflictTier } from "@/lib/military/conflictVisibility";
@@ -160,6 +162,7 @@ export interface ConflictRecordView {
   ownForces?: ForceRow[];
   /** `command` only — a coarse read of the opposing force. */
   enemyBand?: string;
+  navalAir?: NavalAirPanelData;
   /**
    * The viewer nation's unfunded upkeep share (0..1). Readiness recovery is projected
    * against the baseline this suppresses, so a force its nation cannot pay for is not
@@ -714,6 +717,11 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
                 }}
               />
             )}
+
+            {/* Air and sea sits directly above the ground force panel on purpose: it is
+                the thing that decided part of the battle before the armies met, and
+                reading it after the ground picture makes it look like a footnote. */}
+            {c.navalAir && <NavalAirPanel data={c.navalAir} />}
 
             <BelligerentsPanel view={c.belligerents} />
 

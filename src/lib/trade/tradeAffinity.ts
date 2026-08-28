@@ -5,6 +5,7 @@ import type { TradeEmbargo } from "@/lib/db/types/tradeEmbargo";
 import { isFtaActive, type FtaPairSet } from "@/lib/tariffs/ftaOverrides";
 import { computeAffinity } from "./affinity";
 import { importerTariffOnFlow } from "./tariffDrag";
+import { blockadeAffinityMultiplier } from "@/lib/navair/blockade";
 import { PRIMARY_SECTOR_BY_COMMODITY } from "./commoditySector";
 
 export interface TradeAffinityContext {
@@ -32,6 +33,16 @@ export interface TradeAffinityContext {
    * embargoes in force, while Ukraine's 6.32M-unit surplus sat untraded).
    */
   curtainedCountries?: ReadonlySet<string>;
+  /**
+   * Naval blockade closure per country, 0..1, from the naval and air layer.
+   *
+   * Distinct from `embargoes` on purpose. An embargo is a political decision not to
+   * trade; a blockade is hulls in the water stopping trade both parties still want. They
+   * converge on the same effect here, but the causes stay separate so the trade layer can
+   * still say WHY a lane closed. Absent means nobody is blockading anybody, which is the
+   * common case and costs nothing.
+   */
+  blockadeClosure?: ReadonlyMap<string, number>;
 }
 
 export interface TradeAffinityFns {
@@ -71,7 +82,7 @@ function embargoMatches(
  * (mode "cap" → capUnits) specific flows. Pure given its context.
  */
 export function buildTradeAffinity(ctx: TradeAffinityContext): TradeAffinityFns {
-  const { ftaPairs, blocsByCountry, tariffs, embargoes, curtainedCountries } = ctx;
+  const { ftaPairs, blocsByCountry, tariffs, embargoes, curtainedCountries, blockadeClosure } = ctx;
 
   const curtained = (a: string, b: string): boolean => {
     if (!curtainedCountries || curtainedCountries.size === 0) return false;
@@ -94,11 +105,19 @@ export function buildTradeAffinity(ctx: TradeAffinityContext): TradeAffinityFns 
       if (curtained(exporter, importer)) return 0;
       const blocked = blocking.some((em) => embargoMatches(em, exporter, importer, commodity));
       if (blocked) return 0;
+
+      // A blockade on EITHER end closes the flow: goods have to leave one coast and
+      // arrive at another, and shutting either does it. Take the heavier of the two.
+      const closure = Math.max(
+        blockadeClosure?.get(exporter) ?? 0,
+        blockadeClosure?.get(importer) ?? 0
+      );
+      if (closure >= 1) return 0;
       const sectorType = PRIMARY_SECTOR_BY_COMMODITY[commodity];
       const importerTariffRate = sectorType
         ? importerTariffOnFlow(tariffs, ftaPairs, importer, exporter, sectorType)
         : 0;
-      return computeAffinity({
+      const affinity = computeAffinity({
         exporter,
         importer,
         commodity,
@@ -107,6 +126,7 @@ export function buildTradeAffinity(ctx: TradeAffinityContext): TradeAffinityFns 
         importerTariffRate,
         blocked: false,
       });
+      return closure > 0 ? affinity * blockadeAffinityMultiplier(closure) : affinity;
     },
     capUnitsFor: (commodity, exporter, importer) => {
       let cap: number | undefined;

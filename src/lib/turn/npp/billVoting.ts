@@ -338,6 +338,19 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
         whips: { partyWhip: applicableWhip, caucusWhip: null },
       });
 
+      // War-entry bills carry a frozen national pressure snapshot. Fold it into
+      // the ideology bucket so the existing prediction schema remains replayable:
+      // bloc relations can move a close offensive vote, but the bounded force
+      // cannot erase party opposition or individual defiance.
+      const warEntry = bill.provisions?.find((provision) => provision.type === "join_conflict");
+      if (warEntry?.politicalPressure) {
+        const loyaltyScale = 0.75 + (npp.personality?.loyalty ?? 50) / 200;
+        forces.ideology = Math.max(
+          -100,
+          Math.min(100, forces.ideology + warEntry.politicalPressure.total * loyaltyScale)
+        );
+      }
+
       // National-address agenda bonus on federal bills. Mirrors the state
       // agenda bonus: if a co-partisan national leader has an active address
       // emphasizing the bill's category, every NPP voting on the bill picks

@@ -6,6 +6,7 @@ import type { CorporationType } from "@/lib/constants/corporations";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { NationalizationProvisionDetail } from "@/lib/nationalization/billTargetPreview";
 import type { BillVoteSnapshot } from "./voteSnapshot";
+import type { WarEntryPoliticalPressure, WarEntryStake } from "@/lib/military/warEntryPolicy";
 
 /**
  * Pre-whip vote snapshot, keyed by bare characterId (never npp_*).
@@ -208,6 +209,10 @@ export interface JoinConflictProvision {
   organizationId: string;
   /** The resolution that spawned this bill. */
   resolutionId: string;
+  /** Political character of entry, derived from the conflict's host side. */
+  entryStake?: WarEntryStake;
+  /** Frozen national pressure snapshot used by autonomous legislative voting. */
+  politicalPressure?: WarEntryPoliticalPressure;
 }
 
 export interface EmbargoProvision {

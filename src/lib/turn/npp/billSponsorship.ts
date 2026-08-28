@@ -94,6 +94,10 @@ async function countActiveNppSponsoredBills(
   const count = await db.collection<Bill>("bills").countDocuments({
     countryId,
     nppSponsored: true,
+    // Foreign-policy calls use their own diplomatic cadence. Counting them
+    // against the domestic agenda cap lets one war-entry bill shut ordinary
+    // legislative business down for its entire voting window.
+    category: { $ne: "foreign policy" },
     status: { $nin: TERMINAL_STATUSES },
     ...(sponsorParty ? { sponsorParty } : {}),
   });
@@ -112,7 +116,12 @@ async function lastNppSponsoredBillTurn(
   sponsorParty?: string
 ): Promise<number | null> {
   const doc = await db.collection<Bill>("bills").findOne(
-    { countryId, nppSponsored: true, ...(sponsorParty ? { sponsorParty } : {}) },
+    {
+      countryId,
+      nppSponsored: true,
+      category: { $ne: "foreign policy" },
+      ...(sponsorParty ? { sponsorParty } : {}),
+    },
     {
       sort: { votingEndsOnTurn: -1 },
       projection: { votingEndsOnTurn: 1, votingStartedAt: 1 },

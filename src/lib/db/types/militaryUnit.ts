@@ -36,4 +36,26 @@ export interface MilitaryUnit {
   createdTurn: number;
   /** Turn when this freshly-recruited unit becomes operational (null = ready now). */
   readyAtTurn?: number | null;
+
+  // ── naval and air layer ────────────────────────────────────────────────────
+  // Optional because a ground formation never carries them, and because they are
+  // backfilled by the navairOperations phase rather than by a migration. Typed as plain
+  // strings here rather than importing the navair unions, to keep the dependency running
+  // one way: navair narrows these, this file does not know about navair.
+
+  /**
+   * Which region a naval or air formation physically occupies.
+   *
+   * `theaterId` says which WAR a unit belongs to, which is enough for a land front and
+   * not enough for a fleet: two carriers in one war can be in different oceans.
+   */
+  station?: string | null;
+  /** Standing mission. Persists between turns; only a command changes it. */
+  mission?: string | null;
+  /** Region a strike mission is aimed at. Null for missions that take no target. */
+  missionTarget?: string | null;
+  /** Hull or airframe condition, 0..100. Distinct from readiness. */
+  integrity?: number;
+  /** Supply level at station, 0..100. Set by the naval and air sustain pass. */
+  supply?: number;
 }

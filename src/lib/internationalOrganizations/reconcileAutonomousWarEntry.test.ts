@@ -102,10 +102,13 @@ describe("reconcileAutonomousWarEntryBills", () => {
     );
   });
 
-  it("does not duplicate a bill already filed from the same resolution", async () => {
+  it("backfills pressure without duplicating an existing war-entry bill", async () => {
+    const billId = new ObjectId();
     const db = setup([
       {
+        _id: billId,
         countryId: "FR",
+        status: "active_both",
         provisions: [
           {
             type: "join_conflict",
@@ -118,8 +121,18 @@ describe("reconcileAutonomousWarEntryBills", () => {
       },
     ]);
 
-    await expect(reconcileAutonomousWarEntryBills(db as unknown as Db)).resolves.toBe(0);
+    await expect(reconcileAutonomousWarEntryBills(db as unknown as Db)).resolves.toBe(1);
     expect(buildBill).not.toHaveBeenCalled();
+    expect(db.collection("bills").updateOne).toHaveBeenCalledWith(
+      { _id: billId },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          "provisions.$[entry].entryStake": "discretionary",
+          "provisions.$[entry].politicalPressure": expect.any(Object),
+        }),
+      }),
+      expect.objectContaining({ arrayFilters: expect.any(Array) })
+    );
   });
 
   it("stays off until autonomous foreign policy is active", async () => {

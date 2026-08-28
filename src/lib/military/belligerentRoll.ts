@@ -19,6 +19,7 @@
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import { entityName } from "@/lib/constants/entityDisplay";
 import { INTERNATIONAL_ORGANIZATIONS } from "@/lib/constants/internationalOrganizations";
+import { hostSideOf } from "@/lib/military/warEntryPolicy";
 
 export interface BelligerentEntry {
   code: string;
@@ -41,13 +42,6 @@ export interface BelligerentRoll {
 
 type RollInput = Pick<ConflictDoc, "hostCountry" | "sideA" | "sideB"> &
   Partial<Pick<ConflictDoc, "treatyEntries" | "joinTurns">>;
-
-/** Which roster holds the host, or null when it fights on neither. */
-function hostSideOf(c: RollInput): "A" | "B" | null {
-  if ((c.sideA?.countries as string[] | undefined)?.includes(c.hostCountry)) return "A";
-  if ((c.sideB?.countries as string[] | undefined)?.includes(c.hostCountry)) return "B";
-  return null;
-}
 
 /** The alliance's readable name, so a row says "Warsaw Pact" and not "WARSAW_PACT". */
 function orgName(organizationId: string): string {

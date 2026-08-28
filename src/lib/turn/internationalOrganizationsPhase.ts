@@ -62,6 +62,12 @@ import { castAutonomousOrgVotes } from "@/lib/nppAutonomy/autonomousOrgVoting";
 import { foreignPolicyModeFrom } from "@/lib/nppAutonomy/foreignPolicyRollout";
 import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
 import { reconcileAutonomousWarEntryBills } from "@/lib/internationalOrganizations/reconcileAutonomousWarEntry";
+import {
+  classifyWarEntry,
+  assessWarEntryPoliticalPressure,
+  enactImmediateWarEntry,
+  warEntryIsImmediate,
+} from "@/lib/military/warEntryPolicy";
 import type {
   OrganizationLegislation,
   ProposalVoteRecord,
@@ -833,7 +839,54 @@ async function applyResolutionEffect(
         side === "A" ? conflict.sideB.countries : conflict.sideA.countries
       ) as string[];
 
-      for (const countryId of votingMemberIds) {
+      const entryMembers = (await getMembers(db, resolution.organizationId)).filter(
+        (member): member is CountryId => member in COUNTRY_CONFIGS
+      );
+      for (const countryId of entryMembers) {
+        if (other.includes(countryId)) {
+          // A bloc resolution never switches a country's side mid-war.
+          await recordOrgHistoryEvent(
+            db,
+            countryId,
+            currentTurn,
+            `${countryName(countryId)} is already fighting on the other side of ${conflict.name}.`,
+            { organizationId: resolution.organizationId, legislationId: resolution._id.toString() }
+          );
+          continue;
+        }
+        if (chosen.includes(countryId)) continue;
+
+        const stake = classifyWarEntry({
+          conflict,
+          countryId,
+          side,
+          organizationId: resolution.organizationId,
+        });
+        if (warEntryIsImmediate(stake)) {
+          await enactImmediateWarEntry({
+            db,
+            conflict,
+            countryId,
+            side,
+            organizationId: resolution.organizationId,
+            currentTurn,
+            stake,
+          });
+          await recordOrgHistoryEvent(
+            db,
+            countryId,
+            currentTurn,
+            stake === "collective_defense"
+              ? `${resolution.organizationId} collective defense invoked: entered ${conflict.name} immediately.`
+              : `${countryName(countryId)} entered ${conflict.name} as a principal belligerent.`,
+            { organizationId: resolution.organizationId, legislationId: resolution._id.toString() }
+          );
+          continue;
+        }
+
+        // Offensive coalition entry remains a national political choice. A
+        // non-voting client does not acquire a fictional chamber for it.
+        if (!votingMemberIds.includes(countryId)) continue;
         // A bill minted for a country no engine walks never closes — it sits at
         // active_both forever, with nothing to resolve it and nothing reporting it.
         if (!hasBillLifecycle(countryId)) {
@@ -846,20 +899,6 @@ async function applyResolutionEffect(
           );
           continue;
         }
-        // Already in, on the side the bloc chose: nothing to ask.
-        if (chosen.includes(countryId)) continue;
-        if (other.includes(countryId)) {
-          // A bloc resolution never switches a country's side mid-war.
-          await recordOrgHistoryEvent(
-            db,
-            countryId,
-            currentTurn,
-            `${countryName(countryId)} is already fighting on the other side of ${conflict.name}.`,
-            { organizationId: resolution.organizationId, legislationId: resolution._id.toString() }
-          );
-          continue;
-        }
-
         // The head of government sponsors it — the bill arrives at a foreign
         // power's call, so it is filed in the government's name, not a member's.
         const sponsor = await getPolicyHeadSponsor(db, countryId);
@@ -892,6 +931,14 @@ async function applyResolutionEffect(
             side,
             organizationId: resolution.organizationId,
             resolutionId: resolution._id.toString(),
+            entryStake: stake,
+            politicalPressure: await assessWarEntryPoliticalPressure({
+              db,
+              countryId,
+              organizationId: resolution.organizationId,
+              stake,
+              currentTurn,
+            }),
           },
         });
       }
