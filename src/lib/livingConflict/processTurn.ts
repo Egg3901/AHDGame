@@ -9,11 +9,13 @@ import type {
 import { createCrisisFromTemplate } from "@/lib/crises/createCrisisFromTemplate";
 import { logWireEvent } from "@/lib/wireEvent";
 import { listNuclearPrograms } from "@/lib/db/collections/nuclearPrograms";
+import { getConflictsCollection } from "@/lib/db/collections/conflicts";
 import { nuclearStandoffPossible } from "@/lib/military/nuclearProgram";
 import { allLivingConflictDefs } from "./registry";
-import { loadConflictState } from "./driver";
+import { loadConflictState, saveConflictState } from "./driver";
 import { normalizeCampaignState } from "./campaign";
 import { migrateLegacyVietnamState } from "./vietnamCompat";
+import { vietnamWorldPressure } from "./worldPressure";
 import {
   allParticipants,
   driveConflictTurn,
@@ -82,11 +84,11 @@ async function materializeEvent(
   participants: ConflictParticipants,
   driven: DrivenEvent,
   currentTurn: number
-): Promise<boolean> {
+): Promise<{ opened: boolean; blockedByActiveWindow: boolean }> {
   const existing = await db
     .collection<Crisis>("crises")
     .findOne({ livingConflictEventId: driven.fired.id }, { projection: { _id: 1 } });
-  if (existing) return false;
+  if (existing) return { opened: false, blockedByActiveWindow: false };
   const activeWindow = await db
     .collection<Crisis>("crises")
     .findOne(
@@ -99,16 +101,18 @@ async function materializeEvent(
     activeWindow &&
     (activeWindow.durationTurns === null ||
       currentTurn < activeWindow.startTurn + activeWindow.durationTurns);
-  if (activeWindowExpiresAfterThisTurn) return false;
+  if (activeWindowExpiresAfterThisTurn) {
+    return { opened: false, blockedByActiveWindow: true };
+  }
 
   const response = driven.fired.event.response;
   if (!response) {
     await logWireEvent("crisis_start", driven.fired.event.headline);
-    return true;
+    return { opened: true, blockedByActiveWindow: false };
   }
   const roleByCountry = roleMapForEvent(def, participants, driven);
   const countryIds = Object.keys(roleByCountry);
-  if (countryIds.length === 0) return false;
+  if (countryIds.length === 0) return { opened: false, blockedByActiveWindow: false };
   const campaign = normalizeCampaignState((await loadConflictState(db, def.key)).campaign);
 
   await createCrisisFromTemplate(db, {
@@ -133,7 +137,7 @@ async function materializeEvent(
       },
     },
   });
-  return true;
+  return { opened: true, blockedByActiveWindow: false };
 }
 
 export interface LivingConflictTurnResult {
@@ -150,6 +154,11 @@ export async function processLivingConflictsTurn(
 ): Promise<LivingConflictTurnResult> {
   if (!enabled) return { conflictsProcessed: 0, eventsOpened: 0 };
   await migrateLegacyVietnamState(db);
+  const [tension, activeWars] = await Promise.all([
+    db.collection<{ _id: string; value?: number }>("coldWarTension").findOne({ _id: "current" }),
+    getConflictsCollection(db).find({ status: "active" }).toArray(),
+  ]);
+  const vietnamExternalPressure = vietnamWorldPressure(tension?.value ?? 0, activeWars);
   let eventsOpened = 0;
   const defs = allLivingConflictDefs().filter((def) => def.autoOpen !== false);
   let nuclearPrograms: Awaited<ReturnType<typeof listNuclearPrograms>> | null = null;
@@ -164,9 +173,24 @@ export async function processLivingConflictsTurn(
     }
     conflictsProcessed++;
     const participants: ConflictParticipants = def.participants;
-    const result = await driveConflictTurn(db, def, participants, currentTurn, currentYear);
+    const result = await driveConflictTurn(
+      db,
+      def,
+      participants,
+      currentTurn,
+      currentYear,
+      def.key === "vietnam" && typeof currentYear === "number" ? vietnamExternalPressure : 0
+    );
+    let retryPhaseEntry = false;
     for (const event of result.events) {
-      if (await materializeEvent(db, def, participants, event, currentTurn)) eventsOpened++;
+      const materialized = await materializeEvent(db, def, participants, event, currentTurn);
+      if (materialized.opened) eventsOpened++;
+      if (materialized.blockedByActiveWindow && event.fired.event.trigger?.onPhaseEnter) {
+        retryPhaseEntry = true;
+      }
+    }
+    if (retryPhaseEntry) {
+      await saveConflictState(db, { ...result.state, emitPhaseEntryNextTurn: true });
     }
   }
   return { conflictsProcessed, eventsOpened };

@@ -106,7 +106,8 @@ export async function driveConflictTurn(
   def: LivingConflictDef,
   participants: ConflictParticipants,
   turn: number,
-  year: number | null | undefined
+  year: number | null | undefined,
+  externalPressure = 0
 ): Promise<DriveResult> {
   let state = await loadConflictState(db, def.key);
   if (state.lastProcessedTurn === turn) return { state, events: [] };
@@ -128,7 +129,7 @@ export async function driveConflictTurn(
   } else {
     state = tickConflict(state);
     const phase = phaseFor(def, state.phaseLevel);
-    const natural = phase?.naturalPressure ?? 0;
+    const natural = (phase?.naturalPressure ?? 0) + Math.max(0, externalPressure);
     if (natural > 0) {
       state = applyCommitment(
         def,
