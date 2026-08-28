@@ -1274,6 +1274,8 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           rebalances: result.rebalances,
           redemptionsPaid: result.redemptionsPaid,
           bondDeployments: result.bondDeployments,
+          equityLiquidityQuotePairs: result.equityLiquidityQuotePairs,
+          equityLiquidityDepthAnchor: result.equityLiquidityDepthAnchor,
           nppsProcessed: result.nppsProcessed,
           nppInvested: result.nppInvested,
         };

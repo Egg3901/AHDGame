@@ -474,6 +474,69 @@ export async function upsertFundHoldingShares(
   );
 }
 
+/**
+ * Atomically remove shares from a fund's holdings ledger. Returns false when
+ * the live holding cannot cover the requested fill, leaving the document
+ * unchanged. The corporation cap-table debit is handled separately by the
+ * settlement caller and must be rolled back if either guarded leg fails.
+ */
+export async function debitFundHoldingShares(
+  db: Db,
+  fundId: ObjectId,
+  corporationId: ObjectId,
+  shares: number,
+  pricePerShareAnchor: number,
+  options?: FundQueryOptions
+): Promise<boolean> {
+  if (!Number.isFinite(shares) || shares <= 0) return false;
+  const safePrice = Number.isFinite(pricePerShareAnchor) ? Math.max(0, pricePerShareAnchor) : 0;
+  const result = await db.collection<IndexFund>(FUND_COLLECTION).updateOne(
+    {
+      _id: fundId,
+      holdings: { $elemMatch: { corporationId, shares: { $gte: shares } } },
+    },
+    {
+      $inc: { "holdings.$.shares": -shares },
+      $set: {
+        "holdings.$.lastValueAnchor": 0,
+        updatedAt: new Date(),
+      },
+    },
+    mongoOptions(options)
+  );
+  if (result.matchedCount === 0) return false;
+
+  const holding = await db
+    .collection<IndexFund>(FUND_COLLECTION)
+    .findOne(
+      { _id: fundId, "holdings.corporationId": corporationId },
+      { projection: { holdings: 1 }, ...mongoOptions(options) }
+    );
+  const remaining = holding?.holdings.find(
+    (row) => row.corporationId.toString() === corporationId.toString()
+  );
+  if (!remaining || remaining.shares <= 0) {
+    await db.collection<IndexFund>(FUND_COLLECTION).updateOne(
+      { _id: fundId },
+      {
+        $pull: {
+          holdings: { corporationId: { $eq: corporationId }, shares: { $lte: 0 } },
+        },
+      },
+      mongoOptions(options)
+    );
+  } else {
+    await db
+      .collection<IndexFund>(FUND_COLLECTION)
+      .updateOne(
+        { _id: fundId, "holdings.corporationId": corporationId },
+        { $set: { "holdings.$.lastValueAnchor": remaining.shares * safePrice } },
+        mongoOptions(options)
+      );
+  }
+  return true;
+}
+
 export type DebitFundPositionResult =
   { ok: true; position: IndexFundPosition | null; legacyUnitsRedeemed: number } | { ok: false };
 

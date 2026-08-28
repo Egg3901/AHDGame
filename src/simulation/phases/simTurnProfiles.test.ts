@@ -107,6 +107,7 @@ describe("simTurnProfiles: economy-only turn-phase gate", () => {
       "inflationRecalc",
       "commandEconomy",
       "forexTurn",
+      "indexFunds",
       "ledgerReconcile",
       "economicVitalSigns",
     ]) {

@@ -135,6 +135,11 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   office_income: "public_salary",
   savings_interest: "deposit_interest",
   fundraise_credit: "political_fundraising",
+  // Fund-owned quotes are real equity transfers, but index funds are not yet
+  // financialTxLog counterparties. Name the cash leg instead of reporting an
+  // unexplained mint or sink while the fund holdings ledger records the asset.
+  stock_trade_buy: "equity_transfer",
+  stock_trade_sell: "equity_transfer",
 };
 
 /** Semantic mint/sink reason for a single-sided row; `unattributed` when unmapped. */

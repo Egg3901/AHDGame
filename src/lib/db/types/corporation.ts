@@ -45,6 +45,11 @@ export interface ShareOrder {
    * fund's `cashAnchor`.
    */
   placerFundId?: ObjectId;
+  /** Standing quote created by the bounded equity-liquidity facility. */
+  liquidityProvider?: boolean;
+  /** Turn and reference price used to construct the standing quote. */
+  liquidityQuotedTurn?: number;
+  liquidityReferencePrice?: number;
   type: "buy" | "sell";
   shares: number;
   sharesRemaining: number;

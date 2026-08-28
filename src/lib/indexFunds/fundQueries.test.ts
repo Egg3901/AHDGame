@@ -7,6 +7,7 @@ import {
   FUND_REDEMPTION_QUEUE_COLLECTION,
   FUND_SNAPSHOT_COLLECTION,
   creditFundPosition,
+  debitFundHoldingShares,
 } from "./fundQueries";
 
 describe("fundQueries constants", () => {
@@ -16,6 +17,46 @@ describe("fundQueries constants", () => {
     expect(FUND_TRANSACTION_COLLECTION).toBe("indexFundTransactions");
     expect(FUND_REDEMPTION_QUEUE_COLLECTION).toBe("indexFundRedemptionQueue");
     expect(FUND_SNAPSHOT_COLLECTION).toBe("indexFundSnapshots");
+  });
+});
+
+describe("debitFundHoldingShares", () => {
+  it("guards on sufficient inventory and removes an exhausted holding", async () => {
+    const fundId = new ObjectId();
+    const corporationId = new ObjectId();
+    const updateOne = vi
+      .fn()
+      .mockResolvedValueOnce({ matchedCount: 1 })
+      .mockResolvedValueOnce({ matchedCount: 1 });
+    const findOne = vi.fn().mockResolvedValue({
+      holdings: [{ corporationId, shares: 0 }],
+    });
+    const db = { collection: vi.fn(() => ({ updateOne, findOne })) } as never;
+
+    await expect(debitFundHoldingShares(db, fundId, corporationId, 25, 12)).resolves.toBe(true);
+
+    expect(updateOne.mock.calls[0][0]).toMatchObject({
+      _id: fundId,
+      holdings: { $elemMatch: { corporationId, shares: { $gte: 25 } } },
+    });
+    expect(updateOne.mock.calls[0][1].$inc["holdings.$.shares"]).toBe(-25);
+    expect(updateOne.mock.calls[1][1]).toEqual({
+      $pull: {
+        holdings: { corporationId: { $eq: corporationId }, shares: { $lte: 0 } },
+      },
+    });
+  });
+
+  it("does not mutate further when the sufficient-inventory guard fails", async () => {
+    const updateOne = vi.fn().mockResolvedValue({ matchedCount: 0 });
+    const findOne = vi.fn();
+    const db = { collection: vi.fn(() => ({ updateOne, findOne })) } as never;
+
+    await expect(debitFundHoldingShares(db, new ObjectId(), new ObjectId(), 25, 12)).resolves.toBe(
+      false
+    );
+    expect(findOne).not.toHaveBeenCalled();
+    expect(updateOne).toHaveBeenCalledOnce();
   });
 });
 

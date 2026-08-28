@@ -57,6 +57,7 @@ export interface PlaceFundShareBuyOrderInput {
   limitPriceLocal: number;
   /** FX rate (local per 1 ₳) for the target corp's home currency. */
   fxRate: number;
+  liquidityQuote?: { turn: number; referencePrice: number };
 }
 
 export interface PlaceFundShareBuyOrderResult {
@@ -107,6 +108,13 @@ export async function placeFundShareBuyOrder(
       pricePerShare: limitPriceLocal,
       escrowAmount,
       escrowAnchor,
+      ...(input.liquidityQuote
+        ? {
+            liquidityProvider: true,
+            liquidityQuotedTurn: input.liquidityQuote.turn,
+            liquidityReferencePrice: input.liquidityQuote.referencePrice,
+          }
+        : {}),
       status: "open",
       createdAt: now,
       updatedAt: now,
@@ -126,6 +134,74 @@ export async function placeFundShareBuyOrder(
     await refundFundCashAnchor(db, fund._id, escrowAnchor);
     throw err;
   }
+
+  return { ok: true, orderId };
+}
+
+export interface PlaceFundShareSellOrderInput {
+  fund: Pick<IndexFund, "_id" | "name" | "holdings">;
+  corp: Pick<Corporation, "_id">;
+  shares: number;
+  /** Ask price in the target corporation's local currency. */
+  limitPriceLocal: number;
+  liquidityQuote?: { turn: number; referencePrice: number };
+}
+
+/**
+ * Place an executable fund-owned ask without moving inventory at quote time.
+ * Existing open asks reserve their remaining shares for the availability
+ * check. Settlement performs guarded debits against both the cap table and the
+ * fund holdings ledger, so a concurrent redemption cannot create shares.
+ */
+export async function placeFundShareSellOrder(
+  db: Db,
+  input: PlaceFundShareSellOrderInput
+): Promise<PlaceFundShareBuyOrderResult> {
+  const { fund, corp, shares, limitPriceLocal } = input;
+  if (!Number.isFinite(shares) || shares <= 0) {
+    return { ok: false, reason: "Invalid share quantity" };
+  }
+  if (!Number.isFinite(limitPriceLocal) || limitPriceLocal <= 0) {
+    return { ok: false, reason: "Invalid limit price" };
+  }
+
+  const holding = fund.holdings.find((row) => row.corporationId.toString() === corp._id.toString());
+  const openAsks = await db
+    .collection<ShareOrder>("shareOrders")
+    .find({
+      placerFundId: fund._id,
+      corporationId: corp._id,
+      type: "sell",
+      status: "open",
+    })
+    .toArray();
+  const reserved = openAsks.reduce((sum, order) => sum + order.sharesRemaining, 0);
+  if ((holding?.shares ?? 0) - reserved < shares) {
+    return { ok: false, reason: "Insufficient unreserved fund shares" };
+  }
+
+  const now = new Date();
+  const orderId = new ObjectId();
+  await db.collection<ShareOrder>("shareOrders").insertOne({
+    _id: orderId,
+    corporationId: corp._id,
+    placerFundId: fund._id,
+    type: "sell",
+    shares,
+    sharesRemaining: shares,
+    pricePerShare: limitPriceLocal,
+    escrowAmount: 0,
+    ...(input.liquidityQuote
+      ? {
+          liquidityProvider: true,
+          liquidityQuotedTurn: input.liquidityQuote.turn,
+          liquidityReferencePrice: input.liquidityQuote.referencePrice,
+        }
+      : {}),
+    status: "open",
+    createdAt: now,
+    updatedAt: now,
+  });
 
   return { ok: true, orderId };
 }
