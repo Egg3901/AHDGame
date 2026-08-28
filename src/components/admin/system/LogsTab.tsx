@@ -179,6 +179,28 @@ function formatTelemetryValue(value: unknown) {
   return typeof value === "object" ? JSON.stringify(value) : String(value);
 }
 
+/**
+ * Render guard for log fields typed `string | null` that historically have NOT
+ * always been strings on disk. `adminLogs` rows written by ad-hoc heal scripts
+ * have carried structured objects in `details`; rendering one directly throws
+ * React error #31 ("Objects are not valid as a React child"), which escapes to
+ * the admin error boundary and replaces the ENTIRE panel with "Couldn't load
+ * admin panel" — not just this tab.
+ *
+ * The route now coerces these (see api/admin/logs/route.ts), so this is
+ * belt-and-braces; it is kept because the blast radius of getting it wrong is
+ * the whole admin panel rather than one row.
+ */
+function asText(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
 export function LogsTab() {
   const [logs, setLogs] = useState<LogData[]>([]);
   const [hourlyLogs, setHourlyLogs] = useState<TurnLogData[]>([]);
@@ -288,20 +310,24 @@ export function LogsTab() {
                           <span className={`font-semibold ${config.color}`}>{config.label}</span>
                           {log.adminUsername && (
                             <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400">
-                              by {log.adminUsername}
+                              by {asText(log.adminUsername)}
                             </span>
                           )}
                         </div>
                         <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted">
-                          <span className="font-medium text-foreground">{log.username}</span>
+                          <span className="font-medium text-foreground">
+                            {asText(log.username)}
+                          </span>
                           {log.characterName && (
                             <>
                               <span className="text-muted">·</span>
-                              <span>{log.characterName}</span>
+                              <span>{asText(log.characterName)}</span>
                             </>
                           )}
                         </div>
-                        {log.details && <p className="mt-2 text-sm text-muted">{log.details}</p>}
+                        {log.details && (
+                          <p className="mt-2 text-sm text-muted">{asText(log.details)}</p>
+                        )}
                       </div>
                       <time className="flex-shrink-0 text-xs text-muted">
                         {formatDate(log.createdAt)}

@@ -21,6 +21,28 @@ const ACCOUNT_LOGS = [
     createdAt: "2026-08-28T14:57:00.000Z",
   },
   {
+    // The row that took down the whole admin panel on 2026-08-28. Written by an
+    // ad-hoc heal script, `details` is a structured object rather than a string;
+    // rendering it raised React error #31 ("Objects are not valid as a React
+    // child"), which escaped to the admin error boundary and replaced the entire
+    // panel with "Couldn't load admin panel". It sits in the `account` category
+    // the tab opens on, so the panel failed on every load.
+    id: "6a90c3a00da6a70a939df8a3",
+    category: "account" as const,
+    action: "general_traits_refunded",
+    username: "arlebina",
+    characterName: null,
+    adminUsername: null,
+    details: {
+      characterId: "6a77b5d218e42bc9dfb159f2",
+      refundedPoints: 19,
+      traitsCleared: 19,
+      reason: "Player mistakenly trained general traits across categories",
+      backupId: "backup-1",
+    } as unknown as string,
+    createdAt: "2026-08-27T23:09:20.060Z",
+  },
+  {
     id: "68b0c0000000000000000002",
     category: "system" as const,
     // An action with no ACTION_CONFIG entry — must fall back, not crash.
@@ -87,6 +109,17 @@ describe("LogsTab", () => {
   it("renders the default account sub-tab without throwing", async () => {
     render(<LogsTab />);
     await waitFor(() => expect(screen.getByText("Account Created")).toBeTruthy());
+  });
+
+  // Regression guard: a non-string `details` must never reach JSX as an object.
+  // React error #31 here does not degrade the row, it takes down the whole
+  // admin panel via the route-level error boundary.
+  it("renders a log whose details is an object instead of a string", async () => {
+    render(<LogsTab />);
+
+    await waitFor(() => expect(screen.getByText("general_traits_refunded")).toBeTruthy());
+    // Serialised, not dropped — the admin still gets to read the payload.
+    expect(screen.getByText(/refundedPoints/)).toBeTruthy();
   });
 
   it("renders the hourly sub-tab and expands a turn without throwing", async () => {

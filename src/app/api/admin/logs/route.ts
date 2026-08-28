@@ -4,6 +4,35 @@ import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";
 import type { AdminLog, AdminLogCategory } from "@/lib/db/types";
 
+/**
+ * Coerce a stored log field to the `string | null` this route's response
+ * contract promises.
+ *
+ * `adminLogs` is written by ad-hoc heal/migration scripts as well as by the
+ * app, and several of those stored `details` as a structured object rather than
+ * a string (e.g. the `general_traits_refunded` entry holding
+ * `{characterId, refundedPoints, traitsCleared, reason, backupId}`). The route
+ * used to pass the value straight through, so the object reached the client and
+ * `{log.details}` in LogsTab threw React error #31 — "Objects are not valid as
+ * a React child" — which bubbled to the admin error boundary and took down the
+ * WHOLE panel with "Couldn't load admin panel", not just the Logs tab. Since
+ * the offending row sat inside the default `limit=100` window and in the
+ * `account` category the tab opens on, the panel failed every single load.
+ *
+ * Serialising here keeps the payload readable for the admin instead of dropping
+ * it, and honours the declared contract no matter what wrote the row.
+ */
+function toDisplayString(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string") return value || null;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    // Circular or otherwise unserialisable — never let a log row 500 the route.
+    return String(value);
+  }
+}
+
 // GET /api/admin/logs — List admin action logs with optional category filter and limit.
 // Auth: requireAdmin
 // Errors: 403
@@ -35,9 +64,9 @@ export async function GET(request: Request) {
       category: log.category,
       action: log.action,
       username: log.username,
-      characterName: log.characterName || null,
-      adminUsername: log.adminUsername || null,
-      details: log.details || null,
+      characterName: toDisplayString(log.characterName),
+      adminUsername: toDisplayString(log.adminUsername),
+      details: toDisplayString(log.details),
       createdAt: log.createdAt.toISOString(),
     }));
 
