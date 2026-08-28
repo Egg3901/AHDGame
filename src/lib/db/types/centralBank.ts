@@ -55,6 +55,17 @@ export interface RateChangeRecord {
 /** Voting seats on the committee (chair included). Odd so majorities are clean. */
 export const FOMC_BOARD_SIZE = 7;
 
+/**
+ * Countries whose central bank runs on the FOMC committee model. The committee
+ * is the US Federal Reserve's institution; other central banks run the
+ * single-governor / government-controlled model instead. Seeding a committee on
+ * every "independent" bank gave the Bank of England, Bundesbank, BoJ and the
+ * rest a US-shaped board of technocrat NPPs, which then blocked the government
+ * and legislative rate-setting paths those countries actually use (#1195). Keep
+ * the committee where it belongs.
+ */
+export const FOMC_COMMITTEE_COUNTRY_IDS: ReadonlySet<string> = new Set(["US"]);
+
 /** Hard cap on executed rate changes (hikes + cuts, holds are free) per 4-year term. */
 export const RATE_CHANGES_PER_TERM = 16;
 
