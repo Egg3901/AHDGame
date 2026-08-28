@@ -18,7 +18,8 @@ import {
   supplyCeiling,
 } from "./basing";
 import { cv, baseCv, alive } from "./engineCore";
-import type { NavairUnit, RegionChannels } from "./types";
+import { resolveEngagement } from "./engagement";
+import type { NavairUnit, RegionChannels, EngagementOutcome } from "./types";
 import type { CountryId } from "@/lib/constants/countries";
 import type { RegionCode } from "@/lib/military/types";
 
@@ -39,6 +40,11 @@ export interface NavairTurnResult {
   regionsContested: number;
   channelsWritten: number;
   unitsStationed: number;
+  engagementsFought: number;
+  /** Formations reduced to combat ineffectiveness. Never deleted. */
+  formationsLost: number;
+  /** Formation rows written back after combat. */
+  formationsUpdated: number;
 }
 
 /** Who each country is currently shooting at, from active conflicts. */
@@ -92,7 +98,15 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
     .toArray()) as unknown as NavairUnit[];
 
   if (!units.length) {
-    return { countriesProcessed: 0, regionsContested: 0, channelsWritten: 0, unitsStationed: 0 };
+    return {
+      countriesProcessed: 0,
+      regionsContested: 0,
+      channelsWritten: 0,
+      unitsStationed: 0,
+      engagementsFought: 0,
+      formationsLost: 0,
+      formationsUpdated: 0,
+    };
   }
 
   const [hostility, blocs, channels] = await Promise.all([
@@ -133,6 +147,52 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
     }
   }
 
+  // ── surface actions ─────────────────────────────────────────────────────────
+  // Resolved BEFORE the contest is scored, so a fleet that was sunk or crippled this
+  // turn does not go on to contest the water it just lost. Scoring first would let a
+  // destroyed squadron hold a region for one more turn, every time.
+  const engagements: EngagementOutcome[] = [];
+  const crippled: NavairUnit[] = [];
+  const touched = new Set<NavairUnit>();
+
+  for (const [region, here] of byRegion) {
+    const naval = here.filter((u) => u.domain === "naval");
+    if (naval.length < 2) continue;
+
+    // Each hostile pairing fights once. Sorted so the pairing order, and therefore the
+    // result, does not depend on Mongo's return order.
+    const present = [...new Set(naval.map((u) => u.countryId))].sort();
+    const fought = new Set<string>();
+
+    for (const a of present) {
+      const enemies = hostility.get(a) ?? new Set<string>();
+      for (const b of present) {
+        if (a === b || !enemies.has(b)) continue;
+        const pair = [a, b].sort().join(":");
+        if (fought.has(pair)) continue;
+        fought.add(pair);
+
+        const result = resolveEngagement(
+          region,
+          naval.filter((u) => u.countryId === a),
+          naval.filter((u) => u.countryId === b)
+        );
+        if (!result) continue;
+        engagements.push(result.outcome);
+        crippled.push(...result.crippled);
+        for (const u of [...result.crippled, ...result.damaged]) touched.add(u);
+      }
+    }
+  }
+
+  // A crippled formation is not deleted, it is combat ineffective: `alive` reads its
+  // integrity, so it drops out of the contest below without any roster surgery. It keeps
+  // its general and its theater and rebuilds in place, which is the game's existing
+  // convention for a mauled unit and the reason nothing here writes a delete.
+  for (const [region, here] of byRegion) {
+    byRegion.set(region, here.filter(alive));
+  }
+
   // ── score the contest and move the channels ─────────────────────────────────
   const updates: Array<{ countryId: CountryId; region: RegionCode; channels: RegionChannels }> = [];
   let regionsContested = 0;
@@ -166,11 +226,16 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
 
   const channelsWritten = await saveNavairChannels(db, updates);
 
+  const formationsLost = await persistCombatResults(db, touched);
+
   return {
     countriesProcessed: countries.size,
     regionsContested,
     channelsWritten,
     unitsStationed,
+    engagementsFought: engagements.length,
+    formationsLost: crippled.length,
+    formationsUpdated: formationsLost,
   };
 }
 
@@ -193,4 +258,31 @@ function weigh(units: readonly NavairUnit[], domain: "naval" | "air"): number {
     }
   }
   return total;
+}
+
+/**
+ * Write back what combat did to the formations that fought.
+ *
+ * An update, never a delete. Mirrors `persistSide` in the land battle path: personnel,
+ * readiness and condition change, the command structure does not. A formation reduced to
+ * nothing keeps its general and its theater and rebuilds in place.
+ */
+async function persistCombatResults(db: Db, touched: ReadonlySet<NavairUnit>): Promise<number> {
+  if (!touched.size) return 0;
+  const ops = [...touched].map((u) => ({
+    updateOne: {
+      filter: { _id: u._id },
+      update: {
+        $set: {
+          personnel: u.personnel,
+          readiness: u.readiness,
+          integrity: u.integrity ?? 100,
+          supply: u.supply ?? 100,
+          station: u.station ?? null,
+        },
+      },
+    },
+  }));
+  const res = await getMilitaryUnitsCollection(db).bulkWrite(ops, { ordered: false });
+  return res.modifiedCount ?? 0;
 }

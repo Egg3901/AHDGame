@@ -12,9 +12,17 @@ import type { RegionCode } from "@/lib/military/types";
  * whether or not either wanted to, which is what makes stationing a decision rather than
  * a preference.
  *
- * Losses here are PERMANENT. A hull that goes to the bottom is replaced through defence
- * procurement or not at all, which is what makes committing a carrier frightening and
- * what connects this subsystem to the defence economy.
+ * Losses here are real and they persist, but a formation is never deleted. That is the
+ * game's existing convention and it is deliberate: `persistSide` states that a unit keeps
+ * its general and its front no matter how badly it is mauled, and a hollowed out
+ * formation is simply weak, rebuilding in place through the reinforcement flow. Deleting
+ * a sunk squadron would dangle its assigned general and silently rearrange a chain of
+ * command that battle is not allowed to touch.
+ *
+ * So a fleet that loses badly comes home with its hulls wrecked and its crews gone, and
+ * getting it back to strength costs personnel and materiel through the same procurement
+ * and reinforcement path everything else uses. That is what connects this subsystem to
+ * the defence economy, and it does it without a destructive write.
  */
 
 /** Postures that mean a formation is present to contest the water, not merely passing. */
@@ -22,9 +30,12 @@ const AGGRESSIVE: ReadonlySet<string> = new Set(["BLOCKADE", "SEA_CONTROL", "SEA
 
 export interface EngagementResult {
   outcome: EngagementOutcome;
-  /** Units destroyed outright. Their `_id`s are removed from the roster. */
-  destroyed: NavairUnit[];
-  /** Units that took damage and survived. */
+  /**
+   * Formations reduced to combat ineffectiveness. NOT deleted: they keep their general
+   * and their theater and rebuild in place, per the game's existing loss convention.
+   */
+  crippled: NavairUnit[];
+  /** Formations that took damage and are still able to fight. */
   damaged: NavairUnit[];
 }
 
@@ -59,15 +70,19 @@ export function resolveEngagement(
   const lossA = intensity * (cvB / total);
   const lossB = intensity * (cvA / total);
 
-  const destroyed: NavairUnit[] = [];
+  const crippled: NavairUnit[] = [];
   const damaged: NavairUnit[] = [];
 
   const apply = (units: readonly NavairUnit[], lossShare: number) => {
     for (const u of units) {
       u.integrity = clamp((u.integrity ?? 100) - lossShare * 100, 0, 100);
       u.readiness = clamp(u.readiness - R.COMBAT_READINESS_DROP, 0, 100);
+      // Crews go down with the hulls. Combat power scales linearly with personnel in this
+      // game, so this is what actually makes a mauled formation weak, and it is the same
+      // quantity the reinforcement flow refills.
+      u.personnel = Math.max(0, Math.round(u.personnel * (1 - lossShare)));
       u.engaged = true;
-      if (u.integrity <= 0) destroyed.push(u);
+      if (u.integrity <= 0) crippled.push(u);
       else damaged.push(u);
     }
   };
@@ -84,9 +99,9 @@ export function resolveEngagement(
       winner: uniqueCountries(winners),
       loser: uniqueCountries(losers),
       marginPct: Math.round((Math.abs(cvA - cvB) / total) * 100),
-      sunk: destroyed.map((u) => u.name),
+      sunk: crippled.map((u) => u.name),
     },
-    destroyed,
+    crippled,
     damaged,
   };
 }
