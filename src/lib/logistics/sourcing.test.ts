@@ -243,6 +243,54 @@ describe("runSourcingPass", () => {
     expect(coal.toleranceBoundUnits).toBeCloseTo(100);
   });
 
+  it("serves grid demand above the tolerance ceiling — energy is wheeled, not hauled", () => {
+    // Same above-ceiling situation as the coal test, but for energy (grid) and
+    // coal side by side. A grid commodity is wheeled at a price rather than
+    // told no, so it is served from reachable generation; the hauled commodity
+    // stays unmet. This is the energy book divergence: the ledger served it, the
+    // sourcing book used to call it unmet.
+    const highAsk = 100 * (1 + BUYER_TOLERANCE_SLACK) + 50;
+    const seller: Map<CommodityType, Balance> = new Map([
+      ["energy", { supply: 200, demand: 0 }],
+      ["coal", { supply: 200, demand: 0 }],
+      ["freight", { supply: 1000, demand: 0 }],
+    ]);
+    const buyer: Map<CommodityType, Balance> = new Map([
+      ["energy", { supply: 0, demand: 100 }],
+      ["coal", { supply: 0, demand: 100 }],
+      ["freight", { supply: 1000, demand: 0 }],
+    ]);
+    const r = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          ["A1", buyer],
+          ["A2", seller],
+          ["B1", new Map()],
+        ]),
+        byCountry: new Map([
+          [
+            "US",
+            new Map([
+              ["energy", { supply: 200, demand: 100 }],
+              ["coal", { supply: 200, demand: 100 }],
+            ]),
+          ],
+          ["UK", new Map()],
+        ]),
+        statePricesFor: () => ({ A1: 100, A2: highAsk, B1: highAsk }),
+        nationalPricesFor: () => ({ US: highAsk, UK: highAsk }),
+      })
+    );
+    const energy = r.summaries.find((s) => s.commodity === "energy")!;
+    const coal = r.summaries.find((s) => s.commodity === "coal")!;
+    // Grid: served (a hop of transmission loss aside), never tolerance-bound.
+    expect(energy.unmetUnits).toBeLessThan(5);
+    expect(energy.toleranceBoundUnits).toBe(0);
+    // Hauled coal in the identical spot stays unmet above the ceiling.
+    expect(coal.unmetUnits).toBeCloseTo(100);
+    expect(coal.toleranceBoundUnits).toBeCloseTo(100);
+  });
+
   it("clears an otherwise refused route when severe shortage enables the wider ceiling", () => {
     const expensive = makeInputs({
       statePricesFor: () => ({ A1: 100, A2: 150 }),
