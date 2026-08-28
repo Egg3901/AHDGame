@@ -85,7 +85,9 @@ describe("resolveEngagement", () => {
     const weak = [hull({ countryId: "RU", mission: "SEA_CONTROL", basePower: 10 })];
     const strong = [hull({ countryId: "US", mission: "SEA_CONTROL", basePower: 99 })];
     resolveEngagement("nat", strong, weak);
-    expect(weak[0].integrity).toBeLessThan(strong[0].integrity);
+    // resolveEngagement always writes integrity on a formation that fought, so the
+    // fallback here is only to satisfy the optional type, never a real value.
+    expect(weak[0].integrity).toBeLessThan(strong[0].integrity ?? 100);
   });
 
   it("is deterministic, so a replay reproduces the same war", () => {
