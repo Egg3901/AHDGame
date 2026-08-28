@@ -8,17 +8,12 @@ import {
 import { applyCivilLibertiesDelta } from "@/lib/politicalMetrics/civilLiberties";
 import { logWireEvent } from "@/lib/wireEvent";
 import type { CrisisActionContext } from "./optionActions";
+import { CIVIL_DEFENSE_SECTOR_SHIFTS, type WarEmergencySectorShift } from "./warEmergencyBalance";
 
 export type WarEmergencyResponseId = Extract<
   CrisisOptionAction,
   { kind: "warEmergencyResponse" }
 >["response"];
-
-interface SectorShift {
-  sectorType: string;
-  pct: number;
-  durationTurns: number;
-}
 
 interface WarEmergencyResponseEffects {
   label: string;
@@ -26,7 +21,7 @@ interface WarEmergencyResponseEffects {
   treasuryCost?: number;
   mitigation?: { pct: number; durationTurns: number };
   civilLiberties?: number;
-  sectors?: SectorShift[];
+  sectors?: readonly WarEmergencySectorShift[];
 }
 
 const RESPONSE_EFFECTS: Record<WarEmergencyResponseId, WarEmergencyResponseEffects> = {
@@ -87,24 +82,14 @@ const RESPONSE_EFFECTS: Record<WarEmergencyResponseId, WarEmergencyResponseEffec
     approval: 2,
     treasuryCost: 15_000,
     mitigation: { pct: 10, durationTurns: 14 },
-    sectors: [
-      { sectorType: "retail", pct: -3, durationTurns: 8 },
-      { sectorType: "construction", pct: 8, durationTurns: 8 },
-      { sectorType: "manufacturing", pct: 6, durationTurns: 8 },
-      { sectorType: "defense", pct: 8, durationTurns: 8 },
-    ],
+    sectors: CIVIL_DEFENSE_SECTOR_SHIFTS.fund,
   },
   civil_defense_drills: {
     label: "Civil defense drills ordered",
     approval: 1,
     mitigation: { pct: 8, durationTurns: 12 },
     civilLiberties: -1,
-    sectors: [
-      { sectorType: "retail", pct: -2, durationTurns: 6 },
-      { sectorType: "construction", pct: 3, durationTurns: 6 },
-      { sectorType: "manufacturing", pct: 3, durationTurns: 6 },
-      { sectorType: "defense", pct: 4, durationTurns: 6 },
-    ],
+    sectors: CIVIL_DEFENSE_SECTOR_SHIFTS.drills,
   },
   civil_defense_dismiss: {
     label: "Civil defense panic dismissed",
