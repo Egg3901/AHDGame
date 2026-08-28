@@ -207,12 +207,27 @@ export const ATTRITION = {
  * reach the line -- and makes the ground cap a consequence of frontage rather than an
  * arbitrary rule.
  *
- * Calibrated so a normal national army fits entirely (East Germany's eleven formations
- * are 731 combat value) while a thirty-six-formation superstack is cut to about twelve.
- * Tightening this to 550 starts punishing a nation for fielding its own army, which is
- * the wrong behaviour.
+ * Denominated in `frontageCost` -- combat value WITHOUT the readiness curve -- so this
+ * number is not comparable to the 900 that preceded it. Frontage used to be billed at
+ * full combat value, which charged an army for how good and how rested it was; the old
+ * calibration note read "East Germany's eleven formations are 731 combat value", a
+ * figure that both predated general modifiers (x1.4-2.3) and moved every time a force
+ * rested. Same formations under the current bill: 1,138.
+ *
+ * Re-derived at 4,000 in scripts/sim/frontCapacity2026-08-28.ts. It is the SMALLEST
+ * frontage at which the size of an army orders the result the way a player expects. At
+ * 900 and at 2,400 the curve is inverted -- the Soviet Army's 44 formations fight worse
+ * alone than East Germany's 11, because a cap this tight is spent on whichever side has
+ * the better divisions rather than the bigger army. From 4,000 the ordering is
+ * DD alone 47% < RU alone 56% < DD+RU 60%, and the war run forward resolves the way the
+ * fiction says it should: East Germany alone loses to the US on turn 385, and with
+ * Soviet backing takes the map on turn 42.
+ *
+ * Deliberately not higher. Above 6,000 the whole coalition is in the line at once and
+ * the war collapses to 26 turns, which buys nothing the ordering has not already given
+ * and removes the cost of winning it.
  */
-export const FRONT_CAPACITY_BASE = 900;
+export const FRONT_CAPACITY_BASE = 4000;
 
 /**
  * Share of a formation's strength that the worst possible engagement takes.
