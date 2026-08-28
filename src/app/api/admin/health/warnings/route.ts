@@ -41,6 +41,16 @@ interface UnifiedWarning {
   timestamp: Date;
 }
 
+/** First argument that parses to a real Date, or null when none does. */
+function firstValidDate(...candidates: Array<Date | string | null | undefined>): Date | null {
+  for (const c of candidates) {
+    if (!c) continue;
+    const d = new Date(c);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  return null;
+}
+
 /** Wall-clock a phase took, or null when the telemetry is incomplete. */
 function phaseDurationMs(telemetry: {
   startedAt?: Date | string | null;
@@ -217,10 +227,24 @@ export async function GET(request: Request) {
     // Only the worst phase per turn is reported, so a broadly slow turn produces
     // one actionable line rather than thirty.
     if (source === "phaseBudget" || !source) {
+      // Ordered by _id, NOT by turn, and projected down to just the fields used
+      // below (notably dropping the bulky `phases`). `turnLogs` carries only the
+      // default `_id_` index, so sort({turn:-1}) plans as a blocking SORT over a
+      // COLLSCAN: measured 2026-08-28 it examined all 448 documents of a 16.2MB
+      // collection (avgObjSize ~38KB). The collection grows ~24 docs/day and its
+      // intended 24h TTL index does not actually exist, so that sort would have
+      // crossed MongoDB's blocking-sort memory ceiling within weeks and 500'd
+      // this route — the health check failing at the same time as the thing it
+      // exists to warn about.
+      //
+      // sort({_id:-1}) plans as LIMIT <- FETCH <- IXSCAN and examines exactly
+      // PHASE_BUDGET_TURN_SAMPLE documents. ObjectIds are monotonic by
+      // insertion and turn logs are written once per turn in order, so _id
+      // descending is newest-turn-first just as turn descending is.
       const budgetLogs = await db
         .collection<TurnLog>("turnLogs")
-        .find(turnFilter)
-        .sort({ turn: -1 })
+        .find(turnFilter, { projection: { turn: 1, realTime: 1, createdAt: 1, phaseStatuses: 1 } })
+        .sort({ _id: -1 })
         .limit(PHASE_BUDGET_TURN_SAMPLE)
         .toArray();
 
@@ -236,6 +260,13 @@ export async function GET(request: Request) {
         const fraction = worst.ms / PHASE_TIMEOUT_MS;
         if (fraction < PHASE_BUDGET_WARN_FRACTION) continue;
 
+        // Every warning's timestamp is dereferenced by the sort below
+        // (`b.timestamp.getTime()`), so a log missing or carrying a malformed
+        // realTime would throw there and 500 the whole endpoint rather than
+        // dropping one row. Fall back to createdAt, then skip.
+        const timestamp = firstValidDate(log.realTime, log.createdAt);
+        if (!timestamp) continue;
+
         allWarnings.push({
           turn: log.turn,
           phase: worst.phase,
@@ -245,7 +276,7 @@ export async function GET(request: Request) {
             `${Math.round(fraction * 100)}% of the ${PHASE_TIMEOUT_MS / 1000}s phase timeout. ` +
             `Exceeding it fails the phase and aborts the turn.`,
           source: "phaseBudget",
-          timestamp: log.realTime,
+          timestamp,
         });
       }
     }
@@ -256,8 +287,18 @@ export async function GET(request: Request) {
     if (severity) filtered = filtered.filter((w) => w.severity === severity);
     if (source) filtered = filtered.filter((w) => w.source === source);
 
-    // Sort by turn descending, then timestamp descending
-    filtered.sort((a, b) => b.turn - a.turn || b.timestamp.getTime() - a.timestamp.getTime());
+    // Sort by turn descending, then timestamp descending.
+    // Read through a guard rather than dereferencing .getTime() directly: every
+    // source above contributes a timestamp copied straight off a stored
+    // document, so a single row with a missing or malformed date would throw
+    // here and 500 the entire endpoint instead of degrading one line. That is a
+    // bad trade for an observability surface whose whole job is to still work
+    // when something else is broken.
+    const sortKey = (w: UnifiedWarning): number => {
+      const t = w.timestamp instanceof Date ? w.timestamp.getTime() : NaN;
+      return Number.isNaN(t) ? 0 : t;
+    };
+    filtered.sort((a, b) => b.turn - a.turn || sortKey(b) - sortKey(a));
 
     return NextResponse.json({ warnings: filtered.slice(0, limit) });
   } catch (error) {

@@ -20,9 +20,22 @@ builder = "NIXPACKS"
 # Either way the process exits mid-turn and strands gameState's processing
 # lock, wedging the game until the next hourly cron tick.
 #
-# 3072 MB gives ~3.8GB of heap_size_limit — about 4x the observed 958MB peak.
-# RSS at the trip was only 1440MB, so this stays far under the heapWatchdog's
-# 5 GB RSS observation ceiling, which still backstops a genuine runaway.
+# 3072 MB raises heap_size_limit to roughly 3.3GB.
+#
+# Note which guard actually binds afterwards. heapWatchdog trips on EITHER heap
+# (75% of heap_size_limit) or RSS (70% of its 5GB observation ceiling, i.e.
+# 3.5GB). At the observed RSS-to-heapUsed ratio of about 1.5 (1440MB RSS at a
+# 958MB heap trip), a 3.3GB heap limit would reach the RSS threshold at roughly
+# 2.3GB heapUsed, slightly BEFORE the heap threshold at 2.5GB. So the effective
+# new ceiling is the RSS guard at ~3.5GB rather than the heap one: call it a
+# ~2.4x improvement on the old 958MB trip point, not the ~4x that heap headroom
+# alone would suggest.
+#
+# That is fine, and deliberately left as-is: both guards exit cleanly and now
+# release the turn lock on the way out, and tripping at 3.5GB RSS keeps us well
+# inside the container rather than risking an OS OOM kill, which would give no
+# clean exit and no lock release at all.
+#
 # Headroom also relieves the GC pressure that correlates with the median turn
 # duration climbing 46s -> 114s over the preceding fortnight.
 startCommand = "NODE_OPTIONS=--max-old-space-size=3072 HOSTNAME=0.0.0.0 npx next start"

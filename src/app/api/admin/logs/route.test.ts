@@ -93,6 +93,40 @@ describe("GET /api/admin/logs", () => {
     expect(body.logs[0].details).toContain("refundedPoints");
   });
 
+  // Same bug class, same blast radius: `action` is rendered as the display
+  // label whenever it has no ACTION_CONFIG entry, so an object there reaches
+  // JSX exactly as `details` did. These two are contract-non-nullable, so they
+  // floor at "" rather than null.
+  it("coerces object-valued action and username without nulling them", async () => {
+    await mockAdmin();
+    seedLogs([
+      makeLog({
+        action: { kind: "migration", ticket: 1044 },
+        username: { legacy: "unmigrated" },
+      }),
+    ]);
+
+    const { GET } = await import("./route");
+    const res = await GET(new Request("http://localhost/api/admin/logs"));
+    const body = await res.json();
+
+    expect(typeof body.logs[0].action).toBe("string");
+    expect(typeof body.logs[0].username).toBe("string");
+    expect(body.logs[0].action).toContain("migration");
+  });
+
+  it("floors a missing action or username at empty string, not null", async () => {
+    await mockAdmin();
+    seedLogs([makeLog({ action: undefined, username: null })]);
+
+    const { GET } = await import("./route");
+    const res = await GET(new Request("http://localhost/api/admin/logs"));
+    const body = await res.json();
+
+    expect(body.logs[0].action).toBe("");
+    expect(body.logs[0].username).toBe("");
+  });
+
   it("passes a string details through unchanged and maps empty to null", async () => {
     await mockAdmin();
     seedLogs([makeLog({ details: "appointed to office" }), makeLog({ details: "" })]);

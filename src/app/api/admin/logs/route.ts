@@ -33,6 +33,17 @@ function toDisplayString(value: unknown): string | null {
   }
 }
 
+/**
+ * Same coercion for the two fields the contract declares as non-nullable
+ * (`action`, `username`). They carry the identical risk — `action` in
+ * particular is used as the display label when it has no ACTION_CONFIG entry,
+ * so an object there reaches JSX just as `details` did — but collapsing them to
+ * null would change the response shape, so an empty string is the floor.
+ */
+function toRequiredString(value: unknown): string {
+  return toDisplayString(value) ?? "";
+}
+
 // GET /api/admin/logs — List admin action logs with optional category filter and limit.
 // Auth: requireAdmin
 // Errors: 403
@@ -62,8 +73,8 @@ export async function GET(request: Request) {
     const formattedLogs = logs.map((log) => ({
       id: log._id.toString(),
       category: log.category,
-      action: log.action,
-      username: log.username,
+      action: toRequiredString(log.action),
+      username: toRequiredString(log.username),
       characterName: toDisplayString(log.characterName),
       adminUsername: toDisplayString(log.adminUsername),
       details: toDisplayString(log.details),

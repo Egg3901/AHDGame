@@ -842,6 +842,29 @@ describe("cron jobs", () => {
       expect(mockProcessTurn).not.toHaveBeenCalled();
     });
 
+    // gameState's processing lock is shared with other long operations. The
+    // forex migration holds it as processingKind "forexMigration", and
+    // processTurn's crash-recovery guard bails on a non-turn kind — so falling
+    // through would run a NORMAL turn, advancing the game clock at an arbitrary
+    // 5-minute boundary instead of on the hour.
+    it("ignores a stale lock belonging to a non-turn operation", async () => {
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue({
+        currentTurn: 457,
+        isActive: true,
+        isProcessing: true,
+        processingKind: "forexMigration",
+        processingHeartbeatAt: STALE,
+      });
+      armCron();
+
+      const { initializeCronJobs } = await import("./cron");
+      await initializeCronJobs();
+      await findScheduledCallback(STUCK_LOCK_SWEEP_SCHEDULE)();
+
+      expect(mockProcessTurn).not.toHaveBeenCalled();
+    });
+
     it("does nothing while the game is paused", async () => {
       mockInitializeGameState.mockResolvedValue(undefined);
       mockGetGameState.mockResolvedValue({

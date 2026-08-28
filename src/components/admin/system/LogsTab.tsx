@@ -291,8 +291,13 @@ export function LogsTab() {
       {activeSubTab !== "hourly" && !loading && !error && filteredLogs.length > 0 && (
         <div className="space-y-3">
           {filteredLogs.map((log) => {
-            const config = ACTION_CONFIG[log.action] || {
-              label: log.action,
+            // `action` falls through to the label when it has no ACTION_CONFIG
+            // entry, so an object here reaches JSX exactly like `details` did
+            // and takes the whole panel down. Normalise before both the lookup
+            // and the fallback.
+            const actionKey = asText(log.action) ?? "";
+            const config = ACTION_CONFIG[actionKey] || {
+              label: actionKey,
               icon: "edit",
               color: "text-muted",
             };
@@ -302,7 +307,7 @@ export function LogsTab() {
                 className="group relative rounded-lg border border-card-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md"
               >
                 <div className="flex items-start gap-4">
-                  <ActionIcon action={log.action} />
+                  <ActionIcon action={actionKey} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>

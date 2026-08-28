@@ -111,6 +111,31 @@ describe("LogsTab", () => {
     await waitFor(() => expect(screen.getByText("Account Created")).toBeTruthy());
   });
 
+  // `action` is rendered as the label whenever it has no ACTION_CONFIG entry,
+  // so it carries the same whole-panel blast radius as `details`.
+  it("renders a log whose action is an object instead of a string", async () => {
+    global.fetch = vi.fn(async (url: string) => {
+      if (url.includes("/hourly")) {
+        return { ok: true, json: async () => ({ logs: [], count: 0 }) };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          logs: [
+            {
+              ...ACCOUNT_LOGS[0],
+              action: { kind: "migration", ticket: 1044 } as unknown as string,
+            },
+          ],
+          total: 1,
+        }),
+      };
+    }) as unknown as typeof fetch;
+
+    render(<LogsTab />);
+    await waitFor(() => expect(screen.getByText(/migration/)).toBeTruthy());
+  });
+
   // Regression guard: a non-string `details` must never reach JSX as an object.
   // React error #31 here does not degrade the row, it takes down the whole
   // admin panel via the route-level error boundary.

@@ -288,6 +288,17 @@ export async function initializeCronJobs() {
         // here; starting a turn is the :00 / :30 crons' job, not this sweep's.
         if (!currentState.isProcessing) return;
 
+        // Only ever repossess a TURN lock. gameState's processing lock is shared
+        // with other long operations — the forex migration takes it as
+        // processingKind "forexMigration" — and processTurn's own crash-recovery
+        // guard (shouldRecoverCrashedTurn) bails on a non-turn kind, which means
+        // it would fall through and run a NORMAL turn instead. Since this sweep
+        // fires on every 5-minute boundary rather than only at :00/:30, that
+        // would advance the game clock at an arbitrary time off the hour.
+        // Clearing a stranded migration lock is the admin Reset Lock's job, not
+        // this sweep's: taking it over could corrupt a half-applied migration.
+        if (currentState.processingKind !== "turn") return;
+
         const lockState = getProcessingLockState(currentState);
         if (!lockState.isStale) return;
 

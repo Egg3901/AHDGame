@@ -179,21 +179,81 @@ describe("GET /api/admin/health/warnings", () => {
     ]);
   });
 
+  // Every source copies its timestamp straight off a stored document, and the
+  // endpoint's final sort dereferences it. One malformed date must degrade a
+  // single row, not 500 an observability surface whose job is to keep working
+  // when something else is broken.
+  it("survives a warning whose stored timestamp is malformed", async () => {
+    db.collectionMocks.gameHealthSnapshots.find.mockReturnValue({
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([
+        {
+          turn: 441,
+          timestamp: new Date("2026-04-29T04:20:13.361Z"),
+          turnProcessing: {
+            warningCount: 1,
+            errorCount: 0,
+            // TWO warnings, and both on the SAME turn. Array.sort skips the
+            // comparator entirely for a single element, and the comparator
+            // short-circuits on `b.turn - a.turn` when the turns differ — so
+            // either alone makes this test vacuous and it passes even with the
+            // timestamp dereferenced unguarded.
+            warnings: [
+              {
+                phase: "fundGeneration",
+                message: "Warning with a good timestamp",
+                turn: 441,
+                timestamp: new Date("2026-04-29T04:20:10.000Z"),
+              },
+              {
+                phase: "campaignTurn",
+                message: "Warning with a broken timestamp",
+                turn: 441,
+                timestamp: "not-a-date",
+              },
+            ],
+            errors: [],
+            phaseStatuses: {},
+          },
+          dataIntegrity: { issues: [] },
+        },
+      ]),
+    });
+
+    const { GET } = await import("./route");
+    const response = await GET(new Request("http://localhost/api/admin/health/warnings"));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.warnings).toHaveLength(2);
+    expect(json.warnings.map((w: { message: string }) => w.message)).toEqual(
+      expect.arrayContaining(["Warning with a broken timestamp", "Warning with a good timestamp"])
+    );
+  });
+
   // Phase-budget pressure. runPhase kills a phase at PHASE_TIMEOUT_MS (240s),
   // failing the phase and aborting the turn — so a phase creeping toward that
   // ceiling is an outage with a lead time. A slow phase that still SUCCEEDS
   // raises no warning, skip or error anywhere else, so nothing surfaced it.
   describe("phaseBudget warnings", () => {
-    function seedTurnLog(phaseStatuses: Record<string, unknown>) {
+    let sortSpy: ReturnType<typeof vi.fn>;
+
+    function seedTurnLog(
+      phaseStatuses: Record<string, unknown>,
+      logOverrides: Record<string, unknown> = {}
+    ) {
       db.collection("turnLogs");
+      sortSpy = vi.fn().mockReturnThis();
       db.collectionMocks.turnLogs.find.mockReturnValue({
-        sort: vi.fn().mockReturnThis(),
+        sort: sortSpy,
         limit: vi.fn().mockReturnThis(),
         toArray: vi.fn().mockResolvedValue([
           {
             turn: 460,
             realTime: new Date("2026-04-29T05:00:00.000Z"),
             phaseStatuses,
+            ...logOverrides,
           },
         ]),
       });
@@ -283,6 +343,70 @@ describe("GET /api/admin/health/warnings", () => {
       );
       const json = await res.json();
 
+      expect(json.warnings).toHaveLength(0);
+    });
+
+    // turnLogs carries only the default _id_ index and its documents average
+    // ~38KB, so sort({turn:-1}) plans as a blocking SORT over a COLLSCAN of the
+    // whole 16MB+ collection. That would cross MongoDB's blocking-sort memory
+    // ceiling as the collection grows and 500 this endpoint — the health check
+    // failing at the same time as the thing it exists to warn about. _id
+    // descending is index-backed and equivalent here, because ObjectIds are
+    // monotonic and turn logs are written once per turn in order.
+    it("orders by _id, not turn, so the query stays index-backed", async () => {
+      seedTurnLog({ corporationTurn: ranFor(200_000) });
+
+      const { GET } = await import("./route");
+      await GET(new Request("http://localhost/api/admin/health/warnings?source=phaseBudget"));
+
+      expect(sortSpy).toHaveBeenCalledWith({ _id: -1 });
+    });
+
+    it("projects away the bulky phases field", async () => {
+      seedTurnLog({ corporationTurn: ranFor(200_000) });
+
+      const { GET } = await import("./route");
+      await GET(new Request("http://localhost/api/admin/health/warnings?source=phaseBudget"));
+
+      const [, options] = db.collectionMocks.turnLogs.find.mock.calls[0];
+      expect(options?.projection).toEqual(
+        expect.objectContaining({ turn: 1, realTime: 1, phaseStatuses: 1 })
+      );
+      expect(options?.projection?.phases).toBeUndefined();
+    });
+
+    // Every warning's timestamp is dereferenced by the endpoint's final sort, so
+    // one malformed row must not take the whole response down with it.
+    it("falls back to createdAt when realTime is missing", async () => {
+      seedTurnLog(
+        { corporationTurn: ranFor(200_000) },
+        { realTime: undefined, createdAt: new Date("2026-04-29T05:30:00.000Z") }
+      );
+
+      const { GET } = await import("./route");
+      const res = await GET(
+        new Request("http://localhost/api/admin/health/warnings?source=phaseBudget")
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(json.warnings).toHaveLength(1);
+      expect(json.warnings[0].timestamp).toBe("2026-04-29T05:30:00.000Z");
+    });
+
+    it("drops a row with no usable timestamp instead of 500ing the endpoint", async () => {
+      seedTurnLog(
+        { corporationTurn: ranFor(200_000) },
+        { realTime: undefined, createdAt: undefined }
+      );
+
+      const { GET } = await import("./route");
+      const res = await GET(
+        new Request("http://localhost/api/admin/health/warnings?source=phaseBudget")
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
       expect(json.warnings).toHaveLength(0);
     });
   });

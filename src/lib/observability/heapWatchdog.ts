@@ -279,14 +279,27 @@ async function defaultOnCritical(snapshot: HeapSnapshot, deps: HeapWatchdogDeps)
   try {
     const releaseTurnLock =
       deps.releaseTurnLock ??
-      (async (reason: string) => {
+      // `lockReason`, not `reason`: the enclosing scope already has a `reason`
+      // ("heap" | "rss") and shadowing it here reads as if the trip reason were
+      // being passed straight through, when it is actually the formatted string
+      // built at the call site below.
+      (async (lockReason: string) => {
         const { releaseLocalProcessingLock } = await import("@/lib/turnSystem");
-        return releaseLocalProcessingLock(reason);
+        return releaseLocalProcessingLock(lockReason);
       });
+    // The timer is captured and cleared so the loser of the race does not leave
+    // a pending 2s handle behind. Irrelevant in production (we exit immediately
+    // after), but with an injected process.exit — i.e. in tests — an uncleared
+    // handle keeps the event loop alive past the assertion.
+    let releaseTimer: ReturnType<typeof setTimeout> | undefined;
     const released = await Promise.race([
       releaseTurnLock(`heap watchdog trip (${reason})`),
-      new Promise<false>((resolve) => setTimeout(() => resolve(false), LOCK_RELEASE_TIMEOUT_MS)),
-    ]);
+      new Promise<false>((resolve) => {
+        releaseTimer = setTimeout(() => resolve(false), LOCK_RELEASE_TIMEOUT_MS);
+      }),
+    ]).finally(() => {
+      if (releaseTimer) clearTimeout(releaseTimer);
+    });
     console.error(`[heapWatchdog] turn lock release on trip: ${released ? "released" : "no-op"}`);
   } catch (err) {
     console.error("[heapWatchdog] turn lock release on trip failed:", err);
