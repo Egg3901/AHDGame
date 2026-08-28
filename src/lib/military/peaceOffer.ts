@@ -97,6 +97,12 @@ export function sideWouldEmpty(
 export interface WithdrawalGate {
   /** True when this departure would empty their side, handing the asker the war. */
   endsWar: boolean;
+  /**
+   * Treaty allies released alongside this country, because they were pulled in to
+   * defend it. They leave with it, which is how one departure can empty a side that
+   * still looks populated.
+   */
+  guests: CountryId[];
   /** Front progress in the ASKER's favour, 0..1. */
   progress: number;
   /** Progress a war-ending withdrawal requires. */
@@ -139,6 +145,7 @@ export function withdrawalGate(
 
   return {
     endsWar,
+    guests,
     progress,
     required: PRINCIPAL_BUYOUT_PROGRESS,
     blocked: endsWar && progress < PRINCIPAL_BUYOUT_PROGRESS,
