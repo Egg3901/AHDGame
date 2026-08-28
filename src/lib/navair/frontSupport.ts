@@ -79,11 +79,51 @@ export function interdictionFor(
   }
 
   const fromAir = strikeWeight * INTERDICTION.perCombatValue;
-  // A closed sea lane starves a coastal front too, but only where the sea can reach it.
+
+  // A closed sea lane starves a coastal front too, but only where the sea can reach it,
+  // and only where the side has something that can actually REACH INLAND from that sea.
+  //
+  // Escorts, destroyers and submarines win the water. They do not project power over the
+  // beach: their job is screening the carrier and killing other ships. A carrier is the
+  // only hull whose weapons arrive somewhere its keel cannot, which is why the game's own
+  // config already gives it the `strategic` trait, a NAVAL_REACH of 1.00 against an
+  // escort's 0.40, and sole membership of CAN_FLY.
+  //
+  // Without this gate a destroyer squadron strangled a land front exactly as hard as a
+  // carrier group, and an all-escort fleet could interdict an army with nothing capable
+  // of flying a sortie.
   const coastal = M.isWaterAccessible(frontRegion) || M.neighbors(frontRegion).some(M.isNavigable);
-  const fromSea = coastal ? (seaControlHere / 100) * INTERDICTION.fromSeaControl : 0;
+  const carrierPresent = hasCarrierInReach(units, countries, frontRegion);
+  const fromSea =
+    coastal && carrierPresent ? (seaControlHere / 100) * INTERDICTION.fromSeaControl : 0;
 
   return clamp(fromAir + fromSea, 0, INTERDICTION.cap);
+}
+
+/**
+ * Does this side have a carrier on station in water touching the front?
+ *
+ * `CAN_FLY` is the config's own answer to which hulls put aircraft over land, and it
+ * contains exactly one entry. A carrier still under repair or out of supply counts: it is
+ * the airframes that reach inland, and `seaControlHere` already carries how well the side
+ * is holding that water.
+ */
+function hasCarrierInReach(
+  units: readonly NavairUnit[],
+  countries: readonly string[],
+  frontRegion: RegionCode
+): boolean {
+  const side = new Set<string>(countries);
+  const reachable = new Set<string>([frontRegion, ...M.neighbors(frontRegion)]);
+  return units.some(
+    (u) =>
+      alive(u) &&
+      u.domain === "naval" &&
+      side.has(u.countryId) &&
+      !!u.station &&
+      reachable.has(u.station) &&
+      R.CAN_FLY.has(u.type as never)
+  );
 }
 
 /**
