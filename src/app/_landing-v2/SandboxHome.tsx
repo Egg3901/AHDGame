@@ -133,11 +133,52 @@ const footerNav = (t: TFunc) =>
   LANDING_FOOTER_SECTIONS.map((section) => ({
     headingKey: section.headingKey,
     heading: t(section.headingKey),
-    links: section.links.map((link) => ({ href: link.href, label: t(link.labelKey) })),
+    links: section.links.map((link) => ({
+      href: link.href,
+      label: t(link.labelKey),
+      external: link.external ?? false,
+    })),
   }));
 
 const trayNav = (t: TFunc) =>
-  LANDING_TRAY_LINKS.map((link) => ({ href: link.href, label: t(link.labelKey) }));
+  LANDING_TRAY_LINKS.map((link) => ({
+    href: link.href,
+    label: t(link.labelKey),
+    external: link.external ?? false,
+  }));
+
+/**
+ * next/link for in-app routes, a plain anchor for anything off-domain. The
+ * arrow is the only signal a visitor gets that a link leaves the site, so
+ * external entries must not render as a bare internal link.
+ */
+function LandingNavLink({
+  href,
+  label,
+  external,
+  className,
+}: {
+  href: string;
+  label: string;
+  external: boolean;
+  className: string;
+}) {
+  if (external) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
+        {label}
+        <span aria-hidden="true" className="ml-1">
+          ↗
+        </span>
+      </a>
+    );
+  }
+  return (
+    <Link href={href} className={className}>
+      {label}
+    </Link>
+  );
+}
 
 const learnLinks = (t: TFunc) =>
   [
@@ -759,13 +800,13 @@ export function SandboxHome({
             </p>
             <nav aria-label={t("landing.tray.navLabel")} className="flex flex-wrap gap-2">
               {tray.map((item) => (
-                <Link
+                <LandingNavLink
                   key={item.href}
                   href={item.href}
+                  label={item.label}
+                  external={item.external}
                   className="inline-flex items-center rounded-full border border-card-border bg-card px-3.5 py-1.5 text-body-sm text-muted transition-colors duration-150 hover:border-muted/40 hover:text-foreground"
-                >
-                  {item.label}
-                </Link>
+                />
               ))}
             </nav>
           </div>
@@ -786,12 +827,12 @@ export function SandboxHome({
                   <ul className="space-y-1.5">
                     {col.links.map((link) => (
                       <li key={link.href}>
-                        <Link
+                        <LandingNavLink
                           href={link.href}
+                          label={link.label}
+                          external={link.external}
                           className="text-body-sm text-muted transition-colors hover:text-foreground"
-                        >
-                          {link.label}
-                        </Link>
+                        />
                       </li>
                     ))}
                     {col.headingKey === "landing.footer.legal" && (
