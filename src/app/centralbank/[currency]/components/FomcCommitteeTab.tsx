@@ -36,6 +36,20 @@ interface ResolvedMeeting {
   abstain: number;
 }
 
+interface NominationState {
+  id: string;
+  seatId: string;
+  seatLabel: string;
+  makeChair: boolean;
+  nomineeName: string;
+  occupantType: "player" | "npp";
+  votesFor: number;
+  votesAgainst: number;
+  votesAbstain: number;
+  votingEndsOnTurn: number | null;
+  viewerHasVoted: boolean;
+}
+
 interface CommitteeState {
   hasCommittee: boolean;
   primeRate: number;
@@ -46,6 +60,8 @@ interface CommitteeState {
   termEndsAtTurn?: number | null;
   meetingHistory?: ResolvedMeeting[];
   canNominate: boolean;
+  viewerIsSenator?: boolean;
+  nominations?: NominationState[];
   viewerSeatId: string | null;
   board: BoardSeat[];
   meeting: MeetingState | null;
@@ -99,6 +115,30 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
       setError(null);
       try {
         const res = await fetch(`/api/country/${code}/fomc/vote`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ vote }),
+        });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as { error?: string } | null;
+          throw new Error(body?.error ?? "Vote failed");
+        }
+        await load();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Vote failed");
+      } finally {
+        setVoting(false);
+      }
+    },
+    [code, load]
+  );
+
+  const confirmVote = useCallback(
+    async (nominationId: string, vote: "for" | "against" | "abstain") => {
+      setVoting(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/country/${code}/fomc/nominations/${nominationId}/vote`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ vote }),
@@ -232,6 +272,65 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
           </div>
         )}
       </div>
+
+      {/* Senate confirmations — pending nominations the Senate votes on */}
+      {(state.nominations?.length ?? 0) > 0 && (
+        <div className="rounded-xl border border-card-border bg-card">
+          <div className="border-b border-card-border px-5 py-3">
+            <h3 className="text-sm font-semibold text-foreground">Senate confirmations</h3>
+            <p className="mt-0.5 text-xs text-muted">
+              {state.viewerIsSenator
+                ? "Pending Fed nominations. As a Senator, cast your vote to confirm or reject."
+                : "Pending Fed nominations awaiting a Senate confirmation vote."}
+            </p>
+          </div>
+          <ul className="divide-y divide-card-border">
+            {state.nominations!.map((n) => (
+              <li key={n.id} className="flex flex-wrap items-center gap-2 px-5 py-3">
+                <div className="min-w-0">
+                  <span className="text-sm font-medium text-foreground">{n.nomineeName}</span>
+                  <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                    {n.seatLabel}
+                  </span>
+                  {n.occupantType === "npp" && (
+                    <span className="ml-1 rounded-full bg-muted/10 px-2 py-0.5 text-[10px] text-muted">
+                      NPP
+                    </span>
+                  )}
+                  <span className="mt-0.5 block text-[10px] text-muted">
+                    {n.votesFor} for / {n.votesAgainst} against / {n.votesAbstain} abstain
+                    {n.votingEndsOnTurn != null ? ` · closes turn ${n.votingEndsOnTurn}` : ""}
+                  </span>
+                </div>
+                {state.viewerIsSenator && (
+                  <div className="ml-auto flex items-center gap-1">
+                    {n.viewerHasVoted ? (
+                      <span className="text-[10px] font-medium text-muted">Vote cast</span>
+                    ) : (
+                      (["for", "against", "abstain"] as const).map((v) => (
+                        <button
+                          key={v}
+                          disabled={voting}
+                          onClick={() => confirmVote(n.id, v)}
+                          className={`rounded-md border px-2 py-1 text-[11px] font-medium capitalize transition-colors disabled:opacity-40 ${
+                            v === "for"
+                              ? "border-primary/40 text-primary hover:bg-primary/10"
+                              : v === "against"
+                                ? "border-danger/40 text-danger hover:bg-danger/10"
+                                : "border-card-border text-muted hover:bg-card-elevated"
+                          }`}
+                        >
+                          {v}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Recent sessions — how past votes went */}
       {(state.meetingHistory?.length ?? 0) > 0 && (

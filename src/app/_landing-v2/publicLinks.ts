@@ -18,7 +18,16 @@ export type LandingLink = {
   href: string;
   /** Key under the `auth` next-intl namespace. */
   labelKey: string;
+  /**
+   * Renders as a plain `<a target="_blank">` instead of a next/link. Set it for
+   * anything that leaves ahousedividedgame.com, so the tray does not eject a
+   * visitor to another domain with no warning.
+   */
+  external?: true;
 };
+
+/** Canonical home of the public API reference since #771 retired /api-guide. */
+export const API_DOCS_URL = "https://docs.lakesidegames.net/api/public-v1.html";
 
 export type LandingFooterSection = {
   headingKey: string;
@@ -45,7 +54,10 @@ export const LANDING_FOOTER_SECTIONS: readonly LandingFooterSection[] = [
       { href: "/guides", labelKey: "landing.footer.guides" },
       { href: "/wiki", labelKey: "landing.footer.wiki" },
       { href: "/faq", labelKey: "landing.footer.faq" },
-      { href: "/api-guide", labelKey: "landing.footer.apiDocs" },
+      // The in-app /api-guide page was retired in #771 and the route is now a
+      // 308 to the docs site, so link the canonical URL rather than bouncing
+      // through a redirect that lands on another domain unannounced.
+      { href: API_DOCS_URL, labelKey: "landing.footer.apiDocs", external: true },
       { href: "/about", labelKey: "landing.footer.about" },
     ],
   },

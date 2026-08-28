@@ -1,5 +1,58 @@
-import { describe, it, expect } from "vitest";
-import { buildBillVetoedDiscordEmbed, DISCORD_COLORS } from "./discordWebhooks";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const mockInsertOne = vi.fn();
+const mockGetDb = vi.fn(async () => ({
+  collection: (name: string) => {
+    if (name === "gameConfig") {
+      return { findOne: async () => ({ discordNewsWebhookUrl: "http://hook/news" }) };
+    }
+    // sentNewsDedup
+    return {
+      createIndex: async () => undefined,
+      insertOne: (...args: unknown[]) => mockInsertOne(...args),
+    };
+  },
+}));
+vi.mock("@/lib/mongodb", () => ({ getDb: () => mockGetDb() }));
+vi.mock("@/lib/countryAccess", () => ({ isCountryEnabledForPlayers: async () => true }));
+
+import { buildBillVetoedDiscordEmbed, DISCORD_COLORS, sendNewsEvent } from "./discordWebhooks";
+
+describe("sendNewsEvent dedup (#1208)", () => {
+  const fetchMock = vi.fn(async () => ({
+    ok: true,
+    json: async () => ({ id: "1" }),
+    text: async () => "",
+  }));
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  const embed = {
+    title: "First Secretary of State Established",
+    description: "The office was established.",
+    color: 1,
+  };
+
+  it("posts a news embed the first time (dedup claim succeeds)", async () => {
+    mockInsertOne.mockResolvedValueOnce({});
+    await sendNewsEvent(embed);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("suppresses a duplicate embed when the claim hits a duplicate key", async () => {
+    mockInsertOne.mockRejectedValueOnce({ code: 11000 });
+    await sendNewsEvent(embed);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("still posts if the dedup store errors (never silences real news)", async () => {
+    mockInsertOne.mockRejectedValueOnce(new Error("db down"));
+    await sendNewsEvent(embed);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("buildBillVetoedDiscordEmbed", () => {
   const billUrl = "https://ahousedividedgame.com/congress/bills/abc123";
