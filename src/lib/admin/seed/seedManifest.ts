@@ -312,6 +312,12 @@ const RUNTIME: CollectionEntry[] = [
   { name: "nppEndorsements", category: "runtime" },
   { name: "nppVoteCommitments", category: "runtime" },
   { name: "nppVotePredictions", category: "runtime" },
+  {
+    name: "nppForeignPolicyDecisions",
+    category: "runtime",
+    notes:
+      "One auditable autonomous foreign-policy intent per country and turn. Shadow-mode rows are wiped on reset and never mutate gameplay state.",
+  },
   { name: "playerEndorsements", category: "runtime" },
 
   // Bills + legislation runtime
@@ -769,6 +775,11 @@ const RUNTIME: CollectionEntry[] = [
   // alignment turn phase — runtime world state, wiped and reseeded like the
   // org collections above.
   { name: "countryAlignments", category: "runtime" },
+  {
+    name: "sphereMemberships",
+    category: "runtime",
+    notes: "Seeded sphere membership and influence state for the current world iteration.",
+  },
 
   // Queued influence plays, consumed by the alignment turn phase. Player
   // actions against runtime world state, so wiped and reseeded with it.
