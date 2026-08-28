@@ -265,6 +265,84 @@ describe("reconcileLedger", () => {
     expect(report.status).toBe("green");
   });
 
+  it("ignores economically immaterial zero-value mint and sink legs", () => {
+    const entries: LedgerEntry[] = [
+      entry({
+        txType: "bond_issuance",
+        emitSite: "bondIssuance",
+        legs: [
+          {
+            account: "government:US:USD",
+            amount: 0,
+            currencyCode: "USD",
+            anchorAmount: 0,
+            role: "primary",
+          },
+          {
+            account: "mint:unattributed:USD",
+            amount: 0,
+            currencyCode: "USD",
+            anchorAmount: 0,
+            role: "contra",
+          },
+        ],
+      }),
+    ];
+
+    const report = reconcileLedger({
+      turn: 10,
+      entries,
+      openingBalances: {},
+      closingBalances: {},
+      skipStockVsFlow: true,
+    });
+
+    expect(report.moneySupply.status).toBe("green");
+    expect(report.moneySupply.findings).toEqual([]);
+    expect(report.unattributed).toEqual([]);
+    expect(report.status).toBe("green");
+  });
+
+  it("removes pure FX revaluation from stock-flow while retaining cash movement", () => {
+    const account = "corporation:fx-test:USD";
+    const entries: LedgerEntry[] = [
+      entry({
+        txType: "corp_revenue",
+        emitSite: "test/pre-forex-revenue",
+        legs: [
+          {
+            account,
+            amount: 20,
+            currencyCode: "USD",
+            anchorAmount: 20,
+            role: "primary",
+          },
+          {
+            account: "mint:sector_revenue:USD",
+            amount: -20,
+            currencyCode: "USD",
+            anchorAmount: -20,
+            role: "contra",
+          },
+        ],
+      }),
+    ];
+
+    const report = reconcileLedger({
+      turn: 10,
+      entries,
+      openingBalances: { [account]: 100 },
+      preForexBalances: { [account]: 120 },
+      closingBalances: { [account]: 60 },
+      openingAnchorRates: { USD: 1 },
+      preForexAnchorRates: { USD: 1 },
+      closingAnchorRates: { USD: 2 },
+    });
+
+    expect(report.stockVsFlow.divergentCount).toBe(0);
+    expect(report.status).toBe("green");
+  });
+
   it("skips stock-vs-flow when told to (reset/reseed epoch)", () => {
     const report = reconcileLedger({
       turn: 10,

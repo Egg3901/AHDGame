@@ -141,6 +141,35 @@ function emittedEntries(): Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flag
 describe("executeCorporationBondDefaultDissolution ledger rows (#3237)", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("does not finish the dissolution before its ledger-bearing transaction batch", async () => {
+    let releaseTxBatch: (() => void) | undefined;
+    vi.mocked(emitTxBulk).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseTxBatch = resolve;
+        })
+    );
+    const corp = baseCorp({
+      shareholders: [{ characterId: CHAR_ID, shares: 100 }],
+    });
+    const db = makeDb({ corp: corp as unknown as Record<string, unknown>, issuerBonds: [] });
+
+    let settled = false;
+    const dissolution = executeCorporationBondDefaultDissolution(db, corp, {
+      requireDefaultedBonds: false,
+    }).then(() => {
+      settled = true;
+    });
+
+    await vi.waitFor(() => expect(releaseTxBatch).toBeTypeOf("function"));
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    releaseTxBatch!();
+    await dissolution;
+    expect(settled).toBe(true);
+  });
+
   it("bond-less insolvency wind-down emits NO bond_default row (no amount-0 noise)", async () => {
     const corp = baseCorp({
       shareholders: [{ characterId: CHAR_ID, shares: 100 }],
