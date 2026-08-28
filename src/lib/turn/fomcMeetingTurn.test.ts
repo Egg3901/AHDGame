@@ -321,7 +321,11 @@ describe("processFomcMeetings — player vote window", () => {
     expect(result.ratesChanged).toBe(1);
   });
 
-  it("resolves a meeting at open when no player seat is awaiting a ballot (all-NPP board)", async () => {
+  it("does NOT resolve a meeting on the turn it opens, even on an all-NPP board (#1211)", async () => {
+    // A meeting must never open and resolve inside one turn phase: the chair and
+    // members have to see the motion before it carries. Even an all-NPP board —
+    // whose auto ballots alone decide the tally at open — leaves the meeting open
+    // for its window and resolves at the deadline, not on the opening turn.
     const db = makeDb({
       _id: "JP",
       countryId: "JP",
@@ -342,13 +346,47 @@ describe("processFomcMeetings — player vote window", () => {
     const result = await processFomcMeetings(db as unknown as Db, 108, 1956, new Date());
 
     const $set = setOf(db);
+    const meeting = $set.activeFomcMeeting as FomcMeeting;
+    expect(meeting).toBeTruthy();
+    expect(meeting.status).toBe("voting");
+    expect(meeting.openedAtTurn).toBe(108);
+    expect(meeting.resolvesOnTurn).toBe(108 + 24);
+    // Auto seats have cast, but nothing is resolved this turn.
+    expect(meeting.ballots).toHaveLength(7);
+    expect($set.fomcMeetingHistory).toBeUndefined();
+    expect($set.primeRate).toBeUndefined();
+    expect($set.lastFomcMeetingTurn).toBe(108);
+    expect(result.meetingsOpened).toBe(1);
+    expect(result.meetingsResolved).toBe(0);
+    expect(result.ratesChanged).toBe(0);
+  });
+
+  it("resolves the all-NPP meeting at its deadline on a later turn", async () => {
+    const db = makeDb({
+      _id: "JP",
+      countryId: "JP",
+      primeRate: 5,
+      lastFomcMeetingTurn: 108,
+      fomcTermStartedAtTurn: 100,
+      activeFomcMeeting: nppMajorityMeeting(108),
+      fomcBoard: [
+        seat({ seatId: "seat-1", isChair: true, nppId: CHAIR_NPP }),
+        seat({ seatId: "seat-2" }),
+        seat({ seatId: "seat-3" }),
+        seat({ seatId: "seat-4" }),
+        seat({ seatId: "seat-5" }),
+        seat({ seatId: "seat-6" }),
+        seat({ seatId: "seat-7" }),
+      ],
+    });
+
+    const result = await processFomcMeetings(db as unknown as Db, 132, 1956, new Date());
+
+    const $set = setOf(db);
     expect($set.activeFomcMeeting).toBeNull();
     const history = $set.fomcMeetingHistory as FomcMeeting[];
     expect(history).toHaveLength(1);
     expect(history[0].status).toBe("resolved");
-    expect(history[0].ballots).toHaveLength(7);
-    expect($set.lastFomcMeetingTurn).toBe(108);
-    expect(result.meetingsOpened).toBe(1);
     expect(result.meetingsResolved).toBe(1);
   });
 });
