@@ -35,6 +35,22 @@ describe("missingGameStateFlagDefaults", () => {
     expect(out).toMatchObject({ nppAutonomyLevel: "v4", nppAutonomyEnabled: true });
   });
 
+  it("starts fresh worlds with foreign policy active at the votes stage", () => {
+    expect(missingGameStateFlagDefaults(null)).toMatchObject({
+      nppForeignPolicyMode: "active",
+      nppForeignPolicyStage: "votes",
+    });
+  });
+
+  it("preserves an explicit foreign policy hold", () => {
+    const out = missingGameStateFlagDefaults({
+      nppForeignPolicyMode: "shadow",
+      nppForeignPolicyStage: "trade",
+    });
+    expect(out).not.toHaveProperty("nppForeignPolicyMode");
+    expect(out).not.toHaveProperty("nppForeignPolicyStage");
+  });
+
   it("seeds worldEventsEnabled on for a fresh world (World Events v1 Phase 4)", () => {
     expect(missingGameStateFlagDefaults(null)).toMatchObject({ worldEventsEnabled: true });
   });

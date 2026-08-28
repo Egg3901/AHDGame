@@ -1,6 +1,7 @@
-import type { NppForeignPolicyStage } from "@/lib/db/types/gameState";
+import type { NppForeignPolicyMode, NppForeignPolicyStage } from "@/lib/db/types/gameState";
 import type { ForeignPolicyActionType } from "./foreignPolicy";
 
+export const DEFAULT_FOREIGN_POLICY_MODE: NppForeignPolicyMode = "active";
 export const DEFAULT_FOREIGN_POLICY_STAGE: NppForeignPolicyStage = "votes";
 
 export const FOREIGN_POLICY_STAGES: readonly NppForeignPolicyStage[] = [
@@ -18,6 +19,12 @@ const STAGE_RANK: Record<NppForeignPolicyStage, number> = {
   support: 3,
   war: 4,
 };
+
+export function foreignPolicyModeFrom(value: unknown): NppForeignPolicyMode {
+  return value === "off" || value === "shadow" || value === "active"
+    ? value
+    : DEFAULT_FOREIGN_POLICY_MODE;
+}
 
 export function foreignPolicyStageFrom(value: unknown): NppForeignPolicyStage {
   return typeof value === "string" && FOREIGN_POLICY_STAGES.includes(value as NppForeignPolicyStage)

@@ -10,7 +10,10 @@ import type {
   NppForeignPolicyMode,
   NppForeignPolicyStage,
 } from "@/lib/db/types";
-import { foreignPolicyStageFrom } from "@/lib/nppAutonomy/foreignPolicyRollout";
+import {
+  foreignPolicyModeFrom,
+  foreignPolicyStageFrom,
+} from "@/lib/nppAutonomy/foreignPolicyRollout";
 
 /**
  * Unified admin control surface for the game's feature gates. Reads/writes the
@@ -107,7 +110,9 @@ async function readState(): Promise<FeatureGatesState> {
   const nppAutonomyLevel: NppAutonomyLevel =
     doc?.nppAutonomyLevel ?? (doc?.nppAutonomyEnabled === true ? "v0" : "off");
 
-  const nppForeignPolicyMode: NppForeignPolicyMode = doc?.nppForeignPolicyMode ?? "shadow";
+  const nppForeignPolicyMode: NppForeignPolicyMode = foreignPolicyModeFrom(
+    doc?.nppForeignPolicyMode
+  );
   const nppForeignPolicyStage = foreignPolicyStageFrom(doc?.nppForeignPolicyStage);
 
   return { booleans, nppAutonomyLevel, nppForeignPolicyMode, nppForeignPolicyStage };

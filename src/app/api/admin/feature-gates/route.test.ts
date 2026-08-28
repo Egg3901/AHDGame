@@ -28,7 +28,7 @@ describe("admin feature gates foreign policy mode", () => {
     } as never);
   });
 
-  it("reports shadow when the rollout field is absent", async () => {
+  it("reports the active votes rollout when the fields are absent", async () => {
     db.collection("gameState").findOne.mockResolvedValue({ _id: "current" });
     const { GET } = await import("./route");
 
@@ -36,7 +36,7 @@ describe("admin feature gates foreign policy mode", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      nppForeignPolicyMode: "shadow",
+      nppForeignPolicyMode: "active",
       nppForeignPolicyStage: "votes",
     });
   });

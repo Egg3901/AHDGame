@@ -33,7 +33,11 @@ import type { PeaceOfferDoc } from "@/lib/db/types/peaceOffer";
 import type { PersistedSphereMembership } from "@/lib/world/spheres/membershipStore";
 import { isNppAutonomyActive } from "./featureFlag";
 import { executeForeignPolicyChoice } from "./foreignPolicyActions";
-import { foreignPolicyActionAllowed, foreignPolicyStageFrom } from "./foreignPolicyRollout";
+import {
+  foreignPolicyActionAllowed,
+  foreignPolicyModeFrom,
+  foreignPolicyStageFrom,
+} from "./foreignPolicyRollout";
 
 export type ForeignPolicyMode = NppForeignPolicyMode;
 
@@ -149,10 +153,6 @@ function clamp(value: number, min: number, max: number): number {
 function round(value: number, places = 2): number {
   const scale = 10 ** places;
   return Math.round(value * scale) / scale;
-}
-
-function modeFrom(value: unknown): ForeignPolicyMode {
-  return value === "off" || value === "active" ? value : "shadow";
 }
 
 function alreadyVoted(votes: ProposalVoteRecord[] | undefined, countryId: CountryId): boolean {
@@ -1093,7 +1093,7 @@ async function loadContext(
   return {
     countryId,
     currentTurn,
-    mode: modeFrom(gameState?.nppForeignPolicyMode),
+    mode: foreignPolicyModeFrom(gameState?.nppForeignPolicyMode),
     stage: foreignPolicyStageFrom(gameState?.nppForeignPolicyStage),
     head,
     alignments,

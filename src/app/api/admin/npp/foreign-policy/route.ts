@@ -10,7 +10,10 @@ import {
   summarizeForeignPolicyLedger,
   type ForeignPolicyLedgerDecision,
 } from "@/lib/nppAutonomy/foreignPolicyLedger";
-import { foreignPolicyStageFrom } from "@/lib/nppAutonomy/foreignPolicyRollout";
+import {
+  foreignPolicyModeFrom,
+  foreignPolicyStageFrom,
+} from "@/lib/nppAutonomy/foreignPolicyRollout";
 
 const LEDGER_WINDOW_TURNS = 120;
 const LEDGER_DOCUMENT_LIMIT = 5_000;
@@ -65,7 +68,7 @@ export async function GET() {
       throughTurn: currentTurn,
       documentLimitReached: decisions.length >= LEDGER_DOCUMENT_LIMIT,
       rollout: {
-        mode: gameState?.nppForeignPolicyMode ?? "shadow",
+        mode: foreignPolicyModeFrom(gameState?.nppForeignPolicyMode),
         stage: foreignPolicyStageFrom(gameState?.nppForeignPolicyStage),
       },
       summary: summarizeForeignPolicyLedger(decisions),

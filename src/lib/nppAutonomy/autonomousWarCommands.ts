@@ -11,6 +11,11 @@ import { findLiveOffer, getPeaceOffersCollection } from "@/lib/db/collections/pe
 import { validatePeaceOffer } from "@/lib/military/peaceOffer";
 import { isNppAutonomyActive } from "./featureFlag";
 import type { ForeignPolicyChoice } from "./foreignPolicy";
+import {
+  foreignPolicyActionAllowed,
+  foreignPolicyModeFrom,
+  foreignPolicyStageFrom,
+} from "./foreignPolicyRollout";
 
 export interface AutonomousWarCommandResult {
   acted: boolean;
@@ -80,9 +85,23 @@ async function deployReserveCommitment(
 
 async function activeForAutonomousWar(db: Db, countryId: CountryId): Promise<boolean> {
   const rollout = await db
-    .collection<{ _id: string; nppForeignPolicyMode?: "off" | "shadow" | "active" }>("gameState")
-    .findOne({ _id: "current" }, { projection: { nppForeignPolicyMode: 1 } });
-  return rollout?.nppForeignPolicyMode === "active" && (await isNppAutonomyActive(db, countryId));
+    .collection<{
+      _id: string;
+      nppForeignPolicyMode?: "off" | "shadow" | "active";
+      nppForeignPolicyStage?: "votes" | "proposals" | "trade" | "support" | "war";
+    }>("gameState")
+    .findOne(
+      { _id: "current" },
+      { projection: { nppForeignPolicyMode: 1, nppForeignPolicyStage: 1 } }
+    );
+  return (
+    foreignPolicyModeFrom(rollout?.nppForeignPolicyMode) === "active" &&
+    foreignPolicyActionAllowed(
+      "join_war",
+      foreignPolicyStageFrom(rollout?.nppForeignPolicyStage)
+    ) &&
+    (await isNppAutonomyActive(db, countryId))
+  );
 }
 
 export async function prepareAutonomousWarEntry(

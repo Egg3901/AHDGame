@@ -67,7 +67,7 @@ beforeEach(() => {
 });
 
 describe("castAutonomousOrgVotes", () => {
-  it("yields all ballots to the opinion planner in active mode", async () => {
+  it("yields all ballots to the opinion planner when mode is absent", async () => {
     collectionDocs.proposals = [
       {
         _id: new ObjectId(),
@@ -79,7 +79,7 @@ describe("castAutonomousOrgVotes", () => {
     getMembersMock.mockResolvedValue(["FR", "DE"]);
     isActiveMock.mockResolvedValue(true);
 
-    const count = await castAutonomousOrgVotes(makeDb("active"), 10);
+    const count = await castAutonomousOrgVotes(makeDb(), 10);
 
     expect(count).toBe(0);
     expect(getMembersMock).not.toHaveBeenCalled();
@@ -99,7 +99,7 @@ describe("castAutonomousOrgVotes", () => {
     getMembersMock.mockResolvedValue(["FR", "DE", "UK"]);
     isActiveMock.mockImplementation(async (_db: unknown, cid: string) => cid === "FR");
 
-    const count = await castAutonomousOrgVotes(makeDb(), 10);
+    const count = await castAutonomousOrgVotes(makeDb("shadow"), 10);
 
     expect(count).toBe(1);
     expect(upsertMock).toHaveBeenCalledTimes(1);
@@ -126,7 +126,7 @@ describe("castAutonomousOrgVotes", () => {
       async (_db: unknown, cid: string) => cid === "FR" || cid === "UK"
     );
 
-    const count = await castAutonomousOrgVotes(makeDb(), 5);
+    const count = await castAutonomousOrgVotes(makeDb("shadow"), 5);
     // FR already voted; UK is autonomy-active=true here but DE is applicant.
     // Only UK is eligible+unvoted+active → exactly one vote.
     expect(count).toBe(1);
@@ -144,7 +144,7 @@ describe("castAutonomousOrgVotes", () => {
     ];
     isActiveMock.mockImplementation(async (_db: unknown, cid: string) => cid === "FR");
 
-    const count = await castAutonomousOrgVotes(makeDb(), 7);
+    const count = await castAutonomousOrgVotes(makeDb("shadow"), 7);
     expect(count).toBe(1);
     expect(upsertMock.mock.calls[0][2].countryId).toBe("FR");
   });
@@ -156,7 +156,7 @@ describe("castAutonomousOrgVotes", () => {
     getMembersMock.mockResolvedValue(["FR", "UK"]);
     isActiveMock.mockResolvedValue(false);
 
-    const count = await castAutonomousOrgVotes(makeDb(), 3);
+    const count = await castAutonomousOrgVotes(makeDb("shadow"), 3);
     expect(count).toBe(0);
     expect(upsertMock).not.toHaveBeenCalled();
   });

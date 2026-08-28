@@ -59,6 +59,7 @@ import {
   resolveJoinApplication,
 } from "@/lib/internationalOrganizations/joinApplication";
 import { castAutonomousOrgVotes } from "@/lib/nppAutonomy/autonomousOrgVoting";
+import { foreignPolicyModeFrom } from "@/lib/nppAutonomy/foreignPolicyRollout";
 import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
 import type {
   OrganizationLegislation,
@@ -81,7 +82,7 @@ async function policyVotingMembers(db: Db, organizationId: string): Promise<Coun
   const rollout = await db
     .collection<{ _id: string; nppForeignPolicyMode?: NppForeignPolicyMode }>("gameState")
     .findOne({ _id: "current" }, { projection: { nppForeignPolicyMode: 1 } });
-  if (rollout?.nppForeignPolicyMode !== "active") return players;
+  if (foreignPolicyModeFrom(rollout?.nppForeignPolicyMode) !== "active") return players;
 
   const modelledMembers = (await getMembers(db, organizationId)).filter(
     (member): member is CountryId =>

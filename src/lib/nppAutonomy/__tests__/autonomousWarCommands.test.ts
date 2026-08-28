@@ -56,6 +56,7 @@ describe("autonomous war commands", () => {
     db.collection("gameState").findOne.mockResolvedValue({
       _id: "current",
       nppForeignPolicyMode: "active",
+      nppForeignPolicyStage: "war",
     });
     db.collection("governmentApprovals").findOne.mockResolvedValue({ approvalRating: 60 });
     db.collection("federalBudget").findOne.mockResolvedValue({ debtToGdpRatio: 50 });
@@ -78,6 +79,7 @@ describe("autonomous war commands", () => {
     db.collection("gameState").findOne.mockResolvedValue({
       _id: "current",
       nppForeignPolicyMode: "active",
+      nppForeignPolicyStage: "war",
     });
     db.collection("governmentApprovals").findOne.mockResolvedValue({ approvalRating: 30 });
     db.collection("federalBudget").findOne.mockResolvedValue({ debtToGdpRatio: 50 });
@@ -86,6 +88,16 @@ describe("autonomous war commands", () => {
 
     expect(result).toMatchObject({ ready: false, deployedUnits: 0 });
     expect(db.collection("militaryUnits").updateMany).not.toHaveBeenCalled();
+  });
+
+  it("halts ratified NPP entry when the rollout has returned to votes", async () => {
+    const db = createMockDb();
+    db.collection("gameState").findOne.mockResolvedValue({ _id: "current" });
+
+    const result = await prepareAutonomousWarEntry(db as unknown as Db, "FR", conflict, 50);
+
+    expect(result).toMatchObject({ ready: false, deployedUnits: 0 });
+    expect(db.collection("governmentApprovals").findOne).not.toHaveBeenCalled();
   });
 
   it("queues an offensive through the normal battle declaration collection", async () => {
