@@ -6,10 +6,17 @@ builder = "NIXPACKS"
 # actually invokes instrumentation.ts's register() at boot. node-cron, auto-seed,
 # and crash capture all live in that branch and need to initialize at boot.
 # NODE_OPTIONS caps the V8 old-space heap. Without it, V8 sizes the heap to
-# visible machine memory and RSS drifts upward under load. 1024 MB is
-# comfortably above steady-state and the
-# heapWatchdog's own 5 GB RSS observation ceiling still backstops runaways.
-startCommand = "NODE_OPTIONS=--max-old-space-size=1024 HOSTNAME=0.0.0.0 npx next start"
+# visible machine memory and RSS drifts upward under load. The heapWatchdog's
+# own 5 GB RSS observation ceiling still backstops runaways.
+#
+# Raised 1024 -> 3072 on 2026-08-28. At 1024 the reported heap_size_limit was
+# 1275 MB, so the watchdog's 75% threshold put the kill line at ~956 MB. Idle
+# sits near 400 MB and a turn adds ~600 MB, so turn processing crossed it and
+# the watchdog exited mid-turn (turn 460 tripped at 993 MB / 77.9%). Each trip
+# abandoned the turn holding the processing lock, and TURN_LOCK_STALE_MS blocks
+# the retry for 20 minutes, so one trip cost two turn slots. The container has
+# ~5 GB, so 1024 was leaving most of it unused.
+startCommand = "NODE_OPTIONS=--max-old-space-size=3072 HOSTNAME=0.0.0.0 npx next start"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
