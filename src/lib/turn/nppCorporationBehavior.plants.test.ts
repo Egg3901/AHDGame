@@ -11,6 +11,7 @@ import { describe, it, expect } from "vitest";
 import { ObjectId } from "mongodb";
 import {
   makeNppCorpDecision,
+  NPP_FOUNDING_HEADROOM_SHARE,
   type CommodityPriceRatioFn,
   type NppPlantsContext,
 } from "./nppCorporationBehavior";
@@ -119,8 +120,15 @@ function decide(
   );
 }
 
-/** One-facility founding build a neutral NPP should be charged. */
-const EXPECTED_UNITS = foundingStarterUnits("manufacturing");
+/**
+ * Founding build a neutral, cash-ample NPP should be charged. Deployment now
+ * scales to available capital, so with the default 500M-liquid corp the bind is
+ * the founding headroom share, not a single facility. Floored at one facility.
+ */
+const EXPECTED_UNITS = Math.max(
+  foundingStarterUnits("manufacturing"),
+  Math.floor(POOL_UNITS * NPP_FOUNDING_HEADROOM_SHARE)
+);
 const EXPECTED_FEE = sectorEntryFeeAnchor("2019-default");
 const EXPECTED_BUILD = computeBuildCost({
   eraUnitScale: 1,
@@ -143,7 +151,14 @@ describe("NPP expansion under plants — price parity", () => {
     );
 
     expect(decision.newSectors).toHaveLength(1);
-    expect((c.liquidCapital ?? 0) - (decision.updates.liquidCapital as number)).toBeLessThan(2_000);
+    const spent = (c.liquidCapital ?? 0) - (decision.updates.liquidCapital as number);
+    // Era-real pricing keeps a 1953 founding cheap. Deployment now scales to
+    // capital, so a 10k treasury funds several facilities rather than one — but
+    // it stays a bounded share of that treasury and nowhere near the old flat
+    // 500k modern cash gate.
+    expect(spent).toBeGreaterThan(0);
+    expect(spent).toBeLessThan(c.liquidCapital as number);
+    expect(spent).toBeLessThan(50_000);
   });
 
   it("uses canonical physical P&L to block a loss-making expansion", () => {
@@ -205,6 +220,23 @@ describe("NPP expansion under plants — price parity", () => {
       // starter capacity for free.
       { stateId: "CA", sectorType: "manufacturing", units: EXPECTED_UNITS, countryId: "US" },
     ]);
+  });
+
+  it("scales the founding build to capital instead of a single facility (the $2M-one-plant fix)", () => {
+    // The bug: an NPP sitting on cash founded a new sector with exactly one
+    // facility and idled the rest, while a player deploys their treasury into
+    // dozens of plants. Founding now sizes to a bounded share of surplus.
+    const c = corp({ liquidCapital: 2_000_000 });
+    const decision = decide(c, [sector()], [unownedPool()], plantsCtx);
+    const order = decision.newSectors![0].starterOrder!;
+    // Many facilities, not one.
+    expect(order.unitsOrdered).toBeGreaterThan(foundingStarterUnits("manufacturing"));
+    // Bounded by the founding headroom share so it cannot vacuum a fresh market.
+    expect(order.unitsOrdered).toBeLessThanOrEqual(
+      Math.floor(POOL_UNITS * NPP_FOUNDING_HEADROOM_SHARE)
+    );
+    // Never spent below the cash floor.
+    expect(decision.updates.liquidCapital as number).toBeGreaterThan(0);
   });
 
   it("pays the same price a player's founding build pays for the same units", () => {

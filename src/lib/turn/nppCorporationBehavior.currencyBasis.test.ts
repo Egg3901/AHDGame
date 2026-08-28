@@ -32,6 +32,7 @@ import { describe, it, expect } from "vitest";
 import { ObjectId } from "mongodb";
 import {
   makeNppCorpDecision,
+  NPP_FOUNDING_HEADROOM_SHARE,
   type CommodityPriceRatioFn,
   type NppPlantsContext,
 } from "./nppCorporationBehavior";
@@ -50,7 +51,11 @@ const JPY_RATE = 360;
 
 const POOL_REVENUE_ANCHOR = 40_000_000;
 const POOL_UNITS = computeUnownedHeadroomUnits("manufacturing", POOL_REVENUE_ANCHOR, 1);
-const EXPECTED_UNITS = foundingStarterUnits("manufacturing");
+// Cash-ample founding deploys to the headroom-share cap, not a single facility.
+const EXPECTED_UNITS = Math.max(
+  foundingStarterUnits("manufacturing"),
+  Math.floor(POOL_UNITS * NPP_FOUNDING_HEADROOM_SHARE)
+);
 const EXPECTED_BUILD_ANCHOR = computeBuildCost({
   eraUnitScale: 1,
   sectorType: "manufacturing",
