@@ -312,6 +312,10 @@ export interface GameConfig {
   indexFundBondLiquidityEnabled?: boolean;
   /** Governance record required when the sovereign-bond allocation target is enabled. */
   indexFundBondLiquidityIntervention?: EconomicInterventionPlan;
+  /** Route each existing NPP entry slot to a facility-ready empty market first. */
+  nppMarketCoverageEnabled?: boolean;
+  /** Governance record required when empty-market coverage routing is enabled. */
+  nppMarketCoverageIntervention?: EconomicInterventionPlan;
   /**
    * Legacy-stockpile cover cap (week-1 clearing balance pass): when true,
    * shadow-inventory stock above STOCK_COVER_CAP_TURNS × current demand takes

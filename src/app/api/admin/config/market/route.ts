@@ -48,6 +48,8 @@ const patchSchema = z.object({
   intervention: economicInterventionPlanSchema.optional(),
   indexFundBondLiquidityEnabled: z.boolean().optional(),
   bondLiquidityIntervention: economicInterventionPlanSchema.optional(),
+  nppMarketCoverageEnabled: z.boolean().optional(),
+  marketCoverageIntervention: economicInterventionPlanSchema.optional(),
   demographicsDemandEnabled: z.boolean().optional(),
   nppCorpsAttackable: z.boolean().optional(),
   nppCorporateAttacksEnabled: z.boolean().optional(),
@@ -86,6 +88,7 @@ export async function GET() {
           supplyAgreementsEnabled: 1,
           shortageResponsiveSourcingEnabled: 1,
           indexFundBondLiquidityEnabled: 1,
+          nppMarketCoverageEnabled: 1,
           extractionOutputScaleEnabled: 1,
           commandEconomyEnabled: 1,
           commandEconomySecondEconomyTolerance: 1,
@@ -105,6 +108,7 @@ export async function GET() {
       supplyAgreementsEnabled: config?.supplyAgreementsEnabled === true,
       shortageResponsiveSourcingEnabled: config?.shortageResponsiveSourcingEnabled === true,
       indexFundBondLiquidityEnabled: config?.indexFundBondLiquidityEnabled === true,
+      nppMarketCoverageEnabled: config?.nppMarketCoverageEnabled === true,
       extractionOutputScaleEnabled: config?.extractionOutputScaleEnabled === true,
       commandEconomyEnabled: config?.commandEconomyEnabled === true,
       commandEconomySecondEconomyTolerance:
@@ -152,6 +156,8 @@ export async function PATCH(request: Request) {
       intervention,
       indexFundBondLiquidityEnabled,
       bondLiquidityIntervention,
+      nppMarketCoverageEnabled,
+      marketCoverageIntervention,
       demographicsDemandEnabled,
       nppCorpsAttackable,
       nppCorporateAttacksEnabled,
@@ -174,6 +180,8 @@ export async function PATCH(request: Request) {
       intervention?: EconomicInterventionPlan;
       indexFundBondLiquidityEnabled?: boolean;
       bondLiquidityIntervention?: EconomicInterventionPlan;
+      nppMarketCoverageEnabled?: boolean;
+      marketCoverageIntervention?: EconomicInterventionPlan;
       demographicsDemandEnabled?: boolean;
       nppCorpsAttackable?: boolean;
       nppCorporateAttacksEnabled?: boolean;
@@ -233,6 +241,21 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ error: activationError }, { status: 400 });
       }
     }
+    if (nppMarketCoverageEnabled === true) {
+      if (!marketCoverageIntervention) {
+        return NextResponse.json(
+          { error: "An economic intervention plan is required to enable market coverage." },
+          { status: 400 }
+        );
+      }
+      const activationError = validateInterventionActivation(
+        marketCoverageIntervention,
+        currentTurn
+      );
+      if (activationError) {
+        return NextResponse.json({ error: activationError }, { status: 400 });
+      }
+    }
 
     const governorSet: Partial<GameConfig> = {};
     if (typeof governorCap === "number") governorSet.marketGovernorCap = governorCap;
@@ -262,6 +285,12 @@ export async function PATCH(request: Request) {
       governorSet.indexFundBondLiquidityEnabled = indexFundBondLiquidityEnabled;
       if (indexFundBondLiquidityEnabled && bondLiquidityIntervention) {
         governorSet.indexFundBondLiquidityIntervention = bondLiquidityIntervention;
+      }
+    }
+    if (typeof nppMarketCoverageEnabled === "boolean") {
+      governorSet.nppMarketCoverageEnabled = nppMarketCoverageEnabled;
+      if (nppMarketCoverageEnabled && marketCoverageIntervention) {
+        governorSet.nppMarketCoverageIntervention = marketCoverageIntervention;
       }
     }
     if (typeof demographicsDemandEnabled === "boolean")

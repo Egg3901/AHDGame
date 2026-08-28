@@ -14,6 +14,7 @@ import type { CorporationType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import { adjacentStates } from "@/lib/constants/stateAdjacency";
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
+import { foundingStarterUnits } from "@/lib/corporations/foundingPlant";
 import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
 import { SECTOR_SUPPLY, type CommodityType } from "@/lib/constants/commodities";
 import { clampProductionPolicy } from "@/lib/utils/productionPolicy";
@@ -67,6 +68,27 @@ export interface PlacementSignals {
    * output forever, it is never the right build.
    */
   extractionHeadroomOf?: (stateId: string) => number;
+  /** Treatment gate: route an existing entry slot to uncovered markets first. */
+  preferEmptyMarkets?: boolean;
+  /** Active state-sector cells, updated as this cohort founds new sectors. */
+  activeMarketBuckets?: Set<string>;
+}
+
+export function buildActiveMarketBuckets(sectors: readonly CorporateSector[]): Set<string> {
+  return new Set(
+    sectors
+      .filter((sector) => sector.mothballed !== true)
+      .map((sector) => bucketKey(sector.stateId, sector.sectorType))
+  );
+}
+
+export function markMarketsActive(
+  signals: PlacementSignals,
+  sectors: readonly Pick<CorporateSector, "stateId" | "sectorType">[] | undefined
+): void {
+  for (const sector of sectors ?? []) {
+    signals.activeMarketBuckets?.add(bucketKey(sector.stateId, sector.sectorType));
+  }
 }
 
 /**
@@ -208,6 +230,17 @@ export function findBestUnownedSector(
       ? candidates.filter((candidate) => preferredStateIds.has(candidate.stateId))
       : [];
   const rankedCandidates = frontierCandidates.length > 0 ? frontierCandidates : candidates;
+  const activeMarketBuckets = signals?.activeMarketBuckets;
+  const uncoveredCandidates =
+    signals?.preferEmptyMarkets && activeMarketBuckets
+      ? rankedCandidates.filter(
+          (candidate) =>
+            !activeMarketBuckets.has(bucketKey(candidate.stateId, candidate.sectorType)) &&
+            (!plantsEnabled ||
+              sizeOf(candidate) >= foundingStarterUnits(candidate.sectorType as CorporationType))
+        )
+      : [];
+  const entryCandidates = uncoveredCandidates.length > 0 ? uncoveredCandidates : rankedCandidates;
 
   // Shortage at the candidate's own state when a state price exists, country
   // otherwise. This is what routes a founding to the state that is actually
@@ -243,21 +276,21 @@ export function findBestUnownedSector(
   // cash-healthy NPP can, instead of waiting for a same-type corp that may not
   // exist. Highest size×shortage wins; disarms once capacity pulls the ratio
   // back under ESSENTIAL_SHORTAGE_SCORE. See the constant for the full rationale.
-  const critical = rankedCandidates.filter((c) => peakShortageOf(c) >= ESSENTIAL_SHORTAGE_SCORE);
+  const critical = entryCandidates.filter((c) => peakShortageOf(c) >= ESSENTIAL_SHORTAGE_SCORE);
   if (critical.length > 0) return critical.sort((a, b) => score(b) - score(a))[0];
 
   // Tier 1: primary type match
-  const primaryMatch = rankedCandidates.filter((c) => c.sectorType === primaryType);
+  const primaryMatch = entryCandidates.filter((c) => c.sectorType === primaryType);
   if (primaryMatch.length > 0) return best(primaryMatch);
 
   // Tier 2: secondary type match
   if (secondaryType) {
-    const secondaryMatch = rankedCandidates.filter((c) => c.sectorType === secondaryType);
+    const secondaryMatch = entryCandidates.filter((c) => c.sectorType === secondaryType);
     if (secondaryMatch.length > 0) return best(secondaryMatch);
   }
 
   // Tier 3: open market — market-weighted score across all types
-  return best(rankedCandidates);
+  return best(entryCandidates);
 }
 
 /**
