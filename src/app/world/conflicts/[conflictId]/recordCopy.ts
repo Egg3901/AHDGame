@@ -29,7 +29,7 @@ export interface VerdictInput {
  *
  * The detail states MOVEMENT only. Engagement and casualty totals used to be
  * appended here as well, which put both numbers a second time within an inch of
- * the stat tiles that already carry them — the reader learned nothing from the
+ * the stat tiles that already carry them, and the reader learned nothing from the
  * repeat. The one thing the tiles cannot say is that no engagement has happened
  * yet, so that clause stays.
  */
@@ -91,7 +91,7 @@ export function openingLine(v: {
  *
  * The note states the WINDOW and nothing else. It used to lead with the war's
  * engagement and casualty totals, which the stat tiles and the verdict already
- * carry — and because its ground figure is windowed while the verdict's is
+ * carry. Because its ground figure is windowed while the verdict's is
  * measured from the opening, the two sat inches apart quoting different numbers
  * for what read as the same fact. Naming the span is what tells them apart.
  */

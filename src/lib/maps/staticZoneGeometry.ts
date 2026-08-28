@@ -5,7 +5,7 @@
  * needs them: the conflict record decides whether to render a map column at all,
  * and a host with neither region shards nor a static shard draws nothing but a
  * "no mapped territory" sentence in a 620px box. That decision has to be made
- * before the layout is chosen, which means on the server — and it cannot import
+ * before the layout is chosen, which means on the server, and it cannot import
  * them through the `"use client"` module the hook lives in.
  */
 import { VIETNAM_FEATURE_IDS, VIETNAM_GEO_URL } from "@/lib/maps/vietnamGeometry";

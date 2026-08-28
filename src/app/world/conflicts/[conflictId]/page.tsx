@@ -433,8 +433,8 @@ export default async function ConflictRecordPage({
     ),
   ];
   // Whether a map can be drawn at all, decided HERE because it chooses the page's
-  // layout. `FrontLineMap` draws from two sources — region shards for a country
-  // with states, a static shard for a proxy host — and a zone with neither renders
+  // layout. `FrontLineMap` draws from two sources (region shards for a country
+  // with states, a static shard for a proxy host) and a zone with neither renders
   // one sentence inside a 620px box while the whole record is squeezed into the
   // 452px rail beside it. DD is exactly that case.
   const hasMap = hostRegionCodes.length > 0 || staticZoneGeometry(hostEntities).codes.length > 0;
@@ -552,7 +552,7 @@ export default async function ConflictRecordPage({
     sideBLabel: doc.sideB.label,
     recentGainA,
     // The window actually drawn, which is the war's whole length until it is
-    // older than MOMENTUM_WINDOW — the note quotes this so its ground figure is
+    // older than MOMENTUM_WINDOW. The note quotes this so its ground figure is
     // never mistaken for the verdict's since-the-opening one.
     windowTurns: Math.max(1, currentTurn - fromTurn),
     unopposedAdvances: record.unopposedAdvances,

@@ -59,7 +59,7 @@ export interface ConflictRecordView {
   /** The zone's drawable regions — geometry only, never ownership. */
   hostRegionCodes: string[];
   /**
-   * Whether anything can actually be drawn for this zone — region shards OR a
+   * Whether anything can actually be drawn for this zone: region shards OR a
    * static proxy-host shard. False drops the map column and lets the rail flow as
    * a board; absent means "assume yes", so a payload rendered before this shipped
    * lays out exactly as it did.
@@ -399,7 +399,7 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
             units anywhere, so the banner was spending the widest strip above the
             fold on a rule that could never apply to them. It also absorbs the
             allies-defend-automatically line that used to be restated in the page
-            footer — one rule, one place. */}
+            footer. One rule, one place. */}
         {c.viewerCountry && (
           <div
             style={{
@@ -619,7 +619,7 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
             </div>
             {/* No treaty prose here. It restated, one sentence per ally, exactly
                 what the BELLIGERENTS roll's entry column already carries as
-                "Warsaw Pact → DD" — same fact, three lines further from the
+                "Warsaw Pact → DD". Same fact, three lines further from the
                 roster it describes. */}
             <div style={{ marginTop: 12 }}>
               <ControlTrack pctA={pctA} />

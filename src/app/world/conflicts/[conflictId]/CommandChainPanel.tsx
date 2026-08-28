@@ -176,7 +176,7 @@ export function CommandLockedPanel({ note }: { note: string }) {
 
 const COMMANDS_HREF = "/world/conflicts/combat";
 
-/** The left column of `HowThisFrontMoves` — a key, not a card heading. */
+/** The left column of `HowThisFrontMoves`: a key, not a card heading. */
 function RowLabel({ children }: { children: ReactNode }) {
   return (
     <div

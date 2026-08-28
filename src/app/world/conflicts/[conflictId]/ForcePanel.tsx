@@ -181,7 +181,7 @@ export function ForcePanel({ view }: { view: ForcePanelView }) {
         {heading(view.sideBLabel, bIsOwn, "#f0a0a0", "right")}
 
         {/* Public tier withholds all three composition rows on both sides, which
-            rendered six "? ? ?" cells telling the reader one thing — and pushed
+            rendered six "? ? ?" cells telling the reader one thing, and pushed
             the casualties, the only real figures here, below the fold of the
             rail. One row states the same withholding. */}
         {publicOnly ? (

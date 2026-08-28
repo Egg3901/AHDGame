@@ -155,7 +155,7 @@ describe("momentumOf", () => {
   });
 
   // Both totals belong to the war, not to the window, and both are already on the
-  // page — restating them here is what made the two ground figures look wrong.
+  // page. Restating them here is what made the two ground figures look wrong.
   it("does not restate war totals the rest of the page carries", () => {
     const note = momentumOf({ ...m, recentGainA: -6 }).note;
     expect(note).not.toMatch(/engagements/);
