@@ -61,6 +61,7 @@ import {
 import { castAutonomousOrgVotes } from "@/lib/nppAutonomy/autonomousOrgVoting";
 import { foreignPolicyModeFrom } from "@/lib/nppAutonomy/foreignPolicyRollout";
 import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
+import { reconcileAutonomousWarEntryBills } from "@/lib/internationalOrganizations/reconcileAutonomousWarEntry";
 import type {
   OrganizationLegislation,
   ProposalVoteRecord,
@@ -160,6 +161,7 @@ export async function processInternationalOrganizationsTurn(
   const autonomousVotesCast = await castAutonomousOrgVotes(db, currentTurn);
   const proposalsResolved = await resolveExpiredMembershipProposals(db, currentTurn);
   const legislationResolved = await resolveExpiredOrganizationLegislation(db, currentTurn);
+  await reconcileAutonomousWarEntryBills(db);
   const electionsResolved = await resolveExpiredLeadershipElections(db, currentTurn);
   const sanctionsExpired = await expireActiveSanctions(db, currentTurn);
   const directivesExpired = await expireActiveDirectives(db, currentTurn);

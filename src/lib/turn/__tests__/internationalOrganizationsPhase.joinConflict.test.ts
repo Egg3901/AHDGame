@@ -83,6 +83,9 @@ vi.mock("@/lib/db/collections/conflicts", () => ({ getConflict: vi.fn(async () =
 vi.mock("@/lib/internationalOrganizations/commands/buildJoinConflictBill", () => ({
   buildJoinConflictBill: (...args: unknown[]) => buildJoinConflictBill(...args),
 }));
+vi.mock("@/lib/internationalOrganizations/reconcileAutonomousWarEntry", () => ({
+  reconcileAutonomousWarEntryBills: vi.fn().mockResolvedValue(0),
+}));
 vi.mock("@/lib/api/headOfGovernment", () => ({
   getHeadOfGovernmentCharacterId: vi.fn(async () => new ObjectId()),
   getHeadOfGovernmentCharacter: vi.fn(async (_db: unknown, countryId: string) =>

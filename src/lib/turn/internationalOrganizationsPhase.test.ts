@@ -40,6 +40,12 @@ vi.mock("@/lib/nppAutonomy/autonomousOrgVoting", () => ({
   castAutonomousOrgVotes: vi.fn().mockResolvedValue(0),
 }));
 
+// Active-resolution reconciliation has its own focused suite. Keep this resolver
+// suite on the phase behaviors it owns, including the bare-db tribute fixtures.
+vi.mock("@/lib/internationalOrganizations/reconcileAutonomousWarEntry", () => ({
+  reconcileAutonomousWarEntryBills: vi.fn().mockResolvedValue(0),
+}));
+
 // Auto-founding has its own suite (internationalOrganizationsPhase.founding.test.ts).
 // Return a legacy context (null year) so foundDueOrganizations no-ops against
 // the bare `stubDb()` fixtures these tests use.
