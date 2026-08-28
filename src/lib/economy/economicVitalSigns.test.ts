@@ -233,6 +233,8 @@ describe("computeEconomicVitalSigns", () => {
       bonds: [
         {
           _id: new ObjectId(),
+          issuerType: "sovereign",
+          countryId: "US",
           corporationId: corpId,
           faceValue: 1_000,
           couponRate: 4,
@@ -401,6 +403,10 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.securities.activeTradedListingShare.value).toBe(0.25);
     expect(snapshot.securities.noHolderBondShare.value).toBe(1);
     expect(snapshot.securities.bondSubscriptionRate.value).toBe(0);
+    expect(snapshot.securities.sovereignMedianHolders.value).toBe(0);
+    expect(snapshot.securities.sovereignSubscriptionRate.value).toBe(0);
+    expect(snapshot.securities.sovereignMaturityHhi.value).toBe(10_000);
+    expect(snapshot.securities.sovereignMedianPriceToParSpreadPct.value).toBe(0);
     expect(snapshot.securities.twoSidedListingShare.value).toBe(0.25);
     expect(snapshot.securities.medianQuotedSpreadPct.value).toBe(40);
     expect(snapshot.securities.openOrderDepthAnchor).toBe(50);

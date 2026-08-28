@@ -114,6 +114,7 @@ interface SimJob {
   shortageResponsiveSourcingEnabled?: boolean;
   indexFundBondLiquidityEnabled?: boolean;
   nppMarketCoverageEnabled?: boolean;
+  nppFragileMarketSupplyEnabled?: boolean;
   autonomyLevel?: string;
   /** Sim turn-phase profile: "elections-only" skips the economy phases. Default full. */
   mode?: "full" | "elections-only";
@@ -325,6 +326,12 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
         throw new Error("nppMarketCoverageEnabled must be boolean");
       }
       runWorldArgs.push(`--npp-market-coverage=${String(job.nppMarketCoverageEnabled)}`);
+    }
+    if (job.nppFragileMarketSupplyEnabled !== undefined) {
+      if (typeof job.nppFragileMarketSupplyEnabled !== "boolean") {
+        throw new Error("nppFragileMarketSupplyEnabled must be boolean");
+      }
+      runWorldArgs.push(`--npp-fragile-market-supply=${String(job.nppFragileMarketSupplyEnabled)}`);
     }
     // NPP autonomy tier. Without this an MCP-launched run silently used the
     // harness default (v3) while hand-launched runs used v4, so the two were not

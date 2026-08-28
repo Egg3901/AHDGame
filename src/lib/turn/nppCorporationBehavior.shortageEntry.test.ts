@@ -57,7 +57,7 @@ function sectors(corporationId: ObjectId, count = 8): CorporateSector[] {
 }
 
 function pool(
-  sectorType: "manufacturing" | "logistics" = "manufacturing",
+  sectorType: UnownedSector["sectorType"] = "manufacturing",
   stateId = "NY"
 ): UnownedSector {
   const revenue = 80_000_000;
@@ -84,6 +84,7 @@ function decide(args: {
   sectorCount?: number;
   shortageEntryCreditLocal?: number;
   ordinaryEntryEligible?: boolean;
+  placementSignals?: { preferFragileMarketSupply?: boolean };
 }) {
   return makeNppCorpDecision(
     {
@@ -100,7 +101,8 @@ function decide(args: {
     new Map([["US", args.pools ?? [pool()]]]),
     noStateControl,
     args.prices,
-    plants
+    plants,
+    args.placementSignals
   );
 }
 
@@ -167,6 +169,25 @@ describe("NPP shortage-responsive market entry", () => {
       targetStateId: "NY",
       targetSectorType: "manufacturing",
       cohortEligible: true,
+    });
+  });
+
+  it("founds the dedicated recipe when a governed fragile market receives the slot", () => {
+    const decision = decide({
+      corporation: corp(),
+      prices: (commodity) => (commodity === "energy" ? 3 : commodity === "fertilizers" ? 2.5 : 1),
+      pools: [pool("energy", "PA"), pool("chemical_industries", "PA")],
+      placementSignals: { preferFragileMarketSupply: true },
+    });
+
+    expect(decision.newSectors).toHaveLength(1);
+    expect(decision.newSectors?.[0]).toMatchObject({
+      sectorType: "chemical_industries",
+      strategyId: "fertilizers",
+    });
+    expect(decision.entryDiagnostic).toMatchObject({
+      reason: "entered",
+      interventionTargetCommodity: "fertilizers",
     });
   });
 

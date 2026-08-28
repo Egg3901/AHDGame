@@ -268,6 +268,46 @@ describe("GET/PATCH /api/admin/config/market — extractionOutputScaleEnabled", 
     expect(setArg.nppMarketCoverageEnabled).toBe(true);
     expect(setArg.nppMarketCoverageIntervention).toEqual(marketCoverageIntervention);
   });
+
+  it("requires and persists governance for fragile-market supply routing", async () => {
+    const { PATCH } = await import("./route");
+    const refused = await PATCH(
+      makePatchRequest({ mode: "capital", nppFragileMarketSupplyEnabled: true })
+    );
+    expect(refused.status).toBe(400);
+
+    const fragileMarketSupplyIntervention = {
+      id: "issue-991-fragile-market-supply",
+      issueId: 991,
+      owner: "operator",
+      objective: "Improve supply breadth and fill in four diagnosed fragile commodity markets.",
+      targets: [
+        { metric: "targetedFragileMarketFill", direction: "increase", minimumImprovement: 0.05 },
+      ],
+      guardrails: [{ metric: "pooledFillRate", direction: "increase", maximumDeterioration: 0.02 }],
+      cohort: { initialShare: 0.125, maximumShare: 1, rampTurns: 48 },
+      review: { startTurn: 0, reviewTurn: 10_000 },
+      rollback: {
+        owner: "operator",
+        trigger: "Targeted supply breadth or economy-wide fill guardrails fail.",
+        action: "Disable fragile-market supply routing.",
+      },
+    };
+    const accepted = await PATCH(
+      makePatchRequest({
+        mode: "capital",
+        nppFragileMarketSupplyEnabled: true,
+        fragileMarketSupplyIntervention,
+      })
+    );
+    expect(accepted.status).toBe(200);
+    const setArg = db.collectionMocks.gameConfig!.updateOne.mock.calls.at(-1)?.[1]?.$set as Record<
+      string,
+      unknown
+    >;
+    expect(setArg.nppFragileMarketSupplyEnabled).toBe(true);
+    expect(setArg.nppFragileMarketSupplyIntervention).toEqual(fragileMarketSupplyIntervention);
+  });
 });
 
 // MARKET_MODE_INFO[mode].live was enforced ONLY by the admin selector disabling

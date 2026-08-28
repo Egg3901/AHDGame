@@ -77,7 +77,6 @@ import type { CorporationType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
 import type { CommodityType } from "@/lib/constants/commodities";
-import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
 import {
   STRANDED_DIVEST_TURNS,
   STRANDED_DIVEST_MAX_PER_TURN,
@@ -105,11 +104,7 @@ import {
   unownedHeadroomUnitsPerAnchor,
   unownedPoolTrailingSet,
 } from "@/lib/market/unownedHeadroom";
-import {
-  getExtractionOutputScaleEnabled,
-  getMarketSystemModeForDb,
-  marketAtLeast,
-} from "@/lib/market/featureFlag";
+import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
@@ -121,7 +116,11 @@ import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { getEraNominalAmount } from "@/lib/constants/sectorSeedEra";
 import { pickBestNppTechNode } from "@/lib/turn/npp/corpBehaviorConfig";
-import { computeExtractionHeadroomByState } from "@/lib/turn/nppExtractionOpportunity";
+import {
+  fragileReinvestmentPriority,
+  loadNppPlacementSignals,
+  resolveFragileEntryTreatment,
+} from "@/lib/turn/npp/fragileMarketSupply";
 import {
   buildNppMarketEntryDiagnostic,
   persistNppMarketEntryFunnelBestEffort,
@@ -257,6 +256,8 @@ interface NppCorpDecision {
     sectorType: CorporationType;
     revenue: number;
     profitMargin: number;
+    /** Optional focused recipe for a diagnosed fragile commodity. */
+    strategyId?: string;
     /**
      * Plants only. The founding build the corp just paid for: the sector is
      * created with `capitalStock` 0 and this order queued, exactly as
@@ -441,35 +442,7 @@ export async function processNppCorporationDecisions(
     return price / doc.basePrice;
   };
 
-  // Value-weighted unclaimed deposit headroom per state, in [0, 1]. Desired
-  // output uses the supply ledger's era and output-scale unit basis, matching
-  // computeResourceOpportunities and the capacity clamp.
-  const [capDocs, extractionEraUnitScale, extractionConfig] = await Promise.all([
-    db
-      .collection<StateResourceCapacity>("stateResourceCapacity")
-      .find({}, { projection: { stateId: 1, resources: 1 } })
-      .toArray(),
-    loadWorldEraUnitScale(db),
-    db
-      .collection<GameConfig>("gameConfig")
-      .findOne(
-        { _id: "default" },
-        { projection: { extractionOutputScaleEnabled: 1, nppMarketCoverageEnabled: 1 } }
-      ),
-  ]);
-  const extractionOutputScaleEnabled = await getExtractionOutputScaleEnabled(extractionConfig);
-  const extractionHeadroomByState = computeExtractionHeadroomByState(
-    capDocs,
-    allSectors,
-    extractionEraUnitScale,
-    extractionOutputScaleEnabled
-  );
-  const placementSignals: PlacementSignals = {
-    statePriceRatioOf,
-    // A state with no capacity doc has no deposits — headroom 0, never found there.
-    extractionHeadroomOf: (stateId) => extractionHeadroomByState.get(stateId) ?? 0,
-    preferEmptyMarkets: extractionConfig?.nppMarketCoverageEnabled === true,
-  };
+  const placementSignals = await loadNppPlacementSignals(db, turn, allSectors, statePriceRatioOf);
 
   // Fetch unowned sectors in bulk for expansion decisions
   const unownedSectors = await db.collection<UnownedSector>("unownedSectors").find({}).toArray();
@@ -801,6 +774,7 @@ export async function processNppCorporationDecisions(
           currentGrowthCost: 0,
           revenue: ns.revenue,
           profitMargin: ns.profitMargin,
+          ...(ns.strategyId ? { strategyId: ns.strategyId } : {}),
           workers: 100,
           createdAt: now,
           updatedAt: now,
@@ -1481,13 +1455,21 @@ export function makeNppCorpDecision(
     levers.allowExpansion && isProfitable && corpMargin >= effectiveExpansionMinMargin
       ? entryCandidate
       : null;
+  const {
+    candidatePriceRatioOf: entryCandidatePriceRatioOf,
+    interventionTargetCommodity,
+    foundingStrategyId,
+  } = resolveFragileEntryTreatment(entryCandidate, placementSignals, priceRatioOf);
   const entryCandidateShortageScore = entryCandidate
-    ? sectorPeakShortageScore(
-        entryCandidate.sectorType as CorporationType,
-        entryCandidate.countryId,
-        (commodity, countryId) =>
-          placementSignals?.statePriceRatioOf?.(commodity, entryCandidate.stateId) ??
-          priceRatioOf(commodity, countryId)
+    ? Math.max(
+        sectorPeakShortageScore(
+          entryCandidate.sectorType as CorporationType,
+          entryCandidate.countryId,
+          entryCandidatePriceRatioOf
+        ),
+        interventionTargetCommodity
+          ? (entryCandidatePriceRatioOf(interventionTargetCommodity, entryCandidate.countryId) ?? 0)
+          : 0
       )
     : undefined;
   const expansionShortageScore = entryCandidateShortageScore ?? 1;
@@ -1518,6 +1500,9 @@ export function makeNppCorpDecision(
     shortageScore: entryCandidateShortageScore,
     frontierStates,
   });
+  if (interventionTargetCommodity) {
+    entryDiagnostic = { ...entryDiagnostic, interventionTargetCommodity };
+  }
   if (
     expansion &&
     newSectors.length < NPP_SHORTAGE_ENTRIES_PER_TURN &&
@@ -1585,6 +1570,7 @@ export function makeNppCorpDecision(
           stateId: expansion.stateId,
           countryId: expansion.countryId,
           sectorType: expansion.sectorType,
+          strategyId: foundingStrategyId,
           // Written in the corp's own currency, because that is what
           // `sectorTurn` reads it as (`readCorpEconomicAnchor` on the way in,
           // `writeCorpEconomicLocal` on the way out). The unowned pool is ₳,
@@ -1636,6 +1622,7 @@ export function makeNppCorpDecision(
           stateId: expansion.stateId,
           countryId: expansion.countryId,
           sectorType: expansion.sectorType,
+          strategyId: foundingStrategyId,
           revenue: Math.round(expansion.revenue * 0.25),
           profitMargin: 35,
         });
@@ -1706,6 +1693,7 @@ export function makeNppCorpDecision(
       drawUnits: number;
       fill: number;
       headroomUnits: number;
+      interventionPriority: number;
     };
     const candidates: Candidate[] = [];
 
@@ -1826,6 +1814,13 @@ export function makeNppCorpDecision(
           placementSignals?.statePriceRatioOf?.(commodity, sector.stateId) ??
           priceRatioOf(commodity, cid)
       );
+      const interventionPriority = fragileReinvestmentPriority(
+        sector,
+        sectorCountryId,
+        placementSignals,
+        priceRatioOf,
+        ctx.turn
+      );
       const strandedDecayScale = stateShortage <= 0.85 ? 0.5 : 1;
       const replacementUnits =
         runUnits *
@@ -1860,16 +1855,24 @@ export function makeNppCorpDecision(
       const units = replacementUnits + growthUnits;
       if (!(units > 0)) continue;
 
-      candidates.push({ sector, units, drawUnits: growthUnits, fill, headroomUnits });
+      candidates.push({
+        sector,
+        units,
+        drawUnits: growthUnits,
+        fill,
+        headroomUnits,
+        interventionPriority,
+      });
     }
 
-    // Best first: the sector selling hardest into the deepest unmet demand. The
-    // build's own size is in the key because headroom is legitimately ZERO in a
-    // bucket an incumbent fills, and ranking on headroom alone made every
-    // replacement-only candidate tie at 0 — the corp would then always pick
-    // whichever sector the driver happened to return first.
+    // The governed treatment first reallocates the existing build slot to a
+    // critically short fragile market. Normal ranking then uses sell-through
+    // and headroom, including the build size so replacement candidates differ.
     candidates.sort(
-      (a, b) => b.fill * (b.headroomUnits + b.units) - a.fill * (a.headroomUnits + a.units)
+      (a, b) =>
+        Number(b.interventionPriority > 0) - Number(a.interventionPriority > 0) ||
+        b.interventionPriority - a.interventionPriority ||
+        b.fill * (b.headroomUnits + b.units) - a.fill * (a.headroomUnits + a.units)
     );
 
     let placed = 0;

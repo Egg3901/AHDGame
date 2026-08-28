@@ -191,6 +191,9 @@ const TOOLS: ToolDef[] = [
         nppMarketCoverageEnabled: bool(
           "Whether each existing NPP entry slot prioritizes a facility-ready empty state-sector cell in this sandbox only."
         ),
+        nppFragileMarketSupplyEnabled: bool(
+          "Whether each existing eligible NPP entry slot prioritizes advertising, fertilizers, freight, or rare-earth supply when critically short."
+        ),
       },
       ["preset", "turns", "seed"]
     ),
@@ -234,6 +237,12 @@ const TOOLS: ToolDef[] = [
       ) {
         throw new Error("nppMarketCoverageEnabled must be boolean");
       }
+      if (
+        a.nppFragileMarketSupplyEnabled !== undefined &&
+        typeof a.nppFragileMarketSupplyEnabled !== "boolean"
+      ) {
+        throw new Error("nppFragileMarketSupplyEnabled must be boolean");
+      }
       const res = await enqueue(db, {
         preset,
         turns,
@@ -254,6 +263,9 @@ const TOOLS: ToolDef[] = [
         ...(a.nppMarketCoverageEnabled !== undefined
           ? { nppMarketCoverageEnabled: a.nppMarketCoverageEnabled }
           : {}),
+        ...(a.nppFragileMarketSupplyEnabled !== undefined
+          ? { nppFragileMarketSupplyEnabled: a.nppFragileMarketSupplyEnabled }
+          : {}),
       });
       return {
         ...res,
@@ -267,6 +279,7 @@ const TOOLS: ToolDef[] = [
         shortageResponsiveSourcingEnabled: a.shortageResponsiveSourcingEnabled ?? "preset default",
         indexFundBondLiquidityEnabled: a.indexFundBondLiquidityEnabled ?? "preset default",
         nppMarketCoverageEnabled: a.nppMarketCoverageEnabled ?? "preset default",
+        nppFragileMarketSupplyEnabled: a.nppFragileMarketSupplyEnabled ?? "preset default",
         note: 'Poll with sim_run_status. The local worker claims queued jobs within ~15s — if status stays "queued" for minutes, the worker is not running (check sim_worker_health).',
       };
     },

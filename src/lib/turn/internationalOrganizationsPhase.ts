@@ -64,9 +64,57 @@ import type {
   OrganizationLegislation,
   ProposalVoteRecord,
 } from "@/lib/db/types/internationalOrganization";
+import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
+import type { NPP, NppForeignPolicyMode } from "@/lib/db/types";
 
 function countryName(countryId: string): string {
   return COUNTRY_CONFIGS[countryId as CountryId]?.name ?? countryId;
+}
+
+/**
+ * Voting roster for policy decisions. Shadow/off preserve the player-only
+ * baseline. Active mode adds modelled members that have a formed NPP government
+ * and a legislature capable of resolving the consequences of their vote.
+ */
+async function policyVotingMembers(db: Db, organizationId: string): Promise<CountryId[]> {
+  const players = await votingMembers(db, organizationId);
+  const rollout = await db
+    .collection<{ _id: string; nppForeignPolicyMode?: NppForeignPolicyMode }>("gameState")
+    .findOne({ _id: "current" }, { projection: { nppForeignPolicyMode: 1 } });
+  if (rollout?.nppForeignPolicyMode !== "active") return players;
+
+  const modelledMembers = (await getMembers(db, organizationId)).filter(
+    (member): member is CountryId =>
+      member in COUNTRY_CONFIGS && hasBillLifecycle(member as CountryId)
+  );
+  if (modelledMembers.length === 0) return players;
+  const formations = await db
+    .collection<GovernmentFormation>("governmentFormations")
+    .find({
+      _id: { $in: modelledMembers },
+      status: "formed",
+      $or: [{ pmNppId: { $ne: null } }, { presidentNppId: { $ne: null } }],
+    })
+    .toArray();
+  return Array.from(new Set([...players, ...formations.map((formation) => formation.countryId)]));
+}
+
+async function getPolicyHeadSponsor(
+  db: Db,
+  countryId: CountryId
+): Promise<{ _id: ObjectId; name: string; party?: string } | null> {
+  const playerHead = await getHeadOfGovernmentCharacter(db, countryId);
+  if (playerHead) return playerHead;
+
+  const formation = await db
+    .collection<GovernmentFormation>("governmentFormations")
+    .findOne({ _id: countryId, status: "formed" });
+  const headNppId = formation?.presidentNppId ?? formation?.pmNppId ?? null;
+  if (!headNppId) return null;
+  const npp = await db
+    .collection<NPP>("npps")
+    .findOne({ _id: headNppId }, { projection: { _id: 1, name: 1, party: 1 } });
+  return npp ? { _id: npp._id, name: npp.name, party: npp.party } : null;
 }
 
 /**
@@ -371,7 +419,7 @@ async function resolveExpiredMembershipProposals(db: Db, currentTurn: number): P
     // Only player-enabled members have a vote: a client state cannot withhold a
     // unanimous "yes" it was never entitled to cast, which is what keeps
     // unanimity workable once an alliance takes on clients.
-    const voters = (await votingMembers(db, proposal.organizationId)).filter(
+    const voters = (await policyVotingMembers(db, proposal.organizationId)).filter(
       (m: string) => m !== proposingCountryId
     );
     const uniqueVotes = dedupeOrganizationVotes(proposal.votes as ProposalVoteRecord[]);
@@ -478,7 +526,7 @@ async function resolveExpiredOrganizationLegislation(db: Db, currentTurn: number
     // that cannot vote would deadlock the agreement exactly as a silent member
     // would deadlock an admission. The agreement still *binds* every party once
     // ratified, so only the ballot is narrowed here, not the effect below.
-    const members = await votingMembers(db, item.organizationId);
+    const members = await policyVotingMembers(db, item.organizationId);
     const voterSet = new Set<string>(members);
     const votingParties = parties.filter((p): p is CountryId => voterSet.has(p));
     const uniqueVotes = dedupeOrganizationVotes(item.votes as ProposalVoteRecord[]);
@@ -598,7 +646,7 @@ async function resolveExpiredLeadershipElections(db: Db, currentTurn: number): P
     // Electing a chair is a vote like any other, so the roll is the voting one.
     // This also keeps the quorum honest: a silent client state would otherwise
     // count toward turnout it can never supply.
-    const members = await votingMembers(db, election.organizationId);
+    const members = await policyVotingMembers(db, election.organizationId);
     const uniqueVotes = dedupeOrganizationVotes(election.votes as ProposalVoteRecord[]);
     // Only an active "yes" counts. A member who abstains or never votes withholds
     // consent exactly as a "no" does, so the denominator is the roll rather than
@@ -811,7 +859,7 @@ async function applyResolutionEffect(
 
         // The head of government sponsors it — the bill arrives at a foreign
         // power's call, so it is filed in the government's name, not a member's.
-        const sponsor = await getHeadOfGovernmentCharacter(db, countryId);
+        const sponsor = await getPolicyHeadSponsor(db, countryId);
         if (!sponsor) {
           await recordOrgHistoryEvent(
             db,
@@ -827,7 +875,11 @@ async function applyResolutionEffect(
           db,
           countryId,
           preset,
-          sponsor: { characterId: sponsor._id, characterName: sponsor.name },
+          sponsor: {
+            characterId: sponsor._id,
+            characterName: sponsor.name,
+            party: sponsor.party,
+          },
           conflictName: conflict.name,
           organizationId: resolution.organizationId,
           provision: {

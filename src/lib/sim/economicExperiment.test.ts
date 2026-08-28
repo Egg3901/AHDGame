@@ -14,6 +14,7 @@ describe("economic experiment configuration", () => {
         shortageResponsiveSourcingEnabled: false,
         indexFundBondLiquidityEnabled: false,
         nppMarketCoverageEnabled: false,
+        nppFragileMarketSupplyEnabled: false,
       })
     ).toEqual({
       freightSettlementMode: "shadow",
@@ -21,6 +22,7 @@ describe("economic experiment configuration", () => {
       shortageResponsiveSourcingEnabled: false,
       indexFundBondLiquidityEnabled: false,
       nppMarketCoverageEnabled: false,
+      nppFragileMarketSupplyEnabled: false,
     });
     expect(
       economicExperimentCliArgs({
@@ -29,6 +31,7 @@ describe("economic experiment configuration", () => {
         shortageResponsiveSourcingEnabled: false,
         indexFundBondLiquidityEnabled: false,
         nppMarketCoverageEnabled: false,
+        nppFragileMarketSupplyEnabled: false,
       })
     ).toEqual([
       "--freight-settlement=shadow",
@@ -36,6 +39,7 @@ describe("economic experiment configuration", () => {
       "--shortage-responsive-sourcing=false",
       "--index-fund-bond-liquidity=false",
       "--npp-market-coverage=false",
+      "--npp-fragile-market-supply=false",
     ]);
   });
 

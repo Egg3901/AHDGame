@@ -4,10 +4,11 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { FOREIGN_AFFAIRS_POSITION_BY_COUNTRY } from "@/lib/constants/internationalOrganizations";
 import { canTableResolutionType, type OrganizationCategory } from "@/lib/constants/orgCategory";
 import { NATIONAL_TERMINAL_STATUSES } from "@/lib/congress/billProposalLimits";
-import type { Bill, BillStatus, NPP } from "@/lib/db/types";
+import type { Bill, BillStatus, NPP, NppForeignPolicyMode } from "@/lib/db/types";
 import type { CountryAlignment } from "@/lib/db/types/countryAlignment";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
+import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
 import type {
   OrganizationLeadershipElection,
   OrganizationLegislation,
@@ -20,10 +21,12 @@ import type { TradeEmbargo } from "@/lib/db/types/tradeEmbargo";
 import type { TradeFlowSnapshot } from "@/lib/db/types/tradeFlowSnapshot";
 import { loadOrganizationDefWithPowers } from "@/lib/internationalOrganizations/service";
 import { buildActiveNationalBillFilter } from "@/lib/legislature/nationalBillScope";
+import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import type { PersistedSphereMembership } from "@/lib/world/spheres/membershipStore";
 import { isNppAutonomyActive } from "./featureFlag";
+import { executeForeignPolicyChoice } from "./foreignPolicyActions";
 
-export type ForeignPolicyMode = "off" | "shadow" | "active";
+export type ForeignPolicyMode = NppForeignPolicyMode;
 
 export type ForeignPolicyActionType =
   | "vote_org_yes"
@@ -46,7 +49,9 @@ export interface ForeignPolicyChoice {
   targetCountryId?: CountryId;
   organizationId?: string;
   conflictId?: string;
+  conflictSide?: "A" | "B";
   pendingItemId?: string;
+  pendingKind?: "membership" | "legislation" | "leadership";
   reasons: string[];
 }
 
@@ -91,6 +96,10 @@ interface ForeignPolicyContext {
   pendingLeadership: OrganizationLeadershipElection[];
   tradeSnapshot: TradeFlowSnapshot | null;
   debtToGdpRatio: number;
+  recentDecisions: PersistedForeignPolicyDecision[];
+  availableMilitaryUnits: number;
+  averageMilitaryReadiness: number;
+  approvalRating: number;
 }
 
 interface PersistedForeignPolicyDecision {
@@ -102,7 +111,8 @@ interface PersistedForeignPolicyDecision {
   headNppName: string;
   selected: ForeignPolicyChoice | null;
   alternatives: ForeignPolicyChoice[];
-  acted: false;
+  acted: boolean;
+  executionStatus: "planned" | "claimed" | "executed" | "rejected";
   executionNote: string;
   createdAt: Date;
 }
@@ -110,6 +120,8 @@ interface PersistedForeignPolicyDecision {
 const DECISION_COLLECTION = "nppForeignPolicyDecisions";
 const MINIMUM_ACTION_SCORE = 25;
 const MAX_ALTERNATIVES = 5;
+const STANDARD_COOLDOWN_TURNS = 24;
+const TRADE_ESCALATION_COOLDOWN_TURNS = 48;
 const FOREIGN_POLICY_COUNTRIES = (
   Object.keys(FOREIGN_AFFAIRS_POSITION_BY_COUNTRY) as CountryId[]
 ).filter((countryId) => FOREIGN_AFFAIRS_POSITION_BY_COUNTRY[countryId] !== null);
@@ -382,7 +394,12 @@ function candidate(
   reasons: string[],
   detail?: Pick<
     ForeignPolicyChoice,
-    "targetCountryId" | "organizationId" | "conflictId" | "pendingItemId"
+    | "targetCountryId"
+    | "organizationId"
+    | "conflictId"
+    | "conflictSide"
+    | "pendingItemId"
+    | "pendingKind"
   >
 ): ForeignPolicyChoice {
   return { type, score: round(score), reasons, ...detail };
@@ -425,6 +442,7 @@ function voteCandidates(
           targetCountryId: proposal.proposingCountryId,
           organizationId: proposal.organizationId,
           pendingItemId: proposal._id.toString(),
+          pendingKind: "membership",
         }
       )
     );
@@ -433,6 +451,9 @@ function voteCandidates(
   for (const item of context.pendingLegislation) {
     if (!sourceOrganizations.has(item.organizationId)) continue;
     if (alreadyVoted(item.votes, context.countryId)) continue;
+    if (item.type === "free_trade_agreement" && !item.parties.includes(context.countryId)) {
+      continue;
+    }
     let subject: CountryId | undefined;
     let support = 0;
     if (item.type === "free_trade_agreement") {
@@ -471,6 +492,7 @@ function voteCandidates(
           ...(subject ? { targetCountryId: subject } : {}),
           organizationId: item.organizationId,
           pendingItemId: item._id.toString(),
+          pendingKind: "legislation",
         }
       )
     );
@@ -494,6 +516,7 @@ function voteCandidates(
           targetCountryId: election.candidateCountryId,
           organizationId: election.organizationId,
           pendingItemId: election._id.toString(),
+          pendingKind: "leadership",
         }
       )
     );
@@ -541,9 +564,47 @@ function bilateralCandidates(
     );
     const pendingTargetedTariff = context.pendingTariffTargets.has(target);
     const reasons = opinionReasons(opinion);
+    const resolutions = [...context.activeResolutions, ...context.pendingLegislation];
+    const hasFta = resolutions.some(
+      (item) =>
+        item.type === "free_trade_agreement" &&
+        item.parties.includes(context.countryId) &&
+        item.parties.includes(target)
+    );
+    const hasAid = resolutions.some(
+      (item) => item.type === "aid_package" && item.aidRecipientCountryId === target
+    );
+    const hasSanctions = resolutions.some(
+      (item) => item.type === "sanctions" && item.sanctionsTargetCountryId === target
+    );
+    const hasEndorsement = resolutions.some(
+      (item) =>
+        item.type === "joint_statement" &&
+        item.jointStatementSubjectCountryId === target &&
+        item.jointStatementStance === "endorse"
+    );
+    const hasCondemnation = resolutions.some(
+      (item) =>
+        item.type === "joint_statement" &&
+        item.jointStatementSubjectCountryId === target &&
+        item.jointStatementStance === "condemn"
+    );
+    const outgoingEmbargo = context.embargoes.find(
+      (embargo) =>
+        embargo.sourceCountry === context.countryId &&
+        embargo.targetCountry === target &&
+        activeEmbargo(embargo, context.currentTurn)
+    );
+    const targetedTariff = context.tariffs.find(
+      (tariff) =>
+        tariff.countryId === context.countryId &&
+        tariff.scopeType === "origin_country" &&
+        tariff.targetOriginCountryId === target &&
+        tariff.rate > 0
+    );
 
     if (opinion.score >= 20 && sharedOrganizations.length > 0) {
-      if (ftaOrganization) {
+      if (!hasFta && ftaOrganization) {
         choices.push(
           candidate(
             "propose_fta",
@@ -553,7 +614,7 @@ function bilateralCandidates(
           )
         );
       }
-      if (statementOrganization) {
+      if (!hasEndorsement && statementOrganization) {
         choices.push(
           candidate(
             "endorse_country",
@@ -563,7 +624,7 @@ function bilateralCandidates(
           )
         );
       }
-      if (aidOrganization) {
+      if (!hasAid && aidOrganization) {
         choices.push(
           candidate(
             "propose_aid",
@@ -580,7 +641,7 @@ function bilateralCandidates(
 
     const hostile = Math.max(0, -opinion.score);
     if (hostile > 0) {
-      if (!pendingTargetedTariff) {
+      if (!targetedTariff && !pendingTargetedTariff) {
         choices.push(
           candidate(
             "raise_tariff",
@@ -593,18 +654,20 @@ function bilateralCandidates(
           )
         );
       }
-      choices.push(
-        candidate(
-          "impose_embargo",
-          5 + hostile * 0.55 + stubbornness * 12 - opinion.tradeDependence * 30,
-          [
-            `Hostility supports an embargo, but trade dependence applies a ${round(opinion.tradeDependence * 30)} point brake.`,
-            ...reasons,
-          ],
-          { targetCountryId: target }
-        )
-      );
-      if (sanctionsOrganization) {
+      if (!outgoingEmbargo) {
+        choices.push(
+          candidate(
+            "impose_embargo",
+            5 + hostile * 0.55 + stubbornness * 12 - opinion.tradeDependence * 30,
+            [
+              `Hostility supports an embargo, but trade dependence applies a ${round(opinion.tradeDependence * 30)} point brake.`,
+              ...reasons,
+            ],
+            { targetCountryId: target }
+          )
+        );
+      }
+      if (!hasSanctions && sanctionsOrganization) {
         choices.push(
           candidate(
             "propose_sanctions",
@@ -614,7 +677,7 @@ function bilateralCandidates(
           )
         );
       }
-      if (statementOrganization) {
+      if (!hasCondemnation && statementOrganization) {
         choices.push(
           candidate(
             "condemn_country",
@@ -626,12 +689,6 @@ function bilateralCandidates(
       }
     }
 
-    const outgoingEmbargo = context.embargoes.find(
-      (embargo) =>
-        embargo.sourceCountry === context.countryId &&
-        embargo.targetCountry === target &&
-        activeEmbargo(embargo, context.currentTurn)
-    );
     if (outgoingEmbargo && opinion.score > -15) {
       choices.push(
         candidate(
@@ -643,13 +700,6 @@ function bilateralCandidates(
       );
     }
 
-    const targetedTariff = context.tariffs.find(
-      (tariff) =>
-        tariff.countryId === context.countryId &&
-        tariff.scopeType === "origin_country" &&
-        tariff.targetOriginCountryId === target &&
-        tariff.rate > 0
-    );
     if (targetedTariff && !pendingTargetedTariff && opinion.score > 10) {
       choices.push(
         candidate(
@@ -670,10 +720,12 @@ function warCandidates(
   opinions: Map<CountryId, CountryOpinion>
 ): ForeignPolicyChoice[] {
   const choices: ForeignPolicyChoice[] = [];
+  const sourceOrganizations = memberOrganizations(context.memberships, context.countryId);
   const sourceAlignment = context.alignments.find(
     (alignment) => alignment.entityId === context.countryId
   );
   const ambition = clamp(context.head.personality.ambition / 100, 0, 1);
+  const debtBrake = clamp(context.debtToGdpRatio / 150, 0, 1);
   const defenseLean = clamp(
     ((context.head.policies.domainPositions?.defense ?? 0) + 100) / 200,
     0,
@@ -692,8 +744,18 @@ function warCandidates(
       Math.max(1, countries.length);
     const a = sideScore(conflict.sideA.countries);
     const b = sideScore(conflict.sideB.countries);
-    const preferred = a >= b ? conflict.sideA : conflict.sideB;
+    const preferredSide = a >= b ? "A" : "B";
+    const preferred = preferredSide === "A" ? conflict.sideA : conflict.sideB;
     const preferredScore = Math.max(a, b);
+    const representative = preferred.countries.find((countryId) => COUNTRY_CONFIGS[countryId]);
+    if (!representative) continue;
+    const representativeOrganizations = memberOrganizations(context.memberships, representative);
+    const sharedOrganizations = Array.from(sourceOrganizations).filter((orgId) =>
+      representativeOrganizations.has(orgId)
+    );
+    const securityOrganization = sharedOrganizations.find(
+      (orgId) => orgId === "NATO" || orgId === "WARSAW_PACT"
+    );
     const poleSupport = sourceAlignment
       ? Object.entries(sourceAlignment.shares).reduce((best, [pole, share]) => {
           const leader = ALIGNMENT_POLES[pole as AlignmentPoleId]?.leaderCountryId;
@@ -703,28 +765,60 @@ function warCandidates(
         }, 0)
       : 0;
     const base = preferredScore * 0.35 + poleSupport * 0.25 + ambition * 10 + defenseLean * 12;
-    choices.push(
-      candidate(
-        "support_war",
-        12 + base,
-        [
-          `${preferred.label} is the more compatible side in ${conflict.name}.`,
-          `Superpower influence contributes ${round(poleSupport * 0.25)}.`,
-        ],
-        { conflictId: conflict._id }
-      )
+    const hasSupportPackage = [...context.activeResolutions, ...context.pendingLegislation].some(
+      (item) => item.type === "aid_package" && item.aidRecipientCountryId === representative
     );
-    choices.push(
-      candidate(
-        "join_war",
-        -8 + base,
-        [
-          `${preferred.label} is the more compatible side in ${conflict.name}.`,
-          "War entry remains guarded until military readiness and domestic ratification approve it.",
-        ],
-        { conflictId: conflict._id }
-      )
+    if (sharedOrganizations.length > 0 && !hasSupportPackage) {
+      choices.push(
+        candidate(
+          "support_war",
+          12 + base - debtBrake * 15,
+          [
+            `${preferred.label} is the more compatible side in ${conflict.name}.`,
+            `Superpower influence contributes ${round(poleSupport * 0.25)}.`,
+            `Debt applies a ${round(debtBrake * 15)} point support brake.`,
+          ],
+          {
+            targetCountryId: representative,
+            organizationId: sharedOrganizations[0],
+            conflictId: conflict._id,
+          }
+        )
+      );
+    }
+    const hasJoinProposal = context.pendingLegislation.some(
+      (item) =>
+        item.type === "join_conflict" &&
+        item.joinConflictTheaterId === conflict._id &&
+        item.joinConflictSide === preferredSide
     );
+    const warEntryReady =
+      context.availableMilitaryUnits > 0 &&
+      context.averageMilitaryReadiness >= 55 &&
+      context.approvalRating >= 45 &&
+      context.debtToGdpRatio <= 120;
+    if (securityOrganization && !hasJoinProposal && warEntryReady) {
+      choices.push(
+        candidate(
+          "join_war",
+          -8 +
+            base +
+            (context.averageMilitaryReadiness - 55) * 0.25 +
+            (context.approvalRating - 45) * 0.2,
+          [
+            `${preferred.label} is the more compatible side in ${conflict.name}.`,
+            "War entry remains guarded by an alliance vote and domestic ratification.",
+            `${context.availableMilitaryUnits} ready reserve units average ${round(context.averageMilitaryReadiness)} readiness with ${round(context.approvalRating)} government approval.`,
+          ],
+          {
+            targetCountryId: representative,
+            organizationId: securityOrganization,
+            conflictId: conflict._id,
+            conflictSide: preferredSide,
+          }
+        )
+      );
+    }
   }
   return choices;
 }
@@ -738,7 +832,45 @@ function rankChoices(context: ForeignPolicyContext): ForeignPolicyChoice[] {
     ...voteCandidates(context, opinionMap),
     ...bilateralCandidates(context, opinions),
     ...warCandidates(context, opinionMap),
-  ].sort((a, b) => b.score - a.score || a.type.localeCompare(b.type));
+  ]
+    .filter((choice) => !choiceOnCooldown(context, choice))
+    .sort((a, b) => b.score - a.score || a.type.localeCompare(b.type));
+}
+
+function cooldownFamily(type: ForeignPolicyActionType): string | null {
+  if (type === "vote_org_yes" || type === "vote_org_no") return null;
+  if (type === "raise_tariff" || type === "lower_tariff") return "tariff";
+  if (type === "impose_embargo" || type === "lift_embargo") return "embargo";
+  if (type === "propose_aid" || type === "support_war") return "aid";
+  if (type === "endorse_country" || type === "condemn_country") return "statement";
+  return type;
+}
+
+function choiceOnCooldown(context: ForeignPolicyContext, choice: ForeignPolicyChoice): boolean {
+  const family = cooldownFamily(choice.type);
+  if (!family) return false;
+  const cooldown =
+    family === "tariff" || family === "embargo"
+      ? TRADE_ESCALATION_COOLDOWN_TURNS
+      : STANDARD_COOLDOWN_TURNS;
+  return context.recentDecisions.some((decision) => {
+    const previous = decision.selected;
+    if (!previous || decision.mode !== context.mode || decision.turn >= context.currentTurn) {
+      return false;
+    }
+    if (
+      context.currentTurn - decision.turn < 1 ||
+      context.currentTurn - decision.turn >= cooldown
+    ) {
+      return false;
+    }
+    return (
+      cooldownFamily(previous.type) === family &&
+      previous.targetCountryId === choice.targetCountryId &&
+      previous.organizationId === choice.organizationId &&
+      previous.conflictId === choice.conflictId
+    );
+  });
 }
 
 async function loadContext(
@@ -770,6 +902,9 @@ async function loadContext(
     pendingLeadership,
     tradeSnapshot,
     budget,
+    recentDecisions,
+    militaryUnits,
+    governmentApproval,
   ] = await Promise.all([
     db
       .collection<{ _id: string; nppForeignPolicyMode?: ForeignPolicyMode }>("gameState")
@@ -811,6 +946,30 @@ async function loadContext(
     db
       .collection<{ countryId: CountryId; debtToGdpRatio?: number }>("federalBudget")
       .findOne({ countryId }),
+    db
+      .collection<PersistedForeignPolicyDecision>(DECISION_COLLECTION)
+      .find({
+        countryId,
+        turn: { $gte: Math.max(0, currentTurn - TRADE_ESCALATION_COOLDOWN_TURNS) },
+      })
+      .sort({ turn: -1 })
+      .limit(20)
+      .toArray(),
+    db
+      .collection<MilitaryUnit>("militaryUnits")
+      .find({
+        countryId,
+        theaterId: "reserve",
+        personnel: { $gt: 0 },
+        readiness: { $gte: 50 },
+        $or: [
+          { readyAtTurn: null },
+          { readyAtTurn: { $exists: false } },
+          { readyAtTurn: { $lte: currentTurn } },
+        ],
+      })
+      .toArray(),
+    db.collection<GovernmentApproval>("governmentApprovals").findOne({ _id: countryId }),
   ]);
 
   const organizationCategories = new Map<string, OrganizationCategory>();
@@ -836,6 +995,11 @@ async function loadContext(
     }
   }
 
+  const averageMilitaryReadiness =
+    militaryUnits.length > 0
+      ? militaryUnits.reduce((sum, unit) => sum + unit.readiness, 0) / militaryUnits.length
+      : 0;
+
   return {
     countryId,
     currentTurn,
@@ -855,6 +1019,10 @@ async function loadContext(
     pendingLeadership,
     tradeSnapshot,
     debtToGdpRatio: budget?.debtToGdpRatio ?? 0,
+    recentDecisions,
+    availableMilitaryUnits: militaryUnits.length,
+    averageMilitaryReadiness,
+    approvalRating: governmentApproval?.approvalRating ?? 0,
   };
 }
 
@@ -864,8 +1032,8 @@ async function loadContext(
  * The module owns context loading, bilateral opinion, scoring, safety rails,
  * deterministic ranking, and audit persistence. Its interface deliberately
  * exposes none of those storage details. Shadow mode is the default and never
- * calls a gameplay command. Active execution lands behind this same interface
- * in later issue 996 slices.
+ * calls a gameplay command. Active mode claims the audit row before delegating
+ * one choice to the existing domain commands.
  */
 export async function processAutonomousForeignPolicy(
   db: Db,
@@ -919,21 +1087,49 @@ export async function processAutonomousForeignPolicy(
     selected: choice,
     alternatives: ranked.slice(0, MAX_ALTERNATIVES),
     acted: false,
+    executionStatus: context.mode === "shadow" ? "planned" : "claimed",
     executionNote:
       context.mode === "shadow"
         ? "Shadow mode records intent without changing world state."
-        : "Active execution is guarded until the action adapters land.",
+        : "Active decision claimed before command execution.",
     createdAt: now,
   };
-  const write = await db
-    .collection<PersistedForeignPolicyDecision>(DECISION_COLLECTION)
-    .updateOne({ countryId, turn: currentTurn }, { $setOnInsert: decision }, { upsert: true });
+  const decisions = db.collection<PersistedForeignPolicyDecision>(DECISION_COLLECTION);
+  const write = await decisions.updateOne(
+    { countryId, turn: currentTurn },
+    { $setOnInsert: decision },
+    { upsert: true }
+  );
+  const decisionRecorded = write.upsertedCount > 0;
+
+  let acted = false;
+  if (context.mode === "active" && choice && decisionRecorded) {
+    const execution = await executeForeignPolicyChoice(
+      db,
+      countryId,
+      context.head,
+      choice,
+      currentTurn,
+      now
+    );
+    acted = execution.acted;
+    await decisions.updateOne(
+      { _id: decision._id, countryId, turn: currentTurn },
+      {
+        $set: {
+          acted,
+          executionStatus: acted ? "executed" : "rejected",
+          executionNote: execution.note,
+        },
+      }
+    );
+  }
 
   return {
     ran: true,
     mode: context.mode,
-    acted: false,
-    decisionRecorded: write.upsertedCount > 0,
+    acted,
+    decisionRecorded,
     choice,
     ...(choice ? {} : { skipReason: "no-choice" as const }),
   };

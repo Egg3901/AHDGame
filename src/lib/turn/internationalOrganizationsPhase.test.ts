@@ -703,7 +703,7 @@ describe("internationalOrganizationsPhase", () => {
     } as never);
     stubQuietCollections(collections, { skipProposals: true });
 
-    const result = await processInternationalOrganizationsTurn({} as Db, 10);
+    const result = await processInternationalOrganizationsTurn(stubDb(), 10);
 
     expect(result.proposalsResolved).toBe(1);
     expect(join.admitMember).toHaveBeenCalledWith(expect.anything(), "nato", "FR", 10);
@@ -753,7 +753,7 @@ describe("internationalOrganizationsPhase", () => {
     } as never);
     stubQuietCollections(collections, { skipElections: true, skipLeadership: true });
 
-    const result = await processInternationalOrganizationsTurn({} as Db, 10);
+    const result = await processInternationalOrganizationsTurn(stubDb(), 10);
 
     expect(result.electionsResolved).toBe(1);
     expect(electionUpdateOne).toHaveBeenCalledWith(
