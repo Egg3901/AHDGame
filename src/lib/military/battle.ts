@@ -32,6 +32,8 @@ import {
   frontById,
   capacityOfTerrain,
 } from "./combat";
+import { NO_SUPPORT } from "@/lib/navair/frontSupport";
+import type { FrontSupport } from "@/lib/navair/types";
 
 /**
  * The general↔units↔front binding used by battle math.
@@ -234,9 +236,20 @@ export interface SideAgg {
   rn: number;
   aa: number;
   rc: number;
-  airShare: number;
+  /**
+   * This side's hold on the sky over the front, 0..100, from the naval and air layer.
+   *
+   * Replaces the old `airShare`, which was the share of a side's own mass that happened
+   * to be air or naval. That measured what you BROUGHT, not what you WON: a side could
+   * bring three air wings, lose the air war outright, and still read as having air
+   * superiority. Contesting the sky now happens in `navairOperations` before the battle,
+   * and this is its result.
+   */
+  airSuperiority: number;
+  /** Ground weight delivered by close air support this turn, already folded into mass. */
+  casWeight: number;
 }
-export function sideAgg(items: AggItem[]): SideAgg {
+export function sideAgg(items: AggItem[], support: FrontSupport = NO_SUPPORT): SideAgg {
   let mass = 0,
     fp = 0,
     ar = 0,
@@ -245,8 +258,7 @@ export function sideAgg(items: AggItem[]): SideAgg {
     mb = 0,
     rn = 0,
     aa = 0,
-    rc = 0,
-    air = 0;
+    rc = 0;
   for (const it of items) {
     const w = it.cv;
     mass += w;
@@ -258,11 +270,13 @@ export function sideAgg(items: AggItem[]): SideAgg {
     rn += it.s.rn * w;
     aa += it.s.aa * w;
     rc += it.s.rc * w;
-    if (it.domain === "air" || it.domain === "naval") air += w;
   }
+  // Per-stat averages weight by the FORMATIONS present, so `d` is unit mass and does not
+  // include close air support. A sortie contributes weight to the push; it does not drag
+  // the front's average armour or morale toward its own.
   const d = Math.max(1, mass);
   return {
-    mass,
+    mass: mass + support.casWeight,
     fp: fp / d,
     ar: ar / d,
     sh: sh / d,
@@ -271,7 +285,8 @@ export function sideAgg(items: AggItem[]): SideAgg {
     rn: rn / d,
     aa: aa / d,
     rc: rc / d,
-    airShare: air / d,
+    airSuperiority: support.airSuperiority,
+    casWeight: support.casWeight,
   };
 }
 export interface SideMults {
@@ -285,7 +300,12 @@ export interface SideMults {
 export function sideMults(A: SideAgg, B: SideAgg): SideMults {
   const cl = (x: number) => Math.max(-0.5, Math.min(0.5, x));
   const pen = 1 + 0.3 * cl((A.fp - B.ar) / 120);
-  const airm = 1 + 0.24 * cl((A.airShare * 100 - B.aa) / 120);
+  // Head to head hold on the sky, decided by `navairOperations` before this battle
+  // ran. The 0.24 coefficient and the 120 spread are UNCHANGED from the previous
+  // formula on purpose: the input changes, the magnitude does not, so the static
+  // replay isolates the effect of measuring air power properly from the effect of
+  // retuning it. Retune only once the replay says what the first change did.
+  const airm = 1 + 0.24 * cl((A.airSuperiority - B.airSuperiority) / 120);
   const rec = 1 + 0.15 * cl((A.rc - B.rc) / 120);
   const stand = 1 + 0.15 * cl((A.rn - B.rn) / 120);
   const shock = 1 + 0.12 * cl((A.sh - B.ar) / 120);

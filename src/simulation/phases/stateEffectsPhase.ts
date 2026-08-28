@@ -21,6 +21,7 @@ import { processPoliticalMetricsDynamics } from "@/lib/turn/politicalMetricsDyna
 import { syncAllPartyChairHeadsOfState } from "@/lib/turn/partyChairHeadOfState";
 import { processCrisisTurn } from "@/lib/turn/crisisTurn";
 import { processMinisterialOrders } from "@/lib/turn/ministerialOrderProcessing";
+import { processNavairTurn } from "@/lib/navair/turn";
 import { processTopSectorsRecompute } from "@/lib/turn/state/topSectorsRecompute";
 import { processInvestorConfidenceDecay } from "@/lib/turn/investorConfidenceDecay";
 import { processStateOwnershipConcentration } from "@/lib/turn/stateOwnershipConcentration";
@@ -108,16 +109,24 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       const crisisResult = await runtime.runPhase("crisisTurn", () =>
         processCrisisTurn(db, newTurn)
       );
+      // Naval and air operations resolve BEFORE ministerial orders, because
+      // `ministerialOrders` is what resolves battle declarations and a battle reads the
+      // sea control, air superiority and supply this pass leaves behind. Run the other
+      // way round and every battle fights on last turn's dispositions, which is
+      // invisible in the result and wrong in the same direction every time.
+      const navairResult = await runtime.runPhase("navairOperations", () =>
+        processNavairTurn(db, newTurn)
+      );
       const ministerialOrdersResult = await runtime.runPhase("ministerialOrders", () =>
         processMinisterialOrders(newTurn)
       );
       const policyResult = await runtime.runPhase("policyEffects", () =>
         processStatePolicyEffects(db)
       );
-      return { crisisResult, ministerialOrdersResult, policyResult };
+      return { crisisResult, navairResult, ministerialOrdersResult, policyResult };
     })();
     const [
-      { crisisResult, ministerialOrdersResult, policyResult },
+      { crisisResult, navairResult, ministerialOrdersResult, policyResult },
       demoEffectResult,
       ,
       archetypeDecayResult,
@@ -239,6 +248,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       : null;
     phaseResults.crisisTurn = { crisisesProcessed: crisisResult ?? 0 };
     phaseResults.ministerialOrders = ministerialOrdersResult ?? null;
+    (phaseResults as Record<string, unknown>).navairOperations = navairResult ?? null;
     phaseResults.topSectorsRecompute = topSectorsResult ?? null;
 
     if (archetypeDecayResult) {
