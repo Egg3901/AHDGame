@@ -38,6 +38,7 @@ import {
   foreignPolicyModeFrom,
   foreignPolicyStageFrom,
 } from "./foreignPolicyRollout";
+import { hostSideOf } from "@/lib/military/warEntryPolicy";
 
 export type ForeignPolicyMode = NppForeignPolicyMode;
 
@@ -491,7 +492,33 @@ function voteCandidates(
       const base = subject ? (opinions.get(subject)?.score ?? 0) : 0;
       support = item.jointStatementStance === "condemn" ? -base : base;
     } else if (item.type === "join_conflict") {
-      support = context.head.personality.ambition - context.head.personality.stubbornness * 0.25;
+      const conflict = context.conflicts.find(
+        (candidate) => candidate._id === item.joinConflictTheaterId
+      );
+      const side = item.joinConflictSide;
+      if (conflict && side) {
+        const allies = side === "A" ? conflict.sideA.countries : conflict.sideB.countries;
+        const enemies = side === "A" ? conflict.sideB.countries : conflict.sideA.countries;
+        const averageOpinion = (countries: CountryId[]) => {
+          const scores = countries
+            .filter((countryId) => countryId !== context.countryId)
+            .map((countryId) => opinions.get(countryId)?.score)
+            .filter((score): score is number => score !== undefined);
+          return scores.length > 0
+            ? scores.reduce((sum, score) => sum + score, 0) / scores.length
+            : 0;
+        };
+        const collectiveDefense = hostSideOf(conflict) === side;
+        support = collectiveDefense
+          ? 100
+          : -15 +
+            averageOpinion(allies) * 0.4 -
+            averageOpinion(enemies) * 0.25 +
+            context.head.personality.ambition * 0.15 -
+            context.head.personality.stubbornness * 0.1;
+      } else {
+        support = context.head.personality.ambition - context.head.personality.stubbornness * 0.25;
+      }
     } else {
       support = context.head.personality.loyalty - 35;
     }

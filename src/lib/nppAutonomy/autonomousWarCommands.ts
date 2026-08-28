@@ -110,6 +110,31 @@ async function deployReserveCommitment(
   return result.modifiedCount;
 }
 
+/**
+ * Mobilize a treaty-bound or principal belligerent without applying the public
+ * approval and debt gates used for discretionary autonomous intervention.
+ */
+export async function mobilizeImmediateWarEntry(
+  db: Db,
+  countryId: CountryId,
+  conflictId: string,
+  currentTurn: number,
+  organizationId?: string
+): Promise<number> {
+  return deployReserveCommitment(
+    db,
+    countryId,
+    conflictId,
+    currentTurn,
+    organizationId
+      ? (WAR_COMMITMENT_SHARE_BY_ORGANIZATION[organizationId] ?? DEFAULT_WAR_COMMITMENT_SHARE)
+      : DEFAULT_WAR_COMMITMENT_SHARE,
+    organizationId
+      ? (WAR_COMMITMENT_PRIORITY_BY_ORGANIZATION[organizationId] ?? "lowest")
+      : "lowest"
+  );
+}
+
 async function activeForAutonomousWar(db: Db, countryId: CountryId): Promise<boolean> {
   const rollout = await db
     .collection<{
