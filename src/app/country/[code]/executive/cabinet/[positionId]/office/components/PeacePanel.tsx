@@ -26,6 +26,8 @@ export interface EnemyView {
   country: CountryId;
   /** Asking them to withdraw would empty their side and end the war. */
   endsWar: boolean;
+  /** Treaty allies released alongside them, who leave at the same moment. */
+  guestsLeaving: CountryId[];
   /** That withdrawal is refused at the current front. A white peace escapes it. */
   withdrawalBlocked: boolean;
   progressPct: number;
@@ -40,6 +42,8 @@ export interface PeaceWar {
   name: string;
   /** Countries on the OTHER side, the only ones an offer can be made to. */
   enemies: EnemyView[];
+  /** What OUR leaving would do to this war. */
+  ourDeparture: { endsWar: boolean; guestsLeaving: CountryId[] };
 }
 
 /**
@@ -94,6 +98,29 @@ function offerDirectionText(o: OfferView): string {
   return o.incoming
     ? ` asks us to leave the war, staying in it themselves`
     : `, our request that ${leaverName} leave the war`;
+}
+
+/**
+ * What accepting THIS offer would actually do to the war, named for the reader.
+ *
+ * The panel used to state flatly that "the fighting continues for everyone else",
+ * which is only sometimes true and was plainly wrong in the shape that prompted this:
+ * a side of one, and an opposing side whose principal takes its treaty ally out with
+ * it. Either departure ends that war, and a player reading the old line would have
+ * expected the survivors to fight on.
+ */
+function departureConsequence(leaverName: string, endsWar: boolean, guests: CountryId[]): string {
+  const released =
+    guests.length > 0
+      ? ` ${guests.map((g) => COUNTRY_CONFIGS[g]?.name ?? g).join(" and ")} ${
+          guests.length === 1 ? "leaves" : "leave"
+        } at the same moment, released from the treaty that brought ${
+          guests.length === 1 ? "it" : "them"
+        } in.`
+      : "";
+  return endsWar
+    ? `Accepting ends this war outright: nobody would be left on ${leaverName}'s side.${released}`
+    : `Accepting takes ${leaverName} out and the fighting continues for everyone else.${released}`;
 }
 
 export function PeacePanel({
@@ -255,9 +282,10 @@ export function PeacePanel({
     >
       <p className="mb-3 text-[12px] text-muted">
         A deal is struck between two countries, not two sides: accepting takes{" "}
-        <strong>one country</strong> out of the war and the fighting continues for everyone else. An
-        offer stands for {PEACE_OFFER_DURATION_TURNS} turns. Accepting starts a {TRUCE_TURNS}-turn
-        truce, which neither side can trade away.
+        <strong>one country</strong> out of the war. An ally that was pulled in under a treaty
+        leaves with the country it came to defend, and if that empties a side, the war ends there
+        and then. An offer stands for {PEACE_OFFER_DURATION_TURNS} turns. Accepting starts a{" "}
+        {TRUCE_TURNS}-turn truce, which neither side can trade away.
       </p>
 
       {wars.length > 1 && (
@@ -426,6 +454,22 @@ export function PeacePanel({
                 <option value="onePartyState">One-party state</option>
               </select>
             </label>
+          )}
+
+          {selectedEnemy && war && (
+            <p className="text-[11px] text-muted">
+              {leaver === "them"
+                ? departureConsequence(
+                    COUNTRY_CONFIGS[selectedEnemy.country]?.name ?? selectedEnemy.country,
+                    selectedEnemy.endsWar,
+                    selectedEnemy.guestsLeaving
+                  )
+                : departureConsequence(
+                    COUNTRY_CONFIGS[countryId]?.name ?? countryId,
+                    war.ourDeparture.endsWar,
+                    war.ourDeparture.guestsLeaving
+                  )}
+            </p>
           )}
 
           {leaver === "them" && !withdrawalBarred && (

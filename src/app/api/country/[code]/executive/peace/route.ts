@@ -139,6 +139,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
           // country cannot simply be asked to leave BEFORE a player composes an offer
           // the route would refuse. Computed by the same `withdrawalGate` the POST
           // runs, so the two cannot drift; the server stays the authority.
+          // What OUR own departure would do, for the same reason: the panel has to
+          // say whether leaving ends the war rather than claiming the fighting always
+          // carries on without us.
+          ourDeparture: (() => {
+            const g = withdrawalGate(w, countryId, countryId);
+            return { endsWar: g.endsWar, guestsLeaving: g.guests };
+          })(),
           enemies: (onA ? w.sideB.countries : w.sideA.countries)
             .filter((e) => opposedBelligerents(w, countryId, e))
             .map((e) => {
@@ -146,6 +153,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
               return {
                 country: e,
                 endsWar: gate.endsWar,
+                guestsLeaving: gate.guests,
                 withdrawalBlocked: gate.blocked,
                 // Whole percents, for copy. The form shows the reader how far off
                 // they are rather than only that they are.
