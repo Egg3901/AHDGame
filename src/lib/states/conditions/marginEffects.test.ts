@@ -62,8 +62,10 @@ describe("marginEffects", () => {
      * the -3 regional cap on every region of the country. Registration is
      * load-bearing, not belt and braces.
      */
-    it("gives the war modifier no profit margin effect", () => {
-      expect(marginEffectForModifier(-25, "war")).toBe(0);
+    it("gives every war chip no profit margin effect", () => {
+      for (const id of ["war", "war_exhaustion", "war_effort", "alliance_contribution"]) {
+        expect(marginEffectForModifier(-25, id)).toBe(0);
+      }
     });
 
     it("keeps the war modifier out of the regional condition margin sum", () => {

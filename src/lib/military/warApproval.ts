@@ -32,8 +32,10 @@ function clamp(value: number, lo: number, hi: number): number {
 }
 
 /**
- * Approval cost of a war's duration, measured from the turn THIS country
- * entered rather than from the turn the war began.
+ * The original closed-form exhaustion curve, kept as the SEED for the integrator
+ * that replaced it. Exhaustion is now carried between wars by
+ * `stepWarExhaustion`; this function is what a country already fighting when
+ * that shipped starts from, so nothing jumps on the first turn.
  *
  * +1 while the war is fresh and the public is behind it, falling one point per
  * in-game year to a floor of -25 after 26 years (about 52 real days, since a
@@ -45,12 +47,124 @@ function clamp(value: number, lo: number, hi: number): number {
  * twice been revised down and twice been reinstated — do not "correct" it.
  *
  * Continuous rather than stepped, so the block never moves faster than about
- * 0.02 per turn and damping never has to fight it.
+ * 0.02 per turn — which is what lets the block be applied undamped.
  */
 export const WAR_EXHAUSTION_FLOOR = -25;
 
 export function warExhaustion(turnsSinceEntry: number): number {
   return round1(clamp(1 - turnsSinceEntry / TURNS_PER_YEAR, WAR_EXHAUSTION_FLOOR, 1));
+}
+
+/**
+ * Exhaustion moves one point per in-game year, in BOTH directions.
+ *
+ * The same slope the formula above accrues at, run in reverse once the fighting
+ * stops. Symmetry is the point: a war that took four years to sour takes four
+ * years of peace to be forgiven.
+ */
+export const WAR_EXHAUSTION_RATE = 1 / TURNS_PER_YEAR;
+
+/**
+ * Storage precision for the integrator.
+ *
+ * Full precision would write a twenty digit float to the document every turn,
+ * but rounding too hard costs accuracy that compounds: every turn loses up to
+ * half a unit of the last place, and a war runs for thousands of turns. Six
+ * decimals keeps the drift over a war fought to the floor near a ten-thousandth
+ * of a point, which is three orders of magnitude below what a chip can show.
+ */
+function roundStored(value: number): number {
+  return Math.round(value * 1e6) / 1e6;
+}
+
+/**
+ * Slack on the "one more step reaches zero" test, to absorb stored rounding.
+ *
+ * Each stored turn loses up to half a unit of the last decimal place, so after a
+ * few hundred turns the integrator is no longer an exact multiple of the rate
+ * and can sit a hair OUTSIDE its final step — stranding it one turn short and,
+ * worse, one turn short forever if the drift lands the wrong way. Three decimals
+ * is far larger than any drift a war can accumulate and far smaller than the
+ * tenth a chip renders, so it ends the heal on the turn it is due and is
+ * invisible either side of that.
+ */
+const HEAL_SNAP_TOLERANCE = 1e-3;
+
+export interface WarExhaustionStep {
+  /** The stored integrator, or undefined for a country that has never fought. */
+  prev: number | undefined;
+  /** The conflict this country is currently fighting, or null at peace. */
+  conflictId: string | null;
+  /** The conflict the stored value was last accrued against. */
+  prevConflictId: string | null | undefined;
+  /** Turns since this country entered its current war. Ignored at peace. */
+  turnsSinceEntry: number;
+}
+
+/**
+ * Step the persisted exhaustion integrator one turn.
+ *
+ * Exhaustion is the one war term that outlives its war. The rest describe a
+ * front that no longer exists the moment the fighting stops, but a public that
+ * has carried four years of casualties does not forget the week the treaty is
+ * signed — and a government that could end a war and immediately start another
+ * with a clean slate had a free hand no cost ever caught up with.
+ *
+ * Four cases, in the order they are checked:
+ *
+ *  - **Never scored, and at war.** Seed from the original closed-form curve so a
+ *    country already fighting when this shipped keeps the exact value it had.
+ *    Without this the rally below would fire on an existing war and hand a
+ *    nation forty turns deep a fresh +1. Self migrating: no backfill script, and
+ *    a country that has never fought simply starts at zero.
+ *  - **Entering a war from peace.** Rally round the flag: +1 on top of whatever
+ *    residue is carried, capped at +1. A clean slate opens at +1 exactly as
+ *    before; a country restarting at -3 opens at -2.
+ *
+ *    The test is "was this country at peace last turn", which is what a null
+ *    stored conflict id means — NOT "is this a different war from the stored
+ *    one". A country fighting two wars at once whose older war resolves has its
+ *    principal conflict change underneath it without the fighting ever stopping,
+ *    and paying a fresh rally there would hand out +1 for ending a war while
+ *    still at war: a smaller version of the very exploit the cooldown closes.
+ *    A country that goes straight from one war into another with no turn of
+ *    peace between them likewise gets no rally, which is the harsher reading and
+ *    the right one.
+ *  - **Same war, or a new war entered without a break.** Down one point per
+ *    in-game year, to the floor.
+ *  - **At peace.** One point per in-game year toward zero, from whichever side
+ *    it is carried. Peace heals a war's cost and also retires the rally a short
+ *    war left behind; it never earns approval of its own in either direction.
+ */
+export function stepWarExhaustion(input: WarExhaustionStep): number {
+  const { prev, conflictId, prevConflictId, turnsSinceEntry } = input;
+
+  if (conflictId === null) {
+    const carried = prev ?? 0;
+    // Toward zero from WHICHEVER side. A war that ended inside its first year
+    // leaves a positive rally behind, and that has to fade at the same pace a
+    // penalty does. Adding the rate unconditionally would have carried a
+    // positive further from zero and then cut it to nothing in a single turn,
+    // dropping half a point of approval on the turn peace was signed.
+    //
+    // Landing ON zero matters beyond tidiness: "fully healed" is an equality
+    // test — `guestsToRelease` and the snapshot's own bookkeeping both compare
+    // against exactly zero — and rounding the stored value each turn loses a
+    // fraction of the rate, so a value that merely approaches zero never gets
+    // there. Anything within one turn's movement finishes now.
+    if (Math.abs(carried) <= WAR_EXHAUSTION_RATE + HEAL_SNAP_TOLERANCE) return 0;
+    return roundStored(carried > 0 ? carried - WAR_EXHAUSTION_RATE : carried + WAR_EXHAUSTION_RATE);
+  }
+  if (prev === undefined || !Number.isFinite(prev)) {
+    return roundStored(warExhaustion(turnsSinceEntry));
+  }
+  // Null (or a document written before this field existed) means at peace, which
+  // is the only state a rally can be entered from. See the block comment above.
+  const wasAtPeace = prevConflictId === null || prevConflictId === undefined;
+  if (wasAtPeace) {
+    return roundStored(Math.min(1, prev + 1));
+  }
+  return roundStored(clamp(prev - WAR_EXHAUSTION_RATE, WAR_EXHAUSTION_FLOOR, 1));
 }
 
 /** How far war effort can swing in either direction. */
@@ -224,79 +338,120 @@ export function nextControlSample(
   return undefined;
 }
 
-export interface WarPart {
-  id: string;
-  label: string;
-  effect: number;
+/**
+ * What is known about the country's war this turn.
+ *
+ *  - `live`    — fighting right now.
+ *  - `peace`   — no live war; exhaustion is healing.
+ *  - `unknown` — the conflict read threw, so the two cannot be told apart.
+ *
+ * `unknown` is not a synonym for `peace`. A failed read must not label the
+ * lingering exhaustion "recovering", because that tells the player a war has
+ * ended when all that actually happened is that the database had a bad moment,
+ * and the war may well still be running.
+ */
+export type WarPhase = "live" | "peace" | "unknown";
+
+export interface WarModifierInput {
+  /** The stepped exhaustion integrator. */
+  exhaustion: number;
+  /** How the front is going, or null when there is no war to score. */
+  effort: number | null;
+  /** Alliance contribution, or null when it does not apply. */
+  contribution: number | null;
+  /**
+   * The naval war's cost at home, with its own label, or null when there is
+   * nothing to show. It carries a label because it names a situation rather than
+   * a fixed term: "Naval losses" once hulls are gone, "Fleet condition" while
+   * they are only damaged.
+   */
+  naval: { label: string; effect: number } | null;
+  phase: WarPhase;
 }
 
 /**
- * Step the country's stored war total toward this turn's raw total.
+ * The war block as one chip per term.
  *
- * `prev` is seeded to 0 rather than left undefined on purpose. `dampApprovalStep`
- * adopts its target outright when there is no previous value, and conflicts that
- * predate this feature carry no per-country entry record — so an original
- * belligerent in a long-running war would bill from `conflict.startTurn` and land
- * its whole accumulated exhaustion in one undamped turn the day this ships.
+ * This was a single chip carrying a damped total, because attributing a damped
+ * total back across its parts inverts whenever the total and the raw sum have
+ * opposite signs — "the chips do not add up to the number", inside the mechanism
+ * meant to prevent exactly that. That objection is now gone rather than
+ * overridden: exhaustion is a persisted integrator that cannot move faster than
+ * one point per in-game year, and effort and contribution are bounded and
+ * recomputed from the live front, so the block has nothing left that can jump
+ * and needs no damping. With no damping there is no attribution to invert, and
+ * each chip's effect IS its own contribution to the rating. They sum exactly.
  *
- * At peace the caller passes a raw of 0, so the same step retires the block
- * gradually instead of letting it vanish between one turn and the next.
+ * One chip per term is also what a player needs. A single line reading "War -4"
+ * on a war a country is winning is actively misleading: the front is going well
+ * and the public is simply tired, and those are opposite facts that a government
+ * responds to in opposite ways. Three lines say which is which.
  *
- * Deliberately a local implementation rather than an import of `dampApprovalStep`:
- * `governmentApproval.ts` imports this module, so reaching back into it for the
- * helper would close a module cycle.
+ * Every chip declares `marginEffect: 0`. An unregistered id falls through to a
+ * 0.75 factor in `marginEffectForModifier`, which would push a deep war penalty
+ * into every region's profit margins — and splitting one chip into three
+ * multiplies that trap rather than removing it.
  */
-export const WAR_TOTAL_MAX_STEP = 2;
-
-export function stepWarTotal(
-  prev: number | undefined,
-  raw: number,
-  maxStep: number = WAR_TOTAL_MAX_STEP
-): number {
-  const from = Number.isFinite(prev) ? (prev as number) : 0;
-  const delta = raw - from;
-  if (Math.abs(delta) <= maxStep) return round1(raw);
-  return round1(from + Math.sign(delta) * maxStep);
-}
-
-/**
- * The war block as a single approval chip.
- *
- * One chip, not three. Attributing a damped total back across separate parts
- * inverts whenever the total and the raw sum have opposite signs, and drops
- * every chip during peace retirement while the rating is still moving — both of
- * which reintroduce "the chips do not add up to the number" inside the mechanism
- * meant to prevent it. A single chip whose effect IS the applied total cannot
- * disagree with the rating; the parts ride along undamped for the tooltip.
- */
-export function buildWarModifier(
-  applied: number,
-  parts: WarPart[],
-  atPeace = false
-): ActiveModifier | null {
-  const effect = round1(applied);
-  if (effect === 0 || !Number.isFinite(effect)) return null;
-  return {
-    id: "war",
-    // The block retires at two points a turn, so a country can sit at peace for
-    // up to fourteen turns still carrying it, with no live war behind it and
-    // therefore no breakdown to show. Saying "War" there leaves a nation that
-    // is no longer fighting anyone displaying a war penalty it cannot account
-    // for. `atPeace` is passed explicitly rather than inferred from empty
-    // parts, because the failure path also has no parts and a failed read is
-    // not peace: that war may well still be running.
-    label: atPeace ? "War (winding down)" : "War",
-    effect,
+export function buildWarModifiers(input: WarModifierInput): ActiveModifier[] {
+  const { exhaustion, effort, contribution, naval, phase } = input;
+  const live = phase === "live";
+  const chip = (id: string, label: string, value: number): ActiveModifier => ({
+    id,
+    label,
+    effect: round1(value),
     marginEffect: 0,
     source: "war",
-    breakdown: parts.filter((part) => part.effect !== 0),
-  };
-}
+  });
 
+  const modifiers: ActiveModifier[] = [];
+
+  // Exhaustion outlives its war, so it is the one term shown outside one. While
+  // the fighting is live it shows even at zero: a country at war whose terms
+  // happen to cancel must still see the war in its approval, which is the whole
+  // reason the block was invisible on a nation forty two turns into the War for
+  // Germany. Only a confirmed peace says "recovering" — see WarPhase.
+  const exhaustionEffect = round1(exhaustion);
+  if (Number.isFinite(exhaustionEffect) && (live || exhaustionEffect !== 0)) {
+    modifiers.push(
+      chip(
+        "war_exhaustion",
+        phase === "peace" ? "War exhaustion (recovering)" : "War exhaustion",
+        exhaustionEffect
+      )
+    );
+  }
+
+  // The rest describe a front. Outside a live war there is no front to describe,
+  // so they are simply absent rather than retired gradually.
+  if (live && effort !== null && Number.isFinite(effort)) {
+    modifiers.push(chip("war_effort", "War effort", effort));
+  }
+  if (live && contribution !== null && Number.isFinite(contribution)) {
+    modifiers.push(chip("alliance_contribution", "Alliance contribution", contribution));
+  }
+  // Unlike the other three, this one is absent at zero even while the fighting
+  // is live: zero here means the fleet is healthy, or that the country has no
+  // navy at all, and neither is a fact worth a line in the breakdown.
+  if (live && naval !== null && Number.isFinite(naval.effect)) {
+    modifiers.push(chip("naval_losses", naval.label, naval.effect));
+  }
+
+  return modifiers;
+}
 export interface WarApprovalResult {
   modifiers: ActiveModifier[];
-  /** The block total to persist as `warApprovalTotal`. */
+  /** The block total to persist as `warApprovalTotal`. Now simply the chip sum. */
   total: number;
+  /** The stepped integrator to persist as `warExhaustion`, at full precision. */
+  exhaustion: number;
+  /** The conflict the exhaustion was accrued against, to persist alongside it. */
+  conflictId: string | null;
+}
+
+/** What the caller has stored from last turn. */
+export interface WarApprovalState {
+  exhaustion?: number;
+  conflictId?: string | null;
 }
 
 /** Which side's roster holds this country, or null when it is not a belligerent. */
@@ -326,7 +481,7 @@ function entryOf(conflict: ConflictDoc, countryId: CountryId): { turn: number; c
 }
 
 /**
- * The war approval block for one country, damped and ready to persist.
+ * The war approval block for one country, stepped and ready to persist.
  *
  * Selects a single conflict — the one this country has personally fought longest,
  * ranked by its own entry turn so the choice agrees with the exhaustion clock.
@@ -337,16 +492,18 @@ function entryOf(conflict: ConflictDoc, countryId: CountryId): { turn: number; c
  * Never throws. It runs inside `runPhase("approvalSnapshot", ...)` for every
  * active country in a single `Promise.all`, so an unguarded failure would take
  * the approval snapshot down for every country rather than one. On failure the
- * previous total is held rather than zeroed, since a transient error reading as
- * "target zero" would walk the block down at the damping step and back up again.
+ * stored exhaustion is held exactly as it stands: a transient error must not
+ * read as peace and start healing a war that is still being fought, nor as war
+ * and accrue exhaustion against a front nobody could read.
  */
 export async function computeWarApproval(
   db: Db,
   countryId: CountryId,
   turn: number,
-  prevTotal: number | undefined
+  state: WarApprovalState | undefined
 ): Promise<WarApprovalResult> {
-  const previous = Number.isFinite(prevTotal) ? (prevTotal as number) : 0;
+  const prevExhaustion = Number.isFinite(state?.exhaustion) ? state?.exhaustion : undefined;
+  const prevConflictId = state?.conflictId ?? null;
 
   try {
     const live = await listConflictsForCountry(db, countryId);
@@ -368,89 +525,118 @@ export async function computeWarApproval(
       .sort((a, b) => a.entry.turn - b.entry.turn || a.conflict._id.localeCompare(b.conflict._id));
 
     const principal = mine[0];
-    // No live war: target zero and let the damping step walk the block out.
-    if (!principal) return settle(previous, 0, [], true);
+    // At peace the exhaustion integrator keeps healing toward zero and the two
+    // front terms simply stop existing. Nothing is retired gradually any more:
+    // the front is gone, so there is nothing left to describe about it.
+    if (!principal) {
+      return settle({
+        exhaustion: stepWarExhaustion({
+          prev: prevExhaustion,
+          conflictId: null,
+          prevConflictId,
+          turnsSinceEntry: 0,
+        }),
+        effort: null,
+        contribution: null,
+        naval: null,
+        phase: "peace",
+        conflictId: null,
+      });
+    }
 
     const { conflict, side, entry } = principal;
     const turnsSinceEntry = Math.max(0, turn - entry.turn);
 
-    const parts: WarPart[] = [
-      {
-        id: "war_effort",
-        label: "War effort",
-        effect: warEffort({
-          control: conflict.control,
-          entryControl: entry.control,
-          side,
-          turnsSinceEntry,
-          turn,
-          sample: conflict.controlSample,
-          entryTurn: entry.turn,
-        }),
-      },
-      { id: "war_exhaustion", label: "War exhaustion", effect: warExhaustion(turnsSinceEntry) },
-    ];
+    const exhaustion = stepWarExhaustion({
+      prev: prevExhaustion,
+      conflictId: conflict._id,
+      prevConflictId,
+      turnsSinceEntry,
+    });
 
+    const effort = warEffort({
+      control: conflict.control,
+      entryControl: entry.control,
+      side,
+      turnsSinceEntry,
+      turn,
+      sample: conflict.controlSample,
+      entryTurn: entry.turn,
+    });
+
+    let contribution: number | null = null;
     const pulledIn = conflict.treatyEntries?.some((e) => e.countryId === countryId) ?? false;
     if (pulledIn) {
       const peers = (
         side === "A" ? conflict.sideA.countries : conflict.sideB.countries
       ) as CountryId[];
       const byCountry = await theatrePersonnel(db, conflict._id, peers);
-      const contribution = allianceContribution({
+      contribution = allianceContribution({
         mine: byCountry.get(countryId) ?? 0,
         peers: peers.map((peer) => byCountry.get(peer) ?? 0),
         turnsSinceEntry,
       });
-      if (contribution !== null) {
-        parts.push({
-          id: "alliance_contribution",
-          label: "Alliance contribution",
-          effect: contribution,
-        });
-      }
     }
 
-    // The naval war has a political cost at home. Without it a government can have its
-    // fleet destroyed and pay nothing, which makes the whole naval layer a private number
-    // between the admiralty and the engine.
+    // The naval war has a political cost at home. Without it a government can
+    // have its fleet destroyed and pay nothing, which makes the whole naval
+    // layer a private number between the admiralty and the engine.
+    //
+    // Read for the country, not the theatre: a fleet lost anywhere is a fleet
+    // the public can see is gone. `navalApprovalEffect` is a cost only, bounded
+    // at -1, and returns 0 for a country with no navy, so a landlocked power is
+    // neither rewarded nor punished for ships it never had.
     const navalUnits = (await getMilitaryUnitsCollection(db)
       .find({ countryId, domain: "naval" })
       .toArray()) as unknown as NavairUnit[];
     const navalEffect = navalApprovalEffect(navalUnits);
-    if (navalEffect !== 0) {
-      parts.push({
-        id: "naval_losses",
-        label: navalApprovalLabel(navalUnits),
-        effect: navalEffect,
-      });
-    }
 
-    const raw = parts.reduce((sum, part) => sum + part.effect, 0);
-    return settle(previous, raw, parts);
+    return settle({
+      exhaustion,
+      effort,
+      contribution,
+      // The label moves with the situation ("Naval losses" once hulls are lost,
+      // "Fleet condition" while they are merely damaged), so it is passed in
+      // rather than fixed in the chip builder like the other three.
+      naval:
+        navalEffect === 0 ? null : { label: navalApprovalLabel(navalUnits), effect: navalEffect },
+      phase: "live",
+      conflictId: conflict._id,
+    });
   } catch (error) {
-    console.error("[warApproval] scoring failed, holding previous total:", error);
-    return settle(previous, previous, []);
+    console.error("[warApproval] scoring failed, holding stored exhaustion:", error);
+    // Hold everything exactly as stored. The front terms are dropped rather than
+    // guessed: a failed read is not evidence of a front, and inventing one would
+    // move the rating on the strength of an error.
+    return settle({
+      exhaustion: prevExhaustion ?? 0,
+      effort: null,
+      contribution: null,
+      naval: null,
+      phase: "unknown",
+      conflictId: prevConflictId,
+    });
   }
 }
 
-function settle(
-  previous: number,
-  raw: number,
-  parts: WarPart[],
-  atPeace = false
-): WarApprovalResult {
+interface SettleInput extends WarModifierInput {
+  conflictId: string | null;
+}
+
+function settle(input: SettleInput): WarApprovalResult {
   // A corrupt conflict document (a non-finite `control`, say) would otherwise
-  // carry NaN through the clamps, through the damping step, and into
-  // governmentApprovals — where it poisons every rating computation downstream
-  // until something overwrites it. Fall back to holding the previous total,
-  // which is the same thing the failure path does.
-  const safeRaw = Number.isFinite(raw) ? raw : previous;
-  const stepped = stepWarTotal(previous, safeRaw);
-  const total = Number.isFinite(stepped) ? stepped : 0;
-  const finiteParts = parts.filter((part) => Number.isFinite(part.effect));
-  const modifier = buildWarModifier(total, finiteParts, atPeace);
-  return { modifiers: modifier ? [modifier] : [], total };
+  // carry NaN into governmentApprovals, where it poisons every rating
+  // computation downstream until something overwrites it. Every value is
+  // re-checked here rather than trusted from the clamps above.
+  const exhaustion = Number.isFinite(input.exhaustion) ? input.exhaustion : 0;
+  const modifiers = buildWarModifiers({ ...input, exhaustion });
+  const total = modifiers.reduce((sum, modifier) => sum + modifier.effect, 0);
+  return {
+    modifiers,
+    total: Number.isFinite(total) ? Math.round(total * 10) / 10 : 0,
+    exhaustion,
+    conflictId: input.conflictId,
+  };
 }
 
 /** Theatre personnel per country, for the countries on one side of one conflict. */

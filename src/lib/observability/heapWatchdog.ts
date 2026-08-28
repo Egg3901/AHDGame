@@ -77,6 +77,13 @@ export interface HeapWatchdogDeps {
    */
   sampleLogEveryNTicks?: number;
   onCritical?: (snapshot: HeapSnapshot) => Promise<void> | void;
+  /**
+   * Releases this process's in-flight turn-processing lock before the trip
+   * exits. Injectable for tests; defaults to a lazy import of
+   * `releaseLocalProcessingLock` (lazy so this module, which loads very early
+   * in instrumentation.ts, does not drag turnSystem's import graph in at boot).
+   */
+  releaseTurnLock?: (reason: string) => Promise<boolean>;
   process?: NodeJS.Process;
   getMemoryUsage?: () => NodeJS.MemoryUsage;
   getHeapStatistics?: () => { heap_size_limit: number };
@@ -98,6 +105,10 @@ const DEFAULT_RSS_CAP_BYTES = 5_000_000_000;
 const DEFAULT_RSS_THRESHOLD_PCT = 0.7;
 const DEFAULT_SAMPLE_LOG_EVERY_N_TICKS = 6; // 10s interval × 6 = sample log per minute.
 const SENTRY_FLUSH_MS = 2_000;
+// The trip is already an emergency exit; a lock release that cannot complete
+// quickly must not delay it. The :30 backup cron's stale takeover remains the
+// backstop if this window is missed.
+const LOCK_RELEASE_TIMEOUT_MS = 2_000;
 const TURN_DELTA_HISTORY_SIZE = 10;
 const SNAPSHOT_TOP_CONSTRUCTORS = 25;
 
@@ -257,6 +268,42 @@ async function defaultOnCritical(snapshot: HeapSnapshot, deps: HeapWatchdogDeps)
   const deltas = getRecentTurnDeltas();
   console.error("[heapWatchdog] heap spaces:", spaces);
   console.error("[heapWatchdog] recent turn deltas:", deltas);
+
+  // Release this process's turn lock BEFORE exiting. A trip that fires mid-turn
+  // used to strand gameState.isProcessing with a frozen heartbeat, and since the
+  // turn cron only ticks at :00 (plus the :30 backup), the game then sat on
+  // "Processing..." until the 20-min stale window elapsed AND one of those ticks
+  // came round — up to half an hour of wedge for what is otherwise a clean,
+  // deliberate restart. We know we are exiting, so hand the lock back first.
+  // Failure here is non-fatal: the stale takeover still backstops it.
+  try {
+    const releaseTurnLock =
+      deps.releaseTurnLock ??
+      // `lockReason`, not `reason`: the enclosing scope already has a `reason`
+      // ("heap" | "rss") and shadowing it here reads as if the trip reason were
+      // being passed straight through, when it is actually the formatted string
+      // built at the call site below.
+      (async (lockReason: string) => {
+        const { releaseLocalProcessingLock } = await import("@/lib/turnSystem");
+        return releaseLocalProcessingLock(lockReason);
+      });
+    // The timer is captured and cleared so the loser of the race does not leave
+    // a pending 2s handle behind. Irrelevant in production (we exit immediately
+    // after), but with an injected process.exit — i.e. in tests — an uncleared
+    // handle keeps the event loop alive past the assertion.
+    let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+    const released = await Promise.race([
+      releaseTurnLock(`heap watchdog trip (${reason})`),
+      new Promise<false>((resolve) => {
+        releaseTimer = setTimeout(() => resolve(false), LOCK_RELEASE_TIMEOUT_MS);
+      }),
+    ]).finally(() => {
+      if (releaseTimer) clearTimeout(releaseTimer);
+    });
+    console.error(`[heapWatchdog] turn lock release on trip: ${released ? "released" : "no-op"}`);
+  } catch (err) {
+    console.error("[heapWatchdog] turn lock release on trip failed:", err);
+  }
 
   Sentry.captureMessage("Heap watchdog tripped — exiting before OOM", {
     level: "error",
