@@ -95,7 +95,11 @@ import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import { emitBuildCapexTxBulk } from "@/lib/corporations/capexTxLog";
 import { getLogisticsSupportedSectorCount, TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { sumStrengthGrants } from "@/lib/constants/techTree";
-import { CAPACITY_BUILD_TURNS, computeBuildCost } from "@/lib/constants/capacityEconomy";
+import {
+  CAPACITY_BUILD_TURNS,
+  computeBuildCost,
+  MAX_BUILD_UNITS_PER_ORDER,
+} from "@/lib/constants/capacityEconomy";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
 import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
@@ -170,6 +174,28 @@ const EXPANSION_MIN_MARGIN = 15; // Corp-level avg margin must be healthy
  */
 /** One decision can found only one sector, even with several shortages. */
 export const NPP_SHORTAGE_ENTRIES_PER_TURN = 1;
+
+/**
+ * Founding build size as a fraction of surplus, not a single facility. A player
+ * entering a market does not stop at one plant — they follow the entry with a
+ * `buildCapacity` order scaled to their cash and the shortage. An NPP founds at
+ * the same scale, committing this share of its post-floor, post-fee surplus to
+ * the first build (still capped by the market's unowned headroom, still floored
+ * at one facility). Kept below 1 so a single founding bet never zeroes the
+ * treasury or starves reinvestment. Fixes the "$2M treasury funds one plant"
+ * under-deployment.
+ */
+export const NPP_FOUNDING_DEPLOY_FRACTION = 0.6;
+
+/**
+ * A single founding may claim at most this share of the market's unowned
+ * headroom. Cash is the primary bind (a $2M treasury buys far less than half a
+ * market), but a cash-rich corp must still leave a fresh market contestable
+ * rather than vacuuming the whole pool on entry. Larger than the growth leg's
+ * quarter-share ({@link NPP_REINVEST_HEADROOM_SHARE}) because a founding IS the
+ * initial commitment, not an incremental top-up. Floored at one facility below.
+ */
+export const NPP_FOUNDING_HEADROOM_SHARE = 0.5;
 
 // Archetypes may scale the rails but never remove the minimum buffer.
 const SAFE_CASH_FLOOR_MIN = 125_000; // an aggressive floor still leaves a buffer
@@ -1517,11 +1543,14 @@ export function makeNppCorpDecision(
         plants.eraUnitScale
       );
       const starterUnits = foundingStarterUnits(expansion.sectorType as CorporationType);
-      const buildAnchor =
+      // Per-unit founding price. computeBuildCost is linear in units and, at a
+      // greenfield entry, the dominance multiplier is 1 (no presence yet), so a
+      // one-unit quote scales exactly to any order size.
+      const perUnitFoundingAnchor =
         starterUnits > 0
           ? computeBuildCost({
               sectorType: expansion.sectorType as CorporationType,
-              units: starterUnits,
+              units: 1,
               year: plants.year,
               eraUnitScale: plants.eraUnitScale,
               // No presence in this bucket yet — dominance is 1 by construction.
@@ -1537,13 +1566,40 @@ export function makeNppCorpDecision(
           : 0;
       // Charged in the corp's own currency: fee + build are ₳, liquidCapital is not.
       const entryFeeAnchor = sectorEntryFeeAnchor(plants.preset);
-      const foundingCost = toCorpLocal(entryFeeAnchor + buildAnchor);
       const entryCapital =
         liquidCapital + (exceptionalShortageEntry ? (ctx.shortageEntryCreditLocal ?? 0) : 0);
+      // Size the first build to available capital, not a token facility. Deploy
+      // a bounded fraction of post-floor, post-fee surplus into capacity, capped
+      // by the market's unowned headroom and by the per-order ceiling, and
+      // floored at the one-facility quantum so a cash-poor entry still behaves
+      // as before. See NPP_FOUNDING_DEPLOY_FRACTION.
+      const perUnitFoundingLocal = toCorpLocal(perUnitFoundingAnchor);
+      const entryFeeLocal = toCorpLocal(entryFeeAnchor);
+      const deployBudgetLocal = Math.max(
+        0,
+        (entryCapital - effectiveCashFloor - entryFeeLocal) * NPP_FOUNDING_DEPLOY_FRACTION
+      );
+      const affordableUnits =
+        perUnitFoundingLocal > 0 ? Math.floor(deployBudgetLocal / perUnitFoundingLocal) : 0;
+      const buildUnits =
+        starterUnits > 0
+          ? Math.max(
+              starterUnits,
+              Math.floor(
+                Math.min(
+                  headroomUnits * NPP_FOUNDING_HEADROOM_SHARE,
+                  affordableUnits,
+                  MAX_BUILD_UNITS_PER_ORDER
+                )
+              )
+            )
+          : 0;
+      const buildAnchor = perUnitFoundingAnchor * buildUnits;
+      const foundingCost = toCorpLocal(entryFeeAnchor + buildAnchor);
       entryDiagnostic = {
         ...entryDiagnostic,
         targetHeadroomUnits: headroomUnits,
-        starterUnits,
+        starterUnits: buildUnits,
         foundingCostLocal: foundingCost,
         entryCapitalLocal: entryCapital,
         cashFloorLocal: effectiveCashFloor,
@@ -1555,17 +1611,17 @@ export function makeNppCorpDecision(
       // itself under the cash floor. Also require the market have room for the
       // facility — do not found into a zero-headroom bucket.
       if (
-        starterUnits > 0 &&
-        headroomUnits >= starterUnits &&
+        buildUnits > 0 &&
+        headroomUnits >= buildUnits &&
         entryCapital - foundingCost >= effectiveCashFloor
       ) {
         const buildTurns = Math.max(
           1,
           Math.ceil(CAPACITY_BUILD_TURNS(expansion.sectorType as CorporationType) / 2)
         );
-        // Legacy nameplate proportional to the facility share of the pool;
+        // Legacy nameplate proportional to the built share of the pool;
         // plants restates revenue from capacity on the next tick.
-        const nameplateShare = headroomUnits > 0 ? Math.min(1, starterUnits / headroomUnits) : 0;
+        const nameplateShare = headroomUnits > 0 ? Math.min(1, buildUnits / headroomUnits) : 0;
         newSectors.push({
           stateId: expansion.stateId,
           countryId: expansion.countryId,
@@ -1580,7 +1636,7 @@ export function makeNppCorpDecision(
           revenue: Math.round(toCorpLocal(expansion.revenue * nameplateShare)),
           profitMargin: 35,
           starterOrder: {
-            unitsOrdered: starterUnits,
+            unitsOrdered: buildUnits,
             costPaidAnchor: buildAnchor,
             startTurn: ctx.turn,
             onlineTurn: ctx.turn + buildTurns,
@@ -1590,7 +1646,7 @@ export function makeNppCorpDecision(
         unownedDraws.push({
           stateId: expansion.stateId,
           sectorType: expansion.sectorType as CorporationType,
-          units: starterUnits,
+          units: buildUnits,
           countryId: expansion.countryId,
         });
         cashLocal = entryCapital - foundingCost;
