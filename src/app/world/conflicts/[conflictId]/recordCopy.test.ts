@@ -57,11 +57,12 @@ describe("verdictOf", () => {
     );
   });
 
-  it("counts the cost when there has been fighting", () => {
-    expect(verdictOf(base).detail).toMatch(/2 engagements, 26,146 dead/);
-    expect(verdictOf({ ...base, engagements: 1, casualties: 40 }).detail).toMatch(
-      /1 engagement, 40 dead/
-    );
+  // The stat tiles carry both totals a couple of inches above this sentence, so
+  // repeating them here taught the reader nothing and cost a line.
+  it("leaves the engagement and casualty totals to the stat tiles", () => {
+    expect(verdictOf(base).detail).not.toMatch(/26,146/);
+    expect(verdictOf(base).detail).not.toMatch(/2 engagements/);
+    expect(verdictOf({ ...base, engagements: 1, casualties: 40 }).detail).not.toMatch(/40 dead/);
   });
 
   // An uncontested front is a different thing from a quiet one, and the page
@@ -107,9 +108,8 @@ describe("momentumOf", () => {
     sideALabel: "NATO",
     sideBLabel: "Warsaw Pact",
     recentGainA: 0,
-    engagements: 2,
+    windowTurns: 60,
     unopposedAdvances: 3,
-    casualties: 26146,
     contested: true,
   };
 
@@ -129,8 +129,8 @@ describe("momentumOf", () => {
     expect(momentumOf({ ...m, recentGainA: 0.2 }).tag).toBe("THE LINE HOLDS");
   });
 
-  it("distinguishes a stalemate paid for in blood from an empty front", () => {
-    expect(momentumOf(m).note).toMatch(/2 engagements and 26,146 dead have moved the line nowhere/);
+  it("distinguishes a stalemate from an empty front", () => {
+    expect(momentumOf(m).note).toMatch(/The line has not moved in the last 60 turns/);
     expect(momentumOf({ ...m, contested: false }).note).toMatch(
       /3 offensives and no engagement — nothing has stood against this front/
     );
@@ -138,7 +138,27 @@ describe("momentumOf", () => {
 
   it("reports the ground a contested advance actually bought", () => {
     expect(momentumOf({ ...m, recentGainA: -6 }).note).toMatch(
-      /2 engagements, 26,146 dead, and 6 points of ground/
+      /6 points of ground in the last 60 turns/
     );
+  });
+
+  // The verdict measures ground from the war's OPENING and this measures it over
+  // the window, so the two legitimately disagree. Naming the span is the only
+  // thing that stops them reading as one fact quoted two different ways.
+  it("scopes its ground figure to the window it drew", () => {
+    expect(momentumOf({ ...m, recentGainA: -6, windowTurns: 12 }).note).toMatch(
+      /in the last 12 turns/
+    );
+    expect(momentumOf({ ...m, recentGainA: -6, windowTurns: 1 }).note).toMatch(
+      /in the last 1 turn/
+    );
+  });
+
+  // Both totals belong to the war, not to the window, and both are already on the
+  // page — restating them here is what made the two ground figures look wrong.
+  it("does not restate war totals the rest of the page carries", () => {
+    const note = momentumOf({ ...m, recentGainA: -6 }).note;
+    expect(note).not.toMatch(/engagements/);
+    expect(note).not.toMatch(/dead/);
   });
 });

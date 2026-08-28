@@ -24,7 +24,15 @@ export interface VerdictInput {
   startYear: number;
 }
 
-/** One headline sentence about who is winning, and one about how it got there. */
+/**
+ * One headline sentence about who is winning, and one about how it got there.
+ *
+ * The detail states MOVEMENT only. Engagement and casualty totals used to be
+ * appended here as well, which put both numbers a second time within an inch of
+ * the stat tiles that already carry them — the reader learned nothing from the
+ * repeat. The one thing the tiles cannot say is that no engagement has happened
+ * yet, so that clause stays.
+ */
 export function verdictOf(v: VerdictInput): { headline: string; detail: string } {
   const pctB = Math.round(v.control);
   const pctA = 100 - pctB;
@@ -52,12 +60,14 @@ export function verdictOf(v: VerdictInput): { headline: string; detail: string }
         ? `The line has moved ${Math.abs(movedForLeader)} points ${lead === v.sideBLabel ? "toward" : "away from"} ${v.sideBLabel} since ${v.startYear}.`
         : `${lead} has given back ${Math.abs(movedForLeader)} points since ${v.startYear}.`;
 
+  // Only what the stat tiles cannot state. A contested front's engagement count
+  // and dead are already up there, so a fought war adds nothing here.
   const cost =
     v.engagements === 0
       ? v.unopposedAdvances > 0
-        ? ` ${v.unopposedAdvances} ${plural(v.unopposedAdvances, "offensive")}, none of them contested — no engagement has been recorded.`
+        ? ` ${v.unopposedAdvances} ${plural(v.unopposedAdvances, "offensive")}, none of them contested.`
         : " No shot has been fired at this front."
-      : ` ${v.engagements} ${plural(v.engagements, "engagement")}, ${v.casualties.toLocaleString("en-US")} dead.`;
+      : "";
 
   return { headline, detail: movement + cost };
 }
@@ -76,15 +86,23 @@ export function openingLine(v: {
   return v.hostIsBelligerent ? opened : `${opened} — ${v.hostCountry} fights on neither side`;
 }
 
-/** How the front is moving right now, as a tag and a paragraph. */
+/**
+ * How the front is moving right now, as a tag and a line.
+ *
+ * The note states the WINDOW and nothing else. It used to lead with the war's
+ * engagement and casualty totals, which the stat tiles and the verdict already
+ * carry — and because its ground figure is windowed while the verdict's is
+ * measured from the opening, the two sat inches apart quoting different numbers
+ * for what read as the same fact. Naming the span is what tells them apart.
+ */
 export function momentumOf(v: {
   sideALabel: string;
   sideBLabel: string;
   /** Points the front has moved in the momentum window, from side A's side. */
   recentGainA: number;
-  engagements: number;
+  /** How many turns the window spans, so the figure is never read as a total. */
+  windowTurns: number;
   unopposedAdvances: number;
-  casualties: number;
   /** Turn a side first posted forces here against an unopposed advance, if known. */
   contested: boolean;
 }): { tag: string; tagColor: "a" | "b" | "neutral"; note: string } {
@@ -97,11 +115,12 @@ export function momentumOf(v: {
         : `${v.sideBLabel.toUpperCase()} ADVANCING`;
   const tagColor = Math.abs(gain) < 0.5 ? "neutral" : gain > 0 ? "a" : "b";
 
+  const span = `the last ${v.windowTurns} ${plural(v.windowTurns, "turn")}`;
   const note = !v.contested
     ? `${v.unopposedAdvances} ${plural(v.unopposedAdvances, "offensive")} and no engagement — nothing has stood against this front.`
     : Math.abs(gain) < 0.5
-      ? `${v.engagements} ${plural(v.engagements, "engagement")} and ${v.casualties.toLocaleString("en-US")} dead have moved the line nowhere.`
-      : `${v.engagements} ${plural(v.engagements, "engagement")}, ${v.casualties.toLocaleString("en-US")} dead, and ${Math.abs(gain)} points of ground.`;
+      ? `The line has not moved in ${span}.`
+      : `${Math.abs(gain)} points of ground in ${span}.`;
 
   return { tag, tagColor, note };
 }

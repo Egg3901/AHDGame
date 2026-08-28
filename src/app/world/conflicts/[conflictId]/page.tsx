@@ -10,6 +10,7 @@ import { listDeclarationHistory } from "@/lib/db/collections/battleDeclarations"
 import { getGameTime } from "@/lib/time/gameTime";
 import { toConflictView, yearOfTurn } from "../_coldwar/conflictView";
 import { regionCodesOfCountry } from "@/lib/maps/regionOwnership";
+import { staticZoneGeometry } from "@/lib/maps/staticZoneGeometry";
 import { hostEntitiesOf } from "@/lib/military/hostEntities";
 import { belligerentRoll } from "@/lib/military/belligerentRoll";
 import { getAuthUserWithCharacter } from "@/lib/auth";
@@ -431,6 +432,12 @@ export default async function ConflictRecordPage({
       (await Promise.all(hostEntities.map((host) => regionCodesOfCountry(db, host)))).flat()
     ),
   ];
+  // Whether a map can be drawn at all, decided HERE because it chooses the page's
+  // layout. `FrontLineMap` draws from two sources — region shards for a country
+  // with states, a static shard for a proxy host — and a zone with neither renders
+  // one sentence inside a 620px box while the whole record is squeezed into the
+  // 452px rail beside it. DD is exactly that case.
+  const hasMap = hostRegionCodes.length > 0 || staticZoneGeometry(hostEntities).codes.length > 0;
 
   // --- both sides' live force, at the resolution the tier allows ----------------
   const sideACountries = [...doc.sideA.countries] as string[];
@@ -544,9 +551,11 @@ export default async function ConflictRecordPage({
     sideALabel: doc.sideA.label,
     sideBLabel: doc.sideB.label,
     recentGainA,
-    engagements: record.engagements,
+    // The window actually drawn, which is the war's whole length until it is
+    // older than MOMENTUM_WINDOW — the note quotes this so its ground figure is
+    // never mistaken for the verdict's since-the-opening one.
+    windowTurns: Math.max(1, currentTurn - fromTurn),
     unopposedAdvances: record.unopposedAdvances,
-    casualties,
     contested: record.engagements > 0,
   });
 
@@ -572,11 +581,14 @@ export default async function ConflictRecordPage({
     });
   }
   if (pending.length === 0) {
+    // No `when`: the chip's two halves were saying the same thing twice ("Nothing
+    // of yours resolves at this front" · "the line holds"). A chip with nothing
+    // pending has no timing to state.
     pending.push({
       text: canAct
         ? "No offensive declared — the line holds"
         : "Nothing of yours resolves at this front",
-      when: "the line holds",
+      when: "",
       tone: "quiet",
     });
   }
@@ -633,6 +645,7 @@ export default async function ConflictRecordPage({
     controlStart,
     hostEntities,
     hostRegionCodes,
+    hasMap,
     belligerents: belligerentRoll(doc),
     hostIsBelligerent,
     verdict: verdict.headline,
