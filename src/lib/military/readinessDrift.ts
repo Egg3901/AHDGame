@@ -18,8 +18,20 @@ export const POSTURE_READINESS_BASELINE: Record<Posture, number> = {
   alert: 92,
 };
 
-/** Readiness moves at most this far per turn, in either direction. */
-export const READINESS_DRIFT_STEP = 4;
+/**
+ * Readiness moves at most this far per turn, in either direction.
+ *
+ * Raised from 4 once the battle ledger started recording readiness correctly. The drop a
+ * battle takes GROWS with how worn a formation already is (`READINESS_TEMPO_K`), while
+ * this recovery is flat, so the two only balance above a threshold: at 4 a formation spent
+ * to the floor was knocked straight back down by its next engagement at every realistic
+ * fighting cadence, and needed 23 uninterrupted turns to climb out. It never got them.
+ * At 8 the climb is 12 turns and a war can be fought out of, not just into.
+ *
+ * Player-facing recovery copy reads this constant rather than restating it, so the war
+ * room's "+N%/turn, full in M" follows automatically.
+ */
+export const READINESS_DRIFT_STEP = 8;
 
 /**
  * How far a fully-unfunded force's readiness baseline sags. At 0.35 a nation paying none of
