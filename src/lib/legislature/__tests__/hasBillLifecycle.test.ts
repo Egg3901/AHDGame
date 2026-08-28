@@ -22,9 +22,11 @@ describe("hasBillLifecycle", () => {
     }
   });
 
-  it("excludes France, which is in NATO's 1953 roster and has no lifecycle", () => {
-    // A bill minted for a country no engine walks never closes: it sits at
-    // active_both forever, and nothing reports it.
-    expect(hasBillLifecycle("FR")).toBe(false);
+  it("includes every econ-only country that can mint national bills", () => {
+    // A bill minted for a country no engine walks never closes. This list is the
+    // regression boundary for the countries that previously stranded NPP bills.
+    for (const countryId of ["FR", "IT", "ES", "SE", "TR", "AT", "FI", "GR", "BR", "NG"] as const) {
+      expect(hasBillLifecycle(countryId), countryId).toBe(true);
+    }
   });
 });

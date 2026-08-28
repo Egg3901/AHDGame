@@ -204,4 +204,152 @@ describe("living-conflict turn integration", () => {
     ) as unknown as Crisis;
     expect(crisis.livingConflictEventId).toBe("vietnam:tonkin_incident:250:tonkin_incident_entry");
   });
+
+  it("advances Vietnam when a high-tension superpower war supplies external pressure", async () => {
+    const { db, stores } = fakeDb();
+    stores.set("livingConflicts", [
+      {
+        defKey: "vietnam",
+        hasOpened: true,
+        phaseLevel: 1,
+        intensity: 23,
+        openedYear: 1955,
+        pressure: { a: 24, b: 0 },
+        phaseTurns: 103,
+        totalTurns: 104,
+        lastProcessedTurn: 440,
+        updatedAt: new Date(),
+      },
+    ]);
+    stores.set("coldWarTension", [{ _id: "current", value: 100 }]);
+    stores.set("conflicts", [
+      {
+        _id: "war_us_dd_415",
+        name: "The War for Germany",
+        status: "active",
+        intensity: 70,
+        hostCountry: "DD",
+        hostEntities: ["DD", "DE"],
+        sideA: { countries: ["US"] },
+        sideB: { countries: ["DD", "RU"] },
+      },
+    ]);
+
+    await processLivingConflictsTurn(db, 441, 1961, true);
+
+    const vietnam = (stores.get("livingConflicts") ?? []).find(
+      (row) => row.defKey === "vietnam"
+    ) as unknown as LivingConflictState;
+    expect(vietnam.phaseLevel).toBe(2);
+  });
+
+  it("retries a new Vietnam phase entry after the prior response window closes", async () => {
+    const { db, stores } = fakeDb();
+    stores.set("livingConflicts", [
+      {
+        defKey: "vietnam",
+        hasOpened: true,
+        phaseLevel: 1,
+        intensity: 23,
+        openedYear: 1955,
+        pressure: { a: 24, b: 0 },
+        phaseTurns: 103,
+        totalTurns: 104,
+        lastProcessedTurn: 440,
+        updatedAt: new Date(),
+      },
+    ]);
+    stores.set("coldWarTension", [{ _id: "current", value: 100 }]);
+    stores.set("conflicts", [
+      {
+        _id: "war_us_dd_415",
+        status: "active",
+        intensity: 70,
+        hostCountry: "DD",
+        hostEntities: ["DD", "DE"],
+        sideA: { countries: ["US"] },
+        sideB: { countries: ["DD", "RU"] },
+      },
+    ]);
+    stores.set("crises", [
+      {
+        _id: new ObjectId(),
+        name: "Vietnam advisory response",
+        status: "active",
+        startTurn: 433,
+        durationTurns: 24,
+        livingConflictEventId: "vietnam:advisors:433:advisors_world_response",
+        globalResponse: { conflictKey: "vietnam" },
+      },
+    ]);
+
+    await processLivingConflictsTurn(db, 441, 1961, true);
+
+    let vietnam = (stores.get("livingConflicts") ?? []).find(
+      (row) => row.defKey === "vietnam"
+    ) as unknown as LivingConflictState;
+    expect(vietnam.phaseLevel).toBe(2);
+    expect(vietnam.emitPhaseEntryNextTurn).toBe(true);
+    expect(
+      (stores.get("crises") ?? []).some((row) =>
+        String(row.livingConflictEventId).includes(":materiel:")
+      )
+    ).toBe(false);
+
+    const priorResponse = (stores.get("crises") ?? []).find(
+      (row) => row.livingConflictEventId === "vietnam:advisors:433:advisors_world_response"
+    );
+    if (!priorResponse) throw new Error("expected the prior Vietnam response");
+    priorResponse.status = "resolved";
+
+    await processLivingConflictsTurn(db, 442, 1961, true);
+
+    vietnam = (stores.get("livingConflicts") ?? []).find(
+      (row) => row.defKey === "vietnam"
+    ) as unknown as LivingConflictState;
+    expect(vietnam.emitPhaseEntryNextTurn).toBe(false);
+    expect(
+      (stores.get("crises") ?? []).some(
+        (row) => row.livingConflictEventId === "vietnam:materiel:442:materiel_entry"
+      )
+    ).toBe(true);
+  });
+
+  it("does not apply external Vietnam pressure when the game year is unavailable", async () => {
+    const { db, stores } = fakeDb();
+    stores.set("livingConflicts", [
+      {
+        defKey: "vietnam",
+        hasOpened: true,
+        phaseLevel: 1,
+        intensity: 23,
+        openedYear: 1955,
+        pressure: { a: 24, b: 0 },
+        phaseTurns: 103,
+        totalTurns: 104,
+        lastProcessedTurn: 440,
+        updatedAt: new Date(),
+      },
+    ]);
+    stores.set("coldWarTension", [{ _id: "current", value: 100 }]);
+    stores.set("conflicts", [
+      {
+        _id: "war_us_dd_415",
+        status: "active",
+        intensity: 70,
+        hostCountry: "DD",
+        hostEntities: ["DD", "DE"],
+        sideA: { countries: ["US"] },
+        sideB: { countries: ["DD", "RU"] },
+      },
+    ]);
+
+    await processLivingConflictsTurn(db, 441, null, true);
+
+    const vietnam = (stores.get("livingConflicts") ?? []).find(
+      (row) => row.defKey === "vietnam"
+    ) as unknown as LivingConflictState;
+    expect(vietnam.phaseLevel).toBe(1);
+    expect(vietnam.pressure).toEqual({ a: 24, b: 0 });
+  });
 });

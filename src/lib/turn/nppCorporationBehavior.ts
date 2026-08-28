@@ -26,8 +26,6 @@ import type {
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { isCorporateIssuerBond } from "@/lib/bonds/corporateCredit";
 import { netPerTurnDebtServiceAnchor } from "@/lib/bonds/corpBondCashflows";
-import { issueRelocationBond, previewRelocationBond } from "@/lib/corporations/issueRelocationBond";
-import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import {
   ESSENTIAL_SHORTAGE_SCORE,
   expansionFrontierStates,
@@ -114,7 +112,6 @@ import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
   anchorToCorpCapital,
-  corpLiquidCapitalToAnchor,
   resolveSectorHostCurrencyCode,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
@@ -123,6 +120,13 @@ import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { getEraNominalAmount } from "@/lib/constants/sectorSeedEra";
 import { pickBestNppTechNode } from "@/lib/turn/npp/corpBehaviorConfig";
 import { computeExtractionHeadroomByState } from "@/lib/turn/nppExtractionOpportunity";
+import {
+  buildNppMarketEntryDiagnostic,
+  persistNppMarketEntryFunnelBestEffort,
+  resolveNppMarketEntryCredit,
+  setNppMarketEntryReason,
+  type NppMarketEntryDiagnostic,
+} from "@/lib/turn/npp/entryDiagnostics";
 
 export { computeExtractionHeadroomByState } from "@/lib/turn/nppExtractionOpportunity";
 
@@ -293,6 +297,7 @@ interface NppCorpDecision {
     amountLocal: number;
     sectorType: CorporationType;
   };
+  entryDiagnostic?: NppMarketEntryDiagnostic;
 }
 
 /**
@@ -556,6 +561,7 @@ export async function processNppCorporationDecisions(
   // below. A build is a cash → CIP RECLASS, and the shadow ledger drops rows
   // with no anchor value, so every row carries both the local and ₳ magnitude.
   const capexRows: Parameters<typeof emitBuildCapexTxBulk>[1] = [];
+  const entryDiagnostics: NppMarketEntryDiagnostic[] = [];
 
   // Resolve the world's current decade once for NPP tech-tree auto-picks.
   let techCurrentYear = 0;
@@ -659,57 +665,24 @@ export async function processNppCorporationDecisions(
       placementSignals
     );
 
-    // Shortage entry may borrow only through the existing corporate bond
-    // mechanism. Its preflight enforces the normal issuance cooldown, leverage
-    // ceiling, credit rating and coupon. The bond is the liability matching the
-    // proceeds; this function never grants or mints a separate cash balance.
-    const creditRequest = decision.shortageCreditRequest;
-    if (creditRequest) {
-      const roundedLocal =
-        Math.ceil(creditRequest.amountLocal / BOND_UNIT_FACE_VALUE) * BOND_UNIT_FACE_VALUE;
-      const requestedAnchor = corpLiquidCapitalToAnchor(roundedLocal, corp, corpFxRate);
-      const preflight = await previewRelocationBond(
-        db,
-        corp,
-        requestedAnchor,
-        turn,
-        fxByCurrency as ReadonlyMap<CurrencyCode, number>
-      );
-      if (preflight.ok) {
-        const issued = await issueRelocationBond(
-          db,
-          corp,
-          requestedAnchor,
-          turn,
-          preflight,
-          fxByCurrency as ReadonlyMap<CurrencyCode, number>
-        );
-        // The request is converted local -> anchor on the way in and floored on
-        // the way back out, so on a non-anchor currency the issued face can land
-        // one bond unit BELOW the gap it was meant to close. Re-running with a
-        // short credit would fail affordability while the bond already exists,
-        // leaving phantom debt, so only proceed when the proceeds actually cover
-        // the request.
-        if (issued.ok && issued.data.bondFaceValueLocal >= creditRequest.amountLocal) {
-          // Re-run the pure decision with the ACTUAL rounded proceeds. The
-          // resulting liquidCapital write nets debt proceeds against founding
-          // capex in one balance, while the inserted bond records the equal
-          // liability. Bond rounding residue remains as ordinary corp cash.
-          decision = makeNppCorpDecision(
-            {
-              ...decisionContext,
-              shortageEntryCreditLocal: issued.data.bondFaceValueLocal,
-            },
-            unownedByCountry,
-            stateControlled,
-            priceRatioOf,
-            plants,
-            placementSignals
-          );
-        }
-      }
-    }
-
+    decision = await resolveNppMarketEntryCredit({
+      db,
+      corporation: corp,
+      decision,
+      turn,
+      fxByCurrency: fxByCurrency as ReadonlyMap<CurrencyCode, number>,
+      corpFxRate,
+      retry: (creditLocal) =>
+        makeNppCorpDecision(
+          { ...decisionContext, shortageEntryCreditLocal: creditLocal },
+          unownedByCountry,
+          stateControlled,
+          priceRatioOf,
+          plants,
+          placementSignals
+        ),
+    });
+    if (decision.entryDiagnostic) entryDiagnostics.push(decision.entryDiagnostic);
     if (decision.reinvestments && corpCurrency) {
       for (const r of decision.reinvestments) {
         capexRows.push({
@@ -918,6 +891,8 @@ export async function processNppCorporationDecisions(
     await emitBuildCapexTxBulk(db, capexRows);
   }
 
+  await persistNppMarketEntryFunnelBestEffort(db, turn, now, entryDiagnostics);
+
   return {
     corpUpdates,
     sectorUpdates: allSectorUpdates,
@@ -942,6 +917,7 @@ export function makeNppCorpDecision(
   const unownedDraws: NonNullable<NppCorpDecision["unownedDraws"]> = [];
   const reinvestments: NonNullable<NppCorpDecision["reinvestments"]> = [];
   let shortageCreditRequest: NppCorpDecision["shortageCreditRequest"];
+  let entryDiagnostic: NppCorpDecision["entryDiagnostic"];
 
   const liquidCapital = corp.liquidCapital ?? 0;
   // Running balance across the spending sections below (founding, then
@@ -1490,32 +1466,34 @@ export function makeNppCorpDecision(
   const surplusCash = liquidCapital - effectiveCashFloor;
   const existingBuckets = new Set(sectors.map((s) => bucketKey(s.stateId, s.sectorType)));
   const frontierStates = expansionFrontierStates(corp.countryId, corp.headquartersState, sectors);
+  const entryCandidate = findBestUnownedSector(
+    corp.countryId,
+    corp.headquartersState,
+    corp.type,
+    corp.secondaryType,
+    existingBuckets,
+    unownedByCountry,
+    stateControlled,
+    priceRatioOf,
+    plants?.enabled === true,
+    plants?.eraUnitScale ?? 1,
+    placementSignals,
+    frontierStates
+  );
   const expansion =
     levers.allowExpansion && isProfitable && corpMargin >= effectiveExpansionMinMargin
-      ? findBestUnownedSector(
-          corp.countryId,
-          corp.headquartersState,
-          corp.type,
-          corp.secondaryType,
-          existingBuckets,
-          unownedByCountry,
-          stateControlled,
-          priceRatioOf,
-          plants?.enabled === true,
-          plants?.eraUnitScale ?? 1,
-          placementSignals,
-          frontierStates
-        )
+      ? entryCandidate
       : null;
-  const expansionShortageScore = expansion
+  const entryCandidateShortageScore = entryCandidate
     ? sectorPeakShortageScore(
-        expansion.sectorType as CorporationType,
-        expansion.countryId,
+        entryCandidate.sectorType as CorporationType,
+        entryCandidate.countryId,
         (commodity, countryId) =>
-          placementSignals?.statePriceRatioOf?.(commodity, expansion.stateId) ??
+          placementSignals?.statePriceRatioOf?.(commodity, entryCandidate.stateId) ??
           priceRatioOf(commodity, countryId)
       )
-    : 1;
+    : undefined;
+  const expansionShortageScore = entryCandidateShortageScore ?? 1;
   const hasLogisticsCapacity = effectiveSectors < logisticsSupportedSectors;
   const marketEntryEligible = ctx.ordinaryEntryEligible !== false;
   const exceptionalShortageEntry =
@@ -1529,29 +1507,33 @@ export function makeNppCorpDecision(
     hasLogisticsCapacity &&
     marketEntryEligible &&
     (plants?.enabled === true || surplusCash > effectiveExpansionMinCash);
-
+  entryDiagnostic = buildNppMarketEntryDiagnostic({
+    corporation: corp,
+    sectorCount: effectiveSectors,
+    logisticsSupportedSectors,
+    profitable: isProfitable,
+    marginPct: corpMargin,
+    marginFloorPct: effectiveExpansionMinMargin,
+    cohortEligible: marketEntryEligible,
+    strategyAllowsExpansion: levers.allowExpansion,
+    hasLogisticsCapacity,
+    target: entryCandidate,
+    shortageScore: entryCandidateShortageScore,
+    frontierStates,
+  });
   if (
     expansion &&
     newSectors.length < NPP_SHORTAGE_ENTRIES_PER_TURN &&
     (ordinaryEntry || exceptionalShortageEntry)
   ) {
     if (plants?.enabled) {
-      // ─── Plants: an NPP founds a sector on the SAME terms a player does ────
-      //
-      // Pre-plants the AI paid a flat EXPANSION_COST (500k) and was handed
-      // capacity for free, while a player paid 100k and got the same grant.
-      // Under plants capacity is bought, so a free AI grant would be a capacity
-      // mint no player can match — and the flat 500k bears no relation to what
-      // the plant it conjures is worth. Both sides now price through
-      // `computeBuildCost` with the founding discount, and both draw the
-      // capacity out of the unowned pool they enter.
+      // NPPs and players found sectors on the same priced-capacity terms.
       const headroomUnits = unownedHeadroomUnitsOf(
         expansion.sectorType as CorporationType,
         expansion.headroomUnits,
         expansion.revenue,
         plants.eraUnitScale
       );
-      // Same one-facility starter a player gets via expandSector / foundingPlant.
       const starterUnits = foundingStarterUnits(expansion.sectorType as CorporationType);
       const buildAnchor =
         starterUnits > 0
@@ -1576,6 +1558,14 @@ export function makeNppCorpDecision(
       const foundingCost = toCorpLocal(entryFeeAnchor + buildAnchor);
       const entryCapital =
         liquidCapital + (exceptionalShortageEntry ? (ctx.shortageEntryCreditLocal ?? 0) : 0);
+      entryDiagnostic = {
+        ...entryDiagnostic,
+        targetHeadroomUnits: headroomUnits,
+        starterUnits,
+        foundingCostLocal: foundingCost,
+        entryCapitalLocal: entryCapital,
+        cashFloorLocal: effectiveCashFloor,
+      };
 
       // Affordability against the REAL cost. The generic surplus gate above is
       // a flat nominal band and cannot know what a build in this sector costs;
@@ -1622,6 +1612,7 @@ export function makeNppCorpDecision(
         });
         cashLocal = entryCapital - foundingCost;
         updates.liquidCapital = cashLocal;
+        entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "entered");
       } else if (
         exceptionalShortageEntry &&
         starterUnits > 0 &&
@@ -1633,6 +1624,11 @@ export function makeNppCorpDecision(
           amountLocal: Math.max(0, foundingCost + effectiveCashFloor - entryCapital),
           sectorType: expansion.sectorType as CorporationType,
         };
+        entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "credit_requested");
+      } else if (starterUnits <= 0 || headroomUnits < starterUnits) {
+        entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "facility_size");
+      } else if (exceptionalShortageEntry) {
+        entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "state_credit_restricted");
       }
     } else {
       const foundingCost = toCorpLocal(EXPANSION_COST);
@@ -1648,11 +1644,15 @@ export function makeNppCorpDecision(
         });
         cashLocal = entryCapital - foundingCost;
         updates.liquidCapital = cashLocal;
+        entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "entered");
       } else if (exceptionalShortageEntry && !isStateOwned(corp) && !corp.imfBailoutActive) {
         shortageCreditRequest = {
           amountLocal: Math.max(0, foundingCost + effectiveCashFloor - entryCapital),
           sectorType: expansion.sectorType as CorporationType,
         };
+        entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "credit_requested");
+      } else if (exceptionalShortageEntry) {
+        entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "state_credit_restricted");
       }
     }
   }
@@ -1993,6 +1993,7 @@ export function makeNppCorpDecision(
     unownedDraws: unownedDraws.length > 0 ? unownedDraws : undefined,
     reinvestments: reinvestments.length > 0 ? reinvestments : undefined,
     shortageCreditRequest,
+    entryDiagnostic,
     strategy: strategyDecision?.state,
   };
 }

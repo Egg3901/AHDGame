@@ -90,4 +90,23 @@ describe("war emergency crisis responses", () => {
     );
     expect(dependencies.applyCivilLibertiesDelta).not.toHaveBeenCalled();
   });
+
+  it("moves a funded civil defense economy out of consumption and into war production", async () => {
+    const { ctx } = context();
+
+    await applyWarEmergencyResponse(ctx, "civil_defense_fund");
+
+    const shifts = dependencies.writeSectorOutputDemandModifier.mock.calls.map(
+      ([, input]) => input
+    );
+    expect(shifts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sectorType: "retail", pct: -20 }),
+        expect.objectContaining({ sectorType: "entertainment", pct: -12 }),
+        expect.objectContaining({ sectorType: "construction", pct: 20 }),
+        expect.objectContaining({ sectorType: "manufacturing", pct: 20 }),
+        expect.objectContaining({ sectorType: "defense", pct: 20 }),
+      ])
+    );
+  });
 });

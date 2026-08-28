@@ -33,7 +33,6 @@ import {
 import {
   type CountryId,
   getCountryConfig,
-  COUNTRY_CONFIGS,
   COUNTRY_ORDER,
   getExecutiveOfficeKey,
   isParliamentarySystem,
@@ -60,6 +59,7 @@ import { canFormGovernment, canCollapseGovernment } from "@/lib/turn/onePartyCon
 import { getCountryState, updateCountryState } from "@/lib/countryState";
 import { logger } from "../observability/logger";
 import { resolveGoverningPartyIdsFromDocuments } from "@/lib/government/governingPartyIds";
+import { getGameStatePreset } from "@/lib/db/collections/gameState";
 
 export { resolveGoverningPartyIdsFromDocuments };
 
@@ -88,9 +88,11 @@ export function isVoteClosed(
  */
 export async function tallySeatsByParty(
   db: Db,
-  countryId: CountryId
+  countryId: CountryId,
+  preset?: string
 ): Promise<Record<string, number>> {
-  const lowerOfficeType = getLowerChamberOfficeType(countryId);
+  const activePreset = preset ?? (await getGameStatePreset(db));
+  const lowerOfficeType = getLowerChamberOfficeType(countryId, activePreset);
 
   const officials = await db
     .collection<ElectedOfficial>("electedOfficials")
@@ -207,13 +209,14 @@ export async function resolveOppositionLeader(
  */
 export async function ensureParliamentaryGovernmentFormation(
   db: Db,
-  countryId: CountryId
+  countryId: CountryId,
+  preset?: string
 ): Promise<GovernmentFormation | null> {
   const govCol = getGovernmentFormationsCollection(db);
   const existing = await govCol.findOne({ _id: countryId });
   if (existing) return null;
 
-  const seatsByParty = await tallySeatsByParty(db, countryId);
+  const seatsByParty = await tallySeatsByParty(db, countryId, preset);
   const totalSeats = await getLiveLowerChamberSeats(db, countryId);
   const now = new Date();
 
@@ -257,7 +260,8 @@ export async function ensureParliamentaryGovernmentFormation(
  */
 export async function updateParliamentaryGovernmentSeats(
   db: Db,
-  countryId: CountryId
+  countryId: CountryId,
+  preset?: string
 ): Promise<void> {
   const totalSeats = await getLiveLowerChamberSeats(db, countryId);
   const majorityThreshold = lowerChamberMajorityThreshold(totalSeats);
@@ -268,11 +272,11 @@ export async function updateParliamentaryGovernmentSeats(
     // No document yet — self-heal by seeding a fresh pending formation from
     // config so the appointment flow becomes available. The seeded doc already
     // carries the live seat snapshot, so there is no same-turn delta to apply.
-    await ensureParliamentaryGovernmentFormation(db, countryId);
+    await ensureParliamentaryGovernmentFormation(db, countryId, preset);
     return;
   }
 
-  const seatsByParty = await tallySeatsByParty(db, countryId);
+  const seatsByParty = await tallySeatsByParty(db, countryId, preset);
   const now = new Date();
 
   // Safety net: if government is "formed" but PM is vacant, collapse to "pending"
@@ -335,7 +339,7 @@ export async function updateParliamentaryGovernmentSeats(
   }
 
   const lostMajority =
-    canCollapseGovernment(getCountryConfig(countryId)) &&
+    canCollapseGovernment(getCountryConfig(countryId, preset)) &&
     existing.status === "formed" &&
     (existing.formationType === "majority" || existing.formationType === "coalition") &&
     totalSeatsSupporting < majorityThreshold;
@@ -498,8 +502,10 @@ export async function appointPrimeMinister(
   characterId: ObjectId | null,
   nppId: ObjectId | null | undefined,
   characterName: string,
-  now: Date
+  now: Date,
+  preset?: string
 ): Promise<void> {
+  const activePreset = preset ?? (await getGameState())?.preset;
   // Capture the outgoing head of government BEFORE any clears so we only
   // announce a genuinely new appointment. Re-appointing the sitting holder
   // (e.g. the same PM winning a fresh formation vote each turn) must not fire a
@@ -517,7 +523,7 @@ export async function appointPrimeMinister(
 
   // Scope PM clear to this country — other countries may have their own PM
   const clearPM = { $set: { currentOffice: null, updatedAt: now } };
-  const execKey = getExecutiveOfficeKey(countryId);
+  const execKey = getExecutiveOfficeKey(countryId, activePreset);
   await Promise.all([
     db
       .collection<Character>("characters")
@@ -529,7 +535,7 @@ export async function appointPrimeMinister(
     // ── Leader confidence: install or renew on PM appointment ─────────────
     // Driven by config flag so any future country with an internal-party
     // confidence model opts in without a new country literal here.
-    if (getCountryConfig(countryId).hasLeaderConfidenceModel) {
+    if (getCountryConfig(countryId, activePreset).hasLeaderConfidenceModel) {
       const gs = await db
         .collection<{ _id: string; currentTurn: number }>("gameState")
         .findOne({ _id: "current" });
@@ -604,7 +610,7 @@ export async function appointPrimeMinister(
       .updateOne({ _id: nppId }, { $set: { currentOffice: { type: execKey }, updatedAt: now } });
   }
 
-  const config = getCountryConfig(countryId);
+  const config = getCountryConfig(countryId, activePreset);
 
   // Country history: record the head-of-government transition. Fetch PM's
   // party for the event (if a player character) — we don't already have it
@@ -1753,8 +1759,8 @@ export async function failInProgressBills(
 // ---------------------------------------------------------------------------
 
 /** Returns all active/beta/coming-soon parliamentary country IDs. */
-export function getParliamentaryCountryIds(): CountryId[] {
-  return COUNTRY_ORDER.filter((id) => isParliamentarySystem(COUNTRY_CONFIGS[id]));
+export function getParliamentaryCountryIds(preset?: string): CountryId[] {
+  return COUNTRY_ORDER.filter((id) => isParliamentarySystem(getCountryConfig(id, preset)));
 }
 
 /**

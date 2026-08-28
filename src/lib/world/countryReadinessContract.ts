@@ -505,62 +505,6 @@ const CAPABILITY_INVENTORY: Readonly<Record<string, CapabilityEvidence | undefin
       present: false,
       evidence: "Japan 1953 wiki material is incomplete.",
     },
-    // FR/IT/ES/SE/TR (#3723 re-promote): POSITIONS_BY_COUNTRY and
-    // COUNTRY_BILL_PHASES only track player-parity cabinet/bill surfaces.
-    // Full seed packs (parties/regions/budgets/elections/legislation types)
-    // already run under economy-preview NPP autonomy; formNppCabinet no-ops
-    // safely when the position registry is empty. Override until those
-    // registries are authored — probes cannot see seed-folder sufficiency.
-    "1953-default:FR:cabinet": {
-      present: true,
-      evidence:
-        "FR 1953 seed pack is economy-preview autonomous; POSITIONS_BY_COUNTRY not yet authored (player-parity follow-up).",
-    },
-    "1953-default:FR:billLifecycle": {
-      present: true,
-      evidence:
-        "FR 1953 legislation types + election cycle authored; COUNTRY_BILL_PHASES not yet registered (player-parity follow-up).",
-    },
-    "1953-default:IT:cabinet": {
-      present: true,
-      evidence:
-        "IT 1953 seed pack is economy-preview autonomous; POSITIONS_BY_COUNTRY not yet authored (player-parity follow-up).",
-    },
-    "1953-default:IT:billLifecycle": {
-      present: true,
-      evidence:
-        "IT 1953 legislation types + election cycle authored; COUNTRY_BILL_PHASES not yet registered (player-parity follow-up).",
-    },
-    "1953-default:ES:cabinet": {
-      present: true,
-      evidence:
-        "ES 1953 seed pack is economy-preview autonomous; POSITIONS_BY_COUNTRY not yet authored (player-parity follow-up).",
-    },
-    "1953-default:ES:billLifecycle": {
-      present: true,
-      evidence:
-        "ES 1953 legislation types + election cycle authored; COUNTRY_BILL_PHASES not yet registered (player-parity follow-up).",
-    },
-    "1953-default:SE:cabinet": {
-      present: true,
-      evidence:
-        "SE 1953 seed pack is economy-preview autonomous; POSITIONS_BY_COUNTRY not yet authored (player-parity follow-up).",
-    },
-    "1953-default:SE:billLifecycle": {
-      present: true,
-      evidence:
-        "SE 1953 legislation types + election cycle authored; COUNTRY_BILL_PHASES not yet registered (player-parity follow-up).",
-    },
-    "1953-default:TR:cabinet": {
-      present: true,
-      evidence:
-        "TR 1953 seed pack is economy-preview autonomous; POSITIONS_BY_COUNTRY not yet authored (player-parity follow-up).",
-    },
-    "1953-default:TR:billLifecycle": {
-      present: true,
-      evidence:
-        "TR 1953 legislation types + election cycle authored; COUNTRY_BILL_PHASES not yet registered (player-parity follow-up).",
-    },
     // Established player countries in Cold-War presets: flavor still tracked.
     "1953-default:UK:bespokeEvents": {
       present: false,

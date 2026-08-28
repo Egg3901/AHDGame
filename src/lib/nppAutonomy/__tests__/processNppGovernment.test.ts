@@ -190,7 +190,13 @@ describe("processNppGovernment", () => {
     const res = await processNppGovernment(db as unknown as Db, "BR", turn, now);
     expect(res.ran).toBe(true);
     expect(res.seatedExecutive).toBe(true);
-    expect(appointPresidentMock).toHaveBeenCalledWith(expect.anything(), "BR", turn, now);
+    expect(appointPresidentMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "BR",
+      turn,
+      now,
+      undefined
+    );
   });
 
   it("does not run presidential formation for a parliamentary country", async () => {

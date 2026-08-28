@@ -109,7 +109,8 @@ export async function processNppGovernment(
   currentTurn: number,
   now: Date,
   currentYear?: number | null,
-  commandEconomyEnabled?: boolean
+  commandEconomyEnabled?: boolean,
+  preset?: string
 ): Promise<NppGovernmentResult> {
   if (!(await nppAutonomyAtLeast(db, countryId, "v1"))) return INACTIVE;
 
@@ -141,13 +142,13 @@ export async function processNppGovernment(
     };
   }
 
-  const config = getCountryConfig(countryId);
+  const config = getCountryConfig(countryId, preset);
   const planned = isPlannedEconomy(countryId, currentYear, commandEconomyEnabled);
 
   // 1. Executive formation (presidential is the V1-new path).
   let seatedExecutive = false;
   if (isPresidentialGovernmentType(config.governmentType)) {
-    seatedExecutive = await appointNppPresident(db, countryId, currentTurn, now);
+    seatedExecutive = await appointNppPresident(db, countryId, currentTurn, now, preset);
   }
 
   // 2. Governing agenda.
@@ -350,7 +351,7 @@ export async function runNppGovernmentPhases(gameNow: Date, currentTurn: number)
   // Flag default OFF: omitted/false → isPlannedEconomy is false everywhere.
   const gameState = await db
     .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { currentYear: 1 } });
+    .findOne({ _id: "current" }, { projection: { currentYear: 1, preset: 1 } });
   const currentYear = gameState?.currentYear;
   const gameConfig = await db
     .collection<GameConfig>("gameConfig")
@@ -364,7 +365,8 @@ export async function runNppGovernmentPhases(gameNow: Date, currentTurn: number)
       currentTurn,
       gameNow,
       currentYear,
-      commandEconomyEnabled
+      commandEconomyEnabled,
+      gameState?.preset
     );
   }
 }

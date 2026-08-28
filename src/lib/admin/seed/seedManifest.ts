@@ -267,6 +267,12 @@ const RUNTIME: CollectionEntry[] = [
       "Versioned per-turn aggregate market, production, distribution, money, and reconciliation indicators for economic evaluation.",
   },
   {
+    name: "nppMarketEntryFunnels",
+    category: "runtime",
+    notes:
+      "Current and 48-turn retained NPP market-entry outcomes with one exclusive reason per corporation.",
+  },
+  {
     name: "ledgerReconciliations",
     category: "runtime",
     notes:

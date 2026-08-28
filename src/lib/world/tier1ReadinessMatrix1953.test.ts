@@ -190,13 +190,13 @@ describe("1953 Tier-1 readiness matrix (#3723)", () => {
   it("promotes Nigeria 1953 to full-autonomous via live contract evaluation", () => {
     const report = assessProposed1953Tier1Candidate("NG");
     expect(report.autonomous).toBe("ready");
-    expect(report.player).toBe("blocked");
-    expect(report.hardBlockers.map((b) => b.capabilityId)).toEqual(["billLifecycle"]);
+    expect(report.player).toBe("ready");
+    expect(report.hardBlockers).toEqual([]);
 
     const row = matrix.rows.find((r) => r.entityId === "NG");
     expect(row).toMatchObject({
       autonomous: "ready",
-      player: "blocked",
+      player: "ready",
       appliedTier: "full-autonomous",
       reclassification: null,
       hasCountryConfig: true,
@@ -208,10 +208,10 @@ describe("1953 Tier-1 readiness matrix (#3723)", () => {
       simulationTier: "full-autonomous",
       legacyAccess: "economy-preview",
       un: { state: "eligible", expectedAdmissionYear: 1960 },
-      readiness: { autonomous: "ready", player: "blocked" },
+      readiness: { autonomous: "ready", player: "ready" },
     });
     expect(manifest.parentEntityId).toBeUndefined();
-    expect(manifest.readiness.hardBlockers.some((b) => b.startsWith("billLifecycle"))).toBe(true);
+    expect(manifest.readiness.hardBlockers).toEqual([]);
     expect(manifest.tierReclassification).toBeUndefined();
   });
 
