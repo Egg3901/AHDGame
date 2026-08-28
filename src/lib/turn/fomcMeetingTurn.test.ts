@@ -61,7 +61,7 @@ function setOf(db: ReturnType<typeof makeDb>): Record<string, unknown> {
 describe("processFomcMeetings — chair seat rollover", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("hands an expired chair seat to the player selection phase instead of locking in a technocrat", async () => {
+  it("VACATES an expired chair seat (no technocrat) and hands it to the selection phase", async () => {
     const db = makeDb({
       _id: "DD",
       countryId: "DD",
@@ -80,12 +80,17 @@ describe("processFomcMeetings — chair seat rollover", () => {
     await processFomcMeetings(db as unknown as Db, 219, 1956, new Date());
 
     const $set = setOf(db);
-    // The caretaker keeps the committee quorate...
-    expect($set.chairMode).toBe("npp");
-    // ...but the seat must NOT carry a fresh 4-year term, or
-    // processCentralBankChairSelection (which runs later in the same turn and
-    // only fires on an expired/absent term) never sees the vacancy and the
-    // executive's nominations are never read.
+    // The expired chair seat is now VACANT, not restocked with a technocrat NPP.
+    const board = $set.fomcBoard as FomcSeat[];
+    const chairSeat = board.find((s) => s.isChair)!;
+    expect(chairSeat.occupantType).toBe("vacant");
+    expect(chairSeat.nppId).toBeNull();
+    expect(chairSeat.characterId).toBeNull();
+    // The single-chair mirror carries no fabricated NPP, and the seat carries no
+    // fresh term — so processCentralBankChairSelection (later in the turn) sees
+    // the vacancy and opens nominations for a presidential pick.
+    expect($set.chairNppId).toBeNull();
+    expect($set.chairCharacterId).toBeNull();
     expect($set.chairTermExpiresAtTurn).toBeNull();
     expect($set.vacancyAwaitingAutomaticSelection).toBe(true);
   });

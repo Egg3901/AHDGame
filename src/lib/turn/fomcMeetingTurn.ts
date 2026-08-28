@@ -34,8 +34,6 @@ import {
   playerSeats,
   type FomcMacroContext,
 } from "@/lib/centralBank/fomc";
-import { spawnTechnocratNpp } from "@/lib/npp/generator";
-import { oppositeAlignment } from "@/lib/centralBank/chairAlignment";
 
 const FOMC_MEETING_HISTORY_MAX = 24;
 const RATE_HISTORY_MAX = 96;
@@ -96,6 +94,15 @@ function mirrorChairOntoBank(set: Record<string, unknown>, chair: FomcSeat): voi
     set.chairCharacterId = chair.characterId;
     set.chairCharacterName = chair.characterName;
     set.chairNppId = null;
+  } else if (chair.occupantType === "vacant") {
+    // A vacant chair mirrors as no one: clear the person fields but leave
+    // chairMode alone. The vacancy itself is signalled by chairCharacterId=null
+    // plus `vacancyAwaitingAutomaticSelection` (set by the caller), which the
+    // chair-selection phase reads to open nominations. Fabricating an NPP here
+    // is exactly the auto-stock we're removing.
+    set.chairCharacterId = null;
+    set.chairNppId = null;
+    set.chairCharacterName = null;
   } else {
     set.chairMode = "npp";
     set.chairNppId = chair.nppId;
@@ -105,19 +112,19 @@ function mirrorChairOntoBank(set: Record<string, unknown>, chair: FomcSeat): voi
 }
 
 /**
- * Vacate any seat whose staggered term has expired and appoint an autonomous
- * technocrat replacement (flipped alignment, fresh full term) so the board is
- * never short a governor. A player whose term lapses is removed and their seat
- * reverts to an NPP — the President can later re-nominate a player via the
- * confirmation flow. Returns a new board when anything changed, else null.
+ * VACATE any seat whose staggered term has expired. The seat is left empty
+ * (occupantType "vacant"), NOT auto-filled with a technocrat NPP: the committee
+ * is staffed by presidential nomination + Senate confirmation, never stocked by
+ * the engine. A vacant seat abstains on rate motions, so an unstaffed board
+ * simply cannot move the rate until the President fills it — which is the point.
+ * Returns a new board when anything changed, else null.
  *
- * `chairRefreshed` reports whether the CHAIR seat was one of the replacements,
- * so the caller can hand the vacancy to the player selection pipeline instead
- * of locking the technocrat in for a full 4-year term.
+ * `chairRefreshed` reports whether the CHAIR seat was one of the vacancies, so
+ * the caller can hand it to the chair selection / nomination pipeline.
  */
 async function refreshExpiredSeats(
-  db: Db,
-  bank: Pick<CentralBank, "_id" | "countryId">,
+  _db: Db,
+  _bank: Pick<CentralBank, "_id" | "countryId">,
   board: FomcSeat[],
   currentTurn: number
 ): Promise<{ board: FomcSeat[]; replaced: number; chairRefreshed: boolean } | null> {
@@ -126,17 +133,16 @@ async function refreshExpiredSeats(
   const next: FomcSeat[] = [];
   for (const seat of board) {
     if (seat.termExpiresAtTurn != null && seat.termExpiresAtTurn <= currentTurn) {
-      const npp = await spawnTechnocratNpp(db, bank.countryId, "fomcMember");
       next.push({
         ...seat,
-        occupantType: "npp",
+        occupantType: "vacant",
         characterId: null,
-        characterName: npp.name,
-        nppId: npp._id,
-        alignment: oppositeAlignment(seat.alignment),
+        characterName: null,
+        nppId: null,
         appointedByPresidentId: null,
         appointedAtTurn: currentTurn,
-        termExpiresAtTurn: currentTurn + FOMC_TERM_TURNS,
+        // No term on a vacant seat — it stays open until a nominee is confirmed.
+        termExpiresAtTurn: null,
       });
       replaced++;
       if (seat.isChair) chairRefreshed = true;
