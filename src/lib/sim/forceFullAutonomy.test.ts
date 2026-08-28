@@ -38,6 +38,27 @@ describe("forceFullAutonomy", () => {
     expect(gameState?.update.$set.nppAutonomyEnabled).toBe(true);
   });
 
+  it("can activate autonomous foreign policy for a balance run", async () => {
+    const { db, writes } = captureDb();
+    await forceFullAutonomy(db, "v4", "active", "support");
+    const gameState = writes.find((w) => w.collection === "gameState");
+
+    expect(gameState?.update.$set).toMatchObject({
+      nppForeignPolicyMode: "active",
+      nppForeignPolicyModeBy: "sim-harness",
+      nppForeignPolicyStage: "support",
+      nppForeignPolicyStageBy: "sim-harness",
+    });
+    expect(gameState?.update.$set.nppForeignPolicyModeAt).toBeTruthy();
+  });
+
+  it("can preserve player-country access for a production-shaped policy run", async () => {
+    const { db, writes } = captureDb();
+    await forceFullAutonomy(db, "v3", "active", "war", true);
+
+    expect(writes.filter((write) => write.collection === "countryGameStates")).toHaveLength(0);
+  });
+
   it("enables the engine-driven economy flags on gameConfig", async () => {
     const { db, writes } = captureDb();
     await forceFullAutonomy(db);

@@ -47,6 +47,11 @@ export const DEFAULT_GAME_STATE_FLAGS = {
   nppAutonomyLevel: "v4",
   // Kept in sync with nppAutonomyLevel for legacy readers.
   nppAutonomyEnabled: true,
+  // Autonomous diplomacy ships active at its safest rollout stage. Countries
+  // can cast scored organization votes, while proposals, trade, support, and
+  // war remain unavailable until an admin advances the stage.
+  nppForeignPolicyMode: "active",
+  nppForeignPolicyStage: "votes",
   // World Events v1 (plan-world-events-v1) — validated via worldsim A/B in
   // Phase 4 (approval/treasury bounded, sectorDemandModifier stacking capped
   // below market-clearing sensitivity). Seed-on for fresh worlds only; this

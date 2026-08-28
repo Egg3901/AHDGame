@@ -30,12 +30,12 @@ function setup() {
 const inserted = (db: ReturnType<typeof setup>): Bill =>
   db.collectionMocks["bills"]!.insertOne.mock.calls[0]![0] as Bill;
 
-const run = (db: ReturnType<typeof setup>, countryId: "US" | "UK" | "RU" = "US") =>
+const run = (db: ReturnType<typeof setup>, countryId: "US" | "UK" | "RU" = "US", isNpp = false) =>
   buildJoinConflictBill({
     db: db as unknown as Db,
     countryId,
     preset: "1953-default",
-    sponsor: { characterId: new ObjectId(), characterName: "Foreign Secretary" },
+    sponsor: { characterId: new ObjectId(), characterName: "Foreign Secretary", isNpp },
     conflictName: "Korean War",
     organizationId: "NATO",
     provision: PROVISION,
@@ -75,6 +75,13 @@ describe("buildJoinConflictBill", () => {
     expect(doc.countryId).toBe("US");
     expect(doc.provisions).toEqual([PROVISION]);
     expect(doc.category).toBe("foreign policy");
+  });
+
+  it("marks an NPP-sponsored ratification for the autonomous force preflight", async () => {
+    const db = setup();
+    await run(db, "US", true);
+
+    expect(inserted(db).nppSponsored).toBe(true);
   });
 
   it("files a Soviet bill at su_national, not the id a naive fallback would build", async () => {
