@@ -20,6 +20,7 @@ export type IterationType = "Alpha" | "Beta" | "Iteration";
  */
 export type NppAutonomyLevel = "off" | "v0" | "v1" | "v2" | "v3" | "v4";
 export type NppForeignPolicyMode = "off" | "shadow" | "active";
+export type NppForeignPolicyStage = "votes" | "proposals" | "trade" | "support" | "war";
 
 export interface GameIteration {
   type: IterationType;
@@ -216,6 +217,10 @@ export interface GameState {
   nppForeignPolicyMode?: NppForeignPolicyMode;
   nppForeignPolicyModeBy?: string;
   nppForeignPolicyModeAt?: string;
+  /** Highest autonomous action family permitted while foreign policy is active. */
+  nppForeignPolicyStage?: NppForeignPolicyStage;
+  nppForeignPolicyStageBy?: string;
+  nppForeignPolicyStageAt?: string;
   /** When true, crisis international-aid nodes use the slider + legislature-bill flow. */
   crisisAidBillsEnabled?: boolean;
   crisisAidBillsEnabledBy?: string;

@@ -10,7 +10,13 @@ import { processInternationalOrganizationsTurn } from "./internationalOrganizati
  */
 const stubDb = () =>
   ({
-    collection: () => ({ findOne: async () => ({ _id: "current", preset: "2019-default" }) }),
+    collection: () => ({
+      findOne: async () => ({
+        _id: "current",
+        preset: "2019-default",
+        nppForeignPolicyMode: "shadow",
+      }),
+    }),
   }) as unknown as Db;
 
 vi.mock("@/lib/db/collections", () => ({
