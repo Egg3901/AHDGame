@@ -8,8 +8,16 @@ const war = {
   conflictNumber: 3,
   name: "UK–CN War",
   enemies: [
-    { country: "CN", endsWar: false, withdrawalBlocked: false, progressPct: 10, requiredPct: 75 },
+    {
+      country: "CN",
+      endsWar: false,
+      guestsLeaving: [],
+      withdrawalBlocked: false,
+      progressPct: 10,
+      requiredPct: 75,
+    },
   ],
+  ourDeparture: { endsWar: false, guestsLeaving: [] },
 };
 
 const incoming = {
@@ -149,8 +157,22 @@ describe("changing the counterparty", () => {
   const twoEnemies = {
     ...war,
     enemies: [
-      { country: "CN", endsWar: false, withdrawalBlocked: false, progressPct: 10, requiredPct: 75 },
-      { country: "RU", endsWar: false, withdrawalBlocked: false, progressPct: 10, requiredPct: 75 },
+      {
+        country: "CN",
+        endsWar: false,
+        guestsLeaving: [],
+        withdrawalBlocked: false,
+        progressPct: 10,
+        requiredPct: 75,
+      },
+      {
+        country: "RU",
+        endsWar: false,
+        guestsLeaving: [],
+        withdrawalBlocked: false,
+        progressPct: 10,
+        requiredPct: 75,
+      },
     ],
   };
 
@@ -333,7 +355,14 @@ describe("the withdrawal gate in the offer form", () => {
   const gatedWar = {
     ...war,
     enemies: [
-      { country: "CN", endsWar: true, withdrawalBlocked: true, progressPct: 42, requiredPct: 75 },
+      {
+        country: "CN",
+        endsWar: true,
+        guestsLeaving: [],
+        withdrawalBlocked: true,
+        progressPct: 42,
+        requiredPct: 75,
+      },
     ],
   };
 
@@ -397,6 +426,7 @@ describe("the withdrawal gate in the offer form", () => {
         {
           country: "CN",
           endsWar: false,
+          guestsLeaving: [],
           withdrawalBlocked: false,
           progressPct: 5,
           requiredPct: 75,
@@ -406,5 +436,74 @@ describe("the withdrawal gate in the offer form", () => {
     await ready(peelable);
     fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "them" } });
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("what accepting would actually do to the war", () => {
+  /**
+   * The live War for Germany's shape: we are alone on our side, and their principal
+   * takes its treaty ally out with it. EITHER departure ends the war, so the old
+   * blanket line about the fighting continuing was wrong in both directions.
+   */
+  const endsEitherWay = {
+    ...war,
+    enemies: [
+      {
+        country: "CN",
+        endsWar: true,
+        guestsLeaving: ["RU"] as const,
+        withdrawalBlocked: true,
+        progressPct: 0,
+        requiredPct: 75,
+      },
+    ],
+    ourDeparture: { endsWar: true, guestsLeaving: [] },
+  };
+
+  async function ready(w: unknown) {
+    vi.stubGlobal("fetch", mockGet({ currentTurn: 40, wars: [w], offers: [] }));
+    render(<PeacePanel {...props} />);
+    fireEvent.change(await screen.findByLabelText(/country to negotiate with/i), {
+      target: { value: "CN" },
+    });
+  }
+
+  it("says OUR leaving ends the war when our side would empty", async () => {
+    await ready(endsEitherWay);
+    expect(screen.getByText(/ends this war outright/i)).toBeTruthy();
+  });
+
+  it("says THEIR leaving ends it too, and names the ally that goes with them", async () => {
+    await ready(endsEitherWay);
+    fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "them" } });
+    const text = document.body.textContent ?? "";
+    expect(text).toMatch(/ends this war outright/i);
+    expect(text).toMatch(/released from the treaty that brought it in/i);
+  });
+
+  it("still says the fighting continues when the side really would survive", async () => {
+    await ready({
+      ...war,
+      enemies: [
+        {
+          country: "CN",
+          endsWar: false,
+          guestsLeaving: [],
+          withdrawalBlocked: false,
+          progressPct: 5,
+          requiredPct: 75,
+        },
+      ],
+      ourDeparture: { endsWar: false, guestsLeaving: [] },
+    });
+    expect(screen.getByText(/fighting continues for everyone else/i)).toBeTruthy();
+  });
+
+  it("no longer states as a general rule that the fighting always continues", async () => {
+    // The blanket claim in the panel's own introduction is what misled: it promised
+    // survivors in a war that has none.
+    await ready(endsEitherWay);
+    const intro = screen.getByText(/A deal is struck between two countries/);
+    expect(intro.textContent).toMatch(/if that empties a side, the war ends/i);
   });
 });
