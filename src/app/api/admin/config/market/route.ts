@@ -48,6 +48,8 @@ const patchSchema = z.object({
   intervention: economicInterventionPlanSchema.optional(),
   indexFundBondLiquidityEnabled: z.boolean().optional(),
   bondLiquidityIntervention: economicInterventionPlanSchema.optional(),
+  equityLiquidityFacilityEnabled: z.boolean().optional(),
+  equityLiquidityIntervention: economicInterventionPlanSchema.optional(),
   nppMarketCoverageEnabled: z.boolean().optional(),
   marketCoverageIntervention: economicInterventionPlanSchema.optional(),
   nppFragileMarketSupplyEnabled: z.boolean().optional(),
@@ -90,6 +92,7 @@ export async function GET() {
           supplyAgreementsEnabled: 1,
           shortageResponsiveSourcingEnabled: 1,
           indexFundBondLiquidityEnabled: 1,
+          equityLiquidityFacilityEnabled: 1,
           nppMarketCoverageEnabled: 1,
           nppFragileMarketSupplyEnabled: 1,
           extractionOutputScaleEnabled: 1,
@@ -111,6 +114,7 @@ export async function GET() {
       supplyAgreementsEnabled: config?.supplyAgreementsEnabled === true,
       shortageResponsiveSourcingEnabled: config?.shortageResponsiveSourcingEnabled === true,
       indexFundBondLiquidityEnabled: config?.indexFundBondLiquidityEnabled === true,
+      equityLiquidityFacilityEnabled: config?.equityLiquidityFacilityEnabled === true,
       nppMarketCoverageEnabled: config?.nppMarketCoverageEnabled === true,
       nppFragileMarketSupplyEnabled: config?.nppFragileMarketSupplyEnabled === true,
       extractionOutputScaleEnabled: config?.extractionOutputScaleEnabled === true,
@@ -160,6 +164,8 @@ export async function PATCH(request: Request) {
       intervention,
       indexFundBondLiquidityEnabled,
       bondLiquidityIntervention,
+      equityLiquidityFacilityEnabled,
+      equityLiquidityIntervention,
       nppMarketCoverageEnabled,
       marketCoverageIntervention,
       nppFragileMarketSupplyEnabled,
@@ -186,6 +192,8 @@ export async function PATCH(request: Request) {
       intervention?: EconomicInterventionPlan;
       indexFundBondLiquidityEnabled?: boolean;
       bondLiquidityIntervention?: EconomicInterventionPlan;
+      equityLiquidityFacilityEnabled?: boolean;
+      equityLiquidityIntervention?: EconomicInterventionPlan;
       nppMarketCoverageEnabled?: boolean;
       marketCoverageIntervention?: EconomicInterventionPlan;
       nppFragileMarketSupplyEnabled?: boolean;
@@ -243,6 +251,21 @@ export async function PATCH(request: Request) {
       }
       const activationError = validateInterventionActivation(
         bondLiquidityIntervention,
+        currentTurn
+      );
+      if (activationError) {
+        return NextResponse.json({ error: activationError }, { status: 400 });
+      }
+    }
+    if (equityLiquidityFacilityEnabled === true) {
+      if (!equityLiquidityIntervention) {
+        return NextResponse.json(
+          { error: "An economic intervention plan is required to enable equity liquidity." },
+          { status: 400 }
+        );
+      }
+      const activationError = validateInterventionActivation(
+        equityLiquidityIntervention,
         currentTurn
       );
       if (activationError) {
@@ -308,6 +331,12 @@ export async function PATCH(request: Request) {
       governorSet.indexFundBondLiquidityEnabled = indexFundBondLiquidityEnabled;
       if (indexFundBondLiquidityEnabled && bondLiquidityIntervention) {
         governorSet.indexFundBondLiquidityIntervention = bondLiquidityIntervention;
+      }
+    }
+    if (typeof equityLiquidityFacilityEnabled === "boolean") {
+      governorSet.equityLiquidityFacilityEnabled = equityLiquidityFacilityEnabled;
+      if (equityLiquidityFacilityEnabled && equityLiquidityIntervention) {
+        governorSet.equityLiquidityFacilityIntervention = equityLiquidityIntervention;
       }
     }
     if (typeof nppMarketCoverageEnabled === "boolean") {

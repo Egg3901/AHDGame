@@ -48,9 +48,16 @@ vi.mock("@/lib/corporations/shareholderOps", () => ({
   creditShares: vi.fn().mockResolvedValue(true),
   creditSharesToImperial: vi.fn().mockResolvedValue(true),
   creditSharesToCorp: vi.fn().mockResolvedValue(true),
+  creditSharesToFund: vi.fn().mockResolvedValue(true),
   debitShares: vi.fn().mockResolvedValue(10),
   debitSharesFromCorp: vi.fn().mockResolvedValue(10),
+  debitSharesFromFund: vi.fn().mockResolvedValue(10),
   debitSharesFromImperial: vi.fn().mockResolvedValue(10),
+}));
+vi.mock("@/lib/indexFunds/fundQueries", () => ({
+  debitFundHoldingShares: vi.fn().mockResolvedValue(true),
+  insertFundTransaction: vi.fn().mockResolvedValue(new ObjectId()),
+  upsertFundHoldingShares: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/lib/financialTxLog/atomicCashGuard", () => ({
   atomicallyDebitCharacterCash: vi.fn().mockResolvedValue({ ok: true, newBalance: 900 }),
@@ -79,6 +86,111 @@ beforeEach(async () => {
 });
 
 describe("POST /api/corporations/[id]/shares/orders/[orderId]/fill", () => {
+  it("settles a fund-owned executable ask without minting shares", async () => {
+    const userId = new ObjectId();
+    const fillerId = new ObjectId();
+    const fundId = new ObjectId();
+    const corpId = new ObjectId();
+    const orderId = new ObjectId();
+    const order = {
+      _id: orderId,
+      corporationId: corpId,
+      placerFundId: fundId,
+      type: "sell",
+      status: "open",
+      sharesRemaining: 10,
+      escrowAmount: 0,
+      pricePerShare: 12,
+      liquidityProvider: true,
+    };
+    const corporation = {
+      _id: corpId,
+      name: "Target Corp",
+      sharePrice: 12,
+      publicFloat: 100,
+      liquidCurrencyCode: "USD",
+      shareholders: [{ fundId, shares: 25, avgCostPerShare: 7 }],
+    };
+
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: userId.toString() },
+    } as never);
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({ ok: true, corporation } as never);
+
+    db.collection("shareOrders");
+    db.collectionMocks.shareOrders.findOne.mockResolvedValue(order as never);
+    db.collectionMocks.shareOrders.findOneAndUpdate.mockResolvedValue(order as never);
+    db.collection("users");
+    db.collectionMocks.users.findOne.mockResolvedValue({
+      _id: userId,
+      activeCharacterId: fillerId,
+      activeCharacterType: "regular",
+    } as never);
+    db.collection("characters");
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: fillerId,
+      userId,
+      countryId: "US",
+      name: "Buyer",
+    } as never);
+    db.collection("indexFunds");
+    db.collectionMocks.indexFunds.findOne.mockResolvedValue({
+      _id: fundId,
+      name: "US Broad Market Fund",
+      cashAnchor: 1_000,
+      holdings: [{ corporationId: corpId, shares: 25 }],
+    } as never);
+
+    const { POST } = await import("./route");
+    const req = new Request("http://localhost/api/corporations/abc/shares/orders/order/fill", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shares: 10, fillAsCorporation: false }),
+    });
+    const res = await POST(req, {
+      params: Promise.resolve({ id: "abc", orderId: orderId.toString() }),
+    });
+
+    expect(res.status).toBe(200);
+    const { creditShares, debitSharesFromFund } = await import("@/lib/corporations/shareholderOps");
+    const { debitFundHoldingShares, insertFundTransaction } =
+      await import("@/lib/indexFunds/fundQueries");
+    expect(debitSharesFromFund).toHaveBeenCalledWith(
+      db,
+      corpId,
+      fundId,
+      10,
+      { $set: { updatedAt: expect.any(Date) } },
+      { requireSufficient: true }
+    );
+    expect(debitFundHoldingShares).toHaveBeenCalledWith(db, fundId, corpId, 10, 12);
+    expect(creditShares).toHaveBeenCalledWith(
+      db,
+      corpId,
+      fillerId,
+      10,
+      { $set: { updatedAt: expect.any(Date) } },
+      { pricePerShare: 12 }
+    );
+    expect(db.collectionMocks.indexFunds.updateOne).toHaveBeenCalledWith(
+      { _id: fundId },
+      { $inc: { cashAnchor: 120 }, $set: { updatedAt: expect.any(Date) } }
+    );
+    expect(insertFundTransaction).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        fundId,
+        kind: "liquidity_quote_sell",
+        corporationId: corpId,
+        shares: 10,
+        amountAnchor: 120,
+      })
+    );
+  });
+
   it("does not feed order-flow windows when a character fills another character's sell order", async () => {
     const userId = new ObjectId();
     const fillerId = new ObjectId();

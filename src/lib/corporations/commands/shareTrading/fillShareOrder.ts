@@ -8,7 +8,7 @@ import { fillOrderSchema } from "@/lib/api/schemas/corporations";
 import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { assertCeoTradeNotBlocked } from "@/lib/corporations/commands/privatization/openVoteGuard";
-import type { Character, Corporation, ShareOrder, User } from "@/lib/db/types";
+import type { Character, Corporation, IndexFund, ShareOrder, User } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import {
   creditShares,
@@ -16,6 +16,8 @@ import {
   creditSharesToCorp,
   debitShares,
   debitSharesFromCorp,
+  creditSharesToFund,
+  debitSharesFromFund,
   debitSharesFromImperial,
 } from "@/lib/corporations/shareholderOps";
 import {
@@ -56,6 +58,11 @@ import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { assertCeoAcquisitionWithinCap } from "@/lib/corporations/ceoShareAcquisitionCap";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import {
+  debitFundHoldingShares,
+  insertFundTransaction,
+  upsertFundHoldingShares,
+} from "@/lib/indexFunds/fundQueries";
 
 interface RouteParams {
   params: Promise<{ id: string; orderId: string }>;
@@ -228,6 +235,13 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
     const forexEnabled = await isForexEnabled();
     const fillerHomeCurrency = getHomeCurrency({ countryId: fillerCountryId });
     const currentTurn = await getCurrentTurn(db);
+    const sellerFund =
+      order.type === "sell" && order.placerFundId
+        ? await db.collection<IndexFund>("indexFunds").findOne({ _id: order.placerFundId })
+        : null;
+    if (order.type === "sell" && order.placerFundId && !sellerFund) {
+      return NextResponse.json({ error: "Liquidity-provider fund not found" }, { status: 404 });
+    }
 
     // Load filler FX rate upfront — used in both fill paths
     let fillerFxRate = 1.0;
@@ -280,7 +294,11 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
           { status: 400 }
         );
       }
-      if (!order.placerCorporationId && orderCharacterId!.equals(buyingCorp.ceoId)) {
+      if (
+        !order.placerCorporationId &&
+        orderCharacterId &&
+        orderCharacterId.equals(buyingCorp.ceoId)
+      ) {
         return NextResponse.json({ error: "Cannot fill your own order" }, { status: 400 });
       }
       buyingCorpForSellFill = buyingCorp;
@@ -394,6 +412,100 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
       ? corporation.shareholders?.find((sh) => sh.characterId?.equals(orderCharacterId))
           ?.avgCostPerShare
       : undefined;
+    const fundFillPriceAnchor = shares > 0 ? total / shares : 0;
+    let sellerFundInventoryDebited = false;
+    let sellerFundCashCredited = false;
+
+    const debitSellerFundInventory = async (): Promise<boolean> => {
+      if (!order.placerFundId) return true;
+      const remaining = await debitSharesFromFund(
+        db,
+        corporation._id,
+        order.placerFundId,
+        shares,
+        { $set: { updatedAt: now } },
+        { requireSufficient: true }
+      );
+      if (remaining < 0) return false;
+      const holdingsDebited = await debitFundHoldingShares(
+        db,
+        order.placerFundId,
+        corporation._id,
+        shares,
+        fundFillPriceAnchor
+      );
+      if (!holdingsDebited) {
+        await creditSharesToFund(
+          db,
+          corporation._id,
+          order.placerFundId,
+          shares,
+          fundFillPriceAnchor,
+          { $set: { updatedAt: new Date() } }
+        );
+        return false;
+      }
+      sellerFundInventoryDebited = true;
+      return true;
+    };
+
+    const creditSellerFund = async (): Promise<void> => {
+      if (!order.placerFundId) return;
+      const cashCredit = await db
+        .collection<IndexFund>("indexFunds")
+        .updateOne(
+          { _id: order.placerFundId },
+          { $inc: { cashAnchor: total }, $set: { updatedAt: now } }
+        );
+      if (cashCredit.matchedCount === 0) {
+        throw new Error("Liquidity-provider fund disappeared during settlement");
+      }
+      sellerFundCashCredited = true;
+    };
+
+    const recordSellerFundSale = async (): Promise<void> => {
+      if (!order.placerFundId) return;
+      await insertFundTransaction(db, {
+        fundId: order.placerFundId,
+        kind: "liquidity_quote_sell",
+        corporationId: corporation._id,
+        shares,
+        amountAnchor: total,
+        note: "Executable equity liquidity ask filled",
+        createdAt: now,
+      });
+    };
+
+    const rollbackSellerFund = async (): Promise<void> => {
+      if (!order.placerFundId) return;
+      if (sellerFundCashCredited) {
+        await db
+          .collection<IndexFund>("indexFunds")
+          .updateOne(
+            { _id: order.placerFundId },
+            { $inc: { cashAnchor: -total }, $set: { updatedAt: new Date() } }
+          );
+        sellerFundCashCredited = false;
+      }
+      if (sellerFundInventoryDebited) {
+        await creditSharesToFund(
+          db,
+          corporation._id,
+          order.placerFundId,
+          shares,
+          fundFillPriceAnchor,
+          { $set: { updatedAt: new Date() } }
+        );
+        await upsertFundHoldingShares(
+          db,
+          order.placerFundId,
+          corporation._id,
+          shares,
+          fundFillPriceAnchor
+        );
+        sellerFundInventoryDebited = false;
+      }
+    };
 
     if (order.type === "sell") {
       if (fillAsCorporation) {
@@ -478,9 +590,19 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
         }
 
         try {
-          // Skip when sharesDebitedAtCreation: placement already took the shares.
-          // Legacy character sells without that flag still debit here.
-          if (!order.placerCorporationId && order.sharesDebitedAtCreation !== true) {
+          if (order.placerFundId) {
+            const debited = await debitSellerFundInventory();
+            if (!debited) {
+              await restoreClaimedOrder();
+              await refundCorpLiquidCapital(db, buyingCorp._id, costInBuyerCapital);
+              return NextResponse.json(
+                { error: "Liquidity provider no longer has enough shares" },
+                { status: 409 }
+              );
+            }
+          } else if (!order.placerCorporationId && order.sharesDebitedAtCreation !== true) {
+            // Skip when sharesDebitedAtCreation: placement already took the shares.
+            // Legacy character sells without that flag still debit here.
             const remainingSellerShares = await debitShares(
               db,
               corporation._id,
@@ -512,7 +634,9 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
           );
           buyerSharesCredited = true;
 
-          if (order.placerCorporationId) {
+          if (order.placerFundId) {
+            await creditSellerFund();
+          } else if (order.placerCorporationId) {
             const sellerCorp = await db
               .collection<Corporation>("corporations")
               .findOne({ _id: order.placerCorporationId });
@@ -598,11 +722,19 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
             amount: -costInBuyerCapital,
             balanceAfter: corpDebit.newBalance,
             currencyCode: resolveCorpLiquidCurrencyCode(buyingCorp) ?? "USD",
-            counterpartyType: order.placerCorporationId ? "corporation" : "character",
-            counterpartyId: order.placerCorporationId ?? orderCharacterId!,
-            counterpartyName: order.placerCorporationId
-              ? await resolveCorpName(db, order.placerCorporationId)
-              : await resolveCharName(db, orderCharacterId!, false),
+            counterpartyType: order.placerFundId
+              ? "system"
+              : order.placerCorporationId
+                ? "corporation"
+                : "character",
+            counterpartyId: order.placerFundId
+              ? undefined
+              : (order.placerCorporationId ?? orderCharacterId!),
+            counterpartyName: order.placerFundId
+              ? (sellerFund?.name ?? "Index fund")
+              : order.placerCorporationId
+                ? await resolveCorpName(db, order.placerCorporationId)
+                : await resolveCharName(db, orderCharacterId!, false),
             meta: {
               corporationId: corporation._id.toString(),
               orderId: order._id.toString(),
@@ -611,7 +743,9 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
               source: "order_fill_sell_order",
             },
           });
+          await recordSellerFundSale();
         } catch (err) {
+          await rollbackSellerFund();
           if (sellerHomeCredited && sellerCurrency) {
             await db.collection<Character>("characters").updateOne(
               { _id: orderCharacterId! },
@@ -686,9 +820,35 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
         }
 
         try {
-          // Skip when sharesDebitedAtCreation: placement already took the shares.
-          // Legacy character sells without that flag still debit here.
-          if (!order.placerCorporationId && order.sharesDebitedAtCreation !== true) {
+          if (order.placerFundId) {
+            const debited = await debitSellerFundInventory();
+            if (!debited) {
+              await restoreClaimedOrder();
+              if (isImperialFiller) {
+                await refundImperialCash(
+                  db,
+                  fillerId,
+                  fillerHomeCurrency,
+                  totalInFillerHome,
+                  forexEnabled
+                );
+              } else {
+                await refundCharacterCash(
+                  db,
+                  fillerId,
+                  fillerHomeCurrency,
+                  totalInFillerHome,
+                  forexEnabled
+                );
+              }
+              return NextResponse.json(
+                { error: "Liquidity provider no longer has enough shares" },
+                { status: 409 }
+              );
+            }
+          } else if (!order.placerCorporationId && order.sharesDebitedAtCreation !== true) {
+            // Skip when sharesDebitedAtCreation: placement already took the shares.
+            // Legacy character sells without that flag still debit here.
             const remainingSellerShares = await debitShares(
               db,
               corporation._id,
@@ -746,7 +906,9 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
           }
           buyerSharesCredited = true;
 
-          if (order.placerCorporationId) {
+          if (order.placerFundId) {
+            await creditSellerFund();
+          } else if (order.placerCorporationId) {
             const sellerCorp = await db
               .collection<Corporation>("corporations")
               .findOne({ _id: order.placerCorporationId });
@@ -833,11 +995,19 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
             amount: -totalInFillerHome,
             balanceAfter: debitResult.newBalance,
             currencyCode: fillerHomeCurrency,
-            counterpartyType: order.placerCorporationId ? "corporation" : "character",
-            counterpartyId: order.placerCorporationId ?? orderCharacterId!,
-            counterpartyName: order.placerCorporationId
-              ? await resolveCorpName(db, order.placerCorporationId)
-              : await resolveCharName(db, orderCharacterId!, false),
+            counterpartyType: order.placerFundId
+              ? "system"
+              : order.placerCorporationId
+                ? "corporation"
+                : "character",
+            counterpartyId: order.placerFundId
+              ? undefined
+              : (order.placerCorporationId ?? orderCharacterId!),
+            counterpartyName: order.placerFundId
+              ? (sellerFund?.name ?? "Index fund")
+              : order.placerCorporationId
+                ? await resolveCorpName(db, order.placerCorporationId)
+                : await resolveCharName(db, orderCharacterId!, false),
             meta: {
               corporationId: corporation._id.toString(),
               orderId: order._id.toString(),
@@ -847,7 +1017,9 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
               imperial: isImperialFiller || undefined,
             },
           });
+          await recordSellerFundSale();
         } catch (err) {
+          await rollbackSellerFund();
           if (sellerHomeCredited && sellerCurrency) {
             await db.collection<Character>("characters").updateOne(
               { _id: orderCharacterId! },
@@ -968,7 +1140,9 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
           name: await resolveCharName(db, fillerId, isImperialFiller),
         };
       }
-      if (order.placerCorporationId) {
+      if (order.placerFundId) {
+        fromParty = { name: sellerFund?.name ?? "Index fund" };
+      } else if (order.placerCorporationId) {
         fromParty = {
           corporationId: order.placerCorporationId,
           name: await resolveCorpName(db, order.placerCorporationId),
