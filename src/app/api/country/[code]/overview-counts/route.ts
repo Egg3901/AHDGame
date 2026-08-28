@@ -192,6 +192,7 @@ async function assembleOverviewCounts(db: Db, countryId: CountryId): Promise<Ove
     totalReferendums,
     fiscal,
     coldWarDefcon,
+    navairFormations,
   ] = await Promise.all([
     orNull(
       db.collection("politicalParties").countDocuments({ countryId, isDefunct: { $ne: true } })
@@ -218,6 +219,12 @@ async function assembleOverviewCounts(db: Db, countryId: CountryId): Promise<Ove
     orNull(db.collection("referendums").countDocuments({ countryId })),
     orNull(resolveFiscalFigures(db, countryId)),
     orNull(resolveColdWarDefcon(db, countryId)),
+    // Hulls and wings this nation owns. Gates the command link: no fleet, no row.
+    orNull(
+      db
+        .collection("militaryUnits")
+        .countDocuments({ countryId, domain: { $in: ["naval", "air"] } })
+    ),
   ]);
   return {
     parties,
@@ -234,6 +241,7 @@ async function assembleOverviewCounts(db: Db, countryId: CountryId): Promise<Ove
     gdpMillions: fiscal?.gdpMillions ?? null,
     budgetBalancePctGdp: fiscal?.budgetBalancePctGdp ?? null,
     coldWarDefcon,
+    navairFormations,
   };
 }
 

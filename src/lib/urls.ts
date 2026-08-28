@@ -100,6 +100,11 @@ export function scotusUrl(countryId: CountryId | string): string {
   return `/country/${lowerCountry(countryId)}/executive/supreme-court`;
 }
 
+/** Naval and air command: one page for a nation's whole fleet and air force. */
+export function navairUrl(countryId: CountryId | string): string {
+  return `/country/${lowerCountry(countryId)}/navair`;
+}
+
 export function scotusJusticeOfficeUrl(countryId: CountryId | string): string {
   return `/country/${lowerCountry(countryId)}/executive/supreme-court/justice`;
 }

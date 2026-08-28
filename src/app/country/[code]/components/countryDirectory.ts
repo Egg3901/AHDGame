@@ -33,6 +33,7 @@ import {
   politiciansUrl,
   referendumsUrl,
   scotusUrl,
+  navairUrl,
   stockmarketUrl,
   unionsUrl,
 } from "@/lib/urls";
@@ -277,6 +278,19 @@ function nationRows(input: DirectoryInput, config: CountryConfig): DirectoryRow[
     // links to the index. It earns a place here because "how does this work"
     // is the other question a player arrives on a country page with.
     { label: "Wiki", href: "/wiki", available: true },
+    // Naval and air command. Shown whenever the country owns hulls or wings, which is
+    // the same gate the page itself applies: a nation with no fleet and no air force has
+    // nothing to command and gets no row.
+    ...(input.counts?.navairFormations
+      ? [
+          {
+            label: "Naval and Air Command",
+            href: navairUrl(countryId),
+            available: true,
+            figure: countFigure(input.counts.navairFormations, "formation"),
+          },
+        ]
+      : []),
     // Cold War entry, present only when the subsystem is on and this country is
     // a principal. The figure's absence IS the gate: the counts route only
     // returns a DEFCON under those two conditions.
