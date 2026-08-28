@@ -102,7 +102,10 @@ export interface FomcTally {
  * Tally a motion against the ballots cast. Every seat that has not cast a ballot
  * abstains and counts against the motion. `decided` reports early resolution:
  * the motion has passed, or enough abstentions/disagreements make a majority
- * impossible even if all remaining seats agreed.
+ * impossible even if all remaining seats agreed. Note `decided` is pure math —
+ * consumers must still hold a decided meeting open while a seated player can
+ * ballot (see `resolveMeetingInto`), or NPP auto-votes at open would close the
+ * meeting before the player vote window ever starts.
  */
 export function tallyMeeting(
   ballots: FomcBallot[],

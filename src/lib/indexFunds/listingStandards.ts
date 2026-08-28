@@ -208,6 +208,35 @@ export function applyListingRetention(params: {
   return { qualifiedIds, streaks, droppedIds };
 }
 
+/**
+ * Materiality floor on the insolvency screen, as a fraction of market cap.
+ *
+ * A bare `liquidCapital < 0` flags a corporation that is a rounding error into
+ * the red — measured in prod, a corp at -$2,657 against a $7.5M market cap was
+ * called insolvent and kept out of every index, though it clears that shortfall
+ * from one turn of revenue. A negative net-cash position is only a solvency
+ * signal when it is material against what the corporation is worth.
+ */
+export const INSOLVENCY_MATERIALITY_FRACTION = 0.01;
+
+/**
+ * Whether a corporation is MATERIALLY insolvent: net liquid capital negative by
+ * more than {@link INSOLVENCY_MATERIALITY_FRACTION} of its market cap. A corp
+ * with no market value at all and negative cash is treated as insolvent (no
+ * denominator to be immaterial against). `liquidCapital` and `marketCap` should
+ * be the same-currency pair the caller already holds.
+ */
+export function isMateriallyInsolvent(
+  liquidCapital: number | null | undefined,
+  marketCap: number | null | undefined
+): boolean {
+  const cash = Number.isFinite(liquidCapital) ? (liquidCapital as number) : 0;
+  if (cash >= 0) return false;
+  const cap = Number.isFinite(marketCap) && (marketCap as number) > 0 ? (marketCap as number) : 0;
+  if (cap <= 0) return true;
+  return -cash > INSOLVENCY_MATERIALITY_FRACTION * cap;
+}
+
 /** Human-readable reason, for the corporation page and the fund's holdings list. */
 export function describeFailure(failure: ListingFailure): string {
   switch (failure) {

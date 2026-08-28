@@ -51,6 +51,14 @@ describe("autonomous war commands", () => {
     expect(selected.map((row) => row.basePower)).toEqual([10, 20]);
   });
 
+  it("commits more depth through the Warsaw Pact unified command", () => {
+    const units = [unit(10), unit(20), unit(30), unit(40)];
+
+    const selected = planAutonomousDeployment(units, 0.35, "highest");
+
+    expect(selected.map((row) => row.basePower)).toEqual([40]);
+  });
+
   it("rechecks policy, approval, debt, and forces before ratified NPP war entry", async () => {
     const db = createMockDb();
     db.collection("gameState").findOne.mockResolvedValue({

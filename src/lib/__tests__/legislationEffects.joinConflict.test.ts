@@ -82,7 +82,8 @@ describe("join_conflict enactment effect", () => {
       expect.anything(),
       "US",
       expect.objectContaining({ _id: "korea-1953" }),
-      200
+      200,
+      "NATO"
     );
     expect(joinSide).not.toHaveBeenCalled();
   });

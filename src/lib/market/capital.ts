@@ -25,6 +25,15 @@ export const CAPITAL_SEED_HEADROOM = 1.1;
 export const CAPITAL_DEPRECIATION_PER_TURN = 0.0005;
 
 /**
+ * Ceiling on the capital book anchor as a multiple of the sector's CURRENT NPV.
+ * The anchor smooths a transient profit dip, but must not carry a going-concern
+ * book many times current earnings for ever: past a 5x dip the sector is
+ * impaired, not dipping. Bounds the high-water mark so an early-life peak cannot
+ * become a permanent ghost valuation. See {@link advanceCapitalBookAnchor}.
+ */
+export const CAPITAL_BOOK_ANCHOR_MAX_NPV_MULTIPLE = 5;
+
+/**
  * Launch-safety governor for the clearing/capital revenue leg.
  *
  * Big corps run on thin net margins (~0.5% of revenue), so even a few-percent
@@ -52,7 +61,16 @@ export const MARKET_REALIZATION_RAMP_TURNS = 240;
  * ratchets UP with NPV, and decays only slowly (per-turn depreciation) when NPV
  * falls — so valuation reflects durable owned capacity through a profit dip
  * without ever exceeding the sector's own historical peak (no over-crediting).
- * A permanently-impaired sector still bleeds down as the anchor decays.
+ *
+ * The slow decay alone was not enough. At 0.05%/turn the anchor's half-life is
+ * ~1,400 turns, so a value written early in a sector's life persists essentially
+ * for ever even after the sector's real earnings collapse. Measured in prod: an
+ * extraction sector carried an anchor ~35x its live NPV, inflating its share
+ * price ~17x and masking that it was operationally insolvent. So the anchor is
+ * also bounded to a multiple of CURRENT NPV: smoothing a transient profit dip is
+ * legitimate, carrying a book many times current earnings for ever is a ghost.
+ * Above the cap the anchor snaps down to reality; a genuine recovery re-ratchets
+ * it up with NPV.
  */
 export function advanceCapitalBookAnchor(args: {
   prevAnchor: number | null | undefined;
@@ -64,7 +82,11 @@ export function advanceCapitalBookAnchor(args: {
   // First exposure: seed at the current NPV → floor is a no-op on the flip turn.
   if (!(typeof prevAnchor === "number" && prevAnchor > 0)) return npv;
   const decayed = prevAnchor * (1 - Math.max(0, depreciationPerTurn));
-  return Math.max(npv, decayed);
+  const smoothed = Math.max(npv, decayed);
+  // Bound the going-concern floor to a multiple of current NPV. A dip to a fifth
+  // of peak earnings is already severe; below that the sector is impaired, not
+  // dipping, and must not keep a book that reads as many times its own earnings.
+  return Math.min(smoothed, npv * CAPITAL_BOOK_ANCHOR_MAX_NPV_MULTIPLE);
 }
 
 /**

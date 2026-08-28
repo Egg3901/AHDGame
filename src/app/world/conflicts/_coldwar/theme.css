@@ -171,6 +171,18 @@
   flex-direction: column;
   gap: 14px;
 }
+
+/* A zone with no drawable geometry has no map column, so the rail is the whole
+   board and a 452px single file would run the record several screens long for no
+   reason. Panels flow into as many columns as fit and size themselves; `start`
+   keeps a short panel short instead of stretching it to its row's tallest. */
+.cw-front-nomap .cw-front-rail {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(390px, 1fr));
+  align-items: start;
+  gap: 14px;
+}
 /* Side by side, the SVG letterboxes inside this box and HEIGHT is what responds;
    the floor keeps a short rail (a seatless reader's) from crushing the map. */
 .cw-front-canvas {
@@ -184,6 +196,13 @@
   .cw-front-map,
   .cw-front-rail {
     width: 100%;
+  }
+  /* Stacked, the rail is already full width; the grid keeps pairing panels while
+     two still fit, and collapses to one column on its own below ~800px. */
+  .cw-front-rail {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(390px, 1fr));
+    align-items: start;
   }
   /* Stacked, the box takes the HOST's own shape rather than a fixed height. The
      desktop floor has to be reset with it: left standing, a portrait country on

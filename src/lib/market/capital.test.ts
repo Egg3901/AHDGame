@@ -79,15 +79,30 @@ describe("advanceCapitalBookAnchor", () => {
     // prev 1000 decays by 0.0005 → 999.5, still above the depressed NPV 400.
     expect(advanceCapitalBookAnchor({ prevAnchor: 1000, sectorNPV: 400 })).toBeCloseTo(999.5, 6);
   });
-  it("bleeds down over sustained impairment via the decay factor", () => {
+  it("bleeds down over sustained mild impairment via the decay factor", () => {
+    // NPV 900 stays within the 5x cap, so the slow decay governs the ratchet-down.
     let a = 1000;
-    for (let i = 0; i < 100; i++) a = advanceCapitalBookAnchor({ prevAnchor: a, sectorNPV: 0 });
+    for (let i = 0; i < 100; i++) a = advanceCapitalBookAnchor({ prevAnchor: a, sectorNPV: 900 });
     expect(a).toBeCloseTo(1000 * Math.pow(1 - 0.0005, 100), 4);
     expect(a).toBeLessThan(1000);
+    expect(a).toBeGreaterThan(900);
   });
-  it("honors a custom depreciation rate", () => {
+  it("caps the anchor at a multiple of current NPV (kills the ghost high-water mark)", () => {
+    // prev 1000 vs NPV 100 is a 10x impairment: the slow decay would hold it near
+    // 999.5 for ever, but the cap snaps it to 5 x NPV = 500.
+    expect(advanceCapitalBookAnchor({ prevAnchor: 1000, sectorNPV: 100 })).toBe(500);
+  });
+  it("snaps a zero-earnings sector to no going-concern book", () => {
+    // NPV 0 → cap 0. A plant earning nothing has no going-concern value, so it
+    // must not carry a book, however high its early-life peak was.
+    let a = 1_000_000;
+    for (let i = 0; i < 3; i++) a = advanceCapitalBookAnchor({ prevAnchor: a, sectorNPV: 0 });
+    expect(a).toBe(0);
+  });
+  it("honors a custom depreciation rate within the cap", () => {
+    // NPV 500 keeps the 5x cap (2500) non-binding, so the custom 0.1 decay shows.
     expect(
-      advanceCapitalBookAnchor({ prevAnchor: 1000, sectorNPV: 0, depreciationPerTurn: 0.1 })
+      advanceCapitalBookAnchor({ prevAnchor: 1000, sectorNPV: 500, depreciationPerTurn: 0.1 })
     ).toBeCloseTo(900, 6);
   });
 });
