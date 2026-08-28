@@ -373,6 +373,39 @@ describe("processAutonomousForeignPolicy", () => {
     ).toBe(false);
   });
 
+  it("uses an economic bloc for material support when the ally shares one", async () => {
+    const conflict = {
+      _id: "germany",
+      name: "The War for Germany",
+      status: "active",
+      sideA: { label: "West", countries: ["US"] },
+      sideB: { label: "East", countries: ["RU"] },
+    };
+    const db = setup({
+      alignments: [alignment("FR", 90, 0), alignment("US", 100, 0), alignment("RU", 0, 100)],
+      memberships: [
+        membership("FR", "NATO"),
+        membership("US", "NATO"),
+        membership("FR", "COMECON"),
+        membership("US", "COMECON"),
+      ],
+      conflicts: [conflict],
+      approvalRating: 60,
+    });
+
+    await processAutonomousForeignPolicy(db as unknown as Db, "FR", 41, now);
+
+    expect(recordedDecision(db).alternatives).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "support_war",
+          conflictId: "germany",
+          organizationId: "COMECON",
+        }),
+      ])
+    );
+  });
+
   it("offers real operations or peace after an autonomous country enters a war", async () => {
     const conflict = {
       _id: "korea",

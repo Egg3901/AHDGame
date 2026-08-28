@@ -31,7 +31,22 @@ export interface AutonomousWarEntryPreparation {
 const ENTRY_MIN_READINESS = 55;
 const ENTRY_MIN_APPROVAL = 45;
 const ENTRY_MAX_DEBT_TO_GDP = 120;
-const WAR_COMMITMENT_SHARE = 0.2;
+export const DEFAULT_WAR_COMMITMENT_SHARE = 0.2;
+
+/**
+ * The Warsaw Pact's unified command can put a larger share of each member army
+ * into one bloc operation than the default autonomous coalition commitment.
+ * This changes mobilization depth, not combat quality, readiness, or casualties.
+ */
+export const WAR_COMMITMENT_SHARE_BY_ORGANIZATION: Readonly<Record<string, number>> = {
+  WARSAW_PACT: 0.35,
+};
+export type WarCommitmentPriority = "lowest" | "highest";
+export const WAR_COMMITMENT_PRIORITY_BY_ORGANIZATION: Readonly<
+  Record<string, WarCommitmentPriority>
+> = {
+  WARSAW_PACT: "highest",
+};
 
 function readyReserveUnits(
   units: MilitaryUnit[],
@@ -47,15 +62,21 @@ function readyReserveUnits(
   );
 }
 
-export function planAutonomousDeployment(units: MilitaryUnit[]): MilitaryUnit[] {
+export function planAutonomousDeployment(
+  units: MilitaryUnit[],
+  commitmentShare = DEFAULT_WAR_COMMITMENT_SHARE,
+  priority: WarCommitmentPriority = "lowest"
+): MilitaryUnit[] {
   if (units.length === 0) return [];
   const totalPower = units.reduce((sum, unit) => sum + Math.max(0, unit.basePower), 0);
-  const targetPower = Math.max(1, totalPower * WAR_COMMITMENT_SHARE);
+  const targetPower = Math.max(1, totalPower * commitmentShare);
   const selected: MilitaryUnit[] = [];
   let selectedPower = 0;
-  for (const unit of [...units].sort(
-    (a, b) => a.basePower - b.basePower || a._id.toString().localeCompare(b._id.toString())
-  )) {
+  for (const unit of [...units].sort((a, b) => {
+    const powerOrder =
+      priority === "highest" ? b.basePower - a.basePower : a.basePower - b.basePower;
+    return powerOrder || a._id.toString().localeCompare(b._id.toString());
+  })) {
     if (selected.length > 0 && selectedPower >= targetPower) break;
     selected.push(unit);
     selectedPower += Math.max(0, unit.basePower);
@@ -67,10 +88,16 @@ async function deployReserveCommitment(
   db: Db,
   countryId: CountryId,
   conflictId: string,
-  currentTurn: number
+  currentTurn: number,
+  commitmentShare = DEFAULT_WAR_COMMITMENT_SHARE,
+  priority: WarCommitmentPriority = "lowest"
 ): Promise<number> {
   const units = await db.collection<MilitaryUnit>("militaryUnits").find({ countryId }).toArray();
-  const selected = planAutonomousDeployment(readyReserveUnits(units, currentTurn));
+  const selected = planAutonomousDeployment(
+    readyReserveUnits(units, currentTurn),
+    commitmentShare,
+    priority
+  );
   if (selected.length === 0) return 0;
   const result = await db.collection<MilitaryUnit>("militaryUnits").updateMany(
     {
@@ -108,7 +135,8 @@ export async function prepareAutonomousWarEntry(
   db: Db,
   countryId: CountryId,
   conflict: ConflictDoc,
-  currentTurn: number
+  currentTurn: number,
+  organizationId?: string
 ): Promise<AutonomousWarEntryPreparation> {
   if (!(await activeForAutonomousWar(db, countryId))) {
     return { ready: false, deployedUnits: 0, reason: "Autonomous war entry is not active." };
@@ -126,7 +154,18 @@ export async function prepareAutonomousWarEntry(
     return { ready: false, deployedUnits: 0, reason: "Debt leaves no fiscal room for entry." };
   }
 
-  const deployedUnits = await deployReserveCommitment(db, countryId, conflict._id, currentTurn);
+  const deployedUnits = await deployReserveCommitment(
+    db,
+    countryId,
+    conflict._id,
+    currentTurn,
+    organizationId
+      ? (WAR_COMMITMENT_SHARE_BY_ORGANIZATION[organizationId] ?? DEFAULT_WAR_COMMITMENT_SHARE)
+      : DEFAULT_WAR_COMMITMENT_SHARE,
+    organizationId
+      ? (WAR_COMMITMENT_PRIORITY_BY_ORGANIZATION[organizationId] ?? "lowest")
+      : "lowest"
+  );
   return deployedUnits > 0
     ? { ready: true, deployedUnits, reason: "A ready reserve commitment deployed." }
     : { ready: false, deployedUnits: 0, reason: "No ready reserve force can deploy." };

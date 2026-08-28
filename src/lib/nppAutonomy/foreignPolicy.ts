@@ -828,6 +828,10 @@ function warCandidates(
     const sharedOrganizations = Array.from(sourceOrganizations).filter((orgId) =>
       representativeOrganizations.has(orgId)
     );
+    const materialSupportOrganization =
+      sharedOrganizations.find(
+        (orgId) => context.organizationCategories.get(orgId) === "economic"
+      ) ?? sharedOrganizations[0];
     const securityOrganization = sharedOrganizations.find(
       (orgId) => orgId === "NATO" || orgId === "WARSAW_PACT"
     );
@@ -843,7 +847,7 @@ function warCandidates(
     const hasSupportPackage = [...context.activeResolutions, ...context.pendingLegislation].some(
       (item) => item.type === "aid_package" && item.aidRecipientCountryId === representative
     );
-    if (sharedOrganizations.length > 0 && !hasSupportPackage) {
+    if (materialSupportOrganization && !hasSupportPackage) {
       choices.push(
         candidate(
           "support_war",
@@ -855,7 +859,7 @@ function warCandidates(
           ],
           {
             targetCountryId: representative,
-            organizationId: sharedOrganizations[0],
+            organizationId: materialSupportOrganization,
             conflictId: conflict._id,
           }
         )
