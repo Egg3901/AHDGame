@@ -17,6 +17,7 @@ import { AgencyFundingPanel } from "./AgencyFundingPanel";
 import { FundOrgPanel } from "./FundOrgPanel";
 import { DuesPanel } from "./DuesPanel";
 import { Ring, Meter } from "./OrgPrimitives";
+import { WarEntryStatusPanel } from "./WarEntryStatusPanel";
 
 function viewerCountry(viewer: OrgViewerInfo | null): CountryId | null {
   return viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
@@ -156,6 +157,7 @@ export function OverviewTab({
   return (
     <div className="space-y-4">
       <DelegationPanel org={org} viewer={viewer} />
+      <WarEntryStatusPanel org={org} />
 
       <div className="grid gap-4 lg:grid-cols-5">
         <div className="lg:col-span-3">

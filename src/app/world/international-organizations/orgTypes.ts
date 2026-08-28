@@ -5,6 +5,7 @@ import type { OrgIdentity } from "@/lib/constants/orgIdentity";
 import type { OrganizationCategory } from "@/lib/constants/orgCategory";
 import type { AlertPosture } from "@/lib/constants/orgPosture";
 import type { OrgDerived } from "@/lib/internationalOrganizations/orgDerivedMetrics";
+import type { BlocWarEntryOperation } from "@/lib/internationalOrganizations/warEntryStatus";
 import type {
   OrganizationLegislation,
   OrganizationLeadership,
@@ -89,6 +90,8 @@ export interface OrgSummary {
   posture: AlertPosture;
   /** Real defense outlay as a % of GDP per member (security flagship 2% pledge). */
   defensePctByCountry: Record<string, number>;
+  /** Active military-entry calls, including Warsaw Pact status shown on COMECON. */
+  warEntryOperations?: BlocWarEntryOperation[];
 }
 
 export interface OrgWorldResponse {
