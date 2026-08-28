@@ -16,6 +16,20 @@ import { logger } from "../observability/logger";
  * process's in-flight turn lock so the next container picks up immediately,
  * flush Sentry, and exit. Everything is time-bounded so we never overstay
  * Railway's grace window — a slow cleanup is worse than an abrupt exit.
+ *
+ * ORDERING (2026-08-28): we register with prependOnceListener, NOT once.
+ * Next's own `start-server.js` does `process.on('SIGTERM', cleanup)` where
+ * cleanup ends in `process.exit(143)`, and it registers that BEFORE it calls
+ * getRequestHandlers() — which is what loads instrumentation.ts and therefore
+ * this function. So on a plain `once` we are always listener #2, and Next's
+ * process.exit() kills us mid-`await` on the lock release: process.exit does
+ * not wait for pending promises. That is what stranded the lock on turns 456
+ * and 458, wedging the game until the :30 backup cron's stale takeover.
+ * Prepending puts our Mongo round-trip (~ms) in flight before Next even
+ * starts its server.close() drain (tens of ms at best), so the release lands
+ * first. We deliberately do NOT set NEXT_MANUAL_SIG_HANDLE: that would suppress
+ * Next's handler entirely and drop in-flight HTTP requests on every deploy.
+ * This keeps Next's graceful drain and just wins the ordering.
  */
 
 const CLEANUP_TIMEOUT_MS = 2500;
@@ -68,6 +82,9 @@ export function installGracefulShutdown(deps: GracefulShutdownDeps = {}): void {
     })();
   };
 
-  proc.once("SIGTERM", () => handle("SIGTERM"));
-  proc.once("SIGINT", () => handle("SIGINT"));
+  // prependOnceListener, not once — see the ORDERING note above. The
+  // `shuttingDown` guard already makes a repeat signal a no-op, so the
+  // once-semantics are belt-and-braces.
+  proc.prependOnceListener("SIGTERM", () => handle("SIGTERM"));
+  proc.prependOnceListener("SIGINT", () => handle("SIGINT"));
 }

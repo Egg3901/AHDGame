@@ -24,7 +24,13 @@ vi.mock("./cron/backupFireGuard", () => ({
 vi.mock("@sentry/nextjs", () => ({
   withMonitor: vi.fn((_slug: string, fn: () => unknown | Promise<unknown>) => fn()),
   captureException: vi.fn(),
+  captureMessage: vi.fn(),
 }));
+
+/** Cron expressions, so tests can select a callback by what it schedules
+ * rather than by the order it happens to be registered in. */
+const STOCK_EXCHANGE_SCHEDULE = "*/15 * * * *";
+const STUCK_LOCK_SWEEP_SCHEDULE = "*/5 * * * *";
 
 describe("cron jobs", () => {
   let mockSchedule: ReturnType<typeof vi.fn>;
@@ -48,6 +54,20 @@ describe("cron jobs", () => {
     consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.clearAllMocks();
   });
+
+  /** The callback registered for `expression`. Throws rather than returning
+   * undefined so a renamed/removed schedule fails loudly instead of as an
+   * inscrutable "callback is not a function". */
+  function findScheduledCallback(expression: string): () => Promise<void> {
+    const call = mockSchedule.mock.calls.find((args: unknown[]) => args[0] === expression);
+    if (!call) {
+      const registered = mockSchedule.mock.calls.map((args: unknown[]) => args[0]);
+      throw new Error(
+        `No cron scheduled for "${expression}". Registered: ${JSON.stringify(registered)}`
+      );
+    }
+    return call[1] as () => Promise<void>;
+  }
 
   afterEach(() => {
     consoleLogSpy.mockRestore();
@@ -143,10 +163,10 @@ describe("cron jobs", () => {
       await initializeCronJobs();
       await initializeCronJobs(); // Call twice to test stop logic
 
-      // Five cron jobs: turn processing, backup turn, stock exchange refresh,
-      // fog of war, player random events sweep.
+      // Six cron jobs: turn processing, backup turn, stuck turn-lock recovery
+      // sweep, stock exchange refresh, fog of war, player random events sweep.
       // All share the same mocked handle, so stop() is called once per active job on re-init.
-      expect(mockCronJob.stop).toHaveBeenCalledTimes(5);
+      expect(mockCronJob.stop).toHaveBeenCalledTimes(6);
     });
 
     it("logs initialization message", async () => {
@@ -750,6 +770,96 @@ describe("cron jobs", () => {
     });
   });
 
+  // Added 2026-08-28. A process that dies mid-turn (redeploy SIGTERM, heapWatchdog
+  // trip, hard V8 OOM) leaves isProcessing set with a frozen heartbeat. Recovery
+  // used to depend on the :00 / :30 turn crons, so a turn killed at :05 stayed
+  // wedged on "Processing..." until :30. This sweep bounds that to ~5 minutes past
+  // the stale window — while never STARTING a turn that is merely due.
+  describe("stuck turn-lock recovery sweep", () => {
+    const STALE = new Date(Date.now() - 45 * 60 * 1000);
+    const FRESH = new Date();
+
+    function armCron() {
+      const mockCronJob = { start: vi.fn(), stop: vi.fn(), getStatus: vi.fn() };
+      mockSchedule.mockReturnValue(mockCronJob as any);
+    }
+
+    it("takes over when a processing lock has gone stale", async () => {
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue({
+        currentTurn: 457,
+        isActive: true,
+        isProcessing: true,
+        processingKind: "turn",
+        processingTargetTurn: 458,
+        processingPhase: "bannedShareholderRelease",
+        processingHeartbeatAt: STALE,
+      });
+      armCron();
+
+      const { initializeCronJobs } = await import("./cron");
+      await initializeCronJobs();
+      await findScheduledCallback(STUCK_LOCK_SWEEP_SCHEDULE)();
+
+      expect(mockProcessTurn).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves a healthy in-flight turn alone", async () => {
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue({
+        currentTurn: 457,
+        isActive: true,
+        isProcessing: true,
+        processingKind: "turn",
+        processingTargetTurn: 458,
+        processingHeartbeatAt: FRESH,
+      });
+      armCron();
+
+      const { initializeCronJobs } = await import("./cron");
+      await initializeCronJobs();
+      await findScheduledCallback(STUCK_LOCK_SWEEP_SCHEDULE)();
+
+      expect(mockProcessTurn).not.toHaveBeenCalled();
+    });
+
+    // The load-bearing guarantee: this sweep is recovery-only. If it ever fell
+    // through to processTurn on an idle game it would advance the game clock
+    // every 5 minutes instead of hourly.
+    it("never starts a turn when no lock is held", async () => {
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue({
+        currentTurn: 457,
+        isActive: true,
+        isProcessing: false,
+      });
+      armCron();
+
+      const { initializeCronJobs } = await import("./cron");
+      await initializeCronJobs();
+      await findScheduledCallback(STUCK_LOCK_SWEEP_SCHEDULE)();
+
+      expect(mockProcessTurn).not.toHaveBeenCalled();
+    });
+
+    it("does nothing while the game is paused", async () => {
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue({
+        currentTurn: 457,
+        isActive: false,
+        isProcessing: true,
+        processingHeartbeatAt: STALE,
+      });
+      armCron();
+
+      const { initializeCronJobs } = await import("./cron");
+      await initializeCronJobs();
+      await findScheduledCallback(STUCK_LOCK_SWEEP_SCHEDULE)();
+
+      expect(mockProcessTurn).not.toHaveBeenCalled();
+    });
+  });
+
   describe("stock exchange cron callback", () => {
     it("skips refresh when isProcessing is true with a fresh heartbeat", async () => {
       mockInitializeGameState.mockResolvedValue(undefined);
@@ -770,8 +880,10 @@ describe("cron jobs", () => {
       const { initializeCronJobs } = await import("./cron");
       await initializeCronJobs();
 
-      // stock exchange refresh is the third schedule call
-      const stockCallback = mockSchedule.mock.calls[2][1] as () => Promise<void>;
+      // Select by cron expression, not call index: inserting a schedule ahead
+      // of this one used to silently re-point these assertions at the wrong
+      // callback (adding the stuck-lock sweep did exactly that).
+      const stockCallback = findScheduledCallback(STOCK_EXCHANGE_SCHEDULE);
       await stockCallback();
 
       expect(consoleLogSpy).toHaveBeenCalledWith(
@@ -803,7 +915,7 @@ describe("cron jobs", () => {
       const { initializeCronJobs } = await import("./cron");
       await initializeCronJobs();
 
-      const stockCallback = mockSchedule.mock.calls[2][1] as () => Promise<void>;
+      const stockCallback = findScheduledCallback(STOCK_EXCHANGE_SCHEDULE);
       await stockCallback();
 
       // Must NOT have logged the stuck-isProcessing bail-out.

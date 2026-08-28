@@ -6,10 +6,26 @@ builder = "NIXPACKS"
 # actually invokes instrumentation.ts's register() at boot. node-cron, auto-seed,
 # and crash capture all live in that branch and need to initialize at boot.
 # NODE_OPTIONS caps the V8 old-space heap. Without it, V8 sizes the heap to
-# visible machine memory and RSS drifts upward under load. 1024 MB is
-# comfortably above steady-state and the
-# heapWatchdog's own 5 GB RSS observation ceiling still backstops runaways.
-startCommand = "NODE_OPTIONS=--max-old-space-size=1024 HOSTNAME=0.0.0.0 npx next start"
+# visible machine memory and RSS drifts upward under load.
+#
+# 1024 MB was NOT comfortably above steady-state, despite what this comment
+# used to claim — it was the direct cause of the 2026-08-28 stuck-turn spate.
+# Measured on production that day (heapWatchdog's own per-turn ring buffer):
+#   turn 451: before=506MB after=947MB delta=441MB over 161s
+# Steady state oscillates 350-660MB, so a single turn's 441MB of churn lands
+# on top of that and crosses the watchdog's 75% trip line (956MB of the
+# 1275MB heap_size_limit that -max-old-space-size=1024 produces). Turn 451
+# tripped it at 958MB; other turns outran the 10s sampling interval entirely
+# and died on a hard V8 abort ("Ineffective mark-compacts near heap limit").
+# Either way the process exits mid-turn and strands gameState's processing
+# lock, wedging the game until the next hourly cron tick.
+#
+# 3072 MB gives ~3.8GB of heap_size_limit — about 4x the observed 958MB peak.
+# RSS at the trip was only 1440MB, so this stays far under the heapWatchdog's
+# 5 GB RSS observation ceiling, which still backstops a genuine runaway.
+# Headroom also relieves the GC pressure that correlates with the median turn
+# duration climbing 46s -> 114s over the preceding fortnight.
+startCommand = "NODE_OPTIONS=--max-old-space-size=3072 HOSTNAME=0.0.0.0 npx next start"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
