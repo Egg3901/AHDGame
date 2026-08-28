@@ -226,6 +226,23 @@ export default function UnionsPage() {
               lost, until the ban is repealed by legislation. Union actions are unavailable and
               unionization is declining while the ban holds.
             </p>
+            <p className="mt-1.5 text-xs text-foreground">
+              To lift a ban, pass a law in that country:{" "}
+              {bannedCountries.map((c, i) => (
+                <span key={c.countryId}>
+                  {i > 0 && ", "}
+                  <Link
+                    href={`/country/${c.countryId.toLowerCase()}/legislature`}
+                    className="font-medium text-primary underline underline-offset-2 hover:text-primary/80"
+                  >
+                    {c.countryName}
+                  </Link>
+                </span>
+              ))}{" "}
+              — propose an <span className="font-medium">Industry</span> bill, check{" "}
+              <span className="font-medium">Include union-law provision</span>, and choose{" "}
+              <span className="font-medium">Repeal the union ban</span>.
+            </p>
           </div>
         </div>
       )}
