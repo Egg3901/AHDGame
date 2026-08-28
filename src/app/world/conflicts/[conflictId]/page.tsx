@@ -1,3 +1,6 @@
+import { frontSupportFor } from "@/lib/navair/frontSupport";
+import { loadNavairChannels } from "@/lib/db/collections/navairChannels";
+import type { NavairUnit } from "@/lib/navair/types";
 import { notFound } from "next/navigation";
 import { requireConflictsEnabled } from "../_coldwar/gate";
 import { entityName } from "@/app/world/international-organizations/entityLabel";
@@ -411,6 +414,23 @@ export default async function ConflictRecordPage({
         }
       : null;
 
+  // The naval and air picture, read from the state `navairOperations` wrote this turn.
+  // Only assembled for a belligerent, since it is command-tier sight: a spectator reading
+  // the public record must not learn a nation's fleet dispositions from this page.
+  const navairPanelInput = await (async () => {
+    if (!ownSide) return {};
+    const channels = await loadNavairChannels(db);
+    const navairUnits = (await getMilitaryUnitsCollection(db)
+      .find({ domain: { $in: ["naval", "air"] } })
+      .toArray()) as unknown as NavairUnit[];
+    const own = ownSide === "A" ? doc.sideA.countries : doc.sideB.countries;
+    const foe = ownSide === "A" ? doc.sideB.countries : doc.sideA.countries;
+    return {
+      navairSupport: frontSupportFor(navairUnits, channels, [...own], doc.region),
+      navairEnemySupport: frontSupportFor(navairUnits, channels, [...foe], doc.region),
+    };
+  })();
+
   const extras = buildRecordExtras({
     tier,
     ownSide,
@@ -421,6 +441,7 @@ export default async function ConflictRecordPage({
     reports,
     // So this page's enemy band and the war room's odds read the same fleet the same way.
     seaAccess: conflictToFront(doc).seaAccess,
+    ...navairPanelInput,
   });
 
   // The whole conflict zone, not the anchor alone: the front line is placed as a
