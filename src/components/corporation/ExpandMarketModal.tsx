@@ -131,10 +131,10 @@ export default function ExpandMarketModal({
   // Prefer the deep-linked state once on the next suggestions load.
   const pendingStateRef = useRef<string | undefined>(initialStateId);
 
-  // A fresh suggestion set re-points the detail card — at the deep-linked state
-  // when present, otherwise the top row — and drops any half-finished confirmation.
+  // A fresh suggestion set re-points the detail card to the deep-linked state
+  // when present, otherwise the top row. The fetch path clears confirmation
+  // before publishing the new list so this effect cannot undo a fast review click.
   useEffect(() => {
-    setConfirming(false);
     const want = pendingStateRef.current;
     if (want && suggestions.length > 0) {
       const idx = suggestions.findIndex((s) => s.stateId === want);
