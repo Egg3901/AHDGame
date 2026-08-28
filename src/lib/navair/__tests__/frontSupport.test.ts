@@ -69,9 +69,19 @@ describe("interdictionFor", () => {
     expect(interdictionFor([], ["US"], "weu", 0)).toBe(0);
   });
 
-  it("rises with sea control on a front the sea can reach", () => {
-    const none = interdictionFor([], ["US"], "weu", 0);
-    const held = interdictionFor([], ["US"], "weu", 100);
+  it("rises with sea control on a front the sea can reach, given a carrier", () => {
+    // Sea control alone is not enough: something has to be able to reach inland from
+    // that water. See the carrier gate below.
+    const carrier = [
+      {
+        ...wing({ mission: "CAP" }),
+        domain: "naval",
+        type: "Carrier Strike Group",
+        station: "nat",
+      } as NavairUnit,
+    ];
+    const none = interdictionFor(carrier, ["US"], "weu", 0);
+    const held = interdictionFor(carrier, ["US"], "weu", 100);
     expect(held).toBeGreaterThan(none);
   });
 
@@ -131,5 +141,70 @@ describe("airSuperiorityBand", () => {
   it("is symmetric about the middle", () => {
     expect(airSuperiorityBand(60, 40)).toBe("Air advantage");
     expect(airSuperiorityBand(40, 60)).toBe("Enemy air advantage");
+  });
+});
+
+describe("carriers project ashore, escorts do not", () => {
+  // Ariane's review, from having served: only carriers meaningfully affect a land
+  // battle. Everything else screens the carrier and fights other ships. The config
+  // already said so (CAN_FLY holds one entry, NAVAL_REACH gives a carrier 1.00 against
+  // an escort's 0.40); this layer was ignoring it.
+  const hull = (type: string, station: string): NavairUnit =>
+    ({
+      _id: new ObjectId(),
+      countryId: "US" as CountryId,
+      branchId: "navy",
+      domain: "naval",
+      name: type,
+      type,
+      icon: "ship",
+      posture: "standard",
+      techTier: 1,
+      personnel: 1000,
+      readiness: 100,
+      basePower: 64,
+      upkeepBase: 100,
+      vet: 2,
+      xp: 0,
+      equipment: { firepower: 50, protection: 50, support: 50 },
+      drill: null,
+      theaterId: "reserve",
+      assignedGeneralId: null,
+      createdTurn: 1,
+      station,
+      mission: "SEA_CONTROL",
+      integrity: 100,
+      supply: 100,
+    }) as NavairUnit;
+
+  it("gives an all-escort fleet no interdiction, however much sea it holds", () => {
+    const escorts = [
+      hull("Guided-Missile Destroyer", "nat"),
+      hull("Frigate Squadron", "nat"),
+      hull("Attack Submarine", "nat"),
+    ];
+    expect(interdictionFor(escorts, ["US"], "weu", 100)).toBe(0);
+  });
+
+  it("gives a carrier group interdiction from the same water", () => {
+    const withCarrier = [hull("Carrier Strike Group", "nat")];
+    expect(interdictionFor(withCarrier, ["US"], "weu", 100)).toBeGreaterThan(0);
+  });
+
+  it("does not count an enemy's carrier", () => {
+    const theirs = [{ ...hull("Carrier Strike Group", "nat"), countryId: "RU" as CountryId }];
+    expect(interdictionFor(theirs, ["US"], "weu", 100)).toBe(0);
+  });
+
+  it("does not count a carrier that cannot reach the front", () => {
+    const faraway = [hull("Carrier Strike Group", "spa")];
+    expect(interdictionFor(faraway, ["US"], "weu", 100)).toBe(0);
+  });
+
+  it("still lets escorts contribute through the air, if they somehow strike", () => {
+    // The gate is on the SEA term only. Aircraft in range are counted separately and
+    // are unaffected by which hulls are present.
+    const none = interdictionFor([], ["US"], "weu", 0);
+    expect(none).toBe(0);
   });
 });
