@@ -114,6 +114,10 @@ export interface MarketAccessMetrics {
   medianOwnershipAdjustedSellerHhi: number | null;
   medianOwnershipAdjustedBuyerHhi: number | null;
   highConcentrationLowFillShare: number | null;
+  emptyMarketShare: number | null;
+  facilityReadyEmptyMarketShare: number | null;
+  nppMarketEntryRate: number | null;
+  nppEntryOutcomesExplainedShare: number | null;
   activeTradedListingShare: number | null;
   noHolderBondShare: number | null;
   sovereignNoHolderBondShare: number | null;
@@ -137,6 +141,7 @@ export interface MarketAccessMetrics {
 export function marketAccessMetricsFromSnapshot(
   snapshot: EconomicVitalSigns | null
 ): MarketAccessMetrics {
+  const entryFunnel = snapshot?.marketFormation?.entryFunnel;
   return {
     pooledFillRate: snapshot?.goods.pooledFillRate.value ?? null,
     countryScopedFillRate: snapshot?.goods.countryScopedFillRate.value ?? null,
@@ -157,6 +162,13 @@ export function marketAccessMetricsFromSnapshot(
       snapshot?.competition?.medianOwnershipAdjustedBuyerHhi.value ?? null,
     highConcentrationLowFillShare:
       snapshot?.competition?.highConcentrationLowFillShare.value ?? null,
+    emptyMarketShare: snapshot?.marketFormation?.emptyShare ?? null,
+    facilityReadyEmptyMarketShare: snapshot?.marketFormation?.facilityReadyEmptyShare ?? null,
+    nppMarketEntryRate:
+      entryFunnel && entryFunnel.corporationsObserved > 0
+        ? entryFunnel.entered / entryFunnel.corporationsObserved
+        : null,
+    nppEntryOutcomesExplainedShare: entryFunnel?.explainedOutcomeShare ?? null,
     activeTradedListingShare: snapshot?.securities.activeTradedListingShare.value ?? null,
     noHolderBondShare: snapshot?.securities.noHolderBondShare.value ?? null,
     sovereignNoHolderBondShare: snapshot?.securities.sovereignNoHolderBondShare?.value ?? null,

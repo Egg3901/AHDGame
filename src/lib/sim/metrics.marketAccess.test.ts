@@ -53,6 +53,15 @@ describe("marketAccessMetricsFromSnapshot", () => {
       },
       measurement: { confidence: "medium", reasons: ["test"] },
       reconciliation: { status: "amber" },
+      marketFormation: {
+        emptyShare: 0.5,
+        facilityReadyEmptyShare: 0.8,
+        entryFunnel: {
+          corporationsObserved: 10,
+          entered: 2,
+          explainedOutcomeShare: 1,
+        },
+      },
     } as EconomicVitalSigns;
 
     expect(marketAccessMetricsFromSnapshot(snapshot)).toEqual({
@@ -71,6 +80,10 @@ describe("marketAccessMetricsFromSnapshot", () => {
       medianOwnershipAdjustedSellerHhi: 3000,
       medianOwnershipAdjustedBuyerHhi: 2000,
       highConcentrationLowFillShare: 0.4,
+      emptyMarketShare: 0.5,
+      facilityReadyEmptyMarketShare: 0.8,
+      nppMarketEntryRate: 0.2,
+      nppEntryOutcomesExplainedShare: 1,
       activeTradedListingShare: 0.3,
       noHolderBondShare: 0.6,
       sovereignNoHolderBondShare: 0.4,

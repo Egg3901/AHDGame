@@ -152,7 +152,11 @@ export const WAR_EMERGENCY_CRISIS_TEMPLATES: Record<WarEmergencyTemplateKey, Cri
       "Shelter plans, air-raid drills, and survival preparations have become a national obsession.",
     wireStart: "Civil defense fever is sweeping the country as families prepare for attack.",
     wireEnd: "The wave of civil defense anxiety begins to recede.",
-    ambientEffect: ambientMargin("retail", -3, "Preparedness spending displaces consumer trade"),
+    ambientEffect: ambientMargin(
+      "retail",
+      -18,
+      "Preparedness spending sharply displaces consumer trade"
+    ),
     prompt: "How far will the government mobilize the home front?",
     options: [
       option(

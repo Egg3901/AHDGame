@@ -48,7 +48,7 @@ describe("world entity manifest", () => {
       status: "sovereign",
       simulationTier: "full-autonomous",
       legacyAccess: "economy-preview",
-      readiness: { autonomous: "ready", player: "blocked" },
+      readiness: { autonomous: "ready", player: "ready" },
       un: { state: "eligible", expectedAdmissionYear: 1960 },
       recognition: {
         status: "widely-recognized",

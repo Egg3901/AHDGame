@@ -56,6 +56,7 @@ import { migration as backfillRedistrictingAuthorityTypes } from "./entries/2026
 import { migration as repairOutOfRangePolicyLevels } from "./entries/2026-08-26-repair-out-of-range-policy-levels";
 import { migration as dropOffRosterCommandCommanders } from "./entries/2026-08-26-drop-off-roster-command-commanders";
 import { migration as severEmigratedGenerals } from "./entries/2026-08-26-sever-emigrated-generals";
+import { migration as rescheduleEconCountryBills } from "./entries/2026-08-27-reschedule-econ-country-bills";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -165,6 +166,9 @@ export const MIGRATIONS: Migration[] = [
   // can never be sent to a front. Runs AFTER the roster clear, on purpose — that
   // one shrinks the set of holders this has to sever.
   severEmigratedGenerals,
+  // Issue #996: the new lifecycle registrations make these bills resolvable;
+  // reopen their expired vote windows instead of replaying stale tallies.
+  rescheduleEconCountryBills,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.
