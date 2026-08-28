@@ -1008,7 +1008,15 @@ export interface PvpForecast {
 export function battleForecast(
   attackers: BattleSide[],
   defenders: BattleSide[],
-  theaterId: string
+  theaterId: string,
+  /**
+   * What the naval and air layer delivered to each side at this front this turn.
+   * Optional so every existing caller keeps its previous behaviour exactly: absent
+   * means no air superiority, no close air support and no interdiction, which is
+   * what a battle fought before this subsystem existed had.
+   */
+  supportA: FrontSupport = NO_SUPPORT,
+  supportD: FrontSupport = NO_SUPPORT
 ): PvpForecast {
   // Either coalition carries the same fronts map; take whichever is populated so an
   // empty side cannot silently drop the battle onto RESERVE_FRONT.
@@ -1020,8 +1028,8 @@ export function battleForecast(
   const defenderPlan = planEngagement(defenders.map(sideCtx), theaterId, capacity);
   const PA = ownSideProfile(attackers.map(sideCtx), theaterId, attackerPlan);
   const PD = ownSideProfile(defenders.map(sideCtx), theaterId, defenderPlan);
-  const aggA = sideAgg(PA.engaged);
-  const aggD = sideAgg(PD.engaged);
+  const aggA = sideAgg(PA.engaged, supportA);
+  const aggD = sideAgg(PD.engaged, supportD);
   const am = sideMults(aggA, aggD);
   const dm = sideMults(aggD, aggA);
   // Deep-strike degrades the opponent (using the opponent's air-defense).
@@ -1108,9 +1116,11 @@ export function resolvePvpBattle(
   attackers: BattleSide[],
   defenders: BattleSide[],
   theaterId: string,
-  seed: number
+  seed: number,
+  supportA: FrontSupport = NO_SUPPORT,
+  supportD: FrontSupport = NO_SUPPORT
 ): PvpBattleResult {
-  const fc = battleForecast(attackers, defenders, theaterId);
+  const fc = battleForecast(attackers, defenders, theaterId, supportA, supportD);
   const { front, attStr, defStr, ratio } = fc;
   const PA = fc.attackerProfile;
   const PD = fc.defenderProfile;

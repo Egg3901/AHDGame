@@ -1,6 +1,5 @@
 import * as R from "./config";
 import { clamp } from "./engineCore";
-import type { CountryId } from "@/lib/constants/countries";
 import type { RegionCode } from "@/lib/military/types";
 import type { RegionChannels } from "./types";
 
@@ -121,7 +120,7 @@ export function emptyChannels(turn: number): RegionChannels {
  */
 export function sideChannel(
   channels: ReadonlyMap<string, RegionChannels>,
-  countries: readonly CountryId[],
+  countries: readonly string[],
   region: RegionCode,
   key: ChannelKey
 ): number {
@@ -133,7 +132,13 @@ export function sideChannel(
   return best;
 }
 
-/** Map key for a country's channel record in a region. */
-export function channelKey(countryId: CountryId, region: RegionCode): string {
+/**
+ * Map key for a country's channel record in a region.
+ *
+ * Takes a bare string, not `CountryId`. Country ids arrive here from conflict sides and
+ * unit rows as plain strings, and narrowing at this boundary would mean asserting a
+ * shape the database does not guarantee.
+ */
+export function channelKey(countryId: string, region: RegionCode): string {
   return `${countryId}:${region}`;
 }

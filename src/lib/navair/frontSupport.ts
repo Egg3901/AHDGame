@@ -39,7 +39,7 @@ export const NO_SUPPORT: FrontSupport = {
  */
 export function casWeightFor(
   units: readonly NavairUnit[],
-  countries: readonly CountryId[],
+  countries: readonly string[],
   frontRegion: RegionCode
 ): number {
   const side = new Set<string>(countries);
@@ -64,7 +64,7 @@ export function casWeightFor(
  */
 export function interdictionFor(
   units: readonly NavairUnit[],
-  countries: readonly CountryId[],
+  countries: readonly string[],
   frontRegion: RegionCode,
   seaControlHere: number
 ): number {
@@ -115,7 +115,7 @@ export const INTERDICTION = {
 export function frontSupportFor(
   units: readonly NavairUnit[],
   channels: ReadonlyMap<string, RegionChannels>,
-  countries: readonly CountryId[],
+  countries: readonly string[],
   frontRegion: RegionCode
 ): FrontSupport {
   const airSuperiority = sideChannel(channels, countries, frontRegion, "airSuperiority");
