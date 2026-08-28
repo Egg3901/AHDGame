@@ -86,7 +86,7 @@ function dbWith(bank: Record<string, unknown> | null) {
         void filter;
         return null;
       },
-      find: () => ({ toArray: async () => [] }),
+      find: () => ({ sort: () => ({ toArray: async () => [] }), toArray: async () => [] }),
     }),
   };
 }
