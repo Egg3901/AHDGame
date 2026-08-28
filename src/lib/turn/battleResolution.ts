@@ -39,6 +39,9 @@ import { listTheaterStates } from "@/lib/db/collections/theaterState";
 import { conflictToFront } from "@/lib/military/createConflict";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import { resolveConflict } from "@/lib/military/resolveConflict";
+import { frontSupportFor } from "@/lib/navair/frontSupport";
+import { loadNavairChannels } from "@/lib/db/collections/navairChannels";
+import type { NavairUnit } from "@/lib/navair/types";
 import { standDownCountry } from "@/lib/military/leaveConflict";
 import { principalOf, DICTATE_WINDOW_TURNS } from "@/lib/military/principal";
 import { OCCUPATION } from "@/lib/military/config";
@@ -368,6 +371,15 @@ export async function resolveBattleDeclarations(
   // global lookup this replaced in a new costume.
   const blocs = await loadMilitaryBlocs(db);
 
+  // Naval and air state, read ONCE for the whole tick for the same reason as the bloc
+  // roll above. Every front resolved here reads the same dispositions, and a per battle
+  // load would be hundreds of round trips inside a phase that already has a turn time
+  // budget. `navairOperations` wrote this earlier in the same turn.
+  const navairChannels = await loadNavairChannels(db);
+  const navairUnits = (await getMilitaryUnitsCollection(db)
+    .find({ domain: { $in: ["naval", "air"] } })
+    .toArray()) as unknown as NavairUnit[];
+
   // Group by front so each conflict document is loaded once no matter how many
   // allies declared against it.
   const byTheater = new Map<string, BattleDeclarationDoc[]>();
@@ -575,11 +587,30 @@ export async function resolveBattleDeclarations(
         defenderSides.push(factionSide);
       }
 
+      // What the naval and air layer delivered to each side at this front. Computed
+      // from state `navairOperations` already wrote this turn, so a battle reads
+      // current dispositions rather than producing them.
+      const frontRegion = conflict.region;
+      const supportA = frontSupportFor(
+        navairUnits,
+        navairChannels,
+        attackerSides.map((c) => c.country),
+        frontRegion
+      );
+      const supportD = frontSupportFor(
+        navairUnits,
+        navairChannels,
+        defenderSides.map((c) => c.country),
+        frontRegion
+      );
+
       const result = resolvePvpBattle(
         attackerSides,
         defenderSides,
         theaterId,
-        hashStr(String(principal._id) + currentTurn)
+        hashStr(String(principal._id) + currentTurn),
+        supportA,
+        supportD
       );
 
       // Persist per contingent: `persistSide` scopes its unit filter to that

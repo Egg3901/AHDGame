@@ -115,6 +115,10 @@ import type { GameState } from "@/lib/db/types/gameState";
 import { clearAllCommodities, valueTradeSnapshot } from "@/lib/trade/snapshot";
 import { buildReachableBooks, serializeReachableBooks } from "@/lib/trade/reachableBook";
 import { applyTradeConvergence } from "@/lib/trade/convergence";
+import { blockadeClosureByCountry } from "@/lib/navair/blockade";
+import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
+import { getConflictsCollection } from "@/lib/db/collections/conflicts";
+import type { NavairUnit } from "@/lib/navair/types";
 import { buildTradeAffinity } from "@/lib/trade/tradeAffinity";
 import { TRADE_PRICE_CONVERGENCE_K } from "@/lib/trade/constants";
 import { loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
@@ -1234,12 +1238,22 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   const curtainedCountries = new Set<string>(
     COUNTRY_ORDER.filter((c) => isCurtained(c, ledgerCurrentYear, ledgerCommandEconomyEnabled))
   );
+  // Naval blockade pressure, read fresh rather than from persisted navair state.
+  //
+  // `commodityPrices` runs EARLIER in the turn than `navairOperations`, so reading the
+  // persisted channels here would silently use last turn's dispositions: a blockade
+  // would take a turn to bite and nothing in the output would say so. The read is one
+  // indexed query (militaryUnits_domain) and returns an empty map whenever nobody is
+  // blockading anybody, which is the common case.
+  const blockadeClosure = await loadBlockadeClosure(db);
+
   const { affinityFor, capUnitsFor } = buildTradeAffinity({
     ftaPairs,
     blocsByCountry,
     tariffs: tariffDocs,
     embargoes: embargoDocs,
     curtainedCountries,
+    blockadeClosure,
   });
 
   // Build existing price map early: the sourcing pass uses LAST turn's stored
@@ -1887,4 +1901,44 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     statesWithActivity: statesWithActivity.size,
     tradeClearedVolume: tradeSnapshot.world.clearedVolume,
   };
+}
+
+/**
+ * Blockade closure per country for this turn.
+ *
+ * Returns an empty map when no war is running, so a peacetime world does two cheap
+ * indexed reads and nothing else. Kept here rather than in the navair turn pass because
+ * commodity prices resolve earlier in the turn and must not read stale dispositions.
+ */
+async function loadBlockadeClosure(db: Db): Promise<Map<string, number>> {
+  // Projection passed as a find option rather than via the cursor's .project(), which is
+  // this codebase's house style and does not require a cursor implementation of it.
+  const conflicts = (await getConflictsCollection(db)
+    .find({ status: "active" }, { projection: { "sideA.countries": 1, "sideB.countries": 1 } })
+    .toArray()) as unknown as Array<{
+    sideA?: { countries?: string[] };
+    sideB?: { countries?: string[] };
+  }>;
+  if (!conflicts.length) return new Map();
+
+  const hostility = new Map<string, Set<string>>();
+  const link = (a: string, b: string) => {
+    if (!hostility.has(a)) hostility.set(a, new Set());
+    hostility.get(a)!.add(b);
+  };
+  for (const c of conflicts) {
+    for (const a of c.sideA?.countries ?? []) {
+      for (const b of c.sideB?.countries ?? []) {
+        link(a, b);
+        link(b, a);
+      }
+    }
+  }
+
+  const navalUnits = (await getMilitaryUnitsCollection(db)
+    .find({ domain: "naval" })
+    .toArray()) as unknown as NavairUnit[];
+  if (!navalUnits.length) return new Map();
+
+  return blockadeClosureByCountry(navalUnits, hostility);
 }

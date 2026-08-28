@@ -291,10 +291,51 @@ export async function sendCountryGameEventMultiple(
   }
 }
 
+/** Dedup window for identical news embeds — long enough to swallow a double
+ * turn-execution (a stale-lock takeover re-running a phase the still-alive
+ * original also ran, #1208), short enough not to block a legitimately-repeated
+ * headline in a later iteration. */
+const NEWS_DEDUP_WINDOW_MS = 10 * 60 * 1000;
+
+/** djb2 string hash → short hex, to keep the dedup `_id` small and stable. */
+function newsDedupHash(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(16);
+}
+
+/**
+ * True when an identical news embed was already claimed within the dedup window.
+ * Atomic: the claim is an insert keyed on `_id = news:<bucket>:<hash>`, so two
+ * concurrent turn runs racing on the same event have exactly one winner (the
+ * loser hits a duplicate-key error and is told to skip). Best-effort — any
+ * failure falls through to "not a duplicate" so a dedup outage never silences
+ * real news.
+ */
+async function claimNewsEmbed(embed: DiscordEmbed, now: Date): Promise<boolean> {
+  try {
+    const db = await getDb();
+    const bucket = Math.floor(now.getTime() / NEWS_DEDUP_WINDOW_MS);
+    const key = newsDedupHash(`${embed.title ?? ""} ${embed.description ?? ""}`);
+    const coll = db.collection<{ _id: string; sentAt: Date }>("sentNewsDedup");
+    // Best-effort TTL so the collection self-cleans; ignore if it already exists.
+    await coll.createIndex({ sentAt: 1 }, { expireAfterSeconds: 3600 }).catch(() => {});
+    await coll.insertOne({ _id: `news:${bucket}:${key}`, sentAt: now });
+    return true; // we inserted → we are the first, send it
+  } catch (err) {
+    // Duplicate key (11000) → someone already claimed this embed this window.
+    if ((err as { code?: number })?.code === 11000) return false;
+    return true; // any other failure: don't suppress real news
+  }
+}
+
 export async function sendNewsEvent(embed: DiscordEmbed): Promise<string | undefined> {
   try {
     const { news } = await getWebhookUrls();
     if (!news) return undefined;
+    // Idempotency: a double turn-execution must not post the same headline twice
+    // (#1208 — duplicate SCOTUS rulings / cabinet "Established" webhooks).
+    if (!(await claimNewsEmbed(embed, new Date()))) return undefined;
     return await sendDiscordWebhookForId(news, [embed]);
   } catch (err) {
     console.error("[Discord] News event failed:", err);

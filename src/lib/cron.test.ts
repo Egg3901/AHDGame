@@ -842,6 +842,33 @@ describe("cron jobs", () => {
       expect(mockProcessTurn).not.toHaveBeenCalled();
     });
 
+    // #1208: a turn that ran past the 20-minute stale threshold WITHOUT
+    // heartbeating was taken over while still alive, re-running news-emitting
+    // phases and posting duplicate World News. This sweep checks every 5 minutes
+    // instead of every 30, so it must wait longer than the :00/:30 crons before
+    // repossessing, or it sharply raises the odds of stealing from a turn that
+    // is merely blocked rather than dead.
+    it("waits longer than the turn crons before repossessing a stale lock", async () => {
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue({
+        currentTurn: 457,
+        isActive: true,
+        isProcessing: true,
+        processingKind: "turn",
+        processingTargetTurn: 458,
+        // 25 minutes: past TURN_LOCK_STALE_MS (20 min), so the :00/:30 crons
+        // would already act, but inside this sweep's doubled window.
+        processingHeartbeatAt: new Date(Date.now() - 25 * 60 * 1000),
+      });
+      armCron();
+
+      const { initializeCronJobs } = await import("./cron");
+      await initializeCronJobs();
+      await findScheduledCallback(STUCK_LOCK_SWEEP_SCHEDULE)();
+
+      expect(mockProcessTurn).not.toHaveBeenCalled();
+    });
+
     // gameState's processing lock is shared with other long operations. The
     // forex migration holds it as processingKind "forexMigration", and
     // processTurn's crash-recovery guard bails on a non-turn kind — so falling

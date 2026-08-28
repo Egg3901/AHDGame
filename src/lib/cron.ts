@@ -5,7 +5,7 @@ import { applyPriceMultipliers } from "@/lib/corporations/applyPriceMultipliers"
 import { updateCampaignFogOfWar } from "@/lib/campaigns/fogOfWar";
 import { processTurn, getGameState, initializeGameState } from "./turnSystem";
 import { shouldFireBackupTurn } from "./cron/backupFireGuard";
-import { getProcessingLockState } from "./turn/processingLock";
+import { getProcessingLockState, TURN_LOCK_STALE_MS } from "./turn/processingLock";
 import { recordTurnHeapDelta } from "@/lib/observability/heapWatchdog";
 import { getDb } from "@/lib/mongodb";
 import { sweepPlayerRandomEventsRealtime } from "@/lib/events/pree/driver";
@@ -74,6 +74,13 @@ let stockExchangeRefreshCron: ReturnType<typeof cron.schedule> | null = null;
 let fogOfWarCron: ReturnType<typeof cron.schedule> | null = null;
 let backupCron: ReturnType<typeof cron.schedule> | null = null;
 let stuckLockRecoveryCron: ReturnType<typeof cron.schedule> | null = null;
+
+/**
+ * How long a turn lock must sit untouched before the 5-minute recovery sweep
+ * will repossess it. Two full stale windows, i.e. twice what the :00/:30 turn
+ * crons require — see the rationale at the sweep itself (#1208).
+ */
+const STUCK_LOCK_SWEEP_MIN_AGE_MS = 2 * TURN_LOCK_STALE_MS;
 let playerEventsSweepCron: ReturnType<typeof cron.schedule> | null = null;
 let apiAbuseScanCron: ReturnType<typeof cron.schedule> | null = null;
 let retentionCron: ReturnType<typeof cron.schedule> | null = null;
@@ -301,6 +308,26 @@ export async function initializeCronJobs() {
 
         const lockState = getProcessingLockState(currentState);
         if (!lockState.isStale) return;
+
+        // Deliberately MORE conservative than the :00/:30 crons, which act as
+        // soon as the lock is stale at TURN_LOCK_STALE_MS.
+        //
+        // #1208 is a real production incident of the hazard: a turn that ran
+        // past the 20-minute threshold WITHOUT heartbeating was taken over by a
+        // second worker while still alive, re-running news-emitting phases and
+        // posting duplicate World News. The dedup added there is explicitly
+        // best-effort, so it mitigates the symptom rather than the race.
+        //
+        // This sweep checks every 5 minutes instead of every 30, so it is far
+        // likelier than those crons to catch a turn in the window where it is
+        // merely blocked (a long synchronous stretch starves the 30s heartbeat
+        // timer) rather than dead. A dead holder never heartbeats again, so
+        // waiting a second full window costs it nothing; a blocked one gets
+        // that much longer to recover and keep its lock. Worst-case wedge is
+        // still bounded well under the up-to-an-hour this sweep exists to fix.
+        const lastTouchMs = lockState.lastTouch?.getTime();
+        const lockAgeMs = lastTouchMs === undefined ? Infinity : Date.now() - lastTouchMs;
+        if (lockAgeMs < STUCK_LOCK_SWEEP_MIN_AGE_MS) return;
 
         console.warn(
           `[Cron] Stuck-lock sweep: stale processing lock (lastTouch=${

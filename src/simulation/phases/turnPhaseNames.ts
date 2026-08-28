@@ -95,6 +95,10 @@ export const BASE_TURN_PHASE_NAMES = [
   "jpRegionalBudgetProcessing",
   "deRegionalBudgetProcessing",
   "crisisTurn",
+  // Runs BEFORE ministerialOrders, which is what resolves battle declarations. Sea
+  // control, air superiority and supply have to be current for the turn before a battle
+  // reads them, or every battle fights on last turn's dispositions.
+  "navairOperations",
   "ministerialOrders",
   "metricEngine",
   "demographicFlows",

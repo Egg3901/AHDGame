@@ -8,31 +8,28 @@ builder = "NIXPACKS"
 # NODE_OPTIONS caps the V8 old-space heap. Without it, V8 sizes the heap to
 # visible machine memory and RSS drifts upward under load.
 #
-# 1024 MB was NOT comfortably above steady-state, despite what this comment
-# used to claim — it was the direct cause of the 2026-08-28 stuck-turn spate.
-# Measured on production that day (heapWatchdog's own per-turn ring buffer):
-#   turn 451: before=506MB after=947MB delta=441MB over 161s
-# Steady state oscillates 350-660MB, so a single turn's 441MB of churn lands
-# on top of that and crosses the watchdog's 75% trip line (956MB of the
-# 1275MB heap_size_limit that -max-old-space-size=1024 produces). Turn 451
-# tripped it at 958MB; other turns outran the 10s sampling interval entirely
-# and died on a hard V8 abort ("Ineffective mark-compacts near heap limit").
-# Either way the process exits mid-turn and strands gameState's processing
-# lock, wedging the game until the next hourly cron tick.
+# Raised 1024 -> 3072 on 2026-08-28, diagnosed twice independently and merged
+# here. At 1024 the reported heap_size_limit was 1275 MB, so heapWatchdog's 75%
+# threshold put the kill line at ~956 MB. Idle sits near 400 MB and a turn adds
+# ~600 MB, so turn processing crossed it and the watchdog exited mid-turn (turn
+# 460 tripped at 993 MB / 77.9%). heapWatchdog's own per-turn ring buffer shows
+# the same thing from the other side: turn 451 went before=506MB after=947MB,
+# a 441 MB delta over 161s, against a steady state oscillating 350-660 MB.
 #
-# 3072 MB raises heap_size_limit to roughly 3.3GB.
+# Each trip abandoned the turn while it still held the processing lock, and
+# TURN_LOCK_STALE_MS blocks reclaim for 20 minutes, so one trip cost two turn
+# slots. Prod went 127 minutes without a turn and dropped turns 450, 455, 456
+# and 459. Turns that outran the watchdog's 10s sampling interval died on a hard
+# V8 abort ("Ineffective mark-compacts near heap limit") instead.
 #
-# Note which guard actually binds afterwards. heapWatchdog trips on EITHER heap
-# (75% of heap_size_limit) or RSS (70% of its 5GB observation ceiling, i.e.
-# 3.5GB). At the observed RSS-to-heapUsed ratio of about 1.5 (1440MB RSS at a
-# 958MB heap trip), a 3.3GB heap limit would reach the RSS threshold at roughly
-# 2.3GB heapUsed, slightly BEFORE the heap threshold at 2.5GB. So the effective
-# new ceiling is the RSS guard at ~3.5GB rather than the heap one: call it a
-# ~2.4x improvement on the old 958MB trip point, not the ~4x that heap headroom
-# alone would suggest.
-#
-# That is fine, and deliberately left as-is: both guards exit cleanly and now
-# release the turn lock on the way out, and tripping at 3.5GB RSS keeps us well
+# The container has ~5 GB, so 1024 left most of it unused. 3072 puts the heap
+# kill line near 2.4 GB. Note which guard then binds: heapWatchdog trips on
+# EITHER heap (75% of heap_size_limit) or RSS (70% of its 5 GB ceiling, i.e.
+# 3.5 GB), and at the observed RSS-to-heapUsed ratio of ~1.5 the RSS guard is
+# reached marginally first. So the effective new ceiling is the RSS backstop at
+# ~3.5 GB — roughly 2.4x the old 956 MB trip point rather than the ~4x that heap
+# headroom alone would suggest. That is deliberate: both guards exit cleanly and
+# release the turn lock on the way out, and tripping at 3.5 GB RSS keeps us well
 # inside the container rather than risking an OS OOM kill, which would give no
 # clean exit and no lock release at all.
 #
