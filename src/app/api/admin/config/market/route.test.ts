@@ -228,6 +228,46 @@ describe("GET/PATCH /api/admin/config/market — extractionOutputScaleEnabled", 
     expect(setArg.indexFundBondLiquidityEnabled).toBe(true);
     expect(setArg.indexFundBondLiquidityIntervention).toEqual(bondLiquidityIntervention);
   });
+
+  it("requires and persists governance for NPP market coverage", async () => {
+    const { PATCH } = await import("./route");
+    const refused = await PATCH(
+      makePatchRequest({ mode: "capital", nppMarketCoverageEnabled: true })
+    );
+    expect(refused.status).toBe(400);
+
+    const marketCoverageIntervention = {
+      id: "issue-991-market-coverage",
+      issueId: 991,
+      owner: "operator",
+      objective: "Reduce facility-ready empty state-sector markets.",
+      targets: [
+        { metric: "facilityReadyEmptyMarketShare", direction: "decrease", minimumImprovement: 0.1 },
+      ],
+      guardrails: [{ metric: "pooledFillRate", direction: "increase", maximumDeterioration: 0.02 }],
+      cohort: { initialShare: 0.125, maximumShare: 1, rampTurns: 48 },
+      review: { startTurn: 0, reviewTurn: 10_000 },
+      rollback: {
+        owner: "operator",
+        trigger: "Coverage or market-quality guardrails fail.",
+        action: "Disable NPP market coverage routing.",
+      },
+    };
+    const accepted = await PATCH(
+      makePatchRequest({
+        mode: "capital",
+        nppMarketCoverageEnabled: true,
+        marketCoverageIntervention,
+      })
+    );
+    expect(accepted.status).toBe(200);
+    const setArg = db.collectionMocks.gameConfig!.updateOne.mock.calls.at(-1)?.[1]?.$set as Record<
+      string,
+      unknown
+    >;
+    expect(setArg.nppMarketCoverageEnabled).toBe(true);
+    expect(setArg.nppMarketCoverageIntervention).toEqual(marketCoverageIntervention);
+  });
 });
 
 // MARKET_MODE_INFO[mode].live was enforced ONLY by the admin selector disabling

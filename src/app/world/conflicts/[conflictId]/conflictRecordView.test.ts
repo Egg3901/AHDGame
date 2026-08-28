@@ -253,12 +253,16 @@ describe("forceReadiness", () => {
     expect(forceReadiness([])).toBeNull();
   });
 
-  // The projection mirrors driftReadiness: ±4 per turn toward the posture's
-  // baseline. Inventing a rate would promise recovery the tick never delivers.
+  // The projection mirrors driftReadiness: READINESS_DRIFT_STEP per turn toward the
+  // posture's baseline. Inventing a rate would promise recovery the tick never delivers,
+  // so these expectations are derived from the constant rather than restating a number.
   it("projects recovery at the turn processor's own drift step", () => {
     expect(forceReadiness([u(60)])).toEqual({
       readiness: 60,
-      recovery: { perTurn: READINESS_DRIFT_STEP, turnsToFull: 3 },
+      recovery: {
+        perTurn: READINESS_DRIFT_STEP,
+        turnsToFull: Math.ceil(12 / READINESS_DRIFT_STEP),
+      },
     });
   });
 
@@ -271,14 +275,17 @@ describe("forceReadiness", () => {
     // Readiness 60/80 → 70; baselines standard 72 / forward 84 → 78.
     expect(forceReadiness([u(60, "standard"), u(80, "forward")])).toEqual({
       readiness: 70,
-      recovery: { perTurn: 4, turnsToFull: 2 },
+      recovery: { perTurn: READINESS_DRIFT_STEP, turnsToFull: Math.ceil(8 / READINESS_DRIFT_STEP) },
     });
   });
 
   it("falls back to the standard baseline for an unrecognised posture", () => {
     expect(forceReadiness([u(60, "improvised")])).toEqual({
       readiness: 60,
-      recovery: { perTurn: 4, turnsToFull: 3 },
+      recovery: {
+        perTurn: READINESS_DRIFT_STEP,
+        turnsToFull: Math.ceil(12 / READINESS_DRIFT_STEP),
+      },
     });
   });
 
@@ -290,8 +297,10 @@ describe("forceReadiness", () => {
     // recover — but the starved force recovers to a lower ceiling and gets there sooner.
     const funded = forceReadiness([u(40)], 0);
     const starved = forceReadiness([u(40)], 1);
-    expect(funded!.recovery!.turnsToFull).toBe(8);
-    expect(starved!.recovery!.turnsToFull).toBe(2);
+    expect(funded!.recovery!.turnsToFull).toBe(Math.ceil(32 / READINESS_DRIFT_STEP));
+    expect(starved!.recovery!.turnsToFull).toBe(Math.ceil(7 / READINESS_DRIFT_STEP));
+    // The starved force still reaches its lower ceiling sooner, whatever the step is.
+    expect(starved!.recovery!.turnsToFull).toBeLessThan(funded!.recovery!.turnsToFull);
   });
 
   it("promises nothing to a force already above its suppressed baseline", () => {

@@ -107,6 +107,7 @@ export const BASE_TURN_PHASE_NAMES = [
   "tradeGrowthMirror",
   "inflationRecalc",
   "commandEconomy",
+  "ledgerPreForexSnapshot",
   "forexTurn",
   "centralBankChairTurn",
   "fomcMeetings",

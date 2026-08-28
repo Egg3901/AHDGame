@@ -16,7 +16,8 @@ vi.mock("@/lib/treasury/emit", () => ({
   emitTreasuryTransactionsBulk: vi.fn(),
 }));
 
-import { projectNppGeneration } from "@/lib/utils/fundGeneration";
+import { calculateTaxAmount, projectNppGeneration } from "@/lib/utils/fundGeneration";
+import { emitTxBulk } from "@/lib/financialTxLog/emit";
 import { processNppFundGeneration } from "./nppFundGeneration";
 
 describe("processNppFundGeneration", () => {
@@ -99,5 +100,57 @@ describe("processNppFundGeneration", () => {
     expect(vi.mocked(projectNppGeneration)).toHaveBeenCalledWith(
       expect.objectContaining({ currentFundsLocal: 62_000_000 / 1550 })
     );
+  });
+
+  it("does not finish the turn phase before national party-dues ledger emission finishes", async () => {
+    vi.mocked(projectNppGeneration).mockReturnValue(20_000);
+    vi.mocked(calculateTaxAmount).mockReturnValueOnce(0).mockReturnValueOnce(2_000);
+
+    const partyId = new ObjectId();
+    const npp = {
+      _id: new ObjectId(),
+      countryId: "US",
+      party: "1",
+      homeState: "US-CA",
+      funds: 40_000,
+      donorBaseLevel: 0,
+      actionPoints: 0,
+    };
+    setup(npp);
+    db.collectionMocks.politicalParties!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: partyId,
+          countryId: "US",
+          sequentialId: "1",
+          name: "Test Party",
+          nationalTaxRate: 10,
+        },
+      ]),
+    });
+
+    let releaseEmission: (() => void) | undefined;
+    vi.mocked(emitTxBulk).mockReturnValue(
+      new Promise<void>((resolve) => {
+        releaseEmission = resolve;
+      })
+    );
+
+    let phaseFinished = false;
+    const processing = processNppFundGeneration(
+      db as unknown as Db,
+      100,
+      stateMap("US-CA", "US")
+    ).then((result) => {
+      phaseFinished = true;
+      return result;
+    });
+
+    await vi.waitFor(() => expect(emitTxBulk).toHaveBeenCalledOnce());
+    await Promise.resolve();
+    expect(phaseFinished).toBe(false);
+
+    releaseEmission?.();
+    await processing;
   });
 });

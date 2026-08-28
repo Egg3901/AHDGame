@@ -78,7 +78,7 @@ export async function processFundGeneration(
       const campaignFundsField = forexEnabled ? "currencyBalances.campaign" : "funds";
       // tx log accumulators
       const txCharEntries: Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged">[] = [];
-      const taxByCountry = new Map<string, { stateTaxTotal: number; nationalTaxTotal: number }>();
+      const partyDuesTxEntries: Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged">[] = [];
       const nationalTreasuryTxEntries: BulkTreasuryTransactionArgs[] = [];
       const stateTreasuryTxEntries: BulkTreasuryTransactionArgs[] = [];
 
@@ -163,13 +163,6 @@ export async function processFundGeneration(
             meta: { source: "income" },
           });
         }
-        // Accumulate taxes per country for gov_tax_revenue event
-        const cid = character.countryId ?? "US";
-        const taxBucket = taxByCountry.get(cid) ?? { stateTaxTotal: 0, nationalTaxTotal: 0 };
-        taxBucket.stateTaxTotal += stateTaxAmount;
-        taxBucket.nationalTaxTotal += nationalTaxAmount;
-        taxByCountry.set(cid, taxBucket);
-
         if (stateTaxAmount > 0) {
           stateTreasuryUpdates.set(
             statePartyKey,
@@ -217,6 +210,20 @@ export async function processFundGeneration(
             turn: turn ?? 0,
             now,
           });
+          const countryId = party.countryId ?? "US";
+          partyDuesTxEntries.push({
+            type: "party_dues_received",
+            turn: turn ?? 0,
+            createdAt: now,
+            subjectType: "party",
+            subjectId: party._id,
+            subjectName: party.name,
+            amount,
+            currencyCode: (COUNTRY_CURRENCY_MAP[countryId] ?? "USD") as CurrencyCode,
+            counterpartyType: "system",
+            counterpartyName: "Member fund generation tax",
+            meta: { scope: "national", source: "player_national_tax" },
+          });
         }
         await emitTreasuryTransactionsBulk(db, nationalTreasuryTxEntries);
       }
@@ -247,28 +254,34 @@ export async function processFundGeneration(
             turn: turn ?? 0,
             now,
           });
+          const countryId = sp.countryId ?? stateMap.get(sp.stateId)?.countryId ?? "US";
+          partyDuesTxEntries.push({
+            type: "party_dues_received",
+            turn: turn ?? 0,
+            createdAt: now,
+            subjectType: "party",
+            subjectName: `${sp.stateId}:${sp.partyId}`,
+            amount,
+            currencyCode: (COUNTRY_CURRENCY_MAP[countryId] ?? "USD") as CurrencyCode,
+            counterpartyType: "system",
+            counterpartyName: "Member fund generation tax",
+            meta: {
+              scope: "state",
+              statePartyKey,
+              stateId: sp.stateId,
+              partyId: sp.partyId,
+              source: "player_state_tax",
+            },
+          });
         }
         await emitTreasuryTransactionsBulk(db, stateTreasuryTxEntries);
       }
 
-      // Emit office_income entries + gov_tax_revenue per country
-      if (txCharEntries.length > 0 || taxByCountry.size > 0) {
+      // Party taxes fund party treasuries, not the federal budget. Emit the
+      // same party accounts changed above so stock-flow follows real balances.
+      if (txCharEntries.length > 0 || partyDuesTxEntries.length > 0) {
         const thresholds = await loadTxThresholds(db);
-        const govEntries = [...taxByCountry.entries()]
-          .filter(([, t]) => t.stateTaxTotal + t.nationalTaxTotal > 0)
-          .map(([cid, t]) => ({
-            type: "gov_tax_revenue" as const,
-            turn: turn ?? 0,
-            createdAt: now,
-            subjectType: "government" as const,
-            countryId: cid,
-            subjectName: `${cid} Government`,
-            amount: t.stateTaxTotal + t.nationalTaxTotal,
-            currencyCode: (COUNTRY_CURRENCY_MAP[cid as keyof typeof COUNTRY_CURRENCY_MAP] ??
-              "USD") as CurrencyCode,
-            meta: { stateTaxTotal: t.stateTaxTotal, nationalTaxTotal: t.nationalTaxTotal },
-          }));
-        void emitTxBulk(db, [...txCharEntries, ...govEntries], thresholds);
+        await emitTxBulk(db, [...txCharEntries, ...partyDuesTxEntries], thresholds);
       }
 
       return { totalGenerated, totalStateTaxes, totalNationalTaxes };

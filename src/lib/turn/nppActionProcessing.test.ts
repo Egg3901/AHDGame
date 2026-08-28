@@ -16,7 +16,13 @@ vi.mock("@/lib/npp/actionAi", async () => {
   };
 });
 
+vi.mock("@/lib/financialTxLog/emit", () => ({
+  loadTxThresholds: vi.fn().mockResolvedValue({}),
+  emitTxBulk: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { decideNppAction } from "@/lib/npp/actionAi";
+import { emitTxBulk } from "@/lib/financialTxLog/emit";
 
 describe("nppActionProcessing", () => {
   let mockDb: Db;
@@ -704,6 +710,51 @@ describe("nppActionProcessing", () => {
           }),
         ])
       );
+    });
+
+    it("records NPP party donations as party dues before returning", async () => {
+      vi.mocked(decideNppAction).mockReturnValue({ action: "partyDonation", reason: "t" });
+
+      const partyId = new ObjectId();
+      const npp = createNpp({ party: "1", actionPoints: 100, funds: 1_000_000 });
+      mockFindOne.mockResolvedValue({ nppEconomyEnabled: true });
+      mockNppFind.mockReturnValue(createAsyncCursor([npp]));
+      mockPartyFind.mockReturnValue({
+        toArray: vi
+          .fn()
+          .mockResolvedValue([
+            { sequentialId: 1, countryId: "US", name: "Test Party", _id: partyId },
+          ]),
+      });
+
+      let releaseEmission: (() => void) | undefined;
+      vi.mocked(emitTxBulk).mockReturnValue(
+        new Promise<void>((resolve) => {
+          releaseEmission = resolve;
+        })
+      );
+
+      let phaseFinished = false;
+      const processing = processNppActions(mockDb, 4).then((result) => {
+        phaseFinished = true;
+        return result;
+      });
+
+      await vi.waitFor(() => expect(emitTxBulk).toHaveBeenCalledOnce());
+      expect(vi.mocked(emitTxBulk).mock.calls[0]![1]).toEqual([
+        expect.objectContaining({
+          type: "party_dues_received",
+          subjectType: "party",
+          subjectId: partyId,
+          amount: 20_000,
+          meta: expect.objectContaining({ source: "npp_party_donation" }),
+        }),
+      ]);
+      await Promise.resolve();
+      expect(phaseFinished).toBe(false);
+
+      releaseEmission?.();
+      await processing;
     });
 
     it("emits exactly one NPP update per acting NPP regardless of action count", async () => {

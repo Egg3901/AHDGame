@@ -153,6 +153,8 @@ describe("Phase 3 coverage — semantic mint/sink reasons", () => {
     expect(reasonForTxType("corp_dividend")).toBe("corporate_dividend");
     expect(reasonForTxType("corp_group_relief")).toBe("corporate_group_transfer");
     expect(reasonForTxType("office_income")).toBe("public_salary");
+    expect(reasonForTxType("savings_interest")).toBe("deposit_interest");
+    expect(reasonForTxType("bond_default")).toBe("bond_default_settlement");
   });
 
   it("routes a state-party dues row (no subjectId) to a state_party account via meta", () => {

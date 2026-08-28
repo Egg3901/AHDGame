@@ -23,6 +23,8 @@
  *      one-party direct-fill, not the US-only nomination lifecycle.
  *   4. ministerialGovernance — each NPP minister steers its tier setting and
  *      issues ministerial orders toward the agenda (runMinisterialGovernance).
+ *   5. foreignPolicy — score and audit one diplomatic intent. The planner
+ *      defaults to shadow mode and does not mutate gameplay state yet.
  *
  * The agenda compute also derives the V1.6 fiscal stance and intakes active
  * crises (V1.8) so emergencies dominate the agenda. Agenda-driven bill
@@ -62,6 +64,7 @@ import { claimTier1NppDecisionSlot } from "./tier1DecisionClaim";
 import type { Tier1DecisionSkipReason } from "./tier1DecisionSchedule";
 import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
 import { caretakerDecisionAllowed } from "@/lib/world/playerHandoff";
+import { processAutonomousForeignPolicy } from "./foreignPolicy";
 
 /**
  * How many turns an agenda stays valid before recompute. The agenda is
@@ -82,6 +85,8 @@ export interface NppGovernmentResult {
   cabinetPostsFilled: number;
   /** Number of ministerial orders issued this call (V1.4). */
   ministerialOrdersIssued: number;
+  /** Whether this call inserted a foreign-policy decision audit row. */
+  foreignPolicyDecisionRecorded: boolean;
   /** Why the staggered strategic batch was skipped, when applicable (#3724). */
   skipReason?: Tier1DecisionSkipReason;
 }
@@ -92,6 +97,7 @@ const INACTIVE: NppGovernmentResult = {
   agendaUpdated: false,
   cabinetPostsFilled: 0,
   ministerialOrdersIssued: 0,
+  foreignPolicyDecisionRecorded: false,
 };
 
 /**
@@ -138,6 +144,7 @@ export async function processNppGovernment(
       agendaUpdated: false,
       cabinetPostsFilled: 0,
       ministerialOrdersIssued: caretaker.ordersIssued,
+      foreignPolicyDecisionRecorded: false,
       skipReason: "player-controlled",
     };
   }
@@ -177,12 +184,18 @@ export async function processNppGovernment(
   //    and as a no-op below the comingle tier.
   const caretaker = await runCaretakerMinisters(db, countryId, currentTurn, now);
 
+  // 6. Foreign policy. This stays inside the claimed Tier-1 slot so each
+  //    autonomous government considers at most one diplomatic intent per
+  //    six-hour cycle. Shadow mode only writes its audit decision.
+  const foreignPolicy = await processAutonomousForeignPolicy(db, countryId, currentTurn, now);
+
   return {
     ran: true,
     seatedExecutive,
     agendaUpdated,
     cabinetPostsFilled: cabinet.filled,
     ministerialOrdersIssued: ministerial.ordersIssued + caretaker.ordersIssued,
+    foreignPolicyDecisionRecorded: foreignPolicy.decisionRecorded,
   };
 }
 

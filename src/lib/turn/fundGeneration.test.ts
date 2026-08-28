@@ -14,8 +14,18 @@ vi.mock("@/lib/utils/fundGeneration", () => ({
   calculateTaxAmount: vi.fn(),
 }));
 
+vi.mock("@/lib/financialTxLog/emit", () => ({
+  loadTxThresholds: vi.fn().mockResolvedValue({}),
+  emitTxBulk: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/treasury/emit", () => ({
+  emitTreasuryTransactionsBulk: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { getDb } from "@/lib/mongodb";
 import { projectCharacterGeneration, calculateTaxAmount } from "@/lib/utils/fundGeneration";
+import { emitTxBulk } from "@/lib/financialTxLog/emit";
 
 describe("fundGeneration", () => {
   let db: MockDb;
@@ -250,6 +260,62 @@ describe("fundGeneration", () => {
           }),
         ])
       );
+    });
+
+    it("records party taxes as party dues and waits for the ledger write", async () => {
+      const character = createCharacter({ party: "1" });
+      const state = createState("US-CA", 100000);
+      const party = createParty(1, "US");
+      party.nationalTaxRate = 10;
+      const statePartyOrg = createStatePartyOrg("US-CA", "1");
+      statePartyOrg.countryId = "US";
+      statePartyOrg.stateTaxRate = 5;
+
+      vi.mocked(projectCharacterGeneration).mockReturnValue(1000);
+      vi.mocked(calculateTaxAmount).mockReturnValueOnce(50).mockReturnValueOnce(100);
+      setupCollection<State>("states", [state]);
+      setupCollection<PoliticalParty>("politicalParties", [party]);
+      setupCollection<StatePartyOrg>("statePartyOrg", [statePartyOrg]);
+
+      let releaseEmission: (() => void) | undefined;
+      vi.mocked(emitTxBulk).mockReturnValue(
+        new Promise<void>((resolve) => {
+          releaseEmission = resolve;
+        })
+      );
+
+      let phaseFinished = false;
+      const processing = processFundGeneration([character], new Date(), undefined, true, 91).then(
+        (result) => {
+          phaseFinished = true;
+          return result;
+        }
+      );
+
+      await vi.waitFor(() => expect(emitTxBulk).toHaveBeenCalledOnce());
+      const entries = vi.mocked(emitTxBulk).mock.calls[0]![1];
+      expect(entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "party_dues_received",
+            subjectType: "party",
+            subjectId: party._id,
+            amount: 100,
+          }),
+          expect.objectContaining({
+            type: "party_dues_received",
+            subjectType: "party",
+            amount: 50,
+            meta: expect.objectContaining({ statePartyKey: "US-CA_1" }),
+          }),
+        ])
+      );
+      expect(entries.some((row) => row.type === "gov_tax_revenue")).toBe(false);
+      await Promise.resolve();
+      expect(phaseFinished).toBe(false);
+
+      releaseEmission?.();
+      await processing;
     });
 
     it("updates state party treasury with tax amounts", async () => {

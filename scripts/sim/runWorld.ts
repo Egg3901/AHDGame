@@ -65,6 +65,8 @@ interface SimRunDoc {
     freightSettlementMode?: FreightSettlementExperimentMode;
     canonicalFreightBillingEnabled?: boolean;
     shortageResponsiveSourcingEnabled?: boolean;
+    indexFundBondLiquidityEnabled?: boolean;
+    nppMarketCoverageEnabled?: boolean;
   };
 }
 
@@ -146,6 +148,10 @@ const shortageResponsiveSourcingEnabled = parseOptionalBoolean(
 const indexFundBondLiquidityEnabled = parseOptionalBoolean(
   arg("index-fund-bond-liquidity"),
   "index-fund-bond-liquidity"
+);
+const nppMarketCoverageEnabled = parseOptionalBoolean(
+  arg("npp-market-coverage"),
+  "npp-market-coverage"
 );
 // Clone mode: the sandbox DB was pre-loaded with a restore of the LIVE world
 // (mongorestore), so skip bootstrap AND the "real world" users guardrail, and
@@ -616,6 +622,7 @@ async function main() {
     canonicalFreightBillingEnabled,
     shortageResponsiveSourcingEnabled,
     indexFundBondLiquidityEnabled,
+    nppMarketCoverageEnabled,
   };
   const economicExperimentSet = economicExperimentConfigSet(economicExperiment);
   if (Object.keys(economicExperimentSet).length > 0) {
@@ -913,6 +920,7 @@ if (hasFlag("help") || hasFlag("h")) {
       "--seed=<id> [--preset=2019-default] [--turns=500] [--db=<name>] [--autonomy=v3|v4] " +
       "[--run-id=<id>] [--checkpoint-every=10] " +
       "[--mode=full|elections-only|economy-only|macro-only] " +
+      "[--npp-market-coverage=true|false] " +
       "[--macro-growth] [--pre-iteration|--no-pre-iteration]"
   );
   process.exit(0);

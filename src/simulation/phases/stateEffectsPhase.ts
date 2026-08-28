@@ -38,6 +38,8 @@ import { mirrorTradeGrowth } from "@/lib/turn/tradeGrowthMirror";
 import { recalculateInflationPerTurn } from "@/lib/turn/inflationRecalc";
 import { processCommandEconomyTurn } from "@/lib/turn/commandEconomyTurn";
 import { processForexTurn } from "@/lib/turn/forexTurn";
+import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
+import { writePreForexBalanceCheckpoint } from "@/lib/ledger/balanceSnapshot";
 import { processCentralBankChairTurn } from "@/lib/turn/centralBankChairTurn";
 import { processFomcMeetings } from "@/lib/turn/fomcMeetingTurn";
 import { processNppMonetaryOperations } from "@/lib/moneySupply/nppPolicy";
@@ -397,6 +399,18 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     await runtime.runPhase("commandEconomy", () =>
       processCommandEconomyTurn(db, newTurn, currentYear)
     );
+
+    if (isLedgerShadowEnabledFromConfig(context.config)) {
+      await runtime.runPhase("ledgerPreForexSnapshot", () =>
+        writePreForexBalanceCheckpoint(db, newTurn)
+      );
+    } else {
+      await runtime.markPhaseSkipped(
+        "ledgerPreForexSnapshot",
+        "featureDisabled",
+        "Skipped because the shadow ledger is disabled."
+      );
+    }
 
     if (gameState.forexEnabled) {
       // Pass the world's reset preset so the macro-target anchor (baseRate)

@@ -639,7 +639,10 @@ export async function executeCorporationBondDefaultDissolution(
 
   if (dissolutionTxEntries.length > 0) {
     const thresholds = await loadTxThresholds(db);
-    void emitTxBulk(db, dissolutionTxEntries, thresholds);
+    // The transaction batch also emits the shadow-ledger rows. Await it so the
+    // end-of-turn snapshot and reconciler cannot race ahead of a dissolution
+    // that has already changed and deleted authoritative balance accounts.
+    await emitTxBulk(db, dissolutionTxEntries, thresholds);
   }
 
   const bondIds = bonds.map((b) => b._id);

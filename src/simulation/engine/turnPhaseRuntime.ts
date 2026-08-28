@@ -33,6 +33,7 @@ const READ_ONLY_PHASES = new Set<string>([
   "auditAnomalyScan",
   "suspiciousDetection",
   "gameHealthSnapshot",
+  "ledgerPreForexSnapshot",
   "ledgerBalanceSnapshot",
   "ledgerReconcile",
   "metricHistory",
