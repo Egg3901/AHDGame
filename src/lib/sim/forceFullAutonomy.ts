@@ -1,6 +1,12 @@
 import type { Db } from "mongodb";
 import type { GameConfig } from "@/lib/db/types";
-import type { GameState, CountryGameState, NppAutonomyLevel } from "@/lib/db/types/gameState";
+import type {
+  GameState,
+  CountryGameState,
+  NppAutonomyLevel,
+  NppForeignPolicyMode,
+  NppForeignPolicyStage,
+} from "@/lib/db/types/gameState";
 import { ALL_COUNTRY_IDS } from "@/lib/constants/countries";
 
 /** Re-exported for callers that already import from this module — the
@@ -81,7 +87,10 @@ export async function forceFullAutonomy(
    * definition. It is still performed so a v3 and a v4 run differ only in the
    * level, which is what makes an A/B comparison meaningful.
    */
-  level: NppAutonomyLevel = "v3"
+  level: NppAutonomyLevel = "v3",
+  foreignPolicyMode: NppForeignPolicyMode = "shadow",
+  foreignPolicyStage: NppForeignPolicyStage = "war",
+  preservePlayerRail = false
 ): Promise<void> {
   await db.collection<GameState>("gameState").updateOne(
     { _id: "current" },
@@ -90,6 +99,12 @@ export async function forceFullAutonomy(
         nppAutonomyLevel: level,
         nppAutonomyEnabled: true,
         nppAutonomyEnabledBy: "sim-harness",
+        nppForeignPolicyMode: foreignPolicyMode,
+        nppForeignPolicyModeBy: "sim-harness",
+        nppForeignPolicyModeAt: new Date().toISOString(),
+        nppForeignPolicyStage: foreignPolicyStage,
+        nppForeignPolicyStageBy: "sim-harness",
+        nppForeignPolicyStageAt: new Date().toISOString(),
         isActive: true,
         pausedAt: null,
         autoDisastersEnabled: true,
@@ -198,31 +213,33 @@ export async function forceFullAutonomy(
 
   const countryGameStates = db.collection<CountryGameState>("countryGameStates");
   const now = new Date();
-  await Promise.all(
-    ALL_COUNTRY_IDS.map((countryId) =>
-      countryGameStates.updateOne(
-        { _id: countryId },
-        // MUST stay false. It reads like it should be true for a world meant to
-        // exercise everything, and flipping it does switch the auto-disaster /
-        // auto-crisis / IO-broadcast spawners on (they walk
-        // `getEnabledCountryIdsFromDb`, which resolves
-        // `doc?.enabledForPlayers ?? status === "active"` — `??` only falls
-        // through on null/undefined, so `false` pins that list to EMPTY).
-        //
-        // But `isNppAutonomyActive` returns false for any player-enabled country
-        // REGARDLESS of autonomy level — it is a legacy strict rail that
-        // deliberately does not extend into player countries even at v2+. It
-        // gates appointNppPrimeMinister, autonomousOrgVoting and central-bank
-        // chair seating, so flipping this would stop every government forming
-        // for the whole run. That is the exact failure this file's header
-        // documents (UK and JP never formed a government across 100 turns).
-        //
-        // The two needs genuinely conflict inside one predicate, so the spawners
-        // were given their own status-based resolver instead —
-        // `getSimulatedCountryIds` in countryAccess.ts.
-        { $set: { enabledForPlayers: false, updatedAt: now } },
-        { upsert: true }
+  if (!preservePlayerRail) {
+    await Promise.all(
+      ALL_COUNTRY_IDS.map((countryId) =>
+        countryGameStates.updateOne(
+          { _id: countryId },
+          // MUST stay false. It reads like it should be true for a world meant to
+          // exercise everything, and flipping it does switch the auto-disaster /
+          // auto-crisis / IO-broadcast spawners on (they walk
+          // `getEnabledCountryIdsFromDb`, which resolves
+          // `doc?.enabledForPlayers ?? status === "active"`; `??` only falls
+          // through on null/undefined, so `false` pins that list to EMPTY).
+          //
+          // But `isNppAutonomyActive` returns false for any player-enabled country
+          // REGARDLESS of autonomy level. It is a legacy strict rail that
+          // deliberately does not extend into player countries even at v2+. It
+          // gates appointNppPrimeMinister, autonomousOrgVoting and central-bank
+          // chair seating, so flipping this would stop every government forming
+          // for the whole run. That is the exact failure this file's header
+          // documents (UK and JP never formed a government across 100 turns).
+          //
+          // The two needs genuinely conflict inside one predicate, so the spawners
+          // were given their own status-based resolver instead:
+          // `getSimulatedCountryIds` in countryAccess.ts.
+          { $set: { enabledForPlayers: false, updatedAt: now } },
+          { upsert: true }
+        )
       )
-    )
-  );
+    );
+  }
 }

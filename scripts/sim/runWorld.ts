@@ -32,7 +32,11 @@
 // Type-only import — erased at compile time, does not trigger module evaluation,
 // so it cannot race the env-var setup below (which must run before any *runtime*
 // import that touches @/lib/mongodb).
-import type { GameState } from "@/lib/db/types/gameState";
+import type {
+  GameState,
+  NppForeignPolicyMode,
+  NppForeignPolicyStage,
+} from "@/lib/db/types/gameState";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
@@ -69,6 +73,9 @@ interface SimRunDoc {
     nppMarketCoverageEnabled?: boolean;
     nppFragileMarketSupplyEnabled?: boolean;
   };
+  nppForeignPolicyMode?: NppForeignPolicyMode;
+  nppForeignPolicyStage?: NppForeignPolicyStage;
+  preservePlayerRail?: boolean;
 }
 
 function arg(flag: string): string | undefined {
@@ -90,6 +97,16 @@ function hasFlag(flag: string): boolean {
 const AUTONOMY_LEVEL = (arg("autonomy") ?? "v3") as "v3" | "v4";
 if (AUTONOMY_LEVEL !== "v3" && AUTONOMY_LEVEL !== "v4") {
   throw new Error(`--autonomy must be v3 or v4 (got "${AUTONOMY_LEVEL}")`);
+}
+const foreignPolicyMode = (arg("foreign-policy") ?? "shadow") as NppForeignPolicyMode;
+if (!(["off", "shadow", "active"] as const).includes(foreignPolicyMode)) {
+  throw new Error(`--foreign-policy must be off, shadow, or active (got "${foreignPolicyMode}")`);
+}
+const foreignPolicyStage = (arg("foreign-policy-stage") ?? "war") as NppForeignPolicyStage;
+if (!(<const>["votes", "proposals", "trade", "support", "war"]).includes(foreignPolicyStage)) {
+  throw new Error(
+    `--foreign-policy-stage must be votes, proposals, trade, support, or war (got "${foreignPolicyStage}")`
+  );
 }
 
 const SIM_MONGODB_URI = process.env.SIM_MONGODB_URI;
@@ -257,6 +274,15 @@ const inSimScope = (countryId: string) =>
 const dbName = arg("db") ?? `ahd_sim_${seed}`.replace(/[^a-zA-Z0-9_-]/g, "_");
 const checkpointEvery = Number(arg("checkpoint-every") ?? "10");
 const runId = arg("run-id") ?? `${seed}-${dbName}`;
+const quiet = hasFlag("quiet");
+const preservePlayerRail = hasFlag("preserve-player-rail");
+
+if (quiet) {
+  console.log = () => {};
+  console.info = () => {};
+  console.debug = () => {};
+  console.warn = () => {};
+}
 
 if (!Number.isFinite(turns) || turns <= 0) {
   console.error(`--turns must be a positive number, got ${arg("turns")}`);
@@ -268,17 +294,32 @@ if (!Number.isFinite(turns) || turns <= 0) {
 (process.env as { NODE_ENV: string }).NODE_ENV = "test";
 process.env.MONGODB_URI = SIM_MONGODB_URI;
 process.env.MONGODB_DB = dbName;
-// Seeds src/lib/turn/nppActionProcessing.ts's per-NPP action RNG. NOTE: this is
-// the only turn-path RNG site retrofitted for seeding so far (see commit
-// 87adca94c) — src/lib/turn/npp/leadershipVoting.ts and the corp
-// rdInnovation/marketCapSnapshot turn phases still call Math.random()
-// directly, so cross-run bit-for-bit reproducibility is NOT yet guaranteed,
-// only the NPP campaign/finance decision trajectory is seeded. Documented
-// gap, not silently swallowed — see the printed RNG_DETERMINISM note below.
 process.env.SIM_RNG_SALT = seed;
 
+function seededRandom(seedText: string): () => number {
+  let state = 2_166_136_261;
+  for (let index = 0; index < seedText.length; index++) {
+    state ^= seedText.charCodeAt(index);
+    state = Math.imul(state, 16_777_619);
+  }
+  return () => {
+    state += 0x6d2b79f5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4_294_967_296;
+  };
+}
+
+// All remaining engine Math.random callers share the run seed. Individual
+// configurations are repeatable even when active policy consumes a different
+// number of random draws than the off control.
+Math.random = seededRandom(seed);
+
 function log(msg: string) {
-  console.log(`[sim:${runId}] ${msg}`);
+  if (!quiet) {
+    console.log(`[sim:${runId}] ${msg}`);
+  }
 }
 
 /**
@@ -370,13 +411,10 @@ async function main() {
   }
 
   log(
-    `RNG_DETERMINISM: the election/NPP DECISION RNG (nppActionProcessing, electionEntry ` +
-      `challengers, leadershipVoting, centralBankChairSelection) is seeded via ` +
-      `SIM_RNG_SALT="${seed}" — so election trajectories vary by seed and reproduce for the ` +
-      "same seed on the same bootstrapped db. Still unseeded: bootstrap initial NPP stat rolls " +
-      "(seed*.ts, one-time) and the corp rdInnovation/marketCapSnapshot phases (the latter " +
-      "don't run under --mode=elections-only). So cross-seed variance is real; bit-for-bit " +
-      "reproducibility across fresh bootstraps is not yet guaranteed."
+    `RNG_DETERMINISM: SIM_RNG_SALT="${seed}" seeds the NPP decision streams, and the ` +
+      "harness replaces Math.random before dynamic engine imports. The same seed and options " +
+      "therefore reproduce gameplay draws across fresh worlds; generated IDs and timestamps " +
+      "remain intentionally different."
   );
 
   const simRuns = db.collection<SimRunDoc>("simRuns");
@@ -519,8 +557,16 @@ async function main() {
       log(`set demographicsDemandEnabled=true`);
     }
 
-    log(`Forcing full NPP autonomy (${AUTONOMY_LEVEL}, every country off the player rail)`);
-    await forceFullAutonomy(db, AUTONOMY_LEVEL);
+    log(
+      `Forcing NPP autonomy (${AUTONOMY_LEVEL}, foreign policy ${foreignPolicyMode}/${foreignPolicyStage}, player rail ${preservePlayerRail ? "preserved" : "disabled"})`
+    );
+    await forceFullAutonomy(
+      db,
+      AUTONOMY_LEVEL,
+      foreignPolicyMode,
+      foreignPolicyStage,
+      preservePlayerRail
+    );
 
     // Some countries' authored historical seat data (historicalSeats.ts) falls
     // short of that country's own configured legislature size — found via this
@@ -722,7 +768,13 @@ async function main() {
     const converted = await autonomizePlayerCorps(db, log);
     log(`[clone] autonomized ${converted} human-run corporations → ceoType=npp`);
     log(`[clone] forcing full NPP autonomy (world/country gates → ${AUTONOMY_LEVEL})`);
-    await forceFullAutonomy(db, AUTONOMY_LEVEL);
+    await forceFullAutonomy(
+      db,
+      AUTONOMY_LEVEL,
+      foreignPolicyMode,
+      foreignPolicyStage,
+      preservePlayerRail
+    );
   }
 
   // ── SIM-ONLY: mark this database as a sandbox world ───────────────────────
@@ -797,6 +849,9 @@ async function main() {
       $set: {
         simTurnPhaseMode: simTurnPhaseMode ?? "full",
         electionScope: electionScope ? [...electionScope] : null,
+        nppForeignPolicyMode: foreignPolicyMode,
+        nppForeignPolicyStage: foreignPolicyStage,
+        preservePlayerRail,
       },
     }
   );
@@ -930,10 +985,11 @@ if (hasFlag("help") || hasFlag("h")) {
     "Usage: SIM_MONGODB_URI=... npx tsx scripts/sim/runWorld.ts " +
       "--seed=<id> [--preset=2019-default] [--turns=500] [--db=<name>] [--autonomy=v3|v4] " +
       "[--run-id=<id>] [--checkpoint-every=10] " +
+      "[--foreign-policy=off|shadow|active] [--foreign-policy-stage=votes|proposals|trade|support|war] " +
       "[--mode=full|elections-only|economy-only|macro-only] " +
       "[--npp-market-coverage=true|false] " +
       "[--npp-fragile-market-supply=true|false] " +
-      "[--macro-growth] [--pre-iteration|--no-pre-iteration]"
+      "[--macro-growth] [--pre-iteration|--no-pre-iteration] [--preserve-player-rail] [--quiet]"
   );
   process.exit(0);
 }
