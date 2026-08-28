@@ -40,6 +40,13 @@ export async function seedLedgerIndexes(db: Db, log: (msg: string) => void) {
     { name: "balanceSnapshots_turn", unique: true, background: true },
     log
   );
+  await ensureIndex(
+    db,
+    "balanceSnapshotCheckpoints",
+    { turn: 1 },
+    { name: "balanceSnapshotCheckpoints_turn", unique: true, background: true },
+    log
+  );
 
   await ensureIndex(
     db,

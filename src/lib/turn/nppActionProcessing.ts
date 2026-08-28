@@ -25,7 +25,9 @@ import { politeFloatLimit } from "@/lib/nppAutonomy/playerImpactBudget";
 import { advertiseFavorabilityGain, campaignInfluenceGain } from "@/lib/actions";
 import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 import { campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
+import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
+import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { makeSeededRng } from "@/lib/events/substrate/rng";
 import { getNppAutonomyLevel, nppAutonomyLevelAtLeast } from "@/lib/nppAutonomy/featureFlag";
 import { getAllCountryAccess } from "@/lib/countryAccess";
@@ -264,16 +266,28 @@ export async function processNppActions(
   // NPP regardless of autonomy scope, and out-of-scope NPPs still make party
   // donations that have to land somewhere. Party documents number a handful per
   // country, so loading all of them beats a scoped query plus a second lookup.
-  const partiesByKey = new Map<string, { _id: ObjectId; treasury: number }>();
+  const partiesByKey = new Map<
+    string,
+    {
+      _id: ObjectId;
+      treasury: number;
+      name: string;
+      countryId: CountryId;
+      sequentialId: string;
+    }
+  >();
   {
     const parties = await db
       .collection<PoliticalParty>("politicalParties")
-      .find({}, { projection: { _id: 1, sequentialId: 1, countryId: 1, treasury: 1 } })
+      .find({}, { projection: { _id: 1, sequentialId: 1, countryId: 1, treasury: 1, name: 1 } })
       .toArray();
     for (const party of parties) {
       partiesByKey.set(`${party.countryId ?? "US"}:${party.sequentialId}`, {
         _id: party._id,
         treasury: Number.isFinite(party.treasury) ? (party.treasury as number) : 0,
+        name: party.name,
+        countryId: (party.countryId ?? "US") as CountryId,
+        sequentialId: String(party.sequentialId),
       });
     }
   }
@@ -521,6 +535,33 @@ export async function processNppActions(
 
     if (partyOps.length > 0) {
       await db.collection<PoliticalParty>("politicalParties").bulkWrite(partyOps);
+
+      const txEntries: Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged">[] = [];
+      for (const [compositeKey, entry] of partyTreasuryUpdates) {
+        const party = partiesByKey.get(compositeKey);
+        if (!party || entry.amount <= 0) continue;
+        txEntries.push({
+          type: "party_dues_received",
+          turn: currentTurn,
+          createdAt: new Date(),
+          subjectType: "party",
+          subjectId: party._id,
+          subjectName: party.name,
+          amount: entry.amount,
+          currencyCode: (COUNTRY_CURRENCY_MAP[party.countryId] ?? "USD") as CurrencyCode,
+          counterpartyType: "system",
+          counterpartyName: "NPP party donation",
+          meta: {
+            scope: "national",
+            partyId: party.sequentialId,
+            source: "npp_party_donation",
+          },
+        });
+      }
+      if (txEntries.length > 0) {
+        const thresholds = await loadTxThresholds(db);
+        await emitTxBulk(db, txEntries, thresholds);
+      }
     }
   }
 

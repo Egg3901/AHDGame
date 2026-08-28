@@ -54,6 +54,9 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   bond_maturity: "bond_settlement",
   gov_coupon_payment: "bond_coupon_settlement",
   bond_coupon: "bond_coupon_settlement",
+  // This is the issuer-side settlement row paired with dissolution payouts.
+  // It records a modeled default loss, not an unexplained money-supply leak.
+  bond_default: "bond_default_settlement",
   corp_tax_paid: "taxation",
   gov_tax_revenue: "taxation",
   corp_revenue: "sector_revenue",
@@ -130,6 +133,7 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   // One-directional modeled income channels with no payer account in the
   // current balance-snapshot scope.
   office_income: "public_salary",
+  savings_interest: "deposit_interest",
   fundraise_credit: "political_fundraising",
 };
 
