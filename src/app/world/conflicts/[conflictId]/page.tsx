@@ -734,6 +734,7 @@ export default async function ConflictRecordPage({
     battles: extras.battles,
     ownForces: extras.ownForces,
     enemyBand: extras.enemyBand,
+    navalAir: extras.navalAir,
     arrearsRatio: viewerArrearsRatio,
     readinessTier: viewerReadinessTier,
   };

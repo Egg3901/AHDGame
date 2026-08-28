@@ -3,6 +3,8 @@ import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import { getConflictsCollection } from "@/lib/db/collections/conflicts";
 import { loadMilitaryBlocs } from "@/lib/military/blocLookup";
 import { homeRegionOf } from "@/lib/military/regionTopology";
+import { navalStationFor } from "./map";
+import { conflictRegions } from "@/lib/military/conflictRegions";
 import {
   loadNavairChannels,
   saveNavairChannels,
@@ -59,6 +61,10 @@ export interface NavairTurnResult {
 interface WarContext {
   hostility: Map<string, Set<string>>;
   frontRegions: Map<string, Set<RegionCode>>;
+  /** theaterId -> the region that conflict is fought in. */
+  theaterRegion: Map<string, RegionCode>;
+  /** Active conflicts, so engagements can be fought side against side. */
+  conflicts: Array<{ id: string; region?: RegionCode; a: string[]; b: string[] }>;
 }
 
 async function buildWarContext(db: Db): Promise<WarContext> {
@@ -67,12 +73,14 @@ async function buildWarContext(db: Db): Promise<WarContext> {
   const conflicts = (await getConflictsCollection(db)
     .find(
       { status: "active" },
-      { projection: { "sideA.countries": 1, "sideB.countries": 1, region: 1 } }
+      { projection: { "sideA.countries": 1, "sideB.countries": 1, region: 1, extendedRegions: 1 } }
     )
     .toArray()) as unknown as Array<{
+    _id?: unknown;
     sideA?: { countries?: string[] };
     sideB?: { countries?: string[] };
     region?: RegionCode;
+    extendedRegions?: RegionCode[];
   }>;
 
   const hostility = new Map<string, Set<string>>();
@@ -96,9 +104,28 @@ async function buildWarContext(db: Db): Promise<WarContext> {
         link(y, x);
       }
     }
-    if (c.region) for (const country of [...a, ...b]) front(country, c.region);
+    // Every region the war has spread into, not just where it started. A war confined to
+    // its opening region would leave air based on a newly opened flank unable to see a
+    // front it is standing next to.
+    if (c.region) {
+      for (const r of conflictRegions({ region: c.region, extendedRegions: c.extendedRegions })) {
+        for (const country of [...a, ...b]) front(country, r);
+      }
+    }
   }
-  return { hostility, frontRegions };
+  const theaterRegion = new Map<string, RegionCode>();
+  for (const c of conflicts) {
+    if (c.region && c._id) theaterRegion.set(String(c._id), c.region);
+  }
+
+  const sides = conflicts.map((c) => ({
+    id: String(c._id),
+    region: c.region,
+    a: c.sideA?.countries ?? [],
+    b: c.sideB?.countries ?? [],
+  }));
+
+  return { hostility, frontRegions, theaterRegion, conflicts: sides };
 }
 
 /**
@@ -108,8 +135,30 @@ async function buildWarContext(db: Db): Promise<WarContext> {
  * null here instead would quietly drop every un-commanded fleet out of the contest, and
  * the symptom would be an empty ocean rather than an error.
  */
-export function stationOf(unit: NavairUnit): RegionCode | null {
-  return unit.station ?? homeRegionOf(unit.countryId) ?? null;
+export function stationOf(
+  unit: NavairUnit,
+  theaterRegion?: ReadonlyMap<string, RegionCode>
+): RegionCode | null {
+  if (unit.station) return unit.station;
+
+  // A formation ASSIGNED to a war is at that war, not sitting at home. Falling back to
+  // the home region first was wrong in a way that quietly broke the whole point: US air
+  // deployed to a European front read as stationed in North America, three hops from the
+  // fighting, so it could never fly close air support and never contested the sky over
+  // the front it was actually committed to. The symptom was an air term stuck at neutral
+  // forever, with nothing anywhere saying why.
+  const atWar = unit.theaterId && unit.theaterId !== "reserve";
+  const base =
+    (atWar ? theaterRegion?.get(unit.theaterId) : undefined) ?? homeRegionOf(unit.countryId);
+  if (!base) return null;
+
+  // A ship cannot be on dry land. A fleet committed to an inland front bases in the
+  // nearest navigable water instead, which is where it would actually be. Putting it on
+  // the front's own land region was worse than cosmetic: sea control over a land tile is
+  // read by nothing, so a dominant navy changed nothing anywhere.
+  if (unit.domain === "naval") return navalStationFor(base) as RegionCode | null;
+
+  return base;
 }
 
 /**
@@ -142,7 +191,7 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
     loadMilitaryBlocs(db),
     loadNavairChannels(db),
   ]);
-  const { hostility, frontRegions } = war;
+  const { hostility, frontRegions, theaterRegion, conflicts: warSides } = war;
 
   // ── station everything, then index by region ────────────────────────────────
   const touchedByMission = new Set<NavairUnit>();
@@ -152,7 +201,7 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
 
   for (const u of units) {
     if (!alive(u)) continue;
-    const station = stationOf(u);
+    const station = stationOf(u, theaterRegion);
     if (!station) continue;
     if (!u.station) {
       // First time this formation has been placed. Persist it, or the field stays null in
@@ -227,33 +276,35 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
   const crippled: NavairUnit[] = [];
   const touched = new Set<NavairUnit>();
 
+  // A formation fights at most once a turn, whatever it is at war with. The previous
+  // pairing was country against country, so a fleet facing three enemies fought three
+  // separate actions and took damage in each, every one costed as if it were the only
+  // action that turn. Losses scaled with the NUMBER of enemies rather than their
+  // strength, which breaks precisely when a coalition forms.
+  const alreadyFought = new Set<string>();
+
   for (const [region, here] of byRegion) {
     const naval = here.filter((u) => u.domain === "naval");
     if (naval.length < 2) continue;
 
-    // Each hostile pairing fights once. Sorted so the pairing order, and therefore the
-    // result, does not depend on Mongo's return order.
-    const present = [...new Set(naval.map((u) => u.countryId))].sort();
-    const fought = new Set<string>();
+    for (const war of warSides) {
+      const inA = naval.filter(
+        (u) => war.a.includes(u.countryId) && !alreadyFought.has(String(u._id))
+      );
+      const inB = naval.filter(
+        (u) => war.b.includes(u.countryId) && !alreadyFought.has(String(u._id))
+      );
+      if (!inA.length || !inB.length) continue;
 
-    for (const a of present) {
-      const enemies = hostility.get(a) ?? new Set<string>();
-      for (const b of present) {
-        if (a === b || !enemies.has(b)) continue;
-        const pair = [a, b].sort().join(":");
-        if (fought.has(pair)) continue;
-        fought.add(pair);
+      // One action, both coalitions in the line together, exactly as the land battle
+      // treats a coalition front.
+      const result = resolveEngagement(region, inA, inB);
+      if (!result) continue;
 
-        const result = resolveEngagement(
-          region,
-          naval.filter((u) => u.countryId === a),
-          naval.filter((u) => u.countryId === b)
-        );
-        if (!result) continue;
-        engagements.push(result.outcome);
-        crippled.push(...result.crippled);
-        for (const u of [...result.crippled, ...result.damaged]) touched.add(u);
-      }
+      for (const u of [...inA, ...inB]) alreadyFought.add(String(u._id));
+      engagements.push(result.outcome);
+      crippled.push(...result.crippled);
+      for (const u of [...result.crippled, ...result.damaged]) touched.add(u);
     }
   }
 
@@ -288,6 +339,13 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
         hostile: weigh(hostile, "air"),
       };
       if (sea.hostile > 0 || air.hostile > 0) regionsContested++;
+
+      // A country at peace is not "winning" the sky over its own coast, it is simply
+      // unopposed, and treating that as full control let a coalition inherit a freshly
+      // joined ally's stale 100 for the several turns it takes to decay. Only a country
+      // with something to contest builds a holding.
+      const contested = sea.hostile > 0 || air.hostile > 0 || enemies.size > 0;
+      if (!contested) continue;
 
       const current = channelsFor(channels, countryId, region, turn);
       const next = advanceChannels(current, { air, sea }, detection.get(region) ?? 0, turn);

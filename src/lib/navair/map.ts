@@ -148,3 +148,31 @@ export function stepToward(from: RegionId, to: RegionId, maxHops: number): Regio
   }
   return best;
 }
+
+/**
+ * Where a fleet supporting operations at `region` actually sits.
+ *
+ * A land region is not a place a ship can be. Defaulting a naval formation onto the
+ * front's own region put carrier groups in Eastern Europe, which is both nonsense and
+ * quietly wrong in effect: the fleet contested "sea control" over a land tile that no
+ * front ever reads, so a navy could be totally dominant and change nothing.
+ *
+ * Returns the region itself when it is water, otherwise the adjacent navigable water with
+ * the best port, which is where a fleet operating in support of that front would base.
+ * Null when there is no water within reach at all, which is the honest answer for a
+ * genuinely landlocked theatre: that fleet cannot participate.
+ */
+export function navalStationFor(frontRegion: RegionId): RegionId | null {
+  if (isWaterAccessible(frontRegion)) return frontRegion;
+
+  const options = neighbors(frontRegion)
+    .filter(isWaterAccessible)
+    .filter(isNavigable)
+    .sort((a, b) => portOf(b) - portOf(a));
+
+  return options[0] ?? null;
+}
+
+function portOf(id: RegionId): number {
+  return region(id)?.port ?? 0;
+}

@@ -80,20 +80,30 @@ export function defaultAirMission(unit: NavairUnit, ctx: MissionContext): AirMis
   if (unit.readiness < WITHDRAW_READINESS) return "STANDDOWN";
   if (!ctx.enemies.size) return "STANDDOWN";
 
-  // An air defence wing does one thing. Sending it to support a ground attack would be
-  // using it as a worse fighter wing.
-  if (unit.type === "Air Defense Wing") return "CAP";
+  // Type decides first, because an airframe cannot fly a mission it is not built for.
+  // Ordering the contest check ahead of this put transports and bombers on combat air
+  // patrol whenever the sky was contested, which is exactly when they should not be up
+  // there. It also silently removed them from the jobs only they can do.
+  switch (unit.type) {
+    // Interceptors and nothing else. Sending one to support a ground attack would be
+    // using it as a worse fighter wing.
+    case "Air Defense Wing":
+      return "CAP";
+    // Transport does not fight. Keeping the fleet and the front supplied is its whole job.
+    case "Airlift Wing":
+      return "AIRLIFT";
+    // A bomber over a contested front is a target. Strike the airfields putting the enemy
+    // fighters up, which is the only way to fix the problem at its source; otherwise
+    // support the ground war.
+    case "Bomber Squadron":
+      if (ctx.airContestedHere) return "STRIKE_AIRBASE";
+      return canReachFront(unit, ctx.frontRegions) ? "CAS" : "PATROL";
+  }
 
-  // Contested sky first: close air support flown into an uncontested enemy fighter screen
-  // is how you lose an air force without moving the front.
+  // Fighters. Win the sky first: close air support flown into an uncontested enemy
+  // fighter screen loses an air force without moving the front.
   if (ctx.airContestedHere) return "CAP";
-
-  // Transport does not fight. Keeping the fleet and the front supplied is its whole job.
-  if (unit.type === "Airlift Wing") return "AIRLIFT";
-
-  // The land war is the point. Support it if this wing can reach it.
   if (canReachFront(unit, ctx.frontRegions)) return "CAS";
-
   return "PATROL";
 }
 

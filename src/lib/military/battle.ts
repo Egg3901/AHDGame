@@ -226,6 +226,18 @@ export interface AggItem {
   s: StatObj;
   domain: string;
 }
+/**
+ * Sea control a side needs to keep an amphibious force properly supplied ashore.
+ *
+ * Below the landing threshold on purpose: getting marines ashore against opposition is
+ * far harder than keeping them fed once they are. A side that can no longer land can
+ * still sustain what it already put there.
+ */
+export const MARINE_SUSTAINMENT_SEA_CONTROL = 40;
+
+/** What an unsupported marine formation is worth: light infantry, not a landing force. */
+export const MARINE_UNSUPPORTED_FRACTION = 0.6;
+
 export interface SideAgg {
   mass: number;
   fp: number;
@@ -260,7 +272,19 @@ export function sideAgg(items: AggItem[], support: FrontSupport = NO_SUPPORT): S
     aa = 0,
     rc = 0;
   for (const it of items) {
-    const w = it.cv;
+    // Marines ashore across water are only as good as the sea lane behind them. Without
+    // sea control they are cut off from the shipping that lands their heavy equipment and
+    // carries their casualties out, so they fight as light infantry rather than as an
+    // amphibious force.
+    //
+    // A sustainment penalty, deliberately NOT a deployment block: marines who have been
+    // holding a front for forty turns must not evaporate the moment this ships. It is
+    // also the only route sea control has into a land battle besides interdiction, which
+    // is what stops a total naval victory from being worth nothing on the ground.
+    const w =
+      it.domain === "marine" && support.seaControl < MARINE_SUSTAINMENT_SEA_CONTROL
+        ? it.cv * MARINE_UNSUPPORTED_FRACTION
+        : it.cv;
     mass += w;
     fp += it.s.fp * w;
     ar += it.s.ar * w;
@@ -333,7 +357,13 @@ export interface SupplyState {
 export function supplyState(
   ctxs: BattleContext[],
   frontId: string,
-  plan?: EngagementPlan
+  plan?: EngagementPlan,
+  /**
+   * 0..1 of this side's throughput cut by ENEMY interdiction: bombers striking behind the
+   * line, and a blockade closing the sea lane that feeds the front. Optional, so a caller
+   * that predates the naval and air layer is unaffected.
+   */
+  interdiction = 0
 ): SupplyState {
   const front = frontById(frontId, ctxs[0]?.fronts);
   let demand = 0;
@@ -390,6 +420,12 @@ export function supplyState(
   }
   demand = Math.max(1, Math.round(demand));
   throughput = Math.round(throughput);
+  // Interdiction cuts what actually arrives, not what the front asks for. Applied here,
+  // after every source of throughput is summed and before anything derives from it, so a
+  // strangled front reads as short of supply through the SAME path as a front with poor
+  // infrastructure, rather than through a second mechanism nobody would think to check.
+  throughput *= 1 - Math.max(0, Math.min(1, interdiction));
+
   const level = Math.max(0, Math.min(100, Math.round((throughput / demand) * 100)));
   const state =
     level >= 85
@@ -557,7 +593,9 @@ export function planEngagement(
 function ownSideProfile(
   ctxs: BattleContext[],
   frontId: string,
-  plan?: EngagementPlan
+  plan?: EngagementPlan,
+  /** Enemy interdiction against THIS side. See `supplyState`. */
+  interdiction = 0
 ): OwnSideProfile {
   // Terrain is a property of the front, not of its id. Resolved once here off the
   // first context that knows this front — every contingent is fighting on the same
@@ -620,7 +658,7 @@ function ownSideProfile(
     deepShare: share("deepstrike"),
     deepBuff: deepMass ? deepWeighted / deepMass : 1,
     genEnemyMin: genEnemy,
-    sup: supplyState(ctxs, frontId, plan),
+    sup: supplyState(ctxs, frontId, plan, interdiction),
     ownTf,
   };
 }
@@ -1026,8 +1064,10 @@ export function battleForecast(
   const capacity = front.capacity ?? capacityOfTerrain(front.terrain);
   const attackerPlan = planEngagement(attackers.map(sideCtx), theaterId, capacity);
   const defenderPlan = planEngagement(defenders.map(sideCtx), theaterId, capacity);
-  const PA = ownSideProfile(attackers.map(sideCtx), theaterId, attackerPlan);
-  const PD = ownSideProfile(defenders.map(sideCtx), theaterId, defenderPlan);
+  // Each side's supply is cut by the OTHER side's interdiction. Reading your own here
+  // would have a fleet starve the front it is supporting.
+  const PA = ownSideProfile(attackers.map(sideCtx), theaterId, attackerPlan, supportD.interdiction);
+  const PD = ownSideProfile(defenders.map(sideCtx), theaterId, defenderPlan, supportA.interdiction);
   const aggA = sideAgg(PA.engaged, supportA);
   const aggD = sideAgg(PD.engaged, supportD);
   const am = sideMults(aggA, aggD);
