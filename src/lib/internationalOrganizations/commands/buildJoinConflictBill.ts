@@ -22,7 +22,7 @@ export async function buildJoinConflictBill(params: {
   db: Db;
   countryId: CountryId;
   preset?: string;
-  sponsor: { characterId: ObjectId; characterName: string; party?: string };
+  sponsor: { characterId: ObjectId; characterName: string; party?: string; isNpp?: boolean };
   conflictName: string;
   organizationId: string;
   provision: JoinConflictProvision;
@@ -64,6 +64,7 @@ export async function buildJoinConflictBill(params: {
     sponsorId: sponsor.characterId,
     sponsorName: sponsor.characterName,
     sponsorParty: sponsor.party ?? undefined,
+    nppSponsored: sponsor.isNpp === true,
     votes: {},
     votesFor: 0,
     votesAgainst: 0,

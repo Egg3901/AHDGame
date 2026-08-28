@@ -3,13 +3,16 @@ import { ObjectId, type Db } from "mongodb";
 import type { NPP } from "@/lib/db/types";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 
-const { proposeMock, upsertMock, imposeMock, liftMock, tradeBillMock } = vi.hoisted(() => ({
-  proposeMock: vi.fn(),
-  upsertMock: vi.fn(),
-  imposeMock: vi.fn(),
-  liftMock: vi.fn(),
-  tradeBillMock: vi.fn(),
-}));
+const { proposeMock, upsertMock, imposeMock, liftMock, tradeBillMock, warMock } = vi.hoisted(
+  () => ({
+    proposeMock: vi.fn(),
+    upsertMock: vi.fn(),
+    imposeMock: vi.fn(),
+    liftMock: vi.fn(),
+    tradeBillMock: vi.fn(),
+    warMock: vi.fn(),
+  })
+);
 
 vi.mock("@/lib/internationalOrganizations/commands/proposeLegislation", () => ({
   proposeOrganizationLegislation: (...args: unknown[]) => proposeMock(...args),
@@ -23,6 +26,9 @@ vi.mock("@/lib/trade/commands/embargoCommands", () => ({
 }));
 vi.mock("../proposeNppForeignPolicyBill", () => ({
   proposeNppForeignPolicyBill: (...args: unknown[]) => tradeBillMock(...args),
+}));
+vi.mock("../autonomousWarCommands", () => ({
+  executeAutonomousWarChoice: (...args: unknown[]) => warMock(...args),
 }));
 
 import { executeForeignPolicyChoice } from "../foreignPolicyActions";
@@ -40,6 +46,7 @@ beforeEach(() => {
   imposeMock.mockReset().mockResolvedValue({ ok: true, embargoId: new ObjectId() });
   liftMock.mockReset().mockResolvedValue({ ok: true, embargoId: new ObjectId() });
   tradeBillMock.mockReset().mockResolvedValue({ ok: true, billId: "bill-1" });
+  warMock.mockReset().mockResolvedValue({ acted: true, note: "Queued an offensive." });
 });
 
 describe("executeForeignPolicyChoice", () => {
@@ -198,6 +205,28 @@ describe("executeForeignPolicyChoice", () => {
         },
       })
     );
+  });
+
+  it("routes ongoing war operations through the autonomous military adapter", async () => {
+    const db = createMockDb();
+    const choice = {
+      type: "conduct_war" as const,
+      score: 48,
+      conflictId: "korea",
+      reasons: ["Ready forces are deployed."],
+    };
+
+    const result = await executeForeignPolicyChoice(
+      db as unknown as Db,
+      "FR",
+      head,
+      choice,
+      22,
+      now
+    );
+
+    expect(result).toEqual({ acted: true, note: "Queued an offensive." });
+    expect(warMock).toHaveBeenCalledWith(db, "FR", head, choice, 22);
   });
 
   it("imposes a bounded temporary embargo through the trade command", async () => {

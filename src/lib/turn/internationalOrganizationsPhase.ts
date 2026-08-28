@@ -102,9 +102,9 @@ async function policyVotingMembers(db: Db, organizationId: string): Promise<Coun
 async function getPolicyHeadSponsor(
   db: Db,
   countryId: CountryId
-): Promise<{ _id: ObjectId; name: string; party?: string } | null> {
+): Promise<{ _id: ObjectId; name: string; party?: string; isNpp: boolean } | null> {
   const playerHead = await getHeadOfGovernmentCharacter(db, countryId);
-  if (playerHead) return playerHead;
+  if (playerHead) return { ...playerHead, isNpp: false };
 
   const formation = await db
     .collection<GovernmentFormation>("governmentFormations")
@@ -114,7 +114,7 @@ async function getPolicyHeadSponsor(
   const npp = await db
     .collection<NPP>("npps")
     .findOne({ _id: headNppId }, { projection: { _id: 1, name: 1, party: 1 } });
-  return npp ? { _id: npp._id, name: npp.name, party: npp.party } : null;
+  return npp ? { _id: npp._id, name: npp.name, party: npp.party, isNpp: true } : null;
 }
 
 /**
@@ -879,6 +879,7 @@ async function applyResolutionEffect(
             characterId: sponsor._id,
             characterName: sponsor.name,
             party: sponsor.party,
+            isNpp: sponsor.isNpp,
           },
           conflictName: conflict.name,
           organizationId: resolution.organizationId,

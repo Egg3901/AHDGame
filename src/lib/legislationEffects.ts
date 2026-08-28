@@ -28,6 +28,7 @@ import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { declareWar } from "@/lib/military/declareWar";
 import { allianceBarBetween } from "@/lib/military/allianceBar";
 import { joinSide } from "@/lib/military/joinSide";
+import { prepareAutonomousWarEntry } from "@/lib/nppAutonomy/autonomousWarCommands";
 import { getConflict } from "@/lib/db/collections/conflicts";
 import { applyPrivatizeProvision } from "@/lib/nationalization/legislativePrivatize";
 import { applyDesignateStrategicSectorProvision } from "@/lib/nationalization/legislativeDesignateStrategic";
@@ -132,7 +133,13 @@ export async function applyLegislationEffect(
   db: Db,
   bill: Pick<
     Bill,
-    "_id" | "legislationTypeId" | "effectDirection" | "provisions" | "countryId" | "stateId"
+    | "_id"
+    | "legislationTypeId"
+    | "effectDirection"
+    | "provisions"
+    | "countryId"
+    | "stateId"
+    | "nppSponsored"
   >
 ): Promise<void> {
   // Which country's board a political effect lands on. Hoisted because the
@@ -253,11 +260,18 @@ export async function applyLegislationEffect(
             // Never switch a country's side: it can have been dragged onto the
             // other one by its own declaration while this bill was on the floor.
             if (!(opposing as string[]).includes(countryId)) {
-              // Idempotent — joinSide returns early if the roster already has it.
-              // The turn read happens either way (it is an argument), which is a
-              // single indexed gameState lookup on a path that runs once per
-              // enacted provision.
-              await joinSide(db, conflict, countryId, p.side, await getCurrentTurn(db));
+              const currentTurn = await getCurrentTurn(db);
+              const preparation = bill.nppSponsored
+                ? await prepareAutonomousWarEntry(db, countryId, conflict, currentTurn)
+                : { ready: true, deployedUnits: 0, reason: "Player government entry." };
+              if (preparation.ready) {
+                // Idempotent: joinSide returns early if the roster already has it.
+                await joinSide(db, conflict, countryId, p.side, currentTurn);
+              } else {
+                console.warn(
+                  `[legislationEffects] NPP war entry ${String(bill._id)} halted: ${preparation.reason}`
+                );
+              }
             }
           }
         } else if (p.type === "embargo" || p.type === "end_embargo") {

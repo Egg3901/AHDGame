@@ -227,14 +227,16 @@ describe("processAutonomousForeignPolicy", () => {
       },
     });
 
-    const noTrade = await processAutonomousForeignPolicy(noTradeDb as unknown as Db, "FR", 12, now);
-    const withTrade = await processAutonomousForeignPolicy(tradeDb as unknown as Db, "FR", 12, now);
+    await processAutonomousForeignPolicy(noTradeDb as unknown as Db, "FR", 12, now);
+    await processAutonomousForeignPolicy(tradeDb as unknown as Db, "FR", 12, now);
 
-    expect(noTrade.choice?.type).toBe("impose_embargo");
-    expect(withTrade.choice?.type).toBe("raise_tariff");
+    const noTradeEmbargo = recordedDecision(noTradeDb).alternatives.find(
+      (choice) => choice.type === "impose_embargo"
+    );
     const embargo = recordedDecision(tradeDb).alternatives.find(
       (choice) => choice.type === "impose_embargo"
     );
+    expect(noTradeEmbargo?.score).toBeGreaterThan(embargo?.score ?? 0);
     expect(embargo?.reasons.join(" ")).toContain("trade dependence applies a 15 point brake");
   });
 
@@ -334,7 +336,16 @@ describe("processAutonomousForeignPolicy", () => {
       alignments: [alignment("FR", 90, 0), alignment("US", 100, 0), alignment("RU", 0, 100)],
       memberships: [membership("FR"), membership("US")],
       conflicts: [conflict],
-      militaryUnits: [{ _id: new ObjectId(), countryId: "FR", readiness: 72, personnel: 10_000 }],
+      militaryUnits: [
+        {
+          _id: new ObjectId(),
+          countryId: "FR",
+          readiness: 72,
+          personnel: 10_000,
+          theaterId: "reserve",
+          basePower: 100,
+        },
+      ],
     };
     const readyDb = setup({ ...common, approvalRating: 60 });
     const opposedDb = setup({ ...common, approvalRating: 30 });
@@ -350,6 +361,62 @@ describe("processAutonomousForeignPolicy", () => {
     expect(
       recordedDecision(opposedDb).alternatives.some((choice) => choice.type === "join_war")
     ).toBe(false);
+  });
+
+  it("offers real operations or peace after an autonomous country enters a war", async () => {
+    const conflict = {
+      _id: "korea",
+      name: "Korean War",
+      status: "active",
+      sideA: { label: "UN Coalition", countries: ["FR", "US"] },
+      sideB: { label: "Communist Coalition", countries: ["RU"] },
+    };
+    const deployedUnit = {
+      _id: new ObjectId(),
+      countryId: "FR",
+      readiness: 70,
+      personnel: 10_000,
+      theaterId: "korea",
+      basePower: 100,
+    };
+    const fightingDb = setup({
+      conflicts: [conflict],
+      militaryUnits: [deployedUnit],
+      approvalRating: 60,
+    });
+    const exhaustedDb = setup({
+      conflicts: [conflict],
+      militaryUnits: [{ ...deployedUnit, readiness: 25 }],
+      approvalRating: 25,
+    });
+
+    const _fighting = await processAutonomousForeignPolicy(
+      fightingDb as unknown as Db,
+      "FR",
+      42,
+      now
+    );
+    const _exhausted = await processAutonomousForeignPolicy(
+      exhaustedDb as unknown as Db,
+      "FR",
+      42,
+      now
+    );
+
+    expect(recordedDecision(fightingDb).alternatives).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "conduct_war", conflictId: "korea" }),
+      ])
+    );
+    expect(recordedDecision(exhaustedDb).alternatives).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "seek_peace",
+          conflictId: "korea",
+          targetCountryId: "RU",
+        }),
+      ])
+    );
   });
 
   it("is idempotent for the same country and turn", async () => {

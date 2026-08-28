@@ -220,11 +220,14 @@ describe("join_conflict enactment", () => {
     expect(billedCountries()).toEqual(["US", "FR"]);
     const france = buildJoinConflictBill.mock.calls.find(
       (call) => (call[0] as { countryId: string }).countryId === "FR"
-    )?.[0] as { sponsor: { characterId: ObjectId; characterName: string; party?: string } };
+    )?.[0] as {
+      sponsor: { characterId: ObjectId; characterName: string; party?: string; isNpp: boolean };
+    };
     expect(france.sponsor).toEqual({
       characterId: nppHeadId,
       characterName: "French NPP Premier",
       party: "1",
+      isNpp: true,
     });
   });
 

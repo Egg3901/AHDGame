@@ -9,6 +9,7 @@ import type { CountryAlignment } from "@/lib/db/types/countryAlignment";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
+import type { BattleDeclarationDoc } from "@/lib/db/types/battleDeclaration";
 import type {
   OrganizationLeadershipElection,
   OrganizationLegislation,
@@ -22,6 +23,7 @@ import type { TradeFlowSnapshot } from "@/lib/db/types/tradeFlowSnapshot";
 import { loadOrganizationDefWithPowers } from "@/lib/internationalOrganizations/service";
 import { buildActiveNationalBillFilter } from "@/lib/legislature/nationalBillScope";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
+import type { PeaceOfferDoc } from "@/lib/db/types/peaceOffer";
 import type { PersistedSphereMembership } from "@/lib/world/spheres/membershipStore";
 import { isNppAutonomyActive } from "./featureFlag";
 import { executeForeignPolicyChoice } from "./foreignPolicyActions";
@@ -41,7 +43,9 @@ export type ForeignPolicyActionType =
   | "impose_embargo"
   | "lift_embargo"
   | "support_war"
-  | "join_war";
+  | "join_war"
+  | "conduct_war"
+  | "seek_peace";
 
 export interface ForeignPolicyChoice {
   type: ForeignPolicyActionType;
@@ -100,6 +104,9 @@ interface ForeignPolicyContext {
   availableMilitaryUnits: number;
   averageMilitaryReadiness: number;
   approvalRating: number;
+  militaryUnits: MilitaryUnit[];
+  pendingBattleDeclarations: BattleDeclarationDoc[];
+  pendingPeaceOffers: PeaceOfferDoc[];
 }
 
 interface PersistedForeignPolicyDecision {
@@ -733,10 +740,69 @@ function warCandidates(
   );
 
   for (const conflict of context.conflicts) {
-    if (
-      conflict.sideA.countries.includes(context.countryId) ||
-      conflict.sideB.countries.includes(context.countryId)
-    ) {
+    const ownSide = conflict.sideA.countries.includes(context.countryId)
+      ? conflict.sideA
+      : conflict.sideB.countries.includes(context.countryId)
+        ? conflict.sideB
+        : null;
+    if (ownSide) {
+      const enemySide = ownSide === conflict.sideA ? conflict.sideB : conflict.sideA;
+      const enemyCountry = enemySide.countries.find((countryId) => COUNTRY_CONFIGS[countryId]);
+      const deployed = context.militaryUnits.filter(
+        (unit) => unit.theaterId === conflict._id && unit.personnel > 0
+      );
+      const deployedReadiness =
+        deployed.length > 0
+          ? deployed.reduce((sum, unit) => sum + unit.readiness, 0) / deployed.length
+          : 0;
+      const pendingOffensive = context.pendingBattleDeclarations.some(
+        (declaration) => declaration.theaterId === conflict._id
+      );
+      const pendingPeace = context.pendingPeaceOffers.some(
+        (offer) =>
+          offer.conflictId === conflict._id &&
+          offer.fromCountry === context.countryId &&
+          offer.toCountry === enemyCountry &&
+          offer.expiresTurn > context.currentTurn
+      );
+      if (
+        deployed.length > 0 &&
+        deployedReadiness >= 40 &&
+        context.approvalRating >= 40 &&
+        !pendingOffensive
+      ) {
+        choices.push(
+          candidate(
+            "conduct_war",
+            25 + ambition * 8 + defenseLean * 10 + (deployedReadiness - 40) * 0.2,
+            [
+              `${deployed.length} deployed units average ${round(deployedReadiness)} readiness in ${conflict.name}.`,
+              `Government approval is ${round(context.approvalRating)}.`,
+            ],
+            { conflictId: conflict._id }
+          )
+        );
+      }
+      if (
+        enemyCountry &&
+        !pendingPeace &&
+        (context.approvalRating < 35 || deployedReadiness < 35 || context.debtToGdpRatio > 140)
+      ) {
+        choices.push(
+          candidate(
+            "seek_peace",
+            38 +
+              Math.max(0, 35 - context.approvalRating) * 0.4 +
+              Math.max(0, 35 - deployedReadiness) * 0.3 +
+              Math.max(0, context.debtToGdpRatio - 140) * 0.1,
+            [
+              `War pressure in ${conflict.name} exceeds the government's tolerance.`,
+              `Approval ${round(context.approvalRating)}, deployed readiness ${round(deployedReadiness)}, debt ${round(context.debtToGdpRatio)}% of GDP.`,
+            ],
+            { targetCountryId: enemyCountry, conflictId: conflict._id }
+          )
+        );
+      }
       continue;
     }
     const sideScore = (countries: CountryId[]): number =>
@@ -846,13 +912,16 @@ function cooldownFamily(type: ForeignPolicyActionType): string | null {
   return type;
 }
 
+function cooldownTurns(family: string): number {
+  if (family === "tariff" || family === "embargo") return TRADE_ESCALATION_COOLDOWN_TURNS;
+  if (family === "conduct_war") return 6;
+  return STANDARD_COOLDOWN_TURNS;
+}
+
 function choiceOnCooldown(context: ForeignPolicyContext, choice: ForeignPolicyChoice): boolean {
   const family = cooldownFamily(choice.type);
   if (!family) return false;
-  const cooldown =
-    family === "tariff" || family === "embargo"
-      ? TRADE_ESCALATION_COOLDOWN_TURNS
-      : STANDARD_COOLDOWN_TURNS;
+  const cooldown = cooldownTurns(family);
   return context.recentDecisions.some((decision) => {
     const previous = decision.selected;
     if (!previous || decision.mode !== context.mode || decision.turn >= context.currentTurn) {
@@ -905,6 +974,8 @@ async function loadContext(
     recentDecisions,
     militaryUnits,
     governmentApproval,
+    pendingBattleDeclarations,
+    pendingPeaceOffers,
   ] = await Promise.all([
     db
       .collection<{ _id: string; nppForeignPolicyMode?: ForeignPolicyMode }>("gameState")
@@ -955,21 +1026,16 @@ async function loadContext(
       .sort({ turn: -1 })
       .limit(20)
       .toArray(),
-    db
-      .collection<MilitaryUnit>("militaryUnits")
-      .find({
-        countryId,
-        theaterId: "reserve",
-        personnel: { $gt: 0 },
-        readiness: { $gte: 50 },
-        $or: [
-          { readyAtTurn: null },
-          { readyAtTurn: { $exists: false } },
-          { readyAtTurn: { $lte: currentTurn } },
-        ],
-      })
-      .toArray(),
+    db.collection<MilitaryUnit>("militaryUnits").find({ countryId }).toArray(),
     db.collection<GovernmentApproval>("governmentApprovals").findOne({ _id: countryId }),
+    db
+      .collection<BattleDeclarationDoc>("battleDeclarations")
+      .find({ declarerCountry: countryId, status: "pending" })
+      .toArray(),
+    db
+      .collection<PeaceOfferDoc>("peaceOffers")
+      .find({ fromCountry: countryId, status: "pending", expiresTurn: { $gt: currentTurn } })
+      .toArray(),
   ]);
 
   const organizationCategories = new Map<string, OrganizationCategory>();
@@ -995,9 +1061,16 @@ async function loadContext(
     }
   }
 
+  const readyReserveUnits = militaryUnits.filter(
+    (unit) =>
+      unit.theaterId === "reserve" &&
+      unit.personnel > 0 &&
+      unit.readiness >= 50 &&
+      (unit.readyAtTurn == null || unit.readyAtTurn <= currentTurn)
+  );
   const averageMilitaryReadiness =
-    militaryUnits.length > 0
-      ? militaryUnits.reduce((sum, unit) => sum + unit.readiness, 0) / militaryUnits.length
+    readyReserveUnits.length > 0
+      ? readyReserveUnits.reduce((sum, unit) => sum + unit.readiness, 0) / readyReserveUnits.length
       : 0;
 
   return {
@@ -1020,9 +1093,12 @@ async function loadContext(
     tradeSnapshot,
     debtToGdpRatio: budget?.debtToGdpRatio ?? 0,
     recentDecisions,
-    availableMilitaryUnits: militaryUnits.length,
+    availableMilitaryUnits: readyReserveUnits.length,
     averageMilitaryReadiness,
     approvalRating: governmentApproval?.approvalRating ?? 0,
+    militaryUnits,
+    pendingBattleDeclarations,
+    pendingPeaceOffers,
   };
 }
 
