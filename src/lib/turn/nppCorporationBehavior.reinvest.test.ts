@@ -29,6 +29,7 @@ import {
 import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import { foundingStarterUnits } from "@/lib/corporations/foundingPlant";
+import type { PlacementSignals } from "@/lib/turn/npp/marketSignals";
 
 const noPrices: CommodityPriceRatioFn = () => null;
 const noState = new Set<string>();
@@ -99,7 +100,12 @@ function decide(
   sectors: CorporateSector[],
   pools: UnownedSector[],
   plants: NppPlantsContext | null = plantsCtx,
-  extra: { fxRate?: number; stateControlled?: Set<string> } = {}
+  extra: {
+    fxRate?: number;
+    stateControlled?: Set<string>;
+    placementSignals?: PlacementSignals;
+    prices?: CommodityPriceRatioFn;
+  } = {}
 ) {
   return makeNppCorpDecision(
     {
@@ -112,8 +118,9 @@ function decide(
     },
     new Map<string, UnownedSector[]>([["US", pools]]),
     extra.stateControlled ?? noState,
-    noPrices,
-    plants ?? undefined
+    extra.prices ?? noPrices,
+    plants ?? undefined,
+    extra.placementSignals
   );
 }
 
@@ -194,6 +201,29 @@ describe("NPP capacity reinvestment — fires on a selling-out sector with headr
     const writes = queueWrites(decision);
     expect(writes).toHaveLength(1);
     expect(writes[0].filter._id).toEqual(strong._id);
+  });
+
+  it("reallocates the existing build slot to critically short freight capacity", () => {
+    const manufacturing = sector({
+      stateId: "CA",
+      producedUnits: 1_000,
+      soldUnits: 1_000,
+    });
+    const logistics = sector({
+      sectorType: "logistics",
+      stateId: "NY",
+      producedUnits: 1_000,
+      soldUnits: 900,
+    });
+    const pools = [pool({ stateId: "CA" }), pool({ stateId: "NY", sectorType: "logistics" })];
+    const treatment = decide(corp(), [manufacturing, logistics], pools, plantsCtx, {
+      placementSignals: { preferFragileMarketSupply: true },
+      prices: (commodity) => (commodity === "freight" ? 2 : 1),
+    });
+
+    const writes = queueWrites(treatment);
+    expect(writes).toHaveLength(1);
+    expect(writes[0].filter._id).toEqual(logistics._id);
   });
 
   it("does not buy fractional growth when the bucket cannot fit one factory", () => {

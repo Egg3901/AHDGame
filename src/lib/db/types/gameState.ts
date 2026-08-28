@@ -19,6 +19,7 @@ export type IterationType = "Alpha" | "Beta" | "Iteration";
  * See plans/2026-06-23-npp-autonomy-v1-v2-plan.md.
  */
 export type NppAutonomyLevel = "off" | "v0" | "v1" | "v2" | "v3" | "v4";
+export type NppForeignPolicyMode = "off" | "shadow" | "active";
 
 export interface GameIteration {
   type: IterationType;
@@ -212,7 +213,9 @@ export interface GameState {
    * Foreign-policy planner rollout. Absent defaults to shadow so autonomous
    * countries produce auditable intent without changing world state.
    */
-  nppForeignPolicyMode?: "off" | "shadow" | "active";
+  nppForeignPolicyMode?: NppForeignPolicyMode;
+  nppForeignPolicyModeBy?: string;
+  nppForeignPolicyModeAt?: string;
   /** When true, crisis international-aid nodes use the slider + legislature-bill flow. */
   crisisAidBillsEnabled?: boolean;
   crisisAidBillsEnabledBy?: string;

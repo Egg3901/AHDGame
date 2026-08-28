@@ -500,6 +500,27 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
     0
   );
   const bondFloatUnits = activeBonds.reduce((sum, bond) => sum + nonnegative(bond.publicFloat), 0);
+  const sovereignHolderCounts = sovereignBonds.map(
+    (bond) => bond.holders.filter((holder) => holder.units > 0).length
+  );
+  const sovereignHeldUnits = sovereignBonds.reduce(
+    (sum, bond) =>
+      sum + bond.holders.reduce((holderSum, holder) => holderSum + nonnegative(holder.units), 0),
+    0
+  );
+  const sovereignFloatUnits = sovereignBonds.reduce(
+    (sum, bond) => sum + nonnegative(bond.publicFloat),
+    0
+  );
+  const sovereignFaceByMaturity = new Map<number, number>();
+  for (const bond of sovereignBonds) {
+    sovereignFaceByMaturity.set(
+      bond.maturityTurn,
+      (sovereignFaceByMaturity.get(bond.maturityTurn) ?? 0) + nonnegative(bond.totalIssued)
+    );
+  }
+  const sovereignMaturityValues = [...sovereignFaceByMaturity.values()];
+  const sovereignMaturityConcentration = concentration(sovereignMaturityValues);
 
   const wealth = input.globalWealth?.entries.map((entry) => Math.max(0, entry.totalWealth)) ?? [];
   const aggregateWealth = wealth.reduce((sum, value) => sum + value, 0);
@@ -713,6 +734,26 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         ratio(bondHeldUnits, bondHeldUnits + bondFloatUnits),
         activeBonds.length,
         "unmatured_bond_units"
+      ),
+      sovereignMedianHolders: metric(
+        median(sovereignHolderCounts),
+        sovereignBonds.length,
+        "unmatured_sovereign_issue_count"
+      ),
+      sovereignSubscriptionRate: metric(
+        ratio(sovereignHeldUnits, sovereignHeldUnits + sovereignFloatUnits),
+        sovereignBonds.length,
+        "unmatured_sovereign_units"
+      ),
+      sovereignMaturityHhi: metric(
+        sovereignMaturityConcentration.hhi,
+        sovereignMaturityValues.length,
+        "sovereign_face_by_maturity_turn"
+      ),
+      sovereignMedianPriceToParSpreadPct: metric(
+        median(sovereignBonds.map((bond) => (1 - bond.marketPrice) * 100)),
+        sovereignBonds.length,
+        "unmatured_sovereign_issue_count"
       ),
       openBuyOrders: quality.openBuyOrders,
       openSellOrders: quality.openSellOrders,

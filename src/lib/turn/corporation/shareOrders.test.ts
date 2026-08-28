@@ -18,6 +18,9 @@ vi.mock("@/lib/currency/corporationCapital", () => ({
 vi.mock("@/lib/corporations/shareholderOps", () => ({
   creditSharesToFund: vi.fn().mockResolvedValue(true),
 }));
+vi.mock("@/lib/indexFunds/fundQueries", () => ({
+  upsertFundHoldingShares: vi.fn().mockResolvedValue(undefined),
+}));
 
 let db: MockDb;
 
@@ -323,6 +326,7 @@ describe("fillPendingShareOrders", () => {
   it("fills a fund-owned buy order: credits the fund, refunds escrow, applies treasury delta", async () => {
     const { fillPendingShareOrders } = await import("./shareOrders");
     const { creditSharesToFund } = await import("@/lib/corporations/shareholderOps");
+    const { upsertFundHoldingShares } = await import("@/lib/indexFunds/fundQueries");
     const corpId = new ObjectId();
     const fundId = new ObjectId();
 
@@ -378,6 +382,7 @@ describe("fillPendingShareOrders", () => {
     expect(credArgs[2]).toEqual(fundId); // fundId
     expect(credArgs[3]).toBe(10); // shares
     expect(credArgs[4]).toBe(500); // fillPriceAnchor
+    expect(upsertFundHoldingShares).toHaveBeenCalledWith(db, fundId, corpId, 10, 500);
 
     // Unused escrow refunded to fund cashAnchor (6000 - 5000 = 1000).
     const fundsColl = db.collectionMocks["indexFunds"]!;
@@ -401,6 +406,46 @@ describe("fillPendingShareOrders", () => {
       )
     );
     expect(treasuryCall).toBeDefined();
+  });
+
+  it("leaves a fund-owned ask resting for peer execution", async () => {
+    const { fillPendingShareOrders } = await import("./shareOrders");
+    const corpId = new ObjectId();
+    const fundId = new ObjectId();
+    const fundAsk = {
+      _id: new ObjectId(),
+      corporationId: corpId,
+      placerFundId: fundId,
+      type: "sell",
+      shares: 10,
+      sharesRemaining: 10,
+      pricePerShare: 490,
+      escrowAmount: 0,
+      status: "open",
+      liquidityProvider: true,
+    };
+    (db.collection("shareOrders").find as ReturnType<typeof vi.fn>).mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([fundAsk]),
+    });
+    (db.collection("corporations").find as ReturnType<typeof vi.fn>).mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: corpId,
+          sharePrice: 500,
+          publicFloat: 50,
+          liquidCapital: 1_000_000,
+          shareholders: [{ fundId, shares: 100 }],
+          liquidCurrencyCode: "USD",
+          countryId: "US",
+        },
+      ]),
+    });
+
+    await fillPendingShareOrders(db as unknown as Db, new Date(), 301);
+
+    expect(db.collection("shareOrders").bulkWrite).not.toHaveBeenCalled();
+    expect(db.collection("corporations").bulkWrite).not.toHaveBeenCalled();
+    expect(db.collection("indexFunds").bulkWrite).not.toHaveBeenCalled();
   });
 
   it("partial char buy fill refunds only filled shares' below-limit savings and reserves unfilled escrow", async () => {

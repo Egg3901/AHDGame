@@ -4,12 +4,12 @@ import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
-import type { GameState, NppAutonomyLevel } from "@/lib/db/types";
+import type { GameState, NppAutonomyLevel, NppForeignPolicyMode } from "@/lib/db/types";
 
 /**
  * Unified admin control surface for the game's feature gates. Reads/writes the
- * boolean flags + the 4-state NPP-autonomy level that all live on the
- * `gameState` doc, so the admin dashboard can drive every gate from one panel.
+ * boolean flags, the six-state NPP autonomy level, and the three-state foreign
+ * policy rollout that all live on the `gameState` doc.
  *
  * NPP economy, line of credit, and index funds are intentionally NOT here — they
  * are core systems that ship on by default (see seeds/reference/gameConfig.ts).
@@ -69,11 +69,16 @@ const bodySchema = z.discriminatedUnion("kind", [
     kind: z.literal("level"),
     value: z.enum(["off", "v0", "v1", "v2", "v3", "v4"]),
   }),
+  z.object({
+    kind: z.literal("foreign-policy-mode"),
+    value: z.enum(["off", "shadow", "active"]),
+  }),
 ]);
 
 interface FeatureGatesState {
   booleans: Record<FeatureGateBooleanKey, boolean>;
   nppAutonomyLevel: NppAutonomyLevel;
+  nppForeignPolicyMode: NppForeignPolicyMode;
 }
 
 async function readState(): Promise<FeatureGatesState> {
@@ -91,7 +96,9 @@ async function readState(): Promise<FeatureGatesState> {
   const nppAutonomyLevel: NppAutonomyLevel =
     doc?.nppAutonomyLevel ?? (doc?.nppAutonomyEnabled === true ? "v0" : "off");
 
-  return { booleans, nppAutonomyLevel };
+  const nppForeignPolicyMode: NppForeignPolicyMode = doc?.nppForeignPolicyMode ?? "shadow";
+
+  return { booleans, nppAutonomyLevel, nppForeignPolicyMode };
 }
 
 /** GET /api/admin/feature-gates — current state of every gate. */
@@ -105,7 +112,7 @@ export async function GET() {
   }
 }
 
-/** POST /api/admin/feature-gates — set one gate (boolean flag or the NPP level). */
+/** POST /api/admin/feature-gates sets one boolean, autonomy level, or policy mode. */
 export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();
@@ -132,7 +139,7 @@ export async function POST(request: Request) {
         unset[`${key}By`] = "";
         unset[`${key}At`] = "";
       }
-    } else {
+    } else if (parsed.data.kind === "level") {
       const level = parsed.data.value as NppAutonomyLevel;
       set.nppAutonomyLevel = level;
       // Keep the legacy boolean in sync for back-compat readers.
@@ -144,6 +151,11 @@ export async function POST(request: Request) {
         unset.nppAutonomyEnabledBy = "";
         unset.nppAutonomyEnabledAt = "";
       }
+    } else {
+      const mode = parsed.data.value as NppForeignPolicyMode;
+      set.nppForeignPolicyMode = mode;
+      set.nppForeignPolicyModeBy = auth.admin.username;
+      set.nppForeignPolicyModeAt = nowIso;
     }
 
     const update: Record<string, unknown> = { $set: set };

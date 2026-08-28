@@ -67,6 +67,7 @@ interface SimRunDoc {
     shortageResponsiveSourcingEnabled?: boolean;
     indexFundBondLiquidityEnabled?: boolean;
     nppMarketCoverageEnabled?: boolean;
+    nppFragileMarketSupplyEnabled?: boolean;
   };
 }
 
@@ -149,9 +150,17 @@ const indexFundBondLiquidityEnabled = parseOptionalBoolean(
   arg("index-fund-bond-liquidity"),
   "index-fund-bond-liquidity"
 );
+const equityLiquidityFacilityEnabled = parseOptionalBoolean(
+  arg("equity-liquidity"),
+  "equity-liquidity"
+);
 const nppMarketCoverageEnabled = parseOptionalBoolean(
   arg("npp-market-coverage"),
   "npp-market-coverage"
+);
+const nppFragileMarketSupplyEnabled = parseOptionalBoolean(
+  arg("npp-fragile-market-supply"),
+  "npp-fragile-market-supply"
 );
 // Clone mode: the sandbox DB was pre-loaded with a restore of the LIVE world
 // (mongorestore), so skip bootstrap AND the "real world" users guardrail, and
@@ -622,7 +631,9 @@ async function main() {
     canonicalFreightBillingEnabled,
     shortageResponsiveSourcingEnabled,
     indexFundBondLiquidityEnabled,
+    equityLiquidityFacilityEnabled,
     nppMarketCoverageEnabled,
+    nppFragileMarketSupplyEnabled,
   };
   const economicExperimentSet = economicExperimentConfigSet(economicExperiment);
   if (Object.keys(economicExperimentSet).length > 0) {
@@ -921,6 +932,7 @@ if (hasFlag("help") || hasFlag("h")) {
       "[--run-id=<id>] [--checkpoint-every=10] " +
       "[--mode=full|elections-only|economy-only|macro-only] " +
       "[--npp-market-coverage=true|false] " +
+      "[--npp-fragile-market-supply=true|false] " +
       "[--macro-growth] [--pre-iteration|--no-pre-iteration]"
   );
   process.exit(0);

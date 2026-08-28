@@ -188,8 +188,14 @@ const TOOLS: ToolDef[] = [
         indexFundBondLiquidityEnabled: bool(
           "Whether index funds target 20 percent sovereign bonds while retaining a 5 percent cash buffer in this sandbox only."
         ),
+        equityLiquidityFacilityEnabled: bool(
+          "Whether index funds place bounded executable bid and ask quotes for listed equities in this sandbox only."
+        ),
         nppMarketCoverageEnabled: bool(
           "Whether each existing NPP entry slot prioritizes a facility-ready empty state-sector cell in this sandbox only."
+        ),
+        nppFragileMarketSupplyEnabled: bool(
+          "Whether each existing eligible NPP entry slot prioritizes advertising, fertilizers, freight, or rare-earth supply when critically short."
         ),
       },
       ["preset", "turns", "seed"]
@@ -229,10 +235,22 @@ const TOOLS: ToolDef[] = [
         throw new Error("indexFundBondLiquidityEnabled must be boolean");
       }
       if (
+        a.equityLiquidityFacilityEnabled !== undefined &&
+        typeof a.equityLiquidityFacilityEnabled !== "boolean"
+      ) {
+        throw new Error("equityLiquidityFacilityEnabled must be boolean");
+      }
+      if (
         a.nppMarketCoverageEnabled !== undefined &&
         typeof a.nppMarketCoverageEnabled !== "boolean"
       ) {
         throw new Error("nppMarketCoverageEnabled must be boolean");
+      }
+      if (
+        a.nppFragileMarketSupplyEnabled !== undefined &&
+        typeof a.nppFragileMarketSupplyEnabled !== "boolean"
+      ) {
+        throw new Error("nppFragileMarketSupplyEnabled must be boolean");
       }
       const res = await enqueue(db, {
         preset,
@@ -251,8 +269,14 @@ const TOOLS: ToolDef[] = [
         ...(a.indexFundBondLiquidityEnabled !== undefined
           ? { indexFundBondLiquidityEnabled: a.indexFundBondLiquidityEnabled }
           : {}),
+        ...(a.equityLiquidityFacilityEnabled !== undefined
+          ? { equityLiquidityFacilityEnabled: a.equityLiquidityFacilityEnabled }
+          : {}),
         ...(a.nppMarketCoverageEnabled !== undefined
           ? { nppMarketCoverageEnabled: a.nppMarketCoverageEnabled }
+          : {}),
+        ...(a.nppFragileMarketSupplyEnabled !== undefined
+          ? { nppFragileMarketSupplyEnabled: a.nppFragileMarketSupplyEnabled }
           : {}),
       });
       return {
@@ -266,7 +290,9 @@ const TOOLS: ToolDef[] = [
         canonicalFreightBillingEnabled: a.canonicalFreightBillingEnabled ?? "preset default",
         shortageResponsiveSourcingEnabled: a.shortageResponsiveSourcingEnabled ?? "preset default",
         indexFundBondLiquidityEnabled: a.indexFundBondLiquidityEnabled ?? "preset default",
+        equityLiquidityFacilityEnabled: a.equityLiquidityFacilityEnabled ?? "preset default",
         nppMarketCoverageEnabled: a.nppMarketCoverageEnabled ?? "preset default",
+        nppFragileMarketSupplyEnabled: a.nppFragileMarketSupplyEnabled ?? "preset default",
         note: 'Poll with sim_run_status. The local worker claims queued jobs within ~15s — if status stays "queued" for minutes, the worker is not running (check sim_worker_health).',
       };
     },

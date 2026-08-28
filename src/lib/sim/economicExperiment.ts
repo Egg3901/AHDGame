@@ -5,7 +5,9 @@ export interface EconomicExperimentConfig {
   canonicalFreightBillingEnabled?: boolean;
   shortageResponsiveSourcingEnabled?: boolean;
   indexFundBondLiquidityEnabled?: boolean;
+  equityLiquidityFacilityEnabled?: boolean;
   nppMarketCoverageEnabled?: boolean;
+  nppFragileMarketSupplyEnabled?: boolean;
 }
 
 export function parseOptionalBoolean(value: string | undefined, flag: string): boolean | undefined {
@@ -31,8 +33,14 @@ export function economicExperimentConfigSet(
     ...(config.indexFundBondLiquidityEnabled !== undefined
       ? { indexFundBondLiquidityEnabled: config.indexFundBondLiquidityEnabled }
       : {}),
+    ...(config.equityLiquidityFacilityEnabled !== undefined
+      ? { equityLiquidityFacilityEnabled: config.equityLiquidityFacilityEnabled }
+      : {}),
     ...(config.nppMarketCoverageEnabled !== undefined
       ? { nppMarketCoverageEnabled: config.nppMarketCoverageEnabled }
+      : {}),
+    ...(config.nppFragileMarketSupplyEnabled !== undefined
+      ? { nppFragileMarketSupplyEnabled: config.nppFragileMarketSupplyEnabled }
       : {}),
   };
 }
@@ -50,8 +58,14 @@ export function economicExperimentCliArgs(config: EconomicExperimentConfig): str
     ...(set.indexFundBondLiquidityEnabled !== undefined
       ? [`--index-fund-bond-liquidity=${String(set.indexFundBondLiquidityEnabled)}`]
       : []),
+    ...(set.equityLiquidityFacilityEnabled !== undefined
+      ? [`--equity-liquidity=${String(set.equityLiquidityFacilityEnabled)}`]
+      : []),
     ...(set.nppMarketCoverageEnabled !== undefined
       ? [`--npp-market-coverage=${String(set.nppMarketCoverageEnabled)}`]
+      : []),
+    ...(set.nppFragileMarketSupplyEnabled !== undefined
+      ? [`--npp-fragile-market-supply=${String(set.nppFragileMarketSupplyEnabled)}`]
       : []),
   ];
 }

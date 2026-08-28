@@ -45,6 +45,49 @@ const PRODUCTION_POLICY_DEADBAND = 0.05;
  */
 export const ESSENTIAL_SHORTAGE_SCORE = 1.6;
 
+/**
+ * Markets selected for the bounded supply-breadth treatment. These are not a
+ * general concentration rule: each has a measured shortage and a known supply
+ * response path. Advertising and freight need more producer breadth,
+ * fertilizers need dedicated chemical capacity, and rare earths need focused
+ * extraction in states with deposit headroom.
+ */
+export const FRAGILE_MARKET_COMMODITY_BY_SECTOR: Readonly<
+  Partial<Record<CorporationType, CommodityType>>
+> = {
+  media: "advertising",
+  entertainment: "advertising",
+  chemical_industries: "fertilizers",
+  logistics: "freight",
+  extraction: "rare_earth",
+};
+
+/** Use the existing critical-shortage bar so the treatment self-disarms. */
+export const FRAGILE_MARKET_SHORTAGE_SCORE = ESSENTIAL_SHORTAGE_SCORE;
+
+export function fragileMarketCommodityForSector(
+  sectorType: CorporationType,
+  countryId: string,
+  priceRatioOf: CommodityPriceRatioFn
+): CommodityType | null {
+  const commodity = FRAGILE_MARKET_COMMODITY_BY_SECTOR[sectorType];
+  if (!commodity) return null;
+  const ratio = priceRatioOf(commodity, countryId);
+  return ratio != null && ratio >= FRAGILE_MARKET_SHORTAGE_SCORE ? commodity : null;
+}
+
+/** Focus a new plant on the diagnosed commodity when the sector has a dedicated recipe. */
+export function fragileMarketFoundingStrategy(
+  sectorType: CorporationType,
+  countryId: string,
+  priceRatioOf: CommodityPriceRatioFn
+): string | undefined {
+  const commodity = fragileMarketCommodityForSector(sectorType, countryId, priceRatioOf);
+  if (commodity === "fertilizers") return "fertilizers";
+  if (commodity === "rare_earth") return "rare_earth_mining";
+  return undefined;
+}
+
 /** A function that returns currentPrice/basePrice for a commodity in a country,
  *  or null when no price signal is available. */
 export type CommodityPriceRatioFn = (commodity: CommodityType, countryId: string) => number | null;
@@ -70,6 +113,10 @@ export interface PlacementSignals {
   extractionHeadroomOf?: (stateId: string) => number;
   /** Treatment gate: route an existing entry slot to uncovered markets first. */
   preferEmptyMarkets?: boolean;
+  /** Treatment gate: route an existing entry slot to one of four diagnosed fragile markets. */
+  preferFragileMarketSupply?: boolean;
+  /** Preserve planned-economy restrictions when the market treatment is active. */
+  fragileMarketCountryEligible?: (countryId: string) => boolean;
   /** Active state-sector cells, updated as this cohort founds new sectors. */
   activeMarketBuckets?: Set<string>;
 }
@@ -258,6 +305,26 @@ export function findBestUnownedSector(
     if (c.stateId === hqState) s *= HQ_STATE_SCORE_BONUS;
     return s;
   };
+  const candidatePriceRatioOf =
+    (c: UnownedSector): CommodityPriceRatioFn =>
+    (commodity, cid) =>
+      signals?.statePriceRatioOf?.(commodity, c.stateId) ?? priceRatioOf(commodity, cid);
+  const fragileScore = (c: UnownedSector): number => {
+    if (signals?.fragileMarketCountryEligible?.(c.countryId) === false) return 0;
+    const commodity = fragileMarketCommodityForSector(
+      c.sectorType as CorporationType,
+      c.countryId,
+      candidatePriceRatioOf(c)
+    );
+    if (!commodity) return 0;
+    const ratio = candidatePriceRatioOf(c)(commodity, c.countryId) ?? 0;
+    let result = sizeOf(c) * ratio;
+    if (c.sectorType === "extraction" && signals?.extractionHeadroomOf) {
+      result *= signals.extractionHeadroomOf(c.stateId);
+    }
+    if (c.stateId === hqState) result *= HQ_STATE_SCORE_BONUS;
+    return result;
+  };
   // Peak shortage = the price ratio of this sector's SHORTEST single output.
   // The blended `shortageOf` averages a short output against healthy ones
   // (logistics makes freight 0.45 AND consulting 0.25), which would hide a
@@ -269,6 +336,17 @@ export function findBestUnownedSector(
   // Highest market-weighted score wins; the HQ state gets a score bonus, not
   // the old unconditional first pick (see HQ_STATE_SCORE_BONUS).
   const best = (list: UnownedSector[]) => list.sort((a, b) => score(b) - score(a))[0];
+
+  // The treatment reallocates an existing eligible entry slot. It does not
+  // create another slot, waive entry costs, cross the geographic frontier, or
+  // bypass extraction headroom. Once the target price falls below the shared
+  // shortage bar this branch returns no candidates and normal ranking resumes.
+  if (signals?.preferFragileMarketSupply) {
+    const fragileCandidates = entryCandidates.filter((candidate) => fragileScore(candidate) > 0);
+    if (fragileCandidates.length > 0) {
+      return fragileCandidates.sort((a, b) => fragileScore(b) - fragileScore(a))[0];
+    }
+  }
 
   // Tier 0 — essential-shortage override: a commodity whose producer sector is
   // critically short jumps the type cascade, so a single-source input like

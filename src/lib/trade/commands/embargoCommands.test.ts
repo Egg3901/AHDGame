@@ -67,6 +67,10 @@ describe("imposeEmbargo", () => {
     const r = await imposeEmbargo(db as unknown as Db, baseInput);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(/cooldown/i);
+    expect(cooldownCol.createIndex).toHaveBeenCalledWith(
+      { sourceCountry: 1, targetCountry: 1 },
+      { unique: true, name: "embargoCooldowns_pair_unique" }
+    );
     // No embargo row was inserted when the gate rejects.
     expect(db.collectionMocks["tradeEmbargoes"]!.insertOne).not.toHaveBeenCalled();
   });

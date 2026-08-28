@@ -37,9 +37,16 @@ vi.mock("@/lib/db/collections", () => ({
 import { castAutonomousOrgVotes } from "../autonomousOrgVoting";
 
 // Minimal db whose only used collection is "npps" (voter identity lookup).
-function makeDb(): Db {
+function makeDb(mode?: "shadow" | "active"): Db {
   return {
     collection: (name: string) => {
+      if (name === "gameState") {
+        return {
+          findOne: vi
+            .fn()
+            .mockResolvedValue(mode ? { _id: "current", nppForeignPolicyMode: mode } : null),
+        };
+      }
       if (name === "npps") {
         return {
           findOne: vi.fn().mockResolvedValue({ _id: new ObjectId(), name: "Rep NPP" }),
@@ -60,6 +67,25 @@ beforeEach(() => {
 });
 
 describe("castAutonomousOrgVotes", () => {
+  it("yields all ballots to the opinion planner in active mode", async () => {
+    collectionDocs.proposals = [
+      {
+        _id: new ObjectId(),
+        organizationId: "eu",
+        proposingCountryId: "DE",
+        votes: [],
+      },
+    ];
+    getMembersMock.mockResolvedValue(["FR", "DE"]);
+    isActiveMock.mockResolvedValue(true);
+
+    const count = await castAutonomousOrgVotes(makeDb("active"), 10);
+
+    expect(count).toBe(0);
+    expect(getMembersMock).not.toHaveBeenCalled();
+    expect(upsertMock).not.toHaveBeenCalled();
+  });
+
   it("casts yes for an autonomy-active member that hasn't voted on a membership proposal", async () => {
     collectionDocs.proposals = [
       {

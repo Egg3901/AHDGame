@@ -2,14 +2,45 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 
+let policyMode: "shadow" | "active" = "shadow";
+const nppHeadId = new ObjectId();
 const stubDb = () =>
   ({
-    collection: () => ({ findOne: async () => ({ _id: "current", preset: "1953-default" }) }),
+    collection: (name: string) => {
+      if (name === "gameState") {
+        return {
+          findOne: async () => ({
+            _id: "current",
+            preset: "1953-default",
+            nppForeignPolicyMode: policyMode,
+          }),
+        };
+      }
+      if (name === "governmentFormations") {
+        const formation = {
+          _id: "FR",
+          countryId: "FR",
+          status: "formed",
+          pmNppId: nppHeadId,
+        };
+        return {
+          find: () => ({ toArray: async () => [formation] }),
+          findOne: async ({ _id }: { _id: string }) => (_id === "FR" ? formation : null),
+        };
+      }
+      if (name === "npps") {
+        return {
+          findOne: async () => ({ _id: nppHeadId, name: "French NPP Premier", party: "1" }),
+        };
+      }
+      return { findOne: async () => ({ _id: "current", preset: "1953-default" }) };
+    },
   }) as unknown as Db;
 
 const buildJoinConflictBill = vi.fn().mockResolvedValue(new ObjectId());
 let conflict: ConflictDoc | null = null;
 let roster: string[] = [];
+const { headlessCountries } = vi.hoisted(() => ({ headlessCountries: new Set<string>() }));
 
 vi.mock("@/lib/db/collections", () => ({
   getOrganizationLeadershipCollection: vi.fn(),
@@ -54,10 +85,14 @@ vi.mock("@/lib/internationalOrganizations/commands/buildJoinConflictBill", () =>
 }));
 vi.mock("@/lib/api/headOfGovernment", () => ({
   getHeadOfGovernmentCharacterId: vi.fn(async () => new ObjectId()),
-  getHeadOfGovernmentCharacter: vi.fn(async () => ({
-    _id: new ObjectId(),
-    name: "Head of Government",
-  })),
+  getHeadOfGovernmentCharacter: vi.fn(async (_db: unknown, countryId: string) =>
+    headlessCountries.has(countryId)
+      ? null
+      : {
+          _id: new ObjectId(),
+          name: "Head of Government",
+        }
+  ),
 }));
 
 const { processInternationalOrganizationsTurn } =
@@ -140,6 +175,8 @@ describe("join_conflict enactment", () => {
     buildJoinConflictBill.mockClear();
     conflict = KOREA;
     roster = ["US", "UK"];
+    policyMode = "shadow";
+    headlessCountries.clear();
     const access = await import("@/lib/countryAccess");
     vi.mocked(access.getAllCountryAccess).mockResolvedValue(accessSilencing() as never);
     const service = await import("@/lib/internationalOrganizations/service");
@@ -169,6 +206,26 @@ describe("join_conflict enactment", () => {
 
     await runPhase();
     expect(billedCountries()).toEqual(["US"]);
+  });
+
+  it("lets a formed autonomous government vote and ratify war entry in active mode", async () => {
+    policyMode = "active";
+    roster = ["US", "FR"];
+    headlessCountries.add("FR");
+    const access = await import("@/lib/countryAccess");
+    vi.mocked(access.getAllCountryAccess).mockResolvedValue(accessSilencing("FR") as never);
+
+    await runPhase();
+
+    expect(billedCountries()).toEqual(["US", "FR"]);
+    const france = buildJoinConflictBill.mock.calls.find(
+      (call) => (call[0] as { countryId: string }).countryId === "FR"
+    )?.[0] as { sponsor: { characterId: ObjectId; characterName: string; party?: string } };
+    expect(france.sponsor).toEqual({
+      characterId: nppHeadId,
+      characterName: "French NPP Premier",
+      party: "1",
+    });
   });
 
   it("spawns a bill for France now that its national lifecycle is available", async () => {
