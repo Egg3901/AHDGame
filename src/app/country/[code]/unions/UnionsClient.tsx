@@ -236,6 +236,18 @@ export function UnionsClient() {
               lost, until the ban is repealed by legislation. Union actions are unavailable and
               unionization is declining while the ban holds.
             </p>
+            <p className="mt-1.5 text-xs text-foreground">
+              To lift the ban, pass a law:{" "}
+              <Link
+                href={`/country/${code}/legislature`}
+                className="font-medium text-primary underline underline-offset-2 hover:text-primary/80"
+              >
+                Propose Legislation
+              </Link>{" "}
+              → an <span className="font-medium">Industry</span> bill → check{" "}
+              <span className="font-medium">Include union-law provision</span> → choose{" "}
+              <span className="font-medium">Repeal the union ban</span>.
+            </p>
           </div>
         </div>
       )}
