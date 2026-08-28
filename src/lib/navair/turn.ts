@@ -154,7 +154,18 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
     if (!alive(u)) continue;
     const station = stationOf(u);
     if (!station) continue;
-    if (!u.station) unitsStationed++;
+    if (!u.station) {
+      // First time this formation has been placed. Persist it, or the field stays null in
+      // the database forever: `stationOf` is deterministic so the engine would recompute
+      // the same answer every turn and never notice, but the war room reads the stored
+      // value and would show a player nothing about where their own fleet is.
+      //
+      // This is also why the subsystem needs no migration. Backfill is idempotent and
+      // happens on the first turn after deploy, which beats a manual migration against a
+      // shared production database.
+      unitsStationed++;
+      touchedByMission.add(u);
+    }
     u.station = station;
     countries.add(u.countryId);
     const list = byRegion.get(station);
