@@ -4,7 +4,13 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { FOREIGN_AFFAIRS_POSITION_BY_COUNTRY } from "@/lib/constants/internationalOrganizations";
 import { canTableResolutionType, type OrganizationCategory } from "@/lib/constants/orgCategory";
 import { NATIONAL_TERMINAL_STATUSES } from "@/lib/congress/billProposalLimits";
-import type { Bill, BillStatus, NPP, NppForeignPolicyMode } from "@/lib/db/types";
+import type {
+  Bill,
+  BillStatus,
+  NPP,
+  NppForeignPolicyMode,
+  NppForeignPolicyStage,
+} from "@/lib/db/types";
 import type { CountryAlignment } from "@/lib/db/types/countryAlignment";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
@@ -27,6 +33,7 @@ import type { PeaceOfferDoc } from "@/lib/db/types/peaceOffer";
 import type { PersistedSphereMembership } from "@/lib/world/spheres/membershipStore";
 import { isNppAutonomyActive } from "./featureFlag";
 import { executeForeignPolicyChoice } from "./foreignPolicyActions";
+import { foreignPolicyActionAllowed, foreignPolicyStageFrom } from "./foreignPolicyRollout";
 
 export type ForeignPolicyMode = NppForeignPolicyMode;
 
@@ -85,6 +92,7 @@ interface ForeignPolicyContext {
   countryId: CountryId;
   currentTurn: number;
   mode: ForeignPolicyMode;
+  stage: NppForeignPolicyStage;
   head: NPP;
   alignments: CountryAlignment[];
   spheres: PersistedSphereMembership[];
@@ -114,12 +122,13 @@ interface PersistedForeignPolicyDecision {
   countryId: CountryId;
   turn: number;
   mode: ForeignPolicyMode;
+  stage: NppForeignPolicyStage;
   headNppId: ObjectId;
   headNppName: string;
   selected: ForeignPolicyChoice | null;
   alternatives: ForeignPolicyChoice[];
   acted: boolean;
-  executionStatus: "planned" | "claimed" | "executed" | "rejected";
+  executionStatus: "planned" | "claimed" | "executed" | "rejected" | "no_action";
   executionNote: string;
   createdAt: Date;
 }
@@ -899,6 +908,10 @@ function rankChoices(context: ForeignPolicyContext): ForeignPolicyChoice[] {
     ...bilateralCandidates(context, opinions),
     ...warCandidates(context, opinionMap),
   ]
+    .filter(
+      (choice) =>
+        context.mode !== "active" || foreignPolicyActionAllowed(choice.type, context.stage)
+    )
     .filter((choice) => !choiceOnCooldown(context, choice))
     .sort((a, b) => b.score - a.score || a.type.localeCompare(b.type));
 }
@@ -978,7 +991,11 @@ async function loadContext(
     pendingPeaceOffers,
   ] = await Promise.all([
     db
-      .collection<{ _id: string; nppForeignPolicyMode?: ForeignPolicyMode }>("gameState")
+      .collection<{
+        _id: string;
+        nppForeignPolicyMode?: ForeignPolicyMode;
+        nppForeignPolicyStage?: NppForeignPolicyStage;
+      }>("gameState")
       .findOne({ _id: "current" }),
     db.collection<CountryAlignment>("countryAlignments").find({}).toArray(),
     db.collection<PersistedSphereMembership>("sphereMemberships").find({}).toArray(),
@@ -1077,6 +1094,7 @@ async function loadContext(
     countryId,
     currentTurn,
     mode: modeFrom(gameState?.nppForeignPolicyMode),
+    stage: foreignPolicyStageFrom(gameState?.nppForeignPolicyStage),
     head,
     alignments,
     spheres,
@@ -1158,16 +1176,19 @@ export async function processAutonomousForeignPolicy(
     countryId,
     turn: currentTurn,
     mode: context.mode,
+    stage: context.stage,
     headNppId: context.head._id,
     headNppName: context.head.name,
     selected: choice,
     alternatives: ranked.slice(0, MAX_ALTERNATIVES),
     acted: false,
-    executionStatus: context.mode === "shadow" ? "planned" : "claimed",
+    executionStatus: context.mode === "shadow" ? "planned" : choice ? "claimed" : "no_action",
     executionNote:
       context.mode === "shadow"
         ? "Shadow mode records intent without changing world state."
-        : "Active decision claimed before command execution.",
+        : choice
+          ? "Active decision claimed before command execution."
+          : "No permitted choice cleared the action threshold.",
     createdAt: now,
   };
   const decisions = db.collection<PersistedForeignPolicyDecision>(DECISION_COLLECTION);

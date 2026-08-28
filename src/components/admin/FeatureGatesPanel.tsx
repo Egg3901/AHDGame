@@ -6,6 +6,7 @@ import { gameConfig as gameConfigDefaults } from "@/lib/seeds/reference/gameConf
 
 type NppAutonomyLevel = "off" | "v0" | "v1" | "v2" | "v3" | "v4";
 type NppForeignPolicyMode = "off" | "shadow" | "active";
+type NppForeignPolicyStage = "votes" | "proposals" | "trade" | "support" | "war";
 
 interface BooleanGate {
   key: string;
@@ -186,6 +187,34 @@ const NPP_FOREIGN_POLICY_MODES: {
   },
 ];
 
+const NPP_FOREIGN_POLICY_STAGES: {
+  value: NppForeignPolicyStage;
+  label: string;
+  blurb: string;
+}[] = [
+  { value: "votes", label: "Votes", blurb: "Cast scored votes on pending organization business." },
+  {
+    value: "proposals",
+    label: "Proposals",
+    blurb: "Also table trade, aid, sanctions, and statement proposals.",
+  },
+  {
+    value: "trade",
+    label: "Trade",
+    blurb: "Also introduce targeted tariff bills and manage temporary embargoes.",
+  },
+  {
+    value: "support",
+    label: "Support",
+    blurb: "Also provide non-belligerent material support in existing wars.",
+  },
+  {
+    value: "war",
+    label: "War",
+    blurb: "Also seek guarded war entry, conduct operations, and pursue peace.",
+  },
+];
+
 /**
  * Graduated system modes that live on gameConfig instead of gameState. Writes
  * go through the existing per-system PATCH routes (NOT /feature-gates) because
@@ -272,6 +301,7 @@ interface GatesState {
   booleans: Record<string, boolean>;
   nppAutonomyLevel: NppAutonomyLevel;
   nppForeignPolicyMode: NppForeignPolicyMode;
+  nppForeignPolicyStage: NppForeignPolicyStage;
 }
 
 function DefaultBadge() {
@@ -352,11 +382,17 @@ export function FeatureGatesPanel() {
         setError(data.error || "Failed to update gate");
         return;
       }
-      if (data.booleans && data.nppAutonomyLevel && data.nppForeignPolicyMode) {
+      if (
+        data.booleans &&
+        data.nppAutonomyLevel &&
+        data.nppForeignPolicyMode &&
+        data.nppForeignPolicyStage
+      ) {
         setState({
           booleans: data.booleans,
           nppAutonomyLevel: data.nppAutonomyLevel,
           nppForeignPolicyMode: data.nppForeignPolicyMode,
+          nppForeignPolicyStage: data.nppForeignPolicyStage,
         });
       }
     } catch {
@@ -555,6 +591,50 @@ export function FeatureGatesPanel() {
               ?.blurb
           }
         </p>
+        <div className="mt-3 border-t border-card-border pt-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold">Active capability stage</span>
+            <span className="text-[10px] uppercase tracking-wider text-muted">
+              {
+                NPP_FOREIGN_POLICY_STAGES.find(
+                  (stage) => stage.value === state.nppForeignPolicyStage
+                )?.label
+              }
+            </span>
+          </div>
+          <div className="inline-flex flex-wrap gap-1 rounded-lg border border-card-border bg-card p-1">
+            {NPP_FOREIGN_POLICY_STAGES.map((stage) => {
+              const active = state.nppForeignPolicyStage === stage.value;
+              return (
+                <button
+                  key={stage.value}
+                  type="button"
+                  disabled={savingKey === "foreign-policy-stage"}
+                  title={stage.blurb}
+                  onClick={() =>
+                    void post(
+                      { kind: "foreign-policy-stage", value: stage.value },
+                      "foreign-policy-stage"
+                    )
+                  }
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+                    active
+                      ? "bg-primary text-white"
+                      : "text-muted hover:bg-background hover:text-foreground"
+                  }`}
+                >
+                  {stage.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-muted">
+            {
+              NPP_FOREIGN_POLICY_STAGES.find((stage) => stage.value === state.nppForeignPolicyStage)
+                ?.blurb
+            }
+          </p>
+        </div>
       </div>
 
       {/* Graduated system modes (gameConfig) */}

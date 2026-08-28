@@ -4,7 +4,13 @@ import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
-import type { GameState, NppAutonomyLevel, NppForeignPolicyMode } from "@/lib/db/types";
+import type {
+  GameState,
+  NppAutonomyLevel,
+  NppForeignPolicyMode,
+  NppForeignPolicyStage,
+} from "@/lib/db/types";
+import { foreignPolicyStageFrom } from "@/lib/nppAutonomy/foreignPolicyRollout";
 
 /**
  * Unified admin control surface for the game's feature gates. Reads/writes the
@@ -73,12 +79,17 @@ const bodySchema = z.discriminatedUnion("kind", [
     kind: z.literal("foreign-policy-mode"),
     value: z.enum(["off", "shadow", "active"]),
   }),
+  z.object({
+    kind: z.literal("foreign-policy-stage"),
+    value: z.enum(["votes", "proposals", "trade", "support", "war"]),
+  }),
 ]);
 
 interface FeatureGatesState {
   booleans: Record<FeatureGateBooleanKey, boolean>;
   nppAutonomyLevel: NppAutonomyLevel;
   nppForeignPolicyMode: NppForeignPolicyMode;
+  nppForeignPolicyStage: NppForeignPolicyStage;
 }
 
 async function readState(): Promise<FeatureGatesState> {
@@ -97,8 +108,9 @@ async function readState(): Promise<FeatureGatesState> {
     doc?.nppAutonomyLevel ?? (doc?.nppAutonomyEnabled === true ? "v0" : "off");
 
   const nppForeignPolicyMode: NppForeignPolicyMode = doc?.nppForeignPolicyMode ?? "shadow";
+  const nppForeignPolicyStage = foreignPolicyStageFrom(doc?.nppForeignPolicyStage);
 
-  return { booleans, nppAutonomyLevel, nppForeignPolicyMode };
+  return { booleans, nppAutonomyLevel, nppForeignPolicyMode, nppForeignPolicyStage };
 }
 
 /** GET /api/admin/feature-gates — current state of every gate. */
@@ -151,11 +163,16 @@ export async function POST(request: Request) {
         unset.nppAutonomyEnabledBy = "";
         unset.nppAutonomyEnabledAt = "";
       }
-    } else {
+    } else if (parsed.data.kind === "foreign-policy-mode") {
       const mode = parsed.data.value as NppForeignPolicyMode;
       set.nppForeignPolicyMode = mode;
       set.nppForeignPolicyModeBy = auth.admin.username;
       set.nppForeignPolicyModeAt = nowIso;
+    } else {
+      const stage = parsed.data.value as NppForeignPolicyStage;
+      set.nppForeignPolicyStage = stage;
+      set.nppForeignPolicyStageBy = auth.admin.username;
+      set.nppForeignPolicyStageAt = nowIso;
     }
 
     const update: Record<string, unknown> = { $set: set };
