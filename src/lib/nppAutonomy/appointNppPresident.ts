@@ -42,12 +42,13 @@ export async function appointNppPresident(
   db: Db,
   countryId: CountryId,
   currentTurn: number,
-  now: Date
+  now: Date,
+  preset?: string
 ): Promise<boolean> {
   // V1 gate — also enforces the player rail (false below v2 in player countries).
   if (!(await nppAutonomyAtLeast(db, countryId, "v1"))) return false;
 
-  const config = getCountryConfig(countryId);
+  const config = getCountryConfig(countryId, preset);
   if (!isPresidentialGovernmentType(config.governmentType)) return false;
 
   // Countries with a live presidential-election cycle (US electoral-college

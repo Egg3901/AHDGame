@@ -35,7 +35,8 @@ export async function appointNppPrimeMinister(
   db: Db,
   countryId: CountryId,
   currentTurn: number,
-  now: Date
+  now: Date,
+  preset?: string
 ): Promise<boolean> {
   // Safety rail — never fire in player-enabled countries.
   if (!(await isNppAutonomyActive(db, countryId))) return false;
@@ -46,13 +47,13 @@ export async function appointNppPrimeMinister(
   // OR a previously-seated NPP) is left untouched, so this is idempotent.
   if (!gov || gov.status !== "pending") return false;
 
-  const seatsByParty = await tallySeatsByParty(db, countryId);
+  const seatsByParty = await tallySeatsByParty(db, countryId, preset);
   const governingPartyId = getLargestParty(seatsByParty);
   if (!governingPartyId) return false;
 
   // Largest party's seated lower-chamber NPP MPs. A player-character PM is
   // impossible here (country is not player-enabled), so we pick from NPPs.
-  const lowerOfficeType = getLowerChamberOfficeType(countryId);
+  const lowerOfficeType = getLowerChamberOfficeType(countryId, preset);
   const nppMps = await db
     .collection<ElectedOfficial>("electedOfficials")
     .find({
@@ -81,9 +82,10 @@ export async function appointNppPrimeMinister(
 
   // Seat the NPP as head of government: clears any prior PM, sets the NPP's
   // currentOffice, records country history + Discord. Player path untouched.
-  await appointPrimeMinister(db, countryId, null, npp._id, npp.name, now);
+  await appointPrimeMinister(db, countryId, null, npp._id, npp.name, now, preset);
 
-  const majorityThreshold = gov.majorityThreshold ?? getCountryConfig(countryId).coalitionThreshold;
+  const majorityThreshold =
+    gov.majorityThreshold ?? getCountryConfig(countryId, preset).coalitionThreshold;
   const govPartySeats = seatsByParty[governingPartyId] ?? 0;
   const formationType = govPartySeats >= majorityThreshold ? "majority" : "minority";
 
