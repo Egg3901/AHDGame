@@ -113,4 +113,15 @@ describe("buildJoinConflictBill", () => {
 
     expect(notifyChambersVoteOpen).toHaveBeenCalledTimes(1);
   });
+
+  it("returns the existing bill instead of filing the same resolution twice", async () => {
+    const db = setup();
+    const existingId = new ObjectId();
+    db.collectionMocks["bills"]!.findOne.mockResolvedValue({ _id: existingId });
+
+    await expect(run(db)).resolves.toEqual(existingId);
+
+    expect(db.collectionMocks["bills"]!.insertOne).not.toHaveBeenCalled();
+    expect(notifyChambersVoteOpen).not.toHaveBeenCalled();
+  });
 });

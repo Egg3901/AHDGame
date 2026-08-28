@@ -19,12 +19,15 @@ describe("belligerentRoll", () => {
     expect(roll.b.heading).toBe("DEFENDERS");
   });
 
-  it("says which alliance dragged an ally in", () => {
+  // Both halves in the one column. The record used to print the second half as a
+  // prose line in the masthead ("Russia entered under the Warsaw Pact to defend
+  // East Germany") above a roll that already said "Russia · RU | Warsaw Pact".
+  it("says which alliance dragged an ally in, and who for", () => {
     const roll = belligerentRoll(warForGermany);
     const ru = roll.b.rows.find((r) => r.code === "RU");
     // The whole reason the panel exists: a code in a list could not distinguish
     // Russia from the country that started the war.
-    expect(ru).toMatchObject({ name: "Russia", entry: "Warsaw Pact", viaTreaty: true });
+    expect(ru).toMatchObject({ name: "Russia", entry: "Warsaw Pact → DD", viaTreaty: true });
   });
 
   it("separates the declarer, the declared-on and the ally", () => {
@@ -32,7 +35,7 @@ describe("belligerentRoll", () => {
     expect(roll.a.rows.map((r) => [r.code, r.entry])).toEqual([["US", "declared"]]);
     expect(roll.b.rows.map((r) => [r.code, r.entry])).toEqual([
       ["DD", "home ground"],
-      ["RU", "Warsaw Pact"],
+      ["RU", "Warsaw Pact → DD"],
     ]);
   });
 

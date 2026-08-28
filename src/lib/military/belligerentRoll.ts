@@ -74,8 +74,18 @@ function entryFor(
 ): BelligerentEntry {
   const base = { code: countryId, name: entityName(countryId) };
 
+  // Names the ally it came in for, not just the charter that dragged it. The
+  // record used to carry that second half as a prose line in the masthead
+  // ("Russia entered under the Warsaw Pact to defend East Germany") sitting above
+  // a roll that already said "Russia · RU | Warsaw Pact". One column says both.
   const treaty = (c.treatyEntries ?? []).find((e) => e.countryId === countryId);
-  if (treaty) return { ...base, entry: orgName(treaty.organizationId), viaTreaty: true };
+  if (treaty) {
+    return {
+      ...base,
+      entry: `${orgName(treaty.organizationId)} → ${treaty.defending}`,
+      viaTreaty: true,
+    };
+  }
 
   // "home ground", not "declared on": this country's own soil is the theatre, which
   // is true however the war started. The parallel wording would be a claim about a

@@ -262,7 +262,13 @@ export async function applyLegislationEffect(
             if (!(opposing as string[]).includes(countryId)) {
               const currentTurn = await getCurrentTurn(db);
               const preparation = bill.nppSponsored
-                ? await prepareAutonomousWarEntry(db, countryId, conflict, currentTurn)
+                ? await prepareAutonomousWarEntry(
+                    db,
+                    countryId,
+                    conflict,
+                    currentTurn,
+                    p.organizationId
+                  )
                 : { ready: true, deployedUnits: 0, reason: "Player government entry." };
               if (preparation.ready) {
                 // Idempotent: joinSide returns early if the roster already has it.

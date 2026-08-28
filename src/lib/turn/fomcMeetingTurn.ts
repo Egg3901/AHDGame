@@ -31,6 +31,7 @@ import {
   seatPreferredVote,
   tallyMeeting,
   isAutoSeat,
+  playerSeats,
   type FomcMacroContext,
 } from "@/lib/centralBank/fomc";
 import { spawnTechnocratNpp } from "@/lib/npp/generator";
@@ -221,6 +222,14 @@ interface ResolveOutcome {
  * route. Writes resolution mutations into `set` when the meeting resolves (a
  * majority is reached, a majority becomes impossible, or the deadline is hit).
  * Leaves `set` untouched and returns resolved:false while votes are still open.
+ *
+ * A decided tally alone never closes a meeting while a seated player can still
+ * ballot: NPP seats auto-vote the moment a meeting opens, so on a board where
+ * the NPP block alone holds the majority the meeting would otherwise open and
+ * resolve inside the same turn phase and the player seats would never see the
+ * documented 24-turn vote window. Early resolution therefore waits until every
+ * player seat has cast a ballot; the deadline still force-resolves with
+ * no-shows abstaining.
  */
 export function resolveMeetingInto(
   set: Record<string, unknown>,
@@ -232,7 +241,10 @@ export function resolveMeetingInto(
   opts: ResolveOptions
 ): ResolveOutcome {
   const tally = tallyMeeting(meeting.ballots, meeting.motion, board.length);
-  if (!tally.decided && !opts.forceDeadline) {
+  const awaitingPlayerBallot = playerSeats(board).some(
+    (s) => !meeting.ballots.some((b) => b.seatId === s.seatId)
+  );
+  if ((!tally.decided || awaitingPlayerBallot) && !opts.forceDeadline) {
     return { resolved: false, moved: false, changesThisTerm: opts.changesThisTerm };
   }
 
@@ -280,8 +292,8 @@ export type CastBallotResult =
 
 /**
  * Record a live player board member's ballot on the active meeting and, per the
- * "auto-pass before the timer" rule, resolve immediately if that ballot decides
- * the outcome (a full-board majority for or against the motion). Idempotent per
+ * "auto-pass before the timer" rule, resolve immediately once the outcome is
+ * decided and no other player seat is still waiting to ballot. Idempotent per
  * seat per meeting: a seat that has already voted is rejected.
  */
 export async function castFomcBallot(
@@ -330,7 +342,8 @@ export interface FomcMeetingTurnResult {
 /**
  * Per-turn FOMC committee phase. For every bank carrying a committee board:
  *   1. roll the 4-year term (resets the 16-change budget),
- *   2. resolve the active meeting if it is decided or has hit its deadline,
+ *   2. resolve the active meeting if it is decided with no player ballot
+ *      pending, or has hit its deadline,
  *   3. open a fresh meeting on cadence when none is active.
  *
  * No-op for banks without a `fomcBoard` (legacy single-chair banks are untouched).
@@ -450,6 +463,7 @@ export async function processFomcMeetings(
     let meeting = bank.activeFomcMeeting ?? null;
 
     // 2. Open a meeting when none is active and cadence is due.
+    let justOpened = false;
     if (!meeting) {
       const dueForMeeting =
         typeof bank.lastFomcMeetingTurn !== "number" ||
@@ -463,13 +477,23 @@ export async function processFomcMeetings(
         );
         meeting = openMeeting(board, ctx, currentTurn, now, allowChange);
         set.lastFomcMeetingTurn = currentTurn;
+        set.activeFomcMeeting = meeting;
         result.meetingsOpened++;
+        justOpened = true;
       }
     }
 
     // 3. Resolve the active meeting if decided, past its wall-clock window, or
     //    at the game-clock deadline. Turns never pause: no-shows abstain.
-    if (meeting && meeting.status === "voting") {
+    //
+    // A meeting OPENED this very phase is never resolved in the same phase, even
+    // if the NPP/auto seats alone already decide the tally. Otherwise a board with
+    // no seated player — or one where the auto block holds the majority — opens and
+    // resolves a rate motion inside one turn, so the chair and members never see it
+    // ("bills insta-pass without the fed chair even seeing them", #1211). It stays
+    // open for its window; the deadline (which cannot fall on the opening turn,
+    // resolvesOnTurn = openedAtTurn + FOMC_VOTE_WINDOW_TURNS) still force-resolves.
+    if (meeting && meeting.status === "voting" && !justOpened) {
       const deadlineHit =
         currentTurn >= meeting.resolvesOnTurn ||
         now.getTime() >= meeting.playerVoteDeadline.getTime();

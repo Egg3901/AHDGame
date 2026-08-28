@@ -58,6 +58,7 @@ import { migration as dropOffRosterCommandCommanders } from "./entries/2026-08-2
 import { migration as severEmigratedGenerals } from "./entries/2026-08-26-sever-emigrated-generals";
 import { migration as rescheduleEconCountryBills } from "./entries/2026-08-27-reschedule-econ-country-bills";
 import { migration as equityLiquidityIndexes } from "./entries/2026-08-28-equity-liquidity-indexes";
+import { migration as redistrictingAuthorityLegislative } from "./entries/2026-08-26-redistricting-authority-legislative";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -171,6 +172,11 @@ export const MIGRATIONS: Migration[] = [
   // reopen their expired vote windows instead of replaying stale tallies.
   rescheduleEconCountryBills,
   equityLiquidityIndexes,
+  // Redistricting was unreachable: the authority law is orphaned from the v2
+  // catalog, so every US state defaulted to bipartisan commission (canDraw
+  // false). Backfill to legislature-drawn — historically correct for the era
+  // and what lets a trifecta redraw.
+  redistrictingAuthorityLegislative,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.

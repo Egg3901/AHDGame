@@ -623,7 +623,17 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
 
       for (const cand of candidates) {
         if (unmet <= 0) break;
-        if (cand.landed > ceiling) {
+        // The buyer-tolerance ceiling is a HAULAGE limit: past it, trucking the
+        // cargo costs more than the cargo is worth, so the demand goes unmet.
+        // Grid commodities (energy, natural gas) do not ride the haulage fleet —
+        // they are wheeled over wire and pipe, and the design is that a state
+        // gets power at a price rather than a blackout. So grid is NOT
+        // tolerance-bound: it keeps drawing from reachable generation (cheapest
+        // first, lossier the farther it comes) until supply is exhausted, which
+        // is what the consumption ledger already books. Applying the freight
+        // ceiling to grid was the whole energy book divergence: the ledger
+        // served it, the sourcing book called it unmet.
+        if (!isGrid && cand.landed > ceiling) {
           // Sorted ascending: everything past here also breaks the ceiling.
           summary.toleranceBoundUnits += unmet;
           break;

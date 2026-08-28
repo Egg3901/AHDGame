@@ -8,7 +8,11 @@ import type {
   IndexFundScope,
   IndexFundTargetConstituent,
 } from "@/lib/db/types";
-import { applyListingRetention, applyListingStandards } from "./listingStandards";
+import {
+  applyListingRetention,
+  applyListingStandards,
+  isMateriallyInsolvent,
+} from "./listingStandards";
 import type { ListingFailureStreak } from "./listingStandards";
 import { failuresAfterWaiver } from "./petitions/rules";
 
@@ -121,7 +125,9 @@ export function screenListingStandards(
         c.publicFloat !== undefined && (c.totalShares ?? 0) > 0
           ? c.publicFloat / (c.totalShares as number)
           : undefined,
-      insolvent: (c.liquidCapital ?? 0) < 0,
+      // Material insolvency, not a rounding error into the red: negative net
+      // cash beyond a small fraction of market value.
+      insolvent: isMateriallyInsolvent(c.liquidCapital, (c.sharePrice ?? 0) * (c.totalShares ?? 0)),
     }))
   );
   const waived = retention?.waivedIds;

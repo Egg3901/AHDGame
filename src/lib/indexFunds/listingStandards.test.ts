@@ -5,6 +5,7 @@ import {
   MIN_FREE_FLOAT_RATIO,
   MIN_RELATIVE_SIZE,
   applyListingStandards,
+  isMateriallyInsolvent,
   describeFailure,
   medianMarketCap,
   shouldDropConstituent,
@@ -257,5 +258,23 @@ describe("applyListingRetention", () => {
     expect(result.streaks).toEqual([
       { corporationId: "a", consecutiveFailures: 2, failures: ["size"] },
     ]);
+  });
+});
+
+describe("isMateriallyInsolvent", () => {
+  it("does not flag a rounding-error negative against a large market cap", () => {
+    // The Atlas case: -$2,657 against a $7.5M cap clears from one turn of revenue.
+    expect(isMateriallyInsolvent(-2657, 7_500_000)).toBe(false);
+  });
+  it("flags a material negative (beyond 1% of market cap)", () => {
+    expect(isMateriallyInsolvent(-100_000, 7_500_000)).toBe(true);
+  });
+  it("treats a positive or zero balance as solvent", () => {
+    expect(isMateriallyInsolvent(0, 7_500_000)).toBe(false);
+    expect(isMateriallyInsolvent(5, 7_500_000)).toBe(false);
+  });
+  it("treats negative cash with no market value as insolvent", () => {
+    expect(isMateriallyInsolvent(-1, 0)).toBe(true);
+    expect(isMateriallyInsolvent(-1, undefined)).toBe(true);
   });
 });

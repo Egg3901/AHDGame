@@ -95,7 +95,11 @@ import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import { emitBuildCapexTxBulk } from "@/lib/corporations/capexTxLog";
 import { getLogisticsSupportedSectorCount, TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { sumStrengthGrants } from "@/lib/constants/techTree";
-import { CAPACITY_BUILD_TURNS, computeBuildCost } from "@/lib/constants/capacityEconomy";
+import {
+  CAPACITY_BUILD_TURNS,
+  computeBuildCost,
+  MAX_BUILD_UNITS_PER_ORDER,
+} from "@/lib/constants/capacityEconomy";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
 import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
@@ -148,10 +152,42 @@ const NPP_REINVEST_MIN_FILL = 0.85;
 const NPP_REINVEST_MAX_QUEUE_DEPTH = 20;
 /** Stop discretionary growth sooner than necessary replacement. */
 const NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH = 2;
-/** One growth order may claim at most a quarter of open headroom. */
-const NPP_REINVEST_HEADROOM_SHARE = 0.25;
-/** Prevent a cash-rich conglomerate from buying every market at once. */
-const NPP_REINVEST_MAX_SECTORS_PER_TURN = 1;
+/**
+ * Growth builds from nothing, like a player's `buildCapacity` — it is NOT gated
+ * or sized by the unowned-headroom pool. A plant that is profitable, selling
+ * through its output (fill >= MIN_FILL) and in a market that is not glutted
+ * grows by deploying this share of its post-floor surplus into capacity each
+ * turn it can. The per-sector affordability rail and the cash floor bound the
+ * spend; a selling-out plant that overbuilds sees fill fall and stops.
+ */
+const NPP_GROWTH_DEPLOY_FRACTION = 0.5;
+/**
+ * Minimum state shortage score for a growth build — do not add capacity to a
+ * glutted market. Mirrors the stranded-decay glut threshold: at or below this
+ * the plant is shrinking, not growing.
+ */
+export const NPP_GROWTH_MIN_SHORTAGE = 0.85;
+/**
+ * Minimum nameplate utilization (runUnits / capitalStock) for a growth build.
+ * Sell-through (fill) alone is not enough: a plant that runs 1,000 of a
+ * 100,000,000 nameplate and sells all 1,000 has fill 1 but is 99.999% idle, and
+ * adding capacity there is pure waste. Growth requires the plant to be actually
+ * near capacity AND selling out before it buys more.
+ */
+export const NPP_GROWTH_MIN_UTILIZATION = 0.85;
+/**
+ * Per-turn growth ceiling as a fraction of the capacity the plant actually RUNS.
+ * The demand anchor that replaces the phantom unowned pool: a plant's proven
+ * throughput is the honest read on how much more it can sell, so it grows by up
+ * to this share of run capacity a turn and reassesses next turn (a player adds a
+ * chunk to a selling-out plant, not 10,000x it because they hold cash). Growth
+ * compounds over turns and self-limits — a plant that outruns its demand sees
+ * fill/utilization fall and stops. Floored at one facility so a small plant can
+ * still take a first step.
+ */
+export const NPP_GROWTH_MAX_STEP_OF_RUN = 0.5;
+/** A cash-rich conglomerate expands several owned plants a turn, as a player would. */
+const NPP_REINVEST_MAX_SECTORS_PER_TURN = 4;
 /** Maintenance may use a cash share even below the discretionary entry floor. */
 const NPP_REINVEST_MAINTENANCE_CASH_SHARE = 0.25;
 
@@ -170,6 +206,28 @@ const EXPANSION_MIN_MARGIN = 15; // Corp-level avg margin must be healthy
  */
 /** One decision can found only one sector, even with several shortages. */
 export const NPP_SHORTAGE_ENTRIES_PER_TURN = 1;
+
+/**
+ * Founding build size as a fraction of surplus, not a single facility. A player
+ * entering a market does not stop at one plant — they follow the entry with a
+ * `buildCapacity` order scaled to their cash and the shortage. An NPP founds at
+ * the same scale, committing this share of its post-floor, post-fee surplus to
+ * the first build (still capped by the market's unowned headroom, still floored
+ * at one facility). Kept below 1 so a single founding bet never zeroes the
+ * treasury or starves reinvestment. Fixes the "$2M treasury funds one plant"
+ * under-deployment.
+ */
+export const NPP_FOUNDING_DEPLOY_FRACTION = 0.6;
+
+/**
+ * A single founding may claim at most this share of a genuinely UNOWNED
+ * market's headroom (unmet demand nobody has built into yet — real for a fresh
+ * bucket, unlike the ~0 headroom of an already-owned one, which is why growth
+ * no longer reads the pool at all). Cash is the primary bind; the cap only
+ * keeps a cash-rich corp from vacuuming a fresh market on entry. Floored at one
+ * facility below.
+ */
+export const NPP_FOUNDING_HEADROOM_SHARE = 0.5;
 
 // Archetypes may scale the rails but never remove the minimum buffer.
 const SAFE_CASH_FLOOR_MIN = 125_000; // an aggressive floor still leaves a buffer
@@ -887,6 +945,10 @@ export function makeNppCorpDecision(
   const divestedSectorIds: ObjectId[] = [];
   const unownedDraws: NonNullable<NppCorpDecision["unownedDraws"]> = [];
   const reinvestments: NonNullable<NppCorpDecision["reinvestments"]> = [];
+  // A growth-capex build no longer draws the unowned pool, so `unownedDraws`
+  // can't stand in for "made a discretionary investment this turn" any more.
+  // Track it directly so retained earnings still get first claim over dividends.
+  let placedGrowthCapex = false;
   let shortageCreditRequest: NppCorpDecision["shortageCreditRequest"];
   let entryDiagnostic: NppCorpDecision["entryDiagnostic"];
 
@@ -1517,11 +1579,14 @@ export function makeNppCorpDecision(
         plants.eraUnitScale
       );
       const starterUnits = foundingStarterUnits(expansion.sectorType as CorporationType);
-      const buildAnchor =
+      // Per-unit founding price. computeBuildCost is linear in units and, at a
+      // greenfield entry, the dominance multiplier is 1 (no presence yet), so a
+      // one-unit quote scales exactly to any order size.
+      const perUnitFoundingAnchor =
         starterUnits > 0
           ? computeBuildCost({
               sectorType: expansion.sectorType as CorporationType,
-              units: starterUnits,
+              units: 1,
               year: plants.year,
               eraUnitScale: plants.eraUnitScale,
               // No presence in this bucket yet — dominance is 1 by construction.
@@ -1537,13 +1602,40 @@ export function makeNppCorpDecision(
           : 0;
       // Charged in the corp's own currency: fee + build are ₳, liquidCapital is not.
       const entryFeeAnchor = sectorEntryFeeAnchor(plants.preset);
-      const foundingCost = toCorpLocal(entryFeeAnchor + buildAnchor);
       const entryCapital =
         liquidCapital + (exceptionalShortageEntry ? (ctx.shortageEntryCreditLocal ?? 0) : 0);
+      // Size the first build to available capital, not a token facility. Deploy
+      // a bounded fraction of post-floor, post-fee surplus into capacity, capped
+      // by the market's unowned headroom and by the per-order ceiling, and
+      // floored at the one-facility quantum so a cash-poor entry still behaves
+      // as before. See NPP_FOUNDING_DEPLOY_FRACTION.
+      const perUnitFoundingLocal = toCorpLocal(perUnitFoundingAnchor);
+      const entryFeeLocal = toCorpLocal(entryFeeAnchor);
+      const deployBudgetLocal = Math.max(
+        0,
+        (entryCapital - effectiveCashFloor - entryFeeLocal) * NPP_FOUNDING_DEPLOY_FRACTION
+      );
+      const affordableUnits =
+        perUnitFoundingLocal > 0 ? Math.floor(deployBudgetLocal / perUnitFoundingLocal) : 0;
+      const buildUnits =
+        starterUnits > 0
+          ? Math.max(
+              starterUnits,
+              Math.floor(
+                Math.min(
+                  headroomUnits * NPP_FOUNDING_HEADROOM_SHARE,
+                  affordableUnits,
+                  MAX_BUILD_UNITS_PER_ORDER
+                )
+              )
+            )
+          : 0;
+      const buildAnchor = perUnitFoundingAnchor * buildUnits;
+      const foundingCost = toCorpLocal(entryFeeAnchor + buildAnchor);
       entryDiagnostic = {
         ...entryDiagnostic,
         targetHeadroomUnits: headroomUnits,
-        starterUnits,
+        starterUnits: buildUnits,
         foundingCostLocal: foundingCost,
         entryCapitalLocal: entryCapital,
         cashFloorLocal: effectiveCashFloor,
@@ -1555,17 +1647,17 @@ export function makeNppCorpDecision(
       // itself under the cash floor. Also require the market have room for the
       // facility — do not found into a zero-headroom bucket.
       if (
-        starterUnits > 0 &&
-        headroomUnits >= starterUnits &&
+        buildUnits > 0 &&
+        headroomUnits >= buildUnits &&
         entryCapital - foundingCost >= effectiveCashFloor
       ) {
         const buildTurns = Math.max(
           1,
           Math.ceil(CAPACITY_BUILD_TURNS(expansion.sectorType as CorporationType) / 2)
         );
-        // Legacy nameplate proportional to the facility share of the pool;
+        // Legacy nameplate proportional to the built share of the pool;
         // plants restates revenue from capacity on the next tick.
-        const nameplateShare = headroomUnits > 0 ? Math.min(1, starterUnits / headroomUnits) : 0;
+        const nameplateShare = headroomUnits > 0 ? Math.min(1, buildUnits / headroomUnits) : 0;
         newSectors.push({
           stateId: expansion.stateId,
           countryId: expansion.countryId,
@@ -1580,7 +1672,7 @@ export function makeNppCorpDecision(
           revenue: Math.round(toCorpLocal(expansion.revenue * nameplateShare)),
           profitMargin: 35,
           starterOrder: {
-            unitsOrdered: starterUnits,
+            unitsOrdered: buildUnits,
             costPaidAnchor: buildAnchor,
             startTurn: ctx.turn,
             onlineTurn: ctx.turn + buildTurns,
@@ -1590,7 +1682,7 @@ export function makeNppCorpDecision(
         unownedDraws.push({
           stateId: expansion.stateId,
           sectorType: expansion.sectorType as CorporationType,
-          units: starterUnits,
+          units: buildUnits,
           countryId: expansion.countryId,
         });
         cashLocal = entryCapital - foundingCost;
@@ -1690,7 +1782,7 @@ export function makeNppCorpDecision(
        * must therefore be drawn out of the unowned pool. The replacement leg is
        * deliberately NOT in here — see the sizing block below.
        */
-      drawUnits: number;
+      growthUnits: number;
       fill: number;
       headroomUnits: number;
       interventionPriority: number;
@@ -1764,11 +1856,8 @@ export function makeNppCorpDecision(
           )
         : 0;
 
-      // Sizing: replace depreciation, plus the growth the corp's own
-      // targetGrowthRate just asked for, scaled by how convincingly the sector
-      // is selling out. `targetGrowthRate` is % per game YEAR.
-      const targetGrowthRate = Math.max(0, sector.targetGrowthRate ?? 0);
-      const growthPerTurn = targetGrowthRate / 100 / TURNS_PER_YEAR;
+      // Sizing: replacement restores worn capacity; growth (below) is a
+      // separate cash-and-demand decision that no longer reads targetGrowthRate.
       // fill = MIN_FILL ⇒ 0.5×, fill = 1 (sold out) ⇒ 1×. A sector that is only
       // just clearing its output gets a half-sized build, not zero: it still
       // has to replace what wore out.
@@ -1829,36 +1918,80 @@ export function makeNppCorpDecision(
         fillScale *
         strandedDecayScale *
         NPP_REINVEST_AGGRESSION;
-      const growthWanted =
-        !sp.isProfitable ||
-        !levers.allowGrowthCapex ||
-        queueDepth >= NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH
-          ? 0
-          : capitalStock * growthPerTurn * fillScale * NPP_REINVEST_AGGRESSION;
-      // Growth is a factory decision, not a continuous slider. The old path
-      // divided a small annual target by 48 and queued capacity dust, with the
-      // median live order measuring 0.00065 of a facility. When demand and cash
-      // justify growth, buy at least one whole facility. Replacement remains
-      // continuous because it restores worn capacity rather than opening a new
-      // productive site.
+      // GROWTH — build from nothing, sized by cash and demand, exactly as a
+      // player tops up a plant with `buildCapacity`. NO unowned-pool gate or
+      // cap. Reaching here already means the plant is selling through its output
+      // (fill >= MIN_FILL, required above). If it is also profitable, allowed to
+      // grow, has queue room, and sits in a market that is not glutted, it grows
+      // to the scale its treasury supports — not one facility a turn. The old
+      // path sized growth off a 2%/yr target divided by 48 and queued capacity
+      // dust (median 0.00065 of a facility), then the pool capped even that to a
+      // quarter of a headroom number that is ~0 in every built-out market, so
+      // NPP plants never reached player scale. The per-sector affordability rail
+      // below and the cash floor bound the spend; a plant that overbuilds sees
+      // fill fall next turn and stops.
       const facilityUnits = foundingStarterUnits(sector.sectorType);
-      const growthUnits =
-        growthWanted > 0 && headroomUnits >= facilityUnits
-          ? Math.min(
-              headroomUnits,
-              Math.max(
-                facilityUnits,
-                Math.min(growthWanted, headroomUnits * NPP_REINVEST_HEADROOM_SHARE)
+      const utilization = capitalStock > 0 ? runUnits / capitalStock : 0;
+      const canGrow =
+        sp.isProfitable &&
+        levers.allowGrowthCapex &&
+        queueDepth < NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH &&
+        stateShortage > NPP_GROWTH_MIN_SHORTAGE &&
+        utilization >= NPP_GROWTH_MIN_UTILIZATION;
+      // The plant already exists, so its build is tolled at its own dominance
+      // and pays the list price, not the founding discount — the same terms a
+      // player's `buildCapacity` pays.
+      const growthShare =
+        capitalStock > 0
+          ? Math.min(100, (100 * capitalStock) / (capitalStock + Math.max(0, headroomUnits)))
+          : 0;
+      const perUnitGrowthLocal = canGrow
+        ? toCorpLocal(
+            computeBuildCost({
+              sectorType: sector.sectorType,
+              units: 1,
+              year: plants.year,
+              eraUnitScale: plants.eraUnitScale,
+              marketSharePercent: growthShare,
+              primeRate: plants.primeRateOf(sectorCountryId),
+              acumen: NEUTRAL_STAT,
+              hostCostOfLivingIndex: plants.costOfLivingOf(sector.stateId),
+              founding: false,
+            }).totalAnchor
+          )
+        : 0;
+      const growthBudgetLocal =
+        Math.max(0, cashLocal - effectiveCashFloor) * NPP_GROWTH_DEPLOY_FRACTION;
+      // Demand anchor: grow by at most this share of proven throughput a turn
+      // (at least one facility), not the whole treasury at once. No headroom cap
+      // — the unowned pool does not ration this.
+      const growthCapUnits = Math.max(
+        facilityUnits,
+        Math.floor(runUnits * NPP_GROWTH_MAX_STEP_OF_RUN)
+      );
+      // Units the growth budget affords, bounded by that step. Growth only fires
+      // if it clears one whole facility — below that the plant just replaces
+      // depreciation, so a cash-poor corp keeps its maintenance rather than
+      // bundling an unaffordable growth leg that would sink the whole order past
+      // the entry floor.
+      const affordableGrowthUnits =
+        canGrow && perUnitGrowthLocal > 0
+          ? Math.floor(
+              Math.min(
+                growthBudgetLocal / perUnitGrowthLocal,
+                growthCapUnits,
+                MAX_BUILD_UNITS_PER_ORDER
               )
             )
           : 0;
+      const growthUnits = affordableGrowthUnits >= facilityUnits ? affordableGrowthUnits : 0;
       const units = replacementUnits + growthUnits;
       if (!(units > 0)) continue;
 
       candidates.push({
         sector,
         units,
-        drawUnits: growthUnits,
+        growthUnits,
         fill,
         headroomUnits,
         interventionPriority,
@@ -1917,7 +2050,7 @@ export function makeNppCorpDecision(
       // maintenance is a death spiral rather than prudence.
       if (!(costLocal > 0)) continue;
       const affordable =
-        candidate.drawUnits > 0
+        candidate.growthUnits > 0
           ? cashLocal - costLocal >= effectiveCashFloor
           : costLocal <= Math.max(0, cashLocal) * NPP_REINVEST_MAINTENANCE_CASH_SHARE &&
             cashLocal - costLocal > 0;
@@ -1949,22 +2082,14 @@ export function makeNppCorpDecision(
           $inc: { constructionInProgressAnchor: Math.round(costAnchor) },
         },
       });
-      // Conservation: NEW capacity is capacity taken OUT of the unowned pool,
-      // exactly as founding does. Minting it here would double-count the same
-      // demand as both owned capacity and unowned headroom. The replacement leg
-      // is excluded on purpose — it buys back capacity that was already owned
-      // and never returned to the pool when it depreciated, so drawing for it
-      // would charge the market twice for one unit of demand.
-      if (candidate.drawUnits > 0) {
-        unownedDraws.push({
-          stateId: sector.stateId,
-          sectorType: sector.sectorType,
-          units: candidate.drawUnits,
-          countryId: sector.countryId ?? corp.countryId,
-        });
-      }
+      // Growth builds from nothing — a plant top-up does not draw the unowned
+      // pool, exactly as a player's `buildCapacity` does not. The pool is not a
+      // finite budget builds are rationed against; capacity is created by paying
+      // for it. (Market share stays well-defined: owned capacity rises, so the
+      // owner's share of owned+headroom rises, without touching the pool.)
       cashLocal -= costLocal;
       updates.liquidCapital = cashLocal;
+      if (candidate.growthUnits > 0) placedGrowthCapex = true;
       reinvestments.push({
         sectorId: sector._id,
         sectorType: sector.sectorType,
@@ -1980,7 +2105,7 @@ export function makeNppCorpDecision(
   // Productive investment gets first claim on retained earnings. Without this
   // override the same decision could queue a factory and raise its dividend,
   // leaking the cash buffer the next investment turn depends on.
-  if (plants?.enabled && unownedDraws.length > 0) {
+  if (plants?.enabled && (unownedDraws.length > 0 || placedGrowthCapex)) {
     updates.dividendRate = 0;
   }
 
