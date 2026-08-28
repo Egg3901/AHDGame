@@ -6,6 +6,7 @@ export interface EconomicExperimentConfig {
   shortageResponsiveSourcingEnabled?: boolean;
   indexFundBondLiquidityEnabled?: boolean;
   nppMarketCoverageEnabled?: boolean;
+  nppFragileMarketSupplyEnabled?: boolean;
 }
 
 export function parseOptionalBoolean(value: string | undefined, flag: string): boolean | undefined {
@@ -34,6 +35,9 @@ export function economicExperimentConfigSet(
     ...(config.nppMarketCoverageEnabled !== undefined
       ? { nppMarketCoverageEnabled: config.nppMarketCoverageEnabled }
       : {}),
+    ...(config.nppFragileMarketSupplyEnabled !== undefined
+      ? { nppFragileMarketSupplyEnabled: config.nppFragileMarketSupplyEnabled }
+      : {}),
   };
 }
 
@@ -52,6 +56,9 @@ export function economicExperimentCliArgs(config: EconomicExperimentConfig): str
       : []),
     ...(set.nppMarketCoverageEnabled !== undefined
       ? [`--npp-market-coverage=${String(set.nppMarketCoverageEnabled)}`]
+      : []),
+    ...(set.nppFragileMarketSupplyEnabled !== undefined
+      ? [`--npp-fragile-market-supply=${String(set.nppFragileMarketSupplyEnabled)}`]
       : []),
   ];
 }

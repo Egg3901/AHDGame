@@ -1,5 +1,6 @@
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
+import type { CommodityType } from "@/lib/constants/commodities";
 
 export type NppMarketEntryReason =
   | "entered"
@@ -39,6 +40,8 @@ export interface NppMarketEntryDiagnostic {
   cashFloorLocal?: number;
   frontierFallback?: boolean;
   openMarketTypeFallback?: boolean;
+  /** Diagnosed fragile commodity this existing entry slot was routed toward. */
+  interventionTargetCommodity?: CommodityType;
 }
 
 export interface NppMarketEntryFunnel {

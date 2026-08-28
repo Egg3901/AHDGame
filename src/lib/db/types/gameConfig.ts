@@ -316,6 +316,10 @@ export interface GameConfig {
   nppMarketCoverageEnabled?: boolean;
   /** Governance record required when empty-market coverage routing is enabled. */
   nppMarketCoverageIntervention?: EconomicInterventionPlan;
+  /** Route existing eligible NPP entry slots toward four diagnosed fragile commodity markets. */
+  nppFragileMarketSupplyEnabled?: boolean;
+  /** Governance record required when fragile-market supply routing is enabled. */
+  nppFragileMarketSupplyIntervention?: EconomicInterventionPlan;
   /**
    * Legacy-stockpile cover cap (week-1 clearing balance pass): when true,
    * shadow-inventory stock above STOCK_COVER_CAP_TURNS × current demand takes
