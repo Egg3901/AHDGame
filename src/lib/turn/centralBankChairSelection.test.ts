@@ -1152,7 +1152,10 @@ describe("acceptCentralBankChairSelection — executive guard", () => {
 
 describe("processCentralBankChairSelection — NPP autonomy fallback", () => {
   const gameNow = new Date("2024-01-01");
-  const bankId = "US";
+  // JP: a non-committee bank, so the NPP-autonomy caretaker fallback still
+  // applies here. The US Fed is a committee bank and is covered separately
+  // below (it goes vacant for presidential nomination, never a technocrat).
+  const bankId = "JP";
 
   /**
    * Build a mock db where both candidate pools are empty (no player characters
@@ -1163,7 +1166,9 @@ describe("processCentralBankChairSelection — NPP autonomy fallback", () => {
   function createNoCandidateMockDb(opts: {
     nppAutonomyEnabled: boolean;
     enabledForPlayers: boolean;
+    country?: string;
   }) {
+    const id = opts.country ?? bankId;
     const updateOneCalls: unknown[][] = [];
     const nppInsertOne = vi.fn().mockResolvedValue({ insertedId: new ObjectId() });
 
@@ -1174,8 +1179,8 @@ describe("processCentralBankChairSelection — NPP autonomy fallback", () => {
             find: vi.fn().mockReturnValue({
               toArray: vi.fn().mockResolvedValue([
                 {
-                  _id: bankId,
-                  countryId: "US",
+                  _id: id,
+                  countryId: id,
                   chairCharacterId: new ObjectId(), // non-null so vacate is exercised
                   chairCharacterName: "Outgoing Chair",
                   chairTermExpiresAtTurn: 10, // expired at currentTurn=10
@@ -1236,7 +1241,7 @@ describe("processCentralBankChairSelection — NPP autonomy fallback", () => {
           return {
             findOne: vi
               .fn()
-              .mockResolvedValue({ _id: "US", enabledForPlayers: opts.enabledForPlayers }),
+              .mockResolvedValue({ _id: id, enabledForPlayers: opts.enabledForPlayers }),
           };
         }
         if (name === "npps") {
@@ -1321,6 +1326,28 @@ describe("processCentralBankChairSelection — NPP autonomy fallback", () => {
     expect($set.chairMode).toBe("npp");
     expect($set.chairNppId).toBeDefined();
     expect($set.vacancyAwaitingAutomaticSelection).toBe(false);
+  });
+
+  it("leaves the US Fed chair VACANT (never a technocrat) even with autonomy on — presidential nomination only", async () => {
+    const { db, updateOneCalls, nppInsertOne } = createNoCandidateMockDb({
+      nppAutonomyEnabled: true,
+      enabledForPlayers: true,
+      country: "US",
+    });
+
+    const { processCentralBankChairSelection } = await import("./centralBankChairSelection");
+    const result = await processCentralBankChairSelection(db, 10, gameNow);
+
+    // No technocrat spawned; the seat is a real vacancy waiting on a nomination.
+    expect(nppInsertOne).not.toHaveBeenCalled();
+    expect(result.vacanciesRemaining).toBe(1);
+    const bankUpdate = updateOneCalls.find(
+      (args: unknown[]) => (args[0] as Record<string, unknown>)?._id === "US"
+    );
+    const $set = (bankUpdate![1] as Record<string, Record<string, unknown>>).$set;
+    expect($set.chairCharacterId).toBeNull();
+    expect($set.chairNppId ?? null).toBeNull();
+    expect($set.vacancyAwaitingAutomaticSelection).toBe(true);
   });
 
   it("preserves the existing vacancy when autonomy is globally disabled", async () => {
