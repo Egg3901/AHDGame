@@ -31,9 +31,14 @@ export default function ApiAutomationGuidePage() {
           trading dashboards, and portfolio trackers on top of the live simulation. This page covers
           what scoped keys are allowed to do and how to handle them safely. For the full endpoint
           reference (routes, parameters, response shapes, and example requests), see the{" "}
-          <Link className="text-primary underline" href="/api-guide">
+          <a
+            className="text-primary underline"
+            href="https://docs.lakesidegames.net/api/public-v1.html"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             complete API documentation
-          </Link>
+          </a>
           .
         </p>
       </section>
@@ -41,8 +46,8 @@ export default function ApiAutomationGuidePage() {
       <section className="mt-8 space-y-3 rounded-2xl border border-card-border bg-card/70 p-6">
         <h2 className="text-xl font-semibold">What API keys can do</h2>
         <p className="text-sm text-muted">
-          View endpoints use the server&apos;s public bot token. Personal scoped keys are intended
-          for fund-transfer automation only.
+          View endpoints accept any personal API key (public or private scope) sent in the{" "}
+          <code>X-API-Key</code> header. Write endpoints require a <code>private</code> scope key.
         </p>
         <div className="mt-2 space-y-2">
           <p className="text-sm font-medium">Allowed via automation:</p>
@@ -80,7 +85,7 @@ export default function ApiAutomationGuidePage() {
           <li>Create a key from Settings → API Keys.</li>
           <li>Copy it once and save it in your bot/app secret store.</li>
           <li>
-            For personal action endpoints, send your key in the <code>X-Bot-Token</code> header.
+            For all API endpoints, send your key in the <code>X-API-Key</code> header.
           </li>
         </ol>
         <p className="text-sm">

@@ -202,6 +202,14 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
+        // The in-app API reference page was retired in favor of the canonical
+        // docs site (docs.lakesidegames.net, source: Egg3901/ahd-docs). Keeping
+        // a permanent redirect so bookmarks and the old sitemap entry resolve.
+        source: "/api-guide",
+        destination: "https://docs.lakesidegames.net/api/public-v1.html",
+        permanent: true,
+      },
+      {
         source: "/uk",
         destination: "/country/uk",
         permanent: true,
