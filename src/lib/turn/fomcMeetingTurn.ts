@@ -463,6 +463,7 @@ export async function processFomcMeetings(
     let meeting = bank.activeFomcMeeting ?? null;
 
     // 2. Open a meeting when none is active and cadence is due.
+    let justOpened = false;
     if (!meeting) {
       const dueForMeeting =
         typeof bank.lastFomcMeetingTurn !== "number" ||
@@ -476,13 +477,23 @@ export async function processFomcMeetings(
         );
         meeting = openMeeting(board, ctx, currentTurn, now, allowChange);
         set.lastFomcMeetingTurn = currentTurn;
+        set.activeFomcMeeting = meeting;
         result.meetingsOpened++;
+        justOpened = true;
       }
     }
 
     // 3. Resolve the active meeting if decided, past its wall-clock window, or
     //    at the game-clock deadline. Turns never pause: no-shows abstain.
-    if (meeting && meeting.status === "voting") {
+    //
+    // A meeting OPENED this very phase is never resolved in the same phase, even
+    // if the NPP/auto seats alone already decide the tally. Otherwise a board with
+    // no seated player — or one where the auto block holds the majority — opens and
+    // resolves a rate motion inside one turn, so the chair and members never see it
+    // ("bills insta-pass without the fed chair even seeing them", #1211). It stays
+    // open for its window; the deadline (which cannot fall on the opening turn,
+    // resolvesOnTurn = openedAtTurn + FOMC_VOTE_WINDOW_TURNS) still force-resolves.
+    if (meeting && meeting.status === "voting" && !justOpened) {
       const deadlineHit =
         currentTurn >= meeting.resolvesOnTurn ||
         now.getTime() >= meeting.playerVoteDeadline.getTime();
