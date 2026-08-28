@@ -11,6 +11,8 @@ import type {
   ShareOrder,
   ShareTradeHistory,
   StockExchangeSnapshot,
+  NppMarketEntryFunnel,
+  UnownedSector,
   WealthListSnapshot,
 } from "@/lib/db/types";
 import type { CommodityFlow } from "@/lib/db/types/commodityFlow";
@@ -22,6 +24,9 @@ import { computeSectorCommodityUnits } from "@/lib/corporations/corpCommodityFlo
 import { resolveFormalizedGroups } from "@/lib/corporations/groups/groupMembership";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CommodityType } from "@/lib/constants/commodities";
+import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { computeMarketFormationSnapshot } from "@/lib/economy/marketFormation";
+import { NPP_MARKET_ENTRY_FUNNEL_COLLECTION } from "@/lib/turn/npp/entryDiagnostics";
 
 export const ECONOMIC_VITAL_SIGNS_COLLECTION = "economicVitalSigns";
 export const ECONOMIC_VITAL_SIGNS_WINDOW_TURNS = 48 as const;
@@ -45,6 +50,9 @@ type Inputs = {
   balanceSnapshot: BalanceSnapshot | null;
   ledgerEntries: LedgerEntry[];
   commodityParticipants: CommodityParticipant[];
+  unownedSectors?: UnownedSector[];
+  entryFunnel?: NppMarketEntryFunnel | null;
+  eraUnitScale?: number;
 };
 
 type CommodityParticipant = {
@@ -374,6 +382,13 @@ function fillByTurn(flows: CommodityFlow[]): Map<number, number> {
 }
 
 export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
+  const marketFormation = computeMarketFormationSnapshot({
+    sectors: input.sectors,
+    unownedSectors: input.unownedSectors ?? [],
+    prices: input.prices,
+    entryFunnel: input.entryFunnel,
+    eraUnitScale: input.eraUnitScale ?? 1,
+  });
   const pooledDemand = input.currentFlows.reduce(
     (sum, flow) => sum + (flow.demandUnitsLedger ?? flow.demandUnits),
     0
@@ -532,6 +547,7 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
   if (input.commodityParticipants.length === 0) {
     measurementReasons.push("commodity_participant_sample_empty");
   }
+  if (!input.entryFunnel) measurementReasons.push("npp_entry_funnel_unavailable");
   const measurementConfidence: EconomicVitalSigns["measurement"]["confidence"] =
     measurementReasons.length === 0
       ? "high"
@@ -668,6 +684,7 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
       ),
     },
     competition,
+    marketFormation,
     securities: {
       equityTrades48Turns: economicTrades.length,
       equityNotionalAnchor48Turns: economicTrades.reduce(
@@ -848,6 +865,9 @@ export async function snapshotEconomicVitalSigns(
     ledgerEntries,
     groupMembership,
     exchangeRates,
+    unownedSectors,
+    entryFunnel,
+    eraUnitScale,
   ] = await Promise.all([
     db.collection<CommodityFlow>("commodityFlows").find({ turn }).toArray(),
     db
@@ -875,6 +895,11 @@ export async function snapshotEconomicVitalSigns(
       .toArray(),
     resolveFormalizedGroups(db),
     db.collection<ExchangeRate>("exchangeRates").find({}).toArray(),
+    db.collection<UnownedSector>("unownedSectors").find({}).toArray(),
+    db
+      .collection<NppMarketEntryFunnel>(NPP_MARKET_ENTRY_FUNNEL_COLLECTION)
+      .findOne({ _id: `turn:${turn}` }),
+    loadWorldEraUnitScale(db),
   ]);
   const fxByCurrency = new Map(exchangeRates.map((row) => [row.currencyCode, row.rate]));
   if (!fxByCurrency.has("USD")) fxByCurrency.set("USD", 1);
@@ -922,6 +947,9 @@ export async function snapshotEconomicVitalSigns(
     balanceSnapshot,
     ledgerEntries,
     commodityParticipants,
+    unownedSectors,
+    entryFunnel,
+    eraUnitScale,
   });
   await db
     .collection<EconomicVitalSigns>(ECONOMIC_VITAL_SIGNS_COLLECTION)

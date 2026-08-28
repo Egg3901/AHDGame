@@ -123,6 +123,7 @@ describe("NPP shortage-responsive market entry", () => {
     });
 
     expect(decision.newSectors).toBeUndefined();
+    expect(decision.entryDiagnostic?.reason).toBe("logistics_capacity");
   });
 
   it("opens ordinary diversification slots beyond five sectors", () => {
@@ -140,6 +141,7 @@ describe("NPP shortage-responsive market entry", () => {
     });
 
     expect(decision.newSectors).toBeUndefined();
+    expect(decision.entryDiagnostic?.reason).toBe("cohort_ineligible");
   });
 
   it("does not grant shortages a second market-entry cohort slot", () => {
@@ -160,6 +162,12 @@ describe("NPP shortage-responsive market entry", () => {
 
     expect(decision.newSectors).toHaveLength(1);
     expect(decision.newSectors?.[0].sectorType).toBe("manufacturing");
+    expect(decision.entryDiagnostic).toMatchObject({
+      reason: "entered",
+      targetStateId: "NY",
+      targetSectorType: "manufacturing",
+      cohortEligible: true,
+    });
   });
 
   it.each([
@@ -294,5 +302,6 @@ describe("NPP shortage-responsive market entry", () => {
     expect(rich.shortageCreditRequest).toBeUndefined();
     expect(broke.shortageCreditRequest).toBeDefined();
     expect(broke.shortageCreditRequest?.amountLocal).toBeGreaterThan(0);
+    expect(broke.entryDiagnostic?.reason).toBe("credit_requested");
   });
 });

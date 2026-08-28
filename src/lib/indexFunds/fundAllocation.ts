@@ -52,7 +52,7 @@ export function computeTotalFundBackingAnchor(
 /** At most 75% of backing in equities; at least 25% in the bond/cash reserve bucket. */
 export function computeFundAllocationBreakdown(
   fund: Pick<IndexFund, "cashAnchor" | "holdings" | "bondAllocations">,
-  options?: { bondPrincipalAnchor?: number }
+  options?: { bondPrincipalAnchor?: number; bondLiquidityTargetEnabled?: boolean }
 ): FundAllocationBreakdown {
   const holdingsValueAnchor = computeHoldingsValueAnchor(fund);
   const bondPrincipalAnchor = options?.bondPrincipalAnchor ?? sumBondPrincipalAnchor(fund);
@@ -87,8 +87,12 @@ export function computeFundAllocationBreakdown(
     cashAnchor,
     INDEX_FUND_RESERVE_CASH_BUFFER_FRACTION * totalBackingAnchor
   );
-  const targetBondValueAnchor = Math.max(0, minReserveValueAnchor - minCashBufferAnchor);
-  const bondDeploymentNeededAnchor = Math.max(0, targetBondValueAnchor - bondPrincipalAnchor);
+  const targetBondValueAnchor = options?.bondLiquidityTargetEnabled
+    ? Math.max(0, minReserveValueAnchor - minCashBufferAnchor)
+    : bondPrincipalAnchor + reserveShortfallAnchor;
+  const bondDeploymentNeededAnchor = options?.bondLiquidityTargetEnabled
+    ? Math.max(0, targetBondValueAnchor - bondPrincipalAnchor)
+    : reserveShortfallAnchor;
   const cashAvailableForBondDeployAnchor = Math.max(
     0,
     Math.min(bondDeploymentNeededAnchor, cashAnchor - minCashBufferAnchor)

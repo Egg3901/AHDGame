@@ -57,5 +57,13 @@ export async function seedLedgerIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
+  await ensureIndex(
+    db,
+    "nppMarketEntryFunnels",
+    { turn: -1 },
+    { name: "nppMarketEntryFunnels_turn_desc", background: true },
+    log
+  );
+
   log("Shadow ledger indexes ensured");
 }

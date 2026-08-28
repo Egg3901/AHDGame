@@ -11,9 +11,17 @@
  * treasury-neutral. The treasury-negative options (release, guarantee, fund)
  * are never the default.
  */
-import type { EventHandler } from "@/lib/events/substrate/types";
+import type { EventEffect, EventHandler } from "@/lib/events/substrate/types";
 import { registerEventHandler } from "@/lib/events/substrate/registry";
 import { applyDeclarativeEffects } from "@/lib/events/substrate/applyEffects";
+import {
+  CIVIL_DEFENSE_SECTOR_SHIFTS,
+  type WarEmergencySectorShift,
+} from "@/lib/crises/warEmergencyBalance";
+
+function outputDemandEffects(shifts: readonly WarEmergencySectorShift[]): EventEffect[] {
+  return shifts.map((shift) => ({ type: "sectorOutputDemandModifier", ...shift }));
+}
 
 const apply: EventHandler["applyEffects"] = async (ctx) => {
   await applyDeclarativeEffects(ctx, ctx.tier.effects);
@@ -289,20 +297,7 @@ registerEventHandler({
             { type: "approvalDelta", delta: 2 },
             { type: "treasuryDelta", deltaAnchor: -15_000 },
             { type: "warEmergencyMitigation", pct: 10, durationTurns: 14 },
-            { type: "sectorOutputDemandModifier", sectorType: "retail", pct: -3, durationTurns: 8 },
-            {
-              type: "sectorOutputDemandModifier",
-              sectorType: "construction",
-              pct: 8,
-              durationTurns: 8,
-            },
-            {
-              type: "sectorOutputDemandModifier",
-              sectorType: "manufacturing",
-              pct: 6,
-              durationTurns: 8,
-            },
-            { type: "sectorOutputDemandModifier", sectorType: "defense", pct: 8, durationTurns: 8 },
+            ...outputDemandEffects(CIVIL_DEFENSE_SECTOR_SHIFTS.fund),
             { type: "wireOnly" },
           ],
           newsWire: {
@@ -329,20 +324,7 @@ registerEventHandler({
             { type: "approvalDelta", delta: 1 },
             { type: "warEmergencyMitigation", pct: 8, durationTurns: 12 },
             { type: "civilLibertiesDelta", delta: -1 },
-            { type: "sectorOutputDemandModifier", sectorType: "retail", pct: -2, durationTurns: 6 },
-            {
-              type: "sectorOutputDemandModifier",
-              sectorType: "construction",
-              pct: 3,
-              durationTurns: 6,
-            },
-            {
-              type: "sectorOutputDemandModifier",
-              sectorType: "manufacturing",
-              pct: 3,
-              durationTurns: 6,
-            },
-            { type: "sectorOutputDemandModifier", sectorType: "defense", pct: 4, durationTurns: 6 },
+            ...outputDemandEffects(CIVIL_DEFENSE_SECTOR_SHIFTS.drills),
             { type: "wireOnly" },
           ],
           newsWire: {

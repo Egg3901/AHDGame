@@ -19,6 +19,7 @@ import type { Election } from "@/lib/db/types";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
 import {
   runBillLifecycleForCountry,
+  runBillLifecycleForConfiguredCountry,
   runBillLifecycleForJP,
 } from "@/lib/turn/billLifecycle/dispatch";
 import { UK_NATIONAL_CONFIG } from "@/lib/turn/billLifecycle/configs/uk";
@@ -115,6 +116,7 @@ import { appointNppPrimeMinister } from "@/lib/nppAutonomy/appointNppPrimeMinist
 // Per-country seat update overrides (UK has a legacy seed fallback on first run)
 import { updateGovernmentSeats as updateUKGovernmentSeats } from "@/lib/turn/ukGovernmentFormation";
 import { getDb } from "@/lib/mongodb";
+import { getGameStatePreset } from "@/lib/db/collections/gameState";
 
 /** Countries that need a custom updateGovernmentSeats wrapper (e.g. for legacy seed). */
 const SEAT_UPDATE_OVERRIDES: Partial<Record<CountryId, () => Promise<void>>> = {
@@ -140,7 +142,17 @@ export interface CountryBillPhaseEntry {
     | "yuBillLifecycle"
     | "ukrBillLifecycle"
     | "blrBillLifecycle"
-    | "balBillLifecycle";
+    | "balBillLifecycle"
+    | "frBillLifecycle"
+    | "itBillLifecycle"
+    | "esBillLifecycle"
+    | "seBillLifecycle"
+    | "trBillLifecycle"
+    | "atBillLifecycle"
+    | "fiBillLifecycle"
+    | "grBillLifecycle"
+    | "brBillLifecycle"
+    | "ngBillLifecycle";
   fn: (deadlineNow: Date) => Promise<unknown>;
   emptyResult: Record<string, number | boolean>;
 }
@@ -232,6 +244,56 @@ export const COUNTRY_BILL_PHASES: Partial<Record<CountryId, CountryBillPhaseEntr
   BAL: {
     phaseName: "balBillLifecycle",
     fn: processBALBillLifecycle,
+    emptyResult: { enacted: 0, failed: 0 },
+  },
+  FR: {
+    phaseName: "frBillLifecycle",
+    fn: (now) => runBillLifecycleForConfiguredCountry("FR", now),
+    emptyResult: { enacted: 0, failed: 0 },
+  },
+  IT: {
+    phaseName: "itBillLifecycle",
+    fn: (now) => runBillLifecycleForConfiguredCountry("IT", now),
+    emptyResult: { enacted: 0, failed: 0 },
+  },
+  ES: {
+    phaseName: "esBillLifecycle",
+    fn: (now) => runBillLifecycleForConfiguredCountry("ES", now),
+    emptyResult: { enacted: 0, failed: 0 },
+  },
+  SE: {
+    phaseName: "seBillLifecycle",
+    fn: (now) => runBillLifecycleForConfiguredCountry("SE", now),
+    emptyResult: { enacted: 0, failed: 0 },
+  },
+  TR: {
+    phaseName: "trBillLifecycle",
+    fn: (now) => runBillLifecycleForConfiguredCountry("TR", now),
+    emptyResult: { enacted: 0, failed: 0 },
+  },
+  AT: {
+    phaseName: "atBillLifecycle",
+    fn: (now) => runBillLifecycleForConfiguredCountry("AT", now),
+    emptyResult: { enacted: 0, failed: 0 },
+  },
+  FI: {
+    phaseName: "fiBillLifecycle",
+    fn: (now) => runBillLifecycleForConfiguredCountry("FI", now),
+    emptyResult: { enacted: 0, failed: 0 },
+  },
+  GR: {
+    phaseName: "grBillLifecycle",
+    fn: (now) => runBillLifecycleForConfiguredCountry("GR", now),
+    emptyResult: { enacted: 0, failed: 0 },
+  },
+  BR: {
+    phaseName: "brBillLifecycle",
+    fn: (now) => runBillLifecycleForConfiguredCountry("BR", now),
+    emptyResult: { enacted: 0, failed: 0 },
+  },
+  NG: {
+    phaseName: "ngBillLifecycle",
+    fn: (now) => runBillLifecycleForConfiguredCountry("NG", now),
     emptyResult: { enacted: 0, failed: 0 },
   },
 };
@@ -391,6 +453,7 @@ export async function runPostElectionGovernmentPhases(
   generalResolved: number
 ): Promise<{ governmentFormed: Partial<Record<CountryId, boolean>> }> {
   const governmentFormed: Partial<Record<CountryId, boolean>> = {};
+  const preset = await getGameStatePreset(db);
 
   if (generalResolved > 0) {
     // Iterate every country with a configured lower chamber (US included),
@@ -399,10 +462,10 @@ export async function runPostElectionGovernmentPhases(
     const countryIds = COUNTRY_ORDER.filter(
       (id) => COUNTRY_CONFIGS[id].legislature.lowerChamber.key
     );
-    const parliamentary = new Set(getParliamentaryCountryIds());
+    const parliamentary = new Set(getParliamentaryCountryIds(preset));
 
     for (const countryId of countryIds) {
-      const config = getCountryConfig(countryId);
+      const config = getCountryConfig(countryId, preset);
       const lowerChamberKey = config.legislature.lowerChamber.key;
       const snapKey = `snap_${lowerChamberKey}`;
 
@@ -462,7 +525,8 @@ export async function runParliamentaryGovernmentPhases(
   currentTurn: number
 ): Promise<void> {
   const db = await getDb();
-  const parliamentaryCountries = getParliamentaryCountryIds();
+  const preset = await getGameStatePreset(db);
+  const parliamentaryCountries = getParliamentaryCountryIds(preset);
 
   for (const countryId of parliamentaryCountries) {
     // Per-country isolation. 27 countries run in this one loop under a single
@@ -474,7 +538,7 @@ export async function runParliamentaryGovernmentPhases(
     // completed. Isolating each country turns a world-ending failure into one
     // country having a bad turn.
     try {
-      await runParliamentaryCountry(db, countryId, gameNow, currentTurn);
+      await runParliamentaryCountry(db, countryId, gameNow, currentTurn, preset);
     } catch (error) {
       console.error(
         `[countryPhases] parliamentary phases failed for ${countryId}: ${
@@ -489,7 +553,8 @@ async function runParliamentaryCountry(
   db: Awaited<ReturnType<typeof getDb>>,
   countryId: CountryId,
   gameNow: Date,
-  currentTurn: number
+  currentTurn: number,
+  preset?: string
 ): Promise<void> {
   {
     // Some countries have custom seat update wrappers (e.g. UK legacy seed fallback)
@@ -497,7 +562,7 @@ async function runParliamentaryCountry(
     if (seatUpdateOverride) {
       await seatUpdateOverride();
     } else {
-      await updateParliamentaryGovernmentSeats(db, countryId);
+      await updateParliamentaryGovernmentSeats(db, countryId, preset);
     }
 
     await processParliamentaryGovernmentVotes(db, countryId, gameNow, currentTurn);
@@ -507,7 +572,7 @@ async function runParliamentaryCountry(
     // formation stalls "pending" forever. Autoseat the largest party's NPP
     // leader. No-op unless isNppAutonomyActive (never fires where players are
     // enabled) and a player vote hasn't already formed a government this turn.
-    await appointNppPrimeMinister(db, countryId, currentTurn, gameNow);
+    await appointNppPrimeMinister(db, countryId, currentTurn, gameNow, preset);
 
     // Reflect the formed government's party onto countryState.rulingPartyId
     // (informational for non-OPS; was never wired, leaving it null for ~21/23

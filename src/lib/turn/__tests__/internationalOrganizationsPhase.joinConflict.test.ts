@@ -171,10 +171,10 @@ describe("join_conflict enactment", () => {
     expect(billedCountries()).toEqual(["US"]);
   });
 
-  it("spawns NO bill for France, which is player-enabled but has no lifecycle", async () => {
+  it("spawns a bill for France now that its national lifecycle is available", async () => {
     roster = ["US", "FR"];
     await runPhase();
-    expect(billedCountries()).toEqual(["US"]);
+    expect(billedCountries()).toEqual(["US", "FR"]);
   });
 
   it("skips a member already fighting on the chosen side", async () => {

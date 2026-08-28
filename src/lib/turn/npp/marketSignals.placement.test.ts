@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ObjectId } from "mongodb";
-import { findBestUnownedSector, HQ_STATE_SCORE_BONUS } from "./marketSignals";
+import { findBestUnownedSector, HQ_STATE_SCORE_BONUS, markMarketsActive } from "./marketSignals";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { CountryId } from "@/lib/constants/countries";
@@ -179,5 +179,56 @@ describe("state-resolution placement signals (supply dislocation, t202)", () => 
       { statePriceRatioOf: (_c, stateId) => (stateId === "PA" ? 1.0 : null) }
     );
     expect(pick?.stateId).toBe("NY");
+  });
+});
+
+describe("empty-market coverage treatment", () => {
+  it("routes an existing entry slot to a facility-ready uncovered frontier cell", () => {
+    const pool = new Map([
+      ["US", [us("manufacturing", "TX", 10_000_000), us("logistics", "AZ", 100_000)]],
+    ]);
+    const activeMarketBuckets = new Set(["TX:manufacturing"]);
+    const pick = findBestUnownedSector(
+      "US",
+      "CA",
+      "manufacturing",
+      null,
+      new Set(),
+      pool,
+      new Set(),
+      ratios({}),
+      true,
+      1,
+      { preferEmptyMarkets: true, activeMarketBuckets },
+      new Set(["AZ", "TX"])
+    );
+
+    expect(pick).toMatchObject({ stateId: "AZ", sectorType: "logistics" });
+  });
+
+  it("does not redirect into an uncovered cell smaller than one facility", () => {
+    const pool = new Map([["US", [us("manufacturing", "TX", 10_000), us("media", "AZ", 20)]]]);
+    const pick = findBestUnownedSector(
+      "US",
+      "CA",
+      "manufacturing",
+      null,
+      new Set(),
+      pool,
+      new Set(),
+      ratios({}),
+      true,
+      1,
+      { preferEmptyMarkets: true, activeMarketBuckets: new Set(["TX:manufacturing"]) },
+      new Set(["AZ", "TX"])
+    );
+
+    expect(pick).toMatchObject({ stateId: "TX", sectorType: "manufacturing" });
+  });
+
+  it("marks a founding active before the next corporation chooses", () => {
+    const signals = { preferEmptyMarkets: true, activeMarketBuckets: new Set<string>() };
+    markMarketsActive(signals, [us("logistics", "AZ")]);
+    expect(signals.activeMarketBuckets).toContain("AZ:logistics");
   });
 });

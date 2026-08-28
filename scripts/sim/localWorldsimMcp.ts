@@ -188,6 +188,9 @@ const TOOLS: ToolDef[] = [
         indexFundBondLiquidityEnabled: bool(
           "Whether index funds target 20 percent sovereign bonds while retaining a 5 percent cash buffer in this sandbox only."
         ),
+        nppMarketCoverageEnabled: bool(
+          "Whether each existing NPP entry slot prioritizes a facility-ready empty state-sector cell in this sandbox only."
+        ),
       },
       ["preset", "turns", "seed"]
     ),
@@ -225,6 +228,12 @@ const TOOLS: ToolDef[] = [
       ) {
         throw new Error("indexFundBondLiquidityEnabled must be boolean");
       }
+      if (
+        a.nppMarketCoverageEnabled !== undefined &&
+        typeof a.nppMarketCoverageEnabled !== "boolean"
+      ) {
+        throw new Error("nppMarketCoverageEnabled must be boolean");
+      }
       const res = await enqueue(db, {
         preset,
         turns,
@@ -242,6 +251,9 @@ const TOOLS: ToolDef[] = [
         ...(a.indexFundBondLiquidityEnabled !== undefined
           ? { indexFundBondLiquidityEnabled: a.indexFundBondLiquidityEnabled }
           : {}),
+        ...(a.nppMarketCoverageEnabled !== undefined
+          ? { nppMarketCoverageEnabled: a.nppMarketCoverageEnabled }
+          : {}),
       });
       return {
         ...res,
@@ -254,6 +266,7 @@ const TOOLS: ToolDef[] = [
         canonicalFreightBillingEnabled: a.canonicalFreightBillingEnabled ?? "preset default",
         shortageResponsiveSourcingEnabled: a.shortageResponsiveSourcingEnabled ?? "preset default",
         indexFundBondLiquidityEnabled: a.indexFundBondLiquidityEnabled ?? "preset default",
+        nppMarketCoverageEnabled: a.nppMarketCoverageEnabled ?? "preset default",
         note: 'Poll with sim_run_status. The local worker claims queued jobs within ~15s — if status stays "queued" for minutes, the worker is not running (check sim_worker_health).',
       };
     },
