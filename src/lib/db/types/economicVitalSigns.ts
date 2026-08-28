@@ -1,4 +1,5 @@
 import type { ReconcileStatus } from "@/lib/ledger/types";
+import type { MarketFormationSnapshot } from "./marketFormation";
 
 export interface EconomicMetric {
   value: number | null;
@@ -72,6 +73,7 @@ export interface EconomicVitalSigns {
     medianOwnershipAdjustedBuyerHhi: EconomicMetric;
     highConcentrationLowFillShare: EconomicMetric;
   };
+  marketFormation: MarketFormationSnapshot;
   securities: {
     equityTrades48Turns: number;
     equityNotionalAnchor48Turns: number;
