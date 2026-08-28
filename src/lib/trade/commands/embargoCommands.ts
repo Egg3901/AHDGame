@@ -28,7 +28,10 @@ function isDuplicateKeyError(err: unknown): boolean {
 let cooldownIndexEnsured = false;
 async function ensureCooldownIndex(col: Collection<TradeEmbargoCooldown>): Promise<void> {
   if (cooldownIndexEnsured) return;
-  await col.createIndex({ sourceCountry: 1, targetCountry: 1 }, { unique: true });
+  await col.createIndex(
+    { sourceCountry: 1, targetCountry: 1 },
+    { unique: true, name: "embargoCooldowns_pair_unique" }
+  );
   cooldownIndexEnsured = true;
 }
 

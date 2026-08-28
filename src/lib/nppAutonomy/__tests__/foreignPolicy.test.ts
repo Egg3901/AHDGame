@@ -3,10 +3,16 @@ import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { ForeignPolicyChoice } from "../foreignPolicy";
 
-const { activeMock } = vi.hoisted(() => ({ activeMock: vi.fn() }));
+const { activeMock, executionMock } = vi.hoisted(() => ({
+  activeMock: vi.fn(),
+  executionMock: vi.fn(),
+}));
 
 vi.mock("../featureFlag", () => ({
   isNppAutonomyActive: (...args: unknown[]) => activeMock(...args),
+}));
+vi.mock("../foreignPolicyActions", () => ({
+  executeForeignPolicyChoice: (...args: unknown[]) => executionMock(...args),
 }));
 
 import { processAutonomousForeignPolicy } from "../foreignPolicy";
@@ -24,12 +30,15 @@ interface PlannerFixture {
   embargoes?: Array<Record<string, unknown>>;
   bills?: Array<Record<string, unknown>>;
   tradeSnapshot?: Record<string, unknown> | null;
+  recentDecisions?: Array<Record<string, unknown>>;
+  militaryUnits?: Array<Record<string, unknown>>;
+  approvalRating?: number;
 }
 
 interface RecordedDecision {
   selected: ForeignPolicyChoice | null;
   alternatives: ForeignPolicyChoice[];
-  acted: false;
+  acted: boolean;
   mode: "shadow" | "active";
 }
 
@@ -60,6 +69,11 @@ function setup(fixture: PlannerFixture = {}): MockDb {
     debtToGdpRatio: 40,
   });
   db.collection("tradeFlowSnapshots").findOne.mockResolvedValue(fixture.tradeSnapshot ?? null);
+  db.collection("governmentApprovals").findOne.mockResolvedValue(
+    fixture.approvalRating === undefined
+      ? null
+      : { _id: "FR", countryId: "FR", approvalRating: fixture.approvalRating }
+  );
 
   setFindRows(db, "countryAlignments", fixture.alignments ?? []);
   setFindRows(db, "sphereMemberships", fixture.spheres ?? []);
@@ -71,6 +85,8 @@ function setup(fixture: PlannerFixture = {}): MockDb {
   setFindRows(db, "organizationLegislation", []);
   setFindRows(db, "organizationMembershipProposals", fixture.pendingMemberships ?? []);
   setFindRows(db, "organizationLeadershipElections", []);
+  setFindRows(db, "nppForeignPolicyDecisions", fixture.recentDecisions ?? []);
+  setFindRows(db, "militaryUnits", fixture.militaryUnits ?? []);
   db.collection("nppForeignPolicyDecisions").updateOne.mockResolvedValue({
     matchedCount: 0,
     modifiedCount: 0,
@@ -98,7 +114,7 @@ function expectNoGameplayWrites(db: MockDb): void {
   }
 }
 
-function alignment(entityId: "FR" | "IT" | "RU", west: number, east: number) {
+function alignment(entityId: "FR" | "IT" | "RU" | "US", west: number, east: number) {
   return {
     _id: new ObjectId(),
     entityId,
@@ -111,7 +127,7 @@ function alignment(entityId: "FR" | "IT" | "RU", west: number, east: number) {
   };
 }
 
-function membership(countryId: "FR" | "IT" | "RU", organizationId = "NATO") {
+function membership(countryId: "FR" | "IT" | "RU" | "US", organizationId = "NATO") {
   return {
     _id: new ObjectId(),
     organizationId,
@@ -134,6 +150,7 @@ function pendingMembership(proposingCountryId: "IT" | "RU") {
 
 beforeEach(() => {
   activeMock.mockReset().mockResolvedValue(true);
+  executionMock.mockReset().mockResolvedValue({ acted: true, note: "Executed test choice." });
 });
 
 describe("processAutonomousForeignPolicy", () => {
@@ -277,6 +294,64 @@ describe("processAutonomousForeignPolicy", () => {
     );
   });
 
+  it("prevents tariff and embargo reversal inside the pair cooldown", async () => {
+    const db = setup({
+      alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
+      recentDecisions: [
+        {
+          _id: new ObjectId(),
+          countryId: "FR",
+          turn: 20,
+          mode: "shadow",
+          selected: {
+            type: "impose_embargo",
+            score: 50,
+            targetCountryId: "RU",
+            reasons: [],
+          },
+        },
+      ],
+    });
+
+    await processAutonomousForeignPolicy(db as unknown as Db, "FR", 40, now);
+
+    expect(
+      recordedDecision(db).alternatives.some(
+        (choice) => choice.type === "impose_embargo" && choice.targetCountryId === "RU"
+      )
+    ).toBe(false);
+  });
+
+  it("only offers alliance war entry when approval, forces, and readiness clear the guard", async () => {
+    const conflict = {
+      _id: "korea",
+      name: "Korean War",
+      status: "active",
+      sideA: { label: "UN Coalition", countries: ["US"] },
+      sideB: { label: "Communist Coalition", countries: ["RU"] },
+    };
+    const common = {
+      alignments: [alignment("FR", 90, 0), alignment("US", 100, 0), alignment("RU", 0, 100)],
+      memberships: [membership("FR"), membership("US")],
+      conflicts: [conflict],
+      militaryUnits: [{ _id: new ObjectId(), countryId: "FR", readiness: 72, personnel: 10_000 }],
+    };
+    const readyDb = setup({ ...common, approvalRating: 60 });
+    const opposedDb = setup({ ...common, approvalRating: 30 });
+
+    await processAutonomousForeignPolicy(readyDb as unknown as Db, "FR", 41, now);
+    await processAutonomousForeignPolicy(opposedDb as unknown as Db, "FR", 41, now);
+
+    expect(recordedDecision(readyDb).alternatives).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "join_war", conflictId: "korea", conflictSide: "A" }),
+      ])
+    );
+    expect(
+      recordedDecision(opposedDb).alternatives.some((choice) => choice.type === "join_war")
+    ).toBe(false);
+  });
+
   it("is idempotent for the same country and turn", async () => {
     const db = setup();
     db.collection("nppForeignPolicyDecisions")
@@ -302,13 +377,66 @@ describe("processAutonomousForeignPolicy", () => {
     expect(db.collection("nppForeignPolicyDecisions").updateOne).not.toHaveBeenCalled();
   });
 
-  it("keeps active rollout non-mutating until execution adapters land", async () => {
+  it("does not call an action adapter when active mode has no qualifying choice", async () => {
     const db = setup({ mode: "active" });
 
     const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 15, now);
 
     expect(result).toMatchObject({ mode: "active", acted: false });
     expect(recordedDecision(db)).toMatchObject({ mode: "active", acted: false });
+    expect(executionMock).not.toHaveBeenCalled();
     expectNoGameplayWrites(db);
+  });
+
+  it("claims an active decision before executing one opinion-driven vote", async () => {
+    const db = setup({
+      mode: "active",
+      alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
+      memberships: [membership("FR")],
+      pendingMemberships: [pendingMembership("RU")],
+    });
+
+    const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 16, now);
+
+    expect(result).toMatchObject({ mode: "active", acted: true, decisionRecorded: true });
+    expect(result.choice).toMatchObject({ type: "vote_org_no", pendingKind: "membership" });
+    expect(executionMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "FR",
+      expect.objectContaining({ _id: headId }),
+      expect.objectContaining({ type: "vote_org_no" }),
+      16,
+      now
+    );
+    const auditWrites = db.collection("nppForeignPolicyDecisions").updateOne.mock.calls;
+    expect(auditWrites[0][1].$setOnInsert).toMatchObject({
+      executionStatus: "claimed",
+      acted: false,
+    });
+    expect(auditWrites[1][1].$set).toMatchObject({
+      executionStatus: "executed",
+      acted: true,
+      executionNote: "Executed test choice.",
+    });
+  });
+
+  it("does not execute an active decision twice after a same-turn restart", async () => {
+    const db = setup({
+      mode: "active",
+      alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
+      memberships: [membership("FR")],
+      pendingMemberships: [pendingMembership("RU")],
+    });
+    db.collection("nppForeignPolicyDecisions")
+      .updateOne.mockResolvedValueOnce({ matchedCount: 0, modifiedCount: 0, upsertedCount: 1 })
+      .mockResolvedValueOnce({ matchedCount: 1, modifiedCount: 1, upsertedCount: 0 })
+      .mockResolvedValueOnce({ matchedCount: 1, modifiedCount: 0, upsertedCount: 0 });
+
+    const first = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 17, now);
+    const replay = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 17, now);
+
+    expect(first.acted).toBe(true);
+    expect(replay).toMatchObject({ acted: false, decisionRecorded: false });
+    expect(executionMock).toHaveBeenCalledTimes(1);
   });
 });

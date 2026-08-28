@@ -5,6 +5,7 @@ import { DEFAULT_GAME_STATE_FLAGS } from "@/lib/seeds/reference/featureFlagDefau
 import { gameConfig as gameConfigDefaults } from "@/lib/seeds/reference/gameConfig";
 
 type NppAutonomyLevel = "off" | "v0" | "v1" | "v2" | "v3" | "v4";
+type NppForeignPolicyMode = "off" | "shadow" | "active";
 
 interface BooleanGate {
   key: string;
@@ -167,6 +168,24 @@ const NPP_LEVELS: { value: NppAutonomyLevel; label: string; blurb: string }[] = 
   },
 ];
 
+const NPP_FOREIGN_POLICY_MODES: {
+  value: NppForeignPolicyMode;
+  label: string;
+  blurb: string;
+}[] = [
+  { value: "off", label: "Off", blurb: "Do not plan or execute autonomous foreign policy." },
+  {
+    value: "shadow",
+    label: "Shadow",
+    blurb: "Score and audit decisions without changing diplomacy, trade, or conflicts.",
+  },
+  {
+    value: "active",
+    label: "Active",
+    blurb: "Execute at most one scored action per country and strategic cycle.",
+  },
+];
+
 /**
  * Graduated system modes that live on gameConfig instead of gameState. Writes
  * go through the existing per-system PATCH routes (NOT /feature-gates) because
@@ -252,6 +271,7 @@ const SYSTEM_MODES: SystemMode[] = [
 interface GatesState {
   booleans: Record<string, boolean>;
   nppAutonomyLevel: NppAutonomyLevel;
+  nppForeignPolicyMode: NppForeignPolicyMode;
 }
 
 function DefaultBadge() {
@@ -332,8 +352,12 @@ export function FeatureGatesPanel() {
         setError(data.error || "Failed to update gate");
         return;
       }
-      if (data.booleans && data.nppAutonomyLevel) {
-        setState({ booleans: data.booleans, nppAutonomyLevel: data.nppAutonomyLevel });
+      if (data.booleans && data.nppAutonomyLevel && data.nppForeignPolicyMode) {
+        setState({
+          booleans: data.booleans,
+          nppAutonomyLevel: data.nppAutonomyLevel,
+          nppForeignPolicyMode: data.nppForeignPolicyMode,
+        });
       }
     } catch {
       setError("Network error");
@@ -433,7 +457,7 @@ export function FeatureGatesPanel() {
         </p>
       ) : null}
 
-      {/* NPP autonomy — 5-state level selector */}
+      {/* NPP autonomy level selector */}
       <div className="mb-5 rounded-lg border border-card-border bg-background/40 p-4">
         <div className="mb-1 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -445,7 +469,7 @@ export function FeatureGatesPanel() {
           </span>
         </div>
         <p className="mb-3 text-xs text-muted">
-          Fresh seeds start at <span className="font-semibold">v0</span>.{" "}
+          Fresh seeds start at <span className="font-semibold">v4</span>.{" "}
           {NPP_LEVELS.find((l) => l.value === state.nppAutonomyLevel)?.blurb}
         </p>
         <div className="inline-flex flex-wrap gap-1 rounded-lg border border-card-border bg-card p-1">
@@ -483,6 +507,54 @@ export function FeatureGatesPanel() {
             </li>
           ))}
         </ul>
+      </div>
+
+      <div className="mb-5 rounded-lg border border-card-border bg-background/40 p-4">
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <span className="text-sm font-semibold">NPP foreign policy</span>
+          <span className="text-[10px] uppercase tracking-wider text-muted">
+            {
+              NPP_FOREIGN_POLICY_MODES.find((mode) => mode.value === state.nppForeignPolicyMode)
+                ?.label
+            }
+          </span>
+        </div>
+        <p className="mb-3 text-xs text-muted">
+          Defaults to shadow when absent. Active mode can cast organization votes, table diplomacy,
+          aid allies, support alliance war entry, impose embargoes, and introduce tariff bills.
+        </p>
+        <div className="inline-flex flex-wrap gap-1 rounded-lg border border-card-border bg-card p-1">
+          {NPP_FOREIGN_POLICY_MODES.map((mode) => {
+            const active = state.nppForeignPolicyMode === mode.value;
+            return (
+              <button
+                key={mode.value}
+                type="button"
+                disabled={savingKey === "foreign-policy-mode"}
+                title={mode.blurb}
+                onClick={() =>
+                  void post(
+                    { kind: "foreign-policy-mode", value: mode.value },
+                    "foreign-policy-mode"
+                  )
+                }
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+                  active
+                    ? "bg-primary text-white"
+                    : "text-muted hover:bg-background hover:text-foreground"
+                }`}
+              >
+                {mode.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-3 border-t border-card-border pt-2.5 text-[11px] leading-relaxed text-muted">
+          {
+            NPP_FOREIGN_POLICY_MODES.find((mode) => mode.value === state.nppForeignPolicyMode)
+              ?.blurb
+          }
+        </p>
       </div>
 
       {/* Graduated system modes (gameConfig) */}
