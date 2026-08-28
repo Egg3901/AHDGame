@@ -124,6 +124,7 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   index_fund_subscribe: "fund_subscription",
   index_fund_dividend: "fund_distribution",
   corp_escrow_funding: "escrow_transfer",
+  corp_group_relief: "corporate_group_transfer",
   caucus_tax_debit: "party_internal_transfer",
   pension_benefit: "pension_transfer",
   // One-directional modeled income channels with no payer account in the

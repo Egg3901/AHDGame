@@ -151,6 +151,7 @@ describe("Phase 3 coverage — semantic mint/sink reasons", () => {
     expect(reasonForTxType("bond_purchase")).toBe("bond_principal_investment");
     expect(reasonForTxType("index_fund_subscribe")).toBe("fund_subscription");
     expect(reasonForTxType("corp_dividend")).toBe("corporate_dividend");
+    expect(reasonForTxType("corp_group_relief")).toBe("corporate_group_transfer");
     expect(reasonForTxType("office_income")).toBe("public_salary");
   });
 
