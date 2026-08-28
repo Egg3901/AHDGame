@@ -84,6 +84,7 @@ export const ECONOMY_ONLY_PHASES: ReadonlySet<string> = new Set<string>([
   "gameHealthSnapshot",
   "auditAnomalyScan",
   "suspiciousDetection",
+  "indexFunds",
   "moneySupplySnapshot",
   "ledgerBalanceSnapshot",
   "ledgerReconcile",
