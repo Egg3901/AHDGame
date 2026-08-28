@@ -133,9 +133,13 @@ export function NextTickStrip({ nextTurn, chips }: { nextTurn: number; chips: Pe
                 }}
               />
               <span style={{ font: `500 10.5px ${mono}`, color: "#c8c8d4" }}>{p.text}</span>
-              <span style={{ font: `600 10.5px ${mono}`, color: MIL_COLOR.textFaint }}>
-                {p.when}
-              </span>
+              {/* A chip with nothing pending states no timing. An empty `when`
+                  is that case, not a missing value. */}
+              {p.when && (
+                <span style={{ font: `600 10.5px ${mono}`, color: MIL_COLOR.textFaint }}>
+                  {p.when}
+                </span>
+              )}
             </div>
           );
         })}

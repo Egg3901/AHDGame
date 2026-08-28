@@ -1,12 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { GeoFeature } from "@/components/maps/RegionalGeoMap";
-import { VIETNAM_FEATURE_IDS, VIETNAM_GEO_URL } from "@/lib/maps/vietnamGeometry";
-import { HISTORICAL_FEATURE_IDS, HISTORICAL_GEO_URL } from "@/lib/maps/historicalGeometry";
-
 /**
- * Geometry for a conflict host that is NOT a full country.
+ * Loading geometry for a conflict host that is NOT a full country.
  *
  * A proxy war is fought over entities the region-shard machinery cannot reach:
  * `useRegionGeometry` resolves shards by REGION CODE through the manifest, and
@@ -15,35 +10,18 @@ import { HISTORICAL_FEATURE_IDS, HISTORICAL_GEO_URL } from "@/lib/maps/historica
  * back to the bare meter — for exactly the wars this whole subsystem is about.
  *
  * These hosts are drawn from the static feature files instead, the same ones the
- * world map claims through `mapFeatureIds`.
+ * world map claims through `mapFeatureIds`. WHICH shard covers a host is pure and
+ * lives in `staticZoneGeometry`, because the server needs the same answer to decide
+ * whether a conflict gets a map column at all.
  */
-export interface StaticHostGeometry {
-  url: string;
-  /**
-   * The roster codes this host contributes.
-   *
-   * ⚠️ Both consumers filter features against a roster — `RegionalGeoMap` builds a
-   * Set from `regionCodes` and drops everything outside it, and `FrontLineMap`
-   * filters inline. Supplying the features WITHOUT these codes renders an empty box
-   * rather than a map, and every "features is non-empty" assertion still passes.
-   */
-  codes: string[];
-}
+import { useEffect, useMemo, useState } from "react";
+import type { GeoFeature } from "@/components/maps/RegionalGeoMap";
+import { staticZoneGeometry } from "@/lib/maps/staticZoneGeometry";
 
-/** The static shard covering this host, or null when nothing draws it. */
-export function staticHostGeometry(hostEntityId: string): StaticHostGeometry | null {
-  if ((VIETNAM_FEATURE_IDS as readonly string[]).includes(hostEntityId)) {
-    // Both halves: a Vietnam proxy is the whole country split at the 17th
-    // parallel, not a single successor state. Drawing only the host left a
-    // half-outline and a west-east fallback axis because the other capital
-    // sat off the map.
-    return { url: VIETNAM_GEO_URL, codes: [...VIETNAM_FEATURE_IDS] };
-  }
-  if ((HISTORICAL_FEATURE_IDS as readonly string[]).includes(hostEntityId)) {
-    return { url: HISTORICAL_GEO_URL, codes: [hostEntityId] };
-  }
-  return null;
-}
+// Re-exported so the existing importers (and their tests) keep one entry point
+// for host geometry, while the server can reach the pure half directly.
+export { staticHostGeometry, staticZoneGeometry } from "@/lib/maps/staticZoneGeometry";
+export type { StaticHostGeometry } from "@/lib/maps/staticZoneGeometry";
 
 const cache = new Map<string, Promise<GeoFeature[]>>();
 
@@ -57,30 +35,6 @@ function loadShard(url: string): Promise<GeoFeature[]> {
     cache.set(url, pending);
   }
   return pending;
-}
-
-/**
- * Every static shard a whole conflict zone needs, and the codes they contribute.
- *
- * A conflict is fought over `hostEntities`, not over one country — a proxy war can
- * be hosted in two, and the German Question widens its war to both Germanies. Each
- * host resolves independently, so a zone can mix an ordinary country (no shard),
- * a Vietnam half and a historical territory; the urls dedupe because two hosts
- * often share one file.
- */
-export function staticZoneGeometry(hostEntityIds: readonly string[]): {
-  urls: string[];
-  codes: string[];
-} {
-  const urls: string[] = [];
-  const codes = new Set<string>();
-  for (const id of hostEntityIds) {
-    const source = staticHostGeometry(id);
-    if (!source) continue;
-    if (!urls.includes(source.url)) urls.push(source.url);
-    for (const code of source.codes) codes.add(code);
-  }
-  return { urls, codes: [...codes] };
 }
 
 /**

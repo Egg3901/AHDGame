@@ -62,9 +62,9 @@ const base: ConflictRecordView = {
   unopposedAdvances: 0,
   lastEventLabel: "LAST ENGAGEMENT",
   lastEventValue: "T41",
-  pending: [
-    { text: "No offensive declared — the line holds", when: "the line holds", tone: "quiet" },
-  ],
+  // Empty `when`, as the server now sends for a chip with nothing pending: the two
+  // halves were saying the same thing twice.
+  pending: [{ text: "No offensive declared — the line holds", when: "", tone: "quiet" }],
   momentum: {
     control: 70,
     fromTurn: 60,
@@ -104,6 +104,30 @@ describe("ConflictRecord", () => {
   it("shows the conflict's public number and region", () => {
     render(<ConflictRecord conflict={base} />);
     expect(screen.getByText(/#1 · East Asia/)).toBeTruthy();
+  });
+
+  // A zone with nothing drawable rendered a 620px box holding the sentence "No
+  // mapped territory for DD" while every panel worth reading queued down the
+  // 452px rail beside it. The column goes and the rail becomes the board.
+  it("drops the map column when the zone has no drawable geometry", () => {
+    const { container } = render(<ConflictRecord conflict={{ ...base, hasMap: false }} />);
+    expect(container.querySelector(".cw-front-map")).toBeNull();
+    expect(container.querySelector(".cw-front-nomap")).toBeTruthy();
+  });
+
+  // Absent, not false: a payload serialized before `hasMap` shipped must lay out
+  // exactly as it did rather than losing its map.
+  it("keeps the map when the payload does not say either way", () => {
+    const { container } = render(<ConflictRecord conflict={base} />);
+    expect(container.querySelector(".cw-front-map")).toBeTruthy();
+    expect(container.querySelector(".cw-front-nomap")).toBeNull();
+  });
+
+  // The engagement count is a stat tile at the top of the page. Printing it again
+  // beside the offensive count made the scope note read as a contrast to work out.
+  it("scopes the war log without restating the engagement count", () => {
+    render(<ConflictRecord conflict={base} />);
+    expect(screen.getByText(/1 offensive · rosters withheld on both sides/)).toBeTruthy();
   });
 
   it("names both belligerents", () => {
@@ -191,6 +215,44 @@ describe("ConflictRecord tiers", () => {
     expect(screen.getByText("NOT PUBLIC")).toBeTruthy();
     // The withheld cell is a stated absence, not a zero.
     expect(container.textContent).toMatch(/\? \? \?/);
+  });
+
+  // All three composition rows are withheld on both sides at this tier, so the
+  // panel was spending six cells to say one thing — and pushing the casualties,
+  // the only real figures in it, down the rail behind them.
+  it("collapses the withheld composition into one row at the public tier", () => {
+    const { container } = render(<ConflictRecord conflict={base} />);
+    expect(screen.getByText("COMPOSITION")).toBeTruthy();
+    expect(screen.queryByText("DIVISIONS")).toBeNull();
+    expect(screen.queryByText("STRENGTH")).toBeNull();
+    expect(screen.queryByText("READINESS")).toBeNull();
+    expect(container.textContent!.match(/\? \? \?/g)).toHaveLength(2);
+  });
+
+  // The three rows are the point of the panel for anyone who can see them, so
+  // collapsing must be strictly a public-tier behaviour.
+  it("keeps the three composition rows for a seat that may see them", () => {
+    render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          tier: "command",
+          viewerCountry: "US",
+          ownSide: "A",
+          forceA: {
+            divisions: 4,
+            personnel: 40000,
+            readiness: 80,
+            recovery: null,
+            casualties: 6000,
+          },
+        }}
+      />
+    );
+    expect(screen.getByText("DIVISIONS")).toBeTruthy();
+    expect(screen.getByText("STRENGTH")).toBeTruthy();
+    expect(screen.getByText("READINESS")).toBeTruthy();
+    expect(screen.queryByText("COMPOSITION")).toBeNull();
   });
 
   it("publishes both sides' casualty totals even at the public tier", () => {
@@ -560,23 +622,41 @@ describe("ConflictRecord command surface", () => {
 
 describe("ConflictRecord coalition rules", () => {
   it("warns that posting units here commits you to the war", () => {
-    render(<ConflictRecord conflict={base} />);
-    expect(screen.getByText(/commits your country to this war/i)).toBeTruthy();
+    render(<ConflictRecord conflict={{ ...base, viewerCountry: "US" }} />);
+    expect(screen.getByText(/commits your country the first time it fights/i)).toBeTruthy();
+    // The allies-defend-automatically rule lives in this banner now. It used to be
+    // restated as a standalone line at the foot of the record as well.
     expect(screen.getByText(/defend it automatically/i)).toBeTruthy();
+  });
+
+  // A reader with no nation cannot post units anywhere, so the widest strip above
+  // the fold should not be spent telling them what would happen if they did.
+  it("keeps the commitment banner off a page nobody can act on", () => {
+    render(<ConflictRecord conflict={{ ...base, viewerCountry: null }} />);
+    expect(screen.queryByText(/commits your country/i)).toBeNull();
+    expect(screen.queryByText(/defend it automatically/i)).toBeNull();
   });
 
   // Once your units have fought, the warning is no longer a warning — the
   // commitment has been incurred and the only exits are victory or a settlement.
   it("states the commitment as already incurred once your units have fought", () => {
-    render(<ConflictRecord conflict={{ ...base, committedCountry: "US", committedDead: 14206 }} />);
+    render(
+      <ConflictRecord
+        conflict={{ ...base, viewerCountry: "US", committedCountry: "US", committedDead: 14206 }}
+      />
+    );
     expect(screen.getByText("US IS COMMITTED")).toBeTruthy();
-    expect(screen.getByText(/14,206 of your men have died at this front/)).toBeTruthy();
-    expect(screen.queryByText(/commits your country to this war/i)).toBeNull();
+    expect(screen.getByText(/14,206 of your men have died here/)).toBeTruthy();
+    expect(screen.queryByText(/commits your country/i)).toBeNull();
   });
 
   it("does not claim dead a committed nation has not lost", () => {
-    render(<ConflictRecord conflict={{ ...base, committedCountry: "US", committedDead: 0 }} />);
-    expect(screen.getByText(/No one of yours has died here yet/)).toBeTruthy();
+    render(
+      <ConflictRecord
+        conflict={{ ...base, viewerCountry: "US", committedCountry: "US", committedDead: 0 }}
+      />
+    );
+    expect(screen.getByText(/None of yours has died here yet/)).toBeTruthy();
   });
 
   it("lists every belligerent in an engagement, not just two", () => {
