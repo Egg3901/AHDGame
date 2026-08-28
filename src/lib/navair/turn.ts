@@ -19,6 +19,7 @@ import {
 } from "./basing";
 import { cv, baseCv, alive } from "./engineCore";
 import { resolveEngagement } from "./engagement";
+import { defaultMissionFor } from "./missions";
 import type { NavairUnit, RegionChannels, EngagementOutcome } from "./types";
 import type { CountryId } from "@/lib/constants/countries";
 import type { RegionCode } from "@/lib/military/types";
@@ -45,17 +46,33 @@ export interface NavairTurnResult {
   formationsLost: number;
   /** Formation rows written back after combat. */
   formationsUpdated: number;
+  /** Formations given a standing mission because they had none. */
+  missionsAssigned: number;
 }
 
-/** Who each country is currently shooting at, from active conflicts. */
-async function buildHostilityMap(db: Db): Promise<Map<string, Set<string>>> {
+/**
+ * Who each country is shooting at, and where its land fronts are.
+ *
+ * Both come from the same read of active conflicts, so the pass does not query twice for
+ * two facts about one document.
+ */
+interface WarContext {
+  hostility: Map<string, Set<string>>;
+  frontRegions: Map<string, Set<RegionCode>>;
+}
+
+async function buildWarContext(db: Db): Promise<WarContext> {
   // Projection passed as a find option rather than via the cursor's .project(), which is
   // this codebase's house style and does not require a cursor implementation of it.
   const conflicts = (await getConflictsCollection(db)
-    .find({ status: "active" }, { projection: { "sideA.countries": 1, "sideB.countries": 1 } })
+    .find(
+      { status: "active" },
+      { projection: { "sideA.countries": 1, "sideB.countries": 1, region: 1 } }
+    )
     .toArray()) as unknown as Array<{
     sideA?: { countries?: string[] };
     sideB?: { countries?: string[] };
+    region?: RegionCode;
   }>;
 
   const hostility = new Map<string, Set<string>>();
@@ -64,15 +81,24 @@ async function buildHostilityMap(db: Db): Promise<Map<string, Set<string>>> {
     hostility.get(a)!.add(b);
   };
 
+  const frontRegions = new Map<string, Set<RegionCode>>();
+  const front = (country: string, region: RegionCode) => {
+    if (!frontRegions.has(country)) frontRegions.set(country, new Set());
+    frontRegions.get(country)!.add(region);
+  };
+
   for (const c of conflicts) {
-    for (const a of c.sideA?.countries ?? []) {
-      for (const b of c.sideB?.countries ?? []) {
-        link(a, b);
-        link(b, a);
+    const a = c.sideA?.countries ?? [];
+    const b = c.sideB?.countries ?? [];
+    for (const x of a) {
+      for (const y of b) {
+        link(x, y);
+        link(y, x);
       }
     }
+    if (c.region) for (const country of [...a, ...b]) front(country, c.region);
   }
-  return hostility;
+  return { hostility, frontRegions };
 }
 
 /**
@@ -107,16 +133,19 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
       engagementsFought: 0,
       formationsLost: 0,
       formationsUpdated: 0,
+      missionsAssigned: 0,
     };
   }
 
-  const [hostility, blocs, channels] = await Promise.all([
-    buildHostilityMap(db),
+  const [war, blocs, channels] = await Promise.all([
+    buildWarContext(db),
     loadMilitaryBlocs(db),
     loadNavairChannels(db),
   ]);
+  const { hostility, frontRegions } = war;
 
   // ── station everything, then index by region ────────────────────────────────
+  const touchedByMission = new Set<NavairUnit>();
   const byRegion = new Map<RegionCode, NavairUnit[]>();
   const countries = new Set<CountryId>();
   let unitsStationed = 0;
@@ -131,6 +160,37 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
     const list = byRegion.get(station);
     if (list) list.push(u);
     else byRegion.set(station, [u]);
+  }
+
+  // ── standing missions for formations nobody commands ────────────────────────
+  // Most of the world is run by nobody: NPC countries, players who have not opened the
+  // war room, and every formation that existed before this subsystem did. Without this,
+  // every navy in the game carries a null mission, no blockade or engagement ever fires,
+  // and naval combat value falls through to the flying-weights fallback. A stored mission
+  // is never overwritten: this fills a blank, it does not overrule a commander.
+  let missionsAssigned = 0;
+  for (const [region, here] of byRegion) {
+    const hostileNavalHere = new Set(
+      here.filter((u) => u.domain === "naval").map((u) => u.countryId)
+    );
+    const hostileAirHere = new Set(here.filter((u) => u.domain === "air").map((u) => u.countryId));
+
+    for (const u of here) {
+      if (u.mission) continue;
+      const enemies = hostility.get(u.countryId) ?? new Set<string>();
+      const mission = defaultMissionFor(u, {
+        enemies,
+        frontRegions: frontRegions.get(u.countryId) ?? new Set<RegionCode>(),
+        contestedHere: [...hostileNavalHere].some((c) => enemies.has(c)),
+        airContestedHere: [...hostileAirHere].some((c) => enemies.has(c)),
+      });
+      if (mission) {
+        u.mission = mission;
+        touchedByMission.add(u);
+        missionsAssigned++;
+      }
+    }
+    void region;
   }
 
   // ── supply at station, before anything reads combat value ───────────────────
@@ -227,6 +287,7 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
 
   const channelsWritten = await saveNavairChannels(db, updates);
 
+  for (const u of touchedByMission) touched.add(u);
   const formationsLost = await persistCombatResults(db, touched);
 
   return {
@@ -237,6 +298,7 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
     engagementsFought: engagements.length,
     formationsLost: crippled.length,
     formationsUpdated: formationsLost,
+    missionsAssigned,
   };
 }
 
@@ -280,6 +342,7 @@ async function persistCombatResults(db: Db, touched: ReadonlySet<NavairUnit>): P
           integrity: u.integrity ?? 100,
           supply: u.supply ?? 100,
           station: u.station ?? null,
+          mission: u.mission ?? null,
         },
       },
     },
