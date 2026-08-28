@@ -15,19 +15,19 @@ if (!uri || !dbName) {
   );
 }
 
-async function main(): Promise<void> {
-  const client = new MongoClient(uri);
+async function main(mongoUri: string, selectedDbName: string): Promise<void> {
+  const client = new MongoClient(mongoUri);
   try {
     await client.connect();
     const snapshot = await client
-      .db(dbName)
+      .db(selectedDbName)
       .collection<EconomicVitalSigns>("economicVitalSigns")
       .findOne({}, { sort: { turn: -1 } });
-    if (!snapshot) throw new Error(`No economic vital-sign snapshot found in ${dbName}`);
+    if (!snapshot) throw new Error(`No economic vital-sign snapshot found in ${selectedDbName}`);
     process.stdout.write(
       `${JSON.stringify(
         {
-          dbName,
+          dbName: selectedDbName,
           turn: snapshot.turn,
           measurementConfidence: snapshot.measurement.confidence,
           findings: runEconomicStressTests(snapshot),
@@ -41,7 +41,7 @@ async function main(): Promise<void> {
   }
 }
 
-void main().catch((error: unknown) => {
+void main(uri, dbName).catch((error: unknown) => {
   console.error(error);
   process.exitCode = 1;
 });

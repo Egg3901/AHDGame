@@ -280,12 +280,14 @@ if (!uri || !dbNames || dbNames.length === 0) {
 }
 const refresh = process.argv.includes("--refresh");
 
-async function main(): Promise<void> {
-  const client = new MongoClient(uri);
+async function main(mongoUri: string, selectedDbNames: string[]): Promise<void> {
+  const client = new MongoClient(mongoUri);
   try {
     await client.connect();
     const arms = [];
-    for (const dbName of dbNames) arms.push(await summarizeDatabase(client, dbName, refresh));
+    for (const dbName of selectedDbNames) {
+      arms.push(await summarizeDatabase(client, dbName, refresh));
+    }
     const control = arms[0]!;
     const comparisons = arms.slice(1).map((arm) => ({
       treatment: arm.dbName,
@@ -302,7 +304,7 @@ async function main(): Promise<void> {
   }
 }
 
-void main().catch((error: unknown) => {
+void main(uri, dbNames).catch((error: unknown) => {
   console.error(error);
   process.exitCode = 1;
 });
