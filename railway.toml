@@ -6,16 +6,35 @@ builder = "NIXPACKS"
 # actually invokes instrumentation.ts's register() at boot. node-cron, auto-seed,
 # and crash capture all live in that branch and need to initialize at boot.
 # NODE_OPTIONS caps the V8 old-space heap. Without it, V8 sizes the heap to
-# visible machine memory and RSS drifts upward under load. The heapWatchdog's
-# own 5 GB RSS observation ceiling still backstops runaways.
+# visible machine memory and RSS drifts upward under load.
 #
-# Raised 1024 -> 3072 on 2026-08-28. At 1024 the reported heap_size_limit was
-# 1275 MB, so the watchdog's 75% threshold put the kill line at ~956 MB. Idle
-# sits near 400 MB and a turn adds ~600 MB, so turn processing crossed it and
-# the watchdog exited mid-turn (turn 460 tripped at 993 MB / 77.9%). Each trip
-# abandoned the turn holding the processing lock, and TURN_LOCK_STALE_MS blocks
-# the retry for 20 minutes, so one trip cost two turn slots. The container has
-# ~5 GB, so 1024 was leaving most of it unused.
+# Raised 1024 -> 3072 on 2026-08-28, diagnosed twice independently and merged
+# here. At 1024 the reported heap_size_limit was 1275 MB, so heapWatchdog's 75%
+# threshold put the kill line at ~956 MB. Idle sits near 400 MB and a turn adds
+# ~600 MB, so turn processing crossed it and the watchdog exited mid-turn (turn
+# 460 tripped at 993 MB / 77.9%). heapWatchdog's own per-turn ring buffer shows
+# the same thing from the other side: turn 451 went before=506MB after=947MB,
+# a 441 MB delta over 161s, against a steady state oscillating 350-660 MB.
+#
+# Each trip abandoned the turn while it still held the processing lock, and
+# TURN_LOCK_STALE_MS blocks reclaim for 20 minutes, so one trip cost two turn
+# slots. Prod went 127 minutes without a turn and dropped turns 450, 455, 456
+# and 459. Turns that outran the watchdog's 10s sampling interval died on a hard
+# V8 abort ("Ineffective mark-compacts near heap limit") instead.
+#
+# The container has ~5 GB, so 1024 left most of it unused. 3072 puts the heap
+# kill line near 2.4 GB. Note which guard then binds: heapWatchdog trips on
+# EITHER heap (75% of heap_size_limit) or RSS (70% of its 5 GB ceiling, i.e.
+# 3.5 GB), and at the observed RSS-to-heapUsed ratio of ~1.5 the RSS guard is
+# reached marginally first. So the effective new ceiling is the RSS backstop at
+# ~3.5 GB — roughly 2.4x the old 956 MB trip point rather than the ~4x that heap
+# headroom alone would suggest. That is deliberate: both guards exit cleanly and
+# release the turn lock on the way out, and tripping at 3.5 GB RSS keeps us well
+# inside the container rather than risking an OS OOM kill, which would give no
+# clean exit and no lock release at all.
+#
+# Headroom also relieves the GC pressure that correlates with the median turn
+# duration climbing 46s -> 114s over the preceding fortnight.
 startCommand = "NODE_OPTIONS=--max-old-space-size=3072 HOSTNAME=0.0.0.0 npx next start"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 300
