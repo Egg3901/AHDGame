@@ -645,27 +645,38 @@ export async function snapshotApprovalHistory(
   ]);
 
   // The war block is computed BEFORE the metrics guard below, and persisted on
-  // both sides of it. At peace its target is zero, so it retires at the damping
-  // step rather than vanishing — but only if it is stepped every turn. A country
-  // that returns early here would otherwise freeze its war total forever.
+  // both sides of it. Exhaustion integrates one point per in-game year in
+  // whichever direction the country is currently going, so it only reaches the
+  // right value if it is stepped EVERY turn. A country that returned early here
+  // would freeze its exhaustion — and, once at peace, never finish healing.
   const approvalDoc = await db
     .collection<GovernmentApproval>("governmentApprovals")
-    .findOne({ _id: countryId }, { projection: { warApprovalTotal: 1 } });
-  const war = await computeWarApproval(db, countryId, turn, approvalDoc?.warApprovalTotal);
+    .findOne({ _id: countryId }, { projection: { warExhaustion: 1, warExhaustionConflictId: 1 } });
+  const war = await computeWarApproval(db, countryId, turn, {
+    exhaustion: approvalDoc?.warExhaustion,
+    conflictId: approvalDoc?.warExhaustionConflictId,
+  });
 
   if (allMetrics.length === 0) {
-    // No rating to write, but the block still has to move. Only the total is
+    // No rating to write, but the block still has to move. Only the war state is
     // written: the address and org providers are not run on this path, so
     // storing a war-only modifier list would drop those chips from beside a
     // rating that still includes them. A stale list matching a stale rating is
     // better than a fresh list that contradicts it.
     //
     // `upsert: false` — a country with neither metrics nor an approval document
-    // has nothing to retire, and inventing one here would create a document
+    // has no exhaustion to heal, and inventing one here would create a document
     // missing every other required field.
-    await db
-      .collection<GovernmentApproval>("governmentApprovals")
-      .updateOne({ _id: countryId }, { $set: { warApprovalTotal: war.total } });
+    await db.collection<GovernmentApproval>("governmentApprovals").updateOne(
+      { _id: countryId },
+      {
+        $set: {
+          warApprovalTotal: war.total,
+          warExhaustion: war.exhaustion,
+          warExhaustionConflictId: war.conflictId,
+        },
+      }
+    );
     return;
   }
 
@@ -737,7 +748,8 @@ export async function snapshotApprovalHistory(
   //    without bumping every state;
   //  - international joint statements about this country, bounded and time
   //    limited, which lift cleanly when the statement lapses;
-  //  - the war block, already damped as a block by computeWarApproval.
+  //  - the war block, one modifier per term (exhaustion, effort, alliance
+  //    contribution), each already stepped by computeWarApproval.
   //
   // One call rather than a chain: each call independently clamps to [0,100] and
   // rounds to a tenth, and each gets its own POSITIVE_MODIFIER_NET_CAP — so
@@ -753,6 +765,14 @@ export async function snapshotApprovalHistory(
     .toArray();
   const cabinetMods = buildCabinetApprovalModifiers(cabinetMembers, countryId);
 
+  // The war block now contributes one modifier per term rather than one netted
+  // total, so its positive terms compete for POSITIVE_MODIFIER_NET_CAP alongside
+  // the address bump and any joint statements, where the netted block used to be
+  // immune. It only matters when the national positives clear the cap at all —
+  // roughly an address plus two endorsements plus a war going well — and then a
+  // winning front is capped the same way every other positive is. That is the
+  // consistent reading and it is deliberate; raising or exempting the cap is a
+  // balance decision, not a side effect of splitting a chip.
   const nationalMods = [
     ...nationalAddressMods,
     ...orgStatementMods,
@@ -771,6 +791,8 @@ export async function snapshotApprovalHistory(
         netApproval: approval - (100 - approval),
         source: "aggregate" as const,
         warApprovalTotal: war.total,
+        warExhaustion: war.exhaustion,
+        warExhaustionConflictId: war.conflictId,
         activeNationalModifiers: nationalMods,
         updatedAt: new Date(),
       },

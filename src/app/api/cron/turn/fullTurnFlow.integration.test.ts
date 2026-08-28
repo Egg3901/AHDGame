@@ -104,6 +104,9 @@ vi.mock("@/lib/turn/independenceDesireDrift", () => ({
 vi.mock("@/lib/utils/governmentApproval", () => ({
   snapshotApprovalHistory: vi.fn(),
 }));
+vi.mock("@/lib/utils/approvalSnapshotRun", () => ({
+  snapshotApprovalsForTurn: vi.fn(),
+}));
 vi.mock("@/lib/demographicEffects", () => ({
   processAllStateDemographics: vi.fn(),
 }));
@@ -260,6 +263,11 @@ describe("processTurn() — full turn flow", () => {
 
     const govApproval = await import("@/lib/utils/governmentApproval");
     vi.mocked(govApproval.snapshotApprovalHistory).mockResolvedValue(undefined as never);
+    const approvalRun = await import("@/lib/utils/approvalSnapshotRun");
+    vi.mocked(approvalRun.snapshotApprovalsForTurn).mockResolvedValue({
+      countriesProcessed: 0,
+      guestsReleased: [],
+    });
 
     const demographicEffects = await import("@/lib/demographicEffects");
     vi.mocked(demographicEffects.processAllStateDemographics).mockResolvedValue(undefined as never);

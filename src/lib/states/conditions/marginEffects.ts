@@ -72,7 +72,15 @@ export const MODIFIER_MARGIN_FACTOR: Record<string, number> = {
   // registration is load-bearing rather than defensive — an unregistered id
   // takes the 0.75 default below, and war exhaustion reaches -25, so leaving it
   // out puts -18.75 into every region's margins and clamps at the cap.
+  //
+  // One entry per chip, because the block is now one chip per term. `war` is the
+  // retired combined id and stays registered: the previous turn's chips are
+  // stored on the approval document, so a country carries old-style entries
+  // until its next snapshot overwrites them.
   war: 0,
+  war_exhaustion: 0,
+  war_effort: 0,
+  alliance_contribution: 0,
 };
 
 export function marginEffectForModifier(approvalEffect: number, modifierId: string): number {

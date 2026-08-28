@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
+import { netModifierEffect, type ActiveModifier } from "@/lib/utils/approvalModifiers";
 import { regionUrl, regionApiSubUrl, approvalUrl } from "@/lib/urls";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { ModifierList } from "@/components/approval/ModifierChip";
@@ -53,7 +53,7 @@ export function RegionApprovalClient({
   }, [countryId, stateId]);
 
   const modifiers = data?.governmentApprovalModifiers ?? [];
-  const netApproval = modifiers.reduce((s, m) => s + m.effect, 0);
+  const netApproval = netModifierEffect(modifiers);
   const netMargin = computeRegionalConditionMargin(modifiers);
 
   const backHref = regionUrl(countryId, stateId);

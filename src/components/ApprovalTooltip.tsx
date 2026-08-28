@@ -3,8 +3,9 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
-import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
+import { netModifierEffect, type ActiveModifier } from "@/lib/utils/approvalModifiers";
 import { computeRegionalConditionMargin } from "@/lib/states/conditions/marginEffects";
+import { buildModifierTitle } from "@/components/approval/modifierTitle";
 
 interface ApprovalTooltipProps {
   /** Final approval (with modifiers applied). */
@@ -32,6 +33,20 @@ interface TriggerRect {
 }
 
 function EffectIcon({ effect }: { effect: number }) {
+  // The war block can render at zero while the fighting is live. A flat bar
+  // rather than the falling arrow: it is neither costing nor earning approval.
+  if (effect === 0) {
+    return (
+      <svg
+        className="h-3 w-3 text-slate-500 shrink-0"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        aria-hidden
+      >
+        <path d="M5.75 10.75a.75.75 0 010-1.5h8.5a.75.75 0 010 1.5h-8.5z" />
+      </svg>
+    );
+  }
   if (effect > 0) {
     return (
       <svg
@@ -81,7 +96,12 @@ export function ApprovalTooltip({
 
   const positives = modifiers.filter((m) => m.effect > 0);
   const negatives = modifiers.filter((m) => m.effect < 0);
-  const net = modifiers.reduce((s, m) => s + m.effect, 0);
+  // Bucketing on `> 0` and `< 0` alone silently dropped anything at zero, which
+  // is the one reading the war block can legitimately hold while a war is being
+  // fought. This popover is the executive page's approval breakdown, so the war
+  // has to be listed here for the same reason it is listed on the approval page.
+  const neutrals = modifiers.filter((m) => m.effect === 0);
+  const net = netModifierEffect(modifiers);
   const hasModifiers = modifiers.length > 0;
   const netMargin = computeRegionalConditionMargin(modifiers);
 
@@ -150,7 +170,11 @@ export function ApprovalTooltip({
       {positives.length > 0 && (
         <div className="space-y-1 mb-2">
           {positives.map((m) => (
-            <div key={m.id} className="flex items-center justify-between gap-2">
+            <div
+              key={m.id}
+              className="flex items-center justify-between gap-2"
+              title={buildModifierTitle(m)}
+            >
               <span className="flex items-center gap-1.5 text-muted">
                 <EffectIcon effect={m.effect} />
                 {m.label}
@@ -165,12 +189,35 @@ export function ApprovalTooltip({
       {negatives.length > 0 && (
         <div className="space-y-1 mb-2">
           {negatives.map((m) => (
-            <div key={m.id} className="flex items-center justify-between gap-2">
+            <div
+              key={m.id}
+              className="flex items-center justify-between gap-2"
+              title={buildModifierTitle(m)}
+            >
               <span className="flex items-center gap-1.5 text-muted">
                 <EffectIcon effect={m.effect} />
                 {m.label}
               </span>
               <span className="font-medium text-error tabular-nums">{m.effect}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Modifiers sitting at zero */}
+      {neutrals.length > 0 && (
+        <div className="space-y-1 mb-2">
+          {neutrals.map((m) => (
+            <div
+              key={m.id}
+              className="flex items-center justify-between gap-2"
+              title={buildModifierTitle(m)}
+            >
+              <span className="flex items-center gap-1.5 text-muted">
+                <EffectIcon effect={m.effect} />
+                {m.label}
+              </span>
+              <span className="font-medium text-muted tabular-nums">{m.effect}</span>
             </div>
           ))}
         </div>
