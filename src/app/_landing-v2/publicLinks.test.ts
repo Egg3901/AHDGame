@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LANDING_FOOTER_SECTIONS, LANDING_TRAY_LINKS } from "./publicLinks";
+import { API_DOCS_URL, LANDING_FOOTER_SECTIONS, LANDING_TRAY_LINKS } from "./publicLinks";
 import enCatalog from "../../../messages/en/auth.json";
 import deCatalog from "../../../messages/de/auth.json";
 
@@ -47,11 +47,31 @@ describe("landing public link inventory", () => {
     expect(legal?.links.map((l) => l.href)).toEqual(["/privacy", "/terms", "/contact"]);
   });
 
-  it("routes are unique and app-relative", () => {
+  it("routes are unique, and only off-domain links are absolute", () => {
     const hrefs = allLinks.map((l) => l.href);
     expect(new Set(hrefs).size).toBe(hrefs.length);
-    for (const href of hrefs) {
-      expect(href.startsWith("/")).toBe(true);
+    for (const link of allLinks) {
+      if (link.external) {
+        expect(link.href.startsWith("https://")).toBe(true);
+      } else {
+        expect(link.href.startsWith("/")).toBe(true);
+      }
+    }
+  });
+
+  it("links the canonical API docs URL, not the retired /api-guide redirect", () => {
+    // /api-guide was retired in #771 and now 308s to the docs site. Linking the
+    // redirect worked but sent visitors off-domain with no signal, so the tray
+    // and footer carry the real URL flagged external instead.
+    const hrefs = allLinks.map((l) => l.href);
+    expect(hrefs).not.toContain("/api-guide");
+    expect(hrefs).toContain(API_DOCS_URL);
+    expect(allLinks.find((l) => l.href === API_DOCS_URL)?.external).toBe(true);
+  });
+
+  it("every internal link stays on-domain so next/link can route it", () => {
+    for (const link of allLinks.filter((l) => !l.external)) {
+      expect(link.href).not.toMatch(/^https?:\/\//);
     }
   });
 
@@ -59,7 +79,6 @@ describe("landing public link inventory", () => {
     const hrefs = allLinks.map((l) => l.href);
     for (const href of [
       "/tutorial",
-      "/api-guide",
       "/officials",
       "/supporters",
       "/player-ads",
