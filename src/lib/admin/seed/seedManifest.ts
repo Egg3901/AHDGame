@@ -262,6 +262,12 @@ const REFERENCE: CollectionEntry[] = [
 
 const RUNTIME: CollectionEntry[] = [
   {
+    name: "sentNewsDedup",
+    category: "runtime",
+    notes:
+      "Short-lived Discord news delivery claims. Wiped with the game world and rebuilt on demand.",
+  },
+  {
     name: "moneySupplySnapshots",
     category: "runtime",
     notes: "Per-turn M1/M2, credit, sovereign-debt, and central-bank holdings by issuing currency.",

@@ -86,6 +86,16 @@ vi.mock("@/lib/internationalOrganizations/commands/buildJoinConflictBill", () =>
 vi.mock("@/lib/internationalOrganizations/reconcileAutonomousWarEntry", () => ({
   reconcileAutonomousWarEntryBills: vi.fn().mockResolvedValue(0),
 }));
+vi.mock("@/lib/military/warEntryPolicy", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/military/warEntryPolicy")>()),
+  assessWarEntryPoliticalPressure: vi.fn().mockResolvedValue({
+    blocRelations: 0,
+    securityStakes: -10,
+    readiness: 0,
+    domesticPolitics: 0,
+    total: -10,
+  }),
+}));
 vi.mock("@/lib/api/headOfGovernment", () => ({
   getHeadOfGovernmentCharacterId: vi.fn(async () => new ObjectId()),
   getHeadOfGovernmentCharacter: vi.fn(async (_db: unknown, countryId: string) =>

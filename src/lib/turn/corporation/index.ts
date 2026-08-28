@@ -15,12 +15,7 @@ import { processSectors } from "./sectorCalculations";
 import { getLabourSystemMode, labourAtLeast } from "@/lib/labour/featureFlag";
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildMarketContext } from "@/lib/market/marketContext";
-import {
-  computeClearingFactors,
-  qualityPremiumMultiplier,
-  type SectorClearingInput,
-} from "@/lib/market/clearing";
-import { priceRealizationFactor } from "@/lib/market/priceRealization";
+import { computeClearingFactors, type SectorClearingInput } from "@/lib/market/clearing";
 import { computeBrandLoyaltyUpdates, type LoyaltySectorInput } from "./brandLoyaltyTurn";
 import { computeQualityUpdates } from "./brandQualityTurn";
 import {
@@ -106,52 +101,23 @@ import { makeSeededRng } from "@/lib/events/substrate/rng";
 import { logger } from "../../observability/logger";
 import { recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
-import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { advertisingDeliveredValueByCorp } from "./advertisingDeliveredValue";
+import { createCorporationTurnTimer, type CorporationTurnResult } from "./corporationTurnRuntime";
+
+export type { CorporationTurnResult } from "./corporationTurnRuntime";
 
 // Optional sim-run salt, same convention as nppActionProcessing.ts's RNG.
 const CORP_TURN_RNG_SALT = process.env.SIM_RNG_SALT ? `:${process.env.SIM_RNG_SALT}` : "";
 
-export interface CorporationTurnResult {
-  corporationsProcessed: number;
-  sectorsProcessed: number;
-  totalRevenueGenerated: number;
-  totalIncomeGenerated: number;
-  /** CEO salary + shareholder dividends this turn, internal units (for LOC cap / scoring). */
-  currencyIncomeInternalByCharacterId: Map<string, number>;
-  /** Same income as credited to personal, per currency (for LOC repayment allocation). */
-  currencyIncomeFaceByCharacterId: Map<string, Map<CurrencyCode, number>>;
-}
-
 /**
- * Process all corporations each turn:
- * 1. Build lookup maps from DB
- * 1b. Vacant-CEO and inactive-CEO (user offline >72 turns) corps shed 10% of each sector's revenue/workers back to unowned markets
- * 2. Process all sectors (revenue, margin modifiers, share price, credit)
- * 3. Bulk write sector + corp updates
- * 4. Update corporate profit tax bases in federal + state budgets
- * 5. Refresh national budget revenue (public-enterprise corps)
- * 6. Pay CEO salaries + dividends to characters
- * 7. Fill pending share orders
- * 8. Snapshot market cap + per-corp history
+ * Run the corporation economy, settlement, ownership, and reporting phases for one turn.
  */
 export async function processCorporationTurn(turn?: number): Promise<CorporationTurnResult> {
   const db = await getDb();
   const now = new Date();
 
-  // Env-gated sub-step timing (SIM_CORP_TIMING=1). Zero-cost when off, used to
-  // profile which of this phase's ~30 sequential steps actually dominate the
-  // wall clock, so optimization targets real cost, not guesses. Emits one JSON
-  // line per turn that a harness/analysis script can parse.
-  const timingOn = process.env.SIM_CORP_TIMING === "1";
-  const timings: Array<[string, number]> = [];
-  let _tPrev = timingOn ? Date.now() : 0;
-  const mark = (label: string): void => {
-    if (!timingOn) return;
-    const nowMs = Date.now();
-    timings.push([label, nowMs - _tPrev]);
-    _tPrev = nowMs;
-  };
+  const timer = createCorporationTurnTimer();
+  const mark = timer.mark;
 
   // The preamble reads are independent of each other, so they run as one
   // parallel round-trip instead of ~7 serial ones.
@@ -2016,10 +1982,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     recordAuditBulk(corpAuditEntries);
   }
 
-  if (timingOn) {
-    const total = timings.reduce((s, [, ms]) => s + ms, 0);
-    console.log(`[corp-timing] turn=${turn ?? "?"} total=${total}ms ${JSON.stringify(timings)}`);
-  }
+  timer.finish(turn);
 
   return {
     corporationsProcessed: lookups.corporations.length,
