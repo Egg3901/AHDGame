@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Bond } from "@/lib/db/types";
-import { sovereignBondCapError, currentHolderUnits, SOVEREIGN_BOND_HOLDER_CAP } from "./holderCap";
+import {
+  sovereignBondCapError,
+  sovereignBondRemainingCapacityUnits,
+  currentHolderUnits,
+  SOVEREIGN_BOND_HOLDER_CAP,
+} from "./holderCap";
 
 const buyer = new ObjectId();
 const other = new ObjectId();
@@ -60,5 +65,11 @@ describe("sovereignBondCapError", () => {
 
   it("cap fraction is 25%", () => {
     expect(SOVEREIGN_BOND_HOLDER_CAP).toBe(0.25);
+  });
+
+  it("reports remaining capacity for fund allocators", () => {
+    const fundId = new ObjectId();
+    const b = bond({ holders: [{ fundId, units: 175 } as never] });
+    expect(sovereignBondRemainingCapacityUnits(b, "fundId", fundId)).toBe(75);
   });
 });

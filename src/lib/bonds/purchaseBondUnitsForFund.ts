@@ -6,6 +6,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { corpCapitalToAnchor, loadFxRatesRecord } from "@/lib/currency/corporationCapital";
 import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
 import { insertFundTransaction } from "@/lib/indexFunds/fundQueries";
+import { sovereignBondCapError } from "@/lib/bonds/holderCap";
 
 export type PurchaseBondUnitsForFundResult =
   { ok: true; units: number; costAnchor: number; bondId: ObjectId } | { ok: false; reason: string };
@@ -57,6 +58,9 @@ export async function purchaseBondUnitsForFund(
   if (wholeUnits <= 0) return { ok: false, reason: "invalid_units" };
   if (bond.matured || bond.defaulted) return { ok: false, reason: "bond_unavailable" };
   if ((bond.publicFloat ?? 0) < wholeUnits) return { ok: false, reason: "insufficient_float" };
+  if (sovereignBondCapError(bond, "fundId", fund._id, wholeUnits)) {
+    return { ok: false, reason: "position_limit" };
+  }
 
   const bondCurrency = resolveBondCurrency(bond);
   const fxRates = await loadFxRatesRecord(db);
