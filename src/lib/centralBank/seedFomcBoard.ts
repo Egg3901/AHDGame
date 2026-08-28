@@ -1,7 +1,11 @@
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CentralBank, FomcSeat } from "@/lib/db/types/centralBank";
-import { FOMC_BOARD_SIZE, FOMC_TERM_TURNS } from "@/lib/db/types/centralBank";
+import {
+  FOMC_BOARD_SIZE,
+  FOMC_TERM_TURNS,
+  FOMC_COMMITTEE_COUNTRY_IDS,
+} from "@/lib/db/types/centralBank";
 import { spawnTechnocratNpp } from "@/lib/npp/generator";
 import type { ChairAlignment } from "@/lib/centralBank/chairAlignment";
 import { isBankGovernmentControlledLive } from "@/lib/centralBank/governance";
@@ -40,6 +44,13 @@ export async function seedFomcBoards(
   for (const bank of banks) {
     if (bank.fomcBoard && bank.fomcBoard.length > 0) continue;
     const countryId = bank.countryId as CountryId;
+
+    // The committee is the US Federal Reserve's institution. Other central banks
+    // run the single-governor / government model, so they must never be seeded a
+    // board — doing so gave every "independent" bank a US-shaped technocrat
+    // committee that then blocked its own government/legislative rate-setting
+    // path (#1195). Gate on the bank's home country, not the viewing country.
+    if (!FOMC_COMMITTEE_COUNTRY_IDS.has(bank.countryId)) continue;
 
     // No committee for a bank the government controls: the MPC was CREATED by
     // the 1997 independence grant, so a pre-1997 Bank of England has no board.
