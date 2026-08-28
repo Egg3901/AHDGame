@@ -46,6 +46,12 @@ import {
   calculateSplitCostAnchor,
   calculateSplitMsCost,
 } from "@/lib/corporations/marketActionCosts";
+import {
+  attackCapacityBasisAnchor,
+  attackCostAnchorUnderPlants,
+  capacityCaptureUnits,
+  resolveWorldYear,
+} from "@/lib/corporations/capacityCapture";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
 import { shouldRedactCorporation } from "@/lib/corporations/redaction";
@@ -188,7 +194,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     // See lib/country/nationalGdpGrowth.
     const growthGameState = await db
       .collection<GameState>("gameState")
-      .findOne({ _id: "current" }, { projection: { currentYear: 1 } });
+      .findOne({ _id: "current" }, { projection: { currentYear: 1, currentTurn: 1 } });
     const nationalGdpGrowth = await loadNationalGdpGrowth(
       db,
       countryId,
@@ -201,6 +207,9 @@ export async function GET(request: Request, { params }: RouteParams) {
     const economyPreset = await loadWorldPreset(db);
     const usdExchangeRate = getGdpAnchorRate(countryId, economyPreset);
     const eraUnitScale = getEraUnitScale(economyPreset);
+    // World year for plants build pricing in the attack quote below — resolved
+    // the same way the attack-sector route resolves it.
+    const worldYear = resolveWorldYear(growthGameState?.currentYear, growthGameState?.currentTurn);
     const totalMarketPerSector = Math.round(
       (state.gdp * usdExchangeRate * SECTOR_MARKET_GDP_FRACTION) / SECTOR_TYPE_COUNT
     );
@@ -422,17 +431,67 @@ export async function GET(request: Request, { params }: RouteParams) {
           // the contested fraction so dominant defenders bleed more per attack.
           ...(userCorporationId &&
             userCorporationId !== s.corporationId.toString() &&
-            !isNatcorp && {
-              attackCost: calculateAttackCostAnchor(sectorRevenueAnchor),
-              attackEstimatedCapture: Math.round(
-                sectorRevenueAnchor *
-                  ATTACK_OWNED_CONTESTED_FRACTION *
-                  dominanceAttackMult *
-                  underdogMult *
-                  (userMarketingStrength /
-                    (userMarketingStrength + (corp?.marketingStrength ?? 0)) || 1)
-              ),
-            }),
+            !isNatcorp &&
+            (() => {
+              // Quote the SAME cost/capture the attack-sector route enforces, or
+              // the card advertises a price the route then rejects (#1212: card
+              // showed the legacy revenue-based cost while the route charged the
+              // plants build-price floor — "Insufficient capital" on an attack
+              // the card said was affordable).
+              //
+              // Under plants the attack is sized against the defender's CAPACITY
+              // NAMEPLATE (not restated revenue) and priced at least at the build
+              // price of the units received × premium — mirror both here.
+              const attackBasisAnchor =
+                attackCapacityBasisAnchor(
+                  {
+                    sectorType: s.sectorType as CorporationType,
+                    capitalStock: s.capitalStock,
+                    strategyId: s.strategyId,
+                  },
+                  plantsMode,
+                  eraUnitScale
+                ) ?? sectorRevenueAnchor;
+              const defenderMS = corp?.marketingStrength ?? 0;
+              const msSum = userMarketingStrength + defenderMS;
+              const attackerShare = msSum > 0 ? userMarketingStrength / msSum : 1;
+              const contestedAmount =
+                attackBasisAnchor *
+                ATTACK_OWNED_CONTESTED_FRACTION *
+                dominanceAttackMult *
+                underdogMult;
+              const actualCapture = Math.min(
+                Math.round(contestedAmount * attackerShare),
+                Math.max(0, Math.floor(attackBasisAnchor) - 1)
+              );
+              const legacyCostAnchor = calculateAttackCostAnchor(attackBasisAnchor);
+              let attackCost = legacyCostAnchor;
+              if (plantsMode) {
+                const defenderStock =
+                  typeof s.capitalStock === "number" && Number.isFinite(s.capitalStock)
+                    ? Math.max(0, s.capitalStock)
+                    : 0;
+                const rawUnits = capacityCaptureUnits(
+                  actualCapture,
+                  s.sectorType as CorporationType,
+                  s.strategyId,
+                  eraUnitScale
+                );
+                const unitsTaken = Math.min(defenderStock, rawUnits.unitsTaken);
+                const unitsReceived =
+                  rawUnits.unitsTaken > 0
+                    ? rawUnits.unitsReceived * (unitsTaken / rawUnits.unitsTaken)
+                    : 0;
+                attackCost = attackCostAnchorUnderPlants({
+                  legacyCostAnchor,
+                  unitsReceived,
+                  sectorType: s.sectorType as CorporationType,
+                  year: worldYear,
+                  eraUnitScale,
+                });
+              }
+              return { attackCost, attackEstimatedCapture: actualCapture };
+            })()),
         };
       });
 
