@@ -718,6 +718,28 @@ export function combatValue(u: CombatUnit, nm: NatMods, gm: GenMods): number {
   return Math.round(effPower(u) * (0.55 + 0.45 * (u.readiness / 100)) * doctrineMult(u, nm, gm));
 }
 
+/**
+ * What a formation costs in FRONTAGE — `combatValue` without the readiness curve.
+ *
+ * Frontage is a claim about physical width: how many formations can stand on this
+ * ground at once. Readiness is how much fight is left in them, and a worn division
+ * occupies the same country as a rested one. Charging the front at `combatValue` made
+ * the two move together, with two consequences neither system wanted: restoring a
+ * worn army's readiness SHRANK the line it could hold, so every readiness fix silently
+ * re-tightened whatever `FRONT_CAPACITY_BASE` had been calibrated against; and a force
+ * could widen its own frontage by letting itself degrade.
+ *
+ * Everything else about a formation still costs room — base platform, veterancy, tech,
+ * equipment, doctrine and its general all remain in `effPower`/`doctrineMult`. Only the
+ * readiness term, which is a state rather than a size, comes out.
+ *
+ * Used ONLY by `planEngagement` to decide who stands in the line. What those formations
+ * are then WORTH in the fight is still `combatValue`, readiness included.
+ */
+export function frontageCost(u: CombatUnit, nm: NatMods, gm: GenMods): number {
+  return Math.round(effPower(u) * doctrineMult(u, nm, gm));
+}
+
 /** Effective upkeep (design effUpkeep): base × posture × country scale × doctrine × general. */
 export function effUpkeep(u: CombatUnit, nm: NatMods, gm: GenMods, countryScale: number): number {
   return Math.round(u.upkeepBase * posDef(u.posture).up * countryScale * nm.upkeep * gm.upkeep);

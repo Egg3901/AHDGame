@@ -21,6 +21,7 @@ import {
   type StatObj,
   type Front,
   combatValue,
+  frontageCost,
   statObj,
   computeCard,
   terrainFactor,
@@ -90,6 +91,10 @@ export function generalOfForTest(ctx: BattleContext, u: CombatUnit): ProfileGene
 }
 function cv(ctx: BattleContext, u: CombatUnit): number {
   return combatValue(u, ctx.natMods, generalMods(generalOf(ctx, u)));
+}
+/** What this formation costs in frontage — see `frontageCost`. Readiness excluded. */
+function frontage(ctx: BattleContext, u: CombatUnit): number {
+  return frontageCost(u, ctx.natMods, generalMods(generalOf(ctx, u)));
 }
 
 /** Deterministic mulberry32-style RNG (design rng). */
@@ -305,10 +310,17 @@ export interface SupplyState {
  * five-ally coalition five times the bonus, and taking the first contingent's would
  * make the result depend on roster order.
  */
-export function supplyState(ctxs: BattleContext[], frontId: string): SupplyState {
+export function supplyState(
+  ctxs: BattleContext[],
+  frontId: string,
+  plan?: EngagementPlan
+): SupplyState {
   const front = frontById(frontId, ctxs[0]?.fronts);
   let demand = 0;
   let throughput = front.infra != null ? front.infra : 60;
+  let depthCount = 0;
+  let supportCount = 0;
+  let formations = 0;
   const seenForm: Record<string, number> = {};
   let supplyMass = 0;
   let supplyWeighted = 0;
@@ -316,10 +328,17 @@ export function supplyState(ctxs: BattleContext[], frontId: string): SupplyState
     const units = ctx.units.filter((u) => u.theaterId === frontId);
     for (const u of units) {
       demand += effUpkeep(u, ctx.natMods, generalMods(generalOf(ctx, u)), ctx.countryScale) / 12;
-      const role = getRole(ctx.positions, u);
+      const id = String(u._id);
+      const role = plan?.roleOf.get(id) ?? getRole(ctx.positions, u);
       const tk = computeCard(u).traitKeys || [];
-      if (role === "rear") throughput += 34;
-      else if (role === "support") throughput += 14;
+      // The PLAN is the authority on who is actually behind the line. Reading the
+      // player's label instead let a side collect depot throughput for formations that
+      // were standing in the line, which made perfect supply a matter of typing "rear"
+      // enough times -- depth still engages at 0.10, so the label cost nothing.
+      const inDepth = plan ? !plan.inContact.has(id) : role === "rear";
+      formations++;
+      if (inDepth) depthCount++;
+      else if (role === "support") supportCount++;
       if (tk.indexOf("logistics") >= 0) throughput += 22;
       if (u.domain === "air" && tk.indexOf("rapid") >= 0) throughput += 6;
       // A general's supply contribution counts once, not once per unit they lead.
@@ -332,6 +351,11 @@ export function supplyState(ctxs: BattleContext[], frontId: string): SupplyState
       supplyWeighted += ctx.natMods.supply;
     }
   }
+  // Tooth to tail. Depth exists to feed the line, so it is counted only up to the size
+  // of the line it feeds: a tail longer than its teeth is not logistics, it is parking.
+  // Self-scaling, so it needs no constant of its own and grows with the war.
+  const teeth = formations - depthCount;
+  throughput += 34 * Math.min(depthCount, teeth) + 14 * supportCount;
   // Unit-weighted so allies cannot stack the bonus. With no units present there is
   // nothing to weight by, so fall back to the first contingent's own figure — which
   // is exactly what a single-country side did before contingents existed.
@@ -481,7 +505,7 @@ export function planEngagement(
       // nor outrank an infantry division for a place in the line.
       const card = computeCard(u);
       const effective =
-        cv(ctx, u) *
+        frontage(ctx, u) *
         terrainFactor(front, u.domain, card.traitKeys) *
         navalReach(front, u.domain, card.traitKeys);
       rows.push({ id: String(u._id), role: getRole(ctx.positions, u), cv: effective });
@@ -576,7 +600,7 @@ function ownSideProfile(
     deepShare: share("deepstrike"),
     deepBuff: deepMass ? deepWeighted / deepMass : 1,
     genEnemyMin: genEnemy,
-    sup: supplyState(ctxs, frontId),
+    sup: supplyState(ctxs, frontId, plan),
     ownTf,
   };
 }
@@ -1236,7 +1260,14 @@ export function applyOutcome(
     const nu: CombatUnit = {
       ...u,
       personnel: Math.max(0, u.personnel - r.casualties),
-      readiness: Math.max(5, u.readiness - r.readiness),
+      // `UnitResult.readiness` is the LEVEL the battle left, already floored by
+      // `unitOutcomes` — not the amount it took. Subtracting it from the unit's current
+      // readiness stored the DROP instead, which collapsed a fresh formation to single
+      // digits in one engagement and inverted the ledger: a protected unit takes a
+      // smaller drop, so it was persisted LOWER than the infantry beside it. That is the
+      // precise inversion `unitOutcomes` was rewritten to remove, reintroduced one layer
+      // below the tests that cover it.
+      readiness: Math.max(3, r.readiness),
       equipment: {
         firepower: strip(eq.firepower),
         protection: strip(eq.protection),

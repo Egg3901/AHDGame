@@ -14,6 +14,7 @@ const {
   caretakerMinistersMock,
   claimSlotMock,
   enabledForPlayersMock,
+  foreignPolicyMock,
 } = vi.hoisted(() => ({
   atLeastMock: vi.fn(),
   appointPresidentMock: vi.fn(),
@@ -23,6 +24,7 @@ const {
   caretakerMinistersMock: vi.fn(),
   claimSlotMock: vi.fn(),
   enabledForPlayersMock: vi.fn(),
+  foreignPolicyMock: vi.fn(),
 }));
 vi.mock("../featureFlag", () => ({
   nppAutonomyAtLeast: (...a: unknown[]) => atLeastMock(...a),
@@ -45,6 +47,9 @@ vi.mock("../tier1DecisionClaim", () => ({
 }));
 vi.mock("@/lib/countryAccess", () => ({
   isCountryEnabledForPlayers: (...a: unknown[]) => enabledForPlayersMock(...a),
+}));
+vi.mock("../foreignPolicy", () => ({
+  processAutonomousForeignPolicy: (...a: unknown[]) => foreignPolicyMock(...a),
 }));
 
 import { processNppGovernment, AGENDA_RECOMPUTE_INTERVAL_TURNS } from "../processNppGovernment";
@@ -138,6 +143,14 @@ beforeEach(() => {
     })
   );
   enabledForPlayersMock.mockReset().mockResolvedValue(false);
+  foreignPolicyMock.mockReset().mockResolvedValue({
+    ran: true,
+    mode: "shadow",
+    acted: false,
+    decisionRecorded: true,
+    choice: null,
+    skipReason: "no-choice",
+  });
 });
 
 describe("processNppGovernment", () => {
@@ -180,6 +193,7 @@ describe("processNppGovernment", () => {
     expect(formCabinetMock).not.toHaveBeenCalled();
     expect(ministerialMock).not.toHaveBeenCalled();
     expect(caretakerMinistersMock).toHaveBeenCalledWith(expect.anything(), "BR", turn, now);
+    expect(foreignPolicyMock).not.toHaveBeenCalled();
   });
 
   it("runs presidential executive formation for a presidential country", async () => {
@@ -312,5 +326,16 @@ describe("processNppGovernment", () => {
     const res = await processNppGovernment(db as unknown as Db, "BR", turn, now);
     expect(ministerialMock).toHaveBeenCalledWith(expect.anything(), "BR", turn, now);
     expect(res.ministerialOrdersIssued).toBe(2);
+  });
+
+  it("records one foreign-policy decision inside the claimed strategic slot", async () => {
+    atLeastMock.mockResolvedValue(true);
+    setup({ gov: formedPresidentialGov, headNpp });
+    const turn = dueTurn("BR");
+
+    const res = await processNppGovernment(db as unknown as Db, "BR", turn, now);
+
+    expect(foreignPolicyMock).toHaveBeenCalledWith(expect.anything(), "BR", turn, now);
+    expect(res.foreignPolicyDecisionRecorded).toBe(true);
   });
 });

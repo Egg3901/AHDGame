@@ -91,6 +91,7 @@ export const gameConfig: GameConfig = {
   canonicalFreightBillingEnabled: false,
   shortageResponsiveSourcingEnabled: false,
   indexFundBondLiquidityEnabled: false,
+  nppMarketCoverageEnabled: false,
   regionalConditionsOverviewEnabled: true,
 
   // Market launch guard: armed by default now that the market boots at the top

@@ -316,7 +316,7 @@ export async function processNppFundGeneration(
 
   if (partyDuesTxEntries.length > 0) {
     const thresholds = await loadTxThresholds(db);
-    void emitTxBulk(db, partyDuesTxEntries, thresholds);
+    await emitTxBulk(db, partyDuesTxEntries, thresholds);
   }
 
   if (statePartiesToSetDefaultTax.size > 0) {

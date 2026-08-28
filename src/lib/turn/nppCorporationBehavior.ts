@@ -27,12 +27,14 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { isCorporateIssuerBond } from "@/lib/bonds/corporateCredit";
 import { netPerTurnDebtServiceAnchor } from "@/lib/bonds/corpBondCashflows";
 import {
+  buildActiveMarketBuckets,
   ESSENTIAL_SHORTAGE_SCORE,
   expansionFrontierStates,
   findBestUnownedSector,
   hasEnterableHeadroom,
   sectorPeakShortageScore,
   sectorShortageScore,
+  markMarketsActive,
   computeMacroProductionPolicy,
   type CommodityPriceRatioFn,
   type PlacementSignals,
@@ -450,7 +452,10 @@ export async function processNppCorporationDecisions(
     loadWorldEraUnitScale(db),
     db
       .collection<GameConfig>("gameConfig")
-      .findOne({ _id: "default" }, { projection: { extractionOutputScaleEnabled: 1 } }),
+      .findOne(
+        { _id: "default" },
+        { projection: { extractionOutputScaleEnabled: 1, nppMarketCoverageEnabled: 1 } }
+      ),
   ]);
   const extractionOutputScaleEnabled = await getExtractionOutputScaleEnabled(extractionConfig);
   const extractionHeadroomByState = computeExtractionHeadroomByState(
@@ -463,6 +468,7 @@ export async function processNppCorporationDecisions(
     statePriceRatioOf,
     // A state with no capacity doc has no deposits — headroom 0, never found there.
     extractionHeadroomOf: (stateId) => extractionHeadroomByState.get(stateId) ?? 0,
+    preferEmptyMarkets: extractionConfig?.nppMarketCoverageEnabled === true,
   };
 
   // Fetch unowned sectors in bulk for expansion decisions
@@ -474,18 +480,13 @@ export async function processNppCorporationDecisions(
     if (!unownedByCountry.has(us.countryId)) unownedByCountry.set(us.countryId, []);
     unownedByCountry.get(us.countryId)!.push(us);
   }
-  // Same docs, keyed by the (state, type) bucket, so the per-corp loop can
-  // deplete the pool a founding just drew from. The values are the SAME object
-  // references the country index holds, so mutating through here is visible to
-  // every later `findBestUnownedSector` call in the pass.
+  // Shared object references let each founding deplete later candidates in this pass.
   const unownedIndex = new Map<string, UnownedSector>();
   for (const us of unownedSectors) {
     unownedIndex.set(bucketKey(us.stateId, us.sectorType), us);
   }
 
-  // Buckets a National Corporation controls — NPP corps must not auto-expand into
-  // a sector the state has nationalized (it would slowly re-fragment a state
-  // monopoly). Players may still deliberately enter; this only gates the AI.
+  // NPPs cannot auto-expand into state-controlled buckets; players still may.
   const [nationalCorpIds, globalSectors] = await Promise.all([
     loadNationalCorpIds(db),
     db
@@ -499,21 +500,16 @@ export async function processNppCorporationDecisions(
             revenue: 1,
             corporationId: 1,
             nationalizedAtTurn: 1,
+            mothballed: 1,
           },
         }
       )
       .toArray(),
   ]);
   const stateControlled = computeStateControlledBuckets(globalSectors, nationalCorpIds);
+  placementSignals.activeMarketBuckets = buildActiveMarketBuckets(globalSectors);
 
-  // ─── Plants context, resolved ONCE for the whole cohort ───────────────────
-  // Prime rate is per country and costOfLiving per state; both are small,
-  // bounded reads that would otherwise be repeated per corp per turn.
-  // PLANTS-GATED: the NPP founding insert below writes `revenue` only as the
-  // legacy nameplate for non-plants readers. Under plants the new sector is born
-  // with `capitalStock` 0, the founding build order queued, CIP set and
-  // `plantsStartTurn` stamped, and the turn processor restates revenue from that
-  // capacity on the next tick. The unowned pool is drawn down to match.
+  // Resolve the shared plants pricing context once for the cohort.
   const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
   let plants: NppPlantsContext | undefined;
   if (plantsEnabled) {
@@ -682,6 +678,7 @@ export async function processNppCorporationDecisions(
           placementSignals
         ),
     });
+    markMarketsActive(placementSignals, decision.newSectors);
     if (decision.entryDiagnostic) entryDiagnostics.push(decision.entryDiagnostic);
     if (decision.reinvestments && corpCurrency) {
       for (const r of decision.reinvestments) {

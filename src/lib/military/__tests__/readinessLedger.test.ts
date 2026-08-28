@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolvePvpBattle } from "../battle";
+import { resolvePvpBattle, applyOutcome } from "../battle";
 import { side, unit } from "./battleFixtures";
 import type { CountryId } from "@/lib/constants/countries";
 import { ObjectId } from "mongodb";
@@ -68,6 +68,57 @@ describe("readiness ledger", () => {
       expect(end).toBeGreaterThanOrEqual(3);
       expect(end).toBeLessThanOrEqual(start);
     }
+  });
+
+  /**
+   * `UnitResult.readiness` is the LEVEL a battle left, not the amount it took: the
+   * tests above measure a drop by subtracting it from where the unit started, and the
+   * floor test pins it to [3, start]. `applyOutcome` is the only consumer that
+   * persists it, and it is the one place nothing covered.
+   */
+  it("persists the readiness a battle left, not the size of the drop", () => {
+    const u = mk({ type: "Infantry Division", basePower: 90, posture: "alert", readiness: 92 });
+    const att = side("US", "A", [100], T);
+    att.units = [u];
+    const def = side("CN", "B", [100, 100], T);
+    const result = resolvePvpBattle([att], [def], T, SEED);
+    const left = result.attacker.unitResults[0].readiness;
+
+    const stored = applyOutcome(
+      { ...att, positions: {}, assignments: [] } as never,
+      {
+        ...result,
+        unitResults: result.attacker.unitResults,
+      } as never
+    ).units[0].readiness;
+
+    expect(stored).toBe(left);
+  });
+
+  it("leaves a protected formation readier than an exposed one after the same battle", () => {
+    // The inversion this ledger exists to prevent, asserted on what is STORED rather
+    // than on what the resolver reported.
+    const armor = mk({ type: "Armored Division", basePower: 90, posture: "alert", readiness: 92 });
+    const infantry = mk({
+      type: "Infantry Division",
+      basePower: 90,
+      posture: "alert",
+      readiness: 92,
+    });
+    const att = side("US", "A", [100], T);
+    att.units = [armor, infantry];
+    const def = side("CN", "B", [100, 100], T);
+    const result = resolvePvpBattle([att], [def], T, SEED);
+    const stored = applyOutcome(
+      { ...att, positions: {}, assignments: [] } as never,
+      {
+        ...result,
+        unitResults: result.attacker.unitResults,
+      } as never
+    ).units;
+
+    const readinessOf = (id: string) => stored.find((x) => String(x._id) === id)!.readiness;
+    expect(readinessOf(String(armor._id))).toBeGreaterThan(readinessOf(String(infantry._id)));
   });
 
   it("is deterministic for a seed", () => {

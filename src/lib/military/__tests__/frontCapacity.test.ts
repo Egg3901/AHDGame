@@ -112,7 +112,11 @@ describe("planEngagement and reach", () => {
     fleet.units = fleet.units.map((u) => ({ ...u, domain: "naval" }));
     const s = { ...army, units: [...army.units, ...fleet.units] };
     const inland = { ...FRONTS_MAP, [T]: { ...FRONTS_MAP[T]!, seaAccess: false } };
-    const plan = planEngagement([{ ...ctxOf(s), fronts: inland }], T, 250);
+    // 300, not 250: frontage is billed by `frontageCost` (no readiness curve), so a
+    // formation's bill is 1/(0.55 + 0.45 x readiness/100) of what it used to be. At the
+    // fixture's readiness of 70 that is x1.16, and this is the same three-division
+    // scenario restated in the new unit — not a looser one.
+    const plan = planEngagement([{ ...ctxOf(s), fronts: inland }], T, 300);
 
     const armyIn = army.units.filter((u) => plan.inContact.has(String(u._id))).length;
     const fleetIn = fleet.units.filter((u) => plan.inContact.has(String(u._id))).length;

@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { READINESS_DRIFT_STEP } from "@/lib/military/readinessDrift";
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import { ConflictRecord, type ConflictRecordView } from "./ConflictRecord";
@@ -257,8 +258,11 @@ describe("ConflictRecord tiers", () => {
         }}
       />
     );
-    // standard settles at 72; (72 − 60) / 4 = 3 turns.
-    expect(screen.getByText(/\+4%\/turn · full in 3/)).toBeTruthy();
+    // standard settles at 72; ceil((72 - 60) / READINESS_DRIFT_STEP) turns.
+    const turns = Math.ceil(12 / READINESS_DRIFT_STEP);
+    expect(
+      screen.getByText(new RegExp(`\\+${READINESS_DRIFT_STEP}%/turn · full in ${turns}`))
+    ).toBeTruthy();
   });
 
   // The fog lifts when the war ends. Calling an open record "fog of war" beside

@@ -208,6 +208,11 @@ export interface GameState {
   nppAutonomyEnabled?: boolean;
   nppAutonomyEnabledBy?: string;
   nppAutonomyEnabledAt?: string;
+  /**
+   * Foreign-policy planner rollout. Absent defaults to shadow so autonomous
+   * countries produce auditable intent without changing world state.
+   */
+  nppForeignPolicyMode?: "off" | "shadow" | "active";
   /** When true, crisis international-aid nodes use the slider + legislature-bill flow. */
   crisisAidBillsEnabled?: boolean;
   crisisAidBillsEnabledBy?: string;
