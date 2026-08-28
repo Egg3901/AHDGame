@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
+import { getAuthUserWithCharacter } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
+import { getGameState } from "@/lib/gameState";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
+import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { NAVAL_MISSIONS, AIR_MISSIONS } from "@/lib/navair/config";
@@ -21,18 +24,51 @@ export const dynamic = "force-dynamic";
  *
  * One page for the whole force. A fleet belongs to a nation, not to a war, and the
  * decision a commander makes is how to spread a limited number of hulls and wings across
- * every place that wants them. Splitting this across the individual conflict pages would
- * make that decision impossible to see.
+ * every place that wants them. Splitting this across individual conflict pages would make
+ * that decision impossible to see.
+ *
+ * Force composition is command-tier sight. Only someone who actually commands this
+ * nation's forces sees its dispositions; everyone else is told plainly that they do not,
+ * rather than being shown a fleet they have no business seeing or controls that would be
+ * refused by the API anyway.
  */
 export default async function NavairCommandPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
   const countryId = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[countryId]) notFound();
 
+  // Same gate the rest of the military subsystem uses. With conflicts off there is no
+  // war to command anything in.
+  const gameState = await getGameState();
+  if (!gameState?.conflictsEnabled) notFound();
+
   const positionId = DEFENSE_POSITION_BY_COUNTRY[countryId];
   if (!positionId) notFound();
 
   const db = await getDb();
+  const authUser = await getAuthUserWithCharacter();
+  const characterId = authUser?.character?._id ? String(authUser.character._id) : null;
+  const isAdmin = authUser?.isAdmin === true;
+
+  const holder = await getCabinetMembersCollection(db).findOne({ countryId, positionId });
+  const holderId = holder?.characterId ? String(holder.characterId) : null;
+  const commands = isAdmin || (!!characterId && characterId === holderId);
+
+  const countryName = COUNTRY_CONFIGS[countryId].name;
+
+  if (!commands) {
+    return (
+      <main className="mx-auto max-w-4xl p-6">
+        <h1 className="text-lg text-neutral-100">Naval and air command</h1>
+        <p className="mt-1 text-sm text-neutral-400">{countryName}</p>
+        <p className="mt-6 text-sm text-neutral-300">
+          You do not command this nation&apos;s forces. Fleet and air dispositions are only visible
+          to the officeholder.
+        </p>
+      </main>
+    );
+  }
+
   const units = (await getMilitaryUnitsCollection(db)
     .find({ countryId, domain: { $in: ["naval", "air"] } })
     .toArray()) as unknown as NavairUnit[];
@@ -74,7 +110,7 @@ export default async function NavairCommandPage({ params }: { params: Promise<{ 
   return (
     <main className="mx-auto max-w-4xl p-6">
       <h1 className="text-lg text-neutral-100">Naval and air command</h1>
-      <p className="mt-1 text-sm text-neutral-400">{COUNTRY_CONFIGS[countryId].name}</p>
+      <p className="mt-1 text-sm text-neutral-400">{countryName}</p>
 
       <div className="mt-6">
         <NavairCommandClient
