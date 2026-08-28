@@ -209,10 +209,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const eraUnitScale = getEraUnitScale(economyPreset);
     // World year for plants build pricing in the attack quote below — resolved
     // the same way the attack-sector route resolves it.
-    const worldYear = resolveWorldYear(
-      growthGameState?.currentYear,
-      growthGameState?.currentTurn
-    );
+    const worldYear = resolveWorldYear(growthGameState?.currentYear, growthGameState?.currentTurn);
     const totalMarketPerSector = Math.round(
       (state.gdp * usdExchangeRate * SECTOR_MARKET_GDP_FRACTION) / SECTOR_TYPE_COUNT
     );
