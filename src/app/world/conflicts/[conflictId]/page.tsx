@@ -1,3 +1,6 @@
+import { recentNavairEngagements } from "@/lib/db/collections/navairEngagements";
+import { conflictRegions } from "@/lib/military/conflictRegions";
+import { region as regionNameOf } from "@/lib/navair/map";
 import { frontSupportFor } from "@/lib/navair/frontSupport";
 import { loadNavairChannels } from "@/lib/db/collections/navairChannels";
 import type { NavairUnit } from "@/lib/navair/types";
@@ -425,9 +428,21 @@ export default async function ConflictRecordPage({
       .toArray()) as unknown as NavairUnit[];
     const own = ownSide === "A" ? doc.sideA.countries : doc.sideB.countries;
     const foe = ownSide === "A" ? doc.sideB.countries : doc.sideA.countries;
+    // Every region the war is fought across, not just the one it is named after: a war
+    // that has spread has a sea war in more than one place.
+    const theatre = conflictRegions(doc);
+    const actions = await recentNavairEngagements(db, theatre, 5);
+
     return {
       navairSupport: frontSupportFor(navairUnits, channels, [...own], doc.region),
       navairEnemySupport: frontSupportFor(navairUnits, channels, [...foe], doc.region),
+      navairActions: actions.map((a) => ({
+        turn: a.turn,
+        regionName: regionNameOf(a.region)?.name ?? a.region,
+        winner: a.winner.join(", "),
+        marginPct: a.marginPct,
+        sunk: a.sunk,
+      })),
     };
   })();
 

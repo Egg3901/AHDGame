@@ -42,5 +42,14 @@ export async function seedNavairIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
+  // The war room asks "what happened in these regions lately", newest first.
+  await ensureIndex(
+    db,
+    "navairEngagements",
+    { region: 1, turn: -1 },
+    { name: "navairEngagements_region_turn" },
+    log
+  );
+
   log("Naval and air indexes ensured");
 }

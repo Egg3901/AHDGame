@@ -5,6 +5,7 @@ import { loadMilitaryBlocs } from "@/lib/military/blocLookup";
 import { homeRegionOf } from "@/lib/military/regionTopology";
 import { navalStationFor } from "./map";
 import { conflictRegions } from "@/lib/military/conflictRegions";
+import { recordNavairEngagements } from "@/lib/db/collections/navairEngagements";
 import {
   loadNavairChannels,
   saveNavairChannels,
@@ -20,7 +21,7 @@ import {
   supplyCeiling,
 } from "./basing";
 import { cv, baseCv, alive } from "./engineCore";
-import { resolveEngagement } from "./engagement";
+import { resolveEngagement, engagementControlBonus } from "./engagement";
 import { defaultMissionFor } from "./missions";
 import type { NavairUnit, RegionChannels, EngagementOutcome } from "./types";
 import type { CountryId } from "@/lib/constants/countries";
@@ -316,6 +317,18 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
     byRegion.set(region, here.filter(alive));
   }
 
+  // Winning the water is worth more than sitting in it. Capped well below the full scale
+  // by `engagementControlBonus`, so one good turn cannot hand over a region the loser has
+  // held for twenty: the contest still has to be won by staying.
+  const controlBonus = new Map<string, number>();
+  for (const outcome of engagements) {
+    const bonus = engagementControlBonus(outcome.marginPct);
+    for (const c of outcome.winner) {
+      const key = channelKey(c, outcome.region);
+      controlBonus.set(key, Math.max(controlBonus.get(key) ?? 0, bonus));
+    }
+  }
+
   // ── score the contest and move the channels ─────────────────────────────────
   const updates: Array<{ countryId: CountryId; region: RegionCode; channels: RegionChannels }> = [];
   let regionsContested = 0;
@@ -349,6 +362,8 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
 
       const current = channelsFor(channels, countryId, region, turn);
       const next = advanceChannels(current, { air, sea }, detection.get(region) ?? 0, turn);
+      const bonus = controlBonus.get(channelKey(countryId, region)) ?? 0;
+      if (bonus > 0) next.seaControl = Math.min(100, next.seaControl + bonus);
       updates.push({ countryId, region, channels: next });
       channels.set(channelKey(countryId, region), next);
     }
@@ -357,7 +372,10 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
   const channelsWritten = await saveNavairChannels(db, updates);
 
   for (const u of touchedByMission) touched.add(u);
-  const formationsLost = await persistCombatResults(db, touched);
+  const rowsWritten = await persistCombatResults(db, touched);
+  // Record what was fought so players can read the sea war. Nothing reads these back;
+  // an invisible war is one nobody can play.
+  await recordNavairEngagements(db, turn, engagements);
 
   return {
     countriesProcessed: countries.size,
@@ -366,7 +384,7 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
     unitsStationed,
     engagementsFought: engagements.length,
     formationsLost: crippled.length,
-    formationsUpdated: formationsLost,
+    formationsUpdated: rowsWritten,
     missionsAssigned,
   };
 }

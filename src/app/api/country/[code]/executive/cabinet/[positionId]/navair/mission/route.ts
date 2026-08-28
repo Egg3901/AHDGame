@@ -29,8 +29,18 @@ export async function POST(request: Request, { params }: RouteParams) {
       station?: string;
       missionTarget?: string;
     } | null;
-    if (!body?.unitId || !body?.mission) {
+    // Validate the SHAPE, not just presence. The body is untrusted: TypeScript's types
+    // say nothing at runtime, and a non-string here would reach a lookup or a template
+    // and fail somewhere less obvious than this line.
+    const isStr = (v: unknown): v is string => typeof v === "string" && v.length > 0;
+    if (!isStr(body?.unitId) || !isStr(body?.mission)) {
       return NextResponse.json({ error: "unitId and mission are required" }, { status: 400 });
+    }
+    if (body.station !== undefined && !isStr(body.station)) {
+      return NextResponse.json({ error: "station must be a region id." }, { status: 400 });
+    }
+    if (body.missionTarget !== undefined && !isStr(body.missionTarget)) {
+      return NextResponse.json({ error: "missionTarget must be a region id." }, { status: 400 });
     }
 
     if (!ObjectId.isValid(body.unitId)) {

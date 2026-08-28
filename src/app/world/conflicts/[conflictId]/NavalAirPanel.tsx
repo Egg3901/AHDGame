@@ -33,6 +33,23 @@ export function NavalAirPanel({ data }: { data: NavalAirPanelData }) {
         />
       </dl>
 
+      {data.recentActions.length > 0 && (
+        <div className="mt-4">
+          <h4 className="text-xs uppercase tracking-wide text-neutral-500">Surface actions</h4>
+          <ul className="mt-1 space-y-1 text-xs text-neutral-300">
+            {data.recentActions.map((a) => (
+              <li key={`${a.turn}-${a.regionName}`}>
+                <span className="text-neutral-500 tabular-nums">T{a.turn}</span> {a.regionName}:{" "}
+                {a.winner} held the water
+                {a.sunk.length > 0 && (
+                  <span className="text-red-400"> Lost: {a.sunk.join(", ")}.</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <p className="mt-3 text-xs text-neutral-400">
         {data.canLandMarines
           ? "You hold enough of the water to put marines ashore here."

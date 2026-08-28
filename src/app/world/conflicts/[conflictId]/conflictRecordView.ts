@@ -131,6 +131,17 @@ export interface NavalAirPanel {
   airBand: string;
   /** Whether marines could be put ashore here right now. */
   canLandMarines: boolean;
+  /** Recent surface actions in this theatre, newest first. */
+  recentActions: NavalActionRow[];
+}
+
+/** One surface action, as the record states it. */
+export interface NavalActionRow {
+  turn: number;
+  regionName: string;
+  winner: string;
+  marginPct: number;
+  sunk: string[];
 }
 
 export interface RecordExtrasInput {
@@ -152,6 +163,8 @@ export interface RecordExtrasInput {
   navairSupport?: FrontSupport;
   /** The opposing side's, used ONLY to derive a band. Never surfaced as a number. */
   navairEnemySupport?: FrontSupport;
+  /** Recent surface actions across every region this war is fought in. */
+  navairActions?: NavalActionRow[];
   reports: BattleReportDoc[];
 }
 
@@ -300,6 +313,7 @@ export function buildRecordExtras(input: RecordExtrasInput): RecordExtras {
     seaAccess,
     navairSupport,
     navairEnemySupport,
+    navairActions,
   } = input;
 
   const ownCountries = ownSide === "A" ? sideACountries : ownSide === "B" ? sideBCountries : [];
@@ -396,6 +410,7 @@ export function buildRecordExtras(input: RecordExtrasInput): RecordExtras {
           navairEnemySupport?.airSuperiority ?? 0
         ),
         canLandMarines: canLandMarines(navairSupport.seaControl),
+        recentActions: navairActions ?? [],
       };
     }
   }
