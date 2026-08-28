@@ -36,6 +36,7 @@ import { applyDefenseAppropriation } from "./defenseAppropriationTurn";
 import { settleDoctrineIncome } from "@/lib/db/collections/nationalDoctrine";
 import { applyDefenceDeliveries } from "./defenceDeliveryTurn";
 import { applyDefenceRefit } from "./defenceRefitTurn";
+import { applyStateArmsProduction } from "./stateArmsTurn";
 import { applyNuclearProduction } from "./nuclearProductionTurn";
 import { applyCovertNuclearTurn } from "./covertNuclearTurn";
 import { COVERT_CAPABLE } from "@/lib/military/covertNuclear";
@@ -389,6 +390,11 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
     if (defenceYear != null) {
       await applyDefenceDeliveries(db, cid, defenceYear, defenceEraMaxGrade, currentTurn);
     }
+    // Planned-defence economies have no contract pipeline for `applyDefenceDeliveries` to
+    // run, so their store is fed here instead. Before the refit for the same reason
+    // delivery is: materiel has to arrive before it can be issued. A no-op for every
+    // country not on the state-arms roster.
+    await applyStateArmsProduction(db, cid);
     await applyDefenceRefit(db, cid);
     // Nuclear stockpile accrual, right after refit so it competes for the same
     // appropriation AFTER conventional deliveries have settled: a nation short
