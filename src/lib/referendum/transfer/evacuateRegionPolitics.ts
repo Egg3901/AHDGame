@@ -317,58 +317,48 @@ async function carryOfficials(
     .find({ countryId: fromCountryId, state: regionId })
     .toArray()) as unknown as CarriedOfficial[];
 
-  // Grouped by the office they are LANDING in: the target chamber's size is what
-  // the shares are rescaled onto, and two source offices can land in one chamber.
-  const byTargetOffice = new Map<string, CarriedOfficial[]>();
-  for (const official of officials) {
-    const target = remapOffice(fromCountryId, toCountryId, official.officeType);
-    if (target === null) {
-      await db.collection("electedOfficials").deleteOne({ _id: official._id });
-      officialsRetired++;
-      continue;
-    }
-    const group = byTargetOffice.get(target) ?? [];
-    group.push(official);
-    byTargetOffice.set(target, group);
-  }
-
   // THE OFFICE ONLY, NOT THE SEAT COUNT. The chamber they are joining is sized
   // from the region's `houseDistricts` / `stateSenateSeats`, and this runs BEFORE
   // `convertRegionDoc` has written those for the new country -- the region still
   // carries its old country's numbers. `transferRegion` rescales the delegation
   // immediately afterwards, once the size is real.
-  for (const [targetOffice, group] of byTargetOffice) {
-    for (const official of group) {
-      await db
-        .collection("electedOfficials")
-        .updateOne(
-          { _id: official._id },
-          { $set: { countryId: toCountryId, officeType: targetOffice, updatedAt: now } }
-        );
-      // `characters.currentOffice` is a STORED denormalisation, not a derived
-      // one, and `actionRefresh` looks the office key up in the country's config
-      // to award its bonus. A carried player left holding `volkskammerDeputy` in
-      // Germany matches nothing there: they would show a defunct title and
-      // silently lose the bonus their seat is meant to carry.
-      if (official.characterId) {
-        await db
-          .collection("characters")
-          .updateOne(
-            { _id: official.characterId },
-            { $set: { "currentOffice.type": targetOffice, updatedAt: now } }
-          );
-      } else if (official.nppId) {
-        // Most seats here are NPP-held, and an NPP's office is the same stored
-        // denormalisation a player's is.
-        await db
-          .collection("npps")
-          .updateOne(
-            { _id: official.nppId },
-            { $set: { "currentOffice.type": targetOffice, updatedAt: now } }
-          );
-      }
-      officialsRemapped++;
+  for (const official of officials) {
+    const targetOffice = remapOffice(fromCountryId, toCountryId, official.officeType);
+    if (targetOffice === null) {
+      await db.collection("electedOfficials").deleteOne({ _id: official._id });
+      officialsRetired++;
+      continue;
     }
+
+    await db
+      .collection("electedOfficials")
+      .updateOne(
+        { _id: official._id },
+        { $set: { countryId: toCountryId, officeType: targetOffice, updatedAt: now } }
+      );
+
+    // `currentOffice` is a STORED denormalisation on the politician, not a
+    // derived one, and `actionRefresh` looks the office key up in the country's
+    // config to award its bonus. Someone left holding `volkskammerDeputy` in
+    // Germany matches nothing there: they would show a defunct title and
+    // silently lose the bonus their seat is meant to carry. Most of these seats
+    // are NPP-held rather than player-held, so both cases matter.
+    if (official.characterId) {
+      await db
+        .collection("characters")
+        .updateOne(
+          { _id: official.characterId },
+          { $set: { "currentOffice.type": targetOffice, updatedAt: now } }
+        );
+    } else if (official.nppId) {
+      await db
+        .collection("npps")
+        .updateOne(
+          { _id: official.nppId },
+          { $set: { "currentOffice.type": targetOffice, updatedAt: now } }
+        );
+    }
+    officialsRemapped++;
   }
 
   return { officialsRemapped, officialsRetired };
