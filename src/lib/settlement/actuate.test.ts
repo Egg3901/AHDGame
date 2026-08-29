@@ -447,6 +447,24 @@ describe("actuateSettlementOutcome", () => {
     expect(call?.[1].$set.pmNppId).toBeNull();
   });
 
+  it("never installs the survivor's own party when the absorbed state names none", async () => {
+    // A challenger that was not already a one-party state records no ruling
+    // party. Letting the resolver fill the gap reads the SURVIVOR's formed
+    // government and installs the side that just lost, banning the winner.
+    const { getCountryState } = await import("@/lib/countryState");
+    vi.mocked(getCountryState).mockResolvedValue({
+      governmentType: "parliamentaryRepublic",
+      rulingPartyId: null,
+    } as never);
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+    const { installOnePartyState } = await import("@/lib/onePartyState/installOnePartyState");
+    // 7 is the carried party; 1 would be Germany's own SPD.
+    expect(vi.mocked(installOnePartyState)).toHaveBeenCalledWith(expect.anything(), "DE", 470, {
+      rulingPartyId: 7,
+    });
+  });
+
   it("moves the governing party with the government", async () => {
     const gs = new ObjectId();
     prime(db, "governmentFormations").findOne.mockResolvedValue({

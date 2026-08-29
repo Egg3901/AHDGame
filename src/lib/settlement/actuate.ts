@@ -165,14 +165,12 @@ export async function actuateSettlementOutcome(
   //     is exactly this — is never visited by it, and would be left seated on a
   //     country that no longer exists. Same for a cabinet seat held by an NPP
   //     rather than a player.
-  const mappedRulingParty = absorbedRulingPartyId
-    ? Number(partiesMerged.partyIdMap[String(absorbedRulingPartyId)])
-    : Number.NaN;
+  const rulingPartyId = carriedRulingParty(absorbedRulingPartyId, partiesMerged.partyIdMap);
   await retireNationalRemnants(db, {
     absorbed: challenger,
     survivor: target,
     currentTurn,
-    rulingPartyId: Number.isInteger(mappedRulingParty) ? mappedRulingParty : null,
+    rulingPartyId,
   });
 
   // 4. East Berlin into Berlin, AFTER the country merge and not before: both
@@ -217,6 +215,39 @@ export async function actuateSettlementOutcome(
     },
   });
   return { actuated: true, outcome: "challenger", deferred: false };
+}
+
+/**
+ * Which party rules the unified state, under its POST-MIGRATION number.
+ *
+ * ONE definition, read by both the government carry and the one-party install,
+ * because the two must never disagree about who won.
+ *
+ * The fallback matters more than it looks. When the absorbed country records no
+ * ruling party — it was not a one-party state before the settlement imposed one
+ * — there is no winner's party to name, and letting `installOnePartyState`
+ * resolve it instead reads the SURVIVOR's formed government and installs the
+ * side that just lost, banning the winner. The largest carried party is the
+ * honest stand-in: it is the absorbed state's own strongest, and it is certainly
+ * not the survivor's incumbent.
+ *
+ * Null only when nothing was carried at all, which is a country with no parties.
+ */
+function carriedRulingParty(
+  absorbedRulingPartyId: number | null,
+  partyIdMap: Record<string, string>
+): number | null {
+  if (absorbedRulingPartyId != null) {
+    const mapped = Number(partyIdMap[String(absorbedRulingPartyId)]);
+    if (Number.isInteger(mapped)) return mapped;
+  }
+  // Lowest new id, which is the first party the migration moved: deterministic,
+  // and re-running the merge picks the same one.
+  const carried = Object.values(partyIdMap)
+    .map((v) => Number(v))
+    .filter((n) => Number.isInteger(n))
+    .sort((a, b) => a - b);
+  return carried.length > 0 ? carried[0] : null;
 }
 
 /**
@@ -383,16 +414,7 @@ async function adoptChallengerSettlement(
     absorbedRulingPartyId: number | null;
   }
 ): Promise<void> {
-  // The absorbed state's ruling party, translated to its NEW number.
-  //
-  // Passed explicitly rather than resolved. `installOnePartyState` would read the
-  // SURVIVING shell's formed government and install whichever party governs
-  // there. That is now the carried ruling party (`retireNationalRemnants` moved
-  // it), so resolution would land in the right place by luck — but only because
-  // of a write two steps away, which is not a thing to depend on.
-  const mappedRulingParty = params.absorbedRulingPartyId
-    ? Number(params.partyIdMap[String(params.absorbedRulingPartyId)])
-    : Number.NaN;
+  const mappedRulingParty = carriedRulingParty(params.absorbedRulingPartyId, params.partyIdMap);
 
   // The full one-party install, not just a `governmentType` copy: it also sets
   // `rulingPartyId`, restores `opsVoteMultipliers` and `hasLeaderConfidenceModel`,
@@ -405,7 +427,7 @@ async function adoptChallengerSettlement(
   // snap election here would dissolve the seats this pipeline just preserved.
   // Do not "fix" the omission — `reunification.e2e.test.ts` asserts it.
   await installOnePartyState(db, params.survivor, params.currentTurn, {
-    ...(Number.isInteger(mappedRulingParty) ? { rulingPartyId: mappedRulingParty } : {}),
+    ...(mappedRulingParty != null ? { rulingPartyId: mappedRulingParty } : {}),
   });
 
   // The survivor may now legislate in the catalogue it inherited. Without this a
