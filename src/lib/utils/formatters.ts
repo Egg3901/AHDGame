@@ -7,6 +7,7 @@ import {
 } from "@/lib/constants/countries";
 import { parseCountryParam } from "@/lib/db/partyLookup";
 import { STARTING_YEAR } from "@/lib/constants/turnTime";
+import { calendarTurn, type CalendarClock } from "@/lib/utils/gameDate";
 import {
   CANONICAL_REAL_ELECTION_YEARS_BY_PRESET,
   DEFAULT_CYCLE_ANCHOR_CONTEXT,
@@ -735,7 +736,13 @@ export function endTimeToGameYear(
   endTime: string | Date,
   currentTurn: number,
   lastTurnProcessed: string | Date,
-  startingYear: number = STARTING_YEAR
+  startingYear: number = STARTING_YEAR,
+  /**
+   * Founding-phase clock. `currentTurn` is RAW, so without it an election year
+   * reads a game year ahead of the status bar on a world that burned turns
+   * before its calendar started (#1208).
+   */
+  clock?: CalendarClock
 ): number {
   const TURNS_PER_YEAR = 48;
   const MS_PER_TURN = 3_600_000;
@@ -743,7 +750,9 @@ export function endTimeToGameYear(
   const end = new Date(endTime);
   const ref = new Date(lastTurnProcessed);
   const turnsFromNow = Math.round((end.getTime() - ref.getTime()) / MS_PER_TURN);
-  const turnAtEnd = currentTurn + turnsFromNow;
+  // Convert to the display calendar BEFORE the boundary test, so the "Week 1
+  // belongs to the previous year" rule is applied to the year players see.
+  const turnAtEnd = calendarTurn(currentTurn + turnsFromNow, clock);
 
   // Treat elections ending on "Week 1" of year N as belonging to year N-1
   // (same logic as turnToLarpDate's turn-48 → Week 52 special case).
@@ -783,6 +792,24 @@ export function turnToLarpParts(
     weekOfMonth: ((turnsInYear - 1) % 4) + 1,
     year: startingYear + Math.floor((turn - 1) / 48),
   };
+}
+
+/**
+ * Render a RAW stored turn (`crisis.startTurn`, `gameState.currentTurn`, a
+ * career entry) on the world's display calendar.
+ *
+ * Prefer this over calling {@link turnToLarpDate} directly. A world with a
+ * founding phase burns `preIterationTurns` before its calendar starts, so a raw
+ * turn is a game year ahead of the date the status bar shows, and passing one
+ * straight to the formatter dates everything a year late (#1208). The status bar
+ * has always done this conversion; this is the same thing, named once.
+ */
+export function rawTurnToLarpDate(
+  rawTurn: number,
+  startingYear: number = STARTING_YEAR,
+  clock?: CalendarClock
+): string {
+  return turnToLarpDate(calendarTurn(rawTurn, clock), startingYear);
 }
 
 /**

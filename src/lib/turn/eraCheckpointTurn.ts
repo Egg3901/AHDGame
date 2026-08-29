@@ -41,6 +41,7 @@ import type { LegislationType } from "@/lib/db/types/legislation";
 import { getActivePoliciesForState, type LegislationTypeMap } from "@/lib/policyEffects";
 import { calculateDemographicShiftsByTarget } from "@/lib/demographicEffects";
 import { archetypeValuesToBuckets } from "@/lib/demographics/archetypeBucketMap";
+import { calendarTurn, type CalendarClock } from "@/lib/utils/gameDate";
 import {
   applyDurableBucketShift,
   applyDurableBucketTurnoutShift,
@@ -69,7 +70,8 @@ const NO_RESULT: EraCheckpointTurnResult = { checkpointsActive: 0, statesUpdated
 async function resolveActiveCheckpoints(
   db: Db,
   countryId: CountryId,
-  currentTurn: number
+  currentTurn: number,
+  clock: CalendarClock
 ): Promise<Array<{ checkpoint: EraCheckpoint; startTurn: number }>> {
   const checkpoints = ERA_CHECKPOINTS.filter((c) => c.countryId === countryId);
   if (checkpoints.length === 0) return [];
@@ -92,15 +94,21 @@ async function resolveActiveCheckpoints(
     }
   }
 
+  // Everything below is in CALENDAR space: `resolveCheckpointStartTurn` maps a
+  // trigger case's raw `decidedAtTurn` through the same clock, and every
+  // `fallbackStartTurn` is authored as `yearToTurn(...)`, already a calendar
+  // turn. `durationTurns` is a span, identical in either space (#1208).
+  const calTurn = calendarTurn(currentTurn, clock);
   return checkpoints
     .map((checkpoint) => ({
       checkpoint,
       startTurn: resolveCheckpointStartTurn(
         checkpoint,
-        checkpoint.triggerCaseKey ? docketByKey.get(checkpoint.triggerCaseKey) : undefined
+        checkpoint.triggerCaseKey ? docketByKey.get(checkpoint.triggerCaseKey) : undefined,
+        clock
       ),
     }))
-    .filter(({ checkpoint, startTurn }) => isCheckpointActive(checkpoint, startTurn, currentTurn));
+    .filter(({ checkpoint, startTurn }) => isCheckpointActive(checkpoint, startTurn, calTurn));
 }
 
 /**
@@ -122,11 +130,23 @@ export async function processEraCheckpointsTurn(
   // against a modern electorate and permanently mutate demographicDefaults —
   // gate on the world's starting year instead.
   const gameStateDoc = await db
-    .collection<{ _id: string; startingYear?: number }>("gameState")
-    .findOne({ _id: "current" }, { projection: { startingYear: 1 } });
+    .collection<{
+      _id: string;
+      startingYear?: number;
+      preIterationTurns?: number;
+      preIteration?: { active?: boolean };
+    }>("gameState")
+    .findOne(
+      { _id: "current" },
+      { projection: { startingYear: 1, preIterationTurns: 1, preIteration: 1 } }
+    );
   if ((gameStateDoc?.startingYear ?? 2019) !== 1953) return NO_RESULT;
 
-  const active = await resolveActiveCheckpoints(db, countryId, currentTurn);
+  const clock: CalendarClock = {
+    preIterationActive: gameStateDoc?.preIteration?.active,
+    preIterationTurns: gameStateDoc?.preIterationTurns,
+  };
+  const active = await resolveActiveCheckpoints(db, countryId, currentTurn, clock);
   if (active.length === 0) return NO_RESULT;
 
   const stateIds = new Set<string>();

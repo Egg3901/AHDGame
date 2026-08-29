@@ -134,6 +134,7 @@ export default async function ConflictsPage() {
           crises={responseCrises}
           currentTurn={currentTurn}
           startingYear={startingYear}
+          clock={{ preIterationTurns }}
         />
       </div>
       <GlobalConflictsBoard year={currentYear ?? startingYear} conflicts={conflicts} />

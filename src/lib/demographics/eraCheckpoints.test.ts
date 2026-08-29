@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { calendarTurn } from "@/lib/utils/gameDate";
 import {
   applyCheckpointStep,
   applyCounterPressure,
@@ -261,6 +262,53 @@ describe("EraCheckpointTarget shape — every registered checkpoint's targets ar
         expect(target.totalShift, `${checkpoint.id} has a zero totalShift target`).not.toBe(0);
       }
     }
+  });
+
+  it("normalizes a trigger case's raw decidedAtTurn into calendar space (#1208)", () => {
+    // MIXED UNITS: `fallbackStartTurn` is `yearToTurn(...)`, a CALENDAR turn, but
+    // `decidedAtTurn` is stamped with the raw `currentTurn` by scotusDocketTurn.
+    // On a world with a founding phase the two are a year apart, so the window
+    // opened against whichever branch happened to resolve.
+    const decided: DocketCaseLookupEntry = {
+      status: "decided",
+      outcome: "affirmed",
+      decidedAtTurn: 481,
+    };
+    expect(resolveCheckpointStartTurn(BASE_CHECKPOINT, decided, { preIterationTurns: 48 })).toBe(
+      433
+    );
+  });
+
+  it("leaves the calendar-space fallback alone when the clock is applied", () => {
+    expect(
+      resolveCheckpointStartTurn({ ...BASE_CHECKPOINT, triggerCaseKey: undefined }, undefined, {
+        preIterationTurns: 48,
+      })
+    ).toBe(500);
+  });
+
+  it("is unchanged on a world with no founding phase", () => {
+    const decided: DocketCaseLookupEntry = {
+      status: "decided",
+      outcome: "affirmed",
+      decidedAtTurn: 481,
+    };
+    expect(resolveCheckpointStartTurn(BASE_CHECKPOINT, decided)).toBe(481);
+    expect(resolveCheckpointStartTurn(BASE_CHECKPOINT, decided, {})).toBe(481);
+  });
+
+  it("SOUTHERN_REALIGNMENT's fallback window opens on the calendar turn, not the raw one (#1208)", () => {
+    const cp = SOUTHERN_REALIGNMENT_CHECKPOINT;
+    const clock = { preIterationTurns: 48 };
+    // At the raw turn equal to the authored fallback, the calendar has not
+    // reached it yet — the window must still be shut.
+    expect(
+      isCheckpointActive(cp, cp.fallbackStartTurn, calendarTurn(cp.fallbackStartTurn, clock))
+    ).toBe(false);
+    // A founding phase later, it opens.
+    expect(
+      isCheckpointActive(cp, cp.fallbackStartTurn, calendarTurn(cp.fallbackStartTurn + 48, clock))
+    ).toBe(true);
   });
 
   it("a checkpoint with no triggerCaseKey (a designated permanent STATUTE, not a ruling) is a real, working marking convention", () => {
