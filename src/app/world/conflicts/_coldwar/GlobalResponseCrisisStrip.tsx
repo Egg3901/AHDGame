@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { Crisis } from "@/lib/db/types/crisis";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
-import { turnToLarpDate } from "@/lib/utils/formatters";
+import { rawTurnToLarpDate } from "@/lib/utils/formatters";
+import type { CalendarClock } from "@/lib/utils/gameDate";
 
 function turnProgress(crisis: Crisis, currentTurn: number): string {
   if (crisis.durationTurns == null) return "Ongoing";
@@ -25,10 +26,13 @@ export function GlobalResponseCrisisStrip({
   crises,
   currentTurn,
   startingYear,
+  clock,
 }: {
   crises: Crisis[];
   currentTurn: number;
   startingYear: number;
+  /** Founding-phase clock; crisis turns are stored RAW (#1208). */
+  clock: CalendarClock;
 }) {
   const international = crises.filter(
     (crisis) => crisis.status === "active" && crisis.globalResponse != null
@@ -180,8 +184,10 @@ export function GlobalResponseCrisisStrip({
                     font: "9px 'IBM Plex Mono',monospace",
                   }}
                 >
-                  <span title={`Opened on ${turnToLarpDate(crisis.startTurn, startingYear)}`}>
-                    {turnToLarpDate(crisis.startTurn, startingYear)}
+                  <span
+                    title={`Opened on ${rawTurnToLarpDate(crisis.startTurn, startingYear, clock)}`}
+                  >
+                    {rawTurnToLarpDate(crisis.startTurn, startingYear, clock)}
                   </span>
                   <span
                     title={`${totalResponders} governments can shape the shared outcome`}

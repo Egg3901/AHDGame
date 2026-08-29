@@ -26,6 +26,8 @@ import {
   resolveElectionYear,
   pastRealTimestampToLarpDate,
   turnToLarpDate,
+  rawTurnToLarpDate,
+  endTimeToGameYear,
 } from "@/lib/utils/formatters";
 
 describe("formatCurrency", () => {
@@ -592,5 +594,54 @@ describe("electionToLarpYear — RU delegate families", () => {
     expect(electionToLarpYear("governor", 1, null, null, ctx1953, "RU")).toBe(1955);
     // Other countries' governors keep the shared anchor (1954 under 1953-default).
     expect(electionToLarpYear("governor", 1, null, null, ctx1953)).toBe(1954);
+  });
+});
+
+describe("rawTurnToLarpDate (#1208)", () => {
+  it("is turnToLarpDate on a world with no founding phase", () => {
+    expect(rawTurnToLarpDate(1, 1953)).toBe(turnToLarpDate(1, 1953));
+    expect(rawTurnToLarpDate(200, 1953)).toBe(turnToLarpDate(200, 1953));
+    expect(rawTurnToLarpDate(200, 1953, {})).toBe(turnToLarpDate(200, 1953));
+  });
+
+  it("dates a raw turn on the world calendar when a founding phase burned turns", () => {
+    // Live world: 48 founding turns, so raw turn 463 is calendar turn 415 and
+    // the status bar reads 1961 while the raw turn maps to 1962.
+    expect(rawTurnToLarpDate(463, 1953)).toContain("1962");
+    expect(rawTurnToLarpDate(463, 1953, { preIterationTurns: 48 })).toContain("1961");
+  });
+
+  it("pins to the era start while the founding phase is still running", () => {
+    expect(rawTurnToLarpDate(400, 1953, { preIterationActive: true })).toBe(
+      turnToLarpDate(1, 1953)
+    );
+  });
+
+  it("agrees with the status bar for the same turn and clock", () => {
+    const clock = { preIterationTurns: 48 };
+    for (const turn of [49, 200, 463, 600]) {
+      expect(rawTurnToLarpDate(turn, 1953, clock)).toBe(
+        turnToLarpDate(calendarTurn(turn, clock), 1953)
+      );
+    }
+  });
+});
+
+describe("endTimeToGameYear founding-phase offset (#1208)", () => {
+  const ref = new Date("2026-08-28T12:00:00.000Z");
+
+  it("dates an election on the world calendar, not the raw turn", () => {
+    // Raw turn 463 with 48 founding turns is calendar turn 415 — game year 1961.
+    expect(endTimeToGameYear(ref, 463, ref, 1953)).toBe(1962);
+    expect(endTimeToGameYear(ref, 463, ref, 1953, { preIterationTurns: 48 })).toBe(1961);
+  });
+
+  it("is unchanged on a world with no founding phase", () => {
+    expect(endTimeToGameYear(ref, 463, ref, 1953, {})).toBe(1962);
+  });
+
+  it("still credits a Week 1 finish to the year that just ended", () => {
+    // Calendar turn 49 is week 1 of 1954; the rule hands it back to 1953.
+    expect(endTimeToGameYear(ref, 97, ref, 1953, { preIterationTurns: 48 })).toBe(1953);
   });
 });

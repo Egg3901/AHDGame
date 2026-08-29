@@ -104,7 +104,9 @@ export async function getGameClock(): Promise<GameClock> {
     },
     formatYear(timestamp) {
       if (!timestamp) return null;
-      return endTimeToGameYear(timestamp, time.currentTurn, lastTurnProcessed, time.startingYear);
+      return endTimeToGameYear(timestamp, time.currentTurn, lastTurnProcessed, time.startingYear, {
+        preIterationTurns: time.preIterationTurns,
+      });
     },
 
     formatRemainingTurns(targetTurn) {

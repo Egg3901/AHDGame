@@ -101,6 +101,10 @@ export async function GET() {
       autoDisastersEnabled,
       autoCrisisPaused,
       startingYear,
+      // Crisis turns are stored RAW; the table needs the founding-phase clock to
+      // date them on the world calendar rather than a year ahead of it (#1208).
+      preIterationTurns: gameState?.preIterationTurns ?? 0,
+      preIterationActive: gameState?.preIteration?.active ?? false,
       currentTurn,
       autoTemplates,
       autoCooldowns,

@@ -3,11 +3,13 @@ import { deploymentServiceSlug, ownsConfiguredWebhooks } from "./deploymentIdent
 
 describe("deploymentServiceSlug", () => {
   it("slugifies the Railway service name", () => {
-    expect(deploymentServiceSlug({ RAILWAY_SERVICE_NAME: "Main Site" } as NodeJS.ProcessEnv)).toBe(
-      "main-site"
-    );
     expect(
-      deploymentServiceSlug({ RAILWAY_SERVICE_NAME: "Sandbox Staging" } as NodeJS.ProcessEnv)
+      deploymentServiceSlug({ RAILWAY_SERVICE_NAME: "Main Site" } as unknown as NodeJS.ProcessEnv)
+    ).toBe("main-site");
+    expect(
+      deploymentServiceSlug({
+        RAILWAY_SERVICE_NAME: "Sandbox Staging",
+      } as unknown as NodeJS.ProcessEnv)
     ).toBe("sandbox-staging");
   });
 
@@ -16,21 +18,23 @@ describe("deploymentServiceSlug", () => {
       deploymentServiceSlug({
         RAILWAY_SERVICE_NAME: "Main Site",
         RAILWAY_ENVIRONMENT_NAME: "production",
-      } as NodeJS.ProcessEnv)
+      } as unknown as NodeJS.ProcessEnv)
     ).toBe("main-site");
   });
 
   it("falls back to the environment name, then to local", () => {
     expect(
-      deploymentServiceSlug({ RAILWAY_ENVIRONMENT_NAME: "production" } as NodeJS.ProcessEnv)
+      deploymentServiceSlug({
+        RAILWAY_ENVIRONMENT_NAME: "production",
+      } as unknown as NodeJS.ProcessEnv)
     ).toBe("production");
-    expect(deploymentServiceSlug({} as NodeJS.ProcessEnv)).toBe("local");
+    expect(deploymentServiceSlug({} as unknown as NodeJS.ProcessEnv)).toBe("local");
   });
 
   it("never returns an empty slug for a punctuation-only name", () => {
-    expect(deploymentServiceSlug({ RAILWAY_SERVICE_NAME: "---" } as NodeJS.ProcessEnv)).toBe(
-      "local"
-    );
+    expect(
+      deploymentServiceSlug({ RAILWAY_SERVICE_NAME: "---" } as unknown as NodeJS.ProcessEnv)
+    ).toBe("local");
   });
 });
 
@@ -67,11 +71,18 @@ describe("ownsConfiguredWebhooks (#1208)", () => {
     expect(ownsConfiguredWebhooks("main-site")).toBe(false);
   });
 
-  it("says which deployment owns the config when it blocks", () => {
-    process.env.RAILWAY_SERVICE_NAME = "Sandbox Staging";
-    ownsConfiguredWebhooks("main-site");
+  // A distinct pair, because the "log once" set is module state that outlives a
+  // single test — reusing a pair another case already reported would make this
+  // pass or fail on declaration order rather than on the behavior.
+  it("says which deployment owns the config when it blocks, once per mismatch", () => {
+    process.env.RAILWAY_SERVICE_NAME = "Replay Worker";
+    expect(ownsConfiguredWebhooks("some-other-world")).toBe(false);
     expect(console.warn).toHaveBeenCalledWith(
-      expect.stringContaining('owned by "main-site", running as "sandbox-staging"')
+      expect.stringContaining('owned by "some-other-world", running as "replay-worker"')
     );
+    // A suppressed world posts on nearly every turn; the log must not grow with it.
+    expect(ownsConfiguredWebhooks("some-other-world")).toBe(false);
+    expect(ownsConfiguredWebhooks("some-other-world")).toBe(false);
+    expect(console.warn).toHaveBeenCalledTimes(1);
   });
 });

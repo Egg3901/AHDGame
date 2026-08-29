@@ -8,7 +8,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { STARTING_YEAR } from "@/lib/constants/turnTime";
-import { turnToLarpDate } from "@/lib/utils/formatters";
+import { rawTurnToLarpDate } from "@/lib/utils/formatters";
 import type { Crisis } from "@/lib/db/types/crisis";
 import type { State } from "@/lib/db/types/state";
 import { crisisSeverity, effectImpact } from "@/lib/crises/severity";
@@ -239,6 +239,12 @@ export default async function CrisisDetailPage({ params }: { params: Promise<{ i
 
   const isActive = crisis.status === "active";
   const startingYear = gameState?.startingYear ?? STARTING_YEAR;
+  // Crisis turns are stored RAW. Without the founding-phase clock every date on
+  // this page reads a game year ahead of the status bar (#1208).
+  const clock = {
+    preIterationTurns: gameState?.preIterationTurns,
+    preIterationActive: gameState?.preIteration?.active,
+  };
   const currentTurn = gameState?.currentTurn ?? crisis.startTurn;
   const targetCountryNames = crisis.countryIds.map((cId) => COUNTRY_NAMES[cId] ?? cId).join(", ");
   // Region display names (e.g. "California"), falling back to the raw id.
@@ -337,7 +343,7 @@ export default async function CrisisDetailPage({ params }: { params: Promise<{ i
                     </span>
                   )}
                   <span className="text-xs text-white/60 ml-0.5">
-                    Started {turnToLarpDate(crisis.startTurn, startingYear)}
+                    Started {rawTurnToLarpDate(crisis.startTurn, startingYear, clock)}
                   </span>
                 </div>
               </div>
@@ -575,21 +581,25 @@ export default async function CrisisDetailPage({ params }: { params: Promise<{ i
                   </Fact>
                 )}
                 <Fact label="Started" tooltip={CRISIS_TOOLTIPS.started}>
-                  {turnToLarpDate(crisis.startTurn, startingYear)}
+                  {rawTurnToLarpDate(crisis.startTurn, startingYear, clock)}
                   <span className="block text-xs font-normal text-muted">
                     Turn {crisis.startTurn}
                   </span>
                 </Fact>
                 {crisis.status === "resolved" && crisis.endTurn ? (
                   <Fact label="Ended" tooltip={CRISIS_TOOLTIPS.ended}>
-                    {turnToLarpDate(crisis.endTurn, startingYear)}
+                    {rawTurnToLarpDate(crisis.endTurn, startingYear, clock)}
                     <span className="block text-xs font-normal text-muted">
                       Turn {crisis.endTurn}
                     </span>
                   </Fact>
                 ) : crisis.durationTurns ? (
                   <Fact label="Ends" tooltip={CRISIS_TOOLTIPS.duration}>
-                    {turnToLarpDate(crisis.startTurn + crisis.durationTurns, startingYear)}
+                    {rawTurnToLarpDate(
+                      crisis.startTurn + crisis.durationTurns,
+                      startingYear,
+                      clock
+                    )}
                     <span className="block text-xs font-normal text-muted">
                       {crisis.durationTurns} turns total
                     </span>
