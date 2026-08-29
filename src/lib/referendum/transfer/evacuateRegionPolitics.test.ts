@@ -126,3 +126,118 @@ describe("evacuateRegionPolitics", () => {
     expect(res.electionsDissolved).toBe(3);
   });
 });
+
+describe("evacuateRegionPolitics when the source country is dissolving", () => {
+  let db: MockDb;
+  const DEPUTY = new ObjectId();
+  const CHAIRMAN = new ObjectId();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    db.collection("npps").find.mockReturnValue(cursorOf([{ _id: NPP1 }]));
+    db.collection("characters").find.mockReturnValue(cursorOf([{ _id: PLAYER }]));
+    db.collection("corporations").updateMany.mockResolvedValue({ modifiedCount: 0 });
+    db.collection("characters").updateMany.mockResolvedValue({ modifiedCount: 1 });
+    db.collection("electedOfficials").find.mockReturnValue(
+      cursorOf([
+        { _id: DEPUTY, officeType: "volkskammerDeputy", state: "SN", party: "7", seatsHeld: 60 },
+        { _id: CHAIRMAN, officeType: "chairmanOfStateCouncil", state: "SN", party: "7" },
+      ])
+    );
+    db.collection("electedOfficials").updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collection("electedOfficials").deleteMany.mockResolvedValue({ deletedCount: 0 });
+    db.collection("elections").find.mockReturnValue(cursorOf([]));
+    db.collection("seats").findOne.mockResolvedValue(null);
+  });
+
+  const run = () =>
+    evacuateRegionPolitics(db as unknown as Db, {
+      regionId: "SN",
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      relocateToRegionId: null,
+    });
+
+  it("does not force resident players to independent", async () => {
+    await run();
+    const upd = db.collectionMocks["characters"].updateMany.mock.calls[0];
+    expect(upd?.[1].$set?.party).toBeUndefined();
+  });
+
+  it("does not delete the departing players' offices", async () => {
+    await run();
+    expect(db.collectionMocks["electedOfficials"].deleteMany.mock.calls).toHaveLength(0);
+    expect(db.collectionMocks["cabinetMembers"].deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("re-scopes the players' cabinet seats to the surviving country", async () => {
+    await run();
+    const call = db.collectionMocks["cabinetMembers"].updateMany.mock.calls[0];
+    expect(call?.[0]).toEqual({ countryId: "DD", characterId: { $in: [PLAYER] } });
+    expect(call?.[1].$set.countryId).toBe("DE");
+  });
+
+  it("remaps a Volkskammer deputy into the Bundestag", async () => {
+    const res = await run();
+    const call = db.collectionMocks["electedOfficials"].updateOne.mock.calls.find(
+      (c) => String(c[0]._id) === String(DEPUTY)
+    );
+    expect(call?.[1].$set.officeType).toBe("bundestag");
+    expect(call?.[1].$set.countryId).toBe("DE");
+    expect(res.officialsRemapped).toBe(1);
+  });
+
+  it("retires an office with no counterpart instead of carrying it", async () => {
+    const res = await run();
+    const call = db.collectionMocks["electedOfficials"].deleteOne.mock.calls.find(
+      (c) => String(c[0]._id) === String(CHAIRMAN)
+    );
+    expect(call).toBeDefined();
+    expect(res.officialsRetired).toBe(1);
+  });
+
+  it("keeps the region's party organisations instead of deleting them", async () => {
+    await run();
+    expect(db.collectionMocks["statePartyOrg"].deleteMany).not.toHaveBeenCalled();
+    const call = db.collectionMocks["statePartyOrg"].updateMany.mock.calls[0];
+    expect(call?.[1].$set.countryId).toBe("DE");
+  });
+
+  it("rescales seatsHeld onto the target chamber instead of carrying it", async () => {
+    const SED_A = new ObjectId();
+    const LDPD = new ObjectId();
+    db.collection("electedOfficials").find.mockReturnValue(
+      cursorOf([
+        { _id: SED_A, officeType: "volkskammerDeputy", state: "SN", party: "7", seatsHeld: 83 },
+        { _id: LDPD, officeType: "volkskammerDeputy", state: "SN", party: "9", seatsHeld: 17 },
+      ])
+    );
+    db.collection("seats").findOne.mockResolvedValue({
+      countryId: "DE",
+      state: "SN",
+      electionType: "bundestag",
+      totalSeats: 16,
+    });
+    await run();
+    const calls = db.collectionMocks["electedOfficials"].updateOne.mock.calls;
+    const sed = calls.find((c) => String(c[0]._id) === String(SED_A));
+    const ldpd = calls.find((c) => String(c[0]._id) === String(LDPD));
+    expect(sed?.[1].$set.seatsHeld + ldpd?.[1].$set.seatsHeld).toBe(16);
+    expect(sed?.[1].$set.seatsHeld).toBeGreaterThan(ldpd?.[1].$set.seatsHeld);
+  });
+
+  it("leaves a zero-seat office alone rather than apportioning it", async () => {
+    const GOV = new ObjectId();
+    db.collection("electedOfficials").find.mockReturnValue(
+      cursorOf([{ _id: GOV, officeType: "governor", state: "SN", party: "7", seatsHeld: 0 }])
+    );
+    db.collection("seats").findOne.mockResolvedValue(null);
+    await run();
+    const call = db.collectionMocks["electedOfficials"].updateOne.mock.calls.find(
+      (c) => String(c[0]._id) === String(GOV)
+    );
+    expect(call?.[1].$set.officeType).toBe("ministerPresident");
+    expect(call?.[1].$set.seatsHeld).toBeUndefined();
+  });
+});

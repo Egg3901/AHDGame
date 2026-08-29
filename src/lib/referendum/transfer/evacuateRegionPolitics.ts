@@ -18,8 +18,18 @@
 import type { Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { NPP } from "@/lib/db/types/npp";
+import { remapOffice } from "@/lib/country/dissolvingOfficeRemap";
+import { apportionSeats } from "@/lib/country/seatApportionment";
 
-/** Region-scoped party collections dissolved on transfer (target re-seeds). */
+/**
+ * Region-scoped party collections.
+ *
+ * DELETED when the source country survives (the target re-seeds its own),
+ * RE-SCOPED when the source is dissolving. See the `dissolving` branches below:
+ * a surviving source keeps its national parties and the departing region is
+ * cleared for the target to rebuild, while a dissolving one has no parties left
+ * to protect and every organisation it built travels with it.
+ */
 const REGION_PARTY_COLLECTIONS = [
   "statePartyOrg",
   "partyBudget",
@@ -54,6 +64,10 @@ export interface EvacuateRegionPoliticsResult {
   seatsDissolved: number;
   electionsDissolved: number;
   corpsToTarget: number;
+  /** Officials carried into the absorbing country. Dissolving source only. */
+  officialsRemapped: number;
+  /** Officials whose office has no counterpart and ended with the country. */
+  officialsRetired: number;
 }
 
 export async function evacuateRegionPolitics(
@@ -107,10 +121,17 @@ export async function evacuateRegionPolitics(
     corpsFollowedCeo = res?.modifiedCount ?? 0;
   }
 
-  // 2. Player residents become Independent AND vacate every source-country
-  //    office — a foreign citizen can't hold national office (cabinet, national
-  //    seats, head-of-government). The resident rescope flips their countryId to
-  //    the target afterward.
+  // 2. Player residents.
+  //
+  // A SURVIVING source strips them: a foreign citizen cannot hold national office
+  // (cabinet, national seats, head-of-government), so they go Independent and
+  // vacate everything. The resident rescope flips their countryId afterward.
+  //
+  // A DISSOLVING source keeps them whole. Their country is being absorbed, not
+  // left behind, and stripping the winning side's players of the institutions
+  // they just won is the opposite of what a merge should do. Their `party` value
+  // is already correct because `mergePartiesIntoCountry` renumbered it before
+  // this region moved.
   const playerDocs = await db
     .collection("characters")
     .find({ homeState: regionId, userId: { $ne: null } })
@@ -118,7 +139,7 @@ export async function evacuateRegionPolitics(
     .toArray();
   const playerIds = playerDocs.map((p) => p._id);
   let playersToIndependent = 0;
-  if (playerIds.length > 0) {
+  if (playerIds.length > 0 && !dissolving) {
     const upd = await db.collection("characters").updateMany(
       { _id: { $in: playerIds } },
       {
@@ -137,23 +158,63 @@ export async function evacuateRegionPolitics(
         { _id: fromCountryId, headOfGovernmentCharacterId: { $in: playerIds } },
         { $set: { updatedAt: now }, $unset: { headOfGovernmentCharacterId: "" } }
       );
+  } else if (playerIds.length > 0) {
+    // Cabinet seats follow the country. The body they served is gone, but the rows
+    // are re-scoped rather than deleted so the absorbing state inherits a staffed
+    // cabinet rather than an empty one.
+    await db
+      .collection("cabinetMembers")
+      .updateMany(
+        { countryId: fromCountryId, characterId: { $in: playerIds } },
+        { $set: { countryId: toCountryId, updatedAt: now } }
+      );
   }
 
-  // 3. Delete the region's party orgs (the target re-seeds its own).
+  // 3. The region's party organisations.
+  //
+  // Deleted when the source survives (the target re-seeds its own), RE-SCOPED when
+  // it dissolves — this is what carries each party's treasury, its registration
+  // ledger and its organisational strength across the border rather than
+  // destroying them along with the state.
   let partyDocsDeleted = 0;
   for (const coll of REGION_PARTY_COLLECTIONS) {
+    if (dissolving) {
+      await db
+        .collection(coll)
+        .updateMany({ stateId: regionId }, { $set: { countryId: toCountryId, updatedAt: now } });
+      continue;
+    }
     const res = await db.collection(coll).deleteMany({ stateId: regionId });
     partyDocsDeleted += res?.deletedCount ?? 0;
   }
 
-  // 4. Dissolve every officeholder + seat in the region (seats vacated; the
-  //    target re-seeds its own chamber/local seats via the election engine).
-  const officials = await db
-    .collection("electedOfficials")
-    .deleteMany({ countryId: fromCountryId, state: regionId });
-  const seats = await db
-    .collection("seats")
-    .deleteMany({ countryId: fromCountryId, state: regionId });
+  // 4. Officeholders and seats.
+  //
+  // Dissolved and re-seeded when the source survives; REMAPPED when it does not.
+  // An office with no counterpart in the absorbing country retires — see
+  // `dissolvingOfficeRemap` for why that mapping is per-pair rather than generic.
+  let officialsDissolved = 0;
+  let seatsDissolved = 0;
+  let officialsRemapped = 0;
+  let officialsRetired = 0;
+
+  if (dissolving) {
+    ({ officialsRemapped, officialsRetired } = await carryOfficials(db, {
+      regionId,
+      fromCountryId,
+      toCountryId,
+      now,
+    }));
+  } else {
+    const officials = await db
+      .collection("electedOfficials")
+      .deleteMany({ countryId: fromCountryId, state: regionId });
+    officialsDissolved = officials?.deletedCount ?? 0;
+    const seats = await db
+      .collection("seats")
+      .deleteMany({ countryId: fromCountryId, state: regionId });
+    seatsDissolved = seats?.deletedCount ?? 0;
+  }
 
   // 4b. Dissolve the region's source-country races + their candidates so they
   //     don't resolve into phantom source-country officeholders after it leaves;
@@ -185,9 +246,123 @@ export async function evacuateRegionPolitics(
     corpsFollowedCeo,
     playersToIndependent,
     partyDocsDeleted,
-    officialsDissolved: officials?.deletedCount ?? 0,
-    seatsDissolved: seats?.deletedCount ?? 0,
+    officialsDissolved,
+    seatsDissolved,
     electionsDissolved,
     corpsToTarget: corpsToTarget?.modifiedCount ?? 0,
+    officialsRemapped,
+    officialsRetired,
   };
+}
+
+/** One official as the carry-across reads it. */
+interface CarriedOfficial {
+  _id: ObjectId;
+  officeType: string;
+  party?: string;
+  seatsHeld?: number;
+}
+
+/**
+ * Carry a dissolving country's officeholders into the country absorbing it.
+ *
+ * TWO THINGS HAPPEN HERE and they are separable only in principle: the office
+ * changes name, and the chamber changes SIZE. East Germany's Volkskammer seats
+ * 500 against the eastern Laender's 48 Bundestag seats, so an official carrying
+ * `seatsHeld` unchanged would arrive holding more of the chamber than the chamber
+ * has. Shares travel; counts do not.
+ *
+ * Extracted from `evacuateRegionPolitics` because that function is already a
+ * five-step sequence and this is the only step with arithmetic in it.
+ */
+async function carryOfficials(
+  db: Db,
+  params: { regionId: string; fromCountryId: CountryId; toCountryId: CountryId; now: Date }
+): Promise<{ officialsRemapped: number; officialsRetired: number }> {
+  const { regionId, fromCountryId, toCountryId, now } = params;
+  let officialsRemapped = 0;
+  let officialsRetired = 0;
+
+  const officials = (await db
+    .collection("electedOfficials")
+    .find({ countryId: fromCountryId, state: regionId })
+    .toArray()) as unknown as CarriedOfficial[];
+
+  // Grouped by the office they are LANDING in: the target chamber's size is what
+  // the shares are rescaled onto, and two source offices can land in one chamber.
+  const byTargetOffice = new Map<string, CarriedOfficial[]>();
+  for (const official of officials) {
+    const target = remapOffice(fromCountryId, toCountryId, official.officeType);
+    if (target === null) {
+      await db.collection("electedOfficials").deleteOne({ _id: official._id });
+      officialsRetired++;
+      continue;
+    }
+    const group = byTargetOffice.get(target) ?? [];
+    group.push(official);
+    byTargetOffice.set(target, group);
+  }
+
+  for (const [targetOffice, group] of byTargetOffice) {
+    // The chamber this region is joining. `totalSeats` is authoritative: it is
+    // SEEDED, not derived — Germany's seed already carries `DE-bundestag-SN` and
+    // friends precisely so a reunified Bundestag has a sized chamber waiting.
+    const seatDoc = (await db
+      .collection("seats")
+      .findOne({ countryId: toCountryId, state: regionId, electionType: targetOffice })) as {
+      totalSeats?: number;
+    } | null;
+
+    // An office nobody holds seats in (a governor, a minister-president) has no
+    // magnitude to rescale, and apportioning one would invent seats for a seat
+    // that is not a seat.
+    const carriesSeats = group.some((o) => (o.seatsHeld ?? 0) > 0);
+    let allocation: Record<string, number> | null = null;
+    if (seatDoc?.totalSeats && carriesSeats) {
+      const sourceByParty: Record<string, number> = {};
+      for (const o of group) {
+        const key = o.party ?? "independent";
+        sourceByParty[key] = (sourceByParty[key] ?? 0) + (o.seatsHeld ?? 0);
+      }
+      allocation = apportionSeats(sourceByParty, seatDoc.totalSeats);
+    }
+
+    // Split each party's new allocation across the rows that party holds here.
+    // Largest remainder again, keyed by row id, so two officials sharing one
+    // delegation split it identically on every run.
+    const rowsByParty = new Map<string, CarriedOfficial[]>();
+    for (const o of group) {
+      const key = o.party ?? "independent";
+      const rows = rowsByParty.get(key) ?? [];
+      rows.push(o);
+      rowsByParty.set(key, rows);
+    }
+
+    for (const [party, rows] of rowsByParty) {
+      const ordered = [...rows].sort((a, b) => (String(a._id) < String(b._id) ? -1 : 1));
+      const share =
+        allocation && allocation[party] !== undefined
+          ? apportionSeats(
+              Object.fromEntries(ordered.map((o) => [String(o._id), o.seatsHeld ?? 1])),
+              allocation[party]
+            )
+          : null;
+      for (const o of ordered) {
+        await db.collection("electedOfficials").updateOne(
+          { _id: o._id },
+          {
+            $set: {
+              countryId: toCountryId,
+              officeType: targetOffice,
+              ...(share ? { seatsHeld: share[String(o._id)] ?? 0 } : {}),
+              updatedAt: now,
+            },
+          }
+        );
+        officialsRemapped++;
+      }
+    }
+  }
+
+  return { officialsRemapped, officialsRetired };
 }
