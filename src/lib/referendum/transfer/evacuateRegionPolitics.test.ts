@@ -266,6 +266,22 @@ describe("evacuateRegionPolitics when the source country is dissolving", () => {
     expect(call?.[1].$set["currentOffice.type"]).toBe("bundestag");
   });
 
+  it("dissolves the delegation when the country pair has no office mapping", async () => {
+    // An unregistered pair has no statement about how one constitution's offices
+    // become another's. Guessing would seat people in bodies nobody mapped.
+    const res = await evacuateRegionPolitics(db as unknown as Db, {
+      regionId: "SN",
+      fromCountryId: "PL",
+      toCountryId: "RU",
+      relocateToRegionId: null,
+    });
+    expect(res.officialsRemapped).toBe(0);
+    expect(db.collectionMocks["electedOfficials"].deleteMany).toHaveBeenCalledWith({
+      countryId: "PL",
+      state: "SN",
+    });
+  });
+
   it("remaps a Land First Secretary to a Minister-President", async () => {
     const GOV = new ObjectId();
     db.collection("electedOfficials").find.mockReturnValue(

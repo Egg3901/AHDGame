@@ -32,7 +32,7 @@
 import type { Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { NPP } from "@/lib/db/types/npp";
-import { remapOffice } from "@/lib/country/dissolvingOfficeRemap";
+import { officeRemapFor, remapOffice } from "@/lib/country/dissolvingOfficeRemap";
 
 /**
  * Region-scoped party collections.
@@ -299,6 +299,18 @@ async function carryOfficials(
   const { regionId, fromCountryId, toCountryId, now } = params;
   let officialsRemapped = 0;
   let officialsRetired = 0;
+
+  // NO TABLE, NO CARRY. An unregistered country pair has no statement about how
+  // one constitution's offices become another's, and guessing would seat people
+  // in bodies nobody mapped. Those officials are dissolved exactly as they were
+  // before this path existed — the same outcome, made deliberate rather than
+  // emergent from `remapOffice` returning null for every office in turn.
+  if (!officeRemapFor(fromCountryId, toCountryId)) {
+    const dropped = await db
+      .collection("electedOfficials")
+      .deleteMany({ countryId: fromCountryId, state: regionId });
+    return { officialsRemapped: 0, officialsRetired: dropped?.deletedCount ?? 0 };
+  }
 
   const officials = (await db
     .collection("electedOfficials")

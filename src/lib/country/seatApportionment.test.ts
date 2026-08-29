@@ -45,4 +45,18 @@ describe("apportionSeats", () => {
     expect(out.a).toBe(4);
     expect(out.b).toBe(0);
   });
+
+  it("never emits a non-finite seat count", () => {
+    // NaN fails every comparison, so an unguarded implementation reads its own
+    // checks as satisfied and writes NaN to every party in the chamber.
+    const out = apportionSeats({ a: Number.NaN, b: 10 }, 6);
+    expect(Object.values(out).every(Number.isFinite)).toBe(true);
+    expect(out.b).toBe(6);
+    expect(out.a).toBe(0);
+  });
+
+  it("returns zeroes rather than NaN for a non-finite target", () => {
+    const out = apportionSeats({ a: 5, b: 5 }, Number.NaN);
+    expect(out).toEqual({ a: 0, b: 0 });
+  });
 });

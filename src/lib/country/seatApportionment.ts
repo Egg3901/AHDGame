@@ -23,18 +23,27 @@ export function apportionSeats(
   const keys = Object.keys(sourceSeatsByParty).sort();
   if (keys.length === 0) return {};
 
-  const sourceTotal = keys.reduce((sum, k) => sum + Math.max(0, sourceSeatsByParty[k]), 0);
+  // Non-finite in, non-finite out, silently: NaN fails every comparison below,
+  // so the guards read as satisfied, the quotas come out NaN and every party is
+  // written a NaN seat count. A malformed `seatsHeld` should cost that party its
+  // share, not corrupt the whole chamber.
+  const seatsOf = (k: string): number => {
+    const value = sourceSeatsByParty[k];
+    return Number.isFinite(value) ? Math.max(0, value) : 0;
+  };
+
+  const sourceTotal = keys.reduce((sum, k) => sum + seatsOf(k), 0);
   const out: Record<string, number> = {};
   // A source chamber holding no seats has no shares to scale. Zero for everyone is
   // the honest answer; spreading the target evenly would invent a result.
-  if (sourceTotal <= 0 || targetTotal <= 0) {
+  if (sourceTotal <= 0 || !(targetTotal > 0)) {
     for (const k of keys) out[k] = 0;
     return out;
   }
 
   const exact = keys.map((k) => ({
     key: k,
-    quota: (Math.max(0, sourceSeatsByParty[k]) / sourceTotal) * targetTotal,
+    quota: (seatsOf(k) / sourceTotal) * targetTotal,
   }));
 
   let assigned = 0;
