@@ -170,6 +170,21 @@ export async function mergeRegion(db: Db, args: MergeRegionArgs): Promise<MergeR
     now,
   });
 
+  // FORCE THE SURVIVOR'S TAX BASE TO BE RE-DERIVED.
+  //
+  // `stateBudgets.taxBases` is STORED, and `computeStateRevenue` only falls back
+  // to deriving it from the region's GDP and macro metrics when the field is
+  // absent. The target has its own, so without this it would keep taxing the
+  // half of the city it started with while holding the population, the sectors
+  // and the seats of both. Unsetting it hands the next revenue pass the merged
+  // region, which is the figure it should have been reading all along.
+  await db
+    .collection<Record<string, unknown>>("stateBudgets")
+    .updateOne({ _id: toRegionId } as Record<string, unknown>, {
+      $unset: { taxBases: "" },
+      $set: { updatedAt: now },
+    });
+
   // DELETE THE REGION, do not merely flag it.
   //
   // ⚠️ This is the opposite of what `mergeCountry` does to a country shell, and

@@ -102,6 +102,16 @@ describe("mergeRegion", () => {
     });
   });
 
+  it("clears the survivor's stored tax base so it re-derives on the merged region", async () => {
+    await run();
+    const call = db.collectionMocks["stateBudgets"].updateOne.mock.calls.find(
+      (c) => c[0]._id === "BE"
+    );
+    // Stored, not recomputed: Berlin would otherwise keep taxing half a city
+    // while holding the population and sectors of both.
+    expect(call?.[1].$unset).toHaveProperty("taxBases");
+  });
+
   it("re-homes NPPs out of the retired region", async () => {
     await run();
     const call = db.collectionMocks["npps"].updateMany.mock.calls[0];
