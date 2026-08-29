@@ -7,6 +7,7 @@ import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import { PEACE_OFFER_DURATION_TURNS, type PeaceOfferDoc } from "@/lib/db/types/peaceOffer";
 import { getConflict } from "@/lib/db/collections/conflicts";
+import { recomputeNationalApproval } from "@/lib/country/recomputeNationalApproval";
 import { findLiveOffer, getPeaceOffersCollection } from "@/lib/db/collections/peaceOffers";
 import { validatePeaceOffer } from "@/lib/military/peaceOffer";
 import { isNppAutonomyActive } from "./featureFlag";
@@ -172,7 +173,36 @@ export async function prepareAutonomousWarEntry(
       .collection<{ countryId: CountryId; debtToGdpRatio?: number }>("federalBudget")
       .findOne({ countryId }),
   ]);
-  if ((approval?.approvalRating ?? 0) < ENTRY_MIN_APPROVAL) {
+  // A missing document means "not measured yet", NOT "nobody approves". Only
+  // `active` countries and current belligerents are snapshotted into
+  // governmentApprovals, so every other country reads as absent here — and
+  // reading absent as 0 refused entry to exactly the countries this bill route
+  // exists for, whatever their public actually thought. The stored rating still
+  // wins where there is one: it carries the national providers (war block,
+  // address bump, org statements, cabinet) the recompute deliberately omits.
+  //
+  // Measuring reads states, metrics, era context and political bases, which is far
+  // more failure surface than the single findOne it replaced. Every turn caller
+  // wraps applyLegislationEffect in a bare `.catch`, so letting a read error escape
+  // would abandon the rest of THIS bill's provisions as well. Refuse instead:
+  // safer than admitting on error, and narrower than aborting the bill.
+  let approvalRating = approval?.approvalRating;
+  if (approvalRating == null) {
+    try {
+      approvalRating = await recomputeNationalApproval(db, countryId);
+    } catch (err) {
+      console.error(`[warEntry] could not measure ${countryId} approval:`, err);
+      return { ready: false, deployedUnits: 0, reason: "Public approval could not be measured." };
+    }
+  }
+  // Checked for finiteness rather than compared alone: `NaN < ENTRY_MIN_APPROVAL`
+  // is FALSE, so a malformed metric poisoning the population-weighted average
+  // would wave the country into the war instead of holding it out.
+  if (!Number.isFinite(approvalRating)) {
+    console.error(`[warEntry] ${countryId} approval measured as ${approvalRating}`);
+    return { ready: false, deployedUnits: 0, reason: "Public approval could not be measured." };
+  }
+  if (approvalRating < ENTRY_MIN_APPROVAL) {
     return { ready: false, deployedUnits: 0, reason: "Public approval no longer supports entry." };
   }
   if ((budget?.debtToGdpRatio ?? 0) > ENTRY_MAX_DEBT_TO_GDP) {
