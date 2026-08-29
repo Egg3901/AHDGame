@@ -159,6 +159,53 @@ describe("battle forecast route", () => {
     expect(body.oddsPct + body.counterOddsPct).not.toBe(100);
   });
 
+  /**
+   * Regression: "They attack" projected the enemy's offensive against the viewer's
+   * ATTACK roster — the viewer plus whichever allies had filed a declaration.
+   *
+   * Defence is not opt-in. `defendersAtFront` enrols every belligerent with troops on
+   * the ground, because an enemy attacking where your troops stand does not ask first.
+   * So an ally who is holding the line but has not declared an offensive was missing
+   * from the counter-projection, and the viewer was shown the odds of holding the
+   * front alone. That is what made the two rows look so lopsided in the war room.
+   */
+  it("counts an ally holding the front in the counter-projection, declaration or not", async () => {
+    const alliedConflict = {
+      ...CONFLICT,
+      sideA: { label: "A", countries: ["US", "UK"], kind: "coalition" },
+    };
+    const counterWith = async (alliesAtFront: boolean) => {
+      vi.resetModules();
+      db.collectionMocks.conflicts.findOne.mockResolvedValue(alliedConflict);
+      db.collectionMocks.militaryUnits.find.mockImplementation(
+        (q: { countryId?: string; theaterId?: string } = {}) => {
+          const atFront = [
+            unit({ countryId: "US", theaterId: "afghan" }),
+            unit({ countryId: "CN", theaterId: "afghan" }),
+            unit({ countryId: "CN", theaterId: "afghan" }),
+            // The ally is either in the line, or home. Nothing else changes.
+            unit({ countryId: "UK", theaterId: alliesAtFront ? "afghan" : "reserve" }),
+          ];
+          const docs = q.theaterId
+            ? atFront.filter((u) => u.theaterId === q.theaterId)
+            : atFront.filter((u) => u.countryId === (q.countryId ?? "US"));
+          return { toArray: vi.fn().mockResolvedValue(docs) };
+        }
+      );
+      const { GET } = await import(ROUTE);
+      const res = await GET(req("theaterId=afghan&targetCountry=CN"), call);
+      expect(res.status).toBe(200);
+      return (await res.json()).counterOddsPct as number;
+    };
+
+    // No declaration is filed by anyone in either arm, so the ONLY difference is
+    // whether the ally's units sit at the front. Under the old code that made no
+    // difference at all to the counter — which is precisely the bug.
+    const alone = await counterWith(false);
+    const reinforced = await counterWith(true);
+    expect(reinforced).toBeLessThan(alone);
+  });
+
   // Fog is unchanged: the counter-projection is derived from sides already built.
   it("still leaks no enemy strength with the counter-projection present", async () => {
     const { GET } = await import(ROUTE);

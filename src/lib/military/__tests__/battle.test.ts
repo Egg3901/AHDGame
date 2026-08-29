@@ -155,6 +155,59 @@ describe("battleForecast", () => {
     expect(fc.ratio).toBeLessThanOrEqual(0.98);
   });
 
+  /**
+   * THE contract every player-facing surface states: `oddsPct` is a chance of winning,
+   * not a force share. `resolvePvpBattle` is the half that has to make it true.
+   *
+   * Before `ATTRITION.fortuneSpread`, the five-round loop was so nearly deterministic
+   * in `ratio` that a projected 16% won 0.01% of the time and a projected 84% won
+   * 99.99%. Players read the number the way the wiki told them to, watched the
+   * stronger side win every single time, and filed it as the odds being broken or the
+   * enemy being impossibly lucky. Both readings were right about the number.
+   */
+  describe("the projection is a win probability", () => {
+    const realisedWinRate = (a: BattleSide, d: BattleSide, n = 3000) => {
+      let wins = 0;
+      for (let s = 0; s < n; s++) {
+        if (resolvePvpBattle([a], [d], "afghan", s * 7919).win) wins++;
+      }
+      return wins / n;
+    };
+
+    it("the realised win rate tracks the odds that were shown", () => {
+      const pairs: [BattleSide, BattleSide][] = [
+        [side("US", "A", [60], "afghan"), side("CN", "B", [300, 300, 300], "afghan")],
+        [side("US", "A", [120], "afghan"), side("CN", "B", [200, 150], "afghan")],
+        [side("US", "A", [120, 90], "afghan"), side("CN", "B", [80, 60], "afghan")],
+        [side("US", "A", [300, 300, 300], "afghan"), side("CN", "B", [60], "afghan")],
+      ];
+      const projections = pairs.map(([a, d]) => battleForecast([a], [d], "afghan").ratio);
+      // Non-vacuity: this only says something if the fixtures actually span the range
+      // where the old loop was wrong. They project 0.08 / 0.28 / 0.57 / 0.90, and the
+      // pre-fortune resolver returned 0.00 / 0.00 / 0.75 / 1.00 for them. Sides tuned
+      // into a narrow band around even odds would pass this while proving nothing.
+      expect(Math.min(...projections)).toBeLessThan(0.15);
+      expect(Math.max(...projections)).toBeGreaterThan(0.85);
+
+      pairs.forEach(([a, d], i) => {
+        // Tolerance covers sampling error plus the deliberate tail compression: the
+        // clamp holds `ratio` at 0.02..0.98 while round noise still smears across it,
+        // so the very ends pull inward by a couple of points.
+        expect(Math.abs(realisedWinRate(a, d) - projections[i]!)).toBeLessThan(0.06);
+      });
+    });
+
+    it("an underdog sometimes wins, and a favourite sometimes loses", () => {
+      const weak = side("US", "A", [60], "afghan");
+      const strong = side("CN", "B", [300, 300, 300], "afghan");
+      const underdog = realisedWinRate(weak, strong);
+      expect(underdog).toBeGreaterThan(0);
+      expect(underdog).toBeLessThan(0.5);
+      // The other direction of the same front: overwhelming force is not a guarantee.
+      expect(realisedWinRate(strong, weak)).toBeLessThan(1);
+    });
+  });
+
   it("a defender with no units at the front leaves the attacker near-certain", () => {
     const a = side("US", "A", [120], "afghan");
     const d = side("CN", "B", [80], "reserve"); // all home, none at the front

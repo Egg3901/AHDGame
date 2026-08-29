@@ -1034,7 +1034,16 @@ export interface PvpForecast {
   defenderPlan: EngagementPlan;
   attStr: number;
   defStr: number;
-  /** Attacker perspective, reserve-adjusted, clamped 0.02..0.98. */
+  /**
+   * Attacker perspective, reserve-adjusted, clamped 0.02..0.98.
+   *
+   * A PROBABILITY, and `resolvePvpBattle` is what makes that true: it fights the
+   * battle at this ratio plus a per-battle fortune roll, which is what carries the
+   * realised win rate onto this number (see `ATTRITION.fortuneSpread`). Every
+   * player-facing surface — the war room's odds rows, the wiki's "your chance" — is
+   * entitled to read it that way, so nothing here may narrow it back into a bare
+   * force share without changing the resolver in the same breath.
+   */
   ratio: number;
   oddsPct: number;
   /** The side profiles, so the resolver reuses this computation instead of redoing
@@ -1158,7 +1167,13 @@ export function resolvePvpBattle(
   theaterId: string,
   seed: number,
   supportA: FrontSupport = NO_SUPPORT,
-  supportD: FrontSupport = NO_SUPPORT
+  supportD: FrontSupport = NO_SUPPORT,
+  /**
+   * Override for the balance harness in `scripts/sim/` only. Production always takes
+   * the tuned constant. Pass 0 to fight at the bare force balance, which is what this
+   * resolver did before fortune existed — the comparison arm of a balance report.
+   */
+  fortuneSpread: number = ATTRITION.fortuneSpread
 ): PvpBattleResult {
   const fc = battleForecast(attackers, defenders, theaterId, supportA, supportD);
   const { front, attStr, defStr, ratio } = fc;
@@ -1166,13 +1181,30 @@ export function resolvePvpBattle(
   const PD = fc.defenderProfile;
 
   const r = rng(seed + 999);
+  /**
+   * The odds this engagement is actually fought at: the projection, plus this
+   * battle's luck. See `ATTRITION.fortuneSpread` for why the loop needs it — without
+   * it `ratio` is a force share that decides the battle outright, and the percentage
+   * the war room shows is not the chance it claims to be.
+   *
+   * Drawn before the round loop so every round of one battle shares it, and used for
+   * the casualty split too: the side that had the good day must not also be billed
+   * for the bleeding its own luck spared it.
+   *
+   * Bounded so the round loop's two damage multipliers, `0.5 + effRatio` and
+   * `1.5 - effRatio`, can never go negative and start healing a side. At the tuned
+   * spread the clamp is slack — `ratio` is already held to 0.02..0.98, so the widest
+   * draw lands at -0.48 — but it keeps a future retune from silently inverting a
+   * battle instead of merely making it swingier.
+   */
+  const effRatio = Math.max(-0.5, Math.min(1.5, ratio + (r() - 0.5) * 2 * fortuneSpread));
   let f = 100,
     h = 100;
   let retreat: PvpBattleResult["retreat"] = null;
   const rounds: BattleRound[] = [];
   for (let i = 0; i < 5; i++) {
-    const dh = (8 + r() * 16) * (0.5 + ratio);
-    const df = (8 + r() * 16) * (0.5 + (1 - ratio));
+    const dh = (8 + r() * 16) * (0.5 + effRatio);
+    const df = (8 + r() * 16) * (0.5 + (1 - effRatio));
     h = Math.max(0, h - dh);
     f = Math.max(0, f - df);
     const note = dh > df ? "advance" : df > dh * 1.4 ? "heavy resistance" : "contact";
@@ -1233,8 +1265,8 @@ export function resolvePvpBattle(
     }
     return { unitResults, loss };
   };
-  const attOut = sideOutcomes(attackers, PA, ratio, fc.attackerPlan);
-  const defOut = sideOutcomes(defenders, PD, 1 - ratio, fc.defenderPlan);
+  const attOut = sideOutcomes(attackers, PA, effRatio, fc.attackerPlan);
+  const defOut = sideOutcomes(defenders, PD, 1 - effRatio, fc.defenderPlan);
 
   // Breaking off saves men: the side that disengaged takes a fraction of the
   // casualties it would have fighting the engagement out.
