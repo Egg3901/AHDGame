@@ -1,6 +1,39 @@
 import { ObjectId } from "mongodb";
 import { describe, expect, it } from "vitest";
 import { computeEconomicVitalSigns } from "./economicVitalSigns";
+import type { VitalSignsHistoryRow } from "./economicVitalSigns";
+import type { LedgerReconciliation } from "@/lib/ledger/types";
+
+const emptyInput = {
+  turn: 1,
+  now: new Date("2026-08-29T00:00:00.000Z"),
+  currentFlows: [],
+  flowHistory: [],
+  prices: [],
+  sourcing: [],
+  sectors: [],
+  globalExchange: null,
+  trades: [],
+  shareOrders: [],
+  bonds: [],
+  globalWealth: null,
+  money: [],
+  health: null,
+  reconciliation: null,
+  balanceSnapshot: null,
+  ledgerEntries: [],
+  commodityParticipants: [],
+};
+
+function historyRow(turn: number, depthToMarketCap: number): VitalSignsHistoryRow {
+  return {
+    turn,
+    depthToMarketCap,
+    twoSidedListingShare: 0.5,
+    activeTradedListingShare: 0.5,
+    sovereignNoHolderBondShare: 0.1,
+  };
+}
 
 describe("computeEconomicVitalSigns", () => {
   it("keeps pooled, scoped, and buyer-intent denominators separate", () => {
@@ -419,5 +452,112 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.money.dormantModeledBalanceShare48.value).toBe(0.3);
     expect(snapshot.money.modeledGrossVelocity48.value).toBe(0.35);
     expect(snapshot.reconciliation.status).toBe("unavailable");
+  });
+
+  it("treats a series younger than the window as fully covered", () => {
+    const snapshot = computeEconomicVitalSigns({ ...emptyInput, turn: 3 });
+
+    expect(snapshot.coverage.coverageStartTurn).toBe(3);
+    expect(snapshot.coverage.windowTurnsExpected).toBe(1);
+    expect(snapshot.coverage.windowTurnsObserved).toBe(1);
+    expect(snapshot.coverage.missingTurns).toEqual([]);
+    expect(snapshot.coverage.windowCoverageShare).toBe(1);
+    expect(snapshot.measurement.reasons).not.toContain("window_missing_0_turns");
+  });
+
+  it("marks the turns that produced no snapshot without counting pre-series turns", () => {
+    const history: VitalSignsHistoryRow[] = [];
+    for (let turn = 5; turn <= 19; turn += 1) {
+      if (turn === 17 || turn === 18) continue;
+      history.push(historyRow(turn, 0.1));
+    }
+
+    const snapshot = computeEconomicVitalSigns({ ...emptyInput, turn: 20, history });
+
+    // Turns 1 to 4 predate the series and are not gaps. Turns 17 and 18 are.
+    expect(snapshot.coverage.coverageStartTurn).toBe(5);
+    expect(snapshot.coverage.missingTurns).toEqual([17, 18]);
+    expect(snapshot.coverage.windowTurnsObserved).toBe(14);
+    expect(snapshot.coverage.windowTurnsExpected).toBe(16);
+    expect(snapshot.coverage.windowCoverageShare).toBe(14 / 16);
+    expect(snapshot.measurement.reasons).toContain("window_missing_2_turns");
+  });
+
+  it("medians the securities window so one spiky turn cannot anchor a baseline", () => {
+    const history: VitalSignsHistoryRow[] = [];
+    for (let turn = 19; turn <= 29; turn += 1) {
+      history.push(historyRow(turn, turn === 25 ? 0.9 : 0.002));
+    }
+
+    const snapshot = computeEconomicVitalSigns({ ...emptyInput, turn: 30, history });
+
+    expect(snapshot.securitiesRecent12.depthToMarketCapMedian.value).toBe(0.002);
+    expect(snapshot.securitiesRecent12.depthToMarketCapMedian.observations).toBe(11);
+  });
+
+  it("separates facility quotes from organic participation in the equity book", () => {
+    const corporationId = new ObjectId();
+    const listing = {
+      _id: corporationId,
+      sequentialId: 1,
+      name: "Firm",
+      type: "manufacturing",
+      countryId: "US",
+      sharePrice: 10,
+      sharePriceAnchor: 10,
+      totalShares: 1000,
+      marketCapAnchor: 10000,
+      priceChange48h: 0,
+    };
+    const order = (type: "buy" | "sell", liquidityProvider: boolean) => ({
+      _id: new ObjectId(),
+      corporationId,
+      characterId: new ObjectId(),
+      type,
+      shares: 10,
+      sharesRemaining: 10,
+      pricePerShare: type === "buy" ? 9 : 11,
+      escrowAmount: 0,
+      status: "open" as const,
+      liquidityProvider,
+      createdAt: new Date("2026-08-29T00:00:00.000Z"),
+      updatedAt: new Date("2026-08-29T00:00:00.000Z"),
+    });
+
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      // The facility quotes both sides. The only organic order is a buy, so the book
+      // is two-sided on paper and one-sided in fact.
+      globalExchange: { _id: "global", listings: [listing], updatedAt: new Date() } as never,
+      shareOrders: [order("buy", true), order("sell", true), order("buy", false)] as never,
+    });
+
+    expect(snapshot.securities.twoSidedListingShare.value).toBe(1);
+    expect(snapshot.securities.organicTwoSidedListingShare.value).toBe(0);
+    expect(snapshot.securities.facilityQuotedListings).toBe(1);
+    expect(snapshot.securities.organicDepthToMarketCap.value).toBeLessThan(
+      snapshot.securities.depthToMarketCap.value!
+    );
+  });
+
+  it("records a skipped stock versus flow check as unknown, not as zero divergences", () => {
+    const reconciliation: LedgerReconciliation = {
+      _id: new ObjectId(),
+      turn: 30,
+      generatedAt: new Date("2026-08-29T00:00:00.000Z"),
+      status: "amber",
+      entriesChecked: 0,
+      trialBalance: { status: "green", unbalancedCount: 0, findings: [] },
+      stockVsFlow: { status: "amber", skipped: true, divergentCount: null, findings: [] },
+      moneySupply: { status: "green", findings: [] },
+      unattributed: [],
+    };
+
+    const snapshot = computeEconomicVitalSigns({ ...emptyInput, turn: 30, reconciliation });
+
+    expect(snapshot.reconciliation.stockVsFlowDivergentCount).toBeNull();
+    expect(snapshot.reconciliation.stockVsFlowSkipped).toBe(true);
+    expect(snapshot.measurement.reasons).toContain("stock_vs_flow_skipped");
   });
 });

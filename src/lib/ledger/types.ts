@@ -129,7 +129,8 @@ export interface ReconcileReport {
   stockVsFlow: {
     status: ReconcileStatus;
     skipped: boolean;
-    divergentCount: number;
+    /** null when the check was skipped: unknown, not zero. */
+    divergentCount: number | null;
     findings: StockVsFlowFinding[];
   };
   moneySupply: {

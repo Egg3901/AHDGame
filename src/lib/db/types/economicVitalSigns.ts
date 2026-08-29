@@ -91,9 +91,16 @@ export interface EconomicVitalSigns {
     openBuyOrders: number;
     openSellOrders: number;
     twoSidedListingShare: EconomicMetric;
+    /**
+     * The liquidity facility posts both sides itself, so it meets the plain two-sided and
+     * depth measures by construction. These exclude its quotes and show participation.
+     */
+    facilityQuotedListings: number;
+    organicTwoSidedListingShare: EconomicMetric;
     medianQuotedSpreadPct: EconomicMetric;
     openOrderDepthAnchor: number;
     depthToMarketCap: EconomicMetric;
+    organicDepthToMarketCap: EconomicMetric;
     medianFilledOrderExecutionHours: EconomicMetric;
     medianAmihudIlliquidity48: EconomicMetric;
   };
@@ -121,6 +128,22 @@ export interface EconomicVitalSigns {
     partyGrossVelocity48: EconomicMetric;
     governmentGrossVelocity48: EconomicMetric;
   };
+  /** How much of the 48 turn window actually produced a snapshot, and which turns did not. */
+  coverage: {
+    /** Earliest turn in the window that has a snapshot. The series may be younger than the window. */
+    coverageStartTurn: number;
+    windowTurnsExpected: number;
+    windowTurnsObserved: number;
+    windowCoverageShare: number | null;
+    missingTurns: number[];
+  };
+  /** Rolling 12 turn medians so a spiky single turn cannot anchor a review baseline. */
+  securitiesRecent12: {
+    depthToMarketCapMedian: EconomicMetric;
+    twoSidedListingShareMedian: EconomicMetric;
+    activeTradedListingShareMedian: EconomicMetric;
+    sovereignNoHolderBondShareMedian: EconomicMetric;
+  };
   measurement: {
     confidence: "low" | "medium" | "high";
     reasons: string[];
@@ -128,7 +151,9 @@ export interface EconomicVitalSigns {
   reconciliation: {
     status: ReconcileStatus | "unavailable";
     trialBalanceUnbalancedCount: number | null;
+    /** null when the stock-vs-flow check was skipped: unknown, not zero. */
     stockVsFlowDivergentCount: number | null;
+    stockVsFlowSkipped: boolean | null;
     moneySupplyFindingCount: number | null;
   };
 }
