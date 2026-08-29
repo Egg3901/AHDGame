@@ -18,9 +18,12 @@ export default defineConfig({
     // so the workflow's --max-old-space-size=6144 grants 6GB per process on a
     // runner with roughly 7GB total; threads share one heap instead.
     //
-    // `isolate` stays on: the suite has ~128 module-level mutable registries
-    // and caches in src/lib alone, and a shared module graph leaks them across
-    // files. See docs/superpowers/plans/2026-08-28-test-suite-performance.md.
+    // `isolate` stays on. Turning it off runs the suite in about a quarter of
+    // the time, but src/lib alone holds roughly 128 module-level mutable
+    // registries and caches against 8 declared test resetters, and 1,132 files
+    // use `vi.mock`, which vitest hoists per file and cannot scope to a shared
+    // module graph. Sharing the graph leaks that state between files, and which
+    // suites break shifts from run to run with worker scheduling.
     pool: "threads",
     include: [
       "src/**/*.test.ts",
