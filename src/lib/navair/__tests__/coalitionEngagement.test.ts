@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { ObjectId } from "mongodb";
 import { resolveEngagement } from "../engagement";
 import { navalStationFor, navalDistance } from "../map";
+import { stationOf } from "../turn";
 import {
   conflictRegions,
   canExtendConflictTo,
@@ -174,5 +175,27 @@ describe("navalStationFor: fleets base near home, not near the biggest port", ()
 
   it("keeps a fleet in place when the front is already water", () => {
     expect(navalStationFor("nat", "noa")).toBe("nat");
+  });
+});
+
+describe("stationOf: machine placements self-correct, orders do not", () => {
+  const fleet = (over: Partial<NavairUnit>): NavairUnit =>
+    ({ ...hull("US"), theaterId: "reserve", ...over }) as NavairUnit;
+
+  it("re-derives a station the engine chose", () => {
+    // The bug this pins: the pass only assigned a station when one was MISSING, so a bad
+    // placement was permanent. Fixing the geography corrected nothing already on the map,
+    // and a database heal to clear it was undone by the next turn.
+    const machinePlaced = fleet({ station: "mea", stationSetByPlayer: undefined });
+    expect(stationOf(machinePlaced)).not.toBe("mea");
+  });
+
+  it("leaves a commander's order alone", () => {
+    const ordered = fleet({ station: "mea", stationSetByPlayer: true });
+    expect(stationOf(ordered)).toBe("mea");
+  });
+
+  it("places a formation that has no station at all", () => {
+    expect(stationOf(fleet({ station: null }))).toBeTruthy();
   });
 });
