@@ -99,7 +99,10 @@ describe("navair mission route", () => {
 
     expect(res.status).toBe(200);
     const [, update] = db.collectionMocks.militaryUnits.updateOne.mock.calls[0];
-    expect(update.$set).toEqual({ station: "nat" });
+    // `stationSetByPlayer` is what stops the turn pass re-deriving this station
+    // (#1086). It can only ever be set through this path, so a station-only
+    // order has to carry it.
+    expect(update.$set).toEqual({ station: "nat", stationSetByPlayer: true });
     // Neither field is touched: a move is not a change of orders, and blanking
     // missionTarget here would silently disarm a standing strike.
     expect(update.$set).not.toHaveProperty("mission");
