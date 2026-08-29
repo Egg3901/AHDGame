@@ -18,7 +18,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          # Mirror commitlint's @commitlint/config-conventional type list.
+          # Mirror commitlint's type list: config-conventional plus the local
+          # `promote` type for development to staging to main promotion PRs.
           types: |
             build
             chore
@@ -27,6 +28,7 @@ jobs:
             feat
             fix
             perf
+            promote
             refactor
             revert
             style
