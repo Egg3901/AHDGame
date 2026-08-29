@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Skeleton } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { bondIssueIncomePreview } from "@/lib/bonds/bondIssueIncomePreview";
+import { BOND_DEFAULT_CREDIT_PENALTY_TURNS } from "@/lib/constants/bonds";
 import type { BondInfo, CorporationDetail, Financials } from "./CorporationPageTypes";
 import BondHistoryPanel from "./bonds/BondHistoryPanel";
 import { corpIncomeBasis } from "./financials/financialsModel";
@@ -202,9 +203,12 @@ export default function BondsTab({
                 return (
                   <div className="rounded-xl border border-card-border bg-card p-6">
                     <h2 className="text-lg font-bold text-foreground mb-1">Issue Bond</h2>
-                    <p className="text-xs text-muted mb-3">
-                      Issue corporate bonds to raise capital. Bonds pay a fixed coupon rate based on
-                      your credit rating.
+                    <p className="text-xs text-muted mb-3 leading-relaxed">
+                      Issue corporate bonds to raise capital. You receive the full face value in
+                      cash now and pay a fixed coupon every turn, set by your credit rating. The
+                      full face value then comes back out of liquid capital in a single payment on
+                      the maturity turn, not gradually. Coupons and that repayment are charged on
+                      every unit issued, including units that never sell.
                       {bondInfo.cooldownTurnsRemaining > 0 && (
                         <span className="text-warning ml-1">
                           Cooldown: {bondInfo.cooldownTurnsRemaining} turns remaining.
@@ -217,6 +221,18 @@ export default function BondsTab({
                         </span>
                       )}
                     </p>
+
+                    {/* The default trigger is the one thing the issue flow never
+                        said out loud. `bondTurn` folds the maturity debit into
+                        the same negative-liquid-capital test as the coupon, so a
+                        repayment a CEO has not saved for is itself the default. */}
+                    <div className="mb-4 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs leading-relaxed text-foreground/90">
+                      <strong className="text-warning">Keep liquid capital positive.</strong> If a
+                      coupon or a maturity repayment drives liquid capital below zero and this
+                      corporation cannot cover its debt from what it could realize by selling up,
+                      the bond defaults. Holders are marked down to $0.10 on the dollar, and the
+                      credit score is pinned to CCC for {BOND_DEFAULT_CREDIT_PENALTY_TURNS} turns.
+                    </div>
 
                     {/* Rate + capacity summary */}
                     <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs mb-4 px-3 py-2.5 rounded-lg bg-background/60 border border-card-border">
@@ -268,8 +284,14 @@ export default function BondsTab({
                       {bondInfo.totalDebt > 0 && (
                         <div>
                           <span className="text-muted">Outstanding debt </span>
-                          <span className="font-semibold text-foreground">
-                            {fmtMoney(bondInfo.totalDebt)}
+                          {/* `totalDebt` arrives already normalized to ₳ by
+                              sumBondPrincipalAnchor, so it takes formatFull
+                              directly. Passing it through fmtMoney, which
+                              assumes a corp-local figure, converted it a second
+                              time and overstated the debt of every corp outside
+                              the anchor currency. */}
+                          <span className="font-semibold tabular-nums text-foreground">
+                            {formatFull(bondInfo.totalDebt)}
                           </span>
                         </div>
                       )}
@@ -482,6 +504,36 @@ export default function BondsTab({
                                 </>
                               )}
                             </div>
+
+                            {/* The number the coupon row does not contain. Face
+                                value is repaid whole on a single turn, so
+                                showing only interest priced the cheap half of
+                                the debt and hid the expensive half. */}
+                            <div className="mt-4 grid grid-cols-2 gap-4 border-t border-card-border pt-3 text-sm">
+                              <div>
+                                <div className="text-[11px] text-muted mb-0.5">
+                                  Principal due at maturity
+                                </div>
+                                <div className="font-semibold text-error tabular-nums">
+                                  ({formatAmount(parsedFaceValue)})
+                                </div>
+                                <div className="text-[10px] text-muted mt-0.5">
+                                  repaid in one payment
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] text-muted mb-0.5">Repaid on</div>
+                                <div className="font-semibold text-foreground tabular-nums">
+                                  Turn{" "}
+                                  {(bondInfo.currentTurn + bondIssueMaturity).toLocaleString(
+                                    "en-US"
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-muted mt-0.5">
+                                  {bondIssueMaturity} turns from now
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         );
                       })()}
@@ -493,9 +545,10 @@ export default function BondsTab({
             <div className="rounded-xl border border-card-border bg-card overflow-hidden">
               <div className="p-6 pb-0">
                 <h2 className="text-lg font-bold text-foreground mb-1">Outstanding Bonds</h2>
-                <p className="text-xs text-muted mb-4">
+                <p className="text-xs text-muted mb-4 leading-relaxed">
                   Tradable corporate bonds issued by this corporation. Each unit has a $1,000 face
-                  value.
+                  value, and the face value in the column below is repaid in full on the maturity
+                  turn, out of liquid capital, in one payment.
                   {bondInfo.imfFacility && (
                     <span className="block mt-1 text-foreground/90">
                       IMF facility debt is shown above, not in this table.
@@ -543,8 +596,19 @@ export default function BondsTab({
                           <td className="px-6 py-3 font-medium tabular-nums">
                             {bond.couponRate.toFixed(2)}%
                           </td>
+                          {/* Formatted in the BOND's currency, not the corp's.
+                              A relocation re-denominates the corporation and
+                              leaves its outstanding bonds where they were, so
+                              `fmtMoney` (which assumes the corp's code) labelled
+                              a pre-move bond with a currency it is not in. */}
                           <td className="px-4 py-3 text-right tabular-nums">
-                            {fmtMoney(bond.totalIssued)}
+                            {bond.totalIssuedAnchor !== undefined
+                              ? formatAmount(
+                                  bond.totalIssuedAnchor,
+                                  bond.currencyCode as
+                                    import("@/lib/constants/currencies").CurrencyCode | undefined
+                                )
+                              : fmtMoney(bond.totalIssued)}
                           </td>
                           <td className="px-4 py-3 text-right tabular-nums">
                             <span

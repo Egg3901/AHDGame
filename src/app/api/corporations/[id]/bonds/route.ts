@@ -362,23 +362,37 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({
       imfFacility,
-      bonds: bonds.map((b) => ({
-        _id: b._id.toString(),
-        faceValue: b.faceValue,
-        couponRate: b.couponRate,
-        maturityTurns: b.maturityTurns,
-        issuedAtTurn: b.issuedAtTurn,
-        maturityTurn: b.maturityTurn,
-        marketPrice: b.marketPrice,
-        totalIssued: b.totalIssued,
-        publicFloat: b.publicFloat,
-        defaulted: b.defaulted,
-        matured: b.matured,
-        turnsRemaining: Math.max(0, b.maturityTurn - currentTurn),
-        holders: b.holders.length,
-        defaultedAtTurn: b.defaultedAtTurn,
-        defaultCure: b.defaultCure,
-      })),
+      bonds: bonds.map((b) => {
+        // `totalIssued` is denominated in the BOND's currencyCode, which is not
+        // necessarily the issuer's current one: a relocation runs
+        // convertCorpCurrency over liquidCapital and share price but leaves
+        // outstanding bonds in the currency they were issued in. Summing or
+        // formatting those raw locals against the corp's present currency
+        // mixes units, so publish the ₳ mirror alongside, on the same basis
+        // the holdings list above is already normalized on.
+        const bondCcy = (b.currencyCode ?? undefined) as CurrencyCode | undefined;
+        const bondRate = bondCcy ? (fxByCurrency.get(bondCcy) ?? 1) : 1;
+        return {
+          _id: b._id.toString(),
+          faceValue: b.faceValue,
+          couponRate: b.couponRate,
+          maturityTurns: b.maturityTurns,
+          issuedAtTurn: b.issuedAtTurn,
+          maturityTurn: b.maturityTurn,
+          marketPrice: b.marketPrice,
+          totalIssued: b.totalIssued,
+          currencyCode: bondCcy,
+          totalIssuedAnchor:
+            Math.round(corpCapitalToAnchor(b.totalIssued, bondCcy, bondRate) * 100) / 100,
+          publicFloat: b.publicFloat,
+          defaulted: b.defaulted,
+          matured: b.matured,
+          turnsRemaining: Math.max(0, b.maturityTurn - currentTurn),
+          holders: b.holders.length,
+          defaultedAtTurn: b.defaultedAtTurn,
+          defaultCure: b.defaultCure,
+        };
+      }),
       holdings,
       creditRating: {
         ...creditRating,
