@@ -67,7 +67,10 @@ export async function mergeCountry(db: Db, args: MergeCountryArgs): Promise<Merg
 
   const regions = await db
     .collection<State>("states")
-    .find({ countryId: fromCountryId }, { projection: { _id: 1, name: 1, region: 1 } })
+    .find(
+      { countryId: fromCountryId },
+      { projection: { _id: 1, name: 1, region: 1, votingSystem: 1 } }
+    )
     .toArray();
 
   let regionsTransferred = 0;
@@ -81,6 +84,12 @@ export async function mergeCountry(db: Db, args: MergeCountryArgs): Promise<Merg
       // The absorbed country's own name becomes the province label, so a
       // unified state can still tell where a Land came from.
       province: COUNTRY_CONFIGS[fromCountryId].name,
+      // The region KEEPS its own electoral system. `convertRegionDoc` defaults to
+      // Ireland's PR-STV, which is right for a referendum transfer that converts a
+      // region to its new country's rules and wrong for a merge: both halves of a
+      // reunifying country already run the same elections, and switching them is a
+      // constitutional change nobody agreed to.
+      votingSystem: region.votingSystem,
       // NULL: the source is dissolving, so nobody retreats into it.
       relocateToRegionId: null,
       currentTurn,
