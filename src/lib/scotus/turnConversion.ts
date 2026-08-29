@@ -2,11 +2,17 @@ import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { calendarTurn, type CalendarClock } from "@/lib/utils/gameDate";
 
 /**
- * Convert a calendar year (authored on roster/docket data) to the game turn
- * number at which it should fire, given the preset's starting year. Turn 1 =
- * the first week of `startingYear` (see STARTING_YEAR doc comment in
- * turnTime.ts), so this mirrors the same `(year - startingYear) * TURNS_PER_YEAR`
- * shape used by the election-cycle anchor formulas.
+ * Convert a calendar year (authored on roster/docket data) to the turn it fires
+ * on, given the preset's starting year. Turn 1 = the first week of
+ * `startingYear` (see STARTING_YEAR doc comment in turnTime.ts), so this mirrors
+ * the same `(year - startingYear) * TURNS_PER_YEAR` shape used by the
+ * election-cycle anchor formulas.
+ *
+ * The result is a CALENDAR turn, so compare it against
+ * `calendarTurn(currentTurn, clock)` and never against the raw counter. On a
+ * world with a founding phase the two are a game year apart, and comparing a
+ * calendar turn to a raw one is what fired the 1962 docket in 1961 (#1208).
+ * {@link yearFiringAtOrAfterTurn} is the inverse; keep the pair together.
  */
 export function yearToTurn(year: number, startingYear: number): number {
   return (year - startingYear) * TURNS_PER_YEAR + 1;
