@@ -10,9 +10,12 @@ import {
  * maturity turn when the whole face value leaves liquid capital at once. The
  * Bonds tab had no figure for that repayment anywhere, so this helper produces
  * it: total principal still owed, and the next repayment date with its amount.
+ *
+ * Amounts are ₳ throughout. A corporation's bonds do not all share one
+ * currency once it has relocated, so the caller normalizes before summing.
  */
 const live = (over: Partial<BondMaturityScheduleBond> = {}): BondMaturityScheduleBond => ({
-  totalIssued: 1_000_000,
+  principalAnchor: 1_000_000,
   maturityTurn: 200,
   matured: false,
   defaulted: false,
@@ -30,8 +33,8 @@ describe("bondMaturitySchedule", () => {
   it("sums principal across live bonds and reports the soonest repayment", () => {
     const schedule = bondMaturitySchedule(
       [
-        live({ totalIssued: 4_000_000, maturityTurn: 340 }),
-        live({ totalIssued: 1_000_000, maturityTurn: 196 }),
+        live({ principalAnchor: 4_000_000, maturityTurn: 340 }),
+        live({ principalAnchor: 1_000_000, maturityTurn: 196 }),
       ],
       100
     );
@@ -47,9 +50,9 @@ describe("bondMaturitySchedule", () => {
   it("groups bonds that come due on the same turn into one repayment", () => {
     const schedule = bondMaturitySchedule(
       [
-        live({ totalIssued: 1_000_000, maturityTurn: 196 }),
-        live({ totalIssued: 2_500_000, maturityTurn: 196 }),
-        live({ totalIssued: 9_000_000, maturityTurn: 436 }),
+        live({ principalAnchor: 1_000_000, maturityTurn: 196 }),
+        live({ principalAnchor: 2_500_000, maturityTurn: 196 }),
+        live({ principalAnchor: 9_000_000, maturityTurn: 436 }),
       ],
       100
     );
@@ -64,9 +67,9 @@ describe("bondMaturitySchedule", () => {
   it("excludes matured and defaulted bonds from principal and from the next repayment", () => {
     const schedule = bondMaturitySchedule(
       [
-        live({ totalIssued: 7_000_000, maturityTurn: 110, matured: true }),
-        live({ totalIssued: 3_000_000, maturityTurn: 120, defaulted: true }),
-        live({ totalIssued: 1_000_000, maturityTurn: 300 }),
+        live({ principalAnchor: 7_000_000, maturityTurn: 110, matured: true }),
+        live({ principalAnchor: 3_000_000, maturityTurn: 120, defaulted: true }),
+        live({ principalAnchor: 1_000_000, maturityTurn: 300 }),
       ],
       100
     );
@@ -107,5 +110,36 @@ describe("bondMaturitySchedule", () => {
     const schedule = bondMaturitySchedule([live({ maturityTurn: 96 })], 100);
     expect(schedule.next?.turnsRemaining).toBe(0);
     expect(schedule.approaching).toBe(true);
+  });
+
+  it("returns an empty schedule when the bond list is missing", () => {
+    // The corporation page reads `bondInfo.bonds` with optional chaining, so an
+    // absent list is a shape this can be handed, not an impossible one.
+    const schedule = bondMaturitySchedule(undefined, 100);
+    expect(schedule).toEqual({ totalPrincipalDue: 0, next: null, approaching: false });
+  });
+
+  it("skips a bond with no face value instead of poisoning the total", () => {
+    // The bonds route's redaction branch emits rows with maturity fields only.
+    const schedule = bondMaturitySchedule(
+      [
+        {
+          principalAnchor: undefined as unknown as number,
+          maturityTurn: 150,
+          matured: false,
+          defaulted: false,
+        },
+        live({ principalAnchor: 2_000_000, maturityTurn: 300 }),
+      ],
+      100
+    );
+    expect(schedule.totalPrincipalDue).toBe(2_000_000);
+    expect(schedule.next?.maturityTurn).toBe(300);
+  });
+
+  it("returns an empty schedule rather than NaN turns when the turn is unknown", () => {
+    const schedule = bondMaturitySchedule([live()], Number.NaN);
+    expect(schedule.next).toBeNull();
+    expect(schedule.approaching).toBe(false);
   });
 });

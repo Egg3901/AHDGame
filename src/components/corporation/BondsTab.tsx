@@ -285,10 +285,11 @@ export default function BondsTab({
                         <div>
                           <span className="text-muted">Outstanding debt </span>
                           {/* `totalDebt` arrives already normalized to ₳ by
-                              sumBondPrincipalAnchor, unlike the per-bond
-                              `totalIssued` figures below. Passing it through
-                              fmtMoney converted it a second time and overstated
-                              the debt of every corp outside the anchor currency. */}
+                              sumBondPrincipalAnchor, so it takes formatFull
+                              directly. Passing it through fmtMoney, which
+                              assumes a corp-local figure, converted it a second
+                              time and overstated the debt of every corp outside
+                              the anchor currency. */}
                           <span className="font-semibold tabular-nums text-foreground">
                             {formatFull(bondInfo.totalDebt)}
                           </span>
@@ -595,8 +596,19 @@ export default function BondsTab({
                           <td className="px-6 py-3 font-medium tabular-nums">
                             {bond.couponRate.toFixed(2)}%
                           </td>
+                          {/* Formatted in the BOND's currency, not the corp's.
+                              A relocation re-denominates the corporation and
+                              leaves its outstanding bonds where they were, so
+                              `fmtMoney` (which assumes the corp's code) labelled
+                              a pre-move bond with a currency it is not in. */}
                           <td className="px-4 py-3 text-right tabular-nums">
-                            {fmtMoney(bond.totalIssued)}
+                            {bond.totalIssuedAnchor !== undefined
+                              ? formatAmount(
+                                  bond.totalIssuedAnchor,
+                                  bond.currencyCode as
+                                    import("@/lib/constants/currencies").CurrencyCode | undefined
+                                )
+                              : fmtMoney(bond.totalIssued)}
                           </td>
                           <td className="px-4 py-3 text-right tabular-nums">
                             <span
