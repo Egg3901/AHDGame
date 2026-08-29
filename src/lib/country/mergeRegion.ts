@@ -111,10 +111,24 @@ export async function mergeRegion(db: Db, args: MergeRegionArgs): Promise<MergeR
             : null;
     // `idIsState` and `compositeCountryState` documents are keyed BY the region,
     // so there is exactly one per region and fusing them would mean merging their
-    // CONTENTS rather than re-pointing a field. Those figures are recomputed from
-    // the merged region by `computeNationalMetrics`, so the source's are left to
-    // be retired with it rather than silently added to the target's.
-    if (!field) continue;
+    // CONTENTS rather than re-pointing a field. The target already has its own,
+    // and `computeNationalMetrics` recomputes the derived figures from the merged
+    // population, so the source's are DELETED rather than merged.
+    //
+    // Deleting matters now that the region document itself goes: these carry a
+    // `countryId`, and the phases that drive regions by that field would go on
+    // scoring metrics for a Land that is no longer on the map.
+    if (!field) {
+      const id =
+        scope.key === "compositeCountryState"
+          ? `${String(source.countryId)}_${fromRegionId}`
+          : fromRegionId;
+      const gone = await db
+        .collection<Record<string, unknown>>(scope.collection)
+        .deleteOne({ _id: id } as Record<string, unknown>);
+      documentsMoved += gone?.deletedCount ?? 0;
+      continue;
+    }
     const res = await db
       .collection(scope.collection)
       .updateMany({ [field]: fromRegionId }, { $set: { [field]: toRegionId, updatedAt: now } });

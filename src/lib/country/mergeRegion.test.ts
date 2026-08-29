@@ -86,6 +86,22 @@ describe("mergeRegion", () => {
     expect(total).toBe(16);
   });
 
+  it("deletes the absorbed region's own metric documents", async () => {
+    db.collection("macroMetrics").deleteOne.mockResolvedValue({ deletedCount: 1 });
+    await run();
+    // Keyed BY the region, so there is nothing to re-point. The target has its
+    // own, and these carry a countryId that phases drive regions by.
+    expect(db.collectionMocks["macroMetrics"].deleteOne).toHaveBeenCalledWith({ _id: "BEO" });
+    expect(db.collectionMocks["politicalMetrics"].deleteOne).toHaveBeenCalledWith({ _id: "BEO" });
+  });
+
+  it("deletes the composite-keyed registration pool under its full key", async () => {
+    await run();
+    expect(db.collectionMocks["stateRegistrationPool"].deleteOne).toHaveBeenCalledWith({
+      _id: "DE_BEO",
+    });
+  });
+
   it("re-homes NPPs out of the retired region", async () => {
     await run();
     const call = db.collectionMocks["npps"].updateMany.mock.calls[0];
