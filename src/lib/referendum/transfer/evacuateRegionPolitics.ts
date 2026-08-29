@@ -1,25 +1,39 @@
 /**
- * Evacuate a transferring region's UK-era political + economic actors so it can
- * join the target country as a clean slate (the target re-seeds its own parties,
- * NPPs, and seats). Replaces the old party/official migration — NO party doc
- * moves, so the source country's national parties are never disturbed.
+ * Prepare a transferring region's political actors for their new country.
  *
- *  - NPP politicians resident in the region RELOCATE to `relocateToRegionId`,
- *    staying in the SOURCE country and dropping any office. A corporation an
- *    evacuated NPP CEOs follows them there for free.
- *  - Player characters resident in the region become Independent (the resident
- *    rescope then flips their countryId to the target; homeState stays put).
- *  - The region's party orgs, officeholders, and seat docs are deleted.
- *  - Any remaining corporations HQ'd in the region follow it into the target.
+ * TWO MODES, chosen by `relocateToRegionId`, and they are near-opposites.
  *
- * Runs BEFORE `rescopeRegionToCountry`: NPPs are relocated out first (so they
- * stay in the source country), leaving only player residents for the rescope.
+ * EVACUATE (`relocateToRegionId` is a region id — the source country SURVIVES).
+ * The region joins the target as a clean slate and the target re-seeds its own
+ * parties, NPPs and seats. NPP politicians relocate to the named region, staying
+ * in the source country and dropping any office; player residents become
+ * Independent and vacate every source-country office, because a foreign citizen
+ * cannot hold one; the region's party orgs, officeholders and seats are deleted.
+ * This is Northern Ireland leaving the United Kingdom.
+ *
+ * CARRY (`relocateToRegionId` is null — the source country is DISSOLVING).
+ * There is no rest-of-country to retreat into and no source institutions worth
+ * protecting, so the region takes its politics with it. NPPs cross with the
+ * region; players keep their party, their seat and their cabinet post;
+ * officeholders are remapped onto the absorbing country's equivalent offices and
+ * their seat counts rescaled onto the chamber they are joining; the party
+ * organisations are re-scoped rather than deleted, which is what carries each
+ * party's treasury and registration ledger across. This is East Germany merging
+ * into Germany.
+ *
+ * NO PARTY DOCUMENT MOVES HERE in either mode. On the carry path
+ * `mergePartiesIntoCountry` has already moved and renumbered them, which is why
+ * the `party` values these rows carry are correct by the time this runs.
+ *
+ * Runs BEFORE `rescopeRegionToCountry`: on the evacuate path NPPs are relocated
+ * out first so they stay in the source country, leaving only player residents
+ * for the rescope.
  */
 import type { Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { NPP } from "@/lib/db/types/npp";
 import { remapOffice } from "@/lib/country/dissolvingOfficeRemap";
-import { apportionSeats } from "@/lib/country/seatApportionment";
+import { apportionOfficialsToChamber } from "@/lib/country/apportionChamber";
 
 /**
  * Region-scoped party collections.
@@ -304,64 +318,17 @@ async function carryOfficials(
   }
 
   for (const [targetOffice, group] of byTargetOffice) {
-    // The chamber this region is joining. `totalSeats` is authoritative: it is
-    // SEEDED, not derived — Germany's seed already carries `DE-bundestag-SN` and
-    // friends precisely so a reunified Bundestag has a sized chamber waiting.
-    const seatDoc = (await db
-      .collection("seats")
-      .findOne({ countryId: toCountryId, state: regionId, electionType: targetOffice })) as {
-      totalSeats?: number;
-    } | null;
-
-    // An office nobody holds seats in (a governor, a minister-president) has no
-    // magnitude to rescale, and apportioning one would invent seats for a seat
-    // that is not a seat.
-    const carriesSeats = group.some((o) => (o.seatsHeld ?? 0) > 0);
-    let allocation: Record<string, number> | null = null;
-    if (seatDoc?.totalSeats && carriesSeats) {
-      const sourceByParty: Record<string, number> = {};
-      for (const o of group) {
-        const key = o.party ?? "independent";
-        sourceByParty[key] = (sourceByParty[key] ?? 0) + (o.seatsHeld ?? 0);
-      }
-      allocation = apportionSeats(sourceByParty, seatDoc.totalSeats);
-    }
-
-    // Split each party's new allocation across the rows that party holds here.
-    // Largest remainder again, keyed by row id, so two officials sharing one
-    // delegation split it identically on every run.
-    const rowsByParty = new Map<string, CarriedOfficial[]>();
-    for (const o of group) {
-      const key = o.party ?? "independent";
-      const rows = rowsByParty.get(key) ?? [];
-      rows.push(o);
-      rowsByParty.set(key, rows);
-    }
-
-    for (const [party, rows] of rowsByParty) {
-      const ordered = [...rows].sort((a, b) => (String(a._id) < String(b._id) ? -1 : 1));
-      const share =
-        allocation && allocation[party] !== undefined
-          ? apportionSeats(
-              Object.fromEntries(ordered.map((o) => [String(o._id), o.seatsHeld ?? 1])),
-              allocation[party]
-            )
-          : null;
-      for (const o of ordered) {
-        await db.collection("electedOfficials").updateOne(
-          { _id: o._id },
-          {
-            $set: {
-              countryId: toCountryId,
-              officeType: targetOffice,
-              ...(share ? { seatsHeld: share[String(o._id)] ?? 0 } : {}),
-              updatedAt: now,
-            },
-          }
-        );
-        officialsRemapped++;
-      }
-    }
+    officialsRemapped += await apportionOfficialsToChamber(db, {
+      countryId: toCountryId,
+      regionId,
+      officeType: targetOffice,
+      officials: group,
+      // The office and the country change on the same write as the seat count, so
+      // an official is never briefly seated in a chamber their country does not
+      // have.
+      extraSet: { countryId: toCountryId, officeType: targetOffice },
+      now,
+    });
   }
 
   return { officialsRemapped, officialsRetired };
