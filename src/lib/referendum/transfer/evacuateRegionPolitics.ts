@@ -99,8 +99,15 @@ export async function evacuateRegionPolitics(
     .toArray();
   const nppIds = npps.map((n) => n._id);
   // A dissolving source has nowhere to retreat to: the NPPs stay in the region
-  // and cross with it, becoming the target's. Either way they drop their office
-  // — the body they sat in does not survive the transfer.
+  // and cross with it, becoming the target's.
+  //
+  // THE OFFICE IS DROPPED ONLY WHEN THE SOURCE SURVIVES. On that path the body
+  // they sat in does not survive the transfer, so holding an office in it is
+  // meaningless. On the dissolving path the body DOES survive -- remapped onto
+  // the absorbing country's equivalent chamber below -- and most officeholders
+  // here are NPPs rather than players, so nulling this would strip the office
+  // from the majority of the seats the merge just carried, leaving their
+  // `electedOfficials` row intact and the politician holding nothing.
   const dissolving = relocateToRegionId === null;
   if (nppIds.length) {
     await db.collection<NPP>("npps").updateMany(
@@ -108,8 +115,7 @@ export async function evacuateRegionPolitics(
       {
         $set: {
           homeState: dissolving ? regionId : relocateToRegionId,
-          ...(dissolving ? { countryId: toCountryId } : {}),
-          currentOffice: null,
+          ...(dissolving ? { countryId: toCountryId } : { currentOffice: null }),
           updatedAt: now,
         },
       }
@@ -271,6 +277,7 @@ interface CarriedOfficial {
   party?: string;
   seatsHeld?: number;
   characterId?: ObjectId | null;
+  nppId?: ObjectId | null;
 }
 
 /**
@@ -336,6 +343,15 @@ async function carryOfficials(
           .collection("characters")
           .updateOne(
             { _id: official.characterId },
+            { $set: { "currentOffice.type": targetOffice, updatedAt: now } }
+          );
+      } else if (official.nppId) {
+        // Most seats here are NPP-held, and an NPP's office is the same stored
+        // denormalisation a player's is.
+        await db
+          .collection("npps")
+          .updateOne(
+            { _id: official.nppId },
             { $set: { "currentOffice.type": targetOffice, updatedAt: now } }
           );
       }

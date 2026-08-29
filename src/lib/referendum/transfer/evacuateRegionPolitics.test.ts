@@ -217,6 +217,31 @@ describe("evacuateRegionPolitics when the source country is dissolving", () => {
     expect(call?.[1].$set.seatsHeld).toBeUndefined();
   });
 
+  it("keeps NPP officeholders in the office their seat was carried into", async () => {
+    const NPPX = new ObjectId();
+    db.collection("electedOfficials").find.mockReturnValue(
+      cursorOf([
+        {
+          _id: DEPUTY,
+          officeType: "volkskammerDeputy",
+          state: "SN",
+          party: "7",
+          seatsHeld: 60,
+          nppId: NPPX,
+        },
+      ])
+    );
+    await run();
+    // Most seats here are NPP-held. Nulling their office while carrying the seat
+    // would leave the row intact and the politician holding nothing.
+    const bulk = db.collectionMocks["npps"].updateMany.mock.calls[0];
+    expect(bulk?.[1].$set).not.toHaveProperty("currentOffice");
+    const one = db.collectionMocks["npps"].updateOne.mock.calls.find(
+      (c) => String(c[0]._id) === String(NPPX)
+    );
+    expect(one?.[1].$set["currentOffice.type"]).toBe("bundestag");
+  });
+
   it("re-points the carried player's own office label at the new chamber", async () => {
     const CHAR = new ObjectId();
     db.collection("electedOfficials").find.mockReturnValue(
