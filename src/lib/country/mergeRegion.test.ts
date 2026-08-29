@@ -50,19 +50,13 @@ describe("mergeRegion", () => {
     expect(call?.[1].$set.stateId).toBe("BE");
   });
 
-  it("re-points both delegations at the surviving region", async () => {
-    const A = new ObjectId();
-    const B = new ObjectId();
-    db.collection("electedOfficials").find.mockReturnValue(
-      cursorOf([
-        { _id: A, officeType: "bundestag", state: "BEO", party: "7", seatsHeld: 4 },
-        { _id: B, officeType: "bundestag", state: "BE", party: "1", seatsHeld: 12 },
-      ])
-    );
+  it("re-points the absorbed region's delegation at the survivor", async () => {
     await run();
-    const calls = db.collectionMocks["electedOfficials"].updateOne.mock.calls;
-    expect(calls).toHaveLength(2);
-    expect(calls.every((c) => c[1].$set.state === "BE")).toBe(true);
+    const call = db.collectionMocks["electedOfficials"].updateMany.mock.calls.find(
+      (c) => c[0].state === "BEO"
+    );
+    expect(call?.[0]).toEqual({ countryId: "DE", state: "BEO" });
+    expect(call?.[1].$set.state).toBe("BE");
   });
 
   it("re-apportions the fused delegations onto the surviving chamber", async () => {
@@ -70,22 +64,28 @@ describe("mergeRegion", () => {
     const WEST = new ObjectId();
     db.collection("electedOfficials").find.mockReturnValue(
       cursorOf([
-        { _id: EAST, officeType: "bundestag", state: "BEO", party: "7", seatsHeld: 4 },
-        { _id: WEST, officeType: "bundestag", state: "BE", party: "1", seatsHeld: 12 },
+        { _id: EAST, officeType: "bundestag", party: "7", seatsHeld: 4 },
+        { _id: WEST, officeType: "bundestag", party: "1", seatsHeld: 12 },
       ])
     );
-    // Berlin's chamber is 12 seats, not 16: two delegations arriving with their
-    // own counts must not sum past the chamber they are joining.
-    db.collection("seats").findOne.mockResolvedValue({
-      countryId: "DE",
-      state: "BE",
-      electionType: "bundestag",
-      totalSeats: 12,
-    });
+    // Berlin's chamber is one chamber. Two delegations arriving with their own
+    // counts must not sum past it -- the summed houseDistricts is the size.
+    db.collection("states").findOne.mockImplementation(async (f: { _id: string }) =>
+      f._id === "BEO"
+        ? { _id: "BEO", countryId: "DE", population: 1200, houseDistricts: 4 }
+        : { _id: "BE", countryId: "DE", population: 2200, houseDistricts: 16 }
+    );
     await run();
     const calls = db.collectionMocks["electedOfficials"].updateOne.mock.calls;
     const total = calls.reduce((sum, c) => sum + c[1].$set.seatsHeld, 0);
-    expect(total).toBe(12);
+    expect(total).toBe(16);
+  });
+
+  it("re-homes NPPs out of the retired region", async () => {
+    await run();
+    const call = db.collectionMocks["npps"].updateMany.mock.calls[0];
+    expect(call?.[0]).toEqual({ homeState: "BEO" });
+    expect(call?.[1].$set.homeState).toBe("BE");
   });
 
   it("refuses a cross-border fuse rather than seating officials in a foreign region", async () => {

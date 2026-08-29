@@ -33,7 +33,6 @@ import type { Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { NPP } from "@/lib/db/types/npp";
 import { remapOffice } from "@/lib/country/dissolvingOfficeRemap";
-import { apportionOfficialsToChamber } from "@/lib/country/apportionChamber";
 
 /**
  * Region-scoped party collections.
@@ -172,17 +171,13 @@ export async function evacuateRegionPolitics(
         { _id: fromCountryId, headOfGovernmentCharacterId: { $in: playerIds } },
         { $set: { updatedAt: now }, $unset: { headOfGovernmentCharacterId: "" } }
       );
-  } else if (playerIds.length > 0) {
-    // Cabinet seats follow the country. The body they served is gone, but the rows
-    // are re-scoped rather than deleted so the absorbing state inherits a staffed
-    // cabinet rather than an empty one.
-    await db
-      .collection("cabinetMembers")
-      .updateMany(
-        { countryId: fromCountryId, characterId: { $in: playerIds } },
-        { $set: { countryId: toCountryId, updatedAt: now } }
-      );
   }
+  // A dissolving source's CABINET is handled at country level, not here — see
+  // `retireNationalRemnants`. Its seats are keyed by position id rather than by
+  // region, and the two countries do not share that vocabulary: East Germany's
+  // `minister_of_defence` has no counterpart in Germany's `defense_minister`, so
+  // re-scoping the rows would seat ministers in portfolios the surviving country
+  // does not define, alongside the ones it already has.
 
   // 3. The region's party organisations.
   //
@@ -317,18 +312,21 @@ async function carryOfficials(
     byTargetOffice.set(target, group);
   }
 
+  // THE OFFICE ONLY, NOT THE SEAT COUNT. The chamber they are joining is sized
+  // from the region's `houseDistricts` / `stateSenateSeats`, and this runs BEFORE
+  // `convertRegionDoc` has written those for the new country -- the region still
+  // carries its old country's numbers. `transferRegion` rescales the delegation
+  // immediately afterwards, once the size is real.
   for (const [targetOffice, group] of byTargetOffice) {
-    officialsRemapped += await apportionOfficialsToChamber(db, {
-      countryId: toCountryId,
-      regionId,
-      officeType: targetOffice,
-      officials: group,
-      // The office and the country change on the same write as the seat count, so
-      // an official is never briefly seated in a chamber their country does not
-      // have.
-      extraSet: { countryId: toCountryId, officeType: targetOffice },
-      now,
-    });
+    for (const official of group) {
+      await db
+        .collection("electedOfficials")
+        .updateOne(
+          { _id: official._id },
+          { $set: { countryId: toCountryId, officeType: targetOffice, updatedAt: now } }
+        );
+      officialsRemapped++;
+    }
   }
 
   return { officialsRemapped, officialsRetired };

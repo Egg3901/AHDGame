@@ -428,6 +428,35 @@ describe("actuateSettlementOutcome", () => {
     expect(vi.mocked(installOnePartyState)).not.toHaveBeenCalled();
   });
 
+  it("carries the absorbed country's head of government to the survivor", async () => {
+    const gs = new ObjectId();
+    prime(db, "governmentFormations").findOne.mockResolvedValue({
+      _id: "DD",
+      pmCharacterId: gs,
+      pmNppId: null,
+    });
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+    const call = prime(db, "governmentFormations").updateOne.mock.calls.find(
+      (c) => c[0]._id === "DE"
+    );
+    // The winning side's leader leads the unified state. The office KEY stays
+    // `chancellor`; the title is resolved from `governmentType` at display time.
+    expect(call?.[1].$set.pmCharacterId).toEqual(gs);
+    // The survivor's NPP chancellor must not remain beside them.
+    expect(call?.[1].$set.pmNppId).toBeNull();
+  });
+
+  it("retires the absorbed cabinet rather than seating it in unknown portfolios", async () => {
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+    // East Germany seats a `minister_of_defence`; Germany a `defense_minister`.
+    // Carrying the rows would create ministries the surviving country does not
+    // define, alongside the ones it already has.
+    expect(prime(db, "cabinetMembers").deleteMany).toHaveBeenCalledWith({ countryId: "DD" });
+    expect(prime(db, "cabinetMembers").updateMany).not.toHaveBeenCalled();
+  });
+
   it("retires a national office with no counterpart in the surviving country", async () => {
     const chairman = new ObjectId();
     prime(db, "electedOfficials").find.mockReturnValue({

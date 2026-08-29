@@ -168,14 +168,15 @@ describe("evacuateRegionPolitics when the source country is dissolving", () => {
   it("does not delete the departing players' offices", async () => {
     await run();
     expect(db.collectionMocks["electedOfficials"].deleteMany.mock.calls).toHaveLength(0);
-    expect(db.collectionMocks["cabinetMembers"].deleteMany).not.toHaveBeenCalled();
   });
 
-  it("re-scopes the players' cabinet seats to the surviving country", async () => {
+  it("leaves the cabinet alone, because position ids do not survive a border", async () => {
     await run();
-    const call = db.collectionMocks["cabinetMembers"].updateMany.mock.calls[0];
-    expect(call?.[0]).toEqual({ countryId: "DD", characterId: { $in: [PLAYER] } });
-    expect(call?.[1].$set.countryId).toBe("DE");
+    // East Germany seats a `minister_of_defence`; Germany a `defense_minister`.
+    // The cabinet is retired at country level by `retireNationalRemnants`, not
+    // re-scoped here into portfolios the surviving country does not define.
+    // Asserted on collection ACCESS: a collection never touched has no mock.
+    expect(db.collection.mock.calls.map((c) => c[0])).not.toContain("cabinetMembers");
   });
 
   it("remaps a Volkskammer deputy into the Bundestag", async () => {
@@ -204,40 +205,27 @@ describe("evacuateRegionPolitics when the source country is dissolving", () => {
     expect(call?.[1].$set.countryId).toBe("DE");
   });
 
-  it("rescales seatsHeld onto the target chamber instead of carrying it", async () => {
-    const SED_A = new ObjectId();
-    const LDPD = new ObjectId();
-    db.collection("electedOfficials").find.mockReturnValue(
-      cursorOf([
-        { _id: SED_A, officeType: "volkskammerDeputy", state: "SN", party: "7", seatsHeld: 83 },
-        { _id: LDPD, officeType: "volkskammerDeputy", state: "SN", party: "9", seatsHeld: 17 },
-      ])
-    );
-    db.collection("seats").findOne.mockResolvedValue({
-      countryId: "DE",
-      state: "SN",
-      electionType: "bundestag",
-      totalSeats: 16,
-    });
+  it("remaps the office without touching the seat count", async () => {
+    // The chamber's size comes from the region's `houseDistricts`, which
+    // `convertRegionDoc` has not written yet when this runs. `transferRegion`
+    // rescales the delegation immediately afterwards, once the size is real.
     await run();
-    const calls = db.collectionMocks["electedOfficials"].updateOne.mock.calls;
-    const sed = calls.find((c) => String(c[0]._id) === String(SED_A));
-    const ldpd = calls.find((c) => String(c[0]._id) === String(LDPD));
-    expect(sed?.[1].$set.seatsHeld + ldpd?.[1].$set.seatsHeld).toBe(16);
-    expect(sed?.[1].$set.seatsHeld).toBeGreaterThan(ldpd?.[1].$set.seatsHeld);
+    const call = db.collectionMocks["electedOfficials"].updateOne.mock.calls.find(
+      (c) => String(c[0]._id) === String(DEPUTY)
+    );
+    expect(call?.[1].$set.officeType).toBe("bundestag");
+    expect(call?.[1].$set.seatsHeld).toBeUndefined();
   });
 
-  it("leaves a zero-seat office alone rather than apportioning it", async () => {
+  it("remaps a Land First Secretary to a Minister-President", async () => {
     const GOV = new ObjectId();
     db.collection("electedOfficials").find.mockReturnValue(
       cursorOf([{ _id: GOV, officeType: "governor", state: "SN", party: "7", seatsHeld: 0 }])
     );
-    db.collection("seats").findOne.mockResolvedValue(null);
     await run();
     const call = db.collectionMocks["electedOfficials"].updateOne.mock.calls.find(
       (c) => String(c[0]._id) === String(GOV)
     );
     expect(call?.[1].$set.officeType).toBe("ministerPresident");
-    expect(call?.[1].$set.seatsHeld).toBeUndefined();
   });
 });

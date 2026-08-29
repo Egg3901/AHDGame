@@ -28,6 +28,7 @@ import { convertRegionDoc } from "./convertRegionDoc";
 import { reapportionNationalBudget } from "./reapportionNationalBudget";
 import { convertTransferredResidentsCurrency } from "./convertTransferredResidentsCurrency";
 import { reseedJoinedRegionElections } from "./reseedJoinedRegionElections";
+import { rescaleRegionDelegations } from "@/lib/country/apportionChamber";
 
 export interface TransferRegionArgs {
   regionId: string;
@@ -91,6 +92,17 @@ export async function transferRegion(
   });
   const rescoped = await rescopeRegionToCountry(db, regionId, fromCountryId, toCountryId);
   await convertRegionDoc(db, { regionId, toCountryId, province, displayName, votingSystem });
+
+  // A delegation carried in by a DISSOLVING source is sized for the chamber it
+  // left, not the one it joined: East Germany's Saxony holds 151 Volkskammer
+  // seats against the Bundestag delegation Saxony actually gets. Rescaled HERE
+  // rather than inside `evacuateRegionPolitics`, because the size comes from the
+  // region's `houseDistricts` / `stateSenateSeats` and `convertRegionDoc` only
+  // just wrote them. On the evacuate path there is no carried delegation to
+  // rescale -- the officials were deleted -- so this is a no-op.
+  if (relocateToRegionId === null) {
+    await rescaleRegionDelegations(db, { regionId, countryId: toCountryId, now: new Date() });
+  }
 
   // Shift the region's GDP-weighted share of national tax bases + spending
   // baselines from the source country to the target (the budget docs stay

@@ -18,10 +18,10 @@
  *
  * Spec: docs/superpowers/specs/2026-08-29-reunification-merge-design.md
  */
-import type { Db, ObjectId } from "mongodb";
+import type { Db } from "mongodb";
 import type { State } from "@/lib/db/types";
 import { REGION_SCOPED_COLLECTIONS } from "@/lib/referendum/transfer/regionScopedCollections";
-import { apportionOfficialsToChamber, type ChamberOfficial } from "./apportionChamber";
+import { rescaleRegionDelegations } from "./apportionChamber";
 
 export interface MergeRegionArgs {
   fromRegionId: string;
@@ -116,32 +116,40 @@ export async function mergeRegion(db: Db, args: MergeRegionArgs): Promise<MergeR
     documentsMoved += res?.modifiedCount ?? 0;
   }
 
+  // NPPs are NOT in the table above -- `evacuateRegionPolitics` owns them on the
+  // transfer path -- so they need re-homing explicitly. Left alone they keep
+  // pointing at a region that has just been retired.
+  const nppMoved = await db
+    .collection("npps")
+    .updateMany({ homeState: fromRegionId }, { $set: { homeState: toRegionId, updatedAt: now } });
+  documentsMoved += nppMoved?.modifiedCount ?? 0;
+
+  // A corporation headquartered in the absorbed region moves with it, the same
+  // way one follows a region across a border.
+  const corpsMoved = await db
+    .collection("corporations")
+    .updateMany(
+      { headquartersState: fromRegionId },
+      { $set: { headquartersState: toRegionId, updatedAt: now } }
+    );
+  documentsMoved += corpsMoved?.modifiedCount ?? 0;
+
   // Officeholders are NOT in the table above, deliberately: moving them needs the
   // seat arithmetic below, not a field rename. Both delegations are re-pointed at
   // the surviving region and then re-apportioned TOGETHER onto its chamber -- the
   // fused region has one chamber, so two delegations arriving with their own seat
   // counts would otherwise sum past its size.
-  const officials = (await db
+  await db
     .collection("electedOfficials")
-    .find({ countryId: source.countryId, state: { $in: [fromRegionId, toRegionId] } })
-    .toArray()) as unknown as Array<ChamberOfficial & { officeType: string }>;
-
-  const byOffice = new Map<string, Array<ChamberOfficial & { officeType: string }>>();
-  for (const o of officials) {
-    const group = byOffice.get(o.officeType) ?? [];
-    group.push(o);
-    byOffice.set(o.officeType, group);
-  }
-  for (const [officeType, group] of byOffice) {
-    documentsMoved += await apportionOfficialsToChamber(db, {
-      countryId: String(source.countryId),
-      regionId: toRegionId,
-      officeType,
-      officials: group,
-      extraSet: { state: toRegionId },
-      now,
-    });
-  }
+    .updateMany(
+      { countryId: source.countryId, state: fromRegionId },
+      { $set: { state: toRegionId, updatedAt: now } }
+    );
+  documentsMoved += await rescaleRegionDelegations(db, {
+    regionId: toRegionId,
+    countryId: String(source.countryId),
+    now,
+  });
 
   // Retire, do not delete -- the document stays for history and the wiki, exactly
   // as `mergeCountry` retires a country shell.

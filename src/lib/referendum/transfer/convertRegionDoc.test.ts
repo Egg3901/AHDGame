@@ -39,14 +39,7 @@ describe("convertRegionDoc seeded-target handling", () => {
     );
   });
 
-  it("keeps the seeded seat allocation when the target already has seat docs", async () => {
-    db.collection("seats").findOne.mockResolvedValue({
-      _id: "DE-bundestag-SN",
-      countryId: "DE",
-      state: "SN",
-      electionType: "bundestag",
-      totalSeats: 16,
-    });
+  it("takes the caller's electoral system rather than forcing Ireland's", async () => {
     await convertRegionDoc(db as unknown as Db, {
       regionId: "SN",
       toCountryId: "DE",
@@ -54,12 +47,10 @@ describe("convertRegionDoc seeded-target handling", () => {
       votingSystem: "fptp",
     });
     const call = db.collectionMocks["states"].updateOne.mock.calls[0];
-    expect(call[1].$set.houseDistricts).toBe(16);
     expect(call[1].$set.votingSystem).toBe("fptp");
   });
 
-  it("still sizes by population share when the target has no seat doc", async () => {
-    db.collection("seats").findOne.mockResolvedValue(null);
+  it("still defaults to Ireland's PR-STV for the referendum path", async () => {
     await convertRegionDoc(db as unknown as Db, {
       regionId: "NIR",
       toCountryId: "IE",
@@ -68,6 +59,21 @@ describe("convertRegionDoc seeded-target handling", () => {
     const call = db.collectionMocks["states"].updateOne.mock.calls[0];
     expect(call[1].$set.votingSystem).toBe("rcv");
     expect(call[1].$set.houseDistricts).toBeGreaterThan(0);
+  });
+
+  it("never sizes houseDistricts from the seats collection", async () => {
+    // A `DE-bundestag-<Land>` document holds the Wahlkreis count, not the Land's
+    // delegation: Berlin's says 12 while its houseDistricts is 25. Reading it
+    // here would halve every joining Land's representation.
+    db.collection("seats").findOne.mockResolvedValue({ totalSeats: 16 });
+    await convertRegionDoc(db as unknown as Db, {
+      regionId: "SN",
+      toCountryId: "DE",
+      province: "East Germany",
+      votingSystem: "fptp",
+    });
+    const call = db.collectionMocks["states"].updateOne.mock.calls[0];
+    expect(call[1].$set.houseDistricts).not.toBe(16);
   });
 });
 

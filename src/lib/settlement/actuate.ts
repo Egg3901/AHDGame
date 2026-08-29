@@ -212,6 +212,17 @@ export async function actuateSettlementOutcome(
 }
 
 /**
+ * The head-of-government fields, narrowed to what the carry reads and writes.
+ * `governmentFormations` is keyed by country id, not by ObjectId.
+ */
+interface GovernmentFormationHead {
+  _id: CountryId;
+  pmCharacterId?: ObjectId | null;
+  pmNppId?: ObjectId | null;
+  updatedAt?: Date;
+}
+
+/**
  * Deal with what the per-region sweep cannot reach.
  *
  * `evacuateRegionPolitics` runs once per region and matches officials on
@@ -254,10 +265,43 @@ async function retireNationalRemnants(
       );
   }
 
-  // Cabinet seats the region sweep did not carry, which is every NPP-held one.
-  await db
-    .collection("cabinetMembers")
-    .updateMany({ countryId: absorbed }, { $set: { countryId: survivor, updatedAt: now } });
+  // THE CABINET IS RETIRED, NOT CARRIED.
+  //
+  // Cabinet seats are keyed by position id, and the two countries do not share
+  // that vocabulary: East Germany seats a `minister_of_defence`, Germany a
+  // `defense_minister`. Re-scoping the rows would seat ministers in portfolios
+  // the surviving country does not define, next to the ones it already has, and
+  // inventing a position map would be a political judgement rather than a
+  // migration. The head of government is carried separately below; the rest of
+  // the council goes with the state it served, and the new government appoints
+  // its own.
+  await db.collection("cabinetMembers").deleteMany({ countryId: absorbed });
+
+  // THE HEAD OF GOVERNMENT IS CARRIED.
+  //
+  // The winning side's leader leads the unified state — that is the whole
+  // constitutional point of the settlement. The office KEY stays the survivor's
+  // (`chancellor`); the title a player sees is resolved from `governmentType`,
+  // which `installOnePartyState` is about to set to `onePartyState`.
+  //
+  // A player leader is carried by `pmCharacterId` and an NPP one by `pmNppId`,
+  // and the two are mutually exclusive: leaving the survivor's NPP chancellor in
+  // place beside a carried player would leave two people holding one office.
+  const formations = db.collection<GovernmentFormationHead>("governmentFormations");
+  const absorbedGov = await formations.findOne({ _id: absorbed });
+
+  if (absorbedGov?.pmCharacterId || absorbedGov?.pmNppId) {
+    await formations.updateOne(
+      { _id: survivor },
+      {
+        $set: {
+          pmCharacterId: absorbedGov.pmCharacterId ?? null,
+          pmNppId: absorbedGov.pmNppId ?? null,
+          updatedAt: now,
+        },
+      }
+    );
+  }
 }
 
 /**
