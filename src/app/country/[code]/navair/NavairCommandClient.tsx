@@ -2,6 +2,13 @@
 
 import { useState } from "react";
 
+/** A problem with a formation that the commander can actually do something about. */
+export interface FormationWarning {
+  /** Short label shown against the formation. */
+  text: string;
+  severity: "bad" | "warn";
+}
+
 export interface CommandFormation {
   id: string;
   name: string;
@@ -13,12 +20,26 @@ export interface CommandFormation {
   integrity: number;
   readiness: number;
   supply: number;
+  /** True when the engine chose this posting, not the commander. */
+  auto: boolean;
+  warnings: FormationWarning[];
 }
 
 export interface MissionOption {
   key: string;
   label: string;
   desc: string;
+}
+
+/** The one-line answer to "how is my navy doing", shown before any of the detail. */
+export interface ForceSummary {
+  /** Regions where this country holds meaningful sea control, best first. */
+  holding: { region: string; pct: number }[];
+  /** Fronts this country is fighting on that are getting no close air support. */
+  frontsWithoutAir: string[];
+  /** Formations at or near the supply floor. */
+  starving: number;
+  atWar: boolean;
 }
 
 export interface StationOption {
@@ -47,9 +68,11 @@ export function NavairCommandClient({
   navalMissions,
   airMissions,
   stations,
+  summary,
 }: {
   countryCode: string;
   positionId: string;
+  summary: ForceSummary;
   formations: CommandFormation[];
   navalMissions: MissionOption[];
   airMissions: MissionOption[];
@@ -117,9 +140,46 @@ export function NavairCommandClient({
         </p>
       )}
 
+      {/* What this force is achieving, before any of the detail. A list of objects with
+          dropdowns does not tell a commander what problem they are solving; this does. */}
+      <section className="rounded border border-neutral-800 p-4">
+        <h2 className="text-xs uppercase tracking-wide text-neutral-400">Where you stand</h2>
+        <ul className="mt-2 space-y-1 text-sm text-neutral-200">
+          <li>
+            {summary.holding.length > 0 ? (
+              <>
+                You hold the water in{" "}
+                {summary.holding.map((h) => `${h.region} (${Math.round(h.pct)}%)`).join(", ")}.
+              </>
+            ) : (
+              <span className="text-amber-400">
+                You do not control the sea anywhere. Fleets build control by sitting in water and
+                holding an aggressive posture.
+              </span>
+            )}
+          </li>
+
+          {summary.atWar && summary.frontsWithoutAir.length > 0 && (
+            <li className="text-amber-400">
+              No close air support is reaching {summary.frontsWithoutAir.join(", ")}. Air wings in
+              range set to Close Air Support add weight to the ground battle there.
+            </li>
+          )}
+
+          {summary.starving > 0 && (
+            <li className="text-red-400">
+              {summary.starving} formation{summary.starving === 1 ? " is" : "s are"} out of supply.
+              A fleet far from home in unfriendly waters cannot resupply, and an unsupplied
+              formation fights at a fraction of its strength. Move them closer to home.
+            </li>
+          )}
+        </ul>
+      </section>
+
       <p className="text-sm text-neutral-400">
         Orders are standing: a formation keeps its posture until you change it. Changes take effect
-        at the next turn.
+        at the next turn. Anything marked <span className="text-neutral-300">Auto</span> was posted
+        by the staff and will keep being repositioned until you give it an order.
       </p>
 
       {[...byStation.entries()].map(([stationName, group]) => (
@@ -133,13 +193,35 @@ export function NavairCommandClient({
                 <li key={f.id} className="rounded border border-neutral-800 p-3">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <span className="text-sm text-neutral-100">{f.name}</span>
-                    <span className="text-xs text-neutral-500">{f.type}</span>
+                    <span className="text-xs text-neutral-500">
+                      {f.type}
+                      {f.auto && (
+                        <span className="ml-2 rounded border border-neutral-700 px-1 text-neutral-400">
+                          Auto
+                        </span>
+                      )}
+                    </span>
                   </div>
 
                   <p className="mt-1 text-xs text-neutral-500 tabular-nums">
-                    Condition {Math.round(f.integrity)}% · Readiness {Math.round(f.readiness)}% ·
-                    Supply {Math.round(f.supply)}%
+                    Condition {Math.round(f.integrity)}% · Readiness {Math.round(f.readiness)}% ·{" "}
+                    <span className={f.supply <= 25 ? "text-red-400" : undefined}>
+                      Supply {Math.round(f.supply)}%
+                    </span>
                   </p>
+
+                  {f.warnings.length > 0 && (
+                    <ul className="mt-1 space-y-0.5 text-xs">
+                      {f.warnings.map((w) => (
+                        <li
+                          key={w.text}
+                          className={w.severity === "bad" ? "text-red-400" : "text-amber-400"}
+                        >
+                          {w.text}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
 
                   <div className="mt-3 flex flex-wrap gap-3">
                     <label className="text-xs text-neutral-400">
