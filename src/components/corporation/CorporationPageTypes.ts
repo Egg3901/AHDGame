@@ -754,7 +754,17 @@ export interface BondData {
   issuedAtTurn: number;
   maturityTurn: number;
   marketPrice: number;
+  /**
+   * Face value outstanding in the BOND's own currency, which is not necessarily
+   * the issuer's current one (a relocation re-denominates the corp but leaves
+   * its outstanding bonds alone). Prefer `totalIssuedAnchor` for anything that
+   * sums across bonds or compares against a corp-level figure.
+   */
   totalIssued: number;
+  /** Currency `totalIssued` is denominated in; absent on pre-forex bonds. */
+  currencyCode?: string;
+  /** `totalIssued` normalized to ₳. Absent only on a response from an older deploy. */
+  totalIssuedAnchor?: number;
   publicFloat: number;
   defaulted: boolean;
   matured: boolean;

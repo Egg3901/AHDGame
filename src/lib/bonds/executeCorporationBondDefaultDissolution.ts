@@ -35,6 +35,7 @@ import { logWireEvent, wireHeadlineCorpDissolved } from "@/lib/wireEvent";
 import { badRequest } from "@/lib/api/errors";
 import { releaseCorporationHeldSharesToFloat } from "@/lib/corporations/releaseHeldSharesToFloat";
 import { distributeCrossEquityInKind } from "@/lib/corporations/distributeCrossEquityInKind";
+import { payFundShareholderRows } from "@/lib/corporations/payFundShareholders";
 import { restoreSectorsToUnowned } from "@/lib/corporations/restoreSectorsToUnowned";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { stampSubjectDeleted } from "@/lib/financialTxLog/stampDeleted";
@@ -578,6 +579,19 @@ export async function executeCorporationBondDefaultDissolution(
         centralBankId: cbId,
       },
     });
+  }
+
+  // #3451 gap fix: index funds are the fourth shareholder bucket. Voluntary
+  // dissolution (dissolve route) and nationalization already settle their fund
+  // holders via payFundShareholderRows, but this bond-default path never did:
+  // allocateShareholderPool counted fund shares in the payout denominator while
+  // paying the fund nothing and leaving its holding in place. The corp is then
+  // deleted below, so every fund that held a bankrupt corp kept a dangling
+  // holding marked at stale value forever (the "ghost" holdings dominating the
+  // index-fund book). Pay the fund its ₳ pool slice and drop the holding, exactly
+  // as the other two whole-corp payout flows do.
+  if (allocation.fundRows.length > 0) {
+    await payFundShareholderRows(db, allocation.fundRows, refreshedCorporation._id, now);
   }
 
   // Emit the bond_default tx for the defaulting corp (subject side) BEFORE

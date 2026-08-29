@@ -74,6 +74,12 @@ describe("battle forecast route", () => {
     db.collection("militaryFormations");
     db.collection("nationalDoctrine");
     db.collection("conflicts");
+    // Standing orders. Empty by default: the projection pools auto-joining allies the
+    // same way the resolver does, so the route reads this on every request.
+    db.collection("theaterState");
+    db.collectionMocks.theaterState.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
     db.collectionMocks.gameState.findOne.mockResolvedValue({
       conflictsEnabled: true,
       currentTurn: 40,
@@ -157,6 +163,104 @@ describe("battle forecast route", () => {
     const res = await GET(req("theaterId=afghan&targetCountry=CN"), call);
     const body = await res.json();
     expect(body.oddsPct + body.counterOddsPct).not.toBe(100);
+  });
+
+  /**
+   * Regression: the projection left out allies who join under a standing order.
+   *
+   * `battleResolution` folds `autoJoinersAtFront` into the attack roster before it
+   * builds the sides, so an ally with auto-join set and troops at the front fights in
+   * the offensive. The forecast pooled only the declarers, so it understated the
+   * attack by exactly the allies who were about to join it — on a route whose whole
+   * contract is that it cannot disagree with the outcome it predicts.
+   */
+  it("pools an ally that auto-joins offensives, not just the ones who declared", async () => {
+    const alliedConflict = {
+      ...CONFLICT,
+      sideA: { label: "A", countries: ["US", "UK"], kind: "coalition" },
+    };
+    const oddsWith = async (ukAutoJoins: boolean) => {
+      vi.resetModules();
+      db.collectionMocks.conflicts.findOne.mockResolvedValue(alliedConflict);
+      db.collectionMocks.militaryUnits.find.mockImplementation(
+        (q: { countryId?: string; theaterId?: string } = {}) => {
+          const atFront = [
+            unit({ countryId: "US", theaterId: "afghan" }),
+            unit({ countryId: "UK", theaterId: "afghan" }),
+            unit({ countryId: "CN", theaterId: "afghan" }),
+            unit({ countryId: "CN", theaterId: "afghan" }),
+          ];
+          const docs = q.theaterId
+            ? atFront.filter((u) => u.theaterId === q.theaterId)
+            : atFront.filter((u) => u.countryId === (q.countryId ?? "US"));
+          return { toArray: vi.fn().mockResolvedValue(docs) };
+        }
+      );
+      db.collectionMocks.theaterState.find.mockReturnValue({
+        toArray: vi
+          .fn()
+          .mockResolvedValue(ukAutoJoins ? [{ countryId: "UK", autoJoin: { afghan: true } }] : []),
+      });
+      const { GET } = await import(ROUTE);
+      const res = await GET(req("theaterId=afghan&targetCountry=CN"), call);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      return { odds: body.oddsPct as number, contingents: body.alliedContingents as number };
+    };
+
+    // UK never declares in either arm. The only difference is the standing order.
+    const without = await oddsWith(false);
+    const withJoin = await oddsWith(true);
+    expect(without.contingents).toBe(1);
+    expect(withJoin.contingents).toBe(2);
+    expect(withJoin.odds).toBeGreaterThan(without.odds);
+  });
+
+  /**
+   * Regression: "They attack" projected the enemy's offensive against the viewer's
+   * ATTACK roster — the viewer plus whichever allies had filed a declaration.
+   *
+   * Defence is not opt-in. `defendersAtFront` enrols every belligerent with troops on
+   * the ground, because an enemy attacking where your troops stand does not ask first.
+   * So an ally who is holding the line but has not declared an offensive was missing
+   * from the counter-projection, and the viewer was shown the odds of holding the
+   * front alone. That is what made the two rows look so lopsided in the war room.
+   */
+  it("counts an ally holding the front in the counter-projection, declaration or not", async () => {
+    const alliedConflict = {
+      ...CONFLICT,
+      sideA: { label: "A", countries: ["US", "UK"], kind: "coalition" },
+    };
+    const counterWith = async (alliesAtFront: boolean) => {
+      vi.resetModules();
+      db.collectionMocks.conflicts.findOne.mockResolvedValue(alliedConflict);
+      db.collectionMocks.militaryUnits.find.mockImplementation(
+        (q: { countryId?: string; theaterId?: string } = {}) => {
+          const atFront = [
+            unit({ countryId: "US", theaterId: "afghan" }),
+            unit({ countryId: "CN", theaterId: "afghan" }),
+            unit({ countryId: "CN", theaterId: "afghan" }),
+            // The ally is either in the line, or home. Nothing else changes.
+            unit({ countryId: "UK", theaterId: alliesAtFront ? "afghan" : "reserve" }),
+          ];
+          const docs = q.theaterId
+            ? atFront.filter((u) => u.theaterId === q.theaterId)
+            : atFront.filter((u) => u.countryId === (q.countryId ?? "US"));
+          return { toArray: vi.fn().mockResolvedValue(docs) };
+        }
+      );
+      const { GET } = await import(ROUTE);
+      const res = await GET(req("theaterId=afghan&targetCountry=CN"), call);
+      expect(res.status).toBe(200);
+      return (await res.json()).counterOddsPct as number;
+    };
+
+    // No declaration is filed by anyone in either arm, so the ONLY difference is
+    // whether the ally's units sit at the front. Under the old code that made no
+    // difference at all to the counter — which is precisely the bug.
+    const alone = await counterWith(false);
+    const reinforced = await counterWith(true);
+    expect(reinforced).toBeLessThan(alone);
   });
 
   // Fog is unchanged: the counter-projection is derived from sides already built.

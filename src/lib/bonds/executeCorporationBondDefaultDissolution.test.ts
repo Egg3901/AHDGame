@@ -109,6 +109,9 @@ function makeDb(opts: { corp: Record<string, unknown>; issuerBonds: Record<strin
     gameConfig: {
       findOne: vi.fn().mockResolvedValue(null),
     },
+    indexFunds: {
+      updateOne: vi.fn().mockResolvedValue({}),
+    },
   };
   return {
     collection: (name: string) => {
@@ -226,5 +229,31 @@ describe("executeCorporationBondDefaultDissolution ledger rows (#3237)", () => {
     // Conservation: the liquidation ledger legs net to zero.
     const sum = entries.reduce((s, e) => s + (e.amount ?? 0), 0);
     expect(sum).toBe(0);
+  });
+
+  it("pays an index-fund shareholder its pool slice and drops the dangling holding", async () => {
+    // Regression for the ghost-holding leak: allocateShareholderPool counts a
+    // fund's shares in the payout denominator, but before this fix the
+    // bond-default path never consumed allocation.fundRows — so the fund was
+    // paid nothing and its holding survived the corp's deletion as a ghost.
+    const FUND_ID = new ObjectId();
+    const corp = baseCorp({
+      shareholders: [{ fundId: FUND_ID, shares: 100 }], // sole shareholder
+    });
+    const db = makeDb({ corp: corp as unknown as Record<string, unknown>, issuerBonds: [] });
+
+    await executeCorporationBondDefaultDissolution(db, corp, {
+      requireDefaultedBonds: false,
+    });
+
+    const fundUpdate = vi.mocked(db.collection("indexFunds").updateOne);
+    expect(fundUpdate).toHaveBeenCalledTimes(1);
+    const [filter, update] = fundUpdate.mock.calls[0];
+    expect(filter).toEqual({ _id: FUND_ID });
+    // Whole 500k pool → sole fund shareholder, credited to cashAnchor.
+    expect(update).toMatchObject({
+      $inc: { cashAnchor: 500_000 },
+      $pull: { holdings: { corporationId: corp._id } },
+    });
   });
 });
