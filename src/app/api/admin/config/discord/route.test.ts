@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAdmin", () => ({ requireAdmin: vi.fn() }));
@@ -137,5 +137,52 @@ describe("PATCH /api/admin/config/discord", () => {
 
     expect(res.status).toBe(400);
     expect(updateOne).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * #1208: the webhook URLs live in `gameConfig`, so a database restore carries
+ * them into another deployment. Saving them records which deployment owns them,
+ * which is what `discordWebhooks` checks before every send.
+ */
+describe("PATCH /api/admin/config/discord — webhook ownership stamp (#1208)", () => {
+  const originalService = process.env.RAILWAY_SERVICE_NAME;
+
+  afterEach(() => {
+    process.env.RAILWAY_SERVICE_NAME = originalService;
+  });
+
+  it("stamps the running deployment when a webhook url is saved", async () => {
+    process.env.RAILWAY_SERVICE_NAME = "Main Site";
+    const { PATCH } = await import("./route");
+    const res = await PATCH(patchReq({ general: { news: "https://discord.test/news" } }));
+
+    expect(res.status).toBe(200);
+    expect(capturedUpdate()?.$set).toMatchObject({
+      discordNewsWebhookUrl: "https://discord.test/news",
+      discordWebhookOwnerService: "main-site",
+    });
+  });
+
+  it("stamps when a country webhook is saved too", async () => {
+    process.env.RAILWAY_SERVICE_NAME = "Main Site";
+    const { PATCH } = await import("./route");
+    const res = await PATCH(patchReq({ countryWebhooks: { US: "https://discord.test/us2" } }));
+
+    expect(res.status).toBe(200);
+    expect(capturedUpdate()?.$set).toMatchObject({
+      "discordCountryGameWebhookUrls.US": "https://discord.test/us2",
+      discordWebhookOwnerService: "main-site",
+    });
+  });
+
+  it("does not stamp when every url in the request is being cleared", async () => {
+    process.env.RAILWAY_SERVICE_NAME = "Main Site";
+    const { PATCH } = await import("./route");
+    const res = await PATCH(patchReq({ general: { news: "" } }));
+
+    expect(res.status).toBe(200);
+    expect(capturedUpdate()?.$unset).toMatchObject({ discordNewsWebhookUrl: 1 });
+    expect(capturedUpdate()?.$set?.discordWebhookOwnerService).toBeUndefined();
   });
 });

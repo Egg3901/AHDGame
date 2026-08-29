@@ -5,6 +5,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import { getCountryWebhookDescriptors } from "@/lib/discord/countryWebhooks";
+import { deploymentServiceSlug } from "@/lib/deploymentIdentity";
 import type { GameConfig } from "@/lib/db/types";
 
 /** Top-level (non country-scoped) webhooks, keyed by their gameConfig field. */
@@ -74,6 +75,13 @@ export async function PATCH(request: Request) {
         else $unset[`discordCountryGameWebhookUrls.${countryId}`] = 1;
       }
     }
+
+    // #1208: record which deployment owns these webhooks. The URLs live in the
+    // database, so a restore into a sandbox/staging/local world inherits them;
+    // `discordWebhooks` refuses to send unless the running deployment matches
+    // this stamp. Only stamp when a url is being SET — clearing one should not
+    // hand ownership to whoever happened to clear it.
+    if (Object.keys($set).length > 0) $set.discordWebhookOwnerService = deploymentServiceSlug();
 
     const update: Record<string, unknown> = {};
     if (Object.keys($set).length > 0) update.$set = $set;

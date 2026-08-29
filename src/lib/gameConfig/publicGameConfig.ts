@@ -10,6 +10,7 @@ export function toPublicGameConfig(config: GameConfig): PublicGameConfig {
     discordNewsWebhookUrl: _d3,
     discordChangelogWebhookUrl: _d4,
     discordSuggestionsWebhookUrl: _d5,
+    discordWebhookOwnerService: _d6,
     ...rest
   } = config;
   return rest;

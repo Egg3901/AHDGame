@@ -6,6 +6,7 @@
  * Import from this file (not discord.ts) so MongoDB is never bundled client-side.
  */
 import { getDb } from "@/lib/mongodb";
+import { ownsConfiguredWebhooks } from "@/lib/deploymentIdentity";
 import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
 import type { CountryId } from "@/lib/constants/countries";
 import type { GameConfig } from "@/lib/db/types";
@@ -109,6 +110,8 @@ async function getWebhookUrls(): Promise<{
   try {
     const db = await getDb();
     const config = await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" });
+    // #1208 — a restored database must not post into the players' channels.
+    if (!ownsConfiguredWebhooks(config?.discordWebhookOwnerService)) return {};
     return {
       game: config?.discordGameWebhookUrl || undefined,
       countryGame: config?.discordCountryGameWebhookUrls || undefined,
