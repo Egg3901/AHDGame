@@ -6,6 +6,8 @@
 // Errors: 400, 401, 403, 404.
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
+import { z } from "zod";
+import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
 import { authorizeBattleAction } from "@/lib/api/battleAuthz";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
@@ -17,31 +19,27 @@ interface RouteParams {
   params: Promise<{ code: string; positionId: string }>;
 }
 
+// The body is untrusted, so the shape is enforced at runtime here rather than by the
+// TypeScript types, which say nothing once this is running. A non-string would otherwise
+// reach a lookup or a template and fail somewhere less obvious.
+const missionSchema = z.object({
+  unitId: z.string().min(1),
+  mission: z.string().min(1),
+  station: z.string().min(1).optional(),
+  missionTarget: z.string().min(1).optional(),
+});
+
 export async function POST(request: Request, { params }: RouteParams) {
   try {
     const ctx = await authorizeBattleAction(params);
     if (ctx.error) return ctx.error;
     const { db, countryId } = ctx;
 
-    const body = (await request.json().catch(() => null)) as {
-      unitId?: string;
-      mission?: string;
-      station?: string;
-      missionTarget?: string;
-    } | null;
-    // Validate the SHAPE, not just presence. The body is untrusted: TypeScript's types
-    // say nothing at runtime, and a non-string here would reach a lookup or a template
-    // and fail somewhere less obvious than this line.
-    const isStr = (v: unknown): v is string => typeof v === "string" && v.length > 0;
-    if (!isStr(body?.unitId) || !isStr(body?.mission)) {
-      return NextResponse.json({ error: "unitId and mission are required" }, { status: 400 });
+    const parsed = await parseJsonBody(request, missionSchema);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
-    if (body.station !== undefined && !isStr(body.station)) {
-      return NextResponse.json({ error: "station must be a region id." }, { status: 400 });
-    }
-    if (body.missionTarget !== undefined && !isStr(body.missionTarget)) {
-      return NextResponse.json({ error: "missionTarget must be a region id." }, { status: 400 });
-    }
+    const body = parsed.data;
 
     if (!ObjectId.isValid(body.unitId)) {
       return NextResponse.json({ error: "Unknown formation." }, { status: 404 });
