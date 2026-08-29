@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { type Db, ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+
+vi.mock("@/lib/turn/history/recordCountryEvent", () => ({
+  recordCountryEvent: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { mergeRegion } from "./mergeRegion";
 
 function cursorOf<T>(docs: T[]) {
@@ -100,12 +105,23 @@ describe("mergeRegion", () => {
     expect(db.collectionMocks["states"].updateMany).not.toHaveBeenCalled();
   });
 
-  it("retires the source region rather than deleting it", async () => {
+  it("removes the source region so nothing keeps counting it", async () => {
     const res = await run();
-    const call = db.collectionMocks["states"].updateOne.mock.calls.find((c) => c[0]._id === "BEO");
-    expect(call?.[1].$set.dissolvedTurn).toBe(470);
-    expect(db.collectionMocks["states"].deleteOne).not.toHaveBeenCalled();
+    // Nothing filters `states` on `dissolvedTurn` — it is a countryGameStates
+    // concept — so a merely flagged region stays live: its houseDistricts would
+    // be summed into the chamber a second time, on top of the survivor's.
+    expect(db.collectionMocks["states"].deleteOne).toHaveBeenCalledWith({ _id: "BEO" });
     expect(res.retired).toBe(true);
+  });
+
+  it("records the fusion in the country's history", async () => {
+    await run();
+    const { recordCountryEvent } = await import("@/lib/turn/history/recordCountryEvent");
+    // The states document is gone, so this entry is the only record it existed.
+    expect(vi.mocked(recordCountryEvent)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ countryId: "DE", turn: 470 })
+    );
   });
 
   it("refuses to merge a region into itself", async () => {
@@ -117,24 +133,29 @@ describe("mergeRegion", () => {
     expect(res.ok).toBe(false);
   });
 
-  it("is a no-op when the source is already retired", async () => {
-    db.collection("states").findOne.mockResolvedValue({
-      _id: "BEO",
-      countryId: "DE",
-      dissolvedTurn: 400,
-    });
+  it("is a no-op when the source is already gone but the target stands", async () => {
+    // The merge ends by deleting the source, so this is what a replay sees.
+    db.collection("states").findOne.mockImplementation(async (f: { _id: string }) =>
+      f._id === "BEO" ? null : { _id: "BE", countryId: "DE", population: 3400 }
+    );
     const res = await run();
     expect(res.ok).toBe(true);
     expect(res.retired).toBe(true);
     expect(res.documentsMoved).toBe(0);
-    // Nothing was re-pointed and no seats were touched on the replay.
     expect(db.collectionMocks["states"].updateMany).not.toHaveBeenCalled();
-    expect(db.collectionMocks["electedOfficials"].updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks["states"].deleteOne).not.toHaveBeenCalled();
+  });
+
+  it("fails when neither region exists", async () => {
+    db.collection("states").findOne.mockResolvedValue(null);
+    const res = await run();
+    expect(res.ok).toBe(false);
+    expect(res.retired).toBe(false);
   });
 
   it("fails rather than inventing a target that does not exist", async () => {
     db.collection("states").findOne.mockImplementation(async (f: { _id: string }) =>
-      f._id === "BEO" ? { _id: "BEO", population: 1200 } : null
+      f._id === "BEO" ? { _id: "BEO", countryId: "DE", population: 1200 } : null
     );
     const res = await run();
     expect(res.ok).toBe(false);

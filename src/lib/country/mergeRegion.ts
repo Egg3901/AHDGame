@@ -1,5 +1,5 @@
 /**
- * Fuse one region into another INSIDE the same country, then retire the source.
+ * Fuse one region into another INSIDE the same country, then remove the source.
  *
  * NOT `transferRegion`. That moves a region ACROSS a border and assumes both
  * countries survive; this assumes the source region does not survive at all. The
@@ -20,6 +20,8 @@
  */
 import type { Db } from "mongodb";
 import type { State } from "@/lib/db/types";
+import type { CountryId } from "@/lib/constants/countries";
+import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
 import { REGION_SCOPED_COLLECTIONS } from "@/lib/referendum/transfer/regionScopedCollections";
 import { rescaleRegionDelegations } from "./apportionChamber";
 
@@ -56,16 +58,19 @@ export async function mergeRegion(db: Db, args: MergeRegionArgs): Promise<MergeR
     return { ok: false, error: "A region cannot absorb itself.", ...empty };
   }
 
-  const source = (await db.collection<State>("states").findOne({ _id: fromRegionId })) as
-    (State & { dissolvedTurn?: number | null }) | null;
-  if (!source) {
-    return { ok: false, error: `Region ${fromRegionId} not found.`, ...empty };
-  }
-  // Idempotent: a merge that already ran is a no-op, not an error, matching the
-  // contract `mergeCountry` holds per region.
-  if (source.dissolvedTurn != null) return { ok: true, retired: true, documentsMoved: 0 };
-
+  const source = await db.collection<State>("states").findOne({ _id: fromRegionId });
   const target = await db.collection<State>("states").findOne({ _id: toRegionId });
+
+  // IDEMPOTENT, and the ABSENT SOURCE is how that is detected. This ends by
+  // deleting the source document, so a re-run after a partial failure finds
+  // nothing left to merge -- which is success, not an error. A missing source
+  // beside a live target means the work is already done; both missing means the
+  // caller named regions that do not exist.
+  if (!source) {
+    return target
+      ? { ok: true, retired: true, documentsMoved: 0 }
+      : { ok: false, error: `Region ${fromRegionId} not found.`, ...empty };
+  }
   if (!target) {
     return { ok: false, error: `Region ${toRegionId} not found.`, ...empty };
   }
@@ -151,11 +156,33 @@ export async function mergeRegion(db: Db, args: MergeRegionArgs): Promise<MergeR
     now,
   });
 
-  // Retire, do not delete -- the document stays for history and the wiki, exactly
-  // as `mergeCountry` retires a country shell.
-  await db
-    .collection<State>("states")
-    .updateOne({ _id: fromRegionId }, { $set: { dissolvedTurn: currentTurn, updatedAt: now } });
+  // DELETE THE REGION, do not merely flag it.
+  //
+  // ⚠️ This is the opposite of what `mergeCountry` does to a country shell, and
+  // the difference is not stylistic. A retired COUNTRY works because
+  // `dissolvedTurn` is filtered at both enumeration chokepoints —
+  // `registeredBase` and `getRegisteredCountryIds` — so one flag removes it
+  // everywhere at once. A region has no such mechanism: nothing in the codebase
+  // filters `states` on `dissolvedTurn`, and the field is not even on the `State`
+  // type. A "retired" region is therefore just a live region with a flag nobody
+  // reads, and it would keep being counted: `getLiveLowerChamberSeats` sums
+  // `houseDistricts` across `{countryId}`, so East Berlin's seats would be
+  // counted once inside Berlin and again on their own, and `ensureDEElections`
+  // would go on spawning races for a Land that no longer exists.
+  //
+  // Everything the region owned has been re-pointed at the survivor above, so
+  // there is nothing left for the document to hold.
+  await db.collection<State>("states").deleteOne({ _id: fromRegionId });
+
+  // The map changed, so the country's history should say so — the region is gone
+  // from `states` and this entry is the only record that it ever existed.
+  await recordCountryEvent(db, {
+    countryId: source.countryId as CountryId,
+    turn: currentTurn,
+    eventType: "region_transferred",
+    title: `${fromRegionId} was merged into ${toRegionId}.`,
+    details: { fromRegionId, toRegionId, regionMerge: true },
+  }).catch((err) => console.error(`${fromRegionId} merge history failed:`, err));
 
   return { ok: true, retired: true, documentsMoved };
 }

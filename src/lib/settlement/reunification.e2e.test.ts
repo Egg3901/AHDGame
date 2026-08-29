@@ -197,15 +197,14 @@ describe("reunification pipeline, end to end", () => {
     expect(call?.[1].$set.countryScope).toBe("de");
   });
 
-  it("fuses East Berlin and retires it", async () => {
+  it("fuses East Berlin into Berlin and removes it from the map", async () => {
     const { actuateSettlementOutcome } = await import("./actuate");
     await actuateSettlementOutcome(db as unknown as Db, crisis(), 470);
-    const retire = db.collectionMocks["states"].updateOne.mock.calls.find(
-      (c) => c[0]._id === "BEO"
-    );
-    expect(retire?.[1].$set.dissolvedTurn).toBe(470);
     const absorb = db.collectionMocks["states"].updateOne.mock.calls.find((c) => c[0]._id === "BE");
     expect(absorb?.[1].$inc).toMatchObject({ population: 1200 });
+    // Deleted rather than flagged: nothing filters `states` on a dissolved
+    // marker, so a flagged region would keep being counted as its own Land.
+    expect(db.collectionMocks["states"].deleteOne).toHaveBeenCalledWith({ _id: "BEO" });
   });
 
   it("stops before touching the world when the party migration fails", async () => {
