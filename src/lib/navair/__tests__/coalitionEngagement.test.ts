@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { ObjectId } from "mongodb";
 import { resolveEngagement } from "../engagement";
-import { navalStationFor } from "../map";
+import { navalStationFor, navalDistance } from "../map";
+import { stationOf } from "../turn";
 import {
   conflictRegions,
   canExtendConflictTo,
@@ -132,5 +133,69 @@ describe("conflict regions", () => {
 
   it("does not add a region twice", () => {
     expect(canExtendConflictTo({ region: "eeu", extendedRegions: ["weu"] }, "weu")).toBe(false);
+  });
+});
+
+describe("navalStationFor: fleets base near home, not near the biggest port", () => {
+  // Observed in production at turn 463: ranking adjacent water by port size alone put
+  // the US fleet fighting in Central Europe into the Persian Gulf, and the Royal Navy
+  // and Irish fleet into the Mediterranean. A fleet bases where it can sail from.
+
+  it("does not send a fleet supporting a Central European war to the Middle East", () => {
+    // eeu's navigable neighbours are the Arctic (port 2) and the Middle East (port 6).
+    // Port size alone picks the Gulf, which is absurd for a war in Germany.
+    expect(navalStationFor("eeu", "noa")).not.toBe("mea");
+  });
+
+  it("never bases a fleet further from home than an available alternative", () => {
+    // The guarantee the fix actually makes. Where two waters are genuinely equidistant
+    // the tie stands on port size, and that is fine: eeu touches the Arctic and the
+    // Middle East at one hop each, and a Soviet fleet in the Black Sea approaches is not
+    // absurd the way a US fleet in the Gulf was.
+    const home = "noa";
+    const chosen = navalStationFor("eeu", home);
+    expect(chosen).toBeTruthy();
+    const alternatives = ["arc", "mea"].filter((r) => r !== chosen);
+    for (const other of alternatives) {
+      expect(navalDistance(home, chosen as string)).toBeLessThanOrEqual(navalDistance(home, other));
+    }
+  });
+
+  it("puts an Atlantic power's fleet in Atlantic water, not the Mediterranean", () => {
+    // weu touches both nat (port 7) and med (port 8), so port order picks the Med for
+    // the UK and Ireland. Distance from home breaks it the right way.
+    expect(navalStationFor("weu", "noa")).toBe("nat");
+  });
+
+  it("still falls back to port size when no home is known", () => {
+    // Unchanged behaviour for a country with no home region on record: some answer beats
+    // no answer, and this only affects nations the topology does not place.
+    expect(navalStationFor("weu")).toBeTruthy();
+  });
+
+  it("keeps a fleet in place when the front is already water", () => {
+    expect(navalStationFor("nat", "noa")).toBe("nat");
+  });
+});
+
+describe("stationOf: machine placements self-correct, orders do not", () => {
+  const fleet = (over: Partial<NavairUnit>): NavairUnit =>
+    ({ ...hull("US"), theaterId: "reserve", ...over }) as NavairUnit;
+
+  it("re-derives a station the engine chose", () => {
+    // The bug this pins: the pass only assigned a station when one was MISSING, so a bad
+    // placement was permanent. Fixing the geography corrected nothing already on the map,
+    // and a database heal to clear it was undone by the next turn.
+    const machinePlaced = fleet({ station: "mea", stationSetByPlayer: undefined });
+    expect(stationOf(machinePlaced)).not.toBe("mea");
+  });
+
+  it("leaves a commander's order alone", () => {
+    const ordered = fleet({ station: "mea", stationSetByPlayer: true });
+    expect(stationOf(ordered)).toBe("mea");
+  });
+
+  it("places a formation that has no station at all", () => {
+    expect(stationOf(fleet({ station: null }))).toBeTruthy();
   });
 });

@@ -140,7 +140,10 @@ export function stationOf(
   unit: NavairUnit,
   theaterRegion?: ReadonlyMap<string, RegionCode>
 ): RegionCode | null {
-  if (unit.station) return unit.station;
+  // A commander's order stands. Everything else is re-derived every turn, so a change to
+  // the placement rules takes effect everywhere on the next tick instead of only for
+  // formations that happen to have no station yet.
+  if (unit.station && unit.stationSetByPlayer) return unit.station;
 
   // A formation ASSIGNED to a war is at that war, not sitting at home. Falling back to
   // the home region first was wrong in a way that quietly broke the whole point: US air
@@ -157,7 +160,9 @@ export function stationOf(
   // nearest navigable water instead, which is where it would actually be. Putting it on
   // the front's own land region was worse than cosmetic: sea control over a land tile is
   // read by nothing, so a dominant navy changed nothing anywhere.
-  if (unit.domain === "naval") return navalStationFor(base) as RegionCode | null;
+  if (unit.domain === "naval") {
+    return navalStationFor(base, homeRegionOf(unit.countryId)) as RegionCode | null;
+  }
 
   return base;
 }
@@ -204,15 +209,15 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
     if (!alive(u)) continue;
     const station = stationOf(u, theaterRegion);
     if (!station) continue;
-    if (!u.station) {
-      // First time this formation has been placed. Persist it, or the field stays null in
-      // the database forever: `stationOf` is deterministic so the engine would recompute
-      // the same answer every turn and never notice, but the war room reads the stored
-      // value and would show a player nothing about where their own fleet is.
+    if (u.station !== station) {
+      // The derived station disagrees with what is stored, so write it. That covers both
+      // a formation being placed for the first time and one whose placement rules have
+      // since changed: the second case is why this compares rather than checking for
+      // absence. Fixing the geography once corrected nothing already on the map, and the
+      // only remedy was a database heal, which a turn then undid.
       //
-      // This is also why the subsystem needs no migration. Backfill is idempotent and
-      // happens on the first turn after deploy, which beats a manual migration against a
-      // shared production database.
+      // It is also why this subsystem needs no migration: placement converges on the
+      // first turn after any deploy.
       unitsStationed++;
       touchedByMission.add(u);
     }
@@ -430,6 +435,10 @@ async function persistCombatResults(db: Db, touched: ReadonlySet<NavairUnit>): P
           supply: u.supply ?? 100,
           station: u.station ?? null,
           mission: u.mission ?? null,
+          // Preserved deliberately: writing `false` here would erase a commander's
+          // decision on the first turn after they made it, and the engine would quietly
+          // start moving their fleet again.
+          stationSetByPlayer: u.stationSetByPlayer === true,
         },
       },
     },

@@ -162,15 +162,28 @@ export function stepToward(from: RegionId, to: RegionId, maxHops: number): Regio
  * Null when there is no water within reach at all, which is the honest answer for a
  * genuinely landlocked theatre: that fleet cannot participate.
  */
-export function navalStationFor(frontRegion: RegionId): RegionId | null {
+export function navalStationFor(frontRegion: RegionId, homeRegion?: RegionId): RegionId | null {
   if (isWaterAccessible(frontRegion)) return frontRegion;
 
-  const options = neighbors(frontRegion)
-    .filter(isWaterAccessible)
-    .filter(isNavigable)
-    .sort((a, b) => portOf(b) - portOf(a));
+  const options = neighbors(frontRegion).filter(isWaterAccessible).filter(isNavigable);
+  if (!options.length) return null;
 
-  return options[0] ?? null;
+  // Nearest to home first, port size only as a tiebreak.
+  //
+  // Ranking by port alone put the US fleet fighting in Central Europe into the PERSIAN
+  // GULF, because the Middle East (port 6) outranks the Arctic (port 2) as a neighbour of
+  // Eastern Europe. It did the same to the Royal Navy and the Irish fleet, parking both
+  // in the Mediterranean because it out-ports the North Atlantic 8 to 7. A fleet bases
+  // where it can actually sail from, and that is near home, not wherever the biggest
+  // harbour happens to be.
+  return [...options].sort((a, b) => {
+    if (homeRegion) {
+      const da = navalDistance(homeRegion, a);
+      const db = navalDistance(homeRegion, b);
+      if (da !== db) return da - db;
+    }
+    return portOf(b) - portOf(a);
+  })[0];
 }
 
 function portOf(id: RegionId): number {
