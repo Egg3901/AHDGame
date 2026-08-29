@@ -7,6 +7,21 @@ export default defineConfig({
     // Dynamic route imports can exceed 5s under parallel load on slower machines/CI.
     testTimeout: 15_000,
     environment: "node",
+    // Worker threads rather than vitest's default child-process forks.
+    //
+    // 71% of this suite's runtime is per-file module loading, not test bodies,
+    // and threads pay that setup cost far more cheaply: measured over the full
+    // 33,441-test suite, 215.01s -> 173.96s wall, with import down 26%,
+    // transform 45% and setup 38% while test execution barely moved.
+    //
+    // It also matters for memory on CI. Forks give every worker its own heap,
+    // so the workflow's --max-old-space-size=6144 grants 6GB per process on a
+    // runner with roughly 7GB total; threads share one heap instead.
+    //
+    // `isolate` stays on: the suite has ~128 module-level mutable registries
+    // and caches in src/lib alone, and a shared module graph leaks them across
+    // files. See docs/superpowers/plans/2026-08-28-test-suite-performance.md.
+    pool: "threads",
     include: [
       "src/**/*.test.ts",
       "src/**/*.test.tsx",

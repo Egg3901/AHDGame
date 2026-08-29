@@ -33,8 +33,27 @@ jobs:
         # (remove continue-on-error) once those are cleared.
         run: npm run architecture:audit
         continue-on-error: true
-      - name: Unit tests
-        run: npm run test:run
+
+  # Split out of `verify` and sharded: the suite is ~3,500 files and its cost is
+  # dominated by per-file module loading, so wall time tracks file count almost
+  # linearly. Four shards balanced to within 8% of each other and cut a single
+  # job from 770s to 201s when measured locally at CI-like worker counts.
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Unit tests (shard ${{ matrix.shard }}/4)
+        run: npx vitest run --shard=${{ matrix.shard }}/4
         env:
           NODE_OPTIONS: --max-old-space-size=6144
 
