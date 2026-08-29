@@ -299,6 +299,14 @@ export default function BondsGuidePage() {
               mature.
             </p>
             <Callout variant="warn">
+              <strong className="text-foreground">Issuing is borrowing, not income.</strong> The
+              corporation receives the whole face value in cash on the turn it issues, pays the
+              coupon every turn after that, and then repays the whole face value in one payment on
+              the maturity turn. Nothing amortizes along the way, so the cash has to be there on
+              that turn. Every unit issued is charged for, including units still sitting on the
+              public float that nobody bought.
+            </Callout>
+            <Callout variant="warn">
               <strong className="text-foreground">The coupon locks at issuance.</strong> If a
               company issues a BBB bond today and later falls to CCC, the coupon rate on that
               existing bond does not change - but the market price will fall to compensate for the
@@ -531,8 +539,12 @@ The further from maturity, the bigger the price swing for the same rate change.`
             <p className="text-sm text-muted leading-relaxed">
               A corporate bond defaults when the corporation&apos;s{" "}
               <strong className="text-foreground">cash (liquid capital) goes negative</strong> after
-              paying its coupon obligations. This is the only trigger - a company can have a bad
-              credit rating without defaulting as long as it can still make payments.
+              paying its coupon obligations{" "}
+              <strong className="text-foreground">and any face value falling due that turn</strong>,
+              and its assets could not cover the debt. This is the only trigger - a company can have
+              a bad credit rating without defaulting as long as it can still make payments. Maturity
+              is the dangerous one: the coupon is a trickle, and the face value lands in a single
+              turn.
             </p>
             <SubHeader>What happens on default</SubHeader>
             <ul className="space-y-2 text-sm text-muted">
