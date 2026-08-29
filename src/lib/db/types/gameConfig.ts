@@ -54,6 +54,15 @@ export interface GameConfig {
   discordChangelogWebhookUrl?: string;
   /** Discord webhook URL for in-game player suggestions (feedback modal). Optional. */
   discordSuggestionsWebhookUrl?: string;
+  /**
+   * Deployment slug ({@link deploymentServiceSlug}) that owns the webhook URLs
+   * above — stamped whenever an admin saves them. Every send is suppressed when
+   * the running deployment does not match, so a database restored into a
+   * sandbox, staging, or local world cannot post its events into the players'
+   * Discord (#1208). Absent on worlds whose webhooks predate the stamp, which
+   * post as before.
+   */
+  discordWebhookOwnerService?: string;
 
   /**
    * Maintenance mode, tri-state: "off" (normal), "partial" (site stays
@@ -662,4 +671,5 @@ export type PublicGameConfig = Omit<
   | "discordNewsWebhookUrl"
   | "discordChangelogWebhookUrl"
   | "discordSuggestionsWebhookUrl"
+  | "discordWebhookOwnerService"
 >;

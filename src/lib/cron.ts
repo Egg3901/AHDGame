@@ -8,6 +8,7 @@ import { shouldFireBackupTurn } from "./cron/backupFireGuard";
 import { getProcessingLockState, TURN_LOCK_STALE_MS } from "./turn/processingLock";
 import { recordTurnHeapDelta } from "@/lib/observability/heapWatchdog";
 import { getDb } from "@/lib/mongodb";
+import { deploymentServiceSlug } from "@/lib/deploymentIdentity";
 import { sweepPlayerRandomEventsRealtime } from "@/lib/events/pree/driver";
 import { persistApiAbuseScan } from "@/lib/api/abuseDetection";
 import { runRetention } from "@/lib/retention/retention";
@@ -29,11 +30,7 @@ import { runAltDigest } from "@/lib/altDetection/digest";
  * `checkinMargin` is tolerated; beyond that Sentry alerts.
  */
 export function deriveTurnCronMonitorSlug(env: NodeJS.ProcessEnv = process.env): string {
-  const tag = (env.RAILWAY_SERVICE_NAME ?? env.RAILWAY_ENVIRONMENT_NAME ?? "local")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return `turn-cron-${tag || "local"}`;
+  return `turn-cron-${deploymentServiceSlug(env)}`;
 }
 const TURN_CRON_MONITOR_SLUG = deriveTurnCronMonitorSlug();
 const TURN_CRON_MONITOR_CONFIG = {

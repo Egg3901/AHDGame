@@ -70,7 +70,6 @@ vi.mock("@/lib/nationalCommitteeElections", () => ({
 }));
 vi.mock("@/lib/turn/nppBehavior", () => ({
   processNPPTurn: vi.fn(),
-  recalculateNPPSpeakerVotes: vi.fn(),
 }));
 vi.mock("@/lib/budget/fiscalYear", () => ({
   isFiscalYearEnd: vi.fn().mockReturnValue(false),
@@ -224,7 +223,6 @@ describe("processTurn() — full turn flow", () => {
       votescast: 0,
       speakerVotes: 0,
     } as never);
-    vi.mocked(nppBehavior.recalculateNPPSpeakerVotes).mockResolvedValue(undefined as never);
 
     const bills = await import("@/lib/billLifecycle");
     vi.mocked(bills.processBillLifecycle).mockResolvedValue({

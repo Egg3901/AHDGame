@@ -111,7 +111,10 @@ export function reconcileLedger(input: ReconcileInput): ReconcileReport {
     }
     stockFindings.sort((a, b) => Math.abs(b.divergence) - Math.abs(a.divergence));
   }
-  const stockStatus: ReconcileStatus = stockFindings.length > 0 ? "amber" : "green";
+  // A skipped check is unverified, not passing. Reporting green here made a turn
+  // with no opening snapshot read as a perfect reconciliation.
+  const stockStatus: ReconcileStatus =
+    input.skipStockVsFlow || stockFindings.length > 0 ? "amber" : "green";
 
   // --- Check 3: money supply --------------------------------------------------
   // minted = Σ(-anchor) over mint legs; sunk = Σ(anchor) over sink legs.
@@ -188,7 +191,7 @@ export function reconcileLedger(input: ReconcileInput): ReconcileReport {
     stockVsFlow: {
       status: stockStatus,
       skipped: Boolean(input.skipStockVsFlow),
-      divergentCount: stockFindings.length,
+      divergentCount: input.skipStockVsFlow ? null : stockFindings.length,
       findings: stockFindings.slice(0, MAX_FINDINGS),
     },
     moneySupply: {

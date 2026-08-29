@@ -30,6 +30,56 @@ describe("processScotusTenureTurn", () => {
     vi.restoreAllMocks();
   });
 
+  it("holds a scripted departure until the CALENDAR year reaches it (#1208)", async () => {
+    // Founding-phase world: raw turn 49 is calendar turn 1, still 1953, so the
+    // 1954 departure is not due yet. Off the raw turn the seat turned over a
+    // full game year early.
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValue({
+      currentTurn: 49,
+      startingYear,
+      preIterationTurns: 48,
+    } as never);
+    const seatId = new ObjectId();
+    db.collectionMocks.supremeCourtSeats!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: seatId,
+          countryId: "US",
+          seatNumber: 1,
+          isDivergent: false,
+          historicalOccupantIndex: 0,
+          historicalOccupants: [
+            {
+              key: "a",
+              name: "Justice A",
+              economicLean: 2,
+              socialLean: 2,
+              seatedYear: 1953,
+              departureYear: 1954,
+              departureReason: "retirement",
+            },
+            {
+              key: "b",
+              name: "Justice B",
+              economicLean: -2,
+              socialLean: -2,
+              seatedYear: 1954,
+              departureYear: null,
+              departureReason: null,
+            },
+          ],
+        },
+      ]),
+    });
+
+    const { processScotusTenureTurn } = await import("./scotusTenureTurn");
+    const result = await processScotusTenureTurn(49, db as unknown as Db);
+
+    expect(result).toEqual({ seatsAdvanced: 0, seatsVacatedByHistory: 0, seatsVacatedByHazard: 0 });
+    expect(db.collectionMocks.supremeCourtSeats!.updateOne).not.toHaveBeenCalled();
+  });
+
   it("auto-advances an Original Roster seat to the next scripted occupant on their real departure turn", async () => {
     const seatId = new ObjectId();
     const seat = {

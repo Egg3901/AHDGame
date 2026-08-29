@@ -5,6 +5,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import { getCountryWebhookDescriptors } from "@/lib/discord/countryWebhooks";
+import { deploymentServiceSlug } from "@/lib/deploymentIdentity";
 import type { GameConfig } from "@/lib/db/types";
 
 /** Top-level (non country-scoped) webhooks, keyed by their gameConfig field. */
@@ -29,6 +30,13 @@ const schema = z.object({
     })
     .optional(),
   countryWebhooks: z.record(z.string(), urlOrBlank).optional(),
+  /**
+   * Take ownership of these webhooks for the deployment serving this request,
+   * when another one currently holds it. Required because the URLs travel with
+   * a database restore: without an explicit claim, an admin saving the Discord
+   * page of a restored world would silently hand it the live channels (#1208).
+   */
+  claimWebhooks: z.boolean().optional(),
 });
 
 export async function PATCH(request: Request) {
@@ -41,7 +49,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
 
     const db = await getDb();
-    const { general, countryWebhooks } = parsed.data;
+    const { general, countryWebhooks, claimWebhooks } = parsed.data;
 
     // Split into $set (non-empty) and $unset (empty string = clear) operations.
     // MongoDB's BSON serializer strips undefined values from $set, so we must
@@ -73,6 +81,34 @@ export async function PATCH(request: Request) {
         if (value) $set[`discordCountryGameWebhookUrls.${countryId}`] = value;
         else $unset[`discordCountryGameWebhookUrls.${countryId}`] = 1;
       }
+    }
+
+    // #1208: record which deployment owns these webhooks. The URLs live in the
+    // database, so a restore into a sandbox/staging/local world inherits them;
+    // `discordWebhooks` refuses to send unless the running deployment matches
+    // this stamp. Only stamp when a url is being SET — clearing one should not
+    // hand ownership to whoever happened to clear it.
+    if (Object.keys($set).length > 0) {
+      const self = deploymentServiceSlug();
+      const current = await db
+        .collection<GameConfig>("gameConfig")
+        .findOne({ _id: "default" }, { projection: { discordWebhookOwnerService: 1 } });
+      const owner = current?.discordWebhookOwnerService;
+      // Saving from a deployment that does not own these webhooks must not take
+      // ownership by accident — that is exactly how a restored world would start
+      // posting into the players' channels again. Renaming the real service is
+      // the legitimate case, and it says so with `claimWebhooks`.
+      if (owner && owner !== self && claimWebhooks !== true) {
+        return NextResponse.json(
+          {
+            error:
+              `These webhooks belong to the "${owner}" deployment and this is "${self}". ` +
+              `Re-send with claimWebhooks: true to move them here.`,
+          },
+          { status: 409 }
+        );
+      }
+      $set.discordWebhookOwnerService = self;
     }
 
     const update: Record<string, unknown> = {};

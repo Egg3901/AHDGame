@@ -126,6 +126,12 @@ export function DiscordIntegrations() {
   const [testingChangelog, setTestingChangelog] = useState<"latest" | "updates" | null>(null);
   const [backfillingSuggestions, setBackfillingSuggestions] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  /**
+   * Set when the save was refused because another deployment owns these
+   * webhooks (#1208). Holds the offer to take them, so the admin can resolve it
+   * here instead of reaching for curl.
+   */
+  const [ownershipConflict, setOwnershipConflict] = useState(false);
 
   useEffect(() => {
     fetchJson<ConfigPayload>("/api/admin/config/discord", { feature: "admin-discord-config" })
@@ -141,7 +147,7 @@ export function DiscordIntegrations() {
     setCountries((prev) => prev.map((c) => (c.countryId === countryId ? { ...c, url } : c)));
   }, []);
 
-  async function handleSave() {
+  async function handleSave(claimWebhooks = false) {
     if (!loaded) {
       setMessage({
         type: "error",
@@ -151,18 +157,32 @@ export function DiscordIntegrations() {
     }
     setSaving(true);
     setMessage(null);
+    setOwnershipConflict(false);
     try {
       const countryWebhooks: Record<string, string> = {};
       for (const c of countries) countryWebhooks[c.countryId] = c.url;
       const res = await fetch("/api/admin/config/discord", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ general, countryWebhooks }),
+        body: JSON.stringify({
+          general,
+          countryWebhooks,
+          ...(claimWebhooks ? { claimWebhooks: true } : {}),
+        }),
       });
-      if (!res.ok) throw new Error("Save failed");
+      // Show the server's reason, the way handleTest below already does. A bare
+      // "Save failed" hides the one message that says what to do about it.
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        if (res.status === 409) setOwnershipConflict(true);
+        throw new Error(data?.error ?? "Save failed");
+      }
       setMessage({ type: "success", text: "Webhook URLs saved." });
-    } catch {
-      setMessage({ type: "error", text: "Failed to save. Check console." });
+    } catch (err) {
+      setMessage({
+        type: "error",
+        text: err instanceof Error ? err.message : "Failed to save. Check console.",
+      });
     } finally {
       setSaving(false);
     }
@@ -429,13 +449,34 @@ export function DiscordIntegrations() {
         </p>
       )}
 
-      <button
-        onClick={handleSave}
-        disabled={saving || !loaded}
-        className="px-4 py-2 rounded-md bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-      >
-        {saving ? "Saving…" : "Save Webhooks"}
-      </button>
+      {ownershipConflict && (
+        <p className="text-sm text-amber-400">
+          Taking these webhooks over points this deployment&apos;s game events at the channels
+          above. Do it only if this deployment is meant to be the one posting to them.
+        </p>
+      )}
+
+      <div className="flex flex-wrap gap-3">
+        {/* Arrow function, not a bare reference: React would pass the click event
+            as the first argument, and every save would claim ownership. */}
+        <button
+          onClick={() => handleSave()}
+          disabled={saving || !loaded}
+          className="px-4 py-2 rounded-md bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+        >
+          {saving ? "Saving…" : "Save Webhooks"}
+        </button>
+
+        {ownershipConflict && (
+          <button
+            onClick={() => handleSave(true)}
+            disabled={saving}
+            className="px-4 py-2 rounded-md border border-amber-500 text-amber-300 text-sm font-medium hover:bg-amber-500/10 disabled:opacity-50 transition-colors"
+          >
+            Take ownership and save
+          </button>
+        )}
+      </div>
     </div>
   );
 }

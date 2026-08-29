@@ -289,17 +289,19 @@ describe("reconcileLedger", () => {
       }),
     ];
 
+    // Runs the stock-vs-flow check rather than skipping it, so the overall green
+    // status here means every check passed and not that one of them was waived.
     const report = reconcileLedger({
       turn: 10,
       entries,
       openingBalances: {},
       closingBalances: {},
-      skipStockVsFlow: true,
     });
 
     expect(report.moneySupply.status).toBe("green");
     expect(report.moneySupply.findings).toEqual([]);
     expect(report.unattributed).toEqual([]);
+    expect(report.stockVsFlow.skipped).toBe(false);
     expect(report.status).toBe("green");
   });
 
@@ -343,7 +345,7 @@ describe("reconcileLedger", () => {
     expect(report.status).toBe("green");
   });
 
-  it("skips stock-vs-flow when told to (reset/reseed epoch)", () => {
+  it("reports a skipped stock-vs-flow check as unverified, not as clean", () => {
     const report = reconcileLedger({
       turn: 10,
       entries: [],
@@ -352,6 +354,8 @@ describe("reconcileLedger", () => {
       skipStockVsFlow: true,
     });
     expect(report.stockVsFlow.skipped).toBe(true);
-    expect(report.stockVsFlow.divergentCount).toBe(0);
+    expect(report.stockVsFlow.divergentCount).toBeNull();
+    expect(report.stockVsFlow.status).toBe("amber");
+    expect(report.status).toBe("amber");
   });
 });

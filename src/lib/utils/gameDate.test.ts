@@ -3,6 +3,7 @@ import { MS_PER_TURN } from "@/lib/constants/turnTime";
 import {
   calendarTurn,
   formatGameMonth,
+  yearOfTurn,
   gameDateAnchorFromState,
   turnToGameMonth,
   type GameDateAnchor,
@@ -113,5 +114,29 @@ describe("gameDateAnchorFromState", () => {
       preIterationTurns: 48,
       preIterationActive: false,
     });
+  });
+});
+
+describe("yearOfTurn", () => {
+  it("is the identity on a world with no founding phase", () => {
+    expect(yearOfTurn(1, 1953)).toBe(1953);
+    expect(yearOfTurn(48, 1953)).toBe(1953);
+    expect(yearOfTurn(49, 1953)).toBe(1954);
+  });
+
+  it("shifts the year back by the founding-phase offset", () => {
+    // Live world 2026-08-28: currentTurn 463, startingYear 1953,
+    // preIterationTurns 48. The status bar reads 1961, so anything scheduled
+    // off the raw turn (which lands on 1962) is a full game year early.
+    expect(yearOfTurn(463, 1953)).toBe(1962);
+    expect(yearOfTurn(463, 1953, { preIterationTurns: 48 })).toBe(1961);
+  });
+
+  it("pins to the era start while the founding phase is active", () => {
+    expect(yearOfTurn(400, 1953, { preIterationActive: true })).toBe(1953);
+  });
+
+  it("never returns a year before the era start", () => {
+    expect(yearOfTurn(3, 1953, { preIterationTurns: 48 })).toBe(1953);
   });
 });

@@ -175,6 +175,69 @@ describe("processScotusDocketTurn", () => {
     expect(db.collectionMocks.docketCases!.updateOne).not.toHaveBeenCalled();
   });
 
+  it("holds a case back until the CALENDAR year reaches its decision year (#1208)", async () => {
+    // Live world 2026-08-28: raw turn 434, startingYear 1953, preIterationTurns
+    // 48 — the founding phase burns 48 turns before the calendar starts, so the
+    // world reads 1961 while the raw turn maps to 1962. Scheduling off the raw
+    // turn is what handed players "Baker v. Carr (1962)" in a 1961 world.
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValue({
+      currentTurn: 434,
+      startingYear,
+      preIterationTurns: 48,
+    } as never);
+    db.collectionMocks.supremeCourtSeats!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks.docketCases!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: new ObjectId(),
+          countryId: "US",
+          axis: "economic",
+          historicalMajorityDirection: 1,
+          decisionYear: 1962,
+          status: "pending",
+        },
+      ]),
+    });
+
+    const { processScotusDocketTurn } = await import("./scotusDocketTurn");
+    const result = await processScotusDocketTurn(434, db as unknown as Db);
+
+    expect(result).toEqual({ casesFired: 0, casesAffirmed: 0, casesDiverged: 0 });
+    expect(db.collectionMocks.docketCases!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("fires the case once the founding-phase-adjusted calendar reaches it", async () => {
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValue({
+      currentTurn: 481,
+      startingYear,
+      preIterationTurns: 48,
+    } as never);
+    db.collectionMocks.supremeCourtSeats!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks.docketCases!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: new ObjectId(),
+          countryId: "US",
+          axis: "economic",
+          historicalMajorityDirection: 1,
+          decisionYear: 1962,
+          status: "pending",
+        },
+      ]),
+    });
+
+    const { processScotusDocketTurn } = await import("./scotusDocketTurn");
+    const result = await processScotusDocketTurn(481, db as unknown as Db);
+
+    expect(result.casesFired).toBe(1);
+  });
+
   it("posts a full news/wire post for every decided case, affirmed or diverged", async () => {
     const seats = [
       seat({ seatNumber: 1, economicLean: 3 }),

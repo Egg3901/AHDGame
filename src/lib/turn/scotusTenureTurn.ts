@@ -27,6 +27,7 @@ import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import type { Character, ElectedOfficial } from "@/lib/db/types";
 import type { SupremeCourtSeat } from "@/lib/db/types/scotus";
 import { yearToTurn } from "@/lib/scotus/turnConversion";
+import { calendarTurn } from "@/lib/utils/gameDate";
 import { rollDivergentDeparture } from "@/lib/scotus/tenure";
 import { generateScotusVacancyNews } from "@/lib/scotus/scotusNews";
 import { createNotifications, type NotificationInput } from "@/lib/notifications";
@@ -139,6 +140,14 @@ export async function processScotusTenureTurn(
   const gameState = await getGameState();
   const startingYear =
     gameState?.startingYear ?? getStartingYearForPreset(gameState?.preset ?? DEFAULT_SEED_PRESET);
+  // Scripted departures are CALENDAR dates, so they resolve against the calendar
+  // turn — a founding phase shifts the raw turn a full game year ahead of the
+  // year the player sees (#1208). The divergent-seat hazard below stays on the
+  // raw turn: it measures turns SERVED, a duration, not a date.
+  const calTurn = calendarTurn(currentTurn, {
+    preIterationActive: gameState?.preIteration?.active,
+    preIterationTurns: gameState?.preIterationTurns,
+  });
 
   const seats = await database
     .collection<SupremeCourtSeat>("supremeCourtSeats")
@@ -161,7 +170,7 @@ export async function processScotusTenureTurn(
       if (!occupant || occupant.departureYear == null) continue; // still serving to "present"
 
       const departureTurn = yearToTurn(occupant.departureYear, startingYear);
-      if (currentTurn < departureTurn) continue;
+      if (calTurn < departureTurn) continue;
 
       const nextOccupant = seat.historicalOccupants[seat.historicalOccupantIndex + 1];
       if (nextOccupant) {

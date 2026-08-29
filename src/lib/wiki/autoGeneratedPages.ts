@@ -11,7 +11,12 @@ import { getAllPartySlugs } from "@/lib/wiki/partyData";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
 import type { GameIteration } from "@/lib/db/types/gameState";
 import { getGameState } from "@/lib/gameState";
-import { realDateToTurn, type GameDateAnchor } from "@/lib/utils/gameDate";
+import {
+  realDateToTurn,
+  type GameDateAnchor,
+  calendarTurn,
+  type CalendarClock,
+} from "@/lib/utils/gameDate";
 import { STARTING_YEAR } from "@/lib/constants/turnTime";
 import {
   iterationLabel,
@@ -596,13 +601,22 @@ function finalizeEntry(
   turn: number,
   iteration: GameIteration,
   startingYear: number,
-  endTurn: number | null
+  endTurn: number | null,
+  /**
+   * Founding-phase clock. Office turns are stored RAW, so without it every
+   * career date and sort key on the wiki reads a game year AHEAD of the status
+   * bar (#1208).
+   */
+  clock?: CalendarClock
 ): void {
+  // One calendar turn behind all four fields, so the rendered date, the numeric
+  // year and the week never disagree with each other.
+  const calTurn = calendarTurn(turn, clock);
   entry.iteration = iteration;
-  entry.startWeekYear = weekYearFromTurn(turn, startingYear);
-  entry.startYear = startingYear + Math.floor((turn - 1) / 48);
-  entry.startWeek = ((turn - 1) % 48) + 1;
-  entry.endWeekYear = endTurn != null ? weekYearFromTurn(endTurn, startingYear) : null;
+  entry.startWeekYear = weekYearFromTurn(turn, startingYear, clock);
+  entry.startYear = startingYear + Math.floor((calTurn - 1) / 48);
+  entry.startWeek = ((calTurn - 1) % 48) + 1;
+  entry.endWeekYear = endTurn != null ? weekYearFromTurn(endTurn, startingYear, clock) : null;
 }
 
 /**
@@ -627,7 +641,7 @@ function finalizeCurrentEntry(entry: OfficeTenureEntry, ctx: IterationContext): 
   const turn = entry.startDate
     ? realDateToTurn(entry.startDate, ctx.anchor)
     : ctx.anchor.currentTurn;
-  finalizeEntry(entry, turn, ctx.current, ctx.startingYear, null);
+  finalizeEntry(entry, turn, ctx.current, ctx.startingYear, null, ctx.anchor);
 }
 
 /**
@@ -715,7 +729,8 @@ async function getExecutiveHistory(
       event.turn,
       iteration,
       startingYear,
-      sameIterationNext ? (next!.turn ?? null) : null
+      sameIterationNext ? (next!.turn ?? null) : null,
+      ctx.anchor
     );
     return entry;
   });
@@ -775,7 +790,7 @@ async function getCabinetHistory(
     const endTurn = sameIterationNext
       ? confirmationTurn(next!, next!.confirmedAt ?? next!.updatedAt ?? next!.createdAt, ctx)
       : null;
-    finalizeEntry(entry, turn, iteration, startingYear, endTurn);
+    finalizeEntry(entry, turn, iteration, startingYear, endTurn, ctx.anchor);
     return entry;
   });
 
@@ -879,7 +894,7 @@ async function getLeadershipHistory(
     const endTurn = sameIterationNext
       ? confirmationTurn(next!, next!.updatedAt ?? next!.createdAt, ctx)
       : null;
-    finalizeEntry(entry, turn, iteration, startingYear, endTurn);
+    finalizeEntry(entry, turn, iteration, startingYear, endTurn, ctx.anchor);
     return entry;
   });
 
