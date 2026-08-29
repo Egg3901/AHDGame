@@ -180,8 +180,28 @@ export async function prepareAutonomousWarEntry(
   // exists for, whatever their public actually thought. The stored rating still
   // wins where there is one: it carries the national providers (war block,
   // address bump, org statements, cabinet) the recompute deliberately omits.
-  const approvalRating =
-    approval?.approvalRating ?? (await recomputeNationalApproval(db, countryId));
+  //
+  // Measuring reads states, metrics, era context and political bases, which is far
+  // more failure surface than the single findOne it replaced. Every turn caller
+  // wraps applyLegislationEffect in a bare `.catch`, so letting a read error escape
+  // would abandon the rest of THIS bill's provisions as well. Refuse instead:
+  // safer than admitting on error, and narrower than aborting the bill.
+  let approvalRating = approval?.approvalRating;
+  if (approvalRating == null) {
+    try {
+      approvalRating = await recomputeNationalApproval(db, countryId);
+    } catch (err) {
+      console.error(`[warEntry] could not measure ${countryId} approval:`, err);
+      return { ready: false, deployedUnits: 0, reason: "Public approval could not be measured." };
+    }
+  }
+  // Checked for finiteness rather than compared alone: `NaN < ENTRY_MIN_APPROVAL`
+  // is FALSE, so a malformed metric poisoning the population-weighted average
+  // would wave the country into the war instead of holding it out.
+  if (!Number.isFinite(approvalRating)) {
+    console.error(`[warEntry] ${countryId} approval measured as ${approvalRating}`);
+    return { ready: false, deployedUnits: 0, reason: "Public approval could not be measured." };
+  }
   if (approvalRating < ENTRY_MIN_APPROVAL) {
     return { ready: false, deployedUnits: 0, reason: "Public approval no longer supports entry." };
   }

@@ -63,13 +63,16 @@ describe("recomputeNationalApproval", () => {
   it("reads the hybrid political bases for a board country", async () => {
     // The real path for every country in the game, and the one the war-entry
     // gate depends on. SP4 no-divergence rule: a board country must never reach
-    // the legacy metric scorer, even with metrics present that would disagree.
+    // the legacy metric scorer. The metrics handed in are the same fixture the
+    // unboarded cases use, which scores well ABOVE the base, so a result of 49.5
+    // can only have come from the political bases.
     basesMock.mockResolvedValue({ national: 49.5 });
+    const metrics = [makeStateMetrics("rich", 90000), makeStateMetrics("poor", 30000)];
 
     const result = await recomputeNationalApproval(
       db as unknown as Db,
       "FR",
-      inputs([makeStateMetrics("idf", 90000)], { idf: 1000 })
+      inputs(metrics, { rich: 900, poor: 100 })
     );
 
     expect(result).toBe(49.5);
@@ -116,6 +119,36 @@ describe("recomputeNationalApproval", () => {
     const result = await recomputeNationalApproval(db as unknown as Db, UNBOARDED, inputs([]));
 
     expect(result).toBe(BASE_APPROVAL);
+  });
+
+  it("does not gather metrics it will not use for a board country", async () => {
+    // Every country in COUNTRY_ORDER is a board country, so the political branch is
+    // the only one that runs in practice -- and it reads none of the states, metrics
+    // or era context that gathering them costs. The war-entry gate calls this with
+    // no prefetched inputs on every entry bill.
+    basesMock.mockResolvedValue({ national: 49.5 });
+
+    const result = await recomputeNationalApproval(db as unknown as Db, "FR");
+
+    expect(result).toBe(49.5);
+    expect(db.collection("macroMetrics").find).not.toHaveBeenCalled();
+    expect(db.collection("states").find).not.toHaveBeenCalled();
+  });
+
+  it("scopes its own metrics query to the country", async () => {
+    // State ids are not globally unique (DE HB is Bremen, CN HB is Huabei), so an
+    // unscoped `$in` over them pulls another country's metrics into this one's
+    // national averages. `snapshotApprovalHistory` scopes for exactly this reason;
+    // the two must agree or the page and the war-entry gate score differently.
+    db.collection("states")
+      .find()
+      .toArray.mockResolvedValue([{ _id: "HB", population: 1000 }]);
+    db.collection("macroMetrics").find().toArray.mockResolvedValue([]);
+
+    await recomputeNationalApproval(db as unknown as Db, UNBOARDED);
+
+    const metricsFilter = db.collection("macroMetrics").find.mock.calls.at(-1)?.[0];
+    expect(metricsFilter).toMatchObject({ countryId: UNBOARDED });
   });
 
   it("queries for its own inputs when a caller hands none over", async () => {

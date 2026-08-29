@@ -31,8 +31,15 @@ export async function loadNationalApproval(countryId: CountryId): Promise<Nation
     db.collection<GovernmentApproval>("governmentApprovals").findOne({ _id: countryId }),
   ]);
   const stateIds = allStates.map((s) => s._id);
-  // SP5: merged two-store view.
-  const allMetrics = await findMergedRegionMetricsMany(db, { _id: { $in: stateIds } });
+  // SP5: merged two-store view. Scoped to the country like `snapshotApprovalHistory`
+  // and `recomputeNationalApproval`: state ids collide across countries (DE HB is
+  // Bremen, CN HB is Huabei), and an unscoped `$in` pulled the other country's
+  // metrics into these national averages, which feed both the modifiers below and
+  // the recompute the gate now shares.
+  const allMetrics = await findMergedRegionMetricsMany(db, {
+    _id: { $in: stateIds },
+    countryId,
+  });
   const history = approvalDoc?.history ?? [];
 
   // National metric averages (cheap — just averaging the already-fetched docs).

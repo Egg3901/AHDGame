@@ -99,6 +99,12 @@ describe("autonomous war commands", () => {
     });
     db.collection("governmentApprovals").findOne.mockResolvedValue({ approvalRating: 30 });
     db.collection("federalBudget").findOne.mockResolvedValue({ debtToGdpRatio: 50 });
+    // A force that WOULD deploy. Without one this passed with the approval floor
+    // removed entirely, because an unstocked reserve refuses on its own.
+    db.collection("militaryUnits")
+      .find()
+      .toArray.mockResolvedValue([unit(10), unit(20), unit(70)]);
+    db.collection("militaryUnits").updateMany.mockResolvedValue({ modifiedCount: 2 });
 
     const result = await prepareAutonomousWarEntry(db as unknown as Db, "FR", conflict, 50);
 
@@ -138,6 +144,12 @@ describe("autonomous war commands", () => {
     });
     db.collection("governmentApprovals").findOne.mockResolvedValue(null);
     db.collection("federalBudget").findOne.mockResolvedValue({ debtToGdpRatio: 50 });
+    // A force that WOULD deploy, so the refusal can only come from the floor and
+    // not from an empty reserve.
+    db.collection("militaryUnits")
+      .find()
+      .toArray.mockResolvedValue([unit(10), unit(20), unit(70)]);
+    db.collection("militaryUnits").updateMany.mockResolvedValue({ modifiedCount: 2 });
     recomputeMock.mockResolvedValue(30);
 
     const result = await prepareAutonomousWarEntry(db as unknown as Db, "FR", conflict, 50);
@@ -158,11 +170,66 @@ describe("autonomous war commands", () => {
     });
     db.collection("governmentApprovals").findOne.mockResolvedValue({ approvalRating: 30 });
     db.collection("federalBudget").findOne.mockResolvedValue({ debtToGdpRatio: 50 });
+    // A force that WOULD deploy, so reading the recompute instead of the stored 30
+    // shows up as an entry rather than as an empty reserve.
+    db.collection("militaryUnits")
+      .find()
+      .toArray.mockResolvedValue([unit(10), unit(20), unit(70)]);
+    db.collection("militaryUnits").updateMany.mockResolvedValue({ modifiedCount: 2 });
     recomputeMock.mockResolvedValue(90);
 
     const result = await prepareAutonomousWarEntry(db as unknown as Db, "FR", conflict, 50);
 
     expect(result).toMatchObject({ ready: false, deployedUnits: 0 });
+    expect(db.collection("militaryUnits").updateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses entry rather than throwing when approval cannot be measured", async () => {
+    // The measurement reads states, metrics, era context and political bases, so it
+    // has far more failure surface than the single findOne it replaced. Every turn
+    // caller wraps applyLegislationEffect in a bare `.catch`, so a throw here would
+    // abandon the bill's REMAINING provisions too. Refusing is both safer than
+    // admitting on error and narrower than aborting the bill.
+    const db = createMockDb();
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      nppForeignPolicyMode: "active",
+      nppForeignPolicyStage: "war",
+    });
+    db.collection("governmentApprovals").findOne.mockResolvedValue(null);
+    db.collection("federalBudget").findOne.mockResolvedValue({ debtToGdpRatio: 50 });
+    recomputeMock.mockRejectedValue(new Error("metrics unavailable"));
+
+    const result = await prepareAutonomousWarEntry(db as unknown as Db, "FR", conflict, 50);
+
+    expect(result).toMatchObject({ ready: false, deployedUnits: 0 });
+    expect(db.collection("militaryUnits").updateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses entry when the measurement is not a finite number", async () => {
+    // `NaN < ENTRY_MIN_APPROVAL` is false, so a malformed metric that poisons the
+    // population-weighted average would wave the country INTO a world war rather
+    // than out of one. The comparison cannot be the only thing standing there.
+    const db = createMockDb();
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      nppForeignPolicyMode: "active",
+      nppForeignPolicyStage: "war",
+    });
+    db.collection("governmentApprovals").findOne.mockResolvedValue(null);
+    db.collection("federalBudget").findOne.mockResolvedValue({ debtToGdpRatio: 50 });
+    // A force that WOULD deploy, so the refusal can only come from the guard and
+    // not from an empty reserve.
+    db.collection("militaryUnits")
+      .find()
+      .toArray.mockResolvedValue([unit(10), unit(20), unit(70)]);
+    db.collection("militaryUnits").updateMany.mockResolvedValue({ modifiedCount: 2 });
+    recomputeMock.mockResolvedValue(Number.NaN);
+
+    const result = await prepareAutonomousWarEntry(db as unknown as Db, "FR", conflict, 50);
+
+    expect(result).toMatchObject({ ready: false, deployedUnits: 0 });
+    expect(db.collection("militaryUnits").updateMany).not.toHaveBeenCalled();
   });
 
   it("halts ratified NPP entry when the rollout has returned to votes", async () => {
