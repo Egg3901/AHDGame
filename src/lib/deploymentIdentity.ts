@@ -16,6 +16,13 @@ export function deploymentServiceSlug(env: NodeJS.ProcessEnv = process.env): str
 }
 
 /**
+ * Pairs already reported. A suppressed world posts on nearly every turn, and a
+ * sandbox replaying thousands of turns would otherwise bury its own logs in the
+ * same line. One line names the mismatch; repeats add nothing.
+ */
+const reportedSuppressions = new Set<string>();
+
+/**
  * True when this process may post to the Discord webhooks configured in
  * `gameConfig.discord*WebhookUrl`.
  *
@@ -30,13 +37,6 @@ export function deploymentServiceSlug(env: NodeJS.ProcessEnv = process.env): str
  * Unstamped config posts as before — this must never silence a live world that
  * simply has not re-saved its webhooks yet.
  */
-/**
- * Pairs already reported. A suppressed world posts on nearly every turn, and a
- * sandbox replaying thousands of turns would otherwise bury its own logs in the
- * same line. One line names the mismatch; repeats add nothing.
- */
-const reportedSuppressions = new Set<string>();
-
 export function ownsConfiguredWebhooks(owner: string | undefined): boolean {
   if (!owner) return true;
   const self = deploymentServiceSlug();
