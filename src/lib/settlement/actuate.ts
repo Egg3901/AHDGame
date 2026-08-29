@@ -29,15 +29,23 @@
  * DD, not DE, is the one with players to carry across, which `mergeCountry`
  * does by bringing residents over with their regions.
  */
-import type { Db } from "mongodb";
+import type { Db, ObjectId } from "mongodb";
 import type { SettlementCrisisDoc, SettlementOutcome } from "@/lib/db/types/settlementCrisis";
 import type { CountryId } from "@/lib/constants/countries";
-import { SETTLEMENT_REOPEN_COOLDOWN_TURNS } from "@/lib/constants/settlementCrisis";
+import {
+  SETTLEMENT_REOPEN_COOLDOWN_TURNS,
+  GERMAN_QUESTION_BERLIN,
+  GERMAN_QUESTION_EAST_BERLIN,
+} from "@/lib/constants/settlementCrisis";
+import { mergePartiesIntoCountry } from "@/lib/country/mergePartiesIntoCountry";
+import { mergeRegion } from "@/lib/country/mergeRegion";
+import { rescopeLegislationCatalogue } from "@/lib/country/rescopeLegislationCatalogue";
+import { installOnePartyState } from "@/lib/onePartyState/installOnePartyState";
+import { remapOffice } from "@/lib/country/dissolvingOfficeRemap";
 import { getSettlementCrisesCollection } from "@/lib/db/collections";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
 import { mergeCountry } from "@/lib/country/mergeCountry";
 import { getCountryState } from "@/lib/countryState";
-import { getCountryStateCollection } from "@/lib/db/collections/countryState";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { blocOrgFor } from "@/lib/world/blocMembership";
 import { admitMember } from "@/lib/internationalOrganizations/joinApplication";
@@ -100,6 +108,40 @@ export async function actuateSettlementOutcome(
 
   // challenger — the merge. `target` (DE) is the surviving shell; `challenger`
   // (DD) is absorbed into it. See the header for why that direction.
+  //
+  // ORDER IS LOAD-BEARING at every step, and each is argued at its own call site.
+  //
+  //   1. the absorbed ruling party is READ, before anything renumbers it
+  //   2. the parties MOVE, before anything reads a party id
+  //   3. the country MERGES, carrying regions and officials
+  //   4. East Berlin FUSES into Berlin, once both are German
+  //   5. the settlement is ADOPTED, once the chamber it reads exists
+
+  // 1. Read first. `mergePartiesIntoCountry` renumbers this value, and the map it
+  //    returns is the only thing that can translate it afterwards.
+  const absorbedState = await getCountryState(db, challenger);
+  const absorbedRulingPartyId = absorbedState.rulingPartyId ?? null;
+
+  // 2. Parties before regions. `characters.party` and `electedOfficials.party`
+  //    hold a per-country `sequentialId`, so a row that moves country before its
+  //    party is renumbered is silently reinterpreted against the survivor's list
+  //    — East Germany's communists would read as West German social democrats.
+  //    The damage is not reversible, because the old value is gone.
+  const partiesMerged = await mergePartiesIntoCountry(db, {
+    fromCountryId: challenger,
+    toCountryId: target,
+    currentTurn,
+  });
+  if (!partiesMerged.ok) {
+    return {
+      actuated: false,
+      outcome: "challenger",
+      deferred: true,
+      error: partiesMerged.error ?? "The party migration did not complete.",
+    };
+  }
+
+  // 3. The regions and everyone seated in them.
   const merged = await mergeCountry(db, {
     fromCountryId: challenger,
     toCountryId: target,
@@ -116,13 +158,42 @@ export async function actuateSettlementOutcome(
     };
   }
 
-  // The unified state takes the winner's constitutional settlement. Both of
+  // 3b. National officeholders the region sweep cannot see.
+  //
+  //     `evacuateRegionPolitics` works per region and matches on `state`, so an
+  //     official with no region — East Germany's Chairman of the Council of State
+  //     is exactly this — is never visited by it, and would be left seated on a
+  //     country that no longer exists. Same for a cabinet seat held by an NPP
+  //     rather than a player.
+  await retireNationalRemnants(db, { absorbed: challenger, survivor: target, currentTurn });
+
+  // 4. East Berlin into Berlin, AFTER the country merge and not before: both
+  //    regions must be under one flag, and BEO is East German until step 3 runs.
+  //    Germany's seed has no `DE-bundestag-BEO` because a unified Berlin is one
+  //    city, which is the whole reason this step exists.
+  const berlin = await mergeRegion(db, {
+    fromRegionId: GERMAN_QUESTION_EAST_BERLIN,
+    toRegionId: GERMAN_QUESTION_BERLIN,
+    currentTurn,
+  });
+  if (!berlin.ok) {
+    return {
+      actuated: false,
+      outcome: "challenger",
+      deferred: true,
+      error: berlin.error ?? "East Berlin could not be merged into Berlin.",
+    };
+  }
+
+  // 5. The unified state takes the winner's constitutional settlement. Both of
   // these are runtime documents, which is exactly why this direction is the
   // buildable one.
   await adoptChallengerSettlement(db, {
     survivor: target,
     absorbed: challenger,
     currentTurn,
+    partyIdMap: partiesMerged.partyIdMap,
+    absorbedRulingPartyId,
   });
 
   await recordCountryEvent(db, {
@@ -141,6 +212,55 @@ export async function actuateSettlementOutcome(
 }
 
 /**
+ * Deal with what the per-region sweep cannot reach.
+ *
+ * `evacuateRegionPolitics` runs once per region and matches officials on
+ * `state`, so anything held at NATIONAL level is invisible to it. East Germany's
+ * Chairman of the Council of State carries no region at all, and would otherwise
+ * sit for ever on a country that no longer exists. NPP-held cabinet seats have
+ * the same shape: the region sweep only re-scopes the ones a resident PLAYER
+ * holds.
+ *
+ * Offices with a counterpart are carried; offices without one retire. Seat counts
+ * are NOT rescaled here, because a national office that is not tied to a region
+ * is not part of any region's delegation.
+ *
+ * Runs after `mergeCountry`, so anything still pointing at the absorbed country
+ * is genuinely a remnant rather than a region the sweep has not reached yet.
+ */
+async function retireNationalRemnants(
+  db: Db,
+  params: { absorbed: CountryId; survivor: CountryId; currentTurn: number }
+): Promise<void> {
+  const { absorbed, survivor } = params;
+  const now = new Date();
+
+  const remnants = (await db
+    .collection("electedOfficials")
+    .find({ countryId: absorbed })
+    .toArray()) as unknown as Array<{ _id: ObjectId; officeType: string }>;
+
+  for (const official of remnants) {
+    const target = remapOffice(absorbed, survivor, official.officeType);
+    if (target === null) {
+      await db.collection("electedOfficials").deleteOne({ _id: official._id });
+      continue;
+    }
+    await db
+      .collection("electedOfficials")
+      .updateOne(
+        { _id: official._id },
+        { $set: { countryId: survivor, officeType: target, updatedAt: now } }
+      );
+  }
+
+  // Cabinet seats the region sweep did not carry, which is every NPP-held one.
+  await db
+    .collection("cabinetMembers")
+    .updateMany({ countryId: absorbed }, { $set: { countryId: survivor, updatedAt: now } });
+}
+
+/**
  * Give the surviving shell the winner's character: the absorbed state's
  * government type, and its side of the Cold War.
  *
@@ -156,14 +276,42 @@ export async function actuateSettlementOutcome(
  */
 async function adoptChallengerSettlement(
   db: Db,
-  params: { survivor: CountryId; absorbed: CountryId; currentTurn: number }
+  params: {
+    survivor: CountryId;
+    absorbed: CountryId;
+    currentTurn: number;
+    /** old to new party `sequentialId`, from the migration. */
+    partyIdMap: Record<string, string>;
+    /** The absorbed country's ruling party, under its OLD number. */
+    absorbedRulingPartyId: number | null;
+  }
 ): Promise<void> {
-  const absorbedState = await getCountryState(db, params.absorbed);
-  await getCountryStateCollection(db).updateOne(
-    { _id: params.survivor },
-    { $set: { governmentType: absorbedState.governmentType, updatedAt: new Date() } },
-    { upsert: true }
-  );
+  // The absorbed state's ruling party, translated to its NEW number.
+  //
+  // Passed explicitly rather than resolved. `installOnePartyState` would read the
+  // SURVIVING shell's formed government — Germany's, whose governing party is the
+  // SPD — and install the side that just LOST the war, banning the winner.
+  const mappedRulingParty = params.absorbedRulingPartyId
+    ? Number(params.partyIdMap[String(params.absorbedRulingPartyId)])
+    : Number.NaN;
+
+  // The full one-party install, not just a `governmentType` copy: it also sets
+  // `rulingPartyId`, restores `opsVoteMultipliers` and `hasLeaderConfidenceModel`,
+  // marks the ruling party `ruling` and every other party `banned`, and seeds the
+  // regime-escalation row the per-turn driver needs.
+  //
+  // ⚠️ NO `pendingPostConversionElection` IS WRITTEN, and that is deliberate.
+  // Every other route into a conversion schedules one; this one must not, because
+  // the whole point of the merge is that the carried chamber keeps sitting. A
+  // snap election here would dissolve the seats this pipeline just preserved.
+  // Do not "fix" the omission — `reunification.e2e.test.ts` asserts it.
+  await installOnePartyState(db, params.survivor, params.currentTurn, {
+    ...(Number.isInteger(mappedRulingParty) ? { rulingPartyId: mappedRulingParty } : {}),
+  });
+
+  // The survivor may now legislate in the catalogue it inherited. Without this a
+  // one-party socialist Germany could propose nothing but West German tax law.
+  await rescopeLegislationCatalogue(db, params.absorbed, params.survivor);
 
   const preset = await getGameStatePresetOrDefault(db);
   const pactOrg = blocOrgFor(preset, "east");

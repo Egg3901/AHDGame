@@ -18,6 +18,16 @@ vi.mock("@/lib/internationalOrganizations/service", () => ({ isMember: vi.fn() }
 vi.mock("@/lib/internationalOrganizations/withdrawalBills", () => ({
   removeOrganizationMembership: vi.fn(),
 }));
+vi.mock("@/lib/country/mergePartiesIntoCountry", () => ({
+  mergePartiesIntoCountry: vi.fn(),
+}));
+vi.mock("@/lib/country/mergeRegion", () => ({ mergeRegion: vi.fn() }));
+vi.mock("@/lib/country/rescopeLegislationCatalogue", () => ({
+  rescopeLegislationCatalogue: vi.fn(),
+}));
+vi.mock("@/lib/onePartyState/installOnePartyState", () => ({
+  installOnePartyState: vi.fn(),
+}));
 
 function prime(db: MockDb, name: string): MockCollection {
   return db.collection(name) as unknown as MockCollection;
@@ -72,6 +82,26 @@ describe("actuateSettlementOutcome", () => {
     const { removeOrganizationMembership } =
       await import("@/lib/internationalOrganizations/withdrawalBills");
     vi.mocked(removeOrganizationMembership).mockResolvedValue(undefined);
+
+    const { mergePartiesIntoCountry } = await import("@/lib/country/mergePartiesIntoCountry");
+    vi.mocked(mergePartiesIntoCountry).mockResolvedValue({
+      ok: true,
+      partyIdMap: { "1": "7" },
+      partiesMoved: 5,
+      documentsRemapped: 120,
+    });
+    const { mergeRegion } = await import("@/lib/country/mergeRegion");
+    vi.mocked(mergeRegion).mockResolvedValue({ ok: true, retired: true, documentsMoved: 9 });
+    const { rescopeLegislationCatalogue } =
+      await import("@/lib/country/rescopeLegislationCatalogue");
+    vi.mocked(rescopeLegislationCatalogue).mockResolvedValue({ typesRescoped: 115 });
+    const { installOnePartyState } = await import("@/lib/onePartyState/installOnePartyState");
+    vi.mocked(installOnePartyState).mockResolvedValue(undefined);
+    // East Germany's ruling party is sequentialId 1, the SED.
+    vi.mocked(getCountryState).mockResolvedValue({
+      governmentType: "onePartyState",
+      rulingPartyId: 1,
+    } as never);
   });
 
   it("ignores a crisis that has not resolved", async () => {
@@ -145,14 +175,16 @@ describe("actuateSettlementOutcome", () => {
   it("gives the unified state the winner's government type and bloc", async () => {
     const { actuateSettlementOutcome } = await import("./actuate");
     await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 412);
-    const { getCountryStateCollection } = await import("@/lib/db/collections/countryState");
-    const coll = vi.mocked(getCountryStateCollection).mock.results[0].value;
-    expect(coll.updateOne).toHaveBeenCalledWith(
-      { _id: "DE" },
-      expect.objectContaining({
-        $set: expect.objectContaining({ governmentType: "onePartyState" }),
-      }),
-      { upsert: true }
+    // The government type now arrives through the full one-party install rather
+    // than a bare `governmentType` copy: that helper also sets the ruling party,
+    // bans the rest, restores the vote multipliers and seeds the escalation row.
+    // Copying the field alone produced a one-party state with no party.
+    const { installOnePartyState } = await import("@/lib/onePartyState/installOnePartyState");
+    expect(vi.mocked(installOnePartyState)).toHaveBeenCalledWith(
+      expect.anything(),
+      "DE",
+      412,
+      expect.objectContaining({ rulingPartyId: 7 })
     );
     const { admitMember } = await import("@/lib/internationalOrganizations/joinApplication");
     expect(vi.mocked(admitMember)).toHaveBeenCalledWith(
@@ -283,5 +315,131 @@ describe("actuateSettlementOutcome", () => {
     const { removeOrganizationMembership } =
       await import("@/lib/internationalOrganizations/withdrawalBills");
     expect(vi.mocked(removeOrganizationMembership)).not.toHaveBeenCalled();
+  });
+
+  it("migrates the parties before any region moves", async () => {
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+    const { mergePartiesIntoCountry } = await import("@/lib/country/mergePartiesIntoCountry");
+    const { mergeCountry } = await import("@/lib/country/mergeCountry");
+    expect(vi.mocked(mergePartiesIntoCountry).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(mergeCountry).mock.invocationCallOrder[0]
+    );
+  });
+
+  it("fuses East Berlin into Berlin only after the country merge", async () => {
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+    const { mergeRegion } = await import("@/lib/country/mergeRegion");
+    const { mergeCountry } = await import("@/lib/country/mergeCountry");
+    expect(vi.mocked(mergeRegion)).toHaveBeenCalledWith(expect.anything(), {
+      fromRegionId: "BEO",
+      toRegionId: "BE",
+      currentTurn: 470,
+    });
+    // Both halves must be German before they can be fused.
+    expect(vi.mocked(mergeRegion).mock.invocationCallOrder[0]).toBeGreaterThan(
+      vi.mocked(mergeCountry).mock.invocationCallOrder[0]
+    );
+  });
+
+  it("installs the absorbed country's ruling party, not the survivor's", async () => {
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+    const { installOnePartyState } = await import("@/lib/onePartyState/installOnePartyState");
+    // The SED is sequentialId 1 in East Germany and 7 after the migration.
+    // Germany's OWN governing party is also "1" (the SPD) -- the collision this
+    // assertion exists to guard.
+    expect(vi.mocked(installOnePartyState)).toHaveBeenCalledWith(expect.anything(), "DE", 470, {
+      rulingPartyId: 7,
+    });
+  });
+
+  it("does not schedule a post-conversion election", async () => {
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+    const { installOnePartyState } = await import("@/lib/onePartyState/installOnePartyState");
+    // Every other route into a conversion schedules one. Reunification must not:
+    // a snap would dissolve the chamber this whole pipeline works to preserve.
+    const opts = vi.mocked(installOnePartyState).mock.calls[0]?.[3];
+    expect(opts).not.toHaveProperty("pendingPostConversionElection");
+  });
+
+  it("hands the absorbed country's law catalogue to the survivor", async () => {
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+    const { rescopeLegislationCatalogue } =
+      await import("@/lib/country/rescopeLegislationCatalogue");
+    expect(vi.mocked(rescopeLegislationCatalogue)).toHaveBeenCalledWith(
+      expect.anything(),
+      "DD",
+      "DE"
+    );
+  });
+
+  it("aborts and reports deferred when the party migration fails", async () => {
+    const { mergePartiesIntoCountry } = await import("@/lib/country/mergePartiesIntoCountry");
+    vi.mocked(mergePartiesIntoCountry).mockResolvedValue({
+      ok: false,
+      error: "counter unavailable",
+      partyIdMap: {},
+      partiesMoved: 0,
+      documentsRemapped: 0,
+    });
+    const { actuateSettlementOutcome } = await import("./actuate");
+    const res = await actuateSettlementOutcome(
+      db as unknown as Db,
+      crisis({ outcome: "challenger" }),
+      470
+    );
+    const { mergeCountry } = await import("@/lib/country/mergeCountry");
+    expect(res.deferred).toBe(true);
+    expect(res.actuated).toBe(false);
+    expect(vi.mocked(mergeCountry)).not.toHaveBeenCalled();
+  });
+
+  it("aborts when East Berlin cannot be fused", async () => {
+    const { mergeRegion } = await import("@/lib/country/mergeRegion");
+    vi.mocked(mergeRegion).mockResolvedValue({
+      ok: false,
+      error: "different countries",
+      retired: false,
+      documentsMoved: 0,
+    });
+    const { actuateSettlementOutcome } = await import("./actuate");
+    const res = await actuateSettlementOutcome(
+      db as unknown as Db,
+      crisis({ outcome: "challenger" }),
+      470
+    );
+    const { installOnePartyState } = await import("@/lib/onePartyState/installOnePartyState");
+    expect(res.deferred).toBe(true);
+    expect(vi.mocked(installOnePartyState)).not.toHaveBeenCalled();
+  });
+
+  it("runs none of the merge pipeline on a Western win", async () => {
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "incumbent" }), 470);
+    const { mergePartiesIntoCountry } = await import("@/lib/country/mergePartiesIntoCountry");
+    const { mergeRegion } = await import("@/lib/country/mergeRegion");
+    const { installOnePartyState } = await import("@/lib/onePartyState/installOnePartyState");
+    expect(vi.mocked(mergePartiesIntoCountry)).not.toHaveBeenCalled();
+    expect(vi.mocked(mergeRegion)).not.toHaveBeenCalled();
+    expect(vi.mocked(installOnePartyState)).not.toHaveBeenCalled();
+  });
+
+  it("retires a national office with no counterpart in the surviving country", async () => {
+    const chairman = new ObjectId();
+    prime(db, "electedOfficials").find.mockReturnValue({
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      project: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([{ _id: chairman, officeType: "chairmanOfStateCouncil" }]),
+    });
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+    // The region sweep matches on `state`, and this office carries none, so it
+    // would otherwise sit for ever on a dissolved country.
+    expect(prime(db, "electedOfficials").deleteOne).toHaveBeenCalledWith({ _id: chairman });
   });
 });
