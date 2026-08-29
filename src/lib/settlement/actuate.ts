@@ -335,8 +335,12 @@ async function retireNationalRemnants(
   const ministers = (await db
     .collection("cabinetMembers")
     .find({ countryId: absorbed })
-    .toArray()) as unknown as Array<{ characterId?: ObjectId | null }>;
+    .toArray()) as unknown as Array<{ characterId?: ObjectId | null; nppId?: ObjectId | null }>;
   const ministerIds = ministers.map((m) => m.characterId).filter(Boolean) as ObjectId[];
+  // A seat can be held by a player OR an NPP, and both carry the same stored
+  // office field. Handling only the player leaves an NPP minister pointing at a
+  // portfolio that no longer exists.
+  const ministerNppIds = ministers.map((m) => m.nppId).filter(Boolean) as ObjectId[];
 
   await db.collection("cabinetMembers").deleteMany({ countryId: absorbed });
 
@@ -355,6 +359,15 @@ async function retireNationalRemnants(
       .updateMany(
         { _id: { $in: ministerIds }, "currentOffice.type": { $ne: null } },
         { $unset: { cabinetPosition: "" }, $set: { updatedAt: now } }
+      );
+  }
+
+  if (ministerNppIds.length > 0) {
+    await db
+      .collection("npps")
+      .updateMany(
+        { _id: { $in: ministerNppIds }, "currentOffice.type": "parliamentaryCabinet" },
+        { $set: { currentOffice: null, updatedAt: now } }
       );
   }
 
