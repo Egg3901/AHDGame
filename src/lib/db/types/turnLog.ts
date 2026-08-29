@@ -770,7 +770,7 @@ export interface TurnLog {
       status: "green" | "amber" | "red";
       entriesChecked: number;
       unbalancedCount: number;
-      stockVsFlowDivergences: number;
+      stockVsFlowDivergences: number | null;
     } | null;
     economicVitalSigns?: {
       snapshotTurn: number;

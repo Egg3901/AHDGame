@@ -53,6 +53,31 @@ type Inputs = {
   unownedSectors?: UnownedSector[];
   entryFunnel?: NppMarketEntryFunnel | null;
   eraUnitScale?: number;
+  history?: VitalSignsHistoryRow[];
+};
+
+/**
+ * One prior turn's persisted securities readings, loaded with a narrow projection.
+ * The full snapshot document carries per-cell arrays, so never load it whole here.
+ */
+export type VitalSignsHistoryRow = {
+  turn: number;
+  depthToMarketCap: number | null;
+  twoSidedListingShare: number | null;
+  activeTradedListingShare: number | null;
+  sovereignNoHolderBondShare: number | null;
+};
+
+type ProjectedMetric = { value: number | null } | undefined;
+
+type HistoryProjection = {
+  turn: number;
+  securities?: {
+    depthToMarketCap?: ProjectedMetric;
+    twoSidedListingShare?: ProjectedMetric;
+    activeTradedListingShare?: ProjectedMetric;
+    sovereignNoHolderBondShare?: ProjectedMetric;
+  };
 };
 
 type CommodityParticipant = {
@@ -79,6 +104,61 @@ function median(values: number[]): number | null {
   if (sorted.length === 0) return null;
   const middle = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 0 ? (sorted[middle - 1]! + sorted[middle]!) / 2 : sorted[middle]!;
+}
+
+/**
+ * Turns that produced no snapshot are invisible in a raw series, so a gap reads as
+ * a flat line. Record what the window should hold and which turns are absent.
+ *
+ * Coverage starts at the earliest turn in the window that actually has a snapshot,
+ * not at the start of the window. Turns before the series began never had one and
+ * are not gaps; counting them would bury the turns that genuinely died.
+ */
+function computeCoverage(
+  turn: number,
+  history: VitalSignsHistoryRow[]
+): EconomicVitalSigns["coverage"] {
+  const windowStart = Math.max(1, turn - ECONOMIC_VITAL_SIGNS_WINDOW_TURNS + 1);
+  const observed = new Set<number>([turn]);
+  for (const row of history) {
+    if (row.turn >= windowStart && row.turn <= turn) observed.add(row.turn);
+  }
+  const coverageStartTurn = Math.min(...observed);
+  const windowTurnsExpected = turn - coverageStartTurn + 1;
+  const missingTurns: number[] = [];
+  for (let candidate = coverageStartTurn; candidate <= turn; candidate += 1) {
+    if (observed.has(candidate)) continue;
+    missingTurns.push(candidate);
+    if (missingTurns.length >= ECONOMIC_VITAL_SIGNS_WINDOW_TURNS) break;
+  }
+  return {
+    coverageStartTurn,
+    windowTurnsExpected,
+    windowTurnsObserved: observed.size,
+    windowCoverageShare: ratio(observed.size, windowTurnsExpected),
+    missingTurns,
+  };
+}
+
+/**
+ * A single turn's securities reading is spiky enough that a frozen one-turn baseline
+ * can manufacture a regression later. Carry the rolling median beside the point value.
+ */
+function recent12Median(
+  turn: number,
+  history: VitalSignsHistoryRow[],
+  current: number | null,
+  pick: (row: VitalSignsHistoryRow) => number | null,
+  basis: string
+): EconomicMetric {
+  const values: number[] = [];
+  if (current != null && Number.isFinite(current)) values.push(current);
+  for (const row of history) {
+    if (row.turn < turn - 11 || row.turn >= turn) continue;
+    const value = pick(row);
+    if (value != null && Number.isFinite(value)) values.push(value);
+  }
+  return metric(median(values), values.length, basis);
 }
 
 function correlation(xs: number[], ys: number[]): number | null {
@@ -557,10 +637,18 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
   );
   const totalCredit = input.money.reduce((sum, row) => sum + Math.max(0, row.creditOutstanding), 0);
   const activity = monetaryActivity(input.balanceSnapshot, input.ledgerEntries);
+  const history = input.history ?? [];
+  const coverage = computeCoverage(input.turn, history);
   const measurementReasons: string[] = [];
+  if (coverage.missingTurns.length > 0) {
+    measurementReasons.push(`window_missing_${coverage.missingTurns.length}_turns`);
+  }
   if (!input.reconciliation) measurementReasons.push("current_turn_reconciliation_unavailable");
   else if (input.reconciliation.status !== "green") {
     measurementReasons.push(`reconciliation_${input.reconciliation.status}`);
+  }
+  if (input.reconciliation?.stockVsFlow.skipped) {
+    measurementReasons.push("stock_vs_flow_skipped");
   }
   if (!input.balanceSnapshot) measurementReasons.push("balance_snapshot_unavailable");
   if (quality.spreads.length < 5) measurementReasons.push("fewer_than_five_two_sided_books");
@@ -784,6 +872,37 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         "absolute_48h_return_pct_per_million_anchor_notional"
       ),
     },
+    coverage,
+    securitiesRecent12: {
+      depthToMarketCapMedian: recent12Median(
+        input.turn,
+        history,
+        ratio(quality.depthAnchor, marketCapTotal),
+        (row) => row.depthToMarketCap,
+        "open_order_notional_to_listed_market_cap_median_12"
+      ),
+      twoSidedListingShareMedian: recent12Median(
+        input.turn,
+        history,
+        ratio(quality.twoSidedListings, listings.length),
+        (row) => row.twoSidedListingShare,
+        "listed_firm_count_open_order_books_median_12"
+      ),
+      activeTradedListingShareMedian: recent12Median(
+        input.turn,
+        history,
+        ratio(tradedCorporations.size, listings.length),
+        (row) => row.activeTradedListingShare,
+        "listed_firm_count_48_turns_median_12"
+      ),
+      sovereignNoHolderBondShareMedian: recent12Median(
+        input.turn,
+        history,
+        noHolderShare(sovereignBonds).value,
+        (row) => row.sovereignNoHolderBondShare,
+        "unmatured_sovereign_issue_count_median_12"
+      ),
+    },
     households: {
       householdsObserved: wealth.length,
       aggregateWealthAnchor: aggregateWealth,
@@ -869,6 +988,7 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
       status: input.reconciliation?.status ?? "unavailable",
       trialBalanceUnbalancedCount: input.reconciliation?.trialBalance.unbalancedCount ?? null,
       stockVsFlowDivergentCount: input.reconciliation?.stockVsFlow.divergentCount ?? null,
+      stockVsFlowSkipped: input.reconciliation?.stockVsFlow.skipped ?? null,
       moneySupplyFindingCount: input.reconciliation?.moneySupply.findings.length ?? null,
     },
   };
@@ -909,6 +1029,7 @@ export async function snapshotEconomicVitalSigns(
     unownedSectors,
     entryFunnel,
     eraUnitScale,
+    historyDocs,
   ] = await Promise.all([
     db.collection<CommodityFlow>("commodityFlows").find({ turn }).toArray(),
     db
@@ -941,6 +1062,19 @@ export async function snapshotEconomicVitalSigns(
       .collection<NppMarketEntryFunnel>(NPP_MARKET_ENTRY_FUNNEL_COLLECTION)
       .findOne({ _id: `turn:${turn}` }),
     loadWorldEraUnitScale(db),
+    // Narrow projection on purpose: the full snapshot carries per-cell arrays.
+    db
+      .collection<EconomicVitalSigns>(ECONOMIC_VITAL_SIGNS_COLLECTION)
+      .find({ turn: { $gte: windowStart, $lt: turn } })
+      .project<HistoryProjection>({
+        turn: 1,
+        "securities.depthToMarketCap.value": 1,
+        "securities.twoSidedListingShare.value": 1,
+        "securities.activeTradedListingShare.value": 1,
+        "securities.sovereignNoHolderBondShare.value": 1,
+      })
+      .sort({ turn: 1 })
+      .toArray(),
   ]);
   const fxByCurrency = new Map(exchangeRates.map((row) => [row.currencyCode, row.rate]));
   if (!fxByCurrency.has("USD")) fxByCurrency.set("USD", 1);
@@ -969,9 +1103,17 @@ export async function snapshotEconomicVitalSigns(
       });
     }
   }
+  const history: VitalSignsHistoryRow[] = historyDocs.map((doc) => ({
+    turn: doc.turn,
+    depthToMarketCap: doc.securities?.depthToMarketCap?.value ?? null,
+    twoSidedListingShare: doc.securities?.twoSidedListingShare?.value ?? null,
+    activeTradedListingShare: doc.securities?.activeTradedListingShare?.value ?? null,
+    sovereignNoHolderBondShare: doc.securities?.sovereignNoHolderBondShare?.value ?? null,
+  }));
   const snapshot = computeEconomicVitalSigns({
     turn,
     now: new Date(),
+    history,
     currentFlows,
     flowHistory,
     prices,

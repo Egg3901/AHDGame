@@ -63,7 +63,7 @@ async function main() {
   for (const r of all) {
     statusCounts[r.status] += 1;
     maxUnbalanced = Math.max(maxUnbalanced, r.trialBalance.unbalancedCount);
-    maxDivergent = Math.max(maxDivergent, r.stockVsFlow.divergentCount);
+    maxDivergent = Math.max(maxDivergent, r.stockVsFlow.divergentCount ?? 0);
   }
 
   // Aggregate the Phase 3 backlog across every turn.
