@@ -108,4 +108,34 @@ describe("rescopeRegionToCountry", () => {
     expect(names).not.toContain("partyBudget");
     expect(names).not.toContain("billWhips");
   });
+
+  it("covers the records a dissolving merge would otherwise strand", () => {
+    const names = REGION_SCOPED_COLLECTIONS.map((s) => s.collection);
+    // A referendum transfer could leave these behind harmlessly, because the
+    // source country survived to keep owning them. A country merge cannot: the
+    // country they point at stops existing.
+    for (const c of [
+      "enactedLaws",
+      "electionVoteTallies",
+      "elections",
+      "statePartyCandidates",
+      "recruitmentSlates",
+      "slateCandidates",
+      "prospectingSurveys",
+    ]) {
+      expect(names).toContain(c);
+    }
+  });
+
+  it("keys each stranded collection by the field it actually carries", () => {
+    const by = (c: string) => REGION_SCOPED_COLLECTIONS.find((s) => s.collection === c)?.key;
+    expect(by("enactedLaws")).toBe("stateIdField");
+    expect(by("electionVoteTallies")).toBe("stateField");
+    expect(by("elections")).toBe("stateField");
+    expect(by("statePartyCandidates")).toBe("stateIdField");
+    expect(by("recruitmentSlates")).toBe("stateField");
+    // Slate candidates are keyed by residency, not by the slate's region.
+    expect(by("slateCandidates")).toBe("homeStateField");
+    expect(by("prospectingSurveys")).toBe("stateIdField");
+  });
 });
