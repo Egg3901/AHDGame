@@ -270,6 +270,7 @@ interface CarriedOfficial {
   officeType: string;
   party?: string;
   seatsHeld?: number;
+  characterId?: ObjectId | null;
 }
 
 /**
@@ -325,6 +326,19 @@ async function carryOfficials(
           { _id: official._id },
           { $set: { countryId: toCountryId, officeType: targetOffice, updatedAt: now } }
         );
+      // `characters.currentOffice` is a STORED denormalisation, not a derived
+      // one, and `actionRefresh` looks the office key up in the country's config
+      // to award its bonus. A carried player left holding `volkskammerDeputy` in
+      // Germany matches nothing there: they would show a defunct title and
+      // silently lose the bonus their seat is meant to carry.
+      if (official.characterId) {
+        await db
+          .collection("characters")
+          .updateOne(
+            { _id: official.characterId },
+            { $set: { "currentOffice.type": targetOffice, updatedAt: now } }
+          );
+      }
       officialsRemapped++;
     }
   }

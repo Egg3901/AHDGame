@@ -165,7 +165,15 @@ export async function actuateSettlementOutcome(
   //     is exactly this — is never visited by it, and would be left seated on a
   //     country that no longer exists. Same for a cabinet seat held by an NPP
   //     rather than a player.
-  await retireNationalRemnants(db, { absorbed: challenger, survivor: target, currentTurn });
+  const mappedRulingParty = absorbedRulingPartyId
+    ? Number(partiesMerged.partyIdMap[String(absorbedRulingPartyId)])
+    : Number.NaN;
+  await retireNationalRemnants(db, {
+    absorbed: challenger,
+    survivor: target,
+    currentTurn,
+    rulingPartyId: Number.isInteger(mappedRulingParty) ? mappedRulingParty : null,
+  });
 
   // 4. East Berlin into Berlin, AFTER the country merge and not before: both
   //    regions must be under one flag, and BEO is East German until step 3 runs.
@@ -241,9 +249,15 @@ interface GovernmentFormationHead {
  */
 async function retireNationalRemnants(
   db: Db,
-  params: { absorbed: CountryId; survivor: CountryId; currentTurn: number }
+  params: {
+    absorbed: CountryId;
+    survivor: CountryId;
+    currentTurn: number;
+    /** The absorbed ruling party under its NEW number, or null. */
+    rulingPartyId: number | null;
+  }
 ): Promise<void> {
-  const { absorbed, survivor } = params;
+  const { absorbed, survivor, rulingPartyId } = params;
   const now = new Date();
 
   const remnants = (await db
@@ -275,7 +289,36 @@ async function retireNationalRemnants(
   // migration. The head of government is carried separately below; the rest of
   // the council goes with the state it served, and the new government appoints
   // its own.
+  //
+  // The holders' own denormalised office fields go with it: `cabinetPosition`
+  // and a `currentOffice` naming a portfolio would otherwise point at a row that
+  // no longer exists, in a country that never had it. Read BEFORE the delete,
+  // because the rows are how the holders are found.
+  const ministers = (await db
+    .collection("cabinetMembers")
+    .find({ countryId: absorbed })
+    .toArray()) as unknown as Array<{ characterId?: ObjectId | null }>;
+  const ministerIds = ministers.map((m) => m.characterId).filter(Boolean) as ObjectId[];
+
   await db.collection("cabinetMembers").deleteMany({ countryId: absorbed });
+
+  if (ministerIds.length > 0) {
+    await db
+      .collection("characters")
+      .updateMany(
+        { _id: { $in: ministerIds }, "currentOffice.type": "parliamentaryCabinet" },
+        { $set: { currentOffice: null, updatedAt: now }, $unset: { cabinetPosition: "" } }
+      );
+    // A minister who ALSO holds a seat keeps the seat: only the portfolio is
+    // cleared, and their `currentOffice` was already re-pointed at the carried
+    // office by the region sweep.
+    await db
+      .collection("characters")
+      .updateMany(
+        { _id: { $in: ministerIds }, "currentOffice.type": { $ne: null } },
+        { $unset: { cabinetPosition: "" }, $set: { updatedAt: now } }
+      );
+  }
 
   // THE HEAD OF GOVERNMENT IS CARRIED.
   //
@@ -297,6 +340,16 @@ async function retireNationalRemnants(
         $set: {
           pmCharacterId: absorbedGov.pmCharacterId ?? null,
           pmNppId: absorbedGov.pmNppId ?? null,
+          // THE GOVERNING PARTY MOVES WITH THE GOVERNMENT.
+          //
+          // `updateParliamentaryGovernmentSeats` does NOT recompute this for an
+          // already-formed government -- it reads `existing.governingPartyId` to
+          // size the government's support -- so a stale value does not heal on
+          // the next tick. Left alone, unified Germany would go on naming the
+          // SPD as its governing party while the SED ruled: its support would be
+          // counted from the wrong benches, and `applyWhipVotes` would treat the
+          // opposition's members as the government's.
+          ...(rulingPartyId != null ? { governingPartyId: String(rulingPartyId) } : {}),
           updatedAt: now,
         },
       }
@@ -333,8 +386,10 @@ async function adoptChallengerSettlement(
   // The absorbed state's ruling party, translated to its NEW number.
   //
   // Passed explicitly rather than resolved. `installOnePartyState` would read the
-  // SURVIVING shell's formed government — Germany's, whose governing party is the
-  // SPD — and install the side that just LOST the war, banning the winner.
+  // SURVIVING shell's formed government and install whichever party governs
+  // there. That is now the carried ruling party (`retireNationalRemnants` moved
+  // it), so resolution would land in the right place by luck — but only because
+  // of a write two steps away, which is not a thing to depend on.
   const mappedRulingParty = params.absorbedRulingPartyId
     ? Number(params.partyIdMap[String(params.absorbedRulingPartyId)])
     : Number.NaN;

@@ -447,6 +447,40 @@ describe("actuateSettlementOutcome", () => {
     expect(call?.[1].$set.pmNppId).toBeNull();
   });
 
+  it("moves the governing party with the government", async () => {
+    const gs = new ObjectId();
+    prime(db, "governmentFormations").findOne.mockResolvedValue({
+      _id: "DD",
+      pmCharacterId: gs,
+      pmNppId: null,
+    });
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+    const call = prime(db, "governmentFormations").updateOne.mock.calls.find(
+      (c) => c[0]._id === "DE"
+    );
+    // `updateParliamentaryGovernmentSeats` reads this field for an already-formed
+    // government rather than recomputing it, so a stale value never heals: the
+    // survivor would keep naming the losing party as its government.
+    expect(call?.[1].$set.governingPartyId).toBe("7");
+  });
+
+  it("clears a retired minister's stale cabinet fields", async () => {
+    const minister = new ObjectId();
+    prime(db, "cabinetMembers").find.mockReturnValue({
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      project: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([{ characterId: minister }]),
+    });
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+    const calls = prime(db, "characters").updateMany.mock.calls;
+    // `currentOffice` and `cabinetPosition` are stored, not derived, so a
+    // deleted portfolio would otherwise still show on the character.
+    expect(calls.some((c) => c[1].$unset?.cabinetPosition !== undefined)).toBe(true);
+  });
+
   it("retires the absorbed cabinet rather than seating it in unknown portfolios", async () => {
     const { actuateSettlementOutcome } = await import("./actuate");
     await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);

@@ -217,6 +217,30 @@ describe("evacuateRegionPolitics when the source country is dissolving", () => {
     expect(call?.[1].$set.seatsHeld).toBeUndefined();
   });
 
+  it("re-points the carried player's own office label at the new chamber", async () => {
+    const CHAR = new ObjectId();
+    db.collection("electedOfficials").find.mockReturnValue(
+      cursorOf([
+        {
+          _id: DEPUTY,
+          officeType: "volkskammerDeputy",
+          state: "SN",
+          party: "7",
+          seatsHeld: 60,
+          characterId: CHAR,
+        },
+      ])
+    );
+    await run();
+    // `characters.currentOffice` is stored, not derived, and `actionRefresh`
+    // looks the key up in the country's config: a player left holding
+    // `volkskammerDeputy` in Germany matches nothing and loses their bonus.
+    const call = db.collectionMocks["characters"].updateOne.mock.calls.find(
+      (c) => String(c[0]._id) === String(CHAR)
+    );
+    expect(call?.[1].$set["currentOffice.type"]).toBe("bundestag");
+  });
+
   it("remaps a Land First Secretary to a Minister-President", async () => {
     const GOV = new ObjectId();
     db.collection("electedOfficials").find.mockReturnValue(
