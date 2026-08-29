@@ -73,6 +73,24 @@ export function calendarTurn(rawTurn: number, clock?: CalendarClock): number {
   return Math.max(1, rawTurn - (clock?.preIterationTurns ?? 0));
 }
 
+/**
+ * The in-game calendar year a raw turn falls in.
+ *
+ * Routes through {@link calendarTurn}, so a founding-phase offset
+ * (`preIterationTurns`) does not push the year ahead of the status bar. Without
+ * a clock this is the plain `startingYear + floor((turn - 1) / TURNS_PER_YEAR)`
+ * every caller used before, so normal worlds are unchanged.
+ *
+ * Use this for ERA SCHEDULING as well as display: content authored against a
+ * calendar year (SCOTUS docket `decisionYear`, justice `departureYear`, cabinet
+ * seat `yearEnabled`) has to fire against the same year the player sees. Firing
+ * off the raw turn is what decided the 1962 docket in a world reading 1961.
+ */
+export function yearOfTurn(turn: number, startingYear: number, clock?: CalendarClock): number {
+  const cal = calendarTurn(turn, clock);
+  return startingYear + Math.floor(Math.max(0, cal - 1) / TURNS_PER_YEAR);
+}
+
 export function formatGameMonth(eventDate: Date | string, anchor: GameDateAnchor): string {
   const rawTurn = realDateToTurn(eventDate, anchor);
   // Display only: election scheduling and freeze stamps keep using the raw turn
