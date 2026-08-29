@@ -28,6 +28,49 @@ describe("populationShareSeats", () => {
   });
 });
 
+describe("convertRegionDoc seeded-target handling", () => {
+  let db: MockDb;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    db.collection("states").findOne.mockResolvedValue({ _id: "SN", population: 5_000_000 });
+    db.collection("states").find.mockReturnValue(
+      cursorOf([{ _id: "BW", population: 8_000_000, houseDistricts: 58, stateSenateSeats: 4 }])
+    );
+  });
+
+  it("keeps the seeded seat allocation when the target already has seat docs", async () => {
+    db.collection("seats").findOne.mockResolvedValue({
+      _id: "DE-bundestag-SN",
+      countryId: "DE",
+      state: "SN",
+      electionType: "bundestag",
+      totalSeats: 16,
+    });
+    await convertRegionDoc(db as unknown as Db, {
+      regionId: "SN",
+      toCountryId: "DE",
+      province: "East Germany",
+      votingSystem: "fptp",
+    });
+    const call = db.collectionMocks["states"].updateOne.mock.calls[0];
+    expect(call[1].$set.houseDistricts).toBe(16);
+    expect(call[1].$set.votingSystem).toBe("fptp");
+  });
+
+  it("still sizes by population share when the target has no seat doc", async () => {
+    db.collection("seats").findOne.mockResolvedValue(null);
+    await convertRegionDoc(db as unknown as Db, {
+      regionId: "NIR",
+      toCountryId: "IE",
+      province: "Ulster",
+    });
+    const call = db.collectionMocks["states"].updateOne.mock.calls[0];
+    expect(call[1].$set.votingSystem).toBe("rcv");
+    expect(call[1].$set.houseDistricts).toBeGreaterThan(0);
+  });
+});
+
 describe("convertRegionDoc", () => {
   let db: MockDb;
   beforeEach(() => {

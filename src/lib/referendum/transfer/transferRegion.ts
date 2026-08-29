@@ -37,6 +37,15 @@ export interface TransferRegionArgs {
   /** Optional display name the region takes in its new country (NIR → "Ulster"). */
   displayName?: string;
   /**
+   * The electoral system the region adopts, defaulting to Ireland-s PR-STV.
+   *
+   * A REFERENDUM transfer converts the region to its new country-s system. A
+   * MERGE preserves the region-s own system, because both halves of a
+   * reunifying country already run the same elections and converting them would
+   * be a change nobody voted for.
+   */
+  votingSystem?: State["votingSystem"];
+  /**
    * Where evacuated NPPs (+ their corporations) relocate in the source country.
    * NULL when the source is being dissolved by a merge — they cross with the
    * region instead. See `evacuateRegionPolitics`.
@@ -64,6 +73,7 @@ export async function transferRegion(
     toCountryId,
     province,
     displayName,
+    votingSystem,
     relocateToRegionId,
     currentTurn,
   } = args;
@@ -80,7 +90,7 @@ export async function transferRegion(
     relocateToRegionId,
   });
   const rescoped = await rescopeRegionToCountry(db, regionId, fromCountryId, toCountryId);
-  await convertRegionDoc(db, { regionId, toCountryId, province, displayName });
+  await convertRegionDoc(db, { regionId, toCountryId, province, displayName, votingSystem });
 
   // Shift the region's GDP-weighted share of national tax bases + spending
   // baselines from the source country to the target (the budget docs stay
