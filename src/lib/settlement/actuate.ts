@@ -227,9 +227,13 @@ export async function actuateSettlementOutcome(
  * ruling party — it was not a one-party state before the settlement imposed one
  * — there is no winner's party to name, and letting `installOnePartyState`
  * resolve it instead reads the SURVIVOR's formed government and installs the
- * side that just lost, banning the winner. The largest carried party is the
- * honest stand-in: it is the absorbed state's own strongest, and it is certainly
- * not the survivor's incumbent.
+ * side that just lost, banning the winner.
+ *
+ * The stand-in is the absorbed state's FIRST party, by its own original
+ * numbering. That is its principal party by the seeding convention (East
+ * Germany's `1` is the SED), it is deterministic across re-runs, and whatever
+ * else it is, it is not the survivor's incumbent — which is the failure this
+ * exists to rule out.
  *
  * Null only when nothing was carried at all, which is a country with no parties.
  */
@@ -241,13 +245,16 @@ function carriedRulingParty(
     const mapped = Number(partyIdMap[String(absorbedRulingPartyId)]);
     if (Number.isInteger(mapped)) return mapped;
   }
-  // Lowest new id, which is the first party the migration moved: deterministic,
-  // and re-running the merge picks the same one.
-  const carried = Object.values(partyIdMap)
-    .map((v) => Number(v))
+  // Keyed on the smallest ORIGINAL id rather than the smallest new one: the new
+  // ids are handed out in whatever order the parties were read, which is not a
+  // contract, while the old numbering is the source's own.
+  const oldest = Object.keys(partyIdMap)
+    .map((k) => Number(k))
     .filter((n) => Number.isInteger(n))
-    .sort((a, b) => a - b);
-  return carried.length > 0 ? carried[0] : null;
+    .sort((a, b) => a - b)[0];
+  if (oldest === undefined) return null;
+  const mapped = Number(partyIdMap[String(oldest)]);
+  return Number.isInteger(mapped) ? mapped : null;
 }
 
 /**
