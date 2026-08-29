@@ -99,6 +99,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         );
       }
       update.station = body.station;
+      // Flag it as a command decision. The turn pass re-derives every machine-assigned
+      // station each tick, and must not overwrite an order a commander actually gave.
+      update.stationSetByPlayer = true;
     }
 
     if (missionNeedsTarget(body.mission)) {

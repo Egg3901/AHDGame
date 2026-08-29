@@ -50,6 +50,16 @@ export interface MilitaryUnit {
    * not enough for a fleet: two carriers in one war can be in different oceans.
    */
   station?: string | null;
+  /**
+   * True when a commander chose this station, rather than the engine deriving it.
+   *
+   * The engine re-derives a machine-assigned station every turn, so a change to the
+   * placement rules corrects itself everywhere on the next tick. A player's order is
+   * never overwritten. Without this a bad default was PERMANENT: the pass only assigned
+   * a station when one was missing, so fixing the logic fixed nothing already placed and
+   * every correction needed a database heal.
+   */
+  stationSetByPlayer?: boolean;
   /** Standing mission. Persists between turns; only a command changes it. */
   mission?: string | null;
   /** Region a strike mission is aimed at. Null for missions that take no target. */
