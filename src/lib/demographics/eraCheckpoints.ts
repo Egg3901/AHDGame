@@ -75,6 +75,7 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { US_STATES } from "@/lib/constants";
 import { yearToTurn } from "@/lib/scotus/turnConversion";
+import { calendarTurn, type CalendarClock } from "@/lib/utils/gameDate";
 
 /**
  * One (state-set, target, axis) pull of a checkpoint. `dim` + `bucket` must
@@ -724,12 +725,21 @@ export const ERA_CHECKPOINTS: readonly EraCheckpoint[] = [
  */
 export function resolveCheckpointStartTurn(
   checkpoint: EraCheckpoint,
-  docketCase: DocketCaseLookupEntry | undefined
+  docketCase: DocketCaseLookupEntry | undefined,
+  /**
+   * Pre-iteration clock, so both branches below return a turn in the SAME
+   * space. `fallbackStartTurn` is authored as `yearToTurn(...)`, a CALENDAR
+   * turn, but `decidedAtTurn` is stamped with the raw `currentTurn`; on a world
+   * with a founding phase those are a game year apart, so the window used to
+   * open a year early or late depending on which branch resolved (#1208).
+   * Omitted (or empty) on worlds with no founding phase, where it is identity.
+   */
+  clock?: CalendarClock
 ): number {
   if (!checkpoint.triggerCaseKey) return checkpoint.fallbackStartTurn;
   if (!docketCase || docketCase.status !== "decided") return checkpoint.fallbackStartTurn;
   if (docketCase.outcome === "affirmed" && typeof docketCase.decidedAtTurn === "number") {
-    return docketCase.decidedAtTurn;
+    return calendarTurn(docketCase.decidedAtTurn, clock);
   }
   // Diverged (or a decided case missing decidedAtTurn, defensively): the
   // Court-driven trigger didn't fire this time — use the slower fallback.
