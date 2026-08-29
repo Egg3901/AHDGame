@@ -136,8 +136,8 @@ export async function mergeRegion(db: Db, args: MergeRegionArgs): Promise<MergeR
   }
 
   // NPPs are NOT in the table above -- `evacuateRegionPolitics` owns them on the
-  // transfer path -- so they need re-homing explicitly. Left alone they keep
-  // pointing at a region that has just been retired.
+  // transfer path -- so they need re-homing explicitly. Left alone they would be
+  // homed in a region this function is about to delete.
   const nppMoved = await db
     .collection("npps")
     .updateMany({ homeState: fromRegionId }, { $set: { homeState: toRegionId, updatedAt: now } });
