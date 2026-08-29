@@ -1,12 +1,18 @@
 "use client";
 
 import type { Crisis } from "@/lib/db/types/crisis";
-import { turnToLarpDate } from "@/lib/utils/formatters";
+import { rawTurnToLarpDate } from "@/lib/utils/formatters";
+import type { CalendarClock } from "@/lib/utils/gameDate";
 
 interface CrisesTableProps {
   crises: Crisis[];
   loading: boolean;
   startingYear: number | undefined;
+  /**
+   * Founding-phase clock; crisis turns are stored RAW (#1208). REQUIRED on
+   * purpose: an optional one let a call site be missed silently.
+   */
+  clock: CalendarClock;
   onResolve: (id: string) => void;
   onDelete: (id: string) => void;
 }
@@ -15,6 +21,7 @@ export function CrisesTable({
   crises,
   loading,
   startingYear,
+  clock,
   onResolve,
   onDelete,
 }: CrisesTableProps) {
@@ -38,7 +45,7 @@ export function CrisesTable({
               <td className="py-2 pr-4">
                 {c.scope === "country" ? "National" : c.scope === "region" ? "Regional" : "Global"}
               </td>
-              <td className="py-2 pr-4">{turnToLarpDate(c.startTurn, startingYear)}</td>
+              <td className="py-2 pr-4">{rawTurnToLarpDate(c.startTurn, startingYear, clock)}</td>
               <td className="py-2 pr-4">{c.durationTurns ?? "Indefinite"}</td>
               <td className="py-2 pr-4">
                 <span className={c.status === "active" ? "text-green-400" : "text-muted"}>

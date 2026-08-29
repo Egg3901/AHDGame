@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { formatDate, getMessageStyle, turnToLarpDate } from "@/lib/utils/formatters";
+import { formatDate, getMessageStyle, rawTurnToLarpDate } from "@/lib/utils/formatters";
 import { Skeleton } from "@/components/ui";
 
 interface GameState {
@@ -10,6 +10,8 @@ interface GameState {
   /** Year the active preset started in — needed so the LARP date display
    *  reads "Week 1, 1991" on a 1991 reset instead of falling back to 2019. */
   startingYear?: number;
+  /** Founding-phase offset; `currentTurn` is RAW, so the date needs it (#1208). */
+  preIterationTurns?: number;
   isActive: boolean;
   isProcessing: boolean;
   lastTurnProcessed: string;
@@ -335,7 +337,9 @@ export function TurnControls() {
             <div className="text-right">
               <div className="text-3xl font-bold text-primary">Turn {gameState.currentTurn}</div>
               <div className="text-sm text-muted">
-                {turnToLarpDate(gameState.currentTurn, gameState.startingYear)}
+                {rawTurnToLarpDate(gameState.currentTurn, gameState.startingYear, {
+                  preIterationTurns: gameState.preIterationTurns,
+                })}
               </div>
             </div>
           )}

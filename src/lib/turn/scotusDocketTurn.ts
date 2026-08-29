@@ -35,6 +35,7 @@ import type { DocketCase, SupremeCourtSeat } from "@/lib/db/types/scotus";
 import type { PolicyProvision } from "@/lib/db/types/legislation";
 import { decideCaseOutcome, type SeatedJusticeLean } from "@/lib/scotus/divergence";
 import { yearToTurn } from "@/lib/scotus/turnConversion";
+import { calendarTurn } from "@/lib/utils/gameDate";
 import { generateScotusRulingNews } from "@/lib/scotus/scotusNews";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
@@ -61,9 +62,16 @@ export async function processScotusDocketTurn(
     .find({ countryId: "US", status: "pending" })
     .toArray();
 
-  const dueCases = pendingCases.filter(
-    (c) => currentTurn >= yearToTurn(c.decisionYear, startingYear)
-  );
+  // Compare on the CALENDAR turn, not the raw one. `yearToTurn` maps an authored
+  // decisionYear onto turn 1 = week 1 of `startingYear`, but a world with a
+  // founding phase burns `preIterationTurns` before that calendar starts, so the
+  // raw turn runs a full game year ahead of the year the player sees. Off the raw
+  // turn the live 1961 world decided the 1962 docket (#1208).
+  const calTurn = calendarTurn(currentTurn, {
+    preIterationActive: gameState?.preIteration?.active,
+    preIterationTurns: gameState?.preIterationTurns,
+  });
+  const dueCases = pendingCases.filter((c) => calTurn >= yearToTurn(c.decisionYear, startingYear));
   if (dueCases.length === 0) {
     return { casesFired: 0, casesAffirmed: 0, casesDiverged: 0 };
   }
