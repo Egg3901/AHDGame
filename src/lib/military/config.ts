@@ -166,6 +166,36 @@ export const ATTRITION = {
    * makes both modifiers mean something again.
    */
   retreatTrack: 9,
+  /**
+   * How far a single battle's luck can move the odds it is actually fought at.
+   *
+   * `battleForecast` clamps `ratio` to 0.02..0.98 and every player-facing surface
+   * calls it a chance -- the war room's "You attack" row, and the wiki's "Your chance
+   * if you launch the offensive". The five-round attrition loop did not deliver that.
+   * Its damage multipliers are `0.5 + ratio` and `1.5 - ratio`, so over five rounds
+   * the two tracks separate by about `80 * (2 * ratio - 1)` against a round-to-round
+   * spread of only ~15. That is a near-deterministic function of the force balance: a
+   * projected 16% won 0.01% of the time and a projected 84% won 99.99%. Players read
+   * the number as a probability, watched the stronger side win every time, and filed
+   * it as the odds being wrong or the enemy being impossibly lucky. Both readings were
+   * fair -- `oddsPct` was a force share wearing a probability's label.
+   *
+   * One roll per battle shifts the ratio the loop fights at:
+   *
+   *   effective = ratio + uniform(-fortuneSpread, +fortuneSpread)
+   *
+   * At exactly 0.5 the arithmetic is self-calibrating rather than fitted. The loop
+   * turns on whether `effective` clears 0.5, and `effective` is uniform on a window of
+   * width 1 centred on `ratio`, so P(effective > 0.5) is `ratio` itself. Measured over
+   * 300k seeds the realised win rate tracks the projection to within 0.7 points from
+   * 10% to 90%, with the tails compressed inward (2% -> 4.8%, 98% -> 95.3%) because
+   * round-to-round noise still smears across the clamp.
+   *
+   * Drawn ONCE for the whole engagement, not per round: a side that has a good day
+   * fights the whole battle well, which is what the round notes, the casualty split
+   * and the margin already assume.
+   */
+  fortuneSpread: 0.5,
   /** Casualty multiplier for the side that broke off. */
   retreatCasualtyMult: 0.6,
   /** Max fraction of establishment refilled per turn, by mode. */

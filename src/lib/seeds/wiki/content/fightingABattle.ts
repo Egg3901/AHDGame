@@ -32,8 +32,8 @@ The war room shows you, for your chosen target:
 | Readout | What it tells you |
 | --- | --- |
 | **Projected strength** | Your own side's committed weight at this front. |
-| **Odds ("You attack")** | Your chance if *you* launch the offensive. |
-| **Odds ("They attack")** | Your chance if *they* launch it instead. |
+| **Odds ("You attack")** | Your chance of winning if *you* launch the offensive. |
+| **Odds ("They attack")** | *Their* chance of winning if they launch it instead. |
 | **Supply** | SUPPLIED · STRAINED · SHORTAGE · CUT OFF |
 | **Enemy** | A coarse band, never a number. |
 | **Forces** | How many nations are pooled on each side. |
@@ -41,6 +41,8 @@ The war room shows you, for your chosen target:
 ### The two odds rows do not add to 100
 
 This confuses everyone the first time.
+
+**Each row is the chance of whoever is attacking in that row.** "You attack" is your chance when you move; "They attack" is *their* chance when they move. Neither row is the other's leftover, so subtracting one from 100 tells you nothing.
 
 **Attacking is harder than defending.** The defender holds terrain, and the attacker is the one crossing it. So the same pair of armies produces different odds depending on who moves.
 
@@ -65,7 +67,9 @@ The band is deterministic, so looking twice never gives you two different answer
 
 The projection you see is computed by **the same code that resolves the battle**, from the same units, the same supply and the same terrain. It is not a separate estimate that might disagree.
 
-What it cannot know is what changes before the tick. Your opponent has a full turn to reinforce, and the odds you acted on can be stale by the time the battle happens.
+**But it is odds, not a promise.** The battle is fought at the projected chance plus the fortune of the day, so a 70 percent attack fails three times in ten and a 20 percent attack sometimes carries the field. Losing a fight you were favoured to win is the number working, not the number being wrong. Judge a plan over a campaign, not over one tick.
+
+What the projection cannot know is what changes before the tick. Your opponent has a full turn to reinforce, and the odds you acted on can be stale by the time the battle happens.
 
 ## Step 3: Declare the offensive
 

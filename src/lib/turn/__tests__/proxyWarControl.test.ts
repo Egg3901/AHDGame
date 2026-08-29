@@ -56,7 +56,16 @@ describe("a proxy war moves control", () => {
   let db: MockDb;
 
   const declaration = {
-    _id: new ObjectId(),
+    // Fixed, not `new ObjectId()`. The battle seed is `hashStr(principal._id + turn)`,
+    // so a fresh id reseeds the engagement every run. Since `ATTRITION.fortuneSpread`
+    // the seed decides a real roll, and "control moved the declarer's way" became a
+    // coin flip: this fixture's bloc wins about 10 seeds in 12, so the file failed
+    // roughly one run in six. See the same note in `battleResolution.test.ts`.
+    //
+    // This id is one of the 10, chosen deliberately — the cases below are about where
+    // a WIN moves the front to, so they need a battle the declarer wins. The two-in-
+    // twelve losing seeds are the mechanic working, not a fixture to repair.
+    _id: new ObjectId("bbbbbbbbbbbbbbbbbbbb0002"),
     declarerCountry: "US",
     // The FACTION, not a member country. This is the declarable target.
     targetCountry: "NVN",

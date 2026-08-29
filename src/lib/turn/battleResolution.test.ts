@@ -3,6 +3,28 @@ import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
+/**
+ * Fixed declaration ids, one per `describe`.
+ *
+ * The battle seed is `hashStr(principal._id + turn)`, so a `new ObjectId()` reseeds
+ * the engagement on every run. That used to be harmless: the five-round loop was a
+ * near-deterministic function of the force balance, so the stronger side won whatever
+ * the seed was. Since `ATTRITION.fortuneSpread` the seed decides a real roll, and any
+ * assertion about who won or which way the ground moved became a coin flip that fails
+ * a few runs in ten. The one describe below that already pinned its ids says the same
+ * thing at its own `declFrom`.
+ *
+ * Pin the id and a case asserts against ONE battle, every run, forever.
+ */
+const DECL_ID = {
+  base: "aaaaaaaaaaaaaaaaaaaa0001",
+  occupation: "aaaaaaaaaaaaaaaaaaaa0002",
+  unopposedSide: "aaaaaaaaaaaaaaaaaaaa0003",
+  legacyBaselines: "aaaaaaaaaaaaaaaaaaaa0004",
+  alliedAutoJoin: "aaaaaaaaaaaaaaaaaaaa0005",
+  coalition: "aaaaaaaaaaaaaaaaaaaa0006",
+};
+
 // The era's bloc roll is an INPUT to resolution, not something it decides, so it is
 // stubbed rather than assembled from organisation-membership fixtures. Its own
 // derivation is covered by `blocMembership` / `bloc.test.ts`.
@@ -66,7 +88,7 @@ function wireUnits(db: MockDb, declarerUnits: unknown[], targetUnits: unknown[])
 describe("resolveBattleDeclarations", () => {
   let db: MockDb;
   const pending = {
-    _id: new ObjectId(),
+    _id: new ObjectId(DECL_ID.base),
     declarerCountry: "US",
     targetCountry: "CN",
     theaterId: "afghan",
@@ -236,7 +258,7 @@ describe("resolveBattleDeclarations", () => {
 describe("resolveBattleDeclarations — occupation", () => {
   let db: MockDb;
   const pending = {
-    _id: new ObjectId(),
+    _id: new ObjectId(DECL_ID.occupation),
     declarerCountry: "US",
     targetCountry: "CN",
     theaterId: "afghan",
@@ -498,7 +520,7 @@ describe("resolveBattleDeclarations — occupation", () => {
 describe("resolveBattleDeclarations — unopposed side resolution", () => {
   let db: MockDb;
   const pending = {
-    _id: new ObjectId(),
+    _id: new ObjectId(DECL_ID.unopposedSide),
     declarerCountry: "US",
     targetCountry: "CN",
     theaterId: "afghan",
@@ -561,7 +583,7 @@ describe("resolveBattleDeclarations — unopposed side resolution", () => {
 describe("resolveBattleDeclarations — legacy conflict baselines", () => {
   let db: MockDb;
   const pending = {
-    _id: new ObjectId(),
+    _id: new ObjectId(DECL_ID.legacyBaselines),
     declarerCountry: "US",
     targetCountry: "CN",
     theaterId: "afghan",
@@ -771,7 +793,22 @@ describe("resolveBattleDeclarations — coalitions", () => {
     supplyB: 60,
   };
 
-  const declFrom = (country: string, target: string, id = new ObjectId()) => ({
+  // Defaulted to a FIXED id for the same reason the other describes pin theirs: a
+  // fresh one reseeds the battle every run, and these cases assert who won.
+  //
+  // Keyed by declarer rather than one shared constant, because a merged offensive
+  // holds several declarations at once and they must stay distinguishable — the
+  // principal is picked by lowest id, and each is marked resolved by its own.
+  const DECL_BY_DECLARER: Record<string, string> = {
+    US: `${DECL_ID.coalition.slice(0, 20)}00a1`,
+    UK: `${DECL_ID.coalition.slice(0, 20)}00a2`,
+    CN: `${DECL_ID.coalition.slice(0, 20)}00a3`,
+  };
+  const declFrom = (
+    country: string,
+    target: string,
+    id: ObjectId = new ObjectId(DECL_BY_DECLARER[country] ?? DECL_ID.coalition)
+  ) => ({
     _id: id,
     declarerCountry: country,
     targetCountry: target,
@@ -1191,7 +1228,7 @@ describe("resolveBattleDeclarations - allied auto-join", () => {
   };
 
   const usDeclares = {
-    _id: new ObjectId(),
+    _id: new ObjectId(DECL_ID.alliedAutoJoin),
     declarerCountry: "US",
     targetCountry: "CN",
     theaterId: "afghan",
