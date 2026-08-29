@@ -52,8 +52,10 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: Unit tests (shard ${{ matrix.shard }}/4)
-        run: npx vitest run --shard=${{ matrix.shard }}/4
+      # job-total rather than a hard-coded 4, so adding or removing a shard in
+      # the matrix above cannot silently desync the divisor and drop test files.
+      - name: Unit tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+        run: npm run test:run -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}
         env:
           NODE_OPTIONS: --max-old-space-size=6144
 
