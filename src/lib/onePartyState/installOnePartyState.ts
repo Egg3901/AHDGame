@@ -25,17 +25,38 @@ import { ensureInitialEscalationState } from "@/lib/turn/regimeEscalationTurn";
  *
  * Spec: docs/superpowers/specs/2026-08-27-peace-terms-design.md
  */
+export interface InstallOnePartyStateOptions {
+  /**
+   * The party to install, bypassing resolution entirely.
+   *
+   * Reunification needs this and cannot work without it. `resolveRulingParty`
+   * reads the SURVIVING shell's formed government -- Germany's, whose governing
+   * party is the SPD -- so a merge that let it resolve would install the side
+   * that just LOST the war and ban the winner. Naming the party explicitly is
+   * the only way to say "this specific party takes power".
+   *
+   * Ignored when it does not name a party of this country, so a stale id
+   * degrades to the ordinary resolution rather than banning everyone.
+   */
+  rulingPartyId?: number;
+}
+
 export async function installOnePartyState(
   db: Db,
   countryId: CountryId,
-  currentTurn: number
+  currentTurn: number,
+  opts?: InstallOnePartyStateOptions
 ): Promise<void> {
   const parties = await db
     .collection<PoliticalParty>("politicalParties")
     .find({ countryId })
     .toArray();
 
-  const rulingPartyId = await resolveRulingParty(db, countryId, parties);
+  const explicit =
+    opts?.rulingPartyId != null && parties.some((p) => p.sequentialId === opts.rulingPartyId)
+      ? opts.rulingPartyId
+      : null;
+  const rulingPartyId = explicit ?? (await resolveRulingParty(db, countryId, parties));
 
   await updateCountryState(db, countryId, {
     governmentType: "onePartyState",
@@ -121,11 +142,25 @@ async function resolveRulingParty(
   const seatsBySeqId = new Map<number, number>();
   for (const official of officials) {
     if (!official.party) continue;
-    // `ElectedOfficial.party` is a display string, so it can hold either the party's
-    // name or its abbreviation depending on which surface seated the row.
-    const party = parties.find(
-      (p) => p.name === official.party || p.abbreviation === official.party
-    );
+    // `ElectedOfficial.party` holds `String(sequentialId)` in production -- the
+    // convention the seeders write and `candidateEnrichment` reads, and what
+    // every row in the live world carries.
+    //
+    // THE SEQUENTIAL ID IS TRIED FIRST, and its absence here was a real defect:
+    // this fallback compared only against the party's NAME and ABBREVIATION, so
+    // it never matched a production row, always returned null, and left the
+    // caller's `if (rulingPartyId != null)` block unentered. A presidential
+    // country converted to a one-party state therefore got no ruling party and
+    // nobody banned -- a one-party state with no party.
+    //
+    // Name and abbreviation are still accepted afterwards. They are what the
+    // display surfaces write, and dropping them would trade one silent
+    // mismatch for another.
+    const seqId = Number(official.party);
+    const party = Number.isInteger(seqId)
+      ? (parties.find((p) => p.sequentialId === seqId) ??
+        parties.find((p) => p.name === official.party || p.abbreviation === official.party))
+      : parties.find((p) => p.name === official.party || p.abbreviation === official.party);
     if (!party) continue;
     seatsBySeqId.set(
       party.sequentialId,

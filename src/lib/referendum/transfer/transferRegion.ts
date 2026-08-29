@@ -28,6 +28,7 @@ import { convertRegionDoc } from "./convertRegionDoc";
 import { reapportionNationalBudget } from "./reapportionNationalBudget";
 import { convertTransferredResidentsCurrency } from "./convertTransferredResidentsCurrency";
 import { reseedJoinedRegionElections } from "./reseedJoinedRegionElections";
+import { rescaleRegionDelegations } from "@/lib/country/apportionChamber";
 
 export interface TransferRegionArgs {
   regionId: string;
@@ -36,6 +37,15 @@ export interface TransferRegionArgs {
   province: string;
   /** Optional display name the region takes in its new country (NIR → "Ulster"). */
   displayName?: string;
+  /**
+   * The electoral system the region adopts, defaulting to Ireland's PR-STV.
+   *
+   * A REFERENDUM transfer converts the region to its new country's system. A
+   * MERGE preserves the region's own system, because both halves of a
+   * reunifying country already run the same elections and converting them would
+   * be a change nobody voted for.
+   */
+  votingSystem?: State["votingSystem"];
   /**
    * Where evacuated NPPs (+ their corporations) relocate in the source country.
    * NULL when the source is being dissolved by a merge — they cross with the
@@ -64,6 +74,7 @@ export async function transferRegion(
     toCountryId,
     province,
     displayName,
+    votingSystem,
     relocateToRegionId,
     currentTurn,
   } = args;
@@ -80,7 +91,18 @@ export async function transferRegion(
     relocateToRegionId,
   });
   const rescoped = await rescopeRegionToCountry(db, regionId, fromCountryId, toCountryId);
-  await convertRegionDoc(db, { regionId, toCountryId, province, displayName });
+  await convertRegionDoc(db, { regionId, toCountryId, province, displayName, votingSystem });
+
+  // A delegation carried in by a DISSOLVING source is sized for the chamber it
+  // left, not the one it joined: East Germany's Saxony holds 151 Volkskammer
+  // seats against the Bundestag delegation Saxony actually gets. Rescaled HERE
+  // rather than inside `evacuateRegionPolitics`, because the size comes from the
+  // region's `houseDistricts` / `stateSenateSeats` and `convertRegionDoc` only
+  // just wrote them. On the evacuate path there is no carried delegation to
+  // rescale -- the officials were deleted -- so this is a no-op.
+  if (relocateToRegionId === null) {
+    await rescaleRegionDelegations(db, { regionId, countryId: toCountryId, now: new Date() });
+  }
 
   // Shift the region's GDP-weighted share of national tax bases + spending
   // baselines from the source country to the target (the budget docs stay

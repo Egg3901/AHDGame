@@ -15,6 +15,7 @@ import {
   ensureIEElections,
   ensureIELocalCouncilElections,
   ensureIECathaoirleachElections,
+  ensureDEElections,
 } from "@/lib/turn/perpetualElections";
 import { updateParliamentaryGovernmentSeats } from "@/lib/turn/parliamentaryGovernment";
 
@@ -29,6 +30,16 @@ export async function reseedJoinedRegionElections(
     await ensureIELocalCouncilElections(now);
     await ensureIECathaoirleachElections(now);
     // Grow the Dáil's recorded size + majority threshold on the government doc.
+    await updateParliamentaryGovernmentSeats(db, toCountryId);
+  }
+  if (toCountryId === "DE") {
+    // Bundestag races for the newcomer, then the chamber size and majority
+    // threshold. `ensureDEElections` enumerates `states` by countryId, so it
+    // picks up a Land that arrived a moment ago without being told which one.
+    //
+    // Germany has no Land-level spawner of its own, so a joined Land gets its
+    // Landtag races from the ordinary turn phase rather than from here.
+    await ensureDEElections(now);
     await updateParliamentaryGovernmentSeats(db, toCountryId);
   }
   // Future transfer targets register their region-election spawners here.
