@@ -117,6 +117,22 @@ export const SECEDE_FANOUT: FanoutScope[] = [
   },
   // ── composite-key (_id is `${countryId}_${stateId}`) → re-key + copy shares ──
   { collection: "stateRegistrationPool", key: "compositeCountryState", policy: "rekeyCopyShares" },
+  // ── historical records → re-home to capital, never split ─────────────────────
+  // These joined the transfer SSOT for the COUNTRY MERGE, which cannot leave them
+  // pointing at a country that has stopped existing. Their secession policy is
+  // `rehomeCapital` for a different reason: every one of them is a RECORD of
+  // something that already happened in the aggregate region — a law that was
+  // enacted, an election that was held, a survey that was run. Splitting or
+  // scaling a record would fabricate history that did not occur in the
+  // sub-region it was handed to, so the whole set moves to the capital intact.
+  rehome("enactedLaws"),
+  { collection: "electionVoteTallies", key: "stateField", policy: "rehomeCapital" },
+  { collection: "elections", key: "stateField", policy: "rehomeCapital" },
+  rehome("statePartyCandidates"),
+  { collection: "recruitmentSlates", key: "stateField", policy: "rehomeCapital" },
+  // Keyed by the candidate's RESIDENCY, like `characters`, not by a slate region.
+  { collection: "slateCandidates", key: "homeStateField", policy: "rehomeCapital" },
+  rehome("prospectingSurveys"),
   // ── residents (flip countryId, re-home to capital) ──────────────────────────
   { collection: "characters", key: "homeStateField", policy: "rehomeCapital" },
 ];

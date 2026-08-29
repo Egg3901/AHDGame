@@ -404,6 +404,18 @@ export const GERMAN_QUESTION_TARGET = "DE";
 export const GERMAN_QUESTION_CHALLENGER = "DD";
 
 /**
+ * The two halves of Berlin, which reunification fuses into one region.
+ *
+ * Every other eastern Land has a seat document waiting for it in Germany's seed
+ * (`DE-bundestag-BB`, `-MV`, `-SN`, `-ST`, `-TH`). East Berlin has none, because
+ * a unified Berlin is one city rather than a twelfth Land -- Germany already
+ * carries `BE`. So `BEO` is not transferred as a region in its own right: it is
+ * merged into `BE` once both are German, and retired.
+ */
+export const GERMAN_QUESTION_EAST_BERLIN = "BEO";
+export const GERMAN_QUESTION_BERLIN = "BE";
+
+/**
  * The three rule switches the source design declares under its "Rules" section.
  *
  * They are stored PER CRISIS rather than on `gameState`. Two of the three
