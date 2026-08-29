@@ -141,6 +141,46 @@ describe("installOnePartyState", () => {
     expect(writes.filter((w) => w.coll === "politicalParties")).toHaveLength(0);
   });
 
+  it("resolves an official's party by sequentialId, the production convention", async () => {
+    // Regression: `electedOfficials.party` holds `String(sequentialId)` in the live
+    // world. This fallback used to compare only against name and abbreviation, so
+    // it never matched, returned null, and left a converted country with no ruling
+    // party and nobody banned.
+    const { db, writes } = mockDb({
+      parties: PARTIES,
+      officials: [
+        { party: "1", seatsHeld: 10 },
+        { party: "2", seatsHeld: 40 },
+      ],
+    });
+    await installOnePartyState(db, "TR", 412);
+    const patch = updateCountryState.mock.calls[0]![2] as { rulingPartyId?: number };
+    expect(patch.rulingPartyId).toBe(2);
+    expect(writes.filter((w) => w.coll === "politicalParties")).toHaveLength(2);
+  });
+
+  it("installs the party named explicitly, over the formed government's choice", async () => {
+    const { db, writes } = mockDb({ parties: PARTIES, governingPartyId: 1 });
+    await installOnePartyState(db, "DE", 470, { rulingPartyId: 2 });
+    const patch = updateCountryState.mock.calls[0]![2] as { rulingPartyId?: number };
+    expect(patch.rulingPartyId).toBe(2);
+    const ruling = writes.find(
+      (w) => (w.update as { $set: { regimeStatus: string } }).$set.regimeStatus === "ruling"
+    );
+    expect((ruling?.filter as { sequentialId: number }).sequentialId).toBe(2);
+    const banned = writes.find(
+      (w) => (w.update as { $set: { regimeStatus: string } }).$set.regimeStatus === "banned"
+    );
+    expect((banned?.filter as { sequentialId: { $ne: number } }).sequentialId.$ne).toBe(2);
+  });
+
+  it("ignores an explicit party that does not exist in this country", async () => {
+    const { db } = mockDb({ parties: PARTIES, governingPartyId: 1 });
+    await installOnePartyState(db, "DE", 470, { rulingPartyId: 99 });
+    const patch = updateCountryState.mock.calls[0]![2] as { rulingPartyId?: number };
+    expect(patch.rulingPartyId).toBe(1);
+  });
+
   it("ignores a non-numeric governing party, as the sync helper does", async () => {
     // `governingPartyId` can be "independent". Number() would make that NaN and
     // tag nobody as ruling while banning everyone.
