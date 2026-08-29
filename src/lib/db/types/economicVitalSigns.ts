@@ -91,9 +91,16 @@ export interface EconomicVitalSigns {
     openBuyOrders: number;
     openSellOrders: number;
     twoSidedListingShare: EconomicMetric;
+    /**
+     * The liquidity facility posts both sides itself, so it meets the plain two-sided and
+     * depth measures by construction. These exclude its quotes and show participation.
+     */
+    facilityQuotedListings: number;
+    organicTwoSidedListingShare: EconomicMetric;
     medianQuotedSpreadPct: EconomicMetric;
     openOrderDepthAnchor: number;
     depthToMarketCap: EconomicMetric;
+    organicDepthToMarketCap: EconomicMetric;
     medianFilledOrderExecutionHours: EconomicMetric;
     medianAmihudIlliquidity48: EconomicMetric;
   };

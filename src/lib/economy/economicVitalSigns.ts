@@ -222,11 +222,20 @@ function marketQuality(
   const spreads: number[] = [];
   let twoSidedListings = 0;
   let depthAnchor = 0;
+  // The liquidity facility posts both sides itself, so it satisfies the plain two-sided
+  // metric by construction. The organic counters are the ones that show participation.
+  let organicTwoSidedListings = 0;
+  let facilityQuotedListings = 0;
+  let organicDepthAnchor = 0;
   for (const [corporationId, book] of byCorporation) {
     const listing = listingById.get(corporationId);
     if (!listing) continue;
     const buys = book.filter((order) => order.type === "buy");
     const sells = book.filter((order) => order.type === "sell");
+    const organicBuys = buys.filter((order) => order.liquidityProvider !== true);
+    const organicSells = sells.filter((order) => order.liquidityProvider !== true);
+    if (organicBuys.length > 0 && organicSells.length > 0) organicTwoSidedListings += 1;
+    if (book.some((order) => order.liquidityProvider === true)) facilityQuotedListings += 1;
     if (buys.length > 0 && sells.length > 0) {
       const bestBid = Math.max(...buys.map((order) => order.pricePerShare));
       const bestAsk = Math.min(...sells.map((order) => order.pricePerShare));
@@ -242,6 +251,12 @@ function marketQuality(
       (sum, order) => sum + order.sharesRemaining * order.pricePerShare * anchorPerLocal,
       0
     );
+    organicDepthAnchor += book
+      .filter((order) => order.liquidityProvider !== true)
+      .reduce(
+        (sum, order) => sum + order.sharesRemaining * order.pricePerShare * anchorPerLocal,
+        0
+      );
   }
 
   const executionHours = orders.flatMap((order) => {
@@ -270,8 +285,11 @@ function marketQuality(
     openBuyOrders: open.filter((order) => order.type === "buy").length,
     openSellOrders: open.filter((order) => order.type === "sell").length,
     twoSidedListings,
+    organicTwoSidedListings,
+    facilityQuotedListings,
     spreads,
     depthAnchor,
+    organicDepthAnchor,
     executionHours,
     amihud,
   };
@@ -850,6 +868,12 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         listings.length,
         "listed_firm_count_open_order_books"
       ),
+      facilityQuotedListings: quality.facilityQuotedListings,
+      organicTwoSidedListingShare: metric(
+        ratio(quality.organicTwoSidedListings, listings.length),
+        listings.length,
+        "listed_firm_count_open_order_books_excluding_liquidity_facility"
+      ),
       medianQuotedSpreadPct: metric(
         median(quality.spreads),
         quality.spreads.length,
@@ -860,6 +884,13 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         ratio(quality.depthAnchor, marketCapTotal),
         input.shareOrders.filter((order) => order.status === "open").length,
         "open_order_notional_to_listed_market_cap"
+      ),
+      organicDepthToMarketCap: metric(
+        ratio(quality.organicDepthAnchor, marketCapTotal),
+        input.shareOrders.filter(
+          (order) => order.status === "open" && order.liquidityProvider !== true
+        ).length,
+        "open_order_notional_to_listed_market_cap_excluding_liquidity_facility"
       ),
       medianFilledOrderExecutionHours: metric(
         median(quality.executionHours),

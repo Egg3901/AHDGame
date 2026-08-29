@@ -495,6 +495,52 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.securitiesRecent12.depthToMarketCapMedian.observations).toBe(11);
   });
 
+  it("separates facility quotes from organic participation in the equity book", () => {
+    const corporationId = new ObjectId();
+    const listing = {
+      _id: corporationId,
+      sequentialId: 1,
+      name: "Firm",
+      type: "manufacturing",
+      countryId: "US",
+      sharePrice: 10,
+      sharePriceAnchor: 10,
+      totalShares: 1000,
+      marketCapAnchor: 10000,
+      priceChange48h: 0,
+    };
+    const order = (type: "buy" | "sell", liquidityProvider: boolean) => ({
+      _id: new ObjectId(),
+      corporationId,
+      characterId: new ObjectId(),
+      type,
+      shares: 10,
+      sharesRemaining: 10,
+      pricePerShare: type === "buy" ? 9 : 11,
+      escrowAmount: 0,
+      status: "open" as const,
+      liquidityProvider,
+      createdAt: new Date("2026-08-29T00:00:00.000Z"),
+      updatedAt: new Date("2026-08-29T00:00:00.000Z"),
+    });
+
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      // The facility quotes both sides. The only organic order is a buy, so the book
+      // is two-sided on paper and one-sided in fact.
+      globalExchange: { _id: "global", listings: [listing], updatedAt: new Date() } as never,
+      shareOrders: [order("buy", true), order("sell", true), order("buy", false)] as never,
+    });
+
+    expect(snapshot.securities.twoSidedListingShare.value).toBe(1);
+    expect(snapshot.securities.organicTwoSidedListingShare.value).toBe(0);
+    expect(snapshot.securities.facilityQuotedListings).toBe(1);
+    expect(snapshot.securities.organicDepthToMarketCap.value).toBeLessThan(
+      snapshot.securities.depthToMarketCap.value!
+    );
+  });
+
   it("records a skipped stock versus flow check as unknown, not as zero divergences", () => {
     const reconciliation: LedgerReconciliation = {
       _id: new ObjectId(),
