@@ -1,5 +1,6 @@
 import type { GameIteration } from "@/lib/db/types/gameState";
-import { turnToLarpDate } from "@/lib/utils/formatters";
+import { rawTurnToLarpDate } from "@/lib/utils/formatters";
+import type { CalendarClock } from "@/lib/utils/gameDate";
 
 const TYPE_RANK: Record<GameIteration["type"], number> = {
   Alpha: 0,
@@ -53,8 +54,18 @@ export function orderIterations(
   return all.sort(compareIterations);
 }
 
-export function weekYearFromTurn(turn: number, startingYear: number): string {
-  return turnToLarpDate(turn, startingYear);
+/**
+ * Office-history turns are stored RAW, so a world with a founding phase needs
+ * its clock here or every career date reads a game year ahead of the status bar
+ * (#1208). Omitted
+ * clock is the identity, which is what the existing tests assert.
+ */
+export function weekYearFromTurn(
+  turn: number,
+  startingYear: number,
+  clock?: CalendarClock
+): string {
+  return rawTurnToLarpDate(turn, startingYear, clock);
 }
 
 export function weekYearFromFields(week: number, year: number): string {

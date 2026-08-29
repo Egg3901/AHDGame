@@ -337,6 +337,32 @@ describe("processEraCheckpointsTurn", () => {
     expect(atFallback.checkpointsActive).toBeGreaterThanOrEqual(1);
     expect(atFallback.statesUpdated).toBeGreaterThan(0);
   });
+
+  it("holds the fallback window shut until the CALENDAR turn reaches it (#1208)", async () => {
+    // A founding phase shifts the raw counter ahead of the calendar, and every
+    // `fallbackStartTurn` is authored as `yearToTurn(...)` — a calendar turn.
+    // Compared against the raw turn the whole 1950s-60s checkpoint timeline
+    // pulled demographics a full game year early.
+    const { db, collections } = createFakeDb({
+      docketCases: [DECIDED_DIVERGED_CASE],
+      legislationTypes: [],
+      statePolicies: [],
+      stateDemographics: [makeStateDemographics("AL")],
+      demographicDefaults: [makeStateDemographics("AL")],
+    });
+    (
+      collections as { gameState: { __store: Map<string, Record<string, unknown>> } }
+    ).gameState.__store.get("current")!.preIterationTurns = 48;
+
+    // `>` rather than an absolute count: the registry holds other checkpoints
+    // whose own windows already cover this calendar turn. The point is that the
+    // Southern window is still shut at the raw turn and opens 48 turns later,
+    // exactly the founding-phase offset.
+    const fallbackTurn = SOUTHERN_REALIGNMENT_CHECKPOINT.fallbackStartTurn;
+    const early = await processEraCheckpointsTurn(db, fallbackTurn, "US");
+    const onTime = await processEraCheckpointsTurn(db, fallbackTurn + 48, "US");
+    expect(onTime.checkpointsActive).toBeGreaterThan(early.checkpointsActive);
+  });
 });
 
 /**

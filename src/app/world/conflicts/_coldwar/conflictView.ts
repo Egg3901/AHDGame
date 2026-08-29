@@ -2,8 +2,7 @@ import type { ConflictDoc } from "@/lib/db/types/conflict";
 import { occupationOf } from "@/lib/military/occupation";
 import { anchorOf } from "@/lib/maps/countryAnchors";
 import { getRegion } from "@/lib/military/regions";
-import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
-import { calendarTurn, type CalendarClock } from "@/lib/utils/gameDate";
+import { yearOfTurn, type CalendarClock } from "@/lib/utils/gameDate";
 import { projectLonLat } from "./regionOverlayBridge";
 import type { Conflict, Severity } from "./conflicts";
 
@@ -19,16 +18,11 @@ import type { Conflict, Severity } from "./conflicts";
  */
 
 /**
- * The in-game year a turn falls in.
- *
- * Routes through `calendarTurn` so a founding-phase offset (`preIterationTurns`)
- * does not push the year a year ahead of the status bar. Without a clock this is
- * the identity on the raw turn, which is what every existing test asserts.
+ * Re-exported from the shared clock helpers, where it is also the source of
+ * truth for era SCHEDULING (SCOTUS docket, justice tenure). Kept exported here
+ * so the board's existing importers and tests keep their path.
  */
-export function yearOfTurn(turn: number, startingYear: number, clock?: CalendarClock): number {
-  const cal = calendarTurn(turn, clock);
-  return startingYear + Math.floor(Math.max(0, cal - 1) / TURNS_PER_YEAR);
-}
+export { yearOfTurn };
 
 /** The board's severity rung. A winding-down war reads as that whatever its weight. */
 function severityOf(doc: ConflictDoc): Severity {

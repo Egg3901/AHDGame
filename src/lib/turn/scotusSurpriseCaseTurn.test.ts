@@ -94,6 +94,32 @@ describe("processScotusSurpriseCaseTurn", () => {
     }
   });
 
+  it("stamps the CALENDAR year on a spawned case, not the raw-turn year (#1208)", async () => {
+    // Founding-phase world: raw turn 463 maps to 1962, but the calendar (and the
+    // status bar, and every seat gate) reads 1961.
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValue({
+      currentTurn: 463,
+      startingYear: 1953,
+      preset: "1953-default",
+      preIterationTurns: 48,
+    } as never);
+    db.collectionMocks.supremeCourtSeats!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([seat({ economicLean: 2, socialLean: 2 })]),
+    });
+    db.collectionMocks.docketCases!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+
+    const { processScotusSurpriseCaseTurn } = await import("./scotusSurpriseCaseTurn");
+    await processScotusSurpriseCaseTurn(463, db as unknown as Db, 0, 0);
+
+    const inserted = db.collectionMocks.docketCases!.insertOne.mock.calls[0]?.[0] as {
+      decisionYear?: number;
+    };
+    expect(inserted?.decisionYear).toBe(1961);
+  });
+
   it("does not spawn when the draw is above the spawn probability", async () => {
     const { processScotusSurpriseCaseTurn } = await import("./scotusSurpriseCaseTurn");
     const result = await processScotusSurpriseCaseTurn(

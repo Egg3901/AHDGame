@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { turnToLarpDate } from "@/lib/utils/formatters";
+import { rawTurnToLarpDate } from "@/lib/utils/formatters";
+import { useGameTurnStatus } from "@/hooks/useGameEvents";
+import type { CalendarClock } from "@/lib/utils/gameDate";
 import type { PartyTrendPoint } from "../partiesTypes";
 
 interface PartyTrendChartProps {
@@ -22,8 +24,18 @@ const INNER_W = WIDTH - PAD_LEFT - PAD_RIGHT;
 const INNER_H = HEIGHT - PAD_TOP - PAD_BOTTOM;
 const MEMBERSHIP_COLOR = "var(--color-info)";
 
-function compactTurnLabel(turn: number): string {
-  const label = turnToLarpDate(turn);
+/**
+ * History turns are stored RAW and this chart had neither the world's starting
+ * year nor its founding-phase offset: every label fell back to the 2019 constant
+ * and sat a game year ahead of the status bar (#1208). Both come from the shared
+ * turn-status poll, which every consumer on the page already reuses.
+ */
+function compactTurnLabel(
+  turn: number,
+  startingYear: number | undefined,
+  clock: CalendarClock
+): string {
+  const label = rawTurnToLarpDate(turn, startingYear, clock);
   const match = label.match(/^Week (\d+), (\d+)$/);
   if (!match) return label;
   return `W${match[1]} '${match[2].slice(-2)}`;
@@ -42,6 +54,13 @@ export function PartyTrendChart({
   includeNpps,
 }: PartyTrendChartProps) {
   const [hovered, setHovered] = useState<number | null>(null);
+  // Above the early return below — hooks cannot be called conditionally.
+  const turnStatus = useGameTurnStatus();
+  const startingYear = turnStatus?.startingYear;
+  const clock: CalendarClock = {
+    preIterationTurns: turnStatus?.preIterationTurns,
+    preIterationActive: turnStatus?.preIterationActive,
+  };
 
   if (history.length === 0) {
     return (
@@ -236,14 +255,16 @@ export function PartyTrendChart({
             fontSize={9}
             className="fill-muted/70"
           >
-            {compactTurnLabel(history[index].turn)}
+            {compactTurnLabel(history[index].turn, startingYear, clock)}
           </text>
         ))}
       </svg>
 
       {hovered !== null && hoveredOrg && hoveredMember && (
         <div className="pointer-events-none absolute top-2 right-3 rounded-md border border-card-border bg-card px-3 py-2 text-xs shadow-card">
-          <div className="mb-1 text-muted">{turnToLarpDate(history[hovered].turn)}</div>
+          <div className="mb-1 text-muted">
+            {rawTurnToLarpDate(history[hovered].turn, startingYear, clock)}
+          </div>
           <div className="flex items-center justify-between gap-4">
             <span className="inline-flex items-center gap-1.5">
               <span

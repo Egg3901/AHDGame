@@ -8,6 +8,14 @@ export interface CrisisListResult {
   crises: Crisis[];
   currentTurn: number;
   startingYear: number;
+  /**
+   * `GameState.preIterationTurns` (0 on normal worlds). Crisis turns are stored
+   * RAW, so a display needs this to date them on the world's calendar instead of
+   * a game year ahead of it (#1208).
+   */
+  preIterationTurns: number;
+  /** `GameState.preIteration.active` — calendar pinned to the era start while true. */
+  preIterationActive: boolean;
   /** State id → display name, for every region a listed crisis touches. */
   regionNames: Record<string, string>;
 }
@@ -53,6 +61,8 @@ export async function listCrises(
     crises,
     currentTurn: gameState?.currentTurn ?? 0,
     startingYear: gameState?.startingYear ?? STARTING_YEAR,
+    preIterationTurns: gameState?.preIterationTurns ?? 0,
+    preIterationActive: gameState?.preIteration?.active ?? false,
     regionNames,
   };
 }

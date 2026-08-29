@@ -10,8 +10,6 @@
  * All data loaded upfront into shared context for consistency.
  */
 
-export { recalculateNPPSpeakerVotes } from "./npp/speakerRecalculation";
-
 import { loadNPPContext } from "./npp/context";
 import { processElectionEntry } from "./npp/electionEntry";
 import { processNppEndorsements } from "./npp/endorsements";

@@ -6,6 +6,7 @@
  * Import from this file (not discord.ts) so MongoDB is never bundled client-side.
  */
 import { getDb } from "@/lib/mongodb";
+import { ownsConfiguredWebhooks } from "@/lib/deploymentIdentity";
 import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
 import type { CountryId } from "@/lib/constants/countries";
 import type { GameConfig } from "@/lib/db/types";
@@ -109,6 +110,8 @@ async function getWebhookUrls(): Promise<{
   try {
     const db = await getDb();
     const config = await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" });
+    // #1208 — a restored database must not post into the players' channels.
+    if (!ownsConfiguredWebhooks(config?.discordWebhookOwnerService)) return {};
     return {
       game: config?.discordGameWebhookUrl || undefined,
       countryGame: config?.discordCountryGameWebhookUrls || undefined,
@@ -297,6 +300,9 @@ export async function sendCountryGameEventMultiple(
  * headline in a later iteration. */
 const NEWS_DEDUP_WINDOW_MS = 10 * 60 * 1000;
 
+/* The separator is written as the ESCAPE \u0000, never a literal NUL byte:
+ * the same string at runtime, but a literal one makes this file binary to grep,
+ * ripgrep and Semgrep, which then skip it silently. */
 /** djb2 string hash → short hex, to keep the dedup `_id` small and stable. */
 function newsDedupHash(s: string): string {
   let h = 5381;
@@ -316,7 +322,7 @@ async function claimNewsEmbed(embed: DiscordEmbed, now: Date): Promise<boolean> 
   try {
     const db = await getDb();
     const bucket = Math.floor(now.getTime() / NEWS_DEDUP_WINDOW_MS);
-    const key = newsDedupHash(`${embed.title ?? ""} ${embed.description ?? ""}`);
+    const key = newsDedupHash(`${embed.title ?? ""}\u0000${embed.description ?? ""}`);
     const coll = db.collection<{ _id: string; sentAt: Date }>("sentNewsDedup");
     // Best-effort TTL so the collection self-cleans; ignore if it already exists.
     await coll.createIndex({ sentAt: 1 }, { expireAfterSeconds: 3600 }).catch(() => {});

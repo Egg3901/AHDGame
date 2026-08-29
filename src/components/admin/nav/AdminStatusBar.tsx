@@ -1,7 +1,7 @@
 "use client";
 
 import { useGameTurnStatus } from "@/hooks/useGameEvents";
-import { turnToLarpDate } from "@/lib/utils/formatters";
+import { rawTurnToLarpDate } from "@/lib/utils/formatters";
 import { formatBadge } from "@/components/admin/nav/useAdminBadgeCounts";
 import { LocalTime } from "@/components/time/LocalTime";
 
@@ -51,7 +51,10 @@ export function AdminStatusBar({
                   {status.currentTurn.toLocaleString("en-US")}
                 </span>
                 <span className="hidden text-muted sm:inline">
-                  · {turnToLarpDate(status.currentTurn, status.startingYear)}
+                  ·{" "}
+                  {rawTurnToLarpDate(status.currentTurn, status.startingYear, {
+                    preIterationTurns: status.preIterationTurns,
+                  })}
                 </span>
               </span>
               {cron && (
