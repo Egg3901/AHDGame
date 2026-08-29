@@ -157,7 +157,9 @@ export function stationOf(
   // nearest navigable water instead, which is where it would actually be. Putting it on
   // the front's own land region was worse than cosmetic: sea control over a land tile is
   // read by nothing, so a dominant navy changed nothing anywhere.
-  if (unit.domain === "naval") return navalStationFor(base) as RegionCode | null;
+  if (unit.domain === "naval") {
+    return navalStationFor(base, homeRegionOf(unit.countryId)) as RegionCode | null;
+  }
 
   return base;
 }
