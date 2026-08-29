@@ -451,6 +451,19 @@ export interface Forecast {
   enemyStr: number;
   ratio: number;
   ownTf: number;
+  /**
+   * ⚠️ A force share, NOT a win probability — unlike `PvpForecast.oddsPct`, which is.
+   *
+   * This is the synthetic (PvE) path, and `computeBattle` is its only consumer. That
+   * pair is latent: nothing in the application calls either, and only tests do. So it
+   * never received `ATTRITION.fortuneSpread`, and its five-round loop is still the
+   * near-deterministic function of `ratio` that made the PvP number a lie — a
+   * projected 16% would win about one battle in ten thousand here.
+   *
+   * Revive this path and you inherit that bug. Calibrate it the way `resolvePvpBattle`
+   * is calibrated before showing this number to a player, and note that doing so is a
+   * balance change and wants its own report in `scripts/sim/`.
+   */
   oddsPct: number;
   reserveRes: number;
   rearShare: number;
@@ -1191,11 +1204,16 @@ export function resolvePvpBattle(
    * the casualty split too: the side that had the good day must not also be billed
    * for the bleeding its own luck spared it.
    *
-   * Bounded so the round loop's two damage multipliers, `0.5 + effRatio` and
-   * `1.5 - effRatio`, can never go negative and start healing a side. At the tuned
-   * spread the clamp is slack — `ratio` is already held to 0.02..0.98, so the widest
-   * draw lands at -0.48 — but it keeps a future retune from silently inverting a
-   * battle instead of merely making it swingier.
+   * Bounded because three separate terms downstream read it as roughly 0..1 and go
+   * wrong in different ways past that: the round loop's damage multipliers
+   * (`0.5 + effRatio`, `1.5 - effRatio`) would go negative and start HEALING a side,
+   * `unitOutcomes`' readiness drop would invert, and its xp award `16 + ratio * 20`
+   * would go negative below -0.8. At -0.5..1.5 all three stay the right way up, and
+   * a side's xp bottoms out at 6 rather than going negative.
+   *
+   * At the tuned spread the clamp is slack — `ratio` is already held to 0.02..0.98, so
+   * the widest draw lands at -0.48 — but it keeps a future retune from silently
+   * inverting a battle instead of merely making it swingier.
    */
   const effRatio = Math.max(-0.5, Math.min(1.5, ratio + (r() - 0.5) * 2 * fortuneSpread));
   let f = 100,

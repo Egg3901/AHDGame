@@ -197,6 +197,47 @@ describe("battleForecast", () => {
       });
     });
 
+    /**
+     * The fortune roll pushes `effRatio` outside 0..1 — as far as -0.48 and 1.48 at
+     * the tuned spread. Three terms downstream read it as a fraction: the round loop's
+     * damage multipliers, the readiness drop, and the xp award `16 + ratio * 20`. The
+     * clamp in `resolvePvpBattle` is what keeps all three the right way up.
+     */
+    it("keeps unit outcomes in range at the extremes of the fortune roll", () => {
+      const a = side("US", "A", [300, 300, 300], "afghan");
+      const d = side("CN", "B", [40], "afghan");
+      for (let s = 0; s < 1500; s++) {
+        const r = resolvePvpBattle([a], [d], "afghan", s * 31);
+        for (const u of [...r.attacker.unitResults, ...r.defender.unitResults]) {
+          expect(Number.isFinite(u.casualties)).toBe(true);
+          expect(u.casualties).toBeGreaterThanOrEqual(0);
+          // A formation is spent, never erased, and never healed by losing.
+          expect(u.readiness).toBeGreaterThanOrEqual(3);
+          // Fighting never costs a unit experience, however badly the day went.
+          expect(u.xp).toBeGreaterThan(0);
+          expect(u.materiel).toBeGreaterThanOrEqual(0);
+          expect(u.materiel).toBeLessThanOrEqual(EQUIPMENT_TRACK_MAX);
+        }
+      }
+    });
+
+    // An empty side reaches here through the walkover branch's edges; it must produce a
+    // number, not NaN, because the payload crosses an untyped JSON boundary to the UI.
+    it("still yields finite odds when a side is empty", () => {
+      const a = side("US", "A", [120, 90], "afghan");
+      const d = side("CN", "B", [120], "afghan");
+      for (const [x, y] of [
+        [[a], []],
+        [[], [d]],
+        [[], []],
+      ] as [BattleSide[], BattleSide[]][]) {
+        const fc = battleForecast(x, y, "afghan");
+        expect(Number.isFinite(fc.oddsPct)).toBe(true);
+        expect(fc.ratio).toBeGreaterThanOrEqual(0.02);
+        expect(fc.ratio).toBeLessThanOrEqual(0.98);
+      }
+    });
+
     it("an underdog sometimes wins, and a favourite sometimes loses", () => {
       const weak = side("US", "A", [60], "afghan");
       const strong = side("CN", "B", [300, 300, 300], "afghan");

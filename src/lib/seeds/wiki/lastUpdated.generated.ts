@@ -78,7 +78,7 @@ export const WIKI_LAST_UPDATED: Record<string, string> = {
   "executive-term-limits": "2026-08-21",
   "extraction-contracts": "2026-08-11",
   faq: "2026-08-21",
-  "fighting-a-battle": "2026-08-20",
+  "fighting-a-battle": "2026-08-29",
   "first-campaign-walkthrough": "2026-08-20",
   fomc: "2026-08-20",
   "fundraising-ads": "2026-08-21",

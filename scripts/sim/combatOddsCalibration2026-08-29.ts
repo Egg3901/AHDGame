@@ -22,7 +22,7 @@ import type { Db } from "mongodb";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import { battleForecast, resolvePvpBattle, type BattleSide } from "@/lib/military/battle";
-import { buildBattleSide } from "@/lib/military/battleSides";
+import { buildCoalitionSide } from "@/lib/military/battleSides";
 import { conflictToFront } from "@/lib/military/createConflict";
 import { ATTRITION } from "@/lib/military/config";
 
@@ -49,11 +49,11 @@ const pct = (n: number) => (n * 100).toFixed(1) + "%";
  * `basePower` moves the force balance through the same `battleForecast` every other
  * caller uses -- nothing here reimplements the strength math.
  */
-function scaled(side: BattleSide, factor: number): BattleSide {
-  return {
-    ...side,
-    units: side.units.map((u) => ({ ...u, basePower: Math.max(1, u.basePower * factor) })),
-  };
+function scaled(sides: BattleSide[], factor: number): BattleSide[] {
+  return sides.map((s) => ({
+    ...s,
+    units: s.units.map((u) => ({ ...u, basePower: Math.max(1, u.basePower * factor) })),
+  }));
 }
 
 interface Arm {
@@ -68,10 +68,10 @@ function emptyArm(): Arm {
   return { wins: 0, verdicts: {}, retreats: 0, attackerLoss: 0, defenderLoss: 0 };
 }
 
-function run(a: BattleSide, d: BattleSide, spread: number, trials: number): Arm {
+function run(a: BattleSide[], d: BattleSide[], spread: number, trials: number): Arm {
   const arm = emptyArm();
   for (let s = 0; s < trials; s++) {
-    const r = resolvePvpBattle([a], [d], THEATER, s * 7919, undefined, undefined, spread);
+    const r = resolvePvpBattle(a, d, THEATER, s * 7919, undefined, undefined, spread);
     if (r.win) arm.wins++;
     arm.verdicts[r.verdict] = (arm.verdicts[r.verdict] ?? 0) + 1;
     if (r.retreat) arm.retreats++;
@@ -96,13 +96,30 @@ async function main() {
       .find({ theaterId: THEATER })
       .toArray()) as unknown as MilitaryUnit[];
 
-    const west = conflict.sideA.countries[0]!;
-    const east = conflict.sideB.countries[0]!;
-    const baseA = await buildBattleSide(db, west, units, fronts, conflict.supplyA, "A");
-    const baseD = await buildBattleSide(db, east, units, fronts, conflict.supplyB, "B");
+    /**
+     * ⚠️ `buildBattleSide` does NOT filter the units it is handed — it takes the array
+     * as that country's contingent. Partitioning by `countryId` first is therefore
+     * load-bearing, not tidiness: handing it the whole front puts every belligerent
+     * on BOTH sides, which reads as a plausible near-even matchup and silently makes
+     * the report a measurement of an army fighting itself.
+     */
+    const byCountry = new Map<string, MilitaryUnit[]>();
+    for (const u of units) {
+      byCountry.set(String(u.countryId), [...(byCountry.get(String(u.countryId)) ?? []), u]);
+    }
+    // Only belligerents that actually have formations here — an empty contingent adds
+    // nothing to the fight and only pads the roster line printed below.
+    const westCountries = conflict.sideA.countries.filter((c) => byCountry.get(c)?.length);
+    const eastCountries = conflict.sideB.countries.filter((c) => byCountry.get(c)?.length);
+    const [baseA, baseD] = await Promise.all([
+      buildCoalitionSide(db, westCountries, byCountry, fronts, conflict.supplyA, "A"),
+      buildCoalitionSide(db, eastCountries, byCountry, fronts, conflict.supplyB, "B"),
+    ]);
 
-    console.log(`Front ${THEATER}: ${west} (A) vs ${east} (B)`);
-    console.log(`Live formations: ${baseA.units.length} vs ${baseD.units.length}`);
+    const formations = (sides: BattleSide[]) => sides.reduce((a, s) => a + s.units.length, 0);
+    console.log(`Front ${THEATER}: ${conflict.sideA.label} vs ${conflict.sideB.label}`);
+    console.log(`  A: ${westCountries.join("+")} — ${formations(baseA)} formations`);
+    console.log(`  B: ${eastCountries.join("+")} — ${formations(baseD)} formations`);
     console.log(`fortuneSpread under test: ${ATTRITION.fortuneSpread}\n`);
 
     console.log("=== ARM A: calibration sweep ===");
@@ -113,10 +130,16 @@ async function main() {
     // Scaled in OPPOSITE directions. Front capacity caps how much mass either side can
     // get into contact, so scaling only the attacker saturates and the sweep never
     // leaves the middle of the range -- it topped out at 66% before this.
-    for (const factor of [0.05, 0.12, 0.22, 0.35, 0.5, 0.7, 1, 1.4, 2, 3, 8, 20]) {
+    //
+    // The factors are NOT evenly spaced, because the odds they produce are not. Both
+    // sides sit far over capacity on this front, so everything from 0.7x to 3x lands
+    // on the same ~37% plateau while 3x..8x sweeps 40% to 74% -- the spacing is
+    // bunched where the odds actually move, so the 45..70% band that decides most
+    // real offensives is covered rather than jumped over.
+    for (const factor of [0.05, 0.12, 0.22, 0.35, 0.5, 1, 3, 4, 5, 6, 7, 8, 12, 20]) {
       const a = scaled(baseA, factor);
       const d = scaled(baseD, 1 / factor);
-      const projected = battleForecast([a], [d], THEATER).ratio;
+      const projected = battleForecast(a, d, THEATER).ratio;
       const before = run(a, d, 0, TRIALS).wins / TRIALS;
       const after = run(a, d, ATTRITION.fortuneSpread, TRIALS).wins / TRIALS;
       const err = after - projected;
@@ -150,8 +173,8 @@ async function main() {
     console.log(`  standard error at ${TRIALS} trials: +/-${se.toFixed(1)}pp per cell`);
 
     console.log("\n=== ARM B: the live front, as it actually stands ===");
-    const projected = battleForecast([baseA], [baseD], THEATER).ratio;
-    console.log(`  projected odds for a ${west} offensive: ${pct(projected)}\n`);
+    const projected = battleForecast(baseA, baseD, THEATER).ratio;
+    console.log(`  projected odds for a ${westCountries.join("+")} offensive: ${pct(projected)}\n`);
     for (const [label, spread] of [
       ["BEFORE", 0],
       ["AFTER ", ATTRITION.fortuneSpread],

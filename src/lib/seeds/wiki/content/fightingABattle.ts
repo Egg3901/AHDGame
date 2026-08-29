@@ -67,7 +67,9 @@ The band is deterministic, so looking twice never gives you two different answer
 
 The projection you see is computed by **the same code that resolves the battle**, from the same units, the same supply and the same terrain. It is not a separate estimate that might disagree.
 
-What it cannot know is what changes before the tick. Your opponent has a full turn to reinforce, and the odds you acted on can be stale by the time the battle happens.
+**But it is odds, not a promise.** The battle is fought at the projected chance plus the fortune of the day, so a 70 percent attack fails three times in ten and a 20 percent attack sometimes carries the field. Losing a fight you were favoured to win is the number working, not the number being wrong. Judge a plan over a campaign, not over one tick.
+
+What the projection cannot know is what changes before the tick. Your opponent has a full turn to reinforce, and the odds you acted on can be stale by the time the battle happens.
 
 ## Step 3: Declare the offensive
 

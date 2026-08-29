@@ -74,6 +74,12 @@ describe("battle forecast route", () => {
     db.collection("militaryFormations");
     db.collection("nationalDoctrine");
     db.collection("conflicts");
+    // Standing orders. Empty by default: the projection pools auto-joining allies the
+    // same way the resolver does, so the route reads this on every request.
+    db.collection("theaterState");
+    db.collectionMocks.theaterState.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
     db.collectionMocks.gameState.findOne.mockResolvedValue({
       conflictsEnabled: true,
       currentTurn: 40,
@@ -157,6 +163,57 @@ describe("battle forecast route", () => {
     const res = await GET(req("theaterId=afghan&targetCountry=CN"), call);
     const body = await res.json();
     expect(body.oddsPct + body.counterOddsPct).not.toBe(100);
+  });
+
+  /**
+   * Regression: the projection left out allies who join under a standing order.
+   *
+   * `battleResolution` folds `autoJoinersAtFront` into the attack roster before it
+   * builds the sides, so an ally with auto-join set and troops at the front fights in
+   * the offensive. The forecast pooled only the declarers, so it understated the
+   * attack by exactly the allies who were about to join it — on a route whose whole
+   * contract is that it cannot disagree with the outcome it predicts.
+   */
+  it("pools an ally that auto-joins offensives, not just the ones who declared", async () => {
+    const alliedConflict = {
+      ...CONFLICT,
+      sideA: { label: "A", countries: ["US", "UK"], kind: "coalition" },
+    };
+    const oddsWith = async (ukAutoJoins: boolean) => {
+      vi.resetModules();
+      db.collectionMocks.conflicts.findOne.mockResolvedValue(alliedConflict);
+      db.collectionMocks.militaryUnits.find.mockImplementation(
+        (q: { countryId?: string; theaterId?: string } = {}) => {
+          const atFront = [
+            unit({ countryId: "US", theaterId: "afghan" }),
+            unit({ countryId: "UK", theaterId: "afghan" }),
+            unit({ countryId: "CN", theaterId: "afghan" }),
+            unit({ countryId: "CN", theaterId: "afghan" }),
+          ];
+          const docs = q.theaterId
+            ? atFront.filter((u) => u.theaterId === q.theaterId)
+            : atFront.filter((u) => u.countryId === (q.countryId ?? "US"));
+          return { toArray: vi.fn().mockResolvedValue(docs) };
+        }
+      );
+      db.collectionMocks.theaterState.find.mockReturnValue({
+        toArray: vi
+          .fn()
+          .mockResolvedValue(ukAutoJoins ? [{ countryId: "UK", autoJoin: { afghan: true } }] : []),
+      });
+      const { GET } = await import(ROUTE);
+      const res = await GET(req("theaterId=afghan&targetCountry=CN"), call);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      return { odds: body.oddsPct as number, contingents: body.alliedContingents as number };
+    };
+
+    // UK never declares in either arm. The only difference is the standing order.
+    const without = await oddsWith(false);
+    const withJoin = await oddsWith(true);
+    expect(without.contingents).toBe(1);
+    expect(withJoin.contingents).toBe(2);
+    expect(withJoin.odds).toBeGreaterThan(without.odds);
   });
 
   /**
