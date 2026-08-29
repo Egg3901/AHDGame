@@ -1,21 +1,11 @@
 import { getDb } from "@/lib/mongodb";
-import { findMergedRegionMetrics, findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
-import type { StateMetrics, State } from "@/lib/db/types";
+import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
+import type { State } from "@/lib/db/types";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
 import { getEraContext } from "@/lib/era/context";
-import {
-  computeNationalAveragesFromMetrics,
-  calculateStateApproval,
-  calculateNationalApproval,
-  loadElectorateGroups,
-  weightingFor,
-  BASE_APPROVAL,
-} from "@/lib/utils/governmentApproval";
+import { computeNationalAveragesFromMetrics } from "@/lib/utils/governmentApproval";
 import { evaluateModifiers } from "@/lib/utils/approvalModifiers";
-import {
-  isPoliticalApprovalCountry,
-  loadPoliticalApprovalBases,
-} from "@/lib/politicalLegislation/politicalApprovalProvider";
+import { recomputeNationalApproval } from "@/lib/country/recomputeNationalApproval";
 import type { CountryId } from "@/lib/constants/countries";
 
 export interface NationalApprovalData {
@@ -70,33 +60,18 @@ export async function loadNationalApproval(countryId: CountryId): Promise<Nation
   // governmentApprovals (includes national address/cabinet adjustments and
   // matches the history chart, the Executive page, and the metrics masthead).
   // A live recompute is only a fallback for DBs that have no snapshot yet.
-  let governmentApproval = approvalDoc?.approvalRating;
-  if (governmentApproval == null) {
-    if (isPoliticalApprovalCountry(countryId)) {
-      // SP4: playable-country live fallback reads the hybrid political bases —
-      // never the legacy metric scorer (spec §3 no-divergence rule).
-      const bases = await loadPoliticalApprovalBases(db, countryId);
-      governmentApproval = bases?.national ?? BASE_APPROVAL;
-    } else if (allMetrics.length === 0) {
-      governmentApproval = BASE_APPROVAL;
-    } else {
-      const statePopMap = new Map(allStates.map((s) => [s._id, s.population ?? 0]));
-      const groupsByState = await loadElectorateGroups(db, { _id: { $in: stateIds }, countryId });
-      const stateApprovals = allMetrics.map((m) => ({
-        stateId: m._id,
-        approval: calculateStateApproval(
-          m,
-          nationalAverages,
-          [],
-          weightingFor(groupsByState, countryId, String(m._id)),
-          preset,
-          year
-        ),
-        population: statePopMap.get(m._id) ?? 0,
-      }));
-      governmentApproval = calculateNationalApproval(stateApprovals);
-    }
-  }
+  // The inputs are handed over rather than re-fetched: everything the recompute
+  // needs was already read above for the modifiers, so this path costs the same
+  // queries it always did.
+  const governmentApproval =
+    approvalDoc?.approvalRating ??
+    (await recomputeNationalApproval(db, countryId, {
+      allStates,
+      allMetrics,
+      nationalAverages,
+      preset,
+      year,
+    }));
 
-  return { governmentApproval: governmentApproval ?? BASE_APPROVAL, history, modifiers };
+  return { governmentApproval, history, modifiers };
 }

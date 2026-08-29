@@ -7,6 +7,7 @@ import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import { PEACE_OFFER_DURATION_TURNS, type PeaceOfferDoc } from "@/lib/db/types/peaceOffer";
 import { getConflict } from "@/lib/db/collections/conflicts";
+import { recomputeNationalApproval } from "@/lib/country/recomputeNationalApproval";
 import { findLiveOffer, getPeaceOffersCollection } from "@/lib/db/collections/peaceOffers";
 import { validatePeaceOffer } from "@/lib/military/peaceOffer";
 import { isNppAutonomyActive } from "./featureFlag";
@@ -172,7 +173,16 @@ export async function prepareAutonomousWarEntry(
       .collection<{ countryId: CountryId; debtToGdpRatio?: number }>("federalBudget")
       .findOne({ countryId }),
   ]);
-  if ((approval?.approvalRating ?? 0) < ENTRY_MIN_APPROVAL) {
+  // A missing document means "not measured yet", NOT "nobody approves". Only
+  // `active` countries and current belligerents are snapshotted into
+  // governmentApprovals, so every other country reads as absent here — and
+  // reading absent as 0 refused entry to exactly the countries this bill route
+  // exists for, whatever their public actually thought. The stored rating still
+  // wins where there is one: it carries the national providers (war block,
+  // address bump, org statements, cabinet) the recompute deliberately omits.
+  const approvalRating =
+    approval?.approvalRating ?? (await recomputeNationalApproval(db, countryId));
+  if (approvalRating < ENTRY_MIN_APPROVAL) {
     return { ready: false, deployedUnits: 0, reason: "Public approval no longer supports entry." };
   }
   if ((budget?.debtToGdpRatio ?? 0) > ENTRY_MAX_DEBT_TO_GDP) {
