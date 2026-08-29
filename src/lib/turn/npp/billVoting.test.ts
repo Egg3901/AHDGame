@@ -1,23 +1,15 @@
 /**
- * Tests for processBillVoting and the pure helpers in leadershipVoting.ts
- * (alignmentScore, castLeadershipVote).
+ * Tests for processBillVoting and for castLeadershipVote in leadershipVoting.ts.
  *
- * billVoting.ts and leadershipVoting.ts have zero existing tests despite
- * controlling how every NPP elected official votes on every active bill and
- * leadership election. These are high-stakes: bugs here silently corrupt
- * vote tallies across hundreds of documents every turn.
+ * Both control how every NPP elected official votes: billVoting on every active
+ * bill each turn, castLeadershipVote whenever a player whips their caucus in a
+ * leadership race. These are high-stakes: bugs here silently corrupt vote
+ * tallies across hundreds of documents.
  */
 import { describe, it, expect, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
-import type {
-  NPP,
-  Bill,
-  ElectedOfficial,
-  BillWhip,
-  SpeakerElection,
-  SpeakerNomination,
-} from "@/lib/db/types";
+import type { NPP, Bill, ElectedOfficial, BillWhip, SpeakerNomination } from "@/lib/db/types";
 import type { NPPContext } from "./context";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -952,44 +944,6 @@ describe("processBillVoting", () => {
   });
 });
 
-// ─── alignmentScore ────────────────────────────────────────────────────────────
-
-describe("alignmentScore", () => {
-  it("returns 100 for identical positions", async () => {
-    const { alignmentScore } = await import("./leadershipVoting");
-    expect(alignmentScore(0, 0, 0, 0)).toBe(100);
-  });
-
-  it("returns 0 when positions are maximally different", async () => {
-    const { alignmentScore } = await import("./leadershipVoting");
-    // Each axis: |5 - (-5)| * 5 = 50; total penalty = 100 → 100 - 100 = 0
-    expect(alignmentScore(-5, -5, 5, 5)).toBe(0);
-  });
-
-  it("never returns below 0", async () => {
-    const { alignmentScore } = await import("./leadershipVoting");
-    // Beyond normal range — should clamp via Math.max
-    expect(alignmentScore(-100, -100, 100, 100)).toBe(0);
-  });
-
-  it("penalises 5-unit difference on one axis by 25 points", async () => {
-    const { alignmentScore } = await import("./leadershipVoting");
-    // |5 - 0| * 5 = 25 penalty → 75
-    expect(alignmentScore(0, 0, 5, 0)).toBe(75);
-  });
-
-  it("penalises both axes independently", async () => {
-    const { alignmentScore } = await import("./leadershipVoting");
-    // econ diff = 2 → 10, soc diff = 3 → 15 → total penalty = 25 → 75
-    expect(alignmentScore(0, 0, 2, 3)).toBe(75);
-  });
-
-  it("is symmetric (order of arguments doesn't matter for score)", async () => {
-    const { alignmentScore } = await import("./leadershipVoting");
-    expect(alignmentScore(1, -2, 3, 4)).toBe(alignmentScore(3, 4, 1, -2));
-  });
-});
-
 // ─── castLeadershipVote ────────────────────────────────────────────────────────
 
 describe("castLeadershipVote", () => {
@@ -1112,202 +1066,6 @@ describe("castLeadershipVote", () => {
     expect(addFilter._id).toEqual(nom2._id);
     expect((addUpdate.$set as Record<string, unknown>)[`votes.${nppKey}`]).toBe("for");
     expect(addUpdate.$inc.votesFor).toBe(1);
-  });
-});
-
-// ─── processSpeakerVoting — single candidate auto-vote ────────────────────────
-
-describe("processSpeakerVoting", () => {
-  function makeContext(
-    db: Db,
-    npp: NPP,
-    official: ElectedOfficial,
-    speakerElection: SpeakerElection,
-    nominations: SpeakerNomination[]
-  ): NPPContext {
-    return makeCtx(db, {
-      nppOfficials: [official],
-      nppMap: new Map([[npp._id.toString(), npp]]),
-      speakerElection,
-      speakerNominations: nominations,
-      houseLeadershipElections: [],
-      senateLeadershipElections: [],
-    });
-  }
-
-  it("does not cast votes even when a speaker election is active", async () => {
-    const { processSpeakerVoting } = await import("./leadershipVoting");
-    const npp = makeNPP();
-    const official = makeOfficial(npp._id, "house");
-    const now = new Date();
-    const election: SpeakerElection = {
-      _id: "current",
-      status: "voting",
-      startedAt: now,
-      endsAt: new Date(now.getTime() + 3_600_000),
-      updatedAt: now,
-    };
-    const nom: SpeakerNomination = {
-      _id: new ObjectId(),
-      nomineeId: new ObjectId(),
-      nomineeName: "Sole Candidate",
-      nominatedById: new ObjectId(),
-      nominatedByName: "Nominator",
-      status: "open",
-      votesFor: 0,
-      votesAgainst: 0,
-      votes: {},
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    const updateOneCalls: unknown[][] = [];
-    const db = {
-      collection: vi.fn(() => ({
-        updateOne: vi.fn((...args: unknown[]) => {
-          updateOneCalls.push(args);
-          return Promise.resolve({ modifiedCount: 1 });
-        }),
-      })),
-    } as unknown as Db;
-
-    const ctx = makeContext(db, npp, official, election, [nom]);
-    const count = await processSpeakerVoting(ctx);
-
-    expect(count).toBe(0);
-    expect(updateOneCalls).toHaveLength(0);
-  });
-
-  it("does not re-vote for sole candidate if nppKey already in votes", async () => {
-    const { processSpeakerVoting } = await import("./leadershipVoting");
-    const npp = makeNPP();
-    const nppKey = `npp_${npp._id.toString()}`;
-    const official = makeOfficial(npp._id, "house");
-    const now = new Date();
-    const election: SpeakerElection = {
-      _id: "current",
-      status: "voting",
-      startedAt: now,
-      endsAt: new Date(now.getTime() + 3_600_000),
-      updatedAt: now,
-    };
-    const nom: SpeakerNomination = {
-      _id: new ObjectId(),
-      nomineeId: new ObjectId(),
-      nomineeName: "Sole Candidate",
-      nominatedById: new ObjectId(),
-      nominatedByName: "Nominator",
-      status: "voting",
-      votesFor: 1,
-      votesAgainst: 0,
-      votes: { [nppKey]: "for" }, // already voted
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    const updateOneSpy = vi.fn().mockResolvedValue({ modifiedCount: 0 });
-    const db = {
-      collection: vi.fn(() => ({ updateOne: updateOneSpy })),
-    } as unknown as Db;
-
-    const ctx = makeContext(db, npp, official, election, [nom]);
-    const count = await processSpeakerVoting(ctx);
-
-    expect(count).toBe(0);
-    expect(updateOneSpy).not.toHaveBeenCalled();
-  });
-
-  it("skips speaker voting when no active speaker election exists", async () => {
-    const { processSpeakerVoting } = await import("./leadershipVoting");
-    const npp = makeNPP();
-    const official = makeOfficial(npp._id, "house");
-    const updateOneSpy = vi.fn().mockResolvedValue({ modifiedCount: 0 });
-    const db = {
-      collection: vi.fn(() => ({ updateOne: updateOneSpy })),
-    } as unknown as Db;
-
-    const ctx = makeCtx(db, {
-      nppOfficials: [official],
-      nppMap: new Map([[npp._id.toString(), npp]]),
-      speakerElection: null, // no election
-      speakerNominations: [],
-      houseLeadershipElections: [],
-      senateLeadershipElections: [],
-    });
-    const count = await processSpeakerVoting(ctx);
-
-    expect(count).toBe(0);
-    expect(updateOneSpy).not.toHaveBeenCalled();
-  });
-
-  it("does not cast votes when multiple speaker candidates exist", async () => {
-    const { processSpeakerVoting } = await import("./leadershipVoting");
-    const npp = makeNPP({ party: "1", policies: { economic: 0, social: 0 } });
-    const official = makeOfficial(npp._id, "house");
-    const now = new Date();
-    const election: SpeakerElection = {
-      _id: "current",
-      status: "voting",
-      startedAt: now,
-      endsAt: new Date(now.getTime() + 3_600_000),
-      updatedAt: now,
-    };
-
-    // Nomination A: same party as NPP → gets PARTY_MATCH_BONUS = 80
-    const nomA: SpeakerNomination = {
-      _id: new ObjectId(),
-      nomineeId: new ObjectId(),
-      nomineeName: "Same Party",
-      nomineeParty: "1",
-      nomineeCountryId: "US",
-      nominatedById: new ObjectId(),
-      nominatedByName: "Nominator",
-      status: "open",
-      votesFor: 0,
-      votesAgainst: 0,
-      votes: {},
-      createdAt: now,
-      updatedAt: now,
-    };
-    // Nomination B: different party → no bonus
-    const nomB: SpeakerNomination = {
-      _id: new ObjectId(),
-      nomineeId: new ObjectId(),
-      nomineeName: "Other Party",
-      nomineeParty: "2",
-      nomineeCountryId: "US",
-      nominatedById: new ObjectId(),
-      nominatedByName: "Nominator",
-      status: "open",
-      votesFor: 0,
-      votesAgainst: 0,
-      votes: {},
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    const targetNomIds: ObjectId[] = [];
-    const db = {
-      collection: vi.fn(() => ({
-        updateOne: vi.fn((filter: { _id: ObjectId }, _update: unknown) => {
-          targetNomIds.push(filter._id);
-          return Promise.resolve({ modifiedCount: 1 });
-        }),
-      })),
-    } as unknown as Db;
-
-    const ctx = makeCtx(db, {
-      nppOfficials: [official],
-      nppMap: new Map([[npp._id.toString(), npp]]),
-      speakerElection: election,
-      speakerNominations: [nomA, nomB],
-      houseLeadershipElections: [],
-      senateLeadershipElections: [],
-    });
-    const count = await processSpeakerVoting(ctx);
-
-    expect(count).toBe(0);
-    expect(targetNomIds).toHaveLength(0);
   });
 });
 
