@@ -38,10 +38,10 @@ export interface TransferRegionArgs {
   /** Optional display name the region takes in its new country (NIR → "Ulster"). */
   displayName?: string;
   /**
-   * The electoral system the region adopts, defaulting to Ireland-s PR-STV.
+   * The electoral system the region adopts, defaulting to Ireland's PR-STV.
    *
-   * A REFERENDUM transfer converts the region to its new country-s system. A
-   * MERGE preserves the region-s own system, because both halves of a
+   * A REFERENDUM transfer converts the region to its new country's system. A
+   * MERGE preserves the region's own system, because both halves of a
    * reunifying country already run the same elections and converting them would
    * be a change nobody voted for.
    */
