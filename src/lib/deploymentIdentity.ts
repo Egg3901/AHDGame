@@ -30,12 +30,24 @@ export function deploymentServiceSlug(env: NodeJS.ProcessEnv = process.env): str
  * Unstamped config posts as before — this must never silence a live world that
  * simply has not re-saved its webhooks yet.
  */
+/**
+ * Pairs already reported. A suppressed world posts on nearly every turn, and a
+ * sandbox replaying thousands of turns would otherwise bury its own logs in the
+ * same line. One line names the mismatch; repeats add nothing.
+ */
+const reportedSuppressions = new Set<string>();
+
 export function ownsConfiguredWebhooks(owner: string | undefined): boolean {
   if (!owner) return true;
   const self = deploymentServiceSlug();
   if (owner === self) return true;
-  console.warn(
-    `[Discord] Suppressed webhook send: config is owned by "${owner}", running as "${self}".`
-  );
+  const pair = `${owner} -> ${self}`;
+  if (!reportedSuppressions.has(pair)) {
+    reportedSuppressions.add(pair);
+    console.warn(
+      `[Discord] Suppressed webhook send: config is owned by "${owner}", running as "${self}". ` +
+        `Further suppressions are not logged.`
+    );
+  }
   return false;
 }

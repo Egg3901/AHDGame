@@ -176,6 +176,48 @@ describe("PATCH /api/admin/config/discord — webhook ownership stamp (#1208)", 
     });
   });
 
+  /**
+   * Without this, the guard undoes itself: an admin poking at the Discord page
+   * of a restored world silently moves ownership to that deployment, and it
+   * resumes posting to the live channels it inherited.
+   */
+  it("refuses to take ownership from another deployment", async () => {
+    process.env.RAILWAY_SERVICE_NAME = "Sandbox Staging";
+    findOne.mockResolvedValue({ _id: "default", discordWebhookOwnerService: "main-site" });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(patchReq({ general: { news: "https://discord.test/news" } }));
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toEqual({
+      error: expect.stringContaining("main-site"),
+    });
+    expect(updateOne).not.toHaveBeenCalled();
+  });
+
+  it("transfers ownership only when the caller asks for it explicitly", async () => {
+    process.env.RAILWAY_SERVICE_NAME = "Sandbox Staging";
+    findOne.mockResolvedValue({ _id: "default", discordWebhookOwnerService: "main-site" });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(
+      patchReq({ general: { news: "https://discord.test/news" }, claimWebhooks: true })
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedUpdate()?.$set).toMatchObject({
+      discordWebhookOwnerService: "sandbox-staging",
+    });
+  });
+
+  it("lets the owning deployment save without claiming anything", async () => {
+    process.env.RAILWAY_SERVICE_NAME = "Main Site";
+    findOne.mockResolvedValue({ _id: "default", discordWebhookOwnerService: "main-site" });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(patchReq({ general: { news: "https://discord.test/news" } }));
+
+    expect(res.status).toBe(200);
+    expect(capturedUpdate()?.$set).toMatchObject({ discordWebhookOwnerService: "main-site" });
+  });
+
   it("does not stamp when every url in the request is being cleared", async () => {
     process.env.RAILWAY_SERVICE_NAME = "Main Site";
     const { PATCH } = await import("./route");
