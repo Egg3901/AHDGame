@@ -63,7 +63,11 @@ export async function reapportionNationalBudget(
     .toArray();
   const sourceTotalBefore = remaining.reduce((s, r) => s + (r.gdp ?? 0), 0) + regionGdp;
   const weight = sourceTotalBefore > 0 ? regionGdp / sourceTotalBefore : 0;
-  if (!(weight > 0 && weight < 1)) return;
+  // Weight 1 is REAL: the last region of a dissolving country has nothing left
+  // behind it, and skipping it would strand the whole residual base (tax bases,
+  // spending baselines, grants) on a country that no longer exists. Only a
+  // degenerate non-positive weight bails.
+  if (!(weight > 0 && weight <= 1)) return;
 
   const [from, to] = await Promise.all([
     db.collection<FederalBudget>("federalBudget").findOne({ _id: fromCountryId }),
