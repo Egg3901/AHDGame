@@ -22,9 +22,9 @@ Pick the country you actually want to play. It scopes elections, parties, legisl
 | Japan | Region (8) | Shūgiin or Sangiin |
 | China | Macro-region (7) | NPC delegate (one-party; disclaimer on pick) |
 | Ireland | Region (8) | TD (Dáil) |
-| Brazil | State (27) | Federal Deputy |
-| Nigeria | State (36) | Assembly Member |
-| Soviet Union | Republic (17) | Supreme Soviet or Nationalities Deputy |
+| Brazil | State (5 macro-regions) | Federal Deputy |
+| Nigeria | Zone (6) | Assembly Member |
+| Soviet Union | Republic (14) | Supreme Soviet or Nationalities Deputy |
 | East Germany | Land (6) | Volkskammer Deputy |
 
 Which of these are open depends on the world's era preset and the admin roster: the Soviet Union and East Germany exist only in the Cold War presets, and a country can be switched on for players later in a world's life. The country hubs on [Getting Started](/wiki/getting-started) cover each one.
@@ -39,7 +39,7 @@ Type a readable name. Optional avatar; skip it if you want the default tile. You
 
 This is where you canvass cheapest and where most local races live. National races (President, PM) are the exception.
 
-US: any of 50 states. UK: England, Scotland, Wales, or Northern Ireland. DE: one Land. JP: one of 8 regions. CN: one of 7. IE: one of 8. BR: one of 27 states. NG: one of 36. RU: one of 17 republics. DD: one of 6 Länder.
+US: any of 50 states. UK: England, Scotland, Wales, or Northern Ireland. DE: one Land. JP: one of 8 regions. CN: one of 7. IE: one of 8. BR: one of 5 macro-regional states. NG: one of 6 zones. RU: one of 14 republics. DD: one of 6 Länder.
 
 You can [relocate](/wiki/relocation) later. You lose state Political Influence when you do. Pick once, carefully.
 

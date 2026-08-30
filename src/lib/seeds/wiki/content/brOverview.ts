@@ -11,8 +11,8 @@ Brazil is a **federal presidential republic**: South America's largest democracy
 | President | Direct election | 4 years | 1 |
 | Vice President | Elected on presidential ticket | 4 years | 1 |
 | Senator | FPTP statewide election (staggered) | 8 years (staggered) | 81 |
-| Federal Deputy | Open-list PR from 27 multi-member constituencies | 4 years | 513 |
-| Governor | FPTP statewide election | 4 years | 1 per state |
+| Federal Deputy | Open-list PR from 5 multi-member macro-regional constituencies | 4 years | 513 |
+| Governor | FPTP statewide election | 4 years | 1 per state (5) |
 | Governor of the BCB | Appointed action | 4 years | 1 |
 
 The **President** is both head of state and head of government: directly elected for a fixed 4-year term. There is no parliamentary confidence vote. A 2-term limit per character applies, and a second-term run blocks running-mate selection (the VP cannot be changed on a re-election bid).
@@ -25,8 +25,8 @@ The **National Congress** is bicameral and **both chambers participate in the pl
 
 Brazil's legislature has two chambers:
 
-- **Chamber of Deputies**: 513 Federal Deputies elected by **open-list proportional representation** from 27 multi-member constituencies (the 26 states plus the Federal District). 4-year terms. **All seats are contested** each cycle. The Chamber is the primary legislative body and the source of the coalition threshold.
-- **Federal Senate**: 81 senators (3 per state plus 3 for the Federal District), serving **8-year staggered terms**. One-third and two-thirds of seats alternate per cycle (2 classes). The Senate reviews legislation from the Chamber and can amend or reject bills.
+- **Chamber of Deputies**: 513 Federal Deputies elected by **open-list proportional representation** from 5 multi-member constituencies: the game models Brazil as five macro-regional states (Norte, Nordeste, Centro-Oeste, Sudeste, Sul), each electing a block of deputies sized by population. 4-year terms. **All seats are contested** each cycle. The Chamber is the primary legislative body and the source of the coalition threshold.
+- **Federal Senate**: 81 senators, allocated across the five macro-regional states by population and serving **8-year staggered terms**. One-third and two-thirds of seats alternate per cycle (2 classes). The Senate reviews legislation from the Chamber and can amend or reject bills.
 
 ---
 
@@ -46,7 +46,7 @@ Brazil uses **two different electoral systems** for its two chambers:
 
 ### Chamber of Deputies: open-list PR (D'Hondt)
 
-Federal Deputies are elected by **open-list proportional representation** using the D'Hondt divisor method. Each of the 27 multi-member constituencies (states + Federal District) elects a block of deputies proportional to the state's population. Voters cast a vote for an individual candidate, and seats are allocated to parties by vote share, then ordered by individual candidate vote totals within each party list.
+Federal Deputies are elected by **open-list proportional representation** using the D'Hondt divisor method. Each of the five macro-regional constituencies elects a block of deputies proportional to the state's population. Voters cast a vote for an individual candidate, and seats are allocated to parties by vote share, then ordered by individual candidate vote totals within each party list.
 
 - **All 513 seats are contested** each 4-year cycle.
 - **No 5% threshold**: Brazil has no formal vote-share threshold to enter the Chamber, unlike Germany's Sperrklausel. Fragmentation is the natural outcome.
@@ -54,7 +54,7 @@ Federal Deputies are elected by **open-list proportional representation** using 
 
 ### Federal Senate: FPTP staggered
 
-Senators are elected by **First Past the Post (FPTP)** from statewide constituencies: 3 senators per state, one or two contested per cycle on alternating 8-year classes.
+Senators are elected by **First Past the Post (FPTP)** from statewide constituencies: each state's block of senators splits across two alternating 8-year classes, so only part of the chamber is up in any cycle.
 
 - **Partial seats contested**: only one class of Senate seats is up per cycle (2 classes).
 - **Single-member constituencies** for each contested seat.
