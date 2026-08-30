@@ -34,7 +34,7 @@ The war room shows you, for your chosen target:
 | **Projected strength** | Your own side's committed weight at this front. |
 | **Odds ("You attack")** | Your chance of winning if *you* launch the offensive. |
 | **Odds ("They attack")** | *Their* chance of winning if they launch it instead. |
-| **Supply** | SUPPLIED · STRAINED · SHORTAGE · CUT OFF |
+| **Supply** | SUPPLIED · STRAINED · SHORTAGE · CUT OFF, with the level in brackets (what the front can haul as a share of what your formations there draw) |
 | **Enemy** | A coarse band, never a number. |
 | **Forces** | How many nations are pooled on each side. |
 
@@ -196,6 +196,8 @@ The resolution model is deliberately not published in detail: knowing the exact 
 **Let them come to you.** If your "They attack" row is much better than your "You attack" row, the correct play is to hold and make the enemy cross. Sometimes the winning move is not moving.
 
 **Watch supply.** SHORTAGE or CUT OFF is a warning that your position is degrading, not just flavour. A front pushed too far outruns its logistics.
+
+**Know what feeds supply.** Supply is what the front can haul against what your formations there draw. Hauling comes from the ground's infrastructure, your logistics doctrine and generals, a Logistics command covering the region (worth more the larger the force it covers), depth formations feeding the line, and fighting on your own soil. Drawing comes from every formation you have posted there: ground and marine formations in the line draw in full, formations held in depth draw less, and air, naval and rocket formations draw a quarter. Air superiority and sea control do not feed your own supply; they only let you cut the enemy's. If the readout says CUT OFF while you own the sky, you have too much posted at one front.
 
 **Rotate veterans out before they are gutted.** Losses on an elite formation are far more expensive than on a green one, because rebuilding dilutes experience in proportion to how many replacements arrive. Top up early.
 

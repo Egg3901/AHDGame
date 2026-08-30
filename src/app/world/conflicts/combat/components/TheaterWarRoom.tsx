@@ -229,7 +229,9 @@ export function TheaterWarRoom({
                 },
                 {
                   l: "SUPPLY",
-                  v: proj ? proj.supply.state.l : "—",
+                  // The band plus the level behind it: STRAINED covers 55 to 84, and a
+                  // commander deciding whether to thin a front needs to know which end.
+                  v: proj ? `${proj.supply.state.l} (${proj.supply.level}%)` : "—",
                   c: proj ? proj.supply.state.c : MIL_COLOR.textFaint,
                 },
                 { l: "ENEMY", v: proj ? proj.enemyBand : "—", c: MIL_COLOR.text },
