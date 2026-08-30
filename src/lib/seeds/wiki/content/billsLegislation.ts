@@ -17,6 +17,8 @@ Most laws in A House Divided start as bills drafted by sitting national legislat
 | RU | Any sitting Supreme Soviet deputy whose party is not banned |
 | DD | Any sitting Volkskammer deputy whose party is not banned |
 
+Countries nobody plays are not idle: their autonomous governments sponsor and move national bills through the full lifecycle too (France, Italy, Spain, Sweden, Turkey, Austria, Finland, Greece, Brazil and Nigeria included).
+
 Admins can propose bills from any country at any time and are exempt from all proposal costs.
 
 ## Bill structure
@@ -43,7 +45,9 @@ Bills can contain the following kinds of provisions:
 11. **Electoral-law provisions**: change voting age and voter-registration access.
 12. **Central-bank independence provisions**: grant or revoke independence where the bank is not shared across countries.
 13. **Declare-war provisions**: created through the executive foreign-policy flow and requiring two-thirds support in every chamber.
-14. **Join-conflict provisions**: created from a passed international-organization resolution, not from the ordinary bill composer.
+14. **Join-conflict provisions**: created from a passed international-organization resolution, not from the ordinary bill composer. Autonomous governments file and ratify these themselves.
+15. **Budget bills** (UK): the Chancellor's annual Budget bundles real tax rates and statutory programme levels into one Commons confidence vote, sharing the same fiscal ledger as ordinary Acts, so a later Act or a later Budget controls the setting. If no Chancellor is appointed, the Prime Minister may table it.
+16. **Redistricting laws** (US states): the State Redistricting Authority, District Compactness and Electoral Fairness Acts, proposable in state legislatures. See [US House Redistricting](/wiki/us-house-redistricting).
 
 ### Proposal costs
 
@@ -104,7 +108,7 @@ Submit the bill from the Congress or Parliament page. On submission, the bill im
 
 ### Step 2: chamber vote or votes
 
-While voting is open, members can vote For, Against, or Abstain and can change their vote before the deadline. Ordinary bills use a simple majority. Nationalization, privatization, and declarations of war require two-thirds of For plus Against in each required chamber.
+While voting is open, members can vote For, Against, or Abstain and can change their vote before the deadline. Each vote you cast personally can shift your own positions by up to 0.25 per axis toward (Aye) or away from (Nay) the bill, once per bill; the buttons show the exact move (see [Voting & Whips](/wiki/voting-and-whips)). Ordinary bills use a simple majority. Nationalization, privatization, and declarations of war require two-thirds of For plus Against in each required chamber.
 
 ### Step 3: second chamber
 

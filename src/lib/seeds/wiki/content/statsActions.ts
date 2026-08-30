@@ -52,7 +52,7 @@ Infamy is a budget, not a punishment. Spending 2 to 4 attacks against a competit
 
 - **Scale:** −5 to +5 per axis (economic, social)
 - **Set:** At character creation
-- **Changed by:** Voting on bills (±0.25 per vote in the bill's direction)
+- **Changed by:** Voting on bills. Each bill moves you at most 0.25 per axis: an Aye pulls you toward the bill's average position (never past it), a Nay pushes you 0.25 away, and re-voting is measured from where you stood before that bill, so flipping cannot stack. The vote buttons show the exact move before you click.
 - **Used for:**
   - Primary score alignment to your party's official position
   - Demographic group appeal (each group has preferred economic/social positions)

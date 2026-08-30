@@ -88,21 +88,23 @@ Countries with no mapped region data fall back to the meter alone.
 
 ## Victory
 
-**Control reaching 0 or 100 ends the war.**
+**Control reaching 0 or 100 wins the war.** It does not end it on the spot.
 
 At that point:
 
-1. The conflict is marked **resolved**, with the winner and a note recorded.
-2. The end turn is stamped.
-3. **Every belligerent stands down.** For each country, its general postings at that conflict are dropped, which returns all of their units to reserve.
-4. **Truces are recorded between every cross-side pair**: 240 turns, about ten real days.
+1. The fighting stops. The conflict moves to **terms pending**: it takes no more offensives, accepts no more peace offers and admits no new belligerents, but it still counts as a live war everywhere else, so the wartime strip stays up and no second war can be declared between the same countries.
+2. **Every belligerent stands down.** For each country, its general postings at that conflict are dropped, which returns all of their units to reserve.
+3. **The victor has 24 turns to name a settlement.** The country that began the war on the winning side chooses one term (an indemnity, a change of government, or a bar on re-arming), and it lands on the country that began it on the losing side. Nobody has to agree. Let the window lapse and the war ends with nothing taken. See [Peace, Indemnities & Truces](/wiki/peace-and-truces).
+4. When the term is applied or the window lapses, the conflict is marked **resolved**, the winner and end turn are recorded, and **truces are recorded between every cross-side pair**: 240 turns, about ten real days.
 5. **The fog stays down for 480 turns, then lifts entirely.** Until then the conflict page reads as it did during the war: territory, casualties and verdicts for everyone, your own side's rosters for a belligerent's seats. Once the window lapses the page becomes an open archive: both sides' rosters, every engagement, what each formation lost. The war is listed under Historical Conflicts on the conflicts hub from the turn it ends.
+
+Two exceptions skip the terms window and end the war the moment the front runs out: a war against an **insurgency** (no government to impose on), and a war whose losing **founder already left** on a separate peace (nobody is left holding the claim).
 
 Standing down works by removing the **posting**, not by clearing unit locations. Since a unit's position is a cache of its general's posting, clearing the location alone would simply be re-derived back to a dead front on the next reconcile. Removing the posting is what actually brings the army home.
 
 ### The war goal is not enforced at victory
 
-The war goal recorded at declaration is what peace terms negotiate *against*. Reaching a pole ends the conflict on territorial grounds regardless of what was declared.
+The war goal recorded at declaration is what peace terms negotiate *against*. Reaching a pole decides the war on territorial grounds regardless of what was declared; the settlement the victor names is where the goal is actually collected.
 
 **Conquest is not currently selectable** precisely because nothing transfers territory between countries yet: a war fought for conquest could not be won on its own terms. Occupation is a wartime position, not a permanent annexation.
 

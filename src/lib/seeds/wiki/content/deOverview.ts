@@ -9,7 +9,7 @@ Germany is a **federal parliamentary republic** that uses **mixed-member proport
 | Office | How Filled | Term | Seats |
 | --- | --- | --- | --- |
 | Chancellor | Confidence vote of Bundestag members | No fixed term | 1 |
-| Member of Bundestag (MdB) | Mixed-member proportional (AMS) | 4 years | 630 |
+| Member of Bundestag (MdB) | Mixed-member proportional (AMS) | 4 years | 487 in the 1953 preset; 630 modern |
 | Minister-President | Sub-national election | 5 years | 1 per state (11) |
 | Federal President | Ceremonial (not player-facing) | 5 years | 1 |
 | President of the ECB | Appointed action | 4 years | 1 |
@@ -28,6 +28,10 @@ The 11 states are: Baden-Württemberg, Bavaria, Berlin, Bremen, Hamburg, Hesse, 
 
 The five eastern states from reunified Germany (Brandenburg, Mecklenburg-Vorpommern, Saxony, Saxony-Anhalt, Thuringia) belong to East Germany (DD), which is a separate playable country in this era.
 
+### Reunification
+
+The German Question can end the division. If the East wins the question (by a settlement on the diplomatic track, or by winning a war the question attached to), East Germany is absorbed into a single Germany and the East arrives **intact**: the Volkskammer's members take their places in the Bundestag, land assemblies become Landtage, Land First Secretaries become Minister-Presidents, East Berlin is folded into Berlin, and the eastern parties cross over as real parties with their treasuries, registration and members. Seats carried across are rescaled onto the delegation the Bundestag already holds for the five eastern Länder rather than adding a whole second chamber. The unified state is **one-party**, with the parties of the East governing and the western parties barred, it inherits the East's law catalogue alongside its own, it leaves NATO as it joins the Warsaw Pact, and it deliberately calls **no election**: the chamber that was just carried across is the point of the settlement. See [One-Party States](/wiki/one-party-states) and [East Germany](/wiki/dd-overview).
+
 ---
 
 ## How German elections work
@@ -36,8 +40,8 @@ Germany's Bundestag uses the **Additional Member System (AMS)**, also called Mix
 
 Under AMS:
 - Voters elect candidates through a proportional party-list mechanism.
-- Seat allocation across the 630 Bundestag seats is proportional to each party's vote share.
-- The 2023 reform fixed the Bundestag at exactly 630 seats with no overhang mandates.
+- Seat allocation across the Bundestag is proportional to each party's vote share.
+- The chamber's size follows the era: **487 seats** in the 1953 preset (the 2nd Bundestag), **630** in the modern one, where the 2023 reform fixed the size with no overhang mandates.
 
 A party needs at least **5% of the national vote** to enter the Bundestag (the Sperrklausel threshold). Parties that fall below this threshold receive no seats, even if they win significant support in individual states.
 
@@ -49,10 +53,10 @@ A party needs at least **5% of the national vote** to enter the Bundestag (the S
 
 There is no direct vote for Chancellor. The process mirrors the UK's confidence mechanism:
 
-1. After Bundestag elections, the largest party or coalition with a majority (316 of 630 seats) negotiates government formation.
+1. After Bundestag elections, the largest party or coalition with a majority negotiates government formation.
 2. A **confidence vote** among all Bundestag members confirms the Chancellor.
-3. The coalition threshold is 316 seats: a bare majority of the 630-seat chamber.
-4. **Minority government**: any party or coalition chair holding at least 97 Bundestag seats can propose a Chancellor and call a confidence vote, even when a rival bloc has 316+. The Bundestag votes the bid up or down.
+3. The coalition threshold is a bare majority of the chamber: 244 of 487 seats in the 1953 preset, 316 of 630 in the modern one.
+4. **Minority government**: any party or coalition chair holding a sizeable bloc of Bundestag seats can propose a Chancellor and call a confidence vote, even when a rival bloc holds the majority. The Bundestag votes the bid up or down.
 
 In real-world Germany, removing a sitting Chancellor requires a **constructive vote of no confidence**: the Bundestag must simultaneously agree on a replacement before the incumbent can be voted out. *In-game, the simulation currently uses the same standard no-confidence mechanic as the UK and Japan*: a passed vote of no confidence sends the government into a pending state and a 96-turn vacancy clock arms. Modeling the constructive variant is a future enhancement.
 

@@ -55,7 +55,8 @@ The National Front is the bloc-party version of one-party rule (see [One-Party S
 - **CDU (Ost), LDPD, NDPD and DBD** are **approved** bloc parties. They hold seats, field Volkskammer candidates, propose and vote on bills, accept donations and sit in cabinet, but they **cannot form government** or contest the executive.
 - **Vote multipliers**: ruling votes weigh 3.0, approved 0.375, independents and banned parties 0. Player-created parties are automatically **banned** at charter ratification.
 - **No internal confidence gauge.** Unlike the USSR and China, East Germany does not run the ruling-party leader-confidence model, and no faction split spawns a spinoff party. The regime's popular legitimacy still drifts each turn on the shared one-party mood profile.
-- **Collapse points west.** The collapse target is a parliamentary republic: the reunification and democratisation path. Conversion is one-way.
+- **Collapse points west.** The collapse target is a parliamentary republic: the democratisation path. Conversion is one-way.
+- **Winning points west too.** If the German Question resolves in the East's favour, East Germany is absorbed into a single Germany with its parties, its chamber and its government carried across intact: Volkskammer deputies seat in the Bundestag, Land assemblies become Landtage, Land First Secretaries become Minister-Presidents, East Berlin folds into Berlin, and the unified state is one-party with the SED and bloc parties governing and the western parties barred. No election is called. A war declared by or against either Germany freezes the question and decides it outright; a white peace in such a war hands the question back to the diplomatic track. See [Germany](/wiki/de-overview).
 
 ---
 

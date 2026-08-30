@@ -19,7 +19,7 @@ Before entering, confirm:
 
 The race page changes between primary and general phases.
 
-In a **primary**, each party has its own contest. The page shows projected score or delegate share, the phase schedule, and links to campaign operations. The highest finisher in each party advances.
+In a **primary**, each party has its own contest. The page shows each candidate's standing, the cumulative ballot shares once the closing window has opened (delegate shares for president), the phase schedule, and links to campaign operations. The top count in each party advances.
 
 In a **general election**, the page shows live votes, share, trends, persuasion drivers, and any regional or county map available for the office.
 
@@ -31,20 +31,22 @@ Open **View Campaign** from the race page. This is where you raise and spend fun
 
 ## Primary phase: win your party first
 
-State and regional primaries score four broad things:
+State and regional primaries score your standing on four broad things:
 
 1. alignment with the electorate;
 2. alignment with your party;
 3. favorability;
 4. local political influence.
 
-Presidential primaries are national. They use party alignment, home-state party organization, national political influence, and favorability. The UI may show delegate projections because the presidential nomination is built state by state.
+That standing sets your share of the ballots your party's registered voters cast each turn over the primary's closing window, and the cumulative count decides the nomination, so a lead you hold through the window beats one you seize on the last turn.
+
+Presidential primaries are national. They use party alignment, your accumulated party influence, national political influence, and favorability, plus the Campaign Presence you have built state by state, and the nomination is settled by pledged delegates. The UI shows delegate projections because the presidential nomination is built state by state.
 
 Practical primary checklist:
 
 - Match the party and electorate before spending heavily.
-- Build local political influence for a state race.
-- Build NPI and home-state party organization for a presidential race.
+- Build local political influence for a state race, early enough to hold the lead through the closing window.
+- Build NPI, party influence and Campaign Presence for a presidential race.
 - Check whether the contest is actually competitive. An uncontested nomination does not need a war chest.
 - Do not read a projected primary lead as banked general-election votes. The general starts a different contest.
 

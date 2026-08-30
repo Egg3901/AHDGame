@@ -26,7 +26,7 @@ Theater Commander  (one per conflict)
 
 ## Building a Command
 
-Defence office → **Commands** tab → *Create command*.
+Defence office → **Commands** tab → *Create command*. A confirmed defence seat holder or an acting one may build and reorganise commands; only a confirmed holder may commission or dismiss the generals that fill them.
 
 A Command has:
 
@@ -34,7 +34,7 @@ A Command has:
 | --- | --- |
 | **Name** | Yours to choose. |
 | **Type** | Homeland Defense, Regional, or Logistics. |
-| **Regions** | Which strategic regions it is responsible for. Up to **3**. |
+| **Regions** | Which strategic regions it is responsible for. Up to **3** for Homeland Defense and Regional commands; uncapped for Logistics. |
 | **Posture** | One of twelve standing postures. |
 | **Supply priority** | Normal, High, or Emergency. |
 | **Commanders** | Which of your commissioned generals belong to it. |
@@ -81,7 +81,7 @@ Each region carries terrain, infrastructure, port and airbase capacity, strategi
 - **Uncovered**: no Command is responsible for it.
 - **Overlapping**: two Commands *of the same type* both claim it, which is a genuine role conflict rather than useful redundancy.
 
-**Region cap: 3 per Command.** The builder also warns past 4 assigned regions and suggests a Logistics command for multi-region overseas responsibility.
+**Region cap: 3 per Homeland Defense or Regional Command.** A **Logistics** command is exempt from the cap, which is the point of it: it is the structure meant to carry multi-region overseas responsibility. The builder warns any command past 4 assigned regions, and when a non-Logistics command reaches its cap it suggests a Logistics command for the overflow.
 
 ## Capacity and effectiveness
 
@@ -124,7 +124,7 @@ A TC gets two things:
 
 **1. A front-wide command bonus.** A Theater Commander's own training carries, at a fraction of its strength, to *every* friendly unit at that front, not just the ones they personally lead. The fraction is deliberate: a single outstanding TC can never substitute for putting good generals on the units themselves. **Being in charge is worth less than being present.**
 
-**2. Exclusive authority over offensives at that front.**
+**2. Exclusive authority over offensives at that front.** That covers declaring and withdrawing offensives, and the front's **standing order** to join allied offensives automatically (see [Fighting a Battle](/wiki/fighting-a-battle)). The standing order is national policy rather than the commander's own setting, so it survives a change of Theater Commander the way the deployment does.
 
 That second point is the one that catches people out.
 

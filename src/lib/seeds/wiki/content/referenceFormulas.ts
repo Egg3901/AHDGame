@@ -10,7 +10,7 @@ Complete formula reference for A House Divided. All values are sourced directly 
 
 Used for: US House, US Senate, US Governor, US State Senate, UK Commons, UK Regional Council, DE Bundestag, JP Shūgiin, JP Sangiin.
 
-**Maximum: 100 points** (raw), then multiplied by an infamy penalty.
+**Maximum: 100 points** (raw), then multiplied by an infamy penalty. The score is a candidate's **standing**: each turn of the primary's closing window it sets their share of the ballots the party's registered voters cast, and the cumulative ballot count decides the nominee. Only where a party has no registered voters on file does the raw score decide directly.
 
 | Component | Range | Formula |
 |---|---|---|

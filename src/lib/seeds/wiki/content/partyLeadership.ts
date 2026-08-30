@@ -47,17 +47,7 @@ There is no automatic scoring formula for state leadership elections: it is a di
 
 ### Whip authority
 
-State chair and vice chair can issue **whip directives** to NPPs in their state. Directives tell NPPs how to vote on specific bills or leadership elections. NPP compliance depends on their personality:
-
-\`\`\`
-complianceChance = (loyalty × 0.7) + ((1 − stubbornness) × 0.3)
-\`\`\`
-
-| Loyalty | Stubbornness | Compliance Chance |
-| --- | --- | --- |
-| 100 | 0 | 100% |
-| 50 | 50 | 50% |
-| 0 | 100 | 0% |
+State chair and vice chair can issue **whip directives** to NPPs in their state. Directives tell NPPs how to vote on specific bills or leadership elections. A **hard** whip on a bill triggers a hidden compliance roll when issued: a generous base chance, raised by the NPP's loyalty and by the whipping character's Statecraft, lowered by stubbornness, and clamped so even a stubborn NPP usually has a real chance of falling in line and a loyal one is never certain. A **soft** whip is advisory and simply weighs on the NPP's own decision. Leadership, confirmation and confidence votes are binding under a hard whip. See [Voting & Whips](/wiki/voting-and-whips) for the full mechanics.
 
 Whipping is free: no action cost. But each NPP can only be whipped **twice per target per chamber**, so choose your directives carefully.
 

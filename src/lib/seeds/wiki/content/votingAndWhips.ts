@@ -10,6 +10,8 @@ While a bill is in your chamber and its status is \`active\` or \`active_other\`
 
 **Re-voting:** You can change your vote any time while the 24-hour voting window is still open. Only your most recent vote counts.
 
+**Your vote moves your positions.** Voting is a statement of where you stand, so each bill can shift your own economic and social positions by up to **0.25 per axis, once per bill**. An Aye pulls you toward the bill's average position and never past it (if you already hold the bill's position on an axis you do not move); a Nay pushes you 0.25 away. The Aye and Nay buttons show the exact move before you click, computed by the same code that applies it. Changing a vote is measured from where you stood before that bill first moved you, so flipping Aye and Nay cannot stack, and switching to Abstain reverts the shift. A vote written onto you by a party whip never moves you and does not count as your own vote. Bills with no ideology (a war declaration, a tariff-only bill) move nobody.
+
 **Eligibility:** Only members of the current voting chamber can vote. If a bill is in the Senate, House members cannot vote, and vice versa.
 
 ## What determines the outcome
@@ -49,7 +51,7 @@ Party whips can issue a directive telling members how to vote on a specific bill
 
 **Hard whips** trigger an immediate hidden roll when issued:
 
-- The NPP has a base compliance chance of 55%, plus a loyalty bonus and a mode bonus (hard = +15, soft = +6), minus a stubbornness penalty.
+- The NPP has a base compliance chance of 55%, plus a loyalty bonus and a mode bonus (hard = +15, soft = +6), plus a small bonus from the whipping character's Statecraft, minus a stubbornness penalty.
 - Final chance is clamped between 40% and 95%.
 - If the roll succeeds, the NPP votes exactly as directed.
 - If the roll fails, the vote falls back to the deterministic **cross-pressure verdict** (ideology + district + donors).
@@ -69,7 +71,7 @@ Party discipline in A House Divided is shaped by whip mechanics and NPP personal
 1. **Whip directives** guide NPPs and signal players.
 2. **NPP loyalty and stubbornness** determine how reliably the bloc follows the whip. High-loyalty, low-stubbornness NPPs usually comply; stubborn NPPs are more likely to resist and fall back to their own cross-pressure verdict.
 
-There is no direct penalty for a player voting against their party's whip. The social and political consequences play out through favorability dynamics and leadership trust, not through automatic stat deductions.
+There is no direct penalty for a player voting against their party's whip: no infamy, no stat deduction. The consequences play out through leadership trust and, if you drift from the platform through your votes, through your own primary alignment.
 
 ## Abstentions and strategic voting
 

@@ -112,6 +112,7 @@ Each state budget also tracks an accumulated **balance** (the running total of s
 Bills that pass into law create permanent budget entries:
 
 - **Tax rate bills** change the percentage collected on each revenue category, adjusting total revenue immediately
+- **The UK Budget** bundles tax rates and statutory programme levels into one Commons confidence vote; it writes to the same fiscal ledger as ordinary Acts, and the era revenue cap compresses tax-like receipts only, with NHS receipts and public-enterprise income added after it
 - **Spending bills** add to the ongoing expenditure, reducing surplus
 - **Subsidy bills** create +7.5% corporate margin bonuses but add to spending
 - **Tariff bills** generate tariff revenue but cause foreign corporations to face margin penalties

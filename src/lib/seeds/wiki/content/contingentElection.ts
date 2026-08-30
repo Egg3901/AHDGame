@@ -1,6 +1,6 @@
 export const contingentElectionContent = `# Contingent Election
 
-If no presidential ticket wins a majority of the Electoral College, the race doesn't stay unresolved. The US Constitution's 12th Amendment fallback kicks in: the **House elects the President**, the **Senate elects the Vice President**. This page covers how that resolves in-game.
+If no presidential ticket wins a majority of the Electoral College (a majority of the electors the era's census actually apportioned: 270 of 538 today, 266 of 531 in the 1950s), the race doesn't stay unresolved. The US Constitution's 12th Amendment fallback kicks in: the **House elects the President**, the **Senate elects the Vice President**. This page covers how that resolves in-game.
 
 This only applies to the US presidential race, and only when the Electoral College comes up short. See [Election Mechanics](/wiki/election-mechanics) for how the normal vote count and Electoral College tally work before it ever gets here.
 
@@ -17,7 +17,7 @@ If the VP ballot only has one eligible running mate (because two tickets shared 
 
 ## The House votes by state, not by member
 
-This is the part that surprises people: the House doesn't do a normal 435-member roll call. Each **state delegation** casts one combined vote. Your state's representatives don't each get a vote in the contingent count, they decide how their state's single vote gets cast. Winning the Presidency this way takes **26 states**, a majority of state delegations.
+This is the part that surprises people: the House doesn't do a normal member-by-member roll call. Each **state delegation** casts one combined vote. Your state's representatives don't each get a vote in the contingent count, they decide how their state's single vote gets cast. Winning the Presidency this way takes **a majority of the delegations on the ballot**: 26 of 50 on the modern map, 25 of 48 in a 1950s world.
 
 DC has electoral votes in the normal count but no voting House delegation, so it's excluded from this ballot entirely.
 
@@ -25,7 +25,7 @@ A delegation votes for whichever candidate has a strict majority of that state's
 
 ## The Senate votes one senator, one vote
 
-No delegation weighting here. Every senator casts a single vote among the eligible VP candidates. Electing the Vice President takes **51 votes**.
+No delegation weighting here. Every senator casts a single vote among the eligible VP candidates. Electing the Vice President takes **a majority of the senators voting**: 51 of 100 today, 49 of 96 in the 1950s.
 
 ## How each member picks
 
@@ -40,7 +40,7 @@ Each member votes for whoever scores best against them personally. If two candid
 Once both ballots are tallied:
 
 1. Whoever has the most votes leads.
-2. If the leader clears the chamber's threshold, 26 states or 51 senators, they win outright.
+2. If the leader clears the chamber's threshold, a majority of delegations or of senators, they win outright.
 3. If nobody clears the threshold and there's a tie among the leaders, the game breaks the deadlock deterministically rather than looping forever. The tiebreak is seeded off the election, so it's reproducible, not random each time you check.
 4. In the rare case where a chamber produces no usable votes at all (nobody could pick, or the chamber ballot itself was empty), the game falls back to the original Electoral College count from before the contingent election even started, breaking ties by original electoral votes.
 

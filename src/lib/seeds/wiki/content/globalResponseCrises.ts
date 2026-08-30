@@ -81,8 +81,9 @@ Events such as escalation, nuclear tests, and crisis outcomes move the current r
 - 4 points for each Vietnam escalation rung, capped at 30
 - 3 points for each active international response crisis, capped at 12
 - 1.2 times the square root of the total world warhead stockpile, capped at 18
+- Every active shooting war, weighted by its intensity. A war with nuclear-armed countries on opposing sides holds the floor at CRISIS on its own for as long as it burns; a long war that stays below hot intensity slowly sheds part of that shock after twelve turns, but never below a substantial residual.
 
-The page shows each driver, the floor, and whether the current reading is rising or easing toward it. Tension also sets the displayed DEFCON posture, strategic procurement pressure, and detente penalty.
+The page shows each driver (including a WARS card), the floor, and whether the current reading is rising or easing toward it. Declaring a war also spikes the reading immediately: hardest for a war between nuclear powers, less for any other interstate war, least for the rest. Tension also sets the displayed DEFCON posture, strategic procurement pressure, and detente penalty.
 
 ## Nuclear connection
 

@@ -56,7 +56,7 @@ campaign
 5. Do not Attack fellow Democrats.
 6. Optional: one Full Demographic Poll if you have ₳75k and 6 actions.
 
-Highest primary score in the party advances. Score is alignment + favorability + PI.
+Score is alignment + favorability + PI. It sets your standing; over the closing window of the primary the party's registered voters cast ballots split by that standing, and the top count advances. Hold the lead, do not just grab it on the last turn.
 
 ## Week 3: general, opening
 

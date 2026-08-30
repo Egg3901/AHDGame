@@ -81,7 +81,13 @@ Rather than waiting for collapse, the leader can **announce a constitutional con
 
 ## Forced conversion at Stage 4
 
-If the leader doesn't avert collapse, the Stage 4 decision triggers a forced conversion through the same underlying driver as the voluntary convention. The post-collapse regime is whatever the country's collapse target specifies: for CN, that's a multi-party parliamentary system.
+If the leader doesn't avert collapse, the Stage 4 decision triggers a forced conversion through the same underlying driver as the voluntary convention. The post-collapse regime is whatever the country's collapse target specifies: for CN, that's a multi-party parliamentary system. A regime-change peace term imposed by a victorious enemy runs the same conversion in the other direction too: a democracy can be converted to a one-party state.
+
+Every conversion **dissolves the legislature and holds the election it schedules**, in any system, without spending the head of government's own snap allowance or moving the rest of the electoral calendar. The ruling party loses its standing and the country gets a ruling party for the new system where one applies.
+
+## Conversion the other way: reunification
+
+The one settlement that creates a one-party state without a collapse is German reunification under the East. When the German Question resolves in East Germany's favour, the unified Germany is one-party, with the parties of the East governing and the western parties barred, and the East's chamber, offices and law catalogue are carried across rather than dissolved. It deliberately calls no election. See [Germany](/wiki/de-overview).
 
 ## Player surfaces
 

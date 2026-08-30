@@ -31,7 +31,7 @@ See [Congress Leadership](/wiki/congress-leadership) for the Speaker's role alon
 
 ## Germany: Bundestagspräsident
 
-The Bundestagspräsident election opens automatically once the Bundestag's 630 seats are filled through Germany's Additional-Member System (direct mandates plus list seats). Any seated member of the Bundestag may declare candidacy and vote, regardless of party. The ballot runs 24 hours and resolves the same way as the US Speaker race: top vote-getter wins.
+The Bundestagspräsident election opens automatically once the Bundestag's seats (487 in the 1953 preset, 630 modern) are filled through Germany's Additional-Member System (direct mandates plus list seats). Any seated member of the Bundestag may declare candidacy and vote, regardless of party. The ballot runs 24 hours and resolves the same way as the US Speaker race: top vote-getter wins.
 
 ## Nigeria: National Assembly presiding officers
 
