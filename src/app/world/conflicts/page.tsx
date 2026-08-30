@@ -2,9 +2,11 @@ import { requireConflictsEnabled } from "./_coldwar/gate";
 import { GlobalConflictsBoard } from "./_coldwar/GlobalConflictsBoard";
 import { getGameTime } from "@/lib/time/gameTime";
 import { getDb } from "@/lib/mongodb";
-import { listActiveConflicts } from "@/lib/db/collections/conflicts";
+import { listActiveConflicts, listResolvedConflicts } from "@/lib/db/collections/conflicts";
 import { casualtiesByTheater } from "@/lib/db/collections/battleReports";
 import { toConflictView } from "./_coldwar/conflictView";
+import { toHistoricalConflictRow } from "./_history/historyView";
+import { HistoricalConflictsSection } from "./_history/HistoricalConflictsSection";
 import { VietnamEscalationPanel } from "./_coldwar/VietnamEscalationPanel";
 import { getVietnamEscalationSummary, VIETNAM_RUNGS } from "@/lib/crises/vietnamEscalation";
 import { TensionHeader, type NuclearPowerView } from "./_coldwar/TensionHeader";
@@ -20,6 +22,9 @@ import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type { Crisis } from "@/lib/db/types/crisis";
 import { GlobalResponseCrisisStrip } from "./_coldwar/GlobalResponseCrisisStrip";
 
+/** How many concluded wars the hub lists, newest first. Older ones keep their record page. */
+const HISTORY_LIMIT = 24;
+
 // Conflicts hub: every live conflict in the world, on the map and in the list,
 // under one headline: the global cold-war tension reading. Gated by
 // `conflictsEnabled`; the themed-island shell and fonts come from the layout.
@@ -32,13 +37,24 @@ export default async function ConflictsPage() {
   const { currentTurn, currentYear, startingYear, preIterationTurns } = await getGameTime();
 
   const db = await getDb();
-  const docs = await listActiveConflicts(db);
-  const casualties = await casualtiesByTheater(
-    db,
-    docs.map((d) => d._id)
-  );
+  const [docs, resolvedDocs] = await Promise.all([
+    listActiveConflicts(db),
+    listResolvedConflicts(db, HISTORY_LIMIT),
+  ]);
+  const casualties = await casualtiesByTheater(db, [
+    ...docs.map((d) => d._id),
+    ...resolvedDocs.map((d) => d._id),
+  ]);
   const conflicts = docs.map((d) =>
     toConflictView(d, { startingYear, casualties: casualties[d._id] ?? 0, preIterationTurns })
+  );
+  const history = resolvedDocs.map((d) =>
+    toHistoricalConflictRow(d, {
+      startingYear,
+      casualties: casualties[d._id] ?? 0,
+      currentTurn,
+      preIterationTurns,
+    })
   );
 
   const [vietnam, tension, dials, programs, responseCrisisDocs, activeCrisisCount] =
@@ -138,6 +154,7 @@ export default async function ConflictsPage() {
         />
       </div>
       <GlobalConflictsBoard year={currentYear ?? startingYear} conflicts={conflicts} />
+      <HistoricalConflictsSection rows={history} />
     </>
   );
 }

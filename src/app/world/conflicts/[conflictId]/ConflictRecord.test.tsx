@@ -41,7 +41,7 @@ const base: ConflictRecordView = {
   type: "interstate",
   hostCountry: "CN",
   region: "East Asia",
-  years: "1953 – present",
+  years: "1953 to present",
   startYear: 1953,
   currentTurn: 120,
   status: "active",
@@ -98,7 +98,7 @@ describe("ConflictRecord", () => {
     render(<ConflictRecord conflict={base} />);
     expect(screen.getByText("Manchurian Front")).toBeTruthy();
     expect(screen.getAllByText(/CN/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/1953 – present/)).toBeTruthy();
+    expect(screen.getByText(/1953 to present/)).toBeTruthy();
   });
 
   it("shows the conflict's public number and region", () => {
@@ -172,14 +172,112 @@ describe("ConflictRecord", () => {
     expect(screen.getByText(/no engagements/i)).toBeTruthy();
   });
 
+  // The fog outlives the war. A public reader of a war that ended last turn sees
+  // exactly what they saw while it ran, and the panel has to say when that changes
+  // rather than promising a record that "opens when the war resolves" on a war
+  // that already has.
+  it("tells a public reader of a fogged resolved war when the record opens", () => {
+    const { container } = render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          status: "resolved",
+          statusLabel: "Resolved",
+          years: "1953 to 1955",
+          archiveOpensTurn: 577,
+        }}
+      />
+    );
+    expect(container.textContent).toMatch(/until turn 577/);
+    expect(container.textContent).not.toMatch(/opens to everyone when the war resolves/);
+  });
+
+  // A belligerent seat keeps its own rosters on a fogged resolved war, but every
+  // formation has gone home, so the live-war line about reading the enemy off the
+  // strength ratio describes a front that no longer exists.
+  it("tells a command reader of a fogged resolved war when the enemy's record opens", () => {
+    const { container } = render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          tier: "command",
+          ownSide: "A",
+          viewerCountry: "US",
+          status: "resolved",
+          statusLabel: "Resolved",
+          years: "1953 to 1955",
+          archiveOpensTurn: 577,
+          forceA: { divisions: 0, personnel: 0, readiness: null, recovery: null, casualties: 6000 },
+          forceB: { ...withheld, casualties: 6345 },
+        }}
+      />
+    );
+    expect(container.textContent).toMatch(/opens to everyone on turn 577/);
+    expect(container.textContent).not.toMatch(/one band from the strength ratio/);
+  });
+
+  // A war awaiting terms has stood both rosters down exactly as a resolved one has,
+  // but it has no opening turn yet: the window starts when the war resolves.
+  it("tells a command reader of a war awaiting terms that the formations have gone home", () => {
+    const { container } = render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          tier: "command",
+          ownSide: "A",
+          viewerCountry: "US",
+          status: "terms_pending",
+          statusLabel: "Terms Pending",
+          forceA: { divisions: 0, personnel: 0, readiness: null, recovery: null, casualties: 6000 },
+          forceB: { ...withheld, casualties: 6345 },
+        }}
+      />
+    );
+    expect(container.textContent).toMatch(/returned to reserve/);
+    expect(container.textContent).toMatch(/480 turns after the war resolves/);
+    expect(container.textContent).not.toMatch(/one band from the strength ratio/);
+  });
+
+  // The war log's withheld-roster note has the same problem as the force panel:
+  // "after the war resolves" on a war that has already resolved is a promise
+  // already broken. Once there is a date, it names the date.
+  it("dates a withheld engagement roster on a fogged resolved war", () => {
+    const { container } = render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          tier: "command",
+          ownSide: "A",
+          status: "resolved",
+          statusLabel: "Resolved",
+          archiveOpensTurn: 577,
+          battles: [
+            {
+              ...base.battles[0],
+              rostersWithheld: true,
+              rosters: [{ country: "US", power: 4444, units: [] }],
+            },
+          ],
+        }}
+      />
+    );
+    expect(container.textContent).toMatch(/Unlocks for everyone on turn 577/);
+    expect(container.textContent).not.toMatch(/turns after the war resolves/);
+  });
+
+  it("tells a public reader of a live war that the fog outlives it", () => {
+    const { container } = render(<ConflictRecord conflict={base} />);
+    expect(container.textContent).toMatch(/480 turns after the war resolves/);
+  });
+
   it("renders a resolved war", () => {
     render(
       <ConflictRecord
-        conflict={{ ...base, status: "resolved", statusLabel: "Resolved", years: "1953 – 1955" }}
+        conflict={{ ...base, status: "resolved", statusLabel: "Resolved", years: "1953 to 1955" }}
       />
     );
     expect(screen.getByText(/Resolved/)).toBeTruthy();
-    expect(screen.getByText(/1953 – 1955/)).toBeTruthy();
+    expect(screen.getByText(/1953 to 1955/)).toBeTruthy();
   });
 
   it("shows an unopposed advance as an outcome, not a blank row", () => {
@@ -462,7 +560,7 @@ describe("ConflictRecord tiers", () => {
       />
     );
     expect(container.textContent).toMatch(/Roster withheld/);
-    expect(container.textContent).toMatch(/Unlocks for everyone when the war resolves/);
+    expect(container.textContent).toMatch(/Unlocks for everyone 480 turns after the war resolves/);
   });
 });
 

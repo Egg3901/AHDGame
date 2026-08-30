@@ -154,6 +154,12 @@ export interface RecordExtrasInput {
   /** Every unit of both sides' countries (the caller scopes the query). */
   units: MilitaryUnit[];
   /**
+   * Whether the fighting is over (`isConflictConcluded`). A concluded war has stood
+   * every roster down, so there is no live order of battle to show a command-tier
+   * viewer and no enemy front to read a band off; the history is in the reports.
+   */
+  concluded?: boolean;
+  /**
    * Whether the front reaches the sea. Feeds the enemy band through
    * `engageablePool`, so this page's coarse read of the enemy and the war room's odds
    * agree about a fleet that cannot reach the fighting.
@@ -309,6 +315,7 @@ export function buildRecordExtras(input: RecordExtrasInput): RecordExtras {
     sideACountries,
     sideBCountries,
     units,
+    concluded = false,
     reports,
     seaAccess,
     navairSupport,
@@ -321,9 +328,12 @@ export function buildRecordExtras(input: RecordExtrasInput): RecordExtras {
 
   const atFront = units.filter((u) => u.theaterId === theaterId);
 
-  // A resolved war has already returned its units to reserve, so `command`'s live
-  // order of battle is meaningless there — archive reads the reports instead.
-  const showsLiveForces = tier === "command" && ownSide !== null;
+  // A concluded war has already returned its units to reserve, so `command`'s live
+  // order of battle is meaningless there — the record reads the reports instead.
+  // Gated on the war, not the tier: a belligerent seat keeps command sight of a
+  // resolved war while its fog window runs, and would otherwise be shown an empty
+  // order of battle beside a band read off an empty enemy front.
+  const showsLiveForces = tier === "command" && ownSide !== null && !concluded;
   const ownAtFront = atFront.filter((u) => ownCountries.includes(u.countryId));
   const enemyAtFront = atFront.filter((u) => enemyCountries.includes(u.countryId));
 

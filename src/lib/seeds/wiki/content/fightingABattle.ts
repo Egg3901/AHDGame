@@ -156,7 +156,7 @@ What you see depends on your tier:
 
 - **Public**: verdict, both loss totals, territory. That much is always public.
 - **Command**: plus your own order of battle and a coarse enemy band.
-- **Archive** (once the war resolves): everything, both sides, per engagement, including who lost what.
+- **Archive** (480 turns after the war resolves): everything, both sides, per engagement, including who lost what.
 
 ## What actually decides a battle
 

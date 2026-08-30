@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import type { ConflictStatus } from "@/lib/db/types/conflict";
-import { isConflictConcluded } from "./conflictLifecycle";
+import {
+  CONFLICT_ARCHIVE_DELAY_TURNS,
+  archiveOpensTurn,
+  isArchiveOpen,
+  isConflictConcluded,
+} from "./conflictLifecycle";
 
 describe("isConflictConcluded", () => {
   it("is true for a resolved war", () => {
@@ -34,5 +39,42 @@ describe("isConflictConcluded", () => {
     for (const status of all) {
       expect(typeof isConflictConcluded(status)).toBe("boolean");
     }
+  });
+});
+
+describe("archiveOpensTurn", () => {
+  it("opens the archive CONFLICT_ARCHIVE_DELAY_TURNS after the war ended", () => {
+    expect(archiveOpensTurn({ status: "resolved", endTurn: 500 })).toBe(
+      500 + CONFLICT_ARCHIVE_DELAY_TURNS
+    );
+  });
+
+  it("is null for a war that has not resolved, whatever endTurn says", () => {
+    expect(archiveOpensTurn({ status: "terms_pending", endTurn: 500 })).toBeNull();
+    expect(archiveOpensTurn({ status: "active" })).toBeNull();
+  });
+
+  // Every resolver stamps `endTurn` today; only a document resolved before the
+  // stamp existed lacks it. Those have been an open record since they ended, and
+  // dating their fog from nothing would hide what was already public.
+  it("is null for a legacy resolved war with no endTurn, which is already open", () => {
+    expect(archiveOpensTurn({ status: "resolved" })).toBeNull();
+  });
+});
+
+describe("isArchiveOpen", () => {
+  it("is closed inside the fog window and open from the turn it lapses", () => {
+    const c = { status: "resolved" as const, endTurn: 100 };
+    const opens = 100 + CONFLICT_ARCHIVE_DELAY_TURNS;
+    expect(isArchiveOpen(c, opens - 1)).toBe(false);
+    expect(isArchiveOpen(c, opens)).toBe(true);
+  });
+
+  it("is open for a legacy resolved war with no endTurn", () => {
+    expect(isArchiveOpen({ status: "resolved" }, 0)).toBe(true);
+  });
+
+  it("is closed for a war that has not resolved", () => {
+    expect(isArchiveOpen({ status: "terms_pending", endTurn: 0 }, 10_000)).toBe(false);
   });
 });

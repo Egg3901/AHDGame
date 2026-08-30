@@ -35,7 +35,7 @@ import { getCabinetSettingsCollection } from "@/lib/db/collections/cabinetSettin
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import { conflictTier, belligerentSideOf } from "@/lib/military/conflictVisibility";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
+import { archiveOpensTurn, isConflictConcluded } from "@/lib/military/conflictLifecycle";
 import { requirePeaceNegotiator } from "@/lib/api/requirePeaceNegotiator";
 import { INTERNATIONAL_ORGANIZATIONS } from "@/lib/constants/internationalOrganizations";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
@@ -263,6 +263,8 @@ export default async function ConflictRecordPage({
 
   const tier = conflictTier({
     status: doc.status,
+    endTurn: doc.endTurn,
+    currentTurn,
     side: ownSide,
     isPostedGeneral,
     isDefenseHolder,
@@ -453,6 +455,7 @@ export default async function ConflictRecordPage({
     sideACountries: [...doc.sideA.countries],
     sideBCountries: [...doc.sideB.countries],
     units,
+    concluded: isConflictConcluded(doc.status),
     reports,
     // So this page's enemy band and the war room's odds read the same fleet the same way.
     seaAccess: conflictToFront(doc).seaAccess,
@@ -642,6 +645,7 @@ export default async function ConflictRecordPage({
       ? "The Theater Commander designated for this conflict."
       : "The defense secretary — no Theater Commander is designated at this front.";
 
+  const fogLiftsTurn = archiveOpensTurn(doc);
   const conflict: ConflictRecordView = {
     conflictId: doc.conflictId,
     name: doc.name,
@@ -653,6 +657,9 @@ export default async function ConflictRecordPage({
     currentTurn,
     status: doc.status,
     statusLabel: doc.status.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase()),
+    // Only while the fog is still down on a resolved war: the panels use it to say
+    // when the record opens, and an open record has nothing to announce.
+    ...(tier !== "archive" && fogLiftsTurn !== null ? { archiveOpensTurn: fogLiftsTurn } : {}),
     // Only shown when the war was actually declared. warGoalLabel would otherwise
     // print "Undeclared" on every seeded or event-created conflict.
     ...(doc.warGoal ? { warGoal: warGoalLabel(doc.warGoal) } : {}),
