@@ -11,6 +11,7 @@ import { buildVotesByParty, type ScopedVoteOfficial } from "@/lib/congress/billV
 import { resolveBillCardTally, scopeStateBillVotes } from "@/lib/legislature/stateBillVoteScope";
 import { snapshotWeightMap } from "@/lib/legislature/voteSnapshot";
 import type {
+  AxisPositions,
   Character,
   ElectedOfficial,
   LegislationType,
@@ -19,6 +20,7 @@ import type {
   StateBill,
   State,
 } from "@/lib/db/types";
+import { buildVoteShiftPreview } from "@/lib/legislature/voteShiftPreview";
 import type { RegionalBudget } from "@/lib/db/types/regionalBudget";
 import type { StateBillDetail } from "@/lib/legislature/dto/stateBillDetail";
 import type { StateBillDisplay } from "@/lib/legislature/dto/stateLegislature";
@@ -124,12 +126,18 @@ export async function listStateLegislatureBills(
   const legislationTypeMap = new Map(legislationTypes.map((type) => [type._id, type]));
 
   let myCharacterId: string | null = null;
+  let myPolicies: AxisPositions | undefined;
   if (authUser) {
     const character = await db
       .collection<Character>("characters")
-      .findOne({ userId: new ObjectId(authUser.userId) }, { projection: { _id: 1 } });
+      .findOne({ userId: new ObjectId(authUser.userId) }, { projection: { _id: 1, policies: 1 } });
     myCharacterId = character?._id.toString() ?? null;
+    myPolicies = character?.policies;
   }
+  // The viewer may vote on this chamber's bills only while they hold a seat in it.
+  const viewerHoldsSeat =
+    myCharacterId != null &&
+    chamberOfficials.some((official) => official.characterId?.toString() === myCharacterId);
 
   const countryConfig = getCountryConfig(countryId);
   let budget: StateLegislatureBillsPage["budget"] = null;
@@ -227,6 +235,16 @@ export async function listStateLegislatureBills(
       overrideVotingEndsAt: bill.overrideVotingEndsAt?.toISOString(),
       overrideVotingEndsOnTurn: bill.overrideVotingEndsOnTurn,
       myVote: myCharacterId ? (bill.votes[myCharacterId] ?? null) : null,
+      voteShiftPreview: buildVoteShiftPreview({
+        provisions: (bill.provisions ?? []).filter(
+          (provision) => provision.type !== "subsidy" && provision.type !== "end_subsidy"
+        ),
+        ledger: bill.policyShiftLedger,
+        characterId: myCharacterId,
+        policies: myPolicies,
+        previousVote: myCharacterId ? bill.votes[myCharacterId] : undefined,
+        canVote: viewerHoldsSeat && bill.status === "active",
+      }),
       ...(bill.vetoMessage ? { hasVetoMessage: true } : {}),
       // The card row needs only the legislation name and the proposed option's
       // label. Resolved snapshot-first through the shared helper: matching on
@@ -339,11 +357,13 @@ export async function getStateLegislatureBillDetail(
   const legislationTypeMap = new Map(legislationTypes.map((type) => [type._id, type]));
 
   let myCharacterId: string | null = null;
+  let myPolicies: AxisPositions | undefined;
   if (authUser) {
     const character = await db
       .collection<Character>("characters")
-      .findOne({ userId: new ObjectId(authUser.userId) }, { projection: { _id: 1 } });
+      .findOne({ userId: new ObjectId(authUser.userId) }, { projection: { _id: 1, policies: 1 } });
     myCharacterId = character?._id.toString() ?? null;
+    myPolicies = character?.policies;
   }
 
   const subNationalOffice = getSubNationalLegislatureKey(countryId);
@@ -614,6 +634,16 @@ export async function getStateLegislatureBillDetail(
     overrideVotesFor: headlineOverrideVotesFor,
     overrideVotesAgainst: headlineOverrideVotesAgainst,
     canVote,
+    voteShiftPreview: buildVoteShiftPreview({
+      provisions: (bill.provisions ?? []).filter(
+        (provision) => provision.type !== "subsidy" && provision.type !== "end_subsidy"
+      ),
+      ledger: bill.policyShiftLedger,
+      characterId: myCharacterId,
+      policies: myPolicies,
+      previousVote: myCharacterId ? bill.votes[myCharacterId] : undefined,
+      canVote: canVote && bill.status === "active",
+    }),
     canGovernorAction,
     ...(bill.vetoMessage ? { vetoMessage: bill.vetoMessage } : {}),
   };

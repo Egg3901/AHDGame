@@ -17,6 +17,7 @@ import { chamberLabel } from "./billHelpers";
 import { otherChamber } from "@/lib/billLifecycleHelpers";
 import { StatusBadge } from "./components/StatusBadge";
 import { VoteBar } from "./components/VoteBar";
+import { VoteShiftPreview } from "@/components/bills/VoteShiftPreview";
 import { VoteTallyTable } from "./components/VoteTallyTable";
 import { VoteListTable } from "./components/VoteListTable";
 import { LocalTime } from "@/components/time/LocalTime";
@@ -462,6 +463,7 @@ function BillDetailContent() {
                     <div className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
                       Cast your vote
                     </div>
+                    <VoteShiftPreview preview={bill.voteShiftPreview} currentVote={bill.myVote} />
                     <div className="flex gap-2">
                       {(isCabinetReview
                         ? (["for", "against"] as const)
@@ -519,6 +521,7 @@ function BillDetailContent() {
                   onVote={(v) => handleVote(true, v)}
                   requiredPct={supermajorityPct ?? otherRequiredPct}
                   requiredLabel={supermajorityLabel}
+                  shiftPreview={bill.voteShiftPreview}
                 />
               </div>
             )}

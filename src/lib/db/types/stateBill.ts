@@ -2,6 +2,7 @@ import type { ObjectId } from "mongodb";
 import type { CorporationType } from "../../constants/corporations";
 import type { CountryId } from "../../constants/countries";
 import type { BillVoteSnapshot } from "./voteSnapshot";
+import type { PolicyShiftLedgerEntry } from "./legislation";
 
 export type StateBillStatus =
   | "proposed"
@@ -90,6 +91,8 @@ export interface StateBill {
   votesAgainst: number;
   votesAbstain: number;
   votes: Record<string, "for" | "against" | "abstain">;
+  /** Per-voter ideology movement this bill has caused; see Bill.policyShiftLedger. */
+  policyShiftLedger?: Record<string, PolicyShiftLedgerEntry>;
   /** Frozen origin-chamber result, set when the bill leaves `active` (#0982). */
   voteSnapshot?: BillVoteSnapshot;
   /** Frozen veto-override result, set when the bill leaves `veto_override` (#0982). */

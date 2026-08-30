@@ -1,6 +1,7 @@
 import type { CountryId } from "@/lib/constants/countries";
 import type { BillWhipPanelData } from "@/lib/congress/billWhipPanelData";
 import type { ProvisionDisplay } from "@/lib/legislature/provisionEnrichment";
+import type { VoteShiftPreview } from "@/lib/legislature/voteShiftPreview";
 
 export interface BillDetail {
   id: string;
@@ -44,6 +45,8 @@ export interface BillDetail {
   myOverrideWhippedFrom: string | null;
   canVoteOrigin: boolean;
   canVoteOther: boolean;
+  /** What the viewer's Aye and Nay would each do to their positions; null for spectators. */
+  voteShiftPreview?: VoteShiftPreview | null;
   canCosponsor: boolean;
   canUncosponsor: boolean;
   canWithdraw: boolean;

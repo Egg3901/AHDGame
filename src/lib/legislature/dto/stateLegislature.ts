@@ -1,4 +1,5 @@
 import type { ProvisionDisplay } from "@/lib/legislature/provisionEnrichment";
+import type { VoteShiftPreview } from "@/lib/legislature/voteShiftPreview";
 
 export interface LegislatureData {
   state: {
@@ -65,6 +66,8 @@ export interface StateBillDisplay {
   overrideVotingEndsAt?: string;
   overrideVotingEndsOnTurn?: number;
   myVote?: "for" | "against" | "abstain" | null;
+  /** What the viewer's Aye and Nay would each do to their positions; null for spectators. */
+  voteShiftPreview?: VoteShiftPreview | null;
   provisions?: BillProvisionDisplay[];
   /** Truthy when the bill carries a public veto message; UI renders 💬 indicator. */
   hasVetoMessage?: boolean;
