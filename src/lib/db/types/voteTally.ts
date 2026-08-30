@@ -61,6 +61,13 @@ export interface ElectionVoteTally {
    * stalled turn that is cleared and re-run cannot count the slice twice.
    */
   lastAccruedTurn?: number;
+  /**
+   * Ballot-model generation this tally's counts were produced (or converted)
+   * under. 1 = registered-voter model with the inclusive general window
+   * (changelog 1.4.25). Stamped by the conversion migration so it never
+   * rescales a document twice; absent on rows the migration never touched.
+   */
+  ballotModelVersion?: number;
   createdAt: Date;
   updatedAt: Date;
 

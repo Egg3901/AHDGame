@@ -59,6 +59,7 @@ import { migration as severEmigratedGenerals } from "./entries/2026-08-26-sever-
 import { migration as rescheduleEconCountryBills } from "./entries/2026-08-27-reschedule-econ-country-bills";
 import { migration as equityLiquidityIndexes } from "./entries/2026-08-28-equity-liquidity-indexes";
 import { migration as redistrictingAuthorityLegislative } from "./entries/2026-08-26-redistricting-authority-legislative";
+import { migration as electionBallotModelConversion } from "./entries/2026-08-30-election-ballot-model-conversion";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -177,6 +178,12 @@ export const MIGRATIONS: Migration[] = [
   // false). Backfill to legislature-drawn — historically correct for the era
   // and what lets a trifecta redraw.
   redistrictingAuthorityLegislative,
+  // 1.4.25 ballot model: in-flight generals are rescaled to the inclusive,
+  // registered-voter count (and duplicate stalled-turn records collapsed);
+  // primaries with an open ballot window get their elapsed turns replayed.
+  // Ships WITH the engine change - a world that deploys one without the
+  // other shows a count that is half old model, half new.
+  electionBallotModelConversion,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.
