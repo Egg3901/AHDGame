@@ -165,7 +165,7 @@ The rule that follows from this: **a unit is at whatever front its general is po
 A working structure looks roughly like this:
 
 1. **Commission several generals.** They start accruing tenure points immediately.
-2. **Build two or three Commands** with clear region responsibilities and no overlaps: say a Homeland Defense command over your own region, a Regional command over where you expect to fight, and a Logistics command if you intend to fight overseas.
+2. **Build two or three Commands** with clear region responsibilities and no two Commands of the same type over one region: say a Homeland Defense command over your own region, a Regional command over where you expect to fight, and a Logistics command if you intend to fight overseas. Those last two will often cover the same region, which is intended: one holds the ground, the other sustains it.
 3. **Appoint a Commanding General to each**, ideally one whose training fits the Command's job.
 4. **Assign units to generals**, spreading the load so no Command sits over capacity.
 5. **When war comes**, the relevant CG posts their generals to the conflict and names a Theater Commander.

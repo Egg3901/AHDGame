@@ -8,7 +8,7 @@ import type {
 } from "./types";
 import { COMMAND_TYPES, REGION_CAP } from "./config";
 import { getRegion } from "./regions";
-import { draftEffectiveness } from "./calc";
+import { commandsOfRegion, draftEffectiveness } from "./calc";
 
 export interface CommandDraft {
   name: string;
@@ -38,10 +38,6 @@ export function isPostureValidForType(_type: CommandType, _posture: CommandPostu
   return true;
 }
 
-function commandsOfRegion(state: MilitaryState, rid: string): MilitaryCommand[] {
-  return state.commands.filter((c) => c.regionIds.includes(rid));
-}
-
 // Ported from the mockup's draftWarnings().
 export function validateDraft(draft: CommandDraft, state: MilitaryState): string[] {
   const w: string[] = [];
@@ -57,7 +53,7 @@ export function validateDraft(draft: CommandDraft, state: MilitaryState): string
       );
   }
   if (!draft.commanderIds.length) {
-    w.push("No commander selected — command efficiency will be reduced by 10%.");
+    w.push("No commander selected: command efficiency will be reduced by 10%.");
   }
   if (draft.regionIds.length > 4) {
     w.push("Assigned regions exceed the recommended region load (4).");
@@ -65,7 +61,7 @@ export function validateDraft(draft: CommandDraft, state: MilitaryState): string
   const overseasNaval = draft.regionIds.some((rid) => getRegion(rid)?.type === "naval");
   const navalCapable = draft.type === "LOGISTICS";
   if (overseasNaval && !navalCapable) {
-    w.push("No naval command structure for an assigned sea region — coverage will be weak.");
+    w.push("No naval command structure for an assigned sea region: coverage will be weak.");
   }
   if (draft.regionIds.length >= REGION_CAP && draft.type !== "LOGISTICS") {
     w.push("Logistics command recommended for multi-region overseas sustainment.");
@@ -160,7 +156,7 @@ export function createCommand(
     political: "Medium",
     branchFocus: "Combined",
     unitIds: [],
-    role: `Newly established ${COMMAND_TYPES[draft.type].label.toLowerCase()} — awaiting force assignment.`,
+    role: `Newly established ${COMMAND_TYPES[draft.type].label.toLowerCase()}, awaiting force assignment.`,
   };
   return { command };
 }

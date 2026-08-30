@@ -20,6 +20,7 @@ import {
   effIntent,
   overCapacityPenalties,
   commandsOfRegion,
+  hasSameTypeOverlap,
   unitLoad,
 } from "@/lib/military/calc";
 import { SectionCard, Badge, Meter } from "../../dossier";
@@ -317,9 +318,7 @@ export function CommandDetailPanel({
             const r = getRegion(rid);
             if (!r) return null;
             const regionCmds = commandsOfRegion(state, rid);
-            const overlap =
-              regionCmds.length > 1 &&
-              new Set(regionCmds.map((rc) => rc.type)).size < regionCmds.length;
+            const overlap = hasSameTypeOverlap(regionCmds);
             return (
               <div
                 key={rid}

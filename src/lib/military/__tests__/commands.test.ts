@@ -179,6 +179,32 @@ describe("validateDraft", () => {
     expect(w.some((m) => m.includes("already assigned"))).toBe(false);
   });
 
+  // Mixed owners are the case the old code got wrong twice over: it warned when it
+  // should not have, and `owners[0]` could name whichever command happened to sort
+  // first, pointing the Secretary at a command that was not the clash.
+  it("names the same-type owner when a region also holds a command of another type", () => {
+    const draft: CommandDraft = {
+      name: "X",
+      type: "REGIONAL",
+      regionIds: ["mea"],
+      commanderIds: ["hale"],
+      commandingGeneralId: null,
+      posture: "Deterrence",
+      supply: "Normal",
+    };
+    const w = validateDraft(
+      draft,
+      stateWith([
+        cmd({ id: "supply", name: "Supply Corps", type: "LOGISTICS", regionIds: ["mea"] }),
+        cmd({ id: "north", name: "Northern Command", type: "REGIONAL", regionIds: ["mea"] }),
+      ])
+    );
+    const warning = w.find((m) => m.includes("already assigned"));
+    expect(warning).toBeDefined();
+    expect(warning).toContain("Northern Command");
+    expect(warning).not.toContain("Supply Corps");
+  });
+
   it("warns when no commander is selected", () => {
     const draft: CommandDraft = {
       name: "X",

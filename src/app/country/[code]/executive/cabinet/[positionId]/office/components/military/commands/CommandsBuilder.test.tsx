@@ -239,6 +239,34 @@ describe("CommandsBuilder", () => {
     expect(screen.getByText("Infra")).toBeTruthy();
   });
 
+  // The player-visible face of the coverage bug. A Regional command holding a region
+  // while a Logistics command sustains it is the recommended overseas pairing, and the
+  // default COVERAGE filter labelled it UNASSIGNED, so the builder told the Secretary
+  // their correct structure was a gap. Asserted through the UI because the chip is
+  // where players actually met it.
+  it("shows a region held by two different command types as covered, not a gap", () => {
+    render(
+      <CommandsBuilder
+        commands={[
+          command({ id: "cmd-1", name: "Northern Command", type: "REGIONAL", regionIds: ["mea"] }),
+          command({ id: "cmd-2", name: "Supply Corps", type: "LOGISTICS", regionIds: ["mea"] }),
+        ]}
+        {...base}
+      />
+    );
+    // Different types are not a role conflict, so the same-type overlap banner stays away.
+    expect(screen.queryByText(/with two commands of the same type/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "ASSIGN" }));
+    // Scope to the assign-regions modal: the roster renders region names too.
+    const dialog = screen.getByRole("dialog");
+    const row = within(dialog).getByText("Middle East").closest("button");
+    expect(row).toBeTruthy();
+    // getByText matches exactly, so this cannot be satisfied by "UNASSIGNED".
+    expect(within(row as HTMLElement).getByText("ASSIGNED")).toBeTruthy();
+    expect(within(row as HTMLElement).queryByText("UNASSIGNED")).toBeNull();
+  });
+
   // A player holding this seat asked "where do I assign more troops to the battlefield
   // as SoD?" — a question with no button, because units are never sent to a front
   // directly. This page is where the chain starts, so it is where the rule belongs.
