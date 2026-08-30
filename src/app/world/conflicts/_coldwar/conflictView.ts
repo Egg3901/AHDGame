@@ -81,8 +81,8 @@ export function toConflictView(doc: ConflictDoc, opts: ConflictViewOptions): Con
   const startYear = yearOfTurn(doc.startTurn, opts.startingYear, clock);
   const years =
     doc.endTurn != null
-      ? `${startYear} – ${yearOfTurn(doc.endTurn, opts.startingYear, clock)}`
-      : `${startYear} – present`;
+      ? `${startYear} to ${yearOfTurn(doc.endTurn, opts.startingYear, clock)}`
+      : `${startYear} to present`;
 
   const occupier = occ.occupier === "A" ? doc.sideA : occ.occupier === "B" ? doc.sideB : null;
   // The raw id is deliberate here and pinned by a test: the hub board's cards are a

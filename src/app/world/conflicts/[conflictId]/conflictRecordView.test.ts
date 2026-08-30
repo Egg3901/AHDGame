@@ -165,6 +165,24 @@ describe("buildRecordExtras — command tier", () => {
   });
 });
 
+describe("buildRecordExtras — command tier on a concluded war", () => {
+  // A belligerent seat keeps command sight of a resolved war while its fog window
+  // runs, but every formation has stood down. An empty "YOUR ORDER OF BATTLE" and a
+  // band read off an empty enemy front would describe a war still being fought.
+  it("shows no live order of battle and no enemy band", () => {
+    const x = buildRecordExtras(input({ tier: "command", ownSide: "A", concluded: true }));
+    expect(x.ownForces).toBeUndefined();
+    expect(x.enemyBand).toBeUndefined();
+    expect(x.navalAir).toBeUndefined();
+  });
+
+  it("still scopes engagement rosters to the viewer's own side", () => {
+    const x = buildRecordExtras(input({ tier: "command", ownSide: "A", concluded: true }));
+    expect(x.battles[0].rosters!.map((r) => r.country)).toEqual(["US"]);
+    expect(x.battles[0].rostersWithheld).toBe(true);
+  });
+});
+
 describe("buildRecordExtras — archive tier", () => {
   const arc = () => buildRecordExtras(input({ tier: "archive", ownSide: null }));
 

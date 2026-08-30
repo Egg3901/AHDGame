@@ -15,6 +15,22 @@ export async function listActiveConflicts(db: Db): Promise<ConflictDoc[]> {
     .toArray();
 }
 
+/**
+ * Resolved wars, the one that ended most recently first, capped at `limit`.
+ *
+ * The historical list on the conflicts hub. Ordered by `endTurn` with the public
+ * number as a tiebreak so two wars ended on the same tick list deterministically;
+ * a legacy document with no `endTurn` sorts last, which is where a war nobody can
+ * date belongs.
+ */
+export async function listResolvedConflicts(db: Db, limit: number): Promise<ConflictDoc[]> {
+  return getConflictsCollection(db)
+    .find({ status: "resolved" })
+    .sort({ endTurn: -1, conflictId: -1 })
+    .limit(limit)
+    .toArray();
+}
+
 export async function getConflict(db: Db, id: string): Promise<ConflictDoc | null> {
   return getConflictsCollection(db).findOne({ _id: id });
 }

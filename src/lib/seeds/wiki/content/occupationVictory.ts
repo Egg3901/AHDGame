@@ -94,7 +94,7 @@ At that point:
 2. The end turn is stamped.
 3. **Every belligerent stands down.** For each country, its general postings at that conflict are dropped, which returns all of their units to reserve.
 4. **Truces are recorded between every cross-side pair**: 240 turns, about ten real days.
-5. **The fog lifts entirely.** The conflict page becomes an open archive: both sides' rosters, every engagement, what each formation lost.
+5. **The fog stays down for 480 turns, then lifts entirely.** Until then the conflict page reads as it did during the war: territory, casualties and verdicts for everyone, your own side's rosters for a belligerent's seats. Once the window lapses the page becomes an open archive: both sides' rosters, every engagement, what each formation lost. The war is listed under Historical Conflicts on the conflicts hub from the turn it ends.
 
 Standing down works by removing the **posting**, not by clearing unit locations. Since a unit's position is a cache of its general's posting, clearing the location alone would simply be re-derived back to a dead front on the next reconcile. Removing the posting is what actually brings the army home.
 
