@@ -51,10 +51,15 @@ import { getStateLean } from "@/lib/utils/demographics";
 import type {
   StatePartyOrg,
   StateDemographicTurnout,
+  StateRegistrationPool,
   GovernorEndorsement,
   PlayerEndorsement,
 } from "@/lib/db/types";
-import { resolveTurnout } from "@/lib/electionEngine/resolvedTurnout";
+import {
+  resolveTurnout,
+  scalePoolToRegistered,
+  capTurnSliceToRemainingElectorate,
+} from "@/lib/electionEngine/resolvedTurnout";
 import { campaignStrengthVoteMultiplier } from "@/lib/campaigns/campaignStrength";
 import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
 import { getGroundGameSwingBonus, getGroundGameGotvBonus } from "@/lib/campaigns/opsEffects";
@@ -310,6 +315,10 @@ export async function accumulatePresidentVoteTurn(
   ]);
 
   if (!tally || !tally.totalVotesByUnit || candidates.length === 0 || !election?.endTime) return;
+  // Per-turn idempotency (see tallyManagement): a re-run of a stalled turn
+  // must not bank this turn's slice again. Dry runs never persist, so they
+  // may recompute a recorded turn.
+  if (!calibration?.dryRun && tally.turnSnapshots?.some((s) => s.turn === turnNumber)) return;
 
   // Rules freeze: the race runs under the ruleset it was stamped with at
   // spawn (legacy races resolve to v1), so mid-cycle deploys cannot change
@@ -338,27 +347,38 @@ export async function accumulatePresidentVoteTurn(
   // Live era clock (null while `eraSystemEnabled` is off — legacy behavior).
   const eraYear = eraYearContextFromGameState(gsDoc);
 
-  const [categories, states, demographics, statePartyOrgs, turnoutDocs, approvalMap] =
-    await Promise.all([
-      loadDemographicCategories(db),
-      db
-        .collection<State>("states")
-        .find({ _id: { $in: uniqueStateIds } })
-        .toArray(),
-      db
-        .collection<StateDemographics>("stateDemographics")
-        .find({ _id: { $in: uniqueStateIds } })
-        .toArray(),
-      db
-        .collection<StatePartyOrg>("statePartyOrg")
-        .find({ stateId: { $in: uniqueStateIds } })
-        .toArray(),
-      db
-        .collection<StateDemographicTurnout>("stateDemographicTurnout")
-        .find({ _id: { $in: uniqueStateIds } })
-        .toArray(),
-      getAllStateApprovalsForElection(),
-    ]);
+  const [
+    categories,
+    states,
+    demographics,
+    statePartyOrgs,
+    turnoutDocs,
+    registrationPools,
+    approvalMap,
+  ] = await Promise.all([
+    loadDemographicCategories(db),
+    db
+      .collection<State>("states")
+      .find({ _id: { $in: uniqueStateIds } })
+      .toArray(),
+    db
+      .collection<StateDemographics>("stateDemographics")
+      .find({ _id: { $in: uniqueStateIds } })
+      .toArray(),
+    db
+      .collection<StatePartyOrg>("statePartyOrg")
+      .find({ stateId: { $in: uniqueStateIds } })
+      .toArray(),
+    db
+      .collection<StateDemographicTurnout>("stateDemographicTurnout")
+      .find({ _id: { $in: uniqueStateIds } })
+      .toArray(),
+    db
+      .collection<StateRegistrationPool>("stateRegistrationPool")
+      .find({ stateId: { $in: uniqueStateIds } })
+      .toArray(),
+    getAllStateApprovalsForElection(),
+  ]);
 
   // Seeded snapshots for the granular substrate's legislation lean-drift fold.
   const demographicDefaultsByState = new Map(
@@ -373,6 +393,7 @@ export async function accumulatePresidentVoteTurn(
   const stateMap = new Map(states.map((s) => [s._id as string, s]));
   const demographicsMap = new Map(demographics.map((d) => [d._id as string, d]));
   const turnoutMap = new Map(turnoutDocs.map((t) => [t._id as string, t]));
+  const registrationPoolMap = new Map(registrationPools.map((pool) => [pool.stateId, pool]));
   const statePartyOrgsByState = new Map<string, StatePartyOrg[]>();
   for (const po of statePartyOrgs) {
     const list = statePartyOrgsByState.get(po.stateId) ?? [];
@@ -394,6 +415,8 @@ export async function accumulatePresidentVoteTurn(
     createdAt: tally.createdAt,
     currentTurn: turnNumber,
     now,
+    // The turn that reaches endTurn still counts (see tallyManagement).
+    inclusiveEnd: true,
   });
 
   // Scope the party lookup by countryId so sequentialId collisions across
@@ -658,9 +681,17 @@ export async function accumulatePresidentVoteTurn(
       if (typeof po.registration === "number") regByParty.set(po.partyId, po.registration);
     }
 
+    // Age-aware electorate — the same basis the down-ballot engine uses
+    // (P1b-1b): the live voting-age population, falling back to total
+    // population on worlds without cohort vectors. Children do not vote for
+    // President any more than they vote for Senator. Per-state shares (and so
+    // every electoral vote) are pool-magnitude-invariant; only ballot counts
+    // and turnout honesty change.
+    const electorate = state.votingEligiblePopulation ?? state.population;
+
     // Use resolved turnout with GOTV/canvassing/suppression modifiers applied
     const { totalPool: resolvedTotalPool, byGroup: liveTurnouts } = resolveTurnout(
-      state.population,
+      electorate,
       demographics,
       categories,
       turnoutDoc,
@@ -690,7 +721,7 @@ export async function accumulatePresidentVoteTurn(
         year: eraYear.year,
         startingYear: eraYear.startingYear,
         turnoutDoc,
-        statePopulation: state.population,
+        statePopulation: electorate,
         demographics,
         categories,
         liveTurnouts,
@@ -710,7 +741,15 @@ export async function accumulatePresidentVoteTurn(
       }
     }
 
-    const turnPool = turnVoteWeight(totalTurns, turnIndex, effTotalPool);
+    // Registered-voter gate — the unregistered slice cannot cast a ballot.
+    // Same F-4 note as tallyManagement: per-state shares (and therefore every
+    // electoral vote) are invariant; only ballot magnitudes change. Applied to
+    // the TURN pool only — the distribution normalises group contributions by
+    // `effTotalPool`, so scaling both would cancel to a no-op.
+    const turnPool = scalePoolToRegistered(
+      turnVoteWeight(totalTurns, turnIndex, effTotalPool),
+      registrationPoolMap.get(stateId)?.unregistered
+    );
 
     const approvalPct = approvalMap.get(stateId.toUpperCase()) ?? BASE_APPROVAL;
     const approvalDecimal = approvalPct / 100;
@@ -721,13 +760,26 @@ export async function accumulatePresidentVoteTurn(
     // the incumbent's directional advantage comes from the approval-scaled
     // incumbency driver wired via `incumbentPartyId`/`incumbentApproval` below.
     const strengthMultiplier = (1 + (approvalDecimal - 0.5) * 0.5) * officeStrength;
-    const effectiveTurnPool = turnPool * strengthMultiplier;
+    // Cumulative ceiling per unit: the approval multiplier sits outside the
+    // registered gate, so the closing surge could carry a state past its
+    // registered electorate. Ballots already cast in this unit plus this
+    // slice may never exceed it (ME/NE districts share the state ceiling,
+    // which is loose there but never inflating).
+    const alreadyCastInUnit = Object.values(tally.totalVotesByUnit[unit.unitId] ?? {}).reduce(
+      (sum, v) => sum + v,
+      0
+    );
+    const effectiveTurnPool = capTurnSliceToRemainingElectorate(
+      turnPool * strengthMultiplier,
+      alreadyCastInUnit,
+      scalePoolToRegistered(electorate, registrationPoolMap.get(stateId)?.unregistered)
+    );
 
     const { votesPerCandidate: rawVotesPerCandidate } = distributeVotesBySwingFlow(
       effEnriched,
       effectiveTurnPool,
       effTotalPool,
-      state.population,
+      electorate,
       effDemographics,
       effCategories,
       partyOrgByParty,

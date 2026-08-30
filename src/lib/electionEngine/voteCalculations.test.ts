@@ -403,6 +403,30 @@ describe("resolveTurnWindow", () => {
     expect(turnIndex).toBe(0);
   });
 
+  it("inclusiveEnd: the turn that reaches endTurn is its own slice, never a repeat of the last", () => {
+    // General elections accrue on every turn from start THROUGH endTurn (the
+    // timers complete the race after accumulation), so the window holds
+    // endTurn - start + 1 slices and the final turn gets a fresh index.
+    const window = resolveTurnWindow({
+      startTurn: 26,
+      endTurn: 38,
+      currentTurn: 38,
+      now: T0,
+      inclusiveEnd: true,
+    });
+    expect(window.totalTurns).toBe(13);
+    expect(window.turnIndex).toBe(12);
+    // Every slice of the inclusive window integrates to exactly one pool.
+    let released = 0;
+    for (let i = 0; i < window.totalTurns; i++) released += turnVoteWeight(13, i, 1_000_000);
+    expect(released).toBeCloseTo(1_000_000, 6);
+    // Exclusive (primary) windows are untouched.
+    expect(resolveTurnWindow({ startTurn: 26, endTurn: 38, currentTurn: 38, now: T0 })).toEqual({
+      totalTurns: 12,
+      turnIndex: 11,
+    });
+  });
+
   it("turn-first: lands in the final-4 surge band on the last 4 turns despite clock drift", () => {
     // endTime / startTime / now are wildly inconsistent (drifted game clock),
     // but the turn fields put us at turn 45 of a 48-turn race → surge band.

@@ -168,7 +168,22 @@ export function StatePageTabs({
       }
       if (subTab === "elections") {
         return (
-          <StateElections stateId={state._id} stateName={state.name} countryId={state.countryId} />
+          <StateElections
+            stateId={state._id}
+            stateName={state.name}
+            countryId={state.countryId}
+            // Turnout denominator for the race cards. `votingEligiblePopulation`
+            // is the real electorate, but it is absent on worlds seeded without
+            // cohort vectors, so this falls back to total population — a
+            // materially bigger number that would understate turnout by roughly
+            // a quarter if it were passed off as the electorate. The basis is
+            // carried alongside so the card can label which one it is.
+            electorate={
+              state.votingEligiblePopulation
+                ? { count: state.votingEligiblePopulation, basis: "eligible" }
+                : { count: state.population, basis: "residents" }
+            }
+          />
         );
       }
     }

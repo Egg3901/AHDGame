@@ -37,6 +37,30 @@ export interface ElectionVoteTally {
   seatsEstimate?: Record<string, number>;
   /** Stored when primary resolves; used for wiki election history. */
   primaryResults?: PrimaryResults;
+  /**
+   * Non-presidential primaries: cumulative PRIMARY ballots per candidate,
+   * accrued by `recordPrimarySnapshots` over the closing window of the primary
+   * (as long as the race's general window; see primaryBallotWindow). Each
+   * turn's party pool is the region's resolved turnout pool scaled by that
+   * party's registration share, split within the party by that turn's score
+   * shares — so ballots are the time-integral of the standings the players
+   * watched, and `resolvePrimariesIfNeeded` picks the nominee from these
+   * counts when they exist (score fallback otherwise).
+   *
+   * Deliberately separate from `totalVotes`, which holds GENERAL ballots only:
+   * seat estimates, the swing-flow engine and every general display sum
+   * `totalVotes` and must never see primary ballots in that denominator.
+   * Absent on legacy rows and on races whose region lacks registration or
+   * demographic data. Presidential primaries never use this — they have their
+   * own per-state vote projection (`primaryStateVotes` / `primaryDelegates`).
+   */
+  primaryVotes?: Record<string, number>;
+  /**
+   * Last game turn an engine WITHOUT per-turn snapshots (NG president) accrued
+   * into this tally. The accrual skips a turn it has already banked, so a
+   * stalled turn that is cleared and re-run cannot count the slice twice.
+   */
+  lastAccruedTurn?: number;
   createdAt: Date;
   updatedAt: Date;
 

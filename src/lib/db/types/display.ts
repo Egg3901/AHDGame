@@ -62,6 +62,13 @@ export interface ElectionDisplay {
   seatsEstimate?: Record<string, number>;
   /** Current officeholder for single-seat races. Null/absent for multi-seat races. */
   incumbent?: { name: string; party: string; partyColor?: string } | null;
+  /**
+   * Non-presidential primaries: cumulative primary ballots per candidate,
+   * accrued turn by turn by the engine. Separate from generalTally so no
+   * general denominator ever counts primary ballots. Absent when the race
+   * never accrued any (legacy rows, missing registration data, president).
+   */
+  primaryVotes?: Record<string, number>;
   /** General phase tally data for vote table display */
   generalTally?: {
     totalVotes: Record<string, number>;

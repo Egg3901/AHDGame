@@ -25,6 +25,7 @@ export function mapElectionResponseToDisplay(election: ElectionResponse): Electi
     inPrimary: election.inPrimary,
     polling: election.polling ?? undefined,
     seatsEstimate: election.seatsEstimate ?? undefined,
+    primaryVotes: election.primaryVotes ?? undefined,
     generalTally: election.generalVotes
       ? {
           totalVotes: election.generalVotes.totalVotes,

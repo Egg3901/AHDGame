@@ -1,13 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { getMessageStyle, resolveElectionYear } from "@/lib/utils/formatters";
 import { useElectionActions } from "@/hooks/useElectionActions";
 import type { ElectionDisplay, CharacterBasic, GameStateDisplay } from "@/lib/db/types";
 import type { ElectionResponse } from "@/lib/elections/resolveElection";
-import { ElectionCard } from "./elections/ElectionCard";
-import { PresidentialElectionCard } from "./elections/PresidentialElectionCard";
 import { partiesApiUrl, countryElectionsUrl } from "@/lib/urls";
 import {
   COUNTRY_CONFIGS,
@@ -20,9 +18,23 @@ import {
   getUpperChamberOfficeType,
   getOfficeTypeForChamber,
 } from "@/lib/legislature/chamberOfficeType";
-import { buildElectionStateHref } from "./elections/electionHelpers";
+import {
+  buildElectionStateHref,
+  buildElectionHref,
+  electionRaceTitle,
+  STATE_EV,
+} from "./elections/electionHelpers";
 import { logError } from "@/lib/utils/errorLog";
 import { mapElectionResponseToDisplay } from "@/lib/elections/mapElectionResponseToDisplay";
+import { BlendBallotSection } from "./elections/blend/BlendBallotSection";
+import { WireTicker } from "./elections/blend/WireTicker";
+import {
+  buildBlendRegionCards,
+  buildBlendWire,
+  hareQuota,
+  type PartyLookup,
+  type RegionElectorate,
+} from "@/lib/elections/blendRegionViewModel";
 
 function toElectionDisplay(e: ElectionResponse): ElectionDisplay {
   return mapElectionResponseToDisplay(e);
@@ -32,11 +44,20 @@ interface StateElectionsProps {
   stateId: string;
   stateName: string;
   countryId?: string;
+  /**
+   * Region electorate for the turnout figures, carrying the basis it was
+   * measured on. Worlds seeded without cohort vectors have no eligible count at
+   * all and fall back to total population, which is a materially different
+   * number — so the basis travels with it and the card says which one it is.
+   */
+  electorate?: RegionElectorate;
 }
 
 interface PartyInfo {
   id: string;
   name: string;
+  /** Ballot abbreviation ("REP") — the Blend card's party column. */
+  abbreviation: string;
   color: string;
   countryId: string;
 }
@@ -52,6 +73,7 @@ export function StateElections({
   stateId,
   stateName,
   countryId: propCountryId,
+  electorate,
 }: StateElectionsProps) {
   const [elections, setElections] = useState<ElectionDisplay[]>([]);
   const [character, setCharacter] = useState<CharacterBasic | null>(null);
@@ -66,30 +88,25 @@ export function StateElections({
   const countryId = propCountryId ?? "US";
   const regionLabel = COUNTRY_CONFIGS[countryId as CountryId]?.regionLabel ?? "State";
 
-  // Helper to get party color from fetched parties (country-scoped).
-  // Stable identities so memoized ElectionCards skip re-renders on parent ticks.
-  const getPartyColorHex = useCallback(
-    (partyId: string): string | null => {
-      const party = parties.find((p) => p.id === partyId && p.countryId === countryId);
-      return party?.color || null;
-    },
-    [parties, countryId]
-  );
-
-  // Get party display name from fetched parties (country-scoped)
-  const getPartyName = useCallback(
-    (partyId: string): string => {
-      if (partyId === "independent") return "Independent";
-      const party = parties.find((p) => p.id === partyId && p.countryId === countryId);
-      return party?.name || partyId;
-    },
-    [parties, countryId]
-  );
-
-  // Check if party is a custom party (not a major or independent)
-  const isCustomParty = useCallback((partyId: string): boolean => {
-    return partyId !== "independent" && !["1", "2"].includes(partyId);
-  }, []);
+  /**
+   * Party lookup for the Blend cards. The abbreviation is what the card's party
+   * column prints, so it falls back to the full name and then the raw id rather
+   * than rendering an empty cell for a party seeded without one.
+   */
+  const partyLookup = useMemo<PartyLookup>(() => {
+    const find = (partyId: string) =>
+      parties.find((p) => p.id === partyId && p.countryId === countryId);
+    return {
+      abbr: (partyId) => {
+        if (partyId === "independent") return "IND";
+        const party = find(partyId);
+        return party?.abbreviation || party?.name || partyId;
+      },
+      name: (partyId) =>
+        partyId === "independent" ? "Independent" : (find(partyId)?.name ?? partyId),
+      color: (partyId) => find(partyId)?.color || "#9CA3AF",
+    };
+  }, [parties, countryId]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -97,14 +114,15 @@ export function StateElections({
     try {
       const fetchOpts = { signal: AbortSignal.timeout(15_000) };
       const [electionsRes, presRes, charRes, partiesRes, gameStateRes] = await Promise.all([
+        // `view=full` because the Blend cards are a results display: summary
+        // mode returns `generalVotes: null`, so vote counts, turnout and the
+        // per-turn deltas would all be missing. A region carries a handful of
+        // races, unlike the country page which keeps summary for hundreds.
         fetch(
-          `/api/elections?country=${countryId}&state=${stateId}&limit=100&view=summary`,
+          `/api/elections?country=${countryId}&state=${stateId}&limit=100&view=full`,
           fetchOpts
         ),
-        fetch(
-          `/api/elections?country=${countryId}&type=president&limit=10&view=summary`,
-          fetchOpts
-        ),
+        fetch(`/api/elections?country=${countryId}&type=president&limit=10&view=full`, fetchOpts),
         fetch("/api/character/me", fetchOpts),
         fetch(partiesApiUrl(countryId), fetchOpts),
         fetch("/api/game/turn/status", fetchOpts),
@@ -148,9 +166,16 @@ export function StateElections({
         const partiesData = await partiesRes.json();
         setParties(
           partiesData.parties.map(
-            (p: { id: string; name: string; color: string; countryId?: string }) => ({
+            (p: {
+              id: string;
+              name: string;
+              abbreviation?: string;
+              color: string;
+              countryId?: string;
+            }) => ({
               id: p.id,
               name: p.name,
+              abbreviation: p.abbreviation ?? "",
               color: p.color,
               countryId: p.countryId ?? "US",
             })
@@ -169,9 +194,19 @@ export function StateElections({
     fetchData();
   }, [fetchData]);
 
-  // Fetch state-level PV data for presidential elections
+  // Fetch state-level PV data for presidential elections.
+  //
+  // General phase only, and that is load-bearing rather than an optimisation.
+  // A presidential tally only carries `totalVotesByUnit` from the general
+  // onward; during the primary the subdivision endpoint has no per-state
+  // figures to work from and simply spreads the NATIONAL total across this one
+  // region's map. Summing that back up returns the national total again, so
+  // treating it as "this region's vote" would report the whole country's
+  // primary vote as Georgia's, and divide it by Georgia's electorate for
+  // turnout. Leaving it unfetched marks the card as nationwide instead, which
+  // is what the figures actually are.
   useEffect(() => {
-    const presElections = elections.filter((e) => e.electionType === "president");
+    const presElections = elections.filter((e) => e.electionType === "president" && !e.inPrimary);
     if (presElections.length === 0) return;
     // Fetch all elections' subdivision results in parallel and commit once —
     // one re-render for the list instead of one per completed fetch.
@@ -266,9 +301,10 @@ export function StateElections({
     });
 
   // Only show presidential races on state page during general phase (primary is national, not state-relevant)
-  const presidentialElections = elections.filter(
-    (e) => e.electionType === "president" && !e.inPrimary
-  );
+  // Shown in every phase, primary included. The presidential primary is counted
+  // nationally rather than per region, so the card marks its figures as national
+  // totals instead of measuring them against this region's electorate.
+  const presidentialElections = elections.filter((e) => e.electionType === "president");
 
   // Sub-national election types derived from country config.
   const subNationalChamberKey = config?.subNationalChamber?.key;
@@ -280,6 +316,89 @@ export function StateElections({
   stateElectionTypes.add("localCouncil");
 
   const stateElectionsList = elections.filter((e) => stateElectionTypes.has(e.electionType));
+
+  /**
+   * Region-scoped presidential votes, summed from the subdivision results the
+   * tab already fetches. The election's own `generalTally` is the NATIONAL
+   * count, which would be the wrong figure to print on a region page.
+   */
+  const presidentialRegionVotes = useMemo(() => {
+    const out: Record<string, Record<string, number>> = {};
+    for (const [electionId, data] of Object.entries(presidentialStateData)) {
+      out[electionId] = data.votes;
+    }
+    return out;
+  }, [presidentialStateData]);
+
+  /**
+   * Ballots across the region's whole ballot. Computed once here and handed to
+   * every section: each section only sees its own races, so letting them each
+   * compute it would make federal, presidential and regional all report their
+   * own leading race as ~100% of the region's voting.
+   *
+   * A nationwide race counted nationally is excluded — it is not part of this
+   * region's day of voting.
+   */
+  const regionBallots = useMemo(() => {
+    const ballot = [...federalElections, ...presidentialElections, ...stateElectionsList];
+    return ballot.reduce((sum, e) => {
+      const scoped =
+        !!presidentialRegionVotes[e.id] || e.state?.toUpperCase() === stateId.toUpperCase();
+      if (!scoped) return sum;
+      const totals = presidentialRegionVotes[e.id] ?? e.generalTally?.totalVotes ?? {};
+      return sum + e.candidates.reduce((s, c) => s + (totals[c.id] ?? 0), 0);
+    }, 0);
+  }, [
+    federalElections,
+    presidentialElections,
+    stateElectionsList,
+    presidentialRegionVotes,
+    stateId,
+  ]);
+
+  /**
+   * The wire ticker reads the whole ballot, not one section, so its "x% of
+   * <region> ballots" denominator and its headline race are the region's, the
+   * way a results desk would carry them.
+   */
+  const wireItems = useMemo(() => {
+    const ballot = [...federalElections, ...presidentialElections, ...stateElectionsList];
+    if (ballot.length === 0) return [];
+    const titleById: Record<string, string> = {};
+    const hrefById: Record<string, string> = {};
+    const quotaByElectionId: Record<string, number | null> = {};
+    for (const election of ballot) {
+      titleById[election.id] = electionRaceTitle(election, electionGameYear(election));
+      hrefById[election.id] = buildElectionHref(election);
+      quotaByElectionId[election.id] = hareQuota(election, countryId as CountryId);
+    }
+    const cards = buildBlendRegionCards({
+      elections: ballot,
+      countryId: countryId as CountryId,
+      regionName: stateName,
+      regionCode: stateId,
+      parties: partyLookup,
+      viewerCharacterId: character?._id ?? null,
+      viewerPartyId: character?.party ?? null,
+      electorate,
+      titleById,
+      hrefById,
+      regionVotesByElectionId: presidentialRegionVotes,
+      regionElectoralVotes: STATE_EV[stateId],
+    });
+    return buildBlendWire(cards, { regionName: stateName, electorate, quotaByElectionId });
+  }, [
+    federalElections,
+    presidentialElections,
+    stateElectionsList,
+    countryId,
+    stateName,
+    stateId,
+    partyLookup,
+    character,
+    electorate,
+    presidentialRegionVotes,
+  ]);
 
   const federalLabel = isParliamentary ? "Parliamentary Elections" : "Upcoming Federal Elections";
   // Sub-national section header. This section groups several race tiers
@@ -344,19 +463,6 @@ export function StateElections({
     );
   }
 
-  const sharedCardProps = {
-    getPartyColorHex,
-    getPartyName,
-    isCustomParty,
-    isInRace,
-    isInAnyRace,
-    actionLoading,
-    character,
-    stateId,
-    onEnterRace: handleEnterRace,
-    onWithdraw: handleWithdraw,
-  };
-
   return (
     <div className="space-y-6">
       {/* Federal Elections Section */}
@@ -387,47 +493,70 @@ export function StateElections({
         )}
 
         {federalElections.length > 0 ? (
-          <div className="space-y-3">
-            {federalElections.map((election) => (
-              <ElectionCard
-                key={election.id}
-                election={election}
-                gameYear={electionGameYear(election)}
-                {...sharedCardProps}
-              />
-            ))}
-          </div>
+          <BlendBallotSection
+            elections={federalElections}
+            countryId={countryId as CountryId}
+            regionName={stateName}
+            regionCode={stateId}
+            regionBallots={regionBallots}
+            tier="federal"
+            parties={partyLookup}
+            character={character}
+            electorate={electorate}
+            gameYearFor={electionGameYear}
+            isInRace={isInRace}
+            isInAnyRace={isInAnyRace}
+            actionLoading={actionLoading}
+            onEnterRace={handleEnterRace}
+            onWithdraw={handleWithdraw}
+          />
         ) : (
           <p className="text-muted">{federalEmpty}</p>
         )}
 
-        {/* Presidential races shown inline under federal — with state-level PV donut (US only) */}
+        {/* Presidential races sit under federal. From the general onward they
+            are counted on this region's own popular vote; during the primary
+            the count is national and the card says so (US only). */}
         {!isParliamentary && presidentialElections.length > 0 && (
           <div className="mt-4 pt-4 border-t border-card-border/60">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-muted uppercase tracking-wide">
                 Presidential Race
               </h3>
-              <Link
-                href={buildElectionStateHref(presidentialElections[0], countryId, stateId)}
-                className="text-xs text-muted hover:text-primary transition-colors"
-              >
-                County results →
-              </Link>
+              {/* There is no per-county presidential breakdown until the
+                  general, so the link would open a map of redistributed
+                  national numbers. */}
+              {!presidentialElections[0].inPrimary && (
+                <Link
+                  href={buildElectionStateHref(presidentialElections[0], countryId, stateId)}
+                  className="text-xs text-muted hover:text-primary transition-colors"
+                >
+                  County results →
+                </Link>
+              )}
             </div>
-            <div className="space-y-3">
-              {presidentialElections.map((election) => (
-                <PresidentialElectionCard
-                  key={election.id}
-                  election={election}
-                  gameYear={electionGameYear(election)}
-                  stateId={stateId}
-                  stateData={presidentialStateData[election.id]}
-                  getPartyColorHex={getPartyColorHex}
-                  isCustomParty={isCustomParty}
-                />
-              ))}
-            </div>
+            <BlendBallotSection
+              elections={presidentialElections}
+              countryId={countryId as CountryId}
+              regionName={stateName}
+              regionCode={stateId}
+              regionBallots={regionBallots}
+              tier="presidential"
+              parties={partyLookup}
+              character={character}
+              electorate={electorate}
+              gameYearFor={electionGameYear}
+              isInRace={isInRace}
+              isInAnyRace={isInAnyRace}
+              actionLoading={actionLoading}
+              onEnterRace={handleEnterRace}
+              onWithdraw={handleWithdraw}
+              // The presidency stores a NATIONAL tally; on a region page the
+              // region's own subdivision totals are the count that matters, and
+              // they are what decides which way its electoral votes go.
+              regionVotesByElectionId={presidentialRegionVotes}
+              regionElectoralVotes={STATE_EV[stateId]}
+            />
           </div>
         )}
       </div>
@@ -448,21 +577,31 @@ export function StateElections({
           </div>
 
           {stateElectionsList.length > 0 ? (
-            <div className="space-y-3">
-              {stateElectionsList.map((election) => (
-                <ElectionCard
-                  key={election.id}
-                  election={election}
-                  gameYear={electionGameYear(election)}
-                  {...sharedCardProps}
-                />
-              ))}
-            </div>
+            <BlendBallotSection
+              elections={stateElectionsList}
+              countryId={countryId as CountryId}
+              regionName={stateName}
+              regionCode={stateId}
+              regionBallots={regionBallots}
+              tier="regional"
+              parties={partyLookup}
+              character={character}
+              electorate={electorate}
+              gameYearFor={electionGameYear}
+              isInRace={isInRace}
+              isInAnyRace={isInAnyRace}
+              actionLoading={actionLoading}
+              onEnterRace={handleEnterRace}
+              onWithdraw={handleWithdraw}
+            />
           ) : (
             <p className="text-muted">{stateEmpty}</p>
           )}
         </div>
       }
+
+      {/* The wire carries the whole ballot, so it sits below both sections. */}
+      <WireTicker items={wireItems} />
     </div>
   );
 }

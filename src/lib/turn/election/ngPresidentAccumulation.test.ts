@@ -65,6 +65,33 @@ describe("accumulateNGPresidentVoteTurn", () => {
     expect(set.totalVotes[A]).toBeGreaterThan(set.totalVotes[B]);
   });
 
+  it("does not bank the same turn twice when a stalled turn is re-run", async () => {
+    const db = createMockDb();
+    const electionId = new ObjectId();
+    const tallies = db.collection("electionVoteTallies");
+    tallies.findOne.mockResolvedValue({
+      electionId,
+      candidateParties: { a: "apc" },
+      totalVotes: { a: 100 },
+      totalVotesByUnit: {},
+      finalized: false,
+      lastAccruedTurn: 460,
+    });
+
+    // Turn 460 already banked: the re-run is a no-op.
+    await accumulateNGPresidentVoteTurn(db as unknown as Db, electionId, NOW, 460);
+    expect(tallies.updateOne).not.toHaveBeenCalled();
+
+    // Turn 461 accrues and stamps itself.
+    db.collection("states").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue(NG_ZONES.map((z) => ({ _id: z, population: 1_000_000 }))),
+    });
+    db.collection("statePartyOrg").find.mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
+    await accumulateNGPresidentVoteTurn(db as unknown as Db, electionId, NOW, 461);
+    expect(tallies.updateOne).toHaveBeenCalledTimes(1);
+    expect(tallies.updateOne.mock.calls[0][1].$set.lastAccruedTurn).toBe(461);
+  });
+
   it("is a no-op once the tally is finalized", async () => {
     const db = createMockDb();
     const electionId = new ObjectId();

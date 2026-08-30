@@ -22,6 +22,8 @@ export const POSITION_BY_ELECTION_TYPE: Readonly<Record<string, ElectionPosition
   snap_shugiin: "lowerChamber",
   npcDelegate: "lowerChamber",
   supremeSovietDeputy: "lowerChamber",
+  // Union-republic Supreme Soviets (UKR/BLR/BAL): same slot as the RU chambers.
+  supremeSoviet: "lowerChamber",
   volkskammerDeputy: "lowerChamber",
   // Eastern bloc Tier-1 unicameral assemblies (DD pattern).
   sejm: "lowerChamber",

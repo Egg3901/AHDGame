@@ -140,7 +140,10 @@ export function electionTitle(e: ElectionDetail): string {
     case "localCouncil":
       return `Local Council Race${e.totalSeats && e.totalSeats > 1 ? ` · ${e.totalSeats} seats` : ""}`;
     default:
-      return e.electionType;
+      // Every other chamber (soviets, eastern-bloc assemblies, the beta
+      // parliaments) reads its label from the country-aware map instead of
+      // leaking the raw type key ("supremeSoviet") into the page title.
+      return `${formatElectionTypeLabel(e.electionType, e.countryId as CountryId)} Race${seatsSuffix}`;
   }
 }
 
@@ -153,7 +156,7 @@ export function electionTitle(e: ElectionDetail): string {
 export function electionPageTitle(e: ElectionDetail, electionYear: number | null): string {
   const national = ["president", "commons", "uachtaran"].includes(e.electionType);
   if (national) return `${electionYear} ${electionTitle(e)}`;
-  return `${electionYear} ${US_STATE_NAMES[e.state] ?? e.state} ${electionTitle(e)}`;
+  return `${electionYear} ${US_STATE_NAMES[e.state] ?? e.regionName ?? e.state} ${electionTitle(e)}`;
 }
 
 export function scoreColor(score: number) {

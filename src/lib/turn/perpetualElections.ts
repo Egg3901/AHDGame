@@ -263,13 +263,18 @@ async function sendBatchedElectionAnnouncements(
 export async function advanceElectionTimers(
   now: Date,
   currentTurn: number,
-  resolvePrimaries: (now: Date) => Promise<void>
+  resolvePrimaries: (now: Date) => Promise<void>,
+  /** Optional harness restriction to specific elections; absent = all. */
+  onlyElectionIds?: ObjectId[]
 ): Promise<void> {
   const db = await getDb();
 
   const elections = await db
     .collection<Election>("elections")
-    .find({ status: { $in: ["active", "upcoming"] } })
+    .find({
+      ...(onlyElectionIds ? { _id: { $in: onlyElectionIds } } : {}),
+      status: { $in: ["active", "upcoming"] },
+    })
     .toArray();
 
   // `now` is the game-time of the turn being processed, so it doubles as
