@@ -60,4 +60,14 @@ describe("supply tail", () => {
     const planned = supplyState([c], T, plan).throughput;
     expect(planned).toBeLessThan(labelled);
   });
+
+  it("adds the logistics command throughput covering the front region", () => {
+    const ordinary = force(4, 2);
+    const supplied = {
+      ...ordinary,
+      logisticsSupplyByRegion: { afghan: 20 },
+    };
+
+    expect(supplyState([supplied], T).throughput).toBe(supplyState([ordinary], T).throughput + 20);
+  });
 });

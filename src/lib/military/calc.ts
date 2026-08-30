@@ -12,6 +12,9 @@ import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 
 type UnitsById = Record<string, MilitaryUnit>;
 
+/** Supply throughput delivered by a perfectly effective Logistics command. */
+export const LOGISTICS_COMMAND_THROUGHPUT = 20;
+
 /** Command-capacity load a unit consumes (basePower-derived, floored at 1). */
 export function unitLoad(u: MilitaryUnit): number {
   return Math.max(1, Math.round(u.basePower / 12));
@@ -33,6 +36,30 @@ export function effectiveness(c: MilitaryCommand, unitsById: UnitsById): number 
   if (!c.commanderIds.length) e -= CAPACITY.noCommanderPenalty;
   e -= overBy(c, unitsById) * CAPACITY.overCapacityFactor;
   return Math.max(CAPACITY.effFloor, Math.round(e));
+}
+
+/**
+ * Best Logistics-command coverage by region.
+ *
+ * A region is meant to have one command of each type. If stale data overlaps two
+ * Logistics commands, use the strongest instead of stacking them into free supply.
+ * Command effectiveness makes commanders and capacity matter to the advertised bonus.
+ */
+export function logisticsSupplyByRegion(
+  commands: readonly MilitaryCommand[],
+  unitsById: UnitsById
+): Record<string, number> {
+  const result: Record<string, number> = {};
+  for (const command of commands) {
+    if (command.type !== "LOGISTICS") continue;
+    const throughput = Math.round(
+      LOGISTICS_COMMAND_THROUGHPUT * (effectiveness(command, unitsById) / 100)
+    );
+    for (const region of command.regionIds) {
+      result[region] = Math.max(result[region] ?? 0, throughput);
+    }
+  }
+  return result;
 }
 
 /** Effectiveness with an explained positive/negative factor breakdown. */
