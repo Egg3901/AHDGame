@@ -35,6 +35,8 @@ const FAILURE_MESSAGE: Record<CommitPlayFailure, string> = {
   "target-locked": "That nation is locked to its bloc — influence cannot move it.",
   "unknown-target-economy":
     "That nation's economy is not on record, so the cost of influencing it cannot be priced.",
+  "below-min-points":
+    "That is too little to move this nation even a hundredth of a point. Raise the amount.",
   "insufficient-funds": "The organization's fund does not hold that much.",
 };
 

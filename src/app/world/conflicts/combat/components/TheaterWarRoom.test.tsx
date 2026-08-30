@@ -166,6 +166,8 @@ describe("TheaterWarRoom", () => {
     expect(url).toContain("theaterId=afghan");
     await waitFor(() => expect(screen.getByText("64%")).toBeTruthy());
     expect(screen.getByText("Weaker force")).toBeTruthy();
+    // The band alone hid a 30-point range; the level says where in it the front sits.
+    expect(screen.getByText("SUPPLIED (88%)")).toBeTruthy();
   });
 
   it("shows an unavailable state when the projection fails", async () => {

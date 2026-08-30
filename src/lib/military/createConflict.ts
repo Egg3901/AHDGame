@@ -14,7 +14,7 @@ import { getRegion } from "@/lib/military/regions";
 import { getConflictsCollection } from "@/lib/db/collections/conflicts";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
 import type { WarGoal } from "@/lib/military/warGoals";
-import { initialControl } from "./occupation";
+import { initialControl, hostSideOf } from "./occupation";
 import { OCCUPATION } from "./config";
 import { deriveSeaAccess } from "./seaAccess";
 import { hostEntitiesOf } from "./hostEntities";
@@ -232,6 +232,7 @@ export async function createConflict(
 
 /** A conflict as the battle sim's `Front` (fed into the battle context, not looked up). */
 export function conflictToFront(c: ConflictDoc): Front {
+  const hostSide = hostSideOf(c.hostCountry, c.sideA, c.sideB);
   return {
     id: c._id,
     name: c.name,
@@ -245,6 +246,10 @@ export function conflictToFront(c: ConflictDoc): Front {
     seaAccess: c.seaAccess ?? deriveSeaAccess(hostEntitiesOf(c), c.terrain),
     // How much can stand in the line here. Derived from the ground, like `terr`.
     capacity: capacityOfTerrain(c.terrain),
+    // Who is fighting at home. The rosters are CountryId[] and the host may be a world
+    // entity that is not one (a proxy war's host is never a belligerent), so widen the
+    // comparison rather than the roster, exactly as `initialControl` does.
+    ...(hostSide === undefined ? {} : { hostSide }),
     sev: c.severity,
     west: c.sideA.label,
     east: c.sideB.label,

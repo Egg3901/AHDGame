@@ -75,17 +75,33 @@ export function opposedBelligerents(
   return (a.includes(x) && b.includes(y)) || (b.includes(x) && a.includes(y));
 }
 
+/**
+ * Which side holds the host country: the side fighting on its own soil. Undefined when
+ * the host belongs to neither, which is every proxy war (its host is a world entity
+ * that is never a belligerent) and any ground neither side owns.
+ *
+ * Rosters are CountryId[]; the host may be a world entity that is not one. Widen the
+ * COMPARISON rather than the roster. Optional chaining because a trimmed or legacy
+ * document may carry no rosters at all.
+ */
+export function hostSideOf(
+  hostCountry: WorldEntityId,
+  sideA: Pick<ConflictSide, "countries"> | undefined,
+  sideB: Pick<ConflictSide, "countries"> | undefined
+): Side | undefined {
+  if ((sideA?.countries as string[] | undefined)?.includes(hostCountry)) return "A";
+  if ((sideB?.countries as string[] | undefined)?.includes(hostCountry)) return "B";
+  return undefined;
+}
+
 /** The `control` a conflict is born at — the host's own side holds all of its soil. */
 export function initialControl(
   hostCountry: WorldEntityId,
   sideA: ConflictSide,
   sideB: ConflictSide
 ): number {
-  // Rosters are CountryId[]; the host may be a world entity that is not one (a proxy
-  // war's host is never a belligerent). Widen the COMPARISON rather than the roster.
-  if ((sideA.countries as string[]).includes(hostCountry)) return 0;
-  if ((sideB.countries as string[]).includes(hostCountry)) return 100;
-  return 50;
+  const host = hostSideOf(hostCountry, sideA, sideB);
+  return host === "A" ? 0 : host === "B" ? 100 : 50;
 }
 
 /** A side's share (0–1) of the host country's territory. */

@@ -8,7 +8,7 @@ import { loadGeneralsById } from "@/lib/db/collections/characterGenerals";
 import { natMods } from "@/lib/military/doctrineTree";
 import { countryScale } from "@/lib/military/force";
 import { getMilitaryCommands } from "@/lib/db/collections/militaryCommands";
-import { logisticsSupplyByRegion } from "@/lib/military/calc";
+import { logisticsCoverageByRegion } from "@/lib/military/calc";
 
 /**
  * Assemble a nation's battle side from live data. Shared by the turn resolver and the
@@ -49,7 +49,7 @@ export async function buildBattleSide(
     country,
     fronts,
     conflictSupply,
-    logisticsSupplyByRegion: logisticsSupplyByRegion(commands, unitsById),
+    logisticsCoverageByRegion: logisticsCoverageByRegion(commands, unitsById),
   };
 }
 
