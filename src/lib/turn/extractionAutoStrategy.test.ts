@@ -7,6 +7,7 @@ import {
   EXTRACTION_AUTO_STRATEGY_CADENCE_TURNS,
   EXTRACTION_AUTO_STRATEGY_MAX_PER_RUN,
   EXTRACTION_AUTO_STRATEGY_PLACEMENT_MAX_PER_RUN,
+  extractionPlacementCohortViability,
   processExtractionAutoStrategy,
 } from "./extractionAutoStrategy";
 import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
@@ -17,7 +18,14 @@ vi.mock("@/lib/admin/spawnNppCorporation", () => ({
   // Placement is gated on the authored capital-state list so market corps are
   // never founded inside a planned economy. US/BR are market countries here;
   // DD stands in for the planned economies, which map to "" upstream.
-  NPP_CAPITAL_STATES: { US: "DC", BR: "SUDESTE", CN: "BEI", DD: "", RU: "" },
+  NPP_CAPITAL_STATES: {
+    US: "DC",
+    BR: "SUDESTE",
+    CN: "BEI",
+    ES: "ES_MAD",
+    DD: "",
+    RU: "",
+  },
 }));
 
 function cursor<T>(rows: T[]) {
@@ -31,6 +39,31 @@ const NPC_USER_ID = new ObjectId("000000000000000000000000");
 function npcCorp(_id: ObjectId, countryId = "US") {
   return { _id, countryId, ceoType: "npp", userId: NPC_USER_ID };
 }
+
+describe("extractionPlacementCohortViability", () => {
+  it("blocks a mature cohort when most extraction corporations lose money", () => {
+    expect(
+      extractionPlacementCohortViability([
+        { earningsHistory: [100] },
+        { earningsHistory: [-50] },
+        { earningsHistory: [-100] },
+        { earningsHistory: [-200] },
+      ])
+    ).toEqual({
+      viable: false,
+      observations: 4,
+      profitableShare: 0.25,
+      medianIncome: -75,
+    });
+  });
+
+  it("does not block a country before enough realized evidence exists", () => {
+    expect(
+      extractionPlacementCohortViability([{ earningsHistory: [-100] }, { earningsHistory: [-50] }])
+        .viable
+    ).toBe(true);
+  });
+});
 
 describe("processExtractionAutoStrategy", () => {
   let db: MockDb;
@@ -235,6 +268,39 @@ describe("processExtractionAutoStrategy", () => {
     // DD seeds its mining through the budget seeders as SOEs; a market NPP corp
     // has no business being founded there.
     expect(res.placed).toBe(0);
+    expect(spawnNppCorporation).not.toHaveBeenCalled();
+  });
+
+  it("does not add another mine where the mature extraction cohort loses money", async () => {
+    db.collectionMocks.commodityPrices.find.mockReturnValue(
+      cursor([
+        {
+          commodity: "iron",
+          globalSupply: 200,
+          globalDemand: 1000,
+          stateSupply: { ES_MAD: 0 },
+        },
+      ])
+    );
+    db.collectionMocks.stateResourceCapacity.find.mockReturnValue(
+      cursor([{ stateId: "ES_MAD", countryId: "ES", resources: { iron: 10_000 } }])
+    );
+    db.collectionMocks.corporations.find.mockReturnValue(
+      cursor([
+        { ...npcCorp(new ObjectId(), "ES"), type: "extraction", earningsHistory: [100] },
+        { ...npcCorp(new ObjectId(), "ES"), type: "extraction", earningsHistory: [-50] },
+        { ...npcCorp(new ObjectId(), "ES"), type: "extraction", earningsHistory: [-100] },
+        { ...npcCorp(new ObjectId(), "ES"), type: "extraction", earningsHistory: [-200] },
+      ])
+    );
+    db.collectionMocks.corporateSectors.find
+      .mockReturnValueOnce(cursor([]))
+      .mockReturnValueOnce(cursor([]));
+
+    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
+
+    expect(res.placed).toBe(0);
+    expect(res.placementBlockedCountries).toEqual(["ES"]);
     expect(spawnNppCorporation).not.toHaveBeenCalled();
   });
 
