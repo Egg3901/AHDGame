@@ -11,6 +11,7 @@ import {
 } from "@/lib/turn/election/seatAllocation";
 import type { PartyGroup } from "./candidateEnrichment";
 import type { PollingData } from "./electionResponseTypes";
+import { MULTI_SEAT_TYPES } from "@/lib/utils/electionLabels";
 
 // ---------------------------------------------------------------------------
 // Hamilton (Largest-Remainder) seat estimate helper
@@ -35,22 +36,15 @@ export function computeSeatEstimates(
   // Omitted/undefined → proportional (current behavior).
   majoritarianBonus?: MajoritarianBonusConfig
 ): Record<string, number> | null {
-  if (
-    !totalSeats ||
-    !tally ||
-    ![
-      "house",
-      "stateSenate",
-      "commons",
-      "snap_commons",
-      "regionalCouncil",
-      "shugiin",
-      "snap_shugiin",
-      "sangiin",
-      "npcDelegate",
-      "peoplesCongress",
-    ].includes(electionType)
-  ) {
+  // Same gate as the engine (allocateSeats + the per-turn estimate in
+  // tallyManagement): every MULTI_SEAT_TYPES race, plus a "senate" race that
+  // carries more than one seat (Nigerian zones). A private copy of the list
+  // used to live here and had drifted to ten US/UK/JP/CN types, so the detail
+  // page projected 0 seats for every Bundestag, Dail, Landtag, soviet and
+  // eastern-bloc chamber the engine had already apportioned.
+  const multiSeat =
+    MULTI_SEAT_TYPES.has(electionType) || (electionType === "senate" && (totalSeats ?? 0) > 1);
+  if (!totalSeats || !tally || !multiSeat) {
     return null;
   }
 

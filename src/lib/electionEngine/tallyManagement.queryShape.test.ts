@@ -37,7 +37,18 @@ vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("./candidateEnrichment", () => ({ fetchEnrichedCandidates: vi.fn() }));
 vi.mock("./voteDistribution", () => ({ distributeVotesByGroupLevelAllocation: vi.fn() }));
 vi.mock("./voteDistributionSwingFlow", () => ({ distributeVotesBySwingFlow: vi.fn() }));
-vi.mock("./resolvedTurnout", () => ({ resolveTurnout: vi.fn(), buildLiveTurnouts: vi.fn() }));
+vi.mock("./resolvedTurnout", () => ({
+  resolveTurnout: vi.fn(),
+  buildLiveTurnouts: vi.fn(),
+  scalePoolToRegistered: (pool: number) => pool,
+  // Real behavior, kept live in the mock: several tests pin the electorate
+  // ceiling through the distributor's slice argument.
+  capTurnSliceToElectorate: (slice: number, totalPool: number, electorate: number) =>
+    totalPool > electorate && electorate > 0 ? slice * (electorate / totalPool) : slice,
+  // Real behavior too: the cumulative ceiling is pinned through the slice.
+  capTurnSliceToRemainingElectorate: (slice: number, alreadyCast: number, electorate: number) =>
+    electorate > 0 ? Math.max(0, Math.min(slice, electorate - alreadyCast)) : slice,
+}));
 vi.mock("@/lib/utils/getStateApprovalForElection", () => ({
   getStateApprovalForElection: vi.fn(),
 }));
