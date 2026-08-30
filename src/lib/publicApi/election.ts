@@ -56,6 +56,32 @@ function hasResolvedResult(status: Election["status"]): boolean {
   return status === "completed" || status === "resolved";
 }
 
+/**
+ * Per-candidate vote breakdown for one race, drawn from the tally the list query
+ * already loaded. Surfaced only when the caller opts in with `results=true`, so a
+ * bot can pull detailed seat-by-seat numbers for a whole country in ONE call
+ * rather than a `/elections/[id]` request per race (ticket #1229). The heavy
+ * time-series (turn-by-turn snapshots, primary snapshots) is deliberately left
+ * behind `/elections/[id]` — this is the standings, not the full history.
+ *
+ * Shares are computed off the total on the row, so they sum to ~100 even before
+ * the result is finalised; `finalized` says whether the count is done.
+ */
+function toElectionResults(tally: ElectionVoteTally) {
+  const totalVotes = Object.values(tally.totalVotes ?? {}).reduce((a, b) => a + b, 0);
+  const candidates = Object.entries(tally.totalVotes ?? {})
+    .map(([candidateId, votes]) => ({
+      characterId: candidateId,
+      characterName: tally.candidateNames?.[candidateId] ?? null,
+      party: tally.candidateParties?.[candidateId] ?? null,
+      votes,
+      sharePct: totalVotes > 0 ? Math.round((votes / totalVotes) * 10000) / 100 : 0,
+    }))
+    .sort((a, b) => b.votes - a.votes);
+
+  return { totalVotes, finalized: tally.finalized ?? false, candidates };
+}
+
 function toIso(value: Date | string | null | undefined): string | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
@@ -136,8 +162,11 @@ function resolveElectionPhase(election: ElectionPhaseFields, gameTime: GameTimeC
   };
 }
 
-export async function queryElectionList(db: Db, params: { country: string; state?: string }) {
-  const { country, state } = params;
+export async function queryElectionList(
+  db: Db,
+  params: { country: string; state?: string; results?: boolean }
+) {
+  const { country, state, results } = params;
   const query: Record<string, unknown> = { countryId: country };
   if (state) query.state = state;
 
@@ -236,6 +265,10 @@ export async function queryElectionList(db: Db, params: { country: string; state
       candidates,
       formerCandidates,
       ...(finalVotes ? { finalVotes } : {}),
+      // Opt-in: detailed per-candidate standings from the tally already loaded
+      // above, so `?results=true` costs no extra query. `null` when a race has
+      // no tally yet, to stay distinguishable from a race with zero votes cast.
+      ...(results ? { results: tally ? toElectionResults(tally) : null } : {}),
     };
   });
 
