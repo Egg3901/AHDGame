@@ -3,6 +3,7 @@
 import type { MilitaryCommand, CommanderRef } from "@/lib/military/types";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import { COMMAND_TYPES } from "@/lib/military/config";
+import { PostureEffects, TypeBonuses } from "@/components/CommandEffects";
 import { getRegion } from "@/lib/military/regions";
 import {
   forceLoad,
@@ -102,6 +103,7 @@ export function CommandStructurePanel({
         )}
       </div>
       {type && <p className="mt-1 text-[13px] font-semibold text-foreground">{type.label}</p>}
+      <TypeBonuses type={command.type} className="mt-1" />
       {command.role && (
         <p className="mt-2 text-[12px] italic leading-relaxed text-muted">{command.role}</p>
       )}
@@ -116,6 +118,9 @@ export function CommandStructurePanel({
           </div>
         ))}
       </div>
+      {/* What the posture the defence seat chose means for this command. The CG
+          cannot change it, but they should not have to ask what it costs them. */}
+      <PostureEffects posture={command.posture} className="mt-2" />
 
       {over && (
         <div className="mt-3 rounded-lg border border-warning/40 bg-warning/10 p-2.5">

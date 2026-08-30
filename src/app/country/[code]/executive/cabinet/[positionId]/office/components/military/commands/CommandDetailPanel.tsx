@@ -24,6 +24,7 @@ import {
   unitLoad,
 } from "@/lib/military/calc";
 import { SectionCard, Badge, Meter } from "../../dossier";
+import { PostureEffects, TypeBonuses } from "@/components/CommandEffects";
 
 const INTENT_TEXT = { success: "text-success", warn: "text-warning", error: "text-error" } as const;
 const INTENT_METER = {
@@ -108,7 +109,8 @@ export function CommandDetailPanel({
       sub={COMMAND_TYPES[c.type].label}
       right={<Badge tone="gov">{COMMAND_TYPES[c.type].short}</Badge>}
     >
-      <p className="mb-3 text-[12px] italic leading-relaxed text-muted">{c.role}</p>
+      <p className="mb-2 text-[12px] italic leading-relaxed text-muted">{c.role}</p>
+      <TypeBonuses type={c.type} className="mb-3" />
 
       {/* overview */}
       <div className="mb-4 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
@@ -122,10 +124,11 @@ export function CommandDetailPanel({
         ))}
       </div>
 
-      {/* posture */}
-      {canWrite && (
-        <div className="mb-4">
-          <Label>Posture</Label>
+      {/* posture: the trade-offs read for everyone; only a defense seat can change it */}
+      <div className="mb-4">
+        {/* A reader has no select to name the posture, so the label does. */}
+        <Label>{canWrite ? "Posture" : `Posture · ${c.posture}`}</Label>
+        {canWrite && (
           <select
             aria-label="Command posture"
             value={c.posture}
@@ -136,7 +139,7 @@ export function CommandDetailPanel({
                 posture: e.target.value as CommandPosture,
               })
             }
-            className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-[13px] text-foreground"
+            className="mb-1.5 w-full rounded-lg border border-card-border bg-card px-3 py-2 text-[13px] text-foreground"
           >
             {POSTURES.map((p) => (
               <option key={p} value={p}>
@@ -144,8 +147,9 @@ export function CommandDetailPanel({
               </option>
             ))}
           </select>
-        </div>
-      )}
+        )}
+        <PostureEffects posture={c.posture} />
+      </div>
 
       {/* commanders */}
       <div className="mb-4">

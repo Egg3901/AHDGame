@@ -417,7 +417,7 @@ export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
   );
 
   // orgRegLedger — region-page registration sparkline (getStateRegLedger.ts):
-  // find({ countryId, stateId, partyId, metric }).sort({ turn: -1 }).limit(24).
+  // find({ countryId, stateId, partyId, metric }).sort({ turn: -1 }).limit(24 × rows/turn).
   // The collection grows every turn (regDriftDecay insertMany + build-org
   // inserts); with only the _id index this was a full collection scan.
   await ensureIndex(

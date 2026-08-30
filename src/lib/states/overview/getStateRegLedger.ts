@@ -11,6 +11,13 @@ export interface StateRegLedgerResult {
 const NEUTRAL_COLOR = "#6b6b7a";
 /** Default lookback window (turns) for the movement sparkline. */
 export const REG_LEDGER_LOOKBACK_TURNS = 24;
+/**
+ * Upper bound on `reg` ledger rows one party can receive in a single turn:
+ * renormalize + drift + decay from `regDriftDecay`, plus a registration-drive
+ * row from `demographicTurnoutTurn`. Used to size the over-fetch so the
+ * per-turn collapse still covers the full lookback window.
+ */
+const MAX_REG_ROWS_PER_TURN = 4;
 
 /**
  * Read the per-state Registration headline + recent movement. First reader of
@@ -55,15 +62,33 @@ export async function getStateRegLedger(
 
   // Recent reg movement for the headline party (descending turn from the
   // index, then re-sorted ascending for the sparkline).
+  //
+  // A party can carry several `reg` rows in one turn: renormalize, drift
+  // (including a negative drift row when its surplus is sourced by a climbing
+  // rival), and decay are each written separately, in that order, within one
+  // batch insert. The sparkline wants one point per turn holding the running
+  // total after the LAST of those writes, so over-fetch by the maximum rows a
+  // turn can carry, keep the greatest _id per turn (ObjectIds in a batch are
+  // generated in array order), and only then cut to the lookback window. The
+  // sort stays on `turn` alone so it is served by `reg_ledger_lookup`; the
+  // within-turn ordering is resolved here rather than by a blocking sort.
   const ledgerRows = await db
     .collection<OrgRegLedger>("orgRegLedger")
     .find({ countryId, stateId, partyId: top.partyId, metric: "reg" })
     .sort({ turn: -1 })
-    .limit(lookback)
+    .limit(lookback * MAX_REG_ROWS_PER_TURN)
     .toArray();
 
-  const movement = ledgerRows
-    .map((l) => ({ turn: l.turn, regPct: l.value }))
+  const lastByTurn = new Map<number, { id: string; value: number }>();
+  for (const l of ledgerRows) {
+    const id = String(l._id);
+    const cur = lastByTurn.get(l.turn);
+    if (!cur || id > cur.id) lastByTurn.set(l.turn, { id, value: l.value });
+  }
+  const movement = Array.from(lastByTurn.entries())
+    .sort((a, b) => b[0] - a[0])
+    .slice(0, lookback)
+    .map(([turn, { value }]) => ({ turn, regPct: value }))
     .sort((a, b) => a.turn - b.turn);
 
   return { seeded: true, headline, movement };
