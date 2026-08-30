@@ -226,6 +226,27 @@ describe("NationDossier costs and the display-currency preference", () => {
     expect(screen.getByText(/the nation moves when the turn processes/i)).toBeTruthy();
   });
 
+  it("blocks and guides a spend too small to move the nation at all (ticket #1213)", () => {
+    render(
+      <NationDossier
+        view={{ ...VIEW, fundBalanceLocal: 90_000_000 } as OrgInfluenceView}
+        target={TARGET}
+        orgId="NATO"
+        viewerCountryId="US"
+        onCommitted={() => {}}
+      />
+    );
+    // The reporter's exact move: a handful of currency units against a nation
+    // that costs 76m a point. It buys 0.00 points, so the commit is refused
+    // client-side and the player is told the floor (a point is 76m, a hundredth
+    // of it is 760,000).
+    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "10" } });
+    expect(screen.getByText(/too little to move Yugoslavia/i)).toBeTruthy();
+    expect(screen.getByText(/spend at least/i).textContent).toContain("0.01");
+    const commit = screen.getByRole("button", { name: /commit play/i }) as HTMLButtonElement;
+    expect(commit.disabled).toBe(true);
+  });
+
   it("warns when the amount is past the per-turn ceiling", () => {
     render(
       <NationDossier
