@@ -9,7 +9,7 @@ import { handleRouteError } from "@/lib/api/errors";
  * discover endpoints programmatically. Kept in sync by review: any PR that
  * adds or changes a route under /api/public/v1 must update this table.
  */
-const ENDPOINTS = [
+export const ENDPOINTS = [
   {
     method: "GET",
     path: "/api/public/v1/game",
@@ -92,6 +92,18 @@ const ENDPOINTS = [
     method: "GET",
     path: "/api/public/v1/country/[code]/economy",
     description: "Economic indicators for a country.",
+    params: [{ name: "code", required: true, inPath: true }],
+  },
+  {
+    method: "GET",
+    path: "/api/public/v1/country/[code]/budget",
+    description: "National revenue, spending, debt, tax rates, and fiscal indicators.",
+    params: [{ name: "code", required: true, inPath: true }],
+  },
+  {
+    method: "GET",
+    path: "/api/public/v1/country/[code]/regions",
+    description: "Regional population, GDP, representation, political lean, and top sectors.",
     params: [{ name: "code", required: true, inPath: true }],
   },
   {
@@ -203,6 +215,30 @@ const ENDPOINTS = [
   },
   {
     method: "GET",
+    path: "/api/public/v1/commodity/[key]",
+    description: "Commodity detail with optional country pricing.",
+    params: [
+      { name: "key", required: true, inPath: true },
+      { name: "country", required: false },
+    ],
+  },
+  {
+    method: "GET",
+    path: "/api/public/v1/forex",
+    description: "Current rates, targets, volumes, regimes, and intervention bands.",
+    params: [],
+  },
+  {
+    method: "GET",
+    path: "/api/public/v1/forex/[currency]",
+    description: "Currency detail with bounded rate history.",
+    params: [
+      { name: "currency", required: true, inPath: true },
+      { name: "history", required: false },
+    ],
+  },
+  {
+    method: "GET",
     path: "/api/public/v1/funds",
     description: "Index funds; ?slug=SLUG for detail with top holdings.",
     params: [
@@ -246,6 +282,28 @@ const ENDPOINTS = [
       { name: "country", required: false },
       { name: "limit", required: false },
     ],
+  },
+  {
+    method: "GET",
+    path: "/api/public/v1/referendums",
+    description: "Referendum campaigns, polling, party positions, and resolved results.",
+    params: [
+      { name: "country", required: false },
+      { name: "status", required: false },
+      { name: "limit", required: false },
+    ],
+  },
+  {
+    method: "GET",
+    path: "/api/public/v1/referendums/[id]",
+    description: "Referendum detail by ObjectId.",
+    params: [{ name: "id", required: true, inPath: true }],
+  },
+  {
+    method: "GET",
+    path: "/api/public/v1/meta",
+    description: "Machine-readable catalog of the public v1 interface.",
+    params: [],
   },
 ] as const;
 
