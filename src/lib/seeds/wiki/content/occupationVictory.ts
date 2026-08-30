@@ -42,14 +42,14 @@ How far depends on how decisively it was won:
 - **A decisive victory takes the full step.**
 - **Narrower wins scale down** in proportion to the margin. A pyrrhic victory barely moves the line at all.
 - **A loser who broke off in order yields less ground** than one broken in place: an orderly retreat is genuinely better than a collapse.
-- **An advance slows once the winner is deep in enemy territory**, outrunning its logistics. The last stretch is the hardest.
+- **The step does not shrink with depth.** A decisive win deep in enemy territory takes the same ground as one at the border. What makes the last stretch hard is supply, covered below, not a smaller step.
 - **Defensive wins push the line back** by exactly the same rule. There is nothing special about attacking; a successful defence is territorial progress.
 
 The territorial result and the verdict come from the same number, so they can never disagree: a Decisive Victory always moves more ground than a Pyrrhic one.
 
 ### How long is a war?
 
-Deliberately long. A full campaign from one pole to the other takes on the order of **thirty to forty won battles**.
+Deliberately long. A full campaign from one pole to the other needs on the order of **twenty decisive wins that go unanswered**. Narrow wins and orderly retreats take smaller slices, and every defensive win the enemy scores pushes the line back by the same rule, so a contested front runs far longer than twenty battles.
 
 Combined with attrition, that means wars are not decided in an afternoon. You will win a battle, take a slice, discover half your divisions are at 60% strength, and have to pause and rebuild before you can push again. **The grind is the design**: see [Manpower & Conscription](/wiki/manpower-conscription) for why the pauses happen.
 
@@ -108,7 +108,7 @@ The war goal recorded at declaration is what peace terms negotiate *against*. Re
 
 Territory is not the only exit. A war also ends when **one side's roster empties**: every country on it has made a separate peace and left. The last country to leave hands victory to the other side.
 
-That is often the realistic outcome. Thirty to forty won battles is a very long campaign; buying your way out is frequently cheaper than fighting to a pole. See [Peace, Indemnities & Truces](/wiki/peace-and-truces).
+That is often the realistic outcome. Twenty unanswered decisive wins is a very long campaign; buying your way out is frequently cheaper than fighting to a pole. See [Peace, Indemnities & Truces](/wiki/peace-and-truces).
 
 ## Practical guidance
 

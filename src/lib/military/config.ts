@@ -324,13 +324,20 @@ export const OCCUPATION = {
   /** Ground multiplier when the loser broke off instead of being broken in place. */
   retreatYield: 0.7,
   /**
-   * Depth threshold, read two ways. For the advance drag it is the winner's ABSOLUTE
-   * share — the last quarter of the track, the enemy heartland. For the
-   * winding-down status it is progress from the front's STARTING line, since an
+   * Progress from the front's STARTING line at which a war reads as winding down
+   * (`battleResolution.ts`). `peaceOffer.ts` keeps its own copy of the same value
+   * as the ground a settlement may demand. Measured from the start, since an
    * interstate war opens with the defender already holding all of its own soil.
+   *
+   * This used to also gate a `deepPushMult` that halved every advance once the
+   * winner's ABSOLUTE share crossed it. Because it keyed on the winner, past that
+   * mark the attacker's wins were halved and the defender's were not, which on a
+   * near-even front is a wall rather than a slowdown (see
+   * `scripts/sim/reports/control-drift-deep-push.md`). The supply penalties in
+   * `derivedSupply` already slow a deep push, so the drag was removed from
+   * `occupationShift`.
    */
   deepPushDepth: 0.75,
-  deepPushMult: 0.5,
   /** Supply lost at full compression / full overextension, off the side's baseline. */
   compressionPenalty: 40,
   overextensionPenalty: 15,
