@@ -109,7 +109,7 @@ export const WIKI_LAST_UPDATED: Record<string, string> = {
   "manpower-conscription": "2026-08-11",
   "market-safeguards": "2026-08-20",
   "market-system-guide": "2026-08-21",
-  "military-commands": "2026-08-11",
+  "military-commands": "2026-08-29",
   "military-units": "2026-08-20",
   "multi-country-play": "2026-08-21",
   "national-budget": "2026-08-22",
