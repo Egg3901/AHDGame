@@ -146,6 +146,15 @@ Note the FTA override: even though a 20% tariff is on the books, the FTA collaps
 - **Embargoes are blunt and temporary.** They zero trade but expire after 96 turns and trigger a 168-turn cooldown. Use them for targeted pressure, not permanent isolation.
 - **IPF convergence is exact at 40 iterations.** You can trust that the trade matrix is self-consistent: there are no "approximate" affinity values in the final result.
 
+## Public API
+
+Trade restrictions are available to bots and dashboards through the public v1 API:
+
+- \`GET /api/public/v1/trade/tariffs\` lists active tariff layers and supports imposing-country, target-country, scope, and limit filters.
+- \`GET /api/public/v1/trade/embargoes\` combines active ministerial, legislative, and organization sanctions. Add \`includePending=true\` to include embargo bills still moving through a legislature.
+
+Both routes include their public bill or organization-resolution provenance. They do not expose the character IDs used internally to enact a restriction. See the [public API documentation](https://docs.lakesidegames.net/api/public-v1.html) for parameters and response fields.
+
 ## Related systems
 
 - **[International Organizations](/wiki/international-organizations)**: where FTAs and bloc memberships are established

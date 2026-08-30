@@ -108,6 +108,15 @@ export const ENDPOINTS = [
   },
   {
     method: "GET",
+    path: "/api/public/v1/country/[code]/metrics",
+    description: "National and regional quality-of-life metrics with trends and extremes.",
+    params: [
+      { name: "code", required: true, inPath: true },
+      { name: "category", required: false },
+    ],
+  },
+  {
+    method: "GET",
     path: "/api/public/v1/country/[code]/history",
     description: "Country event log (leader changes, bills, referendums).",
     params: [
@@ -239,6 +248,32 @@ export const ENDPOINTS = [
   },
   {
     method: "GET",
+    path: "/api/public/v1/trade/tariffs",
+    description: "Active tariff layers with bill and target provenance.",
+    params: [
+      { name: "country", required: false },
+      { name: "targetCountry", required: false },
+      { name: "scope", required: false },
+      { name: "limit", required: false },
+    ],
+  },
+  {
+    method: "GET",
+    path: "/api/public/v1/trade/embargoes",
+    description: "Active ministerial, legislative, and organization trade restrictions.",
+    params: [
+      { name: "country", required: false },
+      { name: "includePending", required: false },
+    ],
+  },
+  {
+    method: "GET",
+    path: "/api/public/v1/sovereigns",
+    description: "Sovereign debt demand, sustainability, ratings, and crisis state.",
+    params: [],
+  },
+  {
+    method: "GET",
     path: "/api/public/v1/funds",
     description: "Index funds; ?slug=SLUG for detail with top holdings.",
     params: [
@@ -297,6 +332,18 @@ export const ENDPOINTS = [
     method: "GET",
     path: "/api/public/v1/referendums/[id]",
     description: "Referendum detail by ObjectId.",
+    params: [{ name: "id", required: true, inPath: true }],
+  },
+  {
+    method: "GET",
+    path: "/api/public/v1/organizations",
+    description: "International organizations, members, leadership, and activity counts.",
+    params: [],
+  },
+  {
+    method: "GET",
+    path: "/api/public/v1/organizations/[id]",
+    description: "Organization charter, proposals, resolutions, votes, and elections.",
     params: [{ name: "id", required: true, inPath: true }],
   },
   {
