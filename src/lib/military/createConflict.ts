@@ -14,7 +14,7 @@ import { getRegion } from "@/lib/military/regions";
 import { getConflictsCollection } from "@/lib/db/collections/conflicts";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
 import type { WarGoal } from "@/lib/military/warGoals";
-import { initialControl } from "./occupation";
+import { initialControl, hostSideOf } from "./occupation";
 import { OCCUPATION } from "./config";
 import { deriveSeaAccess } from "./seaAccess";
 import { hostEntitiesOf } from "./hostEntities";
@@ -232,7 +232,7 @@ export async function createConflict(
 
 /** A conflict as the battle sim's `Front` (fed into the battle context, not looked up). */
 export function conflictToFront(c: ConflictDoc): Front {
-  const hostSide = hostSideOf(c);
+  const hostSide = hostSideOf(c.hostCountry, c.sideA, c.sideB);
   return {
     id: c._id,
     name: c.name,
@@ -256,13 +256,4 @@ export function conflictToFront(c: ConflictDoc): Front {
     enemyBase: c.baseStrength,
     enemyMix: c.enemyMix,
   };
-}
-
-/** Which side holds the host country, or undefined when the host belongs to neither. */
-function hostSideOf(c: ConflictDoc): "A" | "B" | undefined {
-  // Optional chaining because a trimmed or legacy document may carry no rosters; a
-  // front with no host side is the same as one fought on neutral ground.
-  if ((c.sideA?.countries as string[] | undefined)?.includes(c.hostCountry)) return "A";
-  if ((c.sideB?.countries as string[] | undefined)?.includes(c.hostCountry)) return "B";
-  return undefined;
 }

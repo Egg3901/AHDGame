@@ -125,6 +125,16 @@ describe("logistics command supply", () => {
 
     expect(coverage.eeu).toBe(1);
   });
+
+  it("never reports more than full coverage, whatever the command's base", () => {
+    // A command base arrives from the commands route unbounded; coverage now multiplies the
+    // force's own demand, so an unclamped 500 would be five times the intended share.
+    const coverage = logisticsCoverageByRegion(
+      [cmd({ type: "LOGISTICS", regionIds: ["eeu"], base: 500 })],
+      UNITS
+    );
+    expect(coverage.eeu).toBe(1);
+  });
 });
 
 // The one place the same-type rule is decided. It had been written out by hand in

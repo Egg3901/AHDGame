@@ -386,7 +386,9 @@ export const FRONT_SUPPLY = {
   /**
    * Throughput multiplier for the side fighting on its own soil (the side holding the
    * conflict's host country, which in an interstate war is the nation declared on).
-   * Interior lines, home depots and rail. Measured at x1.10 (indistinguishable from
+   * Interior lines, home depots and rail. In a civil or independence war that is the
+   * government's side, which owns the depots; a proxy war's host is a world entity on
+   * neither roster, so neither faction gets it. Measured at x1.10 (indistinguishable from
    * none), x1.25 and x1.50 (lets a defender stack a front without limit and hands +50%
    * to a side already holding 85% of the map); x1.25 keeps the stacking cost real.
    */

@@ -54,7 +54,10 @@ export function logisticsCoverageByRegion(
   const result: Record<string, number> = {};
   for (const command of commands) {
     if (command.type !== "LOGISTICS") continue;
-    const coverage = effectiveness(command, unitsById) / 100;
+    // Clamped: `base` arrives from the commands route unbounded, and now that the
+    // figure multiplies the force's own demand, a base of 500 would deliver five times
+    // the intended share rather than a slightly larger flat number.
+    const coverage = Math.max(0, Math.min(1, effectiveness(command, unitsById) / 100));
     for (const region of command.regionIds) {
       result[region] = Math.max(result[region] ?? 0, coverage);
     }

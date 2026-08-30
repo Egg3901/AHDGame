@@ -34,7 +34,7 @@ The war room shows you, for your chosen target:
 | **Projected strength** | Your own side's committed weight at this front. |
 | **Odds ("You attack")** | Your chance of winning if *you* launch the offensive. |
 | **Odds ("They attack")** | *Their* chance of winning if they launch it instead. |
-| **Supply** | SUPPLIED · STRAINED · SHORTAGE · CUT OFF |
+| **Supply** | SUPPLIED · STRAINED · SHORTAGE · CUT OFF, with the level in brackets (what the front can haul as a share of what your formations there draw) |
 | **Enemy** | A coarse band, never a number. |
 | **Forces** | How many nations are pooled on each side. |
 

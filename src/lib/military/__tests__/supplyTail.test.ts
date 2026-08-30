@@ -114,15 +114,22 @@ describe("supply demand and throughput scaling", () => {
     const allInLine = supplyState([c], T, roomy).demand;
     const mostlyDepth = supplyState([c], T, tight).demand;
     const per = allInLine / 6;
-    expect(mostlyDepth).toBeCloseTo(per + 5 * per * FRONT_SUPPLY.depthDemand, 0);
+    // Each figure is rounded once, so allow a point.
+    expect(Math.abs(mostlyDepth - (per + 5 * per * FRONT_SUPPLY.depthDemand))).toBeLessThanOrEqual(
+      1
+    );
   });
 
-  it("reads depth from the plan, not the player's label, for the discount too", () => {
-    const c = force(0, 6); // every formation LABELLED rear
-    const roomy = planEngagement([c], T, 1_000_000); // ...but all six in contact
-    const labelledOnly = supplyState([c], T).demand;
-    const planned = supplyState([c], T, roomy).demand;
-    expect(planned).toBeGreaterThan(labelledOnly);
+  it("never reads the discount off the player's label", () => {
+    // Every formation LABELLED rear. Without a plan the label is all there is, and a
+    // discount bought by typing "rear" is the exploit the plan closed for the tail
+    // bonus; so no plan, no discount.
+    const c = force(0, 6);
+    const honest = force(6, 0);
+    expect(supplyState([c], T).demand).toBe(supplyState([honest], T).demand);
+    // With a plan that has all six in contact, the label is overruled the same way.
+    const roomy = planEngagement([c], T, 1_000_000);
+    expect(supplyState([c], T, roomy).demand).toBe(supplyState([honest], T).demand);
   });
 
   it("scales a Logistics command with the demand it covers", () => {
@@ -136,10 +143,10 @@ describe("supply demand and throughput scaling", () => {
       supplyState([cover(small)], T).throughput - supplyState([small], T).throughput;
     const bigGain = supplyState([cover(big)], T).throughput - supplyState([big], T).throughput;
     expect(bigGain).toBeGreaterThan(smallGain);
-    expect(smallGain).toBeCloseTo(
-      supplyState([small], T).demand * FRONT_SUPPLY.logisticsCommandShare,
-      0
-    );
+    // Throughput and demand are each rounded once, so allow a point.
+    expect(
+      Math.abs(smallGain - supplyState([small], T).demand * FRONT_SUPPLY.logisticsCommandShare)
+    ).toBeLessThanOrEqual(1);
   });
 
   it("scales the command's contribution by its effectiveness", () => {
@@ -155,10 +162,9 @@ describe("supply demand and throughput scaling", () => {
     const home = { ...c, fronts: { ...FRONTS_MAP, [T]: front(T, { hostSide: "A" }) } };
     const away = { ...c, fronts: { ...FRONTS_MAP, [T]: front(T, { hostSide: "B" }) } };
     const neutral = supplyState([c], T).throughput;
-    expect(supplyState([home], T).throughput).toBeCloseTo(
-      neutral * FRONT_SUPPLY.hostSideThroughput,
-      0
-    );
+    expect(
+      Math.abs(supplyState([home], T).throughput - neutral * FRONT_SUPPLY.hostSideThroughput)
+    ).toBeLessThanOrEqual(1.5);
     expect(supplyState([away], T).throughput).toBe(neutral);
   });
 

@@ -402,7 +402,9 @@ export function supplyState(
       // line. Both shares are FRONT_SUPPLY, with the measurements that set them.
       let draw = effUpkeep(u, ctx.natMods, generalMods(generalOf(ctx, u)), ctx.countryScale) / 12;
       if (u.domain !== "ground" && u.domain !== "marine") draw *= FRONT_SUPPLY.offFrontDemand;
-      if (inDepth) draw *= FRONT_SUPPLY.depthDemand;
+      // Plan-only. Without a plan `inDepth` is the player's own label, and a discount
+      // read off the label is exactly the exploit the plan closed for the tail bonus.
+      if (plan && inDepth) draw *= FRONT_SUPPLY.depthDemand;
       demand += draw;
       contingentDemand += draw;
       formations++;
