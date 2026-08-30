@@ -33,6 +33,15 @@ import type { CountryId } from "@/lib/constants/countries";
  * the Solid South's seeded 85-90% Democratic registration over ~800 turns.
  * Registration now only drifts up; the decay mechanism (0.004/turn) still
  * provides a slow downward pressure that active parties can recapture.
+ *
+ * 2026-08-30: the climb is sourced from over-registered parties once the
+ * state's Independent + Unregistered pool is empty (`sourceFromSurplus`).
+ * Every US pool had been at 0 since live turn ~140, and the ticket-1133
+ * capacity cap then scaled every climb to zero, so Reg was frozen against
+ * parties that had built Org. Pacing at this rate: two organised challengers
+ * pull a 77% incumbent to ~57% in ~200 turns, matching
+ * `STRONGHOLD_FALL_TIME_TURNS_TARGET`; a state with no party below its Org
+ * still does not move.
  */
 export const PASSIVE_REG_DRIFT_RATE = 0.06 as const;
 

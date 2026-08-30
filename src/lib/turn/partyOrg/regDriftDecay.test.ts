@@ -420,9 +420,12 @@ describe("planStateRegDriftDecay", () => {
     expect(total).toBeCloseTo(100, 6);
     expect(planned.poolUpdate.newIndependent).toBeGreaterThanOrEqual(0);
     expect(planned.poolUpdate.newUnregistered).toBeGreaterThanOrEqual(0);
-    // Empty pool → the climbing party cannot mint the 0.06 pp drift. A decay
-    // catch from the rival (0.004) is still allowed — that is zero-sum.
-    expect(regs.get("state_dem")!).toBeLessThan(60.03);
+    // Empty pool → the climbing party cannot mint the 0.06 pp drift out of
+    // nothing; it is sourced from FLP, whose Reg (40) sits far above its Org
+    // (7.3). FLP gives up what DEM gains (plus a decay-catch sliver to DEM).
+    expect(regs.get("state_dem")!).toBeGreaterThanOrEqual(60.06 - 1e-9);
+    expect(regs.get("state_dem")!).toBeLessThan(60.07);
+    expect(regs.get("state_flp")!).toBeLessThanOrEqual(40 - 0.06 + 1e-9);
   });
 
   it("caps upward drift to remaining pool capacity", () => {
@@ -448,9 +451,13 @@ describe("planStateRegDriftDecay", () => {
     expect(total).toBeCloseTo(100, 6);
     expect(planned.poolUpdate.newIndependent).toBeGreaterThanOrEqual(0);
     expect(planned.poolUpdate.newUnregistered).toBeGreaterThanOrEqual(0);
-    // Uncapped DEM would sit near 50.06; capped DEM cannot take more than the
-    // 0.02 pool plus a decay-catch sliver.
-    expect(regs.get("state_dem")!).toBeLessThan(50.05);
+    // The pool is drained to zero first; the remaining 0.04 comes from GOP,
+    // whose Reg (49.98) sits above its Org (40). Nothing is minted.
+    expect(planned.poolUpdate.newIndependent).toBeCloseTo(0, 6);
+    const gopSourced = planned.ledgerRows.find(
+      (r) => r.source === "drift" && r.partyId === "gop" && r.delta < 0
+    );
+    expect(gopSourced?.delta).toBeCloseTo(-0.04, 6);
   });
 
   it("does not drive one pool bucket negative when the other still has capacity", () => {
@@ -679,5 +686,199 @@ describe("long-run durability — Solid South registration stays high", () => {
     expect(demReg).toBeGreaterThan(80);
     // DEM should be close to 87 + 2.616 = 89.616
     expect(demReg).toBeCloseTo(87 + 654 * 0.004, 3);
+  });
+});
+
+describe("planStateRegDriftDecay — surplus sourcing when the pool is empty", () => {
+  const now = new Date("2026-08-30T12:00:00Z");
+
+  /** Georgia at live turn 499: seeded Solid South Reg, player-built Org. */
+  const georgia = () => [
+    makeRow("dem", 13.51, 77.432),
+    makeRow("flp", 7.41, 21.328),
+    makeRow("cup", 39.21, 0.196),
+    makeRow("gop", 38.31, 1.044),
+  ];
+
+  function applyPlan(
+    parties: StatePartyOrg[],
+    pool: StateRegistrationPool,
+    planned: ReturnType<typeof planStateRegDriftDecay>
+  ): { parties: StatePartyOrg[]; pool: StateRegistrationPool } {
+    if (!planned) throw new Error("expected plan");
+    const next = parties.map((p) => ({ ...p }));
+    for (const u of planned.partyUpdates) {
+      const row = next.find((p) => p._id === u.rowId);
+      if (row) row.registration = u.newReg;
+    }
+    return {
+      parties: next,
+      pool: {
+        ...pool,
+        independent: planned.poolUpdate.newIndependent,
+        unregistered: planned.poolUpdate.newUnregistered,
+      },
+    };
+  }
+
+  function simulate(
+    parties: StatePartyOrg[],
+    pool: StateRegistrationPool,
+    turns: number,
+    governor?: { partyId: string; sign: 1 | 2 | 3 }
+  ) {
+    let state = { parties, pool };
+    for (let turn = 1; turn <= turns; turn++) {
+      const planned = planStateRegDriftDecay({
+        countryId: "US",
+        stateId: "GA",
+        parties: state.parties,
+        pool: state.pool,
+        turn,
+        now,
+        governor,
+      });
+      state = applyPlan(state.parties, state.pool, planned);
+    }
+    return state;
+  }
+
+  const regOf = (parties: StatePartyOrg[], partyId: string) =>
+    parties.find((p) => p.partyId === partyId)!.registration ?? 0;
+
+  const poolTotal = (s: { parties: StatePartyOrg[]; pool: StateRegistrationPool }) =>
+    s.parties.reduce((sum, p) => sum + (p.registration ?? 0), 0) +
+    s.pool.independent +
+    s.pool.unregistered;
+
+  it("sources the climbing parties' drift from parties whose Reg exceeds Org", () => {
+    const parties = georgia();
+    const planned = planStateRegDriftDecay({
+      countryId: "US",
+      stateId: "GA",
+      parties,
+      pool: makePool(0, 0),
+      turn: 500,
+      now,
+    });
+    const after = applyPlan(parties, makePool(0, 0), planned);
+
+    // Both organised challengers get their full 0.06 pp drift even though the
+    // non-party pool is empty (a decay-catch sliver may add to that).
+    expect(regOf(after.parties, "gop")).toBeGreaterThanOrEqual(1.044 + 0.06 - 0.005);
+    expect(regOf(after.parties, "cup")).toBeGreaterThanOrEqual(0.196 + 0.06 - 0.005);
+    // The over-registered incumbents supplied it.
+    expect(regOf(after.parties, "dem")).toBeLessThan(77.432 - 0.08);
+    expect(regOf(after.parties, "flp")).toBeLessThan(21.328 - 0.01);
+    // Invariants: pool sum 100, buckets never negative.
+    expect(poolTotal(after)).toBeCloseTo(100, 6);
+    expect(after.pool.independent).toBeGreaterThanOrEqual(0);
+    expect(after.pool.unregistered).toBeGreaterThanOrEqual(0);
+  });
+
+  it("splits the sourced amount across surplus parties in proportion to (Reg − Org)", () => {
+    // Surplus 30 vs 10 → the first party supplies 3× as much as the second.
+    const parties = [makeRow("a", 10, 40), makeRow("b", 10, 20), makeRow("c", 40, 0)];
+    const planned = planStateRegDriftDecay({
+      countryId: "US",
+      stateId: "GA",
+      parties,
+      pool: makePool(0, 0),
+      turn: 500,
+      now,
+    });
+    if (!planned) throw new Error("expected plan");
+    const sourced = planned.ledgerRows.filter(
+      (r) => r.source === "drift" && r.metric === "reg" && r.delta < 0
+    );
+    const a = sourced.find((r) => r.partyId === "a")!.delta;
+    const b = sourced.find((r) => r.partyId === "b")!.delta;
+    expect(a / b).toBeCloseTo(3, 6);
+    expect(a + b).toBeCloseTo(-0.06, 6);
+  });
+
+  it("draws the pool first and sources only the shortfall from surplus", () => {
+    const parties = [makeRow("a", 10, 40), makeRow("c", 40, 0)];
+    const planned = planStateRegDriftDecay({
+      countryId: "US",
+      stateId: "GA",
+      parties,
+      pool: makePool(0.02, 0),
+      turn: 500,
+      now,
+    });
+    if (!planned) throw new Error("expected plan");
+    expect(planned.poolUpdate.newIndependent).toBeCloseTo(0, 6);
+    const sourced = planned.ledgerRows.find(
+      (r) => r.source === "drift" && r.partyId === "a" && r.delta < 0
+    );
+    expect(sourced?.delta).toBeCloseTo(-0.04, 6);
+  });
+
+  it("the governor's party supplies less of the shortfall (home-field relief)", () => {
+    const parties = [makeRow("a", 10, 40), makeRow("b", 10, 40), makeRow("c", 40, 0)];
+    const withGov = planStateRegDriftDecay({
+      countryId: "US",
+      stateId: "GA",
+      parties,
+      pool: makePool(0, 0),
+      turn: 500,
+      now,
+      governor: { partyId: "a", sign: 2 },
+    });
+    if (!withGov) throw new Error("expected plan");
+    const sourcedA = withGov.ledgerRows.find(
+      (r) => r.source === "drift" && r.partyId === "a" && r.delta < 0
+    )!.delta;
+    const sourcedB = withGov.ledgerRows.find(
+      (r) => r.source === "drift" && r.partyId === "b" && r.delta < 0
+    )!.delta;
+    // Equal surplus; governor at sign 2 contributes at (1 − 0.5) weight.
+    expect(sourcedA / sourcedB).toBeCloseTo(0.5, 6);
+    expect(sourcedA + sourcedB).toBeCloseTo(-0.06, 6);
+  });
+
+  it("never sources below a party's Org (surplus is the ceiling)", () => {
+    // Surplus of only 0.03 available; climber wants 0.06 → gets 0.03.
+    const parties = [makeRow("a", 10, 10.03), makeRow("c", 40, 0)];
+    const planned = planStateRegDriftDecay({
+      countryId: "US",
+      stateId: "GA",
+      parties,
+      pool: makePool(0, 0),
+      turn: 500,
+      now,
+    });
+    if (!planned) throw new Error("expected plan");
+    // The drift ledger row shows exactly the surplus leaving `a`, landing it on
+    // its Org; the ordinary decay step afterwards is unchanged and out of scope.
+    const sourced = planned.ledgerRows.find(
+      (r) => r.source === "drift" && r.partyId === "a" && r.delta < 0
+    );
+    expect(sourced?.delta).toBeCloseTo(-0.03, 9);
+    expect(sourced?.value).toBeCloseTo(10, 9);
+    const climbed = planned.ledgerRows.find(
+      (r) => r.source === "drift" && r.partyId === "c" && r.delta > 0
+    );
+    expect(climbed?.delta).toBeCloseTo(0.03, 9);
+  });
+
+  it("a challenged stronghold falls to Lean in roughly the 200-turn design target", () => {
+    const after = simulate(georgia(), makePool(0, 0), 200, { partyId: "dem", sign: 2 });
+    const dem = regOf(after.parties, "dem");
+    // ~0.10 pp/turn sourced from DEM: 77 → high-50s. Band is deliberately wide.
+    expect(dem).toBeLessThan(63);
+    expect(dem).toBeGreaterThan(50);
+    expect(regOf(after.parties, "gop")).toBeGreaterThan(10);
+    expect(regOf(after.parties, "cup")).toBeGreaterThan(10);
+    expect(poolTotal(after)).toBeCloseTo(100, 4);
+  });
+
+  it("an unchallenged stronghold with an empty pool does not move", () => {
+    // Nobody is below their Org, so there is no drift to source: seeded
+    // registration stays durable exactly as before.
+    const parties = [makeRow("dem", 38, 92), makeRow("rep", 8, 8)];
+    const after = simulate(parties, makePool(0, 0), 654);
+    expect(regOf(after.parties, "dem")).toBeGreaterThanOrEqual(92);
   });
 });
