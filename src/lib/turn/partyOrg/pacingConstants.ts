@@ -26,8 +26,9 @@ import type { CountryId } from "@/lib/constants/countries";
  *
  * 2026-06-21: bumped 0.04 → 0.06 after reverting the active Registration
  * Drive action. Auto-build is the only Reg-growth lever again, so a moderate
- * pace bump (~50%) compensates for the lost active path. ~1.44 pp/day toward
- * Org target; a committed party covers a 50-pt climb in ~35 days vs ~52.
+ * pace bump (~50%) compensated for the lost active path. At 0.06 that was
+ * ~1.44 pp/day toward the Org target; a committed party covered a 50-pt
+ * climb in ~35 days vs ~52.
  *
  * 2026-07-28: made one-directional (up only). Downward drift was erasing
  * the Solid South's seeded 85-90% Democratic registration over ~800 turns.
@@ -38,12 +39,13 @@ import type { CountryId } from "@/lib/constants/countries";
  * state's Independent + Unregistered pool is empty (`sourceFromSurplus`).
  * Every US pool had been at 0 since live turn ~140, and the ticket-1133
  * capacity cap then scaled every climb to zero, so Reg was frozen against
- * parties that had built Org. Pacing at this rate: two organised challengers
- * pull a 77% incumbent to ~57% in ~200 turns, matching
- * `STRONGHOLD_FALL_TIME_TURNS_TARGET`; a state with no party below its Org
- * still does not move.
+ * parties that had built Org. Bumped 0.06 → 0.075 (×1.25) in the same change:
+ * a Georgia-sized 35 pp climb now takes ~470 turns (~20 days) instead of
+ * ~590, and two organised challengers pull a 77% incumbent under 60 in
+ * ~150 turns, the low end of the `STRONGHOLD_FALL_TIME_TURNS_TARGET` band.
+ * A state with no party below its Org still does not move.
  */
-export const PASSIVE_REG_DRIFT_RATE = 0.06 as const;
+export const PASSIVE_REG_DRIFT_RATE = 0.075 as const;
 
 /**
  * Passive Reg% decay / erosion per turn. Independent of drift — Reg loses

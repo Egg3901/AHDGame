@@ -5,7 +5,11 @@ import {
   govHomeFieldNudge,
   planStateRegDriftDecay,
 } from "./regDriftDecay";
-import { HOME_FIELD_DRIFT_BONUS, HOME_FIELD_REG_CAP } from "./pacingConstants";
+import {
+  HOME_FIELD_DRIFT_BONUS,
+  HOME_FIELD_REG_CAP,
+  PASSIVE_REG_DRIFT_RATE,
+} from "./pacingConstants";
 import type { StatePartyOrg, StateRegistrationPool } from "@/lib/db/types";
 import { POOL_SENTINEL_PARTY_ID } from "@/lib/db/types";
 
@@ -420,16 +424,17 @@ describe("planStateRegDriftDecay", () => {
     expect(total).toBeCloseTo(100, 6);
     expect(planned.poolUpdate.newIndependent).toBeGreaterThanOrEqual(0);
     expect(planned.poolUpdate.newUnregistered).toBeGreaterThanOrEqual(0);
-    // Empty pool → the climbing party cannot mint the 0.06 pp drift out of
+    // Empty pool → the climbing party cannot mint its drift step out of
     // nothing; it is sourced from FLP, whose Reg (40) sits far above its Org
     // (7.3). FLP gives up what DEM gains (plus a decay-catch sliver to DEM).
-    expect(regs.get("state_dem")!).toBeGreaterThanOrEqual(60.06 - 1e-9);
-    expect(regs.get("state_dem")!).toBeLessThan(60.07);
-    expect(regs.get("state_flp")!).toBeLessThanOrEqual(40 - 0.06 + 1e-9);
+    const rate = PASSIVE_REG_DRIFT_RATE;
+    expect(regs.get("state_dem")!).toBeGreaterThanOrEqual(60 + rate - 1e-9);
+    expect(regs.get("state_dem")!).toBeLessThan(60 + rate + 0.01);
+    expect(regs.get("state_flp")!).toBeLessThanOrEqual(40 - rate + 1e-9);
   });
 
   it("caps upward drift to remaining pool capacity", () => {
-    // DEM wants the full 0.06 pp drift but only 0.02 pp is left in the pool.
+    // DEM wants a full drift step but only 0.02 pp is left in the pool.
     const parties = [makeRow("dem", 80, 50), makeRow("gop", 40, 49.98)];
     const pool = makePool(0.02, 0);
     const planned = planStateRegDriftDecay({
@@ -451,13 +456,13 @@ describe("planStateRegDriftDecay", () => {
     expect(total).toBeCloseTo(100, 6);
     expect(planned.poolUpdate.newIndependent).toBeGreaterThanOrEqual(0);
     expect(planned.poolUpdate.newUnregistered).toBeGreaterThanOrEqual(0);
-    // The pool is drained to zero first; the remaining 0.04 comes from GOP,
+    // The pool is drained to zero first; the rest of the step comes from GOP,
     // whose Reg (49.98) sits above its Org (40). Nothing is minted.
     expect(planned.poolUpdate.newIndependent).toBeCloseTo(0, 6);
     const gopSourced = planned.ledgerRows.find(
       (r) => r.source === "drift" && r.partyId === "gop" && r.delta < 0
     );
-    expect(gopSourced?.delta).toBeCloseTo(-0.04, 6);
+    expect(gopSourced?.delta).toBeCloseTo(-(PASSIVE_REG_DRIFT_RATE - 0.02), 6);
   });
 
   it("does not drive one pool bucket negative when the other still has capacity", () => {
@@ -763,10 +768,11 @@ describe("planStateRegDriftDecay — surplus sourcing when the pool is empty", (
     });
     const after = applyPlan(parties, makePool(0, 0), planned);
 
-    // Both organised challengers get their full 0.06 pp drift even though the
+    // Both organised challengers get their full per-turn drift even though the
     // non-party pool is empty (a decay-catch sliver may add to that).
-    expect(regOf(after.parties, "gop")).toBeGreaterThanOrEqual(1.044 + 0.06 - 0.005);
-    expect(regOf(after.parties, "cup")).toBeGreaterThanOrEqual(0.196 + 0.06 - 0.005);
+    const rate = PASSIVE_REG_DRIFT_RATE;
+    expect(regOf(after.parties, "gop")).toBeGreaterThanOrEqual(1.044 + rate - 0.005);
+    expect(regOf(after.parties, "cup")).toBeGreaterThanOrEqual(0.196 + rate - 0.005);
     // The over-registered incumbents supplied it.
     expect(regOf(after.parties, "dem")).toBeLessThan(77.432 - 0.08);
     expect(regOf(after.parties, "flp")).toBeLessThan(21.328 - 0.01);
@@ -794,7 +800,7 @@ describe("planStateRegDriftDecay — surplus sourcing when the pool is empty", (
     const a = sourced.find((r) => r.partyId === "a")!.delta;
     const b = sourced.find((r) => r.partyId === "b")!.delta;
     expect(a / b).toBeCloseTo(3, 6);
-    expect(a + b).toBeCloseTo(-0.06, 6);
+    expect(a + b).toBeCloseTo(-PASSIVE_REG_DRIFT_RATE, 6);
   });
 
   it("draws the pool first and sources only the shortfall from surplus", () => {
@@ -812,7 +818,7 @@ describe("planStateRegDriftDecay — surplus sourcing when the pool is empty", (
     const sourced = planned.ledgerRows.find(
       (r) => r.source === "drift" && r.partyId === "a" && r.delta < 0
     );
-    expect(sourced?.delta).toBeCloseTo(-0.04, 6);
+    expect(sourced?.delta).toBeCloseTo(-(PASSIVE_REG_DRIFT_RATE - 0.02), 6);
   });
 
   it("the governor's party supplies less of the shortfall (home-field relief)", () => {
@@ -835,11 +841,11 @@ describe("planStateRegDriftDecay — surplus sourcing when the pool is empty", (
     )!.delta;
     // Equal surplus; governor at sign 2 contributes at (1 − 0.5) weight.
     expect(sourcedA / sourcedB).toBeCloseTo(0.5, 6);
-    expect(sourcedA + sourcedB).toBeCloseTo(-0.06, 6);
+    expect(sourcedA + sourcedB).toBeCloseTo(-PASSIVE_REG_DRIFT_RATE, 6);
   });
 
   it("never sources below a party's Org (surplus is the ceiling)", () => {
-    // Surplus of only 0.03 available; climber wants 0.06 → gets 0.03.
+    // Surplus of only 0.03 available; climber wants a full step → gets 0.03.
     const parties = [makeRow("a", 10, 10.03), makeRow("c", 40, 0)];
     const planned = planStateRegDriftDecay({
       countryId: "US",

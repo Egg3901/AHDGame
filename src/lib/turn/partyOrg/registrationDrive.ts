@@ -17,8 +17,8 @@
  * Per-state, per-turn hard ceiling on the registration boost (percentage
  * points). Kept intentionally small so a large treasury cannot outpace the
  * organic Org→Reg drift system by more than a modest factor: the passive drift
- * ceiling is `PASSIVE_REG_DRIFT_RATE = 0.06 pp/turn`, so this caps a fully
- * funded drive at under ~2× the natural pace. Consistent with GOTV's magnitude
+ * ceiling is `PASSIVE_REG_DRIFT_RATE` (0.075 pp/turn), so this caps a fully
+ * funded drive at ~1.3× the natural pace. Consistent with GOTV's magnitude
  * (its per-state boost is likewise a fraction of a point per turn).
  */
 export const REG_DRIVE_MAX_BOOST_PER_STATE = 0.1 as const;
