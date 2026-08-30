@@ -14,6 +14,7 @@ import { isMetricActive, getEraMetricName } from "@/lib/era/metricCatalog";
 import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { scoreColor } from "@/components/metrics/scoreColor";
 import { ScoreBadge } from "@/components/metrics/ScoreBadge";
+import { formatMetricValue } from "@/components/metrics/formatMetricValue";
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -74,11 +75,7 @@ export default function MetricDetailPage({
 
   const fmt = (val: number) => {
     if (!def) return String(val);
-    const formatted = val.toLocaleString("en-US", {
-      minimumFractionDigits: def.decimals ?? 1,
-      maximumFractionDigits: def.decimals ?? 1,
-    });
-    return `${def.formatPrefix ?? ""}${formatted}${def.formatSuffix ?? ""}`;
+    return formatMetricValue(def, val, countryId);
   };
 
   if (loading) {

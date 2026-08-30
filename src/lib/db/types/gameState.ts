@@ -2,6 +2,8 @@ import type { ObjectId } from "mongodb";
 import type { CountryId, CountryStatus } from "../../constants/countries";
 import type { TurnPhaseTelemetryMap } from "./turnPhaseTelemetry";
 
+export type NppEntryViabilityMode = "off" | "observe" | "enforce";
+
 export type IterationType = "Alpha" | "Beta" | "Iteration";
 
 /**
@@ -302,6 +304,14 @@ export interface GameState {
   extractionAutoStrategyEnabled?: boolean;
   extractionAutoStrategyEnabledBy?: string;
   extractionAutoStrategyEnabledAt?: string;
+  /**
+   * Safety rollout for the realized-viability check on autonomous NPP mine
+   * founding. Absent resolves to observe so existing worlds collect evidence
+   * without changing placement. Only enforce can reject a candidate.
+   */
+  nppEntryViabilityMode?: NppEntryViabilityMode;
+  nppEntryViabilityModeBy?: string;
+  nppEntryViabilityModeAt?: string;
   /** Turn the extraction auto-strategy phase last acted. Guards its cadence. */
   lastExtractionAutoStrategyTurn?: number;
   /** Master gate for the US House districted-redistricting system. Default off. */

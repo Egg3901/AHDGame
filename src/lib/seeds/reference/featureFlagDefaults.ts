@@ -88,6 +88,9 @@ export const DEFAULT_GAME_STATE_FLAGS = {
   embargoTradeExposureEnabled: true,
   liveElectionResultsEnabled: true,
   extractionAutoStrategyEnabled: true,
+  // Existing and fresh worlds start by recording decisions only. Promotion to
+  // enforce is an explicit admin action after the observation gate passes.
+  nppEntryViabilityMode: "observe",
   seasonRecapEnabled: true,
   // Corporate M&A / deal-making subsystem (agreed corp-to-corp acquisitions).
   // Runtime helper is fail-closed (absent = off); default on for fresh worlds.

@@ -235,9 +235,11 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         // is computed. Reads the prior turn's commodity S/D (one-turn lag, same
         // as auto-seed); writes only sector strategy fields. Inert unless
         // gameState.extractionAutoStrategyEnabled.
-        await runtime.runPhase("extractionAutoStrategy", () =>
+        const extractionAutoStrategyResult = await runtime.runPhase("extractionAutoStrategy", () =>
           processExtractionAutoStrategy(context.db, newTurn, gameState)
         );
+        (phaseResults as Record<string, unknown>).extractionAutoStrategy =
+          extractionAutoStrategyResult;
         const [, fundGenResults, corpTurnResults] = await Promise.all([
           runtime.runPhase("actionRefresh", () =>
             processActionRefresh(characters, config, gameNow)
