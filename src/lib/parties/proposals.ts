@@ -8,6 +8,7 @@ import type {
   Character,
   NationalCommitteeElection,
   NationalPartyElection,
+  NationalPartyVote,
   NPP,
   PoliticalParty,
 } from "@/lib/db/types";
@@ -148,12 +149,76 @@ export async function applyElectionMethodEffect(
   proposal: CommitteeProposal
 ): Promise<void> {
   if (!proposal.electionMethod) throw new Error("Not an electionMethod proposal");
-  await db
-    .collection<PoliticalParty>("politicalParties")
-    .updateOne(
-      { _id: proposal.partyId },
-      { $set: { leadershipElectionMethod: proposal.electionMethod.method, updatedAt: new Date() } }
-    );
+  const parties = db.collection<PoliticalParty>("politicalParties");
+  const party = await parties.findOne(
+    { _id: proposal.partyId },
+    { projection: { sequentialId: 1, countryId: 1 } }
+  );
+
+  // Change the party first. Votes cast from this point onward will snapshot
+  // influence in the vote route, closing the race window while we backfill
+  // votes that were recorded under the previous headcount method.
+  await parties.updateOne(
+    { _id: proposal.partyId },
+    { $set: { leadershipElectionMethod: proposal.electionMethod.method, updatedAt: new Date() } }
+  );
+
+  if (
+    proposal.electionMethod.method !== "influence" ||
+    !party ||
+    party.sequentialId === undefined
+  ) {
+    return;
+  }
+
+  const partyId = String(party.sequentialId);
+  const countryId = party.countryId ?? "US";
+  const activeElections = await db
+    .collection<NationalPartyElection>("nationalPartyElections")
+    .find({ partyId, countryId, status: "voting" })
+    .toArray();
+  if (activeElections.length === 0) return;
+
+  const electionIds = activeElections.map((election) => election._id);
+  const votes = await db
+    .collection<NationalPartyVote>("nationalPartyVotes")
+    .find({
+      electionId: { $in: electionIds },
+      voterPartyInfluence: { $exists: false },
+    })
+    .toArray();
+  if (votes.length === 0) return;
+
+  const voterIds = [
+    ...new Map(votes.map((vote) => [vote.voterId.toString(), vote.voterId])).values(),
+  ];
+  const voters = await db
+    .collection<Character>("characters")
+    .find({ _id: { $in: voterIds } }, { projection: { partyInfluence: 1 } })
+    .toArray();
+  const influenceByVoter = new Map(
+    voters.map((voter) => [
+      voter._id.toString(),
+      typeof voter.partyInfluence === "number" && Number.isFinite(voter.partyInfluence)
+        ? voter.partyInfluence
+        : 0,
+    ])
+  );
+
+  await db.collection<NationalPartyVote>("nationalPartyVotes").bulkWrite(
+    votes.map((vote) => ({
+      updateOne: {
+        filter: {
+          electionId: vote.electionId,
+          voterId: vote.voterId,
+          voterPartyInfluence: { $exists: false },
+        },
+        update: {
+          $set: { voterPartyInfluence: influenceByVoter.get(vote.voterId.toString()) ?? 0 },
+        },
+      },
+    }))
+  );
 }
 
 export async function applyElectionDurationEffect(
