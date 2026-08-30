@@ -6,7 +6,7 @@ import type {
   SectorBuildOrder,
   StateResourceCapacity,
 } from "@/lib/db/types";
-import type { GameState } from "@/lib/db/types/gameState";
+import type { GameState, NppEntryViabilityMode } from "@/lib/db/types/gameState";
 import { EXTRACTABLE_RESOURCES, type ExtractableResource } from "@/lib/constants/commodities";
 import { SECTOR_STRATEGIES, STRATEGY_COOLDOWN_TURNS } from "@/lib/constants/sectorStrategies";
 import {
@@ -140,6 +140,56 @@ export const EXTRACTION_AUTO_STRATEGY_SHORTAGE_SD = 0.6; // global S/D below thi
 export const EXTRACTION_AUTO_STRATEGY_PLACEMENT_SHORTAGE_SD = 0.78;
 export const EXTRACTION_STATE_HEADROOM_FRACTION = 0.98; // state must sit below this × capacity
 export const NPP_RESTRATEGIZE_MAX_PER_RUN = 3; // NPP expected-revenue switches per run
+export const EXTRACTION_PLACEMENT_MIN_COHORT_SIZE = 3;
+export const EXTRACTION_PLACEMENT_MIN_PROFITABLE_SHARE = 0.5;
+
+export function nppEntryViabilityModeFrom(value: unknown): NppEntryViabilityMode {
+  return value === "off" || value === "enforce" ? value : "observe";
+}
+
+export interface ExtractionPlacementCohortViability {
+  viable: boolean;
+  observations: number;
+  profitableShare: number | null;
+  medianIncome: number | null;
+}
+
+/**
+ * Use realized whole-corporation income as the local pre-spawn viability prior.
+ * It already includes plant P&L, corporate overhead, freight, labour, policy,
+ * and financing. A country with fewer than three mature extraction NPPs has no
+ * useful prior and stays eligible. Once the cohort is large enough, at least
+ * half must be profitable and median income must be positive before another
+ * automatic mine can be founded there.
+ */
+export function extractionPlacementCohortViability(
+  corporations: Array<Pick<Corporation, "earningsHistory">>
+): ExtractionPlacementCohortViability {
+  const incomes = corporations
+    .map((corp) => corp.earningsHistory?.at(-1))
+    .filter((income): income is number => typeof income === "number" && Number.isFinite(income))
+    .sort((a, b) => a - b);
+  if (incomes.length < EXTRACTION_PLACEMENT_MIN_COHORT_SIZE) {
+    return {
+      viable: true,
+      observations: incomes.length,
+      profitableShare: incomes.length
+        ? incomes.filter((income) => income > 0).length / incomes.length
+        : null,
+      medianIncome: incomes.length ? incomes[Math.floor(incomes.length / 2)] : null,
+    };
+  }
+  const profitableShare = incomes.filter((income) => income > 0).length / incomes.length;
+  const middle = Math.floor(incomes.length / 2);
+  const medianIncome =
+    incomes.length % 2 === 0 ? (incomes[middle - 1] + incomes[middle]) / 2 : incomes[middle];
+  return {
+    viable: profitableShare >= EXTRACTION_PLACEMENT_MIN_PROFITABLE_SHARE && medianIncome > 0,
+    observations: incomes.length,
+    profitableShare,
+    medianIncome,
+  };
+}
 
 /** Per extractable resource, the focused strategy that produces it at the highest rate. */
 export function focusedStrategyByResource(): Map<
@@ -167,6 +217,11 @@ export interface ExtractionAutoStrategyResult {
   /** New NPP extraction corporations placed on idle shortage deposits. */
   placed?: number;
   placedByResource?: Record<string, number>;
+  /** Countries denied another mine because their mature NPP extraction cohort loses money. */
+  placementBlockedCountries?: string[];
+  /** Countries that would be denied in enforce mode. Recorded in observe mode. */
+  placementObservedNonviableCountries?: string[];
+  placementViabilityMode?: NppEntryViabilityMode;
   /** NPP expected-revenue re-strategizations (second pass), by target strategy. */
   restrategized?: number;
   restrategizedByStrategy?: Record<string, number>;
@@ -182,6 +237,7 @@ export async function processExtractionAutoStrategy(
   preloadedGameState?: {
     extractionAutoStrategyEnabled?: boolean;
     lastExtractionAutoStrategyTurn?: number;
+    nppEntryViabilityMode?: NppEntryViabilityMode;
   }
 ): Promise<ExtractionAutoStrategyResult> {
   if (!preloadedGameState?.extractionAutoStrategyEnabled) {
@@ -191,6 +247,9 @@ export async function processExtractionAutoStrategy(
   if (currentTurn - lastTurn < EXTRACTION_AUTO_STRATEGY_CADENCE_TURNS) {
     return { converted: 0, byResource: {}, skippedReason: "cadence" };
   }
+  const placementViabilityMode = nppEntryViabilityModeFrom(
+    preloadedGameState.nppEntryViabilityMode
+  );
 
   // Resolved ONCE per run and threaded into both passes' rescale calls — the
   // D9 capacity renormalization below is plants-only.
@@ -248,6 +307,10 @@ export async function processExtractionAutoStrategy(
   const capByState = new Map(caps.map((c) => [c.stateId, c.resources ?? {}]));
   const focusMap = focusedStrategyByResource();
 
+  type NppCorporation = Pick<
+    Corporation,
+    "_id" | "countryId" | "type" | "ceoType" | "userId" | "caretakerCeo" | "earningsHistory"
+  >;
   const nppCorps = await db
     .collection<Corporation>("corporations")
     .find({
@@ -256,7 +319,15 @@ export async function processExtractionAutoStrategy(
       caretakerCeo: { $exists: false },
       suspended: { $ne: true },
     })
-    .project({ _id: 1, countryId: 1, ceoType: 1, userId: 1, caretakerCeo: 1 })
+    .project<NppCorporation>({
+      _id: 1,
+      countryId: 1,
+      type: 1,
+      ceoType: 1,
+      userId: 1,
+      caretakerCeo: 1,
+      earningsHistory: 1,
+    })
     .toArray();
   const npcCorps = nppCorps.filter(
     (corp) =>
@@ -265,6 +336,19 @@ export async function processExtractionAutoStrategy(
       corp.userId?.toString() === NPC_CORPORATION_USER_ID.toString()
   );
   const nppCorpIds = new Set(npcCorps.map((corp) => corp._id.toString()));
+  const extractionCorpsByCountry = new Map<string, NppCorporation[]>();
+  for (const corp of npcCorps) {
+    if (corp.type !== "extraction") continue;
+    const countryCorps = extractionCorpsByCountry.get(corp.countryId) ?? [];
+    countryCorps.push(corp);
+    extractionCorpsByCountry.set(corp.countryId, countryCorps);
+  }
+  const placementViabilityByCountry = new Map(
+    [...extractionCorpsByCountry].map(([countryId, corporations]) => [
+      countryId,
+      extractionPlacementCohortViability(corporations),
+    ])
+  );
 
   // ── Pass 1: standard→focused shortage conversions for NPP corps only ──────
   // Read every extraction location so placement cannot crowd an existing player
@@ -497,6 +581,8 @@ export async function processExtractionAutoStrategy(
     strategyId: string;
     score: number;
   }> = [];
+  const placementBlockedCountries = new Set<string>();
+  const placementObservedNonviableCountries = new Set<string>();
   for (const capDoc of caps) {
     // Market NPP corps only exist where the authored capital-state list says
     // they can: planned economies seed SOEs through the budget seeders and
@@ -511,6 +597,14 @@ export async function processExtractionAutoStrategy(
       if (occupiedExtractionStates.has(capDoc.stateId)) continue;
       const focus = focusMap.get(resource);
       if (!focus) continue;
+      const cohortViability = placementViabilityByCountry.get(capDoc.countryId);
+      if (placementViabilityMode !== "off" && cohortViability && !cohortViability.viable) {
+        placementObservedNonviableCountries.add(capDoc.countryId);
+        if (placementViabilityMode === "enforce") {
+          placementBlockedCountries.add(capDoc.countryId);
+          continue;
+        }
+      }
       placementCandidates.push({
         stateId: capDoc.stateId,
         countryId: capDoc.countryId,
@@ -567,6 +661,9 @@ export async function processExtractionAutoStrategy(
     byResource,
     placed,
     placedByResource,
+    placementViabilityMode,
+    placementObservedNonviableCountries: [...placementObservedNonviableCountries].sort(),
+    placementBlockedCountries: [...placementBlockedCountries].sort(),
     restrategized,
     restrategizedByStrategy,
     genericRestrategized: 0,
