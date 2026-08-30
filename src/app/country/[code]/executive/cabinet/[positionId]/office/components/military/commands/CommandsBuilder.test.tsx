@@ -318,6 +318,26 @@ describe("posture trade-offs", () => {
   });
 });
 
+describe("command type bonuses", () => {
+  it("shows the selected type's bonuses in the create dialog and updates on change", () => {
+    render(<CommandsBuilder commands={[]} {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: /create command/i }));
+    const dialog = screen.getByRole("dialog");
+    // the default type is Regional
+    expect(within(dialog).getByText("+ balanced command")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Logistics" }));
+    expect(within(dialog).getByText("+ supply throughput")).toBeTruthy();
+    expect(within(dialog).getByText("+ overseas sustainment")).toBeTruthy();
+    expect(within(dialog).queryByText("+ balanced command")).toBeNull();
+  });
+
+  it("shows the command's type bonuses in the detail panel", () => {
+    render(<CommandsBuilder commands={[command({ type: "HOMELAND_DEFENSE" })]} {...base} />);
+    expect(screen.getByText("+ air-defense integration")).toBeTruthy();
+    expect(screen.getByText("+ faster reserve mobilization")).toBeTruthy();
+  });
+});
+
 describe("finding the Commanding General's page", () => {
   it("links the callout's 'Commanding General' to that page", () => {
     // The callout already explains that the CG does the posting; making the phrase

@@ -24,7 +24,7 @@ import {
   unitLoad,
 } from "@/lib/military/calc";
 import { SectionCard, Badge, Meter } from "../../dossier";
-import { PostureEffects } from "./PostureEffects";
+import { PostureEffects, TypeBonuses } from "./EffectLines";
 
 const INTENT_TEXT = { success: "text-success", warn: "text-warning", error: "text-error" } as const;
 const INTENT_METER = {
@@ -109,7 +109,8 @@ export function CommandDetailPanel({
       sub={COMMAND_TYPES[c.type].label}
       right={<Badge tone="gov">{COMMAND_TYPES[c.type].short}</Badge>}
     >
-      <p className="mb-3 text-[12px] italic leading-relaxed text-muted">{c.role}</p>
+      <p className="mb-2 text-[12px] italic leading-relaxed text-muted">{c.role}</p>
+      <TypeBonuses type={c.type} className="mb-3" />
 
       {/* overview */}
       <div className="mb-4 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">

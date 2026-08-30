@@ -13,7 +13,7 @@ import { STRATEGIC_REGIONS } from "@/lib/military/regions";
 import { validateDraft, type CommandDraft } from "@/lib/military/commands";
 import { draftEffectiveness, effIntent } from "@/lib/military/calc";
 import { Badge } from "../../dossier";
-import { PostureEffects } from "./PostureEffects";
+import { PostureEffects, TypeBonuses } from "./EffectLines";
 
 const TYPE_KEYS: CommandType[] = ["HOMELAND_DEFENSE", "REGIONAL", "LOGISTICS"];
 const SUPPLIES: SupplyPriority[] = ["Normal", "High", "Emergency"];
@@ -124,6 +124,7 @@ export function CreateCommandDialog({
                 </button>
               ))}
             </div>
+            <TypeBonuses type={draft.type} className="mt-1.5" />
           </div>
 
           <div className="flex gap-4">
