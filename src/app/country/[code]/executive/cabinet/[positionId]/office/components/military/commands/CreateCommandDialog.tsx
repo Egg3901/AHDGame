@@ -13,6 +13,7 @@ import { STRATEGIC_REGIONS } from "@/lib/military/regions";
 import { validateDraft, type CommandDraft } from "@/lib/military/commands";
 import { draftEffectiveness, effIntent } from "@/lib/military/calc";
 import { Badge } from "../../dossier";
+import { PostureEffects } from "./PostureEffects";
 
 const TYPE_KEYS: CommandType[] = ["HOMELAND_DEFENSE", "REGIONAL", "LOGISTICS"];
 const SUPPLIES: SupplyPriority[] = ["Normal", "High", "Emergency"];
@@ -129,6 +130,7 @@ export function CreateCommandDialog({
             <div className="flex-1">
               <div className="dossier-label mb-1.5 text-muted">Posture</div>
               <select
+                aria-label="Posture"
                 value={draft.posture}
                 onChange={(e) => set({ posture: e.target.value as CommandPosture })}
                 className="w-full rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px] text-foreground"
@@ -139,6 +141,7 @@ export function CreateCommandDialog({
                   </option>
                 ))}
               </select>
+              <PostureEffects posture={draft.posture} className="mt-1.5" />
             </div>
             <div className="flex-1">
               <div className="dossier-label mb-1.5 text-muted">Supply priority</div>
