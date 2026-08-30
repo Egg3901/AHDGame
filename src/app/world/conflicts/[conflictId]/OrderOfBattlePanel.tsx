@@ -66,7 +66,18 @@ export function OrderOfBattlePanel({ view }: { view: OrderOfBattleView }) {
           No forces committed to this front.
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div
+          data-testid="order-of-battle-roster"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+            maxHeight: "32rem",
+            overflowY: "auto",
+            paddingRight: 4,
+            scrollbarGutter: "stable",
+          }}
+        >
           {view.forces.map((f) => {
             const target = readinessBaselineOf(
               f.posture,

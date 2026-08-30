@@ -7,6 +7,7 @@ import { checkRateLimit, rateLimitResponse, BOT_READ_LIMITS } from "@/lib/api/ra
 import { getGameTime } from "@/lib/time/gameTime";
 import { isPrimaryEnded } from "@/lib/elections/phases";
 import { ALL_COUNTRY_IDS, COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { getLiveLowerChamberSeats, getLiveUpperChamberSeats } from "@/lib/turn/lowerChamberSeats";
 import { getChamberName, raceToElectionTypes, raceToOfficeType, validRaces } from "./races";
 import type {
   Election,
@@ -227,7 +228,16 @@ export async function GET(request: Request) {
 
     const current = toPartySeats(currentTally);
     const projected = toPartySeats(projectedTally);
-    const totalSeats = current.reduce((s, p) => s + p.seats, 0);
+    const occupiedSeats = current.reduce((s, p) => s + p.seats, 0);
+    const chamberKey = countryConfig.officeTypes.find(
+      (office) => office.key === officeType
+    )?.chamberKey;
+    const totalSeats =
+      chamberKey === countryConfig.legislature.lowerChamber.key
+        ? await getLiveLowerChamberSeats(db, country as CountryId)
+        : chamberKey === countryConfig.legislature.upperChamber?.key
+          ? await getLiveUpperChamberSeats(db, country as CountryId)
+          : occupiedSeats;
 
     // Chamber display name
     const chamberName = getChamberName(country, race, countryConfig);
