@@ -24,6 +24,9 @@ import { FactorLedgerCard } from "@/components/elections/general/FactorLedgerCar
 import { states as referenceStates } from "@/lib/seeds/reference/states";
 import { getSubdivisionMode } from "@/lib/maps/subdivisionConfig";
 import { UK_REGION_NAMES, RU_REGION_NAMES } from "@/lib/constants/states";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { useGameClock } from "@/contexts/useGameClock";
+import { buildBlendClock } from "@/lib/elections/blendDetailViewModel";
 import type { ElectionDetail } from "./ElectionDetailTypes";
 
 /** Static US state-id → display-name map sourced from the reference seed.
@@ -96,6 +99,48 @@ export function GeneralPhaseView({
   // races show a running tally.
   const isUS = election.countryId === "US";
   const isProjectedGeneral = election.countryId !== "US";
+
+  // Blend detail chrome. The countdowns come from the game clock rather than
+  // the election payload: the two are fetched separately and can disagree for
+  // a few seconds after a turn tick.
+  const clock = useGameClock();
+  const regionName =
+    election.regionName ??
+    (isUS ? US_STATE_NAME_BY_ID[election.state] : undefined) ??
+    UK_REGION_NAMES[election.state] ??
+    RU_REGION_NAMES[election.state] ??
+    election.state;
+  const countryName = COUNTRY_CONFIGS[election.countryId as CountryId]?.name ?? election.countryId;
+  const primaryTimer =
+    election.primaryEndTurn != null
+      ? clock.formatRemainingTurns(election.primaryEndTurn)
+      : clock.formatRemaining(election.primaryEndTime);
+  const generalTimer =
+    election.endTurn != null
+      ? clock.formatRemainingTurns(election.endTurn)
+      : clock.formatRemaining(election.endTime);
+  // Ballots over the field the page actually lists — the tally can still hold
+  // primary-losers' votes, which appear against no row.
+  const blendBallots = election.generalVotes
+    ? election.allCandidates.reduce(
+        (sum, c) => sum + (election.generalVotes!.totalVotes[c.id] ?? 0),
+        0
+      )
+    : 0;
+  const blendElectorate = election.regionElectorate;
+  const blendClockRows = buildBlendClock({
+    primaryLabel: "Primary",
+    primaryValue: election.inPrimary ? primaryTimer.text : "Completed",
+    generalValue: localIsEnded ? "Completed" : generalTimer.text,
+    isEnded: localIsEnded,
+    inPrimary: localInPrimary,
+    // Only when there is a real denominator; the hero fact carries the basis.
+    turnoutPct:
+      blendElectorate && blendElectorate.count > 0 && blendBallots > 0
+        ? (blendBallots / blendElectorate.count) * 100
+        : null,
+    ballots: blendBallots,
+  });
   // The running-mate selector is offered for any president-with-VP-ticket
   // country (US, Brazil, Nigeria) — not just the US. Ceremonial presidencies
   // without a VP office (Ireland, China) never show it. See ticket #0957.
@@ -308,6 +353,12 @@ export function GeneralPhaseView({
             myCharId={election.myCharId}
             myEndorsedCandidateId={election.myEndorsedCandidateId}
             countryId={(election.countryId ?? "US") as "US" | "UK" | "DE"}
+            regionName={regionName}
+            countryName={countryName}
+            year={election.electionYear}
+            clockRows={blendClockRows}
+            electorate={blendElectorate}
+            partyDisplayById={election.partyDisplayById}
           />
         ) : (
           <GeneralElectionNoTallyPanel

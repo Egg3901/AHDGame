@@ -47,6 +47,16 @@ vi.mock("./voteDistributionSwingFlow", () => ({
 vi.mock("./resolvedTurnout", () => ({
   resolveTurnout: vi.fn(),
   buildLiveTurnouts: vi.fn(),
+  // Registered-voter gate: no pool doc in these fixtures, so passthrough — the
+  // real function is identity when `unregistered` is absent.
+  scalePoolToRegistered: (pool: number) => pool,
+  // Real behavior, kept live in the mock: several tests pin the electorate
+  // ceiling through the distributor's slice argument.
+  capTurnSliceToElectorate: (slice: number, totalPool: number, electorate: number) =>
+    totalPool > electorate && electorate > 0 ? slice * (electorate / totalPool) : slice,
+  // Real behavior too: the cumulative ceiling is pinned through the slice.
+  capTurnSliceToRemainingElectorate: (slice: number, alreadyCast: number, electorate: number) =>
+    electorate > 0 ? Math.max(0, Math.min(slice, electorate - alreadyCast)) : slice,
 }));
 
 vi.mock("@/lib/utils/getStateApprovalForElection", () => ({
@@ -571,11 +581,127 @@ describe("accumulateVoteTurn — vote accumulation", () => {
     await accumulateVoteTurn(electionId, 110, now);
     const inflatedCall = vi.mocked(distributeVotesBySwingFlow).mock.calls.at(-1)!;
 
-    // Downstream scaling (turnout shares, strength) applies equally to both
-    // runs, so the capped 3.3M pool must produce byte-identical distribution
-    // inputs to a pool exactly at the ceiling.
-    expect(inflatedCall[2]).toBeCloseTo(atCeilingCall[2] as number, 6); // totalPool capped
-    expect(inflatedCall[1]).toBeCloseTo(atCeilingCall[1] as number, 6); // slice rescaled
+    // Both runs must hand the distributor identical inputs. NOTE: in this
+    // fixture the granular substrate rebuilds the pool below the ceiling in
+    // BOTH runs, so the cap itself is inert here and these are equality pins;
+    // the cap's actual algebra (slice scales, normalisation base untouched -
+    // shrinking both cancels at the ballot) is pinned directly in
+    // resolvedTurnout.scalePool.test.ts on capTurnSliceToElectorate.
+    expect(inflatedCall[2]).toBeCloseTo(atCeilingCall[2] as number, 6);
+    expect(inflatedCall[1]).toBeCloseTo(atCeilingCall[1] as number, 6);
+  });
+
+  it("does not bank the same turn twice when a stalled turn is re-run", async () => {
+    // Live 2026-08-28: turn 460 stalled in corporationTurn, the lock was
+    // cleared and the turn re-run twice under the same number; every open
+    // general accrued three slices of turn 460. The tally already holding
+    // this turn's snapshot is the tell.
+    const { accumulateVoteTurn } = await import("./tallyManagement");
+    const { distributeVotesBySwingFlow } = await import("./voteDistributionSwingFlow");
+
+    const electionId = new ObjectId();
+    const candidate = makeCandidate({ electionId });
+    const candidateId = candidate._id.toString();
+    const election = makeElection({ _id: electionId, startTurn: 100, endTurn: 148 });
+    await setupHappyPath({
+      electionId,
+      candidates: [candidate],
+      election,
+      existingTallyVotes: { [candidateId]: 10_000 },
+    });
+    db.collectionMocks.electionVoteTallies.findOne.mockResolvedValue(
+      makeTally(electionId, {
+        totalVotes: { [candidateId]: 10_000 },
+        candidateNames: { [candidateId]: candidate.characterName },
+        candidateParties: { [candidateId]: candidate.party },
+        turnSnapshots: [
+          {
+            turn: 110,
+            recordedAt: new Date(),
+            cumulativeVotes: { [candidateId]: 10_000 },
+            sharesPct: { [candidateId]: 100 },
+          },
+        ],
+      })
+    );
+    vi.mocked(distributeVotesBySwingFlow).mockClear();
+    db.collectionMocks.electionVoteTallies.updateOne.mockClear();
+
+    await accumulateVoteTurn(electionId, 110, new Date("2024-01-01T10:00:00Z"));
+    expect(distributeVotesBySwingFlow).not.toHaveBeenCalled();
+    expect(db.collectionMocks.electionVoteTallies.updateOne).not.toHaveBeenCalled();
+
+    // The next turn counts normally.
+    await accumulateVoteTurn(electionId, 111, new Date("2024-01-01T11:00:00Z"));
+    expect(distributeVotesBySwingFlow).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts the turn that reaches endTurn and releases exactly the pool across the window", async () => {
+    const { accumulateVoteTurn } = await import("./tallyManagement");
+    const { distributeVotesBySwingFlow } = await import("./voteDistributionSwingFlow");
+
+    const electionId = new ObjectId();
+    const candidate = makeCandidate({ electionId });
+    const start = new Date("2024-01-01T00:00:00Z");
+    const election = makeElection({
+      _id: electionId,
+      startTurn: 100,
+      endTurn: 148,
+      startTime: start,
+      endTime: new Date(start.getTime() + 48 * 3_600_000),
+    });
+    await setupHappyPath({ electionId, candidates: [candidate], election, totalPool: 100_000 });
+
+    // Accumulation runs on every turn from start THROUGH endTurn (timers
+    // complete the race after this phase), so 100..148 is 49 slices. Before
+    // the inclusive window the 49th turn was clamped onto the final slice and
+    // re-released it: 12-turn generals paid out 13 slices (102% turnout).
+    let released = 0;
+    let firstSlice = 0;
+    for (let turn = 100; turn <= 148; turn++) {
+      vi.mocked(distributeVotesBySwingFlow).mockClear();
+      await accumulateVoteTurn(electionId, turn, start);
+      expect(distributeVotesBySwingFlow).toHaveBeenCalledTimes(1);
+      const slice = vi.mocked(distributeVotesBySwingFlow).mock.calls[0][1] as number;
+      if (turn === 100) firstSlice = slice;
+      released += slice;
+    }
+    // Scale-free conservation check (the office-strength multiplier scales
+    // every slice alike): over 49 turns the early band is 37 turns carrying
+    // 50% of the pool, so the whole window is exactly 74 first slices. A
+    // re-released final slice would add a 75th.
+    expect(released / firstSlice).toBeCloseTo(74, 6);
+  });
+
+  it("never carries cumulative ballots past the electorate", async () => {
+    const { accumulateVoteTurn } = await import("./tallyManagement");
+    const { distributeVotesBySwingFlow } = await import("./voteDistributionSwingFlow");
+
+    const electionId = new ObjectId();
+    const candidate = makeCandidate({ electionId });
+    const start = new Date("2024-01-01T00:00:00Z");
+    const election = makeElection({
+      _id: electionId,
+      startTurn: 100,
+      endTurn: 148,
+      startTime: start,
+      endTime: new Date(start.getTime() + 48 * 3_600_000),
+    });
+    // makeState() has 1,000,000 people and no registration pool, so the
+    // ceiling is 1,000,000; 999,500 are already on the board.
+    await setupHappyPath({
+      electionId,
+      candidates: [candidate],
+      election,
+      existingTallyVotes: { [candidate._id.toString()]: 999_500 },
+      totalPool: 1_000_000,
+    });
+
+    // Surge band: the uncapped slice would be tens of thousands of ballots.
+    await accumulateVoteTurn(electionId, 146, start);
+    const slice = vi.mocked(distributeVotesBySwingFlow).mock.calls.at(-1)![1] as number;
+    expect(slice).toBeGreaterThan(0);
+    expect(slice).toBeLessThanOrEqual(500);
   });
 
   it("accumulates votes on top of existing totals", async () => {

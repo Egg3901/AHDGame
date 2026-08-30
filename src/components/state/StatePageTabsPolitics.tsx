@@ -120,9 +120,25 @@ export function PoliticsTab({
   // Matching electedOfficials officeType key, drives the avatar card's
   // office badge.
   const regionalExecutiveOfficeType = getRegionalExecutiveOfficeKey(state.countryId);
-  // JP Sangiin is multi-seat proportional; US Senate is single-seat per class
+  // JP Sangiin is multi-seat proportional in rotating classes; US Senate is single-seat per class
   const upperIsMultiSeat = config.legislature?.upperChamber?.key === "sangiin";
-  const upperMemberTitle = upperIsMultiSeat ? `${upperChamberName} Member` : "Senator";
+  // Elected upper chambers WITHOUT rotating classes (RU Soviet of Nationalities,
+  // IE Seanad, the beta senates): one delegation per region, each member
+  // holding a seat count. Keyed on the chamber's `regionElectedClasses` flag,
+  // the same signal the admin seat appointer uses, so the US Senate keeps its
+  // classed cards and never shows "Class" on a proportional deputy.
+  const upperIsProportional =
+    !upperIsMultiSeat && upperChamber?.elected === true && !upperChamber.regionElectedClasses;
+  const upperOffice = upperChamber
+    ? config.officeTypes.find(
+        (o) => o.chamberKey === upperChamber.key && !o.isExecutive && !o.isSubNational
+      )
+    : undefined;
+  const upperMemberTitle = upperIsMultiSeat
+    ? `${upperChamberName} Member`
+    : upperIsProportional
+      ? (upperOffice?.label ?? "Senator")
+      : "Senator";
   const lowerMemberTitle =
     config.legislature?.lowerChamber?.key === "shugiin"
       ? `${lowerChamberName} Member`
@@ -365,6 +381,7 @@ export function PoliticsTab({
             senators={officials.senators}
             label={upperChamberName}
             memberTitle={upperMemberTitle}
+            isMultiSeat={upperIsProportional}
             isElected={upperChamber?.elected !== false}
             configuredSeats={upperChamber?.seats ?? 2}
             description={upperChamber?.description}

@@ -7,6 +7,7 @@ import type {
   State,
   StateDemographics,
   StateDemographicTurnout,
+  StateRegistrationPool,
 } from "@/lib/db/types";
 import type { StatePartyOrg } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
@@ -410,6 +411,13 @@ export interface AccumulateVoteTurnPreload {
    * granular substrate to fold legislation-driven lean drift onto cells.
    */
   demographicDefaultsByState?: Map<string, StateDemographics>;
+  /**
+   * Per-region registration pools, for the registered-voter gate: the
+   * unregistered slice of a region's electorate cannot cast a general ballot,
+   * so the accrual scales its pool by (100 - unregistered)%. Regions absent
+   * from the map keep the full pool (no registration data seeded).
+   */
+  registrationPoolByState?: Map<string, StateRegistrationPool>;
   categories: DemographicCategory[];
   stateMap: Map<string, State>;
   demographicsMap: Map<string, StateDemographics>;

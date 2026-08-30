@@ -992,7 +992,9 @@ function structuredCloneOr<T>(obj: T): T {
 export async function processPrimaryStaggerWaves(
   db: Db,
   now: Date,
-  turnNumber: number
+  turnNumber: number,
+  /** Optional harness restriction to specific elections; absent = all. */
+  onlyElectionIds?: ObjectId[]
 ): Promise<void> {
   // Scan all active presidential primaries (typically just one) and let the
   // per-election turn-based due-check gate the stagger window. A Date-range
@@ -1001,7 +1003,11 @@ export async function processPrimaryStaggerWaves(
   // check in runPrimaryStaggerWaveIfDue is the source of truth.
   const presElections = await db
     .collection<Election>("elections")
-    .find({ status: "active", electionType: "president" })
+    .find({
+      ...(onlyElectionIds ? { _id: { $in: onlyElectionIds } } : {}),
+      status: "active",
+      electionType: "president",
+    })
     .toArray();
 
   for (const election of presElections) {

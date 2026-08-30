@@ -25,6 +25,7 @@ describe("positionForElectionType", () => {
       "snap_shugiin",
       "npcDelegate",
       "dail",
+      "supremeSoviet",
     ]) {
       expect(positionForElectionType(t)).toBe("lowerChamber");
     }
