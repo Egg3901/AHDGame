@@ -25,8 +25,14 @@ export interface ForcePanelView {
   /** How much of the war the viewer may see, which is what this panel is about. */
   tier: ConflictTier;
   /**
+   * Whether the fighting is over (`isConflictConcluded`): resolved, or awaiting
+   * terms. Either way every formation has returned to reserve, so the live-war
+   * reading of the opposing force describes a front that no longer exists.
+   */
+  concluded?: boolean;
+  /**
    * For a resolved war still under fog: the turn its full record opens. Absent on
-   * a live war and on one whose record has already opened.
+   * a live war, on one awaiting terms (no date yet), and on an open record.
    */
   archiveOpensTurn?: number;
 }
@@ -237,15 +243,18 @@ export function ForcePanel({ view }: { view: ForcePanelView }) {
               nation&rsquo;s. It opens to everyone {CONFLICT_ARCHIVE_DELAY_TURNS} turns after the
               war resolves.
             </>
-          ) : view.tier === "command" && view.archiveOpensTurn != null ? (
-            // Command sight of a resolved war still under fog. Every formation has
+          ) : view.tier === "command" && (view.concluded || view.archiveOpensTurn != null) ? (
+            // Command sight of a concluded war still under fog. Every formation has
             // gone home, so the live-war line about reading the enemy off the
-            // strength ratio describes a front that no longer exists.
+            // strength ratio describes a front that no longer exists. A war awaiting
+            // terms has no opening turn yet: its window starts when it resolves.
             <>
-              This war has resolved and every formation has returned to reserve. Your own
+              The fighting is over and every formation has returned to reserve. Your own
               side&rsquo;s rosters stay yours; the opposing side&rsquo;s composition{" "}
               <span style={{ color: "#c8c8d4" }}>
-                opens to everyone on turn {view.archiveOpensTurn}
+                {view.archiveOpensTurn != null
+                  ? `opens to everyone on turn ${view.archiveOpensTurn}`
+                  : `opens to everyone ${CONFLICT_ARCHIVE_DELAY_TURNS} turns after the war resolves`}
               </span>
               .
             </>

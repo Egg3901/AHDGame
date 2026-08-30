@@ -216,6 +216,28 @@ describe("ConflictRecord", () => {
     expect(container.textContent).not.toMatch(/one band from the strength ratio/);
   });
 
+  // A war awaiting terms has stood both rosters down exactly as a resolved one has,
+  // but it has no opening turn yet: the window starts when the war resolves.
+  it("tells a command reader of a war awaiting terms that the formations have gone home", () => {
+    const { container } = render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          tier: "command",
+          ownSide: "A",
+          viewerCountry: "US",
+          status: "terms_pending",
+          statusLabel: "Terms Pending",
+          forceA: { divisions: 0, personnel: 0, readiness: null, recovery: null, casualties: 6000 },
+          forceB: { ...withheld, casualties: 6345 },
+        }}
+      />
+    );
+    expect(container.textContent).toMatch(/returned to reserve/);
+    expect(container.textContent).toMatch(/480 turns after the war resolves/);
+    expect(container.textContent).not.toMatch(/one band from the strength ratio/);
+  });
+
   // The war log's withheld-roster note has the same problem as the force panel:
   // "after the war resolves" on a war that has already resolved is a promise
   // already broken. Once there is a date, it names the date.

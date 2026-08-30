@@ -741,6 +741,7 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
                 enemyBand: c.enemyBand ?? null,
                 unopposed,
                 tier: c.tier,
+                concluded: isConflictConcluded(c.status as ConflictStatus),
                 archiveOpensTurn: c.archiveOpensTurn,
               }}
             />
