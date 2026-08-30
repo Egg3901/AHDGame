@@ -33,8 +33,10 @@ function clamp(val: number, min: number, max: number): number {
 /**
  * Applies bill vote policy shifts to a character's economic and social positions.
  *
- * Each provision shifts the character's policy by ±0.25 in the direction determined
- * by their vote and relative position to the bill. Multiple provisions accumulate.
+ * Each provision contributes to the direction determined by the character's vote
+ * and relative position to the bill. The combined result is capped at one 0.25
+ * step per axis so omnibus and budget bills do not move voters farther merely
+ * because they contain more provisions.
  *
  * Abstain votes and bills with no provisions are no-ops.
  * Always clamps to [-5, +5].
@@ -55,6 +57,9 @@ export async function applyBillVotePolicyShift(
     deltaEconomic += computePolicyShift(currentPolicies.economic, provision.economic, vote);
     deltaSocial += computePolicyShift(currentPolicies.social, provision.social, vote);
   }
+
+  deltaEconomic = clamp(deltaEconomic, -0.25, 0.25);
+  deltaSocial = clamp(deltaSocial, -0.25, 0.25);
 
   if (deltaEconomic === 0 && deltaSocial === 0) return;
 
