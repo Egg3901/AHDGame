@@ -107,6 +107,7 @@ export function mapStateBillToBillDisplay(
     myOtherChamberVote: null,
     canVoteOrigin,
     canVoteOther: false,
+    voteShiftPreview: canVoteOrigin ? (sb.voteShiftPreview ?? null) : null,
     requiresExecutiveAction: false,
     failedAt: sb.status === "failed" || sb.status === "override_failed" ? sb.proposedAt : null,
   };

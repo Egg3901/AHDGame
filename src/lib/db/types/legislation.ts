@@ -19,6 +19,23 @@ import type { WarEntryPoliticalPressure, WarEntryStake } from "@/lib/military/wa
  */
 export type WhippedFromVoteMap = Record<string, string>;
 
+/** Economic and social ideology positions, -5..+5 on the 0.05 grid. */
+export interface AxisPositions {
+  economic: number;
+  social: number;
+}
+
+/**
+ * What one bill has done to one voter's positions. `baseline` is where they
+ * stood before this bill first moved them; `applied` is the net movement this
+ * bill currently accounts for. Re-votes are measured from `baseline`, so the
+ * net from a single bill can never exceed one step.
+ */
+export interface PolicyShiftLedgerEntry {
+  baseline: AxisPositions;
+  applied: AxisPositions;
+}
+
 export type BillStatus =
   | "proposed"
   | "active"
@@ -413,6 +430,12 @@ export interface Bill {
   votesAbstain: number;
   votes: Record<string, "for" | "against" | "abstain">;
   whippedFromVote?: WhippedFromVoteMap;
+  /**
+   * Per-voter ideology movement this bill has caused, keyed by character id.
+   * A re-vote is measured from `baseline` so the net per bill stays within one
+   * step; entries are written by applyBillVotePolicyShift.
+   */
+  policyShiftLedger?: Record<string, PolicyShiftLedgerEntry>;
   otherChamberVotesFor?: number;
   otherChamberVotesAgainst?: number;
   otherChamberVotesAbstain?: number;

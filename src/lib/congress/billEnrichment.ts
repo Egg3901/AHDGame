@@ -11,6 +11,7 @@ import {
 import { inferCountryIdFromStateId } from "@/lib/congress/resolveBillCountryId";
 import type { VoteByParty } from "./billVoting";
 import type { OverrideChamberDisplay } from "./vetoOverrideTally";
+import type { VoteShiftPreview } from "@/lib/legislature/voteShiftPreview";
 import type {
   Bill,
   CreateDepartmentProvision,
@@ -123,6 +124,8 @@ export interface EnrichedBillDetail {
   myOverrideWhippedFrom: string | null;
   canVoteOrigin: boolean;
   canVoteOther: boolean;
+  /** What the viewer's Aye and Nay would each do to their positions; null for spectators. */
+  voteShiftPreview?: VoteShiftPreview | null;
   canCosponsor: boolean;
   /** True when the viewer is listed as a co-sponsor and may remove that endorsement. */
   canUncosponsor: boolean;

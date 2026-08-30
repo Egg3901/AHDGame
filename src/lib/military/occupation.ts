@@ -135,13 +135,21 @@ export interface ShiftInput {
 
 /**
  * `control` after an engagement. A decisive win takes the full step; narrower wins
- * scale down; a loser who withdrew in order yields less; and an advance halves once
- * the winner is deep in enemy territory and outrunning its logistics.
+ * scale down; a loser who withdrew in order yields less.
+ *
+ * There used to be a third drag here: the step halved once the winner held
+ * `deepPushDepth` of the host. Keyed on the winner, it halved the attacker's wins
+ * past that mark but not the defender's, so on a near-even front the line drifted
+ * back faster than it advanced: a wall, not a slowdown, on top of the supply
+ * penalties that already compound with distance from the start line
+ * (`derivedSupply` below, applied to throughput in `battle.ts`). It was removed;
+ * the report is `scripts/sim/reports/control-drift-deep-push.md`. `deepPushDepth`
+ * itself survives for the winding-down status and the peace-offer threshold, which
+ * read progress from the START line, not the winner's share.
  */
 export function occupationShift({ control, winner, margin, loserRetreated }: ShiftInput): number {
   let shift = Math.min(1, Math.abs(margin) / OCCUPATION.decisiveMargin) * OCCUPATION.maxShift;
   if (loserRetreated) shift *= OCCUPATION.retreatYield;
-  if (shareOf(control, winner) >= OCCUPATION.deepPushDepth) shift *= OCCUPATION.deepPushMult;
   const next = winner === "B" ? control + shift : control - shift;
   return Math.max(0, Math.min(100, next));
 }

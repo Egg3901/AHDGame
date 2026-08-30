@@ -14,9 +14,13 @@ vi.mock("@/lib/api/rateLimit", async (importOriginal) => {
   };
 });
 vi.mock("@/lib/api/requestLog", () => ({ logRequest: vi.fn() }));
-vi.mock("@/lib/policyShift", () => ({
-  applyBillVotePolicyShift: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock("@/lib/policyShift", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/policyShift")>();
+  return {
+    ...actual,
+    applyBillVotePolicyShift: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 let db: MockDb;
 

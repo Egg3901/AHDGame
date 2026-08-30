@@ -1,6 +1,6 @@
 export const peaceAndTrucesContent = `# Peace, indemnities & truces
 
-Most wars do not end by conquest. Thirty to forty won battles is a very long campaign, and the side that is losing usually has a cheaper option: **buy its way out**.
+Most wars do not end by conquest. Twenty unanswered decisive wins is a very long campaign, and the side that is losing usually has a cheaper option: **buy its way out**.
 
 Peace in A House Divided is a bilateral deal between **two countries**, not between two sides. You are ending *your own participation* in a war. Everybody else keeps fighting.
 

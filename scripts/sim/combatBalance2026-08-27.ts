@@ -62,7 +62,10 @@ interface Row {
   defPower: number;
 }
 
-/** Run one matchup over many seeds. `control` only affects the deep-push damper. */
+/**
+ * Run one matchup over many seeds. `control` no longer changes the step size (the
+ * deep-push damper it used to feed was removed); it only sets where the clamp bites.
+ */
 function sweep(label: string, att: BattleSide[], def: BattleSide[], control = 50): Row {
   const wins: number[] = [];
   const aL: number[] = [];

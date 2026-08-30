@@ -289,7 +289,7 @@ Tang traded ground for an intact army. That is a real and often correct decision
 
 **This is public.** Everyone can see it, including Tang, and including neutrals deciding whether to intervene.
 
-Tang reads it correctly: **the price of peace is about to go up sharply.** Right now, China still has an army and holds a quarter of its own territory. In another thirty battles it will have neither.
+Tang reads it correctly: **the price of peace is about to go up sharply.** Right now, China still has an army and holds a quarter of its own territory. In another twenty battles it will have neither.
 
 ## Tang sues for peace
 

@@ -1,5 +1,6 @@
 import type { VoteByParty } from "@/lib/congress/billVoting";
 import type { BillProvisionDisplay } from "@/lib/legislature/dto/stateLegislature";
+import type { VoteShiftPreview } from "@/lib/legislature/voteShiftPreview";
 
 export interface StateBillDetail {
   id: string;
@@ -35,6 +36,8 @@ export interface StateBillDetail {
   overrideVotesFor: number;
   overrideVotesAgainst: number;
   canVote: boolean;
+  /** What the viewer's Aye and Nay would each do to their positions; null for spectators. */
+  voteShiftPreview?: VoteShiftPreview | null;
   canGovernorAction: boolean;
   /** Public message attached to a veto; only set when status indicates vetoed. */
   vetoMessage?: string;
