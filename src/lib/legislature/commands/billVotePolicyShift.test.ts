@@ -235,6 +235,44 @@ describe("national bill vote → policy shift", () => {
     expect(ledgerWrite(db, "bills")).toBeNull();
   });
 
+  it("a vote a whip imposed on an unvoted member does not block their first personal vote", async () => {
+    const result = await performNationalBillAction(db as unknown as Db, {
+      authUser,
+      character: makeCharacter({ economic: 1, social: -1 }),
+      bill: usBill({
+        votes: { [characterId.toString()]: "for" },
+        whippedFromVote: { [characterId.toString()]: "unvoted" },
+      }),
+      countryId: "US",
+      input: { action: "vote", vote: "against" },
+    });
+    expect(result.status).toBe(200);
+    expect(characterShift(db)).toMatchObject({
+      "policies.economic": 1.25,
+      "policies.social": -1.25,
+    });
+    expect(ledgerWrite(db, "bills")).toEqual({
+      baseline: { economic: 1, social: -1 },
+      applied: { economic: 0.25, social: -0.25 },
+    });
+  });
+
+  it("a whip override of a legacy personal vote still does not grant a free step", async () => {
+    const result = await performNationalBillAction(db as unknown as Db, {
+      authUser,
+      character: makeCharacter({ economic: 1, social: -1 }),
+      bill: usBill({
+        votes: { [characterId.toString()]: "for" },
+        // They had personally voted Nay before the ledger existed; the whip flipped it.
+        whippedFromVote: { [characterId.toString()]: "against" },
+      }),
+      countryId: "US",
+      input: { action: "vote", vote: "against" },
+    });
+    expect(result.status).toBe(200);
+    expect(characterShift(db)).toBeNull();
+  });
+
   it("reads the upper chamber's own ledger under a concurrent vote", async () => {
     db.collection("electedOfficials").findOne.mockResolvedValue({
       _id: new ObjectId(),

@@ -78,7 +78,11 @@ export function BillVoteIndicator({
 
   return (
     <div className="space-y-1.5">
-      {canVote && <VoteShiftPreview preview={shiftPreview} currentVote={currentVote} />}
+      {/* After a local vote the numbers on hand predate it; wait for the parent's
+          refetch (myVote catches up to currentVote) before showing them again. */}
+      {canVote && currentVote === myVote && (
+        <VoteShiftPreview preview={shiftPreview} currentVote={currentVote} />
+      )}
       <div className="flex items-center justify-between gap-2">
         {indicator}
         {canVote && (

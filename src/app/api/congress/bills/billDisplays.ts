@@ -241,6 +241,11 @@ export function buildBillDisplays(
             ? b.otherChamberVotes?.[myCharacterId]
             : b.votes?.[myCharacterId]
           : undefined,
+        whippedFrom: myCharacterId
+          ? canVoteOther
+            ? b.otherChamberWhippedFromVote?.[myCharacterId]
+            : b.whippedFromVote?.[myCharacterId]
+          : undefined,
         canVote: canVoteOrigin || canVoteOther,
       }),
       requiresExecutiveAction: billRequiresExecutiveAction(b),

@@ -591,6 +591,11 @@ export async function listNationalLegislatureBills(
             ? bill.otherChamberVotes?.[myCharacterId]
             : bill.votes?.[myCharacterId]
           : undefined,
+        whippedFrom: myCharacterId
+          ? chamber !== lowerKey
+            ? bill.otherChamberWhippedFromVote?.[myCharacterId]
+            : bill.whippedFromVote?.[myCharacterId]
+          : undefined,
         canVote: canVoteOrigin || canVoteOther,
       }),
       requiresExecutiveAction: billRequiresExecutiveAction(bill),
@@ -1004,6 +1009,11 @@ export async function getNationalBillDetail(
       ? detail.canVoteOther
         ? bill.otherChamberVotes?.[myCharacterId]
         : bill.votes?.[myCharacterId]
+      : undefined,
+    whippedFrom: myCharacterId
+      ? detail.canVoteOther
+        ? bill.otherChamberWhippedFromVote?.[myCharacterId]
+        : bill.whippedFromVote?.[myCharacterId]
       : undefined,
     canVote: previewChamberOpen && (detail.canVoteOrigin || detail.canVoteOther),
   });

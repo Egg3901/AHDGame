@@ -11,9 +11,9 @@ function describeAxis(label: string, delta: number, negative: string, positive: 
 
 function describeVote(delta: AxisDelta, isCurrentVote: boolean): string {
   if (delta.economic === 0 && delta.social === 0) {
-    return isCurrentVote
-      ? "your current vote, no further change"
-      : "no change, you already hold this position";
+    // Zero can also mean the voter sits at the edge of the scale, so the line
+    // states the outcome and does not guess at the reason.
+    return isCurrentVote ? "your current vote, no further change" : "no change";
   }
   const econ = getEconomicAxisTickLabels();
   const social = getSocialAxisTickLabels();
@@ -39,6 +39,16 @@ export function VoteShiftPreview({
   className?: string;
 }) {
   if (!preview) return null;
+  const isStill = (d: AxisDelta) => d.economic === 0 && d.social === 0;
+  if (isStill(preview.aye) && isStill(preview.nay)) {
+    // No ideology on this bill (or a vote that predates the ledger): neither
+    // button moves the voter, and claiming a position match would be false.
+    return (
+      <p className={`text-xs text-muted ${className}`.trim()}>
+        This vote does not move your positions.
+      </p>
+    );
+  }
   return (
     <div className={`space-y-0.5 text-xs text-muted ${className}`.trim()}>
       <p>

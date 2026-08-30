@@ -86,6 +86,24 @@ describe("buildVoteShiftPreview", () => {
     });
   });
 
+  it("previews a first personal vote when the recorded vote was imposed by a whip", () => {
+    expect(
+      buildVoteShiftPreview({
+        provisions: [{ economic: 3 }],
+        ledger: undefined,
+        characterId: charKey,
+        policies: { economic: 0, social: 0 },
+        previousVote: "for",
+        whippedFrom: "unvoted",
+        canVote: true,
+      })
+    ).toEqual({
+      current: { economic: 0, social: 0 },
+      aye: { economic: 0.25, social: 0 },
+      nay: { economic: -0.25, social: 0 },
+    });
+  });
+
   it("previews no movement when the bill takes no stance", () => {
     expect(
       buildVoteShiftPreview({

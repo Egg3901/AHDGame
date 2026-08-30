@@ -1,6 +1,7 @@
 import type { AxisPositions, PolicyShiftLedgerEntry } from "@/lib/db/types";
 import {
   billPositionTargets,
+  personalPreviousVote,
   previewVoteShift,
   shouldApplyVoteShift,
   type BillVote,
@@ -15,7 +16,10 @@ export interface BuildVoteShiftPreviewInput {
   ledger: Record<string, PolicyShiftLedgerEntry> | undefined;
   characterId: string | null;
   policies: AxisPositions | undefined;
+  /** The vote on record for this viewer in the chamber they vote in. */
   previousVote: BillVote | undefined;
+  /** The whip snapshot for the same chamber, when a whip overwrote that vote. */
+  whippedFrom?: string;
   canVote: boolean;
 }
 
@@ -30,12 +34,13 @@ export function buildVoteShiftPreview({
   characterId,
   policies,
   previousVote,
+  whippedFrom,
   canVote,
 }: BuildVoteShiftPreviewInput): VoteShiftPreview | null {
   if (!canVote || !characterId || !policies) return null;
   const current: AxisPositions = { economic: policies.economic, social: policies.social };
   const entry = ledger?.[characterId];
-  if (!shouldApplyVoteShift(previousVote, entry)) {
+  if (!shouldApplyVoteShift(personalPreviousVote(previousVote, whippedFrom), entry)) {
     const none: AxisPositions = { economic: 0, social: 0 };
     return { current, aye: none, nay: { ...none } };
   }

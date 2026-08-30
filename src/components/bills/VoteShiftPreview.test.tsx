@@ -40,8 +40,25 @@ describe("VoteShiftPreview", () => {
         }}
       />
     );
-    expect(line("Aye:")).toBe("Aye: no change, you already hold this position");
+    expect(line("Aye:")).toBe("Aye: no change");
     expect(line("Nay:")).toBe("Nay: Economic 0.25 toward Left, Social no change");
+  });
+
+  it("collapses to one line when neither vote would move the voter", () => {
+    // A bill with no ideology (a war declaration, a tariff-only bill) or a legacy
+    // vote that predates the ledger: claiming a position match would be false.
+    const { container } = render(
+      <VoteShiftPreview
+        preview={{
+          current: { economic: 2, social: 0 },
+          aye: { economic: 0, social: 0 },
+          nay: { economic: 0, social: 0 },
+        }}
+      />
+    );
+    expect(container.textContent?.replace(/\s+/g, " ").trim()).toBe(
+      "This vote does not move your positions."
+    );
   });
 
   it("labels the vote already cast as such instead of claiming a position match", () => {

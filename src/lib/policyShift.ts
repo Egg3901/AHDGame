@@ -125,6 +125,23 @@ export function shouldApplyVoteShift(
   return !previousVote || previousVote === "abstain";
 }
 
+/**
+ * The vote the member cast THEMSELVES, seen through any party whip that later
+ * overwrote it. A whip's choice is not the member's stance: it never moved
+ * their positions, so it must not count as a prior vote either. The whip
+ * snapshot holds the pre-whip value ("unvoted" when there was none).
+ */
+export function personalPreviousVote(
+  recordedVote: BillVote | undefined,
+  whippedFrom: string | undefined
+): BillVote | undefined {
+  if (whippedFrom === undefined) return recordedVote;
+  if (whippedFrom === "for" || whippedFrom === "against" || whippedFrom === "abstain") {
+    return whippedFrom;
+  }
+  return undefined;
+}
+
 export interface ApplyBillVotePolicyShiftInput {
   collection: "bills" | "stateBills";
   billId: ObjectId;
@@ -157,15 +174,24 @@ export async function applyBillVotePolicyShift(
     ledgerEntry,
   }: ApplyBillVotePolicyShiftInput
 ): Promise<void> {
-  if (vote === "abstain" && !ledgerEntry) return;
+  // The caller read the bill before recording the vote; a vote that landed in
+  // between may already have written an entry. Re-read at write time so two
+  // rapid votes cannot both start from "no entry" and each apply a full step.
+  const key = `policyShiftLedger.${characterId.toString()}`;
+  const fresh = await db
+    .collection<{ policyShiftLedger?: Record<string, PolicyShiftLedgerEntry> }>(collection)
+    .findOne({ _id: billId }, { projection: { [key]: 1 } });
+  const entry = fresh ? fresh.policyShiftLedger?.[characterId.toString()] : ledgerEntry;
 
-  const baseline = ledgerEntry?.baseline ?? { ...currentPolicies };
-  const applied = ledgerEntry?.applied ?? { economic: 0, social: 0 };
+  if (vote === "abstain" && !entry) return;
+
+  const baseline = entry?.baseline ?? { ...currentPolicies };
+  const applied = entry?.applied ?? { economic: 0, social: 0 };
   const next = computeVoteShift(baseline, billPositionTargets(provisions), vote);
   const changeEconomic = Number((next.economic - applied.economic).toFixed(2));
   const changeSocial = Number((next.social - applied.social).toFixed(2));
 
-  if (changeEconomic === 0 && changeSocial === 0 && ledgerEntry) return;
+  if (changeEconomic === 0 && changeSocial === 0 && entry) return;
 
   if (changeEconomic !== 0 || changeSocial !== 0) {
     await db.collection<Character>("characters").updateOne(
@@ -184,11 +210,6 @@ export async function applyBillVotePolicyShift(
     );
   }
 
-  const entry: PolicyShiftLedgerEntry = { baseline, applied: next };
-  await db
-    .collection(collection)
-    .updateOne(
-      { _id: billId },
-      { $set: { [`policyShiftLedger.${characterId.toString()}`]: entry } }
-    );
+  const nextEntry: PolicyShiftLedgerEntry = { baseline, applied: next };
+  await db.collection(collection).updateOne({ _id: billId }, { $set: { [key]: nextEntry } });
 }

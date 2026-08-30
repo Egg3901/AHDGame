@@ -42,6 +42,27 @@ describe("buildBillDisplays — voteShiftPreview", () => {
     });
   });
 
+  it("treats a whip-imposed vote on an unvoted member as no prior vote", () => {
+    const whipped = {
+      ...bill,
+      votes: { [viewerId.toString()]: "for" },
+      whippedFromVote: { [viewerId.toString()]: "unvoted" },
+    } as unknown as Bill;
+    const [row] = buildBillDisplays([whipped], {
+      partyMap: new Map(),
+      legislationTypeMap: new Map(),
+      myVoteMap: new Map(),
+      myCharacterId: viewerId.toString(),
+      myChamber: "house",
+      myPolicies: { economic: 1, social: 0 },
+    });
+    expect(row!.voteShiftPreview).toEqual({
+      current: { economic: 1, social: 0 },
+      aye: { economic: -0.25, social: 0 },
+      nay: { economic: 0.25, social: 0 },
+    });
+  });
+
   it("carries no preview for a senator who cannot vote on a House-stage bill", () => {
     const [row] = buildBillDisplays([bill], {
       partyMap: new Map(),

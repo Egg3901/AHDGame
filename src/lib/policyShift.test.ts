@@ -5,6 +5,7 @@ import {
   computeVoteShift,
   previewVoteShift,
   shouldApplyVoteShift,
+  personalPreviousVote,
   applyBillVotePolicyShift,
   type PolicyShiftLedgerEntry,
 } from "./policyShift";
@@ -143,11 +144,34 @@ describe("shouldApplyVoteShift", () => {
   });
 });
 
+// ── personalPreviousVote (pure) ─────────────────────────────────────────────
+
+describe("personalPreviousVote", () => {
+  it("is the recorded vote when no whip touched it", () => {
+    expect(personalPreviousVote("for", undefined)).toBe("for");
+    expect(personalPreviousVote(undefined, undefined)).toBeUndefined();
+  });
+
+  it("is no vote at all when a whip imposed the recorded vote on an unvoted member", () => {
+    // The whip's choice is not the member's stance, so their first personal vote
+    // must still count as a first vote.
+    expect(personalPreviousVote("for", "unvoted")).toBeUndefined();
+  });
+
+  it("is the pre-whip vote when a whip overrode a vote the member had cast", () => {
+    expect(personalPreviousVote("for", "against")).toBe("against");
+    expect(personalPreviousVote("for", "abstain")).toBe("abstain");
+  });
+});
+
 // ── applyBillVotePolicyShift (DB writes) ────────────────────────────────────
 
 function makeMockDb() {
   const characters = { updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }) };
-  const bills = { updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }) };
+  const bills = {
+    updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+    findOne: vi.fn().mockResolvedValue(null),
+  };
   const db = {
     collection: vi.fn((name: string) => (name === "characters" ? characters : bills)),
   };
@@ -324,6 +348,31 @@ describe("applyBillVotePolicyShift", () => {
       baseline: { economic: 0, social: 0 },
       applied: { economic: 0, social: 0.25 },
     });
+  });
+
+  it("re-reads the ledger from the bill at write time so a stale caller cannot double-apply", async () => {
+    const { db, characters, bills } = makeMockDb();
+    // The caller loaded the bill before a concurrent vote landed; the bill now
+    // already carries an Aye entry. A second Aye must be a no-op, not another step.
+    bills.findOne.mockResolvedValue({
+      policyShiftLedger: {
+        [characterId.toString()]: {
+          baseline: { economic: 1, social: 0 },
+          applied: { economic: 0.25, social: 0 },
+        },
+      },
+    });
+    await applyBillVotePolicyShift(db as never, {
+      collection: "bills",
+      billId,
+      characterId,
+      provisions: [{ economic: 3 }],
+      vote: "for",
+      currentPolicies: { economic: 1.25, social: 0 },
+      ledgerEntry: undefined,
+    });
+    expect(characters.updateOne).not.toHaveBeenCalled();
+    expect(bills.updateOne).not.toHaveBeenCalled();
   });
 
   it("records a ledger entry even when a first Aye moves nothing, so later re-votes stay capped", async () => {
