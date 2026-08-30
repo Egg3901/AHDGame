@@ -101,7 +101,7 @@ describe("buildCoalitionSide", () => {
   it("loads each country's Logistics-command coverage into its battle side", async () => {
     const sides = await buildCoalitionSide(db, ["US"], new Map([["US", u("US")]]), FRONTS_MAP);
 
-    expect(sides[0].logisticsSupplyByRegion).toEqual({ afghan: 20 });
+    expect(sides[0].logisticsCoverageByRegion).toEqual({ afghan: 1 });
   });
 
   it("gives a country with no units an empty contingent rather than dropping it", async () => {

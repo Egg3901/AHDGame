@@ -583,6 +583,12 @@ export interface Front {
    * the terrain. Absent means unknown, which `planEngagement` treats as the base width.
    */
   capacity?: number;
+  /**
+   * The side fighting on its own soil: whichever holds the conflict's host country,
+   * which in an interstate war is the nation declared on. Set by `conflictToFront`.
+   * Absent means neither, and nobody gets `FRONT_SUPPLY.hostSideThroughput`.
+   */
+  hostSide?: "A" | "B";
   sev?: string;
   west?: string;
   east?: string;
