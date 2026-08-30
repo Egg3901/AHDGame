@@ -346,3 +346,51 @@ export const OCCUPATION = {
   /** Conflict supply at which a side's theatre logistics are neutral (×1.0). */
   supplyNeutral: 60,
 } as const;
+
+/**
+ * Front supply: what a formation draws from the pool and what feeds it.
+ *
+ * `supplyState` is throughput / demand at a front. Demand was every formation's
+ * treasury upkeep / 12 regardless of what it was or where it stood, and throughput was
+ * a set of flat constants sized for an eleven-formation front (the calibration anchor
+ * for FRONT_CAPACITY_BASE). Measured on the live German front at turn 503, 59 Warsaw
+ * Pact formations read CUT OFF at level 22 with 84% air superiority, and the largest
+ * single term was the air arm: 905 of 1,871 demand was fighter, bomber, air-defence and
+ * rocket formations parked at a LAND front, billed like divisions in the mud because a
+ * jet is expensive. A Logistics command was worth a flat +20 against a deficit of
+ * ~1,160. Full workings in scripts/sim/reports/front-supply-2026-08-30.md.
+ */
+export const FRONT_SUPPLY = {
+  /**
+   * Share of upkeep an air, naval, rocket or space formation draws from the land-front
+   * pool. Its cost is in airframes and hulls, not trucked tonnage, and since the naval
+   * and air layer it fights from a station rather than the line. Ground and marine pay
+   * in full: marines are amphibious ground troops and fight ashore.
+   */
+  offFrontDemand: 0.25,
+  /**
+   * Share of upkeep a formation the ENGAGEMENT PLAN leaves in depth draws. Depth
+   * engages at 0.10 and bleeds at 0.15; billing it full ammunition and fuel was the
+   * one place the model charged it as if it were in the line. Keyed on the plan, never
+   * the player's label, for the same reason the tail bonus is.
+   */
+  depthDemand: 0.6,
+  /**
+   * Share of a contingent's front demand a perfectly effective Logistics command
+   * covering the region delivers, in place of the old flat 20. Scales with the army it
+   * feeds, so the command is worth standing up for a coalition front and not only for
+   * the eleven-formation one it was sized against. Effectiveness (commanders,
+   * capacity) multiplies it, and overlapping commands take the strongest, not the sum.
+   */
+  logisticsCommandShare: 0.25,
+  /**
+   * Throughput multiplier for the side fighting on its own soil (the side holding the
+   * conflict's host country, which in an interstate war is the nation declared on).
+   * Interior lines, home depots and rail. In a civil or independence war that is the
+   * government's side, which owns the depots; a proxy war's host is a world entity on
+   * neither roster, so neither faction gets it. Measured at x1.10 (indistinguishable from
+   * none), x1.25 and x1.50 (lets a defender stack a front without limit and hands +50%
+   * to a side already holding 85% of the map); x1.25 keeps the stacking cost real.
+   */
+  hostSideThroughput: 1.25,
+} as const;
