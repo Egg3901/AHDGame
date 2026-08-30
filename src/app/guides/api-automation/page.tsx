@@ -21,7 +21,7 @@ export default function ApiAutomationGuidePage() {
       </nav>
 
       <h1 className="text-3xl font-bold">API Automation Guide</h1>
-      <p className="mt-2 text-sm text-muted">Last updated: May 2, 2026 (UTC)</p>
+      <p className="mt-2 text-sm text-muted">Last updated: August 30, 2026 (UTC)</p>
 
       <section className="mt-8 space-y-3 rounded-2xl border border-card-border bg-card/70 p-6">
         <h2 className="text-xl font-semibold">What this covers</h2>
@@ -40,6 +40,21 @@ export default function ApiAutomationGuidePage() {
             complete API documentation
           </a>
           .
+        </p>
+      </section>
+
+      <section className="mt-6 space-y-3 rounded-2xl border border-card-border bg-card/70 p-6">
+        <h2 className="text-xl font-semibold">What you can read</h2>
+        <p className="text-sm text-muted">
+          Public-scope keys can read the live game clock, countries and regions, national metrics
+          and budgets, governments, elections, legislation, referendums, international
+          organizations, trade restrictions, sovereign risk, conflicts, corporations, stocks, bonds,
+          commodities, funds, and forex.
+        </p>
+        <p className="text-sm text-muted">
+          Start with <code>/api/public/v1/meta</code> for the machine-readable route catalog. The
+          catalog is tested against the route tree, so it cannot silently omit an implemented v1
+          endpoint.
         </p>
       </section>
 

@@ -122,5 +122,11 @@ During this floor the country cannot roll debt, forcing it to run primary surplu
 | Cascade depth | 3 levels |
 | Recovery floor | 48 turns |
 
+## Public API
+
+\`GET /api/public/v1/sovereigns\` provides a world-wide sovereign watch feed for bots and dashboards. Each country row includes its credit rating, crisis state, debt-to-GDP ratio, auction-failure streak, demand ratio and band, demand components, and Debt Sustainability Assessment score. Values use the same calculations as the in-game sovereign watch surface.
+
+Any public or private scoped API key can read it. See the [public API documentation](https://docs.lakesidegames.net/api/public-v1.html) for the complete response shape.
+
 See also: [Sovereign Bonds](/wiki/sovereign-bonds), [IMF & Bailouts](/wiki/imf), [Central Banks](/wiki/central-banks), [National Budget](/wiki/national-budget)
 `;

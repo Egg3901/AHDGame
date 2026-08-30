@@ -27,7 +27,7 @@ The wiki explains how each system works. The **strategy guides** are the long-fo
 
 ## Advanced & Automation
 
-- [API Automation](/guides/api-automation): drive your character programmatically through the public API.
+- [API Automation](/guides/api-automation): build bots and dashboards from live politics, metrics, markets, trade restrictions, international organizations, and sovereign-risk data.
 - [Reference Formulas](/wiki/reference-formulas): current election, approval, organization, and progression formulas.
 - [Turn Order](/wiki/reference-turn-order): the authoritative phase sequence for hourly processing.
 
