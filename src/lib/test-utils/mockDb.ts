@@ -44,6 +44,7 @@ export interface MockCollection {
   aggregate: AnyMockFn;
   bulkWrite: AnyMockFn;
   createIndex: AnyMockFn;
+  listIndexes: AnyMockFn;
 }
 
 /** A minimal mock of a MongoDB Db instance. */
@@ -118,6 +119,11 @@ function createMockCollection(): MockCollection {
       deletedCount: 0,
     }),
     createIndex: vi.fn().mockResolvedValue("index-name"),
+    // Real listIndexes() returns a cursor; tests override with actual index
+    // descriptions when the code under test inspects them.
+    listIndexes: vi.fn().mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    }),
   };
 }
 
