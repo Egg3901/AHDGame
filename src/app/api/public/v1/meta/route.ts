@@ -132,10 +132,12 @@ const ENDPOINTS = [
   {
     method: "GET",
     path: "/api/public/v1/elections",
-    description: "Active elections for a country.",
+    description:
+      "Active elections for a country. Pass results=true for per-candidate vote standings on every race in one call.",
     params: [
       { name: "country", required: true },
       { name: "state", required: false },
+      { name: "results", required: false },
     ],
   },
   {
