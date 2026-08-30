@@ -76,6 +76,7 @@ const state = {
   country: "US",
   countryCode: "us",
   positionId: "secretary_of_defense",
+  canWrite: true,
 } as unknown as CombatState;
 
 /** The forecast URL for a given target, once one has been requested. */
