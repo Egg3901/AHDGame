@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { VoteShiftPreview } from "./VoteShiftPreview";
+import type { VoteShiftPreview as VoteShiftPreviewData } from "@/lib/legislature/voteShiftPreview";
 
 interface BillVoteIndicatorProps {
   billId: string;
@@ -14,6 +16,8 @@ interface BillVoteIndicatorProps {
   stateOverrideVoteUrl?: string;
   /** Raw state bill status from API — selects override vs chamber vote URL */
   rawStateBillStatus?: string;
+  /** What Aye and Nay would do to the viewer's positions; shown above the buttons. */
+  shiftPreview?: VoteShiftPreviewData | null;
 }
 
 export function BillVoteIndicator({
@@ -25,6 +29,7 @@ export function BillVoteIndicator({
   stateVoteUrl,
   stateOverrideVoteUrl,
   rawStateBillStatus,
+  shiftPreview,
 }: BillVoteIndicatorProps) {
   const [voting, setVoting] = useState(false);
   const [currentVote, setCurrentVote] = useState(myVote);
@@ -72,41 +77,44 @@ export function BillVoteIndicator({
   if (!indicator) return null;
 
   return (
-    <div className="flex items-center justify-between gap-2">
-      {indicator}
-      {canVote && (
-        <div className="flex gap-1 shrink-0">
-          {(omitAbstain
-            ? (["for", "against"] as const)
-            : (["for", "against", "abstain"] as const)
-          ).map((voteOption) => (
-            <button
-              key={voteOption}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                castVote(voteOption);
-              }}
-              disabled={voting}
-              className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                currentVote === voteOption
-                  ? voteOption === "for"
-                    ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-400"
-                    : voteOption === "against"
-                      ? "border-red-500/50 bg-red-500/20 text-red-400"
-                      : "border-card-border bg-muted/20 text-muted"
-                  : voteOption === "for"
-                    ? "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
-                    : voteOption === "against"
-                      ? "border-red-500/30 text-red-400 hover:bg-red-500/10"
-                      : "border-card-border text-muted hover:bg-muted/10"
-              }`}
-            >
-              {voteOption === "for" ? "Aye" : voteOption === "against" ? "Nay" : "Abstain"}
-            </button>
-          ))}
-        </div>
-      )}
+    <div className="space-y-1.5">
+      {canVote && <VoteShiftPreview preview={shiftPreview} />}
+      <div className="flex items-center justify-between gap-2">
+        {indicator}
+        {canVote && (
+          <div className="flex gap-1 shrink-0">
+            {(omitAbstain
+              ? (["for", "against"] as const)
+              : (["for", "against", "abstain"] as const)
+            ).map((voteOption) => (
+              <button
+                key={voteOption}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  castVote(voteOption);
+                }}
+                disabled={voting}
+                className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                  currentVote === voteOption
+                    ? voteOption === "for"
+                      ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-400"
+                      : voteOption === "against"
+                        ? "border-red-500/50 bg-red-500/20 text-red-400"
+                        : "border-card-border bg-muted/20 text-muted"
+                    : voteOption === "for"
+                      ? "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                      : voteOption === "against"
+                        ? "border-red-500/30 text-red-400 hover:bg-red-500/10"
+                        : "border-card-border text-muted hover:bg-muted/10"
+                }`}
+              >
+                {voteOption === "for" ? "Aye" : voteOption === "against" ? "Nay" : "Abstain"}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

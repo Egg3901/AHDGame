@@ -1,6 +1,7 @@
 import type { BillChamber, BillStatus } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import type { BillProposalAutoFailWarning } from "@/lib/legislature/billAutoFailWarning";
+import type { VoteShiftPreview } from "@/lib/legislature/voteShiftPreview";
 
 export interface BillDisplay {
   id: string;
@@ -66,6 +67,12 @@ export interface BillDisplay {
   canVoteOrigin: boolean;
   /** Whether the user can vote on this bill in the other chamber */
   canVoteOther: boolean;
+  /**
+   * What the viewer's Aye and Nay would each do to their positions. Only set
+   * when the viewer can vote; computed server-side by the same code that
+   * applies the shift.
+   */
+  voteShiftPreview?: VoteShiftPreview | null;
   requiresExecutiveAction: boolean;
   /** When the bill failed (for timeline display) */
   failedAt: string | null;

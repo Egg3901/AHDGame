@@ -370,6 +370,7 @@ function StateBillDetailContent() {
             myVote={bill.myVote}
             canVote={bill.canVote && !voting && canCastOriginVote}
             onVote={canCastOriginVote ? (v) => void handleChamberVote(v) : undefined}
+            shiftPreview={bill.voteShiftPreview}
           />
         )}
 

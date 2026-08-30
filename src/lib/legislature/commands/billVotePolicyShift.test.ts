@@ -59,6 +59,19 @@ function characterShift(db: MockDb): Record<string, unknown> | null {
   return update.$set;
 }
 
+/** The ledger entry written for this voter on the bill collection, or null when none. */
+function ledgerWrite(db: MockDb, collection: "bills" | "stateBills") {
+  const key = `policyShiftLedger.${characterId.toString()}`;
+  const calls = db.collectionMocks[collection]?.updateOne.mock.calls ?? [];
+  const writes = calls.filter((call) => {
+    const update = call[1] as { $set?: Record<string, unknown> } | unknown[];
+    return !Array.isArray(update) && update.$set !== undefined && key in update.$set;
+  });
+  if (writes.length === 0) return null;
+  expect(writes).toHaveLength(1);
+  return (writes[0]![1] as { $set: Record<string, unknown> }).$set[key];
+}
+
 describe("national bill vote → policy shift", () => {
   let db: MockDb;
   const authUser = { userId: new ObjectId().toString(), isAdmin: false } as AuthUser;
@@ -144,7 +157,72 @@ describe("national bill vote → policy shift", () => {
     expect(characterShift(db)).toBeNull();
   });
 
-  it("changing an already-cast vote does not shift a second time", async () => {
+  it("a first Aye records the voter's baseline and applied step on the bill", async () => {
+    await performNationalBillAction(db as unknown as Db, {
+      authUser,
+      character: makeCharacter({ economic: 1, social: -1 }),
+      bill: usBill(),
+      countryId: "US",
+      input: { action: "vote", vote: "for" },
+    });
+    expect(ledgerWrite(db, "bills")).toEqual({
+      baseline: { economic: 1, social: -1 },
+      applied: { economic: -0.25, social: 0.25 },
+    });
+  });
+
+  it("switching Aye to Nay lands one step the other side of the baseline, never two from current", async () => {
+    const result = await performNationalBillAction(db as unknown as Db, {
+      authUser,
+      // Baseline was 1 / -1; the Aye already moved them to 0.75 / -0.75.
+      character: makeCharacter({ economic: 0.75, social: -0.75 }),
+      bill: usBill({
+        votes: { [characterId.toString()]: "for" },
+        policyShiftLedger: {
+          [characterId.toString()]: {
+            baseline: { economic: 1, social: -1 },
+            applied: { economic: -0.25, social: 0.25 },
+          },
+        },
+      }),
+      countryId: "US",
+      input: { action: "vote", vote: "against" },
+    });
+    expect(result.status).toBe(200);
+    expect(characterShift(db)).toMatchObject({
+      "policies.economic": 1.25,
+      "policies.social": -1.25,
+    });
+    expect(ledgerWrite(db, "bills")).toEqual({
+      baseline: { economic: 1, social: -1 },
+      applied: { economic: 0.25, social: -0.25 },
+    });
+  });
+
+  it("switching to Abstain reverts what this bill applied", async () => {
+    const result = await performNationalBillAction(db as unknown as Db, {
+      authUser,
+      character: makeCharacter({ economic: 0.75, social: -0.75 }),
+      bill: usBill({
+        votes: { [characterId.toString()]: "for" },
+        policyShiftLedger: {
+          [characterId.toString()]: {
+            baseline: { economic: 1, social: -1 },
+            applied: { economic: -0.25, social: 0.25 },
+          },
+        },
+      }),
+      countryId: "US",
+      input: { action: "vote", vote: "abstain" },
+    });
+    expect(result.status).toBe(200);
+    expect(characterShift(db)).toMatchObject({
+      "policies.economic": 1,
+      "policies.social": -1,
+    });
+  });
+
+  it("changing a legacy vote with no ledger entry does not shift", async () => {
     const result = await performNationalBillAction(db as unknown as Db, {
       authUser,
       character: makeCharacter({ economic: 1, social: -1 }),
@@ -154,6 +232,39 @@ describe("national bill vote → policy shift", () => {
     });
     expect(result.status).toBe(200);
     expect(characterShift(db)).toBeNull();
+    expect(ledgerWrite(db, "bills")).toBeNull();
+  });
+
+  it("reads the upper chamber's own ledger under a concurrent vote", async () => {
+    db.collection("electedOfficials").findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      characterId,
+      countryId: "US",
+      officeType: "senate",
+      seatsHeld: 1,
+    });
+    const result = await performNationalBillAction(db as unknown as Db, {
+      authUser,
+      character: makeCharacter({ economic: 0.75, social: -0.75 }),
+      bill: usBill({
+        status: "active_both",
+        otherChamberVotes: { [characterId.toString()]: "for" },
+        otherChamberVotingEndsOnTurn: 999,
+        policyShiftLedger: {
+          [characterId.toString()]: {
+            baseline: { economic: 1, social: -1 },
+            applied: { economic: -0.25, social: 0.25 },
+          },
+        },
+      }),
+      countryId: "US",
+      input: { action: "vote", vote: "against" },
+    });
+    expect(result.status).toBe(200);
+    expect(characterShift(db)).toMatchObject({
+      "policies.economic": 1.25,
+      "policies.social": -1.25,
+    });
   });
 
   it("provisions that take no stance (omitted or 0) do not move the voter", async () => {
@@ -268,7 +379,43 @@ describe("state bill vote → policy shift", () => {
     });
   });
 
-  it("changing an already-cast vote does not shift a second time", async () => {
+  it("a first Aye records the ledger entry on the state bill", async () => {
+    const bill = txBill();
+    db.collection("stateBills").findOne.mockResolvedValue(bill);
+    await castStateBillVote(db as unknown as Db, "US", "TX", bill._id.toString(), user, "for");
+    expect(ledgerWrite(db, "stateBills")).toEqual({
+      baseline: { economic: 0, social: 0 },
+      applied: { economic: 0.25, social: -0.25 },
+    });
+  });
+
+  it("switching Nay to Aye lands one step the other side of the baseline", async () => {
+    const bill = txBill({
+      votes: { [characterId.toString()]: "against" },
+      policyShiftLedger: {
+        [characterId.toString()]: {
+          baseline: { economic: 0, social: 0 },
+          applied: { economic: -0.25, social: 0.25 },
+        },
+      },
+    });
+    db.collection("stateBills").findOne.mockResolvedValue(bill);
+    const result = await castStateBillVote(
+      db as unknown as Db,
+      "US",
+      "TX",
+      bill._id.toString(),
+      { ...user, character: makeCharacter({ economic: -0.25, social: 0.25 }) },
+      "for"
+    );
+    expect(result.status).toBe(200);
+    expect(characterShift(db)).toMatchObject({
+      "policies.economic": 0.25,
+      "policies.social": -0.25,
+    });
+  });
+
+  it("changing a legacy vote with no ledger entry does not shift", async () => {
     const bill = txBill({ votes: { [characterId.toString()]: "against" } });
     db.collection("stateBills").findOne.mockResolvedValue(bill);
     const result = await castStateBillVote(
@@ -281,5 +428,6 @@ describe("state bill vote → policy shift", () => {
     );
     expect(result.status).toBe(200);
     expect(characterShift(db)).toBeNull();
+    expect(ledgerWrite(db, "stateBills")).toBeNull();
   });
 });

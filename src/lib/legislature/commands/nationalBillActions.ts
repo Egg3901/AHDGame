@@ -5,7 +5,7 @@ import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { resolveBillVoteField } from "@/lib/congress/billVoteField";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
-import { applyBillVotePolicyShift } from "@/lib/policyShift";
+import { applyBillVotePolicyShift, shouldApplyVoteShift } from "@/lib/policyShift";
 import { executePresidentialBillAction } from "@/lib/presidentialBillAction";
 import { createNotification } from "@/lib/notifications";
 import { clearWhippedFromVote } from "@/lib/congress/clearWhippedVote";
@@ -327,15 +327,18 @@ export async function performNationalBillAction(
       isOtherChamber || concurrentField === "otherChamberVotes"
         ? bill.otherChamberVotes?.[charKey]
         : bill.votes?.[charKey];
-    if (!previousVote || previousVote === "abstain") {
+    const ledgerEntry = bill.policyShiftLedger?.[charKey];
+    if (shouldApplyVoteShift(previousVote, ledgerEntry)) {
       try {
-        await applyBillVotePolicyShift(
-          db,
-          character._id,
-          (bill.provisions ?? []).filter(isPolicyProvision),
+        await applyBillVotePolicyShift(db, {
+          collection: "bills",
+          billId: bill._id,
+          characterId: character._id,
+          provisions: (bill.provisions ?? []).filter(isPolicyProvision),
           vote,
-          character.policies
-        );
+          currentPolicies: character.policies,
+          ledgerEntry,
+        });
       } catch (error) {
         console.warn("[policyShift] Failed to apply policy shift from congress vote:", error);
       }

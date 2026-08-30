@@ -5,7 +5,7 @@ import {
   getSubNationalLegislatureKey,
   type CountryId,
 } from "@/lib/constants/countries";
-import { applyBillVotePolicyShift } from "@/lib/policyShift";
+import { applyBillVotePolicyShift, shouldApplyVoteShift } from "@/lib/policyShift";
 import { buildEmbeddedVoteTallyUpdate } from "@/lib/votes/embeddedVoteTally";
 import type {
   Character,
@@ -129,17 +129,20 @@ export async function castStateBillVote(
   }
 
   const previousVote = bill.votes?.[charId];
-  if (!previousVote || previousVote === "abstain") {
+  const ledgerEntry = bill.policyShiftLedger?.[charId];
+  if (shouldApplyVoteShift(previousVote, ledgerEntry)) {
     try {
-      await applyBillVotePolicyShift(
-        db,
-        character._id,
-        (bill.provisions ?? []).filter(
+      await applyBillVotePolicyShift(db, {
+        collection: "stateBills",
+        billId: bill._id,
+        characterId: character._id,
+        provisions: (bill.provisions ?? []).filter(
           (provision) => provision.type !== "subsidy" && provision.type !== "end_subsidy"
         ),
         vote,
-        character.policies
-      );
+        currentPolicies: character.policies,
+        ledgerEntry,
+      });
     } catch (error) {
       console.warn("[policyShift] Failed to apply policy shift from state vote:", error);
     }
