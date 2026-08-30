@@ -10,6 +10,7 @@ import {
   globalEffectiveness,
   coverageStatus,
   effIntent,
+  logisticsSupplyByRegion,
 } from "../calc";
 import type { MilitaryCommand, MilitaryState, MilitaryOperation } from "../types";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
@@ -96,6 +97,32 @@ describe("effectiveness", () => {
     const b = effectivenessBreakdown(cmd({ unitIds: ["a", "b"], cap: 8 }), UNITS);
     expect(b.finalValue).toBe(74);
     expect(b.negatives.length).toBeGreaterThan(0);
+  });
+});
+
+describe("logistics command supply", () => {
+  it("delivers effectiveness-scaled throughput only in covered regions", () => {
+    const coverage = logisticsSupplyByRegion(
+      [
+        cmd({ type: "LOGISTICS", regionIds: ["eeu"], base: 100 }),
+        cmd({ id: "regional", type: "REGIONAL", regionIds: ["weu"], base: 100 }),
+      ],
+      UNITS
+    );
+
+    expect(coverage).toEqual({ eeu: 20 });
+  });
+
+  it("uses the strongest overlapping Logistics command instead of stacking", () => {
+    const coverage = logisticsSupplyByRegion(
+      [
+        cmd({ id: "weak", type: "LOGISTICS", regionIds: ["eeu"], base: 50 }),
+        cmd({ id: "strong", type: "LOGISTICS", regionIds: ["eeu"], base: 100 }),
+      ],
+      UNITS
+    );
+
+    expect(coverage.eeu).toBe(20);
   });
 });
 

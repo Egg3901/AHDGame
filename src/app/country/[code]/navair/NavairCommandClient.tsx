@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { missionNeedsTarget } from "@/lib/navair/missions";
 
 /** A problem with a formation that the commander can actually do something about. */
 export interface FormationWarning {
@@ -17,6 +18,7 @@ export interface CommandFormation {
   station: string | null;
   stationName: string;
   mission: string | null;
+  missionTarget: string | null;
   integrity: number;
   readiness: number;
   supply: number;
@@ -82,8 +84,12 @@ export function NavairCommandClient({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  const [strikeDrafts, setStrikeDrafts] = useState<Record<string, string>>({});
 
-  async function send(id: string, patch: { mission?: string; station?: string }) {
+  async function send(
+    id: string,
+    patch: { mission?: string; missionTarget?: string; station?: string }
+  ): Promise<boolean> {
     setBusy(id);
     setError(null);
     setSaved(null);
@@ -101,18 +107,28 @@ export function NavairCommandClient({
         // Show the server's reason verbatim. It knows why, and paraphrasing it into
         // "something went wrong" is how a player ends up filing a ticket.
         setError(body?.error ?? "The order was refused.");
-        return;
+        return false;
       }
       setRows((prev) =>
         prev.map((r) =>
           r.id === id
-            ? { ...r, mission: patch.mission ?? r.mission, station: patch.station ?? r.station }
+            ? {
+                ...r,
+                mission: patch.mission ?? r.mission,
+                missionTarget:
+                  patch.mission !== undefined
+                    ? (patch.missionTarget ?? null)
+                    : (patch.missionTarget ?? r.missionTarget),
+                station: patch.station ?? r.station,
+              }
             : r
         )
       );
       setSaved(id);
+      return true;
     } catch {
       setError("Could not reach the ministry. The order was not sent.");
+      return false;
     } finally {
       setBusy(null);
     }
@@ -188,7 +204,8 @@ export function NavairCommandClient({
           <ul className="mt-2 space-y-3">
             {group.map((f) => {
               const options = f.domain === "naval" ? navalMissions : airMissions;
-              const current = options.find((o) => o.key === f.mission);
+              const selectedMission = strikeDrafts[f.id] ?? f.mission;
+              const current = options.find((o) => o.key === selectedMission);
               return (
                 <li key={f.id} className="rounded border border-neutral-800 p-3">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -228,9 +245,23 @@ export function NavairCommandClient({
                       Orders
                       <select
                         className="ml-2 rounded border border-neutral-700 bg-neutral-900 p-1 text-neutral-100"
-                        value={f.mission ?? ""}
+                        value={selectedMission ?? ""}
                         disabled={busy === f.id}
-                        onChange={(e) => send(f.id, { mission: e.target.value })}
+                        onChange={(e) => {
+                          const mission = e.target.value;
+                          if (missionNeedsTarget(mission)) {
+                            setSaved(null);
+                            setError(null);
+                            setStrikeDrafts((prev) => ({ ...prev, [f.id]: mission }));
+                            return;
+                          }
+                          setStrikeDrafts((prev) => {
+                            const next = { ...prev };
+                            delete next[f.id];
+                            return next;
+                          });
+                          void send(f.id, { mission });
+                        }}
                       >
                         {!f.mission && <option value="">No orders</option>}
                         {options.map((o) => (
@@ -240,6 +271,39 @@ export function NavairCommandClient({
                         ))}
                       </select>
                     </label>
+
+                    {selectedMission && missionNeedsTarget(selectedMission) && (
+                      <label className="text-xs text-neutral-400">
+                        Target
+                        <select
+                          className="ml-2 rounded border border-neutral-700 bg-neutral-900 p-1 text-neutral-100"
+                          value={strikeDrafts[f.id] ? "" : (f.missionTarget ?? "")}
+                          disabled={busy === f.id}
+                          onChange={async (e) => {
+                            const missionTarget = e.target.value;
+                            if (!missionTarget) return;
+                            const ok = await send(f.id, {
+                              mission: selectedMission,
+                              missionTarget,
+                            });
+                            if (ok) {
+                              setStrikeDrafts((prev) => {
+                                const next = { ...prev };
+                                delete next[f.id];
+                                return next;
+                              });
+                            }
+                          }}
+                        >
+                          <option value="">Select target</option>
+                          {stations.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
 
                     <label className="text-xs text-neutral-400">
                       Station
@@ -266,6 +330,11 @@ export function NavairCommandClient({
                   </div>
 
                   {current && <p className="mt-2 text-xs text-neutral-400">{current.desc}</p>}
+                  {strikeDrafts[f.id] && (
+                    <p className="mt-1 text-xs text-amber-400">
+                      Select a target region to send this strike order.
+                    </p>
+                  )}
                   {saved === f.id && (
                     <p className="mt-1 text-xs text-emerald-400">
                       Order sent. Effective next turn.

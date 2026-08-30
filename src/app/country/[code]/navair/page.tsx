@@ -142,6 +142,7 @@ export default async function NavairCommandPage({ params }: { params: Promise<{ 
       // beats showing a blank the player cannot act on.
       stationName: u.station ? (regionOf(u.station)?.name ?? u.station) : "Not yet deployed",
       mission: u.mission ?? null,
+      missionTarget: u.missionTarget ?? null,
       integrity: u.integrity ?? 100,
       readiness: u.readiness,
       supply: u.supply ?? 100,
