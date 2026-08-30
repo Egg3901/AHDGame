@@ -23,6 +23,8 @@ import {
 import { loadGdpUsdMillionsByEntity } from "@/lib/internationalOrganizations/entityGdp";
 import { isIntOrgAlignmentEnabled } from "../featureFlag";
 import { leadFor } from "../project";
+import { MIN_PLAY_POINTS, pointsForSpend } from "../influence";
+import { roundToShareGrid } from "../normalize";
 
 export type CommitPlayFailure =
   | "gate-off"
@@ -30,6 +32,7 @@ export type CommitPlayFailure =
   | "unknown-target"
   | "target-locked"
   | "unknown-target-economy"
+  | "below-min-points"
   | "insufficient-funds";
 
 export type CommitPlayResult =
@@ -83,6 +86,16 @@ export async function commitInfluencePlay(params: {
 
   const fundCountry = await resolveOrgFundCurrencyCountry(db, params.organizationId);
   const amountUsd = localToUsd(fundCountry, amountLocal);
+
+  // A spend too small to buy even one grid step (a hundredth of a point) would
+  // resolve to zero applied points and be refunded a turn later — a submission
+  // and a turn spent to move nothing, which reads as "the button does nothing".
+  // Refuse it up front, BEFORE any debit, so the panel can tell the player the
+  // minimum spend instead. Priced on the raw points the spend buys, matching the
+  // per-point cost the dossier quotes (ticket #1213).
+  if (roundToShareGrid(pointsForSpend(amountUsd, targetGdpUsd)) < MIN_PLAY_POINTS) {
+    return { ok: false, reason: "below-min-points" };
+  }
 
   // Atomic: the disburse guards on balanceLocal >= amount, so two members
   // spending at once cannot both win. Never pre-read the balance.
