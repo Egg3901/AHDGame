@@ -7,6 +7,8 @@ import { getNationalDoctrine } from "@/lib/db/collections/nationalDoctrine";
 import { loadGeneralsById } from "@/lib/db/collections/characterGenerals";
 import { natMods } from "@/lib/military/doctrineTree";
 import { countryScale } from "@/lib/military/force";
+import { getMilitaryCommands } from "@/lib/db/collections/militaryCommands";
+import { logisticsSupplyByRegion } from "@/lib/military/calc";
 
 /**
  * Assemble a nation's battle side from live data. Shared by the turn resolver and the
@@ -28,12 +30,14 @@ export async function buildBattleSide(
   conflictSupply?: number,
   side?: "A" | "B"
 ): Promise<BattleSide> {
-  const [org, doctrine, generalsById] = await Promise.all([
+  const [org, doctrine, generalsById, commands] = await Promise.all([
     getMilitaryFormations(db, country),
     getNationalDoctrine(db, country),
     // Authoritative stats, straight from characterGenerals — never client input.
     loadGeneralsById(db, country),
+    getMilitaryCommands(db, country),
   ]);
+  const unitsById = Object.fromEntries(units.map((unit) => [String(unit._id), unit]));
   return {
     units,
     assignments: org.conflictAssignments,
@@ -45,6 +49,7 @@ export async function buildBattleSide(
     country,
     fronts,
     conflictSupply,
+    logisticsSupplyByRegion: logisticsSupplyByRegion(commands, unitsById),
   };
 }
 

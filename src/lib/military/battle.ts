@@ -73,6 +73,8 @@ export interface BattleContext extends GeneralBinding {
    * that cannot resolve which side a country is on — is unaffected.
    */
   conflictSupply?: number;
+  /** Effective Logistics-command throughput keyed by strategic region. */
+  logisticsSupplyByRegion?: Record<string, number>;
 }
 
 /**
@@ -374,6 +376,7 @@ export function supplyState(
   const seenForm: Record<string, number> = {};
   let supplyMass = 0;
   let supplyWeighted = 0;
+  let commandSupplyWeighted = 0;
   for (const ctx of ctxs) {
     const units = ctx.units.filter((u) => u.theaterId === frontId);
     for (const u of units) {
@@ -399,6 +402,7 @@ export function supplyState(
       }
       supplyMass += 1;
       supplyWeighted += ctx.natMods.supply;
+      commandSupplyWeighted += ctx.logisticsSupplyByRegion?.[front.region] ?? 0;
     }
   }
   // Tooth to tail. Depth exists to feed the line, so it is counted only up to the size
@@ -410,6 +414,10 @@ export function supplyState(
   // nothing to weight by, so fall back to the first contingent's own figure — which
   // is exactly what a single-country side did before contingents existed.
   throughput += supplyMass ? supplyWeighted / supplyMass : (ctxs[0]?.natMods.supply ?? 0);
+  // A coalition cannot stack one Logistics command per flag into unlimited throughput.
+  // Weight each contingent's regional coverage by the formations drawing on the pool,
+  // exactly like the national doctrine contribution above.
+  throughput += supplyMass ? commandSupplyWeighted / supplyMass : 0;
   // Territorial position: a side squeezed by a losing front hauls less through a
   // degraded theatre. Multiplicative rather than additive so a floored supply at a
   // low-infrastructure front cannot drive throughput negative. The figure is per
@@ -946,6 +954,8 @@ export interface BattleSide extends GeneralBinding {
   fronts?: Record<string, Front>;
   /** This side's supply at the conflict (see BattleContext.conflictSupply). */
   conflictSupply?: number;
+  /** Effective Logistics-command throughput keyed by strategic region. */
+  logisticsSupplyByRegion?: Record<string, number>;
 }
 /**
  * Tracks destroyed per point of unmitigated engagement intensity.
@@ -1027,6 +1037,7 @@ function sideCtx(side: BattleSide): BattleContext {
     side: side.side,
     fronts: side.fronts,
     conflictSupply: side.conflictSupply,
+    logisticsSupplyByRegion: side.logisticsSupplyByRegion,
   };
 }
 
