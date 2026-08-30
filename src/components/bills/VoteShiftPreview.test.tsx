@@ -44,6 +44,21 @@ describe("VoteShiftPreview", () => {
     expect(line("Nay:")).toBe("Nay: Economic 0.25 toward Left, Social no change");
   });
 
+  it("labels the vote already cast as such instead of claiming a position match", () => {
+    render(
+      <VoteShiftPreview
+        currentVote="for"
+        preview={{
+          current: { economic: 1.25, social: 0 },
+          aye: { economic: 0, social: 0 },
+          nay: { economic: -0.5, social: 0 },
+        }}
+      />
+    );
+    expect(line("Aye:")).toBe("Aye: your current vote, no further change");
+    expect(line("Nay:")).toBe("Nay: Economic 0.50 toward Left, Social no change");
+  });
+
   it("shows a half-point swing when switching a vote already cast", () => {
     render(
       <VoteShiftPreview

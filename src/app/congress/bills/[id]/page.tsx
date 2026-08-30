@@ -463,7 +463,7 @@ function BillDetailContent() {
                     <div className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
                       Cast your vote
                     </div>
-                    <VoteShiftPreview preview={bill.voteShiftPreview} />
+                    <VoteShiftPreview preview={bill.voteShiftPreview} currentVote={bill.myVote} />
                     <div className="flex gap-2">
                       {(isCabinetReview
                         ? (["for", "against"] as const)

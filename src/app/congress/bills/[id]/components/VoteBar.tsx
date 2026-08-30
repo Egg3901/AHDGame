@@ -103,7 +103,9 @@ export function VoteBar({
         </p>
       )}
 
-      {canVote && onVote && <VoteShiftPreview preview={shiftPreview} className="pt-1" />}
+      {canVote && onVote && (
+        <VoteShiftPreview preview={shiftPreview} currentVote={myVote} className="pt-1" />
+      )}
 
       {canVote && onVote && (
         <div className="flex gap-2 pt-1">

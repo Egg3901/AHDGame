@@ -78,7 +78,7 @@ export function BillVoteIndicator({
 
   return (
     <div className="space-y-1.5">
-      {canVote && <VoteShiftPreview preview={shiftPreview} />}
+      {canVote && <VoteShiftPreview preview={shiftPreview} currentVote={currentVote} />}
       <div className="flex items-center justify-between gap-2">
         {indicator}
         {canVote && (
