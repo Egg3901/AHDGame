@@ -9,7 +9,7 @@ Only the CEO can issue bonds. Access the bond panel from the corporation page.
 | Parameter | Details |
 | --- | --- |
 | Minimum issuance | anchor currency 100,000 |
-| Maximum total debt | 2x equity |
+| Maximum total debt | 2x equity, and never more than what the corporation could realise by selling up (its plants at book, its cash, and the bonds it holds). The second cap is usually the binding one for a built-out corporation, and it is the same test the insolvency check applies, so a corporation inside its quoted ceiling cannot be judged insolvent. The Bonds tab says which limit is binding. Refinancing defaulted debt is exempt, since it adds no debt. |
 | Unit face value | anchor currency 1,000 per bond unit |
 | Maturity options | 96 turns (2 years), 240 turns (5 years), 336 turns (7 years) |
 | Coupon rate | prime rate + credit spread + 1.0pp + term premium (see below) |
@@ -18,6 +18,8 @@ Only the CEO can issue bonds. Access the bond panel from the corporation page.
 **Blocked while under IMF restructuring:** If your corporation is under an active corporate IMF restructuring, you cannot issue new bonds or refinance defaulted debt until the restructuring ends. This is separate from a country's sovereign IMF facility.
 
 Corporate bonds are issued in the corporation's home currency (see [Currency Exchange](/wiki/currency-exchange)). The proceeds go directly to corporate liquid capital. Bond units enter the **public float** and can be purchased by any player or corporation.
+
+**What borrowing actually costs.** The corporation receives the whole face value in cash at issuance, pays a coupon every turn, and then repays the **whole face value in one payment on the maturity turn**, not gradually. Both the coupon and that repayment are charged on every unit issued, including units nobody bought. The issue card prices the principal due at maturity beside the interest, and a standing notice on every tab of the corporation page names the next principal falling due, turning into a warning once it is within 24 turns and saying so outright when liquid capital is already below the amount owed. A bond moved abroad with the corporation stays in the currency it was issued in.
 
 ## Credit rating and coupon rate
 
@@ -106,7 +108,7 @@ CEOs can also **buy back** their own bonds from the public float to reduce outst
 
 ## Default
 
-A bond defaults when the corporation's liquid capital goes negative after coupon payments, AND it fails a solvency check: a positive bond buyback escrow can cover the shortfall first, and a corp whose total assets (valued the same way the restructure planner values them) still exceed its debt is judged illiquid rather than insolvent and does not default. Only a corp that fails both checks actually defaults. On default:
+A bond defaults when the corporation's liquid capital goes negative after a coupon payment **or a maturity repayment** (the lump-sum principal is the trigger people miss), AND it fails a solvency check: the corporation's bond portfolio counts as an asset here, and a corporation whose actions are paused is never declared insolvent while paused, though its coupons and maturities still settle. A positive bond buyback escrow can cover the shortfall first, and a corp whose total assets (valued the same way the restructure planner values them) still exceed its debt is judged illiquid rather than insolvent and does not default. Only a corp that fails both checks actually defaults. On default:
 
 - Bondholders receive no payment that turn
 - The corporation's credit rating takes a **96-turn penalty**, locking it at CCC

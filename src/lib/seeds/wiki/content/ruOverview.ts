@@ -19,8 +19,8 @@ The Soviet Union is a **one-party socialist state** playable in the **1953 and 1
 | --- | --- | --- | --- |
 | Premier (head of government) | Nominated by a party chair, confirmed by Soviet of the Union deputies | 4 years | 1 |
 | Chairman of the Presidium (ceremonial head of state) | Elected by a joint sitting of both chambers | No fixed term | 1 |
-| Supreme Soviet Deputy | Multi-seat regional election | 4 years | 750 (708 in 1953) |
-| Nationalities Deputy | Multi-seat republic-weighted election | 4 years | 640 |
+| Supreme Soviet Deputy | Multi-seat regional election | 4 years | 559 (526 in 1953) |
+| Nationalities Deputy | Multi-seat republic-weighted election | 4 years | 515 |
 | Republic Deputy | Multi-seat sub-national election | 4 years | 5,000 total |
 | Republic First Secretary | Regional executive election | 4 years | 1 per region |
 | Chairman of Gosbank | Appointed action | 5 years | 1 |
@@ -33,8 +33,8 @@ The Premier carries **+4 actions per turn**; a Supreme Soviet or Nationalities D
 
 Unlike China's mechanically unicameral NPC, the Supreme Soviet is **bill-active bicameral**: a bill must clear **both chambers** to become law.
 
-- **Soviet of the Union**: **750 deputies** (708 in the 1953 preset), apportioned to the 17 macro-regions by population. Four-year terms, all seats contested each cycle.
-- **Soviet of Nationalities**: **640 deputies**, seated by republic rather than by population: 25 seats per union republic, 11 per autonomous republic, with a floor of 20 per region so every region has contestable seats.
+- **Soviet of the Union**: **559 deputies** (526 in the 1953 preset), apportioned to the 14 macro-regions by population. Four-year terms, all seats contested each cycle. (The historical chamber seated 750; the seats of Ukraine, Byelorussia and the Baltic republics left with those countries, which the game models separately.)
+- **Soviet of Nationalities**: **515 deputies**, seated by republic rather than by population: 25 seats per union republic, 11 per autonomous republic, with a floor of 20 per region so every region has contestable seats.
 
 Both chambers elect **on the same day** on a shared four-year cycle (anchored to 1954 in the 1953 preset and 1984 in the 1979 preset). Republic Supreme Soviets, the sub-national tier, run their own four-year cycle (1955 / 1980). There are **no snap elections**.
 
@@ -61,9 +61,9 @@ Party role labels are localized: chair reads **"General Secretary"**, vice chair
 
 ---
 
-## The 17 macro-regions
+## The 14 macro-regions
 
-The union is modelled as **17 macro-regions** ("Republics" in the UI): ten covering the RSFSR and seven covering the other union republics. Each has a Republic Supreme Soviet and a directly elected **Republic First Secretary** (the governor office, who also signs regional bills).
+The union is modelled as **14 macro-regions** ("Republics" in the UI): ten covering the RSFSR and four covering the other union republics (Kazakhstan, Transcaucasia, Central Asia, Moldova). Ukraine, Byelorussia and the Baltic republics are modelled as their own countries and are not USSR regions. Each has a Republic Supreme Soviet and a directly elected **Republic First Secretary** (the governor office, who also signs regional bills).
 
 | Region | Union seats (1979) | Nationalities seats |
 | --- | --- | --- |
@@ -77,15 +77,12 @@ The union is modelled as **17 macro-regions** ("Republics" in the UI): ten cover
 | West Siberia | 35 | 20 |
 | East Siberia | 23 | 20 |
 | Russian Far East | 20 | 20 |
-| Ukraine | 143 | 25 |
 | Kazakhstan | 42 | 25 |
 | Transcaucasia | 40 | 108 |
 | Central Asia | 73 | 111 |
 | Moldova | 11 | 25 |
-| Byelorussia | 27 | 25 |
-| Baltic Republics | 21 | 75 |
 
-The 1953 preset reapportions the Union chamber to 708 seats on 1953 populations (Ukraine 145, Central Asia 50, Baltic Republics 10, and so on). The Nationalities table is population-independent and identical in both eras. Byelorussia and the Baltics are seeded as USSR regions, not as separate countries, and seat their deputies inside the Supreme Soviet.
+The 1953 preset reapportions the Union chamber to 526 seats on 1953 populations; the Nationalities table is population-independent and identical in both eras. Ukraine, Byelorussia and the Baltic republics are their own countries, and their deputies sit in their own legislatures, not the Supreme Soviet.
 
 ---
 

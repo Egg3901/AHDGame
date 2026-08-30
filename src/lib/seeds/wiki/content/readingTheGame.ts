@@ -32,7 +32,7 @@ Key metrics to monitor:
 
 Metrics trend slowly: a single policy bill rarely causes dramatic movement. Watch the trend direction over 4 to 8 turns after major legislation passes to see the effect.
 
-The **national approval rating** on the country page reflects the President's (or PM's/Chancellor's) favorability and gives a quick read on political health.
+The **national approval rating** on the country page is computed from the country's own metrics against the national picture, with national effects (a war, a national address, international statements, the state of the cabinet) layered on top; it does not track any one politician's favorability. See [Government Approval](/wiki/government-approval).
 
 ---
 
@@ -44,7 +44,7 @@ The elections page (\`/country/us/legislature\` for Congress elections; country-
 - **Candidates** and their projected standings (from polling, if available)
 - **Primary score leaders** (during primary phase)
 
-In the **primary phase:** Look at the registered candidates and their party affiliations. If a player is in the primary, NPPs receive the 0.5× penalty. Running a Quick Poll (2 actions, ₳25k) at any point during the primary shows your projected score vs. the field.
+In the **primary phase:** Look at the registered candidates and their party affiliations. If a player is in the primary, NPPs receive the 0.5× penalty. Running a Quick Poll (2 actions, ₳25k) at any point during the primary shows your projected standing vs. the field; once the primary's closing window opens, the race page shows the cumulative ballot shares that actually decide it.
 
 In the **general phase:** Vote totals accumulate each turn. The candidate list shows running vote totals. Final-4-turn weighting means leads can close fast, so don't assume a 15% lead is safe with 3 turns left.
 
@@ -78,9 +78,9 @@ Party standings matter for both elections and legislation. Monitor via the parti
 - **Party org by state**: Is your home-state party org above 70?
 - **Active membership**: How many players vs. NPPs?
 
-In parliamentary countries (UK, DE, JP), track whether any party is approaching the majority threshold (UK: 326, DE: 316, JP: 233). A government formation event happens automatically once a party/coalition crosses the threshold after an election.
+In parliamentary countries (UK, DE, JP, IE), track whether any party is approaching the majority threshold (a bare majority of the chamber: UK 326 of 650, JP 233 of 465, IE 81 of 160, DE 316 of 630 in the modern preset or 244 of 487 in the 1953 one). A government formation event happens automatically once a party/coalition crosses the threshold after an election.
 
-For US presidential politics, track **party org in swing states** specifically: a party with 30% org in a swing state is giving away 20% of their vote total there.
+For US presidential politics, track **party org in swing states** specifically: a party badly out-organised in a swing state is handing its rival a structural edge there before a single ad runs.
 
 ---
 
@@ -105,7 +105,7 @@ Polling is the most direct diagnostic tool for electoral decision-making:
 - After a major policy change or ad campaign (to measure impact)
 - Early in campaign season (to identify groups to canvass)
 
-**Full Demographic Poll (5 actions, ₳75k):** Shows your appeal across every segment of the state's electorate. Use this:
+**Full Demographic Poll (6 actions, ₳75k):** Shows your appeal across every segment of the state's electorate. Use this:
 - When you need to allocate a large ad budget
 - When a race is close and you need to find pockets of untapped support
 - Before the final 4-turn campaign season sprint
@@ -119,8 +119,8 @@ Poll projections use the same math as actual vote accumulation: they're accurate
 Party org is often invisible until something breaks. Check it:
 
 1. Go to your party's state org page
-2. Look at the org value (0 to 100) for your home state and target states
-3. A value below 50 means every candidate in your party is getting fewer than 0.75× their base vote total
+2. Look at the org value (0 to 100) for your home state and target states, and compare it with your rivals' in the same state
+3. What matters is your **share** of the state's total org. A party with a fraction of a rival's org still gets a real weight thanks to diminishing returns, but a party with no presence in a state gets nothing there
 
 If org is low, the party chair can invest in org improvement. As a party member, you can lobby the chair to prioritize your target states. If you are the chair, prioritize org in states with the most competitive general elections.
 

@@ -63,6 +63,14 @@ At a **20% tariff**, drag is approximately **0.625**, meaning trade affinity is 
 
 A **ministerial embargo** is a hard block on trade between two countries. When active, trade affinity between the embargoing country and the target is set to **zero**: no trade flows regardless of other modifiers.
 
+### The iron curtain
+
+In the Cold War eras the Soviet bloc trades behind a wall. Trade between a curtained country and the open world is **zero in both directions**; trade within the curtain (the Comecon market) and within the open world is unaffected. No FTA, bloc bonus or tariff setting reaches across it. The curtain is decided per era by history rather than by any minister: **Yugoslavia** broke with Moscow before the 1953 world opens and trades with the West, so it sits outside the curtain (and is cut off from the bloc's internal market) while keeping its planned economy at home.
+
+### Autonomous governments
+
+Countries nobody plays run their own trade policy. An autonomous government can table trade agreements, apply targeted tariff bills against a rival, and impose bounded ministerial embargoes, with cooldowns per country pair and a limit set by how much it actually depends on that partner's trade. Expect a hostile relationship to show up on your tariff and embargo screens even when no player is behind it.
+
 ## IPF convergence
 
 The trade clearing engine uses **iterative proportional fitting (IPF)**, a method that repeatedly adjusts trade numbers in small steps until every country's imports and exports line up, to balance trade flows across all country pairs. The engine runs **40 iterations**, which converges margins to below **0.5%**, meaning the result is effectively exact for gameplay purposes.

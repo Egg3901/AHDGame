@@ -42,7 +42,7 @@ export const WIKI_GLOSSARY = {
   },
   FPTP: {
     definition:
-      "First Past the Post. Winner-take-all: the candidate with the most votes wins the seat. Used in the US, UK, and Japan. Third parties can spoil races.",
+      "First Past the Post. Winner-take-all in single-seat races: the candidate with the most votes wins. Used in the US, Nigeria and Japan's regions; the UK and Japan allocate regional seats proportionally on top. Third parties can spoil races.",
     aliases: ["first past the post", "first-past-the-post"],
   },
   RCV: {
@@ -82,7 +82,7 @@ export const WIKI_GLOSSARY = {
   },
   era: {
     definition:
-      "The game's historical setting (for example Beta 2's 1991 map). Era gates units, tech, offices, and which countries are playable.",
+      "The game's historical setting (a world opens on a preset year such as 1953, 1979, 1991 or 2019 and advances from there). Era gates units, tech, offices, and which countries are playable.",
   },
   bloc: {
     definition:
@@ -103,7 +103,7 @@ export const WIKI_GLOSSARY = {
   },
   "primary score": {
     definition:
-      "The 0 to 100 total that decides who wins a primary. It blends party alignment, favorability, and influence (PI or NPI). Highest per party advances.",
+      "The 0 to 100 standing in a primary, blending alignment, favorability, and influence. It sets each candidate's share of the ballots the party's registered voters cast over the primary's closing window; the top count per party advances.",
   },
   "party org": {
     definition:
@@ -112,12 +112,12 @@ export const WIKI_GLOSSARY = {
   },
   whip: {
     definition:
-      "Party leadership's instruction on how NPPs (and expected members) should vote on a bill. Players can defy a whip at an infamy cost.",
+      "Party leadership's instruction on how NPPs (and expected members) should vote on a bill. Players can defy a whip freely; it costs leadership trust, not infamy.",
     aliases: ["whip directive", "whip directives"],
   },
   infamy: {
     definition:
-      "A lasting penalty stat from attacks, whip defiance, and some dirty tricks. High infamy makes NPP endorsements harder. It decays slowly.",
+      "A lasting penalty stat from attacks, large personal campaign donations, and some random-event choices. High infamy makes NPP endorsements harder and trims your vote weight. It decays 5% a turn.",
   },
   alignment: {
     definition:
@@ -129,7 +129,7 @@ export const WIKI_GLOSSARY = {
   },
   "snap election": {
     definition:
-      "An early parliamentary election called before the term ends (UK, Japan, Germany). It compresses the campaign cycle. See Snap Elections.",
+      "An early parliamentary election called before the term ends (UK, Japan, Germany, Ireland). It compresses the campaign cycle. See Snap Elections.",
     aliases: ["snap elections"],
   },
   filibuster: {
@@ -157,7 +157,7 @@ export const WIKI_GLOSSARY = {
   },
   FOMC: {
     definition:
-      "The 7-seat rate-setting board at a market central bank (Federal Open Market Committee in the US). The chair proposes; a majority of the full board must agree. Abstains count against.",
+      "The US Federal Reserve's 7-seat rate-setting committee. The chair proposes; a majority of the full board must agree, and abstains and vacant seats count against. Other central banks keep a single governor.",
     aliases: ["federal open market committee"],
   },
   "world events": {

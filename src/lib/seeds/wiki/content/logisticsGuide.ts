@@ -17,7 +17,7 @@ export const logisticsGuideContent = `# Logistics: Freight, Sourcing, and Supply
 
 Logistics connects the commodity market to the map. The game projects how a state with unmet input demand would source locally, across state lines, or from abroad after shipping and tariffs. Logistics sectors provide the freight capacity measured by that projection. Heavy haul becomes real Freight commodity demand, so tight capacity raises freight sold volume and price. Electricity and natural gas are the exception: they travel by wire and pipe, spend no freight capacity, and pay distance in transmission loss instead.
 
-The distinction matters: fresh worlds run freight settlement in **shadow** mode. The haul calculation drives the Freight market, sourcing report, and Logistics map, but it does not cap a sector's sales. An admin can switch settlement to **active**, which applies delivery limits to corporate clearing. Neither mode sends a separate shipping payment from each buyer to a logistics corporation.
+The distinction matters: fresh worlds run freight settlement in **shadow** mode. The haul calculation drives the Freight market, sourcing report, and Logistics map, but it does not cap a sector's sales and moves no money. An admin can switch settlement to **active**, which does two things together: it caps a state's sales at what the freight network could actually deliver, and it **bills the shipping**. Buyers in a destination state are charged for their inbound hauls in proportion to the imported inputs they consume, and the same money is credited to the freight-supplying sectors in the origin state, so the charge and the haul revenue stay matched: a transfer between corporations, not a sink. An admin can phase active settlement in over a window of turns; while the ramp runs, both the delivery cap and the shipping bill scale up together and the phase-in fraction is shown on the markets view and the sector Freight tag.
 
 ## The short version
 
@@ -161,7 +161,7 @@ Spending on corporate logistics strength does not create TEU. Opening and operat
 
 **Reading projected routes as settled commodity transfers.** The route calculation measures haul and creates Freight demand. Aggregate commodity clearing still determines commodity supply, demand, and margin effects.
 
-**Expecting a separate shipping-fee transaction.** Logistics corporations earn through freight commodity sales. Haul raises freight demand and therefore sold volume and price; the UI does not book a separate player-to-player shipping invoice for each route.
+**Expecting a per-route shipping invoice in shadow mode.** Under shadow settlement logistics corporations earn only through freight commodity sales: haul raises freight demand and therefore sold volume and price. Under active settlement a real shipping charge is apportioned onto buyer sectors and credited to origin-state freight sectors each turn, but it lands as a per-turn billing line, not as a player-to-player invoice per route.
 
 ## Related
 

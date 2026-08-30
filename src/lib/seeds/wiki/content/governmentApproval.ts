@@ -97,16 +97,31 @@ Modifiers are evaluated against the same flat metrics map used for the base scor
 
 Approval doesn't jump straight to its freshly-computed target each turn. Each state's stored rating is stepped toward the target by **at most 2 points per turn**, so even a modifier swing that would otherwise move approval by double digits plays out gradually over several turns rather than landing all at once.
 
-### Cabinet penalties
+### National modifiers
 
-Two penalties are applied to the **national** approval score after all metric and modifier calculations:
+After the population-weighted state score is assembled, a set of **national modifiers** is applied in one pass, and the approval page lists every one of them beside the rating so the number always has a reason attached. The positive ones share a single ceiling on how much they can lift approval between them.
 
-| Penalty | Condition | Amount |
-| --- | --- | --- |
-| No cabinet | Country has zero confirmed cabinet members | -7.5 |
-| Acting appointments | Each unconfirmed (acting) cabinet member in countries with Senate confirmation | -0.5 per acting member |
+| Modifier | What it is |
+| --- | --- |
+| National address | The head of government's active address bump |
+| International statements | Joint statements by an international organization about your country, bounded and time limited; they lift cleanly when the statement lapses |
+| War effort | How your fronts are moving against what the war was expected to do (see below) |
+| War exhaustion | The public's support for a fresh war, turning to cost after about a year of fighting |
+| Alliance contribution | For a treaty ally: what you field against what your co-belligerents field |
+| No cabinet | Country has zero confirmed cabinet members: -7.5 |
+| Acting appointments | Each acting cabinet member: -0.5, shown as its own line |
 
 A country without a functioning cabinet is heavily penalised. The acting-appointment penalty stacks per member, so a cabinet with 5 acting members loses an additional 2.5 points.
+
+### War and approval
+
+A nation at war carries the war on its rating, in three separate lines, each of which arrives and departs a couple of points per turn rather than landing at once:
+
+- **War effort** judges the front against what the war was expected to do, not simply against who holds ground. A defence that gives up nothing is a political success, an invasion that stalls is a political failure, and a government putting down a rebellion is credited for winning rather than penalised for fighting at home. On a proxy front, where neither side is expected to gain, any movement counts for whoever made it.
+- **War exhaustion** is measured from the turn your own country entered, not the turn the war began. Declaring from peace rallies the public, and that support turns to cost after roughly a year of fighting and keeps deepening. Exhaustion is **carried across a peace** and heals about a point per in-game year, the same pace it accrues, so a country that ended its last war deep in exhaustion opens the next one already paying for it, and a country that never stops fighting gets no rally at all. A year of fighting takes a year of peace to forgive.
+- **Alliance contribution** applies to a country pulled in by a mutual-defence treaty. Matching your co-belligerents is neutral, sending nothing costs approval, and carrying more than your share earns it. Nobody is penalised in the first few turns, before forces could plausibly have arrived.
+
+A war going well and a tired public are opposite facts a government answers in opposite ways, which is why the block is shown per line rather than netted. A zero reading is a real reading and renders as one. When a war ends, the lines ease back out over several turns and say so while they do. Every country actually fighting is snapshotted, playable or not, so a belligerent's war rating is never scored nowhere.
 
 ## What is tracked
 
@@ -114,8 +129,12 @@ Each country has one approval record with:
 - **Approval rating:** 0-100, percentage of population approving
 - **Disapproval rating:** 0-100, percentage disapproving (computed as 100 - approval)
 - **Net approval:** approval minus disapproval (can be negative)
-- **Source:** always the aggregate metric method, not personal favorability
+- **Source:** always the aggregate metric method plus the national modifiers above, never personal favorability
+- **Active modifiers:** the list of national effects folded into the stored rating, so the chips on the page cannot disagree with the number beside them
+- **Carried war exhaustion:** persists between wars
 - **History:** last 20 turns of approval/net values for charting (capped at 20 entries)
+
+The headline figure on the approval page, the history chart, the Executive page and the elections all read this one stored number.
 
 Approval and disapproval sum to exactly 100: there is no "undecided" category in this system.
 
@@ -166,6 +185,7 @@ On top of this direct scaling, approval is a useful **leading indicator**:
 - Appoint a capable Central Bank Chair who keeps inflation near 2% and GDP growth positive
 - Form a full cabinet promptly: the -7.5 no-cabinet penalty is severe
 - Avoid acting appointments where Senate confirmation is available
+- Treat a war as an approval decision: a fresh war rallies the public once, a long one wears it down, and exhaustion follows you into the next one
 
 **As opposition:**
 - Track metric trends: if inflation rises or unemployment spikes, approval will follow downward
