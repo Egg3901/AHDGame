@@ -4,6 +4,7 @@ import type { Db } from "mongodb";
 import { createMockDb, assertSetFields, type MockCollection } from "@/lib/test-utils/mockDb";
 import {
   applyElectionDurationEffect,
+  applyElectionMethodEffect,
   applyPositionShiftEffect,
   applyCampaignerAppointmentEffect,
   applyRemoveOfficeHolderEffect,
@@ -158,6 +159,13 @@ interface ElectionRow {
   status: "voting" | "completed" | "cancelled";
 }
 
+interface NationalVoteRow {
+  _id: ObjectId;
+  electionId: ObjectId;
+  voterId: ObjectId;
+  voterPartyInfluence?: number;
+}
+
 // Captures DB writes so we can assert what gets written without standing up
 // a real Mongo. Supports `politicalParties.findOne/updateOne` plus
 // `find/bulkWrite` on the two election collections.
@@ -165,11 +173,14 @@ function makeDbStub(opts: {
   party?: Record<string, unknown> | null;
   officerElections?: ElectionRow[];
   committeeElections?: ElectionRow[];
+  nationalVotes?: NationalVoteRow[];
+  characters?: Array<{ _id: ObjectId; partyInfluence?: number }>;
 }) {
   const updates: Array<{ collection: string; filter: unknown; update: unknown }> = [];
   const bulkOps: Record<string, Array<{ filter: unknown; update: unknown }>> = {
     nationalPartyElections: [],
     nationalCommitteeElections: [],
+    nationalPartyVotes: [],
   };
   const officerRows = opts.officerElections ?? [];
   const committeeRows = opts.committeeElections ?? [];
@@ -206,10 +217,68 @@ function makeDbStub(opts: {
           }),
       };
     }
+    if (name === "nationalPartyVotes") {
+      return {
+        find: vi.fn().mockReturnValue({
+          toArray: vi.fn().mockResolvedValue(opts.nationalVotes ?? []),
+        }),
+        bulkWrite: vi
+          .fn()
+          .mockImplementation((ops: Array<{ updateOne: { filter: unknown; update: unknown } }>) => {
+            for (const op of ops) bulkOps.nationalPartyVotes.push(op.updateOne);
+            return Promise.resolve({ modifiedCount: ops.length });
+          }),
+      };
+    }
+    if (name === "characters") {
+      return {
+        find: vi.fn().mockReturnValue({
+          toArray: vi.fn().mockResolvedValue(opts.characters ?? []),
+        }),
+      };
+    }
     return {};
   });
   return { db: { collection } as unknown as Db, updates, bulkOps };
 }
+
+describe("applyElectionMethodEffect (ticket #1196)", () => {
+  it("snapshots existing voters' influence when an active election becomes influence-weighted", async () => {
+    const partyId = makePartyId();
+    const electionId = new ObjectId();
+    const voterId = new ObjectId();
+    const { db, bulkOps } = makeDbStub({
+      party: { _id: partyId, sequentialId: 2, countryId: "UK" },
+      officerElections: [
+        {
+          _id: electionId,
+          partyId: "2",
+          countryId: "UK",
+          startTurn: 410,
+          endTurn: 482,
+          startTime: new Date("2026-08-26T18:00:00.000Z"),
+          endTime: new Date("2026-08-29T18:00:00.000Z"),
+          durationTurns: 72,
+          status: "voting",
+        },
+      ],
+      nationalVotes: [{ _id: new ObjectId(), electionId, voterId }],
+      characters: [{ _id: voterId, partyInfluence: 289.6 }],
+    });
+
+    await applyElectionMethodEffect(db, {
+      type: "electionMethod",
+      partyId,
+      electionMethod: { method: "influence" },
+    } as unknown as CommitteeProposal);
+
+    expect(bulkOps.nationalPartyVotes).toHaveLength(1);
+    expect(bulkOps.nationalPartyVotes[0]).toMatchObject({
+      filter: { electionId, voterId },
+      update: { $set: { voterPartyInfluence: 289.6 } },
+    });
+  });
+});
 
 function makePartyId(): ObjectId {
   return new ObjectId();
