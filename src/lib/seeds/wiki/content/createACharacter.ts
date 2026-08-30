@@ -44,7 +44,7 @@ Two sliders, each -5 to +5:
 - **Economic:** -5 left / +5 right
 - **Social:** -5 progressive / +5 conservative
 
-These feed primaries (distance to your party), bill voting (each vote nudges you ±0.25), and demographic appeal.
+These feed primaries (distance to your party), bill voting, and demographic appeal. Each bill you vote on can move you at most 0.25 per axis: an Aye pulls you toward the bill's average position (never past it), a Nay pushes you away, and changing your vote later is measured from where you stood before that bill, so flipping Aye and Nay cannot stack. The vote buttons show you the exact move before you click.
 
 Do not slam both to -5 or +5 unless that party is actually extreme. Moderate parties punish extremes in the primary.
 

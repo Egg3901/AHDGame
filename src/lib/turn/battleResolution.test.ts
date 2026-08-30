@@ -378,7 +378,7 @@ describe("resolveBattleDeclarations — occupation", () => {
   });
 
   it("opens a terms window when the front reaches a pole", async () => {
-    // One point off the pole: even a drag-halved step clears it. The war no longer
+    // One point off the pole: even a narrow step clears it. The war no longer
     // ends on the tick; the victor gets a window in which to name one term.
     db.collectionMocks.conflicts.findOne.mockResolvedValue({ ...warConflict, control: 1 });
     wireWalkover();

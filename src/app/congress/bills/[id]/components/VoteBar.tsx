@@ -1,4 +1,6 @@
 import { useCountdown } from "@/hooks/useCountdown";
+import { VoteShiftPreview } from "@/components/bills/VoteShiftPreview";
+import type { VoteShiftPreview as VoteShiftPreviewData } from "@/lib/legislature/voteShiftPreview";
 
 export function VoteBar({
   votesFor,
@@ -12,6 +14,7 @@ export function VoteBar({
   omitAbstain = false,
   requiredPct,
   requiredLabel,
+  shiftPreview,
 }: {
   votesFor: number;
   votesAgainst: number;
@@ -27,6 +30,8 @@ export function VoteBar({
   requiredPct?: number;
   /** When set, the threshold flag shows this text instead of the raw percentage. */
   requiredLabel?: string;
+  /** What Aye and Nay would do to the viewer's positions; shown above the buttons. */
+  shiftPreview?: VoteShiftPreviewData | null;
 }) {
   const total = votesFor + votesAgainst + votesAbstain || 1;
   const pctFor = (votesFor / total) * 100;
@@ -96,6 +101,10 @@ export function VoteBar({
           </span>
           {canVote && <span className="ml-2 text-muted/60">(click below to change)</span>}
         </p>
+      )}
+
+      {canVote && onVote && (
+        <VoteShiftPreview preview={shiftPreview} currentVote={myVote} className="pt-1" />
       )}
 
       {canVote && onVote && (

@@ -1,6 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
+
+// Non-admin viewers go through the enabled-country gate, which opens its own
+// DB handle; the preview tests below are non-admin so the gate is stubbed.
+vi.mock("@/lib/countryAccess", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/countryAccess")>();
+  return { ...actual, getEnabledCountryIds: vi.fn().mockResolvedValue(["US"]) };
+});
 import {
   getNationalBillDetail,
   listNationalLegislatureBills,
@@ -274,5 +281,184 @@ describe("getNationalBillDetail — concurrent bicameral vote", () => {
     expect(detail).not.toBeNull();
     expect(detail!.otherChamberVotesFor).toBe(1);
     expect(detail!.otherChamberVotesAgainst).toBe(1);
+  });
+});
+
+describe("voteShiftPreview — what Aye and Nay would do to the viewer", () => {
+  const viewerId = new ObjectId();
+  const userId = new ObjectId().toString();
+  const viewer = {
+    _id: viewerId,
+    userId: new ObjectId(userId),
+    party: "1",
+    countryId: "US",
+    policies: { economic: 1, social: 0 },
+  };
+  const official = {
+    characterId: viewerId,
+    nppId: null,
+    countryId: "US",
+    officeType: "house",
+    seatsHeld: 1,
+  };
+  const emptyCursor = () => ({
+    toArray: async () => [],
+    project: () => ({
+      toArray: async () => [],
+      sort: () => ({ skip: () => ({ limit: () => ({ toArray: async () => [] }) }) }),
+    }),
+    sort: () => ({
+      toArray: async () => [],
+      limit: () => ({ toArray: async () => [] }),
+      skip: () => ({ limit: () => ({ toArray: async () => [] }) }),
+    }),
+    limit: () => ({ toArray: async () => [] }),
+  });
+
+  function activeBill(billId: ObjectId) {
+    return {
+      _id: billId,
+      countryId: "US",
+      title: "Public Works Act",
+      summary: "Spend",
+      status: "active",
+      originChamber: "house",
+      currentChamber: "house",
+      sponsorId: new ObjectId(),
+      sponsorName: "Jo",
+      sponsorParty: "1",
+      coSponsors: [],
+      category: "economic",
+      votesFor: 0,
+      votesAgainst: 0,
+      votesAbstain: 0,
+      votes: {},
+      provisions: [{ legislationTypeId: "lt-1", effectDirection: -1, economic: -3, social: 2 }],
+      proposedAt: new Date("2026-08-10T00:00:00Z"),
+      votingEndsOnTurn: 999,
+    };
+  }
+
+  it("the list carries a preview for a seated viewer who can vote", async () => {
+    const billId = new ObjectId();
+    const bill = activeBill(billId);
+    const db = createMockDb();
+    db.collection("bills");
+    db.collectionMocks["bills"]!.find.mockReturnValue({
+      toArray: async () => [bill],
+      project: () => ({
+        sort: () => ({ skip: () => ({ limit: () => ({ toArray: async () => [bill] }) }) }),
+      }),
+    });
+    db.collectionMocks["bills"]!.countDocuments.mockResolvedValue(1);
+    for (const name of ["politicalParties", "legislationTypes", "users", "gameState"]) {
+      db.collection(name);
+      db.collectionMocks[name]!.find.mockReturnValue(emptyCursor());
+    }
+    db.collection("characters");
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue(viewer);
+    db.collection("electedOfficials");
+    db.collectionMocks["electedOfficials"]!.find.mockReturnValue({
+      toArray: async () => [official],
+      project: () => ({ toArray: async () => [official] }),
+    });
+
+    const page = await listNationalLegislatureBills(db as unknown as Db, {
+      countryId: "US",
+      chamber: "house",
+      authUser: { isAdmin: false, userId } as never,
+    });
+
+    expect(page.bills[0]!.canVoteOrigin).toBe(true);
+    expect(page.bills[0]!.voteShiftPreview).toEqual({
+      current: { economic: 1, social: 0 },
+      aye: { economic: -0.25, social: 0.25 },
+      nay: { economic: 0.25, social: -0.25 },
+    });
+  });
+
+  it("the list carries no preview for a spectator", async () => {
+    const billId = new ObjectId();
+    const bill = activeBill(billId);
+    const db = createMockDb();
+    db.collection("bills");
+    db.collectionMocks["bills"]!.find.mockReturnValue({
+      toArray: async () => [bill],
+      project: () => ({
+        sort: () => ({ skip: () => ({ limit: () => ({ toArray: async () => [bill] }) }) }),
+      }),
+    });
+    db.collectionMocks["bills"]!.countDocuments.mockResolvedValue(1);
+    for (const name of ["politicalParties", "legislationTypes", "electedOfficials"]) {
+      db.collection(name);
+      db.collectionMocks[name]!.find.mockReturnValue(emptyCursor());
+    }
+
+    const page = await listNationalLegislatureBills(db as unknown as Db, {
+      countryId: "US",
+      chamber: "house",
+      authUser: null,
+    });
+
+    expect(page.bills[0]!.voteShiftPreview ?? null).toBeNull();
+  });
+
+  it("the detail carries a preview measured from the ledger baseline after a vote", async () => {
+    const billId = new ObjectId();
+    const bill = {
+      ...activeBill(billId),
+      votes: { [viewerId.toString()]: "for" },
+      policyShiftLedger: {
+        [viewerId.toString()]: {
+          baseline: { economic: 1, social: 0 },
+          applied: { economic: -0.25, social: 0.25 },
+        },
+      },
+    };
+    const db = createMockDb();
+    db.collection("bills");
+    db.collectionMocks["bills"]!.findOne.mockResolvedValue(bill);
+    db.collectionMocks["bills"]!.find.mockReturnValue(emptyCursor());
+    for (const name of [
+      "politicalParties",
+      "legislationTypes",
+      "billWhips",
+      "npps",
+      "users",
+      "gameState",
+      "governmentFormations",
+      "cabinetMembers",
+    ]) {
+      db.collection(name);
+      db.collectionMocks[name]!.find.mockReturnValue(emptyCursor());
+    }
+    db.collection("characters");
+    // Detail loads the viewer by userId and later batch-loads voters by _id.
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue({
+      ...viewer,
+      policies: { economic: 0.75, social: 0.25 },
+    });
+    db.collectionMocks["characters"]!.find.mockReturnValue({
+      project: () => ({ toArray: async () => [viewer] }),
+      toArray: async () => [viewer],
+    });
+    db.collection("electedOfficials");
+    db.collectionMocks["electedOfficials"]!.find.mockReturnValue({
+      toArray: async () => [official],
+      project: () => ({ toArray: async () => [official] }),
+    });
+
+    const detail = await getNationalBillDetail(db as unknown as Db, billId.toString(), {
+      isAdmin: false,
+      userId,
+    } as never);
+
+    expect(detail).not.toBeNull();
+    expect(detail!.canVoteOrigin).toBe(true);
+    expect(detail!.voteShiftPreview).toEqual({
+      current: { economic: 0.75, social: 0.25 },
+      aye: { economic: 0, social: 0 },
+      nay: { economic: 0.5, social: -0.5 },
+    });
   });
 });

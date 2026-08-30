@@ -127,15 +127,17 @@ describe("occupationShift", () => {
     );
   });
 
-  it("halves the step once the winner is deep in enemy territory", () => {
-    // B already holds 80% (>= the 0.75 deep-push depth).
+  it("takes the full step even when the winner is deep in enemy territory", () => {
+    // B already holds 80%, past the 0.75 winding-down depth. The step used to halve
+    // here (the "deep push" drag); it no longer does, so the last quarter of the
+    // track moves at the same pace as the first three.
     expect(
       occupationShift({ control: 80, winner: "B", margin: 45, loserRetreated: false })
-    ).toBeCloseTo(82.5);
+    ).toBeCloseTo(85);
   });
 
-  it("does not apply the deep-push drag to the side pushing back", () => {
-    // B holds 80%, but A is the winner here and A's share is only 0.2.
+  it("moves the side pushing back at the same pace", () => {
+    // B holds 80%, but A is the winner here.
     expect(
       occupationShift({ control: 80, winner: "A", margin: 45, loserRetreated: false })
     ).toBeCloseTo(75);
