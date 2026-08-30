@@ -344,7 +344,7 @@ Britain was the last country on side A. **The side empties, so the war ends outr
 
 **Conflict #4 is now \`resolved\`.** Its page at \`/world/conflicts/4\` survives permanently: that is the entire point of the numbering.
 
-**The fog lifts completely.** The **archive** tier is open to everyone: both sides' rosters, every engagement, who fought in each, what every formation lost. During the war, only territory, casualties and verdicts were public; now all of it is.
+**The fog lifts completely, 480 turns later.** For 480 turns after the end the page reads as it did during the war: territory, casualties and verdicts for everyone, and your own rosters if you hold a belligerent seat. Then the **archive** tier opens to everyone: both sides' rosters, every engagement, who fought in each, what every formation lost. In the meantime the war sits under **Historical Conflicts** at the bottom of the conflicts hub, with its outcome, and the card says which turn the fog lifts.
 
 The truce ledger:
 

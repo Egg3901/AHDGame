@@ -35,7 +35,7 @@ import { getCabinetSettingsCollection } from "@/lib/db/collections/cabinetSettin
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import { conflictTier, belligerentSideOf } from "@/lib/military/conflictVisibility";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
+import { archiveOpensTurn, isConflictConcluded } from "@/lib/military/conflictLifecycle";
 import { requirePeaceNegotiator } from "@/lib/api/requirePeaceNegotiator";
 import { INTERNATIONAL_ORGANIZATIONS } from "@/lib/constants/internationalOrganizations";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
@@ -263,6 +263,8 @@ export default async function ConflictRecordPage({
 
   const tier = conflictTier({
     status: doc.status,
+    endTurn: doc.endTurn,
+    currentTurn,
     side: ownSide,
     isPostedGeneral,
     isDefenseHolder,
@@ -653,6 +655,11 @@ export default async function ConflictRecordPage({
     currentTurn,
     status: doc.status,
     statusLabel: doc.status.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase()),
+    // Only while the fog is still down on a resolved war: the panel uses it to say
+    // when the record opens, and an open record has nothing to announce.
+    ...(tier !== "archive" && archiveOpensTurn(doc) !== null
+      ? { archiveOpensTurn: archiveOpensTurn(doc) as number }
+      : {}),
     // Only shown when the war was actually declared. warGoalLabel would otherwise
     // print "Undeclared" on every seeded or event-created conflict.
     ...(doc.warGoal ? { warGoal: warGoalLabel(doc.warGoal) } : {}),

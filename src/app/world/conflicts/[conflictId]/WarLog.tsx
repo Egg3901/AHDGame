@@ -1,4 +1,5 @@
 import { MIL_COLOR, MIL_FONT } from "../military/theme";
+import { CONFLICT_ARCHIVE_DELAY_TURNS } from "@/lib/military/conflictLifecycle";
 import type { RecordBattleRow } from "./conflictRecordView";
 
 const mono = MIL_FONT.mono;
@@ -191,7 +192,8 @@ export function WarLog({ view }: { view: WarLogView }) {
                           marginTop: 3,
                         }}
                       >
-                        Unlocks for everyone when the war resolves.
+                        Unlocks for everyone {CONFLICT_ARCHIVE_DELAY_TURNS} turns after the war
+                        resolves.
                       </div>
                     </div>
                   )}

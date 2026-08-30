@@ -37,6 +37,11 @@ export interface ConflictRecordView {
   currentTurn: number;
   status: string;
   statusLabel: string;
+  /**
+   * For a resolved war still under fog: the turn its full record opens to everyone.
+   * Absent on a live war and once the record has opened.
+   */
+  archiveOpensTurn?: number;
   /** What the war was declared for; absent on conflicts predating declarations. */
   warGoal?: string;
   sideALabel: string;
@@ -263,8 +268,9 @@ function Panel({ children }: { children: ReactNode }) {
  * Territory, cumulative casualties and battle outcomes are PUBLIC in every tier.
  * `command` (a posted general, the defense holder or the head of government of a
  * belligerent) additionally sees its own order of battle and a coarse read of the
- * enemy; `archive` (anyone, once the war resolves) sees both sides' per-engagement
- * rosters. The fog is applied SERVER-SIDE in conflictRecordView — this component
+ * enemy; `archive` (anyone, once a resolved war's fog window has lapsed, see
+ * `CONFLICT_ARCHIVE_DELAY_TURNS`) sees both sides' per-engagement rosters. The fog
+ * is applied SERVER-SIDE in conflictRecordView — this component
  * only renders what it was given, so nothing here is a client-side secret.
  *
  * Spec: docs/superpowers/specs/2026-07-26-conflict-ids-and-pages-design.md
@@ -735,6 +741,7 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
                 enemyBand: c.enemyBand ?? null,
                 unopposed,
                 tier: c.tier,
+                archiveOpensTurn: c.archiveOpensTurn,
               }}
             />
 

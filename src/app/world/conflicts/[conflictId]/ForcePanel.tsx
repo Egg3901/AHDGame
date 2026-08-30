@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { MIL_COLOR, MIL_FONT } from "../military/theme";
 import type { ConflictTier } from "@/lib/military/conflictVisibility";
+import { CONFLICT_ARCHIVE_DELAY_TURNS } from "@/lib/military/conflictLifecycle";
 import type { SideForce } from "./conflictRecordView";
 
 const mono = MIL_FONT.mono;
@@ -23,6 +24,11 @@ export interface ForcePanelView {
   unopposed: boolean;
   /** How much of the war the viewer may see, which is what this panel is about. */
   tier: ConflictTier;
+  /**
+   * For a resolved war still under fog: the turn its full record opens. Absent on
+   * a live war and on one whose record has already opened.
+   */
+  archiveOpensTurn?: number;
 }
 
 /** The withheld cell. Not a zero and not a dash — a field the server never sent. */
@@ -216,10 +222,20 @@ export function ForcePanel({ view }: { view: ForcePanelView }) {
             lineHeight: 1.65,
           }}
         >
-          {publicOnly ? (
+          {publicOnly && view.archiveOpensTurn != null ? (
+            // The fog outlives the war: a resolved war reads as it did while it ran
+            // until the delay lapses. Promising a record that opens "when the war
+            // resolves" on a war that already has would be a promise already broken.
+            <>
+              This war has resolved. Casualties are public; composition stays under fog on both
+              sides <span style={{ color: "#c8c8d4" }}>until turn {view.archiveOpensTurn}</span>,
+              when the full record opens to everyone.
+            </>
+          ) : publicOnly ? (
             <>
               Casualties are public; composition is not, on either side and including your own
-              nation&rsquo;s. It opens to everyone when the war resolves.
+              nation&rsquo;s. It opens to everyone {CONFLICT_ARCHIVE_DELAY_TURNS} turns after the
+              war resolves.
             </>
           ) : view.tier === "archive" ? (
             // The fog lifted when the war ended. Saying "composition is not

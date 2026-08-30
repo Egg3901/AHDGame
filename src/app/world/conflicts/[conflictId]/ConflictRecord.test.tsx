@@ -41,7 +41,7 @@ const base: ConflictRecordView = {
   type: "interstate",
   hostCountry: "CN",
   region: "East Asia",
-  years: "1953 – present",
+  years: "1953 to present",
   startYear: 1953,
   currentTurn: 120,
   status: "active",
@@ -98,7 +98,7 @@ describe("ConflictRecord", () => {
     render(<ConflictRecord conflict={base} />);
     expect(screen.getByText("Manchurian Front")).toBeTruthy();
     expect(screen.getAllByText(/CN/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/1953 – present/)).toBeTruthy();
+    expect(screen.getByText(/1953 to present/)).toBeTruthy();
   });
 
   it("shows the conflict's public number and region", () => {
@@ -172,14 +172,39 @@ describe("ConflictRecord", () => {
     expect(screen.getByText(/no engagements/i)).toBeTruthy();
   });
 
+  // The fog outlives the war. A public reader of a war that ended last turn sees
+  // exactly what they saw while it ran, and the panel has to say when that changes
+  // rather than promising a record that "opens when the war resolves" on a war
+  // that already has.
+  it("tells a public reader of a fogged resolved war when the record opens", () => {
+    const { container } = render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          status: "resolved",
+          statusLabel: "Resolved",
+          years: "1953 to 1955",
+          archiveOpensTurn: 577,
+        }}
+      />
+    );
+    expect(container.textContent).toMatch(/until turn 577/);
+    expect(container.textContent).not.toMatch(/opens to everyone when the war resolves/);
+  });
+
+  it("tells a public reader of a live war that the fog outlives it", () => {
+    const { container } = render(<ConflictRecord conflict={base} />);
+    expect(container.textContent).toMatch(/480 turns after the war resolves/);
+  });
+
   it("renders a resolved war", () => {
     render(
       <ConflictRecord
-        conflict={{ ...base, status: "resolved", statusLabel: "Resolved", years: "1953 – 1955" }}
+        conflict={{ ...base, status: "resolved", statusLabel: "Resolved", years: "1953 to 1955" }}
       />
     );
     expect(screen.getByText(/Resolved/)).toBeTruthy();
-    expect(screen.getByText(/1953 – 1955/)).toBeTruthy();
+    expect(screen.getByText(/1953 to 1955/)).toBeTruthy();
   });
 
   it("shows an unopposed advance as an outcome, not a blank row", () => {
@@ -462,7 +487,7 @@ describe("ConflictRecord tiers", () => {
       />
     );
     expect(container.textContent).toMatch(/Roster withheld/);
-    expect(container.textContent).toMatch(/Unlocks for everyone when the war resolves/);
+    expect(container.textContent).toMatch(/Unlocks for everyone 480 turns after the war resolves/);
   });
 });
 

@@ -17,7 +17,7 @@ const base: Conflict = {
   name: "Manchurian Front",
   type: "interstate",
   region: "East Asia",
-  years: "1953 – present",
+  years: "1953 to present",
   x: 70,
   y: 30,
   lean: 70,
