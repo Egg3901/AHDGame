@@ -237,6 +237,18 @@ export function ForcePanel({ view }: { view: ForcePanelView }) {
               nation&rsquo;s. It opens to everyone {CONFLICT_ARCHIVE_DELAY_TURNS} turns after the
               war resolves.
             </>
+          ) : view.tier === "command" && view.archiveOpensTurn != null ? (
+            // Command sight of a resolved war still under fog. Every formation has
+            // gone home, so the live-war line about reading the enemy off the
+            // strength ratio describes a front that no longer exists.
+            <>
+              This war has resolved and every formation has returned to reserve. Your own
+              side&rsquo;s rosters stay yours; the opposing side&rsquo;s composition{" "}
+              <span style={{ color: "#c8c8d4" }}>
+                opens to everyone on turn {view.archiveOpensTurn}
+              </span>
+              .
+            </>
           ) : view.tier === "archive" ? (
             // The fog lifted when the war ended. Saying "composition is not
             // public" beside two open rosters would describe the opposite page.

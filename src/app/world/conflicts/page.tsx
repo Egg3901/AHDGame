@@ -7,9 +7,6 @@ import { casualtiesByTheater } from "@/lib/db/collections/battleReports";
 import { toConflictView } from "./_coldwar/conflictView";
 import { toHistoricalConflictRow } from "./_history/historyView";
 import { HistoricalConflictsSection } from "./_history/HistoricalConflictsSection";
-
-/** How many concluded wars the hub lists. The record page holds the rest. */
-const HISTORY_LIMIT = 24;
 import { VietnamEscalationPanel } from "./_coldwar/VietnamEscalationPanel";
 import { getVietnamEscalationSummary, VIETNAM_RUNGS } from "@/lib/crises/vietnamEscalation";
 import { TensionHeader, type NuclearPowerView } from "./_coldwar/TensionHeader";
@@ -24,6 +21,9 @@ import { NUCLEAR_NODES } from "@/lib/military/nuclearProgram";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type { Crisis } from "@/lib/db/types/crisis";
 import { GlobalResponseCrisisStrip } from "./_coldwar/GlobalResponseCrisisStrip";
+
+/** How many concluded wars the hub lists, newest first. Older ones keep their record page. */
+const HISTORY_LIMIT = 24;
 
 // Conflicts hub: every live conflict in the world, on the map and in the list,
 // under one headline: the global cold-war tension reading. Gated by

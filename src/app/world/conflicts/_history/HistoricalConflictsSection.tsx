@@ -118,8 +118,11 @@ function HistoricalConflictCard({ row: r }: { row: HistoricalConflictRow }) {
             border: `1px solid ${outcomeColor}55`,
             background: `${outcomeColor}1a`,
             color: outcomeColor,
-            whiteSpace: "nowrap",
-            flexShrink: 0,
+            // A long side label ("Provisional Government victory") wraps inside the
+            // badge on a narrow card rather than pushing the row past the edge.
+            textAlign: "right",
+            flexShrink: 1,
+            minWidth: 0,
           }}
         >
           {r.outcome.label}

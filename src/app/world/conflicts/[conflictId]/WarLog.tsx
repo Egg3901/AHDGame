@@ -11,6 +11,11 @@ export interface WarLogView {
   note: string;
   /** The war's opening line — the last row, and the only one that is not a report. */
   opening: { year: number; text: string };
+  /**
+   * For a resolved war still under fog: the turn every withheld roster opens.
+   * Absent on a live war, whose date is not yet known, and on an open record.
+   */
+  archiveOpensTurn?: number;
 }
 
 /** Which side declared, so the row's marker takes that side's colour. */
@@ -192,8 +197,9 @@ export function WarLog({ view }: { view: WarLogView }) {
                           marginTop: 3,
                         }}
                       >
-                        Unlocks for everyone {CONFLICT_ARCHIVE_DELAY_TURNS} turns after the war
-                        resolves.
+                        {view.archiveOpensTurn != null
+                          ? `Unlocks for everyone on turn ${view.archiveOpensTurn}.`
+                          : `Unlocks for everyone ${CONFLICT_ARCHIVE_DELAY_TURNS} turns after the war resolves.`}
                       </div>
                     </div>
                   )}

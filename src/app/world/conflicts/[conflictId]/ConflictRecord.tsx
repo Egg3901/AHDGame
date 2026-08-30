@@ -769,6 +769,7 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
             view={{
               battles: c.battles,
               sideACountries: c.sideACountries,
+              archiveOpensTurn: c.archiveOpensTurn,
               // Offensives, not offensives AND engagements: the engagement count
               // is a stat tile at the top of the page, and the two figures side by
               // side read as a contrast the reader has to work out rather than the

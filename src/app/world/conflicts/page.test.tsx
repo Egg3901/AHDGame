@@ -87,10 +87,10 @@ const resolvedWar = {
   outcome: { winner: "B", note: "PLA took full control of CN." },
 };
 
-const listResolvedConflicts = vi.fn(async () => [resolvedWar]);
+const listResolvedConflicts = vi.fn(async (_db: unknown, _limit: number) => [resolvedWar]);
 vi.mock("@/lib/db/collections/conflicts", () => ({
   listActiveConflicts: vi.fn(async () => []),
-  listResolvedConflicts: () => listResolvedConflicts(),
+  listResolvedConflicts: (db: unknown, limit: number) => listResolvedConflicts(db, limit),
 }));
 vi.mock("@/lib/db/collections/battleReports", () => ({
   casualtiesByTheater: vi.fn(async () => ({})),
@@ -158,6 +158,8 @@ describe("ConflictsPage historical conflicts", () => {
     expect(screen.getByText("PLA victory")).toBeTruthy();
     const link = screen.getByRole("link", { name: /open record/i });
     expect(link.getAttribute("href")).toBe("/world/conflicts/3");
+    // Bounded: the hub is not the whole archive.
+    expect(listResolvedConflicts).toHaveBeenCalledWith(expect.anything(), 24);
   });
 
   it("says when a fresh war's full record opens", async () => {

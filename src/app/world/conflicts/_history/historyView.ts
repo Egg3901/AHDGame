@@ -60,6 +60,8 @@ export function toHistoricalConflictRow(
       ? `${startYear} to ${yearOfTurn(doc.endTurn, opts.startingYear, clock)}`
       : String(startYear);
 
+  // `isArchiveOpen` is already true when there is no opening turn (a legacy war
+  // with no `endTurn`), so the non-null assertion below is what the branch means.
   const opensTurn = archiveOpensTurn(doc);
   const archive: HistoricalConflictRow["archive"] =
     isArchiveOpen(doc, opts.currentTurn) || opensTurn === null

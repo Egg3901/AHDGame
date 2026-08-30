@@ -192,6 +192,57 @@ describe("ConflictRecord", () => {
     expect(container.textContent).not.toMatch(/opens to everyone when the war resolves/);
   });
 
+  // A belligerent seat keeps its own rosters on a fogged resolved war, but every
+  // formation has gone home, so the live-war line about reading the enemy off the
+  // strength ratio describes a front that no longer exists.
+  it("tells a command reader of a fogged resolved war when the enemy's record opens", () => {
+    const { container } = render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          tier: "command",
+          ownSide: "A",
+          viewerCountry: "US",
+          status: "resolved",
+          statusLabel: "Resolved",
+          years: "1953 to 1955",
+          archiveOpensTurn: 577,
+          forceA: { divisions: 0, personnel: 0, readiness: null, recovery: null, casualties: 6000 },
+          forceB: { ...withheld, casualties: 6345 },
+        }}
+      />
+    );
+    expect(container.textContent).toMatch(/opens to everyone on turn 577/);
+    expect(container.textContent).not.toMatch(/one band from the strength ratio/);
+  });
+
+  // The war log's withheld-roster note has the same problem as the force panel:
+  // "after the war resolves" on a war that has already resolved is a promise
+  // already broken. Once there is a date, it names the date.
+  it("dates a withheld engagement roster on a fogged resolved war", () => {
+    const { container } = render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          tier: "command",
+          ownSide: "A",
+          status: "resolved",
+          statusLabel: "Resolved",
+          archiveOpensTurn: 577,
+          battles: [
+            {
+              ...base.battles[0],
+              rostersWithheld: true,
+              rosters: [{ country: "US", power: 4444, units: [] }],
+            },
+          ],
+        }}
+      />
+    );
+    expect(container.textContent).toMatch(/Unlocks for everyone on turn 577/);
+    expect(container.textContent).not.toMatch(/turns after the war resolves/);
+  });
+
   it("tells a public reader of a live war that the fog outlives it", () => {
     const { container } = render(<ConflictRecord conflict={base} />);
     expect(container.textContent).toMatch(/480 turns after the war resolves/);

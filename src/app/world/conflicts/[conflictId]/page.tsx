@@ -455,6 +455,7 @@ export default async function ConflictRecordPage({
     sideACountries: [...doc.sideA.countries],
     sideBCountries: [...doc.sideB.countries],
     units,
+    concluded: isConflictConcluded(doc.status),
     reports,
     // So this page's enemy band and the war room's odds read the same fleet the same way.
     seaAccess: conflictToFront(doc).seaAccess,
@@ -644,6 +645,7 @@ export default async function ConflictRecordPage({
       ? "The Theater Commander designated for this conflict."
       : "The defense secretary — no Theater Commander is designated at this front.";
 
+  const fogLiftsTurn = archiveOpensTurn(doc);
   const conflict: ConflictRecordView = {
     conflictId: doc.conflictId,
     name: doc.name,
@@ -655,11 +657,9 @@ export default async function ConflictRecordPage({
     currentTurn,
     status: doc.status,
     statusLabel: doc.status.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase()),
-    // Only while the fog is still down on a resolved war: the panel uses it to say
+    // Only while the fog is still down on a resolved war: the panels use it to say
     // when the record opens, and an open record has nothing to announce.
-    ...(tier !== "archive" && archiveOpensTurn(doc) !== null
-      ? { archiveOpensTurn: archiveOpensTurn(doc) as number }
-      : {}),
+    ...(tier !== "archive" && fogLiftsTurn !== null ? { archiveOpensTurn: fogLiftsTurn } : {}),
     // Only shown when the war was actually declared. warGoalLabel would otherwise
     // print "Undeclared" on every seeded or event-created conflict.
     ...(doc.warGoal ? { warGoal: warGoalLabel(doc.warGoal) } : {}),
