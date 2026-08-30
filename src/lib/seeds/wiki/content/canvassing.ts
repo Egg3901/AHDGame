@@ -20,12 +20,12 @@ You pick two things:
 | Category | Groups |
 | --- | --- |
 | Race | White, Black, Hispanic, Asian, Other |
-| Age | Young (18-29), Middle-Aged (30-49), Mature (50-64), Senior (65+) |
+| Age | Young (18-34), Middle-Aged (35-49), Mature (50-64), Senior (65+) |
 | Education | No College, College Educated, Graduate Degree |
 | Wealth | Low Income, Middle Income, High Income |
 | Ideology | Evangelicals, Environmentalists, Libertarians, Progressives, Patriots, Gun Owners |
 
-Canvassing targets one bucket in one category. The modifier reaches every voter carrying that bucket, whatever their other attributes. See [Demographics](/wiki/demographics) for how the census builds the electorate the vote engine counts.
+Canvassing targets one bucket in one category. The modifier reaches every voter carrying that bucket, whatever their other attributes. The four census dimensions are the same ones the vote engine builds its cells from; the fifth, Ideology, is a targeting layer for canvassing (and party GOTV) only, reaching the voters who carry that identity across every census cell. Outside the US, each country's own voter groups stand in for all five. See [Demographics](/wiki/demographics) for how the census builds the electorate the vote engine counts.
 
 ## The effectiveness formula
 

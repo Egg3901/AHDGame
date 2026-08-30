@@ -44,7 +44,7 @@ export const gettingStartedPages: readonly WikiSeedPage[] = [
     slug: "create-a-character",
     title: "Create a Character",
     description:
-      "Every decision during onboarding: country, name, home region, policy positions, starting kit, first party.",
+      "Every decision during onboarding: country (all ten playable hubs), name, home region, policy positions, starting kit, first party.",
     content: createACharacterContent,
     category: "getting-started",
     extraTags: ["onboarding", "character"],

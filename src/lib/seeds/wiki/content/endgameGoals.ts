@@ -17,9 +17,9 @@ The highest executive office in your country. Reaching it requires:
 **For US President:**
 1. Accumulate NPI to 60+ (takes 50-100 turns of active play)
 2. Maintain favorability 70+
-3. Build party org in your home state to 80+
-4. Win the presidential primary (check primary score projection before declaring)
-5. Win the general election (270 electoral votes)
+3. Build party influence and Campaign Presence in delegate-rich states
+4. Win the presidential primary: pledged delegates across the state waves, settled at a convention if nobody holds a majority
+5. Win the general election: a majority of the Electoral College the era apportions
 
 This is the longest-horizon goal in the game. The presidential primary and Electoral College both require national infrastructure that takes game years to build.
 
@@ -70,7 +70,7 @@ Controlling a party means your legislative agenda passes, your candidates win se
 For players focused on changing the game world rather than acquiring power:
 
 1. **Identify target metrics**: national healthcare index, environment index, economic index, education index. Each policy bill affects one or more of these.
-2. **Build a legislative pathway**: you need votes in committee, votes on the floor, and executive signature. Plan for each.
+2. **Build a legislative pathway**: you need floor votes in every required chamber and, in presidential systems, an executive signature. Plan for each.
 3. **Coordinate whip votes**: work with party leadership on NPP votes.
 4. **Track metric history**: after a bill passes, watch the metric history chart to see if your bill is having the intended effect. Some effects take 4-8 turns to materialize.
 5. **Sustain policy**: policies can be reversed by future legislation. Holding office or party leadership helps defend your policies from repeal.
@@ -89,7 +89,7 @@ This requires:
 - **Keeping party org high** in your home state
 - **Avoiding infamy accumulation** that reduces endorsement rates
 
-A Senator who has held their seat for 5 game years is a significant political figure: NPPs are unlikely to unseat them, and player challengers face a +40 alignment + 35 favorability score from a well-maintained incumbent.
+A Senator who has held their seat for 5 game years is a significant political figure: NPPs are unlikely to unseat them, and player challengers face a well-maintained incumbent's full alignment and favorability standing through every turn of the primary count.
 
 ---
 

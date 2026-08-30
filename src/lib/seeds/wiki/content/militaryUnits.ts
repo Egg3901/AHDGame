@@ -2,7 +2,7 @@ export const militaryUnitsContent = `# Units, Recruitment & Procurement
 
 Your army is a list of **formations**. Each one is a real object with a headcount, a technology level, a veterancy grade, a posture, and (once you have generals) a commander. This page covers how you get them, what they cost, and how you improve them.
 
-Everything here is done by the **defence seat holder** from their cabinet office → **Military** tab.
+Everything here is done by the **defence seat holder** from their cabinet office → **Military** tab. An **acting** secretary (a caretaker seated without confirmation) can recruit, upgrade, set postures and assign units, but cannot commission or dismiss generals, adopt doctrine, touch the nuclear programme, or award and cancel defence contracts: those wait for a confirmed holder.
 
 ## Domains and branches
 
@@ -230,6 +230,8 @@ The contractor assigns up to four production lines from each plant across its or
 Both the minister's and contractor's order books show lots ordered, built, carried, delivered, paid, and still committed. A stalled order names the reason. Awards to a corporation the minister owns or materially holds are marked on the contract, reported on the public wire, and reduce the minister's standing.
 
 An admin may pause **new** defence procurement in an emergency. Existing contracts continue to deliver and may still be cancelled or declined.
+
+**Planned economies do not contract.** The Soviet Union and East Germany have no private suppliers to place an order with, so their arsenals are fed by **state arms industry** instead: a fixed trickle of lots every turn, delivered straight to the store and pointed at whichever branch is furthest from a full load. It is enough to keep an army equipped and fit out a new formation in a few turns, and it banks a modest war reserve in peacetime, but it will not keep up with a war fought at full pace. The Soviet arsenal out-produces the East German one several times over.
 
 ## A sensible build order
 

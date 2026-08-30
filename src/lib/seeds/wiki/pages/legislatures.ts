@@ -84,7 +84,7 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     slug: "cabinet",
     title: "Cabinet",
     description:
-      "The 15 US Cabinet positions, how the President nominates and the Senate confirms, and what cabinet members do each turn.",
+      "The 15 US Cabinet positions, how the President nominates and the Senate confirms, acting secretaries, and what cabinet members do each turn.",
     content: cabinetContent,
     category: "legislatures",
     extraTags: ["executive", "confirmation"],

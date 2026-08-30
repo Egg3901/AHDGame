@@ -111,6 +111,7 @@ The planned machinery from the passive model still applies while a country sits 
 - **Two-circuit wage fund**: planned share pulls nominal wage growth down toward real-goods growth plus 2 percentage points. It never raises wage growth. This is the primary brake on forced saving when wages outrun consumer goods.
 
 - **Fixed official currency**: in a fully command country the official rate is pinned to its era anchor and does not float. Do not build forex strategies around it the way you would around USD, GBP, or JPY.
+- **The iron curtain**: in the Cold War eras the bloc's trade with the open world is closed in both directions, while the bloc's internal market and the open world each trade freely among themselves. Yugoslavia, which broke with Moscow before the era begins, sits outside the curtain and trades with the West even though its domestic economy stays planned. See [International Trade](/wiki/trade-system).
 - **Passive central bank**: fully command economies run a passive monobank. The automatic rate setter does not fire, so do not expect rate hikes and cuts to chase inflation and growth.
 - **Administered prices and CPI**: national prices are set by the plan, not cleared by supply and demand, and open inflation sits on the era path. Shortage shows up as unmet demand at a held price, not as a price spike.
 - **Soft budgets**: state firms are not dissolved for insolvency the way market corporations are, unless the Gosbank Chair runs hard budgets. Zombie enterprises are the regime, not a stuck job.

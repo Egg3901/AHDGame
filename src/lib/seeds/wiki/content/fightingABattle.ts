@@ -77,7 +77,7 @@ Press **Declare offensive**, pick the enemy nation.
 
 Every check must pass:
 
-1. **The conflict must be live**: not resolved.
+1. **The conflict must be live**: not resolved, and not already won outright. A war whose front has run to the end of the track takes no more offensives while the victor names terms.
 2. **You must have authority here**: the Theater Commander if one is designated, otherwise the defence seat holder. Admins always.
 3. **Your nation must have a side** in this conflict. You can be on it by roster, or by your bloc backing one of the sides.
 4. **Your target must be an actual belligerent**: by roster only. You cannot drag a bystander in, even a bloc rival. *(Note the asymmetry: your own side may resolve through your bloc, your target's may not.)*
@@ -86,6 +86,17 @@ Every check must pass:
 7. **You must not already have a pending offensive here.** One at a time.
 
 Withdrawing a declaration before it resolves is free and instant.
+
+### The standing order: join allied offensives
+
+Defence has always been automatic: an ally with troops at a front defends it whether or not anyone gave an order. Attacking used to demand a fresh declaration from every ally on the same turn, so a joint push took two nations acting in the same hour.
+
+The conflict page now offers a **standing order** per front: *join allied offensives here automatically*. With it on, your forces at that front fight in any offensive an ally declares there, without a separate order from you. Off is the default.
+
+- It needs troops already posted to that front, exactly like automatic defence. A standing order never moves an army and never pulls you onto a side you are not on.
+- It is national policy, set by whoever holds offensive authority at the front, and it survives a change of Theater Commander.
+- An ally that joins this way appears in the war log under its own flag with its own casualties. Withdrawing your forces from the front is the way to stop supporting an offensive.
+- The war room's odds already count allies who will join, whether by their own declaration or by standing order, and its "They attack" row counts every nation with troops on your side.
 
 ## Step 4: The defender's window
 
@@ -109,7 +120,7 @@ On the tick, battles resolve in a fixed position in the turn: after force effect
 
 ### Coalitions merge
 
-Every ally who declared against the **same side at the same front** is folded into **one offensive**. They fight together, appear on one report, and share the result.
+Every ally who declared against the **same side at the same front**, plus every ally with a standing order to join there, is folded into **one offensive**. They fight together, appear on one report, and each nation's dead are recorded under its own flag.
 
 The merge key is *the front and the attacking side*, **not the named target**. Two allies naming different enemies on the same side are running one attack, because the front and the defending coalition are identical.
 
@@ -168,7 +179,9 @@ The resolution model is deliberately not published in detail: knowing the exact 
 - **Veterancy.** Elite formations are substantially better than green ones. Veterancy is a five-grade table, not a compounding multiplier.
 - **Technology tier.** Real but modest, smaller than veterancy, and it costs upkeep forever.
 - **Equipment.** A small, steady bonus.
-- **Readiness.** A tired army fights worse. Readiness drifts back toward its posture baseline each turn.
+- **Readiness.** A tired army fights worse, and a battle costs a worn formation far more readiness than a fresh one. Readiness climbs back toward its posture baseline at eight points a turn, so pressing every turn keeps a force exhausted while a few turns of rest bring it back. The pace you fight at is a real choice.
+- **Frontage.** A front has finite width. Only so much force can be in contact at once; the rest sits in depth, where it neither fights nor bleeds this turn. Frontline and flank units take their places in the line first, then support, then anything held back. Terrain widens or narrows the line: open plain and desert hold the most, mountains and jungle the least.
+- **Naval reach.** A carrier's air wing genuinely strikes inland and keeps most of its effect on a coastal front. Escorts, submarines and amphibious groups contribute very little to a division fighting inland of them. Whether a front touches the sea is worked out from the host country.
 - **Posture.** Higher postures fight better and cost more.
 
 **Command**

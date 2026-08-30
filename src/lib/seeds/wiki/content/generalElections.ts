@@ -6,7 +6,7 @@ For the overall election structure see [Election Mechanics](/wiki/election-mecha
 
 ## The vote pool
 
-Each election has a total vote pool derived from the state's **demographics**: the census is combined into voter segments, each with a size (share of total), a turnout rate, and policy leans on the economic and social axes.
+Each election has a total vote pool derived from the state's **demographics**: the census is combined into voter segments, each with a size (share of total), a turnout rate, and policy leans on the economic and social axes. Only the **registered** share of the electorate casts general ballots, the pool is conserved across every turn of the count, and a race can never certify more ballots than it has voters.
 
 Per-turn allocation of the pool:
 
@@ -121,8 +121,8 @@ When the general window closes:
 For presidential races, Electoral College resolution runs instead:
 
 - Per-state vote totals sum to Electoral Votes per state (ME and NE split by congressional district).
-- 270 EV to win.
-- 269-269 tie: deterministic coin flip (hash of election ID + candidate IDs).
+- A majority of the college the election apportioned wins outright (270 of 538 on the modern roster, 266 of 531 in the 1950s).
+- No majority, including an exact tie: the race goes to a [contingent election](/wiki/contingent-election) in the House and Senate.
 
 ## Running mates (presidential)
 

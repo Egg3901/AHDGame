@@ -83,6 +83,20 @@ Truces are recorded for **every cross-side pair**, not just the two principals. 
 
 Your defence office's declaration panel lists your live truces and greys out the countries you cannot target, so you see the bar in the picker rather than after committing.
 
+## Treaty allies come in with the defender
+
+Ratification is not the only way into a war. **NATO and the Warsaw Pact carry collective-defence charters, and the engine honours them.** The moment a declaration against a member is enacted, every other member of that alliance that holds a ballot is enrolled on the defender's side, automatically, with no vote and no bill. The alliance is named in the war's belligerent roll ("Warsaw Pact → DD"), and the countries pulled in are notified.
+
+Three things follow from that:
+
+- **It is defensive only.** The trigger is a declaration *against* a member, never "a member is at war". An ally dragged in to defend has declared on nobody, so its own alliances never fire in turn. Chains cannot happen.
+- **A truce still holds.** A member truced with the declarer is not pulled in against it.
+- **The ally is a full belligerent.** Its troops defend the front automatically if posted there, its approval carries the war, and it is judged on what it fields against what its co-belligerents field. It can also negotiate its own way out (see [Peace, Indemnities & Truces](/wiki/peace-and-truces)).
+
+There is a second route in for a bloc: a member can table a resolution calling the whole organization into a conflict. That needs **unanimous consent** from every member entitled to vote, because it commits allies' soldiers, and it lands as a join-conflict bill in each member's legislature. See [International Organizations](/wiki/international-organizations).
+
+Autonomous governments use these roads too. A country nobody plays can ratify a war-entry bill on its own, provided its public approval, readiness, treasury and alliance all support it, and it deploys real forces when it does.
+
 ## What happens the moment it passes
 
 Ratification fires immediately on enactment. One of two things happens:
@@ -94,7 +108,7 @@ A **new conflict** is created, hosted in the defending country:
 - Named after the two belligerents.
 - Side A is you; side B is the defender.
 - Region, terrain and infrastructure are derived from the defender's home region.
-- **Territorial control opens at the defender's own pole**: they hold 100% of their own soil. You are starting from nothing, which is exactly right for an invasion.
+- **Territorial control opens at the defender's own pole**: they hold 100% of their own soil. You are starting from nothing, which is exactly right for an invasion. (The one exception is a war the German Question attaches to, which is fought over both Germanies and opens on an even front.)
 - It is assigned the next sequential conflict number and gets its own page.
 
 ### There is already a live war in the defender
@@ -122,7 +136,9 @@ The point is only to remove the degenerate opening where the first battle is dec
 
 **Filing is cheap, losing is not.** The 10 AP refund means a well-whipped declaration costs nothing. Count your votes first.
 
-**Joining someone else's war has no cooldown advantage.** Enrolling in an existing conflict still consumes your 120-turn cooldown, because it still goes through a full declaration bill.
+**Joining someone else's war by declaration has no cooldown advantage.** Enrolling in an existing conflict through your own declaration still consumes your 120-turn cooldown, because it still goes through a full declaration bill. Being pulled in by a treaty is different: no bill, no cooldown, and no choice.
+
+**Declaring rallies the public, once.** A war declared from peace opens with a wave of support that turns into war exhaustion after about a year of fighting, and that exhaustion is carried across a peace and heals only slowly. A country that goes straight from one war into the next gets no fresh rally at all. See [Government Approval](/wiki/government-approval).
 
 **Check the truce list before you plan a campaign.** Ten real days is a long time to discover you cannot attack the country your whole build-up was aimed at.
 

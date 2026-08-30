@@ -9,10 +9,10 @@ For phase rules see [Primaries](/wiki/primaries) and [General Elections](/wiki/g
 | Dimension | Primary | General |
 | --- | --- | --- |
 | Who votes | Your party's members (and NPPs in your party) | All voters in the state |
-| How winner is chosen | Highest primary score (no vote accumulation) | Vote accumulation across all turns |
-| Biggest stat lever | Alignment to party platform (40 pts) | Appeal via policy positioning to demographics |
-| Strategic target | Party base | Swing demographics |
-| Time pressure | Fixed declaration deadline (no vote gradient) | Gradient: final 4 turns weighted 30% |
+| How winner is chosen | Cumulative primary ballots, split each turn by primary-score standing | Vote accumulation across all turns |
+| Biggest stat lever | Alignment to state lean and party platform (40 pts) | Appeal via policy positioning to demographics |
+| Strategic target | Your party's registered voters | Swing demographics |
+| Time pressure | Ballots count over the closing window of the primary, on the same closing surge | Gradient: final 4 turns weighted 30% |
 | Cost multiplier on campaign upgrades | 1.0x | 1.5x |
 | Attack rival candidates? | No (same party) | Carefully (opponents only) |
 | NPP endorsements | Useful, modest | Useful, higher weight |

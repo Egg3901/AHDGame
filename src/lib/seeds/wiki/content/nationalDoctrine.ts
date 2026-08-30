@@ -109,7 +109,7 @@ The strategic consequence: **doctrine and officer training should be planned tog
 
 ## Who adopts
 
-Only the **defence seat holder**: Secretary of Defense, Defence Secretary, Minister of Defence, or equivalent. Not the head of government, not generals, not the legislature.
+Only the **defence seat holder**: Secretary of Defense, Defence Secretary, Minister of Defence, or equivalent. Not the head of government, not generals, not the legislature, and not an **acting** secretary: doctrine binds the country past a caretaker's tenure, so adopting it waits for a confirmed holder.
 
 Because doctrine is permanent and the budget tiny, **this is one of the most consequential powers in the game and one of the easiest to squander.** A minister who dumps the starting twelve points in their first week has locked in their country's military identity for every successor.
 

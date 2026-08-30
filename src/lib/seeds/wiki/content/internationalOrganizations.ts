@@ -68,6 +68,14 @@ Two thresholds apply, and both are measured against the members entitled to vote
 - **Unanimous**: entering a conflict at the bloc's call, free trade agreements, and admitting a new member. Any one member can refuse simply by declining to consent.
 - **Majority**: everything else, including sanctions, directives, aid packages, dues, posture, agency funding and joint statements. More than half the voting members must vote "yes".
 
+A resolution that fails, and a leadership candidate who is not elected, are written to the country history rather than vanishing from the pending list. A joint statement about a country lifts or lowers that country's national approval for as long as it stands (see [Government Approval](/wiki/government-approval)).
+
+## Mutual defence
+
+The military alliances (NATO and the Warsaw Pact) carry collective-defence charters that the engine enforces without any vote at all. A declaration of war **against** a member pulls every other voting member of that alliance onto the defender's side automatically, the alliance is named on the war's belligerent roll, and the members are told. It is defensive only: an ally pulled in has declared on nobody, so no other alliance fires and no chain can form, and a member truced with the declarer stays out. A member dragged in this way can negotiate its own exit; it is not held in the war until the member it came to defend settles. Calling the bloc into a war it was not attacked in is the unanimous resolution above. In worlds that begin at the 1953 preset the two armed blocs also levy a fixed **tribute** on their non-voting client members instead of voted dues. See [Declaring War](/wiki/declaring-war).
+
+Autonomous governments cast opinion-based votes here too, table trade agreements, aid, sanctions and statements, and can call their alliance to war, so a bloc's ballots fill in whether or not players hold the seats.
+
 ## Custom organizations
 
 Players can **create their own international organizations** with arbitrary parameters:

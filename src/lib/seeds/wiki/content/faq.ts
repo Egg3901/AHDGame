@@ -12,13 +12,14 @@ The US Senate uses staggered classes, so only one-third of seats (one class) are
 
 **Why did I lose the primary?**
 
-Primary scores are calculated when the primary window closes. The highest score per party advances. State primaries use 25 alignment points against state lean, 15 against party position, 35 for favorability, and 25 for political influence. If the state has no cached lean, the two alignment buckets fall back to one 40-point party check. Common reasons for losing:
+Down-ballot primaries are decided by **ballots**, not by a single score at the deadline. Over the closing stretch of the primary your party's registered voters cast a slice of ballots each turn, split between the party's candidates by their primary-score standing that turn, and the cumulative count picks the nominee. The standing itself uses 25 alignment points against state lean, 15 against party position, 35 for favorability, and 25 for political influence (if the state has no cached lean, the two alignment buckets fall back to one 40-point party check). Common reasons for losing:
 
 - Your policy position was too far from the state's lean, the party platform, or both.
-- Your favorability was below 55 to 60. At 50 favorability, you're only contributing 17.5 of a possible 35 points.
-- An NPP scored higher than you without the penalty (NPPs only get the 0.5× penalty if at least one player is in the primary).
+- Your favorability was below 55 to 60. At 50 favorability, you're only contributing 17.5 of a possible 35 standing points.
+- You overtook the field on the last turn. Ballots accumulate, so a rival who led through the closing window keeps most of the count.
+- An NPP outscored you without the penalty (NPPs only get the 0.5× penalty if at least one player is in the primary).
 
-Run a Quick Poll before declaring: it shows your projected primary score before you commit.
+Run a Quick Poll before declaring: it shows your projected standing before you commit, and the race page shows the live cumulative shares once ballots start counting.
 
 ---
 
@@ -30,7 +31,7 @@ Canvassing targets one state at a time. For most characters that state is your h
 
 **How do I get more actions per turn?**
 
-Base actions: 4 per turn. Actions increase by holding offices with action bonuses:
+Base actions: 4 per turn (your Energy stat can raise the cap and the banked amount). Actions increase by holding offices with action bonuses:
 
 - President / PM / Chancellor: +4
 - Vice President: +2
@@ -88,9 +89,9 @@ Go to the Congress or legislature page for your country. Use the "Propose Bill" 
 
 ---
 
-**Why did my bill get stuck in committee?**
+**Why is my bill not moving?**
 
-Bills need committee votes to advance to the floor. NPPs and other player legislators must vote yes. If your bill's effects are ideologically misaligned with the committee's ideology distribution, NPPs will vote against it. Check the ideology breakdown of your committee members and adjust the bill's policy direction accordingly, or use whip directives if you control party leadership.
+There is no committee stage: a bill goes straight to a 24-hour floor vote in its origin chamber (see [Committees](/wiki/committees)). If it is sitting still, the usual causes are a pending parliamentary government (legislation freezes until a PM is seated), a chamber where the NPP cross-pressure runs against your policy option, or a filibuster in the US Senate. Check the ideology breakdown of the chamber and adjust the bill's policy direction, or use whip directives if you control party leadership.
 
 ---
 
@@ -150,7 +151,7 @@ Yes, via the relocation action. Relocating costs actions and funds, and there is
 
 **What is infamy?**
 
-Infamy increases when you take certain negative actions (attacks, defying whip votes, and some legislative plays). Higher infamy reduces NPP endorsement success and affects some approval calculations. It decays by 5% each turn, so a quiet stretch gradually fades it.
+Infamy increases when you take certain negative actions: attacking another politician, converting large sums of personal cash into campaign funds, and some random-event choices. Defying a whip does not add infamy. Higher infamy trims your vote weight and primary standing slightly and reduces NPP endorsement success. It decays by 5% each turn, so a quiet stretch gradually fades it.
 
 ---
 

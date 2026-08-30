@@ -115,7 +115,7 @@ Forced liquidation feeds the confidence score. Flag off freezes prop and interba
 
 The warning badge and the run mechanic are the **market** disciplining a bank after the fact. Supervision is the regulator disciplining it before.
 
-Your bank's **capital ratio** is its capital — posted capital plus the corporation's own free cash — divided by its risk assets, meaning the loan book plus any proprietary book.
+Your bank's **capital ratio** is its capital (posted capital plus the corporation's own free cash) divided by its risk assets, meaning the loan book plus any proprietary book.
 
 | Test | Requirement | What failing costs you |
 | --- | --- | --- |
@@ -124,11 +124,11 @@ Your bank's **capital ratio** is its capital — posted capital plus the corpora
 
 **The stress scenario is published and fixed.** The supervisor assumes 15% of the book defaults at once, absorbed by capital. There is no dice roll: you can compute your own result before the regulator does, which makes the requirement something to plan against rather than a periodic surprise.
 
-**Two thresholds, not one.** A single line would make supervision binary — fine one turn, dead the next. Failing the *stress* test does not endanger your bank and does not touch your charter; what you lose is the right to pay yourself. A bank that cannot survive a downturn on paper does not get to distribute in the meantime. Falling below the *minimum* is the serious one, and it starts a clock.
+**Two thresholds, not one.** A single line would make supervision binary: fine one turn, dead the next. Failing the *stress* test does not endanger your bank and does not touch your charter; what you lose is the right to pay yourself. A bank that cannot survive a downturn on paper does not get to distribute in the meantime. Falling below the *minimum* is the serious one, and it starts a clock.
 
 **Recapitalizing** moves cash from the corporation into the bank's posted capital. It is the same balance sheet, but a different claim: posted capital absorbs losses before depositors do, and cannot be spent on anything else. The interface tells you the exact amount that cures the breach.
 
-**Missing the deadline revokes the charter — it does not fail the bank.** Those are different outcomes and the difference matters to your depositors. A failure means the bank ran out of money to pay them, and they take a haircut above the insured cap. A revocation means the regulator pulled the licence of a bank that would not recapitalize; the book is unwound in an orderly way and posted capital is returned. Depositors should not be punished because an owner ignored a deadline.
+**Missing the deadline revokes the charter: it does not fail the bank.** Those are different outcomes and the difference matters to your depositors. A failure means the bank ran out of money to pay them, and they take a haircut above the insured cap. A revocation means the regulator pulled the licence of a bank that would not recapitalize; the book is unwound in an orderly way and posted capital is returned. Depositors should not be punished because an owner ignored a deadline.
 
 A bank that cures a breach and later breaches again gets a fresh 12 turns. The clock tracks the current breach, not your history.
 
@@ -148,7 +148,7 @@ The window is open to **retail and universal** charters only. An investment bank
 
 That is the real trade-off. The window funds you through a run and makes the run marginally more likely. It is a decision, not an obvious yes.
 
-The penalty scales with how much of your **limit** you have used, not the raw amount — a small bank at its ceiling is in more trouble than a large one borrowing the same sum against a much bigger book. It decays as you repay, so a bank that uses the window briefly and clears it is not marked forever.
+The penalty scales with how much of your **limit** you have used, not the raw amount: a small bank at its ceiling is in more trouble than a large one borrowing the same sum against a much bigger book. It decays as you repay, so a bank that uses the window briefly and clears it is not marked forever.
 
 **The limit is deliberately low.** The window is a bridge across a liquidity shortfall, not a funding source. A bank that needs more than a quarter of its deposit base is not illiquid, it is insolvent, and resolution is the right answer rather than a bigger loan.
 

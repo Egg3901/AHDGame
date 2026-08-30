@@ -82,7 +82,7 @@ Raw D/S remains visible on market and admin screens. Prices and margins use the 
 
 Beyond sector-level supply and demand, several macroeconomic forces inject additional commodity demand each turn:
 
-**Advertising:** Corporate marketing budgets convert to advertising commodity demand. **90%** of a corporation's daily marketing budget becomes advertising demand, distributed to the corporation's HQ state.
+**Advertising:** Corporate marketing budgets convert to advertising commodity demand, distributed to the corporation's HQ state, but only as much as the corporation's liquid capital can actually fund for the next turn. The buyer pays only for the advertising that fills, at the clearing price, and that payment settles to the media and entertainment corporations whose offers filled it; unfilled budget stays in the buyer's treasury.
 
 **Healthcare services:** National healthcare budgets (Medicare, NHS, etc.) convert to healthcare_services demand. **1.5%** of annual healthcare spending is spread across turns as demand.
 

@@ -45,7 +45,7 @@ China is one-party by design. Several runtime constraints enforce this:
 
 ## Internal party confidence
 
-China is the only country with a **ruling-party confidence model**. Instead of a legislative confidence vote, the CCP's internal dynamics drive leadership transitions:
+China was the first country modelled with a **ruling-party confidence model**, which every one-party state now shares. Instead of a legislative confidence vote, the CCP's internal dynamics drive leadership transitions:
 
 - **9-axis priority profile**: ideological weights that shift based on enacted policy.
 - **Per-turn confidence drift**: ruling-party confidence is recomputed each turn based on policy-axis effects, popular mood, and economic signals.
@@ -58,14 +58,14 @@ The **President** is auto-synced to the CCP chair: when the party chair changes,
 
 ## Constitutional convention (regime conversion)
 
-CN is the only country with a **regime-conversion / constitutional convention** system. If ruling-party confidence collapses to a critical threshold, a Stage-4 forced conversion fires:
+CN runs the shared **regime-conversion / constitutional convention** system used by every one-party state, with its own collapse target. If ruling-party confidence collapses to a critical threshold, a Stage-4 forced conversion fires:
 
 - **Collapse target system**: a parliamentary republic by default.
 - **Convention allowlist**: parliamentary republic or presidential. The player can negotiate either target. One-party state is excluded from the list, since conversion only ever runs one way.
 - **Legacy seat reservation**: 20% of post-conversion legislature seats granted to the former ruling party by default. The Stage-4 forced path always uses 5% (and halves it to 3% if a "resist" decision was taken).
 - **Election delay**: 24 turns by default before the first post-conversion election.
 
-This is the only path by which China can transition out of one-party rule. Once converted, there is no path back.
+Conversion, whether forced, negotiated through a convention, or imposed as a regime-change peace term, is one-way. Once converted, there is no path back, and the conversion dissolves the NPC and holds the election it promises.
 
 ---
 
@@ -115,7 +115,7 @@ The 7-candidate primary override is the key CN electoral mechanic: it ensures th
 
 **One-party by design.** The CCP is the ruling party by seed. No other party competes in elections. No-confidence votes are blocked at runtime. The Premier cannot be removed mid-term by a legislative vote.
 
-**Internal confidence, not legislative confidence.** Leadership transitions run through the internal-party confidence model, not a Dáil/Commons-style confidence vote. The 9-axis priority profile and popular mood profile drive drift each turn.
+**Internal confidence, not legislative confidence.** Leadership transitions run through the internal-party confidence model shared by the one-party states, not a Dáil/Commons-style confidence vote. The 9-axis priority profile and popular mood profile drive drift each turn.
 
 **Ceremonial President auto-sync.** The President is not elected: the office auto-populates as whoever holds the CCP chair. When the chair changes, the President updates automatically.
 

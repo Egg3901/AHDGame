@@ -66,24 +66,24 @@ Used for campaign-owner review and for party/public intelligence.
 ### Endorsements
 
 - List of NPPs and players who've endorsed the candidate.
-- Contribution to campaign actions (via the \`1 + floor(sqrt(endorsements) × 3)\` formula).
+- Contribution to campaign actions (via the \`baseline + floor(sqrt(endorsements) × 3)\` formula).
 - Endorsement history: when and by whom.
 
 Player endorsements only count toward the action bonus in **presidential** races. NPP endorsements count in all races.
 
-### Manager (admin-assignable)
+### Campaign Managers
 
-An admin can assign a manager to a campaign. The manager has:
+The candidate (or an admin) appoints managers from the **Campaign Managers** panel on the campaign page: search for a character by name, add them, remove them, up to **three**. A manager must be in your country and cannot be a candidate managing their own campaign. A manager's owning player has:
 
 - Read access to the full campaign page (same as the candidate).
 - Ability to trigger upgrades, allocate campaign actions, and change opposition research targets.
-- Cannot withdraw the candidate.
+- No power to withdraw the candidate or change the manager list.
 
-This is designed for multi-player coordination: a campaign manager can run the operational details while the candidate focuses on character actions.
+This is designed for multi-player coordination: a campaign manager can run the operational details while the candidate focuses on character actions. Everyone else sees the panel read-only.
 
 ### Campaign room briefing (owner-only)
 
-Presidential campaigns get a private briefing panel that turns the current race state into a plan. It only reads numbers the engine and tally already produced, so it never invents vote math. It is visible to the campaign owner, its manager, the nominee, and the running mate. It has:
+Presidential campaigns get a private briefing panel that turns the current race state into a plan. It only reads numbers the engine and tally already produced, so it never invents vote math. It is visible to the nominee and the campaign's managers only: a running mate, a party viewer and the public do not see it, because the coalition read is exactly the intelligence an opponent should not have. It has:
 
 - **Path to victory.** In the primary, your **delegate path**: delegates won, the majority you need, how many remain, and the top delegate leaders in your party. In the general, your **tipping-point path**: the electoral votes you hold, the majority you need, and the 5 closest states by popular-vote margin, the ones that actually decide the race.
 - **Cash runway.** How many turns your funds last at the current burn rate, or unbounded if you are net positive.
@@ -96,13 +96,13 @@ The [Vote Factor Ledger](/wiki/vote-factor-ledger) tells you why you have the vo
 
 Your campaign generates its own per-turn action pool:
 
-- **Base floor:** At least 1 campaign action/turn.
-- **Endorsement bonus:** \`1 + floor(sqrt(endorsements) × 3)\` additional campaign actions per turn.
-  - 0 endorsements → 1/turn
-  - 4 endorsements → 7/turn
-  - 9 endorsements → 10/turn
-  - 16 endorsements → 13/turn
-  - 25 endorsements → 16/turn
+- **Baseline:** the player's own base action rate (4 per turn from game config), so every campaign earns at least 4 actions a turn.
+- **Endorsement bonus:** \`baseline + floor(sqrt(endorsements) × 3)\` campaign actions per turn. Governor and executive endorsements count at their own weight.
+  - 0 endorsements → 4/turn
+  - 4 endorsements → 10/turn
+  - 9 endorsements → 13/turn
+  - 16 endorsements → 16/turn
+  - 25 endorsements → 19/turn
 
 Campaign actions are consumed by **upgrades only** (not regular actions like Campaign or Fundraise).
 
@@ -150,7 +150,7 @@ Your own display is always accurate.
 
 ## Candidate-only operations
 
-Actions only the candidate (or their admin-assigned manager) can perform:
+Actions only the candidate (or an appointed manager) can perform:
 
 - Purchase upgrades
 - Change Opposition Research target (6-hour cooldown between retargets)
@@ -196,7 +196,7 @@ Donations show up in the Budget tab and Activity Log with attribution.
 - **Buying high-maintenance branches you can't afford.** Auto-downgrade kicks in, you lose the investment.
 - **Ignoring Opposition Research retarget cooldown.** Plan retargets ahead of time.
 - **Not checking fog-adjusted opponent investment.** A fogged opponent estimate could be well off. Don't over-react.
-- **Forgetting endorsement action bonuses.** If you have 9 NPP endorsements, your campaign has 10 actions/turn, worth real upgrade velocity.
+- **Forgetting endorsement action bonuses.** If you have 9 NPP endorsements, your campaign has 13 actions/turn, worth real upgrade velocity.
 
 ## Related
 
