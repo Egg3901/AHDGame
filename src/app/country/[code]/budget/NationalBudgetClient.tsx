@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { TreasuryMasthead, type BudgetLens } from "@/components/budget/treasury/TreasuryMasthead";
 import { FiscalStatStrip } from "@/components/budget/treasury/FiscalStatStrip";
 import { FiscalFlow } from "@/components/budget/treasury/FiscalFlow";
+import { displayRevenueEntries } from "@/components/budget/treasury/displayRevenue";
 import {
   BudgetBreakdownPanel,
   type BreakdownLine,
@@ -856,9 +857,8 @@ export function NationalBudgetClient() {
     "costModel" in law ? law.costModel : describeLawCost(law as EnactedLaw);
 
   // Structured revenue lines for the expandable breakdown panel (rate + base).
-  const revenueLines: BreakdownLine[] = Object.entries(budget.revenue)
-    .filter(([key]) => key !== "total")
-    .map(([key, value]) => {
+  const revenueLines: BreakdownLine[] = displayRevenueEntries(budget.revenue).map(
+    ([key, value]) => {
       const taxRate = getNumericField(budget.taxRates, key);
       const taxBaseField = REVENUE_TO_TAX_BASE[key];
       const storedTaxBase =
@@ -881,7 +881,8 @@ export function NationalBudgetClient() {
         rate: taxRate ?? null,
         base: hasBase ? taxBase : null,
       };
-    });
+    }
+  );
 
   // Statutory tax laws govern revenue, not spending: the API enriches each with
   // `revenueTaxType` (the FederalTaxRates key it sets). File them under the
