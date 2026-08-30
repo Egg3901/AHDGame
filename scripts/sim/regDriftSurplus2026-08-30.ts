@@ -33,6 +33,7 @@ import {
   resolveExecutiveOffice,
 } from "@/lib/states/regionalExecutive";
 import { STRONGHOLD_FALL_TIME_TURNS_TARGET } from "@/lib/turn/partyOrg/pacingConstants";
+import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 let uri = process.env.MONGODB_URI_LIVE!;
@@ -168,6 +169,9 @@ async function main() {
       .collection<{ _id: string; currentTurn: number }>("gameState")
       .findOne({ _id: "current" });
     const turn = gs?.currentTurn ?? 0;
+    // Same tenure→band math the turn phase uses, so governor home-field in the
+    // replay matches what production would apply this turn.
+    const turnLengthMinutes = await loadTurnLengthMinutes(db);
     console.log(`Live turn ${turn}; replaying ${TURNS} turns for ${COUNTRIES.join(", ")}`);
     console.log(
       `Design target: STRONGHOLD_FALL_TIME_TURNS_TARGET = ${STRONGHOLD_FALL_TIME_TURNS_TARGET}\n`
@@ -249,7 +253,7 @@ async function main() {
           pool.stateId,
           official,
           new Date(),
-          60
+          turnLengthMinutes
         );
         results.push(
           replay(
