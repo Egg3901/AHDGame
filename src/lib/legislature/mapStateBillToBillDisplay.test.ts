@@ -102,3 +102,32 @@ describe("mapStateBillToBillDisplay — canVoteOrigin deadline gating", () => {
     expect(result.sponsorName).toBe("Kimberly Kowalski");
   });
 });
+
+describe("mapStateBillToBillDisplay — voteShiftPreview", () => {
+  it("forwards the server-computed Aye/Nay preview to the card row", () => {
+    const voteShiftPreview = {
+      current: { economic: 0, social: 0 },
+      aye: { economic: 0.25, social: 0 },
+      nay: { economic: -0.25, social: 0 },
+    };
+    const result = mapStateBillToBillDisplay(
+      buildBill({ voteShiftPreview, votingEndsAt: "2999-01-01T00:00:00.000Z" }),
+      { chamber: "senate", canVote: true }
+    );
+    expect(result.voteShiftPreview).toEqual(voteShiftPreview);
+  });
+
+  it("drops the preview once the vote has closed, even if the server sent one", () => {
+    const voteShiftPreview = {
+      current: { economic: 0, social: 0 },
+      aye: { economic: 0.25, social: 0 },
+      nay: { economic: -0.25, social: 0 },
+    };
+    const result = mapStateBillToBillDisplay(
+      buildBill({ voteShiftPreview, votingEndsAt: "2000-01-01T00:00:00.000Z" }),
+      { chamber: "senate", canVote: true }
+    );
+    expect(result.canVoteOrigin).toBe(false);
+    expect(result.voteShiftPreview).toBeNull();
+  });
+});

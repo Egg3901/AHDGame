@@ -546,3 +546,120 @@ describe("getStateLegislatureBillDetail — an enacted bill keeps the law it rep
     expect(prov.proposed).toEqual({ name: "Universal", explanation: "Full coverage." });
   });
 });
+
+describe("voteShiftPreview — what Aye and Nay would do to the viewer", () => {
+  const BILL_ID = "507f1f77bcf86cd7994390aa";
+  const viewerId = new ObjectId();
+  const userId = new ObjectId().toString();
+  const viewer = {
+    _id: viewerId,
+    userId: new ObjectId(userId),
+    policies: { economic: 0, social: 0 },
+  };
+  const official = {
+    characterId: viewerId,
+    nppId: null,
+    countryId: "US",
+    officeType: "stateSenate",
+    state: "TX",
+    seatsHeld: 2,
+  };
+  const bill = {
+    _id: new ObjectId(BILL_ID),
+    stateId: "TX",
+    countryId: "US",
+    title: "School Funding Act",
+    summary: "Fund schools",
+    sponsorName: "Jo",
+    sponsorParty: "1",
+    status: "active",
+    votesFor: 0,
+    votesAgainst: 0,
+    votesAbstain: 0,
+    votes: {},
+    proposedAt: new Date("2026-06-07T00:00:00Z"),
+    votingEndsOnTurn: 999,
+    provisions: [{ legislationTypeId: "lt-1", effectDirection: 1, economic: 2, social: -2 }],
+  };
+  const cursorOf = (rows: unknown[]) => ({
+    toArray: vi.fn().mockResolvedValue(rows),
+    sort: vi.fn().mockReturnThis(),
+    project: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    skip: vi.fn().mockReturnThis(),
+  });
+
+  function wire(db: MockDb) {
+    db.collection("stateBills");
+    db.collectionMocks["stateBills"]!.findOne.mockResolvedValue(bill);
+    db.collectionMocks["stateBills"]!.find.mockReturnValue(cursorOf([bill]));
+    db.collection("politicalParties");
+    db.collectionMocks["politicalParties"]!.find.mockReturnValue(cursorOf([]));
+    db.collection("legislationTypes");
+    db.collectionMocks["legislationTypes"]!.find.mockReturnValue(cursorOf([]));
+    db.collection("statePolicies");
+    db.collectionMocks["statePolicies"]!.find.mockReturnValue(cursorOf([]));
+    db.collection("characters");
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue(viewer);
+    db.collectionMocks["characters"]!.find.mockReturnValue(cursorOf([viewer]));
+    db.collection("electedOfficials");
+    db.collectionMocks["electedOfficials"]!.findOne.mockResolvedValue(official);
+    db.collectionMocks["electedOfficials"]!.find.mockReturnValue(cursorOf([official]));
+  }
+
+  it("the detail carries a preview for a seated viewer", async () => {
+    const db = createMockDb();
+    wire(db);
+    const detail = await getStateLegislatureBillDetail(db as unknown as Db, {
+      countryId: "US",
+      stateId: "TX",
+      billId: BILL_ID,
+      authUser: { isAdmin: false, userId } as never,
+    });
+    expect(detail!.canVote).toBe(true);
+    expect(detail!.voteShiftPreview).toEqual({
+      current: { economic: 0, social: 0 },
+      aye: { economic: 0.25, social: -0.25 },
+      nay: { economic: -0.25, social: 0.25 },
+    });
+  });
+
+  it("the detail carries no preview for a spectator", async () => {
+    const db = createMockDb();
+    wire(db);
+    const detail = await getStateLegislatureBillDetail(db as unknown as Db, {
+      countryId: "US",
+      stateId: "TX",
+      billId: BILL_ID,
+      authUser: null,
+    });
+    expect(detail!.voteShiftPreview ?? null).toBeNull();
+  });
+
+  it("the list carries a preview on an active bill for a seated viewer", async () => {
+    const db = createMockDb();
+    wire(db);
+    const page = await listStateLegislatureBills(db as unknown as Db, {
+      countryId: "US",
+      stateId: "TX",
+      authUser: { isAdmin: false, userId } as never,
+    });
+    expect(page.bills[0]!.voteShiftPreview).toEqual({
+      current: { economic: 0, social: 0 },
+      aye: { economic: 0.25, social: -0.25 },
+      nay: { economic: -0.25, social: 0.25 },
+    });
+  });
+
+  it("the list carries no preview for a viewer with no seat in this chamber", async () => {
+    const db = createMockDb();
+    wire(db);
+    db.collectionMocks["electedOfficials"]!.find.mockReturnValue(cursorOf([]));
+    const page = await listStateLegislatureBills(db as unknown as Db, {
+      countryId: "US",
+      stateId: "TX",
+      authUser: { isAdmin: false, userId } as never,
+    });
+    expect(page.bills[0]!.voteShiftPreview ?? null).toBeNull();
+  });
+});

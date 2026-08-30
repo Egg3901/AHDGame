@@ -228,6 +228,7 @@ export function BillCard({
             stateVoteUrl={stateVoteUrl}
             stateOverrideVoteUrl={stateOverrideVoteUrl}
             rawStateBillStatus={timelineVariant === "state" ? rawStateBillStatus : undefined}
+            shiftPreview={bill.voteShiftPreview}
           />
         </div>
       </div>
