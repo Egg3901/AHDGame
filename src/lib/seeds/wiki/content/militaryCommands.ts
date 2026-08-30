@@ -76,7 +76,7 @@ Regions are the world's coverage grid: the map your Commands are responsible for
 
 Each region carries terrain, infrastructure, port and airbase capacity, strategic value, logistics difficulty, and a live threat reading. Regions are typed **land**, **naval**, or **mixed**: assigning a sea region to a Command with no naval structure is flagged as weak coverage.
 
-**A region should be covered by exactly one Command.** The builder warns you when a region is already assigned to another Command, and the coverage view flags two problems:
+**A region should be covered by exactly one Command of each type.** Commands of *different* types are welcome to share a region, and often should: a Regional command holding the ground while a Logistics command sustains it is the standard overseas pairing. The builder warns you only when a region is already assigned to another Command of the same type, and the coverage view flags two problems:
 
 - **Uncovered**: no Command is responsible for it.
 - **Overlapping**: two Commands *of the same type* both claim it, which is a genuine role conflict rather than useful redundancy.
@@ -165,7 +165,7 @@ The rule that follows from this: **a unit is at whatever front its general is po
 A working structure looks roughly like this:
 
 1. **Commission several generals.** They start accruing tenure points immediately.
-2. **Build two or three Commands** with clear region responsibilities and no overlaps: say a Homeland Defense command over your own region, a Regional command over where you expect to fight, and a Logistics command if you intend to fight overseas.
+2. **Build two or three Commands** with clear region responsibilities and no two Commands of the same type over one region: say a Homeland Defense command over your own region, a Regional command over where you expect to fight, and a Logistics command if you intend to fight overseas. Those last two will often cover the same region, which is intended: one holds the ground, the other sustains it.
 3. **Appoint a Commanding General to each**, ideally one whose training fits the Command's job.
 4. **Assign units to generals**, spreading the load so no Command sits over capacity.
 5. **When war comes**, the relevant CG posts their generals to the conflict and names a Theater Commander.

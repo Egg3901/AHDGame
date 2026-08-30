@@ -148,7 +148,7 @@ describe("dedupeCommandIds", () => {
 });
 
 describe("validateDraft", () => {
-  it("warns when an assigned region is already owned by another command", () => {
+  it("warns when an assigned region is already owned by a command of the same type", () => {
     const draft: CommandDraft = {
       name: "X",
       type: "REGIONAL",
@@ -158,8 +158,51 @@ describe("validateDraft", () => {
       posture: "Deterrence",
       supply: "Normal",
     };
-    const w = validateDraft(draft, stateWith([cmd({ regionIds: ["mea"] })]));
+    const w = validateDraft(draft, stateWith([cmd({ type: "REGIONAL", regionIds: ["mea"] })]));
     expect(w.some((m) => m.includes("already assigned"))).toBe(true);
+  });
+
+  // Only a same-type owner is a role conflict; overlappingRegions has always drawn the
+  // line there. The warning ignored type, so pairing a Logistics command with the
+  // Regional command already holding the region looked prohibited.
+  it("does not warn when the region's existing owner is a different command type", () => {
+    const draft: CommandDraft = {
+      name: "X",
+      type: "LOGISTICS",
+      regionIds: ["mea"],
+      commanderIds: ["hale"],
+      commandingGeneralId: null,
+      posture: "Expeditionary",
+      supply: "Normal",
+    };
+    const w = validateDraft(draft, stateWith([cmd({ type: "REGIONAL", regionIds: ["mea"] })]));
+    expect(w.some((m) => m.includes("already assigned"))).toBe(false);
+  });
+
+  // Mixed owners are the case the old code got wrong twice over: it warned when it
+  // should not have, and `owners[0]` could name whichever command happened to sort
+  // first, pointing the Secretary at a command that was not the clash.
+  it("names the same-type owner when a region also holds a command of another type", () => {
+    const draft: CommandDraft = {
+      name: "X",
+      type: "REGIONAL",
+      regionIds: ["mea"],
+      commanderIds: ["hale"],
+      commandingGeneralId: null,
+      posture: "Deterrence",
+      supply: "Normal",
+    };
+    const w = validateDraft(
+      draft,
+      stateWith([
+        cmd({ id: "supply", name: "Supply Corps", type: "LOGISTICS", regionIds: ["mea"] }),
+        cmd({ id: "north", name: "Northern Command", type: "REGIONAL", regionIds: ["mea"] }),
+      ])
+    );
+    const warning = w.find((m) => m.includes("already assigned"));
+    expect(warning).toBeDefined();
+    expect(warning).toContain("Northern Command");
+    expect(warning).not.toContain("Supply Corps");
   });
 
   it("warns when no commander is selected", () => {
