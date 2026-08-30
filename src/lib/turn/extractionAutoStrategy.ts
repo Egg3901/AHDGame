@@ -6,7 +6,7 @@ import type {
   SectorBuildOrder,
   StateResourceCapacity,
 } from "@/lib/db/types";
-import type { GameState } from "@/lib/db/types/gameState";
+import type { GameState, NppEntryViabilityMode } from "@/lib/db/types/gameState";
 import { EXTRACTABLE_RESOURCES, type ExtractableResource } from "@/lib/constants/commodities";
 import { SECTOR_STRATEGIES, STRATEGY_COOLDOWN_TURNS } from "@/lib/constants/sectorStrategies";
 import {
@@ -143,6 +143,10 @@ export const NPP_RESTRATEGIZE_MAX_PER_RUN = 3; // NPP expected-revenue switches 
 export const EXTRACTION_PLACEMENT_MIN_COHORT_SIZE = 3;
 export const EXTRACTION_PLACEMENT_MIN_PROFITABLE_SHARE = 0.5;
 
+export function nppEntryViabilityModeFrom(value: unknown): NppEntryViabilityMode {
+  return value === "off" || value === "enforce" ? value : "observe";
+}
+
 export interface ExtractionPlacementCohortViability {
   viable: boolean;
   observations: number;
@@ -215,6 +219,9 @@ export interface ExtractionAutoStrategyResult {
   placedByResource?: Record<string, number>;
   /** Countries denied another mine because their mature NPP extraction cohort loses money. */
   placementBlockedCountries?: string[];
+  /** Countries that would be denied in enforce mode. Recorded in observe mode. */
+  placementObservedNonviableCountries?: string[];
+  placementViabilityMode?: NppEntryViabilityMode;
   /** NPP expected-revenue re-strategizations (second pass), by target strategy. */
   restrategized?: number;
   restrategizedByStrategy?: Record<string, number>;
@@ -230,6 +237,7 @@ export async function processExtractionAutoStrategy(
   preloadedGameState?: {
     extractionAutoStrategyEnabled?: boolean;
     lastExtractionAutoStrategyTurn?: number;
+    nppEntryViabilityMode?: NppEntryViabilityMode;
   }
 ): Promise<ExtractionAutoStrategyResult> {
   if (!preloadedGameState?.extractionAutoStrategyEnabled) {
@@ -239,6 +247,9 @@ export async function processExtractionAutoStrategy(
   if (currentTurn - lastTurn < EXTRACTION_AUTO_STRATEGY_CADENCE_TURNS) {
     return { converted: 0, byResource: {}, skippedReason: "cadence" };
   }
+  const placementViabilityMode = nppEntryViabilityModeFrom(
+    preloadedGameState.nppEntryViabilityMode
+  );
 
   // Resolved ONCE per run and threaded into both passes' rescale calls — the
   // D9 capacity renormalization below is plants-only.
@@ -296,6 +307,10 @@ export async function processExtractionAutoStrategy(
   const capByState = new Map(caps.map((c) => [c.stateId, c.resources ?? {}]));
   const focusMap = focusedStrategyByResource();
 
+  type NppCorporation = Pick<
+    Corporation,
+    "_id" | "countryId" | "type" | "ceoType" | "userId" | "caretakerCeo" | "earningsHistory"
+  >;
   const nppCorps = await db
     .collection<Corporation>("corporations")
     .find({
@@ -304,7 +319,7 @@ export async function processExtractionAutoStrategy(
       caretakerCeo: { $exists: false },
       suspended: { $ne: true },
     })
-    .project({
+    .project<NppCorporation>({
       _id: 1,
       countryId: 1,
       type: 1,
@@ -321,7 +336,7 @@ export async function processExtractionAutoStrategy(
       corp.userId?.toString() === NPC_CORPORATION_USER_ID.toString()
   );
   const nppCorpIds = new Set(npcCorps.map((corp) => corp._id.toString()));
-  const extractionCorpsByCountry = new Map<string, Corporation[]>();
+  const extractionCorpsByCountry = new Map<string, NppCorporation[]>();
   for (const corp of npcCorps) {
     if (corp.type !== "extraction") continue;
     const countryCorps = extractionCorpsByCountry.get(corp.countryId) ?? [];
@@ -567,17 +582,13 @@ export async function processExtractionAutoStrategy(
     score: number;
   }> = [];
   const placementBlockedCountries = new Set<string>();
+  const placementObservedNonviableCountries = new Set<string>();
   for (const capDoc of caps) {
     // Market NPP corps only exist where the authored capital-state list says
     // they can: planned economies seed SOEs through the budget seeders and
     // latent nations cannot spawn pre-activation. Founding a market miner in
     // East Germany or the USSR would be a category error, not a supply fix.
     if (!NPP_CAPITAL_STATES[capDoc.countryId as CountryId]) continue;
-    const cohortViability = placementViabilityByCountry.get(capDoc.countryId);
-    if (cohortViability && !cohortViability.viable) {
-      placementBlockedCountries.add(capDoc.countryId);
-      continue;
-    }
     for (const [resource, info] of placementShortage) {
       const cap = capDoc.resources?.[resource] ?? 0;
       if (cap <= 0) continue;
@@ -586,6 +597,14 @@ export async function processExtractionAutoStrategy(
       if (occupiedExtractionStates.has(capDoc.stateId)) continue;
       const focus = focusMap.get(resource);
       if (!focus) continue;
+      const cohortViability = placementViabilityByCountry.get(capDoc.countryId);
+      if (placementViabilityMode !== "off" && cohortViability && !cohortViability.viable) {
+        placementObservedNonviableCountries.add(capDoc.countryId);
+        if (placementViabilityMode === "enforce") {
+          placementBlockedCountries.add(capDoc.countryId);
+          continue;
+        }
+      }
       placementCandidates.push({
         stateId: capDoc.stateId,
         countryId: capDoc.countryId,
@@ -642,6 +661,8 @@ export async function processExtractionAutoStrategy(
     byResource,
     placed,
     placedByResource,
+    placementViabilityMode,
+    placementObservedNonviableCountries: [...placementObservedNonviableCountries].sort(),
     placementBlockedCountries: [...placementBlockedCountries].sort(),
     restrategized,
     restrategizedByStrategy,

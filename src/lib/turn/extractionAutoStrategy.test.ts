@@ -8,6 +8,7 @@ import {
   EXTRACTION_AUTO_STRATEGY_MAX_PER_RUN,
   EXTRACTION_AUTO_STRATEGY_PLACEMENT_MAX_PER_RUN,
   extractionPlacementCohortViability,
+  nppEntryViabilityModeFrom,
   processExtractionAutoStrategy,
 } from "./extractionAutoStrategy";
 import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
@@ -41,6 +42,13 @@ function npcCorp(_id: ObjectId, countryId = "US") {
 }
 
 describe("extractionPlacementCohortViability", () => {
+  it("defaults missing and invalid rollout values to observe", () => {
+    expect(nppEntryViabilityModeFrom(undefined)).toBe("observe");
+    expect(nppEntryViabilityModeFrom("invalid")).toBe("observe");
+    expect(nppEntryViabilityModeFrom("off")).toBe("off");
+    expect(nppEntryViabilityModeFrom("enforce")).toBe("enforce");
+  });
+
   it("blocks a mature cohort when most extraction corporations lose money", () => {
     expect(
       extractionPlacementCohortViability([
@@ -271,7 +279,45 @@ describe("processExtractionAutoStrategy", () => {
     expect(spawnNppCorporation).not.toHaveBeenCalled();
   });
 
-  it("does not add another mine where the mature extraction cohort loses money", async () => {
+  it("blocks another mine only when the viability rollout is enforced", async () => {
+    db.collectionMocks.commodityPrices.find.mockReturnValue(
+      cursor([
+        {
+          commodity: "iron",
+          globalSupply: 200,
+          globalDemand: 1000,
+          stateSupply: { ES_MAD: 0 },
+        },
+      ])
+    );
+    db.collectionMocks.stateResourceCapacity.find.mockReturnValue(
+      cursor([{ stateId: "ES_MAD", countryId: "ES", resources: { iron: 10_000 } }])
+    );
+    db.collectionMocks.corporations.find.mockReturnValue(
+      cursor([
+        { ...npcCorp(new ObjectId(), "ES"), type: "extraction", earningsHistory: [100] },
+        { ...npcCorp(new ObjectId(), "ES"), type: "extraction", earningsHistory: [-50] },
+        { ...npcCorp(new ObjectId(), "ES"), type: "extraction", earningsHistory: [-100] },
+        { ...npcCorp(new ObjectId(), "ES"), type: "extraction", earningsHistory: [-200] },
+      ])
+    );
+    db.collectionMocks.corporateSectors.find
+      .mockReturnValueOnce(cursor([]))
+      .mockReturnValueOnce(cursor([]));
+
+    const res = await processExtractionAutoStrategy(db as unknown as Db, 10, {
+      ...ENABLED,
+      nppEntryViabilityMode: "enforce",
+    });
+
+    expect(res.placed).toBe(0);
+    expect(res.placementViabilityMode).toBe("enforce");
+    expect(res.placementObservedNonviableCountries).toEqual(["ES"]);
+    expect(res.placementBlockedCountries).toEqual(["ES"]);
+    expect(spawnNppCorporation).not.toHaveBeenCalled();
+  });
+
+  it("records a losing cohort without changing placement in observe mode", async () => {
     db.collectionMocks.commodityPrices.find.mockReturnValue(
       cursor([
         {
@@ -299,9 +345,11 @@ describe("processExtractionAutoStrategy", () => {
 
     const res = await processExtractionAutoStrategy(db as unknown as Db, 10, ENABLED);
 
-    expect(res.placed).toBe(0);
-    expect(res.placementBlockedCountries).toEqual(["ES"]);
-    expect(spawnNppCorporation).not.toHaveBeenCalled();
+    expect(res.placed).toBe(1);
+    expect(res.placementViabilityMode).toBe("observe");
+    expect(res.placementObservedNonviableCountries).toEqual(["ES"]);
+    expect(res.placementBlockedCountries).toEqual([]);
+    expect(spawnNppCorporation).toHaveBeenCalledOnce();
   });
 
   function seed(opts: {
