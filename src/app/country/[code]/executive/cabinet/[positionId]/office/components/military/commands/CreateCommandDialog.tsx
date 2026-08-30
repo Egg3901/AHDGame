@@ -13,7 +13,7 @@ import { STRATEGIC_REGIONS } from "@/lib/military/regions";
 import { validateDraft, type CommandDraft } from "@/lib/military/commands";
 import { draftEffectiveness, effIntent } from "@/lib/military/calc";
 import { Badge } from "../../dossier";
-import { PostureEffects, TypeBonuses } from "./EffectLines";
+import { PostureEffects, TypeBonuses } from "@/components/CommandEffects";
 
 const TYPE_KEYS: CommandType[] = ["HOMELAND_DEFENSE", "REGIONAL", "LOGISTICS"];
 const SUPPLIES: SupplyPriority[] = ["Normal", "High", "Emergency"];

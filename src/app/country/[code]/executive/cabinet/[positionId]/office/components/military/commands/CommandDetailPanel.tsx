@@ -24,7 +24,7 @@ import {
   unitLoad,
 } from "@/lib/military/calc";
 import { SectionCard, Badge, Meter } from "../../dossier";
-import { PostureEffects, TypeBonuses } from "./EffectLines";
+import { PostureEffects, TypeBonuses } from "@/components/CommandEffects";
 
 const INTENT_TEXT = { success: "text-success", warn: "text-warning", error: "text-error" } as const;
 const INTENT_METER = {
@@ -126,7 +126,8 @@ export function CommandDetailPanel({
 
       {/* posture: the trade-offs read for everyone; only a defense seat can change it */}
       <div className="mb-4">
-        <Label>Posture</Label>
+        {/* A reader has no select to name the posture, so the label does. */}
+        <Label>{canWrite ? "Posture" : `Posture · ${c.posture}`}</Label>
         {canWrite && (
           <select
             aria-label="Command posture"
