@@ -69,6 +69,16 @@ interface CommitteeState {
 
 const MOTION_LABEL: Record<string, string> = { hike: "Raise rate", cut: "Cut rate", hold: "Hold" };
 
+function formatUtcDeadline(value: string): string | null {
+  const deadline = new Date(value);
+  if (Number.isNaN(deadline.getTime())) return null;
+  const day = String(deadline.getUTCDate()).padStart(2, "0");
+  const month = deadline.toLocaleString("en-GB", { month: "short", timeZone: "UTC" });
+  const hour = String(deadline.getUTCHours()).padStart(2, "0");
+  const minute = String(deadline.getUTCMinutes()).padStart(2, "0");
+  return `${day} ${month} ${deadline.getUTCFullYear()}, ${hour}:${minute} UTC`;
+}
+
 function AlignmentChip({ alignment }: { alignment: "hawk" | "dove" }) {
   const hawk = alignment === "hawk";
   return (
@@ -213,6 +223,7 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
       : turnsToNextSession <= 0
         ? "The next session is due any turn now."
         : `The next session opens in ${turnsToNextSession} turn${turnsToNextSession === 1 ? "" : "s"} (one every 8 turns).`;
+  const wallClockDeadline = meeting ? formatUtcDeadline(meeting.playerVoteDeadline) : null;
 
   return (
     <div className="space-y-6">
@@ -243,6 +254,12 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
                 {meeting.agree} for / {meeting.disagree} against · {meeting.needed} needed
               </span>
             </div>
+
+            <p className="mt-2 text-xs text-muted">
+              Voting closes by turn {meeting.resolvesOnTurn}
+              {wallClockDeadline ? ` or ${wallClockDeadline}` : ""}, whichever comes first. No-shows
+              abstain.
+            </p>
 
             {state.viewerSeatId && (
               <div className="mt-4">
