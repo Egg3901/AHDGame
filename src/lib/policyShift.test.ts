@@ -149,7 +149,7 @@ describe("applyBillVotePolicyShift", () => {
     expect(setArg["policies.social"]).toBe(-0.25);
   });
 
-  it("accumulates shifts across multiple provisions", async () => {
+  it("combines multiple provisions into one step per axis", async () => {
     const { db, characterCol } = makeMockDb();
     await applyBillVotePolicyShift(
       db as any,
@@ -159,7 +159,26 @@ describe("applyBillVotePolicyShift", () => {
       { economic: 0, social: 0 }
     );
     const setArg = characterCol.updateOne.mock.calls[0][1].$set;
-    expect(setArg["policies.economic"]).toBeCloseTo(0.5);
+    expect(setArg["policies.economic"]).toBeCloseTo(0.25);
+  });
+
+  it("limits one large bill vote to a single step per axis", async () => {
+    const { db, characterCol } = makeMockDb();
+    await applyBillVotePolicyShift(
+      db as any,
+      new ObjectId(),
+      [
+        { economic: 2, social: 2 },
+        { economic: 3, social: 3 },
+        { economic: 4, social: 4 },
+        { economic: 5, social: 5 },
+      ],
+      "for",
+      { economic: 0, social: 0 }
+    );
+    const setArg = characterCol.updateOne.mock.calls[0][1].$set;
+    expect(setArg["policies.economic"]).toBe(0.25);
+    expect(setArg["policies.social"]).toBe(0.25);
   });
 
   it("clamps at +5", async () => {
