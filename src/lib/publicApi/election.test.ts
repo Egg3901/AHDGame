@@ -97,6 +97,85 @@ describe("queryElectionList", () => {
     expect(result.elections[0]).toHaveProperty("finalVotes");
   });
 
+  describe("results opt-in (ticket #1229)", () => {
+    const elecId = new ObjectId();
+
+    function seedTalliedRace() {
+      db.collectionMocks.elections!.find.mockReturnValue({
+        sort: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue([
+          {
+            _id: elecId,
+            seatId: "US-senate-CA-1",
+            electionType: "senate",
+            state: "CA",
+            status: "general",
+            startTime: new Date("2025-01-01"),
+            countryId: "US",
+          },
+        ]),
+      } as never);
+      db.collectionMocks.electionCandidates!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      } as never);
+      db.collectionMocks.electionVoteTallies!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            electionId: elecId,
+            totalVotes: { char1: 300, char2: 700 },
+            candidateNames: { char1: "Jane Smith", char2: "John Doe" },
+            candidateParties: { char1: "Democratic", char2: "Republican" },
+            finalized: false,
+          },
+        ]),
+      } as never);
+      db.collectionMocks.politicalParties!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      } as never);
+    }
+
+    it("surfaces per-candidate standings, leader first, when results=true", async () => {
+      seedTalliedRace();
+      const { queryElectionList } = await import("./election");
+      const result = await queryElectionList(db as unknown as Db, {
+        country: "US",
+        state: "CA",
+        results: true,
+      });
+
+      const race = result.elections[0] as {
+        results: {
+          totalVotes: number;
+          finalized: boolean;
+          candidates: Array<{
+            characterName: string;
+            party: string;
+            votes: number;
+            sharePct: number;
+          }>;
+        };
+      };
+      expect(race.results.totalVotes).toBe(1000);
+      expect(race.results.finalized).toBe(false);
+      // Leader first, share as a percentage of the total on the row.
+      expect(race.results.candidates[0]).toMatchObject({
+        characterName: "John Doe",
+        party: "Republican",
+        votes: 700,
+        sharePct: 70,
+      });
+      expect(race.results.candidates[1]).toMatchObject({ characterName: "Jane Smith", votes: 300 });
+    });
+
+    it("omits the results key entirely by default, so existing callers are unchanged", async () => {
+      seedTalliedRace();
+      const { queryElectionList } = await import("./election");
+      const result = await queryElectionList(db as unknown as Db, { country: "US", state: "CA" });
+
+      expect(result.elections[0]).not.toHaveProperty("results");
+    });
+  });
+
   describe("ballot", () => {
     // Entering a race withdraws any prior row and inserts a fresh one, and the
     // primary resolver withdraws the losers, so withdrawn rows pile up per
