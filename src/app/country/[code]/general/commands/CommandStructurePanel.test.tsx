@@ -59,7 +59,6 @@ describe("CommandStructurePanel", () => {
     expect(container.textContent).toMatch(/Branch focus/);
   });
 
-  // load = round(60/12) + round(24/12) = 5 + 2 = 7, against a capacity of 20.
   it("states what the posture and type mean, not only their names", () => {
     render(<CommandStructurePanel {...base} />);
     // Deterrence
@@ -69,6 +68,7 @@ describe("CommandStructurePanel", () => {
     expect(screen.getByText("+ balanced command")).toBeTruthy();
   });
 
+  // load = round(60/12) + round(24/12) = 5 + 2 = 7, against a capacity of 20.
   it("shows force load against capacity", () => {
     const { container } = render(<CommandStructurePanel {...base} />);
     expect(container.textContent).toMatch(/7\s*\/\s*20/);
