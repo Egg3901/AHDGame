@@ -18,25 +18,21 @@ Do not declare for office until PI reaches 35+ and favorability is at least 55. 
 Party leadership is the multiplier on everything else. The party chair controls:
 
 - **GOTV budget allocation**: Which demographics get turnout boosts across all party members' states
-- **Party organization growth**: Org levels feed into every member's primary score
+- **Party organization growth**: Org share in a state scales every member's general-election weight there, and registration follows org
 - **Whip directives**: How NPP legislators vote on bills (affects legislation success rates)
 - **Party platform position**: The econ/social coordinates all members are scored against in primaries
 
 To win a party leadership election:
 
-1. Build favorability within the party (these are internal elections, so party member favorability matters most)
-2. Accumulate Political Influence; party leadership elections use the same influence scoring as regular primaries
-3. Time your run: leadership elections spawn on a schedule; watch for the opening
+1. Persuade the members: these are direct member votes, one member one vote (a committee can switch a party to committee-only or influence-weighted voting), so the party's players decide
+2. Meet the tenure gate: you must have been a member for 24 turns before you can stand or vote
+3. Time your run: leadership elections run on a shared cycle; watch for the opening
 
 Once chair, use GOTV strategically: concentrate budget on states where your candidates are running, not spread evenly. A concentrated 20% turnout bump in three swing states beats 3% everywhere.
 
 ## Stacking offices
 
-Office stacking means holding multiple offices simultaneously when the rules allow it. In the US:
-
-- You can hold a Governor seat while being a Senator (elected to both)
-- You cannot hold both House and Senate simultaneously (you resign one on winning the other)
-- Cabinet positions can be held alongside nothing else: accepting a Cabinet role vacates your elected seat
+Office stacking means holding an elected office alongside an appointed one. You hold **one elected office at a time**: winning a new seat vacates the old one, so a Senator who wins a governorship stops being a Senator. What stacks are the appointed posts that sit beside an elected seat: the central-bank chair, a Supreme Court seat (which does not occupy your current office), party leadership, and a general's commission.
 
 The highest-action combination in the US is **Senator + Federal Reserve Chair**: 4 (base) + 2 (Senate) + 3 (Fed Chair) = **9 actions per turn**. The Fed Chair role also gives you influence over interest rates, which flows into bond yields and currency strength.
 
@@ -92,8 +88,8 @@ The real measure of a power player is whether the game world responds to your ac
 ## Common power player mistakes
 
 - **Overextending into too many elections at once.** Spreading thin across 3 simultaneous primaries means none gets enough action investment. Pick your races.
-- **Neglecting party org.** It's invisible but compounds over time. A neglected state party org drops below 50, costing every party member 12+ primary-score points.
-- **Burning infamy on low-stakes votes.** Save whip-breaking for legislation you actually care about. Constant defiance tanks your party standing and your own favorability.
+- **Neglecting party org.** It's invisible but compounds over time. A neglected state party's org share erodes, its registration drifts to organised rivals, and every member's general-election weight in that state goes with it.
+- **Defying the whip on low-stakes votes.** Save whip-breaking for legislation you actually care about. It costs no infamy, but constant defiance costs you leadership trust, and every vote you cast drifts your own positions.
 - **Ignoring small offices.** State Senator seats generate actions and block NPP accumulation of state legislative power. Don't cede the sub-national tier.
 
 ## Related

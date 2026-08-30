@@ -20,7 +20,7 @@ export const iterationsPages: readonly WikiSeedPage[] = [
     slug: "beta-2",
     title: "Beta 2",
     description:
-      "The current iteration of A House Divided: seven playable nations on a 1991 Cold War map, a German exit from NATO, and a British declaration of war on China.",
+      "The second numbered iteration, now concluded: seven playable nations on a 1991 Cold War map, a German exit from NATO, and a British declaration of war on China.",
     content: beta2Content,
     category: "iterations",
     extraTags: ["history", "beta", "iteration"],

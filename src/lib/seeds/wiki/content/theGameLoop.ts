@@ -52,7 +52,7 @@ elections
 ## The election cycle (the real loop)
 
 1. **Build** (no race open for your office): Campaign, ads, donor network, party influence.
-2. **Primary:** **Elections** → race → declare. Score = alignment + favorability + PI (NPI for president). Highest per party advances.
+2. **Primary:** **Elections** → race → declare. Your standing = alignment + favorability + PI; over the primary's closing window your party's registered voters cast ballots split by that standing, and the top count per party advances (president: pledged delegates).
 3. **General:** same race page, live tally. Sustain PI and Favorability through the last 4 turns. **View Campaign** for spend.
 
 \`\`\`guide-screenshot

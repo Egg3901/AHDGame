@@ -1,6 +1,6 @@
 export const relocationContent = `# Relocation
 
-You can change your character's **home state** (US), **region** (UK: England / Scotland / Wales / Northern Ireland), **Land** (Germany), or **prefecture** (Japan). Your home anchors where you run for office, campaign cheaply, and appear in regional player lists. Moving is supported but expensive: not a button to press casually.
+You can change your character's **home state** (US), **region** (UK: England / Scotland / Wales / Northern Ireland; Japan's eight regions; Ireland, China, Brazil, Nigeria and the bloc countries likewise), or **Land** (Germany, East Germany). Your home anchors where you run for office, campaign cheaply, and appear in regional player lists. Moving is supported but expensive: not a button to press casually.
 
 ## Cooldown
 
@@ -18,6 +18,7 @@ Every relocation, even within the same country:
 - **State / regional offices** (governor, house, senate, state legislature, …) → auto-resigned. The seat is vacated in \`electedOfficials\` and the perpetual-election system will spawn a replacement race.
 - **National / country-scoped offices** (President, Vice President, cabinet, chancellor, …) → **kept** on an in-country move. They only auto-resign when you change country (same rule as Central Bank Chair).
 - **CEO of a corporation** → removed unless you use the combined relocate-with-corp flow (see below).
+- **Military command** (country change only) → a commissioned general leaves every Command roster, vacates any Command they led, drops their conflict postings, and hands their units back to the old country's General Staff, the same cascade a dismissal runs. The relocation summary tells you when a move cost you a command.
 - **Career history** → a \`"relocated"\` entry is appended with \`fromState\` / \`toState\` (and \`fromCountry\` / \`toCountry\` if the country changed).
 
 ## What only resets on country change

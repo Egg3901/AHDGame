@@ -1,6 +1,6 @@
 export const primariesContent = `# Primaries
 
-Primaries are intra-party competitions: you beat other members of your own party for the nomination slot. They're decided by a **primary score** (not votes), and they close at the primary deadline. Miss the window, wait a full cycle.
+Primaries are intra-party competitions: you beat other members of your own party for the nomination slot. Down-ballot primaries are decided by **real primary ballots**, accumulated over the closing stretch of the primary and split each turn by your **primary score** standing; presidential primaries hand out pledged delegates. They close at the primary deadline. Miss the window, wait a full cycle.
 
 This page covers declaration mechanics, scoring, NPP dynamics, and tactics. For the overall election structure see [Election Mechanics](/wiki/election-mechanics).
 
@@ -14,9 +14,13 @@ This page covers declaration mechanics, scoring, NPP dynamics, and tactics. For 
 
 If you're switching parties, a prior candidacy in a different party is **auto-withdrawn** when you declare under the new party, so no manual cleanup is needed.
 
+## How a down-ballot primary is counted
+
+Standings are scored every turn of the primary, but ballots only start counting over its **closing stretch**, a window as long as the race's own general window (so a Senate seat that sits in its primary for five years does not start casting ballots five years out, and a late entrant faces a fair field). Each turn of that window, each party's **registered voters** release a slice of ballots, paced by the same closing-surge curve the general uses, and the slice is split between that party's candidates in proportion to their primary-score standing. Independents and the unregistered cast no primary ballot. When the deadline passes, **the cumulative count decides**: the party's top vote-getter advances. A sustained lead therefore beats a last-turn surge, exactly as accumulating ballots should. The race page and region Elections tab show these cumulative shares as the primary standings.
+
 ## The standard primary score (state races)
 
-Scores go 0 to 100. Four components, with an infamy penalty applied at the end:
+The score is your standing within the party, and it sets your share of each turn's ballots. Scores go 0 to 100. Four components, with an infamy penalty applied at the end:
 
 | Bucket | Max | How it's scored |
 | --- | --- | --- |
@@ -34,7 +38,7 @@ The raw score is then reduced by an infamy penalty: at most a 5% cut, scaling li
 - **Influence.** A square-root curve, capped once PI reaches 100. PI of 100 scores 25; PI of 85 scores about 23; PI of 50 scores about 17.7; PI of 20 scores about 11.2.
 - **Infamy.** A clean candidate (infamy 0) keeps their full score. A maxed-out infamous candidate (infamy 100) loses 5% of their score.
 
-**Highest score per party advances to the general.** Other candidates in that party's primary are marked withdrawn.
+**Highest cumulative ballot count per party advances to the general.** Other candidates in that party's primary are marked withdrawn. Where a party has no registered voters on file at all, the highest score advances instead.
 
 ## The presidential primary score
 
@@ -71,7 +75,7 @@ NPPs (Non-Player Politicians) autonomously enter primaries. Entry is determinist
 1. **Run a Quick Poll before declaring.** 2 actions + ₳25k. Shows your topline appeal and the 5 best/worst groups. Use it to decide whether this is your race.
 2. **Alignment first.** If your policy positions are more than about 6 points away from your party's official position, reconsider. Check the party page: the official positions are visible there.
 3. **Don't attack fellow party members.** If someone else wins the primary, you want them at full strength going into the general.
-4. **Pump Political Influence.** Campaign 6-10 actions/day in-state. PI compounds over the primary window because decay is much slower than Campaign's +1% per action.
+4. **Pump Political Influence early.** Campaign 6-10 actions/day in-state. PI compounds over the primary window because decay is much slower than Campaign's +1% per action, and because ballots accumulate, a lead you hold through the closing window is worth more than one you grab on the last turn.
 5. **Don't sleep on Favorability.** 35 points of the score live here. Going into primary with Favorability 80 is worth 28 pts vs. 17 at Favorability 50, an 11-point swing.
 
 ## Withdrawal during primary
@@ -87,7 +91,7 @@ Allowed but typically a mistake:
 When the primary deadline passes:
 
 1. The turn processor resolves all primaries that have closed.
-2. Each party's candidates are scored; the highest advances.
+2. Each party's cumulative ballots are read; the top vote-getter advances (highest score where no ballots were cast).
 3. Losers receive a notification and are marked withdrawn.
 4. The winner's candidacy moves into the general election phase.
 5. A general-phase vote tally is initialized for the election.

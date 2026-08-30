@@ -29,7 +29,7 @@ Admins can spawn NPPs in bulk (1 to 500 at a time) for any party, with weighting
 
 ## Key constraints
 
-- **NPPs cannot run for President**: presidential races are reserved for player candidates so there's always a meaningful player choice at the top
+- **NPPs cannot run for President in a player country**: presidential races there are reserved for player candidates so there's always a meaningful player choice at the top. In a country nobody plays, with NPP autonomy active, NPPs do contest the presidency
 - **One NPP per party per primary**: NPPs don't split their own party's vote
 - **Incumbent priority**: an NPP currently holding a seat gets first priority to defend it in the next primary
 - **Country isolation**: US NPPs can only enter US elections; UK NPPs enter UK races only

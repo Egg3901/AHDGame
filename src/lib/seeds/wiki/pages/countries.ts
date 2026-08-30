@@ -44,7 +44,7 @@ export const countriesPages: readonly WikiSeedPage[] = [
     slug: "de-overview",
     title: "Germany",
     description:
-      "Federal parliamentary republic with mixed-member proportional representation and coalition government across 16 states.",
+      "Federal parliamentary republic with mixed-member proportional representation and coalition government across the Länder (11 in the 1953 preset, 16 modern).",
     content: deOverviewContent,
     category: "countries",
     extraTags: ["de", "bundestag"],
@@ -116,7 +116,7 @@ export const countriesPages: readonly WikiSeedPage[] = [
     slug: "ng-overview",
     title: "Nigeria",
     description:
-      "Federal presidential republic with FPTP elections, a bicameral National Assembly of 109 senators and 360 representatives, 36 states, and a high-inflation monetary baseline.",
+      "Federal presidential republic with FPTP elections, a bicameral National Assembly of 109 senators and 360 representatives, six geopolitical zones, and a high-inflation monetary baseline.",
     content: ngOverviewContent,
     category: "countries",
     extraTags: ["ng"],
@@ -130,7 +130,7 @@ export const countriesPages: readonly WikiSeedPage[] = [
     slug: "ru-overview",
     title: "Soviet Union",
     description:
-      "One-party socialist union governed by the CPSU: a bill-active bicameral Supreme Soviet, 17 macro-regions, a Gosplan command economy, and permanent command of the Warsaw Pact. Playable in the 1953 and 1979 presets.",
+      "One-party socialist union governed by the CPSU: a bill-active bicameral Supreme Soviet, 14 macro-regions, a Gosplan command economy, and permanent command of the Warsaw Pact. Playable in the 1953 and 1979 presets.",
     content: ruOverviewContent,
     category: "countries",
     extraTags: ["ru", "cpsu"],

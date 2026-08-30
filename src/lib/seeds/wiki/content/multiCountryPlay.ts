@@ -1,6 +1,6 @@
 export const multiCountryPlayContent = `# Multi-Country Play
 
-A House Divided currently runs six active countries: the United States, United Kingdom, Germany, Japan, China, and Ireland. Each has its own political system, legislature, election rules, and currency. This page covers how character scoping works, how to manage context across countries, and how economic systems cross borders.
+A House Divided runs a roster of playable countries that depends on the world's era: the United States, United Kingdom, Germany, Japan, China, Ireland, Brazil and Nigeria, plus the Soviet Union, East Germany and the Eastern bloc in the Cold War presets. Each has its own political system, legislature, election rules, and currency, and a country can be switched on for players during a world's life. The rest of the world is simulated: autonomous governments there legislate, trade, and conduct foreign policy on their own. This page covers how character scoping works, how to manage context across countries, and how economic systems cross borders.
 
 ## Character country scoping
 
@@ -26,10 +26,13 @@ However, economic investments (corporations, bonds, forex positions) cross count
 | Japan | Parliamentary | Kokkai (Shūgiin + Sangiin) | Prime Minister (confidence of Shūgiin) | FPTP, snap elections allowed |
 | China | One-party state | National People's Congress (delegate-elected) | Premier (elected by NPC delegates) | One-party elections; approved/banned regime tiers; regime can collapse |
 | Ireland | Parliamentary | Oireachtas (Dáil + Seanad) | Taoiseach (confidence of Dáil); Uachtarán (directly elected, ceremonial head of state) | Hare-quota multi-seat allocation; snap elections allowed |
+| Brazil | Presidential | National Congress (Chamber + Senate) | President (directly elected, 2-term cap) | Open-list PR chamber, staggered FPTP senate |
+| Nigeria | Presidential | National Assembly (House + Senate) | President (directly elected, 2-term cap) | FPTP, single-member seats |
+| Soviet Union / East Germany / Eastern bloc | One-party state | Supreme Soviet (bicameral) / Volkskammer | Premier or General Secretary via internal party confidence | Single-list elections; regime can collapse |
 
 Parliamentary systems (UK, DE, JP, IE) form governments through legislative confidence rather than direct election. No one runs "for Prime Minister" / "Taoiseach" / "Chancellor" directly - you win a seat, your party wins a majority (or coalition), and the party leader is appointed. Ireland also elects a separate ceremonial head of state, the Uachtarán, on a 7-year nationwide ballot. The 1.0 simulation resolves that race from first-preference totals; ranked transfer fidelity is planned as a later electoral-system upgrade.
 
-China is unique as the only one-party state: see [One-Party States](/wiki/one-party-states) for how regime tiers, ruling-party confidence, liberalization reforms, and regime collapse work.
+China was the first one-party state modelled and the pattern is generic: see [One-Party States](/wiki/one-party-states) for how regime tiers, ruling-party confidence, liberalization reforms, and regime collapse work across all twelve.
 
 ## Playing in parliamentary countries
 
@@ -64,7 +67,7 @@ The bond market supports sovereign bonds issued by national governments. A chara
 
 ### Currency exchange (Forex)
 
-When Forex is enabled for the game world, characters can trade between currencies: USD, GBP, EUR (DE and IE), JPY, and CNY. Exchange rates shift based on:
+When Forex is enabled for the game world, characters can trade between every floating currency in the world: USD, GBP, EUR or the pre-euro marks and punts, JPY, CNY, BRL, NGN and the rest of the live set. Planned economies fix their official rate and do not trade on the open market. Exchange rates shift based on:
 
 - Trade growth (tracked in federal budgets)
 - National inflation rates
@@ -94,6 +97,10 @@ Each country has its own navigation hub:
 - **Japan:** \`/country/jp\`
 - **China:** \`/country/cn\`
 - **Ireland:** \`/country/ie\`
+- **Brazil:** \`/country/br\`
+- **Nigeria:** \`/country/ng\`
+- **Soviet Union:** \`/country/ru\`
+- **East Germany:** \`/country/dd\`
 
 Each hub includes the legislature, executive, map, parties, and legislation pages for that country.
 

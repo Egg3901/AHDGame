@@ -4,7 +4,13 @@ Recruiting units and paying for equipment are two different systems. This page i
 
 ## Who awards contracts
 
-The defence seat holder writes procurement contracts against the national defence appropriation. A contract names a corporation with a defence-strategy plant as the supplier and commits the country to buying a run of "lots" of equipment from it.
+The defence seat holder writes procurement contracts against the national defence appropriation. A contract names a corporation with a defence-strategy plant as the supplier and commits the country to buying a run of "lots" of equipment from it. An **acting** secretary cannot award or cancel contracts: a contract obligates money across a procurement window that outlives a caretaker appointment, so it waits for a confirmed holder.
+
+A country under a **demilitarisation** settlement (see [Peace, Indemnities & Truces](/wiki/peace-and-truces)) may award no new contracts, and no company may accept a new order from it, until the bar lapses. Live contracts keep delivering.
+
+## Planned economies
+
+The Soviet Union and East Germany place no orders with private suppliers: there is no market to place them into, so the contract pipeline on this page never runs for them. Their arsenals are fed by **state arms industry** instead, a fixed number of lots every turn produced to plan rather than to order, delivered straight to the store and aimed at whichever branch is furthest from a full load. It keeps an army equipped and banks a modest war reserve in peacetime; it does not keep up with a war fought at full pace. See [Units, Recruitment & Procurement](/wiki/military-units).
 
 ## Contracting windows
 

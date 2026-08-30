@@ -29,12 +29,12 @@ Two offices, no precedence between them: either may act. This is a deliberate co
 | **The war** | Which conflict you are leaving. |
 | **The other party** | A single country on the opposing side. |
 | **Who leaves** | Yourself, or them. An offer can propose your own withdrawal, or ask theirs. |
-| **The term** | The one thing this settlement takes. Pick from the three below. |
+| **The term** | The one thing this settlement takes. Pick from the four below. |
 | **Justification** | An optional public note, moderated. Published on the conflict record once accepted. |
 
-## The three terms
+## The four terms
 
-A settlement carries **exactly one** term. Not two, not none: you choose what this war was for.
+A settlement carries **exactly one** term. Not two, not none: you choose what this war was for. A white peace is a term in its own right, the one that takes nothing.
 
 | Term | What it does |
 | --- | --- |
@@ -60,7 +60,7 @@ Status quo ante. Neither side is recorded as having won, no money moves, no gove
 - **The losing side pays to get out.** The obvious case: buy your way out of a war you are losing.
 - **The winning side pays to disengage.** Less obvious and just as legitimate. If you are winning a war you no longer want (because the real threat is elsewhere, or the grind is costing more than it is worth) you can pay your opponent to let you leave.
 
-**An indemnity of zero is a clean white peace.** Same mechanism, dialled to nothing. Everybody walks away, no money moves.
+**An indemnity of zero is not a white peace.** No money moves either way, but an indemnity is a settlement one side imposed, and the record names a winner. If you want the history to say nobody won, choose the white peace.
 
 **Amounts are always quoted in the payer's local currency**, and converted on the way to the recipient. Every treasury is denominated locally, so moving the raw number would invent or destroy value at the exchange rate.
 
@@ -80,7 +80,7 @@ The country changes its system of government. A one-party state becomes a democr
 
 ### Demilitarisation
 
-The country may award no new defence contracts, and no company may accept a new order from it, for a set number of turns.
+The country may award no new defence contracts, and no company may accept a new order from it, for a set number of turns. The default is **240 turns**, the same length as the truce, so the bar on re-arming and the bar on re-declaring lapse together; the offerer may set anything from one turn up to **480**.
 
 **What it has already bought still arrives.** Live contracts keep delivering and orders already placed can still be wound down. This is a bar on re-arming, not a teardown: the army decays through ordinary upkeep while nothing new comes in to replace it.
 
@@ -155,7 +155,7 @@ A war does not only end by agreement. If your front runs all the way to the end 
 
 **Winning does not end the war on the spot.** The fighting stops, every unit goes back to reserve, and the war moves into a state where it is waiting on one thing: your terms.
 
-**You get 24 turns to name them.** The same three terms are available, and you still pick exactly one. The difference is that nobody has to agree: a country with no ground left is not in a position to refuse.
+**You get 24 turns to name them.** The same four terms are available, and you still pick exactly one. The difference is that nobody has to agree: a country with no ground left is not in a position to refuse.
 
 **If the window lapses, the war ends with nothing taken.** Miss it and you get the victory and the truce, and no term at all. The war record will say so.
 
@@ -207,7 +207,7 @@ Your declaration panel lists your live truces and greys out the countries you ca
 
 **Offer early in a losing war.** Territorial position is public. Once you are visibly winding down, your leverage is gone.
 
-**Use white peace liberally.** A zero indemnity that ends a stalemate and buys a 240-turn truce costs nothing and is often the best available outcome.
+**Use white peace liberally.** A settlement that ends a stalemate and buys a 240-turn truce costs nothing and is often the best available outcome.
 
 **Buy out the coalition's weakest link.** You do not have to beat an alliance. You have to make the cheapest member leave.
 

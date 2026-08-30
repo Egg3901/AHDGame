@@ -66,7 +66,7 @@ export const electionsPages: readonly WikiSeedPage[] = [
     slug: "election-mechanics",
     title: "Election Mechanics",
     description:
-      "Primary + general phase structure, duration by race, vote accumulation math, FPTP vs RCV, multi-seat allocation, candidacy rules.",
+      "Primary + general phase structure, duration by race, primary ballots and vote accumulation, FPTP vs RCV, multi-seat allocation, candidacy rules.",
     content: electionMechanicsContent,
     category: "elections",
     extraTags: ["primary", "general", "fptp"],
@@ -80,7 +80,7 @@ export const electionsPages: readonly WikiSeedPage[] = [
     slug: "primaries",
     title: "Primaries",
     description:
-      "Declaration windows, the state vs presidential primary score formulas, NPP primary dynamics, and tactics for winning your party's nomination.",
+      "Declaration windows, how down-ballot primaries count ballots over their closing window, the state vs presidential standing formulas, NPP primary dynamics, and tactics for winning your party's nomination.",
     content: primariesContent,
     category: "elections",
     extraTags: ["primary", "npp"],
@@ -229,7 +229,7 @@ export const electionsPages: readonly WikiSeedPage[] = [
     slug: "campaign-manager",
     title: "Campaign Manager",
     description:
-      "The /campaign/[id] page: budget, upgrades, activity log, endorsements, manager assignment, access tiers, donations, and insolvency auto-downgrade.",
+      "The /campaign/[id] page: budget, upgrades, activity log, endorsements, appointing up to three campaign managers, access tiers, donations, and insolvency auto-downgrade.",
     content: campaignManagerContent,
     category: "elections",
     extraTags: ["campaign"],
@@ -279,7 +279,7 @@ export const electionsPages: readonly WikiSeedPage[] = [
     slug: "contingent-election",
     title: "Contingent Election",
     description:
-      "The US 12th Amendment fallback when no Electoral College majority forms: House elects President by state delegation, Senate elects VP, deadlock rules.",
+      "The US 12th Amendment fallback when no Electoral College majority forms: House elects President by state delegation, Senate elects VP, era-derived thresholds, deadlock rules.",
     content: contingentElectionContent,
     category: "elections",
     extraTags: ["electoral-college", "house"],
