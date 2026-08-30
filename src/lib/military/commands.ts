@@ -46,8 +46,15 @@ function commandsOfRegion(state: MilitaryState, rid: string): MilitaryCommand[] 
 export function validateDraft(draft: CommandDraft, state: MilitaryState): string[] {
   const w: string[] = [];
   for (const rid of draft.regionIds) {
-    const owners = commandsOfRegion(state, rid);
-    if (owners.length) w.push(`${getRegion(rid)?.name} is already assigned to ${owners[0].name}.`);
+    // Only a same-type owner is a role conflict — the line `overlappingRegions` has
+    // always drawn. Warning on every owner told players that pairing a Logistics
+    // command with the Regional command already holding a region was a mistake, when
+    // it is the recommended way to sustain a fight overseas.
+    const owners = commandsOfRegion(state, rid).filter((c) => c.type === draft.type);
+    if (owners.length)
+      w.push(
+        `${getRegion(rid)?.name} is already assigned to ${owners[0].name}, a command of the same type.`
+      );
   }
   if (!draft.commanderIds.length) {
     w.push("No commander selected — command efficiency will be reduced by 10%.");

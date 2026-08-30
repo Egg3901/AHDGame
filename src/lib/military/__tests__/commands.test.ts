@@ -148,7 +148,7 @@ describe("dedupeCommandIds", () => {
 });
 
 describe("validateDraft", () => {
-  it("warns when an assigned region is already owned by another command", () => {
+  it("warns when an assigned region is already owned by a command of the same type", () => {
     const draft: CommandDraft = {
       name: "X",
       type: "REGIONAL",
@@ -158,8 +158,25 @@ describe("validateDraft", () => {
       posture: "Deterrence",
       supply: "Normal",
     };
-    const w = validateDraft(draft, stateWith([cmd({ regionIds: ["mea"] })]));
+    const w = validateDraft(draft, stateWith([cmd({ type: "REGIONAL", regionIds: ["mea"] })]));
     expect(w.some((m) => m.includes("already assigned"))).toBe(true);
+  });
+
+  // Only a same-type owner is a role conflict; overlappingRegions has always drawn the
+  // line there. The warning ignored type, so pairing a Logistics command with the
+  // Regional command already holding the region looked prohibited.
+  it("does not warn when the region's existing owner is a different command type", () => {
+    const draft: CommandDraft = {
+      name: "X",
+      type: "LOGISTICS",
+      regionIds: ["mea"],
+      commanderIds: ["hale"],
+      commandingGeneralId: null,
+      posture: "Expeditionary",
+      supply: "Normal",
+    };
+    const w = validateDraft(draft, stateWith([cmd({ type: "REGIONAL", regionIds: ["mea"] })]));
+    expect(w.some((m) => m.includes("already assigned"))).toBe(false);
   });
 
   it("warns when no commander is selected", () => {

@@ -115,7 +115,12 @@ export function coverageStatus(
   if (owners.length > 1 && new Set(owners.map((o) => o.type)).size < owners.length)
     return "OVERLAPPING";
   if (ops.some((o) => o.region === rid)) return "ACTIVE_CONFLICT";
-  if (owners.length === 1) return "ASSIGNED";
+  // Any owner means covered. Requiring exactly one contradicted the overlap rule
+  // directly above it, which only treats a duplicate TYPE as a conflict: a region held
+  // by a Regional and a Logistics command passed both branches and fell through to
+  // UNASSIGNED. That is the recommended overseas setup, so the builder's default
+  // coverage view flagged the correct structure as a gap.
+  if (owners.length >= 1) return "ASSIGNED";
   return "UNASSIGNED";
 }
 

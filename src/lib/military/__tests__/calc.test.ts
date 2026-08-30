@@ -162,6 +162,24 @@ describe("coverage", () => {
     expect(coverageStatus(state(), "naf", ops)).toBe("OVERLAPPING");
     expect(coverageStatus(state(), "mea", ops)).toBe("ACTIVE_CONFLICT");
   });
+
+  // A Regional command paired with a Logistics command over the same region is the
+  // supported setup for fighting overseas, and the one the wiki recommends. It read
+  // as UNASSIGNED because only a single owner counted as covered, so the builder
+  // told players the pairing had not taken.
+  it("labels a region covered by commands of different types as assigned", () => {
+    const s: MilitaryState = {
+      commands: [
+        cmd({ id: "a", type: "REGIONAL", regionIds: ["weu"] }),
+        cmd({ id: "b", type: "LOGISTICS", regionIds: ["weu"] }),
+      ],
+      selectedId: "a",
+      selectedRegionId: null,
+      filter: "coverage",
+      assignMode: false,
+    };
+    expect(coverageStatus(s, "weu", [])).toBe("ASSIGNED");
+  });
 });
 
 describe("effIntent + global effectiveness", () => {

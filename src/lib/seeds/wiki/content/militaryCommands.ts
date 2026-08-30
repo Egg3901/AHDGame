@@ -76,7 +76,7 @@ Regions are the world's coverage grid: the map your Commands are responsible for
 
 Each region carries terrain, infrastructure, port and airbase capacity, strategic value, logistics difficulty, and a live threat reading. Regions are typed **land**, **naval**, or **mixed**: assigning a sea region to a Command with no naval structure is flagged as weak coverage.
 
-**A region should be covered by exactly one Command.** The builder warns you when a region is already assigned to another Command, and the coverage view flags two problems:
+**A region should be covered by exactly one Command of each type.** Commands of *different* types are welcome to share a region, and often should: a Regional command holding the ground while a Logistics command sustains it is the standard overseas pairing. The builder warns you only when a region is already assigned to another Command of the same type, and the coverage view flags two problems:
 
 - **Uncovered**: no Command is responsible for it.
 - **Overlapping**: two Commands *of the same type* both claim it, which is a genuine role conflict rather than useful redundancy.
