@@ -88,14 +88,25 @@ export function uncoveredRegions(state: MilitaryState): StrategicRegion[] {
   return STRATEGIC_REGIONS.filter((r) => commandsOfRegion(state, r.id).length === 0);
 }
 
+/**
+ * Whether a region's owners contain a role conflict: two or more commands of the
+ * SAME type. Commands of different types sharing a region is supported and useful
+ * (a Regional command holds the ground, a Logistics command sustains it), so only a
+ * repeated type counts.
+ *
+ * The single home for that rule. It used to be written out by hand in three places,
+ * and the bug this consolidates was two of those copies disagreeing: coverageStatus
+ * treated "not an overlap" as "not covered either" and reported the recommended
+ * pairing as UNASSIGNED. One definition means the next edit cannot split them again.
+ */
+export function hasSameTypeOverlap(owners: readonly MilitaryCommand[]): boolean {
+  const types = owners.map((o) => o.type);
+  return new Set(types).size < types.length;
+}
+
 /** Regions covered by two or more commands of the same type (role conflict). */
 export function overlappingRegions(state: MilitaryState): StrategicRegion[] {
-  return STRATEGIC_REGIONS.filter((r) => {
-    const cmds = commandsOfRegion(state, r.id);
-    if (cmds.length < 2) return false;
-    const types = cmds.map((c) => c.type);
-    return new Set(types).size < types.length;
-  });
+  return STRATEGIC_REGIONS.filter((r) => hasSameTypeOverlap(commandsOfRegion(state, r.id)));
 }
 
 /** Average command effectiveness across the nation (mockup globalEff). */
@@ -112,10 +123,14 @@ export function coverageStatus(
   ops: MilitaryOperation[]
 ): CoverageStatus {
   const owners = commandsOfRegion(state, rid);
-  if (owners.length > 1 && new Set(owners.map((o) => o.type)).size < owners.length)
-    return "OVERLAPPING";
+  if (hasSameTypeOverlap(owners)) return "OVERLAPPING";
   if (ops.some((o) => o.region === rid)) return "ACTIVE_CONFLICT";
-  if (owners.length === 1) return "ASSIGNED";
+  // Any owner means covered. Requiring exactly one contradicted the overlap rule
+  // directly above it, which only treats a duplicate TYPE as a conflict: a region held
+  // by a Regional and a Logistics command passed both branches and fell through to
+  // UNASSIGNED. That is the recommended overseas setup, so the builder's default
+  // coverage view flagged the correct structure as a gap.
+  if (owners.length >= 1) return "ASSIGNED";
   return "UNASSIGNED";
 }
 
