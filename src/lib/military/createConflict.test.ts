@@ -372,3 +372,23 @@ describe("buildConflict sea access override", () => {
     expect(conflictToFront(doc).seaAccess).toBe(true);
   });
 });
+
+// The side fighting on its own soil hauls better (`FRONT_SUPPLY.hostSideThroughput`).
+// The front carries which side that is, so the battle math never learns what a conflict
+// is; it is the host's side, which in an interstate war is the nation declared on.
+describe("conflictToFront host side", () => {
+  it("marks side A when the host is on side A", () => {
+    const c = buildConflict(base({ hostCountry: "US", sideA: west, sideB: east }));
+    expect(conflictToFront(c).hostSide).toBe("A");
+  });
+
+  it("marks side B when the host is on side B", () => {
+    const c = buildConflict(base({ hostCountry: "RU", sideA: west, sideB: east }));
+    expect(conflictToFront(c).hostSide).toBe("B");
+  });
+
+  it("marks neither when the host belongs to no side", () => {
+    const c = buildConflict(base({ hostCountry: "VN" as never, sideA: west, sideB: east }));
+    expect(conflictToFront(c).hostSide).toBeUndefined();
+  });
+});

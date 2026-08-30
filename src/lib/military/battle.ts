@@ -13,6 +13,7 @@ import {
   READINESS_DROP_BASE,
   READINESS_TEMPO_K,
   CASUALTY_RATE_SCALE,
+  FRONT_SUPPLY,
 } from "./config";
 import { readinessBaselineOf } from "./readinessDrift";
 import { EQUIPMENT_TRACK_MAX } from "./arsenal";
@@ -73,8 +74,11 @@ export interface BattleContext extends GeneralBinding {
    * that cannot resolve which side a country is on — is unaffected.
    */
   conflictSupply?: number;
-  /** Effective Logistics-command throughput keyed by strategic region. */
-  logisticsSupplyByRegion?: Record<string, number>;
+  /**
+   * Logistics-command coverage keyed by strategic region, as effectiveness 0..1. What
+   * it is worth depends on the demand it covers (see `supplyState`).
+   */
+  logisticsCoverageByRegion?: Record<string, number>;
 }
 
 /**
@@ -379,8 +383,11 @@ export function supplyState(
   let commandSupplyWeighted = 0;
   for (const ctx of ctxs) {
     const units = ctx.units.filter((u) => u.theaterId === frontId);
+    // This contingent's own draw on the pool, which is what its Logistics command
+    // covers. Per contingent, so one command per flag feeds its own formations and a
+    // coalition cannot stack several into unlimited throughput.
+    let contingentDemand = 0;
     for (const u of units) {
-      demand += effUpkeep(u, ctx.natMods, generalMods(generalOf(ctx, u)), ctx.countryScale) / 12;
       const id = String(u._id);
       const role = plan?.roleOf.get(id) ?? getRole(ctx.positions, u);
       const tk = computeCard(u).traitKeys || [];
@@ -389,6 +396,15 @@ export function supplyState(
       // were standing in the line, which made perfect supply a matter of typing "rear"
       // enough times -- depth still engages at 0.10, so the label cost nothing.
       const inDepth = plan ? !plan.inContact.has(id) : role === "rear";
+      // What this formation draws. Upkeep is a treasury figure, so an air wing or a
+      // missile brigade costs like three divisions without eating like them at a land
+      // front; and depth engages at 0.10, so it is not burning ammunition like the
+      // line. Both shares are FRONT_SUPPLY, with the measurements that set them.
+      let draw = effUpkeep(u, ctx.natMods, generalMods(generalOf(ctx, u)), ctx.countryScale) / 12;
+      if (u.domain !== "ground" && u.domain !== "marine") draw *= FRONT_SUPPLY.offFrontDemand;
+      if (inDepth) draw *= FRONT_SUPPLY.depthDemand;
+      demand += draw;
+      contingentDemand += draw;
       formations++;
       if (inDepth) depthCount++;
       else if (role === "support") supportCount++;
@@ -402,8 +418,15 @@ export function supplyState(
       }
       supplyMass += 1;
       supplyWeighted += ctx.natMods.supply;
-      commandSupplyWeighted += ctx.logisticsSupplyByRegion?.[front.region] ?? 0;
     }
+    // A Logistics command over this region delivers a share of what its own contingent
+    // draws, times its effectiveness. Sized by the force it feeds rather than a flat
+    // figure, which was +20 against a coalition front's deficit of ~1,160. Entered
+    // once per formation so the unit-weighted average below treats it exactly like the
+    // national doctrine term.
+    const coverage = ctx.logisticsCoverageByRegion?.[front.region] ?? 0;
+    commandSupplyWeighted +=
+      units.length * FRONT_SUPPLY.logisticsCommandShare * contingentDemand * coverage;
   }
   // Tooth to tail. Depth exists to feed the line, so it is counted only up to the size
   // of the line it feeds: a tail longer than its teeth is not logistics, it is parking.
@@ -425,6 +448,14 @@ export function supplyState(
   const conflictSupply = ctxs.find((c) => c.conflictSupply != null)?.conflictSupply;
   if (conflictSupply != null) {
     throughput = Math.max(0, throughput) * (conflictSupply / OCCUPATION.supplyNeutral);
+  }
+  // Fighting at home: interior lines, depots and rail. The front carries which side
+  // that is (`conflictToFront`); the contingent's own `side` says whether it is them.
+  // Multiplicative, before interdiction, so a blockade still takes its share of a
+  // larger haul rather than being the one thing the home advantage cancels.
+  const hostSide = front.hostSide;
+  if (hostSide && ctxs.some((c) => c.side === hostSide)) {
+    throughput = Math.max(0, throughput) * FRONT_SUPPLY.hostSideThroughput;
   }
   demand = Math.max(1, Math.round(demand));
   throughput = Math.round(throughput);
@@ -954,8 +985,11 @@ export interface BattleSide extends GeneralBinding {
   fronts?: Record<string, Front>;
   /** This side's supply at the conflict (see BattleContext.conflictSupply). */
   conflictSupply?: number;
-  /** Effective Logistics-command throughput keyed by strategic region. */
-  logisticsSupplyByRegion?: Record<string, number>;
+  /**
+   * Logistics-command coverage keyed by strategic region, as effectiveness 0..1. What
+   * it is worth depends on the demand it covers (see `supplyState`).
+   */
+  logisticsCoverageByRegion?: Record<string, number>;
 }
 /**
  * Tracks destroyed per point of unmitigated engagement intensity.
@@ -1037,7 +1071,7 @@ function sideCtx(side: BattleSide): BattleContext {
     side: side.side,
     fronts: side.fronts,
     conflictSupply: side.conflictSupply,
-    logisticsSupplyByRegion: side.logisticsSupplyByRegion,
+    logisticsCoverageByRegion: side.logisticsCoverageByRegion,
   };
 }
 

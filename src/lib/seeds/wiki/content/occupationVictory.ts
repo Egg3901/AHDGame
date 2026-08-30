@@ -66,6 +66,8 @@ Because everything is measured from the starting line, **both sides sit at their
 
 The war room shows your supply as **SUPPLIED · STRAINED · SHORTAGE · CUT OFF**. It is not decoration: degraded supply materially weakens your side in battle. A front that reads SHORTAGE is telling you that pushing further will make things worse, and that consolidating might be the better move.
 
+Displacement is one input to that readout, not the whole of it. The readout is what the front can haul against what you have posted there, so a huge force at one front reads short even at the starting line. **The side fighting on its own soil hauls 25 percent more**: the nation that was declared on, and its allies at that front, have depots, rail and interior lines behind them. An invader has to bring all of that with it.
+
 This produces the natural rhythm of a real campaign: **advance, overextend, stall, consolidate, advance again.**
 
 ## Winding down

@@ -232,6 +232,7 @@ export async function createConflict(
 
 /** A conflict as the battle sim's `Front` (fed into the battle context, not looked up). */
 export function conflictToFront(c: ConflictDoc): Front {
+  const hostSide = hostSideOf(c);
   return {
     id: c._id,
     name: c.name,
@@ -245,10 +246,23 @@ export function conflictToFront(c: ConflictDoc): Front {
     seaAccess: c.seaAccess ?? deriveSeaAccess(hostEntitiesOf(c), c.terrain),
     // How much can stand in the line here. Derived from the ground, like `terr`.
     capacity: capacityOfTerrain(c.terrain),
+    // Who is fighting at home. The rosters are CountryId[] and the host may be a world
+    // entity that is not one (a proxy war's host is never a belligerent), so widen the
+    // comparison rather than the roster, exactly as `initialControl` does.
+    ...(hostSide === undefined ? {} : { hostSide }),
     sev: c.severity,
     west: c.sideA.label,
     east: c.sideB.label,
     enemyBase: c.baseStrength,
     enemyMix: c.enemyMix,
   };
+}
+
+/** Which side holds the host country, or undefined when the host belongs to neither. */
+function hostSideOf(c: ConflictDoc): "A" | "B" | undefined {
+  // Optional chaining because a trimmed or legacy document may carry no rosters; a
+  // front with no host side is the same as one fought on neutral ground.
+  if ((c.sideA?.countries as string[] | undefined)?.includes(c.hostCountry)) return "A";
+  if ((c.sideB?.countries as string[] | undefined)?.includes(c.hostCountry)) return "B";
+  return undefined;
 }

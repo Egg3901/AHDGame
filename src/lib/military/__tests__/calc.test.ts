@@ -10,7 +10,7 @@ import {
   globalEffectiveness,
   coverageStatus,
   effIntent,
-  logisticsSupplyByRegion,
+  logisticsCoverageByRegion,
   hasSameTypeOverlap,
 } from "../calc";
 import type { MilitaryCommand, MilitaryState, MilitaryOperation } from "../types";
@@ -102,8 +102,8 @@ describe("effectiveness", () => {
 });
 
 describe("logistics command supply", () => {
-  it("delivers effectiveness-scaled throughput only in covered regions", () => {
-    const coverage = logisticsSupplyByRegion(
+  it("reports effectiveness as a 0..1 coverage only in covered regions", () => {
+    const coverage = logisticsCoverageByRegion(
       [
         cmd({ type: "LOGISTICS", regionIds: ["eeu"], base: 100 }),
         cmd({ id: "regional", type: "REGIONAL", regionIds: ["weu"], base: 100 }),
@@ -111,11 +111,11 @@ describe("logistics command supply", () => {
       UNITS
     );
 
-    expect(coverage).toEqual({ eeu: 20 });
+    expect(coverage).toEqual({ eeu: 1 });
   });
 
   it("uses the strongest overlapping Logistics command instead of stacking", () => {
-    const coverage = logisticsSupplyByRegion(
+    const coverage = logisticsCoverageByRegion(
       [
         cmd({ id: "weak", type: "LOGISTICS", regionIds: ["eeu"], base: 50 }),
         cmd({ id: "strong", type: "LOGISTICS", regionIds: ["eeu"], base: 100 }),
@@ -123,7 +123,7 @@ describe("logistics command supply", () => {
       UNITS
     );
 
-    expect(coverage.eeu).toBe(20);
+    expect(coverage.eeu).toBe(1);
   });
 });
 
