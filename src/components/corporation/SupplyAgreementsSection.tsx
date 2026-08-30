@@ -494,6 +494,11 @@ export default function SupplyAgreementsSection({
                   </option>
                 ))}
               </select>
+              <p className="text-[11px] text-muted">
+                Freight agreements are state-local and cannot be represented by a corporation-wide
+                contract. Freight capacity instead serves haul demand in the state where it
+                operates.
+              </p>
             </div>
 
             {/* Volume cap */}
