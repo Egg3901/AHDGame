@@ -82,11 +82,50 @@ describe("queryCountryEconomy", () => {
       economicFactors: { inflationRate: 0.15 },
     });
     db.collectionMocks.stockExchangeSnapshots!.findOne.mockResolvedValue(null);
+    db.collectionMocks.states = db.collection("states");
 
     const { queryCountryEconomy } = await import("./economy");
     const result = await queryCountryEconomy(db as unknown as Db, "US");
 
     expect(result!.inflation).toBe(0.15);
+  });
+
+  it("adds authoritative fiscal and regional macro data", async () => {
+    db.collectionMocks.centralBanks!.findOne.mockResolvedValue(null);
+    db.collectionMocks.stockExchangeSnapshots!.findOne.mockResolvedValue(null);
+    db.collectionMocks.federalBudget!.findOne.mockResolvedValue({
+      countryId: "US",
+      currencyCode: "USD",
+      gdp: 99,
+      gdpSmoothed: 1_000_000_000,
+      debt: { principal: 500_000_000 },
+      debtToGdpRatio: 0.5,
+      creditRating: "AAA",
+      revenue: { total: 120_000_000 },
+      spending: { total: 100_000_000 },
+      economicFactors: { inflationRate: 2 },
+      investorConfidence: 73,
+    });
+    db.collection("states").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { population: 600_000, gdp: 600 },
+        { population: 400_000, gdp: 400 },
+      ]),
+    } as never);
+
+    const { queryCountryEconomy } = await import("./economy");
+    const result = await queryCountryEconomy(db as unknown as Db, "US");
+
+    expect(result).toMatchObject({
+      currencyCode: "USD",
+      population: 1_000_000,
+      gdp: 1_000_000_000,
+      gdpPerCapita: 1000,
+      budgetBalance: 20_000_000,
+      budgetBalancePctGdp: 2,
+      investorConfidence: 73,
+      debt: { principal: 500_000_000, debtToGdpRatio: 0.5, creditRating: "AAA" },
+    });
   });
 
   it("falls back to the bank history when the budget carries no rate", async () => {

@@ -8,8 +8,12 @@ import { getCountryState } from "@/lib/countryState";
 import { getExchangeApiKey } from "@/lib/constants/exchangeRegistry";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
 import type { FederalBudget } from "@/lib/db/types/budget";
+import type { State } from "@/lib/db/types";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { aggregateExchangeTotals } from "@/lib/stockExchange/aggregate";
+import { federalSurplus } from "@/lib/budget/federalSurplus";
+import { liveNationalGdpUnits, resolveRatioGdp } from "@/lib/budget/gdpDenominator";
+import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://ahousedividedgame.com";
 const HISTORY_CAP = 12;
@@ -91,7 +95,7 @@ export async function queryCountryEconomy(db: Db, country: string) {
 
   const exchangeApiKey = getExchangeApiKey(country as CountryId);
 
-  const [centralBank, snapshot, budget] = await Promise.all([
+  const [centralBank, snapshot, budget, states] = await Promise.all([
     db
       .collection<CentralBank>("centralBanks")
       .findOne({ countryId: country } as Filter<CentralBank>),
@@ -100,12 +104,28 @@ export async function queryCountryEconomy(db: Db, country: string) {
           .collection<StockExchangeSnapshot>("stockExchangeSnapshots")
           .findOne({ _id: exchangeApiKey as unknown as StockExchangeSnapshot["_id"] })
       : Promise.resolve(null),
+    db.collection<FederalBudget>("federalBudget").findOne(
+      { _id: getNationalBudgetId(country as CountryId) },
+      {
+        projection: {
+          countryId: 1,
+          currencyCode: 1,
+          gdp: 1,
+          gdpSmoothed: 1,
+          debtToGdpRatio: 1,
+          creditRating: 1,
+          "debt.principal": 1,
+          "revenue.total": 1,
+          "spending.total": 1,
+          "economicFactors.inflationRate": 1,
+          investorConfidence: 1,
+        },
+      }
+    ),
     db
-      .collection<FederalBudget>("federalBudget")
-      .findOne(
-        { _id: getNationalBudgetId(country as CountryId) },
-        { projection: { "economicFactors.inflationRate": 1 } }
-      ),
+      .collection<Pick<State, "population" | "gdp">>("states")
+      .find({ countryId: country }, { projection: { population: 1, gdp: 1 } })
+      .toArray(),
   ]);
 
   const rateHistory = (centralBank?.interestRateHistory ?? []).slice(-HISTORY_CAP);
@@ -134,6 +154,18 @@ export async function queryCountryEconomy(db: Db, country: string) {
     change24h: Math.round(totals.weightedChange24h * 100) / 100,
     exchange: snapshot?.exchangeName ?? countryConfig.exchangeName ?? null,
   };
+  const population = states.reduce(
+    (sum, state) =>
+      sum +
+      (typeof state.population === "number" && Number.isFinite(state.population)
+        ? state.population
+        : 0),
+    0
+  );
+  const liveGdp = liveNationalGdpUnits(states);
+  const gdp = liveGdp > 0 ? liveGdp : (budget?.gdp ?? null);
+  const budgetBalance = budget ? federalSurplus(budget) : null;
+  const ratioGdp = budget ? resolveRatioGdp(budget) : 0;
 
   return {
     found: true,
@@ -141,6 +173,23 @@ export async function queryCountryEconomy(db: Db, country: string) {
     primeRate: centralBank?.primeRate ?? null,
     inflation: latestInflation,
     gdpGrowth: latestGdpGrowth,
+    currencyCode: budget ? (resolveCountryCurrencyCode(budget) ?? null) : null,
+    population: population > 0 ? population : null,
+    gdp,
+    gdpPerCapita: population > 0 && gdp != null ? Math.round(gdp / population) : null,
+    debt: budget
+      ? {
+          principal: budget.debt?.principal ?? null,
+          debtToGdpRatio: budget.debtToGdpRatio ?? null,
+          creditRating: budget.creditRating ?? null,
+        }
+      : null,
+    budgetBalance,
+    budgetBalancePctGdp:
+      budgetBalance != null && ratioGdp > 0
+        ? Math.round((budgetBalance / ratioGdp) * 10_000) / 100
+        : null,
+    investorConfidence: budget?.investorConfidence ?? null,
     chair: centralBank?.chairCharacterName
       ? {
           name: centralBank.chairCharacterName,
