@@ -32,7 +32,8 @@ import {
 import { withCommonsOrgRanking } from "@/lib/turn/election/commonsOrgRanking";
 import { loadApportionment } from "@/lib/elections/apportionment";
 import { getUkCommonsSeats } from "@/lib/constants/states";
-import { blocListQuota } from "@/lib/constants/blocList";
+import { blocListQuota, blocListQuotaForGovernment } from "@/lib/constants/blocList";
+import { getCountryState } from "@/lib/countryState";
 import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
 import { districtedHouseResolution } from "@/lib/redistricting/districtedHouseResolution";
 import { getGameStateCollection } from "@/lib/db/collections";
@@ -371,6 +372,13 @@ export async function resolveOneGeneralElection(
       });
     }
 
+    const configuredBlocQuota = blocListQuota(election.countryId);
+    const runtimeBlocQuota = configuredBlocQuota
+      ? blocListQuotaForGovernment(
+          election.countryId,
+          (await getCountryState(db, election.countryId)).governmentType
+        )
+      : null;
     const { isMultiSeat, seatsEstimate, winners, losers } =
       districted ??
       allocateSeats(
@@ -384,7 +392,7 @@ export async function resolveOneGeneralElection(
         // National Front chambers: the quota decides the party split, not the
         // vote. Undefined for every non-bloc-list country, so their allocation
         // is byte-identical.
-        blocListQuota(election.countryId)?.shares,
+        runtimeBlocQuota?.shares,
         commonsSeats
       );
 
