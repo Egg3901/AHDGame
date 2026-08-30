@@ -6,6 +6,8 @@ import { migration } from "./2026-08-30-election-ballot-model-conversion";
 const cursor = <T>(docs: T[]) => ({
   toArray: async () => docs,
   sort: () => cursor(docs),
+  limit: () => cursor(docs),
+  skip: () => cursor(docs),
   project: () => cursor(docs),
 });
 

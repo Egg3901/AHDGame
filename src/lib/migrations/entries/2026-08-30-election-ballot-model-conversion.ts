@@ -56,6 +56,12 @@ import {
  * sees them. Primaries whose window has not opened get only the stamp on
  * their latest snapshot.
  *
+ * Turns banked AFTER the new engine started are left at factor 1: the new
+ * engine stamps `turn` on every primary snapshot it writes, so the earliest
+ * stamped turn on the world marks the cutover, and only general records
+ * before it were sized by the old engine. A world where this runs on the same
+ * deploy as the engine has no stamped snapshots yet and converts everything.
+ *
  * Idempotent: a converted tally carries `ballotModelVersion`, and a snapshot
  * already carrying `turn` is never replayed.
  */
@@ -105,6 +111,17 @@ async function convertBallotModel(db: Db, dryRun: boolean): Promise<MigrationRes
     .find({ electionId: { $in: electionIds } })
     .toArray();
   const tallyByElection = new Map(tallies.map((t) => [t.electionId.toString(), t]));
+
+  // Cutover detection (see the header): the first turn the new engine ran.
+  const firstStamped = await db
+    .collection<PrimarySnapshot>("primarySnapshots")
+    .find({ turn: { $exists: true } })
+    .sort({ turn: 1 })
+    .limit(1)
+    .project<{ turn: number }>({ turn: 1 })
+    .toArray();
+  const newEngineFromTurn = firstStamped[0]?.turn ?? Number.POSITIVE_INFINITY;
+  const oldEngineTurn = (turn: number): boolean => turn < newEngineFromTurn;
 
   const regionKeys = new Set<string>();
   const regionIds = new Set<string>();
@@ -195,7 +212,8 @@ async function convertBallotModel(db: Db, dryRun: boolean): Promise<MigrationRes
       const ceiling = electorateOf(stateDoc) * reg;
       const { snapshots, totals, dropped } = rescaleSnapshotIncrements(
         tally.turnSnapshots,
-        (turn) => generalSliceFactor(generalLength, turn - primaryEndTurn) * reg,
+        (turn) =>
+          oldEngineTurn(turn) ? generalSliceFactor(generalLength, turn - primaryEndTurn) * reg : 1,
         ceiling > 0 ? ceiling : undefined
       );
       duplicateTurnsDropped += dropped;
@@ -242,7 +260,10 @@ async function convertBallotModel(db: Db, dryRun: boolean): Promise<MigrationRes
           : 1;
       const { snapshots, totals, dropped } = rescaleSnapshotIncrements(
         series,
-        (turn) => generalSliceFactor(generalLength, turn - primaryEndTurn) * reg * basis,
+        (turn) =>
+          oldEngineTurn(turn)
+            ? generalSliceFactor(generalLength, turn - primaryEndTurn) * reg * basis
+            : 1,
         electorateOf(stateDoc) * reg || undefined
       );
       duplicateTurnsDropped += dropped;
@@ -478,6 +499,11 @@ async function convertBallotModel(db: Db, dryRun: boolean): Promise<MigrationRes
 
   notes.push(
     `turn ${currentTurn}: ${elections.length} active race(s); generals converted ${generalsConverted}, presidential ${presidentialsConverted}, duplicate turn record(s) dropped ${duplicateTurnsDropped}`
+  );
+  notes.push(
+    Number.isFinite(newEngineFromTurn)
+      ? `new engine detected from turn ${newEngineFromTurn}: records from that turn on kept at factor 1`
+      : "no new-engine records yet: every banked turn treated as old-engine"
   );
   notes.push(
     `primaries replayed ${primariesReplayed}, stamped only ${primariesStamped} (window not open yet: ${skippedNoWindow})`
