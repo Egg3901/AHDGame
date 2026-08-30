@@ -125,12 +125,23 @@ export function resolveTurnWindow(args: {
   createdAt?: Date | string | null;
   currentTurn: number;
   now: Date;
+  /**
+   * The turn that reaches `endTurn` still accrues (general elections: the
+   * timers mark the race completed AFTER vote accumulation, and it resolves
+   * later that same turn), so the window is start..endTurn INCLUSIVE and holds
+   * `endTurn - startTurn + 1` slices. Without this the final turn clamped onto
+   * the last slice and re-released it: a 12-turn window paid out 13 slices,
+   * ~7.5% of the pool over the top (102% turnout on a DD governor race).
+   * Primaries close strictly before `primaryEndTurn` and leave this off.
+   */
+  inclusiveEnd?: boolean;
 }): { totalTurns: number; turnIndex: number } {
   const { startTurn, endTurn, startTime, endTime, createdAt, currentTurn, now } = args;
+  const extra = args.inclusiveEnd ? 1 : 0;
 
   // Turn-first: drift-immune when both bounds are real turn numbers.
   if (typeof startTurn === "number" && typeof endTurn === "number") {
-    const totalTurns = Math.max(4, endTurn - startTurn);
+    const totalTurns = Math.max(4, endTurn - startTurn + extra);
     const turnIndex = Math.max(0, Math.min(currentTurn - startTurn, totalTurns - 1));
     return { totalTurns, turnIndex };
   }
@@ -140,7 +151,7 @@ export function resolveTurnWindow(args: {
   const endMs = endTime ? new Date(endTime).getTime() : now.getTime();
   const totalTurns = Math.max(
     4,
-    Math.round((endMs - effectiveStart.getTime()) / MS_PER_TURN_LOCAL)
+    Math.round((endMs - effectiveStart.getTime()) / MS_PER_TURN_LOCAL) + extra
   );
   const elapsed = Math.max(
     0,

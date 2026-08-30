@@ -47,23 +47,23 @@ describe("toConflictView", () => {
   });
 
   it("dates an ongoing conflict from its start turn", () => {
-    expect(toConflictView(doc({ startTurn: 1 }), opts).years).toBe("1953 – present");
+    expect(toConflictView(doc({ startTurn: 1 }), opts).years).toBe("1953 to present");
     // 48 turns per year: turn 97 is two years in.
-    expect(toConflictView(doc({ startTurn: 97 }), opts).years).toBe("1955 – present");
+    expect(toConflictView(doc({ startTurn: 97 }), opts).years).toBe("1955 to present");
   });
 
   it("honors the founding-phase calendar offset", () => {
     // Live 1953 world: raw turn 214, preIterationTurns 48, status bar is 1956.
     // Without the clock this dates as 1957.
     const offset = { ...opts, preIterationTurns: 48 };
-    expect(toConflictView(doc({ startTurn: 214 }), offset).years).toBe("1956 – present");
+    expect(toConflictView(doc({ startTurn: 214 }), offset).years).toBe("1956 to present");
     expect(yearOfTurn(214, 1953, { preIterationTurns: 48 })).toBe(1956);
     expect(yearOfTurn(214, 1953)).toBe(1957);
   });
 
   it("closes the range for a resolved conflict", () => {
     const v = toConflictView(doc({ startTurn: 1, endTurn: 97, status: "resolved" }), opts);
-    expect(v.years).toBe("1953 – 1955");
+    expect(v.years).toBe("1953 to 1955");
   });
 
   it("places an anchored host on the map", () => {

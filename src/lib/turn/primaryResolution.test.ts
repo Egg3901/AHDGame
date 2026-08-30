@@ -288,6 +288,130 @@ describe("resolvePrimariesIfNeeded", () => {
     );
   });
 
+  it("picks the nominee from accrued primary ballots, not the ideology score", async () => {
+    const electionId = new ObjectId();
+    const election = {
+      _id: electionId,
+      electionType: "senate",
+      status: "active",
+      countryId: "US",
+      state: "CA",
+      primaryEndTime: new Date(NOW.getTime() - 1000),
+      endTime: new Date(NOW.getTime() + 100000),
+    };
+
+    // Listed first, so a score tie (or the legacy score path at all) would
+    // advance them. Their opponent leads the accrued ballot count.
+    const scoreFavouriteId = new ObjectId();
+    const ballotLeaderId = new ObjectId();
+    const candidates = [
+      {
+        _id: scoreFavouriteId,
+        electionId,
+        party: "DEM",
+        characterName: "Score Favourite",
+        characterId: new ObjectId(),
+        isNPP: false,
+        status: "active",
+      },
+      {
+        _id: ballotLeaderId,
+        electionId,
+        party: "DEM",
+        characterName: "Ballot Leader",
+        characterId: new ObjectId(),
+        isNPP: false,
+        status: "active",
+      },
+    ];
+
+    db.collectionMocks["elections"] = db.collection("elections");
+    db.collectionMocks["elections"].find.mockReturnValue(makeCursor([election]));
+    db.collectionMocks["politicalParties"] = db.collection("politicalParties");
+    db.collectionMocks["politicalParties"].find.mockReturnValue(makeCursor([]));
+    db.collectionMocks["electionCandidates"] = db.collection("electionCandidates");
+    let candidateFindCall = 0;
+    db.collectionMocks["electionCandidates"].find.mockImplementation((query?: unknown) => {
+      const idFilter = (query as { _id?: { $in?: ObjectId[] } })?._id?.$in;
+      if (idFilter) {
+        const ids = idFilter.map((id) => id.toString());
+        return makeCursor(candidates.filter((c) => ids.includes(c._id.toString())));
+      }
+      candidateFindCall++;
+      if (candidateFindCall === 1) return makeCursor(candidates);
+      return makeCursor([candidates[1]]);
+    });
+
+    const { fetchEnrichedCandidates } = await import("@/lib/electionEngine");
+    vi.mocked(fetchEnrichedCandidates).mockResolvedValue(
+      candidates.map((c) => ({
+        candidateId: c._id.toString(),
+        charEP: 0,
+        charSP: 0,
+        favorability: 50,
+        politicalInfluence: 100,
+      })) as never
+    );
+
+    // If the score path ran anyway, the score favourite would win outright.
+    const { calcPrimaryScore } = await import("@/lib/primaryScore");
+    vi.mocked(calcPrimaryScore).mockImplementation(() => 999);
+
+    db.collectionMocks["characters"] = db.collection("characters");
+    db.collectionMocks["characters"].find.mockReturnValue(
+      makeCursor(candidates.map((c) => ({ _id: c.characterId, userId: new ObjectId() })))
+    );
+
+    // The tally carries cumulative primary ballots accrued during the window,
+    // with the ballot leader ahead.
+    db.collectionMocks["electionVoteTallies"] = db.collection("electionVoteTallies");
+    db.collectionMocks["electionVoteTallies"].find.mockReturnValue(
+      makeCursor([
+        {
+          electionId,
+          primaryVotes: {
+            [scoreFavouriteId.toString()]: 41_000,
+            [ballotLeaderId.toString()]: 59_000,
+          },
+        },
+      ])
+    );
+    db.collectionMocks["electionVoteTallies"].findOne.mockResolvedValue(null);
+
+    const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
+    await resolvePrimariesIfNeeded(NOW, 100);
+
+    // The score favourite is the one eliminated.
+    const withdrawCall = db.collectionMocks["electionCandidates"].updateMany.mock.calls[0];
+    const withdrawnIds = withdrawCall[0]._id.$in.map((id: ObjectId) => id.toString());
+    expect(withdrawnIds).toContain(scoreFavouriteId.toString());
+    expect(withdrawnIds).not.toContain(ballotLeaderId.toString());
+
+    // primaryResults record the ballot counts with PROPORTIONAL shares — the
+    // score softmax would collapse counts in the tens of thousands to 100/0.
+    const { initElectionVoteTally } = await import("@/lib/electionEngine");
+    const initCall = vi.mocked(initElectionVoteTally).mock.calls.at(-1);
+    expect(initCall).toBeDefined();
+    const primaryResults = initCall![3] as {
+      byParty: Record<
+        string,
+        Array<{ candidateId: string; sharePct: number; won: boolean; primaryScore: number }>
+      >;
+    };
+    const dem = primaryResults.byParty["DEM"];
+    expect(dem[0]).toMatchObject({
+      candidateId: ballotLeaderId.toString(),
+      won: true,
+      primaryScore: 59_000,
+      sharePct: 59,
+    });
+    expect(dem[1]).toMatchObject({
+      candidateId: scoreFavouriteId.toString(),
+      won: false,
+      sharePct: 41,
+    });
+  });
+
   it("applies 0.75x NPP penalty when player is in same party", async () => {
     const electionId = new ObjectId();
     const election = {
@@ -579,6 +703,75 @@ describe("resolvePrimariesIfNeeded", () => {
     expect(dem[1].won).toBe(false);
   });
 
+  it("stamps primaryResults for a within-cap race whose tally holds only primary ballots", async () => {
+    // recordPrimarySnapshots upserts a tally during the primary (ballots, no
+    // general votes). That tally used to trip the mid-general legacy guard,
+    // so every race whose parties already sat within the advance cap went
+    // through the general with no primaryResults record at all.
+    const electionId = new ObjectId();
+    const election = {
+      _id: electionId,
+      electionType: "commons",
+      status: "active",
+      countryId: "UK",
+      state: "SWE",
+      primaryEndTime: new Date(NOW.getTime() - 3600_000),
+      endTime: new Date(NOW.getTime() + 3600_000),
+    };
+    const candidates = [1, 2, 3].map((i) => ({
+      _id: new ObjectId(),
+      electionId,
+      party: "uk_labour",
+      characterName: `Cand${i}`,
+      characterId: new ObjectId(),
+      isNPP: false,
+      status: "active",
+    }));
+    const primaryVotes = Object.fromEntries(
+      candidates.map((c, i) => [c._id.toString(), 30_000 - i * 5_000])
+    );
+
+    db.collectionMocks["elections"] = db.collection("elections");
+    db.collectionMocks["elections"].find.mockReturnValue(makeCursor([election]));
+    db.collectionMocks["politicalParties"] = db.collection("politicalParties");
+    db.collectionMocks["politicalParties"].find.mockReturnValue(makeCursor([]));
+    db.collectionMocks["electionCandidates"] = db.collection("electionCandidates");
+    db.collectionMocks["electionCandidates"].find.mockReturnValue(makeCursor(candidates));
+    db.collectionMocks["electionVoteTallies"] = db.collection("electionVoteTallies");
+    db.collectionMocks["electionVoteTallies"].find.mockReturnValue(
+      makeCursor([{ electionId, totalVotes: {}, turnSnapshots: [], primaryVotes }])
+    );
+    db.collectionMocks["electionVoteTallies"].findOne.mockResolvedValue(null);
+    db.collectionMocks["characters"] = db.collection("characters");
+    db.collectionMocks["characters"].find.mockReturnValue(
+      makeCursor(candidates.map((c) => ({ _id: c.characterId, userId: new ObjectId() })))
+    );
+    const { fetchEnrichedCandidates } = await import("@/lib/electionEngine");
+    vi.mocked(fetchEnrichedCandidates).mockResolvedValue(
+      candidates.map((c) => ({
+        candidateId: c._id.toString(),
+        charEP: 0,
+        charSP: 0,
+        favorability: 50,
+        politicalInfluence: 100,
+      })) as never
+    );
+    const { calcPrimaryScore } = await import("@/lib/primaryScore");
+    vi.mocked(calcPrimaryScore).mockReturnValue(50);
+
+    const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
+    await resolvePrimariesIfNeeded(NOW, 100);
+
+    const { initElectionVoteTally } = await import("@/lib/electionEngine");
+    expect(initElectionVoteTally).toHaveBeenCalledTimes(1);
+    const primaryResults = vi.mocked(initElectionVoteTally).mock.calls[0][3];
+    const labour = primaryResults?.byParty?.["uk_labour"] ?? [];
+    expect(labour).toHaveLength(3);
+    expect(labour.every((r) => r.won)).toBe(true);
+    // Ranked by ballots, not the ideology score (all three scored 50).
+    expect(labour[0].candidateId).toBe(candidates[0]._id.toString());
+  });
+
   it("still eliminates losers when a UK party has more candidates than maxAdvancing", async () => {
     const electionId = new ObjectId();
     const election = {
@@ -666,6 +859,57 @@ describe("recordPrimarySnapshots", () => {
     expect(count).toBe(0);
   });
 
+  it("skips an election already snapshotted for this turn (stalled-turn re-run)", async () => {
+    const electionId = new ObjectId();
+    const election = {
+      _id: electionId,
+      electionType: "senate",
+      status: "active",
+      countryId: "US",
+      state: "CA",
+      primaryEndTime: new Date(NOW.getTime() + 100000),
+    };
+    const candidate = {
+      _id: new ObjectId(),
+      electionId,
+      party: "DEM",
+      characterName: "Alice",
+      characterId: new ObjectId(),
+      isNPP: false,
+      status: "active",
+    };
+    db.collectionMocks["elections"] = db.collection("elections");
+    db.collectionMocks["elections"].find.mockReturnValue(makeCursor([election]));
+    db.collectionMocks["politicalParties"] = db.collection("politicalParties");
+    db.collectionMocks["politicalParties"].find.mockReturnValue(makeCursor([]));
+    db.collectionMocks["electionCandidates"] = db.collection("electionCandidates");
+    db.collectionMocks["electionCandidates"].find.mockReturnValue(makeCursor([candidate]));
+    db.collectionMocks["characters"] = db.collection("characters");
+    db.collectionMocks["characters"].find.mockReturnValue(
+      makeCursor([
+        {
+          _id: candidate.characterId,
+          policies: { economic: 3, social: -2 },
+          favorability: 60,
+          politicalInfluence: 100,
+        },
+      ])
+    );
+    db.collectionMocks["npps"] = db.collection("npps");
+    db.collectionMocks["npps"].find.mockReturnValue(makeCursor([]));
+    // Turn 100 was already recorded by the first attempt at this turn.
+    db.collectionMocks["primarySnapshots"] = db.collection("primarySnapshots");
+    db.collectionMocks["primarySnapshots"].find.mockReturnValue(
+      makeCursor([{ _id: new ObjectId(), electionId, turn: 100, byParty: {} }])
+    );
+
+    const { recordPrimarySnapshots } = await import("./primaryResolution");
+    const count = await recordPrimarySnapshots(NOW, 100);
+
+    expect(count).toBe(0);
+    expect(db.collectionMocks["primarySnapshots"].insertMany).not.toHaveBeenCalled();
+  });
+
   it("creates snapshots for elections with active primaries", async () => {
     const electionId = new ObjectId();
     const election = {
@@ -719,6 +963,8 @@ describe("recordPrimarySnapshots", () => {
     const inserted = db.collectionMocks["primarySnapshots"]!.insertMany.mock.calls[0][0];
     expect(inserted).toHaveLength(1);
     expect(inserted[0].electionId).toEqual(electionId);
+    // Stamped with the turn so a re-run of this turn is recognised and skipped.
+    expect(inserted[0].turn).toBe(100);
     expect(inserted[0].byParty.DEM).toBeDefined();
     expect(inserted[0].byParty.DEM[0].characterName).toBe("Alice");
   });

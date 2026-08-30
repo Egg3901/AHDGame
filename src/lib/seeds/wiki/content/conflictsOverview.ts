@@ -96,9 +96,11 @@ A conflict shows you different things depending on who you are. This is enforced
 | --- | --- | --- |
 | **Public** | Everyone else | Territory held, cumulative casualties, per-battle verdicts and loss totals. No force composition, either side. |
 | **Command** | A belligerent country's posted general, defence seat holder, or head of government | Everything public, **plus** your own live order of battle at that front, plus a coarse read of the enemy ("Stronger force", never a number). |
-| **Archive** | Everyone, once the war is **resolved** | Everything, both sides, per engagement: who fought, what they lost. The fog lifts entirely for history. |
+| **Archive** | Everyone, 480 turns after the war is **resolved** | Everything, both sides, per engagement: who fought, what they lost. The fog lifts entirely for history. |
 
-Note the shape of that: **territory and casualties are public in every tier.** The world always knows how a war is going and how many have died. Only *force composition* is secret, and only while the war is still being fought.
+Note the shape of that: **territory and casualties are public in every tier.** The world always knows how a war is going and how many have died. Only *force composition* is secret, and it stays secret for 480 turns after the war ends, because the day a war ends its order of battle is still a live picture of an army that may fight again. A resolved war reads exactly as it did while it ran until that window lapses; then the record opens for everyone.
+
+Every war that has ended is listed under **Historical Conflicts** at the bottom of the conflicts hub, with its outcome and a link to its record. The card says whether the record is open or when the fog lifts.
 
 One deliberate gap: **incoming offensives are hidden.** You are not told that an enemy has declared an attack on you. You have to infer it from their build-up. Defending well means reading the board, not waiting for an alert.
 

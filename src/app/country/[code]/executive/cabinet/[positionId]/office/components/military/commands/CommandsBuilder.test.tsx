@@ -278,6 +278,66 @@ describe("CommandsBuilder", () => {
   });
 });
 
+describe("posture trade-offs", () => {
+  it("shows the selected posture's trade-offs in the create dialog and updates on change", () => {
+    render(<CommandsBuilder commands={[]} {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: /create command/i }));
+    const dialog = screen.getByRole("dialog");
+    // the default posture is Deterrence
+    expect(within(dialog).getByText("+ crisis response")).toBeTruthy();
+    expect(within(dialog).getByText("+ forward presence")).toBeTruthy();
+    fireEvent.change(within(dialog).getByRole("combobox", { name: "Posture" }), {
+      target: { value: "Training / Reserve" },
+    });
+    expect(within(dialog).getByText("+ readiness recovery")).toBeTruthy();
+    expect(within(dialog).getByText("− not deployable")).toBeTruthy();
+    expect(within(dialog).queryByText("+ crisis response")).toBeNull();
+  });
+
+  it("shows the command's posture trade-offs in the detail panel", () => {
+    render(<CommandsBuilder commands={[command({ posture: "Expeditionary" })]} {...base} />);
+    expect(screen.getByText("+ deployment speed")).toBeTruthy();
+    expect(screen.getByText("− higher supply cost")).toBeTruthy();
+  });
+
+  it("shows the trade-offs to a read-only viewer too", () => {
+    render(
+      <CommandsBuilder
+        commands={[command({ posture: "Rapid Response" })]}
+        units={base.units}
+        commanders={[]}
+        conflictAssignments={[]}
+        regionThreats={{}}
+        countryCode="br"
+        positionId=""
+      />
+    );
+    expect(screen.queryByRole("combobox", { name: "Command posture" })).toBeNull();
+    expect(screen.getByText("+ reaction speed")).toBeTruthy();
+    expect(screen.getByText("− sustainment depth")).toBeTruthy();
+  });
+});
+
+describe("command type bonuses", () => {
+  it("shows the selected type's bonuses in the create dialog and updates on change", () => {
+    render(<CommandsBuilder commands={[]} {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: /create command/i }));
+    const dialog = screen.getByRole("dialog");
+    // the default type is Regional
+    expect(within(dialog).getByText("+ balanced command")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Logistics" }));
+    expect(within(dialog).getByText("+ supply throughput")).toBeTruthy();
+    expect(within(dialog).getByText("+ overseas sustainment")).toBeTruthy();
+    expect(within(dialog).queryByText("+ balanced command")).toBeNull();
+  });
+
+  it("shows the command's type bonuses in the detail panel", () => {
+    render(<CommandsBuilder commands={[command({ type: "HOMELAND_DEFENSE" })]} {...base} />);
+    expect(screen.getByText("+ air-defense integration")).toBeTruthy();
+    expect(screen.getByText("+ faster reserve mobilization")).toBeTruthy();
+  });
+});
+
 describe("finding the Commanding General's page", () => {
   it("links the callout's 'Commanding General' to that page", () => {
     // The callout already explains that the CG does the posting; making the phrase

@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/mongodb";
+import type { ObjectId } from "mongodb";
 import type { Election, ElectionVoteTally, GameState } from "@/lib/db/types";
 import { generateElectionNews } from "@/lib/news";
 import { HOUSE_SEATS, UK_COMMONS_SEATS } from "@/lib/constants";
@@ -26,11 +27,21 @@ export function generalElectionResolutionOrder(election: Election): number {
  * Resolve all completed general elections by delegating each to resolveOneGeneralElection.
  * Batches news and Discord notifications after all elections are processed.
  */
-export async function resolveGeneralElections(now: Date): Promise<number> {
+export async function resolveGeneralElections(
+  now: Date,
+  /** Optional harness restriction to specific elections; absent = all. */
+  onlyElectionIds?: ObjectId[]
+): Promise<number> {
   const db = await getDb();
 
   const completedElections = (
-    await db.collection<Election>("elections").find({ status: "completed" }).toArray()
+    await db
+      .collection<Election>("elections")
+      .find({
+        ...(onlyElectionIds ? { _id: { $in: onlyElectionIds } } : {}),
+        status: "completed",
+      })
+      .toArray()
   ).sort((a, b) => {
     const order = generalElectionResolutionOrder(a) - generalElectionResolutionOrder(b);
     if (order !== 0) return order;

@@ -29,11 +29,17 @@ const MIN_ORG = 5;
 export async function accumulateNGPresidentVoteTurn(
   db: Db,
   electionId: ObjectId,
-  now: Date
+  now: Date,
+  /** Game turn being processed; guards a stalled turn's re-run (see below). */
+  turnNumber?: number
 ): Promise<void> {
   const tallies = db.collection<ElectionVoteTally>("electionVoteTallies");
   const tally = await tallies.findOne({ electionId });
   if (!tally || tally.finalized) return;
+  // Per-turn idempotency: this engine keeps no per-turn snapshot, so the tally
+  // remembers the last turn it accrued. A re-run of a stalled turn (lock
+  // cleared, same turn number) must not add a second 10% slice.
+  if (typeof turnNumber === "number" && tally.lastAccruedTurn === turnNumber) return;
 
   const candidateParties = tally.candidateParties ?? {};
   const candidateIds = Object.keys(candidateParties);
@@ -89,6 +95,13 @@ export async function accumulateNGPresidentVoteTurn(
 
   await tallies.updateOne(
     { electionId, finalized: { $ne: true } },
-    { $set: { totalVotesByUnit: newByUnit, totalVotes: newTotals, updatedAt: now } }
+    {
+      $set: {
+        totalVotesByUnit: newByUnit,
+        totalVotes: newTotals,
+        ...(typeof turnNumber === "number" ? { lastAccruedTurn: turnNumber } : {}),
+        updatedAt: now,
+      },
+    }
   );
 }
