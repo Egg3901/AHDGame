@@ -41,17 +41,24 @@ export function buildOrderRevertPolicyFields(
   currentTurn: number
 ): RevertPolicyFields {
   const indexedOption = legislationType?.policyOptions?.[order.policyOptionIndexBefore];
-  const snapshottedOption = order.policyOptionIdBefore
-    ? legislationType?.policyOptions?.find((option) => option.id === order.policyOptionIdBefore)
+  const snapshottedOptionIndex = order.policyOptionIdBefore
+    ? legislationType?.policyOptions?.findIndex(
+        (option) => option.id === order.policyOptionIdBefore
+      )
+    : -1;
+  const snapshotMatchesIndex = snapshottedOptionIndex === order.policyOptionIndexBefore;
+  const snapshottedOption = snapshotMatchesIndex
+    ? legislationType?.policyOptions?.[snapshottedOptionIndex]
     : undefined;
   const priorOption = snapshottedOption ?? indexedOption;
-  const hasExactSnapshot = order.policyOptionIdBefore != null;
+  // A short-lived legacy expiry bug could leave an order with an option id
+  // copied from an already-corrupt row while its numeric before-index remained
+  // correct. Never rebuild a hybrid row from contradictory snapshots.
+  const hasExactSnapshot = order.policyOptionIdBefore != null && snapshotMatchesIndex;
 
   return {
     policyOptionIndex: order.policyOptionIndexBefore,
-    ...(order.policyOptionIdBefore || priorOption?.id
-      ? { policyOptionId: order.policyOptionIdBefore ?? priorOption!.id }
-      : {}),
+    ...(priorOption?.id ? { policyOptionId: priorOption.id } : {}),
     ...(hasExactSnapshot
       ? {
           ...(order.economicBefore != null
