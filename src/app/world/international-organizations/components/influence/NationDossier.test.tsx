@@ -200,7 +200,7 @@ describe("NationDossier costs and the display-currency preference", () => {
       screen.getByText((_, el) => el?.textContent?.trim() === "$90.0M available")
     ).toBeTruthy();
 
-    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "152000000" } });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "152000000" } });
     // TARGET prices a point at 76m, so 152m is exactly two points.
     // Scoped to the preview line: "2.00" also appears on the share bar above.
     expect(
@@ -240,11 +240,49 @@ describe("NationDossier costs and the display-currency preference", () => {
     // that costs 76m a point. It buys 0.00 points, so the commit is refused
     // client-side and the player is told the floor (a point is 76m, a hundredth
     // of it is 760,000).
-    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "10" } });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "10" } });
     expect(screen.getByText(/too little to move Yugoslavia/i)).toBeTruthy();
     expect(screen.getByText(/spend at least/i).textContent).toContain("0.01");
     const commit = screen.getByRole("button", { name: /commit play/i }) as HTMLButtonElement;
     expect(commit.disabled).toBe(true);
+  });
+
+  it("takes the M shorthand the panel itself prints (ticket #1236)", () => {
+    // The reporter read "spend at least $4.0M" and "costs $399.0M a point",
+    // typed 1, then 49, in plain units, and bought nothing. The field now
+    // accepts the abbreviated token the preview prints, so 49m is 49 million.
+    render(
+      <NationDossier
+        view={{ ...VIEW, fundBalanceLocal: 26_000_000_000 } as OrgInfluenceView}
+        target={
+          {
+            ...TARGET,
+            pointCostLocal: 399_000_000,
+            turnCapCostLocal: 1_995_000_000,
+          } as InfluenceTarget
+        }
+        orgId="NATO"
+        viewerCountryId="US"
+        onCommitted={() => {}}
+      />
+    );
+    expect(screen.getByText(/shorthand works here/i)).toBeTruthy();
+
+    // One plain unit against a 399M point: still refused, as ticket #1213 set.
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "1" } });
+    expect(screen.getByText(/too little to move Yugoslavia/i)).toBeTruthy();
+    const commit = screen.getByRole("button", { name: /commit play/i }) as HTMLButtonElement;
+    expect(commit.disabled).toBe(true);
+
+    // The reporter's intended spend, typed the way they said it: "49m".
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "49m" } });
+    expect(commit.disabled).toBe(false);
+    expect(
+      screen.getByText((_, el) => {
+        const t = el?.textContent ?? "";
+        return t.startsWith("Buys") && t.includes("0.12") && t.includes("each");
+      })
+    ).toBeTruthy();
   });
 
   it("warns when the amount is past the per-turn ceiling", () => {
@@ -258,7 +296,7 @@ describe("NationDossier costs and the display-currency preference", () => {
       />
     );
     // 76m a point, so the 5-point ceiling is 380m; 500m is past it.
-    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "500000000" } });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "500000000" } });
     expect(screen.getByText(/past the 5-point ceiling/i)).toBeTruthy();
   });
 });
