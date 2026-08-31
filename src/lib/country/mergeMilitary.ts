@@ -68,7 +68,7 @@ async function mergeOneDocPerCountry<T extends Document>(
       const withStamp = {
         ...update,
         $set: { ...(update.$set ?? {}), updatedAt: now },
-      } as UpdateFilter<T>;
+      } as unknown as UpdateFilter<T>;
       await coll.updateOne({ countryId: toCountryId } as never, withStamp);
       await coll.deleteOne({ countryId: fromCountryId } as never);
       return fromDoc as T;
