@@ -546,7 +546,15 @@ export async function appointPrimeMinister(
     // ── Leader confidence: install or renew on PM appointment ─────────────
     // Driven by config flag so any future country with an internal-party
     // confidence model opts in without a new country literal here.
-    if (getCountryConfig(countryId, activePreset).hasLeaderConfidenceModel) {
+    // RUNTIME flag, not the static config. `installOnePartyState` switches
+    // `hasLeaderConfidenceModel` on in `countryState` when it converts a
+    // country, and the compiled config carries it only for CN/RU/DD — so a
+    // converted country (reunified Germany) had the model turned on and then
+    // never consulted, leaving its leader with no confidence record at all.
+    // `getCountryState` self-heals from the same config when no row exists, so
+    // this strictly supersedes the old read rather than narrowing it.
+    const leaderConfidenceRuntime = await getCountryState(db, countryId);
+    if (leaderConfidenceRuntime.hasLeaderConfidenceModel) {
       const gs = await db
         .collection<{ _id: string; currentTurn: number }>("gameState")
         .findOne({ _id: "current" });

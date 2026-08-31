@@ -49,6 +49,8 @@ import { getSettlementCrisesCollection } from "@/lib/db/collections";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
 import { mergeCountry } from "@/lib/country/mergeCountry";
 import { getCountryState } from "@/lib/countryState";
+import { getExecutiveOfficeKey } from "@/lib/constants/countries";
+import { carryLeaderStateOnMerge } from "@/lib/turn/rulingPartyConfidence";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import type { GameState } from "@/lib/db/types/gameState";
 import type { CountryGameState } from "@/lib/db/types/gameState";
@@ -480,6 +482,30 @@ async function retireNationalRemnants(
         },
       }
     );
+  }
+
+  // THE MANDATE COMES WITH THE LEADER.
+  //
+  // `countryLeaderStates` is keyed `${countryId}_${characterId}`, so the record
+  // does not follow the head of government the way the formation row above
+  // does: the carried leader would arrive in the unified state with no mandate
+  // on record, and the next `installNewLeader` would seat them at a fresh 75 as
+  // though they had just taken power — erasing the tenure they won the war with.
+  //
+  // Only a PLAYER leader has one. An NPP head of government is carried by
+  // `pmNppId` and holds no character-keyed record, which is why this reads
+  // `pmCharacterId` alone rather than the same condition as the block above.
+  if (absorbedGov?.pmCharacterId) {
+    await carryLeaderStateOnMerge(db, {
+      fromCountryId: absorbed,
+      toCountryId: survivor,
+      leaderCharacterId: absorbedGov.pmCharacterId,
+      // The SURVIVOR's executive key. The office the leader now holds is
+      // Germany's chancellorship, not the GDR post the record was written under.
+      leaderOfficeType: getExecutiveOfficeKey(survivor),
+      governingPartyId: rulingPartyId != null ? String(rulingPartyId) : null,
+      currentTurn: params.currentTurn,
+    });
   }
 
   // The absorbed state's own formation row goes with the state. Left in place

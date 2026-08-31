@@ -120,7 +120,7 @@ describe("banned-party guards under a runtime conversion", () => {
         votes: {},
       } as unknown as Parameters<typeof performNationalBillAction>[1]["bill"],
       countryId: "DE",
-      input: { action: "vote", vote: "aye" },
+      input: { action: "vote", vote: "for" },
     });
 
     expect(result.status).toBe(403);
