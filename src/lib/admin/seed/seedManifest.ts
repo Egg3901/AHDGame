@@ -171,12 +171,6 @@ const REFERENCE: CollectionEntry[] = [
   { name: "unionLeaderVotes", category: "runtime" },
   { name: "unionOrganizers", category: "runtime" },
   {
-    name: "sentNewsDedup",
-    category: "runtime",
-    notes:
-      "De-duplication cache for the news-webhook dispatcher: one row per already-sent item so a double turn-execution does not re-post. Pure runtime state, no seeder.",
-  },
-  {
     name: "bargainingCampaigns",
     category: "runtime",
     notes: "Release 1.1 union-employer negotiation history; tied to unions and corporations.",
