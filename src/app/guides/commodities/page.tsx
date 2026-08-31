@@ -467,37 +467,31 @@ effective D/S = raw D/S up to 3x, softened beyond 3x
             </div>
           </section>
 
-          {/* ── 6. Retail Hub ── */}
+          {/* ── 6. Retail ── */}
           <section className="space-y-4">
-            <SectionHeader id="retail-hub">6. Retail: The Demand Hub</SectionHeader>
+            <SectionHeader id="retail-hub">6. Retail and Household Demand</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
-              Retail is unique. It consumes small amounts of{" "}
-              <strong className="text-foreground">every commodity in the market</strong> - it is the
-              primary channel through which end-consumer purchasing pressure flows into the
-              commodity system. Retail also supplies the Consumer Goods commodity, which it then
-              demands back from itself, creating a loop that ties retail sector performance to
-              overall GDP.
+              Retail supplies the Consumer Goods commodity. Its customers come from the household
+              consumption ledger, independently of how much Retail capacity exists. Population,
+              income, employment, consumer confidence, and prices determine what households buy.
+              Opening more stores therefore competes for existing demand instead of creating new
+              customers.
             </p>
-            <FormulaBlock>{`Retail demand multiplier = 1 + (blended GDP growth / 100) × 15
-
-Blended GDP = 50% national + 50% regional (state-level)
-Clamped to: 0.5× minimum, 2.0× maximum
-
-Examples:
-  GDP growth 2%:   multiplier 1.30 → +30% more retail demand across all commodities
-  GDP growth 0%:   multiplier 1.00 → neutral
-  GDP growth −1%:  multiplier 0.85 → −15% demand, easing shortage pressure globally`}</FormulaBlock>
+            <FormulaBlock>{`Household demand = population × per-capita budget
+  × employment factor
+  × consumer-confidence factor
+  × relative-income factor
+  × commodity basket share
+  × bounded price elasticity`}</FormulaBlock>
             <p className="text-sm text-muted leading-relaxed">
-              This means a booming economy creates commodity shortages even if no new industrial
-              sectors were added - retail simply demands more of everything. Conversely, an economic
-              contraction relieves commodity pressure across the board.
+              Consumer purchases also create final demand for food, energy, vehicles, electronics,
+              healthcare, entertainment, and other household goods and services. Those purchases are
+              counted once by households, not duplicated as a Retail-sector input proxy.
             </p>
-            <Callout variant="warn">
-              <strong className="text-foreground">Consumer Goods is a feedback loop.</strong> A
-              retail sector supplies Consumer Goods, then retail consumer demand is pegged to a GDP
-              multiplier × that supply. Strong GDP growth amplifies Consumer Goods demand beyond
-              what retail supply can match, driving prices up and benefiting retail sellers. Weak
-              GDP deflates it, compressing retail output margins.
+            <Callout variant="info">
+              <strong className="text-foreground">Retail can saturate.</strong> Excess stores lower
+              seller fill and revenue. Shortages raise prices and create room for competitors to
+              build. Retail follows the same supply-and-demand discipline as every other sector.
             </Callout>
           </section>
 

@@ -8,11 +8,11 @@ Dashboard shows actions. They roll to 200, but above 100 you pay -4/turn. Click 
 
 ## 2. Join a party before you declare
 
-**Parties** → join. Independents eat a primary and general penalty. Match your sliders to the platform.
+**Parties** → join. Independents run in their own primary with no party organisation, registration or whip behind them, and an independent presidential run carries a heavy vote penalty. Match your sliders to the platform.
 
 ## 3. Poll, then declare
 
-Race page → Quick Poll (2 AP, ₳25k). If the primary math looks hopeless, pick another seat. **Elections** is where you look.
+Race page → Quick Poll (2 AP, ₳25k). If your standing looks hopeless, pick another seat. Primaries count ballots over their closing window, so a lead you hold beats one you grab at the end. **Elections** is where you look.
 
 \`\`\`guide-screenshot
 elections
@@ -48,7 +48,7 @@ Low home-state party org scales your general votes down. Ask the chair to Build 
 
 ## 11. Infamy sticks
 
-Attack and whip-defy add Infamy. It decays slowly and hurts NPP endorsements. Click Attack only when the damage is worth it.
+Attack actions and large personal donations add Infamy. It decays 5% a turn and hurts NPP endorsements and your own vote weight. Click Attack only when the damage is worth it. Defying a whip costs no Infamy; it costs leadership trust.
 
 ## 12. Watch declaration timers
 

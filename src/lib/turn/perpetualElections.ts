@@ -3,6 +3,7 @@ import { ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getCountryAccessFromDb, withCountryAccessSnapshot } from "@/lib/countryAccess";
 import type { Election, ElectionStatus, GameState, Seat, State } from "@/lib/db/types";
+import { CURRENT_PRESIDENTIAL_RULESET_VERSION } from "@/lib/elections/presidentialRuleset";
 import { US_STATE_FILTER } from "@/lib/utils/electionLabels";
 import { MS_PER_TURN, STARTING_YEAR } from "@/lib/constants/turnTime";
 import {
@@ -62,6 +63,7 @@ import {
   getUKRegionalCouncilCycle1EndTurn,
   getUKRegionalCouncilElectionYear,
 } from "@/lib/elections/ukRegionalCouncilStagger";
+import { snapAnchorEndTime } from "@/lib/elections/snapShift";
 
 // Re-export so existing consumers (sync-date, snapElection, admin routes,
 // etc.) that import DEFAULT_DURATIONS from this module keep working.
@@ -261,13 +263,18 @@ async function sendBatchedElectionAnnouncements(
 export async function advanceElectionTimers(
   now: Date,
   currentTurn: number,
-  resolvePrimaries: (now: Date) => Promise<void>
+  resolvePrimaries: (now: Date) => Promise<void>,
+  /** Optional harness restriction to specific elections; absent = all. */
+  onlyElectionIds?: ObjectId[]
 ): Promise<void> {
   const db = await getDb();
 
   const elections = await db
     .collection<Election>("elections")
-    .find({ status: { $in: ["active", "upcoming"] } })
+    .find({
+      ...(onlyElectionIds ? { _id: { $in: onlyElectionIds } } : {}),
+      status: { $in: ["active", "upcoming"] },
+    })
     .toArray();
 
   // `now` is the game-time of the turn being processed, so it doubles as
@@ -474,12 +481,64 @@ function buildCanonicalSpawn(params: {
     endTurn: spawn.endTurn,
     durationHours: dur.durationHours,
     primaryDurationHours: dur.durationHours - dur.generalDurationHours,
+    // Rules freeze: the race keeps the ruleset it opened under for its whole
+    // cycle, so mid-race deploys cannot change how it counts.
+    ...(electionType === "president"
+      ? { rulesetVersion: CURRENT_PRESIDENTIAL_RULESET_VERSION }
+      : {}),
     createdAt: now,
     updatedAt: now,
   };
   if (senateClass) (doc as Election).senateClass = senateClass;
   if (chamberClass) (doc as Election).chamberClass = chamberClass;
   return doc;
+}
+
+/**
+ * Heal `totalSeats` on live US House races after a decennial reapportionment
+ * (ticket #1190).
+ *
+ * `runCensus` rewrites `state.houseDistricts` and regenerates the affected
+ * `congressionalDistricts` maps, but nothing carried the new apportionment onto
+ * the Election docs. `buildCanonicalSpawn` inherits `prev?.totalSeats`, so a
+ * stale count propagates forward indefinitely, and a race already in flight when
+ * the census fires is never corrected at all. The two then disagree about the
+ * size of the same delegation: `districtedHouseResolution` allocates over the
+ * NEW district map while every display surface reads the OLD `totalSeats`. On
+ * the live 1953 world the 1960 census moved 21 states — Alabama 9 → 8 — and its
+ * in-flight race rendered "You are projected 7 of 9 seats" with an unfillable
+ * ninth block, while the delegation resolved to 8 members and the House to 434.
+ *
+ * Same pattern, and the same reason, as the Commons heal in
+ * {@link ensureUKElections}: without it projections keep reading the wrong
+ * `totalSeats` until the next cycle even though allocation is already
+ * apportionment-aware.
+ *
+ * `houseSeats` must be the LIVE apportionment (`loadApportionment`), not the
+ * frozen preset map — the census is exactly what moves them apart.
+ */
+export function buildHouseSeatHealOps(
+  liveElections: Pick<Election, "_id" | "electionType" | "countryId" | "state" | "totalSeats">[],
+  houseSeats: Record<string, number>,
+  now: Date
+): AnyBulkWriteOperation<Election>[] {
+  return liveElections.flatMap((e) => {
+    // NG zone races share electionType "house" with their own seat counts, so
+    // the country gate is load-bearing, not defensive.
+    if (e.electionType !== "house" || e.countryId !== "US" || !e.state) return [];
+    const expected = houseSeats[e.state];
+    // A state absent from the apportionment map (an unadmitted territory) or
+    // reading non-positive must be left alone rather than zeroed.
+    if (typeof expected !== "number" || expected <= 0 || e.totalSeats === expected) return [];
+    return [
+      {
+        updateOne: {
+          filter: { _id: e._id },
+          update: { $set: { totalSeats: expected, updatedAt: now } },
+        },
+      },
+    ];
+  });
 }
 
 /**
@@ -635,7 +694,24 @@ export async function ensurePerpetualElections(now: Date, currentTurn?: number):
 
   // Live (census-updated) House apportionment for fallback delegation sizes
   // (P1d-2); equals the preset seed until a decennial census reapportions.
-  const { houseSeats: liveHouseSeats } = await loadApportionment(db, ctx.preset);
+  //
+  // `currentYear` is load-bearing: without it the admitted-state set is built as
+  // of the PRESET year, and a state admitted mid-game is absent from that set by
+  // definition — so it drops out of `houseSeats` entirely. It would then fall to
+  // the 1-seat backstop below and, worse, be invisible to the census heal, which
+  // skips states the map does not carry. `stateIds` above already gates
+  // admission on `currentYear`, so passing it keeps the two in agreement.
+  const { houseSeats: liveHouseSeats } = await loadApportionment(db, ctx.preset, currentYear);
+
+  // A census between cycles leaves live races sized to the OLD apportionment
+  // (#1190). Correct them before anything reads `totalSeats` this turn.
+  const houseSeatHealOps = buildHouseSeatHealOps(liveElections, liveHouseSeats, now);
+  if (houseSeatHealOps.length > 0) {
+    await db.collection<Election>("elections").bulkWrite(houseSeatHealOps);
+    console.log(
+      `[Turn] ensurePerpetualElections: healed totalSeats on ${houseSeatHealOps.length} live US House race(s)`
+    );
+  }
 
   for (const stateId of stateIds) {
     // ── House (always perpetual) ─────────────────────────────────────────────
@@ -651,7 +727,15 @@ export async function ensurePerpetualElections(now: Date, currentTurn?: number):
         fallbackTotalSeats: liveHouseSeats[stateId] ?? 1,
         ctx,
       });
-      if (doc) toInsert.push(doc);
+      if (doc) {
+        // `buildCanonicalSpawn` inherits `prev?.totalSeats`, so the fallback
+        // alone cannot resize a delegation after a census — the prior cycle
+        // always wins. A state's House size is whatever the live apportionment
+        // says today, so force it (same reason as the NG force-heal below).
+        const apportioned = liveHouseSeats[stateId];
+        if (apportioned && apportioned > 0) doc.totalSeats = apportioned;
+        toInsert.push(doc);
+      }
     }
 
     // ── Senate (only the 2 classes that belong to this state) ────────────────
@@ -971,13 +1055,11 @@ export async function ensureUKElections(now: Date): Promise<void> {
     if (justResolvedInSameTurn(prev, now, currentTurn)) continue;
 
     // Snap shift: only the immediate post-snap regular inherits the snap's
-    // endTurn as its anchor. If prev is a regular (even an admin-accelerated
-    // one), we deliberately DO NOT pass priorEndTurn — admin edits must not
-    // drag the LARP calendar.
-    const priorEndTurn =
-      prev?.electionType === "snap_commons" && prev.endTime
-        ? endTimeToLarpTurn(prev.endTime, now, currentTurn)
-        : null;
+    // endTurn as its anchor, and only when the country called the snap itself.
+    // See `snapAnchorEndTime` for why a regular and an IMPOSED snap both yield
+    // null here.
+    const snapAnchor = snapAnchorEndTime(prev, "snap_commons");
+    const priorEndTurn = snapAnchor ? endTimeToLarpTurn(snapAnchor, now, currentTurn) : null;
 
     const spawn = pickNextCanonicalCycle({
       electionType: "commons",
@@ -1248,13 +1330,10 @@ export async function ensureJPElections(now: Date): Promise<void> {
     const prev = lastCompleted(regionId);
     if (justResolvedInSameTurn(prev, now, currentTurn)) continue;
 
-    // Snap shift: only when prev is a snap does the snap's endTurn anchor the
-    // next regular's LARP schedule. Admin-accelerated regulars must NOT drag
-    // the LARP calendar.
-    const priorEndTurn =
-      prev?.electionType === "snap_shugiin" && prev.endTime
-        ? endTimeToLarpTurn(prev.endTime, now, currentTurn)
-        : null;
+    // Snap shift: only when prev is a snap the country called itself does its
+    // endTurn anchor the next regular's LARP schedule. See `snapAnchorEndTime`.
+    const snapAnchor = snapAnchorEndTime(prev, "snap_shugiin");
+    const priorEndTurn = snapAnchor ? endTimeToLarpTurn(snapAnchor, now, currentTurn) : null;
 
     const spawn = pickNextCanonicalCycle({
       electionType: "shugiin",
@@ -1716,10 +1795,8 @@ export async function ensureDEElections(now: Date): Promise<void> {
     // Snap shift: only the immediate post-snap regular inherits the snap's
     // endTurn as its anchor. Regular-to-regular transitions use pure canonical
     // LARP to keep admin edits from dragging the calendar.
-    const priorEndTurn =
-      prev?.electionType === "snap_bundestag" && prev.endTime
-        ? endTimeToLarpTurn(prev.endTime, now, currentTurn)
-        : null;
+    const snapAnchor = snapAnchorEndTime(prev, "snap_bundestag");
+    const priorEndTurn = snapAnchor ? endTimeToLarpTurn(snapAnchor, now, currentTurn) : null;
 
     const spawn = pickNextCanonicalCycle({
       electionType: "bundestag",
@@ -2843,12 +2920,12 @@ async function ensureBetaParliamentElections(
     const prev = lastCompleted(regionId);
     if (justResolvedInSameTurn(prev, now, currentTurn)) continue;
 
-    // Snap shift: only a resolved snap drags the anchor (priorEndTurn +
-    // period); admin-accelerated regulars must NOT move the LARP calendar.
-    const priorEndTurn =
-      prev?.electionType === snapType && prev.endTime
-        ? endTimeToLarpTurn(prev.endTime, now, currentTurn)
-        : null;
+    // Snap shift: only a resolved snap the country called itself drags the
+    // anchor (priorEndTurn + period). Admin-accelerated regulars must NOT move
+    // the LARP calendar, and neither must an IMPOSED snap. See
+    // `snapAnchorEndTime`.
+    const snapAnchor = snapAnchorEndTime(prev, snapType);
+    const priorEndTurn = snapAnchor ? endTimeToLarpTurn(snapAnchor, now, currentTurn) : null;
 
     const spawn = pickNextCanonicalCycle({
       electionType,

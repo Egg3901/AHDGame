@@ -1,12 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { conflictTier, belligerentSideOf, type ViewerFacts } from "./conflictVisibility";
 import type { ConflictSide } from "@/lib/db/types/conflict";
+import { CONFLICT_ARCHIVE_DELAY_TURNS } from "./conflictLifecycle";
 
 const west: ConflictSide = { label: "NATO", countries: ["US"], kind: "coalition", backer: "west" };
 const east: ConflictSide = { label: "PLA", countries: ["CN"], kind: "state", backer: "east" };
 
 const facts = (over: Partial<ViewerFacts> = {}): ViewerFacts => ({
   status: "active",
+  currentTurn: 100,
   side: null,
   isPostedGeneral: false,
   isDefenseHolder: false,
@@ -15,14 +17,61 @@ const facts = (over: Partial<ViewerFacts> = {}): ViewerFacts => ({
   ...over,
 });
 
+/** A war resolved long enough ago that its fog has lifted. */
+const opened = (over: Partial<ViewerFacts> = {}): ViewerFacts =>
+  facts({
+    status: "resolved",
+    endTurn: 100,
+    currentTurn: 100 + CONFLICT_ARCHIVE_DELAY_TURNS,
+    ...over,
+  });
+
+/** A war resolved this turn: still under fog for the whole delay. */
+const fogged = (over: Partial<ViewerFacts> = {}): ViewerFacts =>
+  facts({ status: "resolved", endTurn: 100, currentTurn: 100, ...over });
+
 describe("conflictTier", () => {
-  it("gives everyone the archive once the war is resolved", () => {
-    expect(conflictTier(facts({ status: "resolved" }))).toBe("archive");
+  it("gives everyone the archive once the fog window after resolution lapses", () => {
+    expect(conflictTier(opened())).toBe("archive");
   });
 
   // Even a passer-by with no stake — the fog lifts for history.
   it("archives for a non-belligerent too", () => {
-    expect(conflictTier(facts({ status: "resolved", side: null }))).toBe("archive");
+    expect(conflictTier(opened({ side: null }))).toBe("archive");
+  });
+
+  it("opens the archive on the exact turn the window lapses, not one before", () => {
+    const opens = 100 + CONFLICT_ARCHIVE_DELAY_TURNS;
+    expect(conflictTier(fogged({ currentTurn: opens - 1 }))).toBe("public");
+    expect(conflictTier(fogged({ currentTurn: opens }))).toBe("archive");
+  });
+
+  // A war that just ended is exactly as fogged as a war still running: whatever the
+  // losing side could not read yesterday, it cannot read today. Rivals have to wait
+  // the full window before the rosters become history.
+  it("keeps a freshly resolved war under live-war rules for a bystander", () => {
+    expect(conflictTier(fogged())).toBe("public");
+  });
+
+  it("keeps a freshly resolved war under live-war rules for a belligerent citizen", () => {
+    expect(conflictTier(fogged({ side: "A" }))).toBe("public");
+  });
+
+  it("keeps command sight of a freshly resolved war for a belligerent seat", () => {
+    expect(conflictTier(fogged({ side: "A", isDefenseHolder: true }))).toBe("command");
+    expect(conflictTier(fogged({ side: "B", isHeadOfGovernment: true }))).toBe("command");
+  });
+
+  // Only a document resolved before `endTurn` was stamped lacks it; those have been
+  // an open record since the day they ended and must not go dark retroactively.
+  it("archives a legacy resolved war with no endTurn at once", () => {
+    expect(conflictTier(facts({ status: "resolved", currentTurn: 0 }))).toBe("archive");
+  });
+
+  it("never archives a war awaiting terms, however old", () => {
+    expect(conflictTier(facts({ status: "terms_pending", endTurn: 0, currentTurn: 10_000 }))).toBe(
+      "public"
+    );
   });
 
   it("commands for a general posted to this conflict", () => {

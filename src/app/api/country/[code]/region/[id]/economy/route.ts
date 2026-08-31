@@ -21,7 +21,9 @@ import type {
 import { getEffectiveTariffRate, getSplitCaptureMultiplier } from "@/lib/tariffs/tariffEffects";
 import { loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
 import {
+  corpLiquidCapitalToAnchor,
   fxRateForSectorHostFromMap,
+  getCorpFxRate,
   loadFxRatesByCurrency,
   resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
@@ -51,6 +53,9 @@ import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
 import { shouldRedactCorporation } from "@/lib/corporations/redaction";
 import { effectiveMarketAnchor } from "@/lib/corporations/marketShare";
 import { aggregateCountrySectorMix } from "@/lib/economy/sectorMix";
+import { loadNationalGdpGrowth } from "@/lib/country/nationalGdpGrowth";
+import type { GameState } from "@/lib/db/types/gameState";
+import { calculatePlantSectorSplit } from "@/lib/corporations/plantSectorSplit";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string }>;
@@ -79,6 +84,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     let userCorporationId: string | null = null;
     let userCorporationSectorType: CorporationType | null = null;
     let userMarketingStrength = 0;
+    let userLiquidCapitalAnchor = 0;
     let userSplitEscalation = 0;
     let userCorpCountryId: string | null = null;
     const user = await getAuthUser();
@@ -99,6 +105,8 @@ export async function GET(request: Request, { params }: RouteParams) {
           _id: 1,
           type: 1,
           marketingStrength: 1,
+          liquidCapital: 1,
+          liquidCurrencyCode: 1,
           splitEscalation: 1,
           countryId: 1,
         },
@@ -137,64 +145,66 @@ export async function GET(request: Request, { params }: RouteParams) {
         userCorporationId = corp._id.toString();
         userCorporationSectorType = corp.type;
         userMarketingStrength = corp.marketingStrength ?? 0;
+        userLiquidCapitalAnchor = corpLiquidCapitalToAnchor(
+          corp.liquidCapital ?? 0,
+          corp,
+          await getCorpFxRate(db, corp)
+        );
         userSplitEscalation = corp.splitEscalation ?? 0;
         userCorpCountryId = corp.countryId ?? null;
       }
     }
 
-    const [state, stateMetricsDoc, stateTariffs, stateCapDoc, activeFtaPairs, countryStates] =
-      await Promise.all([
-        db.collection<State>("states").findOne({ _id: stateId, countryId }),
-        // SP5: workforce skill spans both pipelines — shared loader.
-        loadWorkforceSkillByState(db, [stateId]).then((m) => {
-          const value = m.get(stateId);
-          return value == null
-            ? null
-            : ({ education: { workforceSkill: { value } } } as StateMetrics);
-        }),
-        db.collection<Tariff>("tariffs").find({ countryId }).toArray(),
-        db
-          .collection("stateResourceCapacity")
-          .findOne({ stateId }, { projection: { stateId: 1, resources: 1 } }),
-        loadActiveFtaPairs(db),
-        db
-          .collection<State>("states")
-          .find({ countryId })
-          .project<{ _id: string; population: number }>({ population: 1 })
-          .toArray(),
-      ]);
+    // The country-wide states read that used to live here existed only to
+    // population-weight a national GDP-growth average. That average was the wrong
+    // aggregate (see below), so the read went with it.
+    const [state, stateMetricsDoc, stateTariffs, stateCapDoc, activeFtaPairs] = await Promise.all([
+      db.collection<State>("states").findOne({ _id: stateId, countryId }),
+      // SP5: workforce skill spans both pipelines — shared loader.
+      loadWorkforceSkillByState(db, [stateId]).then((m) => {
+        const value = m.get(stateId);
+        return value == null
+          ? null
+          : ({ education: { workforceSkill: { value } } } as StateMetrics);
+      }),
+      db.collection<Tariff>("tariffs").find({ countryId }).toArray(),
+      db
+        .collection("stateResourceCapacity")
+        .findOne({ stateId }, { projection: { stateId: 1, resources: 1 } }),
+      loadActiveFtaPairs(db),
+    ]);
     if (!state) {
       return NextResponse.json({ error: "State not found" }, { status: 404 });
     }
     const workforceSkill = stateMetricsDoc?.education?.workforceSkill?.value ?? null;
 
-    // Macro header context: this state's GDP-growth metric plus the
-    // population-weighted national average (same weighting the national
-    // metrics route uses). Null-safe — missing metrics degrade the header,
-    // they never fail the route.
-    const countryGrowthMetrics = await db
+    // Macro header context. Null-safe throughout: missing metrics degrade the
+    // header, they never fail the route.
+    //
+    // This region's own rate comes from its own metrics document.
+    const regionGrowthDoc = await db
       .collection<StateMetrics>("macroMetrics")
-      .find({ _id: { $in: countryStates.map((s) => s._id) } })
-      .project<{ _id: string; economic?: { gdpGrowth?: { value?: number } } }>({
-        "economic.gdpGrowth.value": 1,
-      })
-      .toArray();
-    const populationByStateId = new Map(countryStates.map((s) => [s._id, s.population ?? 0]));
-    let weightedGrowthSum = 0;
-    let weightedPopulationSum = 0;
-    let stateGdpGrowth: number | null = null;
-    for (const m of countryGrowthMetrics) {
-      const value = m.economic?.gdpGrowth?.value;
-      if (typeof value !== "number") continue;
-      if (m._id === stateId) stateGdpGrowth = value;
-      const population = populationByStateId.get(m._id) ?? 0;
-      weightedGrowthSum += value * population;
-      weightedPopulationSum += population;
-    }
-    const nationalGdpGrowth =
-      weightedPopulationSum > 0
-        ? Math.round((weightedGrowthSum / weightedPopulationSum) * 100) / 100
+      .findOne({ _id: stateId }, { projection: { "economic.gdpGrowth.value": 1 } });
+    const regionGrowthValue = regionGrowthDoc?.economic?.gdpGrowth?.value;
+    const stateGdpGrowth =
+      typeof regionGrowthValue === "number" && Number.isFinite(regionGrowthValue)
+        ? regionGrowthValue
         : null;
+
+    // The NATIONAL figure is the canonical one, NOT a population-weighted mean of
+    // the regions. This page reported 6.56% for RU where the Economy and Central
+    // Bank pages both said 5.14%, because population is the wrong weight: the
+    // engine compounds each region's GDP by that region's own rate, so only a
+    // GDP-weighted aggregate is consistent, and the national doc already is one.
+    // See lib/country/nationalGdpGrowth.
+    const growthGameState = await db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { currentYear: 1, currentTurn: 1 } });
+    const nationalGdpGrowth = await loadNationalGdpGrowth(
+      db,
+      countryId,
+      growthGameState?.currentYear
+    );
 
     // Total market size per sector type based on state GDP. The GDP→₳ rate is
     // era-scoped (refs #3778): a 1953 world normalizes with 1953 rates, not the
@@ -387,6 +397,25 @@ export async function GET(request: Request, { params }: RouteParams) {
             : 0;
         const dominanceAttackMult = getDominanceAttackEaseMultiplier(sectorMarketShare);
         const underdogMult = getUnderdogAttackAmplifier(attackerShareInType, sectorMarketShare);
+        const hasPersistedPlantLedger =
+          Number.isInteger(s.plantCount) &&
+          (s.plantCount ?? 0) >= 2 &&
+          typeof s.capacityBookAnchor === "number" &&
+          Number.isFinite(s.capacityBookAnchor) &&
+          s.capacityBookAnchor >= 0;
+        const plantSplitQuote =
+          plantsMode &&
+          userCorporationId &&
+          userCorporationId !== s.corporationId.toString() &&
+          !isNatcorp &&
+          hasPersistedPlantLedger
+            ? calculatePlantSectorSplit({
+                defenderPlantCount: s.plantCount as number,
+                defenderBookValueAnchor: s.capacityBookAnchor as number,
+                attackerMarketingStrength: userMarketingStrength,
+                defenderMarketingStrength: corp?.marketingStrength ?? 0,
+              })
+            : null;
         return {
           sectorId: s._id.toString(),
           corporationId: s.corporationId.toString(),
@@ -401,6 +430,7 @@ export async function GET(request: Request, { params }: RouteParams) {
           ceoSequentialId: ceo?.sequentialId,
           revenue: Math.round(sectorRevenueAnchor),
           marketShare: sectorMarketShare,
+          ...(plantsMode && hasPersistedPlantLedger ? { plantCount: s.plantCount } : {}),
           workers: calculateWorkers(sectorRevenueAnchor, workforceSkill),
           targetGrowthRate: s.targetGrowthRate ?? s.currentGrowthRate ?? s.growthRate ?? 0,
           currentGrowthRate: s.currentGrowthRate ?? s.growthRate ?? 0,
@@ -421,19 +451,31 @@ export async function GET(request: Request, { params }: RouteParams) {
           // Cost denominated in ₳ so the UI formatter can convert to whatever
           // currency the attacker's wallet prefers. Dominance multiplier scales
           // the contested fraction so dominant defenders bleed more per attack.
-          ...(userCorporationId &&
+          ...(!plantsMode &&
+            userCorporationId &&
             userCorporationId !== s.corporationId.toString() &&
-            !isNatcorp && {
-              attackCost: calculateAttackCostAnchor(sectorRevenueAnchor),
-              attackEstimatedCapture: Math.round(
+            !isNatcorp &&
+            (() => {
+              // Legacy worlds still quote the same cost and capture enforced by
+              // the attack route. Plant worlds use plantSplitQuote above.
+              const defenderMS = corp?.marketingStrength ?? 0;
+              const msSum = userMarketingStrength + defenderMS;
+              const attackerShare = msSum > 0 ? userMarketingStrength / msSum : 1;
+              const contestedAmount =
                 sectorRevenueAnchor *
-                  ATTACK_OWNED_CONTESTED_FRACTION *
-                  dominanceAttackMult *
-                  underdogMult *
-                  (userMarketingStrength /
-                    (userMarketingStrength + (corp?.marketingStrength ?? 0)) || 1)
-              ),
-            }),
+                ATTACK_OWNED_CONTESTED_FRACTION *
+                dominanceAttackMult *
+                underdogMult;
+              const actualCapture = Math.min(
+                Math.round(contestedAmount * attackerShare),
+                Math.max(0, Math.floor(sectorRevenueAnchor) - 1)
+              );
+              return {
+                attackCost: calculateAttackCostAnchor(sectorRevenueAnchor),
+                attackEstimatedCapture: actualCapture,
+              };
+            })()),
+          ...(plantSplitQuote ? { plantSplitQuote } : {}),
         };
       });
 
@@ -571,6 +613,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       userCorporationId,
       userCorporationSectorType,
       userMarketingStrength: roundMarketingStrength(userMarketingStrength),
+      userLiquidCapitalAnchor: Math.round(userLiquidCapitalAnchor),
       // Rival attacks retain the escalation cost under plants even though
       // unowned-market splits are retired there.
       attackMsCost: calculateSplitMsCost(userSplitEscalation),

@@ -2,6 +2,7 @@ import type { ObjectId } from "mongodb";
 import type { CorporationType } from "../../constants/corporations";
 import type { CountryId } from "../../constants/countries";
 import type { BillVoteSnapshot } from "./voteSnapshot";
+import type { PolicyShiftLedgerEntry } from "./legislation";
 
 export type StateBillStatus =
   | "proposed"
@@ -31,8 +32,24 @@ export interface StateBillPolicyProvision {
   social?: number;
   /** Tax-slider laws: the slider-chosen rate. */
   proposedRate?: number;
+  /**
+   * Frozen NAME of the proposed option, stamped at proposal (or governor-queue
+   * fire) time. Documents written before the structured split may hold a
+   * combined "Name: explanation" string; the read path splits those.
+   */
   policyOptionNameSnapshot?: string;
+  /** Frozen explanation for the proposed option. */
+  policyOptionExplanationSnapshot?: string;
+  /**
+   * Frozen current-law option id at proposal time. Without it the bill detail
+   * page re-reads the live law, so after enactment the current-law box shows the
+   * bill's own outcome.
+   */
+  currentPolicyOptionIdSnapshot?: string;
+  /** Frozen NAME of the current law shown beside the proposal. */
   currentPolicyOptionNameSnapshot?: string;
+  /** Frozen explanation for the current law. */
+  currentPolicyOptionExplanationSnapshot?: string;
 }
 
 export interface StateBillSubsidyProvision {
@@ -74,6 +91,8 @@ export interface StateBill {
   votesAgainst: number;
   votesAbstain: number;
   votes: Record<string, "for" | "against" | "abstain">;
+  /** Per-voter ideology movement this bill has caused; see Bill.policyShiftLedger. */
+  policyShiftLedger?: Record<string, PolicyShiftLedgerEntry>;
   /** Frozen origin-chamber result, set when the bill leaves `active` (#0982). */
   voteSnapshot?: BillVoteSnapshot;
   /** Frozen veto-override result, set when the bill leaves `veto_override` (#0982). */

@@ -69,4 +69,17 @@ describe("getLastFiredTurn (World Events v1 Phase 1 scheduler)", () => {
       )
     ).toBe(40);
   });
+
+  it("reads the nested shape MongoDB creates for dotted kind names", () => {
+    expect(
+      getLastFiredTurn(
+        {
+          lastFiredTurnByKind: {
+            worldEvents: { highTensionShared: 438 },
+          } as unknown as Record<string, number>,
+        },
+        "worldEvents.highTensionShared"
+      )
+    ).toBe(438);
+  });
 });

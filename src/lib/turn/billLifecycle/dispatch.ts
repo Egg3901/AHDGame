@@ -2,7 +2,9 @@ import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { runBillLifecycle } from "./engine";
 import { JP_NATIONAL_CONFIG } from "./configs/jp";
+import { buildConfiguredCountryBillLifecycle } from "./configs/configuredCountry";
 import type { BillLifecycleConfig } from "./types";
+import type { CountryId } from "@/lib/constants/countries";
 
 /**
  * Registry-facing wrapper for country bill lifecycles dispatched via
@@ -43,4 +45,17 @@ export async function runBillLifecycleForJP(
     overrides: t.override_shugiin ?? 0,
     cabinetPassed: t.active ?? 0,
   };
+}
+
+/** Resolve an era-aware country lifecycle and run it against the current world. */
+export async function runBillLifecycleForConfiguredCountry(
+  countryId: CountryId,
+  now: Date
+): Promise<{ enacted: number; failed: number }> {
+  const db = await getDb();
+  const gameState = await getGameState();
+  const currentTurn = gameState?.currentTurn ?? 1;
+  const config = buildConfiguredCountryBillLifecycle(countryId, gameState?.preset);
+  const result = await runBillLifecycle(db, config, now, currentTurn);
+  return { enacted: result.billsPassed, failed: result.billsFailed };
 }

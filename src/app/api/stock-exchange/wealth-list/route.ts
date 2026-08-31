@@ -16,9 +16,10 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
   corpLiquidCapitalToAnchor,
   fxRateForCorpFromMap,
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
 } from "@/lib/currency/corporationCapital";
 import { computeLocDebtInternal } from "@/lib/lineOfCredit/netWorth";
+import { getPublicShareQuote } from "@/lib/corporations/marketQuote";
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
@@ -169,7 +170,10 @@ async function computeWealthListFallback(
         countryId: 1,
       })
       .toArray(),
-    loadFxRatesByCurrency(db),
+    // Valuation map, not the settlement map: this list RANKS players by wealth.
+    // The settlement map leaves the six bloc currencies (PLZ/CSK/HUF/YUD/BGL/ROL)
+    // missing on purpose, which converted them at 1.0. See corporationCapital.ts.
+    loadValuationFxRates(db),
   ]);
 
   const stateNameMap = new Map(states.map((s) => [s._id, s.name]));
@@ -181,7 +185,11 @@ async function computeWealthListFallback(
     if (ceoId && !corp.ceoVacant && characterIdSet.has(ceoId) && !ceoCorpByCharId.has(ceoId)) {
       ceoCorpByCharId.set(ceoId, corp.name);
     }
-    const price = corp.sharePrice ?? 0;
+    // Same accessor every other valuation surface uses, including this route's
+    // own hourly snapshot in turn/investorWealthSnapshots. A MISSING price falls
+    // back to DEFAULT_SHARE_PRICE rather than dropping the holding to zero; an
+    // explicit 0 still skips.
+    const price = getPublicShareQuote(corp);
     if (price <= 0) continue;
     const corpFxRate = fxRateForCorpFromMap(corp, fxByCurrency);
     for (const sh of corp.shareholders ?? []) {

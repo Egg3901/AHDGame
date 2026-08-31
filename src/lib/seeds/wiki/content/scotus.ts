@@ -16,7 +16,7 @@ A justice seat is not a cabinet office and is not gated by year the way HUD or H
 
 ## Docket
 
-Curated historical cases resolve against the sitting Court. A majority on the case's tagged axis can diverge from the historical outcome; a divergence can enact policy through the same bill-enactment pipeline as legislation.
+Curated historical cases resolve against the sitting Court on the calendar year the world actually shows, not the raw turn counter. A majority on the case's tagged axis can diverge from the historical outcome; a divergence can enact policy through the same bill-enactment pipeline as legislation. An evenly split bench (4-4, or no seated majority at all) reaches no decision: the case affirms the existing outcome and history is unchanged.
 
 **Surprise cases** can also fire: non-historical docket items that resolve the same turn they spawn. They still produce a ruling from the sitting majority.
 

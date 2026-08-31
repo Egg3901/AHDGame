@@ -30,6 +30,7 @@ import { sweepExpiredCountryModifiers } from "@/lib/events/substrate/countryModi
 import { processWorldEventsTurn } from "@/lib/events/worldEvents/driver";
 import { processCampaignSpendReset } from "@/lib/turn/elections/campaignSpendReset";
 import { resolveGeneralElections } from "@/lib/turn/electionResolution";
+import { processPostConversionElections } from "@/lib/turn/postConversionElections";
 import {
   resolvePrimariesIfNeeded,
   recordPrimarySnapshots,
@@ -119,6 +120,7 @@ import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
 import { writeBalanceSnapshot } from "@/lib/ledger/balanceSnapshot";
 import { snapshotMoneySupply } from "@/lib/moneySupply/snapshot";
 import { reconcileTurn } from "@/lib/ledger/reconcile";
+import { snapshotEconomicVitalSigns } from "@/lib/economy/economicVitalSigns";
 import { runAutoReelectionEntry } from "@/lib/turn/autoReelectionEntry";
 import { withdrawInactiveCandidates } from "@/lib/turn/withdrawInactiveCandidates";
 import { stateEffectsAndNationalAggregationPhase } from "./stateEffectsPhase";
@@ -195,6 +197,13 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         // Bond servicing (processBondTurn) is intentionally NOT skipped here: it
         // settles existing contractual coupons/maturities, including sovereign
         // bonds held by players, which are not "corporation actions".
+        //
+        // That is still true of SETTLEMENT, but processBondTurn now gates its own
+        // default DETECTION on this same flag (ticket #1198). Paying a coupon out
+        // of a corp whose revenue this pause just switched off is contractual;
+        // liquidating it for the resulting cash hole is the pause's own doing.
+        // Corporation #624 was defaulted twice that way. See Phase 3 in
+        // `bondTurn.ts` for the full argument.
         const corpActionsPaused = gameState.corporationActionsPaused === true;
         // Skip the disaster spawner while corporate actions are paused: the
         // corporation turn (which applies the onset margin penalty) is skipped
@@ -226,9 +235,11 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         // is computed. Reads the prior turn's commodity S/D (one-turn lag, same
         // as auto-seed); writes only sector strategy fields. Inert unless
         // gameState.extractionAutoStrategyEnabled.
-        await runtime.runPhase("extractionAutoStrategy", () =>
+        const extractionAutoStrategyResult = await runtime.runPhase("extractionAutoStrategy", () =>
           processExtractionAutoStrategy(context.db, newTurn, gameState)
         );
+        (phaseResults as Record<string, unknown>).extractionAutoStrategy =
+          extractionAutoStrategyResult;
         const [, fundGenResults, corpTurnResults] = await Promise.all([
           runtime.runPhase("actionRefresh", () =>
             processActionRefresh(characters, config, gameNow)
@@ -1095,6 +1106,18 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         await runtime.runPhase("parliamentaryVacancyWatcher", () =>
           runParliamentaryVacancyWatcher(gameNow, newTurn)
         );
+        // Fire the election a system conversion promised. Sits beside the vacancy
+        // watcher because it is the same kind of operation, a snap triggered from
+        // a stamp rather than from a player, and it needs the same prerequisites:
+        // elections already resolved and any government formed this turn already
+        // seated. Ahead of `ensurePerpetualElections`, which is correct because a
+        // live snap suppresses the regular ensurer for that chamber.
+        const postConversion = await runtime.runPhase("postConversionElections", () =>
+          processPostConversionElections(db, newTurn, gameNow)
+        );
+        if (postConversion && postConversion.fired > 0) {
+          phaseResults.postConversionElections = postConversion;
+        }
         // NPP Autonomy V1 governing brain, runs after executives are seated so
         // the agenda computation sees a formed government. Self-gates per
         // country on nppAutonomyAtLeast(v1); a cheap no-op below v1.
@@ -1249,6 +1272,8 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           rebalances: result.rebalances,
           redemptionsPaid: result.redemptionsPaid,
           bondDeployments: result.bondDeployments,
+          equityLiquidityQuotePairs: result.equityLiquidityQuotePairs,
+          equityLiquidityDepthAnchor: result.equityLiquidityDepthAnchor,
           nppsProcessed: result.nppsProcessed,
           nppInvested: result.nppInvested,
         };
@@ -1323,6 +1348,28 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
                 `${report.trialBalance.unbalancedCount === 1 ? "y" : "ies"} at turn ${newTurn}`
             );
           }
+        }
+      },
+    },
+    {
+      key: "economicVitalSigns",
+      async execute(context, runtime) {
+        const snapshot = await runtime.runPhase("economicVitalSigns", () =>
+          snapshotEconomicVitalSigns(context.db, context.newTurn)
+        );
+        if (snapshot) {
+          context.phaseResults.economicVitalSigns = {
+            snapshotTurn: snapshot.turn,
+            domainsAvailable: [
+              snapshot.goods.pooledFillRate,
+              snapshot.trade.intentFulfillmentRate,
+              snapshot.production.physicalSellThrough,
+              snapshot.firms.marketCapHhi,
+              snapshot.securities.activeTradedListingShare,
+              snapshot.households.wealthGini,
+              snapshot.money.medianAnnualizedM2GrowthPct,
+            ].filter((item) => item.value !== null).length,
+          };
         }
       },
     },

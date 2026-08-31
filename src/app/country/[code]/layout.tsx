@@ -5,6 +5,11 @@ import { CountryFlag } from "@/components/CountryFlag";
 import { getCountryAccess } from "@/lib/countryAccess";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { getGameState } from "@/lib/gameState";
+import { getDb } from "@/lib/mongodb";
+import { loadCountryWarNotice } from "@/lib/military/countryAtWar";
+import { WartimeBanner } from "./WartimeBanner";
+import { PeaceBanner } from "./PeaceBanner";
+import { loadCountryPeaceNotice } from "@/lib/military/countryPeaceNotice";
 
 interface Props {
   params: Promise<{ code: string }>;
@@ -28,15 +33,43 @@ export default async function CountryLayout({ params, children }: Props) {
   if (!config) notFound();
 
   // Parallelize independent DB lookups
-  const [access, user, gameState] = await Promise.all([
+  const [access, user, gameState, war] = await Promise.all([
     getCountryAccess(countryId),
     getAuthUserWithCharacter(),
     getGameState(),
+    // One indexed read against a collection that holds a handful of documents.
+    // Joined to the batch above rather than awaited after it, so the banner costs
+    // no extra round trip on any country page.
+    getDb().then((db) => loadCountryWarNotice(db, countryId)),
   ]);
+
+  // NOT in the batch above, because it needs the viewer resolved: the peace strip is
+  // seat gated and there is nobody to check until `getAuthUserWithCharacter` has
+  // returned. Skipped entirely in peacetime, so the common case costs nothing.
+  const peace = war
+    ? await getDb().then((db) =>
+        loadCountryPeaceNotice(
+          db,
+          countryId,
+          user?.character?._id ?? null,
+          gameState?.currentTurn ?? 0
+        )
+      )
+    : null;
+
+  // Null in peacetime, which renders nothing. Declared once and used by all three
+  // viewable branches below: a war is a fact about the COUNTRY, so which of them a
+  // given reader lands in must not change whether they are told about it.
+  const wartime = war ? <WartimeBanner notice={war} /> : null;
 
   const isAdmin = user?.isAdmin === true;
   // Era-aware display name (e.g. "West Germany" in 1979) for the banners/headings.
   const name = getCountryDisplayName(countryId, gameState?.preset);
+
+  // Declared here with the war strip and used by all three viewable branches below,
+  // for the same reason: which branch a reader lands in must not change whether they
+  // are told a decision is waiting on them.
+  const peacetime = peace ? <PeaceBanner notice={peace} countryName={name} /> : null;
 
   // Admins always see everything — just show a banner when the country is not
   // yet enabled for regular players.
@@ -44,6 +77,8 @@ export default async function CountryLayout({ params, children }: Props) {
     const showAdminBanner = !access.enabledForPlayers;
     return (
       <>
+        {wartime}
+        {peacetime}
         {showAdminBanner && (
           <div className="bg-warning/10 border-b border-warning/30 px-4 py-2 text-center text-sm text-warning">
             {access.econOnly
@@ -56,9 +91,15 @@ export default async function CountryLayout({ params, children }: Props) {
     );
   }
 
-  // Fully enabled — render normally.
+  // Fully enabled — render normally, save for the war strip.
   if (access.enabledForPlayers) {
-    return <>{children}</>;
+    return (
+      <>
+        {wartime}
+        {peacetime}
+        {children}
+      </>
+    );
   }
 
   // Econ-only nation: a registered country that is not open for play. Every page
@@ -70,6 +111,8 @@ export default async function CountryLayout({ params, children }: Props) {
   if (access.econOnly) {
     return (
       <>
+        {wartime}
+        {peacetime}
         <div className="bg-primary/10 border-b border-primary/20 px-4 py-2 text-center text-sm text-primary">
           {name} is an econ-only nation. You can view every page here, but you cannot run for
           office, join a party, or vote.

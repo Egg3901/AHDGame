@@ -37,9 +37,16 @@ vi.mock("@/lib/db/collections", () => ({
 import { castAutonomousOrgVotes } from "../autonomousOrgVoting";
 
 // Minimal db whose only used collection is "npps" (voter identity lookup).
-function makeDb(): Db {
+function makeDb(mode?: "shadow" | "active"): Db {
   return {
     collection: (name: string) => {
+      if (name === "gameState") {
+        return {
+          findOne: vi
+            .fn()
+            .mockResolvedValue(mode ? { _id: "current", nppForeignPolicyMode: mode } : null),
+        };
+      }
       if (name === "npps") {
         return {
           findOne: vi.fn().mockResolvedValue({ _id: new ObjectId(), name: "Rep NPP" }),
@@ -60,6 +67,25 @@ beforeEach(() => {
 });
 
 describe("castAutonomousOrgVotes", () => {
+  it("yields all ballots to the opinion planner when mode is absent", async () => {
+    collectionDocs.proposals = [
+      {
+        _id: new ObjectId(),
+        organizationId: "eu",
+        proposingCountryId: "DE",
+        votes: [],
+      },
+    ];
+    getMembersMock.mockResolvedValue(["FR", "DE"]);
+    isActiveMock.mockResolvedValue(true);
+
+    const count = await castAutonomousOrgVotes(makeDb(), 10);
+
+    expect(count).toBe(0);
+    expect(getMembersMock).not.toHaveBeenCalled();
+    expect(upsertMock).not.toHaveBeenCalled();
+  });
+
   it("casts yes for an autonomy-active member that hasn't voted on a membership proposal", async () => {
     collectionDocs.proposals = [
       {
@@ -73,7 +99,7 @@ describe("castAutonomousOrgVotes", () => {
     getMembersMock.mockResolvedValue(["FR", "DE", "UK"]);
     isActiveMock.mockImplementation(async (_db: unknown, cid: string) => cid === "FR");
 
-    const count = await castAutonomousOrgVotes(makeDb(), 10);
+    const count = await castAutonomousOrgVotes(makeDb("shadow"), 10);
 
     expect(count).toBe(1);
     expect(upsertMock).toHaveBeenCalledTimes(1);
@@ -100,7 +126,7 @@ describe("castAutonomousOrgVotes", () => {
       async (_db: unknown, cid: string) => cid === "FR" || cid === "UK"
     );
 
-    const count = await castAutonomousOrgVotes(makeDb(), 5);
+    const count = await castAutonomousOrgVotes(makeDb("shadow"), 5);
     // FR already voted; UK is autonomy-active=true here but DE is applicant.
     // Only UK is eligible+unvoted+active → exactly one vote.
     expect(count).toBe(1);
@@ -118,7 +144,7 @@ describe("castAutonomousOrgVotes", () => {
     ];
     isActiveMock.mockImplementation(async (_db: unknown, cid: string) => cid === "FR");
 
-    const count = await castAutonomousOrgVotes(makeDb(), 7);
+    const count = await castAutonomousOrgVotes(makeDb("shadow"), 7);
     expect(count).toBe(1);
     expect(upsertMock.mock.calls[0][2].countryId).toBe("FR");
   });
@@ -130,7 +156,7 @@ describe("castAutonomousOrgVotes", () => {
     getMembersMock.mockResolvedValue(["FR", "UK"]);
     isActiveMock.mockResolvedValue(false);
 
-    const count = await castAutonomousOrgVotes(makeDb(), 3);
+    const count = await castAutonomousOrgVotes(makeDb("shadow"), 3);
     expect(count).toBe(0);
     expect(upsertMock).not.toHaveBeenCalled();
   });

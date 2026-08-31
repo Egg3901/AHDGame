@@ -92,6 +92,29 @@ describe("computeResourceOpportunities", () => {
     expect(result[0]!.states.map((s) => s.stateId)).toEqual(["GOOD"]);
   });
 
+  it("measures 1953 desired output in era-scaled ledger units", async () => {
+    mockFind("stateResourceCapacity", [{ stateId: "AZ", resources: { rare_earth: 200 } }]);
+    mockFind("corporateSectors", [{ stateId: "AZ", revenue: 21_000, strategyId: "standard" }]);
+    mockFind("states", [{ _id: "AZ", countryId: "US" }]);
+    db.collection("gameState");
+    db.collectionMocks.gameState!.findOne.mockResolvedValue({ preset: "1953-default" });
+    db.collection("gameConfig");
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      extractionOutputScaleEnabled: true,
+    });
+
+    const { computeResourceOpportunities } = await import("./extractionOpportunities");
+    const result = await computeResourceOpportunities(db as unknown as Db, ["rare_earth"], "HOME");
+
+    // 21,000 anchor at rate 1 becomes 174.42 ledger units on the 1953
+    // price basis with rare-earth output scaling enabled, not 1 modern unit.
+    expect(result[0]!.states[0]).toMatchObject({
+      stateId: "AZ",
+      desired: 174.42,
+      headroom: 25.58,
+    });
+  });
+
   it("returns [] when no resources are requested", async () => {
     const { computeResourceOpportunities } = await import("./extractionOpportunities");
     const result = await computeResourceOpportunities(db as unknown as Db, [], "HOME");

@@ -2,6 +2,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { RegionCode } from "@/lib/military/types";
 import type { WarGoal } from "@/lib/military/warGoals";
 import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
+import type { PeaceTerm } from "@/lib/military/peaceTerm";
 
 /**
  * A conflict — a dynamic, first-class battleground that generalizes the retired
@@ -20,7 +21,15 @@ export type ConflictType =
   | "independence"
   /** A proxy war fought on third-party soil; the sides are internal factions. */
   | "cold_war";
-export type ConflictStatus = "active" | "escalating" | "winding_down" | "resolved";
+/**
+ * `terms_pending` is a WON war that has not ended yet: the front has reached a pole,
+ * every belligerent has stood down, and the victor holds a window in which to impose
+ * one term. It is deliberately NOT "resolved", so every reader that treats a live war
+ * as `status !== "resolved"` keeps counting it, and no second war can be declared
+ * between the same pair while terms are outstanding.
+ */
+export type ConflictStatus =
+  "active" | "escalating" | "winding_down" | "terms_pending" | "resolved";
 export type SideKind = "state" | "coalition" | "generated";
 export type ConflictBloc = "west" | "east" | "internal" | "contested";
 
@@ -48,6 +57,23 @@ export interface ConflictSide {
   tokenStrength?: number;
 }
 
+/**
+ * One country pulled into a war by a mutual-defence treaty, and who it came for.
+ *
+ * `defending` is the load-bearing field: it is what the separate-peace bar reads to
+ * decide whether this country may still buy its way out, and what release reads to
+ * decide who leaves when that country settles. Without it an auto-joined ally is
+ * indistinguishable from one that declared war itself.
+ */
+export interface TreatyEntry {
+  countryId: CountryId;
+  /** The alliance that bound it, e.g. "NATO" / "WARSAW_PACT". */
+  organizationId: string;
+  /** The member this country was pulled in to defend. */
+  defending: CountryId;
+  joinedTurn: number;
+}
+
 export interface ConflictDoc {
   /** Dynamic conflict id (a unit's `theaterId` holds this, or "reserve"). */
   _id: string;
@@ -68,17 +94,44 @@ export interface ConflictDoc {
    * check left — validation lives at the admin creation route, the only writer.
    */
   hostCountry: WorldEntityId;
-  /** Derived from the host country (map / regionThreat). */
+  /** Derived from the host country (map / regionThreat). The war's primary region. */
   region: RegionCode;
+  /**
+   * Additional regions this war has spread into, beyond `region`.
+   *
+   * A war does not stay in one country. As belligerents join, fronts extend into the
+   * ground next door: a Central European war reaches the North Atlantic when the US
+   * convoys start, and the Mediterranean when Italy joins.
+   *
+   * INVARIANT: every entry must be adjacent to `region` or to another entry, so the
+   * theatre is always one connected piece of map. A war cannot be simultaneously in
+   * Western Europe and the South Pacific with nothing in between; that is two wars.
+   * Enforced by `canExtendConflictTo`.
+   *
+   * Optional, so every conflict created before this reads as a single-region war and
+   * needs no migration.
+   */
+  extendedRegions?: RegionCode[];
   type: ConflictType;
   sideA: ConflictSide;
   sideB: ConflictSide;
   /** Cold War alignment of the conflict as a whole. */
   bloc: ConflictBloc;
+  /**
+   * Countries pulled in by a mutual-defence treaty. Optional, so every conflict
+   * created before this feature reads as `undefined` and needs no migration.
+   */
+  treatyEntries?: TreatyEntry[];
 
   // Generated at birth (was hardcoded across BOTH old static datasets — the Theater
   // situation flavor AND the combat.ts Front battle-math data):
   terrain: string;
+  /**
+   * Whether this front reaches the sea. Absent means derive it from the host's
+   * geography (`deriveSeaAccess`); set it only to override that, which is the case of a
+   * war fought inland in a country that does have a coast.
+   */
+  seaAccess?: boolean;
   severity: "HIGH" | "MEDIUM" | "LOW";
   /** The generated side's weight (= old Theater.enemyBase). */
   baseStrength: number;
@@ -95,6 +148,12 @@ export interface ConflictDoc {
   // Live state (seeded here; evolved by sub-project C):
   intensity: number;
   /**
+   * First consecutive turn below the hot-war threshold used by Cold War
+   * tension. Cleared while the war is hot, then restarted when it cools, so
+   * hot turns never count toward public acclimation.
+   */
+  limitedWarSinceTurn?: number;
+  /**
    * Share of the HOST country's territory held by side B: 0 = side A holds all of
    * it, 100 = side B holds all of it. Moved by battles; reaching a pole ends the war.
    * See src/lib/military/occupation.ts.
@@ -106,6 +165,27 @@ export interface ConflictDoc {
   /** Seeded supply values, preserved so live supply can be derived, not accumulated. */
   supplyBaseA?: number;
   supplyBaseB?: number;
+  /**
+   * Trailing `control` reading, for the war-effort momentum term.
+   *
+   * Refreshed by `applyOccupation` once it is older than the momentum window.
+   * Absent means "no history yet", which scores momentum at zero rather than
+   * undefined — the provider derives a default and never requires this field.
+   */
+  controlSample?: { turn: number; control: number };
+  /**
+   * When each belligerent entered, and where the front stood at the time.
+   *
+   * Written by `joinSide`, so BOTH the treaty path and the declare-into-an-
+   * existing-war path record one; `treatyEntries` covers only the former and is
+   * not a complete entry ledger. Founding belligerents are absent and fall back
+   * to `startTurn` / `controlStart`.
+   *
+   * `control` is what keeps a late joiner from inheriting the war record its
+   * side built before it arrived: war effort is scored from the front as it
+   * stood when THIS country entered, not from the conflict's opening line.
+   */
+  joinTurns?: Array<{ countryId: CountryId; turn: number; control: number }>;
   status: ConflictStatus;
   /**
    * Every third-party country in the theatre — the roster that changes bloc when the
@@ -127,6 +207,44 @@ export interface ConflictDoc {
   warGoal?: WarGoal;
   /** The bill that declared it, for the record page. */
   declaredByBillId?: string;
+  /**
+   * Set when the front reaches a pole and the victor may impose one term.
+   *
+   * Cleared implicitly by the war resolving: a resolved conflict's window is spent
+   * whether it was used or it lapsed.
+   */
+  termsWindow?: {
+    victor: "A" | "B";
+    /** Founding belligerent of the winning side. The ONLY country that may impose. */
+    imposer: CountryId;
+    /** Founding belligerent of the losing side. The country the term lands on. */
+    target: CountryId;
+    /** Lapses ON this turn, the same boundary convention as an offer and a truce. */
+    closesTurn: number;
+  };
+  /**
+   * The term a settlement took, once one is reached. Read by the news wire, which
+   * builds its copy from this rather than parsing the outcome prose.
+   *
+   * Absent on a war that ended with no terms, which includes every war resolved
+   * before this feature and every lapsed window.
+   */
+  settlement?: {
+    term: PeaceTerm;
+    /** "dictated" via a war won outright, "negotiated" via an accepted offer. */
+    path: "dictated" | "negotiated";
+    imposedBy: CountryId;
+    target: CountryId;
+    turn: number;
+  };
+  /**
+   * Wire dispatches already filed for this conflict, so each posts exactly once.
+   *
+   * The STAMP, not the state, is what makes a one-off post one-off: a settled war
+   * stays settled for ever, and a sweeper keyed on the state alone would repost it
+   * every tick.
+   */
+  postedWireEvents?: string[];
   createdBy: "player" | "event" | "seed";
   startTurn: number;
   endTurn?: number;

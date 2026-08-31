@@ -714,12 +714,9 @@ export async function runSeed(
   const { getProjectedPoliticalLegislationTypes, isPoliticalLegislationPreset } =
     await import("./seedPoliticalLegislation");
   const politicalLegislation = isPoliticalLegislationPreset(preset);
-  const { POLITICAL_LEGISLATION_EXCLUDED_SCOPES } =
-    await import("@/lib/politicalMetrics/pipelinePreset");
+  const { isOldLegislationTypeExcluded } = await import("@/lib/politicalMetrics/pipelinePreset");
   const baseSeedTypes = politicalLegislation
-    ? legislationTypes.filter(
-        (lt) => !POLITICAL_LEGISLATION_EXCLUDED_SCOPES.has(lt.countryScope ?? "us")
-      )
+    ? legislationTypes.filter((lt) => !isOldLegislationTypeExcluded(lt))
     : legislationTypes;
   const allLegislationTypes = [
     ...baseSeedTypes.map((lt) => ({ ...lt, source: "seed" as const })),

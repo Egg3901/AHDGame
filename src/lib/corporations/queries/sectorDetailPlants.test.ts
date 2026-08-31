@@ -17,6 +17,8 @@ function sectorFixture(patch: Partial<CorporateSector> = {}): CorporateSector {
     revenue: 1_000_000,
     profitMargin: 20,
     workers: 100,
+    workersDesired: 400,
+    labourStaffingFactor: 0.25,
     capitalStock: 200,
     producedUnits: 150,
     soldUnits: 120,
@@ -57,13 +59,30 @@ const BASE_ARGS = {
 
 describe("buildSectorPlantsSection", () => {
   it("splits capacity into produced, sold, unsold and idle without losing units", () => {
-    const s = buildSectorPlantsSection({ eraUnitScale: 1, ...BASE_ARGS, sector: sectorFixture() });
+    const s = buildSectorPlantsSection({
+      eraUnitScale: 1,
+      ...BASE_ARGS,
+      sector: sectorFixture({ plantCount: 7 }),
+    });
+    expect(s.plantCount).toBe(7);
     expect(s.capacityUnits).toBe(200);
     expect(s.producedUnits).toBe(150);
     expect(s.soldUnits).toBe(120);
     expect(s.unsoldUnits).toBe(30);
     expect(s.idleUnits).toBe(50);
     expect(s.fillRate).toBeCloseTo(0.8, 6);
+  });
+
+  it("falls back to the pre-migration visible facility count", () => {
+    const s = buildSectorPlantsSection({ eraUnitScale: 1, ...BASE_ARGS, sector: sectorFixture() });
+    expect(s.plantCount).toBe(8);
+  });
+
+  it("surfaces actual staffing beside desired staffing", () => {
+    const s = buildSectorPlantsSection({ eraUnitScale: 1, ...BASE_ARGS, sector: sectorFixture() });
+    expect(s.workers).toBe(100);
+    expect(s.workersDesired).toBe(400);
+    expect(s.labourStaffingFactor).toBe(0.25);
   });
 
   it("attributes idle capacity exactly — named causes plus other sum to idleUnits", () => {

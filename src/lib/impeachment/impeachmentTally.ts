@@ -1,12 +1,44 @@
 import type { Db } from "@/lib/mongodb";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import {
+  COUNTRY_CONFIGS,
+  getSubNationalLegislatureKey,
+  type CountryId,
+} from "@/lib/constants/countries";
 import type { ElectedOfficial } from "@/lib/db/types";
 import type { ImpeachmentVoteValue } from "@/lib/db/types/impeachment";
+import {
+  getLowerChamberOfficeType,
+  getUpperChamberOfficeType,
+} from "@/lib/legislature/chamberOfficeType";
 
 export interface ChamberTally {
   for: number;
   against: number;
   seats: number;
+}
+
+/**
+ * Impeachment bars, measured against ALL seats in the chamber, never votes
+ * cast: an abstention, a partyless bloc, or a seat that never voted counts
+ * AGAINST passage. House articles need a strict majority of the full chamber;
+ * Senate conviction needs at least two-thirds of the full chamber. Each bar is
+ * a numerator/denominator seat share compared with exact integer math, so
+ * retuning either bar is a one-line constant edit.
+ */
+export const IMPEACHMENT_HOUSE_BAR = { num: 1, den: 2 } as const;
+export const IMPEACHMENT_SENATE_BAR = { num: 2, den: 3 } as const;
+
+/** Smallest seat-weighted aye count that carries the House bar at `seats` seats. */
+export function houseImpeachmentVotesNeeded(seats: number): number {
+  // Strict majority: for * den > seats * num.
+  return Math.floor((seats * IMPEACHMENT_HOUSE_BAR.num) / IMPEACHMENT_HOUSE_BAR.den) + 1;
+}
+
+/** Smallest seat-weighted aye count that meets the Senate bar at `seats` seats. */
+export function senateConvictionVotesNeeded(seats: number): number {
+  // Inclusive share: for * den >= seats * num.
+  const { num, den } = IMPEACHMENT_SENATE_BAR;
+  return Math.ceil((seats * num) / den);
 }
 
 /**
@@ -72,16 +104,57 @@ export async function tallyImpeachmentChamber(
   return { for: votesFor, against: votesAgainst, seats };
 }
 
-/** House impeaches on a seat-weighted simple majority of votes cast. */
-export function passesHouseImpeachment(t: ChamberTally): boolean {
-  return t.for > t.against;
+/** Total seated weight in one of the case's chambers (the all-seats denominator). */
+export async function countChamberSeats(
+  db: Db,
+  countryId: CountryId,
+  officeType: string,
+  state?: string
+): Promise<number> {
+  const officials = await db
+    .collection<ElectedOfficial>("electedOfficials")
+    .find(impeachmentChamberOfficialFilter(countryId, officeType, state))
+    .project<Pick<ElectedOfficial, "seatsHeld">>({ seatsHeld: 1 })
+    .toArray();
+  return officials.reduce((sum, o) => sum + (o.seatsHeld ?? 1), 0);
 }
 
 /**
- * Senate convicts on a seat-weighted two-thirds of votes cast (abstentions
- * excluded); no votes cast fails. Mirrors meetsBillPassRule("twoThirds").
+ * The chamber that votes at an open case's current stage: the lower chamber
+ * during the House stage, the upper chamber (or a governor's state legislature)
+ * during the Senate/conviction stage. Null once the case is no longer open.
+ */
+export function impeachmentStageChamberOfficeType(
+  impeachment: Pick<ImpeachmentLite, "targetOffice" | "stage" | "countryId" | "state">
+): string | undefined {
+  if (impeachment.targetOffice === "governor") {
+    return impeachment.stage === "senate"
+      ? getSubNationalLegislatureKey(impeachment.countryId)
+      : undefined;
+  }
+  return impeachment.stage === "house"
+    ? getLowerChamberOfficeType(impeachment.countryId)
+    : getUpperChamberOfficeType(impeachment.countryId);
+}
+
+/** Minimal shape of an impeachment doc the chamber helpers need. */
+export interface ImpeachmentLite {
+  targetOffice: string;
+  stage: string;
+  countryId: CountryId;
+  state?: string;
+}
+
+/** House impeaches on a seat-weighted strict majority of ALL chamber seats. */
+export function passesHouseImpeachment(t: ChamberTally): boolean {
+  return t.for * IMPEACHMENT_HOUSE_BAR.den > t.seats * IMPEACHMENT_HOUSE_BAR.num;
+}
+
+/**
+ * Senate convicts on a seat-weighted two-thirds of ALL chamber seats (the
+ * governor's single-chamber trial uses the same bar). Abstentions and seats
+ * that never voted count against conviction; an empty chamber fails.
  */
 export function passesSenateConviction(t: ChamberTally): boolean {
-  const cast = t.for + t.against;
-  return cast > 0 && t.for * 3 >= 2 * cast;
+  return t.seats > 0 && t.for * IMPEACHMENT_SENATE_BAR.den >= t.seats * IMPEACHMENT_SENATE_BAR.num;
 }

@@ -24,7 +24,7 @@ The total is the sum of all active signed forces. The verdict uses a **strict** 
 | **Against** | Total < −5 |
 | **Abstain** | Total is exactly +5, exactly −5, or anywhere in between |
 
-This is a deterministic model, not a probabilistic one. There is no random roll or compliance chance.
+This is a deterministic model, not a probabilistic one: the turn processor's vote on an open bill involves no random roll. The one roll in the system happens when a **hard whip is issued**: the NPP is checked once, at issuance, for whether it falls in line immediately, and an NPP that resists falls back to the cross-pressure verdict above. See [Voting & Whips](/wiki/voting-and-whips).
 
 ### Whip force details
 

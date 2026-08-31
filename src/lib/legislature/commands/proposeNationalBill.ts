@@ -439,7 +439,7 @@ export async function proposeNationalBill(
 
   const snapshottedPolicyProvisions = await snapshotBillPolicyProvisions(
     db,
-    policyStoreId,
+    { scope: "national", countryId },
     validatedPolicyProvisions
   );
 

@@ -238,6 +238,9 @@ export function distributeVotesByGroupLevelAllocation(
           const normalized = normalizePartyInfluencePresidentialPrimary(effective);
           partyInfluenceMult = 1 + normalized * MAX_PARTY_INFLUENCE_BONUS_PRIMARY;
         }
+        // UK manifesto policy-popularity factor (epic #856). Off by default:
+        // when no map is supplied the lookup falls back to 1.0 (no effect).
+        const manifestoMult = options?.manifestoMultipliers?.[ec.party]?.[group.id] ?? 1;
         const w = Math.max(
           0,
           appeal *
@@ -254,7 +257,8 @@ export function distributeVotesByGroupLevelAllocation(
             partyFit *
             stateOrgMult *
             homeStateMult *
-            partyInfluenceMult
+            partyInfluenceMult *
+            manifestoMult
         );
         weights[ec.candidateId] = w;
       }

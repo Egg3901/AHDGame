@@ -13,8 +13,21 @@ import { createHash } from "crypto";
 import { ObjectId } from "mongodb";
 import { HOUSE_SEATS } from "@/lib/constants/states";
 
+/**
+ * Modern-roster fallbacks: a majority of 50 House delegations and of 100
+ * senators. The live ballot derives its thresholds from the rosters actually
+ * voting (`contingentMajorityOf`), which reproduces these numbers exactly on
+ * the modern roster and yields the era-correct 25-of-48 / 49-of-96 on 1950s
+ * worlds. Kept exported as the no-roster fallback and for display defaults.
+ */
 export const HOUSE_CONTINGENT_THRESHOLD = 26;
 export const SENATE_CONTINGENT_THRESHOLD = 51;
+
+/** Majority of a contingent-ballot roster: more than half of its members. */
+export function contingentMajorityOf(rosterSize: number, fallback: number): number {
+  if (!Number.isFinite(rosterSize) || rosterSize <= 0) return fallback;
+  return Math.floor(rosterSize / 2) + 1;
+}
 /** DC has EVs but no voting House delegation in a contingent election. */
 export const CONTINGENT_EXCLUDED_HOUSE_STATE = "DC";
 
@@ -56,8 +69,8 @@ export interface ContingentElectionResult {
   presidentWinnerId: string;
   /** Empty when no running mates were eligible for a Senate contingent vote. */
   vicePresidentWinnerId: string | null;
-  houseThreshold: typeof HOUSE_CONTINGENT_THRESHOLD;
-  senateThreshold: typeof SENATE_CONTINGENT_THRESHOLD;
+  houseThreshold: number;
+  senateThreshold: number;
   deadlockBreakerUsed: boolean;
   deadlockBreakerReason?: string;
   topElectoralVoteTotal: number;
@@ -325,6 +338,12 @@ export function resolveContingentElection(
   }
 
   const tieSeed = electionId.toString();
+  // Era-aware majorities: a majority of the delegations and senators actually
+  // on the ballot, not of the modern roster. 50 delegations -> 26 and 100
+  // senators -> 51 (identical to the old constants); 1950s worlds -> 25 of 48
+  // and 49 of 96.
+  const houseThreshold = contingentMajorityOf(houseDelegations.length, HOUSE_CONTINGENT_THRESHOLD);
+  const senateThreshold = contingentMajorityOf(senators.length, SENATE_CONTINGENT_THRESHOLD);
   const { delegationVotes, totals: houseVoteTotals } = calculateHouseDelegationVotes(
     houseDelegations,
     presidentCandidates,
@@ -346,7 +365,7 @@ export function resolveContingentElection(
     const senateOutcome = resolveWinnerFromTotals(
       electionId,
       senateVoteTotals,
-      SENATE_CONTINGENT_THRESHOLD,
+      senateThreshold,
       "senate",
       eligibleVicePresidentCandidateIds,
       evByEligibleId
@@ -359,7 +378,7 @@ export function resolveContingentElection(
   const houseOutcome = resolveWinnerFromTotals(
     electionId,
     houseVoteTotals,
-    HOUSE_CONTINGENT_THRESHOLD,
+    houseThreshold,
     "house",
     eligiblePresidentCandidateIds,
     evByEligibleId
@@ -382,8 +401,8 @@ export function resolveContingentElection(
     senateVoteTotals,
     presidentWinnerId: houseOutcome.winnerId,
     vicePresidentWinnerId,
-    houseThreshold: HOUSE_CONTINGENT_THRESHOLD,
-    senateThreshold: SENATE_CONTINGENT_THRESHOLD,
+    houseThreshold,
+    senateThreshold,
     deadlockBreakerUsed,
     deadlockBreakerReason: deadlockReasons || undefined,
     topElectoralVoteTotal: rankedEv[0]?.[1] ?? 0,

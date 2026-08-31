@@ -239,7 +239,7 @@ export async function POST(request: Request, { params }: RouteParams) {
             countryId,
             electionId: { $in: sameStateSlateIds, $ne: election._id },
           },
-          { $set: { status: "withdrawn", updatedAt: now } }
+          { $set: { status: "withdrawn", refusalReason: null, updatedAt: now } }
         );
       }
       if (candidate.candidateType === "character" && candidate.userId) {
@@ -267,7 +267,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           countryId,
           electionId: { $in: sameStateSlateIds, $ne: election._id },
         },
-        { $set: { status: "withdrawn", updatedAt: now } }
+        { $set: { status: "withdrawn", refusalReason: null, updatedAt: now } }
       );
     }
     if (candidate.candidateType === "character" && candidate.userId) {

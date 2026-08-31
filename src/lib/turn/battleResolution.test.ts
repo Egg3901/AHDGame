@@ -3,6 +3,28 @@ import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
+/**
+ * Fixed declaration ids, one per `describe`.
+ *
+ * The battle seed is `hashStr(principal._id + turn)`, so a `new ObjectId()` reseeds
+ * the engagement on every run. That used to be harmless: the five-round loop was a
+ * near-deterministic function of the force balance, so the stronger side won whatever
+ * the seed was. Since `ATTRITION.fortuneSpread` the seed decides a real roll, and any
+ * assertion about who won or which way the ground moved became a coin flip that fails
+ * a few runs in ten. The one describe below that already pinned its ids says the same
+ * thing at its own `declFrom`.
+ *
+ * Pin the id and a case asserts against ONE battle, every run, forever.
+ */
+const DECL_ID = {
+  base: "aaaaaaaaaaaaaaaaaaaa0001",
+  occupation: "aaaaaaaaaaaaaaaaaaaa0002",
+  unopposedSide: "aaaaaaaaaaaaaaaaaaaa0003",
+  legacyBaselines: "aaaaaaaaaaaaaaaaaaaa0004",
+  alliedAutoJoin: "aaaaaaaaaaaaaaaaaaaa0005",
+  coalition: "aaaaaaaaaaaaaaaaaaaa0006",
+};
+
 // The era's bloc roll is an INPUT to resolution, not something it decides, so it is
 // stubbed rather than assembled from organisation-membership fixtures. Its own
 // derivation is covered by `blocMembership` / `bloc.test.ts`.
@@ -66,7 +88,7 @@ function wireUnits(db: MockDb, declarerUnits: unknown[], targetUnits: unknown[])
 describe("resolveBattleDeclarations", () => {
   let db: MockDb;
   const pending = {
-    _id: new ObjectId(),
+    _id: new ObjectId(DECL_ID.base),
     declarerCountry: "US",
     targetCountry: "CN",
     theaterId: "afghan",
@@ -236,7 +258,7 @@ describe("resolveBattleDeclarations", () => {
 describe("resolveBattleDeclarations — occupation", () => {
   let db: MockDb;
   const pending = {
-    _id: new ObjectId(),
+    _id: new ObjectId(DECL_ID.occupation),
     declarerCountry: "US",
     targetCountry: "CN",
     theaterId: "afghan",
@@ -246,7 +268,13 @@ describe("resolveBattleDeclarations — occupation", () => {
   };
 
   // US on side A, CN on side B, hosted in CN — CN starts holding all its own soil.
-  const warConflict = {
+  //
+  // Rebuilt per test rather than shared: resolution mutates the conflict document it
+  // is handed (`joinSide` the roster, `applyOccupation` the front and supplies) so the
+  // rest of the tick sees a consistent picture. A single literal shared across cases
+  // therefore carries one test's advance into the next.
+  let warConflict: Record<string, unknown>;
+  const makeWarConflict = () => ({
     _id: "afghan",
     name: "Central Asian Front",
     hostCountry: "CN",
@@ -267,10 +295,11 @@ describe("resolveBattleDeclarations — occupation", () => {
     control: 100,
     controlStart: 100,
     status: "active",
-  };
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
+    warConflict = makeWarConflict();
     db = createMockDb();
     db.collection("militaryUnits");
     db.collection("militaryFormations");
@@ -348,9 +377,62 @@ describe("resolveBattleDeclarations — occupation", () => {
     expect(controlWrite()).toBeUndefined();
   });
 
-  it("stands the conflict down when the front reaches a pole", async () => {
-    // One point off the pole: even a drag-halved step clears it.
+  it("opens a terms window when the front reaches a pole", async () => {
+    // One point off the pole: even a narrow step clears it. The war no longer
+    // ends on the tick; the victor gets a window in which to name one term.
     db.collectionMocks.conflicts.findOne.mockResolvedValue({ ...warConflict, control: 1 });
+    wireWalkover();
+
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    const windowWrite = db.collectionMocks.conflicts.updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.status === "terms_pending"
+    );
+    expect(windowWrite).toBeDefined();
+    expect(windowWrite![1].$set.termsWindow.victor).toBe("A");
+    expect(windowWrite![1].$set.termsWindow.closesTurn).toBeGreaterThan(41);
+  });
+
+  it("names both principals on the window, so exactly one country may impose", async () => {
+    db.collectionMocks.conflicts.findOne.mockResolvedValue({ ...warConflict, control: 1 });
+    wireWalkover();
+
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    const windowWrite = db.collectionMocks.conflicts.updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.status === "terms_pending"
+    );
+    const { imposer, target } = windowWrite![1].$set.termsWindow;
+    expect(imposer).toBeTruthy();
+    expect(target).toBeTruthy();
+    expect(imposer).not.toBe(target);
+  });
+
+  it("stamps no winner while terms are outstanding", async () => {
+    // The war is not over until the term is taken or the window lapses, so nothing
+    // may record an outcome yet.
+    db.collectionMocks.conflicts.findOne.mockResolvedValue({ ...warConflict, control: 1 });
+    wireWalkover();
+
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    const resolvedWrite = db.collectionMocks.conflicts.updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.status === "resolved"
+    );
+    expect(resolvedWrite).toBeUndefined();
+  });
+
+  it("still resolves outright when a side has no principal left", async () => {
+    // Every country on the losing side joined after the war opened, so its founder
+    // has already taken a separate peace and nobody holds the claim. Handing it to
+    // a late joiner would award the war to a country that did not start it, so the
+    // original resolve is the honest outcome. The generated-side case reaches the
+    // same branch through an empty roster; `principalOf` covers that directly.
+    db.collectionMocks.conflicts.findOne.mockResolvedValue({
+      ...warConflict,
+      control: 1,
+      joinTurns: [{ countryId: "CN", turn: 5, control: 100 }],
+    });
     wireWalkover();
 
     await resolveBattleDeclarations(db as unknown as Db, 41);
@@ -408,6 +490,13 @@ describe("resolveBattleDeclarations — occupation", () => {
 
     const join = db.collectionMocks.conflicts.updateOne.mock.calls.find((c) => c[1]?.$addToSet);
     expect(join![1].$addToSet).toEqual({ "sideA.countries": "US" });
+
+    // The entry stamp is a separate, country-filtered write: war approval scores
+    // a country from the turn and front position at which it actually entered.
+    const stamp = db.collectionMocks.conflicts.updateOne.mock.calls.find(
+      (c) => c[1]?.$push?.joinTurns
+    );
+    expect(stamp![1].$push.joinTurns).toEqual({ countryId: "US", turn: 41, control: 100 });
   });
 
   it("fights normally but moves no ground when neither side can be resolved", async () => {
@@ -431,7 +520,7 @@ describe("resolveBattleDeclarations — occupation", () => {
 describe("resolveBattleDeclarations — unopposed side resolution", () => {
   let db: MockDb;
   const pending = {
-    _id: new ObjectId(),
+    _id: new ObjectId(DECL_ID.unopposedSide),
     declarerCountry: "US",
     targetCountry: "CN",
     theaterId: "afghan",
@@ -494,7 +583,7 @@ describe("resolveBattleDeclarations — unopposed side resolution", () => {
 describe("resolveBattleDeclarations — legacy conflict baselines", () => {
   let db: MockDb;
   const pending = {
-    _id: new ObjectId(),
+    _id: new ObjectId(DECL_ID.legacyBaselines),
     declarerCountry: "US",
     targetCountry: "CN",
     theaterId: "afghan",
@@ -574,7 +663,9 @@ describe("resolveBattleDeclarations — supply at the front", () => {
     declaredTurn: 40,
     status: "pending",
   };
-  const warConflict = {
+  // Rebuilt per test — see the note on the occupation block's fixture.
+  let warConflict: Record<string, unknown>;
+  const makeWarConflict = () => ({
     _id: "afghan",
     name: "Central Asian Front",
     hostCountry: "CN",
@@ -595,10 +686,11 @@ describe("resolveBattleDeclarations — supply at the front", () => {
     control: 60,
     controlStart: 100,
     status: "active",
-  };
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
+    warConflict = makeWarConflict();
     db = createMockDb();
     db.collection("militaryUnits");
     db.collection("militaryFormations");
@@ -701,7 +793,22 @@ describe("resolveBattleDeclarations — coalitions", () => {
     supplyB: 60,
   };
 
-  const declFrom = (country: string, target: string, id = new ObjectId()) => ({
+  // Defaulted to a FIXED id for the same reason the other describes pin theirs: a
+  // fresh one reseeds the battle every run, and these cases assert who won.
+  //
+  // Keyed by declarer rather than one shared constant, because a merged offensive
+  // holds several declarations at once and they must stay distinguishable — the
+  // principal is picked by lowest id, and each is marked resolved by its own.
+  const DECL_BY_DECLARER: Record<string, string> = {
+    US: `${DECL_ID.coalition.slice(0, 20)}00a1`,
+    UK: `${DECL_ID.coalition.slice(0, 20)}00a2`,
+    CN: `${DECL_ID.coalition.slice(0, 20)}00a3`,
+  };
+  const declFrom = (
+    country: string,
+    target: string,
+    id: ObjectId = new ObjectId(DECL_BY_DECLARER[country] ?? DECL_ID.coalition)
+  ) => ({
     _id: id,
     declarerCountry: country,
     targetCountry: target,
@@ -880,5 +987,324 @@ describe("resolveBattleDeclarations — coalitions", () => {
     );
     expect(ops.length).toBeGreaterThan(0);
     expect(new Set(ops.map((o) => o.updateOne.filter.countryId)).size).toBeGreaterThan(1);
+  });
+});
+
+describe("resolveBattleDeclarations — opposing offensives in one tick", () => {
+  let db: MockDb;
+  // Rebuilt per test: `joinSide` mutates the roster of whatever document
+  // `conflicts.findOne` hands back, so a shared literal leaks between cases.
+  let contested: Record<string, unknown>;
+  const makeContested = (id: string): Record<string, unknown> => ({
+    _id: id,
+    name: "Central Asian Front",
+    hostCountry: "CN",
+    region: "cas",
+    terrain: "Arid / mountainous",
+    bloc: "contested",
+    severity: "HIGH",
+    baseStrength: 470,
+    terr: 1.15,
+    infra: 34,
+    enemyMix: ["armor", "mech", "infantry"],
+    sideA: { label: "NATO", countries: ["US"], kind: "state", backer: "west" },
+    sideB: { label: "PLA", countries: ["CN"], kind: "state", backer: "east" },
+    control: 50,
+    status: "active",
+    supplyA: 60,
+    supplyB: 60,
+  });
+
+  // Fixed ids, not `new ObjectId()`: the battle seed is `hashStr(principal._id +
+  // turn)`, so a freshly generated id would reseed every engagement on every run and
+  // these cases would assert against a different battle each time.
+  const declFrom = (country: string, target: string, id: string) => ({
+    _id: new ObjectId(id),
+    declarerCountry: country,
+    targetCountry: target,
+    theaterId: "afghan",
+    declaredByCharacterId: "c1",
+    declaredTurn: 40,
+    status: "pending",
+  });
+
+  /** Every `conflicts.updateOne` that moved `control`, in the order written. */
+  const controlWrites = () =>
+    db.collectionMocks.conflicts.updateOne.mock.calls
+      .filter((c) => c[1]?.$set && "control" in c[1].$set)
+      .map((c) => c[1].$set as { control: number; controlStart: number });
+
+  const reports = () =>
+    db.collectionMocks.battleReports.insertOne.mock.calls.map(
+      (c) => c[0] as { controlBefore: number; controlAfter: number }
+    );
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    for (const c of [
+      "militaryUnits",
+      "militaryFormations",
+      "nationalDoctrine",
+      "battleDeclarations",
+      "battleReports",
+      "conflicts",
+      "characterGenerals",
+    ]) {
+      db.collection(c);
+    }
+    db.collectionMocks.militaryFormations.findOne.mockResolvedValue(null);
+    db.collectionMocks.nationalDoctrine.findOne.mockResolvedValue(null);
+    contested = makeContested("afghan");
+    db.collectionMocks.conflicts.findOne.mockResolvedValue(contested);
+    // Both sides declare on the same turn, so both resolve in this tick as their
+    // own offensive — `mergeOffensives` groups by (front, attacking side).
+    db.collectionMocks.battleDeclarations.find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([
+          declFrom("US", "CN", "aaaaaaaaaaaaaaaaaaaaaaa1"),
+          declFrom("CN", "US", "aaaaaaaaaaaaaaaaaaaaaaa2"),
+        ]),
+    });
+    // US overwhelms CN, so side A takes the ground in BOTH engagements: it wins
+    // its own offensive and it holds against the counter-attack.
+    wireUnits(
+      db,
+      [unit({ countryId: "US", theaterId: "afghan", basePower: 4000 })],
+      [unit({ countryId: "CN", theaterId: "afghan", basePower: 10 })]
+    );
+  });
+
+  it("resolves the second offensive against the front the first one left", async () => {
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    const [first, second] = reports();
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
+    expect(first.controlAfter).toBeLessThan(50);
+    expect(second.controlBefore).toBe(first.controlAfter);
+  });
+
+  it("keeps the ground both offensives took, not just the last one's", async () => {
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    const writes = controlWrites();
+    expect(writes).toHaveLength(2);
+    expect(writes[1].control).toBeLessThan(writes[0].control);
+    expect(writes[1].control).toBe(reports()[1].controlAfter);
+  });
+
+  it("pins controlStart once for the conflict, not once per offensive", async () => {
+    // A document predating `controlStart` — the first write pins it to where the
+    // front stood, and the second must not re-pin it to the ground just taken.
+    delete contested.controlStart;
+
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    for (const w of controlWrites()) expect(w.controlStart).toBe(50);
+  });
+
+  it("carries the first engagement's casualties into the second", async () => {
+    // An even matchup, so both formations are still bleeding in the second battle.
+    wireUnits(
+      db,
+      [unit({ countryId: "US", theaterId: "afghan" })],
+      [unit({ countryId: "CN", theaterId: "afghan" })]
+    );
+
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    type Res = { id: string; casualties: number };
+    const [first, second] = db.collectionMocks.battleReports.insertOne.mock.calls.map(
+      (c) =>
+        c[0] as {
+          result: { attacker: { unitResults: Res[] }; defender: { unitResults: Res[] } };
+        }
+    );
+    // The US formation attacks in the first engagement and defends in the second,
+    // so it fights twice in this one tick.
+    const hitA = first.result.attacker.unitResults[0];
+    const hitB = second.result.defender.unitResults.find((r) => r.id === hitA.id);
+    expect(hitB).toBeDefined();
+    expect(hitA.casualties).toBeGreaterThan(0);
+    expect(hitB!.casualties).toBeGreaterThan(0);
+
+    const writes = db.collectionMocks.militaryUnits.bulkWrite.mock.calls
+      .flatMap(
+        (c) =>
+          c[0] as Array<{
+            updateOne: { filter: { _id: unknown }; update: { $set: { personnel: number } } };
+          }>
+      )
+      .filter((o) => String(o.updateOne.filter._id) === hitA.id);
+    expect(writes).toHaveLength(2);
+    // Both writes are absolute `$set`s, so the second must be computed from what the
+    // first left behind or it silently restores the men killed in the first battle.
+    expect(writes[1].updateOne.update.$set.personnel).toBe(
+      15000 - hitA.casualties - hitB!.casualties
+    );
+  });
+
+  it("does not let one front ending its war fizzle another front's offensive", async () => {
+    // The stand-down flag is per conflict. If it ever leaked across the theater loop,
+    // one war finishing would silently cancel every other front's fighting that tick.
+    contested.control = 1; // afghan ends this tick
+    const korea = makeContested("korea");
+    db.collectionMocks.conflicts.findOne.mockImplementation((q: { _id?: string }) =>
+      Promise.resolve(q?._id === "korea" ? korea : contested)
+    );
+    db.collectionMocks.battleDeclarations.find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([
+          declFrom("US", "CN", "aaaaaaaaaaaaaaaaaaaaaaa1"),
+          declFrom("CN", "US", "aaaaaaaaaaaaaaaaaaaaaaa2"),
+          { ...declFrom("US", "CN", "aaaaaaaaaaaaaaaaaaaaaaa3"), theaterId: "korea" },
+        ]),
+    });
+    wireUnits(
+      db,
+      [
+        unit({ countryId: "US", theaterId: "afghan", basePower: 4000 }),
+        unit({ countryId: "US", theaterId: "korea" }),
+      ],
+      [
+        unit({ countryId: "CN", theaterId: "afghan", basePower: 10 }),
+        unit({ countryId: "CN", theaterId: "korea" }),
+      ]
+    );
+
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    const theaters = db.collectionMocks.battleReports.insertOne.mock.calls.map(
+      (c) => (c[0] as { theaterId: string }).theaterId
+    );
+    expect(theaters).toContain("korea");
+  });
+
+  it("stops resolving offensives once the front has ended the war", async () => {
+    // One point off the pole: the first offensive clears it and stands the war down,
+    // which recalls every unit at the front to reserve. Nothing may fight after that.
+    contested.control = 1;
+
+    const out = await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    const stoodDown = db.collectionMocks.conflicts.updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.status === "terms_pending" || c[1]?.$set?.status === "resolved"
+    );
+    expect(stoodDown).toBeDefined();
+    expect(db.collectionMocks.battleReports.insertOne).toHaveBeenCalledTimes(1);
+    expect(out).toEqual({ resolved: 1, fizzled: 1 });
+  });
+});
+
+describe("resolveBattleDeclarations - allied auto-join", () => {
+  let db: MockDb;
+
+  /** A two-nation coalition so `sideOf` resolves off the roster, not the bloc table. */
+  const coalitionConflict = {
+    _id: "afghan",
+    name: "Central Asian Front",
+    hostCountry: "RU",
+    region: "cas",
+    terrain: "Arid / mountainous",
+    bloc: "contested",
+    severity: "HIGH",
+    baseStrength: 470,
+    terr: 1.15,
+    infra: 34,
+    enemyMix: ["armor", "mech", "infantry"],
+    // Supply is REQUIRED. Without it `conflictSupply` is undefined, the supply state
+    // resolves to NaN and every casualty, power and readiness figure in the battle comes
+    // out NaN. The older fixture in this file omits it and nothing noticed, because no
+    // test there asserts a numeric outcome.
+    supplyA: 60,
+    supplyB: 60,
+    supplyBaseA: 60,
+    supplyBaseB: 60,
+    sideA: { label: "Allies", countries: ["US", "UK"], kind: "coalition" },
+    sideB: { label: "Gov't", countries: ["CN"], kind: "state" },
+  };
+
+  const usDeclares = {
+    _id: new ObjectId(DECL_ID.alliedAutoJoin),
+    declarerCountry: "US",
+    targetCountry: "CN",
+    theaterId: "afghan",
+    declaredByCharacterId: "char_1",
+    declaredTurn: 40,
+    status: "pending",
+  };
+
+  /** Only UK's standing order varies between these cases. */
+  function setup(ukAutoJoin: boolean) {
+    vi.clearAllMocks();
+    db = createMockDb();
+    for (const c of [
+      "militaryUnits",
+      "militaryFormations",
+      "nationalDoctrine",
+      "battleDeclarations",
+      "battleReports",
+      "conflicts",
+      "theaterState",
+    ]) {
+      db.collection(c);
+    }
+    db.collectionMocks.militaryFormations.findOne.mockResolvedValue(null);
+    db.collectionMocks.nationalDoctrine.findOne.mockResolvedValue(null);
+    db.collectionMocks.conflicts.findOne.mockResolvedValue(coalitionConflict);
+    db.collectionMocks.battleDeclarations.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([usDeclares]),
+    });
+    db.collectionMocks.theaterState.find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue(
+          ukAutoJoin
+            ? [{ countryId: "UK", cohesion: 85, committed: {}, autoJoin: { afghan: true } }]
+            : []
+        ),
+    });
+    wireUnits(
+      db,
+      [unit({ countryId: "US" }), unit({ countryId: "UK", theaterId: "afghan" })],
+      [unit({ countryId: "CN", theaterId: "afghan" })]
+    );
+  }
+
+  const reportOf = () =>
+    db.collectionMocks.battleReports.insertOne.mock.calls[0]?.[0] as {
+      attackers?: string[];
+      result?: { attacker?: { contingents?: { country: string; loss: number }[] } };
+    };
+
+  it("pulls an opted-in ally into an offensive it never declared", async () => {
+    setup(true);
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+    expect(reportOf().attackers).toEqual(["US", "UK"]);
+  });
+
+  it("leaves the ally out when it has no standing order", async () => {
+    // The whole contract: silence is the old behaviour.
+    setup(false);
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+    expect(reportOf().attackers).toEqual(["US"]);
+  });
+
+  it("attributes the auto-joined ally's dead to the ally, not the declarer", async () => {
+    // Auto-join makes multi-nation offensives routine, so per-nation attribution stops
+    // being an edge case. Without it this feature would file UK's dead under the US.
+    setup(true);
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+    const contingents = reportOf().result?.attacker?.contingents ?? [];
+    // Names only. This harness mocks militaryFormations and nationalDoctrine to null and
+    // never registers characterGenerals, so the battle math it produces is not numerically
+    // meaningful -- which is why no test in this file asserts a figure, only that the
+    // writes happened. The numbers for a multi-nation offensive are verified against the
+    // live world by `scripts/sim/combatBalance2026-08-27.ts`, which resolves DD+RU as a
+    // real coalition and checks the per-contingent losses sum to the side.
+    expect(contingents.map((c) => c.country).sort()).toEqual(["UK", "US"]);
   });
 });

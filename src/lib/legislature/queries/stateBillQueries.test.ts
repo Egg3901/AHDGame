@@ -46,6 +46,49 @@ describe("listStateLegislatureBills — regional budget gate", () => {
     expect(db.collectionMocks["regionalBudgets"]!.findOne).toHaveBeenCalledWith({ _id: "SCT" });
     expect(page.budget?.totalBudget).toBe(100);
   });
+
+  it("fetches legislation types named by provisions, not just each bill's headline type", async () => {
+    // A bill's provisions can name a different law from its headline type.
+    // Fetching only the headline type left those provisions unresolved, so the
+    // card had no law name to show for them.
+    db.collection("stateBills");
+    db.collectionMocks["stateBills"]!.find.mockReturnValue({
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: new ObjectId(),
+          stateId: "AZ",
+          countryId: "US",
+          title: "Omnibus",
+          summary: "Two laws",
+          sponsorName: "Jo",
+          sponsorParty: "1",
+          status: "active",
+          votesFor: 0,
+          votesAgainst: 0,
+          votesAbstain: 0,
+          votes: {},
+          proposedAt: new Date("2026-06-07T00:00:00Z"),
+          legislationTypeId: "headline_law",
+          provisions: [{ legislationTypeId: "other_law", effectDirection: 1 }],
+        },
+      ]),
+    });
+    db.collection("legislationTypes");
+
+    await listStateLegislatureBills(db as unknown as Db, {
+      countryId: "US",
+      stateId: "AZ",
+      authUser: null,
+    });
+
+    const filter = db.collectionMocks["legislationTypes"]!.find.mock.calls[0]?.[0] as {
+      _id: { $in: string[] };
+    };
+    expect(filter._id.$in).toContain("headline_law");
+    expect(filter._id.$in).toContain("other_law");
+  });
 });
 
 describe("getStateLegislatureBillDetail — provision descriptions", () => {
@@ -134,10 +177,14 @@ describe("getStateLegislatureBillDetail — provision descriptions", () => {
 
     expect(detail).not.toBeNull();
     const prov = detail!.provisions[0]!;
-    expect(prov.policyOptionName).toBe("Direct Democracy Expansion Act");
-    expect(prov.policyOptionDescription).toBe("_Acht_ — citizens' assembly");
-    expect(prov.currentPolicyOptionName).toBe("Statutory Electoral Commission Act");
-    expect(prov.currentPolicyOptionDescription).toBe("Maintain current remit");
+    expect(prov.proposed).toEqual({
+      name: "Direct Democracy Expansion Act",
+      explanation: "_Acht_ — citizens' assembly",
+    });
+    expect(prov.current).toEqual({
+      name: "Statutory Electoral Commission Act",
+      explanation: "Maintain current remit",
+    });
     expect(prov.economic).toBe(-3);
     expect(prov.social).toBe(-4);
     expect(prov.effects && prov.effects.length).toBeGreaterThan(0);
@@ -350,5 +397,269 @@ describe("getStateLegislatureBillDetail — frozen snapshot for concluded bills 
     expect(card).toBeDefined();
     expect(card!.votesFor).toBe(14);
     expect(card!.votesAgainst).toBe(17);
+  });
+});
+
+describe("getStateLegislatureBillDetail — an enacted bill keeps the law it replaced", () => {
+  const BILL_ID = "507f1f77bcf86cd799439012";
+
+  const legType = {
+    _id: "ru_regional_health",
+    name: "Regional Health Programme",
+    policyDomain: "welfare",
+    effectTargetsWeighted: [
+      { metricCategoryId: "society", metricId: "healthcareQuality", weight: 1 },
+    ],
+    policyOptions: [
+      {
+        id: "o1",
+        name: "Minimal",
+        explanation: "Token funding.",
+        stance: "right",
+        effectDirection: 1,
+        economic: 2,
+        social: 0,
+      },
+      {
+        id: "o2",
+        name: "Universal",
+        explanation: "Full coverage.",
+        stance: "left",
+        effectDirection: -1,
+        economic: -2,
+        social: 0,
+      },
+    ],
+  };
+
+  const cursorOf = (rows: unknown[]) => ({
+    toArray: vi.fn().mockResolvedValue(rows),
+    sort: vi.fn().mockReturnThis(),
+    project: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    skip: vi.fn().mockReturnThis(),
+  });
+
+  it("shows the pre-enactment law, not the bill's own outcome", async () => {
+    // The reported bug. The bill has ALREADY enacted, so the live statePolicies
+    // row now points at the option this very bill introduced. Resolving current
+    // law live therefore rendered the bill's own outcome in the "Current law"
+    // box, and the bill looked like it had re-passed the law already in force.
+    const db = createMockDb();
+    db.collection("stateBills");
+    db.collectionMocks["stateBills"]!.findOne.mockResolvedValue({
+      _id: BILL_ID,
+      stateId: "MOW",
+      countryId: "RU",
+      title: "Moscow Health Act",
+      summary: "Expand coverage.",
+      sponsorName: "NPP",
+      sponsorParty: "1",
+      status: "enacted",
+      votesFor: 10,
+      votesAgainst: 2,
+      votesAbstain: 0,
+      votes: {},
+      proposedAt: new Date("2026-06-07T00:00:00Z"),
+      legislationTypeId: "ru_regional_health",
+      provisions: [
+        {
+          legislationTypeId: "ru_regional_health",
+          policyOptionId: "o2",
+          effectDirection: -1,
+          currentPolicyOptionIdSnapshot: "o1",
+          currentPolicyOptionNameSnapshot: "Minimal",
+          currentPolicyOptionExplanationSnapshot: "Token funding.",
+          policyOptionNameSnapshot: "Universal",
+          policyOptionExplanationSnapshot: "Full coverage.",
+        },
+      ],
+    });
+    db.collection("legislationTypes");
+    db.collectionMocks["legislationTypes"]!.find.mockReturnValue(cursorOf([legType]));
+    db.collection("statePolicies");
+    db.collectionMocks["statePolicies"]!.find.mockReturnValue(
+      cursorOf([{ stateId: "MOW", legislationTypeId: "ru_regional_health", policyOptionIndex: 1 }])
+    );
+    db.collection("enactedLaws");
+    db.collectionMocks["enactedLaws"]!.find.mockReturnValue(cursorOf([]));
+
+    const detail = await getStateLegislatureBillDetail(db as unknown as Db, {
+      countryId: "RU",
+      stateId: "MOW",
+      billId: BILL_ID,
+      authUser: null,
+    });
+
+    const prov = detail!.provisions[0]!;
+    expect(prov.current).toEqual({ name: "Minimal", explanation: "Token funding." });
+    expect(prov.proposed).toEqual({ name: "Universal", explanation: "Full coverage." });
+    expect(prov.current).not.toEqual(prov.proposed);
+    // The ladder positions must differ too, or the effect chips read as a no-op.
+    expect(prov.currentPolicyIndex).toBe(0);
+    expect(prov.proposedPolicyIndex).toBe(1);
+    expect(prov.effects?.length).toBeGreaterThan(0);
+  });
+
+  it("still falls back to the live law for a bill proposed before snapshots existed", async () => {
+    // Pre-fix documents carry no snapshot at all. They must keep rendering
+    // exactly as before rather than showing an empty current-law box.
+    const db = createMockDb();
+    db.collection("stateBills");
+    db.collectionMocks["stateBills"]!.findOne.mockResolvedValue({
+      _id: BILL_ID,
+      stateId: "MOW",
+      countryId: "RU",
+      title: "Legacy Bill",
+      summary: "No snapshots.",
+      sponsorName: "NPP",
+      sponsorParty: "1",
+      status: "active",
+      votesFor: 0,
+      votesAgainst: 0,
+      votesAbstain: 0,
+      votes: {},
+      proposedAt: new Date("2026-06-07T00:00:00Z"),
+      legislationTypeId: "ru_regional_health",
+      provisions: [
+        { legislationTypeId: "ru_regional_health", policyOptionId: "o2", effectDirection: -1 },
+      ],
+    });
+    db.collection("legislationTypes");
+    db.collectionMocks["legislationTypes"]!.find.mockReturnValue(cursorOf([legType]));
+    db.collection("statePolicies");
+    db.collectionMocks["statePolicies"]!.find.mockReturnValue(
+      cursorOf([{ stateId: "MOW", legislationTypeId: "ru_regional_health", policyOptionIndex: 0 }])
+    );
+    db.collection("enactedLaws");
+    db.collectionMocks["enactedLaws"]!.find.mockReturnValue(cursorOf([]));
+
+    const detail = await getStateLegislatureBillDetail(db as unknown as Db, {
+      countryId: "RU",
+      stateId: "MOW",
+      billId: BILL_ID,
+      authUser: null,
+    });
+
+    const prov = detail!.provisions[0]!;
+    expect(prov.current).toEqual({ name: "Minimal", explanation: "Token funding." });
+    expect(prov.proposed).toEqual({ name: "Universal", explanation: "Full coverage." });
+  });
+});
+
+describe("voteShiftPreview — what Aye and Nay would do to the viewer", () => {
+  const BILL_ID = "507f1f77bcf86cd7994390aa";
+  const viewerId = new ObjectId();
+  const userId = new ObjectId().toString();
+  const viewer = {
+    _id: viewerId,
+    userId: new ObjectId(userId),
+    policies: { economic: 0, social: 0 },
+  };
+  const official = {
+    characterId: viewerId,
+    nppId: null,
+    countryId: "US",
+    officeType: "stateSenate",
+    state: "TX",
+    seatsHeld: 2,
+  };
+  const bill = {
+    _id: new ObjectId(BILL_ID),
+    stateId: "TX",
+    countryId: "US",
+    title: "School Funding Act",
+    summary: "Fund schools",
+    sponsorName: "Jo",
+    sponsorParty: "1",
+    status: "active",
+    votesFor: 0,
+    votesAgainst: 0,
+    votesAbstain: 0,
+    votes: {},
+    proposedAt: new Date("2026-06-07T00:00:00Z"),
+    votingEndsOnTurn: 999,
+    provisions: [{ legislationTypeId: "lt-1", effectDirection: 1, economic: 2, social: -2 }],
+  };
+  const cursorOf = (rows: unknown[]) => ({
+    toArray: vi.fn().mockResolvedValue(rows),
+    sort: vi.fn().mockReturnThis(),
+    project: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    skip: vi.fn().mockReturnThis(),
+  });
+
+  function wire(db: MockDb) {
+    db.collection("stateBills");
+    db.collectionMocks["stateBills"]!.findOne.mockResolvedValue(bill);
+    db.collectionMocks["stateBills"]!.find.mockReturnValue(cursorOf([bill]));
+    db.collection("politicalParties");
+    db.collectionMocks["politicalParties"]!.find.mockReturnValue(cursorOf([]));
+    db.collection("legislationTypes");
+    db.collectionMocks["legislationTypes"]!.find.mockReturnValue(cursorOf([]));
+    db.collection("statePolicies");
+    db.collectionMocks["statePolicies"]!.find.mockReturnValue(cursorOf([]));
+    db.collection("characters");
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue(viewer);
+    db.collectionMocks["characters"]!.find.mockReturnValue(cursorOf([viewer]));
+    db.collection("electedOfficials");
+    db.collectionMocks["electedOfficials"]!.findOne.mockResolvedValue(official);
+    db.collectionMocks["electedOfficials"]!.find.mockReturnValue(cursorOf([official]));
+  }
+
+  it("the detail carries a preview for a seated viewer", async () => {
+    const db = createMockDb();
+    wire(db);
+    const detail = await getStateLegislatureBillDetail(db as unknown as Db, {
+      countryId: "US",
+      stateId: "TX",
+      billId: BILL_ID,
+      authUser: { isAdmin: false, userId } as never,
+    });
+    expect(detail!.canVote).toBe(true);
+    expect(detail!.voteShiftPreview).toEqual({
+      current: { economic: 0, social: 0 },
+      aye: { economic: 0.25, social: -0.25 },
+      nay: { economic: -0.25, social: 0.25 },
+    });
+  });
+
+  it("the detail carries no preview for a spectator", async () => {
+    const db = createMockDb();
+    wire(db);
+    const detail = await getStateLegislatureBillDetail(db as unknown as Db, {
+      countryId: "US",
+      stateId: "TX",
+      billId: BILL_ID,
+      authUser: null,
+    });
+    expect(detail!.voteShiftPreview ?? null).toBeNull();
+  });
+
+  it("the list carries a preview on an active bill for a seated viewer", async () => {
+    const db = createMockDb();
+    wire(db);
+    const page = await listStateLegislatureBills(db as unknown as Db, {
+      countryId: "US",
+      stateId: "TX",
+      authUser: { isAdmin: false, userId } as never,
+    });
+    expect(page.bills[0]!.voteShiftPreview).toEqual({
+      current: { economic: 0, social: 0 },
+      aye: { economic: 0.25, social: -0.25 },
+      nay: { economic: -0.25, social: 0.25 },
+    });
+  });
+
+  it("the list carries no preview for a viewer with no seat in this chamber", async () => {
+    const db = createMockDb();
+    wire(db);
+    db.collectionMocks["electedOfficials"]!.find.mockReturnValue(cursorOf([]));
+    const page = await listStateLegislatureBills(db as unknown as Db, {
+      countryId: "US",
+      stateId: "TX",
+      authUser: { isAdmin: false, userId } as never,
+    });
+    expect(page.bills[0]!.voteShiftPreview ?? null).toBeNull();
   });
 });

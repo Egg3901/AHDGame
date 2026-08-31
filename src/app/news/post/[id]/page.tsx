@@ -31,17 +31,28 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const titleText = post.title
     ? `${post.title} | News | ${SITE_BRAND}`
     : `${post.authorName} — News | ${SITE_BRAND}`;
-  const desc = post.content.length > 160 ? `${post.content.slice(0, 157)}…` : post.content;
+  // Wire posts can be a single word or a single punctuation mark. Echoing that
+  // into the description produced live meta tags reading "." and "Tinky
+  // Corporation", so anything too short to describe the page falls back.
+  const trimmed = post.content.trim();
+  const desc =
+    trimmed.length < 40
+      ? `An in-character player post on the ${SITE_BRAND} news wire.`
+      : trimmed.length > 160
+        ? `${trimmed.slice(0, 157)}…`
+        : trimmed;
 
   const absImage = post.imageUrl ? toAbsoluteAssetUrl(base, post.imageUrl) : null;
 
   return {
     title: titleText,
     description: desc,
-    robots:
-      post.feedType === "advertisement" || post.isSystem
-        ? { index: false, follow: false }
-        : { index: true, follow: true },
+    // Every wire permalink is noindex, not just ads and system posts. These are
+    // player-written in-character posts of a few dozen words each; Google
+    // rejected the AdSense application on low value content while 68 of them
+    // were indexed, and the section carries UGC the site would be held
+    // responsible for. follow stays on so the crawler still walks back to /news.
+    robots: { index: false, follow: true },
     alternates: { canonical: url },
     openGraph: {
       title: titleText,

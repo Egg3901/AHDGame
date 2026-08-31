@@ -131,7 +131,11 @@ export function useGameClock(): GameClock {
         timestamp,
         status.currentTurn,
         lastTurnProcessed,
-        status.startingYear ?? STARTING_YEAR
+        status.startingYear ?? STARTING_YEAR,
+        {
+          preIterationTurns: status.preIterationTurns,
+          preIterationActive: status.preIterationActive,
+        }
       );
     },
 

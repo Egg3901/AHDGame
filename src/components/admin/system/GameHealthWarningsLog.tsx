@@ -7,7 +7,7 @@ interface Warning {
   phase: string;
   severity: "warning" | "error";
   message: string;
-  source: "turnProcessing" | "integrity" | "turnLock" | "turnPhase";
+  source: "turnProcessing" | "integrity" | "turnLock" | "turnPhase" | "phaseBudget";
   timestamp: string;
 }
 
@@ -21,6 +21,7 @@ const sourceLabels = {
   integrity: "Integrity",
   turnLock: "Turn Lock",
   turnPhase: "Phase Status",
+  phaseBudget: "Phase Budget",
 } as const;
 
 const sourceClasses = {
@@ -28,6 +29,9 @@ const sourceClasses = {
   integrity: "bg-warning/10 text-warning",
   turnLock: "bg-error/10 text-error",
   turnPhase: "bg-primary/10 text-primary",
+  // Amber like Integrity: a phase nearing the timeout is a lead-time signal,
+  // not yet a failure.
+  phaseBudget: "bg-warning/10 text-warning",
 } as const;
 
 export function GameHealthWarningsLog() {
@@ -96,6 +100,7 @@ export function GameHealthWarningsLog() {
           <option value="integrity">Integrity</option>
           <option value="turnLock">Turn Lock</option>
           <option value="turnPhase">Phase Outcomes</option>
+          <option value="phaseBudget">Phase Budget</option>
         </select>
       </div>
 

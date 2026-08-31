@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { sumActiveSectorDemandModifierPct } from "./countryModifiers";
+import {
+  sumActiveSectorDemandModifierPct,
+  sumActiveWarEmergencyMitigationPct,
+  WAR_EMERGENCY_MITIGATION_CAP_PCT,
+} from "./countryModifiers";
 
 describe("sumActiveSectorDemandModifierPct", () => {
   const modifiers = [
@@ -28,5 +32,21 @@ describe("sumActiveSectorDemandModifierPct", () => {
 
   it("returns 0 for an empty modifier list", () => {
     expect(sumActiveSectorDemandModifierPct([], "construction", 15)).toBe(0);
+  });
+});
+
+describe("sumActiveWarEmergencyMitigationPct", () => {
+  it("stacks active measures, ignores expired ones, and preserves a residual crisis cadence", () => {
+    expect(
+      sumActiveWarEmergencyMitigationPct(
+        [
+          { pct: 18, expiresAtTurn: 120 },
+          { pct: 14, expiresAtTurn: 130 },
+          { pct: 30, expiresAtTurn: 99 },
+          { pct: 20, expiresAtTurn: 140 },
+        ],
+        100
+      )
+    ).toBe(WAR_EMERGENCY_MITIGATION_CAP_PCT);
   });
 });

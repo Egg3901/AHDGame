@@ -65,7 +65,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     slug: "multi-country-play",
     title: "Multi-Country Play",
     description:
-      "How character countryId scoping works, playing in parliamentary vs presidential systems, and how economic investments (forex, bonds, corporations) cross borders.",
+      "The playable roster by era, how character country scoping works, playing in parliamentary, presidential and one-party systems, and how economic investments (forex, bonds, corporations) cross borders.",
     content: multiCountryPlayContent,
     category: "advanced",
     featured: false,
@@ -101,7 +101,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     slug: "reference-turn-order",
     title: "Reference: Turn Order",
     description:
-      "The complete turn processing sequence: 14 groups, 40+ phases, what runs in each, and why the Group 7 election resolution order is strictly load-bearing.",
+      "The complete turn processing sequence: 14 groups, 130+ phases, what runs in each, where battles and the Fed resolve, and why the Group 7 election resolution order is strictly load-bearing.",
     content: referenceTurnOrderContent,
     category: "advanced",
     extraTags: ["turns", "phases"],
@@ -115,7 +115,7 @@ export const advancedPages: readonly WikiSeedPage[] = [
     slug: "reference-offices",
     title: "Reference: Offices",
     description:
-      "Complete reference for all playable offices across the US, UK, Germany, and Japan: how each is won, term lengths, action bonuses, and party strength weights.",
+      "Reference for the offices of the US, UK, Germany, and Japan: how each is won, term lengths, action bonuses, and party strength weights. Other countries' offices live on their hubs.",
     content: referenceOfficesContent,
     category: "advanced",
     extraTags: ["offices", "action-bonus"],

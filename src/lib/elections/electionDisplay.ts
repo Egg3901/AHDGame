@@ -41,6 +41,7 @@ export function toElectionDisplay(e: ElectionResponse): ElectionDisplay {
     inPrimary: e.inPrimary,
     polling: e.polling ?? undefined,
     seatsEstimate: e.seatsEstimate ?? undefined,
+    primaryVotes: e.primaryVotes ?? undefined,
     incumbent: e.incumbent
       ? {
           name: e.incumbent.name,

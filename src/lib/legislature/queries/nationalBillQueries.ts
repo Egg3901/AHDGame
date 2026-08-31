@@ -14,7 +14,8 @@ import type {
   NPP,
   PoliticalParty,
 } from "@/lib/db/types";
-import { isPolicyProvision } from "@/lib/db/types/legislation";
+import { isPolicyProvision, type AxisPositions } from "@/lib/db/types/legislation";
+import { buildVoteShiftPreview } from "@/lib/legislature/voteShiftPreview";
 import { formatEmbargoProvisionLabel } from "@/lib/legislature/embargoProvisionLabel";
 import {
   axisRelevant,
@@ -261,6 +262,7 @@ export async function listNationalLegislatureBills(
     .toArray();
 
   let myCharacterId: string | null = null;
+  let myPolicies: AxisPositions | undefined;
   let canPropose = false;
   let isMember = false;
   let isMemberOfViewedChamber = false;
@@ -270,6 +272,7 @@ export async function listNationalLegislatureBills(
   if (authUser) {
     const char = await getCharacterByUserId(db, authUser.userId);
     myCharacterId = char?._id?.toString() ?? null;
+    myPolicies = char?.policies;
     if (myCharacterId) {
       // In a bill-active bicameral legislature (US/JP/NG) the upper chamber can
       // also originate bills, so its members count as proposers. UK Lords / DE
@@ -376,6 +379,15 @@ export async function listNationalLegislatureBills(
       lowerKey,
       upperKeyForGet ?? null
     );
+    // On a concurrent bill BOTH chambers are open, so a member of whichever chamber
+    // this page is showing may vote — into that chamber's own map. `canVoteOther` was
+    // a hardcoded `false`, which would have hidden the vote button from every upper
+    // chamber on every one of these bills.
+    const canVoteOrigin =
+      (bill.status === "active" || (bill.status === "active_both" && chamber === lowerKey)) &&
+      isMemberOfViewedChamber;
+    const canVoteOther =
+      bill.status === "active_both" && chamber !== lowerKey && isMemberOfViewedChamber;
     const partySlug = bill.sponsorParty ?? "";
     const party = partyMap.get(partySlug);
     const firstPolicy = bill.provisions?.find(isPolicyProvision);
@@ -567,11 +579,25 @@ export async function listNationalLegislatureBills(
       // this page is showing may vote — into that chamber's own map. `canVoteOther` was
       // a hardcoded `false`, which would have hidden the vote button from every upper
       // chamber on every one of these bills.
-      canVoteOrigin:
-        (bill.status === "active" || (bill.status === "active_both" && chamber === lowerKey)) &&
-        isMemberOfViewedChamber,
-      canVoteOther:
-        bill.status === "active_both" && chamber !== lowerKey && isMemberOfViewedChamber,
+      canVoteOrigin,
+      canVoteOther,
+      voteShiftPreview: buildVoteShiftPreview({
+        provisions: (bill.provisions ?? []).filter(isPolicyProvision),
+        ledger: bill.policyShiftLedger,
+        characterId: myCharacterId,
+        policies: myPolicies,
+        previousVote: myCharacterId
+          ? chamber !== lowerKey
+            ? bill.otherChamberVotes?.[myCharacterId]
+            : bill.votes?.[myCharacterId]
+          : undefined,
+        whippedFrom: myCharacterId
+          ? chamber !== lowerKey
+            ? bill.otherChamberWhippedFromVote?.[myCharacterId]
+            : bill.whippedFromVote?.[myCharacterId]
+          : undefined,
+        canVote: canVoteOrigin || canVoteOther,
+      }),
       requiresExecutiveAction: billRequiresExecutiveAction(bill),
       failedAt: bill.failedAt?.toISOString() ?? null,
     };
@@ -617,6 +643,7 @@ export async function getNationalBillDetail(
   let viewerPartyId: string | null = null;
   let viewerCharacterObjectId: ObjectId | null = null;
   let viewerCountryId: CountryId | null = null;
+  let viewerPolicies: AxisPositions | undefined;
 
   if (country === "US") {
     if (authUser) {
@@ -624,13 +651,14 @@ export async function getNationalBillDetail(
         .collection<Character>("characters")
         .findOne(
           { userId: new ObjectId(authUser.userId) },
-          { projection: { _id: 1, party: 1, countryId: 1 } }
+          { projection: { _id: 1, party: 1, countryId: 1, policies: 1 } }
         );
       if (viewerCharacter) {
         myCharacterId = viewerCharacter._id.toString();
         viewerCharacterObjectId = viewerCharacter._id;
         viewerPartyId = viewerCharacter.party ?? null;
         viewerCountryId = viewerCharacter.countryId ?? null;
+        viewerPolicies = viewerCharacter.policies;
         const [officials, presidentOfficial] = await Promise.all([
           db
             .collection<ElectedOfficial>("electedOfficials")
@@ -672,6 +700,7 @@ export async function getNationalBillDetail(
       viewerCharacterObjectId = character._id;
       viewerPartyId = character.party ?? null;
       viewerCountryId = character.countryId ?? null;
+      viewerPolicies = character.policies;
       const officials = await db
         .collection<ElectedOfficial>("electedOfficials")
         .find({
@@ -969,5 +998,24 @@ export async function getNationalBillDetail(
     upperKey,
     overrideDisplay
   ) as BillDetail;
-  return { ...detail, whipCounts };
+  // Cabinet review votes never move positions, so no preview there.
+  const previewChamberOpen = bill.status !== "cabinet_review";
+  const voteShiftPreview = buildVoteShiftPreview({
+    provisions: (bill.provisions ?? []).filter(isPolicyProvision),
+    ledger: bill.policyShiftLedger,
+    characterId: myCharacterId,
+    policies: viewerPolicies,
+    previousVote: myCharacterId
+      ? detail.canVoteOther
+        ? bill.otherChamberVotes?.[myCharacterId]
+        : bill.votes?.[myCharacterId]
+      : undefined,
+    whippedFrom: myCharacterId
+      ? detail.canVoteOther
+        ? bill.otherChamberWhippedFromVote?.[myCharacterId]
+        : bill.whippedFromVote?.[myCharacterId]
+      : undefined,
+    canVote: previewChamberOpen && (detail.canVoteOrigin || detail.canVoteOther),
+  });
+  return { ...detail, whipCounts, voteShiftPreview };
 }

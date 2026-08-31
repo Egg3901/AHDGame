@@ -7,6 +7,7 @@
  */
 import type { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
+import { ownsConfiguredWebhooks } from "@/lib/deploymentIdentity";
 import { sendDiscordWebhookMultiple, type DiscordEmbed } from "@/lib/discordWebhooks";
 import { createNotification } from "@/lib/notifications";
 import type { GameConfig } from "@/lib/db/types";
@@ -290,7 +291,12 @@ async function getChangelogWebhookUrl(): Promise<string | undefined> {
   const db = await getDb();
   const config = await db
     .collection<GameConfig>("gameConfig")
-    .findOne({ _id: "default" }, { projection: { discordChangelogWebhookUrl: 1 } });
+    .findOne(
+      { _id: "default" },
+      { projection: { discordChangelogWebhookUrl: 1, discordWebhookOwnerService: 1 } }
+    );
+  // #1208 — a database restored into another deployment inherits these URLs.
+  if (!ownsConfiguredWebhooks(config?.discordWebhookOwnerService)) return undefined;
   return config?.discordChangelogWebhookUrl || undefined;
 }
 

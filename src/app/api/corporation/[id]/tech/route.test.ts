@@ -20,6 +20,12 @@ vi.mock("@/lib/auth", () => ({ getAuthUser: vi.fn().mockResolvedValue(null) }));
 vi.mock("@/lib/corporations/techTree/featureFlag", () => ({
   isSectorTechTreesEnabled: vi.fn().mockResolvedValue(true),
 }));
+vi.mock("@/lib/corporations/dailyGrossRevenue", () => ({
+  corpDailyGrossRevenuePricingLocal: vi.fn().mockResolvedValue({
+    dailyGrossRevenueLocal: 2_635_025_293.53,
+    capacityFloorApplied: true,
+  }),
+}));
 
 let db: MockDb;
 const corpId = new ObjectId();
@@ -59,6 +65,26 @@ beforeEach(async () => {
 });
 
 describe("GET /api/corporation/[id]/tech", () => {
+  it("explains the gross operating scale used to price technology", async () => {
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: makeCorp(),
+    } as never);
+
+    const { GET } = await import("./route");
+    const res = await GET(new Request("http://localhost/api/corporation/x/tech"), {
+      params: Promise.resolve({ id: corpId.toString() }),
+    });
+    const body = await res.json();
+
+    expect(body.cashPricing).toEqual({
+      dailyGrossOperatingScale: 2_635_025_294,
+      defaultRevenueFraction: 0.15,
+      capacityFloorApplied: true,
+    });
+  });
+
   it("does not lock either lane in a past decade the corp committed a lane in (ticket #0869)", async () => {
     const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
     vi.mocked(resolveCorporation).mockResolvedValue({

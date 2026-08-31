@@ -47,6 +47,11 @@ export const DEFAULT_GAME_STATE_FLAGS = {
   nppAutonomyLevel: "v4",
   // Kept in sync with nppAutonomyLevel for legacy readers.
   nppAutonomyEnabled: true,
+  // Autonomous diplomacy ships active at its safest rollout stage. Countries
+  // can cast scored organization votes, while proposals, trade, support, and
+  // war remain unavailable until an admin advances the stage.
+  nppForeignPolicyMode: "active",
+  nppForeignPolicyStage: "votes",
   // World Events v1 (plan-world-events-v1) — validated via worldsim A/B in
   // Phase 4 (approval/treasury bounded, sectorDemandModifier stacking capped
   // below market-clearing sensitivity). Seed-on for fresh worlds only; this
@@ -83,6 +88,9 @@ export const DEFAULT_GAME_STATE_FLAGS = {
   embargoTradeExposureEnabled: true,
   liveElectionResultsEnabled: true,
   extractionAutoStrategyEnabled: true,
+  // Existing and fresh worlds start by recording decisions only. Promotion to
+  // enforce is an explicit admin action after the observation gate passes.
+  nppEntryViabilityMode: "observe",
   seasonRecapEnabled: true,
   // Corporate M&A / deal-making subsystem (agreed corp-to-corp acquisitions).
   // Runtime helper is fail-closed (absent = off); default on for fresh worlds.

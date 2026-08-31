@@ -98,6 +98,256 @@ describe("GET/PATCH /api/admin/config/market — extractionOutputScaleEnabled", 
     >;
     expect(setArg).not.toHaveProperty("extractionOutputScaleEnabled");
   });
+
+  it("GET reflects shortage-responsive sourcing and defaults it off", async () => {
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "capital",
+      shortageResponsiveSourcingEnabled: true,
+    });
+    const { GET } = await import("./route");
+    const enabled = (await (await GET()).json()) as {
+      shortageResponsiveSourcingEnabled: boolean;
+    };
+    expect(enabled.shortageResponsiveSourcingEnabled).toBe(true);
+
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "capital",
+    });
+    const absent = (await (await GET()).json()) as {
+      shortageResponsiveSourcingEnabled: boolean;
+    };
+    expect(absent.shortageResponsiveSourcingEnabled).toBe(false);
+  });
+
+  it("PATCH writes the dark sourcing gate only when explicitly provided", async () => {
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "capital",
+    });
+    const { PATCH } = await import("./route");
+    await PATCH(
+      makePatchRequest({
+        mode: "capital",
+        shortageResponsiveSourcingEnabled: true,
+        intervention: {
+          id: "issue-968-shortage-sourcing",
+          issueId: 968,
+          owner: "operator",
+          objective: "Increase buyer intent fulfillment.",
+          targets: [
+            {
+              metric: "intentFulfillmentRate",
+              direction: "increase",
+              minimumImprovement: 0.05,
+            },
+          ],
+          guardrails: [
+            {
+              metric: "physicalSellThrough",
+              direction: "increase",
+              maximumDeterioration: 0.05,
+            },
+          ],
+          cohort: { initialShare: 0.1, maximumShare: 1, rampTurns: 24 },
+          review: { startTurn: 0, reviewTurn: 10_000 },
+          rollback: {
+            owner: "operator",
+            trigger: "A guardrail breaches.",
+            action: "Disable shortage sourcing.",
+          },
+        },
+      })
+    );
+    const setArg = db.collectionMocks.gameConfig!.updateOne.mock.calls[0]?.[1]?.$set as Record<
+      string,
+      unknown
+    >;
+    expect(setArg.shortageResponsiveSourcingEnabled).toBe(true);
+    expect(setArg.shortageResponsiveSourcingIntervention).toMatchObject({
+      id: "issue-968-shortage-sourcing",
+      issueId: 968,
+    });
+  });
+
+  it("refuses an ungoverned shortage-sourcing activation", async () => {
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "capital",
+    });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(
+      makePatchRequest({ mode: "capital", shortageResponsiveSourcingEnabled: true })
+    );
+
+    expect(res.status).toBe(400);
+    expect(db.collectionMocks.gameConfig!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("requires and persists governance for bond liquidity", async () => {
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "capital",
+    });
+    const { PATCH } = await import("./route");
+    const refused = await PATCH(
+      makePatchRequest({ mode: "capital", indexFundBondLiquidityEnabled: true })
+    );
+    expect(refused.status).toBe(400);
+
+    const bondLiquidityIntervention = {
+      id: "issue-968-bond-liquidity",
+      issueId: 968,
+      owner: "operator",
+      objective: "Reduce unheld sovereign bond issues.",
+      targets: [{ metric: "noHolderBondShare", direction: "decrease", minimumImprovement: 0.1 }],
+      guardrails: [
+        { metric: "fundBackingRatio", direction: "increase", maximumDeterioration: 0.05 },
+      ],
+      cohort: { initialShare: 0.1, maximumShare: 1, rampTurns: 24 },
+      review: { startTurn: 0, reviewTurn: 10_000 },
+      rollback: {
+        owner: "operator",
+        trigger: "Fund backing deteriorates.",
+        action: "Disable bond liquidity and retain existing assets.",
+      },
+    };
+    const accepted = await PATCH(
+      makePatchRequest({
+        mode: "capital",
+        indexFundBondLiquidityEnabled: true,
+        bondLiquidityIntervention,
+      })
+    );
+    expect(accepted.status).toBe(200);
+    const setArg = db.collectionMocks.gameConfig!.updateOne.mock.calls.at(-1)?.[1]?.$set as Record<
+      string,
+      unknown
+    >;
+    expect(setArg.indexFundBondLiquidityEnabled).toBe(true);
+    expect(setArg.indexFundBondLiquidityIntervention).toEqual(bondLiquidityIntervention);
+  });
+
+  it("requires and persists governance for bounded equity liquidity", async () => {
+    const { PATCH } = await import("./route");
+    const refused = await PATCH(
+      makePatchRequest({ mode: "capital", equityLiquidityFacilityEnabled: true })
+    );
+    expect(refused.status).toBe(400);
+
+    const equityLiquidityIntervention = {
+      id: "issue-990-equity-liquidity",
+      issueId: 990,
+      owner: "operator",
+      objective: "Increase executable two-sided equity depth.",
+      targets: [{ metric: "twoSidedListingShare", direction: "increase", minimumImprovement: 0.2 }],
+      guardrails: [
+        { metric: "fundBackingRatio", direction: "increase", maximumDeterioration: 0.02 },
+      ],
+      cohort: { initialShare: 0.1, maximumShare: 0.4, rampTurns: 48 },
+      review: { startTurn: 0, reviewTurn: 10_000 },
+      rollback: {
+        owner: "operator",
+        trigger: "Fund backing, concentration, or market-quality guardrails fail.",
+        action: "Disable the facility and cancel all standing quotes.",
+      },
+    };
+    const accepted = await PATCH(
+      makePatchRequest({
+        mode: "capital",
+        equityLiquidityFacilityEnabled: true,
+        equityLiquidityIntervention,
+      })
+    );
+    expect(accepted.status).toBe(200);
+    const setArg = db.collectionMocks.gameConfig!.updateOne.mock.calls.at(-1)?.[1]?.$set as Record<
+      string,
+      unknown
+    >;
+    expect(setArg.equityLiquidityFacilityEnabled).toBe(true);
+    expect(setArg.equityLiquidityFacilityIntervention).toEqual(equityLiquidityIntervention);
+  });
+
+  it("requires and persists governance for NPP market coverage", async () => {
+    const { PATCH } = await import("./route");
+    const refused = await PATCH(
+      makePatchRequest({ mode: "capital", nppMarketCoverageEnabled: true })
+    );
+    expect(refused.status).toBe(400);
+
+    const marketCoverageIntervention = {
+      id: "issue-991-market-coverage",
+      issueId: 991,
+      owner: "operator",
+      objective: "Reduce facility-ready empty state-sector markets.",
+      targets: [
+        { metric: "facilityReadyEmptyMarketShare", direction: "decrease", minimumImprovement: 0.1 },
+      ],
+      guardrails: [{ metric: "pooledFillRate", direction: "increase", maximumDeterioration: 0.02 }],
+      cohort: { initialShare: 0.125, maximumShare: 1, rampTurns: 48 },
+      review: { startTurn: 0, reviewTurn: 10_000 },
+      rollback: {
+        owner: "operator",
+        trigger: "Coverage or market-quality guardrails fail.",
+        action: "Disable NPP market coverage routing.",
+      },
+    };
+    const accepted = await PATCH(
+      makePatchRequest({
+        mode: "capital",
+        nppMarketCoverageEnabled: true,
+        marketCoverageIntervention,
+      })
+    );
+    expect(accepted.status).toBe(200);
+    const setArg = db.collectionMocks.gameConfig!.updateOne.mock.calls.at(-1)?.[1]?.$set as Record<
+      string,
+      unknown
+    >;
+    expect(setArg.nppMarketCoverageEnabled).toBe(true);
+    expect(setArg.nppMarketCoverageIntervention).toEqual(marketCoverageIntervention);
+  });
+
+  it("requires and persists governance for fragile-market supply routing", async () => {
+    const { PATCH } = await import("./route");
+    const refused = await PATCH(
+      makePatchRequest({ mode: "capital", nppFragileMarketSupplyEnabled: true })
+    );
+    expect(refused.status).toBe(400);
+
+    const fragileMarketSupplyIntervention = {
+      id: "issue-991-fragile-market-supply",
+      issueId: 991,
+      owner: "operator",
+      objective: "Improve supply breadth and fill in four diagnosed fragile commodity markets.",
+      targets: [
+        { metric: "targetedFragileMarketFill", direction: "increase", minimumImprovement: 0.05 },
+      ],
+      guardrails: [{ metric: "pooledFillRate", direction: "increase", maximumDeterioration: 0.02 }],
+      cohort: { initialShare: 0.125, maximumShare: 1, rampTurns: 48 },
+      review: { startTurn: 0, reviewTurn: 10_000 },
+      rollback: {
+        owner: "operator",
+        trigger: "Targeted supply breadth or economy-wide fill guardrails fail.",
+        action: "Disable fragile-market supply routing.",
+      },
+    };
+    const accepted = await PATCH(
+      makePatchRequest({
+        mode: "capital",
+        nppFragileMarketSupplyEnabled: true,
+        fragileMarketSupplyIntervention,
+      })
+    );
+    expect(accepted.status).toBe(200);
+    const setArg = db.collectionMocks.gameConfig!.updateOne.mock.calls.at(-1)?.[1]?.$set as Record<
+      string,
+      unknown
+    >;
+    expect(setArg.nppFragileMarketSupplyEnabled).toBe(true);
+    expect(setArg.nppFragileMarketSupplyIntervention).toEqual(fragileMarketSupplyIntervention);
+  });
 });
 
 // MARKET_MODE_INFO[mode].live was enforced ONLY by the admin selector disabling

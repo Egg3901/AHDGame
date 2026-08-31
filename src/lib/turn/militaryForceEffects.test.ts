@@ -131,6 +131,25 @@ describe("driftReadiness", () => {
   it("does not overshoot the baseline", () => {
     expect(driftReadiness(71, "standard")).toBe(72); // baseline 72, step capped at target
   });
+
+  /**
+   * A formation spent down to the floor has to be able to come back on a timescale a
+   * player will actually see. The battle ledger's tempo escalator charges a worn unit
+   * up to four times as much for the same engagement, so recovery that crawls leaves a
+   * spent formation unable to climb out at any realistic fighting cadence: it is knocked
+   * straight back to the floor by its next battle. Recovery has to outrun that.
+   */
+  it("brings a formation back from the floor inside half a day of turns", () => {
+    let readiness = 3;
+    let turns = 0;
+    const target = readinessBaselineOf("alert");
+    while (readiness < target && turns < 100) {
+      readiness = driftReadiness(readiness, "alert");
+      turns++;
+    }
+    expect(readiness).toBe(target);
+    expect(turns).toBeLessThanOrEqual(12);
+  });
 });
 
 // A force whose upkeep the defence appropriation could not fund settles toward a

@@ -56,7 +56,16 @@ describe("a proxy war moves control", () => {
   let db: MockDb;
 
   const declaration = {
-    _id: new ObjectId(),
+    // Fixed, not `new ObjectId()`. The battle seed is `hashStr(principal._id + turn)`,
+    // so a fresh id reseeds the engagement every run. Since `ATTRITION.fortuneSpread`
+    // the seed decides a real roll, and "control moved the declarer's way" became a
+    // coin flip: this fixture's bloc wins about 10 seeds in 12, so the file failed
+    // roughly one run in six. See the same note in `battleResolution.test.ts`.
+    //
+    // This id is one of the 10, chosen deliberately — the cases below are about where
+    // a WIN moves the front to, so they need a battle the declarer wins. The two-in-
+    // twelve losing seeds are the mechanic working, not a fixture to repair.
+    _id: new ObjectId("bbbbbbbbbbbbbbbbbbbb0002"),
     declarerCountry: "US",
     // The FACTION, not a member country. This is the declarable target.
     targetCountry: "NVN",
@@ -66,7 +75,12 @@ describe("a proxy war moves control", () => {
     status: "pending",
   };
 
-  const vietnam = {
+  // Rebuilt per test: resolution mutates the conflict document it is handed, so the
+  // rest of the tick sees a consistent picture — the roster (`joinSide`), the front
+  // and supplies (`applyOccupation`), and the faction's `tokenStrength`. A single
+  // literal shared across cases would carry one test's grinding into the next.
+  let vietnam: ReturnType<typeof makeVietnam>;
+  const makeVietnam = () => ({
     _id: "vietnam",
     name: "Vietnam War",
     hostCountry: "SVN",
@@ -104,10 +118,11 @@ describe("a proxy war moves control", () => {
     control: 50,
     controlStart: 50,
     status: "active",
-  };
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vietnam = makeVietnam();
     db = createMockDb();
     for (const c of [
       "militaryUnits",

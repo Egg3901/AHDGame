@@ -12,10 +12,7 @@
 const AD_SLOT_IDS: Record<string, string> = {
   "ahd-footer-responsive": "",
   "ahd-about-inarticle": "",
-  "ahd-news-infeed": "",
-  "ahd-wiki-sidebar": "",
   "ahd-guides-incontent": "",
-  "ahd-changelog-native": "",
   "ahd-faq-top": "",
   "ahd-faq-bottom": "",
 };

@@ -2,12 +2,14 @@ import { describe, it, expect, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import {
   buildConflict,
+  createConflict,
   conflictToFront,
   deployOpeningForces,
   type BuildConflictInput,
 } from "./createConflict";
-import type { ConflictSide } from "@/lib/db/types/conflict";
+import type { ConflictDoc, ConflictSide } from "@/lib/db/types/conflict";
 import { OCCUPATION } from "./config";
+import { createMockDb } from "@/lib/test-utils/mockDb";
 
 const west: ConflictSide = {
   label: "United States",
@@ -134,6 +136,56 @@ describe("conflict numbering", () => {
   });
 });
 
+describe("createConflict tension event", () => {
+  it("treats any two opposing live nuclear powers as a nuclear-war declaration", async () => {
+    const db = createMockDb();
+    for (const name of [
+      "counters",
+      "conflicts",
+      "militaryUnits",
+      "nuclearPrograms",
+      "coldWarTension",
+    ]) {
+      db.collection(name);
+    }
+    db.collectionMocks.counters!.findOneAndUpdate.mockResolvedValue({ seq: 1 });
+    db.collectionMocks.nuclearPrograms!.find.mockReturnValue({
+      toArray: vi.fn(async () => [
+        { _id: "US", adopted: {}, warheads: 522, productionRate: 0, updatedAt: new Date() },
+        { _id: "UK", adopted: {}, warheads: 578, productionRate: 0, updatedAt: new Date() },
+      ]),
+    } as never);
+    db.collectionMocks.coldWarTension!.findOne.mockResolvedValue({
+      _id: "current",
+      value: 40,
+      pressureFloor: 12,
+      updatedTurn: 10,
+      events: [],
+      updatedAt: new Date(),
+    });
+    const { conflictId: _conflictId, ...input } = base({
+      id: "war_us_uk_11",
+      hostCountry: "UK",
+      sideA: west,
+      sideB: { label: "United Kingdom", countries: ["UK"], kind: "state" },
+      startTurn: 11,
+    });
+
+    await createConflict(db as unknown as Db, input);
+
+    expect(db.collectionMocks.coldWarTension!.updateOne).toHaveBeenCalledWith(
+      { _id: "current" },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          value: 60,
+          events: [expect.objectContaining({ label: expect.stringContaining("War declared") })],
+        }),
+      }),
+      { upsert: true }
+    );
+  });
+});
+
 describe("deployOpeningForces", () => {
   it("moves comparable reserve units to the new conflict", async () => {
     const us1 = new ObjectId();
@@ -231,5 +283,112 @@ describe("cold_war conflicts", () => {
     expect(c.sideA.factionEntity).toBe("SVN");
     expect(c.sideB.factionEntity).toBe("NVN");
     expect(c.sideB.tokenStrength).toBe(40);
+  });
+});
+
+/** The live German war, trimmed to the fields conflictToFront reads. */
+const germanWar = {
+  _id: "war_us_dd_415",
+  name: "The War for Germany",
+  region: "eeu",
+  terrain: "Plain / forest",
+  bloc: "contested",
+  terr: 0.95,
+  infra: 70,
+  severity: "HIGH",
+  baseStrength: 440,
+  hostCountry: "DD",
+  hostEntities: ["DD", "DE"],
+  sideA: { label: "United States" },
+  sideB: { label: "East Germany" },
+} as unknown as ConflictDoc;
+
+describe("conflictToFront sea access", () => {
+  it("derives sea access from the host when the conflict does not say", () => {
+    // DD and DE both hold naval branches, so the German front reaches the Baltic.
+    expect(conflictToFront(germanWar).seaAccess).toBe(true);
+  });
+
+  it("derives inland for a landlocked host", () => {
+    const czech = { ...germanWar, hostCountry: "CS", hostEntities: ["CS"] } as ConflictDoc;
+    expect(conflictToFront(czech).seaAccess).toBe(false);
+  });
+
+  it("lets an explicit conflict override win over the derivation", () => {
+    // A war fought inland in a coastal country.
+    const bavaria = { ...germanWar, seaAccess: false } as ConflictDoc;
+    expect(conflictToFront(bavaria).seaAccess).toBe(false);
+  });
+
+  it("honours an explicit true as well, so the override is not one-way", () => {
+    const czech = {
+      ...germanWar,
+      hostCountry: "CS",
+      hostEntities: ["CS"],
+      seaAccess: true,
+    } as ConflictDoc;
+    expect(conflictToFront(czech).seaAccess).toBe(true);
+  });
+
+  it("falls back to the anchor when hostEntities is absent", () => {
+    const anchored = { ...germanWar, hostEntities: undefined } as ConflictDoc;
+    expect(conflictToFront(anchored).seaAccess).toBe(true);
+  });
+});
+
+describe("buildConflict sea access override", () => {
+  const base = (over: Partial<BuildConflictInput> = {}): BuildConflictInput => ({
+    id: "war_test",
+    conflictId: 1,
+    hostCountry: "DD" as BuildConflictInput["hostCountry"],
+    type: "interstate",
+    sideA: west,
+    sideB: east,
+    startTurn: 1,
+    createdBy: "seed",
+    ...over,
+  });
+
+  it("writes no seaAccess at all when the caller does not override", () => {
+    // Storing the derived answer would freeze it into the document and stop it
+    // tracking the branch table.
+    const doc = buildConflict(base());
+    expect("seaAccess" in doc).toBe(false);
+    // ...and it still resolves coastal through the derivation.
+    expect(conflictToFront(doc).seaAccess).toBe(true);
+  });
+
+  it("stores an explicit override and lets it beat the derivation", () => {
+    // A war fought inland of a coastal nation.
+    const doc = buildConflict(base({ seaAccess: false }));
+    expect(doc.seaAccess).toBe(false);
+    expect(conflictToFront(doc).seaAccess).toBe(false);
+  });
+
+  it("stores an explicit true for a landlocked host", () => {
+    const doc = buildConflict(
+      base({ hostCountry: "CS" as BuildConflictInput["hostCountry"], seaAccess: true })
+    );
+    expect(conflictToFront(doc).seaAccess).toBe(true);
+  });
+});
+
+// The side fighting on its own soil hauls better (`FRONT_SUPPLY.hostSideThroughput`).
+// The front carries which side that is, so the battle math never learns what a conflict
+// is; it is the host's side, which in an interstate war is the nation declared on.
+describe("conflictToFront host side", () => {
+  it("marks side A when the host is on side A", () => {
+    const c = buildConflict(base({ hostCountry: "US", sideA: west, sideB: east }));
+    expect(conflictToFront(c).hostSide).toBe("A");
+  });
+
+  it("marks side B when the host is on side B", () => {
+    const c = buildConflict(base({ hostCountry: "RU", sideA: west, sideB: east }));
+    expect(conflictToFront(c).hostSide).toBe("B");
+  });
+
+  it("marks neither when the host belongs to no side", () => {
+    const c = buildConflict(base({ hostCountry: "VN" as never, sideA: west, sideB: east }));
+    expect(conflictToFront(c).hostSide).toBeUndefined();
   });
 });

@@ -85,6 +85,14 @@ export const gameConfig: GameConfig = {
   // Freight routes are observable from a fresh world, but the economic effect
   // requires an explicit, separately-soaked rollout.
   freightSettlementMode: "shadow",
+  // Canonical freight billing (issue #897) ships dark: turning it on is a
+  // balance change (a world-scale shipping bill becomes real money) and
+  // requires a simulation report per CONTRIBUTING.md before any world enables it.
+  canonicalFreightBillingEnabled: false,
+  shortageResponsiveSourcingEnabled: false,
+  indexFundBondLiquidityEnabled: false,
+  nppMarketCoverageEnabled: false,
+  nppFragileMarketSupplyEnabled: false,
   regionalConditionsOverviewEnabled: true,
 
   // Market launch guard: armed by default now that the market boots at the top

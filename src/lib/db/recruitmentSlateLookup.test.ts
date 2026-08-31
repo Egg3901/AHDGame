@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import type { Character, Election, NPP, RecruitmentSlate, SlateCandidate } from "@/lib/db/types";
 import {
+  isSlateRowVisibleToChair,
   listStateAssignedCandidateIds,
   materializeSlateAssignmentsFromTemplate,
 } from "./recruitmentSlateLookup";
@@ -666,5 +667,26 @@ describe("listStateAssignedCandidateIds", () => {
 
     expect(ids).toEqual([filedCandidate.toString()]);
     expect(ids).not.toContain(withdrawnCandidate.toString());
+  });
+});
+
+describe("isSlateRowVisibleToChair", () => {
+  it("shows live rows", () => {
+    for (const status of ["invited", "considering", "accepted", "declined", "filed"] as const) {
+      expect(isSlateRowVisibleToChair({ status, refusalReason: null })).toBe(true);
+    }
+  });
+
+  it("hides a chair-issued tombstone, which carries no reason", () => {
+    expect(isSlateRowVisibleToChair({ status: "withdrawn", refusalReason: null })).toBe(false);
+  });
+
+  it("shows a tombstone the turn's filing pass wrote a reason onto (#1181)", () => {
+    expect(isSlateRowVisibleToChair({ status: "withdrawn", refusalReason: "slot_taken" })).toBe(
+      true
+    );
+    expect(
+      isSlateRowVisibleToChair({ status: "withdrawn", refusalReason: "ineligible_region" })
+    ).toBe(true);
   });
 });

@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
+import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { getGameStateCollection } from "@/lib/db/collections/gameState";
@@ -17,16 +18,7 @@ import {
   getCharacterGeneralsCollection,
   getCharacterCommission,
 } from "@/lib/db/collections/characterGenerals";
-import {
-  getMilitaryCommands,
-  getMilitaryCommandsCollection,
-} from "@/lib/db/collections/militaryCommands";
-import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
-import {
-  getMilitaryFormations,
-  getMilitaryFormationsCollection,
-} from "@/lib/db/collections/militaryFormations";
-import { applyDismissal } from "@/lib/military/dismissal";
+import { severFromChainOfCommand } from "@/lib/military/severFromChainOfCommand";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 
 interface RouteParams {
@@ -67,6 +59,10 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       );
     }
 
+    // A dismissal cascades through the chain of command and cannot be cleanly undone.
+    const actingDenied = requireConfirmedSecretary(member, "personnel", !!auth.user.isAdmin);
+    if (actingDenied) return actingDenied;
+
     const commission = await getCharacterCommission(db, characterId);
     if (!commission.commissioned) {
       return NextResponse.json({ error: "Not a commissioned general" }, { status: 404 });
@@ -81,29 +77,9 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     // A dismissed general cannot be left holding a command, a lead, or a posting.
     // Dismissing a theater commander vacates that front — authority falls back to the
     // defense holder until a successor is designated.
-    const [commands, org] = await Promise.all([
-      getMilitaryCommands(db, countryId),
-      getMilitaryFormations(db, countryId),
-    ]);
-    const next = applyDismissal(commands, org.conflictAssignments, characterId);
-    await Promise.all([
-      getMilitaryCommandsCollection(db).updateOne(
-        { countryId },
-        { $set: { commands: next.commands }, $setOnInsert: { countryId } },
-        { upsert: true }
-      ),
-      getMilitaryFormationsCollection(db).updateOne(
-        { countryId },
-        { $set: { conflictAssignments: next.assignments }, $setOnInsert: { countryId } },
-        { upsert: true }
-      ),
-      // Their units keep no ghost leader: fall to General Staff / reserve. Since the
-      // general's postings are dropped in the same op, reserve is the reconciled home.
-      getMilitaryUnitsCollection(db).updateMany(
-        { countryId, assignedGeneralId: characterId },
-        { $set: { assignedGeneralId: null, theaterId: "reserve" } }
-      ),
-    ]);
+    // Shared with relocation, which severs the same ties when a commissioned
+    // general emigrates. One definition, so the two events cannot drift.
+    await severFromChainOfCommand(db, countryId, characterId);
 
     // Clear the commission but retain the profile — dismissal costs the post, not the
     // career, so re-appointing a veteran restores their record.

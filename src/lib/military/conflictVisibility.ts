@@ -1,5 +1,6 @@
 import type { ConflictDoc, ConflictStatus } from "@/lib/db/types/conflict";
 import type { CountryId } from "@/lib/constants/countries";
+import { isArchiveOpen } from "./conflictLifecycle";
 
 /**
  * Who may see how much of a conflict.
@@ -15,6 +16,9 @@ export type ConflictTier = "public" | "command" | "archive";
 
 export interface ViewerFacts {
   status: ConflictStatus;
+  /** When the war resolved; absent while it runs and on legacy resolved documents. */
+  endTurn?: number;
+  currentTurn: number;
   /** The viewer's side by EXPLICIT roster membership; null when not a belligerent. */
   side: "A" | "B" | null;
   isPostedGeneral: boolean;
@@ -59,9 +63,15 @@ export function belligerentSideOf(
 }
 
 /**
- * The tier a viewer reads this conflict at. A resolved war is an open record for
- * everyone; otherwise command sight needs BOTH a belligerent country and a SEAT
+ * The tier a viewer reads this conflict at. A resolved war becomes an open record
+ * for everyone once its fog window has lapsed (`isArchiveOpen`); until then, and
+ * for every live war, command sight needs BOTH a belligerent country and a SEAT
  * in its command structure.
+ *
+ * The fog outlives the war on purpose. The day a war ends, its order of battle is
+ * still a live intelligence picture of nations that may fight again next season,
+ * so a freshly resolved war reads exactly as it did while it ran: own side for a
+ * belligerent seat, the public layer for everyone else.
  *
  * An account flag is not a seat. `isAdmin` used to escalate here, which meant a
  * staff member holding no office in a belligerent nation was handed their own
@@ -72,7 +82,7 @@ export function belligerentSideOf(
  * public record.
  */
 export function conflictTier(f: ViewerFacts): ConflictTier {
-  if (f.status === "resolved") return "archive";
+  if (isArchiveOpen(f, f.currentTurn)) return "archive";
   if (f.side === null) return "public";
   const hasSeat =
     f.isPostedGeneral || f.isDefenseHolder || f.isHeadOfGovernment || f.isCommandingGeneral;

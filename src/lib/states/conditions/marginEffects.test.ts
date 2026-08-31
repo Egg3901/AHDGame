@@ -54,4 +54,29 @@ describe("marginEffects", () => {
       expect(computeRegionalConditionMargin(modifiers)).toBe(REGIONAL_CONDITION_MARGIN_CAP);
     });
   });
+
+  describe("the war block", () => {
+    /**
+     * An unregistered id falls through to the 0.75 default factor, so a war
+     * exhaustion of -25 would push -18.75 into corporate margins and clamp at
+     * the -3 regional cap on every region of the country. Registration is
+     * load-bearing, not belt and braces.
+     */
+    it("gives every war chip no profit margin effect", () => {
+      for (const id of ["war", "war_exhaustion", "war_effort", "alliance_contribution"]) {
+        expect(marginEffectForModifier(-25, id)).toBe(0);
+      }
+    });
+
+    it("keeps the war modifier out of the regional condition margin sum", () => {
+      const war: ActiveModifier = {
+        id: "war",
+        label: "War",
+        effect: -25,
+        marginEffect: 0,
+        source: "war",
+      };
+      expect(computeRegionalConditionMargin([war])).toBe(0);
+    });
+  });
 });

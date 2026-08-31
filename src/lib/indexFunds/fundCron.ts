@@ -20,6 +20,7 @@ import type { ClientSession, Db } from "mongodb";
 import type {
   Corporation,
   ExchangeRate,
+  GameConfig,
   IndexFund,
   IndexFundHolding,
   IndexFundRedemptionQueueEntry,
@@ -66,7 +67,10 @@ import { sumFundBondHoldingsValueAnchor } from "@/lib/bonds/fundBondHoldings";
 import { getAllFundDefinitions } from "@/lib/indexFunds/fundDefinitions";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { buildPersonalBalanceInc, loadCharacterFxRate } from "@/lib/currency/characterFunds";
-import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
+import {
+  corpLiquidCapitalToAnchor,
+  resolveCorpLiquidCurrencyCode,
+} from "@/lib/currency/corporationCapital";
 import {
   holdingsNeedMarkToMarketRefresh,
   refreshFundHoldingsMarkToMarket,
@@ -98,6 +102,7 @@ import {
   loadOpenOrdersEscrowByFundId,
   loadQueuedRedemptionLiabilityByFundId,
 } from "@/lib/indexFunds/fundValuation";
+import { refreshEquityLiquidityFacility } from "@/lib/indexFunds/equityLiquidityFacility";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -118,6 +123,8 @@ export type FundCronResult = {
   /** A5: sponsored funds advanced through wind-up, and those that finished. */
   windDownsAdvanced: number;
   windDownsCompleted: number;
+  equityLiquidityQuotePairs: number;
+  equityLiquidityDepthAnchor: number;
   errors: string[];
 };
 
@@ -983,10 +990,27 @@ export async function runIndexFundCron(
     expenseFeeAnchor: 0,
     windDownsAdvanced: 0,
     windDownsCompleted: 0,
+    equityLiquidityQuotePairs: 0,
+    equityLiquidityDepthAnchor: 0,
     errors: [],
   };
+  const currentTurn = options?.currentTurn ?? 0;
 
   if (!(await isIndexFundsEnabled())) {
+    try {
+      await refreshEquityLiquidityFacility({
+        db,
+        turn: currentTurn,
+        enabled: false,
+        funds: [],
+        listings: [],
+        totalListings: 0,
+      });
+    } catch (err) {
+      result.errors.push(
+        `Equity liquidity cleanup: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
     return result;
   }
 
@@ -1002,7 +1026,17 @@ export async function runIndexFundCron(
     _tPrev = nowMs;
   };
 
-  const currentTurn = options?.currentTurn ?? 0;
+  const liquidityConfig = await db.collection<GameConfig>("gameConfig").findOne(
+    { _id: "default" },
+    {
+      projection: {
+        indexFundBondLiquidityEnabled: 1,
+        equityLiquidityFacilityEnabled: 1,
+      },
+    }
+  );
+  const bondLiquidityEnabled = liquidityConfig?.indexFundBondLiquidityEnabled === true;
+  const equityLiquidityEnabled = liquidityConfig?.equityLiquidityFacilityEnabled === true;
   const forexEnabled = await isForexEnabled();
   const exchangeRates = await loadExchangeRates(db);
   const candidateCorps = await loadIndexFundCandidateCorporations(db);
@@ -1103,7 +1137,9 @@ export async function runIndexFundCron(
         refreshedFund,
         exchangeRates
       );
-      const bondDeploy = await deployBondReserveFromCash(db, refreshedFund, bondPrincipalAfterNav);
+      const bondDeploy = await deployBondReserveFromCash(db, refreshedFund, bondPrincipalAfterNav, {
+        liquidityTargetEnabled: bondLiquidityEnabled,
+      });
       if (bondDeploy.deployedAnchor > 0) {
         result.bondDeployments++;
       }
@@ -1317,6 +1353,48 @@ export async function runIndexFundCron(
     result.errors.push(`Wind-up: ${err instanceof Error ? err.message : String(err)}`);
   }
   mark("step7-sponsorship");
+
+  // Step 8: refresh bounded executable equity quotes after every other fund
+  // mutation has settled. Disabling the gate cancels and refunds prior bids in
+  // the same pass, providing an immediate rollback path.
+  try {
+    const quoteFunds = await listActiveFunds(db);
+    const fxByCurrency = new Map<CurrencyCode, number>(
+      Object.entries(exchangeRates)
+        .filter(([, rate]) => typeof rate === "number" && rate > 0)
+        .map(([code, rate]) => [code as CurrencyCode, rate as number])
+    );
+    const quoteListings = candidateCorps.flatMap((corp) => {
+      const referencePriceLocal = resolveShareExecutionPrice(corp);
+      if (!Number.isFinite(referencePriceLocal) || referencePriceLocal <= 0) return [];
+      const fxRate = fxRateForCorpFromMap(corp, fxByCurrency);
+      const referencePriceAnchor = corpLiquidCapitalToAnchor(referencePriceLocal, corp, fxRate);
+      if (!Number.isFinite(referencePriceAnchor) || referencePriceAnchor <= 0) return [];
+      return [
+        {
+          corporationId: corp._id,
+          referencePriceLocal,
+          referencePriceAnchor,
+          totalShares: corp.totalShares,
+          fxRate,
+          corporation: corp,
+        },
+      ];
+    });
+    const liquidity = await refreshEquityLiquidityFacility({
+      db,
+      turn: currentTurn,
+      enabled: equityLiquidityEnabled,
+      funds: quoteFunds,
+      listings: quoteListings,
+      totalListings: candidateCorps.length,
+    });
+    result.equityLiquidityQuotePairs = liquidity.quotePairsPlaced;
+    result.equityLiquidityDepthAnchor = liquidity.bidDepthAnchor + liquidity.askDepthAnchor;
+  } catch (err) {
+    result.errors.push(`Equity liquidity: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  mark("step8-equityLiquidity");
 
   if (timingOn) {
     const total = passTimings.reduce((s, [, ms]) => s + ms, 0);

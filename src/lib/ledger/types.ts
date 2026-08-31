@@ -67,6 +67,8 @@ export interface BalanceSnapshot {
   createdAt: Date;
   /** account id -> ₳ balance at snapshot time. */
   balances: Record<string, number>;
+  /** Local-currency units per anchor unit at snapshot time. */
+  anchorRates?: Record<string, number>;
   /**
    * When the balances were re-baselined after an admin reseed / era reset
    * (see reconcile.ts resetEpoch handling), stock-vs-flow is skipped for the
@@ -127,7 +129,8 @@ export interface ReconcileReport {
   stockVsFlow: {
     status: ReconcileStatus;
     skipped: boolean;
-    divergentCount: number;
+    /** null when the check was skipped: unknown, not zero. */
+    divergentCount: number | null;
     findings: StockVsFlowFinding[];
   };
   moneySupply: {

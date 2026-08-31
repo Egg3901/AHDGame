@@ -141,6 +141,7 @@ describe("computeSupplyAgreementSettlements", () => {
         contractedUnits: 100,
         deliveredUnits: 30,
         turn: 5,
+        buyerConsumptionUnits: 30,
         // #1147: recorded on every delivery so the UI can distinguish "met the
         // contract" from "never settled". No production sink here ⇒ nothing to
         // charge for, and no ceiling is known ⇒ `achievableUnits` stays absent.
@@ -471,6 +472,9 @@ describe("settleSupplyAgreements delivery persistence", () => {
           commodity,
           volumeCap: 100,
           pricePremium: 0,
+          lastDeliveryTurn: 4,
+          lastDeliveredUnits: 0,
+          lastBuyerConsumptionUnits: 25,
         },
       ],
       contractSettlementByCorp: new Map([[S, new Map([[commodity, 100]])]]),
@@ -489,6 +493,10 @@ describe("settleSupplyAgreements delivery persistence", () => {
             $set: {
               lastDeliveryTurn: 5,
               lastDeliveredUnits: 30,
+              lastBuyerConsumptionUnits: 30,
+              previousDeliveryTurn: 4,
+              previousDeliveredUnits: 0,
+              previousBuyerConsumptionUnits: 25,
               // #1147: persisted so the contract row can explain its own
               // charge. Zero here means no production sink, so nothing is owed.
               lastShortfallUnits: 0,

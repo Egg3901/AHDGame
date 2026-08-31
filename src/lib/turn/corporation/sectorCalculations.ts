@@ -21,6 +21,7 @@ import {
   MAX_DIVIDEND_RATE,
   SECTOR_RISK_PREMIUM,
   CEO_SALARY_MAX_REVENUE_MULTIPLE,
+  CORP_OVERHEAD_MAX_REVENUE_MULTIPLE,
 } from "@/lib/constants/corporations";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import {
@@ -65,6 +66,7 @@ import {
   perTurnIssuerBondInterestExpense,
   perTurnBondCouponIncomeAsHolder,
 } from "@/lib/bonds/corpBondCashflows";
+import { addCorpToCorpSettlement, type SettleCorpInfo } from "./settleSupplyAgreements";
 
 /** Primary commodities that proxy R&D conditions for each sector type. */
 const SECTOR_RD_COMMODITIES: Partial<Record<string, [string, string?]>> = {
@@ -141,6 +143,7 @@ export function processSectors(
   // indices above this is NOT gated on the labour system being on, so it stays
   // populated in worlds where wages are off.
   const labourDemandByState = makeLabourDemandByState();
+  const labourDemandWageIndexByState = new Map<string, WageIndexAccumulator>();
   // v3 Phase 6: strike trigger/resolution events, for index.ts (which owns
   // db) to turn into sentiment pulses. Same "collect during the pure loop,
   // consume after" pattern as sectorFxSpreadFees below.
@@ -181,6 +184,7 @@ export function processSectors(
     wageIndexByState,
     automationIndexByState,
     labourDemandByState,
+    labourDemandWageIndexByState,
     pendingStrikeEvents,
     pendingCapacityBindingEvents,
     sectorOps,
@@ -201,6 +205,41 @@ export function processSectors(
     fee: number;
   }> = [];
   const fundDividendAccruals: FundDividendAccrual[] = [];
+  const marketingSpendAnchorByBuyerId = new Map<string, number>();
+  const advertisingSellerDeliveredValues = [
+    ...(market.advertisingSellerDeliveredValueAnchorByCorpId ?? new Map()),
+  ].filter(
+    ([corpId, value]) => lookups.corpById.has(corpId) && Number.isFinite(value) && value > 0
+  );
+  const totalAdvertisingDeliveredValueAnchor = advertisingSellerDeliveredValues.reduce(
+    (sum, [, value]) => sum + value,
+    0
+  );
+  const marketingOrderWeightByBuyerId = new Map<string, number>();
+  if (market.clearingEnabled && totalAdvertisingDeliveredValueAnchor > 0) {
+    for (const corp of lookups.corporations) {
+      const code = resolveCorpLiquidCurrencyCode(corp);
+      const rate = fxRateForCorpFromMap(corp, lookups.exchangeRatesByCurrency);
+      const requested =
+        readCorpEconomicAnchor(corp.marketingBudget ?? 0, code, rate) / TURNS_PER_DAY;
+      const funded = Math.min(
+        Math.max(0, requested),
+        Math.max(
+          0,
+          corpCapitalToAnchor(
+            Number.isFinite(corp.liquidCapital) ? corp.liquidCapital : 0,
+            code,
+            rate
+          )
+        )
+      );
+      if (funded > 0) marketingOrderWeightByBuyerId.set(corp._id.toString(), funded);
+    }
+  }
+  const totalMarketingOrderWeight = [...marketingOrderWeightByBuyerId.values()].reduce(
+    (sum, weight) => sum + weight,
+    0
+  );
 
   function addToPaymentMap(
     map: Map<string, Map<CurrencyCode, number>>,
@@ -392,17 +431,41 @@ export function processSectors(
       localFxRate
     );
 
-    const hourlyMarketing = marketingBudgetAnchor / TURNS_PER_DAY;
-    const hourlyLogistics = logisticsBudgetAnchor / TURNS_PER_DAY;
+    const requestedHourlyMarketing = marketingBudgetAnchor / TURNS_PER_DAY;
+    const requestedHourlyLogistics = logisticsBudgetAnchor / TURNS_PER_DAY;
     // R&D spend lives in the same daily-budget cadence as marketing/logistics
     // and counts against the 150% overhead cap. Feeds rdScore growth below.
-    const hourlyRd = rdBudgetAnchor / TURNS_PER_DAY;
+    const requestedHourlyRd = rdBudgetAnchor / TURNS_PER_DAY;
     const requestedCeoSalary = imfBailoutActive ? 0 : ceoSalaryAnchor / TURNS_PER_DAY;
 
-    // Compute income before CEO salary to determine what the corp can afford
-    const costsBeforeCeo = corpCosts + hourlyMarketing + hourlyLogistics + hourlyRd;
-    const incomeBeforeCeo = corpRevenue - costsBeforeCeo;
-    const corpCountryId = corp.countryId;
+    // Ticket #1237: pay-time ceiling on the 150% combined-overhead rule. The
+    // set-time check in updateCorporationSettings only binds at the moment
+    // budgets are saved, so a corp whose revenue later collapses keeps charging
+    // its stored budgets against revenue it no longer earns. Marketing is
+    // clamped below (cash + delivered value) and CEO salary is clamped twice
+    // (affordability, then 1.25x revenue per Bug #0728) — logistics and R&D had
+    // no pay-time ceiling at all, which is why a 2.997e278 logistics budget
+    // wrote liquidCapital -1.33e+277 in a single turn on a corp with no sectors.
+    //
+    // The overage lands on logistics/R&D precisely because they are the two legs
+    // with no other clamp. Marketing and CEO salary are subtracted at their
+    // *requested* size, mirroring the set-time check, which also tests stored
+    // budgets rather than realized spend. Same per-turn gross-revenue basis as
+    // the salary cap below, so this ceiling is never tighter than the set-time
+    // one: a corp inside the 150% rule is charged exactly as it was before.
+    // Zero (or negative) revenue ⇒ both legs pay $0.
+    const overheadCeiling = CORP_OVERHEAD_MAX_REVENUE_MULTIPLE * Math.max(0, corpRevenue);
+    const opsOverheadCeiling = Math.max(
+      0,
+      overheadCeiling - Math.max(0, requestedHourlyMarketing) - Math.max(0, requestedCeoSalary)
+    );
+    const requestedOpsOverhead = requestedHourlyLogistics + requestedHourlyRd;
+    const opsOverheadScale =
+      requestedOpsOverhead > opsOverheadCeiling && requestedOpsOverhead > 0
+        ? opsOverheadCeiling / requestedOpsOverhead
+        : 1;
+    const hourlyLogistics = requestedHourlyLogistics * opsOverheadScale;
+    const hourlyRd = requestedHourlyRd * opsOverheadScale;
 
     // liquidCapital normalized to ₳ using the per-corp FX resolved at loop entry.
     // Every downstream comparison against liquidCapital must normalize to a common
@@ -414,6 +477,43 @@ export function processSectors(
       resolvedHomeCurrency,
       localFxRate
     );
+
+    // Under clearing, marketing is a purchase only to the extent advertising
+    // was delivered. Each funded buyer receives its pro-rata share of the
+    // delivered book's clearing value, capped again by its budget and cash.
+    // When the world has no advertising seller, retain the cost but create no
+    // settlement: marketing does not become globally free at zero supply.
+    const marketingSettlementEnabled = market.clearingEnabled;
+    const marketingCashAvailable = Math.max(
+      0,
+      liquidCapitalAnchor + corpRevenue - corpCosts - hourlyLogistics - hourlyRd
+    );
+    const deliveredValueShare =
+      totalMarketingOrderWeight > 0
+        ? totalAdvertisingDeliveredValueAnchor *
+          ((marketingOrderWeightByBuyerId.get(corpId) ?? 0) / totalMarketingOrderWeight)
+        : 0;
+    const hourlyMarketing = marketingSettlementEnabled
+      ? Math.min(
+          Math.max(0, requestedHourlyMarketing),
+          marketingCashAvailable,
+          totalAdvertisingDeliveredValueAnchor > 0
+            ? Math.max(0, deliveredValueShare)
+            : Math.max(0, requestedHourlyMarketing)
+        )
+      : requestedHourlyMarketing;
+    if (
+      marketingSettlementEnabled &&
+      totalAdvertisingDeliveredValueAnchor > 0 &&
+      hourlyMarketing > 0
+    ) {
+      marketingSpendAnchorByBuyerId.set(corpId, hourlyMarketing);
+    }
+
+    // Compute income before CEO salary to determine what the corp can afford
+    const costsBeforeCeo = corpCosts + hourlyMarketing + hourlyLogistics + hourlyRd;
+    const incomeBeforeCeo = corpRevenue - costsBeforeCeo;
+    const corpCountryId = corp.countryId;
 
     // Cap CEO salary: only pay what the corp can cover without going below zero.
     // projectedLiquid is what liquidCapital would be after all costs except CEO salary.
@@ -758,21 +858,28 @@ export function processSectors(
 
     // Marketing strength accumulation: base 1/turn + 0.5/turn per $100k, with diminishing returns.
     // Thresholds are ₳-calibrated ($100k anchor), so pass the anchor-normalized budget.
-    const marketingGrowth = calcMarketingGrowth(marketingBudgetAnchor, corp.marketingStrength ?? 0);
+    const marketingGrowth = calcMarketingGrowth(
+      marketingSettlementEnabled ? hourlyMarketing * TURNS_PER_DAY : marketingBudgetAnchor,
+      corp.marketingStrength ?? 0
+    );
 
     // Logistics strength: decays 5%/turn, grows with spending. No diminishing returns —
     // the decay naturally caps accumulation. Same anchor-threshold convention.
+    // Ticket #1237: grow on what was actually charged, not what was requested —
+    // marketing above already passes its settled spend. Feeding the raw budget
+    // here let an unpayable budget buy strength for free: Tinky 3.0 banked
+    // logisticsStrength 1256 and rdScore 408 in the same turn it "spent" 1e278.
     const currentLogisticsStrength = corp.logisticsStrength ?? 0;
     const newLogisticsStrength = calcLogisticsStrengthAfterTurn(
       currentLogisticsStrength,
-      logisticsBudgetAnchor
+      hourlyLogistics * TURNS_PER_DAY
     );
     const logisticsDelta = newLogisticsStrength - currentLogisticsStrength;
 
     // R&D score: decays 3%/turn, grows with spending. Diminishing returns on stored
     // score above 100 (mirrors marketing). Drives innovation probability and boost magnitude.
-    // rdBudgetAnchor was resolved at the top of the per-corp loop so it also
-    // flows through the operating-cost deduction (hourlyRd).
+    // Grows on the overhead-clamped spend (hourlyRd), the same figure deducted as
+    // an operating cost above, so R&D score cannot outrun what the corp paid.
     const currentRdScore = corp.rdScore ?? 0;
     // rdDemandFactor (±15%) ties R&D output to technology + consulting demand.
     // moraleFactor (#84, ±15%) rewards paying workers above baseline: happier
@@ -781,13 +888,25 @@ export function processSectors(
     const moraleFactor = rdMoraleFactor(avgWageLevel);
     const newRdScore = calcRdScoreAfterTurn(
       currentRdScore,
-      rdBudgetAnchor * rdDemandFactor * moraleFactor
+      hourlyRd * TURNS_PER_DAY * rdDemandFactor * moraleFactor
     );
     const rdScoreDelta = newRdScore - currentRdScore;
 
+    // The bulk cash transfer below owns the debit for a filled advertising
+    // order. Add back only that buyer's settled accounting expense here so the
+    // pre-settlement cash leg is charged exactly once after the transfer lands.
+    // With no sellers there is no transfer and the ordinary expense remains.
+    const cashIncomeBeforeMarketingSettlement =
+      income + (marketingSpendAnchorByBuyerId.has(corpId) ? hourlyMarketing : 0);
+    const incomeForBalance = anchorToCorpCapital(
+      cashIncomeBeforeMarketingSettlement,
+      resolvedHomeCurrency,
+      localFxRate
+    );
+
     // Share price is finalized after all corps are processed (iterative cross-holding quotes).
     const totalShares = corp.totalShares ?? 10_000_000;
-    const endLiquidAnchor = liquidCapitalAnchor + income;
+    const endLiquidAnchor = liquidCapitalAnchor + cashIncomeBeforeMarketingSettlement;
     /** Placeholder until cross-holding iteration writes the real price into corpOps. */
     const placeholderSharePrice = Number.isFinite(corp.sharePrice) ? corp.sharePrice : 0.1;
 
@@ -829,9 +948,9 @@ export function processSectors(
     // (decoupled 2026-06-07), so funding the escrow lowers liquidCapital and thus
     // the tangible-book floor — it is no longer price-neutral. Only the persisted
     // liquidCapital/escrow need reflect the move here.
-    // `incomeForBalance` is the local-currency post-income delta (mirrors the
-    // snapshot's liquidCapital expression and the bulk-op $inc below).
-    const incomeForBalance = anchorToCorpCapital(income, resolvedHomeCurrency, localFxRate);
+    // `incomeForBalance` is the pre-settlement local-currency cash delta used
+    // by both this bulk op and the initial snapshot. The settlement pass later
+    // applies its delta to both representations before pricing and persistence.
     const escrowFundingMove =
       getShareBuybackMode(corp) === "escrow"
         ? computeEscrowFundingTransfer({
@@ -950,6 +1069,107 @@ export function processSectors(
           corp.ceoType === "imperial" ? `imperial:${corp.ceoId.toString()}` : corp.ceoId.toString();
         addToPaymentMap(ceoSalaryPayments, key, actualCeoSalary, corp.countryId);
       }
+    }
+  }
+
+  // Route only the clearing value of delivered advertising. Buyer shares are
+  // already capped above, so unfilled budget remains in treasury. Pair legs
+  // stay unrounded until every corporation's transfers have been aggregated,
+  // preventing small buyers from losing every sub-unit seller allocation.
+  if (marketingSpendAnchorByBuyerId.size > 0 && totalAdvertisingDeliveredValueAnchor > 0) {
+    const marketingDeltasLocal = new Map<string, number>();
+    const corpInfo = (corpId: string): SettleCorpInfo | undefined => {
+      const corp = lookups.corpById.get(corpId);
+      if (!corp) return undefined;
+      return {
+        _id: corp._id,
+        name: corp.name,
+        ccy: resolveCorpLiquidCurrencyCode(corp),
+        fxRate: fxRateForCorpFromMap(corp, lookups.exchangeRatesByCurrency),
+      };
+    };
+    for (const [buyerId, spendAnchor] of marketingSpendAnchorByBuyerId) {
+      const buyer = corpInfo(buyerId);
+      if (!buyer) continue;
+      let allocatedAnchor = 0;
+      for (let i = 0; i < advertisingSellerDeliveredValues.length; i++) {
+        const [sellerId, deliveredValueAnchor] = advertisingSellerDeliveredValues[i];
+        const seller = corpInfo(sellerId);
+        if (!seller) continue;
+        const amountAnchor =
+          i === advertisingSellerDeliveredValues.length - 1
+            ? spendAnchor - allocatedAnchor
+            : spendAnchor * (deliveredValueAnchor / totalAdvertisingDeliveredValueAnchor);
+        allocatedAnchor += amountAnchor;
+        addCorpToCorpSettlement(
+          marketingDeltasLocal,
+          buyerId,
+          buyer,
+          sellerId,
+          seller,
+          amountAnchor
+        );
+      }
+    }
+    // Net the settled advertising out of each seller's CASH leg. The seller
+    // already booked this advertising as ordinary sector revenue, so income and
+    // tax keep it; crediting the transfer receipt ON TOP double-pays it in cash
+    // (once through revenue → liquidCapital, once through this settlement). This
+    // mirrors the buyer's cost add-back above, which defers the marketing DEBIT
+    // to this same transfer so the cost lands exactly once: here we defer the
+    // seller's advertising CREDIT the same way, removing its delivered value
+    // from cash so the transfer receipt is its only ad cash. When budgets fund
+    // the delivered book the receipt equals the delivered value and the two
+    // cancel (money conserved); a funding shortfall (delivered > funded) leaves
+    // the unpaid remainder as bad debt on the seller, never minted cash.
+    for (const [sellerId, deliveredValueAnchor] of advertisingSellerDeliveredValues) {
+      const seller = corpInfo(sellerId);
+      if (!seller) continue;
+      const deliveredLocal = anchorToCorpCapital(deliveredValueAnchor, seller.ccy, seller.fxRate);
+      if (!Number.isFinite(deliveredLocal)) continue;
+      marketingDeltasLocal.set(
+        sellerId,
+        (marketingDeltasLocal.get(sellerId) ?? 0) - deliveredLocal
+      );
+    }
+    for (let i = 0; i < lookups.corporations.length; i++) {
+      const delta = marketingDeltasLocal.get(lookups.corporations[i]._id.toString()) ?? 0;
+      if (delta === 0) continue;
+      const corp = lookups.corporations[i];
+      const update = corpOps[i].updateOne.update;
+      update.$inc.liquidCapital = (update.$inc.liquidCapital ?? 0) + delta;
+
+      // History, credit, and the tangible-book floor must see the same final
+      // treasury as the bulk write, for both payer debits and seller receipts.
+      const snapshot = corpSnapshots[i];
+      const code = resolveCorpLiquidCurrencyCode(corp);
+      const rate = fxRateForCorpFromMap(corp, lookups.exchangeRatesByCurrency);
+      snapshot.liquidCapital += delta;
+      snapshot.liquidCapitalAnchorAfterIncome += corpCapitalToAnchor(delta, code, rate);
+
+      const creditPack = computeCorporateCreditAtTurn({
+        liquidCapitalAnchor: snapshot.liquidCapitalAnchorAfterIncome,
+        incomePerTurn: snapshot.income,
+        sectorNpv: snapshot.sectorNPV,
+        bonds: lookups.bondsByCorpId.get(corp._id.toString()) ?? [],
+        corporationId: corp._id,
+        currentTurn,
+        bondDefaultCreditPenaltyUntilTurn: corp.bondDefaultCreditPenaltyUntilTurn,
+        previousCompositeScore: corp.creditCompositeSnapshot ?? undefined,
+        fxByCurrency: lookups.exchangeRatesByCurrency,
+        ceoOwnershipFraction: ceoOwnershipFraction(corp),
+        indexFundOwnershipFraction: indexFundOwnershipFraction(corp),
+        isPrivate: corp.isPrivate ?? false,
+        constructionInProgressAnchor: sumCorporateSectorConstructionInProgress(
+          lookups.sectorsByCorp.get(corp._id.toString()) ?? [],
+          corp._id
+        ),
+      });
+      snapshot.creditComposite = creditPack.creditRating.compositeScore;
+      snapshot.creditRating = creditPack.creditRating.rating;
+      update.$set.creditRatingSnapshot = creditPack.creditRating.rating;
+      update.$set.creditCompositeSnapshot = creditPack.creditRating.compositeScore;
+      update.$set.creditRatingComponents = creditPack.creditRating.components;
     }
   }
 
@@ -1081,6 +1301,9 @@ export function processSectors(
       Array.from(automationIndexByState, ([stateId, acc]) => [stateId, resolveAutomationIndex(acc)])
     ),
     labourDemandByState,
+    labourDemandWageIndexByState: new Map(
+      Array.from(labourDemandWageIndexByState, ([stateId, acc]) => [stateId, resolveWageIndex(acc)])
+    ),
     strikeEvents: pendingStrikeEvents,
     capacityBindingEvents: pendingCapacityBindingEvents,
   };

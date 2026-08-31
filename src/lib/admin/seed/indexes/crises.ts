@@ -18,11 +18,40 @@ export async function seedCrisisIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
+  // crises_living_event dedupes replayed living-conflict events. PARTIAL on
+  // string type, not sparse: a sparse unique index skips documents where the
+  // field is ABSENT but still indexes { livingConflictEventId: null }, and the
+  // template writer used to serialize an undefined id as null, so the second
+  // null insert failed E11000 on every spawner turn (GlitchTip AHD-1JV).
+  // $type string excludes both null and missing. The legacy sparse version is
+  // dropped explicitly first: ensureIndex tolerates "already exists" errors,
+  // which would otherwise silently keep the old options forever.
+  const legacyLivingEvent = (
+    await db
+      .collection("crises")
+      .indexes()
+      .catch(() => [])
+  ).find(
+    (index) =>
+      index.name === "crises_living_event" &&
+      !("partialFilterExpression" in index && index.partialFilterExpression)
+  );
+  if (legacyLivingEvent) {
+    await db
+      .collection("crises")
+      .dropIndex("crises_living_event")
+      .catch(() => {});
+    log("  - crises.crises_living_event (dropped legacy sparse version)");
+  }
   await ensureIndex(
     db,
     "crises",
     { livingConflictEventId: 1 },
-    { name: "crises_living_event", unique: true, sparse: true },
+    {
+      name: "crises_living_event",
+      unique: true,
+      partialFilterExpression: { livingConflictEventId: { $type: "string" } },
+    },
     log
   );
 

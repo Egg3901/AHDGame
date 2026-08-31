@@ -120,6 +120,61 @@ describe("runDemographicFlows", () => {
     expect(set).not.toHaveProperty("population.migrationRate.value"); // policy input untouched
   });
 
+  it("turns a persistent labour shortage into additional population growth", async () => {
+    async function runMode(labourSystemMode: "wages" | "macro") {
+      const target = createMockDb();
+      target.collection("regionDemographics");
+      target.collectionMocks.regionDemographics!.find = vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([{ _id: "CA", countryId: "US", ages: vec(1_000_000) }]),
+      });
+      target.collection("states");
+      target.collectionMocks.states!.find = vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([{ _id: "CA", countryId: "US", population: 1_000_000 }]),
+      });
+      target.collection("stateMetrics");
+      target.collectionMocks.macroMetrics = target.collectionMocks.stateMetrics!;
+      target.collectionMocks.stateMetrics!.find = vi.fn().mockReturnValue({
+        project: vi.fn().mockReturnValue({
+          toArray: vi.fn().mockResolvedValue([
+            {
+              _id: "CA",
+              population: { birthRate: { value: 50 }, migrationRate: { value: 0.05 } },
+              healthcare: { lifeExpectancy: { value: 50 }, preventableMortality: { value: 50 } },
+              economic: {
+                labourTightness: { value: 4.8 },
+                labourWageIndex: { value: 1 },
+              },
+            },
+          ]),
+        }),
+      });
+      target.collection("gameConfig");
+      target.collectionMocks.gameConfig!.findOne = vi
+        .fn()
+        .mockResolvedValue({ _id: "default", labourSystemMode });
+
+      const { runDemographicFlows } = await import("./phase");
+      await runDemographicFlows(target as unknown as Db, 1);
+      const population = (
+        target.collectionMocks.states!.bulkWrite.mock.calls[0][0] as Array<{
+          updateOne: { update: { $set: { population: number } } };
+        }>
+      )[0].updateOne.update.$set.population;
+      const metrics = (
+        target.collectionMocks.macroMetrics!.bulkWrite.mock.calls[0][0] as Array<{
+          updateOne: { update: { $set: Record<string, number> } };
+        }>
+      )[0].updateOne.update.$set;
+      return { population, realizedMigration: metrics["population.realizedMigrationRate.value"] };
+    }
+
+    const gated = await runMode("wages");
+    const responsive = await runMode("macro");
+
+    expect(responsive.realizedMigration).toBeGreaterThan(gated.realizedMigration);
+    expect(responsive.population).toBeGreaterThan(gated.population);
+  });
+
   it("writes state.votingEligiblePopulation (Σ ages ≥ voting age) ≤ total population", async () => {
     const { runDemographicFlows } = await import("./phase");
     await runDemographicFlows(db as unknown as Db, 1);
@@ -213,6 +268,58 @@ describe("runDemographicFlows", () => {
       .$set["population.realizedMigrationRate.value"];
     expect(caMigration).toBeGreaterThan(0);
     expect(txMigration).toBeLessThan(0);
+  });
+
+  it("moves working-age population toward a state with persistent unfilled jobs", async () => {
+    setDemos([
+      { _id: "CA", countryId: "US", ages: vec(1_000_000) },
+      { _id: "TX", countryId: "US", ages: vec(1_000_000) },
+    ]);
+    db.collectionMocks.states!.find = vi.fn().mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { _id: "CA", countryId: "US", population: 1_000_000 },
+        { _id: "TX", countryId: "US", population: 1_000_000 },
+      ]),
+    });
+    const neutralEconomy = {
+      gdpGrowth: { value: 2.5 },
+      unemploymentRate: { value: 5 },
+      medianIncome: { value: 50_000 },
+      costOfLiving: { value: 50 },
+      labourWageIndex: { value: 1 },
+    };
+    db.collectionMocks.stateMetrics!.find = vi.fn().mockReturnValue({
+      project: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            _id: "CA",
+            population: { birthRate: { value: 50 }, migrationRate: { value: 0 } },
+            economic: { ...neutralEconomy, labourTightness: { value: 4.8 } },
+          },
+          {
+            _id: "TX",
+            population: { birthRate: { value: 50 }, migrationRate: { value: 0 } },
+            economic: { ...neutralEconomy, labourTightness: { value: 0.8 } },
+          },
+        ]),
+      }),
+    });
+    db.collection("gameConfig");
+    db.collectionMocks.gameConfig!.findOne = vi
+      .fn()
+      .mockResolvedValue({ _id: "default", labourSystemMode: "macro" });
+
+    const { runDemographicFlows } = await import("./phase");
+    await runDemographicFlows(db as unknown as Db, 1);
+    const writes = db.collectionMocks.states!.bulkWrite.mock.calls[0][0] as Array<{
+      updateOne: { filter: { _id: string }; update: { $set: { population: number } } };
+    }>;
+    const caPopulation = writes.find((write) => write.updateOne.filter._id === "CA")!.updateOne
+      .update.$set.population;
+    const txPopulation = writes.find((write) => write.updateOne.filter._id === "TX")!.updateOne
+      .update.$set.population;
+
+    expect(caPopulation).toBeGreaterThan(txPopulation);
   });
 
   it("writes state.militaryServicePopulation (conscription withdrawal) for a conscripting country", async () => {

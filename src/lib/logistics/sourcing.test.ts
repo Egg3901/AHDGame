@@ -11,6 +11,8 @@ import {
   FREIGHT_CONGESTION_OVERFLOW,
   GRID_LOSS_PER_HOP,
   GRID_WHEELING_PER_HOP_FRACTION,
+  shortageResponsiveToleranceSlack,
+  SHORTAGE_TOLERANCE_MAX_EXTRA,
 } from "./sourcing";
 import { FREIGHT_CLASS_BY_COMMODITY } from "./freightClass";
 import { COMMODITY_TYPES } from "@/lib/constants/commodities";
@@ -63,6 +65,21 @@ describe("freight classes", () => {
 });
 
 describe("runSourcingPass", () => {
+  it("widens willingness to pay only for severe local shortage", () => {
+    expect(
+      shortageResponsiveToleranceSlack({ localSupply: 0, localDemand: 100, enabled: false })
+    ).toBe(BUYER_TOLERANCE_SLACK);
+    expect(
+      shortageResponsiveToleranceSlack({ localSupply: 50, localDemand: 100, enabled: true })
+    ).toBe(BUYER_TOLERANCE_SLACK);
+    expect(
+      shortageResponsiveToleranceSlack({ localSupply: 25, localDemand: 100, enabled: true })
+    ).toBe(BUYER_TOLERANCE_SLACK + SHORTAGE_TOLERANCE_MAX_EXTRA / 2);
+    expect(
+      shortageResponsiveToleranceSlack({ localSupply: 0, localDemand: 100, enabled: true })
+    ).toBe(BUYER_TOLERANCE_SLACK + SHORTAGE_TOLERANCE_MAX_EXTRA);
+  });
+
   it("fills intra-state demand free before sourcing interstate", () => {
     const r = runSourcingPass(
       makeInputs({
@@ -224,6 +241,72 @@ describe("runSourcingPass", () => {
     expect(coalFlow(r)).toHaveLength(0);
     expect(coal.unmetUnits).toBeCloseTo(100);
     expect(coal.toleranceBoundUnits).toBeCloseTo(100);
+  });
+
+  it("serves grid demand above the tolerance ceiling — energy is wheeled, not hauled", () => {
+    // Same above-ceiling situation as the coal test, but for energy (grid) and
+    // coal side by side. A grid commodity is wheeled at a price rather than
+    // told no, so it is served from reachable generation; the hauled commodity
+    // stays unmet. This is the energy book divergence: the ledger served it, the
+    // sourcing book used to call it unmet.
+    const highAsk = 100 * (1 + BUYER_TOLERANCE_SLACK) + 50;
+    const seller: Map<CommodityType, Balance> = new Map([
+      ["energy", { supply: 200, demand: 0 }],
+      ["coal", { supply: 200, demand: 0 }],
+      ["freight", { supply: 1000, demand: 0 }],
+    ]);
+    const buyer: Map<CommodityType, Balance> = new Map([
+      ["energy", { supply: 0, demand: 100 }],
+      ["coal", { supply: 0, demand: 100 }],
+      ["freight", { supply: 1000, demand: 0 }],
+    ]);
+    const r = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          ["A1", buyer],
+          ["A2", seller],
+          ["B1", new Map()],
+        ]),
+        byCountry: new Map([
+          [
+            "US",
+            new Map([
+              ["energy", { supply: 200, demand: 100 }],
+              ["coal", { supply: 200, demand: 100 }],
+            ]),
+          ],
+          ["UK", new Map()],
+        ]),
+        statePricesFor: () => ({ A1: 100, A2: highAsk, B1: highAsk }),
+        nationalPricesFor: () => ({ US: highAsk, UK: highAsk }),
+      })
+    );
+    const energy = r.summaries.find((s) => s.commodity === "energy")!;
+    const coal = r.summaries.find((s) => s.commodity === "coal")!;
+    // Grid: served (a hop of transmission loss aside), never tolerance-bound.
+    expect(energy.unmetUnits).toBeLessThan(5);
+    expect(energy.toleranceBoundUnits).toBe(0);
+    // Hauled coal in the identical spot stays unmet above the ceiling.
+    expect(coal.unmetUnits).toBeCloseTo(100);
+    expect(coal.toleranceBoundUnits).toBeCloseTo(100);
+  });
+
+  it("clears an otherwise refused route when severe shortage enables the wider ceiling", () => {
+    const expensive = makeInputs({
+      statePricesFor: () => ({ A1: 100, A2: 150 }),
+      nationalPricesFor: () => ({ UK: 160 }),
+    });
+    const dark = runSourcingPass(expensive);
+    const treatment = runSourcingPass({
+      ...expensive,
+      shortageResponsiveSourcingEnabled: true,
+    });
+
+    expect(coalFlow(dark)).toHaveLength(0);
+    expect(coalFlow(treatment)).toHaveLength(1);
+    const coal = treatment.summaries.find((row) => row.commodity === "coal")!;
+    expect(coal.unmetUnits).toBe(0);
+    expect(coal.shortageResponsiveUnits).toBe(100);
   });
 
   it("caps interstate shipping at the origin state's shared freight capacity", () => {
@@ -459,42 +542,151 @@ describe("runSourcingPass", () => {
     expect(r.deliveryLimitedSupplyByState.get("coal")!.get("A2")).toBe(0);
   });
 
-  it("deliveryLimitedSupplyByState: attributes only the spare somebody wanted", () => {
+  it("deliveryLimitedSupplyByState: a price lockout is not a delivery failure (ticket #1180)", () => {
     // Tolerance locks every seller out, so nothing ships. A1 wants 100 and A2
-    // holds 200: half of what A2 could not place was wanted by someone, the
-    // other half was never wanted at all.
+    // holds 200, but A2's trucks were never the constraint: the goods were
+    // haulable and too expensive. Telling A2 to build freight would sell it
+    // capacity that changes nothing, so this attributes zero.
     const r = runSourcingPass(
       makeInputs({
         statePricesFor: () => ({ A1: 100, A2: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
         nationalPricesFor: () => ({ UK: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
       })
     );
+    const coal = r.summaries.find((s) => s.commodity === "coal")!;
     const unplaced = r.unplacedSupplyByState.get("coal")!.get("A2")!;
     expect(unplaced).toBeCloseTo(200);
-    expect(r.deliveryLimitedSupplyByState.get("coal")!.get("A2")).toBeCloseTo(100);
+    // The demand was real and went unmet. It is just priced out, not stuck.
+    expect(coal.unmetUnits).toBeGreaterThan(0);
+    expect(coal.toleranceBoundUnits).toBeGreaterThan(0);
+    expect(coal.capacityBoundUnits).toBe(0);
+    expect(r.deliveryLimitedSupplyByState.get("coal")!.get("A2")).toBe(0);
   });
 
   it("deliveryLimitedSupplyByState: saturates at the spare on hand", () => {
-    // Demand of 500 against 200 of unshippable spare. The share caps at 1: a
-    // seller can only ever fail to deliver what it actually holds.
+    // Demand of 500 against 200 of spare in a state with NO freight capacity,
+    // so every unit a buyer wanted is capacity-bound. A seller can only ever
+    // fail to deliver what it actually holds, so this caps at the 200 spare
+    // rather than the 500 that was wanted.
     const r = runSourcingPass(
       makeInputs({
         byState: new Map([
           ["A1", new Map([["coal", { supply: 0, demand: 500 }]]) as Map<CommodityType, Balance>],
-          ["A2", new Map([["coal", { supply: 200, demand: 0 }]]) as Map<CommodityType, Balance>],
+          [
+            "A2",
+            new Map([
+              ["coal", { supply: 200, demand: 0 }],
+              ["freight", { supply: 0, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
         ]),
         states: [
           { stateId: "A1", countryId: "US" as CountryId },
           { stateId: "A2", countryId: "US" as CountryId },
         ],
         byCountry: new Map([["US", new Map([["coal", { supply: 200, demand: 500 }]])]]),
-        statePricesFor: () => ({ A1: 100, A2: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
-        nationalPricesFor: () => ({ UK: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
+        statePricesFor: () => ({ A1: 100, A2: 100 }),
       })
     );
     const unplaced = r.unplacedSupplyByState.get("coal")!.get("A2")!;
     expect(unplaced).toBeCloseTo(200);
     expect(r.deliveryLimitedSupplyByState.get("coal")!.get("A2")).toBeCloseTo(200);
+  });
+
+  it("books refused haul TEU scaled by what was genuinely stuck, not the sum of attempts", () => {
+    // Two buyers each want 300 of A2's 200 spare and both are refused by A2's
+    // zero-capacity network, so capacityBound (400 of attempts against the
+    // spare) exceeds the 200 that is genuinely stuck. The booked freight
+    // demand must be the attempts' TEU scaled by limited/capacityBound, not
+    // the raw sum: a refused attempt later placed elsewhere may not claim
+    // freight demand twice.
+    const r = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          ["A1", new Map([["coal", { supply: 0, demand: 300 }]]) as Map<CommodityType, Balance>],
+          ["A3", new Map([["coal", { supply: 0, demand: 300 }]]) as Map<CommodityType, Balance>],
+          [
+            "A2",
+            new Map([
+              ["coal", { supply: 200, demand: 0 }],
+              ["freight", { supply: 0, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+        ]),
+        states: [
+          { stateId: "A1", countryId: "US" as CountryId },
+          { stateId: "A2", countryId: "US" as CountryId },
+          { stateId: "A3", countryId: "US" as CountryId },
+        ],
+        byCountry: new Map([["US", new Map([["coal", { supply: 200, demand: 600 }]])]]),
+        statePricesFor: () => ({ A1: 100, A2: 100, A3: 100 }),
+      })
+    );
+    const limited = r.deliveryLimitedSupplyByState.get("coal")!.get("A2")!;
+    expect(limited).toBeCloseTo(200);
+    const bookedTwoBuyers = r.freightDemandTeuByState.get("A2")!.bulk;
+    expect(bookedTwoBuyers).toBeGreaterThan(0);
+
+    // Single-buyer control: same 200 spare, one 300-unit refusal. The booked
+    // TEU must be identical: it tracks the stuck spare, not the attempt count.
+    const single = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          ["A1", new Map([["coal", { supply: 0, demand: 300 }]]) as Map<CommodityType, Balance>],
+          [
+            "A2",
+            new Map([
+              ["coal", { supply: 200, demand: 0 }],
+              ["freight", { supply: 0, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+        ]),
+        states: [
+          { stateId: "A1", countryId: "US" as CountryId },
+          { stateId: "A2", countryId: "US" as CountryId },
+        ],
+        byCountry: new Map([["US", new Map([["coal", { supply: 200, demand: 300 }]])]]),
+        statePricesFor: () => ({ A1: 100, A2: 100 }),
+      })
+    );
+    const bookedSingle = single.freightDemandTeuByState.get("A2")!.bulk;
+    expect(bookedTwoBuyers).toBeCloseTo(bookedSingle, 10);
+  });
+
+  it("deliveryLimitedSupplyByState: blames only the state whose network failed (ticket #1180)", () => {
+    // The regression the ticket reported. A2 has no freight capacity and its
+    // spare is genuinely stuck. A3 sits in a different country with the same
+    // spare and no buyer at all, a plain glut. The old rule divided world
+    // unmet demand by world spare and stamped one ratio on both, so A3 wore a
+    // freight warning for a shortage on another continent.
+    const r = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          ["A1", new Map([["coal", { supply: 0, demand: 200 }]]) as Map<CommodityType, Balance>],
+          [
+            "A2",
+            new Map([
+              ["coal", { supply: 200, demand: 0 }],
+              ["freight", { supply: 0, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+          ["A3", new Map([["coal", { supply: 200, demand: 0 }]]) as Map<CommodityType, Balance>],
+        ]),
+        states: [
+          { stateId: "A1", countryId: "US" as CountryId },
+          { stateId: "A2", countryId: "US" as CountryId },
+          { stateId: "A3", countryId: "UK" as CountryId },
+        ],
+        byCountry: new Map([["US", new Map([["coal", { supply: 200, demand: 200 }]])]]),
+        statePricesFor: () => ({ A1: 100, A2: 100, A3: 100 }),
+      })
+    );
+    // Both states end the pass holding all 200 units.
+    expect(r.unplacedSupplyByState.get("coal")!.get("A2")).toBeCloseTo(200);
+    expect(r.unplacedSupplyByState.get("coal")!.get("A3")).toBeCloseTo(200);
+    // Only A2's is a delivery failure.
+    expect(r.deliveryLimitedSupplyByState.get("coal")!.get("A2")).toBeGreaterThan(0);
+    expect(r.deliveryLimitedSupplyByState.get("coal")!.get("A3")).toBe(0);
   });
 
   it("unplacedSupplyByState: grid losses make the flow ledger unable to answer this", () => {
@@ -583,5 +775,150 @@ describe("grid class (energy and natural gas)", () => {
     // A freight-price spike has no business moving the cost of electricity.
     expect(leg(cheapFreight)).toBeCloseTo(leg(dearFreight));
     expect(leg(cheapFreight)).toBeCloseTo(90 * GRID_WHEELING_PER_HOP_FRACTION);
+  });
+
+  it("freight billing: wheeled grid legs never bill the haulage fleet", () => {
+    const r = runSourcingPass(gridInputs());
+    expect(r.flows.some((f) => f.commodity === "energy" && f.units > 0)).toBe(true);
+    expect(r.freightChargesByDestState.size).toBe(0);
+    expect(r.haulRevenueByOriginState.size).toBe(0);
+  });
+});
+
+describe("freight billing aggregates (canonical freight billing v1)", () => {
+  const totalCharges = (r: ReturnType<typeof runSourcingPass>) => {
+    let sum = 0;
+    for (const byCommodity of r.freightChargesByDestState.values())
+      for (const charge of byCommodity.values()) sum += charge;
+    return sum;
+  };
+  const totalHaulRevenue = (r: ReturnType<typeof runSourcingPass>) => {
+    let sum = 0;
+    for (const revenue of r.haulRevenueByOriginState.values()) sum += revenue;
+    return sum;
+  };
+
+  it("books the shipping leg of an accepted domestic haul on both sides", () => {
+    // Default fixture: A1 buys 100 coal from A2, shippingPerUnit = 1000 × 0.004
+    // × 1 hop = 4 → 400 charged to A1, 400 earned by A2's network.
+    const r = runSourcingPass(makeInputs());
+    expect(r.freightChargesByDestState.get("A1")!.get("coal")).toBeCloseTo(400);
+    expect(r.haulRevenueByOriginState.get("A2")).toBeCloseTo(400);
+  });
+
+  it("transfer identity: total charges equal total haul revenue", () => {
+    const r = runSourcingPass(makeInputs());
+    expect(totalCharges(r)).toBeCloseTo(totalHaulRevenue(r), 10);
+    expect(totalCharges(r)).toBeGreaterThan(0);
+  });
+
+  it("refused hauls bill zero TEU: a state with no freight supply moves no money", () => {
+    const r = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          ["A1", new Map([["coal", { supply: 0, demand: 100 }]]) as Map<CommodityType, Balance>],
+          [
+            "A2",
+            new Map([
+              ["coal", { supply: 200, demand: 0 }],
+              ["freight", { supply: 0, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+        ]),
+        states: [
+          { stateId: "A1", countryId: "US" as CountryId },
+          { stateId: "A2", countryId: "US" as CountryId },
+        ],
+        byCountry: new Map([["US", new Map([["coal", { supply: 200, demand: 100 }]])]]),
+      })
+    );
+    const coal = r.summaries.find((s) => s.commodity === "coal")!;
+    expect(coal.capacityBoundUnits).toBeGreaterThan(0);
+    expect(r.freightChargesByDestState.size).toBe(0);
+    expect(r.haulRevenueByOriginState.size).toBe(0);
+  });
+
+  it("tolerance-refused demand bills nothing", () => {
+    const r = runSourcingPass(
+      makeInputs({
+        statePricesFor: () => ({ A1: 100, A2: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
+        nationalPricesFor: () => ({ UK: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
+      })
+    );
+    expect(r.freightChargesByDestState.size).toBe(0);
+    expect(r.haulRevenueByOriginState.size).toBe(0);
+  });
+
+  it("imports are excluded: no domestic network exists to earn the sea leg", () => {
+    // freightPrice 100: UK wins the coal book (see the cheap-sea test above).
+    const r = runSourcingPass(
+      makeInputs({
+        freightPrice: 100,
+        nationalPricesFor: () => ({ US: 95, UK: 60 }),
+      })
+    );
+    expect(coalFlow(r)[0].originType).toBe("country");
+    expect(r.freightChargesByDestState.size).toBe(0);
+    expect(r.haulRevenueByOriginState.size).toBe(0);
+  });
+
+  it("congested hauls carry their surcharge, and the identity still holds", () => {
+    const freightSupply = 0.2;
+    const r = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          ["A1", new Map([["coal", { supply: 0, demand: 100 }]]) as Map<CommodityType, Balance>],
+          [
+            "A2",
+            new Map([
+              ["coal", { supply: 200, demand: 0 }],
+              ["freight", { supply: freightSupply, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+        ]),
+        states: [
+          { stateId: "A1", countryId: "US" as CountryId },
+          { stateId: "A2", countryId: "US" as CountryId },
+        ],
+        byCountry: new Map([["US", new Map([["coal", { supply: 200, demand: 100 }]])]]),
+        statePricesFor: () => ({ A1: 200, A2: 90, B1: 80 }),
+      })
+    );
+    const coal = r.summaries.find((s) => s.commodity === "coal")!;
+    expect(coal.congestionSurchargePaid).toBeGreaterThan(0);
+    const flow = coalFlow(r)[0];
+    // Base shipping on every shipped unit plus the overflow units' surcharge.
+    expect(r.freightChargesByDestState.get("A1")!.get("coal")).toBeCloseTo(
+      coal.interStateUnits * flow.shippingPerUnit + coal.congestionSurchargePaid,
+      6
+    );
+    expect(totalCharges(r)).toBeCloseTo(totalHaulRevenue(r), 10);
+  });
+
+  it("aggregates survive the itemization floor: sub-floor flows still bill", () => {
+    // 0.5 units is below FLOW_RECORD_FLOOR_UNITS (1), so no flow is itemized,
+    // but the money aggregates must stay exact regardless.
+    const r = runSourcingPass(
+      makeInputs({
+        byState: new Map([
+          ["A1", new Map([["coal", { supply: 0, demand: 0.5 }]]) as Map<CommodityType, Balance>],
+          [
+            "A2",
+            new Map([
+              ["coal", { supply: 200, demand: 0 }],
+              ["freight", { supply: 1000, demand: 0 }],
+            ]) as Map<CommodityType, Balance>,
+          ],
+        ]),
+        states: [
+          { stateId: "A1", countryId: "US" as CountryId },
+          { stateId: "A2", countryId: "US" as CountryId },
+        ],
+        byCountry: new Map([["US", new Map([["coal", { supply: 200, demand: 0.5 }]])]]),
+      })
+    );
+    expect(coalFlow(r)).toHaveLength(0);
+    expect(r.freightChargesByDestState.get("A1")!.get("coal")).toBeCloseTo(0.5 * 4);
+    expect(r.haulRevenueByOriginState.get("A2")).toBeCloseTo(0.5 * 4);
   });
 });

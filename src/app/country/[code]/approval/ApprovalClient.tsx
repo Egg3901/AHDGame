@@ -3,12 +3,13 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
+import { netModifierEffect, type ActiveModifier } from "@/lib/utils/approvalModifiers";
 import { metricsApiUrl, approvalApiUrl, politicalMetricsUrl, regionApprovalUrl } from "@/lib/urls";
 import { POLITICAL_METRIC_COUNTRY_IDS } from "@/lib/politicalMetrics/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { ModifierList } from "@/components/approval/ModifierChip";
 import { computeRegionalConditionMargin } from "@/lib/states/conditions/marginEffects";
+import { mergeApprovalModifiers } from "./mergeApprovalModifiers";
 
 interface StateApprovalEntry {
   stateId: string;
@@ -92,12 +93,28 @@ export default function ApprovalClient({ initialMetrics, initialApproval }: Appr
     load();
   }, [load]);
 
-  // Use metrics endpoint for modifiers/state rankings if available; fallback to approval endpoint modifiers
-  const modifiers: ActiveModifier[] =
-    metricsData?.governmentApprovalModifiers ?? approvalData?.modifiers ?? [];
+  // Metric conditions come from the metrics endpoint when it has loaded; the
+  // national ones the snapshot stored (address, org statements, the war block)
+  // only ever arrive through the approval endpoint, so they are merged in
+  // rather than lost to a preference between the two.
+  const modifiers: ActiveModifier[] = mergeApprovalModifiers(
+    metricsData?.governmentApprovalModifiers,
+    approvalData?.modifiers
+  );
 
+  // The STORED snapshot value, not the metrics endpoint's live recompute.
+  //
+  // The two are different models: the snapshot is a population-weighted
+  // aggregate of damped regional approval with the national providers and the
+  // cabinet penalties folded in, while the metrics endpoint scores national
+  // metric averages alone. The stored one is canonical — it is what the history
+  // chart below plots, what the Executive page shows, and what elections
+  // consume — so showing the other beside that history was already showing two
+  // different numbers for the same thing. It becomes untenable once the effects
+  // list includes national modifiers the recompute does not know about: the
+  // chips would not add up to the figure above them.
   const governmentApproval: number | undefined =
-    metricsData?.governmentApproval ?? approvalData?.governmentApproval;
+    approvalData?.governmentApproval ?? metricsData?.governmentApproval;
 
   const sortedStates = metricsData?.stateApprovals
     ? [...metricsData.stateApprovals].sort((a, b) => b.approval - a.approval)
@@ -105,7 +122,7 @@ export default function ApprovalClient({ initialMetrics, initialApproval }: Appr
 
   const history = approvalData?.history ?? [];
 
-  const netApproval = modifiers.reduce((s, m) => s + m.effect, 0);
+  const netApproval = netModifierEffect(modifiers);
   const netMargin = computeRegionalConditionMargin(modifiers);
 
   return (

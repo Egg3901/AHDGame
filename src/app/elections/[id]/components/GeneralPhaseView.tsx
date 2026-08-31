@@ -7,7 +7,11 @@ import { GeneralElectionPanel, GeneralElectionNoTallyPanel } from "./ElectionDet
 import { GeneralElectionShellClient } from "./GeneralElectionShellClient";
 import { buildGeneralElectionViewModel } from "@/lib/elections/generalViewModel";
 import { countryHasPresidentialRunningMate } from "@/lib/elections/runningMateEligibility";
-import { assessContingentEvRisk } from "@/lib/elections/presidentialResolutionDisplay";
+import {
+  assessContingentEvRisk,
+  collegeSizeFromEvByState,
+  electoralMajorityFor,
+} from "@/lib/elections/presidentialResolutionDisplay";
 import { ContingentRiskBanner } from "./ContingentRiskBanner";
 import { CampaignSeasonBanner } from "./CampaignSeasonBanner";
 import type { DriverDisplayInputs } from "@/lib/elections/computePersuasionDriverDisplay";
@@ -16,9 +20,13 @@ import {
   type PersuasionDriverCandidate,
 } from "@/components/elections/general/PersuasionDrivers";
 import { NationalMoodGauge } from "@/components/elections/general/NationalMoodGauge";
+import { FactorLedgerCard } from "@/components/elections/general/FactorLedgerCard";
 import { states as referenceStates } from "@/lib/seeds/reference/states";
 import { getSubdivisionMode } from "@/lib/maps/subdivisionConfig";
 import { UK_REGION_NAMES, RU_REGION_NAMES } from "@/lib/constants/states";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { useGameClock } from "@/contexts/useGameClock";
+import { buildBlendClock } from "@/lib/elections/blendDetailViewModel";
 import type { ElectionDetail } from "./ElectionDetailTypes";
 
 /** Static US state-id → display-name map sourced from the reference seed.
@@ -91,6 +99,48 @@ export function GeneralPhaseView({
   // races show a running tally.
   const isUS = election.countryId === "US";
   const isProjectedGeneral = election.countryId !== "US";
+
+  // Blend detail chrome. The countdowns come from the game clock rather than
+  // the election payload: the two are fetched separately and can disagree for
+  // a few seconds after a turn tick.
+  const clock = useGameClock();
+  const regionName =
+    election.regionName ??
+    (isUS ? US_STATE_NAME_BY_ID[election.state] : undefined) ??
+    UK_REGION_NAMES[election.state] ??
+    RU_REGION_NAMES[election.state] ??
+    election.state;
+  const countryName = COUNTRY_CONFIGS[election.countryId as CountryId]?.name ?? election.countryId;
+  const primaryTimer =
+    election.primaryEndTurn != null
+      ? clock.formatRemainingTurns(election.primaryEndTurn)
+      : clock.formatRemaining(election.primaryEndTime);
+  const generalTimer =
+    election.endTurn != null
+      ? clock.formatRemainingTurns(election.endTurn)
+      : clock.formatRemaining(election.endTime);
+  // Ballots over the field the page actually lists — the tally can still hold
+  // primary-losers' votes, which appear against no row.
+  const blendBallots = election.generalVotes
+    ? election.allCandidates.reduce(
+        (sum, c) => sum + (election.generalVotes!.totalVotes[c.id] ?? 0),
+        0
+      )
+    : 0;
+  const blendElectorate = election.regionElectorate;
+  const blendClockRows = buildBlendClock({
+    primaryLabel: "Primary",
+    primaryValue: election.inPrimary ? primaryTimer.text : "Completed",
+    generalValue: localIsEnded ? "Completed" : generalTimer.text,
+    isEnded: localIsEnded,
+    inPrimary: localInPrimary,
+    // Only when there is a real denominator; the hero fact carries the basis.
+    turnoutPct:
+      blendElectorate && blendElectorate.count > 0 && blendBallots > 0
+        ? (blendBallots / blendElectorate.count) * 100
+        : null,
+    ballots: blendBallots,
+  });
   // The running-mate selector is offered for any president-with-VP-ticket
   // country (US, Brazil, Nigeria) — not just the US. Ceremonial presidencies
   // without a VP office (Ireland, China) never show it. See ticket #0957.
@@ -202,9 +252,10 @@ export function GeneralPhaseView({
           !localInPrimary &&
           !localIsEnded &&
           (() => {
+            const college = collegeSizeFromEvByState(election.generalVotes?.evByState);
             const risk = assessContingentEvRisk(
               election.generalVotes?.electoralVotesByCandidate,
-              270
+              college > 0 ? electoralMajorityFor(college) : 270
             );
             return risk?.atRisk ? (
               <ContingentRiskBanner
@@ -221,6 +272,22 @@ export function GeneralPhaseView({
             races have no field and the card returns null. */}
         {election.electionType === "president" && !localInPrimary && (
           <NationalMoodGauge data={election.economicReferendum} />
+        )}
+
+        {/* Factor Ledger — the read-only decomposition of each candidate's
+            projected votes into named factors, teed off the engine's own math.
+            Sits beside National Mood; renders null for races with no ledger. */}
+        {election.electionType === "president" && !localInPrimary && (
+          <FactorLedgerCard
+            data={election.factorLedger}
+            candidates={Object.entries(election.generalVotes?.candidateNames ?? {}).map(
+              ([id, name]) => ({
+                id,
+                name,
+                color: election.generalVotes?.candidateColors?.[id] ?? "#9CA3AF",
+              })
+            )}
+          />
         )}
 
         {isUS && election.electionType === "president" && !localInPrimary && (
@@ -286,6 +353,12 @@ export function GeneralPhaseView({
             myCharId={election.myCharId}
             myEndorsedCandidateId={election.myEndorsedCandidateId}
             countryId={(election.countryId ?? "US") as "US" | "UK" | "DE"}
+            regionName={regionName}
+            countryName={countryName}
+            year={election.electionYear}
+            clockRows={blendClockRows}
+            electorate={blendElectorate}
+            partyDisplayById={election.partyDisplayById}
           />
         ) : (
           <GeneralElectionNoTallyPanel

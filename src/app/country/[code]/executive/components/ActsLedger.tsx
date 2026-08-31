@@ -22,13 +22,16 @@ const KIND_TONE: Record<ExecutiveActKind, string> = {
   order: "bg-gold/10 text-gold",
   confirmed: "bg-info/10 text-info",
   nominated: "bg-info/10 text-info",
+  // Warning tone, matching the Acting badge on the cabinet page: a caretaker
+  // seat is a provisional state, not a settled appointment.
+  acting: "bg-warning/10 text-warning",
 };
 
 type LedgerFilter = "all" | "bills" | "appointments" | "orders";
 
 const FILTER_KINDS: Record<Exclude<LedgerFilter, "all">, ExecutiveActKind[]> = {
   bills: ["signed", "vetoed", "onDesk"],
-  appointments: ["confirmed", "nominated"],
+  appointments: ["confirmed", "nominated", "acting"],
   orders: ["order"],
 };
 

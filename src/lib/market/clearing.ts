@@ -2,6 +2,7 @@ import type { CommodityType } from "@/lib/constants/commodities";
 import { commodityMixWeight as mixWeight } from "@/lib/constants/commodities";
 import { priceRealizationFactor } from "@/lib/market/priceRealization";
 import { LOYAL_POOL_FRACTION, SLICE_NOISE_FLOOR } from "@/lib/market/brandLoyalty";
+import { isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
 
 /**
  * Market clearing — Tier 3 (Fix 2) of the structural market rework
@@ -27,6 +28,10 @@ import { LOYAL_POOL_FRACTION, SLICE_NOISE_FLOOR } from "@/lib/market/brandLoyalt
  * Demand is the PRIOR turn's aggregate (lagged, like every market input in
  * this rework), so clearing can't feed back on itself within a turn.
  */
+
+/** Namespace prefix for state-scoped clearing books. */
+const STATE_GROUP_PREFIX = "state:";
+const MISSING_STATE_GROUP_PREFIX = "missing-state:";
 
 export const PRICING_POSTURE_MIN = -0.2;
 export const PRICING_POSTURE_MAX = 0.2;
@@ -415,8 +420,51 @@ export function computeClearingFactors(args: {
    * worldwide ratio, so the map may be sparse.
    */
   priceRatioByGroup?: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+  /**
+   * State-local market context. Omit the whole context to preserve the legacy
+   * reachable-book behavior, for example while a legacy freight supply
+   * agreement still requires corporation-wide settlement. Once present, a
+   * state-local seller with missing location data fails closed into a zero-
+   * demand book rather than claiming aggregate demand already used elsewhere.
+   */
+  stateMarkets?: {
+    /** sectorId → host stateId. */
+    stateBySector: ReadonlyMap<string, string>;
+    /** stateId → commodity → lagged supply and demand. */
+    balances: ReadonlyMap<string, ReadonlyMap<CommodityType, { supply: number; demand: number }>>;
+    /** stateId → commodity → lagged price-over-base ratio. */
+    priceRatios: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+  };
 }): Map<string, SectorClearingResult> {
   const { sectors, balances, priceRatioByCommodity, basePrices, onBookDiagnostic } = args;
+
+  // States and countries share an id space (DE is both Delaware and Germany),
+  // so a state book gets a namespaced group key that cannot collide with a
+  // country group.
+  const stateGroupKey = (stateId: string) => `${STATE_GROUP_PREFIX}${stateId}`;
+  /** The seller's known state when this commodity clears state-locally. */
+  const stateScopeFor = (commodity: CommodityType, sectorId: string): string | null => {
+    if (!args.stateMarkets || !isStateScopedCommodity(commodity)) return null;
+    return args.stateMarkets.stateBySector.get(sectorId) ?? null;
+  };
+  const bookKeyFor = (commodity: CommodityType, sectorId: string): string => {
+    const stateId = stateScopeFor(commodity, sectorId);
+    if (stateId != null) return stateGroupKey(stateId);
+    if (args.stateMarkets && isStateScopedCommodity(commodity)) {
+      return `${MISSING_STATE_GROUP_PREFIX}${sectorId}`;
+    }
+    return args.groupBySector?.get(sectorId) ?? "";
+  };
+  const balanceForBook = (book: string, commodity: CommodityType) => {
+    if (book.startsWith(STATE_GROUP_PREFIX)) {
+      return args.stateMarkets?.balances.get(book.slice(STATE_GROUP_PREFIX.length))?.get(commodity);
+    }
+    if (book.startsWith(MISSING_STATE_GROUP_PREFIX)) return undefined;
+    return (
+      (book !== "" ? args.balancesByGroup?.get(book)?.get(commodity) : undefined) ??
+      balances.get(commodity)
+    );
+  };
 
   // Loyal-slice lookup (seller id === sectorId), built only when the slice is on.
   const loyaltyBySectorId = args.loyaltySliceEnabled
@@ -433,10 +481,9 @@ export function computeClearingFactors(args: {
       // Auto-posture reads the sector's OWN market's balance when partitioned:
       // a seller in a glutted, embargo-walled market must undercut off its
       // reachable book, not off a healthy worldwide aggregate it cannot sell to.
-      const group = args.groupBySector?.get(s.sectorId);
-      const bal =
-        (group !== undefined ? args.balancesByGroup?.get(group)?.get(commodity) : undefined) ??
-        balances.get(commodity);
+      // Under state scoping that book is its own state, so a logistics sector
+      // in a glutted state undercuts even while the nation looks balanced.
+      const bal = balanceForBook(bookKeyFor(commodity, s.sectorId), commodity);
       const posture =
         s.posture != null
           ? clampPricingPosture(s.posture)
@@ -479,20 +526,17 @@ export function computeClearingFactors(args: {
     // balances. Without partition args this is one worldwide group ("") over
     // the aggregate `balances` — the original single-book pass, unchanged.
     const partitioned = new Map<string, ClearingSeller[]>();
-    if (args.balancesByGroup) {
+    if (args.balancesByGroup || args.stateMarkets) {
       for (const s of sellers) {
-        const g = args.groupBySector?.get(s.id) ?? "";
+        const g = bookKeyFor(commodity, s.id);
         partitioned.set(g, [...(partitioned.get(g) ?? []), s]);
       }
     } else {
       partitioned.set("", sellers);
     }
-    const balForGroup = (g: string) =>
-      (g !== "" ? args.balancesByGroup?.get(g)?.get(commodity) : undefined) ??
-      balances.get(commodity);
 
     for (const [g, groupSellers] of partitioned) {
-      const bal = balForGroup(g);
+      const bal = balanceForBook(g, commodity);
       const rawOfferedUnits = groupSellers.reduce((sum, s) => sum + s.units, 0);
       const laggedSupply = bal?.supply ?? 0;
       const normalizable = groupSellers.filter((s) => !s.realUnits);
@@ -550,7 +594,7 @@ export function computeClearingFactors(args: {
     const contractedCorpBySector = new Map<string, string>();
     const contractedShareBySector = new Map<string, number>();
     for (const [g, groupSellers] of partitioned) {
-      const bal = balForGroup(g);
+      const bal = balanceForBook(g, commodity);
       const laggedSupply = bal?.supply ?? 0;
       const offeredUnits = groupSellers.reduce((sum, s) => sum + s.units, 0);
       const totalSupply = Math.max(laggedSupply, offeredUnits);
@@ -653,8 +697,16 @@ export function computeClearingFactors(args: {
       const rate = s.supplyRates[commodity] ?? 0;
       if (rate <= 0) continue;
       const sold = soldByCommodityBySector.get(commodity)?.get(s.sectorId) ?? 1;
+      // State-scoped legs realize their own state's price. Clearing volume
+      // locally while realizing price nationally would leave a seller who
+      // relieved a local shortage paid at the glutted national level.
+      const stateScope = stateScopeFor(commodity, s.sectorId);
+      const stateRatio =
+        stateScope != null
+          ? args.stateMarkets?.priceRatios.get(stateScope)?.get(commodity)
+          : undefined;
       const priceLeg = priceRealizationFactor(
-        groupRatios?.get(commodity) ?? priceRatioByCommodity.get(commodity)
+        stateRatio ?? groupRatios?.get(commodity) ?? priceRatioByCommodity.get(commodity)
       );
       rateSum += rate;
       factorSum += rate * sold * (1 + effectivePremium) * priceLeg;

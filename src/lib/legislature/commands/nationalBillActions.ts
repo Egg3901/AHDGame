@@ -5,7 +5,11 @@ import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { resolveBillVoteField } from "@/lib/congress/billVoteField";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
-import { applyBillVotePolicyShift } from "@/lib/policyShift";
+import {
+  applyBillVotePolicyShift,
+  personalPreviousVote,
+  shouldApplyVoteShift,
+} from "@/lib/policyShift";
 import { executePresidentialBillAction } from "@/lib/presidentialBillAction";
 import { createNotification } from "@/lib/notifications";
 import { clearWhippedFromVote } from "@/lib/congress/clearWhippedVote";
@@ -323,19 +327,27 @@ export async function performNationalBillAction(
     // Read from the VOTER's own map. Under active_both, isOtherChamber is false for
     // everyone, so an upper-chamber voter's prior vote was looked up in the lower map --
     // always absent -- and the policy shift re-fired every time they changed their vote.
-    const previousVote =
-      isOtherChamber || concurrentField === "otherChamberVotes"
-        ? bill.otherChamberVotes?.[charKey]
-        : bill.votes?.[charKey];
-    if (!previousVote || previousVote === "abstain") {
+    const votesInOtherChamber = isOtherChamber || concurrentField === "otherChamberVotes";
+    // A whip may have written the recorded vote; only the member's own vote counts
+    // as a prior vote. The snapshot was read with the bill, before clearWhippedFromVote.
+    const previousVote = personalPreviousVote(
+      votesInOtherChamber ? bill.otherChamberVotes?.[charKey] : bill.votes?.[charKey],
+      votesInOtherChamber
+        ? bill.otherChamberWhippedFromVote?.[charKey]
+        : bill.whippedFromVote?.[charKey]
+    );
+    const ledgerEntry = bill.policyShiftLedger?.[charKey];
+    if (shouldApplyVoteShift(previousVote, ledgerEntry)) {
       try {
-        await applyBillVotePolicyShift(
-          db,
-          character._id,
-          (bill.provisions ?? []).filter(isPolicyProvision),
+        await applyBillVotePolicyShift(db, {
+          collection: "bills",
+          billId: bill._id,
+          characterId: character._id,
+          provisions: (bill.provisions ?? []).filter(isPolicyProvision),
           vote,
-          character.policies
-        );
+          currentPolicies: character.policies,
+          ledgerEntry,
+        });
       } catch (error) {
         console.warn("[policyShift] Failed to apply policy shift from congress vote:", error);
       }

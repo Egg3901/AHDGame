@@ -110,6 +110,49 @@ describe("PUT general assignments", () => {
     expect(res.status).toBe(200);
   });
 
+  /**
+   * Another commanding general's row for someone who has since emigrated or been
+   * dismissed. The merged whole is validated against the live roster, so carrying
+   * that row through froze EVERY commanding general in the country out of saving,
+   * over a name none of them owns and none of them can reach.
+   */
+  it("carries other commands' postings through but drops one for a departed general", async () => {
+    db.collectionMocks.militaryFormations.findOne.mockResolvedValue({
+      countryId: "US",
+      conflictAssignments: [
+        { theaterId: "afghan", generalCharacterId: "g_outsider", inCharge: false },
+        { theaterId: "afghan", generalCharacterId: "g_departed", inCharge: false },
+      ],
+    });
+    const { PUT } = await import(ROUTE);
+    const res = await PUT(req({ conflictAssignments: [assignment({ inCharge: false })] }), call);
+    expect(res.status).toBe(200);
+    const saved = db.collectionMocks.militaryFormations.updateOne.mock.calls[0][1].$set
+      .conflictAssignments as { generalCharacterId: string }[];
+    expect(saved.map((a) => a.generalCharacterId).sort()).toEqual(["g_outsider", "g_sub"]);
+  });
+
+  // The caller's OWN submission is still validated strictly: a departed general in
+  // their command list is refused rather than quietly dropped.
+  it("403s a commanding general whose own character has left the country", async () => {
+    // The mock collection ignores the query, so the roster is narrowed by narrowing
+    // BOTH reads listCountryGenerals makes.
+    db.collectionMocks.characters.find.mockReturnValue({
+      project: () => ({ toArray: vi.fn().mockResolvedValue([{ _id: "g_sub", name: "Sub" }]) }),
+    });
+    db.collectionMocks.characterGenerals.find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([
+          { characterId: "g_sub", general: { name: "Sub", spec: "armor", level: 1, traits: [] } },
+        ]),
+    });
+    const { PUT } = await import(ROUTE);
+    const res = await PUT(req({ conflictAssignments: [assignment()] }), call);
+    expect(res.status).toBe(403);
+    expect(db.collectionMocks.militaryFormations.updateOne).not.toHaveBeenCalled();
+  });
+
   it("403s a general who leads no command", async () => {
     vi.mocked(requireAuth).mockResolvedValue({
       ok: true,

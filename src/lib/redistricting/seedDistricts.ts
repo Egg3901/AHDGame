@@ -2,6 +2,7 @@ import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CongressionalDistrict } from "@/lib/db/types";
 import { buildDistrictDocsForStates } from "./buildStateDocs";
+import { seedRedistrictingAuthority } from "./seedRedistrictingAuthority";
 
 interface SeedOpts {
   countryId?: CountryId;
@@ -38,5 +39,17 @@ export async function seedCongressionalDistricts(
     .catch(() => {});
 
   log(`Seeded ${seeded} congressional districts (${countryId})`);
+
+  // Seed the authority law to legislature-drawn for every state that got
+  // districts. Without this the redistricting feature is unreachable (the code
+  // default is bipartisan commission, which cannot redraw) and the default is
+  // historically wrong for the 1953/1960 eras.
+  await seedRedistrictingAuthority(db, {
+    countryId,
+    stateIds: docs.map((d) => d.stateId),
+    now: opts.now,
+    log,
+  });
+
   return { seeded };
 }

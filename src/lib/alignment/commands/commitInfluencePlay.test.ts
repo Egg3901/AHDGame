@@ -146,4 +146,18 @@ describe("commitInfluencePlay", () => {
     expect(r).toEqual({ ok: false, reason: "insufficient-funds" });
     expect(db.collection("organizationFunds").updateOne).not.toHaveBeenCalled();
   });
+
+  it("refuses a spend too small to move even a hundredth of a point, before any debit", async () => {
+    // The ticket-#1213 case: a foreign minister typed a handful of currency
+    // units against a nation that costs millions per point. It used to debit,
+    // queue, resolve to zero applied points and refund a turn later — a no-op
+    // round trip that read as "the button does nothing". Now it is refused up
+    // front so the panel can say how much is actually needed.
+    const { commitInfluencePlay } = await import("./commitInfluencePlay");
+    const r = await commitInfluencePlay({ db: db as unknown as Db, ...base, amountLocal: 10 });
+
+    expect(r).toEqual({ ok: false, reason: "below-min-points" });
+    expect(db.collection("organizationFunds").updateOne).not.toHaveBeenCalled();
+    expect(db.collection("alignmentPlays").insertOne).not.toHaveBeenCalled();
+  });
 });

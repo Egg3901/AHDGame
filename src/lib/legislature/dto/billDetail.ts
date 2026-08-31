@@ -1,6 +1,7 @@
 import type { CountryId } from "@/lib/constants/countries";
 import type { BillWhipPanelData } from "@/lib/congress/billWhipPanelData";
-import type { NationalizationProvisionDetail } from "@/lib/congress/billEnrichment";
+import type { ProvisionDisplay } from "@/lib/legislature/provisionEnrichment";
+import type { VoteShiftPreview } from "@/lib/legislature/voteShiftPreview";
 
 export interface BillDetail {
   id: string;
@@ -29,41 +30,7 @@ export interface BillDetail {
   directionLabel: "Left" | "Center" | "Right" | null;
   positionLabel?: string | null;
   effectTargetLabel: string | null;
-  provisions?: {
-    legislationTypeName: string;
-    policyOptionId?: string;
-    policyOptionName?: string;
-    currentPolicyOptionName?: string;
-    changeDirection?: "up" | "down" | "same";
-    effectDirection: number;
-    directionLabel: "Left" | "Center" | "Right";
-    positionLabel?: string;
-    effectTargetLabel?: string;
-    /**
-     * Per-metric projected effects. `direction` is how the metric's value moves
-     * vs the current law (a delta), `isGood` whether that's beneficial.
-     */
-    effects?: { metric: string; direction: "up" | "down"; isGood: boolean }[];
-    archetypeApprovals?: Record<string, number>;
-    policyDomain?: string;
-    currentPolicyIndex?: number;
-    proposedPolicyIndex?: number;
-    /** Per-option combined position score (economic+social), for correct approval shift direction. */
-    policyOptionScores?: number[];
-    economic?: number;
-    social?: number;
-    nationalizationDetail?: NationalizationProvisionDetail;
-    /** Political-legislation v2 (spec §8): live fiscal profile + net delta. */
-    fiscal?: {
-      currencyCode: string;
-      proposed?: { cost: number; revenue: number; net: number };
-      current?: { cost: number; revenue: number; net: number };
-      netDelta?: number;
-      currentRate?: number;
-      proposedRate?: number;
-      revenueDelta?: number;
-    };
-  }[];
+  provisions?: ProvisionDisplay[];
   votesFor: number;
   votesAgainst: number;
   votesAbstain: number;
@@ -78,6 +45,8 @@ export interface BillDetail {
   myOverrideWhippedFrom: string | null;
   canVoteOrigin: boolean;
   canVoteOther: boolean;
+  /** What the viewer's Aye and Nay would each do to their positions; null for spectators. */
+  voteShiftPreview?: VoteShiftPreview | null;
   canCosponsor: boolean;
   canUncosponsor: boolean;
   canWithdraw: boolean;

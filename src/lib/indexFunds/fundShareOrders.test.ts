@@ -85,6 +85,64 @@ describe("placeFundShareBuyOrder", () => {
   });
 });
 
+describe("placeFundShareSellOrder", () => {
+  it("places a bounded fund ask only against unreserved holdings", async () => {
+    const { placeFundShareSellOrder } = await import("./fundShareOrders");
+    const c = corp();
+    const f = {
+      ...fund(),
+      holdings: [{ corporationId: c._id, shares: 100 }],
+    };
+    (db.collection("shareOrders").find as ReturnType<typeof vi.fn>).mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ sharesRemaining: 20 }]),
+    });
+
+    const result = await placeFundShareSellOrder(db as unknown as Db, {
+      fund: f,
+      corp: c,
+      shares: 25,
+      limitPriceLocal: 51,
+      liquidityQuote: { turn: 44, referencePrice: 50 },
+    });
+
+    expect(result.ok).toBe(true);
+    const inserted = (db.collection("shareOrders").insertOne as ReturnType<typeof vi.fn>).mock
+      .calls[0][0];
+    expect(inserted).toMatchObject({
+      placerFundId: f._id,
+      corporationId: c._id,
+      type: "sell",
+      sharesRemaining: 25,
+      pricePerShare: 51,
+      liquidityProvider: true,
+      liquidityQuotedTurn: 44,
+      liquidityReferencePrice: 50,
+    });
+  });
+
+  it("refuses an ask that exceeds holdings after open-order reservations", async () => {
+    const { placeFundShareSellOrder } = await import("./fundShareOrders");
+    const c = corp();
+    const f = {
+      ...fund(),
+      holdings: [{ corporationId: c._id, shares: 100 }],
+    };
+    (db.collection("shareOrders").find as ReturnType<typeof vi.fn>).mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ sharesRemaining: 80 }]),
+    });
+
+    const result = await placeFundShareSellOrder(db as unknown as Db, {
+      fund: f,
+      corp: c,
+      shares: 25,
+      limitPriceLocal: 51,
+    });
+
+    expect(result).toMatchObject({ ok: false, reason: expect.stringMatching(/unreserved/) });
+    expect(db.collection("shareOrders").insertOne).not.toHaveBeenCalled();
+  });
+});
+
 describe("cancelFundShareOrder", () => {
   it("refunds remaining escrowAnchor to cashAnchor and marks cancelled", async () => {
     const { cancelFundShareOrder } = await import("./fundShareOrders");

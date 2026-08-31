@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import type { Crisis } from "@/lib/db/types/crisis";
+import type { CalendarClock } from "@/lib/utils/gameDate";
 import type { AutoCooldownRow, AutoTemplate, FormState } from "./crisisAdminTypes";
 import { makeEmptyForm } from "./crisisAdminTypes";
 import { CrisesHeaderBar } from "./CrisesHeaderBar";
@@ -13,6 +14,7 @@ import { CreateFromTemplateModal } from "./CreateFromTemplateModal";
 export function CrisesManager() {
   const [crises, setCrises] = useState<Crisis[]>([]);
   const [startingYear, setStartingYear] = useState<number | undefined>(undefined);
+  const [clock, setClock] = useState<CalendarClock>({});
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [showModal, setShowModal] = useState(false);
@@ -47,6 +49,10 @@ export function CrisesManager() {
         const data = await res.json();
         setCrises(data.crises ?? []);
         setStartingYear(data.startingYear);
+        setClock({
+          preIterationTurns: data.preIterationTurns,
+          preIterationActive: data.preIterationActive,
+        });
         setInteractionEnabled(data.interactionEnabled === true);
         setAutoDisastersEnabled(data.autoDisastersEnabled === true);
         setAutoCrisisPaused(data.autoCrisisPaused === true);
@@ -306,6 +312,7 @@ export function CrisesManager() {
         crises={crises}
         loading={loading}
         startingYear={startingYear}
+        clock={clock}
         onResolve={handleResolve}
         onDelete={handleDelete}
       />

@@ -18,6 +18,10 @@ import { legislationTypes as oldReferenceTypes } from "@/lib/seeds/reference/leg
 import { getCatalog } from "@/lib/politicalLegislation/catalog";
 import { budgetKeyForLaw } from "@/lib/politicalLegislation/budgetKeys";
 import { LAW_COUNTRY_IDS } from "@/lib/politicalLegislation/types";
+import {
+  isOldLegislationTypeExcluded,
+  POLITICAL_LEGISLATION_RETAINED_OLD_IDS,
+} from "@/lib/politicalMetrics/pipelinePreset";
 import { seedLegislationTypes } from "./seedLegislationTypes";
 import { seedPoliticalLegislationBaseline } from "./seedPoliticalLegislation";
 
@@ -125,13 +129,11 @@ describe("1953 reset — end-to-end political-legislation verification", () => {
     await seedPoliticalLegislationBaseline(db as unknown as Db, vi.fn(), 1953);
     // The statePolicies stale-cleanup mirrors seedStatePolicies' deleter set:
     const { getAllNewGenerationLawIds } = await import("@/lib/politicalLegislation/catalog");
-    const excluded = new Set(
-      oldReferenceTypes
-        .filter((lt) => ["us", "uk", "ru", "dd"].includes(lt.countryScope ?? "us"))
-        .map((lt) => lt._id)
-    );
+    // Mirrors seedStatePolicies' deleter set via the SAME predicate the seeder
+    // uses — spelling the scope list out here let this simulation drift from the
+    // real sweep (it would have kept deleting the retained redistricting rows).
     const valid = [
-      ...oldReferenceTypes.filter((lt) => !excluded.has(lt._id)).map((lt) => lt._id),
+      ...oldReferenceTypes.filter((lt) => !isOldLegislationTypeExcluded(lt)).map((lt) => lt._id),
       ...getAllNewGenerationLawIds(),
     ];
     await db.collectionMocks.statePolicies.deleteMany({ legislationTypeId: { $nin: valid } });
@@ -141,10 +143,12 @@ describe("1953 reset — end-to-end political-legislation verification", () => {
     await runResetPass();
 
     const survivingIds = [...typeStore.keys()];
-    expect(survivingIds.some((id) => id.startsWith("us_"))).toBe(false);
-    expect(survivingIds.some((id) => id.startsWith("uk_"))).toBe(false);
-    expect(survivingIds.some((id) => id.startsWith("su_"))).toBe(false);
-    expect(survivingIds.some((id) => id.startsWith("dd_"))).toBe(false);
+    // Exactly the deliberate carve-out survives: the state redistricting levers
+    // have no new-generation equivalent and the redistricting caps read them by
+    // id (ticket #1189). Any OTHER old playable-country id still fails here.
+    expect(survivingIds.filter((id) => /^(us|uk|su|dd)_/.test(id)).sort()).toEqual(
+      [...POLITICAL_LEGISLATION_RETAINED_OLD_IDS].sort()
+    );
     // Other countries' old catalogs survive untouched.
     expect(survivingIds.some((id) => id.startsWith("jp_"))).toBe(true);
 

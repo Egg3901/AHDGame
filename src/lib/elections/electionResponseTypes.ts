@@ -16,6 +16,7 @@ import type {
   PresidentialResolutionMode,
 } from "@/lib/elections/presidentialResolutionDisplay";
 import type { EnrichedCandidate, PartyGroup } from "@/lib/elections/candidateEnrichment";
+import type { FactorLedgerSnapshot } from "@/lib/electionEngine/factorLedger";
 
 export interface PollingData {
   leaderId: string | null;
@@ -264,6 +265,16 @@ export interface ElectionResponse {
   };
 
   /**
+   * President only: the descriptive factor ledger read straight off the vote
+   * tally (`ElectionVoteTally.factorLedger`), never recomputed here. Feeds the
+   * Factor Ledger card. Fog-of-war applied in `enrichElection`: the national
+   * factor waterfall is shown for every candidate, but per-candidate
+   * `bucketAppeal` and the per-unit breakdown are stripped for candidates the
+   * viewer does not own. Absent for races that ran before the ledger existed.
+   */
+  factorLedger?: FactorLedgerSnapshot;
+
+  /**
    * Per-state registration-lean breakdown for the presidential
    * RegistrationInfluenceCard. Keyed by stateId → party shares (each
    * party's `statePartyOrg.registration` as a lean %) plus the
@@ -286,6 +297,32 @@ export interface ElectionResponse {
    * `regByState` breakdown. Populated alongside `regByState`.
    */
   partyDisplayById?: Record<string, { abbr: string; color: string }>;
+
+  /**
+   * The seat's region electorate, for turnout on the detail page.
+   *
+   * `basis` says what the count actually is: `eligible` is the region's
+   * voting-eligible population, `residents` is total population, used only when
+   * a world has no cohort vectors and so no eligible figure at all. They differ
+   * by roughly a quarter, so the consumer must label which one it divided by
+   * rather than print either as "the electorate". Absent for nationwide races,
+   * which have no single regional electorate.
+   */
+  regionElectorate?: { count: number; basis: "eligible" | "residents" };
+  /**
+   * Display name of the region the race is held in, from the region doc.
+   * Absent for nationwide races. Consumers used static US/UK/RU name maps
+   * and fell back to the raw id ("BLR_HOM") everywhere else.
+   */
+  regionName?: string;
+
+  /**
+   * Non-presidential primaries: cumulative PRIMARY ballots per candidate,
+   * accrued turn by turn by the engine (see ElectionVoteTally.primaryVotes).
+   * Kept apart from generalVotes so no general-phase denominator ever counts
+   * primary ballots. Absent when the race never accrued any.
+   */
+  primaryVotes?: Record<string, number>;
 }
 
 export interface ResolveElectionOptions {

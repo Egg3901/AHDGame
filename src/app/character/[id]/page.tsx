@@ -572,8 +572,7 @@ export default async function CharacterPage({ params }: PageProps) {
     gameDateAnchor,
   } = data;
 
-  const { corporation, bondIncomePerTurn, dividendIncomePerTurn, portfolioValue, fxRatesRecord } =
-    financialData;
+  const { corporation, bondIncomePerTurn, dividendIncomePerTurn, fxRatesRecord } = financialData;
 
   const isOwnProfile = userData?.character?._id?.toString() === character._id.toString();
   const canInfluence = userData?.hasCharacter && !isOwnProfile && !isBanned;
@@ -1022,7 +1021,6 @@ export default async function CharacterPage({ params }: PageProps) {
                     ceoSalaryCurrencyCode: corporation?.liquidCurrencyCode ?? null,
                     bondIncomePerTurn,
                     dividendIncomePerTurn,
-                    portfolioValue,
                     forexBalances: character.currencyBalances
                       ? {
                           personal: character.currencyBalances.personal,

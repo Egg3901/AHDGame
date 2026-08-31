@@ -141,6 +141,8 @@ export type IndexFundTransactionKind =
   | "rebalance"
   | "cross_fund_buy"
   | "cross_fund_sell"
+  | "liquidity_quote_buy"
+  | "liquidity_quote_sell"
   | "capital_injection"
   // A5 sponsorship
   | "sponsor_seed_capital"

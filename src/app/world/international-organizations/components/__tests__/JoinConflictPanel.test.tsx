@@ -78,6 +78,42 @@ const org = (category: string) =>
     defensePctByCountry: {},
   }) as unknown as OrgSummary;
 
+/** NATO with a voting roll of US + UK and one silent client state. */
+const orgWithPendingEntry = () => {
+  const base = org("bloc") as unknown as Record<string, unknown>;
+  return {
+    ...base,
+    members: [
+      {
+        countryId: "US",
+        countryName: "United States",
+        status: "founding",
+        joinedTurn: 0,
+        hasVote: true,
+      },
+      {
+        countryId: "UK",
+        countryName: "United Kingdom",
+        status: "member",
+        joinedTurn: 0,
+        hasVote: true,
+      },
+      { countryId: "DE", countryName: "Germany", status: "member", joinedTurn: 0, hasVote: false },
+    ],
+    pendingLegislation: [
+      {
+        _id: "l1",
+        type: "join_conflict",
+        title: "NATO Entry into the Korean War",
+        proposedByCharacterName: "Lee Radziwill",
+        closesOnTurn: 213,
+        parties: [],
+        votes: [{ countryId: "US", vote: "yes" }],
+      },
+    ],
+  } as unknown as OrgSummary;
+};
+
 const viewer = {
   characterId: "c1",
   foreignMinisterOf: "US",
@@ -137,6 +173,38 @@ describe("JoinConflictPanel", () => {
       // downstream references.
       expect(body).toMatchObject({ type: "join_conflict", theaterId: "korea-1953", side: "B" });
     });
+  });
+
+  it("counts the tally against the voting roll, not the full membership", () => {
+    // NATO carries client states that hold no ballot. Showing them in the
+    // denominator told players a resolution needed far more support than the
+    // resolver actually asks for.
+    render(
+      <JoinConflictPanel
+        org={orgWithPendingEntry()}
+        viewer={viewer}
+        currentTurn={200}
+        votingWindowTurns={24}
+        onChange={() => {}}
+      />
+    );
+
+    expect(screen.getByText(/1 \/ 2 members in favour/)).toBeTruthy();
+    expect(screen.queryByText(/\/ 3 members in favour/)).toBeNull();
+  });
+
+  it("tells players entry needs unanimous consent", () => {
+    render(
+      <JoinConflictPanel
+        org={orgWithPendingEntry()}
+        viewer={viewer}
+        currentTurn={200}
+        votingWindowTurns={24}
+        onChange={() => {}}
+      />
+    );
+
+    expect(screen.getByText(/unanimous consent required/)).toBeTruthy();
   });
 
   it("surfaces the server's refusal reason", async () => {

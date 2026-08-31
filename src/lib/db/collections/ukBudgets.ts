@@ -1,0 +1,267 @@
+import type { Db, ObjectId } from "mongodb";
+import type { UKBudget, UKBudgetStatus } from "../types/ukBudget";
+import type { Bill, BillProvision } from "../types/legislation";
+import { validateBudget } from "@/lib/uk/budget/budgetValidation";
+import { applyConfidenceEventToGov } from "@/lib/uk/confidence/confidenceGaugeStore";
+import { getNationalDocId } from "@/lib/constants/nationalScope";
+
+/** Hours a Budget vote runs — mirrors the UK bill voting window. */
+const BUDGET_VOTING_HOURS = 24;
+
+/**
+ * UK Budget persistence + lifecycle (epic #856, ticket #858).
+ * Collection: "ukBudgets" — one document per fiscal year.
+ *
+ * Lifecycle: draft → tabled → passed | defeated. A defeat fires the
+ * `budgetDefeat` confidence event (the biggest single gauge hit) — the key
+ * connective piece between the Budget and the confidence gauge.
+ */
+
+export function getUKBudgetsCollection(db: Db) {
+  return db.collection<UKBudget>("ukBudgets");
+}
+
+export async function getBudgetForFiscalYear(db: Db, fiscalYear: number): Promise<UKBudget | null> {
+  return getUKBudgetsCollection(db).findOne({ fiscalYear });
+}
+
+/**
+ * Ensure a draft Budget exists for a fiscal year so the Chancellor has something
+ * to author when the annual cycle opens. Idempotent: a no-op if any budget
+ * (draft or resolved) already exists for the year. Returns true if it created one.
+ * Seeds empty tax/programme maps for the Chancellor to fill.
+ */
+export async function ensureBudgetDraftForFiscalYear(
+  db: Db,
+  fiscalYear: number,
+  now: Date
+): Promise<boolean> {
+  const col = getUKBudgetsCollection(db);
+  const existing = await col.findOne({ fiscalYear });
+  if (existing) return false;
+  await col.insertOne({
+    fiscalYear,
+    status: "draft",
+    chancellorCharacterId: null,
+    taxRates: {},
+    programLevels: {},
+    createdAt: now,
+    updatedAt: now,
+  } as UKBudget);
+  return true;
+}
+
+export interface UpsertBudgetDraftInput {
+  fiscalYear: number;
+  chancellorCharacterId: ObjectId | null;
+  taxRates: Record<string, number>;
+  programLevels: Record<string, number>;
+  now: Date;
+}
+
+export interface BudgetOpResult {
+  ok: boolean;
+  error?: string;
+}
+
+export interface TabledBudgetResult extends BudgetOpResult {
+  billId?: ObjectId;
+}
+
+/**
+ * Create/update a draft Budget for a fiscal year. Refuses to edit a Budget that
+ * has already been tabled or resolved (immutable once before the Commons).
+ */
+export async function upsertBudgetDraft(
+  db: Db,
+  input: UpsertBudgetDraftInput
+): Promise<BudgetOpResult> {
+  const col = getUKBudgetsCollection(db);
+  const existing = await col.findOne({ fiscalYear: input.fiscalYear });
+  if (existing && existing.status !== "draft") {
+    return { ok: false, error: "budget already tabled" };
+  }
+  const updated = await col.updateOne(
+    existing ? { fiscalYear: input.fiscalYear, status: "draft" } : { fiscalYear: input.fiscalYear },
+    {
+      $set: {
+        chancellorCharacterId: input.chancellorCharacterId,
+        taxRates: input.taxRates,
+        programLevels: input.programLevels,
+        updatedAt: input.now,
+      },
+      $setOnInsert: {
+        fiscalYear: input.fiscalYear,
+        status: "draft" as UKBudgetStatus,
+        createdAt: input.now,
+      },
+    },
+    { upsert: true }
+  );
+  if (existing && updated.matchedCount === 0) {
+    return { ok: false, error: "budget already tabled" };
+  }
+  return { ok: true };
+}
+
+/** Table a draft Budget before the Commons. Validates it first. */
+export async function tableBudget(db: Db, fiscalYear: number, now: Date): Promise<BudgetOpResult> {
+  const col = getUKBudgetsCollection(db);
+  const budget = await col.findOne({ fiscalYear });
+  if (!budget) return { ok: false, error: "no budget to table" };
+  if (budget.status !== "draft") return { ok: false, error: "budget already tabled" };
+
+  const valid = validateBudget({
+    taxRates: budget.taxRates ?? {},
+    programLevels: budget.programLevels ?? {},
+  });
+  if (!valid.ok) return valid;
+
+  const updated = await col.updateOne(
+    { fiscalYear, status: "draft" },
+    { $set: { status: "tabled", tabledAt: now, updatedAt: now } }
+  );
+  if (updated.matchedCount === 0) return { ok: false, error: "budget already tabled" };
+  return { ok: true };
+}
+
+/**
+ * Create the Budget's vote-vehicle bill so MPs vote on it through the normal UK
+ * Commons lifecycle, including whips. Its ordinary policy provisions are the
+ * executable Budget. `budgetFiscalYear` links the vote outcome back to the
+ * annual Budget document. Returns the bill id.
+ */
+export async function createBudgetBill(
+  db: Db,
+  args: {
+    fiscalYear: number;
+    chancellorCharacterId: ObjectId | null;
+    chancellorName: string | null;
+    chancellorParty: string | null;
+    currentTurn: number;
+    now: Date;
+    provisions: BillProvision[];
+  }
+): Promise<ObjectId> {
+  const countryId = "UK" as const;
+  const bill: Omit<Bill, "_id"> = {
+    countryId,
+    stateId: getNationalDocId(countryId) ?? "uk_national",
+    title: `Budget ${args.fiscalYear}`,
+    summary: `The annual Budget for fiscal year ${args.fiscalYear}, tabled by HM Treasury.`,
+    originChamber: "commons",
+    currentChamber: "commons",
+    sponsorId: args.chancellorCharacterId,
+    sponsorName: args.chancellorName ?? "HM Treasury",
+    ...(args.chancellorParty ? { sponsorParty: args.chancellorParty } : {}),
+    ...(args.chancellorCharacterId ? {} : { adminProposed: true }),
+    status: "active",
+    votesFor: 0,
+    votesAgainst: 0,
+    votesAbstain: 0,
+    votes: {},
+    category: "budget",
+    budgetFiscalYear: args.fiscalYear,
+    provisions: args.provisions,
+    proposedAt: args.now,
+    proposedTurn: args.currentTurn,
+    votingStartedAt: args.now,
+    votingEndsAt: new Date(args.now.getTime() + BUDGET_VOTING_HOURS * 60 * 60 * 1000),
+    votingEndsOnTurn: args.currentTurn + BUDGET_VOTING_HOURS,
+    createdAt: args.now,
+    updatedAt: args.now,
+  };
+  const res = await db.collection<Omit<Bill, "_id">>("bills").insertOne(bill);
+  return res.insertedId;
+}
+
+/**
+ * Move a draft before the Commons and create its bill as one lifecycle action.
+ * On standalone Mongo, where transactions are unavailable, a clean insert
+ * failure reopens the draft. An ambiguous insert is detected by reading the
+ * fiscal-year bill before deciding whether rollback is safe.
+ */
+export async function tableBudgetWithBill(
+  db: Db,
+  args: Parameters<typeof createBudgetBill>[1]
+): Promise<TabledBudgetResult> {
+  const tabled = await tableBudget(db, args.fiscalYear, args.now);
+  if (!tabled.ok) return tabled;
+
+  try {
+    const billId = await createBudgetBill(db, args);
+    return { ok: true, billId };
+  } catch (error) {
+    let existingBill: Pick<Bill, "_id"> | null;
+    try {
+      existingBill = await db.collection<Bill>("bills").findOne(
+        {
+          countryId: "UK",
+          budgetFiscalYear: args.fiscalYear,
+          status: { $nin: ["failed", "signed"] },
+        },
+        { projection: { _id: 1 } }
+      );
+    } catch {
+      throw error;
+    }
+    if (existingBill?._id) return { ok: true, billId: existingBill._id };
+
+    await getUKBudgetsCollection(db).updateOne(
+      { fiscalYear: args.fiscalYear, status: "tabled" },
+      { $set: { status: "draft", tabledAt: null, updatedAt: args.now } }
+    );
+    throw error;
+  }
+}
+
+export interface BudgetResolution {
+  ok: boolean;
+  passed: boolean;
+  /** True when the defeat produced a confidence hit. */
+  confidenceHit: boolean;
+  error?: string;
+}
+
+/**
+ * Apply an explicit pass/fail outcome to a tabled Budget (e.g. mirroring the
+ * result of its vote-vehicle bill, whose pass rule may differ from a raw
+ * majority). Sets status and, on defeat, fires the budgetDefeat confidence hit.
+ */
+export async function applyBudgetOutcome(
+  db: Db,
+  args: {
+    fiscalYear: number;
+    passed: boolean;
+    votesFor?: number;
+    votesAgainst?: number;
+    now: Date;
+  }
+): Promise<BudgetResolution> {
+  const col = getUKBudgetsCollection(db);
+  const budget = await col.findOne({ fiscalYear: args.fiscalYear });
+  if (!budget) return { ok: false, passed: false, confidenceHit: false, error: "no budget" };
+  if (budget.status !== "tabled") {
+    return { ok: false, passed: false, confidenceHit: false, error: "budget not tabled" };
+  }
+
+  await col.updateOne(
+    { fiscalYear: args.fiscalYear },
+    {
+      $set: {
+        status: args.passed ? "passed" : "defeated",
+        votesFor: args.votesFor ?? budget.votesFor ?? 0,
+        votesAgainst: args.votesAgainst ?? budget.votesAgainst ?? 0,
+        resolvedAt: args.now,
+        updatedAt: args.now,
+      },
+    }
+  );
+
+  if (!args.passed) {
+    await applyConfidenceEventToGov(db, { kind: "budgetDefeat" }, args.now);
+    return { ok: true, passed: false, confidenceHit: true };
+  }
+  await applyConfidenceEventToGov(db, { kind: "budgetPass" }, args.now);
+  return { ok: true, passed: true, confidenceHit: false };
+}

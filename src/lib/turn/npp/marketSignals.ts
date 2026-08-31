@@ -11,7 +11,10 @@
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import type { CorporationType } from "@/lib/constants/corporations";
+import type { CountryId } from "@/lib/constants/countries";
+import { adjacentStates } from "@/lib/constants/stateAdjacency";
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
+import { foundingStarterUnits } from "@/lib/corporations/foundingPlant";
 import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
 import { SECTOR_SUPPLY, type CommodityType } from "@/lib/constants/commodities";
 import { clampProductionPolicy } from "@/lib/utils/productionPolicy";
@@ -37,10 +40,53 @@ const PRODUCTION_POLICY_DEADBAND = 0.05;
  * (observed on prod 2026-08-16: freight 2.0x base, 19% US coverage, and no NPP
  * founding it). 1.6 clears genuine multi-turn shortages without firing on a
  * mild 1.1x premium, and self-disarms: as capacity lands the ratio falls back
- * under the bar. Paced by the same cadence / MIN_CASH / MAX_SECTORS gates as
- * every other founding.
+ * under the bar. Both ordinary and exceptional entry remain paced and bounded
+ * by the corporation's logistics-supported footprint.
  */
 export const ESSENTIAL_SHORTAGE_SCORE = 1.6;
+
+/**
+ * Markets selected for the bounded supply-breadth treatment. These are not a
+ * general concentration rule: each has a measured shortage and a known supply
+ * response path. Advertising and freight need more producer breadth,
+ * fertilizers need dedicated chemical capacity, and rare earths need focused
+ * extraction in states with deposit headroom.
+ */
+export const FRAGILE_MARKET_COMMODITY_BY_SECTOR: Readonly<
+  Partial<Record<CorporationType, CommodityType>>
+> = {
+  media: "advertising",
+  entertainment: "advertising",
+  chemical_industries: "fertilizers",
+  logistics: "freight",
+  extraction: "rare_earth",
+};
+
+/** Use the existing critical-shortage bar so the treatment self-disarms. */
+export const FRAGILE_MARKET_SHORTAGE_SCORE = ESSENTIAL_SHORTAGE_SCORE;
+
+export function fragileMarketCommodityForSector(
+  sectorType: CorporationType,
+  countryId: string,
+  priceRatioOf: CommodityPriceRatioFn
+): CommodityType | null {
+  const commodity = FRAGILE_MARKET_COMMODITY_BY_SECTOR[sectorType];
+  if (!commodity) return null;
+  const ratio = priceRatioOf(commodity, countryId);
+  return ratio != null && ratio >= FRAGILE_MARKET_SHORTAGE_SCORE ? commodity : null;
+}
+
+/** Focus a new plant on the diagnosed commodity when the sector has a dedicated recipe. */
+export function fragileMarketFoundingStrategy(
+  sectorType: CorporationType,
+  countryId: string,
+  priceRatioOf: CommodityPriceRatioFn
+): string | undefined {
+  const commodity = fragileMarketCommodityForSector(sectorType, countryId, priceRatioOf);
+  if (commodity === "fertilizers") return "fertilizers";
+  if (commodity === "rare_earth") return "rare_earth_mining";
+  return undefined;
+}
 
 /** A function that returns currentPrice/basePrice for a commodity in a country,
  *  or null when no price signal is available. */
@@ -65,6 +111,58 @@ export interface PlacementSignals {
    * output forever, it is never the right build.
    */
   extractionHeadroomOf?: (stateId: string) => number;
+  /** Treatment gate: route an existing entry slot to uncovered markets first. */
+  preferEmptyMarkets?: boolean;
+  /** Treatment gate: route an existing entry slot to one of four diagnosed fragile markets. */
+  preferFragileMarketSupply?: boolean;
+  /** Preserve planned-economy restrictions when the market treatment is active. */
+  fragileMarketCountryEligible?: (countryId: string) => boolean;
+  /** Active state-sector cells, updated as this cohort founds new sectors. */
+  activeMarketBuckets?: Set<string>;
+}
+
+export function buildActiveMarketBuckets(sectors: readonly CorporateSector[]): Set<string> {
+  return new Set(
+    sectors
+      .filter((sector) => sector.mothballed !== true)
+      .map((sector) => bucketKey(sector.stateId, sector.sectorType))
+  );
+}
+
+export function markMarketsActive(
+  signals: PlacementSignals,
+  sectors: readonly Pick<CorporateSector, "stateId" | "sectorType">[] | undefined
+): void {
+  for (const sector of sectors ?? []) {
+    signals.activeMarketBuckets?.add(bucketKey(sector.stateId, sector.sectorType));
+  }
+}
+
+/**
+ * Neighboring states on the corporation's current geographic frontier.
+ * Expansion radiates from every occupied home-country state. A corporation
+ * with no sectors starts from its headquarters.
+ */
+export function expansionFrontierStates(
+  countryId: CountryId,
+  headquartersState: string,
+  sectors: readonly CorporateSector[]
+): ReadonlySet<string> {
+  const occupied = new Set(
+    sectors
+      .filter((sector) => (sector.countryId ?? countryId) === countryId)
+      .map((sector) => sector.stateId)
+  );
+  const origins = occupied.size > 0 ? occupied : new Set([headquartersState]);
+  const frontier = new Set<string>();
+
+  for (const stateId of origins) {
+    for (const adjacentState of adjacentStates(countryId, stateId)) {
+      if (!occupied.has(adjacentState)) frontier.add(adjacentState);
+    }
+  }
+
+  return frontier;
 }
 
 /**
@@ -91,18 +189,21 @@ export function hasEnterableHeadroom(
   plantsEnabled: boolean,
   eraUnitScale: number
 ): boolean {
+  const frontier = expansionFrontierStates(corp.countryId, corp.headquartersState, sectors);
   return (
     findBestUnownedSector(
       corp.countryId,
       corp.headquartersState,
       corp.type,
       corp.secondaryType,
-      new Set(sectors.map((sec) => sec.sectorType)),
+      new Set(sectors.map((sec) => bucketKey(sec.stateId, sec.sectorType))),
       unownedByCountry,
       stateControlled,
       () => null,
       plantsEnabled,
-      eraUnitScale
+      eraUnitScale,
+      undefined,
+      frontier
     ) !== null
   );
 }
@@ -119,17 +220,18 @@ export function hasEnterableHeadroom(
  * shortage fills, so the herd self-disperses.
  */
 export function findBestUnownedSector(
-  countryId: string,
+  countryId: CountryId,
   hqState: string,
   primaryType: string,
   secondaryType: string | null | undefined,
-  existingTypes: Set<string>,
+  existingBuckets: ReadonlySet<string>,
   unownedByCountry: Map<string, UnownedSector[]>,
   stateControlled: ReadonlySet<string>,
   priceRatioOf: CommodityPriceRatioFn,
   plantsEnabled: boolean = false,
   eraUnitScale: number = 1,
-  signals?: PlacementSignals
+  signals?: PlacementSignals,
+  preferredStateIds?: ReadonlySet<string>
 ): UnownedSector | null {
   const countryUnowned = unownedByCountry.get(countryId);
   if (!countryUnowned || countryUnowned.length === 0) return null;
@@ -149,12 +251,12 @@ export function findBestUnownedSector(
         )
       : us.revenue;
 
-  // Filter to non-overlapping types with a positive pool, excluding buckets a
+  // Filter to unoccupied buckets with a positive pool, excluding buckets a
   // National Corporation controls (don't expand into a nationalized sector) and
   // extraction buckets whose state has zero unclaimed deposit capacity.
   const candidates = countryUnowned.filter(
     (us) =>
-      !existingTypes.has(us.sectorType) &&
+      !existingBuckets.has(bucketKey(us.stateId, us.sectorType)) &&
       sizeOf(us) > 0 &&
       !stateControlled.has(bucketKey(us.stateId, us.sectorType)) &&
       !(
@@ -165,6 +267,27 @@ export function findBestUnownedSector(
   );
 
   if (candidates.length === 0) return null;
+
+  // Prefer the adjacent frontier when it has an enterable market. If topology
+  // data is absent, an island has no open neighbor, or every neighboring pool
+  // is blocked, fall back to the country pool so geography does not become a
+  // permanent ceiling.
+  const frontierCandidates =
+    preferredStateIds && preferredStateIds.size > 0
+      ? candidates.filter((candidate) => preferredStateIds.has(candidate.stateId))
+      : [];
+  const rankedCandidates = frontierCandidates.length > 0 ? frontierCandidates : candidates;
+  const activeMarketBuckets = signals?.activeMarketBuckets;
+  const uncoveredCandidates =
+    signals?.preferEmptyMarkets && activeMarketBuckets
+      ? rankedCandidates.filter(
+          (candidate) =>
+            !activeMarketBuckets.has(bucketKey(candidate.stateId, candidate.sectorType)) &&
+            (!plantsEnabled ||
+              sizeOf(candidate) >= foundingStarterUnits(candidate.sectorType as CorporationType))
+        )
+      : [];
+  const entryCandidates = uncoveredCandidates.length > 0 ? uncoveredCandidates : rankedCandidates;
 
   // Shortage at the candidate's own state when a state price exists, country
   // otherwise. This is what routes a founding to the state that is actually
@@ -182,25 +305,48 @@ export function findBestUnownedSector(
     if (c.stateId === hqState) s *= HQ_STATE_SCORE_BONUS;
     return s;
   };
+  const candidatePriceRatioOf =
+    (c: UnownedSector): CommodityPriceRatioFn =>
+    (commodity, cid) =>
+      signals?.statePriceRatioOf?.(commodity, c.stateId) ?? priceRatioOf(commodity, cid);
+  const fragileScore = (c: UnownedSector): number => {
+    if (signals?.fragileMarketCountryEligible?.(c.countryId) === false) return 0;
+    const commodity = fragileMarketCommodityForSector(
+      c.sectorType as CorporationType,
+      c.countryId,
+      candidatePriceRatioOf(c)
+    );
+    if (!commodity) return 0;
+    const ratio = candidatePriceRatioOf(c)(commodity, c.countryId) ?? 0;
+    let result = sizeOf(c) * ratio;
+    if (c.sectorType === "extraction" && signals?.extractionHeadroomOf) {
+      result *= signals.extractionHeadroomOf(c.stateId);
+    }
+    if (c.stateId === hqState) result *= HQ_STATE_SCORE_BONUS;
+    return result;
+  };
   // Peak shortage = the price ratio of this sector's SHORTEST single output.
   // The blended `shortageOf` averages a short output against healthy ones
   // (logistics makes freight 0.45 AND consulting 0.25), which would hide a
   // genuine single-input crisis behind a co-product. The essential-shortage
   // override gates on the peak so freight at 2.0x triggers logistics even
   // though consulting is at base.
-  const peakShortageOf = (c: UnownedSector): number => {
-    const supply = SECTOR_SUPPLY[c.sectorType as CorporationType];
-    if (!supply || supply.length === 0) return 0;
-    let peak = 0;
-    for (const { commodity } of supply) {
-      const ratio = priceRatioOf(commodity, countryId);
-      if (ratio != null && Number.isFinite(ratio) && ratio > peak) peak = ratio;
-    }
-    return peak;
-  };
+  const peakShortageOf = (c: UnownedSector): number =>
+    sectorPeakShortageScore(c.sectorType as CorporationType, countryId, priceRatioOf);
   // Highest market-weighted score wins; the HQ state gets a score bonus, not
   // the old unconditional first pick (see HQ_STATE_SCORE_BONUS).
   const best = (list: UnownedSector[]) => list.sort((a, b) => score(b) - score(a))[0];
+
+  // The treatment reallocates an existing eligible entry slot. It does not
+  // create another slot, waive entry costs, cross the geographic frontier, or
+  // bypass extraction headroom. Once the target price falls below the shared
+  // shortage bar this branch returns no candidates and normal ranking resumes.
+  if (signals?.preferFragileMarketSupply) {
+    const fragileCandidates = entryCandidates.filter((candidate) => fragileScore(candidate) > 0);
+    if (fragileCandidates.length > 0) {
+      return fragileCandidates.sort((a, b) => fragileScore(b) - fragileScore(a))[0];
+    }
+  }
 
   // Tier 0 — essential-shortage override: a commodity whose producer sector is
   // critically short jumps the type cascade, so a single-source input like
@@ -208,21 +354,21 @@ export function findBestUnownedSector(
   // cash-healthy NPP can, instead of waiting for a same-type corp that may not
   // exist. Highest size×shortage wins; disarms once capacity pulls the ratio
   // back under ESSENTIAL_SHORTAGE_SCORE. See the constant for the full rationale.
-  const critical = candidates.filter((c) => peakShortageOf(c) >= ESSENTIAL_SHORTAGE_SCORE);
+  const critical = entryCandidates.filter((c) => peakShortageOf(c) >= ESSENTIAL_SHORTAGE_SCORE);
   if (critical.length > 0) return critical.sort((a, b) => score(b) - score(a))[0];
 
   // Tier 1: primary type match
-  const primaryMatch = candidates.filter((c) => c.sectorType === primaryType);
+  const primaryMatch = entryCandidates.filter((c) => c.sectorType === primaryType);
   if (primaryMatch.length > 0) return best(primaryMatch);
 
   // Tier 2: secondary type match
   if (secondaryType) {
-    const secondaryMatch = candidates.filter((c) => c.sectorType === secondaryType);
+    const secondaryMatch = entryCandidates.filter((c) => c.sectorType === secondaryType);
     if (secondaryMatch.length > 0) return best(secondaryMatch);
   }
 
   // Tier 3: open market — market-weighted score across all types
-  return best(candidates);
+  return best(entryCandidates);
 }
 
 /**
@@ -290,4 +436,24 @@ export function sectorShortageScore(
     totalWeight += rate;
   }
   return totalWeight > 0 ? weighted / totalWeight : 1;
+}
+
+/**
+ * Highest live price-over-base ratio among a sector type's outputs. This is the
+ * essential-shortage signal used for entry: a critical single output must not
+ * be hidden by a balanced co-product in the weighted sector average.
+ */
+export function sectorPeakShortageScore(
+  sectorType: CorporationType,
+  countryId: string,
+  priceRatioOf: CommodityPriceRatioFn
+): number {
+  const supply = SECTOR_SUPPLY[sectorType];
+  if (!supply || supply.length === 0) return 0;
+  let peak = 0;
+  for (const { commodity } of supply) {
+    const ratio = priceRatioOf(commodity, countryId);
+    if (ratio != null && Number.isFinite(ratio) && ratio > peak) peak = ratio;
+  }
+  return peak;
 }

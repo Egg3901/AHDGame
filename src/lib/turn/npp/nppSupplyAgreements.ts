@@ -29,9 +29,10 @@ import {
   type SupplyAgreement,
 } from "@/lib/db/types/supplyAgreement";
 import { computeSupplierCommodityCapacityUnits } from "@/lib/corporations/supplyAgreementCapacity";
-import { glutStaggerEligible } from "@/lib/turn/nppCorporationBehavior";
+import { glutStaggerEligible } from "@/lib/turn/npp/cohort";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import { supportsCorporationWideSupplyAgreement } from "@/lib/market/commodityMarketScope";
 
 /** Fill below this: the seller cannot move output and will discount to lock a buyer. */
 export const NPP_CONTRACT_GLUT_FILL = 0.5;
@@ -242,6 +243,7 @@ export function decideNppSupplyAgreements(args: {
   // 1. Auto-accept inbound pending proposals the NPP buyer actually needs.
   for (const a of agreements) {
     if (a.status !== "pending") continue;
+    if (!supportsCorporationWideSupplyAgreement(a.commodity)) continue;
     const buyer = byId.get(a.buyerCorpId);
     if (!buyer || buyer.isNatcorp) continue;
     if (!staggerEligible(buyer.corpId)) continue;
@@ -267,6 +269,7 @@ export function decideNppSupplyAgreements(args: {
   // 2. Serve cancel notice when the supplier has gone cold on that commodity.
   for (const a of agreements) {
     if (a.status !== "active") continue;
+    if (!supportsCorporationWideSupplyAgreement(a.commodity)) continue;
     const supplier = byId.get(a.supplierCorpId);
     if (!supplier) continue;
     if (!staggerEligible(supplier.corpId)) continue;
@@ -324,6 +327,7 @@ export function decideNppSupplyAgreements(args: {
         s.transitionStartTurn,
         turn
       )) {
+        if (!supportsCorporationWideSupplyAgreement(c)) continue;
         outputSet.add(c);
       }
     }

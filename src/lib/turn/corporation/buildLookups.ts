@@ -25,7 +25,7 @@ import type { CommodityType } from "@/lib/constants/commodities";
 import type { CountryId } from "@/lib/constants/countries";
 import { isCorporateIssuerBond } from "@/lib/bonds/corporateCredit";
 import { buildPrimeRateByCountry } from "@/lib/centralBank/helpers";
-import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
+import { isCurtained } from "@/lib/constants/commandEconomy";
 import { capInputPriceRatioAtWorld } from "@/lib/corporations/physicalPnl";
 import { getActiveSubsidies } from "@/lib/subsidies/subsidyEffects";
 import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
@@ -77,8 +77,9 @@ import { buildSovereignDefaultMarginByCorpId } from "@/lib/sovereignDefault/marg
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
-  COMMODITY_BASE_PRICES,
+  eraScaledBasePrices,
   EXTRACTABLE_RESOURCES,
+  extractionOutputScaleFor,
   SECTOR_SUPPLY,
 } from "@/lib/constants/commodities";
 import type { ExtractableResource } from "@/lib/constants/commodities";
@@ -89,13 +90,14 @@ import {
 } from "@/lib/turn/extraction/extractionCapacity";
 import { depletedCapacityDoc } from "@/lib/extraction/depletion";
 import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
+import { getExtractionOutputScaleEnabled } from "@/lib/market/featureFlag";
 import {
   getExtractionContractsCollection,
   activeExtractionContractFilter,
 } from "@/lib/db/collections/extractionContracts";
 import {
   haircutScarcityRelief,
-  weightedCapacityUtilization,
+  scarcityReliefCappedUtilization,
 } from "@/lib/extraction/capacityHaircut";
 import type { SourcingNetworkDoc } from "@/lib/logistics/sourcingLedger";
 
@@ -117,6 +119,14 @@ export async function buildCorporationLookups(
     moneyWiringEnabled?: boolean;
     /** Use lagged freight-delivery availability as a local input constraint. */
     freightSettlementActive?: boolean;
+    /**
+     * Canonical freight billing v1 (issue #897):
+     * gameConfig.canonicalFreightBillingEnabled. When true, loads last turn's
+     * sourcingNetworkLoad billing aggregates as `freightChargesByDestState` /
+     * `freightHaulRevenueByOriginState`. Omitted/false keeps both maps empty,
+     * so the corporation turn computes and writes nothing.
+     */
+    canonicalFreightBillingEnabled?: boolean;
   }
 ): Promise<CorporationLookups> {
   await reconcileSignedTariffBills(db);
@@ -563,6 +573,11 @@ export async function buildCorporationLookups(
     string,
     Map<CommodityType, { supply: number; demand: number }>
   >();
+  // Lagged price-over-base per STATE, the state twin of
+  // `reachablePriceRatioByCountry`. Feeds the price-realization leg for
+  // state-scoped commodities, so a seller in a locally short
+  // state is paid that state's scarcity price rather than the national one.
+  const statePriceRatioByState = new Map<string, Map<CommodityType, number>>();
   const stateInputAvailabilityByState = new Map<string, Map<CommodityType, number>>();
   const statePlacementRatioByState = new Map<string, Map<CommodityType, number>>();
   const stateDeliveryLimitedRatioByState = new Map<string, Map<CommodityType, number>>();
@@ -614,6 +629,18 @@ export async function buildCorporationLookups(
         supply: cp.stateSupply[stateId] ?? 0,
         demand: cp.stateDemand[stateId] ?? 0,
       });
+    }
+
+    if (typeof cp.basePrice === "number" && cp.basePrice > 0 && cp.statePrices) {
+      for (const [stateId, price] of Object.entries(cp.statePrices)) {
+        if (!(typeof price === "number" && price > 0)) continue;
+        let byCommodity = statePriceRatioByState.get(stateId);
+        if (!byCommodity) {
+          byCommodity = new Map<CommodityType, number>();
+          statePriceRatioByState.set(stateId, byCommodity);
+        }
+        byCommodity.set(cp.commodity, price / cp.basePrice);
+      }
     }
 
     if (options?.freightSettlementActive) {
@@ -732,6 +759,7 @@ export async function buildCorporationLookups(
   // same trade the smoothed prime rate and the inflation passthrough already
   // make, and labour supply does not move fast enough for one turn to matter.
   const labourTightnessByState = new Map<string, number>();
+  const labourDemandWageIndexByState = new Map<string, number>();
   const crimeRateByState = new Map<string, number>();
   const broadbandByState = new Map<string, number>();
   const roadConditionByState = new Map<string, number>();
@@ -755,6 +783,10 @@ export async function buildCorporationLookups(
     const tightnessVal = sm.economic?.labourTightness?.value;
     if (typeof tightnessVal === "number" && Number.isFinite(tightnessVal)) {
       labourTightnessByState.set(stateId, tightnessVal);
+    }
+    const demandWageIndex = sm.economic?.labourDemandWageIndex?.value;
+    if (typeof demandWageIndex === "number" && Number.isFinite(demandWageIndex)) {
+      labourDemandWageIndexByState.set(stateId, demandWageIndex);
     }
     const skillVal = sm.education?.workforceSkill?.value;
     if (typeof skillVal === "number") {
@@ -821,8 +853,9 @@ export async function buildCorporationLookups(
       blocsByCountry.get(m.countryId)!.add(String(m.organizationId));
     }
     // Iron curtain (mirrors commodityPriceTurn): planned economies trade only
-    // among themselves; membership from the engine's MARKETIZATION_SCHEDULE so
-    // the curtain lifts on the historical marketization dates.
+    // among themselves; membership from the engine's MARKETIZATION_SCHEDULE via
+    // isCurtained, so the curtain lifts on the historical marketization dates
+    // and the Tito-split exemption keeps Yugoslavia trading with the open world.
     const [curtainCfg, curtainState] = await Promise.all([
       db
         .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
@@ -834,7 +867,7 @@ export async function buildCorporationLookups(
     const curtainEnabled = curtainCfg?.commandEconomyEnabled === true;
     const curtainYear = curtainState?.currentYear ?? null;
     const curtainedCountries = new Set<string>(
-      COUNTRY_ORDER.filter((c) => isPlannedEconomy(c, curtainYear, curtainEnabled))
+      COUNTRY_ORDER.filter((c) => isCurtained(c, curtainYear, curtainEnabled))
     );
     const { affinityFor, capUnitsFor } = buildTradeAffinity({
       ftaPairs: activeFtaPairs,
@@ -882,6 +915,14 @@ export async function buildCorporationLookups(
   >();
   if (extractionSectors.length > 0) {
     const capacityTurn = await getCurrentTurn(db);
+    // Mirror the supply-ledger input exactly (commodityPriceTurn): the
+    // extraction output-scale flag gates the per-resource boost, and the
+    // ₳↔unit conversion runs on this world's ERA base-price table. The
+    // previous modern-table figure here was 70-174x smaller than what the
+    // ledger books on a 1953 world, so this clamp rationed against a
+    // fraction of the sector's real desired output and never bound.
+    const extractionOutputScaleEnabled = await getExtractionOutputScaleEnabled();
+    const extractionBasePrices = eraScaledBasePrices(eraUnitScale);
     const extractionStateIds = [...new Set(extractionSectors.map((s) => s.stateId))];
     const activeContracts = await (
       await getExtractionContractsCollection(db)
@@ -891,6 +932,7 @@ export async function buildCorporationLookups(
     // Resolve each extraction sector's effective supply rates once, then reuse
     // them for both the capacity clamp input and the revenue-weighted utilization.
     const ratesBySector = new Map<string, Partial<Record<ExtractableResource, number>>>();
+    const outputUnitsBySector = new Map<string, Partial<Record<ExtractableResource, number>>>();
     const extractionInputs: ExtractionSectorInput[] = extractionSectors.map((sector) => {
       const hasStrategy = sector.strategyId && sector.strategyId !== "standard";
       const strategyRates =
@@ -911,11 +953,21 @@ export async function buildCorporationLookups(
           : ((SECTOR_SUPPLY["extraction"] ?? []).find((f) => f.commodity === resource)?.rate ?? 0);
         if (rate > 0) {
           rates[resource] = rate;
-          revenueBasedOutput[resource] = (sector.revenue * rate) / COMMODITY_BASE_PRICES[resource];
+          // Identical expression to the ledger path: revenue x rate x
+          // per-resource output scale, over the era-scaled base price. At
+          // eraUnitScale 1 the table IS COMMODITY_BASE_PRICES and the scale
+          // follows the same config flag as the ledger, so modern worlds are
+          // unchanged whenever the ledger is.
+          revenueBasedOutput[resource] =
+            (sector.revenue *
+              rate *
+              extractionOutputScaleFor(resource, extractionOutputScaleEnabled)) /
+            extractionBasePrices[resource];
         }
       }
       const sectorId = sector._id.toString();
       ratesBySector.set(sectorId, rates);
+      outputUnitsBySector.set(sectorId, revenueBasedOutput);
       return {
         sectorId,
         stateId: sector.stateId,
@@ -945,9 +997,18 @@ export async function buildCorporationLookups(
       if (relief > 0) reliefByResource[resource] = relief;
     }
     for (const [sectorId, rates] of ratesBySector) {
+      // Relief is capped at the raw capacity ratio over the CORRECTED
+      // desired-output units: a sector whose desired output exceeds its
+      // state's deposit ceiling cannot have the haircut lifted past what
+      // those deposits can actually yield.
       extractionCapacityUtilBySector.set(
         sectorId,
-        weightedCapacityUtilization(rates, multipliers.get(sectorId), reliefByResource)
+        scarcityReliefCappedUtilization(
+          rates,
+          multipliers.get(sectorId),
+          reliefByResource,
+          outputUnitsBySector.get(sectorId)
+        )
       );
     }
   }
@@ -1051,8 +1112,13 @@ export async function buildCorporationLookups(
   // its doc for `turn`, so on a normal cadence that's turn - 1, but reading
   // <= current turn survives a doc gap without going in-turn-mutation-order
   // sensitive.
+  //
+  // Canonical freight billing (issue #897) shares the same doc and the same
+  // lag, so one fetch serves both flags.
   const landedPremiumByState = new Map<string, Map<CommodityType, number>>();
-  if (options?.moneyWiringEnabled) {
+  const freightChargesByDestState = new Map<string, Map<CommodityType, number>>();
+  const freightHaulRevenueByOriginState = new Map<string, number>();
+  if (options?.moneyWiringEnabled || options?.canonicalFreightBillingEnabled) {
     const networkDoc = await db
       .collection<SourcingNetworkDoc>("sourcingNetworkLoad")
       .find({ turn: { $lte: embargoTurn } })
@@ -1060,7 +1126,7 @@ export async function buildCorporationLookups(
       .limit(1)
       .toArray();
     const doc = networkDoc[0];
-    if (doc?.landedPremiums) {
+    if (options?.moneyWiringEnabled && doc?.landedPremiums) {
       for (const [stateId, byCommodity] of Object.entries(doc.landedPremiums)) {
         const m = new Map<CommodityType, number>();
         for (const [commodity, premium] of Object.entries(byCommodity)) {
@@ -1068,6 +1134,19 @@ export async function buildCorporationLookups(
             m.set(commodity as CommodityType, premium);
         }
         if (m.size > 0) landedPremiumByState.set(stateId, m);
+      }
+    }
+    if (options?.canonicalFreightBillingEnabled) {
+      for (const [stateId, byCommodity] of Object.entries(doc?.freightCharges ?? {})) {
+        const m = new Map<CommodityType, number>();
+        for (const [commodity, charge] of Object.entries(byCommodity)) {
+          if (typeof charge === "number" && charge > 0) m.set(commodity as CommodityType, charge);
+        }
+        if (m.size > 0) freightChargesByDestState.set(stateId, m);
+      }
+      for (const [stateId, revenue] of Object.entries(doc?.freightHaulRevenue ?? {})) {
+        if (typeof revenue === "number" && revenue > 0)
+          freightHaulRevenueByOriginState.set(stateId, revenue);
       }
     }
   }
@@ -1103,6 +1182,7 @@ export async function buildCorporationLookups(
     workforceSkillByState,
     rawWorkforceSkillByState,
     labourTightnessByState,
+    labourDemandWageIndexByState,
     crimeRateByState,
     broadbandByState,
     roadConditionByState,
@@ -1116,10 +1196,13 @@ export async function buildCorporationLookups(
     reachablePriceRatioByCountry,
     reachableInputPriceRatiosByCountry,
     landedPremiumByState,
+    freightChargesByDestState,
+    freightHaulRevenueByOriginState,
     nationalCommodityBalancesByCountry,
     countryClearingBooks,
     exportIntensityByCountry,
     rawStateBalances,
+    statePriceRatioByState,
     sectorPresenceKeys,
     allTariffs,
     activeFtaPairs,

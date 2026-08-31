@@ -14,6 +14,7 @@ interface MarketFlags {
   brandLoyaltySliceEnabled: boolean;
   sectorQualityEnabled: boolean;
   supplyAgreementsEnabled: boolean;
+  shortageResponsiveSourcingEnabled: boolean;
   extractionOutputScaleEnabled: boolean;
 }
 
@@ -53,6 +54,12 @@ const FEATURE_TOGGLES: Array<{
     description: "Persistent supply/demand imbalance ratchets commodity prices over time.",
   },
   {
+    key: "shortageResponsiveSourcingEnabled",
+    label: "Shortage-responsive sourcing",
+    description:
+      "Dark rollout: severely short states accept higher landed prices. Enable only after a controlled simulation report.",
+  },
+  {
     key: "stockCoverCapEnabled",
     label: "Stock cover cap",
     description: "Accelerated spoilage on shadow stock above cover cap (legacy overhang defusal).",
@@ -86,6 +93,7 @@ export function MarketAdminPanel() {
           brandLoyaltySliceEnabled: data.brandLoyaltySliceEnabled === true,
           sectorQualityEnabled: data.sectorQualityEnabled === true,
           supplyAgreementsEnabled: data.supplyAgreementsEnabled === true,
+          shortageResponsiveSourcingEnabled: data.shortageResponsiveSourcingEnabled === true,
           extractionOutputScaleEnabled: data.extractionOutputScaleEnabled === true,
         });
         setError("");

@@ -71,12 +71,20 @@ export default function PlantPanel({
   onMothball,
   onReactivate,
 }: PlantPanelProps) {
+  const ownedPlantCount =
+    plants.plantCount ?? facilitiesFromUnits(sectorType, plants.capacityUnits ?? 0);
   const { formatAmount } = useCurrency();
   const vocab = facilityVocabulary(sectorType);
   const sites = facilityPlural(sectorType);
   const money = (anchor: number) => formatAmount(anchor);
   const mothballed = plants.mothballed;
   const hasRun = plants.producedUnits != null;
+  const workersDesired = plants.workersDesired ?? plants.workers;
+  const labourStaffingFactor =
+    plants.labourStaffingFactor ??
+    (workersDesired > 0 ? Math.min(1, plants.workers / workersDesired) : 1);
+  const staffingShortfall =
+    workersDesired > 0 && plants.workers < workersDesired ? 1 - plants.workers / workersDesired : 0;
   const primaryMediaSupply =
     sectorType === "media" ? marketSupplies.find((supply) => supply.units > 0) : undefined;
   const mediaLedgerShare =
@@ -139,13 +147,11 @@ export default function PlantPanel({
         </p>
         <p className="mt-1 flex items-baseline gap-2">
           <span className="text-display font-bold tabular-nums text-foreground">
-            {fmtUnits(facilitiesFromUnits(sectorType, plants.capacityUnits ?? 0))}
+            {fmtUnits(ownedPlantCount)}
           </span>
           <span className="text-body-sm text-muted">
-            {facilitiesFromUnits(sectorType, plants.capacityUnits ?? 0) === 1
-              ? facilitySingular(sectorType)
-              : sites}{" "}
-            · {fmtUnits(plants.capacityUnits)} units per day
+            {ownedPlantCount === 1 ? facilitySingular(sectorType) : sites} ·{" "}
+            {fmtUnits(plants.capacityUnits)} units per day
           </span>
         </p>
 
@@ -222,6 +228,12 @@ export default function PlantPanel({
               <span className="block tabular-nums">
                 Avg wage level {averageWageLevel.toFixed(2)}×
               </span>
+              {staffingShortfall > 0.001 && (
+                <span className="block tabular-nums text-warning">
+                  {fmtUnits(plants.workers)} of {fmtUnits(workersDesired)} jobs filled (
+                  {fmtPct(labourStaffingFactor)})
+                </span>
+              )}
             </div>
           }
           help={`Workers staffing this capacity. It takes about ${plants.laborIntensity.toFixed(2)} workers for each unit per day.`}
@@ -251,6 +263,14 @@ export default function PlantPanel({
           help={`${vocab.plural.charAt(0).toUpperCase()}${vocab.plural.slice(1)} you have paid for that are still under construction. They arrive a few at a time and are finished on the turn shown in the build list.`}
         />
       </div>
+
+      {staffingShortfall > 0.001 && (
+        <p className="mt-3 rounded-lg border border-warning/30 bg-warning/10 p-3 text-body-sm text-foreground">
+          Local worker shortage is limiting this run. Higher pay can win a larger share of the
+          available workforce, while participation and migration respond gradually over future
+          turns.
+        </p>
+      )}
 
       {/* Build queue ───────────────────────────────────────────────────────*/}
       {plants.buildQueue.length > 0 && (

@@ -12,6 +12,10 @@ import { computeMarketDemand } from "@/lib/sovereignDefault/marketDemand";
 import { computeDsa } from "@/lib/sovereignDefault/debtSustainability";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import type { FederalBudget } from "@/lib/db/types/budget";
+import { federalSurplus } from "@/lib/budget/federalSurplus";
+import { resolveRatioGdp } from "@/lib/budget/gdpDenominator";
+import { loadNationalGdpGrowth } from "@/lib/country/nationalGdpGrowth";
+import type { GameState } from "@/lib/db/types/gameState";
 import type { SovereignCrisisDecision } from "@/lib/db/types/sovereignCrisisDecision";
 
 interface RouteParams {
@@ -43,17 +47,30 @@ export async function GET(_req: Request, { params }: RouteParams) {
     .collection<FederalBudget>("federalBudget")
     .findOne({ _id: getNationalBudgetId(upperCode) });
 
+  // Live national growth, not `economicFactors.gdpGrowth`. That field is the
+  // fiscal-year assumption frozen at the last rollover and can sit points away
+  // from the rate every other page shows (UK: -5.32 stored against +6.24 live).
+  // A forward-looking gauge must use the forward-looking number.
+  // See lib/country/nationalGdpGrowth.
+  const gameStateForGrowth = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { projection: { currentYear: 1 } });
+  const liveGdpGrowth = await loadNationalGdpGrowth(db, upperCode, gameStateForGrowth?.currentYear);
+
   // Phase 11a: forward-looking sustainability gauge. Pure math; reads from
   // the snapshot + budget surplus/gdp. Independent of the 3-failed-auctions
   // hard fire trigger.
   const dsa = computeDsa({
     debtToGdp: snapshot.debtToGdp,
+    // Derived surplus over the smoothed GDP: the same two bases `snapshot.debtToGdp`
+    // and every other fiscal surface use, so this gauge cannot disagree with the
+    // debt ratio beside it. See lib/budget/federalSurplus + gdpDenominator.
     primarySurplusToGdp:
-      budget?.surplus !== undefined && budget?.gdp && budget.gdp > 0
-        ? budget.surplus / budget.gdp
-        : 0,
+      budget && resolveRatioGdp(budget) > 0 ? federalSurplus(budget) / resolveRatioGdp(budget) : 0,
     fxDepreciation10t: snapshot.fxDepreciationRate10t ?? 0,
-    annualGdpGrowth: (budget?.economicFactors?.gdpGrowth ?? 0) / 100, // stored as percent
+    // stored as percent; fall back to the frozen FY assumption only when the
+    // country has neither a national metrics doc nor an authored era trend.
+    annualGdpGrowth: (liveGdpGrowth ?? budget?.economicFactors?.gdpGrowth ?? 0) / 100,
   });
 
   // Phase 9b: surface either the open decision (crisisPending) OR the

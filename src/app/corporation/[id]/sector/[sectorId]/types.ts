@@ -1,5 +1,6 @@
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { StateMetricMarginContribution } from "@/lib/corporations/stateMetricMarginTypes";
+import type { PlantSectorSplitQuote } from "@/lib/corporations/plantSectorSplit";
 
 export interface SectorData {
   _id: string;
@@ -18,6 +19,8 @@ export interface SectorData {
   currentGrowthCost: number;
   revenue: number;
   workers: number;
+  workersDesired?: number;
+  labourStaffingFactor?: number;
   productionPolicy: number;
   productionPolicyLevel: number;
   /** Labour system: CEO wage-level lever (1.0 = baseline). */
@@ -380,6 +383,13 @@ export interface Competitor {
   brandColor?: string;
   revenue: number;
   marketShare: number;
+  /**
+   * True when this rival is part of the autonomous NPP field rather than another
+   * player's company. The market panel folds these into one arc and one
+   * collapsed list group. Absent on payloads served before that shipped, which
+   * reads as player-owned and renders the way it always did.
+   */
+  isNpp?: boolean;
 }
 
 export interface SplitSizeInfo {
@@ -418,6 +428,8 @@ export interface AttackInfo {
   userLiquidCurrencyCode?: string | null;
   stateId: string;
   countryId?: string;
+  plantCount?: number;
+  plantSplitQuote?: PlantSectorSplitQuote;
   /** Per-strength cost/capture breakdown. Present on pages loaded after the split-strength feature. */
   splitStrengths?: {
     full: SplitStrengthInfo;
@@ -541,6 +553,8 @@ export interface PlantBuildOrderView {
 }
 
 export interface PlantsData {
+  /** Persisted whole facilities owned by this sector. */
+  plantCount?: number;
   capacityUnits: number | null;
   producedUnits: number | null;
   soldUnits: number | null;
@@ -554,6 +568,8 @@ export interface PlantsData {
   depreciationPerTurn: number;
   buildTurns: number;
   workers: number;
+  workersDesired?: number;
+  labourStaffingFactor?: number;
   unionizationPct: number;
   laborIntensity: number;
   governor: {

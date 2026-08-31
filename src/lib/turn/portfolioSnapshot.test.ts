@@ -3,6 +3,7 @@ import { snapshotPortfolioValues, snapshotCorporationPortfolioValues } from "./p
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
+import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital";
 
 vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
@@ -37,6 +38,10 @@ describe("portfolioSnapshot", () => {
     find: vi.fn().mockReturnThis(),
     project: vi.fn().mockReturnThis(),
     toArray: vi.fn().mockResolvedValue(result),
+    // `loadValuationFxRates` reads gameState.preset via findOne to pick the era
+    // fallback rate. Null keeps the valuation map equal to the settlement map
+    // here, which is what these already-anchored fixtures assume.
+    findOne: vi.fn().mockResolvedValue(null),
     insertMany: (...args: unknown[]) => (mockInsertMany as (...a: unknown[]) => unknown)(...args),
   });
 
@@ -51,6 +56,11 @@ describe("portfolioSnapshot", () => {
     vi.mocked(getDb).mockResolvedValue(mockDb);
     vi.clearAllMocks();
     vi.mocked(isForexEnabled).mockResolvedValue(false);
+    // Without this the FX map stays cached across tests, so whether
+    // `loadValuationFxRates` reads `exchangeRates` at all depends on test
+    // order and the queued mock sequences below drift. Matches
+    // stockExchangeSnapshot.test.ts.
+    resetCorpFxRateCacheForTests();
     // Default for any collection the individual tests do not queue explicitly
     // (index-fund positions and definitions), so adding a read to the snapshot
     // does not shift every test's mockReturnValueOnce sequence.
@@ -121,6 +131,8 @@ describe("portfolioSnapshot", () => {
       mockCollection.mockReturnValueOnce(createMockChain([])); // imperialCharacters
       mockCollection.mockReturnValueOnce(createMockChain([])); // corps
       mockCollection.mockReturnValueOnce(createMockChain([])); // bonds
+      mockCollection.mockReturnValueOnce(createMockChain([])); // exchangeRates (loadValuationFxRates)
+      mockCollection.mockReturnValueOnce(createMockChain([])); // gameState preset (loadValuationFxRates)
       mockCollection.mockReturnValueOnce(
         createMockChain([{ fundId, holderKind: "character", characterId: charId, units: 10 }])
       );

@@ -17,8 +17,9 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
 import { getNationalDocId } from "@/lib/constants/nationalScope";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
-import { getStartingYearForPreset, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { getGameState } from "@/lib/gameState";
+import { yearFiringAtOrAfterTurn } from "@/lib/scotus/turnConversion";
 import { nationalizeSector } from "@/lib/nationalization/ownershipTransition";
 import { resolveCorpEligibilityBatch } from "@/lib/nationalization/targetEligibility";
 import { persistBargainingMediationAction } from "@/lib/unions/commands/bargaining";
@@ -42,6 +43,7 @@ import { ALL_CRISIS_TEMPLATES } from "@/lib/crises/templates";
 import { createCrisisFromTemplate } from "@/lib/crises/createCrisisFromTemplate";
 import { WARSAW_PACT_SATELLITE_COUNTRY_IDS } from "@/lib/crises/warsawPactSatellites";
 import { runUnionBanStrikeResponse } from "@/lib/crises/unionBanStrike";
+import { applyWarEmergencyResponse } from "@/lib/crises/warEmergencyResponse";
 
 /**
  * Context handed to every crisis option-action handler. The crisis is
@@ -200,13 +202,17 @@ async function spawnNationalizationChallenge(
   const preset = gameState?.preset ?? DEFAULT_SEED_PRESET;
   const startingYear = gameState?.startingYear ?? getStartingYearForPreset(preset);
 
-  // `scotusDocketTurn` fires a pending case when `currentTurn >=
-  // yearToTurn(decisionYear)`, and `yearToTurn(y) = (y - startingYear) *
-  // TURNS_PER_YEAR + 1`. Invert that so the case lands on/just after a target a
-  // few turns out (annual granularity means it can be up to a year out).
+  // `yearFiringAtOrAfterTurn` is the inverse of the rule `scotusDocketTurn`
+  // actually applies, kept beside `yearToTurn` so the two cannot drift apart
+  // again: this was an inline re-derivation, and it went on inverting the
+  // raw-turn rule after the docket moved to the calendar turn (#1208). Annual
+  // granularity means the case can still land up to a year out.
   const CHALLENGE_DELAY_TURNS = 4;
   const targetTurn = ctx.currentTurn + CHALLENGE_DELAY_TURNS;
-  const decisionYear = startingYear + Math.max(0, Math.ceil((targetTurn - 1) / TURNS_PER_YEAR));
+  const decisionYear = yearFiringAtOrAfterTurn(targetTurn, startingYear, {
+    preIterationActive: gameState?.preIteration?.active,
+    preIterationTurns: gameState?.preIterationTurns,
+  });
 
   const now = new Date();
   // A taking with specific seized sectors carries a real reversal payload: a
@@ -734,6 +740,9 @@ export async function runCrisisOptionAction(ctx: CrisisActionContext): Promise<C
         });
         return result.nextNodeId ? { nextNodeId: result.nextNodeId } : {};
       }
+      case "warEmergencyResponse":
+        await applyWarEmergencyResponse(ctx, action.response);
+        break;
     }
   } catch (err) {
     console.error(

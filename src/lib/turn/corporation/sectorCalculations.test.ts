@@ -281,6 +281,121 @@ describe("expropriation-risk margin drag", () => {
   });
 });
 
+describe("marketing settlement", () => {
+  type CorpOp = {
+    updateOne: {
+      filter: { _id: ObjectId };
+      update: { $inc?: { liquidCapital?: number } };
+    };
+  };
+
+  const liquidDeltaFor = (corpOps: CorpOp[], corp: Corporation): number =>
+    corpOps
+      .filter((op) => op.updateOne.filter._id.equals(corp._id))
+      .reduce((sum, op) => sum + (op.updateOne.update.$inc?.liquidCapital ?? 0), 0);
+
+  // #889 double-pay fix. A seller books the advertising it sells as ordinary
+  // sector revenue, so income/tax keep it; crediting the settlement receipt ON
+  // TOP would pay it twice in cash. The settlement now nets each seller's
+  // delivered value out of its cash leg (mirroring the buyer's cost add-back),
+  // so a FUNDED seller's settlement receipt exactly cancels the netted delivered
+  // value and its settlement cash contribution is zero. World-money conservation
+  // is the prod invariant delivered-value == booked-ad-revenue (the netted value
+  // re-enters as the seller's own sector revenue), which lives in the
+  // delivered-value module + integration path, not this decoupled fixture.
+  // Here we pin the mechanical contract, across two currencies.
+  it("nets each funded seller's settlement receipt out of its cash leg", () => {
+    // Buyer carries only a marketing budget (no sector), so its delta is exactly
+    // the marketing it pays, uncluttered by sector income.
+    const buyer = makeCorp({ liquidCapital: 1_000_000, marketingBudget: 2_400 });
+    const sellerUsd = makeCorp({ liquidCapital: 1_000_000 });
+    const sellerGbp = makeCorp({
+      countryId: "UK",
+      headquartersState: "UK-ENG",
+      liquidCurrencyCode: "GBP",
+      liquidCapital: 2_000_000,
+    });
+    const lookups = baseLookups([buyer, sellerUsd, sellerGbp], []);
+    lookups.exchangeRatesByCurrency = new Map<CurrencyCode, number>([
+      ["USD", 1],
+      ["GBP", 2],
+    ]);
+    const market: MarketContext = {
+      ...MARKET_DISABLED,
+      clearingEnabled: true,
+      // Budget is 2_400/day = 100/turn, so a 50-unit delivered book is funded.
+      advertisingSellerDeliveredValueAnchorByCorpId: new Map([
+        [sellerUsd._id.toString(), 30],
+        [sellerGbp._id.toString(), 20],
+      ]),
+    };
+
+    const ops = processSectors(lookups, 1, new Date(), false, 1953, undefined, market)
+      .corpOps as CorpOp[];
+
+    // Buyer pays only for the 50 units delivered (30 + 20 anchor), once.
+    expect(liquidDeltaFor(ops, buyer)).toBe(-50);
+    // Each funded seller: receipt (== delivered) is netted out, so the
+    // settlement contributes zero net cash — no double-pay. GBP seller nets in
+    // its own currency (20 anchor received, 20 anchor netted).
+    expect(liquidDeltaFor(ops, sellerUsd)).toBe(0);
+    expect(liquidDeltaFor(ops, sellerGbp)).toBe(0);
+  });
+
+  it("does not charge a buyer for unfilled advertising demand", () => {
+    const buyer = makeCorp({ liquidCapital: 1_000, marketingBudget: 2_400 });
+    const seller = makeCorp({ liquidCapital: 1_000 });
+    const market: MarketContext = {
+      ...MARKET_DISABLED,
+      clearingEnabled: true,
+      advertisingSellerDeliveredValueAnchorByCorpId: new Map([[seller._id.toString(), 10]]),
+    };
+
+    const result = processSectors(
+      baseLookups([buyer, seller], []),
+      1,
+      new Date(),
+      false,
+      1953,
+      undefined,
+      market
+    );
+    const corpOps = result.corpOps as CorpOp[];
+
+    // Buyer is charged only for the 10 units delivered, not its full budget.
+    expect(liquidDeltaFor(corpOps, buyer)).toBe(-10);
+    // Seller's receipt (10) is netted against the delivered value it already
+    // booked as revenue, so the settlement nets to zero cash on a bare seller
+    // with no other income in this fixture.
+    expect(liquidDeltaFor(corpOps, seller)).toBe(0);
+    expect(result.corpSnapshots.find((s) => s.corpId.equals(buyer._id))?.liquidCapital).toBe(990);
+    expect(result.corpSnapshots.find((s) => s.corpId.equals(seller._id))?.liquidCapital).toBe(
+      1_000
+    );
+  });
+
+  it("charges marketing without settlement when no advertising seller exists", () => {
+    const buyer = makeCorp({ liquidCapital: 100, marketingBudget: 2_400 });
+    const market: MarketContext = {
+      ...MARKET_DISABLED,
+      clearingEnabled: true,
+      advertisingSellerDeliveredValueAnchorByCorpId: new Map(),
+    };
+
+    const result = processSectors(
+      baseLookups([buyer], []),
+      1,
+      new Date(),
+      false,
+      1953,
+      undefined,
+      market
+    );
+
+    expect(liquidDeltaFor(result.corpOps as CorpOp[], buyer)).toBe(-100);
+  });
+});
+
 describe("total-embargo corporate suppression", () => {
   it("mothballs a foreign-national sector operating in an embargoing country", () => {
     const jpCorp = makeCorp({ countryId: "JP", headquartersState: "JP-13" });
@@ -1152,6 +1267,109 @@ describe("CEO salary payments", () => {
     const result = processSectors(lookups, 1, new Date());
 
     expect(getTotalPayment(result.ceoSalaryPayments, ceoId.toString())).toBe(0);
+  });
+});
+
+// ── Pay-time overhead ceiling (ticket #1237) ─────────────────────────────────
+
+describe("logistics/R&D pay-time overhead ceiling (ticket #1237)", () => {
+  /**
+   * `totalCosts` bundles the sector's own operating costs with the corp-level
+   * overhead legs, and the sector cost is a fixed function of the fixture, not
+   * of the budgets. Difference it against an otherwise identical zero-budget
+   * corp so the assertions measure the overhead charge alone.
+   */
+  function overheadCharged(corpOverrides: Record<string, unknown>, sectorRevenue: number): number {
+    const run = (overrides: Record<string, unknown>) => {
+      const corp = makeCorp({ liquidCapital: 1_000_000, ...overrides });
+      const sector = makeSector(corp._id, { revenue: sectorRevenue, profitMargin: 100 });
+      return processSectors(baseLookups([corp], [sector]), 1, new Date()).corpSnapshots[0]
+        .totalCosts;
+    };
+    return run(corpOverrides) - run({ marketingBudget: 0, logisticsBudget: 0, rdBudget: 0 });
+  }
+
+  it("charges nothing for logistics or R&D when gross revenue is zero", () => {
+    // The #1237 repro: a 15-minute-old corp with no revenue carrying the exact
+    // logistics budget that was stored on Tinky 3.0 (TRTW) at t513. Before the
+    // pay-time clamp this charged budget/24 in full and wrote liquidCapital
+    // -1.33e+277 in a single turn.
+    const corp = makeCorp({
+      logisticsBudget: 2.9971329020839937e278,
+      rdBudget: 1.873208063802496e277,
+      liquidCapital: 502.14,
+    });
+    const sector = makeSector(corp._id, { revenue: 0, profitMargin: 0 });
+    const lookups = baseLookups([corp], [sector]);
+
+    const snapshot = processSectors(lookups, 1, new Date()).corpSnapshots[0];
+
+    expect(Number.isFinite(snapshot.liquidCapital)).toBe(true);
+    expect(snapshot.liquidCapital).toBeCloseTo(502.14, 2);
+    expect(
+      overheadCharged(
+        { logisticsBudget: 2.9971329020839937e278, rdBudget: 1.873208063802496e277 },
+        0
+      )
+    ).toBe(0);
+  });
+
+  it("does not bank logistics strength or R&D score for spend it never charged", () => {
+    // The derived-stat half of #1237: strength growth read the raw budget, so an
+    // unpayable budget bought competitive stats for free. Tinky 3.0 banked
+    // logisticsStrength 1256 and rdScore 408 in the turn it "spent" 1e278.
+    const corp = makeCorp({
+      logisticsBudget: 2.9971329020839937e278,
+      rdBudget: 1.873208063802496e277,
+      logisticsStrength: 0,
+      rdScore: 0,
+    });
+    const sector = makeSector(corp._id, { revenue: 0, profitMargin: 0 });
+    const lookups = baseLookups([corp], [sector]);
+
+    const snapshot = processSectors(lookups, 1, new Date()).corpSnapshots[0];
+
+    expect(snapshot.logisticsStrength).toBe(0);
+    expect(snapshot.rdScore).toBe(0);
+  });
+
+  it("charges logistics and R&D in full when combined overhead is inside the 150% ceiling", () => {
+    // Revenue 24_000/day = 1_000/turn ⇒ ceiling 1_500/turn. Logistics 12_000/day
+    // (500/turn) + R&D 12_000/day (500/turn) = 1_000/turn, comfortably inside it.
+    // A compliant corp must be charged exactly as it was before this clamp.
+    expect(overheadCharged({ logisticsBudget: 12_000, rdBudget: 12_000 }, 24_000)).toBeCloseTo(
+      1_000,
+      4
+    );
+  });
+
+  it("scales logistics and R&D down proportionally once revenue falls below the budgets", () => {
+    // Legitimately-set budgets whose revenue later collapsed: 24_000/day each
+    // (500/turn each, 1_000/turn combined) against revenue 240/day = 10/turn,
+    // so the ceiling is 15/turn. Both legs keep their 50/50 split of it.
+    expect(overheadCharged({ logisticsBudget: 24_000, rdBudget: 24_000 }, 240)).toBeCloseTo(15, 4);
+  });
+
+  it("leaves logistics and R&D no headroom when CEO salary alone fills the ceiling", () => {
+    // Salary 36_000/day = 1_500/turn is the whole 150% ceiling at revenue
+    // 24_000/day (1_000/turn), so both budget legs clamp to zero.
+    const corp = makeCorp({
+      ceoSalary: 36_000,
+      logisticsBudget: 24_000,
+      rdBudget: 24_000,
+      liquidCapital: 1_000_000,
+    });
+    const sector = makeSector(corp._id, { revenue: 24_000, profitMargin: 100 });
+    const lookups = baseLookups([corp], [sector]);
+
+    const snapshot = processSectors(lookups, 1, new Date()).corpSnapshots[0];
+
+    // Only the salary leg is charged, and Bug #0728 caps that at 1.25x revenue.
+    expect(
+      overheadCharged({ ceoSalary: 36_000, logisticsBudget: 24_000, rdBudget: 24_000 }, 24_000)
+    ).toBeCloseTo(1.25 * 1_000, 4);
+    expect(snapshot.logisticsStrength).toBe(0);
+    expect(snapshot.rdScore).toBe(0);
   });
 });
 

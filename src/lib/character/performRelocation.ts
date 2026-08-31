@@ -17,6 +17,7 @@ import { cleanupCaucusParticipationForCharacters } from "@/lib/caucus/cleanupCau
 import { closeCeoTenure } from "@/lib/corporations/ceoHistory";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { officeResignsOnRelocation } from "@/lib/character/officeResignsOnRelocation";
+import { severFromChainOfCommand } from "@/lib/military/severFromChainOfCommand";
 
 export interface RelocationOutcome {
   resignedFromOffice: string | null;
@@ -29,6 +30,11 @@ export interface RelocationOutcome {
   withdrawnNationalPartyElections: number;
   withdrawnCommitteeElections: number;
   countryChanged: boolean;
+  /**
+   * Commands the character led in the country they left, by name. Empty for
+   * everyone who commanded nothing, which is almost everyone.
+   */
+  relinquishedCommands: string[];
 }
 
 export interface PerformRelocationOptions {
@@ -207,6 +213,22 @@ export async function performRelocation(
     await db.collection("cabinetMembers").deleteMany({ characterId });
   }
 
+  // 4c. Cross-country: leave the old country's chain of command. Same reasoning as
+  // the cabinet records above — a saved command keeps a CHARACTER id, and
+  // `requireCommandingGeneral` reads authority straight off it, so a commanding
+  // general who moved abroad kept posting their old country's generals and naming
+  // its Theater Commanders. Their units fall back to that country's General Staff
+  // rather than following them out.
+  //
+  // The commission is deliberately left alone: `characterGenerals` carries no
+  // country, so a general's army is simply wherever their character lives, and the
+  // new country's roster picks them up.
+  let relinquishedCommands: string[] = [];
+  if (countryChanged) {
+    const severed = await severFromChainOfCommand(db, oldCountryId, characterId.toString());
+    relinquishedCommands = severed.led;
+  }
+
   // 5. Strip state/region-party leadership in the OLD state
   //    (always — a player can't chair the CA state party if they live in TX).
   const clearedStateLeadership: string[] = [];
@@ -332,5 +354,6 @@ export async function performRelocation(
     withdrawnNationalPartyElections: withdrawals.withdrawnNationalPartyElections,
     withdrawnCommitteeElections: withdrawals.withdrawnCommitteeElections,
     countryChanged,
+    relinquishedCommands,
   };
 }

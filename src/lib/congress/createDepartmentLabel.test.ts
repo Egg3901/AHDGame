@@ -19,8 +19,8 @@ describe("create_department provision label", () => {
       positionId: "secretary_of_education",
     });
     expect(label.legislationTypeName).toBe("Executive Reorganization");
-    expect(label.policyOptionName).toBe("Establish the office of Secretary of Education");
-    expect(label.policyOptionName.toLowerCase()).not.toContain("subsid");
+    expect(label.proposed.name).toBe("Establish the office of Secretary of Education");
+    expect(label.proposed.name.toLowerCase()).not.toContain("subsid");
   });
 
   it("keeps lowercase joining words readable", () => {
@@ -28,14 +28,14 @@ describe("create_department provision label", () => {
       formatCreateDepartmentLabel({
         type: "create_department",
         positionId: "secretary_of_health_and_human_services",
-      }).policyOptionName
+      }).proposed.name
     ).toBe("Establish the office of Secretary of Health And Human Services");
   });
 
   it("survives a single-word seat id", () => {
     expect(
-      formatCreateDepartmentLabel({ type: "create_department", positionId: "postmaster" })
-        .policyOptionName
+      formatCreateDepartmentLabel({ type: "create_department", positionId: "postmaster" }).proposed
+        .name
     ).toBe("Establish the office of Postmaster");
   });
 });

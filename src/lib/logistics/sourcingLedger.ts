@@ -16,8 +16,15 @@ export const SOURCING_FLOW_RETENTION_TURNS = 48;
 export const SOURCING_FLOW_MAX_ITEMIZED = 200;
 
 export interface CommoditySourcingDoc {
+  /**
+   * State buyer intents before era calibration, resolved through reachable
+   * sellers, landed-price tolerance, and freight capacity.
+   */
+  basis: "buyer_intent_sourcing";
   commodity: CommodityType;
   turn: number;
+  /** Full buyer-intent denominator: all delivered legs plus `unmetUnits`. */
+  demandUnitsIntent: number;
   intraStateUnits: number;
   interStateUnits: number;
   importUnits: number;
@@ -25,6 +32,8 @@ export interface CommoditySourcingDoc {
   unmetUnits: number;
   toleranceBoundUnits: number;
   capacityBoundUnits: number;
+  /** Units cleared only through the shortage-responsive willingness-to-pay margin. */
+  shortageResponsiveUnits: number;
   /** Largest flows first, capped at SOURCING_FLOW_MAX_ITEMIZED. */
   flows: Omit<SourcingFlow, "commodity">[];
   itemizedFlowCount: number;
@@ -45,13 +54,49 @@ export interface SourcingNetworkDoc {
   landedPremiums: Record<string, Record<CommodityType, number>>;
   /** Per buyer country: tariff paid and import value, rounded to 2 decimals. Omits zero entries. */
   importAggregates: Record<string, { tariffPaid: number; importValue: number }>;
+  /**
+   * Canonical freight billing v1 (gameConfig.canonicalFreightBillingEnabled):
+   * per destination state, per commodity, the shipping money buyers there owe
+   * for accepted domestic hauls, rounded to 2 decimals. Only written while the
+   * flag is on; absent otherwise, so a world with billing off persists nothing
+   * new. The corporation turn reads it one turn lagged, like landedPremiums.
+   */
+  freightCharges?: Record<string, Partial<Record<CommodityType, number>>>;
+  /**
+   * The transfer's other half: per origin state, the shipping money its
+   * freight network earned, rounded to 2 decimals. Same gate and cadence as
+   * `freightCharges`.
+   */
+  freightHaulRevenue?: Record<string, number>;
+  /**
+   * Phase 4 freight ramp indicator: the active ramp fraction R in [0,1] applied
+   * this turn to the sales cap and billing money. Written whenever the ramp is
+   * mid-flight (0 < R < 1) so the markets tracker and admin view can show the
+   * phase-in explicitly; absent when unramped (R == 1, full effect or off).
+   */
+  freightSettlementRampFraction?: number;
   createdAt: Date;
 }
 
 export function buildSourcingDocs(
   result: SourcingResult,
   turn: number,
-  now: Date
+  now: Date,
+  options?: {
+    /**
+     * gameConfig.canonicalFreightBillingEnabled. Off (the default) writes no
+     * billing fields at all — the aggregates exist only inside the pure pass.
+     */
+    includeFreightBilling?: boolean;
+    /**
+     * Phase 4 freight ramp: scale the persisted billing money (charge AND haul
+     * revenue) by this fraction [0,1] so the shipping bill fades in with the
+     * sales cap. Both sides scale by the same factor, so the charge/credit
+     * conservation the corp-turn apportionment relies on is preserved. Default
+     * 1 (unramped, byte-identical to before).
+     */
+    billingRampFraction?: number;
+  }
 ): { commodityDocs: CommoditySourcingDoc[]; networkDoc: SourcingNetworkDoc } {
   const flowsByCommodity = new Map<CommodityType, SourcingFlow[]>();
   for (const flow of result.flows) {
@@ -70,8 +115,12 @@ export function buildSourcingDocs(
       .slice(0, SOURCING_FLOW_MAX_ITEMIZED)
       .map(({ commodity: _commodity, ...rest }) => rest);
     return {
+      basis: "buyer_intent_sourcing",
       commodity: s.commodity,
       turn,
+      demandUnitsIntent:
+        Math.round((s.intraStateUnits + s.interStateUnits + s.importUnits + s.unmetUnits) * 100) /
+        100,
       intraStateUnits: s.intraStateUnits,
       interStateUnits: s.interStateUnits,
       importUnits: s.importUnits,
@@ -79,6 +128,7 @@ export function buildSourcingDocs(
       unmetUnits: s.unmetUnits,
       toleranceBoundUnits: s.toleranceBoundUnits,
       capacityBoundUnits: s.capacityBoundUnits,
+      shortageResponsiveUnits: s.shortageResponsiveUnits,
       flows: itemized,
       itemizedFlowCount: itemized.length,
       totalFlowCount: all.length,
@@ -120,8 +170,37 @@ export function buildSourcingDocs(
     importAggregates[countryId] = { tariffPaid, importValue };
   }
 
-  return {
-    commodityDocs,
-    networkDoc: { turn, freightTeuByState, landedPremiums, importAggregates, createdAt: now },
+  const networkDoc: SourcingNetworkDoc = {
+    turn,
+    freightTeuByState,
+    landedPremiums,
+    importAggregates,
+    createdAt: now,
   };
+
+  if (options?.includeFreightBilling) {
+    // Ramp fraction scales both the charge and the haul-revenue side by the
+    // same factor, preserving their conservation. Clamped defensively; default 1.
+    const rampScale = Math.max(0, Math.min(1, options.billingRampFraction ?? 1));
+    const freightCharges: Record<string, Partial<Record<CommodityType, number>>> = {};
+    for (const [stateId, byCommodity] of result.freightChargesByDestState) {
+      const perCommodity: Partial<Record<CommodityType, number>> = {};
+      for (const [commodity, charge] of byCommodity) {
+        const rounded = Math.round(charge * rampScale * 100) / 100;
+        if (rounded <= 0) continue;
+        perCommodity[commodity] = rounded;
+      }
+      if (Object.keys(perCommodity).length > 0) freightCharges[stateId] = perCommodity;
+    }
+    const freightHaulRevenue: Record<string, number> = {};
+    for (const [stateId, revenue] of result.haulRevenueByOriginState) {
+      const rounded = Math.round(revenue * rampScale * 100) / 100;
+      if (rounded <= 0) continue;
+      freightHaulRevenue[stateId] = rounded;
+    }
+    networkDoc.freightCharges = freightCharges;
+    networkDoc.freightHaulRevenue = freightHaulRevenue;
+  }
+
+  return { commodityDocs, networkDoc };
 }

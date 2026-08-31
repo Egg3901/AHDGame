@@ -236,12 +236,12 @@ describe("assessCountryReadiness (static probes + inventory)", () => {
     expect(report.flavorGaps.length).toBeGreaterThan(0);
   });
 
-  it("promotes Nigeria 1953 to autonomous-ready; player-blocked on billLifecycle", () => {
+  it("promotes Nigeria 1953 to autonomous-ready and player-ready", () => {
     const report = assessCountryReadiness("NG", "1953-default");
     expect(report.archetypes).toEqual(["presidential", "market"]);
     expect(report.autonomous).toBe("ready");
-    expect(report.player).toBe("blocked");
-    expect(report.hardBlockers.map((b) => b.capabilityId)).toEqual(["billLifecycle"]);
+    expect(report.player).toBe("ready");
+    expect(report.hardBlockers).toEqual([]);
     expect(report.flavorGaps.map((g) => g.capabilityId).sort()).toEqual([
       "artAssets",
       "bespokeEvents",

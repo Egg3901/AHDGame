@@ -16,6 +16,11 @@
  * non-playable conversion will need a scope check here rather than a new,
  * drift-prone gate of its own.
  */
+import {
+  REDISTRICT_AUTHORITY_LAW,
+  REDISTRICT_COMPACTNESS_LAW,
+  REDISTRICT_FAIRNESS_LAW,
+} from "@/lib/redistricting/caps";
 import { POLITICAL_METRIC_COUNTRY_IDS } from "./types";
 
 export function isPoliticalPipelinePreset(_preset: string | undefined): boolean {
@@ -34,3 +39,39 @@ export function isPoliticalPipelinePreset(_preset: string | undefined): boolean 
 export const POLITICAL_LEGISLATION_EXCLUDED_SCOPES: ReadonlySet<string> = new Set(
   POLITICAL_METRIC_COUNTRY_IDS.map((id) => id.toLowerCase())
 );
+
+/**
+ * Old-catalog `_id`s that survive the exclusion sweep above.
+ *
+ * The three US state redistricting levers are mechanical who-may-draw switches,
+ * not metric-moving programs: `src/lib/redistricting/caps.ts` reads them BY ID
+ * out of `statePolicies` and turns the enacted option INDEX into the caps the
+ * map editor enforces. The new-generation law book has no equivalent — a
+ * `PoliticalLaw` is a five-level program with a political-metric target, which
+ * a three-option authority switch is not — so excluding them by `countryScope`
+ * took the whole system's only lever off the board (ticket #1189): every state
+ * sat on the index-1 default (bipartisan commission, `canDraw: false`) with no
+ * proposable bill able to move it.
+ *
+ * Sourced from caps.ts rather than written out so the retained set and the
+ * consumer can never drift apart.
+ */
+export const POLITICAL_LEGISLATION_RETAINED_OLD_IDS: ReadonlySet<string> = new Set([
+  REDISTRICT_AUTHORITY_LAW,
+  REDISTRICT_COMPACTNESS_LAW,
+  REDISTRICT_FAIRNESS_LAW,
+]);
+
+/**
+ * Whether an old-generation legislation type must not seed.
+ *
+ * The ONE place the exclusion is decided. The three seeders that apply it
+ * (`runCoreSeed`, `seedLegislationTypes`, `seedStatePolicies`) previously each
+ * tested `EXCLUDED_SCOPES.has(countryScope ?? "us")` inline — the same
+ * copy-and-drift shape this module already exists to prevent — so a carve-out
+ * added to one would silently miss the others.
+ */
+export function isOldLegislationTypeExcluded(lt: { _id: string; countryScope?: string }): boolean {
+  if (POLITICAL_LEGISLATION_RETAINED_OLD_IDS.has(lt._id)) return false;
+  return POLITICAL_LEGISLATION_EXCLUDED_SCOPES.has(lt.countryScope ?? "us");
+}

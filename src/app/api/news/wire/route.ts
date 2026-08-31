@@ -17,6 +17,7 @@ import { BOND_MATURITY_LABELS, type BondMaturityTurns } from "@/lib/db/types/bon
 import type { WireEvent } from "@/lib/wireEvent";
 
 import type { WireItem } from "@/lib/news/types";
+import { withPublicNewsVisibility } from "@/lib/news/publicModeration";
 
 // Re-export for any consumer that still imports types from the route file.
 // New consumers should import from "@/lib/news/types".
@@ -53,7 +54,7 @@ export async function GET() {
 
       db
         .collection<NewsPost>("newsPosts")
-        .find({ isSystem: true, createdAt: { $gte: since } })
+        .find(withPublicNewsVisibility({ isSystem: true, createdAt: { $gte: since } }))
         .sort({ createdAt: -1 })
         .limit(20)
         .project({ content: 1, category: 1, createdAt: 1 })

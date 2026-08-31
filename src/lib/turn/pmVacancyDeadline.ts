@@ -17,6 +17,7 @@ import { getParliamentaryCountryIds } from "@/lib/turn/parliamentaryGovernment";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
 import { triggerSnapElection } from "@/lib/turn/snapElection";
 import { logger } from "../observability/logger";
+import { getGameStatePreset } from "@/lib/db/collections/gameState";
 
 export interface ProcessPMVacancyDeadlinesResult {
   autoSnapsFired: CountryId[];
@@ -29,9 +30,10 @@ export async function processPMVacancyDeadlines(
 ): Promise<ProcessPMVacancyDeadlinesResult> {
   const db = dbOverride ?? (await getDb());
   const autoSnapsFired: CountryId[] = [];
+  const preset = await getGameStatePreset(db);
 
-  for (const countryId of getParliamentaryCountryIds()) {
-    const config = getCountryConfig(countryId);
+  for (const countryId of getParliamentaryCountryIds(preset)) {
+    const config = getCountryConfig(countryId, preset);
     if (!supportsSnapElections(config)) continue;
 
     const gov = await getGovernmentFormationsCollection(db).findOne({ _id: countryId });

@@ -293,6 +293,37 @@ describe("GET /api/country/[code]/executive/cabinet/[positionId]/briefing", () =
     expect(json.forceSummary).toHaveProperty("militaryPriceBaselineGdp");
   });
 
+  // The Commands tab posts generals to conflicts through a dropdown built from this
+  // list, and names the conflict a general is already posted to by looking its id up
+  // in it. Without the list the dropdown has no options at all — the seat cannot send
+  // anyone to a war — and the posting badge falls back to printing the raw theatre id.
+  it("lists the live conflicts a general can be posted to, on the defence seat", async () => {
+    db.collection("cabinetMembers");
+    db.collection("cabinetSettings");
+    db.collection("militaryUnits");
+    db.collection("conflicts");
+    db.collectionMocks.cabinetMembers.findOne.mockResolvedValue(null);
+    db.collectionMocks.cabinetSettings.findOne.mockResolvedValue(null);
+    db.collectionMocks.militaryUnits.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    } as never);
+    db.collectionMocks.conflicts.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "war_us_dd_415", name: "The War for Germany" }]),
+    } as never);
+
+    const { GET } =
+      await import("@/app/api/country/[code]/executive/cabinet/[positionId]/briefing/route");
+    const response = await GET(
+      new Request(
+        "http://localhost/api/country/us/executive/cabinet/secretary_of_defense/briefing"
+      ),
+      { params: Promise.resolve({ code: "us", positionId: "secretary_of_defense" }) }
+    );
+    const json = (await response.json()) as { conflicts?: { id: string; name: string }[] };
+
+    expect(json.conflicts).toEqual([{ id: "war_us_dd_415", name: "The War for Germany" }]);
+  });
+
   // The arsenal and contract blocks are assembled outside `forceSummary`'s typed view, so
   // the same reasoning applies: a dropped field type-checks and renders as `undefined`.
   it("emits the arsenal, contract and supplier blocks on the defence seat", async () => {

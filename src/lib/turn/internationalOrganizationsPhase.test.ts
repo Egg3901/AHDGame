@@ -10,7 +10,13 @@ import { processInternationalOrganizationsTurn } from "./internationalOrganizati
  */
 const stubDb = () =>
   ({
-    collection: () => ({ findOne: async () => ({ _id: "current", preset: "2019-default" }) }),
+    collection: () => ({
+      findOne: async () => ({
+        _id: "current",
+        preset: "2019-default",
+        nppForeignPolicyMode: "shadow",
+      }),
+    }),
   }) as unknown as Db;
 
 vi.mock("@/lib/db/collections", () => ({
@@ -32,6 +38,12 @@ vi.mock("@/lib/internationalOrganizations/service", () => ({
 // Stub it to a no-op so it doesn't consume the getMembers mock queue.
 vi.mock("@/lib/nppAutonomy/autonomousOrgVoting", () => ({
   castAutonomousOrgVotes: vi.fn().mockResolvedValue(0),
+}));
+
+// Active-resolution reconciliation has its own focused suite. Keep this resolver
+// suite on the phase behaviors it owns, including the bare-db tribute fixtures.
+vi.mock("@/lib/internationalOrganizations/reconcileAutonomousWarEntry", () => ({
+  reconcileAutonomousWarEntryBills: vi.fn().mockResolvedValue(0),
 }));
 
 // Auto-founding has its own suite (internationalOrganizationsPhase.founding.test.ts).
@@ -703,7 +715,7 @@ describe("internationalOrganizationsPhase", () => {
     } as never);
     stubQuietCollections(collections, { skipProposals: true });
 
-    const result = await processInternationalOrganizationsTurn({} as Db, 10);
+    const result = await processInternationalOrganizationsTurn(stubDb(), 10);
 
     expect(result.proposalsResolved).toBe(1);
     expect(join.admitMember).toHaveBeenCalledWith(expect.anything(), "nato", "FR", 10);
@@ -753,7 +765,7 @@ describe("internationalOrganizationsPhase", () => {
     } as never);
     stubQuietCollections(collections, { skipElections: true, skipLeadership: true });
 
-    const result = await processInternationalOrganizationsTurn({} as Db, 10);
+    const result = await processInternationalOrganizationsTurn(stubDb(), 10);
 
     expect(result.electionsResolved).toBe(1);
     expect(electionUpdateOne).toHaveBeenCalledWith(

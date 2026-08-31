@@ -1,4 +1,5 @@
 import { MIL_COLOR, MIL_FONT } from "../military/theme";
+import { CONFLICT_ARCHIVE_DELAY_TURNS } from "@/lib/military/conflictLifecycle";
 import type { RecordBattleRow } from "./conflictRecordView";
 
 const mono = MIL_FONT.mono;
@@ -10,6 +11,11 @@ export interface WarLogView {
   note: string;
   /** The war's opening line — the last row, and the only one that is not a report. */
   opening: { year: number; text: string };
+  /**
+   * For a resolved war still under fog: the turn every withheld roster opens.
+   * Absent on a live war, whose date is not yet known, and on an open record.
+   */
+  archiveOpensTurn?: number;
 }
 
 /** Which side declared, so the row's marker takes that side's colour. */
@@ -101,14 +107,15 @@ export function WarLog({ view }: { view: WarLogView }) {
                     textAlign: "right",
                   }}
                 >
-                  {b.unopposed ? (
-                    "no contact"
-                  ) : (
-                    <>
-                      {b.declarer} {b.declarerLoss.toLocaleString("en-US")} · {b.target}{" "}
-                      {b.targetLoss.toLocaleString("en-US")}
-                    </>
-                  )}
+                  {/* Every belligerent that bled, named for itself. This used to
+                      print the declarer beside the WHOLE attacking side's dead, so a
+                      two-nation offensive filed its ally's casualties under the
+                      principal's flag. */}
+                  {b.unopposed
+                    ? "no contact"
+                    : [...b.attackerLosses, ...b.defenderLosses]
+                        .map((c) => `${c.country} ${c.loss.toLocaleString("en-US")}`)
+                        .join(" · ")}
                   {/* Absent on reports filed before the front's position was
                       recorded: unknown, not "nothing moved". */}
                   {declarerGround != null && Math.abs(declarerGround) >= 0.1 && (
@@ -162,7 +169,7 @@ export function WarLog({ view }: { view: WarLogView }) {
                   {/* The other side's roster is not merely absent — say why, and
                       say that it is coming, so the gap reads as a rule rather
                       than a bug. */}
-                  {b.rosters.length === 1 && (
+                  {b.rostersWithheld && (
                     <div
                       style={{
                         flex: 1,
@@ -190,7 +197,9 @@ export function WarLog({ view }: { view: WarLogView }) {
                           marginTop: 3,
                         }}
                       >
-                        Unlocks for everyone when the war resolves.
+                        {view.archiveOpensTurn != null
+                          ? `Unlocks for everyone on turn ${view.archiveOpensTurn}.`
+                          : `Unlocks for everyone ${CONFLICT_ARCHIVE_DELAY_TURNS} turns after the war resolves.`}
                       </div>
                     </div>
                   )}

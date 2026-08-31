@@ -27,6 +27,7 @@ describe("simTurnProfiles — elections-only turn-phase gate", () => {
       "metricEngine",
       "ledgerReconcile",
       "wealthListSnapshot",
+      "economicVitalSigns",
     ]) {
       expect(pred!(econ)).toBe(false);
     }
@@ -106,7 +107,9 @@ describe("simTurnProfiles: economy-only turn-phase gate", () => {
       "inflationRecalc",
       "commandEconomy",
       "forexTurn",
+      "indexFunds",
       "ledgerReconcile",
+      "economicVitalSigns",
     ]) {
       expect(ECONOMY_ONLY_PHASES.has(phase)).toBe(true);
       expect(pred(phase)).toBe(true);

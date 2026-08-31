@@ -746,6 +746,8 @@ export interface TurnLog {
       rebalances: number;
       redemptionsPaid: number;
       bondDeployments: number;
+      equityLiquidityQuotePairs: number;
+      equityLiquidityDepthAnchor: number;
       nppsProcessed: number;
       nppInvested: number;
     } | null;
@@ -760,11 +762,19 @@ export interface TurnLog {
     ledgerBalanceSnapshot?: {
       accountsSnapshotted: number;
     } | null;
+    /** Snap elections fired for countries whose system conversion promised one. */
+    postConversionElections?: {
+      fired: number;
+    } | null;
     ledgerReconcile?: {
       status: "green" | "amber" | "red";
       entriesChecked: number;
       unbalancedCount: number;
-      stockVsFlowDivergences: number;
+      stockVsFlowDivergences: number | null;
+    } | null;
+    economicVitalSigns?: {
+      snapshotTurn: number;
+      domainsAvailable: number;
     } | null;
   };
 

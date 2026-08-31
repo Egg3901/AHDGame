@@ -80,6 +80,27 @@ export const REGION_SCOPED_COLLECTIONS: RegionScope[] = [
   { collection: "demographicDefaults", key: "idIsState" },
   // ── composite-key (_id is `${countryId}_${stateId}`) → must be re-keyed ──────
   { collection: "stateRegistrationPool", key: "compositeCountryState" },
+  // ── records a DISSOLVING merge would otherwise strand ───────────────────────
+  // These are region-keyed rows that the referendum path could leave behind
+  // harmlessly — the source country survived to keep owning them — but that a
+  // country merge cannot, because the country they point at stops existing.
+  //
+  // `enactedLaws` is the load-bearing one: a region's law book is part of the
+  // region. Its `legislationTypeId`s keep resolving after the merge because
+  // `legislationTypes` is a GLOBAL collection whose documents are not deleted
+  // when a country dissolves — see `rescopeLegislationCatalogue`, which hands the
+  // catalogue itself to the survivor so those laws stay amendable.
+  //
+  // `elections` carries the RESOLVED history only: `evacuateRegionPolitics` runs
+  // first and deletes the active and upcoming races, so what is rescoped here is
+  // the record of elections already held.
+  { collection: "enactedLaws", key: "stateIdField" },
+  { collection: "electionVoteTallies", key: "stateField" },
+  { collection: "elections", key: "stateField" },
+  { collection: "statePartyCandidates", key: "stateIdField" },
+  { collection: "recruitmentSlates", key: "stateField" },
+  { collection: "slateCandidates", key: "homeStateField" },
+  { collection: "prospectingSurveys", key: "stateIdField" },
   // ── residents (flip countryId, KEEP homeState) ──────────────────────────────
   { collection: "characters", key: "homeStateField" },
 ];

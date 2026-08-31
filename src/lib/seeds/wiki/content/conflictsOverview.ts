@@ -40,7 +40,7 @@ Each conflict carries:
 | **War goal** | What the war was declared *for*. Peace terms negotiate against it. |
 | **Control** | The share of the host's territory each side holds. This is the war's scoreboard. |
 | **Region & terrain** | Derived from the host country. Terrain shapes how the fighting goes. |
-| **Status** | Active, escalating, winding down, or resolved. |
+| **Status** | Active, escalating, winding down, terms pending, or resolved. A war whose front has run to a pole sits at *terms pending* while the victor names a settlement; see [Peace, Indemnities & Truces](/wiki/peace-and-truces). |
 
 A resolved conflict keeps its page forever. That is the point of the numbering: conflict #1 is a permanent historical record, browsable long after the shooting stops.
 
@@ -64,7 +64,7 @@ Authority is deliberately split. No single office runs a war.
 
 | Decision | Who may take it |
 | --- | --- |
-| **Declare war** | Head of government **or** the defence seat holder, then the legislature must ratify it |
+| **Declare war** | Head of government **or** the defence seat holder, then the legislature must ratify it. A country can also be brought in without declaring: a mutual-defence charter (NATO, the Warsaw Pact) pulls every member into a war declared **against** one of them, and a bloc can vote to enter a war at its own call. See [Declaring War](/wiki/declaring-war). |
 | **Recruit, upgrade, set posture, assign units to generals** | The defence seat holder |
 | **Commission and dismiss generals** | The defence seat holder |
 | **Adopt national doctrine** | The defence seat holder |
@@ -83,8 +83,8 @@ Two of these are worth reading twice.
 
 Not every nation has the machinery.
 
-- **Full participants:** a defence cabinet seat, so every control on these pages is live: US, UK, CN, DE, JP, IE, NG, RU, DD, PL, HU, RO, YU, BG, CS, UKR, BLR, BAL.
-- **Read-only:** no defence seat is defined, so their forces exist and are simulated but no player can direct them: BR, FR, IT, ES, SE, TR, GR, AT, FI, SCO, WAL.
+- **Every sovereign country has a defence seat**, so every control on these pages exists for it: the playable countries and the wider roster alike (US, UK, CN, DE, JP, IE, BR, NG, RU, DD, PL, HU, RO, YU, BG, CS, UKR, BLR, BAL, FR, IT, ES, SE, TR, GR, AT, FI). Whether a *player* can sit in that seat depends on whether the country is open to players in your world; where it is not, the seat is run by the autonomous government, which recruits, deploys and can even ratify its way into a war.
+- **Read-only:** Scotland and Wales define no defence seat. Their forces exist and are simulated but nobody directs them.
 
 Era gating narrows this further. West Germany has **no armed forces at all in 1953**: the Bundeswehr stands up in 1955, and East Germany's NVA in 1956. A 1953 world correctly seeds those nations with zero branches rather than inventing a predecessor.
 
@@ -96,9 +96,11 @@ A conflict shows you different things depending on who you are. This is enforced
 | --- | --- | --- |
 | **Public** | Everyone else | Territory held, cumulative casualties, per-battle verdicts and loss totals. No force composition, either side. |
 | **Command** | A belligerent country's posted general, defence seat holder, or head of government | Everything public, **plus** your own live order of battle at that front, plus a coarse read of the enemy ("Stronger force", never a number). |
-| **Archive** | Everyone, once the war is **resolved** | Everything, both sides, per engagement: who fought, what they lost. The fog lifts entirely for history. |
+| **Archive** | Everyone, 480 turns after the war is **resolved** | Everything, both sides, per engagement: who fought, what they lost. The fog lifts entirely for history. |
 
-Note the shape of that: **territory and casualties are public in every tier.** The world always knows how a war is going and how many have died. Only *force composition* is secret, and only while the war is still being fought.
+Note the shape of that: **territory and casualties are public in every tier.** The world always knows how a war is going and how many have died. Only *force composition* is secret, and it stays secret for 480 turns after the war ends, because the day a war ends its order of battle is still a live picture of an army that may fight again. A resolved war reads exactly as it did while it ran until that window lapses; then the record opens for everyone.
+
+Every war that has ended is listed under **Historical Conflicts** at the bottom of the conflicts hub, with its outcome and a link to its record. The card says whether the record is open or when the fog lifts.
 
 One deliberate gap: **incoming offensives are hidden.** You are not told that an enemy has declared an attack on you. You have to infer it from their build-up. Defending well means reading the board, not waiting for an alert.
 
@@ -112,6 +114,8 @@ Wars move on the hourly turn tick, in a fixed order:
 4. **Reinforcement.** Manpower regenerates and under-strength units top up in place, still under their own general.
 
 So a turn reads: **fight → count the losses → rebuild.** A formation mauled in step 2 begins recovering in step 4 without leaving the front.
+
+A war also leaves marks outside the war room. Your nation's **approval** answers to how the front is moving, whether treaty allies are pulling their weight, and how long you have been fighting; every page of a country at war carries a red strip naming the war; and the world's **tension gauge** rises with every war on the board. See [Government Approval](/wiki/government-approval) and [Cold War Tension](/wiki/cold-war-tension).
 
 The one-turn gap between declaring and resolving is the **defender's window**. If your opponent declares on turn 500, it resolves on turn 501, and in between you can reinforce the front, reshuffle generals, or pull out entirely.
 

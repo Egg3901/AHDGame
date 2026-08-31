@@ -7,9 +7,8 @@ import {
   formatCurrencyCompactChip,
   formatCurrencyFull,
   formatRealTimeCountdown,
-  turnToLarpDate,
+  rawTurnToLarpDate,
 } from "@/lib/utils/formatters";
-import { calendarTurn } from "@/lib/utils/gameDate";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useRefetchNav } from "@/contexts/AuthDataContext";
@@ -374,13 +373,10 @@ export function StatusBar() {
                     Founding
                   </span>
                 )}
-                {turnToLarpDate(
-                  calendarTurn(gameState.currentTurn, {
-                    preIterationActive: gameState.preIterationActive,
-                    preIterationTurns: gameState.preIterationTurns,
-                  }),
-                  gameState.startingYear
-                )}
+                {rawTurnToLarpDate(gameState.currentTurn, gameState.startingYear, {
+                  preIterationActive: gameState.preIterationActive,
+                  preIterationTurns: gameState.preIterationTurns,
+                })}
               </span>
               <div className="flex min-w-0 shrink-0 items-center gap-1.5 sm:gap-2">
                 {isProcessing ? (

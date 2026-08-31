@@ -15,7 +15,7 @@ vi.mock("@/lib/time/gameTime", async (importActual) => ({
   }),
 }));
 
-import { resolveCanvassState } from "./eligibility";
+import { resolveCanvassState, resolveRunningMateCanvassState } from "./eligibility";
 import type { Character, ElectionCandidate, Election } from "@/lib/db/types";
 
 function makeCharacter(overrides: Partial<Character> = {}): Character {
@@ -205,5 +205,94 @@ describe("resolveCanvassState", () => {
 
       expect(result).toEqual({ ok: true, stateId: "TX", source: "travel" });
     });
+  });
+});
+
+describe("resolveRunningMateCanvassState", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    db = createMockDb();
+    db.collection("electionCandidates").find.mockReturnValue({
+      toArray: () => Promise.resolve([]),
+    });
+  });
+
+  function mockMateTicket(candidate: Partial<ElectionCandidate>, election: Partial<Election>) {
+    const electionId = election._id ?? new ObjectId();
+    const nomineeCharacterId = candidate.characterId ?? new ObjectId();
+    db.collection("electionCandidates").find.mockReturnValue({
+      toArray: () =>
+        Promise.resolve([
+          {
+            _id: new ObjectId(),
+            electionId,
+            characterId: nomineeCharacterId,
+            status: "active",
+            ...candidate,
+          } as ElectionCandidate,
+        ]),
+    });
+    db.collection("elections").find.mockReturnValue({
+      toArray: () =>
+        Promise.resolve([
+          {
+            _id: electionId,
+            electionType: "president",
+            status: "active",
+            ...election,
+          } as Election,
+        ]),
+    });
+    return { electionId, nomineeCharacterId };
+  }
+
+  it("returns not_running_mate when the character is nobody's running mate", async () => {
+    const character = { _id: new ObjectId() } as Character;
+    const result = await resolveRunningMateCanvassState(db as unknown as Db, character);
+    expect(result).toEqual({ ok: false, reason: "not_running_mate" });
+  });
+
+  it("returns the ticket's travel state in the general phase", async () => {
+    const character = { _id: new ObjectId() } as Character;
+    const past = new Date(Date.now() - 60 * 60 * 1000);
+    const future = new Date(Date.now() + 60 * 60 * 1000);
+    const { electionId, nomineeCharacterId } = mockMateTicket(
+      { runningMateId: character._id, runningMateTravelState: "PA" },
+      { primaryEndTime: past, endTime: future }
+    );
+
+    const result = await resolveRunningMateCanvassState(db as unknown as Db, character);
+
+    expect(result).toEqual({
+      ok: true,
+      stateId: "PA",
+      electionId,
+      nomineeCharacterId,
+    });
+  });
+
+  it("returns needs_travel when the ticket has no travel state yet", async () => {
+    const character = { _id: new ObjectId() } as Character;
+    const past = new Date(Date.now() - 60 * 60 * 1000);
+    const future = new Date(Date.now() + 60 * 60 * 1000);
+    mockMateTicket({ runningMateId: character._id }, { primaryEndTime: past, endTime: future });
+
+    const result = await resolveRunningMateCanvassState(db as unknown as Db, character);
+
+    expect(result).toEqual({ ok: false, reason: "needs_travel" });
+  });
+
+  it("returns not_running_mate in the primary phase (surrogate is general-only)", async () => {
+    const character = { _id: new ObjectId() } as Character;
+    const future = new Date(Date.now() + 60 * 60 * 1000);
+    mockMateTicket(
+      { runningMateId: character._id, runningMateTravelState: "PA" },
+      { primaryEndTime: future, endTime: future }
+    );
+
+    const result = await resolveRunningMateCanvassState(db as unknown as Db, character);
+
+    expect(result).toEqual({ ok: false, reason: "not_running_mate" });
   });
 });

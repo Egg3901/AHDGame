@@ -8,6 +8,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
+import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { getGameState } from "@/lib/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
@@ -68,6 +69,10 @@ export async function POST(request: Request, { params }: RouteParams) {
         { status: 403 }
       );
     }
+
+    // Breaking ground commits the department's budget for the build's duration.
+    const actingDenied = requireConfirmedSecretary(member, "assets", !!auth.user.isAdmin);
+    if (actingDenied) return actingDenied;
 
     if (member && member.ministerialActions == null) {
       await membersCol.updateOne({ _id: member._id }, { $set: { ministerialActions: 2 } });

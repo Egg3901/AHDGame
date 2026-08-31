@@ -9,6 +9,7 @@ import {
   EXEC_ORDER_DURATION_TURNS,
   EXEC_ORDER_MAX_STEPS,
 } from "@/lib/constants/governorOffice";
+import { ladderBounds } from "@/lib/legislature/policyLadder";
 import { BILL_CATEGORIES, STATE_BILL_CATEGORIES } from "@shared/constants/legislation";
 import { getExecutiveOrderName, type CountryId } from "@/lib/constants/countries";
 
@@ -121,8 +122,20 @@ export function IssueOrderModal({
     ? typesForCategory.find((t) => t._id === legId)
     : undefined;
   const policyOptions = selectedType?.policyOptions ?? [];
-  const currentIndex = legId ? (currentPolicies[legId] ?? 3) : 3;
-  const proposedIndex = clamp(currentIndex + shift, 0, 6);
+  // Ladder bounds follow the selected type's own option count — the same helper
+  // the order route uses, so a button is never offered for a step the route
+  // will refuse.
+  const { maxIndex, centerIndex } = ladderBounds(policyOptions.length);
+  // Clamped the same way the route clamps it, so a stored index that already
+  // sits off the end of the ladder (written by the pre-fix 0-6 clamp) resolves
+  // to the same starting point on both sides. Without this the modal would
+  // offer a destination the route then computes differently.
+  const currentIndex = clamp(
+    legId ? (currentPolicies[legId] ?? centerIndex) : centerIndex,
+    0,
+    maxIndex
+  );
+  const proposedIndex = clamp(currentIndex + shift, 0, maxIndex);
   const actualSteps = Math.abs(proposedIndex - currentIndex);
   const wouldClamp = proposedIndex !== currentIndex + shift;
   const wouldNoOp = proposedIndex === currentIndex;
@@ -139,9 +152,11 @@ export function IssueOrderModal({
     setLegId(newId);
     // Snap shift to a viable side if the picked type sits at a boundary.
     if (!newId) return;
-    const curIdx = currentPolicies[newId] ?? 3;
+    const newType = typesForCategory.find((t) => t._id === newId);
+    const bounds = ladderBounds(newType?.policyOptions?.length);
+    const curIdx = currentPolicies[newId] ?? bounds.centerIndex;
     if (curIdx <= 0) setShift(1);
-    else if (curIdx >= 6) setShift(-1);
+    else if (curIdx >= bounds.maxIndex) setShift(-1);
   }
 
   /** Returns true if a given shift would clamp at the policy boundary for the
@@ -149,7 +164,7 @@ export function IssueOrderModal({
   function shiftWouldClamp(s: Shift): boolean {
     if (!legId) return false;
     const target = currentIndex + s;
-    return target < 0 || target > 6;
+    return target < 0 || target > maxIndex;
   }
 
   async function submit() {
@@ -244,7 +259,7 @@ export function IssueOrderModal({
             <div className="grid grid-cols-2 gap-2 mb-3 sm:grid-cols-4">
               {SHIFT_BUTTONS.map((b) => {
                 const clamped = shiftWouldClamp(b.shift);
-                const destIdx = clamp(currentIndex + b.shift, 0, 6);
+                const destIdx = clamp(currentIndex + b.shift, 0, maxIndex);
                 const destName = policyOptions[destIdx]?.name;
                 const cost = Math.abs(b.shift);
                 return (

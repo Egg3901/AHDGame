@@ -66,6 +66,26 @@ describe("resolveSeatOffices", () => {
     });
   });
 
+  it("names the defence minister holding a seat", async () => {
+    primeFind(db, "cabinetMembers", [
+      {
+        countryId: "DD",
+        positionId: "minister_of_defence",
+        characterId: new ObjectId(),
+        characterName: "Erich Keller",
+      },
+    ]);
+
+    const { resolveSeatOffices } = await import("./seatOffices");
+    const offices = await resolveSeatOffices(db as unknown as Db);
+
+    expect(offices.DD[2]).toEqual({
+      role: "defenseMinister",
+      title: "Minister of National Defence",
+      holder: "Erich Keller",
+    });
+  });
+
   it("titles each head of government from its own country config", async () => {
     const { resolveSeatOffices } = await import("./seatOffices");
     const offices = await resolveSeatOffices(db as unknown as Db);
@@ -88,13 +108,27 @@ describe("resolveSeatOffices", () => {
     expect(offices.DD[1].title).toBe("Minister of Foreign Affairs");
   });
 
+  it("titles each defence minister from its own cabinet roster", async () => {
+    const { resolveSeatOffices } = await import("./seatOffices");
+    const offices = await resolveSeatOffices(db as unknown as Db);
+
+    expect(offices.US[2].title).toBe("Secretary of Defense");
+    expect(offices.UK[2].title).toBe("Secretary of State for Defence");
+    expect(offices.RU[2].title).toBe("Minister of Defence");
+    expect(offices.DD[2].title).toBe("Minister of National Defence");
+  });
+
   it("returns both offices for every seat even when neither is held", async () => {
     const { resolveSeatOffices } = await import("./seatOffices");
     const offices = await resolveSeatOffices(db as unknown as Db);
 
     for (const seatId of ["US", "UK", "RU", "DD"] as const) {
-      expect(offices[seatId]).toHaveLength(2);
-      expect(offices[seatId].map((o) => o.role)).toEqual(["headOfGovernment", "foreignMinister"]);
+      expect(offices[seatId]).toHaveLength(3);
+      expect(offices[seatId].map((o) => o.role)).toEqual([
+        "headOfGovernment",
+        "foreignMinister",
+        "defenseMinister",
+      ]);
       expect(offices[seatId].every((o) => o.holder === null)).toBe(true);
     }
   });
@@ -145,9 +179,13 @@ describe("resolveSeatOffices", () => {
         { countryId: "UK", positionId: "foreign_secretary" },
         { countryId: "RU", positionId: "minister_of_foreign_affairs" },
         { countryId: "DD", positionId: "minister_of_foreign_affairs" },
+        { countryId: "US", positionId: "secretary_of_defense" },
+        { countryId: "UK", positionId: "defence_secretary" },
+        { countryId: "RU", positionId: "minister_of_defence" },
+        { countryId: "DD", positionId: "minister_of_defence" },
       ])
     );
-    expect(filter.$or).toHaveLength(4);
+    expect(filter.$or).toHaveLength(8);
   });
 
   it("pairs country to position rather than crossing the two lists", async () => {

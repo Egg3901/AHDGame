@@ -19,7 +19,7 @@ import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
-import { glutStaggerEligible } from "@/lib/turn/nppCorporationBehavior";
+import { glutStaggerEligible } from "@/lib/turn/npp/cohort";
 import {
   anchorToCorpCapital,
   resolveCorpLiquidCurrencyCode,

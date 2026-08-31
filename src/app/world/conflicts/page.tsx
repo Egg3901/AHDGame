@@ -2,19 +2,28 @@ import { requireConflictsEnabled } from "./_coldwar/gate";
 import { GlobalConflictsBoard } from "./_coldwar/GlobalConflictsBoard";
 import { getGameTime } from "@/lib/time/gameTime";
 import { getDb } from "@/lib/mongodb";
-import { listActiveConflicts } from "@/lib/db/collections/conflicts";
+import { listActiveConflicts, listResolvedConflicts } from "@/lib/db/collections/conflicts";
 import { casualtiesByTheater } from "@/lib/db/collections/battleReports";
 import { toConflictView } from "./_coldwar/conflictView";
+import { toHistoricalConflictRow } from "./_history/historyView";
+import { HistoricalConflictsSection } from "./_history/HistoricalConflictsSection";
 import { VietnamEscalationPanel } from "./_coldwar/VietnamEscalationPanel";
 import { getVietnamEscalationSummary, VIETNAM_RUNGS } from "@/lib/crises/vietnamEscalation";
 import { TensionHeader, type NuclearPowerView } from "./_coldwar/TensionHeader";
 import { getColdWarTension, tensionBand, tensionPressureBreakdown } from "@/lib/coldwar/tension";
+import {
+  buildStandingPressureSnapshot,
+  conflictWarPressureInput,
+} from "@/lib/coldwar/standingPressure";
 import { getColdWarDials } from "@/lib/coldwar/dials";
 import { listNuclearPrograms } from "@/lib/db/collections/nuclearPrograms";
 import { NUCLEAR_NODES } from "@/lib/military/nuclearProgram";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type { Crisis } from "@/lib/db/types/crisis";
 import { GlobalResponseCrisisStrip } from "./_coldwar/GlobalResponseCrisisStrip";
+
+/** How many concluded wars the hub lists, newest first. Older ones keep their record page. */
+const HISTORY_LIMIT = 24;
 
 // Conflicts hub: every live conflict in the world, on the map and in the list,
 // under one headline: the global cold-war tension reading. Gated by
@@ -28,39 +37,52 @@ export default async function ConflictsPage() {
   const { currentTurn, currentYear, startingYear, preIterationTurns } = await getGameTime();
 
   const db = await getDb();
-  const docs = await listActiveConflicts(db);
-  const casualties = await casualtiesByTheater(
-    db,
-    docs.map((d) => d._id)
-  );
+  const [docs, resolvedDocs] = await Promise.all([
+    listActiveConflicts(db),
+    listResolvedConflicts(db, HISTORY_LIMIT),
+  ]);
+  const casualties = await casualtiesByTheater(db, [
+    ...docs.map((d) => d._id),
+    ...resolvedDocs.map((d) => d._id),
+  ]);
   const conflicts = docs.map((d) =>
     toConflictView(d, { startingYear, casualties: casualties[d._id] ?? 0, preIterationTurns })
   );
+  const history = resolvedDocs.map((d) =>
+    toHistoricalConflictRow(d, {
+      startingYear,
+      casualties: casualties[d._id] ?? 0,
+      currentTurn,
+      preIterationTurns,
+    })
+  );
 
-  const [vietnam, tension, dials, programs, responseCrisisDocs] = await Promise.all([
-    getVietnamEscalationSummary(db),
-    getColdWarTension(db),
-    getColdWarDials(db),
-    listNuclearPrograms(db),
-    db
-      .collection<Crisis>("crises")
-      .find({ status: "active", globalResponse: { $exists: true } })
-      .sort({ startTurn: -1 })
-      .toArray(),
-  ]);
+  const [vietnam, tension, dials, programs, responseCrisisDocs, activeCrisisCount] =
+    await Promise.all([
+      getVietnamEscalationSummary(db),
+      getColdWarTension(db),
+      getColdWarDials(db),
+      listNuclearPrograms(db),
+      db
+        .collection<Crisis>("crises")
+        .find({ status: "active", globalResponse: { $exists: true } })
+        .sort({ startTurn: -1 })
+        .toArray(),
+      db.collection<Crisis>("crises").countDocuments({ status: "active" }),
+    ]);
 
   // Response scope answers who owns the decision, not how far the crisis reaches.
   // Living-conflict events are stored as country-scoped because every government
   // answers separately; globalResponse is the canonical international marker.
   const responseCrises = responseCrisisDocs.filter((crisis) => crisis.globalResponse != null);
-  const activeCrisisCount = responseCrises.length;
-
-  const totalWarheads = programs.reduce((sum, program) => sum + Math.max(0, program.warheads), 0);
-  const pressureBreakdown = tensionPressureBreakdown({
+  const pressureSnapshot = buildStandingPressureSnapshot({
     escalationLevel: vietnam.level,
     activeCrises: activeCrisisCount,
-    totalWarheads,
+    programs,
+    conflicts: docs.map(conflictWarPressureInput),
+    currentTurn,
   });
+  const pressureBreakdown = tensionPressureBreakdown(pressureSnapshot.pressures);
 
   // Who holds the bomb: any programme with a stockpile or an adopted node.
   // A country that never opened one has no document and never appears.
@@ -93,7 +115,9 @@ export default async function ConflictsPage() {
             ...pressureBreakdown,
             escalationLevel: vietnam.level,
             activeCrisisCount,
-            totalWarheads,
+            totalWarheads: pressureSnapshot.totalWarheads,
+            activeWarCount: pressureSnapshot.warSummary.activeWarCount,
+            nuclearWarCount: pressureSnapshot.warSummary.nuclearWarCount,
           }}
           dials={dials}
         />
@@ -126,9 +150,11 @@ export default async function ConflictsPage() {
           crises={responseCrises}
           currentTurn={currentTurn}
           startingYear={startingYear}
+          clock={{ preIterationTurns }}
         />
       </div>
       <GlobalConflictsBoard year={currentYear ?? startingYear} conflicts={conflicts} />
+      <HistoricalConflictsSection rows={history} />
     </>
   );
 }

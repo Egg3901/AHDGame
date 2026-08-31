@@ -5,7 +5,7 @@
  * State party whips take precedence over national; national whips only apply
  * when no state party leadership exists.
  *
- * Shared by billVoting.ts and leadershipVoting.ts to prevent logic drift.
+ * Used by billVoting.ts to keep whip resolution in one place.
  */
 
 import type { NPP, BillWhip, StatePartyOrg, PoliticalParty } from "@/lib/db/types";

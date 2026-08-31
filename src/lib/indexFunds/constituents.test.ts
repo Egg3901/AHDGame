@@ -267,7 +267,8 @@ describe("committee waivers inside the basket build", () => {
   it("keeps an INSOLVENT corporation out however it was waived", () => {
     // The waiver suppresses the qualification bars and never solvency, and it
     // is enforced in the screen so no caller can grant what the rule forbids.
-    const broke = corp({ sharePrice: 10, totalShares: 500, liquidCapital: -1 });
+    // Materially insolvent: -1000 far exceeds 1% of the 5000 market cap.
+    const broke = corp({ sharePrice: 10, totalShares: 500, liquidCapital: -1000 });
     const { constituents } = buildIndexFundTargetConstituents({
       corporations: [...pool(), broke],
       definition,

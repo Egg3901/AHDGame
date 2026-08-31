@@ -88,6 +88,12 @@ export interface SettleableSupplyAgreement {
    * "assess", which keeps every existing caller and test unchanged.
    */
   shortfallEligible?: boolean;
+  lastDeliveryTurn?: number;
+  lastDeliveredUnits?: number;
+  lastBuyerConsumptionUnits?: number;
+  previousDeliveryTurn?: number;
+  previousDeliveredUnits?: number;
+  previousBuyerConsumptionUnits?: number;
 }
 
 /** Per-corp economic identity the pure settlement needs (id, name, ccy, fx). */
@@ -108,6 +114,29 @@ export interface SettleCorpInfo {
    * pre-C6 behaviour (no floor) rather than silently settling everything to 0.
    */
   liquidCapitalAnchor?: number;
+}
+
+/**
+ * Add one equal-and-opposite corporation cash transfer to an accumulator.
+ *
+ * Conversion deliberately remains unrounded here. Callers that fan one payer
+ * out across many recipients must aggregate all of a corporation's legs before
+ * rounding, otherwise every sub-unit pair can disappear independently.
+ */
+export function addCorpToCorpSettlement(
+  deltaByCorp: Map<string, number>,
+  payerCorpId: string,
+  payer: SettleCorpInfo,
+  recipientCorpId: string,
+  recipient: SettleCorpInfo,
+  amountAnchor: number
+): void {
+  if (!(Number.isFinite(amountAnchor) && amountAnchor > 0)) return;
+  const payerLocal = anchorToCorpCapital(amountAnchor, payer.ccy, payer.fxRate);
+  const recipientLocal = anchorToCorpCapital(amountAnchor, recipient.ccy, recipient.fxRate);
+  if (!(Number.isFinite(payerLocal) && Number.isFinite(recipientLocal))) return;
+  deltaByCorp.set(payerCorpId, (deltaByCorp.get(payerCorpId) ?? 0) - payerLocal);
+  deltaByCorp.set(recipientCorpId, (deltaByCorp.get(recipientCorpId) ?? 0) + recipientLocal);
 }
 
 type TxInput = Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged">;
@@ -131,6 +160,10 @@ export interface SupplyAgreementDelivery {
   contractedUnits: number;
   deliveredUnits: number;
   turn: number;
+  buyerConsumptionUnits?: number;
+  previousTurn?: number;
+  previousDeliveredUnits?: number;
+  previousBuyerConsumptionUnits?: number;
   /**
    * Ticket #1147: why the supplier was charged, persisted so the corporation
    * UI can say it in words instead of the player watching cash vanish. A
@@ -767,6 +800,33 @@ export function computeSupplyAgreementSettlements(args: {
         contractedUnits: a.volumeCap,
         deliveredUnits: qty,
         turn,
+        ...(args.buyerDemandByCorpCommodity
+          ? {
+              buyerConsumptionUnits: Math.max(
+                0,
+                args.buyerDemandByCorpCommodity.get(a.buyerCorpId)?.get(a.commodity) ?? 0
+              ),
+            }
+          : {}),
+        ...(a.lastDeliveryTurn !== undefined && a.lastDeliveryTurn < turn
+          ? {
+              previousTurn: a.lastDeliveryTurn,
+              previousDeliveredUnits: Math.max(0, a.lastDeliveredUnits ?? 0),
+              ...(a.lastBuyerConsumptionUnits !== undefined
+                ? { previousBuyerConsumptionUnits: Math.max(0, a.lastBuyerConsumptionUnits) }
+                : {}),
+            }
+          : a.lastDeliveryTurn === turn && a.previousDeliveryTurn !== undefined
+            ? {
+                previousTurn: a.previousDeliveryTurn,
+                previousDeliveredUnits: Math.max(0, a.previousDeliveredUnits ?? 0),
+                ...(a.previousBuyerConsumptionUnits !== undefined
+                  ? {
+                      previousBuyerConsumptionUnits: Math.max(0, a.previousBuyerConsumptionUnits),
+                    }
+                  : {}),
+              }
+            : {}),
       };
       deliveries.push(deliveryRecord);
     }
@@ -1048,6 +1108,18 @@ export async function settleSupplyAgreements(args: {
       const setFields = {
         lastDeliveryTurn: delivery.turn,
         lastDeliveredUnits: delivery.deliveredUnits,
+        ...(delivery.buyerConsumptionUnits !== undefined
+          ? { lastBuyerConsumptionUnits: delivery.buyerConsumptionUnits }
+          : {}),
+        ...(delivery.previousTurn !== undefined
+          ? { previousDeliveryTurn: delivery.previousTurn }
+          : {}),
+        ...(delivery.previousDeliveredUnits !== undefined
+          ? { previousDeliveredUnits: delivery.previousDeliveredUnits }
+          : {}),
+        ...(delivery.previousBuyerConsumptionUnits !== undefined
+          ? { previousBuyerConsumptionUnits: delivery.previousBuyerConsumptionUnits }
+          : {}),
         lastShortfallUnits: Math.round(delivery.shortfallUnits ?? 0),
         lastShortfallPenaltyAnchor: Math.round(delivery.penaltyAnchor ?? 0),
         lastSupplierCashDelta: delivery.supplierCashDeltaLocal ?? 0,

@@ -248,20 +248,95 @@ describe("commodityPriceTurn", () => {
       expect(result.statesWithActivity).toBeGreaterThanOrEqual(0);
     });
 
+    it("anchors Polish sector revenue at the authored PLZ era rate", async () => {
+      const corpId = new ObjectId();
+      setupMocks({
+        sectors: [
+          {
+            _id: new ObjectId(),
+            sectorType: "agriculture" as const,
+            revenue: 24_000,
+            stateId: "pl_mz",
+            countryId: "PL",
+            corporationId: corpId,
+            strategyId: null,
+            transitionFromStrategyId: null,
+            transitionStartTurn: null,
+          },
+        ],
+        corporations: [
+          {
+            _id: corpId,
+            countryId: "PL",
+            liquidCurrencyCode: "PLZ",
+            marketingBudget: 0,
+            countryOwnerId: null,
+          },
+        ],
+        states: [{ _id: "pl_mz", countryId: "PL", gdp: 1_000_000 }],
+        exchangeRates: [{ currencyCode: "USD", rate: 1.0 }],
+      });
+      mockCollection.mockReturnValue({
+        bulkWrite: mockBulkWrite,
+        insertMany: mockInsertMany,
+        updateOne: mockTradeUpdateOne,
+        deleteMany: vi.fn().mockResolvedValue({}),
+        createIndex: vi.fn().mockResolvedValue(""),
+        findOne: vi.fn().mockResolvedValue({ preset: "1953-default" }),
+        find: vi.fn().mockReturnValue({
+          sort: vi.fn().mockReturnThis(),
+          toArray: vi.fn().mockResolvedValue([]),
+        }),
+      });
+
+      await processCommodityPriceTurn(100);
+
+      const ops = mockBulkWrite.mock.calls[0][0];
+      const foodOp = ops.find((op: any) => op.updateOne.filter.commodity === "food");
+      // 24,000 PLZ / 24 PLZ per anchor = 1,000 anchor revenue. Agriculture
+      // supplies food at 0.5 revenue per 200 anchor units, yielding 2.5 units.
+      expect(foodOp.updateOne.update.$set.stateSupply.pl_mz).toBe(2.5);
+    });
+
     it("adds marketing budget demand to advertising commodity", async () => {
       setupMocks({
         corporations: [
           {
             _id: new ObjectId(),
             marketingBudget: 10000,
+            liquidCapital: 1_000,
             headquartersState: "US-CA",
             countryOwnerId: null,
           },
         ],
+        states: [{ _id: "US-CA", countryId: "US", gdp: 1_000 }],
       });
 
       await processCommodityPriceTurn(100);
-      expect(mockBulkWrite).toHaveBeenCalled();
+      const ops = mockBulkWrite.mock.calls[0][0];
+      const advertisingOp = ops.find((op: any) => op.updateOne.filter.commodity === "advertising");
+      expect(advertisingOp.updateOne.update.$set.stateDemand["US-CA"]).toBe(60);
+    });
+
+    it("does not book advertising demand a corporation cannot afford", async () => {
+      setupMocks({
+        corporations: [
+          {
+            _id: new ObjectId(),
+            marketingBudget: 10_000,
+            liquidCapital: 0,
+            headquartersState: "US-CA",
+            countryOwnerId: null,
+          },
+        ],
+        states: [{ _id: "US-CA", countryId: "US", gdp: 1_000 }],
+      });
+
+      await processCommodityPriceTurn(100);
+
+      const ops = mockBulkWrite.mock.calls[0][0];
+      const advertisingOp = ops.find((op: any) => op.updateOne.filter.commodity === "advertising");
+      expect(advertisingOp.updateOne.update.$set.stateDemand["US-CA"]).toBe(0);
     });
 
     it("handles natcorp sectors correctly", async () => {

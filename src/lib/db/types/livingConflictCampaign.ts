@@ -54,6 +54,7 @@ export interface CampaignCapabilitySnapshot {
 /** Server-enforced requirements for an authored response option. */
 export interface CampaignRequirement {
   allowedStages?: CampaignStage[];
+  /** @deprecated Legacy serialized field. Crisis spending can be debt-financed. */
   minTreasuryPctGdp?: number;
   minMilitaryReadiness?: number;
   minLogistics?: number;

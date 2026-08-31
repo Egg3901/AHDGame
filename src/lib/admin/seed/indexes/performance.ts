@@ -220,6 +220,18 @@ export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
   // dominates the turn loop. Currently 608 docs / 86 active in production —
   // adding ahead of growth, not as a hotfix.
   await ensureIndex(db, "bonds", { matured: 1, _id: 1 }, { name: "bonds_matured_id" }, log);
+  // Creditor-side lookups: `{"holders.corporationId": id, matured: false}`. The
+  // corp detail page and the dissolve preview have always run it; ticket #1198
+  // adds the bond-issuance route, which needs a corp's portfolio to price its
+  // exit equity. The sibling (holders.characterId, matured, defaulted) index
+  // covers the character case but nothing covered the corporate one.
+  await ensureIndex(
+    db,
+    "bonds",
+    { "holders.corporationId": 1, matured: 1 },
+    { name: "bonds_holderCorp_matured" },
+    log
+  );
 
   // Route hot paths: parties, national metrics, stock market, news, and sector detail.
   await ensureIndex(
@@ -405,7 +417,7 @@ export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
   );
 
   // orgRegLedger — region-page registration sparkline (getStateRegLedger.ts):
-  // find({ countryId, stateId, partyId, metric }).sort({ turn: -1 }).limit(24).
+  // find({ countryId, stateId, partyId, metric }).sort({ turn: -1 }).limit(24 × rows/turn).
   // The collection grows every turn (regDriftDecay insertMany + build-org
   // inserts); with only the _id index this was a full collection scan.
   await ensureIndex(

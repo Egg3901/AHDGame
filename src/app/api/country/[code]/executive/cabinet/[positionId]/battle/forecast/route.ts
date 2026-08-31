@@ -18,6 +18,8 @@ import { buildCoalitionSide } from "@/lib/military/battleSides";
 import { resolveDefendingSides } from "@/lib/military/defendingSides";
 import { buildFactionSide } from "@/lib/military/factionSide";
 import { listPendingDeclarations } from "@/lib/db/collections/battleDeclarations";
+import { listTheaterStates } from "@/lib/db/collections/theaterState";
+import { autoJoinersAtFront } from "@/lib/military/coalition";
 import { battleForecast } from "@/lib/military/battle";
 import { enemyBand } from "@/lib/military/forecastFog";
 import { sideOf } from "@/lib/military/occupation";
@@ -108,7 +110,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const supplyFor = (side: "A" | "B") => (side === "A" ? conflict.supplyA : conflict.supplyB);
 
     // Attackers are the viewer plus every ally that has already filed against this
-    // front on the same side — an offensive only pools allies who declared.
+    // front on the same side, and then the standing-order joiners below.
     //
     // Deliberately NOT filtered by the resolver's turn window: a declaration made
     // this turn resolves alongside the viewer's, so it belongs in the projection.
@@ -121,7 +123,24 @@ export async function GET(request: Request, { params }: RouteParams) {
           .map((d) => d.declarerCountry)
       ),
     ];
-    const attackerCountries = [countryId, ...alliedDeclarers];
+    // ...and every ally standing here under a standing order to join offensives.
+    //
+    // `battleResolution` folds these into `off.attackers` before it builds the sides,
+    // so leaving them out here understated an offensive by exactly the allies who were
+    // going to fight in it. The route's own contract is that a forecast can never
+    // disagree with the outcome it predicts, so it has to ask the same question with
+    // the same helper the resolver uses.
+    const optedIn = new Set(
+      (await listTheaterStates(db))
+        .filter((st) => st.autoJoin?.[theaterId])
+        .map((st) => String(st.countryId))
+    );
+    const autoJoiners = optedIn.size
+      ? autoJoinersAtFront(conflict, atFront, theaterId, ownSide, blocs, optedIn)
+      : [];
+    // The viewer leads, as they do in the resolver's roster. A Set because an ally can
+    // both hold a standing order and have filed a declaration of their own.
+    const attackerCountries = [...new Set<string>([countryId, ...alliedDeclarers, ...autoJoiners])];
     // The same helper the resolver uses. A forecast can never disagree with the
     // outcome it predicts, and a proxy war's faction defends with a token force that
     // owns no unit rows — computing "is anyone home" a second way here is exactly how
@@ -134,16 +153,34 @@ export async function GET(request: Request, { params }: RouteParams) {
       blocs,
     });
     const defenderCountries = defending.defenderCountries;
+    // Who holds this front for the VIEWER'S side, for the counter-projection below.
+    //
+    // Not the same roster as `attackerCountries`, and that is the whole point.
+    // Attacking is opt-in: it takes a declaration or a standing order, so the attack
+    // roster is only the allies who chose one. Defence is not a decision at all —
+    // `defendersAtFront` enrols every belligerent with troops here, because an enemy
+    // attacking the ground your troops stand on does not ask first. Projecting the
+    // enemy's offensive against the ATTACK roster billed the viewer for holding the
+    // front alone while allies who had opted into neither stood in the line beside
+    // them, which is why "They attack" read far higher than the battle the resolver
+    // would actually fight.
+    const ownDefence = resolveDefendingSides({
+      conflict,
+      atFront,
+      theaterId,
+      enemySide: ownSide,
+      blocs,
+    });
 
-    const [attackerSides, defenderSides] = await Promise.all([
-      buildCoalitionSide(
-        db,
-        attackerCountries,
-        unitsByCountry,
-        fronts,
-        supplyFor(ownSide),
-        ownSide
-      ),
+    // The attack roster and the home defence roster are both on `ownSide`, so they take
+    // the same supply and the same side flag and differ only in WHO is listed. Built as
+    // one union and then partitioned: `buildBattleSide` issues three database reads per
+    // country (formations, doctrine, generals), and the two rosters overlap almost
+    // entirely, so building them separately paid for the viewer's own coalition twice
+    // on a route the war room re-fetches every time the target changes.
+    const ownRoster = [...new Set<string>([...attackerCountries, ...ownDefence.defenderCountries])];
+    const [ownSides, defenderSides] = await Promise.all([
+      buildCoalitionSide(db, ownRoster, unitsByCountry, fronts, supplyFor(ownSide), ownSide),
       buildCoalitionSide(
         db,
         defenderCountries,
@@ -153,6 +190,14 @@ export async function GET(request: Request, { params }: RouteParams) {
         enemySide
       ),
     ]);
+    const ownByCountry = new Map(ownSides.map((s) => [s.country, s]));
+    // `filter(Boolean)` is not enough for the type narrowing, and a miss would be a
+    // logic error rather than a data condition — every name in both rosters was just
+    // used to build `ownSides`.
+    const pickOwn = (countries: string[]) =>
+      countries.map((c) => ownByCountry.get(c)).filter((s) => s !== undefined);
+    const attackerSides = pickOwn(attackerCountries);
+    const ownDefenderSides = pickOwn(ownDefence.defenderCountries);
     // The projection has to include the token force for the same reason the battle
     // does — otherwise it forecasts an unopposed advance the resolver will not deliver.
     const factionSide = defending.factionDefends
@@ -162,12 +207,26 @@ export async function GET(request: Request, { params }: RouteParams) {
       factionSide.conflictSupply = supplyFor(enemySide);
       defenderSides.push(factionSide);
     }
+    // The viewer's side can be a proxy war's faction too — same reason, other end.
+    const ownFactionSide = ownDefence.factionDefends
+      ? buildFactionSide(conflict, ownDefence.factionDefends, fronts[theaterId]!)
+      : null;
+    if (ownFactionSide && ownFactionSide.units.length > 0) {
+      ownFactionSide.conflictSupply = supplyFor(ownSide);
+      ownDefenderSides.push(ownFactionSide);
+    }
 
     const fc = battleForecast(attackerSides, defenderSides, theaterId);
     // The same front from the other end. Derived from the sides already built here,
     // so it discloses nothing new — and it is NOT 100 − oddsPct, because the
     // defender holds terrain in whichever direction the attack runs.
-    const counter = battleForecast(defenderSides, attackerSides, theaterId);
+    //
+    // Both rosters change when the attack does. The enemy attacks with everything
+    // they hold here — they have a full turn to declare, so their present force is
+    // what they could bring — and the viewer meets it with `ownDefenderSides`, the
+    // allies who are already standing on this ground, not the ones who happened to
+    // file an offensive alongside them.
+    const counter = battleForecast(defenderSides, ownDefenderSides, theaterId);
     // An undefended front fizzles at resolution rather than fighting — say so up front.
     const unopposed = defending.unopposed;
     const sup = fc.attackerProfile.sup;

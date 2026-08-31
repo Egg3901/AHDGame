@@ -86,6 +86,15 @@ describe("IE label + multi-seat coverage", () => {
   });
 });
 
+describe("union-republic Supreme Soviet multi-seat coverage", () => {
+  it("treats the UKR/BLR/BAL supremeSoviet race and its sovietDeputy office as multi-seat", () => {
+    // Both keys: resolution and seat estimates key on the electionType, the
+    // officials sweep keys on the office-type key.
+    expect(MULTI_SEAT_TYPES.has("supremeSoviet")).toBe(true);
+    expect(MULTI_SEAT_TYPES.has("sovietDeputy")).toBe(true);
+  });
+});
+
 describe("DD Volkskammer multi-seat coverage (issue #3896)", () => {
   it("treats volkskammerDeputy as multi-seat", () => {
     // Regression: volkskammerDeputy was absent from MULTI_SEAT_TYPES, so

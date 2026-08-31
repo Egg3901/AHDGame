@@ -16,6 +16,7 @@ import { describe, it, expect } from "vitest";
 import { ObjectId } from "mongodb";
 import {
   makeNppCorpDecision,
+  NPP_GROWTH_MAX_STEP_OF_RUN,
   type CommodityPriceRatioFn,
   type NppPlantsContext,
 } from "./nppCorporationBehavior";
@@ -28,7 +29,8 @@ import {
 } from "@/lib/constants/capacityEconomy";
 import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
-import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import { foundingStarterUnits } from "@/lib/corporations/foundingPlant";
+import type { PlacementSignals } from "@/lib/turn/npp/marketSignals";
 
 const noPrices: CommodityPriceRatioFn = () => null;
 const noState = new Set<string>();
@@ -99,7 +101,13 @@ function decide(
   sectors: CorporateSector[],
   pools: UnownedSector[],
   plants: NppPlantsContext | null = plantsCtx,
-  extra: { fxRate?: number; stateControlled?: Set<string> } = {}
+  extra: {
+    fxRate?: number;
+    stateControlled?: Set<string>;
+    placementSignals?: PlacementSignals;
+    prices?: CommodityPriceRatioFn;
+    retailExpansionPaused?: boolean;
+  } = {}
 ) {
   return makeNppCorpDecision(
     {
@@ -109,11 +117,13 @@ function decide(
       now: new Date(),
       fxRate: extra.fxRate,
       modifiers: ceoArchetypeModifiers("cautious"),
+      retailExpansionPaused: extra.retailExpansionPaused,
     },
     new Map<string, UnownedSector[]>([["US", pools]]),
     extra.stateControlled ?? noState,
-    noPrices,
-    plants ?? undefined
+    extra.prices ?? noPrices,
+    plants ?? undefined,
+    extra.placementSignals
   );
 }
 
@@ -137,8 +147,36 @@ function pushedOrder(write: ReturnType<typeof queueWrites>[number]) {
   return write.update.$push!.buildQueue as Record<string, number>;
 }
 
-describe("NPP capacity reinvestment — fires on a selling-out sector with headroom", () => {
-  it("queues a build sized to replace depreciation plus the chosen growth", () => {
+describe("NPP capacity reinvestment — a selling-out, fully-utilized plant grows", () => {
+  it("maintains but does not grow Retail capacity during the demand unwind", () => {
+    const s = sector({ sectorType: "retail" });
+    const decision = decide(
+      corp({ type: "retail" }),
+      [s],
+      [pool({ sectorType: "retail" })],
+      plantsCtx,
+      { retailExpansionPaused: true }
+    );
+    const order = pushedOrder(queueWrites(decision)[0]);
+    const replacement = (s.producedUnits ?? 0) * CAPITAL_DEPRECIATION_PER_TURN;
+
+    expect(order.unitsOrdered).toBeCloseTo(replacement, 6);
+  });
+
+  it("grows a maxed-out plant by a chunk of its throughput, built from nothing", () => {
+    const s = sector();
+    const decision = decide(corp(), [s], [pool()]);
+    const order = pushedOrder(queueWrites(decision)[0]);
+    const replacement = (s.producedUnits ?? 0) * CAPITAL_DEPRECIATION_PER_TURN;
+    // Growth builds from nothing — no draw against the unowned pool.
+    expect(decision.unownedDraws).toBeUndefined();
+    // The growth leg is a real chunk of what the plant runs, not a token facility.
+    expect(order.unitsOrdered - replacement).toBeGreaterThanOrEqual(
+      foundingStarterUnits("manufacturing")
+    );
+  });
+
+  it("sizes growth at a fixed step of proven throughput, plus replacement", () => {
     const s = sector();
     const decision = decide(corp(), [s], [pool()]);
 
@@ -146,9 +184,10 @@ describe("NPP capacity reinvestment — fires on a selling-out sector with headr
     expect(writes).toHaveLength(1);
     const order = pushedOrder(writes[0]);
 
-    // fill == 1 ⇒ fillScale 1; AGGRESSION 1.
-    const expectedUnits =
-      (s.capitalStock ?? 0) * (CAPITAL_DEPRECIATION_PER_TURN + 3 / 100 / TURNS_PER_YEAR);
+    // fill == 1 ⇒ fillScale 1; AGGRESSION 1. Cash is ample (500M), so growth is
+    // bounded by the per-turn step: NPP_GROWTH_MAX_STEP_OF_RUN × runUnits.
+    const expectedGrowth = Math.floor((s.producedUnits ?? 0) * NPP_GROWTH_MAX_STEP_OF_RUN);
+    const expectedUnits = (s.capitalStock ?? 0) * CAPITAL_DEPRECIATION_PER_TURN + expectedGrowth;
     expect(order.unitsOrdered).toBeCloseTo(expectedUnits, 6);
     expect(order.startTurn).toBe(TURN);
     expect(order.onlineTurn).toBe(TURN + CAPACITY_BUILD_TURNS("manufacturing"));
@@ -176,32 +215,56 @@ describe("NPP capacity reinvestment — fires on a selling-out sector with headr
     expect(JSON.stringify(write.update)).not.toContain('"unitsOrdered":5,');
   });
 
-  it("caps at one sector per corp per turn, best fill × headroom first", () => {
-    const weak = sector({ stateId: "CA", producedUnits: 1_000, soldUnits: 900 });
-    const strong = sector({ stateId: "NY", producedUnits: 1_000, soldUnits: 1_000 });
-    const decision = decide(
-      corp(),
-      [weak, strong],
-      [pool({ stateId: "CA" }), pool({ stateId: "NY" })]
-    );
+  it("expands several owned plants in one turn, as a player would", () => {
+    const a = sector({ stateId: "CA", producedUnits: 1_000, soldUnits: 1_000 });
+    const b = sector({ stateId: "NY", producedUnits: 1_000, soldUnits: 1_000 });
+    const decision = decide(corp(), [a, b], [pool({ stateId: "CA" }), pool({ stateId: "NY" })]);
     const writes = queueWrites(decision);
-    expect(writes).toHaveLength(1);
-    expect(writes[0].filter._id).toEqual(strong._id);
+    // No longer one-plant-per-turn: a cash-rich corp grows all its maxed plants.
+    expect(writes.length).toBeGreaterThan(1);
+    const ids = writes.map((w) => String(w.filter._id));
+    expect(ids).toContain(String(a._id));
+    expect(ids).toContain(String(b._id));
   });
 
-  it("never takes more than a quarter of the bucket's remaining headroom", () => {
-    // A huge plant next to a nearly-exhausted pool. Only the GROWTH leg is
-    // headroom-scoped, so the clamp is asserted on the pool draw.
-    const tinyPool = pool({ headroomUnits: 4, revenue: 1 });
+  it("reallocates the existing build slot to critically short freight capacity", () => {
+    const manufacturing = sector({
+      stateId: "CA",
+      producedUnits: 1_000,
+      soldUnits: 1_000,
+    });
+    const logistics = sector({
+      sectorType: "logistics",
+      stateId: "NY",
+      producedUnits: 1_000,
+      soldUnits: 900,
+    });
+    const pools = [pool({ stateId: "CA" }), pool({ stateId: "NY", sectorType: "logistics" })];
+    const treatment = decide(corp(), [manufacturing, logistics], pools, plantsCtx, {
+      placementSignals: { preferFragileMarketSupply: true },
+      prices: (commodity) => (commodity === "freight" ? 2 : 1),
+    });
+
+    const writes = queueWrites(treatment);
+    // The critically short fragile market is ranked to the FRONT of the queue,
+    // ahead of the healthy manufacturing plant.
+    expect(writes.length).toBeGreaterThanOrEqual(1);
+    expect(writes[0].filter._id).toEqual(logistics._id);
+  });
+
+  it("does not grow a plant that is nearly all idle, only replaces what it runs", () => {
+    // A 100M-nameplate plant that runs and sells just 1,000 units has fill 1 but
+    // utilization ~0. Selling out the trickle it makes is not evidence it can
+    // sell more capacity, so growth stays off; maintenance sizes off the run.
     const decision = decide(
       corp(),
       [sector({ capitalStock: 100_000_000, producedUnits: 1_000, soldUnits: 1_000 })],
-      [tinyPool]
+      [pool()]
     );
     const order = pushedOrder(queueWrites(decision)[0]);
     const replacement = 1_000 * CAPITAL_DEPRECIATION_PER_TURN;
-    expect(order.unitsOrdered).toBeCloseTo(replacement + 1, 6); // growth: 4 × 0.25
-    expect(decision.unownedDraws![0].units).toBeCloseTo(1, 6);
+    expect(order.unitsOrdered).toBeCloseTo(replacement, 6);
+    expect(decision.unownedDraws).toBeUndefined();
   });
 });
 
@@ -259,6 +322,31 @@ describe("NPP capacity reinvestment — does not fire", () => {
     });
   }
 
+  it("does not add growth to a plant whose canonical physical P&L is negative", () => {
+    const losing = sector({
+      plantsPnl: {
+        revenue: 1_000,
+        inventoryRevenue: 0,
+        inventoryCarry: 0,
+        inputs: 700,
+        labour: 300,
+        upkeep: 100,
+        compliance: 0,
+        otherOpex: 0,
+        financialLegs: 0,
+        policyCredit: 0,
+        policyPp: 0,
+        operatingCost: 1_000,
+        totalCost: 1_100,
+        profit: -100,
+        turn: TURN - 1,
+      },
+    });
+    const decision = decide(corp(), [losing], [pool()]);
+
+    expect(decision.unownedDraws).toBeUndefined();
+  });
+
   // SUPERSEDED. This used to assert "an SOE MAY build into its own nationalized
   // bucket" — the carve-out that let a state enterprise through the private,
   // cash-rationed path. It cannot any more: an SOE has no operating cash of its
@@ -282,23 +370,16 @@ describe("NPP capacity reinvestment — does not fire", () => {
 });
 
 describe("NPP capacity reinvestment — conservation and pricing", () => {
-  it("draws the GROWTH leg out of the unowned pool, and only that leg", () => {
+  it("builds growth from nothing — never draws the unowned pool", () => {
     const s = sector();
     const decision = decide(corp(), [s], [pool()]);
     const order = pushedOrder(queueWrites(decision)[0]);
-    expect(decision.unownedDraws).toHaveLength(1);
-    expect(decision.unownedDraws![0]).toMatchObject({
-      stateId: "CA",
-      sectorType: "manufacturing",
-      countryId: "US",
-    });
-    const growth = (s.capitalStock ?? 0) * (3 / 100 / TURNS_PER_YEAR);
+    // Growth is a plant top-up, priced and paid like a player's buildCapacity;
+    // it does not consume the unowned pool.
+    expect(decision.unownedDraws).toBeUndefined();
+    const growth = Math.floor((s.producedUnits ?? 0) * NPP_GROWTH_MAX_STEP_OF_RUN);
     const replacement = (s.producedUnits ?? 0) * CAPITAL_DEPRECIATION_PER_TURN;
-    expect(order.unitsOrdered).toBeCloseTo(growth + replacement, 10);
-    // Replacement buys back capacity that already existed in this market and
-    // was never returned to the pool when it depreciated — charging the pool
-    // for it would bill the same demand twice.
-    expect(decision.unownedDraws![0].units).toBeCloseTo(growth, 10);
+    expect(order.unitsOrdered).toBeCloseTo(growth + replacement, 6);
   });
 
   it("prices the build at the non-founding list price in the corp's own currency", () => {
@@ -338,52 +419,53 @@ describe("NPP capacity reinvestment — conservation and pricing", () => {
   });
 });
 
-describe("NPP capacity reinvestment — a full bucket still gets MAINTENANCE", () => {
-  // THE 96-TURN ZERO-BUILD REGRESSION. A bucket an incumbent fills has zero
-  // unowned headroom by construction, and nothing ever puts headroom back:
-  // depreciation destroys owned capacity without returning it to the pool. The
-  // first cut gated the whole build on `headroomUnits > 0`, so the sectors that
-  // most needed replacement could never buy it. Measured on the controlled A/B
-  // (`ab4_plants`, turn 135): 237 of the 238 NPP sectors that passed every other
-  // gate were refused here, and the world carried ZERO build queues.
-  const noRoom: Array<[string, UnownedSector[]]> = [
+describe("NPP capacity reinvestment — a full bucket no longer blocks growth", () => {
+  // THE 96-TURN ZERO-BUILD REGRESSION, fixed at the root. A bucket an incumbent
+  // fills has ~zero unowned headroom, and nothing ever puts it back: depreciation
+  // destroys owned capacity without returning it to the pool. The old growth leg
+  // was gated and sized off that pool, so the plants that most needed to grow
+  // never could (237 of 238 eligible NPP sectors refused, ZERO build queues at
+  // turn 135 of the A/B). Growth no longer reads the pool at all — a profitable,
+  // fully-utilized, selling-out plant grows from nothing, headroom or not.
+  const emptyPools: Array<[string, UnownedSector[]]> = [
     ["an exhausted pool", [pool({ headroomUnits: 0, revenue: 0 })]],
     ["no pool doc for the bucket at all", []],
   ];
 
-  for (const [label, pools] of noRoom) {
-    it(`still replaces depreciation with ${label}`, () => {
+  for (const [label, pools] of emptyPools) {
+    it(`grows a maxed-out plant with ${label}`, () => {
       const s = sector();
       const decision = decide(corp(), [s], pools);
       const writes = queueWrites(decision);
       expect(writes).toHaveLength(1);
-      // Replacement only — no growth leg is possible with no headroom.
-      expect(pushedOrder(writes[0]).unitsOrdered).toBeCloseTo(
-        (s.producedUnits ?? 0) * CAPITAL_DEPRECIATION_PER_TURN,
-        10
-      );
-      // ...and nothing is drawn from a pool it did not consume.
+      const replacement = (s.producedUnits ?? 0) * CAPITAL_DEPRECIATION_PER_TURN;
+      const growth = Math.floor((s.producedUnits ?? 0) * NPP_GROWTH_MAX_STEP_OF_RUN);
+      expect(pushedOrder(writes[0]).unitsOrdered).toBeCloseTo(replacement + growth, 6);
+      // Built from nothing — nothing is drawn from the pool.
       expect(decision.unownedDraws).toBeUndefined();
     });
   }
 
-  it("replaces only the capacity it actually RUNS, not idle nameplate", () => {
-    // 15% of this plant is idle (throughput-bound), and idle capacity already
-    // costs IDLE_UPKEEP_FRACTION every turn. Buying it back each turn would
-    // fund that drag in perpetuity.
-    const s = sector({ capitalStock: 1_000, producedUnits: 850, soldUnits: 850 });
+  it("an under-utilized plant only replaces what it RUNS, and does not grow", () => {
+    // 20% idle: utilization below the growth gate, so no growth — just
+    // maintenance sized off the capacity it actually RUNS, not idle nameplate.
+    const s = sector({ capitalStock: 1_000, producedUnits: 800, soldUnits: 800 });
     const decision = decide(corp(), [s], [pool({ headroomUnits: 0, revenue: 0 })]);
     expect(pushedOrder(queueWrites(decision)[0]).unitsOrdered).toBeCloseTo(
-      850 * CAPITAL_DEPRECIATION_PER_TURN,
+      800 * CAPITAL_DEPRECIATION_PER_TURN,
       10
     );
+    expect(decision.unownedDraws).toBeUndefined();
   });
 });
 
 describe("NPP capacity reinvestment — the two cash rails", () => {
-  /** Cost of the maintenance-only build the base fixture places. */
+  // Under-utilized (80%): utilization is below the growth gate, so these place a
+  // REPLACEMENT-only build and exercise the maintenance cash rail in isolation.
+  const maintOnly = () => sector({ capitalStock: 1_000, producedUnits: 800, soldUnits: 800 });
+  /** Cost of the maintenance-only build the under-utilized fixture places. */
   function maintenanceCost(): number {
-    const decision = decide(corp(), [sector()], [pool({ headroomUnits: 0, revenue: 0 })]);
+    const decision = decide(corp(), [maintOnly()], [pool({ headroomUnits: 0, revenue: 0 })]);
     return decision.reinvestments![0].costAnchor;
   }
 
@@ -393,7 +475,7 @@ describe("NPP capacity reinvestment — the two cash rails", () => {
     // re-qualify. 317 of 395 NPP corps sat here at turn 135 of the A/B.
     const cost = maintenanceCost();
     const c = corp({ liquidCapital: cost * 10 }); // way under CASH_FLOOR
-    const decision = decide(c, [sector()], [pool({ headroomUnits: 0, revenue: 0 })]);
+    const decision = decide(c, [maintOnly()], [pool({ headroomUnits: 0, revenue: 0 })]);
     expect(queueWrites(decision)).toHaveLength(1);
     expect(decision.updates.liquidCapital as number).toBeGreaterThan(0);
   });
@@ -402,18 +484,22 @@ describe("NPP capacity reinvestment — the two cash rails", () => {
     const cost = maintenanceCost();
     const decision = decide(
       corp({ liquidCapital: cost * 3 }), // cost is a THIRD of cash — too much
-      [sector()],
+      [maintOnly()],
       [pool({ headroomUnits: 0, revenue: 0 })]
     );
     expect(queueWrites(decision)).toHaveLength(0);
   });
 
-  it("a build carrying a GROWTH leg still faces the full entry floor", () => {
+  it("drops an unaffordable growth leg but still funds maintenance", () => {
+    // A fully-utilized (growth-eligible) plant whose owner is below the entry
+    // floor: growth needs post-floor surplus it does not have, so growth drops
+    // to zero rather than sinking the whole order, and the plant still gets its
+    // maintenance. Growth never blocks the replacement it is bundled with.
     const cost = maintenanceCost();
-    // Same balance that funded maintenance above, now with headroom available:
-    // the growth leg makes it a discretionary bet, and the floor bites.
-    const decision = decide(corp({ liquidCapital: cost * 10 }), [sector()], [pool()]);
-    expect(queueWrites(decision)).toHaveLength(0);
+    const c = corp({ liquidCapital: cost * 10 }); // below CASH_FLOOR
+    const decision = decide(c, [sector()], [pool({ headroomUnits: 0, revenue: 0 })]);
+    expect(queueWrites(decision)).toHaveLength(1);
+    expect(decision.updates.liquidCapital as number).toBeGreaterThan(0);
   });
 });
 
@@ -497,17 +583,15 @@ describe("NPP capacity reinvestment — a multi-turn world keeps building", () =
       }
     }
 
-    // THE ASSERTION THAT WAS MISSING: a plants world builds. Zero orders in 96
-    // turns is the exact regression this file exists to prevent.
+    // A plants world builds — zero orders in 96 turns is the regression this
+    // file exists to prevent.
     expect(ordersPlaced).toBeGreaterThan(0);
-    // ...and it never goes quiet for a whole build cycle — the queue ceiling
-    // may throttle the cadence, but a landing always frees it again.
-    expect(longestSilence).toBeLessThanOrEqual(CAPACITY_BUILD_TURNS("manufacturing"));
+    // It stays solvent: the entry floor and cash floor bound every build.
     expect(capital).toBeGreaterThan(0);
-    // And the plant roughly HOLDS. Not a boom: replacement cannot fully beat
-    // depreciation over a horizon shorter than the build lag.
-    expect(stock).toBeGreaterThan(startStock * 0.95);
-    expect(stock).toBeLessThan(startStock * 1.05);
+    // THE POINT OF THE FIX: a full-bucket plant now GROWS, where the old
+    // pool-gated leg left it flat and decaying. Even a fixed purse (this harness
+    // adds no revenue) funds real expansion before it is spent down.
+    expect(stock).toBeGreaterThan(startStock);
   });
 });
 

@@ -16,7 +16,7 @@ const conflict = {
   sideB: { label: "PLA", countries: ["CN"], kind: "state" },
 } as unknown as ConflictDoc;
 
-const indemnity = { payer: "UK" as const, amount: 100 };
+const term = { kind: "indemnity", payer: "UK", amount: 100 } as const;
 
 describe("isOfferLive", () => {
   it("is live while pending and inside the window", () => {
@@ -41,22 +41,32 @@ describe("isOfferLive", () => {
 
 describe("validatePeaceOffer", () => {
   it("accepts opposed belligerents", () => {
-    expect(validatePeaceOffer(conflict, "UK", "CN", indemnity)).toEqual({ ok: true });
+    expect(validatePeaceOffer(conflict, "UK", "CN", term, "UK")).toEqual({ ok: true });
   });
 
   it("refuses a resolved war", () => {
     const done = { ...conflict, status: "resolved" } as ConflictDoc;
-    expect(validatePeaceOffer(done, "UK", "CN", indemnity).ok).toBe(false);
+    expect(validatePeaceOffer(done, "UK", "CN", term, "UK").ok).toBe(false);
   });
 
   it("refuses two countries on the SAME side", () => {
-    const r = validatePeaceOffer(conflict, "US", "UK", { payer: "US", amount: 0 });
+    const r = validatePeaceOffer(
+      conflict,
+      "US",
+      "UK",
+      {
+        kind: "indemnity" as const,
+        payer: "US",
+        amount: 0,
+      },
+      "US"
+    );
     expect(r.ok).toBe(false);
     expect((r as { error: string }).error).toMatch(/same side/i);
   });
 
   it("refuses a country that is not in the war", () => {
-    const r = validatePeaceOffer(conflict, "UK", "RU", indemnity);
+    const r = validatePeaceOffer(conflict, "UK", "RU", term, "UK");
     expect(r.ok).toBe(false);
     // Its own message: "not in this war" is a different problem from "same side",
     // and an offerer can only act on the right one.
@@ -69,7 +79,7 @@ describe("validatePeaceOffer", () => {
       ...conflict,
       sideB: { label: "Insurgents", countries: [], kind: "generated" },
     } as unknown as ConflictDoc;
-    const r = validatePeaceOffer(gen, "UK", "CN", indemnity);
+    const r = validatePeaceOffer(gen, "UK", "CN", term, "UK");
     expect(r.ok).toBe(false);
     expect((r as { error: string }).error).toMatch(/no government/i);
   });
@@ -82,35 +92,95 @@ describe("validatePeaceOffer", () => {
       ...conflict,
       sideB: { label: "Insurgents", countries: [], kind: "generated" },
     } as unknown as ConflictDoc;
-    const r = validatePeaceOffer(gen, "UK", "CN", indemnity);
+    const r = validatePeaceOffer(gen, "UK", "CN", term, "UK");
     expect((r as { error: string }).error).not.toMatch(/belligerent/i);
   });
 
   it("refuses a negative indemnity", () => {
-    expect(validatePeaceOffer(conflict, "UK", "CN", { payer: "UK", amount: -1 }).ok).toBe(false);
+    expect(
+      validatePeaceOffer(
+        conflict,
+        "UK",
+        "CN",
+        {
+          kind: "indemnity" as const,
+          payer: "UK",
+          amount: -1,
+        },
+        "UK"
+      ).ok
+    ).toBe(false);
   });
 
   it("refuses a NaN indemnity", () => {
     // `amount < 0` would let NaN through, and NaN would then be $inc'd into a
     // treasury. The check is written as !(amount >= 0) precisely for this.
-    expect(validatePeaceOffer(conflict, "UK", "CN", { payer: "UK", amount: NaN }).ok).toBe(false);
+    expect(
+      validatePeaceOffer(
+        conflict,
+        "UK",
+        "CN",
+        {
+          kind: "indemnity" as const,
+          payer: "UK",
+          amount: NaN,
+        },
+        "UK"
+      ).ok
+    ).toBe(false);
   });
 
   it("refuses a payer who is not one of the two parties", () => {
     // US is a belligerent, but not a party to THIS offer — it cannot be billed for
     // a deal it is not in.
-    expect(validatePeaceOffer(conflict, "UK", "CN", { payer: "US", amount: 5 }).ok).toBe(false);
+    expect(
+      validatePeaceOffer(
+        conflict,
+        "UK",
+        "CN",
+        {
+          kind: "indemnity" as const,
+          payer: "US",
+          amount: 5,
+        },
+        "UK"
+      ).ok
+    ).toBe(false);
   });
 
   it("accepts a zero indemnity — that is a white peace", () => {
-    expect(validatePeaceOffer(conflict, "UK", "CN", { payer: "UK", amount: 0 })).toEqual({
+    expect(
+      validatePeaceOffer(
+        conflict,
+        "UK",
+        "CN",
+        {
+          kind: "indemnity" as const,
+          payer: "UK",
+          amount: 0,
+        },
+        "UK"
+      )
+    ).toEqual({
       ok: true,
     });
   });
 
   it("accepts EITHER party as payer", () => {
     // A winning country may pay to disengage from a war it no longer wants.
-    expect(validatePeaceOffer(conflict, "UK", "CN", { payer: "CN", amount: 5 })).toEqual({
+    expect(
+      validatePeaceOffer(
+        conflict,
+        "UK",
+        "CN",
+        {
+          kind: "indemnity" as const,
+          payer: "CN",
+          amount: 5,
+        },
+        "UK"
+      )
+    ).toEqual({
       ok: true,
     });
   });
@@ -119,7 +189,19 @@ describe("validatePeaceOffer", () => {
     // Deliberate: treasuryBalance is a signed position, and a country already in
     // debt must still be able to buy peace. (No cap passed — affordability and the
     // GDP ceiling are separate concerns; the ceiling is exercised below.)
-    expect(validatePeaceOffer(conflict, "UK", "CN", { payer: "UK", amount: 1e15 })).toEqual({
+    expect(
+      validatePeaceOffer(
+        conflict,
+        "UK",
+        "CN",
+        {
+          kind: "indemnity" as const,
+          payer: "UK",
+          amount: 1e15,
+        },
+        "UK"
+      )
+    ).toEqual({
       ok: true,
     });
   });
@@ -128,13 +210,29 @@ describe("validatePeaceOffer", () => {
     // The exploit: without a ceiling, `amount: 1e15` is accepted and moved on
     // accept, draining the payer treasury arbitrarily. With the GDP cap it is
     // rejected at offer time.
-    const r = validatePeaceOffer(conflict, "UK", "CN", { payer: "UK", amount: 1e15 }, 1000);
+    const r = validatePeaceOffer(
+      conflict,
+      "UK",
+      "CN",
+      { kind: "indemnity" as const, payer: "UK", amount: 1e15 },
+      "UK",
+      1000
+    );
     expect(r.ok).toBe(false);
     expect((r as { error: string }).error).toMatch(/GDP/i);
   });
 
   it("accepts an indemnity exactly at the ceiling", () => {
-    expect(validatePeaceOffer(conflict, "UK", "CN", { payer: "UK", amount: 1000 }, 1000)).toEqual({
+    expect(
+      validatePeaceOffer(
+        conflict,
+        "UK",
+        "CN",
+        { kind: "indemnity" as const, payer: "UK", amount: 1000 },
+        "UK",
+        1000
+      )
+    ).toEqual({
       ok: true,
     });
   });
@@ -176,6 +274,122 @@ describe("sideWouldEmpty", () => {
     } as unknown as ConflictDoc;
     expect(sideWouldEmpty(solo, "UK")).toBe("A");
   });
+
+  it("accepts a set of leavers and empties the side when they are all of it", () => {
+    const pact = {
+      sideA: { label: "US", countries: ["US"], kind: "state" },
+      sideB: { label: "Pact", countries: ["DD", "RU"], kind: "coalition" },
+    } as unknown as ConflictDoc;
+    // Treaty release takes DD and RU out together. Asked about DD alone this returns
+    // null, and the war would sit active with an empty side B and no winner.
+    expect(sideWouldEmpty(pact, ["DD", "RU"])).toBe("B");
+    expect(sideWouldEmpty(pact, ["DD"])).toBeNull();
+  });
+
+  it("ignores leavers that are not on the side", () => {
+    const pact = {
+      sideA: { label: "US", countries: ["US"], kind: "state" },
+      sideB: { label: "Pact", countries: ["DD"], kind: "state" },
+    } as unknown as ConflictDoc;
+    expect(sideWouldEmpty(pact, ["DD", "PL"])).toBe("B");
+  });
+
+  // A generated side carries `countries: []`. Without the length guard an `every` over
+  // an empty array is vacuously true and every insurgency would read as "emptied".
+  it("never names a side that was already empty", () => {
+    const generated = {
+      sideA: { label: "Gov", countries: ["CN"], kind: "state" },
+      sideB: { label: "Rebels", countries: [], kind: "generated" },
+    } as unknown as ConflictDoc;
+    expect(sideWouldEmpty(generated, ["CN"])).toBe("A");
+  });
+});
+
+describe("validatePeaceOffer treaty bar", () => {
+  const pact = {
+    status: "active",
+    sideA: { label: "US", countries: ["US"], kind: "state" },
+    sideB: { label: "Pact", countries: ["DD", "RU"], kind: "coalition" },
+    treatyEntries: [
+      { countryId: "RU", organizationId: "WARSAW_PACT", defending: "DD", joinedTurn: 5 },
+    ],
+  } as unknown as ConflictDoc;
+
+  it("lets an auto-joined ally buy its OWN way out while its ally fights on", () => {
+    // THE SEPARATE-PEACE BAR IS GONE, and this test is where it used to be asserted.
+    // It kept a country a treaty had dragged in fighting until the member it came to
+    // defend settled, which left it with no exit it could reach itself. Peeling a
+    // coalition apart is now something the other side must pay for and the guest must
+    // agree to, which is a price rather than a formality.
+    const res = validatePeaceOffer(
+      pact,
+      "RU",
+      "US",
+      { kind: "indemnity" as const, payer: "RU", amount: 0 },
+      "RU"
+    );
+    expect(res.ok).toBe(true);
+  });
+
+  it("allows the ally once the defended country has left the war", () => {
+    const settled = {
+      ...pact,
+      sideB: { label: "Pact", countries: ["RU"], kind: "coalition" },
+    } as unknown as ConflictDoc;
+    expect(
+      validatePeaceOffer(
+        settled,
+        "RU",
+        "US",
+        {
+          kind: "indemnity" as const,
+          payer: "RU",
+          amount: 0,
+        },
+        "RU"
+      ).ok
+    ).toBe(true);
+  });
+
+  it("never bars the defended country itself", () => {
+    expect(
+      validatePeaceOffer(
+        pact,
+        "DD",
+        "US",
+        { kind: "indemnity" as const, payer: "DD", amount: 0 },
+        "DD"
+      ).ok
+    ).toBe(true);
+  });
+
+  // The OFFERER is the country that leaves (acceptPeace sets leaver = offer.fromCountry).
+  // An attacker offering peace to an auto-joined ally is the attacker giving up, and must
+  // not be refused.
+  it("never bars the attacker from offering peace to an ally", () => {
+    expect(
+      validatePeaceOffer(
+        pact,
+        "US",
+        "RU",
+        { kind: "indemnity" as const, payer: "US", amount: 0 },
+        "US"
+      ).ok
+    ).toBe(true);
+  });
+
+  it("leaves a conflict with no treaty entries unaffected", () => {
+    const plain = { ...pact, treatyEntries: undefined } as unknown as ConflictDoc;
+    expect(
+      validatePeaceOffer(
+        plain,
+        "RU",
+        "US",
+        { kind: "indemnity" as const, payer: "RU", amount: 0 },
+        "RU"
+      ).ok
+    ).toBe(true);
+  });
 });
 
 describe("constants", () => {
@@ -205,5 +419,94 @@ describe("findLiveOffer", () => {
     const { findLiveOffer } = await import("@/lib/db/collections/peaceOffers");
     const rows = [{ status: "pending", expiresTurn: 10 }];
     expect(await findLiveOffer(stub(rows), "t1", "UK", "CN", 9)).not.toBeNull();
+  });
+});
+
+describe("the buy-out gate", () => {
+  /** US (side A) vs DD + RU, RU dragged in under the Pact. The live shape. */
+  const war = (over: Partial<ConflictDoc> = {}) =>
+    ({
+      _id: "w2",
+      status: "active",
+      sideA: { label: "United States", countries: ["US"], kind: "state" },
+      sideB: { label: "East Germany", countries: ["DD", "RU"], kind: "coalition" },
+      treatyEntries: [
+        { countryId: "RU", organizationId: "WARSAW_PACT", defending: "DD", joinedTurn: 415 },
+      ],
+      control: 100,
+      controlStart: 100,
+      ...over,
+    }) as unknown as ConflictDoc;
+
+  const buyOut = (
+    c: ConflictDoc,
+    to: "DD" | "RU",
+    term = { kind: "indemnity" as const, payer: "US" as const, amount: 10 }
+  ) => validatePeaceOffer(c, "US", to, term, to, 1e12);
+
+  it("allows peeling a guest off, because the side still stands", () => {
+    // RU leaving leaves DD fighting. This is the coalition-peeling the wiki has
+    // advised as strategy since before it was possible.
+    expect(buyOut(war(), "RU").ok).toBe(true);
+  });
+
+  it("refuses buying the war outright from a standing start", () => {
+    // DD leaving takes RU with it as its treaty guest, so side B empties and the war
+    // is simply bought. At the opening line the US has taken no ground for it.
+    const res = buyOut(war(), "DD");
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/not far enough forward/i);
+  });
+
+  it("allows it once the front is deep enough in your favour", () => {
+    // Side A wins as control falls toward 0, so 25 is three quarters of the way.
+    expect(buyOut(war({ control: 25 }), "DD").ok).toBe(true);
+  });
+
+  it("refuses it just short of the threshold", () => {
+    expect(buyOut(war({ control: 26 }), "DD").ok).toBe(false);
+  });
+
+  it("does not credit the other side's gains to you", () => {
+    // The line has moved AGAINST the US here. `progressForSide` reads zero for a
+    // losing side rather than reading its opponent's push as its own.
+    const losing = war({ control: 100, controlStart: 40 });
+    expect(buyOut(losing, "DD").ok).toBe(false);
+  });
+
+  it("always allows a WHITE PEACE, however the war is going", () => {
+    // It records no victor and moves nothing, so nothing is bought: a war fought
+    // over a question ends with the question still open.
+    expect(buyOut(war(), "DD", { kind: "white_peace" } as never).ok).toBe(true);
+  });
+
+  it("never gates an offer to leave YOURSELF", () => {
+    // Walking away is always yours to propose, whatever the ground looks like.
+    expect(validatePeaceOffer(war(), "US", "DD", { kind: "white_peace" as const }, "US").ok).toBe(
+      true
+    );
+    expect(
+      validatePeaceOffer(
+        war(),
+        "US",
+        "DD",
+        { kind: "indemnity" as const, payer: "US", amount: 10 },
+        "US",
+        1e12
+      ).ok
+    ).toBe(true);
+  });
+
+  it("refuses a leaver who is not a party to the deal", () => {
+    expect(
+      validatePeaceOffer(
+        war(),
+        "US",
+        "DD",
+        { kind: "indemnity" as const, payer: "US", amount: 10 },
+        "RU" as never,
+        1e12
+      ).ok
+    ).toBe(false);
   });
 });

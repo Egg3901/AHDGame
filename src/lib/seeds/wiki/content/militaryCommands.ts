@@ -26,7 +26,7 @@ Theater Commander  (one per conflict)
 
 ## Building a Command
 
-Defence office → **Commands** tab → *Create command*.
+Defence office → **Commands** tab → *Create command*. A confirmed defence seat holder or an acting one may build and reorganise commands; only a confirmed holder may commission or dismiss the generals that fill them.
 
 A Command has:
 
@@ -34,7 +34,7 @@ A Command has:
 | --- | --- |
 | **Name** | Yours to choose. |
 | **Type** | Homeland Defense, Regional, or Logistics. |
-| **Regions** | Which strategic regions it is responsible for. Up to **3**. |
+| **Regions** | Which strategic regions it is responsible for. Up to **3** for Homeland Defense and Regional commands; uncapped for Logistics. |
 | **Posture** | One of twelve standing postures. |
 | **Supply priority** | Normal, High, or Emergency. |
 | **Commanders** | Which of your commissioned generals belong to it. |
@@ -76,12 +76,12 @@ Regions are the world's coverage grid: the map your Commands are responsible for
 
 Each region carries terrain, infrastructure, port and airbase capacity, strategic value, logistics difficulty, and a live threat reading. Regions are typed **land**, **naval**, or **mixed**: assigning a sea region to a Command with no naval structure is flagged as weak coverage.
 
-**A region should be covered by exactly one Command.** The builder warns you when a region is already assigned to another Command, and the coverage view flags two problems:
+**A region should be covered by exactly one Command of each type.** Commands of *different* types are welcome to share a region, and often should: a Regional command holding the ground while a Logistics command sustains it is the standard overseas pairing. The builder warns you only when a region is already assigned to another Command of the same type, and the coverage view flags two problems:
 
 - **Uncovered**: no Command is responsible for it.
 - **Overlapping**: two Commands *of the same type* both claim it, which is a genuine role conflict rather than useful redundancy.
 
-**Region cap: 3 per Command.** The builder also warns past 4 assigned regions and suggests a Logistics command for multi-region overseas responsibility.
+**Region cap: 3 per Homeland Defense or Regional Command.** A **Logistics** command is exempt from the cap, which is the point of it: it is the structure meant to carry multi-region overseas responsibility. The builder warns any command past 4 assigned regions, and when a non-Logistics command reaches its cap it suggests a Logistics command for the overflow.
 
 ## Capacity and effectiveness
 
@@ -124,7 +124,7 @@ A TC gets two things:
 
 **1. A front-wide command bonus.** A Theater Commander's own training carries, at a fraction of its strength, to *every* friendly unit at that front, not just the ones they personally lead. The fraction is deliberate: a single outstanding TC can never substitute for putting good generals on the units themselves. **Being in charge is worth less than being present.**
 
-**2. Exclusive authority over offensives at that front.**
+**2. Exclusive authority over offensives at that front.** That covers declaring and withdrawing offensives, and the front's **standing order** to join allied offensives automatically (see [Fighting a Battle](/wiki/fighting-a-battle)). The standing order is national policy rather than the commander's own setting, so it survives a change of Theater Commander the way the deployment does.
 
 That second point is the one that catches people out.
 
@@ -165,7 +165,7 @@ The rule that follows from this: **a unit is at whatever front its general is po
 A working structure looks roughly like this:
 
 1. **Commission several generals.** They start accruing tenure points immediately.
-2. **Build two or three Commands** with clear region responsibilities and no overlaps: say a Homeland Defense command over your own region, a Regional command over where you expect to fight, and a Logistics command if you intend to fight overseas.
+2. **Build two or three Commands** with clear region responsibilities and no two Commands of the same type over one region: say a Homeland Defense command over your own region, a Regional command over where you expect to fight, and a Logistics command if you intend to fight overseas. Those last two will often cover the same region, which is intended: one holds the ground, the other sustains it.
 3. **Appoint a Commanding General to each**, ideally one whose training fits the Command's job.
 4. **Assign units to generals**, spreading the load so no Command sits over capacity.
 5. **When war comes**, the relevant CG posts their generals to the conflict and names a Theater Commander.

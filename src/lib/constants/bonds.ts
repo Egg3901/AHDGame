@@ -50,22 +50,65 @@ export const BOND_ISSUANCE_MIN_HEADROOM = 10_000;
 export const MAX_BOND_ISSUANCE_FRACTION = 2.0;
 
 /**
+ * Hard cap on total debt as a multiple of EXIT equity — what a corp's balance
+ * sheet would actually realize if the debt had to be settled today (see
+ * {@link import("@/lib/bonds/corpExitEquity").corpExitEquityAnchor}).
+ *
+ * `MAX_BOND_ISSUANCE_FRACTION` above measures the going-concern equity a corp
+ * is worth as a living business; this one measures what its creditors could
+ * recover. Under `marketSystemMode: "plants"` the two diverge sharply, and
+ * before ticket #1198 only the first was enforced at issuance while only the
+ * second was enforced by `filterInsolventCorps` — so a corp could be sold a
+ * debt ceiling ~75x larger than the one that could liquidate it. Corporation
+ * #624 drew under 1% of its quoted ceiling and was declared insolvent two turns
+ * later.
+ *
+ * At 1.0 the invariant is exact: `debt <= exit equity`, so a corp that stays
+ * inside its quoted ceiling can never be judged insolvent. Raising this above
+ * 1.0 reopens that gap by precisely the amount it is raised.
+ */
+export const MAX_BOND_ISSUANCE_EXIT_EQUITY_FRACTION = 1.0;
+
+/**
  * The issuance window a corporation may actually use, all in ₳. `maxAllowed` is
- * the smaller of the per-issuance cap and the remaining 2x-equity leverage
- * headroom. `effectiveMin` clamps the flat `MIN_BOND_ISSUANCE` down to that
+ * the smallest of the per-issuance cap, the remaining 2x going-concern leverage
+ * headroom, and the remaining 1x exit-equity headroom (#1198).
+ * `effectiveMin` clamps the flat `MIN_BOND_ISSUANCE` down to that
  * ceiling so a small corp is never locked out by min > max (ticket #1083).
  * `available` is false below the dust floor, where bonds are offered at all.
+ * `limitedBy` names the binding constraint so callers can explain a refusal in
+ * the terms that actually caused it.
  */
 export function effectiveBondIssuanceWindow(args: {
   maxPerIssuance: number;
   totalEquity: number;
   existingDebt: number;
-}): { maxAllowed: number; effectiveMin: number; available: boolean } {
+  /** Realizable equity on the exit basis, ₳. */
+  exitEquity: number;
+}): {
+  maxAllowed: number;
+  effectiveMin: number;
+  available: boolean;
+  limitedBy: "perIssuance" | "leverage" | "exitEquity";
+} {
   const debtCeilingHeadroom = args.totalEquity * MAX_BOND_ISSUANCE_FRACTION - args.existingDebt;
-  const maxAllowed = Math.max(0, Math.min(args.maxPerIssuance, debtCeilingHeadroom));
+  const exitCeilingHeadroom =
+    args.exitEquity * MAX_BOND_ISSUANCE_EXIT_EQUITY_FRACTION - args.existingDebt;
+  const maxAllowed = Math.max(
+    0,
+    Math.min(args.maxPerIssuance, debtCeilingHeadroom, exitCeilingHeadroom)
+  );
+  // Ties resolve to the more explanatory constraint: exit equity is the one a
+  // CEO has never seen before, so it is named whenever it is (jointly) binding.
+  const limitedBy =
+    exitCeilingHeadroom <= debtCeilingHeadroom && exitCeilingHeadroom <= args.maxPerIssuance
+      ? "exitEquity"
+      : debtCeilingHeadroom <= args.maxPerIssuance
+        ? "leverage"
+        : "perIssuance";
   const available = maxAllowed >= BOND_ISSUANCE_MIN_HEADROOM;
   const effectiveMin = Math.min(MIN_BOND_ISSUANCE, maxAllowed);
-  return { maxAllowed, effectiveMin, available };
+  return { maxAllowed, effectiveMin, available, limitedBy };
 }
 
 /** Per-issuance cap as a fraction of annual revenue (25%) */

@@ -7,6 +7,8 @@ import { useToast } from "@/contexts/ToastContext";
 import { GeneralVoteCharts, type LineSeries } from "./ElectionDetailCharts";
 import { buildGeneralColors } from "@/lib/utils/politics";
 import type { CandidateDetail, GeneralVotes } from "./ElectionDetailTypes";
+import type { BlendClockRow } from "@/lib/elections/blendDetailViewModel";
+import type { RegionElectorate } from "@/lib/elections/blendRegionViewModel";
 import { KeyInsightsPanel } from "./KeyInsightsPanel";
 import { StateByStateResultsTable } from "./StateByStateResultsTable";
 import { PresidentialWinnerBanner } from "./PresidentialWinnerBanner";
@@ -19,6 +21,8 @@ import {
   assessContingentEvRisk,
   isContingentResolutionMode,
   PRESIDENTIAL_EV_NEEDED,
+  electoralMajorityFor,
+  collegeSizeFromEvByState,
   resolvePresidentialWinnerCandidateId,
 } from "@/lib/elections/presidentialResolutionDisplay";
 import { ContingentRiskBanner } from "./ContingentRiskBanner";
@@ -43,6 +47,12 @@ export function GeneralElectionPanel({
   myEndorsedCandidateId: initialEndorsedId,
   countryId = "US",
   afterTally,
+  regionName,
+  countryName,
+  year,
+  clockRows,
+  electorate,
+  partyDisplayById,
 }: {
   tally: GeneralVotes;
   candidates: CandidateDetail[];
@@ -56,6 +66,16 @@ export function GeneralElectionPanel({
   countryId?: "US" | "UK" | "DE";
   /** Rendered between the tally and the trend charts (non-presidential). */
   afterTally?: React.ReactNode;
+  /** Blend detail chrome — region, country and year for the verdict hero. */
+  regionName?: string;
+  countryName?: string;
+  year?: number | null;
+  /** Deadline rows for the Clock card, built by the caller from the game clock. */
+  clockRows?: BlendClockRow[];
+  /** Region electorate for the turnout fact. */
+  electorate?: RegionElectorate;
+  /** Party abbreviations, from the response's `partyDisplayById`. */
+  partyDisplayById?: Record<string, { abbr: string; color: string }>;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -221,13 +241,9 @@ export function GeneralElectionPanel({
   });
   const colorMap = buildGeneralColors(sorted);
 
-  const pieSlices = sorted.map((c) => ({
-    label: c.characterName,
-    pct: grandTotal > 1 ? ((tally.totalVotes[c.id] ?? 0) / grandTotal) * 100 : 100 / sorted.length,
-    color: colorMap.get(c.id)!,
-    ...(c.isNPP ? {} : { partyId: c.party }),
-  }));
-
+  // The vote-share donut went with the Blend layout: the count now leads with
+  // the share as a large serif figure per candidate, and a second reading of
+  // the same split earned no room.
   const lineSeries: LineSeries[] = sorted.map((c) => ({
     id: c.id,
     name: c.characterName,
@@ -236,8 +252,12 @@ export function GeneralElectionPanel({
 
   // Presidential election - enhanced table view
   if (isPresident) {
-    const totalEV = 538;
-    const evNeeded = PRESIDENTIAL_EV_NEEDED;
+    // Era-aware college: sum the active apportionment's per-state EVs (531 on
+    // 1950s worlds, 538 modern) and take its majority; fall back to the modern
+    // constants when the payload predates evByState.
+    const liveCollege = collegeSizeFromEvByState(tally.evByState);
+    const totalEV = liveCollege > 0 ? liveCollege : 538;
+    const evNeeded = liveCollege > 0 ? electoralMajorityFor(liveCollege) : PRESIDENTIAL_EV_NEEDED;
     const contingentRisk =
       !isEnded && electoralVotes ? assessContingentEvRisk(electoralVotes, evNeeded) : null;
 
@@ -465,15 +485,19 @@ export function GeneralElectionPanel({
   return (
     <NonPresidentialResultsPanel
       sorted={sorted}
-      colorMap={colorMap}
       tally={tally}
-      grandTotal={grandTotal}
       totalVotesCast={totalVotesCast}
       isEnded={isEnded}
       totalSeats={totalSeats}
-      pieSlices={pieSlices}
       lineSeries={lineSeries}
       countryId={countryId}
+      electionType={electionType}
+      regionName={regionName ?? ""}
+      countryName={countryName ?? ""}
+      year={year ?? null}
+      clockRows={clockRows ?? []}
+      electorate={electorate}
+      partyDisplayById={partyDisplayById}
       afterTally={afterTally}
       renderEndorse={
         canEndorse

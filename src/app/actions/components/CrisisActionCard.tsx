@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useToast } from "@/contexts/ToastContext";
 import type { Crisis, CrisisInteraction, CrisisDecisionNode } from "@/lib/db/types/crisis";
 
@@ -11,6 +12,11 @@ interface ActiveCrisisData {
   canInteract: boolean;
   timeRemainingMinutes: number | null;
   hasContributed: boolean;
+  /**
+   * Per-option campaign eligibility for global-response crises, as the crisis
+   * detail page receives it. Null for crises that carry no such requirements.
+   */
+  optionAvailability?: Record<string, { eligible: boolean; reasons: string[] }> | null;
 }
 
 function formatTimeRemaining(minutes: number): string {
@@ -76,7 +82,8 @@ export default function CrisisActionCard() {
   const [crises, setCrises] = useState<ActiveCrisisData[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Keyed by crisis: one refusal must not print under every open crisis.
+  const [error, setError] = useState<{ crisisId: string; message: string } | null>(null);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const { showToast } = useToast();
 
@@ -118,7 +125,7 @@ export default function CrisisActionCard() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to submit decision");
+        setError({ crisisId, message: data.error ?? "Failed to submit decision" });
         return;
       }
 
@@ -141,7 +148,7 @@ export default function CrisisActionCard() {
       // Refresh to show next node or resolved state
       await fetchCrises();
     } catch {
-      setError("Network error");
+      setError({ crisisId, message: "Network error" });
     } finally {
       setSubmitting(null);
     }
@@ -179,6 +186,7 @@ export default function CrisisActionCard() {
           canInteract,
           timeRemainingMinutes,
           hasContributed,
+          optionAvailability,
         } = data;
         const severity = crisisSeverity(crisis);
         const styles = SEVERITY_STYLES[severity];
@@ -286,57 +294,88 @@ export default function CrisisActionCard() {
                   </div>
                 )}
 
-                {/* Options */}
-                {currentNode.options && currentNode.options.length > 0 && (
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {currentNode.options.map((option) => {
-                      const isSubmitting =
-                        submitting === `${crisis._id.toString()}:${option.optionId}`;
-                      const isDisabled =
-                        isSubmitting || (currentNode.type === "collective" && hasContributed);
-
-                      return (
-                        <button
-                          key={option.optionId}
-                          onClick={() => handleInteract(crisis._id.toString(), option.optionId)}
-                          disabled={isDisabled}
-                          className={`rounded-lg border border-card-border bg-card p-3 text-left transition-colors hover:bg-card-elevated disabled:opacity-50 disabled:cursor-not-allowed ${
-                            isSubmitting ? "animate-pulse" : ""
-                          }`}
-                        >
-                          <div className="text-sm font-medium text-foreground">{option.label}</div>
-                          <div className="text-xs text-muted mt-0.5">{option.description}</div>
-                          {option.collectiveContribution && (
-                            <div className="text-xs text-primary mt-1">
-                              Contribute ${option.collectiveContribution.toLocaleString("en-US")}
-                            </div>
-                          )}
-                          {option.effects.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {option.effects.map((effect, i) => (
-                                <span
-                                  key={i}
-                                  className={`text-xs px-1.5 py-0.5 rounded border ${
-                                    effect.value < 0
-                                      ? "border-error/20 bg-error/5 text-error"
-                                      : "border-success/20 bg-success/5 text-success"
-                                  }`}
-                                >
-                                  {effect.value > 0 ? "+" : ""}
-                                  {effect.value} {effect.label}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                {/* Aid nodes need a share-of-GDP amount, which only the crisis
+                    page's slider collects. Posting a bare optionId from here is
+                    always refused, so send the player to the real flow. */}
+                {currentNode.type === "aid" && (
+                  <Link
+                    href={`/world/crises/${crisis._id.toString()}`}
+                    className="inline-flex items-center gap-1 rounded-lg border border-card-border bg-card px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-card-elevated"
+                  >
+                    Open the crisis to send aid or decline
+                  </Link>
                 )}
+
+                {/* Options */}
+                {currentNode.type !== "aid" &&
+                  currentNode.options &&
+                  currentNode.options.length > 0 && (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {currentNode.options.map((option) => {
+                        const isSubmitting =
+                          submitting === `${crisis._id.toString()}:${option.optionId}`;
+                        // An option the nation cannot meet the campaign requirement
+                        // for would be refused by the command path, so it is closed
+                        // here with its reasons rather than offered and rejected.
+                        const availability = optionAvailability?.[option.optionId];
+                        const isDisabled =
+                          isSubmitting ||
+                          availability?.eligible === false ||
+                          (currentNode.type === "collective" && hasContributed);
+
+                        return (
+                          <button
+                            key={option.optionId}
+                            onClick={() => handleInteract(crisis._id.toString(), option.optionId)}
+                            disabled={isDisabled}
+                            className={`rounded-lg border border-card-border bg-card p-3 text-left transition-colors hover:bg-card-elevated disabled:opacity-50 disabled:cursor-not-allowed ${
+                              isSubmitting ? "animate-pulse" : ""
+                            }`}
+                          >
+                            <div className="text-sm font-medium text-foreground">
+                              {option.label}
+                            </div>
+                            <div className="text-xs text-muted mt-0.5">{option.description}</div>
+                            {availability?.eligible === false && (
+                              <ul className="mt-2 space-y-0.5 text-[10px] text-error">
+                                {availability.reasons.map((reason) => (
+                                  <li key={reason}>{reason}</li>
+                                ))}
+                              </ul>
+                            )}
+                            {option.collectiveContribution && (
+                              <div className="text-xs text-primary mt-1">
+                                Contribute ${option.collectiveContribution.toLocaleString("en-US")}
+                              </div>
+                            )}
+                            {option.effects.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {option.effects.map((effect, i) => (
+                                  <span
+                                    key={i}
+                                    className={`text-xs px-1.5 py-0.5 rounded border ${
+                                      effect.value < 0
+                                        ? "border-error/20 bg-error/5 text-error"
+                                        : "border-success/20 bg-success/5 text-success"
+                                    }`}
+                                  >
+                                    {effect.value > 0 ? "+" : ""}
+                                    {effect.value} {effect.label}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
               </div>
             )}
 
-            {error && <p className="text-xs text-rose-600 mt-2">{error}</p>}
+            {error?.crisisId === crisis._id.toString() && (
+              <p className="text-xs text-rose-600 mt-2">{error.message}</p>
+            )}
           </div>
         );
       })}

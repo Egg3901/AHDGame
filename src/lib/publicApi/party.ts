@@ -1,3 +1,4 @@
+import type { CountryId } from "@/lib/constants/countries";
 import type { Db, Filter } from "mongodb";
 import type { PoliticalParty, Character, Election } from "@/lib/db/types";
 import { getLeanLabel } from "@/lib/utils/demographics";
@@ -116,5 +117,50 @@ export async function queryParty(
         })),
       },
     }),
+  };
+}
+
+/**
+ * All parties for a country, ordered by member count. Seat counts come from
+ * the country's current legislature composition when available, so the list
+ * matches what /country/[code] reports.
+ */
+export async function queryPartyList(db: Db, params: { country: string }) {
+  const cid = params.country.toUpperCase() as CountryId;
+
+  const parties = await db
+    .collection<PoliticalParty>("politicalParties")
+    .find({ countryId: cid })
+    .sort({ memberCount: -1 })
+    .toArray();
+
+  if (parties.length === 0) return { found: false, parties: [] as unknown[] };
+
+  // Seat share per party from the elected-officials roster (same source the
+  // legislature widgets aggregate), so seats always reconcile with members.
+  const seatCounts = new Map<string, number>();
+  const officials = db.collection("electedOfficials");
+  const rows = await officials
+    .aggregate([{ $match: { countryId: cid } }, { $group: { _id: "$party", seats: { $sum: 1 } } }])
+    .toArray();
+  for (const r of rows) {
+    if (r._id != null) seatCounts.set(String(r._id), r.seats);
+  }
+
+  return {
+    found: true,
+    parties: parties.map((p) => ({
+      id: p.sequentialId,
+      objectId: p._id.toString(),
+      name: p.name,
+      abbreviation: p.abbreviation ?? null,
+      color: p.color,
+      economicPosition: p.economicPosition,
+      socialPosition: p.socialPosition,
+      memberCount: p.memberCount,
+      seatCount: seatCounts.get(String(p.sequentialId)) ?? 0,
+      treasury: p.treasury ?? null,
+      isDefault: p.isDefault ?? false,
+    })),
   };
 }

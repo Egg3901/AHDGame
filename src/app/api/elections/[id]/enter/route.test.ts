@@ -305,7 +305,7 @@ describe("POST /api/elections/[id]/enter — UK regional party geography", () =>
     vi.clearAllMocks();
   });
 
-  it("returns 403 when an SNP character files in London (ticket #1110)", async () => {
+  it("lets an SNP character file in London now that geography is not a gate", async () => {
     const db = setupScenario({
       electionCountry: "US",
       characterCountry: "US",
@@ -350,8 +350,10 @@ describe("POST /api/elections/[id]/enter — UK regional party geography", () =>
     const res = await POST(makeReq(), {
       params: Promise.resolve({ id: electionOid.toString() }),
     });
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toMatch(/home nation/i);
+    expect(res.status).not.toBe(403);
+    if (res.status >= 400) {
+      const body = (await res.json()) as { error: string };
+      expect(body.error).not.toMatch(/home nation/i);
+    }
   });
 });

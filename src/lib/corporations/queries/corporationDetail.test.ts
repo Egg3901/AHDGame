@@ -482,6 +482,8 @@ describe("loadCorporationDetailView — plants-tier physicals", () => {
       revenue: 1_000,
       profitMargin: 20,
       workers: 10,
+      workersDesired: 40,
+      labourStaffingFactor: 0.25,
       capitalStock: 5_000,
       producedUnits: 4_000,
       soldUnits: 1_200,
@@ -544,10 +546,14 @@ describe("loadCorporationDetailView — plants-tier physicals", () => {
 
     const row = result.sectors[0]!;
     expect(row.capacityUnits).toBe(5_000);
+    expect(row.plantCount).toBe(200);
     expect(row.producedUnits).toBe(4_000);
     expect(row.soldUnits).toBe(1_200);
     expect(row.constructionInProgressAnchor).toBe(250_000);
     expect(row.mothballed).toBe(true);
+    expect(row.workers).toBe(10);
+    expect(row.workersDesired).toBe(40);
+    expect(row.labourStaffingFactor).toBe(0.25);
     // 1200/4000 = 0.3 → "low". Fill is the number a rival most wants, so the
     // exact ratio and the band are both computed here and the API layer decides
     // which of them a given viewer keeps.
@@ -595,7 +601,7 @@ describe("loadCorporationDetailView — plants-tier physicals", () => {
     expect(row.mothballed).toBe(false);
     // Legacy fields survive untouched.
     expect(row.revenue).toBe(1_000);
-    expect(row.workers).toBeGreaterThan(0);
+    expect(row.workers).toBe(10);
   });
 
   it("treats an absent market mode as off, not as plants", async () => {

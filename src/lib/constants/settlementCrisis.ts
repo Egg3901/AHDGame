@@ -404,6 +404,18 @@ export const GERMAN_QUESTION_TARGET = "DE";
 export const GERMAN_QUESTION_CHALLENGER = "DD";
 
 /**
+ * The two halves of Berlin, which reunification fuses into one region.
+ *
+ * Every other eastern Land has a seat document waiting for it in Germany's seed
+ * (`DE-bundestag-BB`, `-MV`, `-SN`, `-ST`, `-TH`). East Berlin has none, because
+ * a unified Berlin is one city rather than a twelfth Land -- Germany already
+ * carries `BE`. So `BEO` is not transferred as a region in its own right: it is
+ * merged into `BE` once both are German, and retired.
+ */
+export const GERMAN_QUESTION_EAST_BERLIN = "BEO";
+export const GERMAN_QUESTION_BERLIN = "BE";
+
+/**
  * The three rule switches the source design declares under its "Rules" section.
  *
  * They are stored PER CRISIS rather than on `gameState`. Two of the three
@@ -637,6 +649,21 @@ export const SETTLEMENT_PLAYS: readonly SettlementPlayDef[] = [
     addsHeat: false,
     detail:
       "Coal, steel and cheap credit into the border Länder. Buys quiet sympathy in state capitals.",
+  },
+  {
+    id: "nva",
+    name: "NVA Border Deployment",
+    seat: "DD",
+    class: "forces",
+    target: "garrison",
+    magnitude: mag(4),
+    capitalCost: 10,
+    fundsUnit: "local",
+    fundsCost: 18_000_000,
+    actionCost: 1,
+    addsHeat: false,
+    detail:
+      "Station National People's Army liaison detachments along the inner border. Makes the Allied garrison look like the problem, not the guarantee.",
   },
   // ── USSR · Politburo ───────────────────────────────────────────────────────
   {

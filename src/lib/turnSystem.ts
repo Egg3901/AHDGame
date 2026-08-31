@@ -20,7 +20,8 @@ import {
   ensureUKElections,
   ensureUKRegionalCouncilElections,
 } from "@/lib/turn/perpetualElections";
-import { STARTING_YEAR, TURNS_PER_YEAR, MS_PER_TURN } from "@/lib/constants/turnTime";
+import { STARTING_YEAR, MS_PER_TURN } from "@/lib/constants/turnTime";
+import { yearOfTurn } from "@/lib/utils/gameDate";
 import { DEFAULT_GAME_STATE_FLAGS } from "@/lib/seeds/reference/featureFlagDefaults";
 import { DEFAULT_CYCLE_ANCHOR_CONTEXT } from "@/lib/elections/cycleAnchorContext";
 import { seedUnownedSectors } from "@/lib/admin/seed/seedUnownedSectors";
@@ -36,6 +37,7 @@ import { createTurnPhaseRuntime } from "@/simulation/engine/turnPhaseRuntime";
 import { buildTurnExecutionContext } from "@/simulation/engine/turnExecutionContext";
 import { getTurnPhaseRegistry } from "@/simulation/phases/turnPhaseRegistry";
 import { getSimTurnPhasePredicate } from "@/simulation/phases/simTurnProfiles";
+import { reportFederalBudgetInvariantBreaches } from "@/lib/budget/budgetInvariants";
 
 // Re-export public helpers consumed by other modules
 export {
@@ -341,7 +343,15 @@ export async function processTurn(): Promise<{
     if (crashedTurnRecovery && crashedTurnRecovery.targetTurn === gameState.currentTurn + 1) {
       const recoveredTurn = crashedTurnRecovery.targetTurn;
       const startingYear = gameState.startingYear ?? STARTING_YEAR;
-      const recoveredYear = startingYear + Math.floor((recoveredTurn - 1) / TURNS_PER_YEAR);
+      // Same offset-aware year `reconcileGameStateClock` computes — deriving it
+      // from the raw turn wrote a year AHEAD of the calendar on a world with a
+      // founding phase, and every direct `gameState.currentYear` reader (the
+      // cabinet roster gate among them) saw it until the next turn repaired it
+      // (#1208).
+      const recoveredYear = yearOfTurn(recoveredTurn, startingYear, {
+        preIterationActive: gameState.preIteration?.active,
+        preIterationTurns: gameState.preIterationTurns,
+      });
       // Advance the game clock by exactly one turn (as a normal completion would),
       // so currentTurn and lastTurnProcessed stay in lockstep and don't drift a
       // turn apart at year boundaries.
@@ -441,6 +451,14 @@ export async function processTurn(): Promise<{
     for (const adapter of getTurnPhaseRegistry()) {
       await adapter.execute(context, runtime);
     }
+
+    // Diagnostic only, never throws. `federalBudget.surplus` and
+    // `debt.principal` are caches of an expression, and both drift intra-year
+    // on the live world even though every writer maintains them on its own
+    // write. Runs HERE, after every phase, because live `updatedAt` values show
+    // budget writes landing well after the corporation phase that recomputes
+    // them. See lib/budget/budgetInvariants.
+    await reportFederalBudgetInvariantBreaches(db, context.newTurn);
 
     healthSnapshotWritten = context.phaseResults.gameHealthSnapshot !== null;
 

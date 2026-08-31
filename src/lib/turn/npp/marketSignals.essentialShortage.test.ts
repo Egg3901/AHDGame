@@ -4,6 +4,8 @@ import {
   findBestUnownedSector,
   sectorShortageScore,
   ESSENTIAL_SHORTAGE_SCORE,
+  fragileMarketCommodityForSector,
+  fragileMarketFoundingStrategy,
 } from "./marketSignals";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import type { CommodityType } from "@/lib/constants/commodities";
@@ -61,15 +63,15 @@ describe("essential-shortage founding override (freight valve)", () => {
     expect(pick?.sectorType).toBe("manufacturing");
   });
 
-  it("does not re-found a type the corp already runs, even when critical", () => {
-    // logistics excluded by existingTypes → the override has nothing to pick and
-    // the corp falls back to its own type.
+  it("does not re-found the same type in the same state", () => {
+    // The NY logistics bucket is occupied, so the corp falls back to the open
+    // manufacturing bucket in PA. The same type remains legal in other states.
     const pick = findBestUnownedSector(
       "US",
       "PA",
       "manufacturing",
       null,
-      new Set(["logistics"]),
+      new Set(["NY:logistics"]),
       pool,
       new Set(),
       ratios({ freight: 2.0 }),
@@ -104,5 +106,116 @@ describe("essential-shortage founding override (freight valve)", () => {
     expect(blended).toBeLessThan(2.0); // co-product drags the average down
     expect(ESSENTIAL_SHORTAGE_SCORE).toBeGreaterThan(1);
     expect(ESSENTIAL_SHORTAGE_SCORE).toBeLessThan(blended + 0.05); // still fires via peak
+  });
+});
+
+describe("governed fragile-market supply routing", () => {
+  it("reallocates an existing critical-shortage slot to dedicated fertilizer capacity", () => {
+    const candidates = new Map([
+      ["US", [us("energy", "PA", 1_000_000), us("chemical_industries", "NY", 100_000)]],
+    ]);
+    const prices = ratios({ energy: 3, fertilizers: 2.5 });
+
+    const control = findBestUnownedSector(
+      "US",
+      "PA",
+      "energy",
+      null,
+      new Set(),
+      candidates,
+      new Set(),
+      prices,
+      false
+    );
+    const treatment = findBestUnownedSector(
+      "US",
+      "PA",
+      "energy",
+      null,
+      new Set(),
+      candidates,
+      new Set(),
+      prices,
+      false,
+      1,
+      { preferFragileMarketSupply: true }
+    );
+
+    expect(control?.sectorType).toBe("energy");
+    expect(treatment?.sectorType).toBe("chemical_industries");
+    expect(fragileMarketFoundingStrategy("chemical_industries", "US", prices)).toBe("fertilizers");
+  });
+
+  it("self-disarms below the shared critical-shortage threshold", () => {
+    const candidates = new Map([
+      ["US", [us("manufacturing", "PA", 1_000_000), us("media", "NY", 100_000)]],
+    ]);
+    const prices = ratios({ advertising: ESSENTIAL_SHORTAGE_SCORE - 0.01 });
+    const treatment = findBestUnownedSector(
+      "US",
+      "PA",
+      "manufacturing",
+      null,
+      new Set(),
+      candidates,
+      new Set(),
+      prices,
+      false,
+      1,
+      { preferFragileMarketSupply: true }
+    );
+
+    expect(treatment?.sectorType).toBe("manufacturing");
+    expect(fragileMarketCommodityForSector("media", "US", prices)).toBeNull();
+  });
+
+  it("keeps rare-earth entry subject to deposit headroom", () => {
+    const candidates = new Map([
+      ["US", [us("energy", "PA", 1_000_000), us("extraction", "NY", 100_000)]],
+    ]);
+    const prices = ratios({ energy: 3, rare_earth: 2 });
+    const treatment = findBestUnownedSector(
+      "US",
+      "PA",
+      "energy",
+      null,
+      new Set(),
+      candidates,
+      new Set(),
+      prices,
+      false,
+      1,
+      {
+        preferFragileMarketSupply: true,
+        extractionHeadroomOf: () => 0,
+      }
+    );
+
+    expect(treatment?.sectorType).toBe("energy");
+    expect(fragileMarketFoundingStrategy("extraction", "US", prices)).toBe("rare_earth_mining");
+  });
+
+  it("does not route market supply treatment into a planned economy", () => {
+    const candidates = new Map([
+      ["US", [us("energy", "PA", 1_000_000), us("media", "NY", 100_000)]],
+    ]);
+    const treatment = findBestUnownedSector(
+      "US",
+      "PA",
+      "energy",
+      null,
+      new Set(),
+      candidates,
+      new Set(),
+      ratios({ energy: 3, advertising: 2 }),
+      false,
+      1,
+      {
+        preferFragileMarketSupply: true,
+        fragileMarketCountryEligible: () => false,
+      }
+    );
+
+    expect(treatment?.sectorType).toBe("energy");
   });
 });

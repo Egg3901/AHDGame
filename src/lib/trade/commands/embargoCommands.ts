@@ -22,13 +22,53 @@ function isDuplicateKeyError(err: unknown): boolean {
   );
 }
 
+/**
+ * MongoDB IndexOptionsConflict (code 85) — the requested index collides with an
+ * existing one, most notably when an equivalent index already exists under a
+ * different name.
+ */
+function isIndexConflictError(err: unknown): boolean {
+  return (
+    (typeof err === "object" &&
+      err !== null &&
+      "code" in err &&
+      (err as { code?: number }).code === 85) ||
+    (err instanceof Error && err.message.includes("already exists with a different name"))
+  );
+}
+
 // The cooldown gate relies on a unique index over (sourceCountry,targetCountry).
 // Seeding creates it, but ensure it once per process too so the atomic gate is
-// correct even on a DB that predates the seed change. createIndex is idempotent.
+// correct even on a DB that predates the seed change. createIndex is idempotent
+// when the name matches the seed's, but an equivalent pair index left under a
+// different name (e.g. the auto-named sourceCountry_1_targetCountry_1 from a
+// build that created it without a name) makes createIndex throw
+// IndexOptionsConflict instead of no-oping — which surfaced as a 500 "Internal
+// server error" on every embargo impose (ticket #1213). Any unique index over
+// the same full key pattern satisfies the atomic gate, so accept such an index
+// rather than failing the player's action.
 let cooldownIndexEnsured = false;
 async function ensureCooldownIndex(col: Collection<TradeEmbargoCooldown>): Promise<void> {
   if (cooldownIndexEnsured) return;
-  await col.createIndex({ sourceCountry: 1, targetCountry: 1 }, { unique: true });
+  const pairKeys = { sourceCountry: 1, targetCountry: 1 };
+  try {
+    await col.createIndex(pairKeys, { unique: true, name: "embargoCooldowns_pair_unique" });
+  } catch (err) {
+    if (!isIndexConflictError(err)) throw err;
+    const equivalent = (
+      await col
+        .listIndexes()
+        .toArray()
+        .catch(() => [])
+    ).find(
+      (idx) =>
+        idx.name !== "_id_" &&
+        idx.unique === true &&
+        idx.partialFilterExpression == null &&
+        JSON.stringify(idx.key) === JSON.stringify(pairKeys)
+    );
+    if (!equivalent) throw err;
+  }
   cooldownIndexEnsured = true;
 }
 

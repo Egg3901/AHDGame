@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { ladderBounds } from "@/lib/legislature/policyLadder";
 import { Slider } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
 import {
@@ -952,7 +953,10 @@ export function ProposeLegislationModal({
                             archetypeApprovals={selectedOption?.archetypeApprovals}
                             groupApprovals={selectedOption?.groupApprovals}
                             policyDomain={lt.policyDomain}
-                            currentPolicyIndex={currentPolicies[row.legislationTypeId] ?? 3}
+                            currentPolicyIndex={
+                              currentPolicies[row.legislationTypeId] ??
+                              ladderBounds(options.length).centerIndex
+                            }
                             proposedPolicyIndex={options.findIndex(
                               (o) => o.id === row.policyOptionId
                             )}

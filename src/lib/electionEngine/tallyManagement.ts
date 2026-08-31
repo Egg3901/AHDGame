@@ -14,7 +14,12 @@ import type {
 } from "@/lib/db/types";
 import { ObjectId } from "mongodb";
 import { getStateApprovalForElection } from "@/lib/utils/getStateApprovalForElection";
-import type { StatePartyOrg, StateDemographicTurnout, ExecutiveEndorsement } from "@/lib/db/types";
+import type {
+  StatePartyOrg,
+  StateDemographicTurnout,
+  StateRegistrationPool,
+  ExecutiveEndorsement,
+} from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { getPartyStrengthWeight, getRegionalExecutiveOfficeKey } from "@/lib/constants/countries";
 import {
@@ -51,7 +56,12 @@ import type { AccumulateVoteTurnPreload } from "./types";
 import { loadPartyGroupFavorability } from "@/lib/governorOffice/address/partyGroupFavorabilityLoader";
 import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
 import { eraYearContextFromGameState } from "@/lib/era/context";
-import { resolveTurnout } from "./resolvedTurnout";
+import {
+  resolveTurnout,
+  scalePoolToRegistered,
+  capTurnSliceToElectorate,
+  capTurnSliceToRemainingElectorate,
+} from "./resolvedTurnout";
 import { isPrimaryEnded } from "@/lib/elections/phases";
 import type { GameTimeContext } from "@/lib/time/gameTime";
 import { STARTING_YEAR } from "@/lib/constants/turnTime";
@@ -60,6 +70,10 @@ import {
   isMidtermOppositionBoostEligible,
 } from "./midtermOppositionBoost";
 import { resolveGoverningPartyIds } from "@/lib/government/governingPartyIds";
+import {
+  resolveElectionManifestoMultipliers,
+  deriveGroupLeans,
+} from "@/lib/uk/manifesto/electionManifestoResolver";
 
 // ─── Accumulate one turn of votes into a tally ───────────────────────────────
 
@@ -80,6 +94,12 @@ export async function accumulateVoteTurn(
   ]);
 
   if (!tally || candidates.length === 0) return;
+  // Per-turn idempotency: a turn whose later phase stalled (a stuck
+  // corporationTurn lock, cleared and re-run) runs this phase again under the
+  // SAME turn number. Live turn 460 ran three times on 2026-08-28 and every
+  // open general banked three slices of that turn. A tally that already holds
+  // this turn's snapshot has already been counted.
+  if (tally.turnSnapshots?.some((s) => s.turn === turnNumber)) return;
 
   const election = await db.collection<Election>("elections").findOne({ _id: electionId });
   if (!election || !election.endTime) return;
@@ -90,6 +110,7 @@ export async function accumulateVoteTurn(
   let categories: import("@/lib/db/types").DemographicCategory[];
   let statePartyOrgs: StatePartyOrg[];
   let turnoutDoc: StateDemographicTurnout | null;
+  let registrationPool: StateRegistrationPool | null = null;
   let preset: string | undefined;
   let currentYear: number | undefined;
   let eraYear: { year: number | null; startingYear: number | null };
@@ -100,6 +121,7 @@ export async function accumulateVoteTurn(
     categories = options.preload.categories;
     statePartyOrgs = options.preload.statePartyOrgsByState.get(stateId) ?? [];
     turnoutDoc = options.preload.turnoutByState.get(stateId) ?? null;
+    registrationPool = options.preload.registrationPoolByState?.get(stateId) ?? null;
     preset = options.preload.preset;
     currentYear = options.preload.currentYear;
     eraYear = eraYearContextFromGameState({
@@ -108,7 +130,7 @@ export async function accumulateVoteTurn(
       eraSystemEnabled: options.preload.eraSystemEnabled,
     });
   } else {
-    const [s, d, c, spo, t, gs] = await Promise.all([
+    const [s, d, c, spo, t, rp, gs] = await Promise.all([
       db.collection<State>("states").findOne({ _id: stateId, countryId: election.countryId }),
       db
         .collection<StateDemographics>("stateDemographics")
@@ -124,6 +146,9 @@ export async function accumulateVoteTurn(
       db
         .collection<StateDemographicTurnout>("stateDemographicTurnout")
         .findOne({ _id: stateId, countryId: election.countryId }),
+      db
+        .collection<StateRegistrationPool>("stateRegistrationPool")
+        .findOne({ stateId, countryId: election.countryId }),
       db
         .collection<{
           _id: string;
@@ -151,6 +176,7 @@ export async function accumulateVoteTurn(
     categories = c;
     statePartyOrgs = spo;
     turnoutDoc = t;
+    registrationPool = rp;
     preset = gs?.preset;
     currentYear = gs?.currentYear;
     eraYear = eraYearContextFromGameState(gs);
@@ -198,6 +224,9 @@ export async function accumulateVoteTurn(
     createdAt: tally.createdAt,
     currentTurn: turnNumber,
     now,
+    // The turn that reaches endTurn still counts (timers complete the race
+    // AFTER this phase), so the window is inclusive: endTurn - start + 1 slices.
+    inclusiveEnd: true,
   });
 
   // Age-aware electorate (P1b-1b): the vote pool is the live voting-age population
@@ -299,6 +328,52 @@ export async function accumulateVoteTurn(
         substrate.partyGroupFavorabilityByKey ?? partyGroupFavorabilityByKey;
     }
   }
+  // ── Physical electorate ceiling ────────────────────────────────────────────
+  // The resolved turnout pool can exceed the people who exist: the granular
+  // substrate aggregates turnout over overlapping demographic dimensions, and
+  // on era worlds the 1956 general certified 333% of the voting-eligible
+  // population (the audited engine defect behind 378.8M ballots from 204.9M
+  // residents). A state cannot cast more ballots than it has eligible voters,
+  // so the per-turn slice is rescaled to the electorate's share. Vote SHARES
+  // are invariant to the pool basis (the F-4 guarantee above), so this changes
+  // reported magnitudes only.
+  //
+  // The cap scales ONLY the released turn slice, deliberately leaving
+  // `effTotalPool` as the truthful normalisation base. The earlier form also
+  // reassigned `effTotalPool = electorate`, and that made the cap a no-op on
+  // actual ballots: the distributors normalise each group's contribution by
+  // `totalPool` before multiplying by the slice, so shrinking both cancels to
+  // the ballot — the same algebra that made the registered-voter gate below a
+  // live-verified no-op on its first placement.
+  effEffectiveTurnPool = capTurnSliceToElectorate(effEffectiveTurnPool, effTotalPool, electorate);
+  // ── Registered-voter gate ──────────────────────────────────────────────────
+  // The unregistered slice of the registration pool cannot cast a ballot, so
+  // this turn's released pool shrinks to the registered share. Same F-4 note
+  // as the ceiling above: shares, seats and winners are invariant — only
+  // reported magnitudes and turnout percentages change.
+  //
+  // Scale ONLY the turn pool, never `effTotalPool`: the distributors normalise
+  // each group as `contribution / totalPool` and then multiply by the turn
+  // pool, so scaling both cancels to the ballot and the gate would be a no-op
+  // (verified live before this comment existed).
+  effEffectiveTurnPool = scalePoolToRegistered(
+    effEffectiveTurnPool,
+    registrationPool?.unregistered
+  );
+  // ── Cumulative ceiling ────────────────────────────────────────────────────
+  // The strength multiplier above sits outside both caps, so the closing
+  // surge could still carry the race past the registered electorate. Ballots
+  // already on the board (active candidates only, matching `newTotals`) plus
+  // this slice may never exceed it.
+  const alreadyCast = candidates.reduce(
+    (sum, c) => sum + (tally.totalVotes[c._id.toString()] ?? 0),
+    0
+  );
+  effEffectiveTurnPool = capTurnSliceToRemainingElectorate(
+    effEffectiveTurnPool,
+    alreadyCast,
+    scalePoolToRegistered(electorate, registrationPool?.unregistered)
+  );
   // Determine if we are in the general election phase (after primary end).
   // Turn-first (drift-immune, freezes on pause); falls back to the Date for
   // elections not yet backfilled. `now` is the game-time of this turn, so it
@@ -480,6 +555,17 @@ export async function accumulateVoteTurn(
     );
   }
 
+  // UK manifesto policy-popularity map (epic #856). Off by default: the
+  // resolver short-circuits to undefined unless UK_MANIFESTO_VOTE_EFFECT=1 and
+  // this is a UK general election with locked manifestos — so no DB read and no
+  // behaviour change in prod until the coefficient is worldsim-calibrated.
+  const manifestoMultipliers = await resolveElectionManifestoMultipliers(db, {
+    countryId: electionCountryId,
+    electionId,
+    isGeneralElection,
+    groups: deriveGroupLeans(effCategories, effDemographics),
+  });
+
   const { votesPerCandidate, sharesPct } = distributeFn(
     effEnriched,
     effEffectiveTurnPool,
@@ -496,6 +582,7 @@ export async function accumulateVoteTurn(
       countryId: electionCountryId,
       currentStateId: stateId,
       parentRegionId: state.parentRegionId,
+      manifestoMultipliers,
       liveTurnouts: effLiveTurnouts, // Pass resolved turnout to vote distribution
       hasPlayerInRace,
       partyGroupFavorabilityByKey: effPartyGroupFavorabilityByKey,
@@ -719,6 +806,13 @@ export async function initElectionVoteTally(
     candidateParties[c._id.toString()] = c.party;
   }
 
+  // Primary ballots accrued during the primary window live on the same doc,
+  // and this init runs replaceOne — carry them across or the general-phase
+  // re-init silently erases the primary's entire count.
+  const existing = await db
+    .collection<ElectionVoteTally>("electionVoteTallies")
+    .findOne({ electionId }, { projection: { primaryVotes: 1 } });
+
   const doc: ElectionVoteTally = {
     _id: electionId,
     electionId,
@@ -729,6 +823,7 @@ export async function initElectionVoteTally(
     turnSnapshots: [],
     finalized: false,
     ...(primaryResults && { primaryResults }),
+    ...(existing?.primaryVotes && { primaryVotes: existing.primaryVotes }),
     createdAt: now,
     updatedAt: now,
   };

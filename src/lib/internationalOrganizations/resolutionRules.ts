@@ -4,6 +4,72 @@ import type {
   ProposalVoteRecord,
 } from "@/lib/db/types/internationalOrganization";
 
+/**
+ * Every ballot an organisation runs: the resolution types, plus the two
+ * instruments that are not resolutions but are decided exactly the same way —
+ * admitting a member and electing the chair.
+ */
+export type OrgBallotKind =
+  OrganizationResolutionType | "membership_proposal" | "leadership_election";
+
+/**
+ * Ballots that need every eligible voter to vote "yes".
+ *
+ * A trade agreement and an admission bind a member to an obligation it cannot
+ * shed cheaply, and entering a war spends its soldiers. None of those should be
+ * imposed on a member by the rest of the bloc, so each carries a member-by-member
+ * veto. Everything else is ordinary bloc business and carries on a majority.
+ */
+const UNANIMOUS_KINDS: ReadonlySet<OrgBallotKind> = new Set<OrgBallotKind>([
+  "free_trade_agreement",
+  "join_conflict",
+  "membership_proposal",
+]);
+
+/** Whether `kind` needs the whole roll rather than a majority of it. */
+export function requiresUnanimity(kind: OrgBallotKind): boolean {
+  return UNANIMOUS_KINDS.has(kind);
+}
+
+/**
+ * Yes votes needed to carry `kind` across a ballot of `ballotSize` eligible
+ * voters.
+ *
+ * The denominator is the eligible roll, never the votes actually cast. A member
+ * who abstains, or who never shows up, withholds approval exactly as a "no"
+ * does. The panels read this too, so the number a player is shown is the number
+ * the resolver will apply — the two drifted apart once already.
+ */
+export function votesNeeded(kind: OrgBallotKind, ballotSize: number): number {
+  if (ballotSize <= 0) return 0;
+  return requiresUnanimity(kind) ? ballotSize : Math.floor(ballotSize / 2) + 1;
+}
+
+/**
+ * Whether `yes` votes carry `kind`. A ballot with nobody eligible to vote can
+ * never carry: an org with no voting members does not pass things by default.
+ */
+export function ballotPasses(kind: OrgBallotKind, ballotSize: number, yes: number): boolean {
+  if (ballotSize <= 0) return false;
+  return yes >= votesNeeded(kind, ballotSize);
+}
+
+/**
+ * Fold historical duplicate rows down to the latest vote per country.
+ *
+ * Live data carries rows from before the write path became an upsert, so one
+ * country can appear twice on the same ballot. Lives here rather than beside the
+ * write path because the panels tally votes too, and a panel that counted the
+ * duplicates would show a total the resolver would never reach.
+ */
+export function dedupeOrganizationVotes<T extends { countryId: string }>(votes: T[]): T[] {
+  const latestByCountry = new Map<string, T>();
+  for (const vote of votes) {
+    latestByCountry.set(vote.countryId, vote);
+  }
+  return [...latestByCountry.values()];
+}
+
 export interface ResolutionPassageInput {
   type: OrganizationResolutionType;
   /** Current members of the host org. */
@@ -27,12 +93,14 @@ export interface ResolutionPassageInput {
  * Decide whether a resolution passes at its close turn.
  *
  * - `free_trade_agreement`: unanimous "yes" from every named party (an FTA binds
- *   only its parties; non-party members have no vote). Matches the legacy rule.
- * - all other types: simple majority of host-org members voting — yes > no and
- *   yes > 0. Abstain / no-vote count as non-approval; non-member votes ignored.
+ *   only its parties; non-party members have no vote).
+ * - `join_conflict`: unanimous "yes" from the whole voting roll. Calling a bloc
+ *   into a war is the one resolution that spends a member's soldiers, so any
+ *   member can refuse simply by not consenting.
+ * - all other types: more than half the voting roll voting "yes".
  *
- * Phase 2 extends this with the UN permanent-member veto via an added optional
- * parameter; keep the FTA + majority cores intact when doing so.
+ * Abstaining and never voting are non-approval in every case; only an active
+ * "yes" counts. Votes from non-members are ignored.
  */
 export function resolutionPasses(input: ResolutionPassageInput): boolean {
   if (input.type === "free_trade_agreement") {
@@ -40,19 +108,19 @@ export function resolutionPasses(input: ResolutionPassageInput): boolean {
     const yesParties = new Set<string>(
       input.votes.filter((v) => v.vote === "yes").map((v) => v.countryId)
     );
-    return input.parties.length > 0 && input.parties.every((p) => yesParties.has(p));
+    const parties = new Set<string>(input.parties);
+    const yes = [...parties].filter((p) => yesParties.has(p)).length;
+    return ballotPasses("free_trade_agreement", parties.size, yes);
   }
 
   const memberSet = new Set<string>(input.members);
   const vetoSet = new Set<string>(input.permanentMembers ?? []);
   let yes = 0;
-  let no = 0;
   for (const v of input.votes) {
     if (!memberSet.has(v.countryId)) continue;
     // A permanent member's "no" is a veto — blocks regardless of the tally.
     if (v.vote === "no" && vetoSet.has(v.countryId)) return false;
     if (v.vote === "yes") yes++;
-    else if (v.vote === "no") no++;
   }
-  return yes > no && yes > 0;
+  return ballotPasses(input.type, memberSet.size, yes);
 }

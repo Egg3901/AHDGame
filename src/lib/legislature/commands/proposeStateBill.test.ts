@@ -225,3 +225,90 @@ describe("proposeStateBill — US state tax sliders (ticket #1106)", () => {
     expect(db.collection("stateBills").insertOne).not.toHaveBeenCalled();
   });
 });
+
+describe("proposeStateBill — provision snapshots", () => {
+  let db: MockDb;
+
+  const LT = {
+    _id: "ru_regional_health",
+    name: "Regional Health Programme",
+    policyDomain: "welfare",
+    policyOptions: [
+      { id: "o1", name: "Minimal", effectDirection: 1, explanation: "Token funding." },
+      { id: "o2", name: "Universal", effectDirection: -1, explanation: "Full coverage." },
+    ],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    db.collection("politicalParties").findOne.mockResolvedValue({
+      sequentialId: 1,
+      countryId: "RU",
+      _id: "kprf",
+    });
+    db.collection("electedOfficials").findOne.mockResolvedValue({
+      officeType: "regionalAssembly",
+      state: "MOW",
+      characterId,
+      countryId: "RU",
+    });
+    db.collection("stateBills").findOne.mockResolvedValue(null);
+    db.collection("characters").updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collection("stateBills").insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+    db.collection("legislationTypes").find.mockReturnValue({ toArray: async () => [LT] });
+    db.collection("statePolicies").find.mockReturnValue({
+      toArray: async () => [
+        { legislationTypeId: "ru_regional_health", policyOptionId: "o1", policyOptionIndex: 0 },
+      ],
+    });
+    db.collection("enactedLaws").find.mockReturnValue({
+      sort: () => ({ toArray: async () => [] }),
+    });
+  });
+
+  it("freezes the current law on the stored provision", async () => {
+    const { proposeStateBill } = await import("./proposeStateBill");
+    const res = await proposeStateBill(db as unknown as Db, "RU", "mow", authUser(), {
+      title: "Moscow Health Act",
+      summary: "Expand regional health coverage.",
+      category: "healthcare",
+      provisions: [
+        { legislationTypeId: "ru_regional_health", policyOptionId: "o2", effectDirection: -1 },
+      ],
+    });
+
+    expect(res.status).toBe(200);
+    const inserted = db.collection("stateBills").insertOne.mock.calls[0]?.[0] as {
+      provisions: Array<Record<string, unknown>>;
+    };
+    expect(inserted.provisions[0]).toMatchObject({
+      currentPolicyOptionIdSnapshot: "o1",
+      currentPolicyOptionNameSnapshot: "Minimal",
+      currentPolicyOptionExplanationSnapshot: "Token funding.",
+      policyOptionNameSnapshot: "Universal",
+      policyOptionExplanationSnapshot: "Full coverage.",
+    });
+  });
+
+  it("keeps subsidy provisions in their original positions alongside policy ones", async () => {
+    const { proposeStateBill } = await import("./proposeStateBill");
+    const res = await proposeStateBill(db as unknown as Db, "RU", "mow", authUser(), {
+      title: "Moscow Industry Act",
+      summary: "Subsidise regional industry.",
+      category: "industry",
+      provisions: [
+        { type: "subsidy", scopeType: "economy_wide", domesticOnly: false },
+        { legislationTypeId: "ru_regional_health", policyOptionId: "o2", effectDirection: -1 },
+      ],
+    });
+
+    expect(res.status).toBe(200);
+    const inserted = db.collection("stateBills").insertOne.mock.calls[0]?.[0] as {
+      provisions: Array<Record<string, unknown>>;
+    };
+    expect(inserted.provisions).toHaveLength(2);
+    expect(inserted.provisions[0].type).toBe("subsidy");
+    expect(inserted.provisions[1].currentPolicyOptionIdSnapshot).toBe("o1");
+  });
+});

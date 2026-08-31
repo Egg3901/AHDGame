@@ -1,3 +1,9 @@
+import { recentNavairEngagements } from "@/lib/db/collections/navairEngagements";
+import { conflictRegions } from "@/lib/military/conflictRegions";
+import { region as regionNameOf } from "@/lib/navair/map";
+import { frontSupportFor } from "@/lib/navair/frontSupport";
+import { loadNavairChannels } from "@/lib/db/collections/navairChannels";
+import type { NavairUnit } from "@/lib/navair/types";
 import { notFound } from "next/navigation";
 import { requireConflictsEnabled } from "../_coldwar/gate";
 import { entityName } from "@/app/world/international-organizations/entityLabel";
@@ -10,6 +16,9 @@ import { listDeclarationHistory } from "@/lib/db/collections/battleDeclarations"
 import { getGameTime } from "@/lib/time/gameTime";
 import { toConflictView, yearOfTurn } from "../_coldwar/conflictView";
 import { regionCodesOfCountry } from "@/lib/maps/regionOwnership";
+import { staticZoneGeometry } from "@/lib/maps/staticZoneGeometry";
+import { hostEntitiesOf } from "@/lib/military/hostEntities";
+import { belligerentRoll } from "@/lib/military/belligerentRoll";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import { getMilitaryFormations } from "@/lib/db/collections/militaryFormations";
@@ -17,13 +26,18 @@ import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers
 import { getPendingDeclaration } from "@/lib/db/collections/battleDeclarations";
 import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
 import { theaterCommanderOf } from "@/lib/military/assignments";
+import { rank } from "@/lib/military/generals";
 import { getMilitaryCommands } from "@/lib/db/collections/militaryCommands";
 import { loadGeneralsById } from "@/lib/db/collections/characterGenerals";
 import { resolveCommandChain } from "@/lib/military/commandChain";
+import type { PostedGeneralRow } from "./PostedGeneralsPanel";
 import { getCabinetSettingsCollection } from "@/lib/db/collections/cabinetSettings";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import { conflictTier, belligerentSideOf } from "@/lib/military/conflictVisibility";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { archiveOpensTurn, isConflictConcluded } from "@/lib/military/conflictLifecycle";
+import { requirePeaceNegotiator } from "@/lib/api/requirePeaceNegotiator";
+import { INTERNATIONAL_ORGANIZATIONS } from "@/lib/constants/internationalOrganizations";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import { READINESS_DRIFT_STEP } from "@/lib/military/readinessDrift";
 import { getDefenseAppropriation } from "@/lib/db/collections/defenseAppropriation";
@@ -39,6 +53,8 @@ import { verdictOf, openingLine, momentumOf } from "./recordCopy";
 import type { MomentumMark } from "./MomentumPanel";
 import type { PendingChip } from "./NextTickStrip";
 import { ConflictRecord, type ConflictRecordView } from "./ConflictRecord";
+import { conflictToFront } from "@/lib/military/createConflict";
+import { getTheaterState } from "@/lib/db/collections/theaterState";
 
 /** How many engagements the record lists, newest first. */
 const BATTLE_LIMIT = 50;
@@ -133,6 +149,15 @@ export default async function ConflictRecordPage({
   let theaterCommander: string | null = null;
   let theaterCommanderName: string | null = null;
   let employ: ConflictRecordView["employ"] = null;
+  // The viewer nation's postings at this front, resolved here where the org doc and
+  // the general roster are already loaded, and turned into rows once the unit query
+  // below has run (a general's divisions travel with them).
+  let postingsHere: {
+    generalCharacterId: string;
+    name: string;
+    level: number;
+    inCharge: boolean;
+  }[] = [];
   if (viewerCountry && ownSide && viewerCharacterId) {
     const [org, seatHolder, hog, commands, generalsById] = await Promise.all([
       getMilitaryFormations(db, viewerCountry),
@@ -146,23 +171,51 @@ export default async function ConflictRecordPage({
       getMilitaryCommands(db, viewerCountry),
       loadGeneralsById(db, viewerCountry),
     ]);
-    isPostedGeneral = org.conflictAssignments.some(
+    // Postings held by someone the country's roster no longer contains are not real
+    // postings: they cannot fight, the assignments PUT drops them on the next save,
+    // and counting them here would have the page name a Theater Commander it then
+    // could not list. Filtered once so every reader below agrees.
+    const liveAssignments = org.conflictAssignments.filter(
+      (a) => generalsById[a.generalCharacterId]
+    );
+    isPostedGeneral = liveAssignments.some(
       (a) => a.theaterId === doc._id && a.generalCharacterId === viewerCharacterId
     );
     isDefenseHolder = seatHolder?.characterId?.toString() === viewerCharacterId;
     isHeadOfGovernment = hog?.toString() === viewerCharacterId;
-    const ownCommand = commands.find((c) => c.commandingGeneralId === viewerCharacterId) ?? null;
+    // Leading a command is only authority while its lead is still a commissioned
+    // general of this country: `requireCommandingGeneral` re-checks exactly this, so
+    // trusting the stored id alone would render an Employ panel whose every button
+    // the route then refuses.
+    const ownCommand =
+      (generalsById[viewerCharacterId]
+        ? commands.find((c) => c.commandingGeneralId === viewerCharacterId)
+        : undefined) ?? null;
     isCommandingGeneral = ownCommand !== null;
-    theaterCommander = theaterCommanderOf(org.conflictAssignments, doc._id);
+    theaterCommander = theaterCommanderOf(liveAssignments, doc._id);
     // Who holds a theater is public — the designation is an act of state — so the
     // name is resolved for every seat, not only the ones that can act on it.
     theaterCommanderName = theaterCommander ? (generalsById[theaterCommander]?.name ?? null) : null;
+
+    // Every general of this nation standing at this front, Theater Commander first.
+    // Their own country's only: the record's rule is that who is standing where is
+    // not public, and the enemy's dispositions are never itemised anywhere.
+    postingsHere = liveAssignments
+      .filter((a) => a.theaterId === doc._id)
+      .map((a) => ({
+        generalCharacterId: a.generalCharacterId,
+        name: generalsById[a.generalCharacterId].name ?? "Unnamed general",
+        level: generalsById[a.generalCharacterId].level,
+        inCharge: a.inCharge,
+      }));
 
     // The Commanding General's lever, brought to the front it applies to. Their
     // whole posting set is sent, not just this conflict's: the route merges other
     // commands' rows back but replaces this CG's own wholesale, so omitting the
     // rest would recall every general they have posted elsewhere.
-    if (ownCommand && doc.status !== "resolved") {
+    // Concluded, not merely resolved: a war awaiting terms takes no more postings,
+    // so offering the lever there would be a control that cannot do anything.
+    if (ownCommand && !isConflictConcluded(doc.status)) {
       const ownUnits = await getMilitaryUnitsCollection(db)
         .find({ countryId: viewerCountry })
         .toArray();
@@ -170,18 +223,24 @@ export default async function ConflictRecordPage({
       employ = {
         countryCode: viewerCountry.toLowerCase(),
         theaterId: doc._id,
-        generals: ownCommand.commanderIds.map((id) => {
-          // A general's force is DERIVED from assignedGeneralId — it is never
-          // listed on the posting, and it travels with them.
-          const led = ownUnits.filter((u) => u.assignedGeneralId === id);
-          return {
-            id,
-            name: generalsById[id]?.name ?? "Unnamed general",
-            divisions: led.length,
-            men: led.reduce((s, u) => s + u.personnel, 0).toLocaleString("en-US"),
-          };
-        }),
-        ownAssignments: org.conflictAssignments.filter((a) => ownIds.has(a.generalCharacterId)),
+        // Filtered to generals the country's roster still holds. A commander who
+        // emigrated or was dismissed stays in `commanderIds` (see
+        // reconcileCommandCommanders), and offering them here would render an
+        // "Unnamed general" whose Post-here button the assignments PUT refuses.
+        generals: ownCommand.commanderIds
+          .filter((id) => generalsById[id])
+          .map((id) => {
+            // A general's force is DERIVED from assignedGeneralId — it is never
+            // listed on the posting, and it travels with them.
+            const led = ownUnits.filter((u) => u.assignedGeneralId === id);
+            return {
+              id,
+              name: generalsById[id]?.name ?? "Unnamed general",
+              divisions: led.length,
+              men: led.reduce((s, u) => s + u.personnel, 0).toLocaleString("en-US"),
+            };
+          }),
+        ownAssignments: liveAssignments.filter((a) => ownIds.has(a.generalCharacterId)),
       };
     }
   }
@@ -204,6 +263,8 @@ export default async function ConflictRecordPage({
 
   const tier = conflictTier({
     status: doc.status,
+    endTurn: doc.endTurn,
+    currentTurn,
     side: ownSide,
     isPostedGeneral,
     isDefenseHolder,
@@ -225,7 +286,10 @@ export default async function ConflictRecordPage({
   // anyone, and a non-belligerent has nothing to declare with. Being strictly
   // narrower, this can never offer an action the route would refuse.
   const canAct =
-    doc.status !== "resolved" &&
+    // Concluded, not merely resolved. A war awaiting terms has stood both rosters
+    // down and the turn phase now fizzles anything declared at it, so offering the
+    // panel here would be a button that cannot work.
+    !isConflictConcluded(doc.status) &&
     ownSide !== null &&
     defensePosition !== "" &&
     (theaterCommander ? theaterCommander === viewerCharacterId : isDefenseHolder);
@@ -238,6 +302,27 @@ export default async function ConflictRecordPage({
           .find({ countryId: { $in: belligerentCountries } })
           .toArray()
       : [];
+
+  // Gated on a MILITARY seat, not merely on `command` tier. The tier also admits the
+  // head of government, whom `resolveCommandChain` reads as a citizen — and the
+  // citizen panel says outright that who is standing where is not public. Showing
+  // them the roster would have the page contradict its own copy.
+  const holdsMilitarySeat = isDefenseHolder || isCommandingGeneral || isPostedGeneral;
+  const postedHere: PostedGeneralRow[] | null =
+    tier === "command" && holdsMilitarySeat && viewerCountry
+      ? postingsHere
+          .map((a) => ({
+            id: a.generalCharacterId,
+            name: a.name,
+            rank: rank(a.level),
+            divisions: units.filter(
+              (u) => u.countryId === viewerCountry && u.assignedGeneralId === a.generalCharacterId
+            ).length,
+            inCharge: a.inCharge,
+            isViewer: a.generalCharacterId === viewerCharacterId,
+          }))
+          .sort((a, b) => Number(b.inCharge) - Number(a.inCharge) || a.name.localeCompare(b.name))
+      : null;
 
   // The opposing side's state members are the only legal targets here; the declare
   // route re-checks side membership against the same rosters, so this only shapes the
@@ -260,6 +345,32 @@ export default async function ConflictRecordPage({
       : ownSide === "B"
         ? (doc.sideB.backer ?? "neutral")
         : "neutral";
+  // The dictate panel, shown ONLY to the negotiator of the country that won this
+  // war outright. Null for everyone else, including the losing side and the winning
+  // side's allies: a coalition victory yields one term, and the panel is where that
+  // is visible rather than only enforced by the route.
+  const dictate =
+    doc.status === "terms_pending" &&
+    doc.termsWindow &&
+    viewerCountry === doc.termsWindow.imposer &&
+    authUser?.character?._id &&
+    (
+      await requirePeaceNegotiator(
+        db,
+        viewerCountry,
+        authUser.character._id,
+        authUser.isAdmin === true
+      )
+    ).ok
+      ? {
+          conflictId: doc._id,
+          countryCode: viewerCountry.toLowerCase(),
+          target: doc.termsWindow.target,
+          targetName: COUNTRY_CONFIGS[doc.termsWindow.target]?.name ?? doc.termsWindow.target,
+          turnsLeft: Math.max(0, doc.termsWindow.closesTurn - currentTurn),
+        }
+      : null;
+
   const pendingDecl =
     canAct && viewerCountry ? await getPendingDeclaration(db, viewerCountry, doc._id) : null;
   const actions =
@@ -302,8 +413,40 @@ export default async function ConflictRecordPage({
             };
           }),
           ownSpectrum,
+          // The viewer's own standing order at this front. Read from theatre state, so
+          // it survives a change of Theater Commander the way the deployment does.
+          autoJoin: Boolean((await getTheaterState(db, viewerCountry)).autoJoin?.[doc._id]),
         }
       : null;
+
+  // The naval and air picture, read from the state `navairOperations` wrote this turn.
+  // Only assembled for a belligerent, since it is command-tier sight: a spectator reading
+  // the public record must not learn a nation's fleet dispositions from this page.
+  const navairPanelInput = await (async () => {
+    if (!ownSide) return {};
+    const channels = await loadNavairChannels(db);
+    const navairUnits = (await getMilitaryUnitsCollection(db)
+      .find({ domain: { $in: ["naval", "air"] } })
+      .toArray()) as unknown as NavairUnit[];
+    const own = ownSide === "A" ? doc.sideA.countries : doc.sideB.countries;
+    const foe = ownSide === "A" ? doc.sideB.countries : doc.sideA.countries;
+    // Every region the war is fought across, not just the one it is named after: a war
+    // that has spread has a sea war in more than one place.
+    const theatre = conflictRegions(doc);
+    const actions = await recentNavairEngagements(db, theatre, 5);
+
+    return {
+      navairSupport: frontSupportFor(navairUnits, channels, [...own], doc.region),
+      navairEnemySupport: frontSupportFor(navairUnits, channels, [...foe], doc.region),
+      navairActions: actions.map((a) => ({
+        turn: a.turn,
+        regionName: regionNameOf(a.region)?.name ?? a.region,
+        winner: a.winner.join(", "),
+        marginPct: a.marginPct,
+        sunk: a.sunk,
+      })),
+    };
+  })();
 
   const extras = buildRecordExtras({
     tier,
@@ -312,10 +455,28 @@ export default async function ConflictRecordPage({
     sideACountries: [...doc.sideA.countries],
     sideBCountries: [...doc.sideB.countries],
     units,
+    concluded: isConflictConcluded(doc.status),
     reports,
+    // So this page's enemy band and the war room's odds read the same fleet the same way.
+    seaAccess: conflictToFront(doc).seaAccess,
+    ...navairPanelInput,
   });
 
-  const hostRegionCodes = await regionCodesOfCountry(db, doc.hostCountry);
+  // The whole conflict zone, not the anchor alone: the front line is placed as a
+  // share of the land the map can see, so a war hosted in two countries has to
+  // project both or the line is measured against half a theatre.
+  const hostEntities = hostEntitiesOf(doc) as string[];
+  const hostRegionCodes = [
+    ...new Set(
+      (await Promise.all(hostEntities.map((host) => regionCodesOfCountry(db, host)))).flat()
+    ),
+  ];
+  // Whether a map can be drawn at all, decided HERE because it chooses the page's
+  // layout. `FrontLineMap` draws from two sources (region shards for a country
+  // with states, a static shard for a proxy host) and a zone with neither renders
+  // one sentence inside a 620px box while the whole record is squeezed into the
+  // 452px rail beside it. DD is exactly that case.
+  const hasMap = hostRegionCodes.length > 0 || staticZoneGeometry(hostEntities).codes.length > 0;
 
   // --- both sides' live force, at the resolution the tier allows ----------------
   const sideACountries = [...doc.sideA.countries] as string[];
@@ -429,9 +590,11 @@ export default async function ConflictRecordPage({
     sideALabel: doc.sideA.label,
     sideBLabel: doc.sideB.label,
     recentGainA,
-    engagements: record.engagements,
+    // The window actually drawn, which is the war's whole length until it is
+    // older than MOMENTUM_WINDOW. The note quotes this so its ground figure is
+    // never mistaken for the verdict's since-the-opening one.
+    windowTurns: Math.max(1, currentTurn - fromTurn),
     unopposedAdvances: record.unopposedAdvances,
-    casualties,
     contested: record.engagements > 0,
   });
 
@@ -457,11 +620,14 @@ export default async function ConflictRecordPage({
     });
   }
   if (pending.length === 0) {
+    // No `when`: the chip's two halves were saying the same thing twice ("Nothing
+    // of yours resolves at this front" · "the line holds"). A chip with nothing
+    // pending has no timing to state.
     pending.push({
       text: canAct
         ? "No offensive declared — the line holds"
         : "Nothing of yours resolves at this front",
-      when: "the line holds",
+      when: "",
       tone: "quiet",
     });
   }
@@ -479,6 +645,7 @@ export default async function ConflictRecordPage({
       ? "The Theater Commander designated for this conflict."
       : "The defense secretary — no Theater Commander is designated at this front.";
 
+  const fogLiftsTurn = archiveOpensTurn(doc);
   const conflict: ConflictRecordView = {
     conflictId: doc.conflictId,
     name: doc.name,
@@ -490,6 +657,9 @@ export default async function ConflictRecordPage({
     currentTurn,
     status: doc.status,
     statusLabel: doc.status.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase()),
+    // Only while the fog is still down on a resolved war: the panels use it to say
+    // when the record opens, and an open record has nothing to announce.
+    ...(tier !== "archive" && fogLiftsTurn !== null ? { archiveOpensTurn: fogLiftsTurn } : {}),
     // Only shown when the war was actually declared. warGoalLabel would otherwise
     // print "Undeclared" on every seeded or event-created conflict.
     ...(doc.warGoal ? { warGoal: warGoalLabel(doc.warGoal) } : {}),
@@ -499,9 +669,27 @@ export default async function ConflictRecordPage({
     sideBCountries,
     sideAFaction: doc.sideA.factionEntity,
     sideBFaction: doc.sideB.factionEntity,
+    // Humanised here rather than in the component: the record is a presentational
+    // client component and has no business reaching for country or org constants.
+    //
+    // Filtered to countries STILL on a roster. Entries are never deleted (they are the
+    // war's record of why each ally came), so an ally released by its principal's peace
+    // would otherwise keep claiming a place in a belligerent list it has left.
+    treatyNotes: (doc.treatyEntries ?? [])
+      .filter((e) => sideACountries.includes(e.countryId) || sideBCountries.includes(e.countryId))
+      .map((e) => ({
+        country: COUNTRY_CONFIGS[e.countryId]?.name ?? e.countryId,
+        organization:
+          INTERNATIONAL_ORGANIZATIONS[e.organizationId as keyof typeof INTERNATIONAL_ORGANIZATIONS]
+            ?.name ?? e.organizationId,
+        defending: COUNTRY_CONFIGS[e.defending]?.name ?? e.defending,
+      })),
     control: doc.control,
     controlStart,
+    hostEntities,
     hostRegionCodes,
+    hasMap,
+    belligerents: belligerentRoll(doc),
     hostIsBelligerent,
     verdict: verdict.headline,
     verdictDetail: verdict.detail,
@@ -543,7 +731,7 @@ export default async function ConflictRecordPage({
       id: o._id.toString(),
       leaver: o.fromCountry,
       other: o.toCountry,
-      indemnity: o.indemnity,
+      term: o.term,
       justification: o.justification ?? null,
       turn: o.resolvedTurn ?? o.offeredTurn,
     })),
@@ -555,6 +743,8 @@ export default async function ConflictRecordPage({
     // record does not need to be told they hold none.
     chain: viewerCharacterId ? chain : null,
     actions,
+    dictate,
+    postedHere,
     employ,
     whoDeclares,
     committedCountry,
@@ -566,6 +756,7 @@ export default async function ConflictRecordPage({
     battles: extras.battles,
     ownForces: extras.ownForces,
     enemyBand: extras.enemyBand,
+    navalAir: extras.navalAir,
     arrearsRatio: viewerArrearsRatio,
     readinessTier: viewerReadinessTier,
   };

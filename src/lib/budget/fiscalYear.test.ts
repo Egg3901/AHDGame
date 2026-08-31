@@ -272,6 +272,7 @@ function makeDb(options: {
     matchedCount: 1,
     upsertedCount: 0,
   });
+  const ukBudgetInsertOne = vi.fn().mockResolvedValue({ insertedId: "uk-budget" });
 
   const db = {
     collection: vi.fn((name: string) => {
@@ -329,12 +330,14 @@ function makeDb(options: {
             updateOne: vi.fn().mockResolvedValue({}),
             updateMany: vi.fn().mockResolvedValue({}),
             replaceOne: vi.fn().mockResolvedValue({}),
+            insertOne: ukBudgetInsertOne,
           };
       }
     }),
     _federalBudgetUpdateOne: federalBudgetUpdateOne,
     _stateBudgetUpdateOne: stateBudgetUpdateOne,
     _federalBudgetSnapshotReplaceOne: federalBudgetSnapshotReplaceOne,
+    _ukBudgetInsertOne: ukBudgetInsertOne,
   };
 
   return db;
@@ -405,6 +408,18 @@ describe("processFiscalYear", () => {
           fiscalYear: 2026,
         }),
       })
+    );
+  });
+
+  it("opens a UK Budget draft only when the world has a UK fiscal ledger", async () => {
+    const usDb = makeDb({});
+    await processFiscalYear(usDb as unknown as Db, 2026, 600);
+    expect(usDb._ukBudgetInsertOne).not.toHaveBeenCalled();
+
+    const ukDb = makeDb({ federalBudget: makeFederalBudget({ _id: "UK", countryId: "UK" }) });
+    await processFiscalYear(ukDb as unknown as Db, 2026, 600);
+    expect(ukDb._ukBudgetInsertOne).toHaveBeenCalledWith(
+      expect.objectContaining({ fiscalYear: 2026, status: "draft" })
     );
   });
 

@@ -1,4 +1,5 @@
 import type { CountryId } from "../../constants/countries";
+import type { ActiveModifier } from "../../utils/approvalModifiers";
 
 /**
  * Country-level government approval rating.
@@ -33,5 +34,50 @@ export interface GovernmentApproval {
     approval: number;
     net: number;
   }>;
+  /**
+   * The war block's applied total as of the last snapshot: the sum of the war
+   * chips, nothing more. No longer a damped quantity in its own right — every
+   * term is now either a slow integrator or bounded and recomputed, so the block
+   * has nothing left that can jump.
+   *
+   * Written for diagnostics and read by nothing. The snapshot decides when a
+   * non-playable belligerent's document can be released from `warExhaustion`
+   * instead: this total rounds to a tenth for display, so it reads zero while a
+   * real residue is still healing.
+   */
+  warApprovalTotal?: number;
+  /**
+   * War exhaustion, as a running integrator rather than a function of the
+   * current war's clock.
+   *
+   * Moves one point per in-game year: down while the country is fighting, up
+   * toward a ceiling of zero while it is at peace. Persisted BECAUSE it outlives
+   * its war. Ending a war and immediately starting another used to reset
+   * exhaustion to its opening +1, so a government could fight continuously and
+   * never pay for it; the residue now carries across and the rally on entry is
+   * capped at +1 rather than granted outright.
+   *
+   * Absent means "never scored". The first snapshot of a country already at war
+   * seeds this from the original closed-form curve, so nothing jumps the day it
+   * ships and no backfill script is needed.
+   */
+  warExhaustion?: number;
+  /**
+   * The conflict `warExhaustion` was last accrued against.
+   *
+   * The rally on entering a new war keys on this changing, rather than on
+   * `turnsSinceEntry === 0`: a turn the snapshot did not run for this country
+   * would otherwise swallow the transition silently, and ending one war and
+   * opening another on the same turn would be missed entirely.
+   */
+  warExhaustionConflictId?: string | null;
+  /**
+   * The national modifiers behind `approvalRating`, as of the last snapshot.
+   *
+   * Stored rather than recomputed because the providers behind them are async
+   * and read conflicts, personnel and org state — work that belongs in the turn
+   * phase, not in a page render. Readers show these beside the stored rating.
+   */
+  activeNationalModifiers?: ActiveModifier[];
   updatedAt: Date;
 }

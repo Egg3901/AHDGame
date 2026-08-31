@@ -10,6 +10,8 @@ import {
   globalEffectiveness,
   coverageStatus,
   effIntent,
+  logisticsCoverageByRegion,
+  hasSameTypeOverlap,
 } from "../calc";
 import type { MilitaryCommand, MilitaryState, MilitaryOperation } from "../types";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
@@ -99,6 +101,72 @@ describe("effectiveness", () => {
   });
 });
 
+describe("logistics command supply", () => {
+  it("reports effectiveness as a 0..1 coverage only in covered regions", () => {
+    const coverage = logisticsCoverageByRegion(
+      [
+        cmd({ type: "LOGISTICS", regionIds: ["eeu"], base: 100 }),
+        cmd({ id: "regional", type: "REGIONAL", regionIds: ["weu"], base: 100 }),
+      ],
+      UNITS
+    );
+
+    expect(coverage).toEqual({ eeu: 1 });
+  });
+
+  it("uses the strongest overlapping Logistics command instead of stacking", () => {
+    const coverage = logisticsCoverageByRegion(
+      [
+        cmd({ id: "weak", type: "LOGISTICS", regionIds: ["eeu"], base: 50 }),
+        cmd({ id: "strong", type: "LOGISTICS", regionIds: ["eeu"], base: 100 }),
+      ],
+      UNITS
+    );
+
+    expect(coverage.eeu).toBe(1);
+  });
+
+  it("never reports more than full coverage, whatever the command's base", () => {
+    // A command base arrives from the commands route unbounded; coverage now multiplies the
+    // force's own demand, so an unclamped 500 would be five times the intended share.
+    const coverage = logisticsCoverageByRegion(
+      [cmd({ type: "LOGISTICS", regionIds: ["eeu"], base: 500 })],
+      UNITS
+    );
+    expect(coverage.eeu).toBe(1);
+  });
+});
+
+// The one place the same-type rule is decided. It had been written out by hand in
+// three places (overlappingRegions, coverageStatus, and the detail panel's region
+// rows), and the original bug was exactly two of those copies disagreeing.
+describe("hasSameTypeOverlap", () => {
+  it("is false for no owners, one owner, or owners that are all different types", () => {
+    expect(hasSameTypeOverlap([])).toBe(false);
+    expect(hasSameTypeOverlap([cmd({ id: "a", type: "REGIONAL" })])).toBe(false);
+    expect(
+      hasSameTypeOverlap([
+        cmd({ id: "a", type: "REGIONAL" }),
+        cmd({ id: "b", type: "LOGISTICS" }),
+        cmd({ id: "c", type: "HOMELAND_DEFENSE" }),
+      ])
+    ).toBe(false);
+  });
+
+  it("is true as soon as one type repeats, whoever else is present", () => {
+    expect(
+      hasSameTypeOverlap([cmd({ id: "a", type: "REGIONAL" }), cmd({ id: "b", type: "REGIONAL" })])
+    ).toBe(true);
+    expect(
+      hasSameTypeOverlap([
+        cmd({ id: "a", type: "REGIONAL" }),
+        cmd({ id: "b", type: "LOGISTICS" }),
+        cmd({ id: "c", type: "LOGISTICS" }),
+      ])
+    ).toBe(true);
+  });
+});
+
 describe("coverage", () => {
   const state = (): MilitaryState => ({
     commands: [cmd({ id: "a", regionIds: ["mea", "naf"] }), cmd({ id: "b", regionIds: ["naf"] })],
@@ -134,6 +202,61 @@ describe("coverage", () => {
     expect(coverageStatus(state(), "arc", ops)).toBe("UNASSIGNED");
     expect(coverageStatus(state(), "naf", ops)).toBe("OVERLAPPING");
     expect(coverageStatus(state(), "mea", ops)).toBe("ACTIVE_CONFLICT");
+  });
+
+  // A Regional command paired with a Logistics command over the same region is the
+  // supported setup for fighting overseas, and the one the wiki recommends. It read
+  // as UNASSIGNED because only a single owner counted as covered, so the builder
+  // told players the pairing had not taken.
+  it("labels a region covered by commands of different types as assigned", () => {
+    const s: MilitaryState = {
+      commands: [
+        cmd({ id: "a", type: "REGIONAL", regionIds: ["weu"] }),
+        cmd({ id: "b", type: "LOGISTICS", regionIds: ["weu"] }),
+      ],
+      selectedId: "a",
+      selectedRegionId: null,
+      filter: "coverage",
+      assignMode: false,
+    };
+    expect(coverageStatus(s, "weu", [])).toBe("ASSIGNED");
+  });
+
+  // The ops branch sits between OVERLAPPING and the owner count, so widening the
+  // owner count to "any owner" must not let a covered region outrank a live war in
+  // the chip. Locks the documented precedence for the multi-owner case specifically.
+  it("still reports an active conflict in a region covered by different command types", () => {
+    const s: MilitaryState = {
+      commands: [
+        cmd({ id: "a", type: "REGIONAL", regionIds: ["weu"] }),
+        cmd({ id: "b", type: "LOGISTICS", regionIds: ["weu"] }),
+      ],
+      selectedId: "a",
+      selectedRegionId: null,
+      filter: "coverage",
+      assignMode: false,
+    };
+    const live: MilitaryOperation[] = [
+      { id: "o1", name: "Op", cmd: "a", region: "weu", type: "x", risk: "Low", progress: 10 },
+    ];
+    expect(coverageStatus(s, "weu", live)).toBe("ACTIVE_CONFLICT");
+  });
+
+  // A duplicate type is still a conflict even when a third command of another type
+  // shares the region, so the overlap branch must not be weakened by the widening.
+  it("still flags an overlap when a duplicate type shares a region with another type", () => {
+    const s: MilitaryState = {
+      commands: [
+        cmd({ id: "a", type: "REGIONAL", regionIds: ["weu"] }),
+        cmd({ id: "b", type: "REGIONAL", regionIds: ["weu"] }),
+        cmd({ id: "c", type: "LOGISTICS", regionIds: ["weu"] }),
+      ],
+      selectedId: "a",
+      selectedRegionId: null,
+      filter: "coverage",
+      assignMode: false,
+    };
+    expect(coverageStatus(s, "weu", [])).toBe("OVERLAPPING");
   });
 });
 

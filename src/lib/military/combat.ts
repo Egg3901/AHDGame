@@ -6,6 +6,7 @@ import type { NatMods } from "./doctrineTree";
 import type { GenMods } from "./generals";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import { VETM, eqAvg, computeEffectivePower } from "@/lib/constants/military";
+import { NAVAL_REACH, FRONT_CAPACITY_BASE, TERRAIN_CAPACITY } from "./config";
 
 // VETM + eqAvg live canonically in constants/military.ts (the one power model);
 // re-exported here so combat-suite consumers keep importing from "./combat".
@@ -571,6 +572,23 @@ export interface Front {
   contested: boolean;
   terr: number;
   infra: number;
+  /**
+   * Whether this front reaches the sea. Set by `conflictToFront`, which derives it from
+   * the host's geography unless the conflict overrides it. Absent means unknown, which
+   * `navalReach` treats as inland.
+   */
+  seaAccess?: boolean;
+  /**
+   * Combat value this front can hold in contact at once. Set by `conflictToFront` from
+   * the terrain. Absent means unknown, which `planEngagement` treats as the base width.
+   */
+  capacity?: number;
+  /**
+   * The side fighting on its own soil: whichever holds the conflict's host country,
+   * which in an interstate war is the nation declared on. Set by `conflictToFront`.
+   * Absent means neither, and nobody gets `FRONT_SUPPLY.hostSideThroughput`.
+   */
+  hostSide?: "A" | "B";
   sev?: string;
   west?: string;
   east?: string;
@@ -706,6 +724,28 @@ export function combatValue(u: CombatUnit, nm: NatMods, gm: GenMods): number {
   return Math.round(effPower(u) * (0.55 + 0.45 * (u.readiness / 100)) * doctrineMult(u, nm, gm));
 }
 
+/**
+ * What a formation costs in FRONTAGE — `combatValue` without the readiness curve.
+ *
+ * Frontage is a claim about physical width: how many formations can stand on this
+ * ground at once. Readiness is how much fight is left in them, and a worn division
+ * occupies the same country as a rested one. Charging the front at `combatValue` made
+ * the two move together, with two consequences neither system wanted: restoring a
+ * worn army's readiness SHRANK the line it could hold, so every readiness fix silently
+ * re-tightened whatever `FRONT_CAPACITY_BASE` had been calibrated against; and a force
+ * could widen its own frontage by letting itself degrade.
+ *
+ * Everything else about a formation still costs room — base platform, veterancy, tech,
+ * equipment, doctrine and its general all remain in `effPower`/`doctrineMult`. Only the
+ * readiness term, which is a state rather than a size, comes out.
+ *
+ * Used ONLY by `planEngagement` to decide who stands in the line. What those formations
+ * are then WORTH in the fight is still `combatValue`, readiness included.
+ */
+export function frontageCost(u: CombatUnit, nm: NatMods, gm: GenMods): number {
+  return Math.round(effPower(u) * doctrineMult(u, nm, gm));
+}
+
 /** Effective upkeep (design effUpkeep): base × posture × country scale × doctrine × general. */
 export function effUpkeep(u: CombatUnit, nm: NatMods, gm: GenMods, countryScale: number): number {
   return Math.round(u.upkeepBase * posDef(u.posture).up * countryScale * nm.upkeep * gm.upkeep);
@@ -730,6 +770,50 @@ export function terrainFactor(
   if (T.domain && T.domain[domain]) m *= T.domain[domain];
   if (T.trait) for (const k of traitKeys || []) if (T.trait[k]) m *= T.trait[k];
   return Math.max(0.6, Math.min(1.4, m));
+}
+
+/**
+ * How much of a naval formation reaches a land battle, by hull class and sea access.
+ *
+ * Deliberately NOT folded into `terrainFactor`. That function clamps to 0.6..1.4, which
+ * encodes a rule worth keeping -- terrain never swings a unit more than +/-40%. Whether
+ * a hull can touch the battle at all is a different question and has to go below 0.6.
+ *
+ * Only `Carrier Strike Group` carries `strategic` among naval types (the other holders
+ * are air, rocket and space domain), so scoping to the naval domain makes that trait a
+ * clean carrier test without inventing new data.
+ *
+ * `marine` is deliberately NOT covered. Marines are amphibious GROUND troops and fight
+ * ashore perfectly well, so they take no reach penalty; the terrain table already
+ * weights them where it should (`maritime` 1.15, `highland` 0.95). Do not "fix" this by
+ * folding marine in with the hulls.
+ *
+ * `Amphibious Group` lands on the escort side of the split, which is a deliberate
+ * simplification rather than an oversight: it puts troops ashore, so it is worth more
+ * than a frigate on a coastal front and nothing at all inland, and one number cannot say
+ * both. If amphibious assault ever needs its own band, that is a third class, not a
+ * reclassification of this one.
+ */
+/**
+ * How much combat value this ground can hold in contact, from its terrain.
+ *
+ * Unrecognised terrain falls back to the base rather than inventing a family, matching
+ * `terrainFactor`, which returns 1 for the same reason.
+ */
+export function capacityOfTerrain(terrain: string | undefined): number {
+  const family = terrainFamilyOf(terrain);
+  const mult = family ? TERRAIN_CAPACITY[family] : 1;
+  return FRONT_CAPACITY_BASE * mult;
+}
+
+export function navalReach(
+  front: Pick<Front, "seaAccess"> | undefined,
+  domain: string,
+  traitKeys: string[]
+): number {
+  if (domain !== "naval") return 1;
+  const band = front?.seaAccess ? NAVAL_REACH.coastal : NAVAL_REACH.inland;
+  return (traitKeys || []).includes("strategic") ? band.carrier : band.escort;
 }
 
 /** Recommended battle role from a unit's profile (design recommendRole). */

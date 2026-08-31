@@ -84,13 +84,19 @@ describe("computeCorpCommodityFlows", () => {
 
   it("attaches global market context from the latest flow ledger row", () => {
     const flow: CommodityFlow = {
+      basis: "ledger_aggregate",
+      clearingBasis: "global_pooled_availability",
       commodity: "steel",
       turn: 42,
       supplyUnits: 1000,
       demandUnits: 900,
+      demandUnitsLedger: 900,
       clearedUnits: 900,
+      clearedUnitsPooled: 900,
       unmetDemandUnits: 0,
+      unmetDemandUnitsPooled: 0,
       surplusUnits: 100,
+      surplusUnitsPooled: 100,
       price: 850,
       stockUnits: 5000,
       coverTurns: 5.5,
@@ -140,6 +146,7 @@ describe("computeCorpCommodityFlows", () => {
       consumptionCoveredUnits: 60,
       coveragePercent: 60,
       turn: 9,
+      consumptionUnits: 100,
     });
   });
 
@@ -167,6 +174,7 @@ describe("computeCorpCommodityFlows", () => {
       consumptionCoveredUnits: 0,
       coveragePercent: 0,
       turn: 9,
+      consumptionUnits: 0,
     });
   });
 

@@ -33,6 +33,46 @@ function seedWorld() {
 }
 
 describe("splitParties", () => {
+  // Regression: the UK regional parties now hold a seed-floor org row in every
+  // region, so "has any row outside the region" no longer means the party is
+  // organised outside it. Treating a floor row as real presence would flip the
+  // SNP (and Sinn Fein on an NI secession) from wholesale transfer to
+  // independentized — dissolving the very party the region just voted for.
+  it("still transfers a region-homed major that only holds seed-floor org elsewhere", async () => {
+    const { db, cols } = seedWorld();
+    cols.statePartyOrg.push({
+      _id: "UK_ENG_20",
+      countryId: "UK",
+      stateId: "ENG",
+      partyId: "20",
+      organization: 5,
+    });
+
+    const res = await splitParties(db, "SCO", "UK", "SCO");
+
+    expect(res).toMatchObject({ wholesale: 1 });
+    expect(res.idMap).toEqual({ 20: 1 });
+    const snp = cols.politicalParties.find((p) => p._id === "snp")!;
+    expect(snp).toMatchObject({ countryId: "SCO", sequentialId: 1 });
+  });
+
+  it("treats real organisation outside the region as outside presence", async () => {
+    const { db, cols } = seedWorld();
+    // 35 org in England is a genuine national footprint, not a seed floor, so
+    // the SNP is no longer region-homed and does not emigrate wholesale.
+    cols.statePartyOrg.push({
+      _id: "UK_ENG_20",
+      countryId: "UK",
+      stateId: "ENG",
+      partyId: "20",
+      organization: 35,
+    });
+
+    const res = await splitParties(db, "SCO", "UK", "SCO");
+
+    expect(res).toMatchObject({ wholesale: 0 });
+  });
+
   it("transfers only the region-homed major; independentizes UK-wide majors and non-majors", async () => {
     const { db, cols } = seedWorld();
     const res = await splitParties(db, "SCO", "UK", "SCO");

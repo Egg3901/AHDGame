@@ -25,16 +25,30 @@ function command(over: Record<string, unknown> = {}) {
   };
 }
 
+/** Put `ids` on the country's commissioned-general roster. */
+function roster(db: MockDb, ids: string[]) {
+  db.collectionMocks.characters.find.mockReturnValue({
+    project: () => ({ toArray: async () => ids.map((id) => ({ _id: id, name: `Gen ${id}` })) }),
+  });
+  db.collectionMocks.characterGenerals.find.mockReturnValue({
+    toArray: async () =>
+      ids.map((id) => ({ characterId: id, commissioned: true, general: { level: 2, name: id } })),
+  });
+}
+
 describe("requireCommandingGeneral", () => {
   let db: MockDb;
   beforeEach(() => {
     vi.clearAllMocks();
     db = createMockDb();
     db.collection("militaryCommands");
+    db.collection("characters");
+    db.collection("characterGenerals");
     db.collectionMocks.militaryCommands.findOne.mockResolvedValue({
       countryId: "US",
       commands: [command()],
     });
+    roster(db, ["g1", "g2", "other"]);
   });
 
   const run = (characterId: string | null) =>
@@ -92,5 +106,31 @@ describe("requireCommandingGeneral", () => {
     const r = await run("g1");
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.command.id).toBe("cmd2");
+  });
+
+  /**
+   * Live data: Russia's only command was led by a general whose character had moved
+   * to the United Kingdom. The stored id still matched, so the country-scoped lookup
+   * alone handed a foreign player Russia's postings and Theater Commander picks.
+   */
+  it("403s a lead whose character has left the country", async () => {
+    roster(db, ["g2"]);
+    const r = await run("g1");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.response.status).toBe(403);
+  });
+
+  it("403s a lead who has been dismissed as a general", async () => {
+    db.collectionMocks.characterGenerals.find.mockReturnValue({
+      toArray: async () => [{ characterId: "g1", commissioned: false, general: { level: 2 } }],
+    });
+    const r = await run("g1");
+    expect(r.ok).toBe(false);
+  });
+
+  // The roster query is the expensive half; an unauthorized caller must not pay it.
+  it("does not read the roster for a caller who leads nothing", async () => {
+    await run("stranger");
+    expect(db.collectionMocks.characterGenerals.find).not.toHaveBeenCalled();
   });
 });

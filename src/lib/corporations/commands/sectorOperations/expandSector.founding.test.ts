@@ -161,9 +161,27 @@ beforeEach(() => {
   db.collection("characters");
   db.collection("stateMetrics");
   db.collection("gameState");
+  db.collection("gameConfig");
 });
 
 describe("expandSector — founding build (plants)", () => {
+  it("pauses new Retail sectors during the demand unwind", async () => {
+    await wireMocks(true);
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      _id: "default",
+      retailDemandTransitionStartTurn: CURRENT_TURN - 48,
+      retailDemandTransitionTurns: 192,
+    });
+    const { expandSector } = await import("./expandSector");
+    const res = await expandSector(request("retail"), { params });
+    const body = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(body.error).toContain("144 turns remaining");
+    expect(db.collectionMocks.corporateSectors.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+  });
+
   it("blocks private expansion into an eastern-bloc command economy", async () => {
     await wireMocks(true);
     db.collectionMocks.states.findOne.mockResolvedValue({

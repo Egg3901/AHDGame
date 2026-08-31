@@ -18,7 +18,15 @@ import {
   listOffersForCountry,
   reapExpiredOffers,
 } from "@/lib/db/collections/peaceOffers";
-import { validatePeaceOffer, isOfferLive, maxIndemnityForGdp } from "@/lib/military/peaceOffer";
+import {
+  validatePeaceOffer,
+  isOfferLive,
+  maxIndemnityForGdp,
+  withdrawalGate,
+} from "@/lib/military/peaceOffer";
+import type { PeaceTerm } from "@/lib/military/peaceTerm";
+import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
+import { getCountryState } from "@/lib/countryState";
 import type { FederalBudget } from "@/lib/db/types";
 import { opposedBelligerents } from "@/lib/military/occupation";
 import { PEACE_OFFER_DURATION_TURNS, type PeaceOfferDoc } from "@/lib/db/types/peaceOffer";
@@ -27,10 +35,33 @@ import { moderatedBillText } from "@/lib/api/schemas/congress";
 const bodySchema = z.object({
   conflictId: z.string().min(1),
   toCountry: z.string().min(2).max(3),
-  indemnity: z.object({
-    payer: z.string().min(2).max(3),
-    amount: z.number().finite().min(0),
-  }),
+  // A discriminated union, so a body carrying two terms cannot parse. Note
+  // `parliamentaryMonarchy` is deliberately ABSENT: a settlement cannot install a
+  // crown, and refusing it at the schema is stronger than refusing it in the
+  // validator alone.
+  /**
+   * Which party this deal removes. Omitted means the sender, which is the original
+   * shape and what every existing client sends.
+   */
+  leaver: z.enum(["us", "them"]).optional(),
+  term: z.discriminatedUnion("kind", [
+    // A white peace carries no fields: it is the absence of a term, and the whole of
+    // its effect is that the war resolves with no victor recorded.
+    z.object({ kind: z.literal("white_peace") }),
+    z.object({
+      kind: z.literal("indemnity"),
+      payer: z.string().min(2).max(3),
+      amount: z.number().finite().min(0),
+    }),
+    z.object({
+      kind: z.literal("regime_change"),
+      targetSystem: z.enum(["presidential", "parliamentaryRepublic", "onePartyState"]),
+    }),
+    z.object({
+      kind: z.literal("demilitarisation"),
+      turns: z.number().int().positive(),
+    }),
+  ]),
   // Player-authored text another player reads, so it takes the body-copy policy —
   // not the stricter name filter reserved for public page titles.
   justification: moderatedBillText(z.string().max(1000)).optional(),
@@ -74,10 +105,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     // Wars this country is actually FIGHTING, not merely hosting.
     // `listConflictsForCountry` also matches `hostCountry`, and a country can host a
     // war it is not a belligerent in — there is nothing for it to negotiate there.
+    // A war awaiting terms is excluded too: it has already been won, the POST would
+    // refuse an offer for it, and listing it would put a choice in the dropdown that
+    // cannot go anywhere.
     const wars = (await listConflictsForCountry(db, countryId)).filter(
       (c) =>
-        (c.sideA.countries as string[]).includes(countryId) ||
-        (c.sideB.countries as string[]).includes(countryId)
+        !isConflictConcluded(c.status) &&
+        ((c.sideA.countries as string[]).includes(countryId) ||
+          (c.sideB.countries as string[]).includes(countryId))
     );
 
     const offers = await listOffersForCountry(
@@ -99,9 +134,33 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
           name: w.name,
           // Only countries that can actually be offered terms: the opposing roster,
           // which is empty for a generated force and correctly offers nobody.
-          enemies: (onA ? w.sideB.countries : w.sideA.countries).filter((e) =>
-            opposedBelligerents(w, countryId, e)
-          ),
+          //
+          // Each carries the withdrawal gate's verdict, so the form can say why a
+          // country cannot simply be asked to leave BEFORE a player composes an offer
+          // the route would refuse. Computed by the same `withdrawalGate` the POST
+          // runs, so the two cannot drift; the server stays the authority.
+          // What OUR own departure would do, for the same reason: the panel must say
+          // whether leaving ends the war rather than claiming the fighting always
+          // carries on without us.
+          ourDeparture: (() => {
+            const g = withdrawalGate(w, countryId, countryId);
+            return { endsWar: g.endsWar, guestsLeaving: g.guests };
+          })(),
+          enemies: (onA ? w.sideB.countries : w.sideA.countries)
+            .filter((e) => opposedBelligerents(w, countryId, e))
+            .map((e) => {
+              const gate = withdrawalGate(w, countryId, e);
+              return {
+                country: e,
+                endsWar: gate.endsWar,
+                guestsLeaving: gate.guests,
+                withdrawalBlocked: gate.blocked,
+                // Whole percents, for copy. The form shows the reader how far off
+                // they are rather than only that they are.
+                progressPct: Math.round(gate.progress * 100),
+                requiredPct: Math.round(gate.required * 100),
+              };
+            }),
         };
       }),
       offers: offers.map((o) => ({
@@ -109,7 +168,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
         conflictId: o.conflictId,
         fromCountry: o.fromCountry,
         toCountry: o.toCountry,
-        indemnity: o.indemnity,
+        term: o.term,
+        leaver: o.leaver,
         justification: o.justification ?? null,
         // Derived, not the stored field: a row can say "pending" and be expired.
         status: isOfferLive(o, currentTurn)
@@ -140,8 +200,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
     const toCountry = parsed.data.toCountry.toUpperCase() as CountryId;
-    const payer = parsed.data.indemnity.payer.toUpperCase() as CountryId;
-    const indemnity = { payer, amount: parsed.data.indemnity.amount };
+    // Country codes arrive in whatever case the client sent. Normalised here so the
+    // validator's payer comparison against `from`/`to` is not case-sensitive.
+    const term: PeaceTerm =
+      parsed.data.term.kind === "indemnity"
+        ? {
+            kind: "indemnity",
+            payer: parsed.data.term.payer.toUpperCase() as CountryId,
+            amount: parsed.data.term.amount,
+          }
+        : parsed.data.term;
 
     const conflict = await getConflict(db, parsed.data.conflictId);
     if (!conflict) {
@@ -152,18 +220,41 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     // bounded only by `>= 0`, and accept would move an arbitrary sum. Reject a
     // payer with no usable GDP rather than assume one (an assumed GDP is an
     // uncapped indemnity by the back door).
-    const payerBudget = await db
-      .collection<FederalBudget>("federalBudget")
-      .findOne({ countryId: payer }, { projection: { gdp: 1 } });
-    const maxAmount = maxIndemnityForGdp(payerBudget?.gdp);
-    if (maxAmount == null) {
-      return NextResponse.json(
-        { error: "The paying country has no GDP on record to size an indemnity against." },
-        { status: 400 }
-      );
+    //
+    // Only read for an indemnity: a GDP ceiling is meaningless for the other terms,
+    // and refusing a regime change because the target has no GDP on record would be
+    // a bar with no reason behind it.
+    let maxAmount: number | null = null;
+    if (term.kind === "indemnity") {
+      const payerBudget = await db
+        .collection<FederalBudget>("federalBudget")
+        .findOne({ countryId: term.payer }, { projection: { gdp: 1 } });
+      maxAmount = maxIndemnityForGdp(payerBudget?.gdp);
+      if (maxAmount == null) {
+        return NextResponse.json(
+          { error: "The paying country has no GDP on record to size an indemnity against." },
+          { status: 400 }
+        );
+      }
     }
 
-    const check = validatePeaceOffer(conflict, countryId, toCountry, indemnity, maxAmount);
+    // The target's live system, so a conversion that would change nothing is
+    // refused before it is ever offered.
+    const targetState = await getCountryState(db, toCountry);
+
+    // "them" asks the recipient to withdraw while we stay in the war; the default
+    // keeps the original shape, where the sender is the one leaving.
+    const leaver = parsed.data.leaver === "them" ? toCountry : countryId;
+
+    const check = validatePeaceOffer(
+      conflict,
+      countryId,
+      toCountry,
+      term,
+      leaver,
+      maxAmount,
+      targetState.governmentType
+    );
     if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
 
     // One live offer per (conflict, from, to). Re-offering means withdrawing first,
@@ -181,7 +272,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       conflictId: conflict._id,
       fromCountry: countryId,
       toCountry,
-      indemnity,
+      leaver,
+      term,
       ...(parsed.data.justification ? { justification: parsed.data.justification } : {}),
       status: "pending" as const,
       offeredTurn: currentTurn,

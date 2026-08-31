@@ -3,6 +3,7 @@ import type {
   ContingentElectionDisplay,
   PresidentialResolutionMode,
 } from "@/lib/elections/presidentialResolutionDisplay";
+import type { FactorLedgerSnapshot } from "@/lib/electionEngine/factorLedger";
 
 export interface Endorsement {
   nppId?: string;
@@ -302,6 +303,21 @@ export interface ElectionDetail {
   partyDisplayById?: Record<string, { abbr: string; color: string }>;
 
   /**
+   * The seat's region electorate, for the turnout figure. `basis` says what the
+   * count is: `eligible` is the voting-eligible population, `residents` is total
+   * population, used only where a world has no cohort vectors. They differ by
+   * roughly a quarter, so the display must label which it divided by. Absent for
+   * nationwide races, which have no single regional electorate.
+   */
+  regionElectorate?: { count: number; basis: "eligible" | "residents" };
+  /**
+   * Display name of the region the race is held in, from the region doc.
+   * Absent for nationwide races. Consumers used static US/UK/RU name maps
+   * and fell back to the raw id ("BLR_HOM") everywhere else.
+   */
+  regionName?: string;
+
+  /**
    * President only: the economic-referendum reading the engine recorded on the
    * vote tally, passed through by `_enrichElection`. Feeds the National Mood
    * gauge. Absent for races that ran before the channel existed.
@@ -323,4 +339,11 @@ export interface ElectionDetail {
     incumbentPartyColor?: string;
     recordedTurn: number;
   };
+
+  /**
+   * President only: the descriptive factor ledger passed through by
+   * `_enrichElection`, fog-of-war applied. Feeds the Factor Ledger card.
+   * Absent for races that ran before the ledger existed.
+   */
+  factorLedger?: FactorLedgerSnapshot;
 }

@@ -50,10 +50,11 @@ import {
  *      by the UI (`value > 0` filter) and the legend totals above 100%.
  *   3. Drift: for each party, move regPct toward orgPct by
  *      `min(PASSIVE_REG_DRIFT_RATE, |orgPct - regPct|)`.
- *      Cap the gross party-Reg gain by remaining Independent+Unregistered
- *      capacity (same bound as registrationDrive) so drift cannot mint Reg
- *      out of an empty pool. Residual is drawn from non-party buckets
- *      without driving either bucket negative.
+ *      The gross party-Reg gain is drawn from Independent+Unregistered first
+ *      (without driving either bucket negative); any shortfall is sourced
+ *      from parties whose Reg exceeds their own target, in proportion to
+ *      that surplus (`sourceFromSurplus`). Drift never mints Reg: if both
+ *      the pool and the surplus are exhausted the gain is scaled down.
  *   4. Decay: for each party with regPct > 0, lose `PASSIVE_REG_DECAY_RATE`.
  *      Distribute the lost amount via sqrt(orgPct) weights to parties with
  *      `orgPct >= REG_DRIFT_CATCH_ELIGIBILITY_ORG_PCT`. If no eligible party,
@@ -255,6 +256,80 @@ function capPositiveDeltas(deltas: PartyDelta[], capacity: number): number {
 }
 
 /**
+ * Source a drift shortfall from parties whose Reg sits ABOVE their drift
+ * target (`max(0, Org − lag)`), in proportion to each party's surplus.
+ *
+ * Why this exists: drift only ever drew from the non-party pool, and once a
+ * state's Independent + Unregistered buckets are exhausted (every US state by
+ * live turn ~140) `capPositiveDeltas` scaled every climb to zero. From then on
+ * the only mover was the 0.004 pp/turn decay, and registration was frozen
+ * against parties that had built real Org. Organised opposition is exactly the
+ * "real political cause" seeded registration is meant to respond to, so the
+ * shortfall now comes from the over-registered incumbents instead of nowhere.
+ *
+ * Bounds:
+ *   - a party never gives more than its surplus (Reg never drops below target);
+ *   - the governor's party contributes at `(1 − relief.factor)` weight, the
+ *     same home-field defence its decay already enjoys;
+ *   - a state where no party is below target has no shortfall and is untouched,
+ *     so an unchallenged Solid South seed stays as durable as before.
+ *
+ * Returns negative `PartyDelta`s for the sourced parties (their total is
+ * `-min(shortfall, Σ surplus)`) so they merge into the drift deltas and ledger
+ * exactly like any other drift movement.
+ */
+export function sourceFromSurplus(
+  views: PartyView[],
+  climbers: PartyDelta[],
+  shortfall: number,
+  regLagBelowOrg: number = 0,
+  relief?: { partyId: string; factor: number }
+): PartyDelta[] {
+  if (shortfall <= 0) return [];
+  const climbing = new Set(climbers.map((d) => d.partyId));
+  const donors = views
+    .filter((p) => !climbing.has(p.partyId))
+    .map((p) => {
+      const target = Math.max(0, p.orgPct - regLagBelowOrg);
+      const surplus = p.regPct - target;
+      const weight = relief && p.partyId === relief.partyId ? Math.max(0, 1 - relief.factor) : 1;
+      return { view: p, surplus, weight, drawn: 0 };
+    })
+    .filter((d) => d.surplus > 0 && d.weight > 0);
+  if (donors.length === 0) return [];
+
+  // Water-fill: distribute by (surplus × weight), cap each donor at its
+  // surplus, and re-spread any remainder over the donors still under cap.
+  let remaining = Math.min(
+    shortfall,
+    donors.reduce((sum, d) => sum + d.surplus, 0)
+  );
+  const EPS = 1e-12;
+  while (remaining > EPS) {
+    const open = donors.filter((d) => d.surplus - d.drawn > EPS);
+    if (open.length === 0) break;
+    const totalWeight = open.reduce((sum, d) => sum + (d.surplus - d.drawn) * d.weight, 0);
+    if (totalWeight <= 0) break;
+    const batch = remaining;
+    for (const d of open) {
+      const share = (batch * (d.surplus - d.drawn) * d.weight) / totalWeight;
+      const take = Math.min(share, d.surplus - d.drawn);
+      d.drawn += take;
+      remaining -= take;
+    }
+  }
+
+  return donors
+    .filter((d) => d.drawn > 0)
+    .map((d) => ({
+      partyId: d.view.partyId,
+      rowId: d.view.rowId,
+      delta: -d.drawn,
+      newReg: d.view.regPct - d.drawn,
+    }));
+}
+
+/**
  * Apply a pool residual without driving either bucket negative.
  * `residual` < 0 takes from the pool (parties gained); `residual` > 0 adds
  * to the pool split by Independent bias. When taking, leftover demand after
@@ -423,10 +498,25 @@ export function planStateRegDriftDecay(input: ProcessStateInput): ProcessStateOu
     }
   }
 
-  // Drift (including home-field) cannot mint registration once Independent
-  // and Unregistered are exhausted — the same bound registrationDrive uses.
-  const taken = capPositiveDeltas(drift, availablePoolCapacity(independent, unregistered));
-  const driftPoolResidual = -taken;
+  // Drift (including home-field) cannot mint registration. The pool is drawn
+  // first; whatever Independent + Unregistered cannot cover is sourced from
+  // parties holding Reg above their own target (see `sourceFromSurplus`), and
+  // only the remainder after both is scaled away.
+  const capacity = availablePoolCapacity(independent, unregistered);
+  const wanted = drift.reduce((sum, d) => sum + Math.max(0, d.delta), 0);
+  const sourced = sourceFromSurplus(
+    viewsAfterRepair,
+    drift,
+    wanted - capacity,
+    regLag,
+    gov
+      ? { partyId: gov.partyId, factor: Math.min(1, gov.sign * HOME_FIELD_DECAY_RELIEF) }
+      : undefined
+  );
+  const fromSurplus = sourced.reduce((sum, d) => sum - d.delta, 0);
+  const taken = capPositiveDeltas(drift, capacity + fromSurplus);
+  const driftPoolResidual = -Math.min(taken, capacity);
+  drift.push(...sourced);
 
   // Apply drift to in-memory views before computing decay so decay reads
   // post-drift regPct (matches §8.4 invariant: drift before decay).

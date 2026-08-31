@@ -16,6 +16,7 @@ import { PrivatizationVotePanel } from "@/components/corporation/PrivatizationVo
 import { ManagePrivateShareholdersPanel } from "@/components/corporation/ManagePrivateShareholdersPanel";
 import PrivateSalePanel from "@/components/corporation/shares/PrivateSalePanel";
 import { NationalizationStatusCard } from "@/components/corporation/NationalizationStatusCard";
+import BondMaturityNotice from "@/components/corporation/BondMaturityNotice";
 import { NewFeatureBadge } from "@/components/ui";
 import { useFeatureSeen } from "@/hooks/useFeatureSeen";
 import { CORP_PAGE_FEATURE_KEYS } from "@/lib/ui/corpPageFeatureKeys";
@@ -834,6 +835,18 @@ export default function CorporationDetailPage() {
         />
 
         <NationalizationStatusCard corpId={id} />
+
+        {/* Bond principal is repaid in one lump on the maturity turn, and that
+            debit is inside the same negative-liquid-capital test that declares a
+            default. Players read the coupon as the whole cost of borrowing, so
+            the notice lives here, above the tabs, rather than on the Bonds tab
+            nobody opens between issuing a bond and being charged for it. */}
+        <BondMaturityNotice
+          bondInfo={bondInfo}
+          liquidCurrencyCode={corporation.liquidCurrencyCode}
+          liquidCapital={corporation.liquidCapital}
+          corporationName={corporation.name}
+        />
 
         {/* Ticket #1153: a private corporation is deliberately excluded from
             every exchange snapshot, but nothing said so, so its owner read the

@@ -17,12 +17,13 @@ import type {
   UnownedSector,
   State,
   Corporation,
+  GameConfig,
 } from "@/lib/db/types";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { sectorDemandGapUnits } from "@/lib/market/sectorDemandGap";
-import { reachableDemandGap } from "@/lib/trade/reachableBook";
+import { commodityDemandGap } from "@/lib/market/commodityMarketScope";
 import { bookFor, loadReachableBooks } from "@/lib/trade/queries/loadReachableBooks";
 import { getStrategy } from "@/lib/constants/sectorStrategies";
 import { CAPACITY_BUILD_TURNS, computeBuildCost } from "@/lib/constants/capacityEconomy";
@@ -46,6 +47,11 @@ import { calculateSplitCostAnchor } from "@/lib/corporations/marketActionCosts";
 import { loadCommandEconomyBlockedCountries } from "@/lib/economy/queries/commandEconomyMarketGate";
 import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
 import { pinStateInTopSuggestions } from "@/lib/corporations/expandSuggestionPin";
+import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
+import {
+  retailCapacityExpansionPaused,
+  retailDemandTransitionTurnsRemaining,
+} from "@/lib/market/retailDemandTransition";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -107,8 +113,42 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const plantsMode = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
 
-    // Demand gap for this sector type's output mix, PER COUNTRY (min over legs —
-    // the market stops absorbing when the first leg saturates; 0 in a glut). The
+    // Greenfield Retail builds are deliberately unavailable while the legacy
+    // supply-derived demand is fading out. Reject before calculating and
+    // presenting opportunities so the modal explains the pause instead of
+    // inviting a build that the command will later refuse. Competitor mode is
+    // still available because sector attacks transfer existing plants.
+    if (plantsMode && sectorType === "retail" && mode === "unowned") {
+      const [transition, gameState] = await Promise.all([
+        db.collection<GameConfig>("gameConfig").findOne(
+          { _id: "default" },
+          {
+            projection: {
+              retailDemandTransitionStartTurn: 1,
+              retailDemandTransitionTurns: 1,
+            },
+          }
+        ),
+        db
+          .collection<GameState>("gameState")
+          .findOne({ _id: "current" }, { projection: { currentTurn: 1 } }),
+      ]);
+      const currentTurn = gameState?.currentTurn ?? 0;
+      if (retailCapacityExpansionPaused(transition, currentTurn)) {
+        const remaining = retailDemandTransitionTurnsRemaining(transition, currentTurn);
+        return NextResponse.json(
+          {
+            error: `New Retail sectors are paused while consumer demand is rebalanced (${remaining} turns remaining). Existing stores and plant transfers still operate normally.`,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    // Demand gap for this sector type's output mix, per physical market (min
+    // over legs because the market stops absorbing when the first leg
+    // saturates). Most outputs use the candidate country's reachable book;
+    // state-local outputs use the candidate state's own balance.
     // unowned pool's headroom is claimable market SHARE, not buyers; ranking
     // and labelling it "untapped demand" steered players straight into gluts
     // (ticket #1027 follow-up).
@@ -120,33 +160,60 @@ export async function GET(request: Request, { params }: RouteParams) {
     // quoted "room for 0". A market a corporation cannot sell into must not
     // suppress the quote for one it can.
     const supplyMix = getStrategy(sectorType, "standard").supply ?? {};
-    const reachableBooks = plantsMode ? await loadReachableBooks(db) : null;
-    let globalGapFallbackUnits = Number.POSITIVE_INFINITY;
-    if (plantsMode && !reachableBooks) {
-      // No book persisted yet (world has not run a turn since 1.1.2). Fall back
-      // to the previous world-aggregate behaviour rather than reporting no room.
-      const priceDocs = await db
-        .collection<{ commodity: CommodityType; globalSupply?: number; globalDemand?: number }>(
-          "commodityPrices"
-        )
-        .find({}, { projection: { commodity: 1, globalSupply: 1, globalDemand: 1 } })
-        .toArray();
-      const balances = new Map(priceDocs.map((p) => [p.commodity, p]));
-      globalGapFallbackUnits = sectorDemandGapUnits(supplyMix, (mixCommodity) => {
-        const bal = balances.get(mixCommodity);
-        return (bal?.globalDemand ?? 0) - (bal?.globalSupply ?? 0);
-      });
+    const [reachableBooks, priceDocs] = plantsMode
+      ? await Promise.all([
+          loadReachableBooks(db),
+          db
+            .collection<CommodityPrice>("commodityPrices")
+            .find(
+              {},
+              {
+                projection: {
+                  commodity: 1,
+                  globalSupply: 1,
+                  globalDemand: 1,
+                  stateSupply: 1,
+                  stateDemand: 1,
+                },
+              }
+            )
+            .toArray(),
+        ])
+      : [null, [] as CommodityPrice[]];
+    const globalBalances = new Map(
+      priceDocs.map((price) => [
+        price.commodity,
+        { supply: price.globalSupply ?? 0, demand: price.globalDemand ?? 0 },
+      ])
+    );
+    const stateBalances = new Map<string, Map<CommodityType, { supply: number; demand: number }>>();
+    for (const price of priceDocs) {
+      for (const stateId of new Set([
+        ...Object.keys(price.stateSupply ?? {}),
+        ...Object.keys(price.stateDemand ?? {}),
+      ])) {
+        const byCommodity = stateBalances.get(stateId) ?? new Map();
+        byCommodity.set(price.commodity, {
+          supply: price.stateSupply?.[stateId] ?? 0,
+          demand: price.stateDemand?.[stateId] ?? 0,
+        });
+        stateBalances.set(stateId, byCommodity);
+      }
     }
-    const demandGapUnitsByCountry = new Map<string, number>();
-    const demandGapUnitsFor = (countryId: string): number => {
+    const demandGapUnitsByState = new Map<string, number>();
+    const demandGapUnitsFor = (stateId: string, countryId: string): number => {
       if (!plantsMode) return Number.POSITIVE_INFINITY;
-      if (!reachableBooks) return globalGapFallbackUnits;
-      const cached = demandGapUnitsByCountry.get(countryId);
+      const cached = demandGapUnitsByState.get(stateId);
       if (cached !== undefined) return cached;
       const gap = sectorDemandGapUnits(supplyMix, (mixCommodity) =>
-        reachableDemandGap(bookFor(reachableBooks, countryId, mixCommodity))
+        commodityDemandGap({
+          commodity: mixCommodity,
+          stateBalance: stateBalances.get(stateId)?.get(mixCommodity),
+          reachableBook: bookFor(reachableBooks, countryId, mixCommodity),
+          globalBalance: globalBalances.get(mixCommodity),
+        })
       );
-      demandGapUnitsByCountry.set(countryId, gap);
+      demandGapUnitsByState.set(stateId, gap);
       return gap;
     };
 
@@ -441,7 +508,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         // in a glut the pool reads huge while extra output simply goes unsold.
         const headroomUnits =
           poolHeadroomUnits != null
-            ? Math.round(Math.min(poolHeadroomUnits, demandGapUnitsFor(state.countryId)))
+            ? Math.round(Math.min(poolHeadroomUnits, demandGapUnitsFor(state._id, state.countryId)))
             : null;
         const starterBuildCostAnchor = plantsMode
           ? (starterBuildCostByState.get(stateId) ?? 0)

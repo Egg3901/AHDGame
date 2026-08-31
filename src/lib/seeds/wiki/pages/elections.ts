@@ -18,6 +18,9 @@ import { contingentElectionContent } from "../content/contingentElection";
 import { executiveTermLimitsContent } from "../content/executiveTermLimits";
 import { referendumsContent } from "../content/referendums";
 import { politicalOperationsContent } from "../content/politicalOperations";
+import { nominatingConventionContent } from "../content/nominatingConvention";
+import { runningMateSurrogateContent } from "../content/runningMateSurrogate";
+import { voteFactorLedgerContent } from "../content/voteFactorLedger";
 
 export const electionsPages: readonly WikiSeedPage[] = [
   {
@@ -63,7 +66,7 @@ export const electionsPages: readonly WikiSeedPage[] = [
     slug: "election-mechanics",
     title: "Election Mechanics",
     description:
-      "Primary + general phase structure, duration by race, vote accumulation math, FPTP vs RCV, multi-seat allocation, candidacy rules.",
+      "Primary + general phase structure, duration by race, primary ballots and vote accumulation, FPTP vs RCV, multi-seat allocation, candidacy rules.",
     content: electionMechanicsContent,
     category: "elections",
     extraTags: ["primary", "general", "fptp"],
@@ -77,13 +80,49 @@ export const electionsPages: readonly WikiSeedPage[] = [
     slug: "primaries",
     title: "Primaries",
     description:
-      "Declaration windows, the state vs presidential primary score formulas, NPP primary dynamics, and tactics for winning your party's nomination.",
+      "Declaration windows, how down-ballot primaries count ballots over their closing window, the state vs presidential standing formulas, NPP primary dynamics, and tactics for winning your party's nomination.",
     content: primariesContent,
     category: "elections",
     extraTags: ["primary", "npp"],
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 6,
+  },
+  {
+    slug: "nominating-convention",
+    title: "Presidential Nominating Convention",
+    description:
+      "How pledged delegates settle a presidential nomination: the delegate-majority threshold, first-ballot wins, and the multi-ballot contested convention with affinity-weighted delegate releases.",
+    content: nominatingConventionContent,
+    category: "elections",
+    extraTags: ["president", "primary", "delegate", "convention"],
+    difficulty: "advanced",
+    contentType: "mechanics",
+    estimatedReadTime: 5,
+  },
+  {
+    slug: "running-mate-surrogate",
+    title: "Running Mate Surrogate Campaigning",
+    description:
+      "The running mate's own player can campaign for the ticket: state visits and ticket canvassing, the shared 2-per-day surrogate pool, favorability and turnout effects, and action costs.",
+    content: runningMateSurrogateContent,
+    category: "elections",
+    extraTags: ["president", "general", "running-mate", "campaign"],
+    difficulty: "advanced",
+    contentType: "guide",
+    estimatedReadTime: 5,
+  },
+  {
+    slug: "vote-factor-ledger",
+    title: "Vote Factor Ledger",
+    description:
+      "The presidential general vote decomposition: the baseline-plus-factors waterfall, every factor and what it means, vote delta vs display multiplier, and what is public vs owner-only.",
+    content: voteFactorLedgerContent,
+    category: "elections",
+    extraTags: ["president", "general", "results", "transparency"],
+    difficulty: "intermediate",
+    contentType: "reference",
+    estimatedReadTime: 5,
   },
   {
     slug: "general-elections",
@@ -190,7 +229,7 @@ export const electionsPages: readonly WikiSeedPage[] = [
     slug: "campaign-manager",
     title: "Campaign Manager",
     description:
-      "The /campaign/[id] page: budget, upgrades, activity log, endorsements, manager assignment, access tiers, donations, and insolvency auto-downgrade.",
+      "The /campaign/[id] page: budget, upgrades, activity log, endorsements, appointing up to three campaign managers, access tiers, donations, and insolvency auto-downgrade.",
     content: campaignManagerContent,
     category: "elections",
     extraTags: ["campaign"],
@@ -240,7 +279,7 @@ export const electionsPages: readonly WikiSeedPage[] = [
     slug: "contingent-election",
     title: "Contingent Election",
     description:
-      "The US 12th Amendment fallback when no Electoral College majority forms: House elects President by state delegation, Senate elects VP, deadlock rules.",
+      "The US 12th Amendment fallback when no Electoral College majority forms: House elects President by state delegation, Senate elects VP, era-derived thresholds, deadlock rules.",
     content: contingentElectionContent,
     category: "elections",
     extraTags: ["electoral-college", "house"],

@@ -165,6 +165,26 @@ const RU_REGION_IDS = [
   "MOL",
 ];
 
+/** Retired pre-split USSR region IDs. These now exist as separate countries. */
+export const RU_RETIRED_REGION_IDS = ["UKR", "BEL", "BLT"] as const;
+
+const RU_RETIRED_REGION_STORES = [
+  "macroMetrics",
+  "politicalMetrics",
+  "stateBaselines",
+  "stateBudgets",
+] as const;
+
+export async function purgeRetiredRuRegionDocs(db: Db): Promise<number> {
+  const ids = [...RU_RETIRED_REGION_IDS];
+  const results = await Promise.all(
+    RU_RETIRED_REGION_STORES.map((store) =>
+      db.collection(store).deleteMany({ _id: { $in: ids } as never })
+    )
+  );
+  return results.reduce((total, result) => total + result.deletedCount, 0);
+}
+
 export async function seedRUStateMetrics(
   db: Db,
   reset: boolean,
@@ -172,7 +192,10 @@ export async function seedRUStateMetrics(
   preset: string
 ) {
   if (reset) {
-    await db.collection("macroMetrics").deleteMany({ _id: { $in: RU_REGION_IDS } as never });
+    await Promise.all([
+      db.collection("macroMetrics").deleteMany({ _id: { $in: RU_REGION_IDS } as never }),
+      purgeRetiredRuRegionDocs(db),
+    ]);
   }
   const { ruStateMetrics } = await import("@/lib/seeds/ru/ruStateMetrics");
   const { getRegionMetricPresets, applyMetricPresetToMetrics } =

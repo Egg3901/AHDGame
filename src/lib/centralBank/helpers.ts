@@ -15,8 +15,9 @@ export function getBankId(countryId: CountryId): string {
  * Clearing only `chairCharacterId` left the departed chair sitting in
  * `fomcBoard`'s seat 0, where their alignment kept tabling motions and the page
  * kept naming them. Backdating `termExpiresAtTurn` lets the next
- * `refreshExpiredSeats` pass drop a caretaker technocrat in, which in turn
- * routes the vacancy to the player selection phase.
+ * `refreshExpiredSeats` pass vacate the seat (the engine never seats a
+ * replacement, #1195) and route the chair vacancy to the selection /
+ * presidential-nomination pipeline.
  *
  * No-op for banks without a committee.
  */

@@ -41,6 +41,7 @@ export const ELECTION_TYPE_LABEL_MAP: Record<string, string> = {
   peoplesCongress: "People's Congress",
   // RU (Soviet Union) offices
   supremeSovietDeputy: "Supreme Soviet",
+  supremeSoviet: "Supreme Soviet",
   nationalitiesDeputy: "Soviet of Nationalities",
   republicSupremeSoviet: "Republic Supreme Soviet",
   // DD (East Germany) offices
@@ -91,6 +92,7 @@ export const ELECTION_TYPE_SHORT_LABEL: Record<string, string> = {
   peoplesCongress: "People's Congress",
   // RU (Soviet Union) offices
   supremeSovietDeputy: "Supreme Soviet",
+  supremeSoviet: "Supreme Soviet",
   nationalitiesDeputy: "Nationalities",
   // DD (East Germany) offices
   volkskammerDeputy: "Volkskammer",
@@ -193,6 +195,12 @@ export const MULTI_SEAT_TYPES: ReadonlySet<string> = new Set([
   "supremeSovietDeputy",
   "nationalitiesDeputy",
   "republicSupremeSoviet",
+  // Union-republic Supreme Soviets (UKR/BLR/BAL, electionType "supremeSoviet",
+  // office key "sovietDeputy"): the same one-list-per-region PR shape as the
+  // RU chambers above. Without both keys every republic delegation collapsed
+  // to a single deputy (one winner of an 85-129 seat chamber).
+  "supremeSoviet",
+  "sovietDeputy",
   // Eastern bloc Tier-1 unicameral assemblies (DD multi-seat regional pattern).
   "sejm",
   "chamberOfThePeople",

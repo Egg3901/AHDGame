@@ -48,7 +48,7 @@ Each unit is unavailable for **6 turns** after ordering. Brennan is not building
 
 ## Hale and Brennan spend the doctrine points
 
-**Turn 1,010.** Brennan opens the **Doctrine** tab. The US has the standard twelve starting doctrines and **12 points, which is all it will ever have**.
+**Turn 1,010.** Brennan opens the **Doctrine** tab. The US has the standard twelve starting doctrines and **12 points**. It will earn one more at the start of each game year and nothing else, so the budget for the whole decade is a handful.
 
 He decides the United States is a **power-projection** nation and spends deliberately:
 
@@ -59,7 +59,7 @@ He decides the United States is a **power-projection** nation and spends deliber
 | Expeditionary Warfare | 3 | 9 |
 | Joint Task Force | 3 | 12 |
 
-**Twelve points, gone, permanently.** Brennan cannot undo this and neither can his successor. Every US general from now on should be training toward expeditionary logistics and joint operations, because those are the traits the nation now boosts.
+**Twelve points, gone, permanently.** Brennan cannot undo this and neither can his successor; the one point a year that arrives from now on is all there is to work with. Every US general from now on should be training toward expeditionary logistics and joint operations, because those are the traits the nation now boosts.
 
 > **Mistake avoided:** he does not buy one node from each category. A scattered twelve points produces a nation good at nothing.
 
@@ -255,7 +255,7 @@ Ashford's own 120-turn cooldown starts anyway; joining is still a full declarati
 
 **Turn 1,430.** A British general is posted to Conflict #4. Ruiz and the British TC both declare against China on turn 1,431.
 
-**Turn 1,432.** The two declarations **merge into one coalition offensive.** They share a front and an attacking side, so they are one attack, on one report, with a combined roster.
+**Turn 1,432.** The two declarations **merge into one coalition offensive.** They share a front and an attacking side, so they are one attack, on one report, with each nation's dead recorded under its own flag. (Had Ashford set the front's standing order to join allied offensives, Ruiz's declaration alone would have carried the British in.)
 
 China's defence pools automatically: **defenders never declare anything.** Every country with units at the front on the defending side is in the battle. Deployment *is* the consent step.
 
@@ -289,7 +289,7 @@ Tang traded ground for an intact army. That is a real and often correct decision
 
 **This is public.** Everyone can see it, including Tang, and including neutrals deciding whether to intervene.
 
-Tang reads it correctly: **the price of peace is about to go up sharply.** Right now, China still has an army and holds a quarter of its own territory. In another thirty battles it will have neither.
+Tang reads it correctly: **the price of peace is about to go up sharply.** Right now, China still has an army and holds a quarter of its own territory. In another twenty battles it will have neither.
 
 ## Tang sues for peace
 
@@ -334,9 +334,9 @@ Ashford, whose army is fresh but who never raised the **Territorial and Reserve 
 
 ## Britain's turn
 
-**Turn 1,690.** Britain, unable to sustain the front alone, negotiates its own **white peace**: indemnity **zero**. Same mechanism, dialled to nothing.
+**Turn 1,690.** Britain, unable to sustain the front alone, offers its own **white peace**: the term that takes nothing and names no winner. It could have offered to pay an indemnity and been refused, or been asked for a harsher term and made to pay it.
 
-Britain was the last country on side A. **The side empties, so the war ends outright**, with China recorded as the winner. Every remaining cross-side pair is truced.
+Britain was the last country on side A. **The side empties, so the war ends outright**, with China recorded as the winner of the war even though the last settlement in it was a white peace. Every remaining cross-side pair is truced.
 
 ---
 
@@ -344,7 +344,7 @@ Britain was the last country on side A. **The side empties, so the war ends outr
 
 **Conflict #4 is now \`resolved\`.** Its page at \`/world/conflicts/4\` survives permanently: that is the entire point of the numbering.
 
-**The fog lifts completely.** The **archive** tier is open to everyone: both sides' rosters, every engagement, who fought in each, what every formation lost. During the war, only territory, casualties and verdicts were public; now all of it is.
+**The fog lifts completely, 480 turns later.** For 480 turns after the end the page reads as it did during the war: territory, casualties and verdicts for everyone, and your own rosters if you hold a belligerent seat. Then the **archive** tier opens to everyone: both sides' rosters, every engagement, who fought in each, what every formation lost. In the meantime the war sits under **Historical Conflicts** at the bottom of the conflicts hub, with its outcome, and the card says which turn the fog lifts.
 
 The truce ledger:
 
@@ -366,7 +366,7 @@ And China, which lost the shooting and won the war, kept its army.
 | Turn | Decision | Why it mattered |
 | --- | --- | --- |
 | 1,000 | Recruited early | 4 actions/day + 6-turn builds means armies take real weeks |
-| 1,010 | Spent 12 doctrine points on one identity | Starting points are scarce, and adoption is permanent |
+| 1,010 | Spent 12 doctrine points on one identity | Points arrive one a year, and adoption is permanent |
 | 1,015 | Commissioned generals 5 days early | Tenure points more than doubled their starting capability |
 | 1,020 | Left no Command commanderless | Avoided a flat 10% penalty |
 | 1,150 | Filed with the votes counted | Two-thirds is real, and refusal costs 10 AP and 120 turns |

@@ -93,4 +93,14 @@ describe("SupplyAgreementsSection delivery outcome", () => {
     expect(screen.getByText("Maximum legal commitment")).toBeTruthy();
     expect(screen.getByText(/50% of the market value/)).toBeTruthy();
   });
+
+  it("explains why freight is not a corporation-wide agreement option", async () => {
+    render(<SupplyAgreementsSection corpId="supplier" />);
+
+    await waitFor(() => expect(screen.getByText("As supplier")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Propose agreement" }));
+
+    expect(screen.getByText(/Freight agreements are state-local/i)).toBeTruthy();
+    expect(screen.getByText(/cannot be represented by a corporation-wide contract/i)).toBeTruthy();
+  });
 });

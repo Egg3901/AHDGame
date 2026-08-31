@@ -69,6 +69,7 @@ export const ECONOMY_ONLY_PHASES: ReadonlySet<string> = new Set<string>([
   "tradeGrowthMirror",
   "inflationRecalc",
   "commandEconomy",
+  "ledgerPreForexSnapshot",
   "forexTurn",
   "centralBankChairTurn",
   "fomcMeetings",
@@ -83,9 +84,11 @@ export const ECONOMY_ONLY_PHASES: ReadonlySet<string> = new Set<string>([
   "gameHealthSnapshot",
   "auditAnomalyScan",
   "suspiciousDetection",
+  "indexFunds",
   "moneySupplySnapshot",
   "ledgerBalanceSnapshot",
   "ledgerReconcile",
+  "economicVitalSigns",
 ]);
 
 /**
@@ -118,6 +121,7 @@ export const MACRO_ONLY_PHASES: ReadonlySet<string> = new Set<string>([
   "tradeGrowthMirror",
   "inflationRecalc",
   "commandEconomy",
+  "ledgerPreForexSnapshot",
   "forexTurn",
   "centralBankChairTurn",
   "fomcMeetings",
@@ -177,6 +181,7 @@ export const ELECTIONS_SKIP_PHASES: ReadonlySet<string> = new Set<string>([
   "economicModel",
   "tradeGrowthMirror",
   "inflationRecalc",
+  "ledgerPreForexSnapshot",
   "forexTurn",
   "centralBankChairTurn",
   "fomcMeetings",
@@ -195,6 +200,7 @@ export const ELECTIONS_SKIP_PHASES: ReadonlySet<string> = new Set<string>([
   "indexFunds",
   "ledgerBalanceSnapshot",
   "ledgerReconcile",
+  "economicVitalSigns",
 ]);
 
 /**

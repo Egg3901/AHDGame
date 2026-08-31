@@ -2,12 +2,11 @@ import type { BillDisplay } from "@/lib/legislature/dto/billDisplay";
 import type { BillChamber, BillStatus } from "@/lib/db/types/legislation";
 import type { StateBillDisplay } from "@/lib/legislature/dto/stateLegislature";
 import { isVotingDeadlinePassed } from "./billVotingWindow";
-
-function directionFromEffect(d: number): "Left" | "Center" | "Right" {
-  if (d < 0) return "Left";
-  if (d > 0) return "Right";
-  return "Center";
-}
+// Imported from the leaf module, NOT the provisionEnrichment barrel. This file
+// is reachable from client components, and the barrel re-exports the fiscal
+// resolver, which pulls the Mongo driver into the client bundle and breaks the
+// production build.
+import { directionLabel as directionFromEffect } from "@/lib/legislature/provisionEnrichment/optionLabel";
 
 /**
  * Map a subnational bill API shape to {@link BillDisplay} so state/region bills can use
@@ -36,7 +35,7 @@ export function mapStateBillToBillDisplay(
       legislationTypeName: p.legislationTypeName ?? "",
       effectDirection: p.effectDirection,
       directionLabel: directionFromEffect(p.effectDirection),
-      positionLabel: p.policyOptionName ?? undefined,
+      positionLabel: p.proposed.name,
       effectTargetLabel: p.effectTargetsWeighted?.[0]?.metricId
         ? `${p.legislationTypeName ?? "Policy"}: ${p.effectTargetsWeighted[0].metricId}`
         : undefined,
@@ -87,7 +86,7 @@ export function mapStateBillToBillDisplay(
     legislationTypeName: sb.legislationTypeName ?? firstProv?.legislationTypeName ?? null,
     effectDirection: firstProv?.effectDirection ?? null,
     directionLabel: firstProv ? directionFromEffect(firstProv.effectDirection) : null,
-    positionLabel: firstProv?.policyOptionName ?? null,
+    positionLabel: firstProv?.proposed.name ?? null,
     effectTargetLabel: null,
     provisions,
     proposedAt: sb.proposedAt,
@@ -108,6 +107,7 @@ export function mapStateBillToBillDisplay(
     myOtherChamberVote: null,
     canVoteOrigin,
     canVoteOther: false,
+    voteShiftPreview: canVoteOrigin ? (sb.voteShiftPreview ?? null) : null,
     requiresExecutiveAction: false,
     failedAt: sb.status === "failed" || sb.status === "override_failed" ? sb.proposedAt : null,
   };

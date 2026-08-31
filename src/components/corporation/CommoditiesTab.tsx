@@ -185,16 +185,18 @@ export default function CommoditiesTab({
                     </div>
                   </div>
                 </div>
-                {(c.market.surplusUnits != null || c.market.unmetDemandUnits != null) && (
+                {(c.market.surplusUnitsPooled != null ||
+                  c.market.unmetDemandUnitsPooled != null) && (
                   <div className="mt-2 flex flex-wrap gap-x-3 text-[11px] text-muted">
-                    {c.market.surplusUnits != null && c.market.surplusUnits > 0 && (
-                      <span>Surplus: {fmtUnits(c.market.surplusUnits)}</span>
+                    {c.market.surplusUnitsPooled != null && c.market.surplusUnitsPooled > 0 && (
+                      <span>Pooled surplus: {fmtUnits(c.market.surplusUnitsPooled)}</span>
                     )}
-                    {c.market.unmetDemandUnits != null && c.market.unmetDemandUnits > 0 && (
-                      <span className="text-amber-400">
-                        Unmet: {fmtUnits(c.market.unmetDemandUnits)}
-                      </span>
-                    )}
+                    {c.market.unmetDemandUnitsPooled != null &&
+                      c.market.unmetDemandUnitsPooled > 0 && (
+                        <span className="text-amber-400">
+                          Pooled unmet: {fmtUnits(c.market.unmetDemandUnitsPooled)}
+                        </span>
+                      )}
                   </div>
                 )}
                 <div className="mt-3 flex flex-wrap gap-2 border-t border-card-border pt-2">
@@ -221,8 +223,8 @@ export default function CommoditiesTab({
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Per-turn commodity flows</h3>
         <p className="text-xs text-muted">
-          Net is this corporation&apos;s own output minus its input use. It is separate from the
-          world stockpile and does not describe a world shortage or surplus.
+          Net production is this corporation&apos;s own output minus its input use. Purchases do not
+          change it. The private-supply box shows where consumed inputs came from.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           {commodities.map((c) => (
@@ -276,7 +278,7 @@ export default function CommoditiesTab({
                 </div>
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-wider text-muted">
-                    Net
+                    Net production
                   </div>
                   <div
                     className={`text-sm font-semibold tabular-nums ${
@@ -286,7 +288,7 @@ export default function CommoditiesTab({
                     {c.netUnits >= 0 ? "+" : ""}
                     {fmtUnits(c.netUnits)}
                   </div>
-                  {/* Net cash flow: revenue − input cost, at the current market price (per turn). */}
+                  {/* Net production valued at the current market price per turn. */}
                   {c.market.price != null && (
                     <div
                       className={`mt-0.5 text-[11px] tabular-nums ${
@@ -306,13 +308,33 @@ export default function CommoditiesTab({
                     Private supply
                   </div>
                   <div className="mt-1 text-xs font-medium text-foreground tabular-nums">
-                    {fmtUnits(c.privateSupply.deliveredUnits)} {c.unit} delivered on turn{" "}
-                    {c.privateSupply.turn}
+                    {fmtUnits(c.privateSupply.consumptionCoveredUnits)} of{" "}
+                    {fmtUnits(c.privateSupply.consumptionUnits)} {c.unit} consumed came from private
+                    supply.
                   </div>
                   <div className="mt-1 text-[11px] text-muted">
-                    {fmtUnits(c.privateSupply.coveragePercent)}% of consumption covered. Contracted
-                    cap: {fmtUnits(c.privateSupply.contractedUnits)} {c.unit}/turn.
+                    {fmtUnits(
+                      Math.max(
+                        0,
+                        c.privateSupply.consumptionUnits - c.privateSupply.consumptionCoveredUnits
+                      )
+                    )}{" "}
+                    {c.unit} came from the open market or other sources.
                   </div>
+                  <div className="mt-1 text-[11px] text-muted tabular-nums">
+                    Delivered on turn {c.privateSupply.turn}.{" "}
+                    {fmtUnits(c.privateSupply.coveragePercent)}% covered. Contracted cap:{" "}
+                    {fmtUnits(c.privateSupply.contractedUnits)} {c.unit}/turn.
+                  </div>
+                  {c.privateSupply.previousTurn !== undefined &&
+                    c.privateSupply.previousDeliveredUnits !== undefined &&
+                    c.privateSupply.previousConsumptionUnits !== undefined && (
+                      <div className="mt-2 text-[11px] text-muted tabular-nums">
+                        Previous turn {c.privateSupply.previousTurn}:{" "}
+                        {fmtUnits(c.privateSupply.previousDeliveredUnits)} delivered against{" "}
+                        {fmtUnits(c.privateSupply.previousConsumptionUnits)} consumed.
+                      </div>
+                    )}
                   <div className="mt-2 text-[11px] text-muted">
                     Delivery can be below the cap when the supplier cannot cover all active
                     agreements or when your corporation consumes less. Scarce supplier output is

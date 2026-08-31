@@ -4,6 +4,7 @@ import { assertSameCountry, isSameCountry } from "@/lib/api/sameCountry";
 import {
   isCampaignManagerUser,
   isCampaignNomineeUser,
+  isCampaignRunningMateUser,
   legacyManagersAsList,
   MAX_CAMPAIGN_MANAGERS,
 } from "@/lib/campaigns/access";
@@ -57,9 +58,17 @@ export async function upgradeCampaign(params: {
   const { db, campaignId, user, category, targetId } = params;
   const branch = params.branch ?? null;
   const campaign = await getCampaignOrThrow(db, campaignId);
-  await assertCampaignManagerOrNominee(db, campaign, user);
 
   const election = await db.collection<Election>("elections").findOne({ _id: campaign.electionId });
+  // Fundraising is the running-mate surrogate's only upgrade lane; every other
+  // lever stays manager/nominee-only. The surrogate assert is a superset, so
+  // managers/nominees are unaffected on the fundraising lane too.
+  if (category === "fundraising") {
+    await assertCampaignActorForSurrogate(db, campaign, election, user);
+  } else {
+    await assertCampaignManagerOrNominee(db, campaign, user);
+  }
+
   if (!user.isAdmin) {
     assertSameCountry(user.character, election, {
       message: "You cannot upgrade a campaign in another country",
@@ -1140,6 +1149,49 @@ async function assertCampaignManagerOrNominee(
   }
 }
 
+/**
+ * Authorize a ticket-surrogate action (rally fire, fundraising upgrade).
+ *
+ * Defense-in-depth superset of the manager/nominee gate: managers and nominees
+ * keep their existing broad access with no phase or race-type restriction (so
+ * nothing changes for down-ballot or primary-phase campaigns). It ADDS a third
+ * authorized actor, the ticket's running mate, but ONLY on a presidential
+ * race that is in its general-election phase, since the running mate is a
+ * general-phase presidential concept and has no baseline in any other context.
+ *
+ * The surrogate spends the SAME campaign pools the nominee already spends
+ * (Campaign.actions / funds, lastRallyTurn), so the effect augments the ticket
+ * rather than granting a second independent pool.
+ */
+async function assertCampaignActorForSurrogate(
+  db: Db,
+  campaign: Campaign,
+  election: Election | null,
+  user: AuthUserWithCharacter & { hasCharacter: true; character: Character }
+) {
+  const isManager = isCampaignManagerUser(campaign, user.userId);
+  if (isManager) return;
+  const isNominee = await isCampaignNomineeUser(db, campaign, user.userId, user.character._id);
+  if (isNominee) return;
+
+  const isRunningMate = await isCampaignRunningMateUser(
+    db,
+    campaign,
+    user.userId,
+    user.character._id
+  );
+  if (!isRunningMate) {
+    throw forbidden("Not authorized");
+  }
+  if (election?.electionType !== "president") {
+    throw forbidden("Not authorized");
+  }
+  const gameTime = await getGameTime();
+  if (!isCampaignUpgradeGeneralPhase(election, gameTime.currentTurn, gameTime)) {
+    throw badRequest("Running-mate surrogate actions open once the general election begins");
+  }
+}
+
 async function getCurrentTurn(db: Db): Promise<number> {
   const gameState = await db
     .collection<{ _id: string; currentTurn?: number }>("gameState")
@@ -1165,13 +1217,17 @@ export async function fireRallyOneShot(params: {
 }) {
   const { db, campaignId, user } = params;
   const campaign = await getCampaignOrThrow(db, campaignId);
-  await assertCampaignManagerOrNominee(db, campaign, user);
 
   const now = new Date();
   const election = await db.collection<Election>("elections").findOne({ _id: campaign.electionId });
   if (!election) {
     throw notFound("Election not found");
   }
+  // Rally is a ticket-surrogate action: manager/nominee keep broad access, and
+  // a presidential general-phase running mate may fire it too. It spends the
+  // shared Campaign.actions pool + lastRallyTurn, so a VP fire and a nominee
+  // fire share the one-per-turn throttle (augment, not double).
+  await assertCampaignActorForSurrogate(db, campaign, election, user);
   if (!user.isAdmin) {
     assertSameCountry(user.character, election, {
       message: "You cannot rally for a campaign in another country",

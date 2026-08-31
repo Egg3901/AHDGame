@@ -48,7 +48,7 @@ export const militaryPages: readonly WikiSeedPage[] = [
     slug: "declaring-war",
     title: "Declaring War",
     description:
-      "War is legislation: the two-thirds bill, war goals, who may file, the 120-turn cooldown, truces, joining an existing war, and opening forces.",
+      "War is legislation: the two-thirds bill, war goals, who may file, the 120-turn cooldown, truces, treaty allies pulled in by mutual defence, joining an existing war, and opening forces.",
     content: declaringWarContent,
     category: "military",
     extraTags: ["war", "legislation", "diplomacy"],
@@ -134,7 +134,7 @@ export const militaryPages: readonly WikiSeedPage[] = [
     slug: "occupation-and-victory",
     title: "Occupation, Territory & Victory",
     description:
-      "The control meter, why a war opens at the defender's pole, supply derived from the front's displacement, winding down, the front map, and how wars are won.",
+      "The control meter, why a war opens at the defender's pole, supply derived from the front's displacement, winding down, the front map, and what winning outright opens.",
     content: occupationVictoryContent,
     category: "military",
     extraTags: ["occupation", "territory", "victory"],
@@ -146,7 +146,7 @@ export const militaryPages: readonly WikiSeedPage[] = [
     slug: "peace-and-truces",
     title: "Peace, Indemnities & Truces",
     description:
-      "Bilateral peace offers, the 72-turn window, white peace, indemnities in the payer's currency, leaving a side, and the 240-turn truce that follows any war.",
+      "Bilateral peace offers, the 72-turn window, the four terms (white peace, indemnity, regime change, demilitarisation), asking an enemy to leave, dictating terms after an outright win, and the 240-turn truce that follows any war.",
     content: peaceAndTrucesContent,
     category: "military",
     extraTags: ["peace", "diplomacy", "truce"],

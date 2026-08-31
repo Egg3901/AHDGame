@@ -1944,13 +1944,9 @@ export function computeRawSupplyDemand(
    * retail's SECTOR_DEMAND inputs (food, electronics, …) are skipped — the
    * household basket owns those final-demand legs and would double-count them.
    *
-   * The retail-commodity SELF-LOOP below is deliberately NOT suppressed: under
-   * plants, retail supply is physical `producedUnits` while household demand is
-   * population × per-capita, and those scales do not match (ticket #1026: live
-   * Consumer Goods sat at ~169× oversupply / ~8.3M supply vs ~49k demand). The
-   * self-loop (`demand ≈ supply × GDP multiplier`) is what keeps the retail
-   * OUTPUT commodity solvent; household's small `retail` basket weight stays as
-   * a mild additive, not a replacement. Optional/false is a pure no-op.
+   * Retail's legacy supply-derived output demand is controlled separately by
+   * `retailLegacyDemandFactor` below. This flag only prevents the household
+   * basket and Retail's old input proxy from double-counting the same purchases.
    */
   suppressRetailConsumerDemand = false,
   /**
@@ -1991,7 +1987,20 @@ export function computeRawSupplyDemand(
    * in `commodityPriceTurn`); absent/1 is a pure no-op, so every legacy caller,
    * every modern world and every below-plants world stays byte-identical.
    */
-  ledgerUnitScale = 1
+  ledgerUnitScale = 1,
+  /**
+   * Temporary demand for the named sector's outputs. The adjustment is based
+   * on that sector's actual output units, so positive values raise demand for
+   * what it sells and negative values lower it without changing input costs.
+   */
+  sectorOutputDemandModifierPct?: Map<string, number>,
+  /**
+   * Remaining share of Retail's legacy `demand = supply × GDP multiplier`
+   * feedback loop. Defaults to 1 for worlds that have not started the bounded
+   * transition. Production passes a factor that reaches exactly 0, after which
+   * adding Retail supply can never create Retail demand.
+   */
+  retailLegacyDemandFactor = 1
 ): {
   global: Map<CommodityType, { supply: number; demand: number }>;
   byState: Map<string, Map<CommodityType, { supply: number; demand: number }>>;
@@ -2012,6 +2021,23 @@ export function computeRawSupplyDemand(
   const demandUnscaled = luScale > 1 ? new Map<CommodityType, number>() : null;
   const addUnscaledDemand = (commodity: CommodityType, units: number) => {
     if (demandUnscaled) demandUnscaled.set(commodity, (demandUnscaled.get(commodity) ?? 0) + units);
+  };
+  const outputDemandDeltasByState = new Map<string, Map<CommodityType, number>>();
+  const recordOutputDemandDelta = (
+    sector: { countryId?: string; stateId: string },
+    sectorType: CorporationType,
+    commodity: CommodityType,
+    outputUnits: number
+  ) => {
+    if (!sectorOutputDemandModifierPct || !sector.countryId || outputUnits <= 0) return;
+    const pct = sectorOutputDemandModifierPct.get(`${sector.countryId}:${sectorType}`);
+    if (!pct || !Number.isFinite(pct)) return;
+    let stateDeltas = outputDemandDeltasByState.get(sector.stateId);
+    if (!stateDeltas) {
+      stateDeltas = new Map();
+      outputDemandDeltasByState.set(sector.stateId, stateDeltas);
+    }
+    stateDeltas.set(commodity, (stateDeltas.get(commodity) ?? 0) + outputUnits * (pct / 100));
   };
 
   // Initialize all commodity types with the per-commodity stabilizer. Big
@@ -2128,6 +2154,7 @@ export function computeRawSupplyDemand(
         if (units > 0) {
           global.get(commodity)!.supply += units;
           stateMap.get(commodity)!.supply += units;
+          recordOutputDemandDelta(sector, st, commodity, units);
         }
         continue;
       }
@@ -2171,6 +2198,7 @@ export function computeRawSupplyDemand(
       g.supply += units;
       const s = stateMap.get(commodity)!;
       s.supply += units;
+      recordOutputDemandDelta(sector, st, commodity, units);
     }
 
     const demandEntries = strategyRates
@@ -2219,22 +2247,21 @@ export function computeRawSupplyDemand(
     }
   }
 
-  // ── Retail commodity: demand driven by GDP growth ──────────────────────────
-  // Consumer demand for the "retail" commodity is derived from retail supply
-  // scaled by the GDP growth multiplier. When GDP grows, demand > supply
-  // (consumers want more), driving up retail prices. When GDP shrinks,
-  // demand < supply (consumers pull back), depressing retail prices.
-  //
-  // Always runs — including when `suppressRetailConsumerDemand` is on. That flag
-  // only drops retail's INPUT proxy (SECTOR_DEMAND); the household basket cannot
-  // replace this self-loop at plants-scale physical supply (ticket #1026).
-  if (gdpGrowthData) {
+  // ── Temporary Retail legacy-demand unwind ──────────────────────────────────
+  // This is intentionally the only supply-derived demand leg in the ledger and
+  // it is temporary. Production fades it to zero through
+  // `retailDemandTransition`; independent household demand remains downstream.
+  // Clamp here as a final defence against a corrupt config amplifying the loop.
+  const retailLegacyFactor = Number.isFinite(retailLegacyDemandFactor)
+    ? Math.max(0, Math.min(1, retailLegacyDemandFactor))
+    : 1;
+  if (gdpGrowthData && retailLegacyFactor > 0) {
     for (const [stateId, stateMap] of byState) {
       const retailBal = stateMap.get("retail");
       if (!retailBal || retailBal.supply <= 0) continue;
       const stateGdp = gdpGrowthData.byState.get(stateId) ?? 0;
       const multiplier = computeRetailDemandMultiplier(gdpGrowthData.nationalAverage, stateGdp);
-      const consumerDemand = retailBal.supply * multiplier;
+      const consumerDemand = retailBal.supply * multiplier * retailLegacyFactor;
       retailBal.demand += consumerDemand;
       const g = global.get("retail")!;
       g.demand += consumerDemand;
@@ -2332,6 +2359,30 @@ export function computeRawSupplyDemand(
       }
       byState.get(stateId)!.get("construction_services")!.demand += units;
     }
+  }
+
+  // Apply output-demand shifts after ordinary and macro demand is assembled.
+  // Negative shocks cannot make a state's demand negative; the global ledger
+  // receives the sum actually applied in each state so both views stay aligned.
+  const appliedOutputDemandDelta = new Map<CommodityType, number>();
+  for (const [stateId, deltas] of outputDemandDeltasByState) {
+    const stateMap = byState.get(stateId);
+    if (!stateMap) continue;
+    for (const [commodity, requestedDelta] of deltas) {
+      const balance = stateMap.get(commodity);
+      if (!balance) continue;
+      const nextDemand = Math.max(0, balance.demand + requestedDelta);
+      const appliedDelta = nextDemand - balance.demand;
+      balance.demand = nextDemand;
+      appliedOutputDemandDelta.set(
+        commodity,
+        (appliedOutputDemandDelta.get(commodity) ?? 0) + appliedDelta
+      );
+    }
+  }
+  for (const [commodity, delta] of appliedOutputDemandDelta) {
+    global.get(commodity)!.demand = Math.max(0, global.get(commodity)!.demand + delta);
+    addUnscaledDemand(commodity, delta);
   }
 
   // ── Era-rescale demand cap (see PLANTS_LEDGER_DEMAND_SUPPLY_CAP) ──────────

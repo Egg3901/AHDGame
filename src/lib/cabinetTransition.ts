@@ -24,10 +24,19 @@ import { getCabinetEligibleOfficeTypes } from "@/lib/legislature/chamberOfficeTy
  * is none. Guarded — a holder whose `currentOffice` has already moved on (no
  * longer the cabinet office type) is left untouched, never clobbered.
  */
-async function notifyAndRestoreClearedHolders(
+export async function notifyAndRestoreClearedHolders(
   db: Db,
   countryId: CountryId,
-  memberIds: ObjectId[]
+  memberIds: ObjectId[],
+  /**
+   * What to tell the cleared holders. Defaults to the government-transition
+   * wording. Callers clearing a seat for another reason MUST pass their own,
+   * or the holder is told their government fell when it did not.
+   */
+  notice: { title: string; message: string } = {
+    title: "Cabinet Resigned",
+    message: "Your cabinet appointment has ended due to a change in government.",
+  }
 ): Promise<void> {
   if (memberIds.length === 0) {
     await createNotifications([]);
@@ -77,8 +86,8 @@ async function notifyAndRestoreClearedHolders(
     .map((c) => ({
       userId: c.userId,
       type: "system",
-      title: "Cabinet Resigned",
-      message: "Your cabinet appointment has ended due to a change in government.",
+      title: notice.title,
+      message: notice.message,
     }));
   await createNotifications(notifications);
 }

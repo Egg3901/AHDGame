@@ -35,10 +35,18 @@ export interface ConvertRegionDocArgs {
   /** Optional display name the region takes in its new country, replacing its
    *  origin-country name (NIR → "Ulster", from "Northern Ireland"). */
   displayName?: string;
+  /**
+   * The electoral system the region adopts. Defaults to `rcv`, which is
+   * IRELAND's system and was hardcoded here when this function had exactly one
+   * caller. It is not a universal default: a Land joining Germany keeps `fptp`,
+   * and forcing it to PR-STV would silently re-run its elections under rules
+   * neither country uses.
+   */
+  votingSystem?: State["votingSystem"];
 }
 
 export async function convertRegionDoc(db: Db, args: ConvertRegionDocArgs): Promise<void> {
-  const { regionId, toCountryId, province, displayName } = args;
+  const { regionId, toCountryId, province, displayName, votingSystem } = args;
   const now = new Date();
 
   const region = await db.collection<State>("states").findOne({ _id: regionId });
@@ -46,6 +54,13 @@ export async function convertRegionDoc(db: Db, args: ConvertRegionDocArgs): Prom
 
   const peers = await db.collection<State>("states").find({ countryId: toCountryId }).toArray();
 
+  // ⚠️ DO NOT source this from the `seats` collection. A `DE-bundestag-<Land>`
+  // document holds that Land's WAHLKREIS count under the additive-member system
+  // (299 across Germany), not its delegation: Berlin's seat doc says 12 while its
+  // `houseDistricts` is 25, and `getLiveLowerChamberSeats` sums the latter to get
+  // the real 487-seat Bundestag. Reading the seat doc here halves every joining
+  // Land's representation. (`stateSenateSeats` happens to equal its landtag seat
+  // doc exactly, which makes the mistake easy to make and easy to miss.)
   const houseDistricts = populationShareSeats(
     population,
     peers.map((p) => ({ population: p.population, seats: p.houseDistricts }))
@@ -63,7 +78,7 @@ export async function convertRegionDoc(db: Db, args: ConvertRegionDocArgs): Prom
         regionType: "region",
         region: province,
         ...(displayName ? { name: displayName } : {}),
-        votingSystem: "rcv",
+        votingSystem: votingSystem ?? "rcv",
         houseDistricts,
         stateSenateSeats,
         updatedAt: now,

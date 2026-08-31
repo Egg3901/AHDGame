@@ -38,6 +38,7 @@ import { Tooltip } from "@/components/Tooltip";
 import { useGameTurnStatus } from "@/hooks/useGameEvents";
 import { useAuthMe } from "@/contexts/AuthDataContext";
 import { fetchJson } from "@/lib/observability/fetchJson";
+import { aggregateExchangeTotals } from "@/lib/stockExchange/aggregate";
 
 const STATS_HISTORY_LIMIT = 500;
 
@@ -433,13 +434,14 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
     exchangeMeta[exchangeFilter.toUpperCase()] ??
     exchangeMeta.global;
 
-  // Stats computed from listings — use anchor-normalised values so cross-currency
-  // sums (USD + GBP + JPY corps) don't mix raw numbers as if they were the same unit.
-  const totalMarketCap =
-    data?.listings.reduce((s, l) => s + (l.marketCapAnchor ?? l.marketCap), 0) ?? 0;
-  const totalRevenue =
-    data?.listings.reduce((s, l) => s + (l.totalRevenueAnchor ?? l.totalRevenue), 0) ?? 0;
-  const totalIncome = data?.listings.reduce((s, l) => s + (l.incomeAnchor ?? l.income), 0) ?? 0;
+  // Stats computed from listings — anchor-normalised so cross-currency sums
+  // (USD + GBP + JPY corps) don't mix raw numbers as if they were the same unit.
+  // Shared with the Economy page card and the public API so the three cannot
+  // report different totals for one exchange. See lib/stockExchange/aggregate.
+  const exchangeTotals = aggregateExchangeTotals(data?.listings ?? []);
+  const totalMarketCap = exchangeTotals.marketCap;
+  const totalRevenue = exchangeTotals.revenue;
+  const totalIncome = exchangeTotals.income;
   const profitable = data?.listings.filter((l) => l.income > 0).length ?? 0;
   const totalListed = data?.listings.length ?? 0;
   const unlistedPrivateCount = data?.unlistedPrivateCount ?? 0;
@@ -447,24 +449,12 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
   const [stockTimeframe, setStockTimeframe] = useState<"1h" | "24h" | "48h">("24h");
   const [fundCount, setFundCount] = useState<number | undefined>(undefined);
 
-  const getPriceChange = (l: StockListing, tf: "1h" | "24h" | "48h") => {
-    switch (tf) {
-      case "1h":
-        return l.priceChange1h ?? 0;
-      case "24h":
-        return l.priceChange24h ?? 0;
-      case "48h":
-        return l.priceChange48h ?? 0;
-    }
-  };
-
   const weightedPriceChange =
-    totalMarketCap > 0 && data?.listings
-      ? (data.listings.reduce(
-          (s, l) => s + getPriceChange(l, stockTimeframe) * (l.marketCapAnchor ?? l.marketCap),
-          0
-        ) ?? 0) / totalMarketCap
-      : 0;
+    stockTimeframe === "1h"
+      ? exchangeTotals.weightedChange1h
+      : stockTimeframe === "48h"
+        ? exchangeTotals.weightedChange48h
+        : exchangeTotals.weightedChange24h;
 
   const tabs: { key: StockTab; label: string; tooltip: string; count?: number }[] = [
     {

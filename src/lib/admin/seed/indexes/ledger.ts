@@ -40,12 +40,35 @@ export async function seedLedgerIndexes(db: Db, log: (msg: string) => void) {
     { name: "balanceSnapshots_turn", unique: true, background: true },
     log
   );
+  await ensureIndex(
+    db,
+    "balanceSnapshotCheckpoints",
+    { turn: 1 },
+    { name: "balanceSnapshotCheckpoints_turn", unique: true, background: true },
+    log
+  );
 
   await ensureIndex(
     db,
     "ledgerReconciliations",
     { turn: -1 },
     { name: "ledgerReconciliations_turn_desc", background: true },
+    log
+  );
+
+  await ensureIndex(
+    db,
+    "economicVitalSigns",
+    { turn: -1 },
+    { name: "economicVitalSigns_turn_desc", unique: true, background: true },
+    log
+  );
+
+  await ensureIndex(
+    db,
+    "nppMarketEntryFunnels",
+    { turn: -1 },
+    { name: "nppMarketEntryFunnels_turn_desc", background: true },
     log
   );
 

@@ -5,6 +5,7 @@ vi.mock("@/lib/turn/perpetualElections", () => ({
   ensureIEElections: vi.fn(),
   ensureIELocalCouncilElections: vi.fn(),
   ensureIECathaoirleachElections: vi.fn(),
+  ensureDEElections: vi.fn(),
 }));
 vi.mock("@/lib/turn/parliamentaryGovernment", () => ({
   updateParliamentaryGovernmentSeats: vi.fn(),
@@ -27,9 +28,18 @@ describe("reseedJoinedRegionElections", () => {
     expect(parl.updateParliamentaryGovernmentSeats).toHaveBeenCalledWith(db, "IE");
   });
 
+  it("re-seeds Bundestag races and resizes the chamber when a region joins Germany", async () => {
+    await reseedJoinedRegionElections(db, "DE", now);
+    expect(perpetual.ensureDEElections).toHaveBeenCalledWith(now);
+    expect(parl.updateParliamentaryGovernmentSeats).toHaveBeenCalledWith(db, "DE");
+    // Ireland's spawners are not Germany's.
+    expect(perpetual.ensureIEElections).not.toHaveBeenCalled();
+  });
+
   it("no-ops for a country with no registered spawners", async () => {
     await reseedJoinedRegionElections(db, "US", now);
     expect(perpetual.ensureIEElections).not.toHaveBeenCalled();
+    expect(perpetual.ensureDEElections).not.toHaveBeenCalled();
     expect(parl.updateParliamentaryGovernmentSeats).not.toHaveBeenCalled();
   });
 });
