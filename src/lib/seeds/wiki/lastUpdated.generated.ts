@@ -165,7 +165,7 @@ export const WIKI_LAST_UPDATED: Record<string, string> = {
   scotus: "2026-08-30",
   "snap-elections": "2026-08-30",
   "sovereign-bonds": "2026-08-21",
-  "sovereign-default": "2026-08-21",
+  "sovereign-default": "2026-08-30",
   "stats-actions": "2026-08-30",
   "stock-market": "2026-08-21",
   "strategy-guides": "2026-08-21",

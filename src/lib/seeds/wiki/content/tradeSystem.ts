@@ -152,8 +152,9 @@ Trade restrictions are available to bots and dashboards through the public v1 AP
 
 - \`GET /api/public/v1/trade/tariffs\` lists active tariff layers and supports imposing-country, target-country, scope, and limit filters.
 - \`GET /api/public/v1/trade/embargoes\` combines active ministerial, legislative, and organization sanctions. Add \`includePending=true\` to include embargo bills still moving through a legislature.
+- \`GET /api/public/v1/trade/flows\` returns bounded world trade history. Filter by country, commodity, and turn range to chart exports, imports, net balances, and cleared volume.
 
-Both routes include their public bill or organization-resolution provenance. They do not expose the character IDs used internally to enact a restriction. See the [public API documentation](https://docs.lakesidegames.net/api/public-v1.html) for parameters and response fields.
+The restriction routes include their public bill or organization-resolution provenance. They do not expose the character IDs used internally to enact a restriction. Trade-flow history omits raw bilateral matrices and internal reachable market books. See the [public API documentation](https://docs.lakesidegames.net/api/public-v1.html) for parameters and response fields.
 
 ## Related systems
 
