@@ -5,13 +5,7 @@ import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_FINANCIAL_LIMITS } from "@/lib/api/rateLimit";
-import type {
-  Corporation,
-  CorporateSector,
-  State,
-  StateMetrics,
-  UnownedSector,
-} from "@/lib/db/types";
+import type { Corporation, CorporateSector, State, UnownedSector } from "@/lib/db/types";
 import {
   CORPORATION_TYPES,
   CORPORATION_TYPE_LABELS,

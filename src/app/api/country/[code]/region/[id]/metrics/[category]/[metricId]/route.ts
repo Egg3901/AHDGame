@@ -6,7 +6,7 @@ import {
 import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import type { StateMetrics, LegislationType } from "@/lib/db/types";
+import type { LegislationType } from "@/lib/db/types";
 import type { State } from "@/lib/db/types/state";
 import type { MetricCategoryId } from "@/lib/db/types/stateMetrics";
 import type { StatePolicy } from "@/lib/db/types/statePolicy";

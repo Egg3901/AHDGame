@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { findMergedRegionMetricsManyForDisplay } from "@/lib/macroMetrics/displayMerge";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
-import type { StateMetrics, MetricCategoryId } from "@/lib/db/types";
+import type { MetricCategoryId } from "@/lib/db/types";
 import { NATIONAL_SCOPE } from "@/lib/constants/nationalScope";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { resolveGameYear } from "@/lib/era/era";

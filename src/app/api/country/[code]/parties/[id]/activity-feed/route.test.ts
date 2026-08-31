@@ -152,6 +152,48 @@ describe("GET /api/country/[code]/parties/[id]/activity-feed", () => {
       summary: "-$2,000 | Recruitment drive",
     });
   });
+  async function limitsPassedToMongo(query: string): Promise<number[]> {
+    const limitSpy = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
+    const chain = { sort: vi.fn().mockReturnValue({ limit: limitSpy }) };
+    db.collectionMocks.treasuryTransactions.find.mockReturnValue(chain as never);
+    db.collectionMocks.slateCandidates.find.mockReturnValue(chain as never);
+
+    const { GET } = await import("./route");
+    const response = await GET(
+      new Request(`http://localhost/api/country/us/parties/1/activity-feed${query}`),
+      { params: Promise.resolve({ code: "us", id: "1" }) }
+    );
+    expect(response.status).toBe(200);
+    return limitSpy.mock.calls.map((call) => call[0] as number);
+  }
+
+  it.each(["abc", "", "NaN", "Infinity", "1e", "null"])(
+    "never lets an unparseable ?limit=%s reach Mongo as NaN",
+    async (raw) => {
+      // `Math.max(1, Math.min(100, Number("abc")))` is NaN, not 1, so garbage
+      // used to reach `.limit()` as NaN and return 500 or an empty feed (#590).
+      const limits = await limitsPassedToMongo(`?limit=${encodeURIComponent(raw)}`);
+      expect(limits.length).toBeGreaterThan(0);
+      for (const value of limits) {
+        expect(Number.isFinite(value)).toBe(true);
+      }
+      // An unusable limit falls back to the default rather than 400ing.
+      expect(limits).toEqual(await limitsPassedToMongo(""));
+    }
+  );
+
+  it("clamps a usable ?limit into the 1..100 band", async () => {
+    const defaults = await limitsPassedToMongo("");
+    // Below the floor and above the ceiling both clamp; the route over-fetches
+    // a multiple of the clamped value, so compare against the clamped requests.
+    expect(await limitsPassedToMongo("?limit=0")).toEqual(await limitsPassedToMongo("?limit=1"));
+    expect(await limitsPassedToMongo("?limit=-5")).toEqual(await limitsPassedToMongo("?limit=1"));
+    expect(await limitsPassedToMongo("?limit=9999")).toEqual(
+      await limitsPassedToMongo("?limit=100")
+    );
+    // A limit inside the band is honoured, so it differs from the default 30.
+    expect(await limitsPassedToMongo("?limit=100")).not.toEqual(defaults);
+  });
 });
 
 describe("describeSlateActivity", () => {

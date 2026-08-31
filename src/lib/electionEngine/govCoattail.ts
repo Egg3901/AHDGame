@@ -1,7 +1,7 @@
 import type { Db } from "mongodb";
 import { findMergedRegionMetrics, findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 import type { CountryId } from "@/lib/constants/countries";
-import type { GameState, StateMetrics } from "@/lib/db/types";
+import type { GameState } from "@/lib/db/types";
 import type { StateApprovalHistory } from "@/lib/db/types/stateApproval";
 import { resolveGameYear } from "@/lib/era/era";
 import { getRegionalExecutive } from "@/lib/states/regionalExecutive";

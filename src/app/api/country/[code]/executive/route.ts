@@ -43,6 +43,18 @@ import { getLowerChamberOfficeType } from "@/lib/legislature/chamberOfficeType";
 import { SNAP_ELECTION_LIMIT, SNAP_ELECTION_COOLDOWN_TURNS } from "@/lib/turn/snapElection";
 import { getConfidenceConsequenceLevel } from "@/lib/turn/rulingPartyPriorities";
 
+/**
+ * Coerce a character id that is typed `ObjectId` but may have been persisted as
+ * a string by some writer. Returns null for anything that is not a usable id,
+ * so a shape drift degrades to "no PM" instead of 500ing the whole page on
+ * `pmCharacterId.equals is not a function`.
+ */
+function toObjectIdOrNull(value: ObjectId | string | null | undefined): ObjectId | null {
+  if (!value) return null;
+  if (value instanceof ObjectId) return value;
+  return ObjectId.isValid(value) ? new ObjectId(value) : null;
+}
+
 export async function GET(_request: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
     const { code } = await params;
@@ -265,10 +277,13 @@ async function handleParliamentary(countryId: CountryId) {
 
   let primeMinister: ExecutiveInfo = null;
 
-  if (govFormation?.pmCharacterId) {
-    const char = await db
-      .collection<Character>("characters")
-      .findOne({ _id: govFormation.pmCharacterId });
+  // `pmCharacterId` is typed ObjectId, but the whole executive page 500s if a
+  // writer ever leaves a string there ("pmCharacterId.equals is not a
+  // function"). Normalise once, and compare/query off the normalised value.
+  const pmCharacterId = toObjectIdOrNull(govFormation?.pmCharacterId);
+
+  if (pmCharacterId) {
+    const char = await db.collection<Character>("characters").findOne({ _id: pmCharacterId });
     if (char) {
       const charCountry: CountryId = char.countryId ?? countryId;
       const party = char.party
@@ -277,16 +292,16 @@ async function handleParliamentary(countryId: CountryId) {
             .findOne({ sequentialId: Number(char.party), countryId: charCountry })
         : null;
       primeMinister = {
-        id: govFormation.pmCharacterId.toString(),
+        id: pmCharacterId.toString(),
         characterId: char._id.toString(),
         sequentialId: char.sequentialId ?? null,
-        characterName: govFormation.pmName ?? char.name,
+        characterName: govFormation?.pmName ?? char.name,
         party: char.party,
         partyName: party?.name ?? char.party,
         partyColor: party?.color,
         countryId: charCountry,
         avatarUrl: char.avatarUrl,
-        administrationStartDate: govFormation.formedAt?.toISOString() ?? null,
+        administrationStartDate: govFormation?.formedAt?.toISOString() ?? null,
       };
     }
   }
@@ -333,10 +348,7 @@ async function handleParliamentary(countryId: CountryId) {
         .collection<Character>("characters")
         .findOne({ userId: new ObjectId(authUser.userId) })
     : null;
-  const isPrimeMinister =
-    !!govFormation?.pmCharacterId &&
-    !!myCharacter &&
-    govFormation.pmCharacterId.equals(myCharacter._id);
+  const isPrimeMinister = !!pmCharacterId && !!myCharacter && pmCharacterId.equals(myCharacter._id);
 
   const userLowerOfficial = myCharacter
     ? await db.collection<ElectedOfficial>("electedOfficials").findOne({

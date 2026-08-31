@@ -1,6 +1,7 @@
 import type { BillDetail } from "../types";
 import { getCountryConfig } from "@/lib/constants/countries";
 import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
+import { LocalTime } from "@/components/time/LocalTime";
 import { inferCountryIdFromStateId } from "@/lib/congress/resolveBillCountryId";
 import {
   TIMELINE_STEPS,
@@ -151,7 +152,9 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                   {step.label}
                 </p>
                 {date && (
-                  <p className="text-[10px] text-muted mt-0.5">{new Date(date).toLocaleString()}</p>
+                  <p className="text-[10px] text-muted mt-0.5">
+                    <LocalTime value={date} />
+                  </p>
                 )}
               </div>
             </div>
@@ -178,7 +181,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
               </p>
               {(bill.failedAt ?? bill.enactedAt) && (
                 <p className="text-[10px] text-muted mt-0.5">
-                  {new Date((bill.failedAt ?? bill.enactedAt)!).toLocaleString()}
+                  <LocalTime value={(bill.failedAt ?? bill.enactedAt)!} />
                 </p>
               )}
             </div>
@@ -198,7 +201,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                 <p className="text-xs font-medium text-error">Vetoed</p>
                 {bill.failedAt && (
                   <p className="text-[10px] text-muted mt-0.5">
-                    {new Date(bill.failedAt).toLocaleString()}
+                    <LocalTime value={bill.failedAt} />
                   </p>
                 )}
               </div>
@@ -235,7 +238,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                     </p>
                     {bill.overrideVotingEndsAt && isActive && (
                       <p className="text-[10px] text-muted mt-0.5">
-                        Ends {new Date(bill.overrideVotingEndsAt).toLocaleString()}
+                        Ends <LocalTime value={bill.overrideVotingEndsAt} />
                       </p>
                     )}
                   </div>
@@ -253,7 +256,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                   <p className="text-xs font-medium text-error">Veto Sustained</p>
                   {bill.overrideFailedAt && (
                     <p className="text-[10px] text-muted mt-0.5">
-                      {new Date(bill.overrideFailedAt).toLocaleString()}
+                      <LocalTime value={bill.overrideFailedAt} />
                     </p>
                   )}
                 </div>
@@ -270,7 +273,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                   <p className="text-xs font-medium text-emerald-400">Enacted (Override)</p>
                   {bill.overrideEnactedAt && (
                     <p className="text-[10px] text-muted mt-0.5">
-                      {new Date(bill.overrideEnactedAt).toLocaleString()}
+                      <LocalTime value={bill.overrideEnactedAt} />
                     </p>
                   )}
                 </div>
@@ -297,7 +300,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                 <p className="text-xs font-medium text-error">Sangiin Rejected</p>
                 {bill.otherChamberVotingEndsAt && (
                   <p className="text-[10px] text-muted mt-0.5">
-                    {new Date(bill.otherChamberVotingEndsAt).toLocaleString()}
+                    <LocalTime value={bill.otherChamberVotingEndsAt} />
                   </p>
                 )}
               </div>
@@ -332,7 +335,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                     </p>
                     {bill.votingEndsAt && isActive && (
                       <p className="text-[10px] text-muted mt-0.5">
-                        Ends {new Date(bill.votingEndsAt).toLocaleString()}
+                        Ends <LocalTime value={bill.votingEndsAt} />
                       </p>
                     )}
                   </div>
@@ -350,7 +353,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                   <p className="text-xs font-medium text-error">Override Failed</p>
                   {bill.failedAt && (
                     <p className="text-[10px] text-muted mt-0.5">
-                      {new Date(bill.failedAt).toLocaleString()}
+                      <LocalTime value={bill.failedAt} />
                     </p>
                   )}
                 </div>
@@ -367,7 +370,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                   <p className="text-xs font-medium text-emerald-400">Enacted (Override)</p>
                   {bill.enactedAt && (
                     <p className="text-[10px] text-muted mt-0.5">
-                      {new Date(bill.enactedAt).toLocaleString()}
+                      <LocalTime value={bill.enactedAt} />
                     </p>
                   )}
                 </div>
