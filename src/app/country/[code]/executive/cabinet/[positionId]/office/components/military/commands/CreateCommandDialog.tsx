@@ -10,7 +10,7 @@ import type {
 } from "@/lib/military/types";
 import { COMMAND_TYPES, POSTURES, REGION_CAP } from "@/lib/military/config";
 import { STRATEGIC_REGIONS } from "@/lib/military/regions";
-import { validateDraft, type CommandDraft } from "@/lib/military/commands";
+import { validateDraft, LOGISTICS_SUGGESTION, type CommandDraft } from "@/lib/military/commands";
 import { draftEffectiveness, effIntent } from "@/lib/military/calc";
 import { Badge } from "../../dossier";
 import { PostureEffects, TypeBonuses } from "@/components/CommandEffects";
@@ -65,8 +65,12 @@ export function CreateCommandDialog({
     });
 
   // validateDraft returns advisory warnings (they inform, they don't block); a command
-  // only needs a name to be created.
+  // only needs a name to be created. The at-cap Logistics suggestion is advice about
+  // structure, not a fault with this draft, so it renders apart from the warnings
+  // rather than beside them as another ⚠ line.
   const warnings = validateDraft(draft, state);
+  const suggestions = [LOGISTICS_SUGGESTION].filter((s) => warnings.includes(s));
+  const faults = warnings.filter((w) => !suggestions.includes(w));
   const canConfirm = draft.name.trim().length > 0;
   const preview = draftEffectiveness(draft);
 
@@ -219,10 +223,17 @@ export function CreateCommandDialog({
             )}
           </div>
 
-          {warnings.length > 0 && (
+          {faults.length > 0 && (
             <ul className="flex flex-col gap-0.5 text-[11px] text-warning">
-              {warnings.map((w) => (
+              {faults.map((w) => (
                 <li key={w}>⚠ {w}</li>
+              ))}
+            </ul>
+          )}
+          {suggestions.length > 0 && (
+            <ul className="flex flex-col gap-0.5 text-[11px] text-muted">
+              {suggestions.map((s) => (
+                <li key={s}>{s}</li>
               ))}
             </ul>
           )}

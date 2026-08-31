@@ -38,6 +38,18 @@ export function isPostureValidForType(_type: CommandType, _posture: CommandPostu
   return true;
 }
 
+/**
+ * The at-cap suggestion validateDraft emits for a non-Logistics command holding its
+ * full three regions. Ticket 1244: the old wording ("Logistics command recommended
+ * for multi-region overseas sustainment.", rendered as a ⚠ warning) read as an error
+ * demanding a Logistics command, and players reported 3/3 region assignment as
+ * broken. It is a suggestion, not a fault: the command saves and operates normally.
+ * Exported so the create dialog can present it as the neutral advice it is, apart
+ * from the real penalty warnings.
+ */
+export const LOGISTICS_SUGGESTION =
+  "At the region cap. Optional: a Logistics command has no region cap, if you need wider coverage.";
+
 // Ported from the mockup's draftWarnings().
 export function validateDraft(draft: CommandDraft, state: MilitaryState): string[] {
   const w: string[] = [];
@@ -64,7 +76,7 @@ export function validateDraft(draft: CommandDraft, state: MilitaryState): string
     w.push("No naval command structure for an assigned sea region: coverage will be weak.");
   }
   if (draft.regionIds.length >= REGION_CAP && draft.type !== "LOGISTICS") {
-    w.push("Logistics command recommended for multi-region overseas sustainment.");
+    w.push(LOGISTICS_SUGGESTION);
   }
   return w;
 }

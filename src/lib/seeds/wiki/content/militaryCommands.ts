@@ -81,7 +81,7 @@ Each region carries terrain, infrastructure, port and airbase capacity, strategi
 - **Uncovered**: no Command is responsible for it.
 - **Overlapping**: two Commands *of the same type* both claim it, which is a genuine role conflict rather than useful redundancy.
 
-**Region cap: 3 per Homeland Defense or Regional Command.** A **Logistics** command is exempt from the cap, which is the point of it: it is the structure meant to carry multi-region overseas responsibility. The builder warns any command past 4 assigned regions, and when a non-Logistics command reaches its cap it suggests a Logistics command for the overflow.
+**Region cap: 3 per Homeland Defense or Regional Command.** A **Logistics** command is exempt from the cap, which is the point of it: it is the structure meant to carry multi-region overseas responsibility. The builder warns any command past 4 assigned regions, and when a non-Logistics command reaches its cap it suggests a Logistics command for the overflow. That suggestion is optional advice, not an error: a Regional or Homeland Defense command at its full three regions is complete and saves normally.
 
 ## Capacity and effectiveness
 

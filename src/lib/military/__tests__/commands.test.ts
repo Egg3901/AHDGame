@@ -4,6 +4,7 @@ import {
   dedupeCommandIds,
   reconcileCommandCommanders,
   validateDraft,
+  LOGISTICS_SUGGESTION,
   type CommandDraft,
 } from "../commands";
 import type { MilitaryCommand, MilitaryState } from "../types";
@@ -231,6 +232,54 @@ describe("validateDraft", () => {
     expect(
       validateDraft(draft, stateWith([])).some((m) => m.includes("naval command structure"))
     ).toBe(true);
+  });
+
+  // Ticket 1244: a Regional command assigned three regions (the reporter's South Asia,
+  // East Asia, Southeast Asia trio) drew the Logistics suggestion as a ⚠ warning and
+  // players read it as an error refusing the assignment. Any non-Logistics trio fires
+  // it, which proves it is the cap speaking, and the message must read as optional
+  // advice rather than a fault. The command itself stays perfectly valid.
+  it("suggests a Logistics command when a non-Logistics draft reaches the region cap", () => {
+    const draft: CommandDraft = {
+      name: "Indo-Pacific Command",
+      type: "REGIONAL",
+      regionIds: ["sas", "eas", "sea"],
+      commanderIds: ["hale"],
+      commandingGeneralId: null,
+      posture: "Deterrence",
+      supply: "Normal",
+    };
+    expect(validateDraft(draft, stateWith([]))).toContain(LOGISTICS_SUGGESTION);
+    // Cap-triggered, not region-set-specific: a different trio behaves identically.
+    expect(validateDraft({ ...draft, regionIds: ["naf", "mea", "cas"] }, stateWith([]))).toContain(
+      LOGISTICS_SUGGESTION
+    );
+  });
+
+  it("does not suggest a Logistics command below the cap or for a Logistics draft", () => {
+    const draft: CommandDraft = {
+      name: "X",
+      type: "REGIONAL",
+      regionIds: ["sas", "eas"],
+      commanderIds: ["hale"],
+      commandingGeneralId: null,
+      posture: "Deterrence",
+      supply: "Normal",
+    };
+    expect(validateDraft(draft, stateWith([]))).not.toContain(LOGISTICS_SUGGESTION);
+  });
+
+  it("does not suggest a Logistics command to a Logistics command", () => {
+    const draft: CommandDraft = {
+      name: "X",
+      type: "LOGISTICS",
+      regionIds: ["sas", "eas", "sea", "ior"],
+      commanderIds: ["hale"],
+      commandingGeneralId: null,
+      posture: "Expeditionary",
+      supply: "Normal",
+    };
+    expect(validateDraft(draft, stateWith([]))).not.toContain(LOGISTICS_SUGGESTION);
   });
 });
 

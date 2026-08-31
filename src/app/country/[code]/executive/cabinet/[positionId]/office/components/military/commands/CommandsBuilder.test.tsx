@@ -451,3 +451,35 @@ describe("one command per commanding general", () => {
     });
   });
 });
+
+describe("the at-cap Logistics suggestion", () => {
+  // Ticket 1244: assigning a third region to a Regional command drew the Logistics
+  // suggestion as a ⚠ warning line and players read it as an error refusing the
+  // assignment. Asserted through the UI because the presentation, not the logic, was
+  // the defect: the suggestion is advice and must not render alongside the penalties.
+  function selectThreeRegions(dialog: HTMLElement) {
+    for (const name of ["South Asia", "East Asia", "Southeast Asia"]) {
+      fireEvent.click(within(dialog).getByRole("button", { name }));
+    }
+  }
+
+  it("renders the suggestion without the warning marker once the third region is picked", () => {
+    render(<CommandsBuilder commands={[]} {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: /create command/i }));
+    const dialog = screen.getByRole("dialog");
+    selectThreeRegions(dialog);
+    const advice = within(dialog).getByText(/At the region cap/i);
+    expect(advice.textContent).not.toContain("⚠");
+    // Genuine faults (no commander selected) still render as ⚠ warnings beside it.
+    expect(within(dialog).getByText(/No commander selected/).textContent).toContain("⚠");
+  });
+
+  it("does not render any suggestion while the draft is under the cap", () => {
+    render(<CommandsBuilder commands={[]} {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: /create command/i }));
+    const dialog = screen.getByRole("dialog");
+    selectThreeRegions(dialog);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Southeast Asia" }));
+    expect(within(dialog).queryByText(/At the region cap/i)).toBeNull();
+  });
+});
