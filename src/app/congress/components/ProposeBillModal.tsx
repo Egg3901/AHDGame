@@ -83,6 +83,12 @@ interface LegislationTypeOption {
   effectTargetsWeighted?: EffectTargetWeighted[];
   /** Set by the era-gated legislation-types API for types unlocked this era. */
   eraNew?: boolean;
+  /**
+   * Which country's book this type belongs to (lower-case). A merge re-scopes
+   * the absorbed state's catalogue onto the survivor, so this — not the
+   * compiled per-country tables — is what says a carried law is now ours.
+   */
+  countryScope?: string;
   /** Political-legislation v2 (spec §8): live per-level fiscal estimates. */
   estimates?: Array<{ level: number; cost: number; revenue: number; net: number }>;
   /** GDP at the priced scope — annotates cost deltas as %GDP. */
