@@ -6,6 +6,16 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { PollBannerNotice, PollBannerStrip } from "./PollBannerNotice";
 import type { PollBannerSnapshot } from "@/lib/pollBanner";
 
+/** Drives the component's usePathname without inventing a fake module export. */
+const mockPathname = vi.hoisted(() => ({ current: "/world" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => mockPathname.current,
+}));
+
+function setMockPathname(pathname: string) {
+  mockPathname.current = pathname;
+}
+
 const ENABLED: PollBannerSnapshot = {
   enabled: true,
   message: "Please fill out the survey here for feedback about the game:",
@@ -92,5 +102,41 @@ describe("PollBannerNotice", () => {
 
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
     expect(container.firstChild).toBeNull();
+  });
+});
+
+describe("PollBannerNotice on chromeless pages", () => {
+  function stubEnabled() {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify(ENABLED), { status: 200 }))
+    );
+  }
+
+  // The navbar is hidden on these, so a banner would otherwise float at the very
+  // top of the page with nothing above it.
+  it.each(["/login", "/register", "/banned", "/maintenance"])(
+    "renders nothing on %s even while the banner is enabled",
+    async (pathname) => {
+      setMockPathname(pathname);
+      stubEnabled();
+
+      const { container } = render(<PollBannerNotice />);
+
+      expect(container.firstChild).toBeNull();
+      // And it does not poll the endpoint every minute for a banner it will
+      // never draw. /login is a high-traffic anonymous page.
+      await waitFor(() => expect(container.firstChild).toBeNull());
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+    }
+  );
+
+  it("still renders on an ordinary page", async () => {
+    setMockPathname("/world");
+    stubEnabled();
+
+    render(<PollBannerNotice />);
+
+    await waitFor(() => expect(screen.getByRole("link", { name: "Click Here" })).toBeTruthy());
   });
 });

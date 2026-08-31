@@ -18,6 +18,8 @@
  * the surrounding chrome either.
  */
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+import { isChromeHiddenPath } from "@/lib/constants/layoutPaths";
 import type { PollBannerSnapshot } from "@/lib/pollBanner";
 
 const POLL_INTERVAL_MS = 60_000; // 1 minute
@@ -49,9 +51,14 @@ export function PollBannerStrip({ snapshot }: { snapshot: PollBannerSnapshot }) 
 }
 
 export function PollBannerNotice() {
+  const pathname = usePathname();
   const [snapshot, setSnapshot] = useState<PollBannerSnapshot | null>(null);
 
   useEffect(() => {
+    // Nothing to draw on a chromeless page, so do not poll for it either.
+    // Re-runs on navigation, which is what resumes polling on the way out.
+    if (isChromeHiddenPath(pathname)) return;
+
     let cancelled = false;
     async function load() {
       try {
@@ -69,8 +76,11 @@ export function PollBannerNotice() {
       cancelled = true;
       clearInterval(handle);
     };
-  }, []);
+  }, [pathname]);
 
+  // Login, register, banned and maintenance draw no navbar, so a strip here
+  // would sit alone at the top of the page against no chrome at all.
+  if (isChromeHiddenPath(pathname)) return null;
   if (!snapshot?.enabled) return null;
   return <PollBannerStrip snapshot={snapshot} />;
 }
