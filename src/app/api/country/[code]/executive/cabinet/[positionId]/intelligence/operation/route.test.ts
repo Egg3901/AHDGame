@@ -30,6 +30,14 @@ function post(body: unknown) {
   return new Request("http://t", { method: "POST", body: JSON.stringify(body) });
 }
 
+/** The route's return type is nullable through its guard union; tests need a value. */
+async function run(body: unknown, positionId?: string, code?: string) {
+  const { POST } = await import("./route");
+  const res = await POST(post(body), call(positionId, code));
+  if (!res) throw new Error("route returned no response");
+  return res;
+}
+
 const VALID = {
   targetCountryId: "RU",
   domain: "military",
@@ -88,8 +96,7 @@ beforeEach(() => {
 
 describe("POST intelligence operation", () => {
   it("404s on a position that is not the intelligence seat", async () => {
-    const { POST } = await import("./route");
-    expect((await POST(post(VALID), call("secretary_of_defense"))).status).toBe(404);
+    expect((await run(VALID, "secretary_of_defense")).status).toBe(404);
   });
 
   it("403s when the caller may not act in the office", async () => {
@@ -97,35 +104,30 @@ describe("POST intelligence operation", () => {
       canView: true,
       canAct: false,
     } as never);
-    const { POST } = await import("./route");
-    expect((await POST(post(VALID), call())).status).toBe(403);
+    expect((await run(VALID)).status).toBe(403);
   });
 
   it("403s an acting director, whose scope bars pointing the service", async () => {
     vi.mocked(requireConfirmedSecretary).mockReturnValue(
       new Response(null, { status: 403 }) as never
     );
-    const { POST } = await import("./route");
-    expect((await POST(post(VALID), call())).status).toBe(403);
+    expect((await run(VALID)).status).toBe(403);
     expect(runOperation).not.toHaveBeenCalled();
   });
 
   it("400s on an unknown domain", async () => {
-    const { POST } = await import("./route");
-    const res = await POST(post({ ...VALID, domain: "political" }), call());
+    const res = await run({ ...VALID, domain: "political" });
     // Political is not a domain, deliberately: espionage targets state
     // capability, never another player's political career.
     expect(res.status).toBe(400);
   });
 
   it("400s on an unknown target country", async () => {
-    const { POST } = await import("./route");
-    expect((await POST(post({ ...VALID, targetCountryId: "zz" }), call())).status).toBe(400);
+    expect((await run({ ...VALID, targetCountryId: "zz" })).status).toBe(400);
   });
 
   it("passes the resolved director stat multiplier through", async () => {
-    const { POST } = await import("./route");
-    await POST(post(VALID), call());
+    await run(VALID);
     const args = vi.mocked(runOperation).mock.calls[0][0];
     // intellect 7 + statecraft 6 => mean 6.5, one point above the 5.5 pivot.
     expect(args.statMultiplier).toBeCloseTo(1.04, 5);
@@ -147,14 +149,12 @@ describe("POST intelligence operation", () => {
       opSlots: { turn: 10, remaining: 2 },
       foundedTurn: 1,
     });
-    const { POST } = await import("./route");
-    expect((await POST(post(VALID), call())).status).toBe(200);
+    expect((await run(VALID)).status).toBe(200);
     expect(vi.mocked(runOperation).mock.calls[0][0].statMultiplier).toBe(1);
   });
 
   it("returns both axes and never the roll detail", async () => {
-    const { POST } = await import("./route");
-    const res = await POST(post(VALID), call());
+    const res = await run(VALID);
     const raw = await res.text();
     expect(raw).not.toContain("rollDetail");
     const body = JSON.parse(raw);
@@ -170,8 +170,7 @@ describe("POST intelligence operation", () => {
       status: 429,
       error: "The service has run every operation it can this turn.",
     } as never);
-    const { POST } = await import("./route");
-    const res = await POST(post(VALID), call());
+    const res = await run(VALID);
     expect(res.status).toBe(429);
     expect((await res.json()).error).toContain("this turn");
   });
