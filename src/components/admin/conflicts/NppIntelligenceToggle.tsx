@@ -52,8 +52,8 @@ export function NppIntelligenceToggle() {
       if (res.ok) {
         setMessage(
           next
-            ? "NPP governments will now build networks and run operations of their own."
-            : "NPP governments will no longer run intelligence operations."
+            ? "NPP governments are cleared to run intelligence operations once that behaviour ships."
+            : "NPP governments will not run intelligence operations."
         );
         // Apply locally first, then re-read for the attribution the server stamped.
         setFlags((current) =>
@@ -86,9 +86,10 @@ export function NppIntelligenceToggle() {
         role="note"
         className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-foreground"
       >
-        <span className="font-semibold">Warning.</span> Turning this on points the whole NPP world
-        at your players. An operation that is traced back raises tension and can open a crisis, and
-        NPP services pick their targets without a player weighing the diplomatic cost.
+        <span className="font-semibold">Not yet active.</span> NPP services do not run operations of
+        their own yet, so this switch changes nothing today. It is the gate for when they do, and it
+        ships off so that behaviour can never arrive switched on by surprise. Counter intelligence
+        is already live for every country regardless of this setting.
       </div>
 
       <div className="mt-4 flex flex-col gap-3 rounded-lg border border-card-border bg-background p-3 sm:flex-row sm:items-start sm:justify-between">

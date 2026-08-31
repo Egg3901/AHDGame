@@ -5,7 +5,9 @@ import {
   getIntelligenceAgenciesCollection,
   getIntelligenceNetworksCollection,
 } from "@/lib/db/collections/intelligence";
+import type { CountryId } from "@/lib/constants/countries";
 import type { IntelligenceAgency, IntelligenceNetwork } from "@/lib/db/types/intelligence";
+import { OP_SLOTS_PER_TURN, TRADECRAFT_DEFAULT } from "@/lib/intelligence/config";
 import { deriveCounterIntel } from "@/lib/intelligence/counterIntel";
 import { stepNetwork } from "@/lib/intelligence/network";
 
@@ -13,8 +15,6 @@ export interface IntelligenceTurnResult {
   networksStepped: number;
   posturesRefreshed: number;
 }
-
-const NOTHING: IntelligenceTurnResult = { networksStepped: 0, posturesRefreshed: 0 };
 
 /**
  * Per-turn intelligence upkeep.
@@ -45,8 +45,6 @@ export async function processIntelligenceTurn(
     agenciesCollection.find({}).toArray(),
   ]);
 
-  if (networks.length === 0 && agencies.length === 0) return NOTHING;
-
   const networkOps: AnyBulkWriteOperation<IntelligenceNetwork>[] = [];
   for (const net of networks) {
     const stepped = stepNetwork(net, turn);
@@ -70,24 +68,44 @@ export async function processIntelligenceTurn(
   // One access sweep and one tension read for the whole pass, not per country.
   const [access, tension] = await Promise.all([getAllCountryAccess(db), getColdWarTension(db)]);
 
+  const counterIntel = deriveCounterIntel({
+    atWar: false,
+    alignedShare: 0,
+    tensionValue: tension.value,
+    securityEstateCount: 0,
+  });
+  const byCountry = new Map(agencies.map((a) => [String(a.countryId), a]));
+
+  // Iterate the COUNTRY LIST, not the existing agency rows.
+  //
+  // Agencies are created lazily when someone opens the console, and nobody ever
+  // opens an NPP country's console — so walking existing rows would refresh the
+  // posture of exactly the countries that already had a player and leave every
+  // NPP country at zero forever. That would make "defence needs no order" inert
+  // and every unplayed country a free target. Upsert instead, so the row exists
+  // the first time anything needs to read it.
   const agencyOps: AnyBulkWriteOperation<IntelligenceAgency>[] = [];
-  for (const agency of agencies) {
+  for (const [countryId, entry] of Object.entries(access)) {
     // `enabledForPlayers` and NOT `nppGoverned`, matching offensiveOptIns: a
     // predicate that also demands the autonomy ladder would leave most of the
     // world defending at a default in any world with autonomy switched off.
-    const entry = access[agency.countryId];
-    if (!entry || entry.enabledForPlayers) continue;
-    const counterIntel = deriveCounterIntel({
-      atWar: false,
-      alignedShare: 0,
-      tensionValue: tension.value,
-      securityEstateCount: 0,
-    });
-    if (counterIntel === agency.counterIntel) continue;
+    if (entry.enabledForPlayers) continue;
+    const existing = byCountry.get(countryId);
+    if (existing && existing.counterIntel === counterIntel) continue;
     agencyOps.push({
       updateOne: {
-        filter: { _id: agency._id },
-        update: { $set: { counterIntel, updatedAt: new Date() } },
+        filter: { countryId: countryId as CountryId },
+        update: {
+          $set: { counterIntel, updatedAt: new Date() },
+          $setOnInsert: {
+            directorCharacterId: null,
+            tradecraft: TRADECRAFT_DEFAULT,
+            budgetRemaining: 0,
+            opSlots: { turn, remaining: OP_SLOTS_PER_TURN },
+            foundedTurn: turn,
+          },
+        },
+        upsert: true,
       },
     });
   }

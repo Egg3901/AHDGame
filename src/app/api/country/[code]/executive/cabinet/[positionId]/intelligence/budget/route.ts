@@ -64,7 +64,14 @@ export async function PATCH(request: Request, { params }: IntelligenceRouteParam
       return NextResponse.json({ error: "Could not credit the service." }, { status: 500 });
     }
 
-    return NextResponse.json({ budgetRemaining: agency.budgetRemaining + amount });
+    // Re-read rather than adding to the snapshot: an operation resolving
+    // concurrently also moves this figure, and reporting snapshot + amount would
+    // hand the console a number that was never true.
+    const fresh = await agencies.findOne(
+      { _id: agency._id },
+      { projection: { budgetRemaining: 1 } }
+    );
+    return NextResponse.json({ budgetRemaining: fresh?.budgetRemaining ?? agency.budgetRemaining });
   } catch (error) {
     return handleRouteError(error);
   }

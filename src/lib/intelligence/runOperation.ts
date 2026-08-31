@@ -1,4 +1,4 @@
-import type { Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import {
   getIntelligenceAgenciesCollection,
@@ -208,6 +208,7 @@ export async function runOperation(args: RunOperationArgs): Promise<RunOperation
 
   const opLog = await getIntelligenceOpLogCollection(db);
   await opLog.insertOne({
+    _id: new ObjectId(),
     ownerCountryId: agency.countryId,
     targetCountryId,
     domain,
@@ -232,7 +233,7 @@ export async function runOperation(args: RunOperationArgs): Promise<RunOperation
     effectSummary: message,
     turn,
     createdAt: new Date(),
-  } as never);
+  });
 
   return {
     ok: true,

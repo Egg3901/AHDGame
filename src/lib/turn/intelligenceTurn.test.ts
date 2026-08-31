@@ -57,14 +57,22 @@ function collections(networks: unknown[], agencies: unknown[]) {
 }
 
 describe("processIntelligenceTurn", () => {
-  it("does nothing at all in a world with no intelligence state", async () => {
+  it("stands NPP postures up even in a world with no intelligence rows at all", async () => {
+    // The whole point: agencies are created lazily by the console, and nobody
+    // ever opens an NPP country's console. Walking existing rows would leave
+    // every unplayed country undefended forever.
     const { processIntelligenceTurn } = await import("./intelligenceTurn");
     const { db, networkBulk, agencyBulk } = collections([], []);
     const result = await processIntelligenceTurn(db, 10);
 
-    expect(result).toEqual({ networksStepped: 0, posturesRefreshed: 0 });
+    expect(result.networksStepped).toBe(0);
+    expect(result.posturesRefreshed).toBe(1);
     expect(networkBulk).not.toHaveBeenCalled();
-    expect(agencyBulk).not.toHaveBeenCalled();
+    const ops = agencyBulk.mock.calls[0][0] as {
+      updateOne: { filter: Record<string, unknown>; upsert?: boolean };
+    }[];
+    expect(ops[0].updateOne.filter).toEqual({ countryId: "PL" });
+    expect(ops[0].updateOne.upsert).toBe(true);
   });
 
   it("steps every network once", async () => {
@@ -101,12 +109,14 @@ describe("processIntelligenceTurn", () => {
     // Only PL: `enabledForPlayers: false` is what makes a country NPP, matching
     // offensiveOptIns. A player country's posture is the player's to set.
     expect(result.posturesRefreshed).toBe(1);
-    const ops = agencyBulk.mock.calls[0][0] as { updateOne: { filter: { _id: string } } }[];
+    const ops = agencyBulk.mock.calls[0][0] as {
+      updateOne: { filter: { countryId: string } };
+    }[];
     expect(ops).toHaveLength(1);
-    expect(ops[0].updateOne.filter._id).toBe("a2");
+    expect(ops[0].updateOne.filter.countryId).toBe("PL");
   });
 
-  it("writes nothing when a posture is already correct", async () => {
+  it("writes nothing when every posture is already correct", async () => {
     const { processIntelligenceTurn } = await import("./intelligenceTurn");
     // 20 default + 0.2 * 40 tension = 28.
     const agencies = [{ _id: "a2", countryId: "PL", counterIntel: 28 }];
@@ -117,15 +127,15 @@ describe("processIntelligenceTurn", () => {
     expect(agencyBulk).not.toHaveBeenCalled();
   });
 
-  it("skips an agency whose country has left the registry", async () => {
+  it("never resurrects a dissolved country's agency", async () => {
+    // A dissolved country is out of getAllCountryAccess entirely, so iterating
+    // the country list cannot upsert a row back for it after the merge purge.
     const { processIntelligenceTurn } = await import("./intelligenceTurn");
-    // A dissolved country is out of getAllCountryAccess entirely. Its rows are
-    // purged on dissolution, but a turn racing that purge must not throw.
     const agencies = [{ _id: "a3", countryId: "DD", counterIntel: 0 }];
     const { db, agencyBulk } = collections([], agencies);
-    const result = await processIntelligenceTurn(db, 10);
+    await processIntelligenceTurn(db, 10);
 
-    expect(result.posturesRefreshed).toBe(0);
-    expect(agencyBulk).not.toHaveBeenCalled();
+    const ops = agencyBulk.mock.calls[0][0] as { updateOne: { filter: { countryId: string } } }[];
+    expect(ops.map((o) => o.updateOne.filter.countryId)).not.toContain("DD");
   });
 });
