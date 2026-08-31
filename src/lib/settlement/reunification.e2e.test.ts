@@ -47,6 +47,8 @@ const CRISIS_ID = new ObjectId();
 const CHAIRMAN = new ObjectId();
 const SED_DOC = new ObjectId();
 const CDU_DOC = new ObjectId();
+/** Germany's own governing party — the one reunification must BAN. */
+const SPD_DOC = new ObjectId();
 
 function cursorOf<T>(docs: T[]) {
   const c = {
@@ -88,7 +90,12 @@ describe("reunification pipeline, end to end", () => {
             { _id: SED_DOC, countryId: "DD", sequentialId: 1, abbreviation: "SED" },
             { _id: CDU_DOC, countryId: "DD", sequentialId: 2, abbreviation: "CDU" },
           ])
-        : cursorOf([
+        : // Germany AFTER the migration: its own SPD, plus the two eastern
+          // parties under their new numbers. The SPD has to be here for the
+          // tolerate/ban split to mean anything — it is the party that must end
+          // up banned while the carried bloc is merely approved.
+          cursorOf([
+            { _id: SPD_DOC, countryId: "DE", sequentialId: 1, abbreviation: "SPD" },
             { _id: SED_DOC, countryId: "DE", sequentialId: 7, abbreviation: "SED" },
             { _id: CDU_DOC, countryId: "DE", sequentialId: 8, abbreviation: "CDU" },
           ])
@@ -157,15 +164,36 @@ describe("reunification pipeline, end to end", () => {
     expect(sed?.[1].$set.mergedFrom).toMatchObject({ countryId: "DD", sequentialId: 1 });
   });
 
-  it("rules with the eastern party and bans the western ones", async () => {
+  it("rules with the eastern party, tolerates its bloc, and bans the western ones", async () => {
     const { actuateSettlementOutcome } = await import("./actuate");
     await actuateSettlementOutcome(db as unknown as Db, crisis(), 470);
     const writes = db.collectionMocks["politicalParties"].updateMany.mock.calls;
     const ruling = writes.find((c) => c[1].$set?.regimeStatus === "ruling");
+    const approved = writes.find((c) => c[1].$set?.regimeStatus === "approved");
     const banned = writes.find((c) => c[1].$set?.regimeStatus === "banned");
+
     // 7 is the SED's number after migration -- NOT 1, which is the SPD in Germany.
     expect(ruling?.[0].sequentialId).toBe(7);
-    expect(banned?.[0].sequentialId.$ne).toBe(7);
+    // The eastern bloc party crossed with the SED and is tolerated, not banned:
+    // the winning side does not dissolve its own National Front on arrival.
+    expect(approved?.[0].sequentialId.$in).toEqual([8]);
+    // Only Germany's own party is outlawed.
+    expect(banned?.[0].sequentialId.$in).toEqual([1]);
+  });
+
+  it("vacates the seats of the parties it bans", async () => {
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis(), 470);
+    // The western benches are emptied rather than left sitting as a banned
+    // majority of a chamber their own parties are outlawed in. Matched on the
+    // party tokens the vacate builds -- id, name and abbreviation.
+    const finds = db.collectionMocks["electedOfficials"].find.mock.calls;
+    const vacateQuery = finds.find(
+      (c) => c[0]?.countryId === "DE" && c[0]?.party?.$in !== undefined
+    );
+    expect(vacateQuery).toBeDefined();
+    expect(vacateQuery![0].party.$in).toEqual(expect.arrayContaining(["1", "SPD"]));
+    expect(vacateQuery![0].party.$in).not.toContain("7");
   });
 
   it("retires the national office the region sweep cannot see", async () => {

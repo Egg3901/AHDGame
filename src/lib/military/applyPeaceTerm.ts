@@ -64,7 +64,7 @@ export async function applyPeaceTerm(
   }
 
   if (term.kind === "regime_change") {
-    await convertRegime(db, term.targetSystem, ctx);
+    await convertRegime(db, term.targetSystem, ctx, term.rulingPartyId);
     return;
   }
 
@@ -91,14 +91,23 @@ export async function applyPeaceTerm(
 async function convertRegime(
   db: Db,
   targetSystem: Extract<PeaceTerm, { kind: "regime_change" }>["targetSystem"],
-  ctx: ApplyTermContext
+  ctx: ApplyTermContext,
+  rulingPartyId?: number
 ): Promise<void> {
   // A visible interregnum rather than an instant handover: the country spends the
   // delay under a fallen government before the campaign opens.
   const electionAtTurn = ctx.currentTurn + FORCED_ELECTION_DELAY_TURNS;
 
   if (targetSystem === "onePartyState") {
-    await installOnePartyState(db, ctx.target, ctx.currentTurn);
+    // The victor's choice of party, when they named one. Left out, the install
+    // resolves it from the target's own formed government or largest bench —
+    // which is how this shipped, and which can hand a monopoly to the very party
+    // the victor just fought. `installOnePartyState` ignores an id that names no
+    // party of this country, so a stale value degrades to that same resolution
+    // rather than banning everyone.
+    await installOnePartyState(db, ctx.target, ctx.currentTurn, {
+      ...(rulingPartyId != null ? { rulingPartyId } : {}),
+    });
     // `installOnePartyState` mirrors the FIELDS `triggerSystemConversion` clears and
     // deliberately schedules nothing, so the marker is written here to bring the two
     // directions back to the same end state.

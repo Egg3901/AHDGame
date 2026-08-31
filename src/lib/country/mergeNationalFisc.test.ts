@@ -94,7 +94,11 @@ describe("mergeNationalFisc", () => {
     )![1].$set;
     expect(deSet.taxRates).toEqual({ incomeTax: 60, corporateTax: 80 }); // rates: no FX
     expect(deSet.taxRatePhaseIn).toEqual({ incomeTax: 62 }); // DD's pending ramps continue
-    expect(deSet["debt.ceiling"]).toBe(10000); // 5000 × 2 — money converts
+    // The ceiling SUMS rather than replacing: it is borrowing capacity, not a
+    // rule, and a state that just absorbed another has not lost the capacity of
+    // the half it took on. 5000 × 2 (money converts) + Germany's own 90000.
+    expect(deSet["debt.ceiling"]).toBe(100000);
+    // The LATER of the two raises — the combined ceiling is new.
     expect(deSet["debt.ceilingLastRaisedYear"]).toBe(1953);
     expect(deSet.minimumWageKaitzRatio).toBe(0.55);
     expect(deSet.unionLawBias).toBe(50);
@@ -131,6 +135,38 @@ describe("mergeNationalFisc", () => {
     expect(deSet.minimumWageKaitzRatio).toBeUndefined(); // DD never set one
     expect(deSet.unionLawBias).toBeUndefined();
     expect(deSet["debt.ceiling"]).toBeUndefined(); // DD had no ceiling of its own
+  });
+
+  it("sums the debt ceilings rather than letting the absorbed side's replace one three times its size", async () => {
+    // The live German case, in round numbers: replacing would have cut a state
+    // with 3x the GDP down to the smaller ceiling it absorbed.
+    db.collection("federalBudget")
+      .findOne.mockResolvedValueOnce({
+        _id: "DD",
+        treasuryBalance: 0,
+        debt: { principal: 0, ceiling: 10_000, ceilingLastRaisedYear: 1953 },
+      })
+      .mockResolvedValueOnce({
+        _id: "DE",
+        treasuryBalance: 0,
+        debt: { principal: 0, ceiling: 18_000, ceilingLastRaisedYear: 1955 },
+      });
+
+    await mergeNationalFisc(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 510,
+    });
+
+    const deSet = db.collectionMocks["federalBudget"].updateOne.mock.calls.find(
+      (c) => c[0]._id === "DE"
+    )![1].$set;
+    // 18_000 + 10_000 × 2 — strictly more than either side alone, and never less
+    // than the survivor already had.
+    expect(deSet["debt.ceiling"]).toBe(38_000);
+    expect(deSet["debt.ceiling"]).toBeGreaterThan(18_000);
+    // The survivor's raise is the later one here, so it is the one recorded.
+    expect(deSet["debt.ceilingLastRaisedYear"]).toBe(1955);
   });
 
   it("a deficit large enough to sink the survivor sets the survivor's debt mirror", async () => {

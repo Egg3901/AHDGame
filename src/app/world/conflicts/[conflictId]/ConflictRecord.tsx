@@ -1,4 +1,4 @@
-import type { PeaceTerm } from "@/lib/military/peaceTerm";
+import { governmentSystemLabel, type PeaceTerm } from "@/lib/military/peaceTerm";
 import { NavalAirPanel } from "./NavalAirPanel";
 import type { NavalAirPanel as NavalAirPanelData } from "./conflictRecordView";
 import type { ReactNode } from "react";
@@ -105,6 +105,11 @@ export interface ConflictRecordView {
     leaver: string;
     other: string;
     term: PeaceTerm;
+    /**
+     * The party a one-party conversion installed, when the term named one.
+     * Resolved server-side because the term stores an id, not a name.
+     */
+    rulingPartyName?: string | null;
     justification: string | null;
     turn: number;
   }>;
@@ -282,7 +287,7 @@ function Panel({ children }: { children: ReactNode }) {
  * quoted in the payer's own currency and is printed as a plain figure beside the
  * country that paid it, never converted to a unit players do not use.
  */
-function settlementTermText(term: PeaceTerm): string {
+function settlementTermText(term: PeaceTerm, rulingPartyName?: string | null): string {
   if (term.kind === "white_peace") {
     return "A white peace. Neither side prevailed and nothing changed hands.";
   }
@@ -292,7 +297,15 @@ function settlementTermText(term: PeaceTerm): string {
       : "A white peace. No money changed hands.";
   }
   if (term.kind === "regime_change") {
-    return "The government fell and fresh elections were called.";
+    // A one-party conversion is the one shape where "fresh elections" describes
+    // something milder than what happened, and where the party that took power
+    // is the substance of the settlement rather than a detail.
+    if (term.targetSystem === "onePartyState") {
+      return rulingPartyName
+        ? `The government fell and the country was reconstituted as a one-party state under the ${rulingPartyName}, with every other party banned.`
+        : "The government fell and the country was reconstituted as a one-party state, with every party but the strongest banned.";
+    }
+    return `The government fell and fresh elections were called under a ${governmentSystemLabel(term.targetSystem)}.`;
   }
   return `New defence procurement was frozen for ${term.turns} turns.`;
 }
@@ -493,7 +506,7 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
               >
                 <div style={{ font: `500 12px ${mono}`, color: "#c9c9d6" }}>
                   {s.leaver} left the war on turn {s.turn}, settling with {s.other}:{" "}
-                  {settlementTermText(s.term)}
+                  {settlementTermText(s.term, s.rulingPartyName)}
                 </div>
                 {s.justification && (
                   <div

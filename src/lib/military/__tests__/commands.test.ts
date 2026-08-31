@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   createCommand,
   dedupeCommandIds,
+  needsLogisticsPairing,
   reconcileCommandCommanders,
   validateDraft,
   type CommandDraft,
@@ -231,6 +232,81 @@ describe("validateDraft", () => {
     expect(
       validateDraft(draft, stateWith([])).some((m) => m.includes("naval command structure"))
     ).toBe(true);
+  });
+
+  // Ticket #1244. The warning keyed on `regionIds.length >= REGION_CAP`, and REGION_CAP
+  // is a hard cap the dialog and the reducer both enforce, so it fired on every full
+  // non-Logistics command whatever the geography. South Asia, East Asia and Southeast
+  // Asia are one theatre; sustaining them needs no separate logistics tail, and any two
+  // of the three drew no warning at all.
+  it("does not recommend logistics when every assigned region is in one macro theatre", () => {
+    const draft: CommandDraft = {
+      name: "X",
+      type: "REGIONAL",
+      regionIds: ["sas", "eas", "sea"],
+      commanderIds: ["hale"],
+      commandingGeneralId: null,
+      posture: "Deterrence",
+      supply: "Normal",
+    };
+    expect(
+      validateDraft(draft, stateWith([])).some((m) => m.includes("Logistics command recommended"))
+    ).toBe(false);
+  });
+
+  it("recommends logistics when the assigned regions span two macro theatres", () => {
+    const draft: CommandDraft = {
+      name: "X",
+      type: "REGIONAL",
+      regionIds: ["weu", "sas"],
+      commanderIds: ["hale"],
+      commandingGeneralId: null,
+      posture: "Deterrence",
+      supply: "Normal",
+    };
+    expect(
+      validateDraft(draft, stateWith([])).some((m) => m.includes("Logistics command recommended"))
+    ).toBe(true);
+  });
+
+  // The advice has to be reachable from the detail panel too, which holds a saved
+  // MilitaryCommand rather than a draft, so the rule lives in its own predicate.
+  it("does not recommend logistics to a command whose regions are all one theatre", () => {
+    expect(needsLogisticsPairing("REGIONAL", ["sas", "eas", "sea"])).toBe(false);
+  });
+
+  it("recommends logistics to a command spanning two theatres", () => {
+    expect(needsLogisticsPairing("REGIONAL", ["weu", "sas"])).toBe(true);
+  });
+
+  it("never recommends logistics to a Logistics command", () => {
+    expect(needsLogisticsPairing("LOGISTICS", ["weu", "sas"])).toBe(false);
+  });
+
+  it("recommends nothing for a command with no regions", () => {
+    expect(needsLogisticsPairing("REGIONAL", [])).toBe(false);
+  });
+
+  // A saved command can name a region the map no longer has. An unknown id contributes
+  // no theatre rather than counting as its own, which would advise on a phantom spread.
+  it("ignores region ids the map does not know", () => {
+    expect(needsLogisticsPairing("REGIONAL", ["sas", "not-a-region"])).toBe(false);
+  });
+
+  // A Logistics command IS the sustainment structure, so it is never told to go find one.
+  it("never recommends logistics to a Logistics command spanning theatres", () => {
+    const draft: CommandDraft = {
+      name: "X",
+      type: "LOGISTICS",
+      regionIds: ["weu", "sas"],
+      commanderIds: ["hale"],
+      commandingGeneralId: null,
+      posture: "Expeditionary",
+      supply: "Normal",
+    };
+    expect(
+      validateDraft(draft, stateWith([])).some((m) => m.includes("Logistics command recommended"))
+    ).toBe(false);
   });
 });
 

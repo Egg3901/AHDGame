@@ -95,6 +95,56 @@ describe("validatePeaceTerm: regime change", () => {
     const monarchy: PeaceTermContext = { ...ctx, targetSystem: "parliamentaryMonarchy" };
     expect(validatePeaceTerm(term, monarchy)).toEqual({ ok: true });
   });
+
+  it("accepts a named ruling party that exists in the target", () => {
+    const term: PeaceTerm = {
+      kind: "regime_change",
+      targetSystem: "onePartyState",
+      rulingPartyId: 2,
+    };
+    expect(validatePeaceTerm(term, { ...ctx, targetPartyIds: [1, 2, 3] })).toEqual({ ok: true });
+  });
+
+  it("refuses a named ruling party the target does not have", () => {
+    const term: PeaceTerm = {
+      kind: "regime_change",
+      targetSystem: "onePartyState",
+      rulingPartyId: 9,
+    };
+    expect(validatePeaceTerm(term, { ...ctx, targetPartyIds: [1, 2, 3] }).ok).toBe(false);
+  });
+
+  it("skips the party check when no list was loaded", () => {
+    // Null means "not passed", matching maxIndemnity's stance: the check is
+    // skipped rather than failed, and installOnePartyState ignores an id that
+    // names no party of the country.
+    const term: PeaceTerm = {
+      kind: "regime_change",
+      targetSystem: "onePartyState",
+      rulingPartyId: 9,
+    };
+    expect(validatePeaceTerm(term, { ...ctx, targetPartyIds: null })).toEqual({ ok: true });
+  });
+
+  it("refuses naming a ruling party for a system that has none", () => {
+    // A republic forms a government from its chamber. Naming a party alongside
+    // one is a contradiction the offerer plainly did not mean.
+    const term: PeaceTerm = {
+      kind: "regime_change",
+      targetSystem: "parliamentaryRepublic",
+      rulingPartyId: 2,
+    };
+    expect(validatePeaceTerm(term, { ...ctx, targetPartyIds: [1, 2] }).ok).toBe(false);
+  });
+
+  it("refuses a party id that is not a positive integer", () => {
+    const term: PeaceTerm = {
+      kind: "regime_change",
+      targetSystem: "onePartyState",
+      rulingPartyId: 0,
+    };
+    expect(validatePeaceTerm(term, { ...ctx, targetPartyIds: [0, 1] }).ok).toBe(false);
+  });
 });
 
 describe("validatePeaceTerm: demilitarisation", () => {

@@ -10,6 +10,7 @@ import { entityName } from "@/app/world/international-organizations/entityLabel"
 import { getDb } from "@/lib/mongodb";
 import { getConflictByNumber } from "@/lib/db/collections/conflicts";
 import { getPeaceOffersCollection } from "@/lib/db/collections/peaceOffers";
+import { loadPartyChoices, loadPartyChoicesFor, partyDisplayName } from "@/lib/military/peaceOffer";
 import { warGoalLabel } from "@/lib/military/warGoals";
 import { getBattleReportsCollection, theaterRecord } from "@/lib/db/collections/battleReports";
 import { listDeclarationHistory } from "@/lib/db/collections/battleDeclarations";
@@ -346,6 +347,16 @@ export default async function ConflictRecordPage({
       : ownSide === "B"
         ? (doc.sideB.backer ?? "neutral")
         : "neutral";
+  // Party lists for every country a settlement on this war converted, in ONE
+  // query: the record needs names and the terms store ids. Only the terms that
+  // actually name a party contribute, so an ordinary war loads nothing.
+  const settlementParties = await loadPartyChoicesFor(
+    db,
+    settlements
+      .filter((o) => o.term.kind === "regime_change" && o.term.rulingPartyId != null)
+      .map((o) => o.toCountry)
+  );
+
   // The dictate panel, shown ONLY to the negotiator of the country that won this
   // war outright. Null for everyone else, including the losing side and the winning
   // side's allies: a coalition victory yields one term, and the panel is where that
@@ -369,6 +380,10 @@ export default async function ConflictRecordPage({
           target: doc.termsWindow.target,
           targetName: COUNTRY_CONFIGS[doc.termsWindow.target]?.name ?? doc.termsWindow.target,
           turnsLeft: Math.max(0, doc.termsWindow.closesTurn - currentTurn),
+          // The parties the victor may install, when they convert the loser to a
+          // one-party state. Loaded from the same helper the route validates
+          // against, so anything offered here is accepted there.
+          targetParties: await loadPartyChoices(db, doc.termsWindow.target),
         }
       : null;
 
@@ -728,7 +743,18 @@ export default async function ConflictRecordPage({
       note: momentum.note,
       sideBLabel: doc.sideB.label,
     },
-    settlements: settlements.map(settlementRow),
+    // The record needs a party NAME and the term stores an id. Resolved from the
+    // batch loaded above, so a war with several converting settlements is still one
+    // query. Always keyed on `toCountry`: the term lands on the recipient whichever
+    // side the deal removes from the war.
+    settlements: settlements.map((o) =>
+      settlementRow(
+        o,
+        o.term.kind === "regime_change" && o.term.rulingPartyId != null
+          ? partyDisplayName(settlementParties.get(o.toCountry), o.term.rulingPartyId)
+          : null
+      )
+    ),
     tier,
     canAct,
     viewerCountry,

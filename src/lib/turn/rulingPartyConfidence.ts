@@ -9,6 +9,7 @@ import type { Db } from "mongodb";
 import {
   INITIAL_CONFIDENCE,
   RENEWAL_BUMP,
+  REUNIFICATION_BUMP,
   MAX_HISTORY_ENTRIES,
   clampConfidence,
 } from "@/lib/onePartyState/rulingPartyConfidence";
@@ -176,6 +177,88 @@ export async function renewLeaderMandate(
   }
 
   return { state: result, bumped: true };
+}
+
+/**
+ * Move a leader's confidence record onto the country that absorbed theirs.
+ *
+ * A merge carries the head of government (`governmentFormations.pmCharacterId`)
+ * but the confidence record is keyed `${countryId}_${characterId}`, so it does
+ * not follow: the leader arrived in the surviving state with no mandate on
+ * record and `installNewLeader` would later reset them to 75 as though they had
+ * just taken office. The record is REWRITTEN under the survivor rather than
+ * updated, because the country id is half the primary key.
+ *
+ * `startedAtTurn` and `renewalCount` are preserved — the leader's tenure did not
+ * restart, their state grew — and the carry adds `REUNIFICATION_BUMP` on top,
+ * clamped to `MAX_CONFIDENCE` like every other bump.
+ *
+ * IDEMPOTENT on the survivor's row: a second run finds it already there and
+ * neither re-bumps nor rewrites history. The absorbed row is deleted either way,
+ * so a re-run after a partial failure still finishes the move.
+ *
+ * Returns null when there is nothing to carry — an NPP head of government holds
+ * no character-keyed record, and neither does a leader who never had a mandate
+ * installed.
+ */
+export async function carryLeaderStateOnMerge(
+  db: Db,
+  params: {
+    fromCountryId: CountryId;
+    toCountryId: CountryId;
+    leaderCharacterId: ObjectId;
+    /** The office key the leader holds in the SURVIVING country. */
+    leaderOfficeType: string;
+    /** The ruling party under its post-migration number, or null. */
+    governingPartyId: string | null;
+    currentTurn: number;
+  }
+): Promise<CountryLeaderState | null> {
+  const {
+    fromCountryId,
+    toCountryId,
+    leaderCharacterId,
+    leaderOfficeType,
+    governingPartyId,
+    currentTurn,
+  } = params;
+  const coll = getCountryLeaderStatesCollection(db);
+  const fromId = buildId(fromCountryId, leaderCharacterId);
+  const toId = buildId(toCountryId, leaderCharacterId);
+
+  const existingSurvivor = await coll.findOne({ _id: toId });
+  if (existingSurvivor) {
+    // Already carried. Still clear the absorbed row so the dissolved country
+    // stops carrying a leader.
+    await coll.deleteOne({ _id: fromId });
+    return existingSurvivor;
+  }
+
+  const absorbed = await coll.findOne({ _id: fromId });
+  if (!absorbed) return null;
+
+  const nextConfidence = clampConfidence(absorbed.partyConfidence + REUNIFICATION_BUMP);
+  const entry = makeHistoryEntry(
+    currentTurn,
+    absorbed.partyConfidence,
+    nextConfidence,
+    "Confidence carried across reunification"
+  );
+
+  const carried: CountryLeaderState = {
+    ...absorbed,
+    _id: toId,
+    countryId: toCountryId,
+    leaderOfficeType,
+    governingPartyId,
+    partyConfidence: nextConfidence,
+    confidenceHistory: trimHistory([entry, ...absorbed.confidenceHistory]),
+    updatedAt: new Date(),
+  };
+
+  await coll.replaceOne({ _id: toId }, carried, { upsert: true });
+  await coll.deleteOne({ _id: fromId });
+  return carried;
 }
 
 /**

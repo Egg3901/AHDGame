@@ -84,10 +84,31 @@ export async function mergeNationalFisc(
     const lawSet: Record<string, unknown> = {};
     if (from.taxRates) lawSet.taxRates = from.taxRates;
     if (from.taxRatePhaseIn) lawSet.taxRatePhaseIn = from.taxRatePhaseIn;
-    if (typeof from.debt?.ceiling === "number") {
-      lawSet["debt.ceiling"] = from.debt.ceiling * scale;
-      if (typeof from.debt.ceilingLastRaisedYear === "number") {
-        lawSet["debt.ceilingLastRaisedYear"] = from.debt.ceilingLastRaisedYear;
+    // THE DEBT CEILING IS THE ONE LEVER THAT SUMS RATHER THAN REPLACING.
+    //
+    // Every other carried lever is a RULE — a rate, a ratio, a prohibition — and
+    // one state can only have one of each, so the winner's replaces the
+    // survivor's. A ceiling is a QUANTITY: it is how much this state may borrow,
+    // and a state that has just doubled in size has not thereby lost the
+    // borrowing capacity of the half it absorbed.
+    //
+    // Replacing it was actively wrong. Germany's 18bn EUR ceiling would have
+    // been overwritten by the GDR's 10bn DDM (~12.3bn EUR) — a 32% cut for a
+    // state with three times the GDP, arrived at by treating a balance-sheet
+    // capacity as though it were a tax rate. Summing keeps the arithmetic in the
+    // same place as the treasury and the bond book, which already add.
+    //
+    // `ceilingLastRaisedYear` takes the LATER of the two: the combined ceiling is
+    // new, and dating it to the older of the two raises would make the unified
+    // state look overdue for a raise it just effectively had.
+    const fromCeiling = from.debt?.ceiling;
+    if (typeof fromCeiling === "number") {
+      lawSet["debt.ceiling"] = (to.debt?.ceiling ?? 0) + fromCeiling * scale;
+      const raisedYears = [from.debt?.ceilingLastRaisedYear, to.debt?.ceilingLastRaisedYear].filter(
+        (year): year is number => typeof year === "number"
+      );
+      if (raisedYears.length > 0) {
+        lawSet["debt.ceilingLastRaisedYear"] = Math.max(...raisedYears);
       }
     }
     if (typeof from.minimumWageKaitzRatio === "number") {

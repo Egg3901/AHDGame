@@ -267,6 +267,32 @@ describe("CommandsBuilder", () => {
     expect(within(row as HTMLElement).queryByText("UNASSIGNED")).toBeNull();
   });
 
+  // Ticket 1244. The logistics advice was only ever computed for a DRAFT, so it could
+  // only appear in the create dialog. Regions are edited on a saved command from this
+  // panel (REMOVE_REGION here, TOGGLE_REGION from the assign modal), which is exactly
+  // where a command acquires a second theatre, and there it said nothing.
+  it("advises pairing with logistics on a saved command that spans two theatres", () => {
+    render(<CommandsBuilder commands={[command({ regionIds: ["weu", "sas"] })]} {...base} />);
+    expect(screen.getByText(/Logistics command recommended/i)).toBeTruthy();
+  });
+
+  it("gives no logistics advice on a saved command inside one theatre", () => {
+    render(
+      <CommandsBuilder commands={[command({ regionIds: ["sas", "eas", "sea"] })]} {...base} />
+    );
+    expect(screen.queryByText(/Logistics command recommended/i)).toBeNull();
+  });
+
+  it("gives no logistics advice to a Logistics command spanning theatres", () => {
+    render(
+      <CommandsBuilder
+        commands={[command({ type: "LOGISTICS", regionIds: ["weu", "sas"] })]}
+        {...base}
+      />
+    );
+    expect(screen.queryByText(/Logistics command recommended/i)).toBeNull();
+  });
+
   // A player holding this seat asked "where do I assign more troops to the battlefield
   // as SoD?" — a question with no button, because units are never sent to a front
   // directly. This page is where the chain starts, so it is where the rule belongs.

@@ -3,6 +3,11 @@ import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import type { StatePolicy, GovernorExecutiveOrder } from "@/lib/db/types";
 import { canonicalizeLegislationTypeId } from "@/lib/legislationTypeAliases";
+import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
+import {
+  REGIONAL_DEFAULT_LEVEL,
+  regionalDefaultLaws,
+} from "@/lib/politicalLegislation/regionalDefaults";
 import { ObjectId } from "mongodb";
 
 // GET /api/game/current-policies — Returns current policy option indices for a given state or federal level.
@@ -55,6 +60,27 @@ export async function GET(request: Request) {
         policy.enactedBy?.kind === "order" ? orderById.get(policy.enactedBy.id.toString()) : null;
       policyMap[canonicalId] = order ? order.policyOptionIndexBefore : policy.policyOptionIndex;
       if (exactCanonical) canonicalSources.add(canonicalId);
+    }
+
+    // A region can legislate on top of a new-generation `both` law, so the
+    // propose modal needs a current level for one even before the region has
+    // ever touched it. Without an entry here `LawProvisionComparison` bails on
+    // `currentIndex === undefined` and drops the fiscal comparison AND the
+    // metric chips — the "regional infrastructure bill shows no metrics" bug.
+    // Level 0 is what the engine already reads for an unlegislated region
+    // (`getEnactedLevel`), so this only fills a display gap.
+    //
+    // Region-only: `stateId` is also the national pseudo-id ("federal",
+    // "uk_national", ...), whose rows really are seeded. Those short-circuit on
+    // NATIONAL_SCOPE_IDS rather than paying for a `states` lookup that would
+    // miss anyway, and a genuine miss (unknown region) fills in nothing.
+    if (!NATIONAL_SCOPE_IDS.has(stateId)) {
+      const region = await db
+        .collection<{ _id: string; countryId?: string }>("states")
+        .findOne({ _id: stateId }, { projection: { countryId: 1 } });
+      for (const law of regionalDefaultLaws(region?.countryId ?? "")) {
+        policyMap[law.id] ??= REGIONAL_DEFAULT_LEVEL;
+      }
     }
 
     return NextResponse.json(policyMap, {
