@@ -621,7 +621,7 @@ export async function accumulatePresidentVoteTurn(
 
   // Consecutive terms the incumbent PARTY has already held. Term fatigue is
   // priced by the economic referendum below (penalty-side multiplier); this
-  // count also feeds `appealWeight`'s nominal-share `personalStatTenureFatigue`.
+  // count also feeds `appealWeight`'s nominal-share `personalStatTenureRetention`.
   const incumbentConsecutiveTerms = getPresidentialConsecutiveTerms(
     gsDoc,
     electionCountryId,
