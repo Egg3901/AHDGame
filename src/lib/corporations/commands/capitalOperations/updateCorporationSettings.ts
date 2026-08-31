@@ -11,6 +11,7 @@ import {
   TYPE_SWITCH_COOLDOWN_TURNS,
   TYPE_SWITCH_PENALTY_TURNS,
   CEO_SALARY_MAX_REVENUE_MULTIPLE,
+  CORP_OVERHEAD_MAX_REVENUE_MULTIPLE,
   type CorporationType,
 } from "@/lib/constants/corporations";
 import { migrateUnlockedTechOnPrimaryTypeSwitch } from "@/lib/corporations/techTree/migrateUnlocksOnTypeSwitch";
@@ -124,7 +125,7 @@ export async function updateCorporationSettings(request: Request, { params }: Ro
         (corporation.logisticsBudget ?? 0) +
         (corporation.rdBudget ?? 0) +
         (corporation.ceoSalary ?? 0);
-      const overheadCeiling = totalDailyRevenue * 1.5;
+      const overheadCeiling = totalDailyRevenue * CORP_OVERHEAD_MAX_REVENUE_MULTIPLE;
       if (combined > overheadCeiling && combined > storedCombined) {
         return NextResponse.json(
           {
