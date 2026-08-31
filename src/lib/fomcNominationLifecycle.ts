@@ -240,16 +240,30 @@ export async function processFomcNominationLifecycle(
           { $set: { status: "rejected", rejectedAt: now, updatedAt: now } }
         );
       result.rejected++;
-      if (nom.occupantType === "player") {
-        const userId = await nomineeUserId(db, nom.nomineeCharacterId);
-        if (userId) {
-          notifications.push({
-            userId,
-            type: "system",
-            title: "FOMC nomination rejected",
-            message: `The Senate did not confirm you as ${seatLabel}.`,
-          });
-        }
+      const rejectedNomineeUserId =
+        nom.occupantType === "player" ? await nomineeUserId(db, nom.nomineeCharacterId) : null;
+      if (rejectedNomineeUserId) {
+        notifications.push({
+          userId: rejectedNomineeUserId,
+          type: "system",
+          title: "FOMC nomination rejected",
+          message: `The Senate did not confirm you as ${seatLabel}.`,
+        });
+      }
+      // The seat stays vacant and only the proposer can refill it, so a silent
+      // rejection deadlocks the board again (ticket #1238): tell the president
+      // their pick failed and that they may nominate again.
+      const proposerId = await nomineeUserId(db, nom.proposedByPresidentId);
+      if (
+        proposerId &&
+        (rejectedNomineeUserId === null || !proposerId.equals(rejectedNomineeUserId))
+      ) {
+        notifications.push({
+          userId: proposerId,
+          type: "system",
+          title: "FOMC nomination rejected",
+          message: `The Senate did not confirm ${nom.nomineeName} as ${seatLabel}. The seat remains vacant; you may put forward another nominee.`,
+        });
       }
     }
   }

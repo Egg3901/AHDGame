@@ -15,6 +15,7 @@ export function PrimeRateCard({
   governmentControlled = false,
   viewerSetsRate = false,
   committeeSeated = false,
+  committeeDead = false,
   onOpenCommittee,
   lastRateChangeTurn,
   currentTurn,
@@ -30,6 +31,8 @@ export function PrimeRateCard({
   viewerSetsRate?: boolean;
   /** A committee is seated, so the rate moves by vote and this card cannot set it. */
   committeeSeated?: boolean;
+  /** A committee exists but cannot carry a motion; the chair holds the rate directly. */
+  committeeDead?: boolean;
   /** Jump to the committee tab; rendered as the call to action when seated. */
   onOpenCommittee?: () => void;
   lastRateChangeTurn: number | null;
@@ -136,6 +139,26 @@ export function PrimeRateCard({
                 Open the committee room
               </button>
               .
+            </>
+          )}
+        </div>
+      )}
+
+      {committeeDead && !governmentControlled && (
+        <div className="mt-4 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+          The committee board is understaffed: with too few seated members it cannot carry a rate
+          motion, so the chair is setting the rate directly.
+          {onOpenCommittee && (
+            <>
+              {" "}
+              <button
+                type="button"
+                onClick={onOpenCommittee}
+                className="font-semibold text-foreground underline underline-offset-2"
+              >
+                Nominate governors
+              </button>{" "}
+              to restore the committee&apos;s vote.
             </>
           )}
         </div>

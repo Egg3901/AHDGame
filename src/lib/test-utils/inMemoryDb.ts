@@ -17,6 +17,7 @@
 import { ObjectId } from "mongodb";
 
 type Doc = Record<string, unknown>;
+type Update = Doc | Doc[];
 
 function isPlainObject(value: unknown): value is Doc {
   return (
@@ -161,7 +162,19 @@ function matchesFilter(doc: Doc, filter: Doc): boolean {
   });
 }
 
-function applyUpdate(doc: Doc, update: Doc): void {
+function applyUpdate(doc: Doc, update: Update): void {
+  if (Array.isArray(update)) {
+    for (const stage of update) {
+      const entries = Object.entries(stage);
+      if (entries.length !== 1 || entries[0][0] !== "$set") {
+        throw new Error(`inMemoryDb: unsupported update pipeline stage ${entries[0]?.[0]}`);
+      }
+      for (const [path, expression] of Object.entries(entries[0][1] as Doc)) {
+        setPath(doc, path, evalExpr(expression, doc));
+      }
+    }
+    return;
+  }
   for (const [op, fields] of Object.entries(update)) {
     if (op === "$set") {
       for (const [path, value] of Object.entries(fields as Doc)) setPath(doc, path, value);
@@ -248,12 +261,15 @@ class InMemoryCollection {
 
   async updateOne(
     filter: Doc,
-    update: Doc,
+    update: Update,
     options: { upsert?: boolean } = {}
   ): Promise<{ matchedCount: number; modifiedCount: number; upsertedCount: number }> {
     const target = this.docs.find((d) => matchesFilter(d, filter));
     if (!target) {
       if (options.upsert) {
+        if (Array.isArray(update)) {
+          throw new Error("inMemoryDb: pipeline upserts are not supported");
+        }
         const seed: Doc = {};
         for (const [key, condition] of Object.entries(filter)) {
           if (!key.startsWith("$") && !isPlainObject(condition)) setPath(seed, key, condition);
@@ -275,7 +291,7 @@ class InMemoryCollection {
 
   async updateMany(
     filter: Doc,
-    update: Doc
+    update: Update
   ): Promise<{ matchedCount: number; modifiedCount: number }> {
     const targets = this.docs.filter((d) => matchesFilter(d, filter));
     for (const doc of targets) applyUpdate(doc, update);
@@ -284,7 +300,7 @@ class InMemoryCollection {
 
   async findOneAndUpdate(
     filter: Doc,
-    update: Doc,
+    update: Update,
     options: { returnDocument?: "before" | "after" } = {}
   ): Promise<Doc | null> {
     const target = this.docs.find((d) => matchesFilter(d, filter));

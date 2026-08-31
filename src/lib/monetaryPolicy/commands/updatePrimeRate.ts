@@ -14,6 +14,7 @@ import { getBankId } from "@/lib/centralBank/helpers";
 import { isBankGovernmentControlledLive } from "@/lib/centralBank/governance";
 import { isNationalIssuer } from "@/lib/extraction/contractIssuerAuth";
 import { INTERFERENCE_SCRUTINY } from "@/lib/centralBank/credibility";
+import { boardCanCarryMotions } from "@/lib/centralBank/fomc";
 import type { ExchangeRate } from "@/lib/db/types/exchangeRate";
 import { rateChangeRefusal, type FxRegime } from "@/lib/currency/exchangeRateRegime";
 
@@ -82,14 +83,17 @@ export async function updatePrimeRate(params: {
     };
   }
 
-  // A seated committee is the rate authority, full stop. The schema has said so
-  // since the FOMC landed ("when present, rate moves are decided by committee
-  // vote") and the NPP auto-rate path already skips banks with a board, but this
-  // command never checked — so a chair could set the rate unilaterally and skip
-  // the motion, the majority and the per-term cap the committee lives under.
-  // Admins keep the override for operational repair.
+  // A seated committee is the rate authority: a board that can still carry a
+  // motion leaves the rate to committee vote, so the chair's direct control is
+  // gone and the card must send players to the committee room instead of a dead
+  // POST. Admins keep the override for operational repair. But a board that has
+  // decayed below the carry-a-motion threshold (fewer seated members than a
+  // strict majority of the full board) is structurally dead: no motion can ever
+  // pass, so the chair's direct authority returns until nominations restore a
+  // working board (ticket #1238 follow-up).
   const hasCommittee = (bank.fomcBoard?.length ?? 0) > 0;
-  if (hasCommittee && !isAdmin) {
+  const boardFunctional = hasCommittee && boardCanCarryMotions(bank.fomcBoard ?? []);
+  if (hasCommittee && boardFunctional && !isAdmin) {
     return {
       ok: false as const,
       status: 409,
@@ -190,9 +194,11 @@ export async function updatePrimeRate(params: {
         updatedAt: now,
         lastRateChangeTurn: currentTurn,
         ...(newInfamy !== undefined ? { chairInfamy: newInfamy } : {}),
-        // An admin override on a committee bank still consumes one of the term's
-        // moves, so the override cannot be used to hand the committee free changes.
-        ...(hasCommittee
+        // An admin override on a committee bank, and a chair's emergency set on
+        // a board too vacant to carry a motion, still consume one of the term's
+        // moves, so the override cannot be used to hand the committee free
+        // changes once it is seated again.
+        ...(hasCommittee && (isAdmin || !boardFunctional)
           ? {
               rateChangesThisTerm: Math.min(
                 RATE_CHANGES_PER_TERM,

@@ -377,6 +377,49 @@ describe("banking lending", () => {
   });
 
   describe("originateLoan success and compensation", () => {
+    it("lets an investment charter disburse a named corporation loan", async () => {
+      const bankId = new ObjectId();
+      const borrowerCorpId = new ObjectId();
+      const charter = makeActiveRetailCharter({
+        type: "investment",
+        npcDeposits: 0,
+        cashReserves: 1_000_000,
+        totalLoans: 0,
+      });
+      db.collectionMocks.corporations!.findOne.mockImplementation(
+        async (query: { _id: ObjectId }) =>
+          query._id.equals(bankId)
+            ? makeBankCorp(charter, { _id: bankId })
+            : ({
+                _id: borrowerCorpId,
+                name: "Borrower Corp",
+                liquidCapital: 50_000,
+                liquidCurrencyCode: "USD",
+                countryId: "US",
+              } as Corporation)
+      );
+      db.collectionMocks.bankLoans!.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+      db.collectionMocks.corporations!.updateOne.mockResolvedValue({
+        matchedCount: 1,
+        modifiedCount: 1,
+      });
+
+      const { originateLoan } = await importLending();
+      const result = await originateLoan(
+        db as unknown as Db,
+        bankId,
+        { type: "corporation", id: borrowerCorpId },
+        25_000,
+        24
+      );
+
+      expect(result.ok).toBe(true);
+      const [bankFilter] = db.collectionMocks.corporations!.updateOne.mock.calls[0];
+      expect(bankFilter["bankCharter.type"]).toEqual({
+        $in: ["retail", "investment", "universal"],
+      });
+    });
+
     it("credits borrower, writes outstanding, and $inc's totalLoans by the same principal", async () => {
       const bankId = new ObjectId();
       const characterId = new ObjectId();

@@ -93,6 +93,20 @@ describe("computeExtractionCapacityMultipliers", () => {
     expect(result.get("s1")?.oil).toBe(1);
   });
 
+  it("shares one corporate contract across all of that corporation's sectors", () => {
+    const sectors = [
+      { sectorId: "s1", stateId: "TX", corporationId: corp1, revenueBasedOutput: { oil: 40000 } },
+      { sectorId: "s2", stateId: "TX", corporationId: corp1, revenueBasedOutput: { oil: 40000 } },
+    ];
+    const capacities = [makeCapacity("TX", { oil: 100000 })];
+    const contracts = [makeContract("TX", corp1, "oil", 0.5)];
+
+    const result = computeExtractionCapacityMultipliers(sectors, contracts, capacities);
+
+    expect(result.get("s1")?.oil).toBeCloseTo(0.625);
+    expect(result.get("s2")?.oil).toBeCloseTo(0.625);
+  });
+
   it("squeezes open-access to zero when contracts over-allocate", () => {
     const sectors = [
       // corp1 has 60% contract

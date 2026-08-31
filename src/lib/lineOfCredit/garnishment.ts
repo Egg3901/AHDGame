@@ -13,7 +13,7 @@
 // non-distressed borrowers and for distressed borrowers' wallet-side payments
 // (which will be zero in the garnished currencies).
 
-import { ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import type { Character, CentralBank } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { FOREX_ACTIVE_CURRENCIES, getCountryIdForCurrency } from "@/lib/constants/currencies";
@@ -104,9 +104,6 @@ export async function garnishLocFromIncome(
   let borrowersGarnished = 0;
   let totalInternalGarnished = 0;
 
-  // Per-character LOC writes and ledger rows are collected in the loop and
-  // flushed in bulk below instead of one round-trip each.
-  const charLocOps: AnyBulkWriteOperation<Character>[] = [];
   const pendingLedgerEntries: Parameters<typeof insertLocLedgerEntry>[1][] = [];
 
   for (const char of distressed) {
@@ -171,18 +168,25 @@ export async function garnishLocFromIncome(
       if (a > 0) newA[c] = a;
     }
 
-    charLocOps.push({
-      updateOne: {
-        filter: { _id: char._id },
-        update: {
-          $set: {
-            "lineOfCredit.balances": newP,
-            "lineOfCredit.arrears": newA,
-            updatedAt: now,
-          },
+    // Claim this exact LOC snapshot before suppressing any in-flight income.
+    // A concurrent draw or repayment makes the claim miss, leaving the income
+    // untouched for the caller to credit normally instead of overwriting debt.
+    const locUpdate = await db.collection<Character>("characters").updateOne(
+      { _id: char._id, lineOfCredit: loc },
+      {
+        $set: {
+          "lineOfCredit.balances": newP,
+          "lineOfCredit.arrears": newA,
+          updatedAt: now,
         },
-      },
-    });
+      }
+    );
+    if (locUpdate.matchedCount === 0) {
+      console.warn(
+        `[line-of-credit] skipped stale ${source} garnishment for character ${charIdStr} on turn ${turn}`
+      );
+      continue;
+    }
 
     // Reduce or remove the in-flight income map for this character. If the
     // obligation only consumed a fraction of income, scale down each currency
@@ -284,9 +288,6 @@ export async function garnishLocFromIncome(
     );
   }
 
-  if (charLocOps.length > 0) {
-    await db.collection<Character>("characters").bulkWrite(charLocOps);
-  }
   if (pendingLedgerEntries.length > 0) {
     await Promise.all(pendingLedgerEntries.map((entry) => insertLocLedgerEntry(db, entry)));
   }

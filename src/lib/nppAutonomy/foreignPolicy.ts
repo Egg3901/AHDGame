@@ -141,6 +141,20 @@ interface PersistedForeignPolicyDecision {
 const DECISION_COLLECTION = "nppForeignPolicyDecisions";
 const MINIMUM_ACTION_SCORE = 25;
 const MAX_ALTERNATIVES = 5;
+/**
+ * Priority floor for the two choices an active belligerent makes about a war it
+ * is already fighting: `conduct_war` and `seek_peace`. Only the single
+ * top-ranked choice acts, and routine diplomacy scores in the 46-73 band (org
+ * votes 46-86, hostile tariffs to 68, embargoes to 73), so war actions based at
+ * 25 and 38 could never win a slot against any pending vote or hostile
+ * neighbour. That starved the whole war stage: production recorded 205
+ * autonomous decisions with zero `conduct_war` and zero `seek_peace` selections
+ * while NATO members sat deployed and ready in an active war, so allies joined
+ * the roster but never once attacked (ticket #1233). War conduct now starts
+ * above the routine band; the readiness/approval gates, the 6-turn conduct
+ * cooldown, and `seek_peace`'s pressure terms remain the restraint.
+ */
+const BELLIGERENT_WAR_ACTION_BASE = 60;
 const STANDARD_COOLDOWN_TURNS = 24;
 const TRADE_ESCALATION_COOLDOWN_TURNS = 48;
 const FOREIGN_POLICY_COUNTRIES = (
@@ -810,7 +824,10 @@ function warCandidates(
         choices.push(
           candidate(
             "conduct_war",
-            25 + ambition * 8 + defenseLean * 10 + (deployedReadiness - 40) * 0.2,
+            BELLIGERENT_WAR_ACTION_BASE +
+              ambition * 8 +
+              defenseLean * 10 +
+              (deployedReadiness - 40) * 0.2,
             [
               `${deployed.length} deployed units average ${round(deployedReadiness)} readiness in ${conflict.name}.`,
               `Government approval is ${round(context.approvalRating)}.`,
@@ -827,7 +844,7 @@ function warCandidates(
         choices.push(
           candidate(
             "seek_peace",
-            38 +
+            BELLIGERENT_WAR_ACTION_BASE +
               Math.max(0, 35 - context.approvalRating) * 0.4 +
               Math.max(0, 35 - deployedReadiness) * 0.3 +
               Math.max(0, context.debtToGdpRatio - 140) * 0.1,

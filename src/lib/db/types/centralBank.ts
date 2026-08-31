@@ -81,6 +81,14 @@ export const FOMC_PLAYER_VOTE_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** Game-clock window (turns) matching the 24h wall clock (~1 turn/hour), for meetings and confirmations. */
 export const FOMC_VOTE_WINDOW_TURNS = 24;
 
+/**
+ * Turns between repeats of the "board seats are vacant" notice to the
+ * executive. Vacant seats can only be filled by presidential nomination, so an
+ * unstaffed board silently deadlocks every rate motion (ticket #1238); the
+ * reminder keeps the one player who can act aware without nagging every turn.
+ */
+export const FOMC_VACANCY_REMINDER_INTERVAL_TURNS = 48;
+
 /** A motion / ballot direction. */
 export type FomcVote = "hike" | "cut" | "hold";
 
@@ -293,6 +301,12 @@ export interface CentralBank {
   fomcTermStartedAtTurn?: number;
   /** Turn of the most recently opened FOMC meeting (paces the meeting cadence). */
   lastFomcMeetingTurn?: number;
+  /**
+   * Turn the executives were last notified that committee seats sit vacant
+   * (throttles the vacancy reminder to one notice per
+   * FOMC_VACANCY_REMINDER_INTERVAL_TURNS). Stamped by processFomcMeetings.
+   */
+  lastFomcVacancyNoticeAtTurn?: number | null;
   /** Recent resolved meetings (ring buffer) for dissent history / charting. */
   fomcMeetingHistory?: FomcMeeting[];
   /** When set, the next chair must accept before the appointment is finalized */

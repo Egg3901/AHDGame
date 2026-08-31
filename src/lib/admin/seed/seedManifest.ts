@@ -331,6 +331,7 @@ const RUNTIME: CollectionEntry[] = [
       "One auditable autonomous foreign-policy intent per country and turn. Shadow-mode rows are wiped on reset and never mutate gameplay state.",
   },
   { name: "playerEndorsements", category: "runtime" },
+  { name: "playerEndorsementLocks", category: "runtime" },
 
   // Bills + legislation runtime
   { name: "bills", category: "runtime" },

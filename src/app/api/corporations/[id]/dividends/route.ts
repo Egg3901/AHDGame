@@ -76,8 +76,15 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const now = new Date();
-    await db.collection<Corporation>("corporations").updateOne(
-      { _id: corporation._id },
+    const cooldownCutoff = new Date(now.getTime() - DIVIDEND_COOLDOWN_MS);
+    const update = await db.collection<Corporation>("corporations").updateOne(
+      {
+        _id: corporation._id,
+        $or: [
+          { lastDividendChange: { $exists: false } },
+          { lastDividendChange: { $lte: cooldownCutoff } },
+        ],
+      },
       {
         $set: {
           dividendRate: parsed.data.dividendRate,
@@ -86,6 +93,12 @@ export async function POST(request: Request, { params }: RouteParams) {
         },
       }
     );
+    if (update.matchedCount === 0) {
+      return NextResponse.json(
+        { error: "Dividend rate was changed by another request. Try again after the cooldown." },
+        { status: 429 }
+      );
+    }
 
     logWireEvent(
       "dividend_changed",

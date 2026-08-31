@@ -31,6 +31,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { getInflationTarget } from "@/lib/budget/inflation";
 import { processNppChairAutoRate } from "@/lib/nppAutonomy/nppChairAutoRate";
+import { boardCanCarryMotions } from "@/lib/centralBank/fomc";
 import {
   capScrutinyGain,
   resolveRecoveryDelta,
@@ -290,10 +291,15 @@ export async function processCentralBankChairTurn(
     // credit or penalize). chairInfamy is still decayed/written above for
     // display transparency.
     if (bank.chairMode === "npp") {
-      // When a bank has an FOMC committee, the committee (processFomcMeetings)
-      // owns the rate. Skip the single-chair autonomous setter to avoid two
-      // systems moving primeRate on the same turn.
-      if (bank.fomcBoard && bank.fomcBoard.length > 0) continue;
+      // A functional FOMC committee (one that can still carry a motion) owns
+      // the rate. Skip the single-chair autonomous setter to avoid two systems
+      // moving primeRate on the same turn. When the board has decayed below the
+      // carry-a-motion threshold no motion can ever pass, so the autonomous
+      // chair holds the rate directly until nominations restore the board
+      // (ticket #1238 follow-up).
+      if (bank.fomcBoard && bank.fomcBoard.length > 0 && boardCanCarryMotions(bank.fomcBoard)) {
+        continue;
+      }
       await processNppChairAutoRate(
         db,
         bank,

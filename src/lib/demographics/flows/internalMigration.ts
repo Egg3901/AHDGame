@@ -5,7 +5,7 @@ export interface RegionPullMetrics {
   gdpGrowth: number; // %
   unemployment: number; // %
   medianIncome: number; // currency
-  costOfLiving: number; // 0-100 index
+  costOfLiving: number; // 100-centered index
   labourTightness?: number; // desired workers / civilian labour force
   labourWageIndex?: number; // 1 = baseline wage
 }
@@ -15,7 +15,7 @@ export interface RegionPullMetrics {
 const W_GDP = 0.3;
 const W_UNEMP = 0.2;
 const W_INCOME = 0.04; // per % above/below the country-average income
-const W_COL = 0.05; // per point of cost-of-living above the neutral 50
+const W_COL = 0.05; // per point of cost-of-living above the neutral 100
 const W_LABOUR_SHORTAGE = 1;
 const ATTRACT_CLAMP = 10;
 
@@ -45,7 +45,7 @@ export function regionAttractiveness(m: RegionPullMetrics, countryAvgMedianIncom
     W_GDP * m.gdpGrowth -
     W_UNEMP * m.unemployment +
     W_INCOME * incomeRelPct -
-    W_COL * (m.costOfLiving - 50) +
+    W_COL * (m.costOfLiving - 100) +
     W_LABOUR_SHORTAGE * shortage * wage;
   return Math.max(-ATTRACT_CLAMP, Math.min(ATTRACT_CLAMP, raw));
 }

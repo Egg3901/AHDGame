@@ -20,6 +20,7 @@ import {
   LOGISTICS_DECAY_RATE,
   RD_DECAY_RATE,
   CEO_SALARY_MAX_REVENUE_MULTIPLE,
+  CORP_OVERHEAD_MAX_REVENUE_MULTIPLE,
   MARKETING_DIMINISHING_THRESHOLD,
   RD_DIMINISHING_THRESHOLD,
   RD_INNOVATION_INTERVAL,
@@ -146,7 +147,8 @@ export default function CeoBudgetSubtab({
     (corporation.logisticsBudget ?? 0) +
     (corporation.rdBudget ?? 0) +
     (corporation.ceoSalary ?? 0);
-  const maxDailyOverhead = Math.max(0, financials.totalRevenue) * 1.5;
+  const maxDailyOverhead =
+    Math.max(0, financials.totalRevenue) * CORP_OVERHEAD_MAX_REVENUE_MULTIPLE;
   const isOverCap =
     combinedDailyOverhead > maxDailyOverhead && combinedDailyOverhead > storedDailyOverhead;
 
