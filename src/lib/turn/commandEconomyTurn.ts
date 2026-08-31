@@ -7,6 +7,7 @@ import {
   isPlannedEconomy,
   plannedShare,
   scheduledMarketizationLevel,
+  DUAL_TRACK_CEILING,
   hydrateStoredMarketizationLevels,
   setStoredMarketizationLevel,
   marketizationLevel,
@@ -188,17 +189,25 @@ export async function processCommandEconomyTurn(
   const budgets = await db.collection<FederalBudget>("federalBudget").find({}).toArray();
 
   // ── Hydrate the stored marketization registry for this turn ───────────────
+  //
+  // Gated on the PERSISTED level (schedule as fallback), never on
+  // `isPlannedEconomy`: that accessor reads the registry this loop is about to
+  // rebuild — empty after a restart — and falls back to the compiled schedule,
+  // which would silently drop (a) a country the schedule never listed whose
+  // regime was carried onto it by a merge (post-reunification DE), and (b) a
+  // command country whose stored level outlived its schedule's `throughYear`.
+  // The band check itself uses the same ceiling `isPlannedEconomy` does.
   const hydration: Array<[string, number]> = [];
   for (const budget of budgets) {
     const countryId = budget.countryId;
-    if (!isPlannedEconomy(countryId, currentYear, enabled)) continue;
+    if (!countryId || !enabled) continue;
     const persisted = budget.economicFactors?.marketizationLevel;
-    hydration.push([
-      countryId,
+    const level =
       typeof persisted === "number" && Number.isFinite(persisted)
         ? persisted
-        : scheduledMarketizationLevel(countryId, currentYear),
-    ]);
+        : scheduledMarketizationLevel(countryId, currentYear);
+    if (level >= DUAL_TRACK_CEILING) continue;
+    hydration.push([countryId, level]);
   }
   hydrateStoredMarketizationLevels(hydration);
 
