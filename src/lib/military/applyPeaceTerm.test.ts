@@ -143,8 +143,25 @@ describe("applyPeaceTerm: regime change", () => {
   it("installs a one-party state when that is the target system", async () => {
     const { db } = mockDb();
     await applyPeaceTerm(db, { kind: "regime_change", targetSystem: "onePartyState" }, ctx);
-    expect(installOnePartyState).toHaveBeenCalledWith(expect.anything(), "TR", 100);
+    expect(installOnePartyState).toHaveBeenCalledWith(expect.anything(), "TR", 100, {});
     expect(triggerSystemConversion).not.toHaveBeenCalled();
+  });
+
+  it("installs the party the settlement named", async () => {
+    const { db } = mockDb();
+    await applyPeaceTerm(
+      db,
+      { kind: "regime_change", targetSystem: "onePartyState", rulingPartyId: 3 },
+      ctx
+    );
+    // Left to resolve, the install reads the target's own largest bench — which
+    // can hand the monopoly to the government the victor just fought.
+    expect(installOnePartyState).toHaveBeenCalledWith(
+      expect.anything(),
+      "TR",
+      100,
+      expect.objectContaining({ rulingPartyId: 3 })
+    );
   });
 
   it("uses the shipped conversion when the target system is a democracy", async () => {
@@ -157,7 +174,12 @@ describe("applyPeaceTerm: regime change", () => {
   it("converts the TARGET, never the imposer", async () => {
     const { db } = mockDb();
     await applyPeaceTerm(db, { kind: "regime_change", targetSystem: "onePartyState" }, ctx);
-    expect(installOnePartyState).toHaveBeenCalledWith(expect.anything(), "TR", expect.anything());
+    expect(installOnePartyState).toHaveBeenCalledWith(
+      expect.anything(),
+      "TR",
+      expect.anything(),
+      expect.anything()
+    );
   });
 
   it("queues the election marker when installing a one-party state", async () => {

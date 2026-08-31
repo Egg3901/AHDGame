@@ -83,7 +83,8 @@ export async function proposeStateBill(
     const sponsorParty = await db
       .collection<PoliticalParty>("politicalParties")
       .findOne({ sequentialId: parseInt(character.party, 10), countryId });
-    if (isBannedParty(postCountryConfig, sponsorParty)) {
+    // RUNTIME shape, not `postCountryConfig` — see the note in `nationalBillActions`.
+    if (isBannedParty({ governmentType: runtimeState.governmentType }, sponsorParty)) {
       return {
         status: 403,
         body: { error: "Banned parties cannot propose legislation." },

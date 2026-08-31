@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { READINESS_DRIFT_STEP } from "@/lib/military/readinessDrift";
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { ConflictRecord, type ConflictRecordView } from "./ConflictRecord";
 import type { SideForce } from "./conflictRecordView";
 
@@ -938,6 +938,10 @@ describe("the dictate panel on a won war", () => {
     target: "TR",
     targetName: "Turkey",
     turnsLeft: 18,
+    targetParties: [
+      { id: 1, name: "Republican People's Party", abbreviation: "CHP" },
+      { id: 2, name: "Democrat Party", abbreviation: "DP" },
+    ],
   };
 
   it("is absent for a viewer the server did not authorize", () => {
@@ -974,5 +978,26 @@ describe("the dictate panel on a won war", () => {
     render(<ConflictRecord conflict={{ ...base, dictate }} />);
     const radios = screen.getAllByRole("radio");
     expect(radios.filter((r) => (r as HTMLInputElement).checked)).toHaveLength(1);
+  });
+
+  it("offers the target's parties once a one-party state is chosen", () => {
+    render(<ConflictRecord conflict={{ ...base, dictate }} />);
+    // Hidden until the system that HAS a ruling party is selected: a republic
+    // forms its government from the chamber, so there is nothing to name.
+    expect(screen.queryByText(/Republican People's Party/)).toBeNull();
+
+    // The term's own fields render only under the selected radio.
+    fireEvent.click(screen.getByRole("radio", { name: /Regime change/ }));
+    // Still hidden: a republic is the default system and names no ruling party.
+    expect(screen.queryByText(/Republican People's Party/)).toBeNull();
+
+    fireEvent.change(screen.getByRole("combobox", { name: /New system/i }), {
+      target: { value: "onePartyState" },
+    });
+
+    expect(screen.getByText(/CHP \(Republican People's Party\)/)).toBeTruthy();
+    expect(screen.getByText(/DP \(Democrat Party\)/)).toBeTruthy();
+    // The default leaves the choice to the conversion, which is how this shipped.
+    expect(screen.getByText(/Let the strongest party take power/)).toBeTruthy();
   });
 });

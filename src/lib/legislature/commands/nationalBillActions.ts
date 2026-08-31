@@ -79,7 +79,11 @@ export async function performNationalBillAction(
     const voterParty = await db
       .collection<PoliticalParty>("politicalParties")
       .findOne({ sequentialId: parseInt(character.party, 10), countryId });
-    if (isBannedParty(config, voterParty)) {
+    // RUNTIME shape, not `config`. `isBannedParty` re-tests `isOnePartyState`
+    // itself, and the static config never learns about a conversion — so passing
+    // it here would make this whole guard inert for a country converted at
+    // runtime (reunified Germany, or any `regime_change` peace term).
+    if (isBannedParty({ governmentType: runtimeState.governmentType }, voterParty)) {
       return {
         status: 403,
         body: { error: "Banned parties cannot vote on or act on legislation." },

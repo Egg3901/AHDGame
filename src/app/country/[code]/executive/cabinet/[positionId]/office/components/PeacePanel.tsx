@@ -14,6 +14,12 @@ interface OfferView {
   /** Which party the deal removes. Absent on rows written before offers ran both ways. */
   leaver?: CountryId;
   term: PeaceTerm;
+  /**
+   * Display name of the ruling party a regime change would install, when the
+   * term names one. Null when it leaves the choice to the conversion. Resolved
+   * server-side because the term stores an id and the reader needs a name.
+   */
+  rulingPartyName?: string | null;
   justification: string | null;
   status: "pending" | "accepted" | "rejected" | "withdrawn" | "expired";
   offeredTurn: number;
@@ -32,6 +38,11 @@ export interface EnemyView {
   withdrawalBlocked: boolean;
   progressPct: number;
   requiredPct: number;
+  /**
+   * Their parties, for naming which one rules if the deal converts them to a
+   * one-party state. Served by the same helper the POST validates against.
+   */
+  parties: { id: number; name: string; abbreviation?: string }[];
 }
 
 export interface PeaceWar {
@@ -66,7 +77,7 @@ export interface PeaceWar {
  * An indemnity names whose currency the figure is in, because the amount is
  * quoted in the PAYER's currency, which is not always the reader's.
  */
-function offerTermText(term: PeaceTerm): string {
+function offerTermText(term: PeaceTerm, rulingPartyName?: string | null): string {
   if (term.kind === "white_peace") return " on white peace terms, with nothing changing hands";
   if (term.kind === "indemnity") {
     if (!(term.amount > 0)) return " with no indemnity, a white peace";
@@ -74,6 +85,13 @@ function offerTermText(term: PeaceTerm): string {
     return ` for ${term.amount.toLocaleString("en-US")} from ${payerName} (in ${payerName} currency)`;
   }
   if (term.kind === "regime_change") {
+    // Naming the party matters to the reader deciding whether to accept: handing
+    // a named party a monopoly is a different deal from a change of system.
+    if (term.targetSystem === "onePartyState") {
+      return rulingPartyName
+        ? ` in return for becoming a one-party state under the ${rulingPartyName}, with every other party banned`
+        : " in return for becoming a one-party state, with every party but the strongest banned";
+    }
     return " in return for a change of government and fresh elections";
   }
   return ` in return for freezing new defence procurement for ${term.turns} turns`;
@@ -146,6 +164,9 @@ export function PeacePanel({
     "white_peace" | "indemnity" | "regime_change" | "demilitarisation"
   >("indemnity");
   const [targetSystem, setTargetSystem] = useState<string>("parliamentaryRepublic");
+  // Empty string means "let the conversion resolve it", which is what the term
+  // does when it names no party.
+  const [rulingParty, setRulingParty] = useState<string>("");
   const [demilTurns, setDemilTurns] = useState<string>("240");
   const [justification, setJustification] = useState("");
   const [busy, setBusy] = useState(false);
@@ -266,7 +287,15 @@ export function PeacePanel({
       return { kind: "white_peace" };
     }
     if (termKind === "regime_change") {
-      return { kind: "regime_change", targetSystem: targetSystem as GovernmentType };
+      // The party rides along only for the system that HAS a ruling party. The
+      // route refuses the pairing outright otherwise, so sending it with a
+      // republic would turn a stale dropdown into a rejected offer.
+      const named = targetSystem === "onePartyState" && rulingParty !== "";
+      return {
+        kind: "regime_change",
+        targetSystem: targetSystem as GovernmentType,
+        ...(named ? { rulingPartyId: Number(rulingParty) } : {}),
+      };
     }
     if (termKind === "demilitarisation") {
       return { kind: "demilitarisation", turns: Number(demilTurns) || 0 };
@@ -324,7 +353,7 @@ export function PeacePanel({
               <p className="text-[12px]">
                 <strong>{COUNTRY_CONFIGS[o.fromCountry]?.name ?? o.fromCountry}</strong>
                 {offerDirectionText(o)}
-                {offerTermText(o.term)}.
+                {offerTermText(o.term, o.rulingPartyName)}.
               </p>
               {o.justification && (
                 <p className="mt-1 border-l-2 border-card-border pl-2 text-[11px] italic text-muted">
@@ -452,6 +481,27 @@ export function PeacePanel({
                 <option value="parliamentaryRepublic">Parliamentary republic</option>
                 <option value="presidential">Presidential republic</option>
                 <option value="onePartyState">One-party state</option>
+              </select>
+            </label>
+          )}
+
+          {termKind === "regime_change" && targetSystem === "onePartyState" && (
+            <label className="block text-[11px] text-muted">
+              Ruling party. The party you name rules alone and every other party is banned. Leave
+              this on the default and the largest bench takes power, which may be the government you
+              are fighting.
+              <select
+                aria-label="Ruling party"
+                value={rulingParty}
+                onChange={(e) => setRulingParty(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px]"
+              >
+                <option value="">Let the strongest party take power</option>
+                {(selectedEnemy?.parties ?? []).map((p) => (
+                  <option key={p.id} value={String(p.id)}>
+                    {p.abbreviation ? `${p.abbreviation} (${p.name})` : p.name}
+                  </option>
+                ))}
               </select>
             </label>
           )}
