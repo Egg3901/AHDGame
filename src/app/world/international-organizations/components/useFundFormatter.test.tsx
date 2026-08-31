@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { useFundFormatter } from "./useFundFormatter";
 
@@ -9,6 +9,9 @@ const formatAmount = vi.fn((anchor: number, code?: string) => `${code ?? "?"}:${
 vi.mock("@/contexts/CurrencyContext", () => ({
   useCurrency: () => ({ formatAmount }),
 }));
+
+// Cleared per test so call assertions read this test's calls, not the file's.
+beforeEach(() => formatAmount.mockClear());
 
 describe("useFundFormatter", () => {
   it("resolves the currency from an org fund's currencyCountryId", () => {

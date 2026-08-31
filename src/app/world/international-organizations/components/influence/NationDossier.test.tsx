@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { InfluenceTarget, OrgInfluenceView } from "@/lib/alignment/queries/orgInfluence";
 import { NationDossier } from "./NationDossier";
@@ -10,6 +10,9 @@ const formatAmount = vi.fn((anchor: number) => `¥${Math.round(anchor)}`);
 vi.mock("@/contexts/CurrencyContext", () => ({
   useCurrency: () => ({ formatAmount }),
 }));
+
+// Cleared per test so call assertions read this render's calls, not the file's.
+beforeEach(() => formatAmount.mockClear());
 
 const VIEW = {
   poles: [
