@@ -225,9 +225,11 @@ export function ConflictActions({
         {proj.navalAirSupport && (
           <>
             {" "}
-            Close air support: {proj.navalAirSupport.closeAirSupportActive
+            Close air support:{" "}
+            {proj.navalAirSupport.closeAirSupportActive
               ? `active (+${proj.navalAirSupport.casWeight} combat weight)`
-              : "no eligible CAS wing is reaching this front"}.
+              : "no eligible CAS wing is reaching this front"}
+            .
           </>
         )}
       </div>

@@ -105,9 +105,9 @@ export async function GET(request: Request, { params }: RouteParams) {
     // misleading rather than merely approximate.
     const [navairChannels, navairUnits] = await Promise.all([
       loadNavairChannels(db),
-      unitsCol
-        .find({ domain: { $in: ["naval", "air"] } })
-        .toArray() as unknown as Promise<NavairUnit[]>,
+      unitsCol.find({ domain: { $in: ["naval", "air"] } }).toArray() as unknown as Promise<
+        NavairUnit[]
+      >,
     ]);
     const unitsByCountry = new Map<string, typeof atFront>();
     for (const u of atFront) {

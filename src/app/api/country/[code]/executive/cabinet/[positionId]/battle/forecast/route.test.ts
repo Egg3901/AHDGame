@@ -150,10 +150,12 @@ describe("battle forecast route", () => {
           return { toArray: vi.fn().mockResolvedValue(wings) };
         }
         return {
-          toArray: vi.fn().mockResolvedValue([
-            unit({ countryId: "US", theaterId: q.theaterId ?? "afghan" }),
-            unit({ countryId: "CN", theaterId: q.theaterId ?? "afghan" }),
-          ]),
+          toArray: vi
+            .fn()
+            .mockResolvedValue([
+              unit({ countryId: "US", theaterId: q.theaterId ?? "afghan" }),
+              unit({ countryId: "CN", theaterId: q.theaterId ?? "afghan" }),
+            ]),
         };
       }
     );
