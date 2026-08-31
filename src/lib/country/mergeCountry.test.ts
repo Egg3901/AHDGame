@@ -240,6 +240,9 @@ describe("mergeCountry", () => {
     expect(prime(db, "npps").updateMany.mock.calls[0][1].$set.countryId).toBe("DE");
     expect(prime(db, "tariffs").updateMany.mock.calls[0][0]).toEqual({ countryId: "DD" });
     expect(prime(db, "tariffs").updateMany.mock.calls[0][1].$set.countryId).toBe("DE");
+    // National-scope subsidies (region-scoped ones crossed with their regions).
+    expect(prime(db, "subsidies").updateMany.mock.calls[0][0]).toEqual({ countryId: "DD" });
+    expect(prime(db, "subsidies").updateMany.mock.calls[0][1].$set.countryId).toBe("DE");
   });
 
   it("the winner's tariff takes a colliding scope from the survivor", async () => {

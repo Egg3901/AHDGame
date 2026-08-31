@@ -246,6 +246,13 @@ async function sweepNationalStrays(
   await db
     .collection("npps")
     .updateMany({ countryId: fromCountryId }, { $set: { countryId: toCountryId, updatedAt: now } });
+  // NATIONAL-scope subsidies: the region-scoped rows crossed with their regions
+  // (the `subsidies` collection is in REGION_SCOPED_COLLECTIONS by stateId), so
+  // whatever still carries the old countryId here is a national programme — the
+  // unified treasury inherits the obligation.
+  await db
+    .collection("subsidies")
+    .updateMany({ countryId: fromCountryId }, { $set: { countryId: toCountryId, updatedAt: now } });
   // Tariffs are collision-aware in the winner's favour: where BOTH states
   // legislated a tariff on the same scope (same sector, same origin country,
   // same corporation, or both economy-wide), the absorbed side's record takes
