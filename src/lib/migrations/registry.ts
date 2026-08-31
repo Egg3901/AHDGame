@@ -60,6 +60,7 @@ import { migration as rescheduleEconCountryBills } from "./entries/2026-08-27-re
 import { migration as equityLiquidityIndexes } from "./entries/2026-08-28-equity-liquidity-indexes";
 import { migration as redistrictingAuthorityLegislative } from "./entries/2026-08-26-redistricting-authority-legislative";
 import { migration as purgeRetiredRuMetricRegions } from "./entries/2026-08-30-purge-retired-ru-metric-regions";
+import { migration as intelligenceIndexes } from "./entries/2026-08-31-intelligence-indexes";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -181,6 +182,10 @@ export const MIGRATIONS: Migration[] = [
   // UKR, BEL, and BLT were old RU regions. They now exist as separate country
   // region sets, but their obsolete RU metric rows survived the split.
   purgeRetiredRuMetricRegions,
+  // Intelligence spine: three UNIQUE guards the agency/network/coverage read
+  // paths assume rather than re-check, plus the operation-log lookups. A live
+  // world never re-seeds, so seedIndexes alone would never reach it.
+  intelligenceIndexes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.
