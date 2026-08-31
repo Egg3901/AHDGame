@@ -45,7 +45,38 @@ export const BLOCKADE = {
    * reachable without changing any pressure result below the existing floor.
    */
   totalClosurePressureRatio: 9,
+  /**
+   * Condition below which a hull gets disproportionately bad at closing a lane.
+   *
+   * Blockade pressure ALREADY falls linearly with condition, because `baseCv` multiplies
+   * by `integrityMult`. This is the knee on top of that, so the two COMPOUND: at a knee of
+   * 50, a hull at 25% condition closes at 0.25 (linear) x 0.25 (knee) = 6.25% of its
+   * nominal pressure rather than 25%. Blockade is patient, unglamorous work, and a ship
+   * held together by damage-control parties cannot sustain it.
+   *
+   * Must sit below `FREE_REPAIR_CEILING.station`, or a fleet mending where it stands could
+   * never climb out of the penalty band and a blockade would be unrecoverable without
+   * going home. That is the trap the repair design exists to remove.
+   */
+  wornKnee: 50,
 } as const;
+
+/**
+ * The share of its lane pressure a hull in this condition can still apply, 0..1.
+ *
+ * Squared below the knee so the fall-off accelerates: the gap between a hull at 45% and
+ * one at 25% should be far larger than twenty points of anything else.
+ */
+export function wornPenalty(integrity: number | undefined): number {
+  // `clamp` passes NaN straight through, and a NaN here would propagate into blockade
+  // closure and from there into trade affinity, where it would be far harder to trace
+  // back. An unreadable condition reads as undamaged rather than poisoning the lane.
+  if (integrity !== undefined && !Number.isFinite(integrity)) return 1;
+  const i = clamp(integrity ?? 100, 0, 100);
+  if (i >= BLOCKADE.wornKnee) return 1;
+  const ratio = i / BLOCKADE.wornKnee;
+  return ratio * ratio;
+}
 
 /**
  * The water through which a country's seaborne trade must pass.
@@ -88,7 +119,10 @@ export function blockadeClosureFor(
       if (!hostileTo.has(u.countryId)) continue;
       // `embargo` is the share of a hull's value that counts toward closing a lane.
       // BLOCKADE is 1.0, SEA_DENIAL 0.7, SEA_CONTROL 0.55, ESCORT 0.15, transit and port 0.
-      pressure += cv(u, "embargo");
+      // Scaled twice, deliberately. `cv` already carries the linear `integrityMult`, and
+      // `wornPenalty` adds the knee on top, so a badly worn hull falls off much faster
+      // than its condition alone suggests.
+      pressure += cv(u, "embargo") * wornPenalty(u.integrity);
     }
     if (pressure <= 0) continue;
 

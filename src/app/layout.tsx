@@ -25,6 +25,7 @@ import { COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
 import { LiveRefreshBanner } from "@/components/LiveRefreshBanner";
 import { MassCrashAlertBanner } from "@/components/MassCrashAlertBanner";
 import { MaintenancePartialBanner } from "@/components/MaintenancePartialBanner";
+import { PollBannerNotice } from "@/components/PollBannerNotice";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { AdSlot } from "@/components/AdSlot";
@@ -320,6 +321,9 @@ export default async function RootLayout({
                           {!isWikiSubdomain && <BugReportFab displayMode={displayMode} />}
                           {!isWikiSubdomain && <MassCrashAlertBanner />}
                           {!isWikiSubdomain && <MaintenancePartialBanner />}
+                          {/* Admin-controlled survey strip. Not auth-gated: it must reach
+                            signed-out visitors too. */}
+                          {!isWikiSubdomain && <PollBannerNotice />}
                           <AuthConnectivityGate />
                           <StatAllocationGate />
                           <SeasonRecapGate />

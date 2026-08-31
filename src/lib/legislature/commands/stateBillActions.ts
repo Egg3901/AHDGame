@@ -76,7 +76,8 @@ export async function castStateBillVote(
     const voterParty = await db
       .collection<PoliticalParty>("politicalParties")
       .findOne({ sequentialId: parseInt(character.party, 10), countryId });
-    if (isBannedParty(countryConfig, voterParty)) {
+    // RUNTIME shape, not `countryConfig` — see the note in `nationalBillActions`.
+    if (isBannedParty({ governmentType: runtimeState.governmentType }, voterParty)) {
       return {
         status: 403,
         body: { error: "Banned parties cannot vote on legislation." },

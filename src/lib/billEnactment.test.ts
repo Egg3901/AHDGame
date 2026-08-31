@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import { onBillEnacted } from "./billEnactment";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { getCatalog } from "@/lib/politicalLegislation/catalog";
+import { projectLawToLegislationType } from "@/lib/politicalLegislation/project";
 import type { Db } from "mongodb";
 
 vi.mock("@/lib/mongodb", () => ({
@@ -544,6 +546,68 @@ describe("onBillEnacted", () => {
       expect.any(Number),
       expect.anything(), // resolvedCountry — "US" for US bills, "UK" for UK, etc.
       expect.anything() // per-option position scores (econ+social) for correct shift direction
+    );
+  });
+
+  it("scores a region bill's shift from level 0 for a new-generation `both` law", async () => {
+    // The region default is level 0 and the propose modal now previews the
+    // shift from there. Falling through to the ladder centre scored the
+    // approval swing as 2 -> 3 instead of 0 -> 3, so the outcome disagreed
+    // with the preview the voters were shown.
+    const bothLaw = getCatalog("RU").find(
+      (law) => law.kind !== "tax" && law.allowedScope === "both"
+    )!;
+    const projected = projectLawToLegislationType(bothLaw);
+    const bill = createBill({
+      stateId: "MOW",
+      provisions: [{ legislationTypeId: bothLaw.id, policyOptionId: "l3", effectDirection: 1 }],
+      votes: { "507f1f77bcf86cd799439011": "for" },
+    });
+    vi.mocked(calculateShiftImpacts).mockReturnValue({});
+
+    setupCollection("legislationTypes", [projected]);
+    setupCollection("gameState", [{ _id: "current", currentYear: 1962 } as any]);
+    setupCollection("characters", []);
+    setupCollection("npps", []);
+
+    await onBillEnacted(db as unknown as Db, bill as any, 10);
+
+    expect(calculateShiftImpacts).toHaveBeenCalledWith(
+      projected.policyDomain,
+      0,
+      3,
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
+  it("keeps the ladder centre for a NATIONAL bill on the same law", async () => {
+    // National rows are seeded, so a missing one is a different problem and
+    // must not be silently rewritten to 0.
+    const bothLaw = getCatalog("RU").find(
+      (law) => law.kind !== "tax" && law.allowedScope === "both"
+    )!;
+    const projected = projectLawToLegislationType(bothLaw);
+    const bill = createBill({
+      stateId: "su_national",
+      provisions: [{ legislationTypeId: bothLaw.id, policyOptionId: "l3", effectDirection: 1 }],
+      votes: { "507f1f77bcf86cd799439011": "for" },
+    });
+    vi.mocked(calculateShiftImpacts).mockReturnValue({});
+
+    setupCollection("legislationTypes", [projected]);
+    setupCollection("gameState", [{ _id: "current", currentYear: 1962 } as any]);
+    setupCollection("characters", []);
+    setupCollection("npps", []);
+
+    await onBillEnacted(db as unknown as Db, bill as any, 10);
+
+    expect(calculateShiftImpacts).toHaveBeenCalledWith(
+      projected.policyDomain,
+      2,
+      3,
+      expect.anything(),
+      expect.anything()
     );
   });
 
