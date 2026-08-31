@@ -1,6 +1,8 @@
-/** Fixed plant-sector split rules. This module is deterministic except for the supplied roll. */
+/** Plant-sector split rules. This module is deterministic except for the supplied roll. */
 
-export const FIXED_PLANT_SPLIT_FRACTION = 0.01;
+export const BASELINE_PLANT_SPLIT_FRACTION = 0.01;
+export const MAX_PLANT_SPLIT_FRACTION = 0.25;
+export const MS_RATIO_FOR_MAX_PLANT_SPLIT = 2;
 export const MIN_PLANT_SPLIT_SUCCESS_PROBABILITY = 0.05;
 export const MAX_PLANT_SPLIT_SUCCESS_PROBABILITY = 0.95;
 export const PLANT_SPLIT_CASH_BOOK_FRACTION = 0.5;
@@ -17,6 +19,7 @@ export interface PlantSectorSplitInput {
 }
 
 export interface PlantSectorSplitQuote {
+  seizureFraction: number;
   plantsAtRisk: number;
   trancheBookValueAnchor: number;
   cashCostAnchor: number;
@@ -37,45 +40,62 @@ function clamp(value: number, minimum: number, maximum: number): number {
 }
 
 /**
+ * Convert relative MS into the automatic seizure size.
+ *
+ * Equal or weaker MS receives the 1 percent baseline. The share then rises
+ * linearly with attacker advantage, reaching the 25 percent cap at 2:1 MS.
+ * The attacker never chooses this value.
+ */
+export function plantSplitFractionFromMarketingStrength(
+  attackerMarketingStrength: number,
+  defenderMarketingStrength: number
+): number {
+  const attacker = finiteNonNegative(attackerMarketingStrength);
+  const defender = finiteNonNegative(defenderMarketingStrength);
+  const ratio =
+    defender > 0 ? attacker / defender : attacker > 0 ? MS_RATIO_FOR_MAX_PLANT_SPLIT : 1;
+  const normalizedAdvantage = clamp((ratio - 1) / (MS_RATIO_FOR_MAX_PLANT_SPLIT - 1), 0, 1);
+  return (
+    BASELINE_PLANT_SPLIT_FRACTION +
+    normalizedAdvantage * (MAX_PLANT_SPLIT_FRACTION - BASELINE_PLANT_SPLIT_FRACTION)
+  );
+}
+
+/**
  * Quote one sector-split attempt.
  *
- * The attacker never chooses a percentage. Every eligible attempt risks a
- * fixed 1 percent of the defender's opening whole-plant count, rounded down
- * with a one-plant minimum. The defender always keeps at least one plant.
+ * The attacker never chooses a percentage. Every eligible attempt starts at
+ * 1 percent of the defender's opening whole-plant count. Relative MS scales
+ * that automatically to at most 25 percent at a 2:1 advantage. The result is
+ * rounded down with a one-plant minimum, and the defender keeps one plant.
  */
-export function calculatePlantSectorSplit(
-  input: PlantSectorSplitInput
-): PlantSectorSplitQuote {
+export function calculatePlantSectorSplit(input: PlantSectorSplitInput): PlantSectorSplitQuote {
   const defenderPlantCount = wholeNonNegative(input.defenderPlantCount);
   const defenderBookValueAnchor = finiteNonNegative(input.defenderBookValueAnchor);
   const attackerMarketingStrength = finiteNonNegative(input.attackerMarketingStrength);
   const defenderMarketingStrength = finiteNonNegative(input.defenderMarketingStrength);
+  const seizureFraction = plantSplitFractionFromMarketingStrength(
+    attackerMarketingStrength,
+    defenderMarketingStrength
+  );
 
   const plantsAtRisk =
     defenderPlantCount <= 1
       ? 0
       : Math.min(
           defenderPlantCount - 1,
-          Math.max(1, Math.floor(defenderPlantCount * FIXED_PLANT_SPLIT_FRACTION))
+          Math.max(1, Math.floor(defenderPlantCount * seizureFraction))
         );
 
   const trancheBookValueAnchor =
-    defenderPlantCount > 0
-      ? (defenderBookValueAnchor * plantsAtRisk) / defenderPlantCount
-      : 0;
-  const cashCostAnchor = Math.round(
-    trancheBookValueAnchor * PLANT_SPLIT_CASH_BOOK_FRACTION
-  );
+    defenderPlantCount > 0 ? (defenderBookValueAnchor * plantsAtRisk) / defenderPlantCount : 0;
+  const cashCostAnchor = Math.round(trancheBookValueAnchor * PLANT_SPLIT_CASH_BOOK_FRACTION);
   const marketingStrengthCost =
-    plantsAtRisk > 0
-      ? PLANT_SPLIT_MS_LOG_SCALE * Math.ceil(Math.log2(1 + defenderPlantCount))
-      : 0;
+    plantsAtRisk > 0 ? PLANT_SPLIT_MS_LOG_SCALE * Math.ceil(Math.log2(1 + defenderPlantCount)) : 0;
 
   const totalMarketingStrength = attackerMarketingStrength + defenderMarketingStrength;
   const rawSuccessProbability =
-    totalMarketingStrength > 0
-      ? attackerMarketingStrength / totalMarketingStrength
-      : 0.5;
+    totalMarketingStrength > 0 ? attackerMarketingStrength / totalMarketingStrength : 0.5;
   const successProbability = clamp(
     rawSuccessProbability,
     MIN_PLANT_SPLIT_SUCCESS_PROBABILITY,
@@ -83,6 +103,7 @@ export function calculatePlantSectorSplit(
   );
 
   return {
+    seizureFraction,
     plantsAtRisk,
     trancheBookValueAnchor,
     cashCostAnchor,
