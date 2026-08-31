@@ -407,6 +407,7 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
     // hull nudged off zero and immediately redeployed would stick a few points above zero
     // forever. That is the plateau the config's own docblock warns about.
     const withdrawing = isWithdrawing(u);
+    const stationBefore = u.station;
     if (withdrawing) {
       const home = homeRegionOf(u.countryId);
       if (home) u.station = home as RegionCode;
@@ -436,10 +437,12 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
       ? repairedIntegrity({ ...u, mission: "PORT" }, basing)
       : repairedIntegrity(u, basing);
 
-    if ((u.integrity ?? 100) !== before) {
-      formationsRepaired++;
-      touched.add(u);
-    }
+    const mended = (u.integrity ?? 100) !== before;
+    if (mended) formationsRepaired++;
+    // The move home is persisted even on a turn that mends nothing. A formation that
+    // withdrew and then fought recovers no condition, so keying the write on the repair
+    // alone silently dropped the station change and left it at the front.
+    if (mended || u.station !== stationBefore) touched.add(u);
   }
 
   for (const u of touchedByMission) touched.add(u);

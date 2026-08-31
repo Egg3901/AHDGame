@@ -14,9 +14,13 @@ import { WITHDRAW_INTEGRITY } from "../missions";
  */
 
 const unitDocs: Record<string, unknown>[] = [];
+const conflictDocs: Record<string, unknown>[] = [];
 
 function mockDb(): Db {
   const col = (name: string) => {
+    if (name === "conflicts") {
+      return { find: () => ({ toArray: async () => conflictDocs }) };
+    }
     if (name === "militaryUnits") {
       return {
         find: () => ({ toArray: async () => unitDocs }),
@@ -73,6 +77,7 @@ const hull = (over: Record<string, unknown>) => ({
 
 beforeEach(() => {
   unitDocs.length = 0;
+  conflictDocs.length = 0;
 });
 
 describe("processNavairTurn repair", () => {
@@ -182,6 +187,45 @@ describe("processNavairTurn repair", () => {
       .filter((n) => n === "navairChannels");
     expect(channelWrites.length).toBeGreaterThan(0);
     expect(unitDocs[0].station).toBe("weu");
+  });
+
+  // A formation that withdrew and then fought recovers nothing that turn, because you mend
+  // between engagements and not during one. Keying the write on the repair alone silently
+  // dropped the station change with it, leaving the hull at the front it was pulled from.
+  it("persists the move home even on a turn that mends nothing", async () => {
+    conflictDocs.push({
+      _id: "war-1",
+      region: "mea",
+      sideA: { countries: ["UK"] },
+      sideB: { countries: ["RU"] },
+    });
+    unitDocs.push(
+      hull({
+        _id: "uk-1",
+        integrity: 20,
+        station: "mea",
+        mission: "SEA_CONTROL",
+        theaterId: "war-1",
+      }),
+      hull({
+        _id: "ru-1",
+        countryId: "RU",
+        integrity: 100,
+        station: "mea",
+        mission: "SEA_CONTROL",
+        theaterId: "war-1",
+      })
+    );
+
+    await processNavairTurn(mockDb(), 100);
+
+    const uk = unitDocs.find((d) => d._id === "uk-1")!;
+    // It fought, so it mended nothing, and it must still have been moved home. The
+    // integrity assertion is what stops this passing for the wrong reason: if no
+    // engagement fired, the hull would have mended and the write would have happened
+    // anyway, proving nothing about the dropped station change.
+    expect(uk.integrity as number).toBeLessThanOrEqual(20);
+    expect(uk.station).toBe("weu");
   });
 
   it("leaves an undamaged fleet alone", async () => {
