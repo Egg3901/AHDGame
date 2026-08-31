@@ -320,6 +320,13 @@ export const COMMAND_ECONOMY_SOE_SECTORS: Partial<Record<CountryId, CorporationT
   BLR: EASTERN_BLOC_ALL_SECTORS_SOE,
   BAL: EASTERN_BLOC_ALL_SECTORS_SOE,
   DD: EASTERN_BLOC_ALL_SECTORS_SOE,
+  // Germany carries no planned band in the SCHEDULE (market by seed), but a
+  // German Question `challenger` outcome carries the GDR's regime onto it
+  // (`mergeEconomicRegime`). This entry is INERT until that stored dial puts DE
+  // in the command band — every consumer gates on `isCommandEconomy` /
+  // `isPlannedEconomy` first — and exists so a reunified socialist Germany has
+  // an SOE stack to operate rather than a planned economy with no plan.
+  DE: EASTERN_BLOC_ALL_SECTORS_SOE,
   PL: EASTERN_BLOC_ALL_SECTORS_SOE,
   HU: EASTERN_BLOC_ALL_SECTORS_SOE,
   CS: EASTERN_BLOC_ALL_SECTORS_SOE,

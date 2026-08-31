@@ -18,6 +18,7 @@ import { getGameState } from "@/lib/gameState";
 import { getDb } from "@/lib/mongodb";
 import type { GameConfig } from "@/lib/db/types";
 import { updatePrimeRate } from "@/lib/monetaryPolicy/commands/updatePrimeRate";
+import { PRIME_RATE_STEP } from "@/lib/db/types/centralBank";
 
 interface RouteContext {
   params: Promise<{ code: string }>;
@@ -28,7 +29,7 @@ const schema = z.object({
     .number()
     .min(0, "Rate must be at least 0%")
     .max(25, "Rate must be at most 25%")
-    .multipleOf(0.25, "Rate must be in 0.25% increments"),
+    .multipleOf(PRIME_RATE_STEP, `Rate must be in ${PRIME_RATE_STEP}% increments`),
   reason: z.string().max(200, "Reason must be at most 200 characters").optional(),
 });
 

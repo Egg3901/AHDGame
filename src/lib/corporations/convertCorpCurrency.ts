@@ -4,6 +4,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import * as Sentry from "@sentry/nextjs";
 import { getMongoClient } from "@/lib/mongodb";
+import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { cancelShareOrderAndRefund } from "@/lib/corporations/cancelShareOrder";
 import { cancelShareListingAndRefund } from "@/lib/corporations/cancelShareListing";
@@ -244,26 +245,20 @@ export async function convertCorpCurrency(
     }
   };
 
-  const client = await getMongoClient();
-  const session = client.startSession();
   try {
-    try {
-      await session.withTransaction(async () => {
-        await applyCorpAndSectors({ session });
-      });
-    } catch (err) {
-      // Standalone mongods report TransactionNotSupported (code 20). Fall back
-      // to sequential writes so dev-on-standalone still functions — production
-      // Atlas always runs a replica set and gets the atomicity guarantee.
-      const code = (err as MongoServerError | undefined)?.code;
-      if (code === 20 || code === 263 /* IllegalOperation for sessions */) {
-        await applyCorpAndSectors();
-      } else {
-        throw err;
-      }
+    await runTransactionWithSessionRetry(getMongoClient, async (session) => {
+      await applyCorpAndSectors({ session });
+    });
+  } catch (err) {
+    // Standalone mongods report TransactionNotSupported (code 20). Fall back
+    // to sequential writes so dev-on-standalone still functions — production
+    // Atlas always runs a replica set and gets the atomicity guarantee.
+    const code = (err as MongoServerError | undefined)?.code;
+    if (code === 20 || code === 263 /* IllegalOperation for sessions */) {
+      await applyCorpAndSectors();
+    } else {
+      throw err;
     }
-  } finally {
-    await session.endSession();
   }
 
   const sectorsConverted = sectors.length;

@@ -6,7 +6,14 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, badRequest, forbidden, notFound } from "@/lib/api/errors";
+import {
+  handleRouteError,
+  badRequest,
+  conflict,
+  forbidden,
+  isDuplicateKeyError,
+  notFound,
+} from "@/lib/api/errors";
 import { assertSameCountry } from "@/lib/api/sameCountry";
 import { checkRateLimit, CONGRESS_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
@@ -228,21 +235,33 @@ export async function appointCabinetMemberHandler(request: Request, countryId: C
     const now = new Date();
     // Single source of truth: the unified cabinetMembers collection (office
     // pages, ministerial orders, action regen, foreign/trade-minister detection
-    // all read this). The seat is guaranteed empty here (the existingMember
-    // 409-guard above), so a direct insert is safe and yields the new _id.
-    const member = await getCabinetMembersCollection(db).insertOne({
-      countryId,
-      positionId,
-      characterId: targetChar._id,
-      characterName: targetChar.name,
-      party: lowerOfficial?.party ?? targetChar.party,
-      appointedByCharacterId: pmCharacter._id,
-      appointedAt: now,
-      confirmedAt: now,
-      ...initialMinisterialActionFields(now),
-      createdAt: now,
-      updatedAt: now,
-    } as never);
+    // all read this). The seat and character were both verified free above,
+    // but those checks can be raced by a concurrent appointment. The
+    // collection's unique indexes are the real lock, so a duplicate-key
+    // insert here is a lost race, not a fault.
+    let member;
+    try {
+      member = await getCabinetMembersCollection(db).insertOne({
+        countryId,
+        positionId,
+        characterId: targetChar._id,
+        characterName: targetChar.name,
+        party: lowerOfficial?.party ?? targetChar.party,
+        appointedByCharacterId: pmCharacter._id,
+        appointedAt: now,
+        confirmedAt: now,
+        ...initialMinisterialActionFields(now),
+        createdAt: now,
+        updatedAt: now,
+      } as never);
+    } catch (error) {
+      if (isDuplicateKeyError(error)) {
+        throw conflict(
+          "A conflicting appointment was just made. Refresh the cabinet and try again."
+        );
+      }
+      throw error;
+    }
 
     // Add career history entry — UK uses legacy "ukCabinet" type, others use "parliamentaryCabinet"
     const cabinetType = countryId === ("UK" as CountryId) ? "ukCabinet" : "parliamentaryCabinet";

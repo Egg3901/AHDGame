@@ -23,6 +23,7 @@ import type { State } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
 import { REGION_SCOPED_COLLECTIONS } from "@/lib/referendum/transfer/regionScopedCollections";
+import { REGION_PARTY_COLLECTIONS } from "@/lib/referendum/transfer/evacuateRegionPolitics";
 import { rescaleRegionDelegations } from "./apportionChamber";
 
 export interface MergeRegionArgs {
@@ -132,6 +133,59 @@ export async function mergeRegion(db: Db, args: MergeRegionArgs): Promise<MergeR
     const res = await db
       .collection(scope.collection)
       .updateMany({ [field]: fromRegionId }, { $set: { [field]: toRegionId, updatedAt: now } });
+    documentsMoved += res?.modifiedCount ?? 0;
+  }
+
+  // The region PARTY collections are also not in the table above — the transfer
+  // path owns them through `evacuateRegionPolitics` — so a fuse must re-home
+  // them itself, or the absorbed half's party organisations (their treasuries
+  // included, freshly currency-converted by the border crossing) end up keyed
+  // to a region this function is about to delete, invisible to every page that
+  // enumerates orgs by the country's live regions.
+  //
+  // `statePartyOrg` is collision-aware: on a reunification fuse the two halves'
+  // parties are disjoint (they came from different countries), but a general
+  // fuse can find the SAME party organised in both halves, and two rows for one
+  // (party, region) pair would break the one-org-per-party read. Treasuries add;
+  // the survivor's settings stand. Everything else in the list is ledger/history
+  // shaped and re-points wholesale.
+  interface RegionPartyOrg {
+    _id: unknown;
+    partyId?: string;
+    stateId?: string;
+    treasury?: number;
+    updatedAt?: Date;
+  }
+  const partyOrgs = db.collection<RegionPartyOrg>("statePartyOrg");
+  const sourceOrgs = await partyOrgs.find({ stateId: fromRegionId }).toArray();
+  // One read of the target's orgs up front, not a collision probe per source org.
+  const targetOrgsByParty = new Map(
+    sourceOrgs.length > 0
+      ? (await partyOrgs.find({ stateId: toRegionId }).toArray()).map((org) => [org.partyId, org])
+      : []
+  );
+  for (const org of sourceOrgs) {
+    const existing = targetOrgsByParty.get(org.partyId);
+    if (existing) {
+      const treasury = typeof org.treasury === "number" ? org.treasury : 0;
+      await partyOrgs.updateOne(
+        { _id: existing._id },
+        { $inc: { treasury }, $set: { updatedAt: now } }
+      );
+      await partyOrgs.deleteOne({ _id: org._id });
+    } else {
+      await partyOrgs.updateOne(
+        { _id: org._id },
+        { $set: { stateId: toRegionId, updatedAt: now } }
+      );
+    }
+    documentsMoved++;
+  }
+  for (const coll of REGION_PARTY_COLLECTIONS) {
+    if (coll === "statePartyOrg") continue;
+    const res = await db
+      .collection(coll)
+      .updateMany({ stateId: fromRegionId }, { $set: { stateId: toRegionId, updatedAt: now } });
     documentsMoved += res?.modifiedCount ?? 0;
   }
 

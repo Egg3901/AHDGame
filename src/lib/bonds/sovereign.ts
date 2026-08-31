@@ -22,12 +22,8 @@ import type {
   FederalBudget,
 } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
-import {
-  COUNTRY_CONFIGS,
-  COUNTRY_ORDER,
-  getCountryConfig,
-  type CountryId,
-} from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, getCountryConfig, type CountryId } from "@/lib/constants/countries";
+import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { getBankId } from "@/lib/centralBank/helpers";
 import {
   calculateCreditRating,
@@ -397,7 +393,10 @@ export async function issueScheduledSovereignBondSeries(
     return 0;
   }
 
-  const configuredCountries: CountryId[] = COUNTRY_ORDER;
+  // Registered, not the raw static list: a country dissolved by a merge keeps
+  // its budget doc, and the scheduler would otherwise keep rolling its debt
+  // over — issuing fresh paper for a state that no longer exists.
+  const configuredCountries: CountryId[] = await getRegisteredCountryIds(db);
   const budgets = await db
     .collection<FederalBudget>("federalBudget")
     .find({

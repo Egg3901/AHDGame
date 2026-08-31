@@ -16,7 +16,10 @@ describe("merger review wiring", () => {
   it("maps every law country to a real, program-kind antitrust law", () => {
     for (const countryId of LAW_COUNTRY_IDS) {
       const lawId = ANTITRUST_LAW_BY_COUNTRY[countryId];
-      const law = getLaw(lawId);
+      // The map is keyed by CountryId (a merge survivor may hold a seat for a
+      // CARRIED statute), so every law country must still have its own entry.
+      expect(lawId, `${countryId}: no antitrust law mapped`).toBeTruthy();
+      const law = getLaw(lawId!);
       expect(law, `${countryId}: ${lawId} not in the catalog`).toBeTruthy();
       // `getEnactedLevel` returns 0 for tax-kind laws, which would silently
       // disable review everywhere. The mapping must point at a program law.

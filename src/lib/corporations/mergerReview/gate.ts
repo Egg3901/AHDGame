@@ -23,7 +23,9 @@ import type { MergerReview, MergerReviewTrigger } from "@/lib/db/types/mergerRev
 import { getGameState } from "@/lib/gameState";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { getEnactedLevel } from "@/lib/politicalLegislation/enactedLevels";
+import { carriedLawIdFor } from "@/lib/politicalLegislation/carriedLaw";
 import type { LawCountryId } from "@/lib/politicalLegislation/types";
+import type { CountryId } from "@/lib/constants/countries";
 import { loadCommandEconomyBlockedCountries } from "@/lib/economy/queries/commandEconomyMarketGate";
 import { createNotification } from "@/lib/notifications";
 import { computeMergerConcentration } from "./concentration";
@@ -117,7 +119,14 @@ export async function assertMergerClearance(
 
   if (!(await reviewApplies(db, acquirer, target))) return { ok: true };
 
-  const lawId = ANTITRUST_LAW_BY_COUNTRY[target.countryId as LawCountryId];
+  // A table miss is not always "no statute": a country merge hands the survivor
+  // the absorbed state's competition primary (post-reunification Germany owns
+  // the GDR's), and the winner's law governs the unified state. Costs one
+  // indexed lookup only on the miss path; still fails open when neither a
+  // native nor a carried statute exists.
+  const lawId =
+    ANTITRUST_LAW_BY_COUNTRY[target.countryId as CountryId] ??
+    (await carriedLawIdFor(db, target.countryId, Object.values(ANTITRUST_LAW_BY_COUNTRY)));
   if (!lawId) return { ok: true };
   const level = await getEnactedLevel(db, target.countryId as LawCountryId, lawId);
   const threshold = thresholdForLevel(level);

@@ -804,4 +804,26 @@ describe("issueScheduledSovereignBondSeries", () => {
     const maturities = bondDocs.map((b) => b.maturityTurns).sort((a, b) => a - b);
     expect(maturities).toEqual([48, 96]);
   });
+
+  it("never issues for a dissolved country, even with its budget doc present", async () => {
+    // A merged country keeps its budget as a stamped husk; the scheduler must
+    // not keep rolling a dead state's debt over into fresh paper.
+    const dd = makeBudget({ _id: "DD" as never, countryId: "DD" });
+    const { db } = setupScheduledMocks({ budgets: [makeBudget(), dd] });
+    db.collectionMocks["countryGameStates"] = db.collection("countryGameStates") as ReturnType<
+      typeof db.collection
+    >;
+    db.collectionMocks["countryGameStates"]!.find.mockReturnValue({
+      toArray: async () => [{ _id: "DD", dissolvedTurn: 500 }],
+    });
+
+    await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
+
+    const insertCalls = db.collectionMocks["bonds"]!.insertMany.mock.calls;
+    const issuedCountries = insertCalls.flatMap((c) =>
+      (c[0] as Array<{ countryId?: string }>).map((b) => b.countryId)
+    );
+    expect(issuedCountries).toContain("US");
+    expect(issuedCountries).not.toContain("DD");
+  });
 });

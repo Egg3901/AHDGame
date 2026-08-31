@@ -1,6 +1,7 @@
 import type { Db } from "mongodb";
 import type { FederalBudget, GameState } from "@/lib/db/types";
-import { COUNTRY_CONFIGS, COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { loadCountrySovereignSnapshot } from "@/lib/sovereignDefault/snapshotLoader";
 import { computeMarketDemand } from "@/lib/sovereignDefault/marketDemand";
@@ -20,8 +21,13 @@ export async function querySovereignWatch(db: Db) {
     .collection<GameState>("gameState")
     .findOne({ _id: "current" }, { projection: { currentYear: 1 } });
 
+  // Registered, not the raw static list: a country dissolved by a merge keeps
+  // its budget doc as a stamped husk, and a public watchlist that kept quoting
+  // a dead sovereign's zeroed book would be reporting an issuer that no longer
+  // exists.
+  const registered = await getRegisteredCountryIds(db);
   const countries = await Promise.all(
-    COUNTRY_ORDER.map(async (countryId: CountryId) => {
+    registered.map(async (countryId: CountryId) => {
       const [snapshot, budget, liveGdpGrowth] = await Promise.all([
         loadCountrySovereignSnapshot(db, countryId, currentTurn),
         db

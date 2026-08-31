@@ -52,4 +52,29 @@ describe("resolveConscriptionStanceFor", () => {
     expect(s.id).toBe("limited");
     expect(db.collectionMocks.statePolicies.findOne).not.toHaveBeenCalled();
   });
+
+  // Post-reunification: DE has no native reserve law, but the merge handed it
+  // East Germany's catalogue — the carried law's enacted level must govern the
+  // unified state's conscription rather than the default table.
+  it("a CARRIED reserve law governs a country with no native one", async () => {
+    db.collection("legislationTypes").findOne.mockResolvedValue({
+      _id: "dd.sec.reservesVoluntaryDefense",
+      countryScope: "de",
+    });
+    db.collectionMocks.statePolicies.findOne.mockResolvedValue({ policyOptionIndex: 3 });
+
+    const s = await resolveConscriptionStanceFor(db as unknown as Db, "DE");
+
+    expect(s.id).toBe("national");
+    const scopeFilter = db.collectionMocks.legislationTypes.findOne.mock.calls[0][0];
+    expect(scopeFilter.countryScope).toBe("de");
+    expect(scopeFilter._id.$in).toContain("dd.sec.reservesVoluntaryDefense");
+  });
+
+  it("no carried law either → the default table, exactly as before", async () => {
+    db.collection("legislationTypes").findOne.mockResolvedValue(null);
+    const s = await resolveConscriptionStanceFor(db as unknown as Db, "DE");
+    expect(s.id).toBeDefined();
+    expect(db.collectionMocks.statePolicies.findOne).not.toHaveBeenCalled();
+  });
 });
