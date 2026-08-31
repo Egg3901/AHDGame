@@ -1,5 +1,6 @@
 import * as R from "./config";
 import { clamp } from "./engineCore";
+import { WITHDRAW_INTEGRITY } from "./missions";
 import type { BasingKey } from "./config";
 import type { NavairUnit } from "./types";
 
@@ -63,6 +64,22 @@ export function supplyScale(supply: number | undefined): number {
  */
 export function isResting(unit: NavairUnit): boolean {
   return unit.mission === "PORT" || unit.mission === "STANDDOWN";
+}
+
+/**
+ * Is this formation being pulled back to home water to mend?
+ *
+ * `WITHDRAW_INTEGRITY` is the same threshold `defaultNavalMission` already uses for "save
+ * the ship", so this is one doctrine rather than a second one invented here. A commander
+ * who deliberately stationed a damaged formation somewhere keeps it there.
+ *
+ * Lives here rather than inside the turn pass because the command page has to reach the
+ * same answer. A withdrawn formation mends at the in-port rate against the home ceiling
+ * whatever its standing order still says, and a page reading the stored mission instead
+ * would tell a commander 5% a turn toward 80% while the engine delivered 12 toward 100.
+ */
+export function isWithdrawing(unit: NavairUnit): boolean {
+  return (unit.integrity ?? 100) < WITHDRAW_INTEGRITY && unit.stationSetByPlayer !== true;
 }
 
 /**

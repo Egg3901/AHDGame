@@ -2,12 +2,14 @@ import { describe, it, expect } from "vitest";
 import {
   supplyScale,
   isResting,
+  isWithdrawing,
   repairRate,
   freeRepairCeiling,
   repairedIntegrity,
   FREE_REPAIR_CEILING,
 } from "../repair";
 import * as R from "../config";
+import { WITHDRAW_INTEGRITY } from "../missions";
 import type { NavairUnit } from "../types";
 
 /**
@@ -125,6 +127,29 @@ describe("freeRepairCeiling", () => {
   it("gives the station ceiling in neutral and hostile water", () => {
     expect(freeRepairCeiling("neutral", true)).toBe(FREE_REPAIR_CEILING.station);
     expect(freeRepairCeiling("hostile", true)).toBe(FREE_REPAIR_CEILING.station);
+  });
+});
+
+describe("isWithdrawing", () => {
+  // One doctrine, shared by the turn pass and the command page. When these two read the
+  // rule differently the page told a commander 5% a turn toward 80% while the engine
+  // delivered 12 toward 100, which is the "a forecast must never disagree with the
+  // outcome" failure this codebase has been bitten by before.
+  it("pulls back a badly damaged formation the engine stationed", () => {
+    expect(isWithdrawing(hull({ integrity: 10 }))).toBe(true);
+  });
+
+  it("leaves a formation a commander stationed where it is", () => {
+    expect(isWithdrawing(hull({ integrity: 10, stationSetByPlayer: true }))).toBe(false);
+  });
+
+  it("does not pull back a formation still fit to fight", () => {
+    expect(isWithdrawing(hull({ integrity: 60 }))).toBe(false);
+  });
+
+  it("uses the same threshold the mission doctrine uses to save the ship", () => {
+    expect(isWithdrawing(hull({ integrity: WITHDRAW_INTEGRITY - 0.1 }))).toBe(true);
+    expect(isWithdrawing(hull({ integrity: WITHDRAW_INTEGRITY }))).toBe(false);
   });
 });
 

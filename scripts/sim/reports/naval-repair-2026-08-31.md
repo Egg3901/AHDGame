@@ -150,3 +150,25 @@ The knee sits below the 80% station ceiling, so a fleet mending where it stands 
 climbs clear of the penalty band. That relationship is a constraint, not a coincidence:
 raising the knee above the ceiling would make a blockade unrecoverable without going home.
 `blockade.test.ts` asserts the ordering so a future edit cannot break it silently.
+
+## Observed consequence, recorded rather than smoothed over
+
+`WITHDRAW_INTEGRITY` is 35 and `BLOCKADE.wornKnee` is 50, so a formation the engine
+withdraws stops being withdrawn while it is still inside the worn-hull penalty band.
+
+Traced against the live world: the UK's seven hulls sit at zero in `mea` on 10% supply.
+On the first turn they withdraw to `weu`, supply jumps to 100, and they mend 12 a turn.
+After three turns they pass 35, `stationOf` returns them to the front, and there they sit
+on 10% supply where `supplyScale` is zero. They stop at roughly 36% condition: seaworthy,
+but permanently inside the knee, applying about 19% of nominal lane pressure.
+
+That is a coherent outcome rather than a bug. The engine restores basic seaworthiness for
+free and no further; getting a fleet back to full is a decision a commander makes, by
+ordering it into port or by spending materiel. Both routes are now stated on the command
+page and in the war room, so the player is told why and what to do.
+
+It is recorded here because it is the sort of thing that reads as a bug six months from
+now. Raising `WITHDRAW_INTEGRITY` to sit above the knee would make automatic recovery
+complete, but it also holds ships out of the fighting for longer and changes the mission
+doctrine that constant already governs. That is a separate balance question and should not
+be settled as a side effect of this branch.

@@ -26,7 +26,7 @@ import { getConflictsCollection } from "@/lib/db/collections/conflicts";
 import { conflictRegions } from "@/lib/military/conflictRegions";
 import { channelKey } from "@/lib/navair/channels";
 import { MIN_SUPPLY } from "@/lib/navair/config";
-import { repairRate, isResting, freeRepairCeiling } from "@/lib/navair/repair";
+import { repairRate, isResting, isWithdrawing, freeRepairCeiling } from "@/lib/navair/repair";
 import { basingStatus } from "@/lib/navair/basing";
 import { loadMilitaryBlocs } from "@/lib/military/blocLookup";
 import { getNationalArsenal } from "@/lib/db/collections/nationalArsenal";
@@ -269,8 +269,13 @@ function warningsFor(unit: NavairUnit, frontRegions: readonly string[]): Formati
  */
 function repairNoteFor(unit: NavairUnit, basing: BasingKey): RepairNote {
   const integrity = unit.integrity ?? 100;
-  const resting = isResting(unit);
-  const ceiling = freeRepairCeiling(basing, resting);
+  // A formation being withdrawn mends in a yard whatever its standing order still says,
+  // so both terms have to be read the way the turn pass reads them. Taking the stored
+  // mission at face value here reported a fraction of the real rate against the wrong
+  // limit, and a page that disagrees with the engine is worse than one that says nothing.
+  const withdrawing = isWithdrawing(unit);
+  const resting = withdrawing || isResting(unit);
+  const ceiling = freeRepairCeiling(withdrawing ? "home" : basing, resting);
   const rate = repairRate(unit, resting);
 
   // Deliberately says nothing about having fought this turn, even though that does block
@@ -294,7 +299,7 @@ function repairNoteFor(unit: NavairUnit, basing: BasingKey): RepairNote {
     };
   }
 
-  const where = resting ? "in port" : "on station";
+  const where = withdrawing ? "in a home yard" : resting ? "in port" : "on station";
   const limited =
     (unit.supply ?? 100) < 100 ? `, limited by ${Math.round(unit.supply ?? 100)}% supply` : "";
   return {

@@ -22,8 +22,8 @@ import {
 } from "./basing";
 import { cv, baseCv, alive } from "./engineCore";
 import { resolveEngagement, engagementControlBonus } from "./engagement";
-import { defaultMissionFor, WITHDRAW_INTEGRITY } from "./missions";
-import { repairedIntegrity } from "./repair";
+import { defaultMissionFor } from "./missions";
+import { isWithdrawing, repairedIntegrity } from "./repair";
 import type { NavairUnit, RegionChannels, EngagementOutcome } from "./types";
 import type { CountryId } from "@/lib/constants/countries";
 import type { RegionCode } from "@/lib/military/types";
@@ -347,7 +347,7 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
     // exactly where supply is too low for `supplyScale` to allow any repair at all — so a
     // hull nudged off zero and immediately redeployed would stick a few points above zero
     // forever. That is the plateau the config's own docblock warns about.
-    const withdrawing = before < WITHDRAW_INTEGRITY && u.stationSetByPlayer !== true;
+    const withdrawing = isWithdrawing(u);
     if (withdrawing) {
       const home = homeRegionOf(u.countryId);
       if (home) u.station = home as RegionCode;
