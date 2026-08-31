@@ -188,6 +188,23 @@ async function vacateSeatsOfParties(
     if (party.name) tokens.add(party.name);
     if (party.abbreviation) tokens.add(party.abbreviation);
   }
+
+  // AMBIGUOUS TOKENS ARE DROPPED, and this is not hypothetical: reunification
+  // leaves Germany holding TWO parties abbreviated "CDU" — the western one it
+  // bans and the eastern one it tolerates. A name or abbreviation shared with a
+  // party that is NOT banned cannot identify a bench, so matching on it would
+  // unseat the tolerated party's members alongside the banned one's.
+  //
+  // `sequentialId` is never dropped: it is unique per country by index, it is
+  // what production actually stores, and it is the only token that is safe by
+  // construction.
+  for (const party of parties) {
+    if (banned.has(party.sequentialId)) continue;
+    if (party.name) tokens.delete(party.name);
+    if (party.abbreviation) tokens.delete(party.abbreviation);
+  }
+  for (const id of banned) tokens.add(String(id));
+
   if (tokens.size === 0) return;
 
   const officials = db.collection<ElectedOfficial>("electedOfficials");

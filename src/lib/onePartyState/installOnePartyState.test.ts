@@ -30,12 +30,22 @@ function mockDb(opts: {
   officials?: Array<{ party?: string; seatsHeld?: number }>;
 }) {
   const writes: Array<{ coll: string; filter: unknown; update: unknown }> = [];
+  /** Every `find` filter, so the vacate sweep's party-token query can be asserted. */
+  const finds: Array<{ coll: string; filter: unknown }> = [];
+  const deletes: Array<{ coll: string; filter: unknown }> = [];
   const db = {
     collection: (name: string) => ({
-      find: () => ({
-        toArray: async () =>
-          name === "politicalParties" ? (opts.parties ?? []) : (opts.officials ?? []),
-      }),
+      find: (filter?: unknown) => {
+        finds.push({ coll: name, filter });
+        return {
+          toArray: async () =>
+            name === "politicalParties" ? (opts.parties ?? []) : (opts.officials ?? []),
+        };
+      },
+      deleteMany: async (filter: unknown) => {
+        deletes.push({ coll: name, filter });
+        return { deletedCount: 0 };
+      },
       findOne: async () =>
         name === "governmentFormations"
           ? opts.governingPartyId !== undefined
@@ -48,7 +58,7 @@ function mockDb(opts: {
       },
     }),
   } as unknown as Db;
-  return { db, writes };
+  return { db, writes, finds, deletes };
 }
 
 const PARTIES: Party[] = [
@@ -190,6 +200,39 @@ describe("installOnePartyState", () => {
         (w) => (w.update as { $set: { regimeStatus: string } }).$set.regimeStatus === "banned"
       )
     ).toBeUndefined();
+  });
+
+  it("does not unseat a tolerated party that shares an abbreviation with a banned one", async () => {
+    // Reunification leaves Germany holding TWO parties abbreviated "CDU": the
+    // western one it bans and the eastern one it tolerates. Matching benches on
+    // an abbreviation shared with a non-banned party would unseat both.
+    const twoCdus: Party[] = [
+      { sequentialId: 2, name: "Christlich Demokratische Union", abbreviation: "CDU" },
+      { sequentialId: 7, name: "Sozialistische Einheitspartei", abbreviation: "SED" },
+      { sequentialId: 8, name: "Christlich-Demokratische Union (Ost)", abbreviation: "CDU" },
+    ];
+    const { db, finds } = mockDb({ parties: twoCdus, governingPartyId: 7 });
+    await installOnePartyState(db, "DE", 470, {
+      rulingPartyId: 7,
+      toleratedPartyIds: [8],
+      vacateBannedSeats: true,
+    });
+
+    const vacate = finds.find(
+      (f) => f.coll === "electedOfficials" && (f.filter as { party?: unknown })?.party !== undefined
+    );
+    expect(vacate).toBeDefined();
+    const matched = (vacate!.filter as { party: { $in: string[] } }).party.$in;
+    // The banned party's own id is there.
+    expect(matched).toContain("2");
+    // Its abbreviation is NOT, because the tolerated eastern party shares it.
+    expect(matched).not.toContain("CDU");
+    // Its unambiguous full name still is.
+    expect(matched).toContain("Christlich Demokratische Union");
+    // And nothing that identifies the ruling or tolerated parties.
+    expect(matched).not.toContain("7");
+    expect(matched).not.toContain("8");
+    expect(matched).not.toContain("SED");
   });
 
   it("never demotes the ruling party to approved, even when named tolerated", async () => {

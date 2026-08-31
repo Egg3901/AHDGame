@@ -183,22 +183,55 @@ export async function loadPartyChoices(
   db: Db,
   countryId: CountryId
 ): Promise<PeaceTermPartyChoice[]> {
+  return (await loadPartyChoicesFor(db, [countryId])).get(countryId) ?? [];
+}
+
+/**
+ * The same, for several countries in ONE query.
+ *
+ * The peace panel lists every country that could be offered terms across every
+ * war a nation is fighting — ten of them in the live German war alone — and a
+ * lookup per country turns one page load into ten round trips. A country
+ * fighting on two fronts is still one entry here.
+ *
+ * Every requested country gets a key, empty array included, so a caller can tell
+ * "no parties" from "not loaded" without a second existence check.
+ */
+export async function loadPartyChoicesFor(
+  db: Db,
+  countryIds: CountryId[]
+): Promise<Map<CountryId, PeaceTermPartyChoice[]>> {
+  const wanted = [...new Set(countryIds)];
+  const out = new Map<CountryId, PeaceTermPartyChoice[]>(wanted.map((id) => [id, []]));
+  if (wanted.length === 0) return out;
+
   const parties = (await db
     .collection("politicalParties")
-    .find({ countryId }, { projection: { sequentialId: 1, name: 1, abbreviation: 1 } })
+    .find(
+      { countryId: { $in: wanted } },
+      { projection: { countryId: 1, sequentialId: 1, name: 1, abbreviation: 1 } }
+    )
     .toArray()) as unknown as Array<{
+    countryId?: CountryId;
     sequentialId?: number;
     name?: string;
     abbreviation?: string;
   }>;
-  return parties
-    .filter((p) => typeof p.sequentialId === "number" && Number.isInteger(p.sequentialId))
-    .map((p) => ({
-      id: p.sequentialId as number,
-      name: p.name ?? p.abbreviation ?? `Party ${p.sequentialId}`,
-      ...(p.abbreviation ? { abbreviation: p.abbreviation } : {}),
-    }))
-    .sort((a, b) => a.id - b.id);
+
+  for (const party of parties) {
+    if (typeof party.sequentialId !== "number" || !Number.isInteger(party.sequentialId)) continue;
+    const bucket = party.countryId ? out.get(party.countryId) : undefined;
+    if (!bucket) continue;
+    bucket.push({
+      id: party.sequentialId,
+      name: party.name ?? party.abbreviation ?? `Party ${party.sequentialId}`,
+      ...(party.abbreviation ? { abbreviation: party.abbreviation } : {}),
+    });
+  }
+  // Sorted by `sequentialId` so the list reads the same on every render rather
+  // than in whatever order Mongo returned it.
+  for (const bucket of out.values()) bucket.sort((a, b) => a.id - b.id);
+  return out;
 }
 
 /**

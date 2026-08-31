@@ -535,6 +535,27 @@ async function retireNationalRemnants(
   const absorbedGov = await formations.findOne({ _id: absorbed });
 
   if (absorbedGov?.pmCharacterId || absorbedGov?.pmNppId) {
+    // THE DISPLACED LEADER STANDS DOWN FIRST.
+    //
+    // Clearing `pmNppId` takes the survivor's chancellor off the formation row,
+    // but `currentOffice` is a STORED denormalisation and does not follow: the
+    // outgoing leader would go on reading as chancellor on their own profile,
+    // in `deriveHighestOffice`, and everywhere else that ranks an office off
+    // that field — two people holding one office, which is the exact thing the
+    // note above says this must not do. `parliamentaryGovernment` clears it the
+    // same way whenever it seats a new PM; this path had simply never done it.
+    //
+    // Scoped by country AND executive key so it cannot reach a leader of another
+    // country, or a minister of this one.
+    const execKey = getExecutiveOfficeKey(survivor, await getGameStatePresetOrDefault(db));
+    const standDown = { $set: { currentOffice: null, updatedAt: now } };
+    await db
+      .collection("characters")
+      .updateMany({ countryId: survivor, "currentOffice.type": execKey }, standDown);
+    await db
+      .collection("npps")
+      .updateMany({ countryId: survivor, "currentOffice.type": execKey }, standDown);
+
     await formations.updateOne(
       { _id: survivor },
       {
@@ -568,22 +589,46 @@ async function retireNationalRemnants(
   // Only a PLAYER leader has one. An NPP head of government is carried by
   // `pmNppId` and holds no character-keyed record, which is why this reads
   // `pmCharacterId` alone rather than the same condition as the block above.
-  if (absorbedGov?.pmCharacterId) {
+  if (absorbedGov?.pmCharacterId || absorbedGov?.pmNppId) {
     // Era-aware. `officeTypes` IS overridden per preset for several countries,
     // and reading the key without the active preset is the same class of bug as
     // the static-config reads this change set exists to fix — it happens to be
     // harmless for DE today only because DE has no override.
     const preset = await getGameStatePresetOrDefault(db);
-    await carryLeaderStateOnMerge(db, {
-      fromCountryId: absorbed,
-      toCountryId: survivor,
-      leaderCharacterId: absorbedGov.pmCharacterId,
-      // The SURVIVOR's executive key. The office the leader now holds is
-      // Germany's chancellorship, not the GDR post the record was written under.
-      leaderOfficeType: getExecutiveOfficeKey(survivor, preset),
-      governingPartyId: rulingPartyId != null ? String(rulingPartyId) : null,
-      currentTurn: params.currentTurn,
-    });
+    const execKey = getExecutiveOfficeKey(survivor, preset);
+
+    // THE CARRIED LEADER TAKES THE SURVIVOR'S OFFICE KEY.
+    //
+    // `currentOffice.type` still names the office they held in the country that
+    // no longer exists — East Germany's `generalSecretary`, which is not an
+    // office the Federal Republic defines. That is the same defect
+    // `evacuateRegionPolitics` re-points every ordinary official to avoid: a
+    // holder left on a key their country does not list shows a defunct title and
+    // matches nothing that looks the office up in the country's config.
+    //
+    // Only `.type` is written. `.state` is re-pointed by `mergeRegion` when the
+    // region it names is the one being fused away, which runs after this.
+    const takeOffice = { $set: { "currentOffice.type": execKey, updatedAt: now } };
+    if (absorbedGov.pmCharacterId) {
+      await db.collection("characters").updateOne({ _id: absorbedGov.pmCharacterId }, takeOffice);
+    }
+    if (absorbedGov.pmNppId) {
+      await db.collection("npps").updateOne({ _id: absorbedGov.pmNppId }, takeOffice);
+    }
+
+    // The confidence record is character-keyed, so only a PLAYER leader has one.
+    if (absorbedGov.pmCharacterId) {
+      await carryLeaderStateOnMerge(db, {
+        fromCountryId: absorbed,
+        toCountryId: survivor,
+        leaderCharacterId: absorbedGov.pmCharacterId,
+        // The SURVIVOR's executive key. The office the leader now holds is
+        // Germany's chancellorship, not the GDR post the record was written under.
+        leaderOfficeType: execKey,
+        governingPartyId: rulingPartyId != null ? String(rulingPartyId) : null,
+        currentTurn: params.currentTurn,
+      });
+    }
   }
 
   // The absorbed state's own formation row goes with the state. Left in place

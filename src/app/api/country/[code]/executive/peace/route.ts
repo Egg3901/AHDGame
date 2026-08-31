@@ -24,7 +24,7 @@ import {
   maxIndemnityForGdp,
   withdrawalGate,
   loadPartySequentialIds,
-  loadPartyChoices,
+  loadPartyChoicesFor,
 } from "@/lib/military/peaceOffer";
 import type { PeaceTerm } from "@/lib/military/peaceTerm";
 import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
@@ -141,28 +141,24 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
         if (opposedBelligerents(w, countryId, e)) enemyCountries.add(e);
       }
     }
-    const partiesByCountry = new Map<CountryId, Awaited<ReturnType<typeof loadPartyChoices>>>();
-    for (const enemy of enemyCountries) {
-      partiesByCountry.set(enemy, await loadPartyChoices(db, enemy));
-    }
-
     // A regime change that NAMES a ruling party is a materially different deal
     // from one that leaves it to resolve, and the country being asked to accept
     // has to be able to see which party it would be handing power to. The term
-    // stores an id; the reader needs a name. Our OWN parties are loaded too,
-    // because an incoming offer converts us and `partiesByCountry` covers only
-    // the enemies we could offer terms to.
-    const namesForOfferTargets = new Map<CountryId, Map<number, string>>();
+    // stores an id; the reader needs a name. An offer's target is added to the
+    // same load, because an incoming offer converts US and the enemy set covers
+    // only the countries we could offer terms to.
     for (const offer of offers) {
       if (offer.term.kind !== "regime_change" || offer.term.rulingPartyId == null) continue;
-      if (namesForOfferTargets.has(offer.toCountry)) continue;
-      const known =
-        partiesByCountry.get(offer.toCountry) ?? (await loadPartyChoices(db, offer.toCountry));
-      namesForOfferTargets.set(
-        offer.toCountry,
-        new Map(known.map((p) => [p.id, p.abbreviation ?? p.name]))
-      );
+      enemyCountries.add(offer.toCountry);
     }
+
+    // ONE query for every country involved, not one per country: a nation on
+    // several fronts would otherwise turn a single page load into ten round trips.
+    const partiesByCountry = await loadPartyChoicesFor(db, [...enemyCountries]);
+    const nameOf = (country: CountryId, partyId: number): string | null =>
+      partiesByCountry.get(country)?.find((p) => p.id === partyId)?.abbreviation ??
+      partiesByCountry.get(country)?.find((p) => p.id === partyId)?.name ??
+      null;
 
     return NextResponse.json({
       currentTurn,
@@ -219,7 +215,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
          */
         rulingPartyName:
           o.term.kind === "regime_change" && o.term.rulingPartyId != null
-            ? (namesForOfferTargets.get(o.toCountry)?.get(o.term.rulingPartyId) ?? null)
+            ? nameOf(o.toCountry, o.term.rulingPartyId)
             : null,
         leaver: o.leaver,
         justification: o.justification ?? null,

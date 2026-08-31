@@ -466,6 +466,48 @@ describe("actuateSettlementOutcome", () => {
     expect(call?.[1].$set.pmNppId).toBeNull();
   });
 
+  it("stands the displaced leader down from the office they no longer hold", async () => {
+    const gs = new ObjectId();
+    prime(db, "governmentFormations").findOne.mockResolvedValue({
+      _id: "DD",
+      pmCharacterId: gs,
+      pmNppId: null,
+    });
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+
+    // `currentOffice` is a STORED denormalisation: clearing `pmNppId` alone
+    // leaves the outgoing chancellor still reading as chancellor everywhere that
+    // ranks an office off that field. Scoped by country AND executive key.
+    for (const coll of ["characters", "npps"] as const) {
+      const cleared = prime(db, coll).updateMany.mock.calls.find(
+        (c) => c[0]?.countryId === "DE" && c[0]?.["currentOffice.type"] === "chancellor"
+      );
+      expect(cleared, `${coll} stand-down`).toBeDefined();
+      expect(cleared![1].$set.currentOffice).toBeNull();
+    }
+  });
+
+  it("gives the carried leader the surviving country's office key", async () => {
+    const gs = new ObjectId();
+    prime(db, "governmentFormations").findOne.mockResolvedValue({
+      _id: "DD",
+      pmCharacterId: gs,
+      pmNppId: null,
+    });
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+
+    // They arrive holding `generalSecretary`, which the Federal Republic does not
+    // define. Left alone they show a defunct title and match nothing that looks
+    // the office up in the country's config.
+    const took = prime(db, "characters").updateOne.mock.calls.find(
+      (c) => String(c[0]?._id) === String(gs) && c[1]?.$set?.["currentOffice.type"] !== undefined
+    );
+    expect(took).toBeDefined();
+    expect(took![1].$set["currentOffice.type"]).toBe("chancellor");
+  });
+
   it("never installs the survivor's own party when the absorbed state names none", async () => {
     // A challenger that was not already a one-party state records no ruling
     // party. Letting the resolver fill the gap reads the SURVIVOR's formed
