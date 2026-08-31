@@ -5,8 +5,10 @@ import {
   blockadeClosureFor,
   blockadeClosureByCountry,
   blockadeAffinityMultiplier,
+  wornPenalty,
   BLOCKADE,
 } from "../blockade";
+import { FREE_REPAIR_CEILING } from "../repair";
 import type { NavairUnit, NavalMission } from "../types";
 import type { CountryId } from "@/lib/constants/countries";
 import type { RegionCode } from "@/lib/military/types";
@@ -144,5 +146,47 @@ describe("blockadeAffinityMultiplier", () => {
 
   it("degrades trade continuously in between", () => {
     expect(blockadeAffinityMultiplier(0.25)).toBeGreaterThan(blockadeAffinityMultiplier(0.75));
+  });
+});
+
+describe("worn hulls close less", () => {
+  // A ship shot to pieces is not going to be good at stopping anyone. Blockade is patient,
+  // unglamorous work that a hull held together by damage-control parties cannot sustain,
+  // and below the knee it gets worse faster than proportionally.
+  it("penalises nothing at or above the knee", () => {
+    expect(wornPenalty(BLOCKADE.wornKnee)).toBe(1);
+    expect(wornPenalty(100)).toBe(1);
+    expect(wornPenalty(undefined)).toBe(1);
+  });
+
+  it("falls off faster than linear below the knee", () => {
+    const half = BLOCKADE.wornKnee / 2;
+    expect(wornPenalty(half)).toBeLessThan(half / BLOCKADE.wornKnee);
+  });
+
+  it("closes nothing at zero", () => {
+    expect(wornPenalty(0)).toBe(0);
+  });
+
+  it("makes a worn fleet close a lane less than a fresh one of the same tonnage", () => {
+    const fresh = blockadeClosureFor(
+      "DD",
+      [hull("UK", "mea", "BLOCKADE", { integrity: 100 })],
+      hostileTo("UK")
+    );
+    const worn = blockadeClosureFor(
+      "DD",
+      [hull("UK", "mea", "BLOCKADE", { integrity: 20 })],
+      hostileTo("UK")
+    );
+    expect(fresh).toBeGreaterThan(0);
+    expect(worn).toBeLessThan(fresh);
+  });
+
+  // The knee must sit below the ceiling free repair reaches on station, or a fleet mending
+  // where it stands could never climb out of the penalty band and a blockade would be
+  // unrecoverable without going home. That is the trap this whole design exists to remove.
+  it("sits below the ceiling free repair reaches on station", () => {
+    expect(BLOCKADE.wornKnee).toBeLessThan(FREE_REPAIR_CEILING.station);
   });
 });
