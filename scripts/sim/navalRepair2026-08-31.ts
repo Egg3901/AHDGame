@@ -91,7 +91,9 @@ async function main(): Promise<void> {
     .find({ domain: { $in: ["naval", "air"] } })
     .toArray()) as unknown as NavairUnit[];
   const arsenals = await db.collection("nationalArsenal").find({}).toArray();
-  const gs = await db.collection("gameState").findOne({ _id: "current" });
+  const gs = await db
+    .collection<{ _id: string; currentTurn?: number }>("gameState")
+    .findOne({ _id: "current" });
 
   const out: string[] = [];
   const say = (line = "") => {
