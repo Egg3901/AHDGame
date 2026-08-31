@@ -319,6 +319,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
             previousDeliveryTurn: 1,
             previousDeliveredUnits: 1,
             previousBuyerConsumptionUnits: 1,
+            lastDamagesNoticeTurn: 1,
           },
         }
       )
@@ -337,6 +338,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       previousDeliveryTurn?: number;
       previousDeliveredUnits?: number;
       previousBuyerConsumptionUnits?: number;
+      lastDamagesNoticeTurn?: number;
     }[]) {
       if (isStateScopedCommodity(a.commodity)) {
         stateLocalClearingBlockedByLegacyAgreement = true;
@@ -361,6 +363,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         previousDeliveryTurn: a.previousDeliveryTurn,
         previousDeliveredUnits: a.previousDeliveredUnits,
         previousBuyerConsumptionUnits: a.previousBuyerConsumptionUnits,
+        lastDamagesNoticeTurn: a.lastDamagesNoticeTurn,
       });
     }
     if (stateLocalClearingBlockedByLegacyAgreement) {

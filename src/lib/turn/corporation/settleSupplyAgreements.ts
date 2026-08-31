@@ -94,6 +94,11 @@ export interface SettleableSupplyAgreement {
   previousDeliveryTurn?: number;
   previousDeliveredUnits?: number;
   previousBuyerConsumptionUnits?: number;
+  /**
+   * Turn this agreement last notified its supplier's owner about damages.
+   * Read by the damages-notice cooldown; see NOTICE_COOLDOWN_TURNS.
+   */
+  lastDamagesNoticeTurn?: number;
 }
 
 /** Per-corp economic identity the pure settlement needs (id, name, ccy, fx). */
@@ -1238,10 +1243,22 @@ export async function settleSupplyAgreements(args: {
     }
   }
   if (txEntries.length > 0) await emitTxBulk(db, txEntries, args.thresholds);
-  await notifySupplyAgreementDamages({ damages, lookups, turn });
+  await notifySupplyAgreementDamages({ db, damages, agreements, lookups, turn });
 
   return { settledCount, totalPremiumAnchor, settledPremiums, deliveries, damages };
 }
+
+/**
+ * Turns between damages notices for the SAME agreement.
+ *
+ * Damages are a LEVEL condition, not an edge: a contract whose volume cap sits
+ * above what the plants can achieve is charged every single turn until the
+ * owner resizes it. Notifying on every charge would put the same line in the
+ * inbox daily, per agreement, forever — the `extraction_capacity_bound`
+ * precedent this follows only fires on sectors that NEWLY bind. A cooldown
+ * keeps the first charge loud and the reminder periodic.
+ */
+const DAMAGES_NOTICE_COOLDOWN_TURNS = 12;
 
 /**
  * Ticket #1147: tell a player-owned supplier's owner when its contract charged
@@ -1252,13 +1269,33 @@ export async function settleSupplyAgreements(args: {
  * skipped; best-effort like every other notification in the turn pipeline.
  */
 async function notifySupplyAgreementDamages(args: {
+  db: Db;
   damages: readonly SupplyAgreementDamages[];
+  agreements: readonly SettleableSupplyAgreement[];
   lookups: CorporationLookups;
   turn: number;
 }): Promise<void> {
   if (args.damages.length === 0) return;
   const ZERO_USER = "000000000000000000000000";
-  const notifications = args.damages.flatMap((d) => {
+  // Cooldown gate. An agreement with no recorded notice has never been
+  // reported and always notifies; after that it waits out the cooldown so a
+  // permanently oversized contract does not file a daily inbox item.
+  const lastNoticeByAgreement = new Map<string, number>();
+  for (const a of args.agreements) {
+    if (a.agreementId !== undefined && a.lastDamagesNoticeTurn !== undefined) {
+      lastNoticeByAgreement.set(a.agreementId, a.lastDamagesNoticeTurn);
+    }
+  }
+  const notifiedAgreementIds: string[] = [];
+  const due = args.damages.filter((d) => {
+    if (d.agreementId === undefined) return true;
+    const last = lastNoticeByAgreement.get(d.agreementId);
+    if (last !== undefined && args.turn - last < DAMAGES_NOTICE_COOLDOWN_TURNS) return false;
+    notifiedAgreementIds.push(d.agreementId);
+    return true;
+  });
+  if (due.length === 0) return;
+  const notifications = due.flatMap((d) => {
     const supplier = args.lookups.corpById.get(d.supplierCorpId);
     const buyer = args.lookups.corpById.get(d.buyerCorpId);
     const userId = supplier?.userId;
@@ -1297,5 +1334,20 @@ async function notifySupplyAgreementDamages(args: {
     await createNotifications(notifications);
   } catch (err) {
     console.error("[settleSupplyAgreements] damage notifications failed:", err);
+    return;
+  }
+  // Stamp the cooldown only after the notices actually went out, so a failed
+  // send is retried next turn rather than silently starting the cooldown.
+  const stampIds = notifiedAgreementIds.filter((id) => ObjectId.isValid(id));
+  if (stampIds.length === 0) return;
+  try {
+    await args.db
+      .collection<SupplyAgreement>("supplyAgreements")
+      .updateMany(
+        { _id: { $in: stampIds.map((id) => new ObjectId(id)) } },
+        { $set: { lastDamagesNoticeTurn: args.turn } }
+      );
+  } catch (err) {
+    console.error("[settleSupplyAgreements] damage notice cooldown stamp failed:", err);
   }
 }

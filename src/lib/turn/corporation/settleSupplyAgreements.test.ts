@@ -1130,7 +1130,10 @@ describe("ticket #1147 — shortfall damage visibility", () => {
     } as unknown as CorporationLookups;
   }
 
-  async function settle(lookups: CorporationLookups) {
+  async function settle(
+    lookups: CorporationLookups,
+    opts: { turn?: number; lastDamagesNoticeTurn?: number } = {}
+  ) {
     const db = createMockDb();
     db.collection("corporations");
     db.collection("supplyAgreements");
@@ -1145,13 +1148,16 @@ describe("ticket #1147 — shortfall damage visibility", () => {
           commodity,
           volumeCap: 100,
           pricePremium: 0,
+          ...(opts.lastDamagesNoticeTurn !== undefined
+            ? { lastDamagesNoticeTurn: opts.lastDamagesNoticeTurn }
+            : {}),
         },
       ],
       contractSettlementByCorp: new Map(),
       producedByCorpCommodity: new Map([[S, new Map([[commodity, 60]])]]),
       plantsEnabled: true,
       priceRatioByCommodity: ratio,
-      turn: 5,
+      turn: opts.turn ?? 5,
       now,
       thresholds: {} as never,
     });
@@ -1185,5 +1191,25 @@ describe("ticket #1147 — shortfall damage visibility", () => {
   it("does not notify for NPP/state corps without a real user", async () => {
     await settle(lookupsWith("000000000000000000000000"));
     expect(createNotifications).not.toHaveBeenCalled();
+  });
+
+  it("stays quiet inside the cooldown, so an oversized contract is not a daily notice", async () => {
+    // Damages are a LEVEL condition: an oversized cap charges every turn until
+    // the owner resizes it. Notifying on every charge would file the same line
+    // daily, per agreement, forever.
+    await settle(lookupsWith(new ObjectId().toString()), { turn: 8, lastDamagesNoticeTurn: 5 });
+    expect(createNotifications).not.toHaveBeenCalled();
+    // Damages themselves are still reported to the caller — only the inbox
+    // notice is on a cooldown.
+    const r = await settle(lookupsWith(new ObjectId().toString()), {
+      turn: 8,
+      lastDamagesNoticeTurn: 5,
+    });
+    expect(r.damages).toHaveLength(1);
+  });
+
+  it("notifies again once the cooldown has elapsed", async () => {
+    await settle(lookupsWith(new ObjectId().toString()), { turn: 30, lastDamagesNoticeTurn: 5 });
+    expect(createNotifications).toHaveBeenCalledTimes(1);
   });
 });

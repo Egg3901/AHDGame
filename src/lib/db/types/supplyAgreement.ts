@@ -107,6 +107,13 @@ export interface SupplyAgreement {
   lastSupplierCashCurrency?: CurrencyCode;
   /** Net settlement amount left unpaid by the solvency floor, in anchor currency. */
   lastUnpaidSettlementAnchor?: number;
+  /**
+   * Turn the supplier's owner was last told this agreement charged shortfall
+   * damages. Damages are a LEVEL condition — an oversized contract charges
+   * every turn until it is resized — so the notice is on a cooldown and this
+   * is what the cooldown reads. Absent means never notified.
+   */
+  lastDamagesNoticeTurn?: number;
   createdAt: Date;
   updatedAt: Date;
 }
