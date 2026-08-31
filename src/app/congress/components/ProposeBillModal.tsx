@@ -1109,7 +1109,8 @@ export function ProposeBillModal({
                                   const manpowerLabel = reserveManpowerLabel(
                                     countryId,
                                     p.legislationTypeId,
-                                    optIdx
+                                    optIdx,
+                                    type?.countryScope
                                   );
                                   const suffix =
                                     (posLabel ? ` — ${posLabel}` : "") + netLabel + manpowerLabel;
