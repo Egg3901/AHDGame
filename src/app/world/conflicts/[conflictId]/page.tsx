@@ -10,6 +10,7 @@ import { entityName } from "@/app/world/international-organizations/entityLabel"
 import { getDb } from "@/lib/mongodb";
 import { getConflictByNumber } from "@/lib/db/collections/conflicts";
 import { getPeaceOffersCollection } from "@/lib/db/collections/peaceOffers";
+import { loadPartyChoices, loadPartyChoicesFor, partyDisplayName } from "@/lib/military/peaceOffer";
 import { warGoalLabel } from "@/lib/military/warGoals";
 import { getBattleReportsCollection, theaterRecord } from "@/lib/db/collections/battleReports";
 import { listDeclarationHistory } from "@/lib/db/collections/battleDeclarations";
@@ -47,6 +48,7 @@ import {
   declarationOutcome,
   forceReadiness,
   recoveringCount,
+  settlementRow,
   type SideForce,
 } from "./conflictRecordView";
 import { verdictOf, openingLine, momentumOf } from "./recordCopy";
@@ -345,6 +347,16 @@ export default async function ConflictRecordPage({
       : ownSide === "B"
         ? (doc.sideB.backer ?? "neutral")
         : "neutral";
+  // Party lists for every country a settlement on this war converted, in ONE
+  // query: the record needs names and the terms store ids. Only the terms that
+  // actually name a party contribute, so an ordinary war loads nothing.
+  const settlementParties = await loadPartyChoicesFor(
+    db,
+    settlements
+      .filter((o) => o.term.kind === "regime_change" && o.term.rulingPartyId != null)
+      .map((o) => o.toCountry)
+  );
+
   // The dictate panel, shown ONLY to the negotiator of the country that won this
   // war outright. Null for everyone else, including the losing side and the winning
   // side's allies: a coalition victory yields one term, and the panel is where that
@@ -368,6 +380,10 @@ export default async function ConflictRecordPage({
           target: doc.termsWindow.target,
           targetName: COUNTRY_CONFIGS[doc.termsWindow.target]?.name ?? doc.termsWindow.target,
           turnsLeft: Math.max(0, doc.termsWindow.closesTurn - currentTurn),
+          // The parties the victor may install, when they convert the loser to a
+          // one-party state. Loaded from the same helper the route validates
+          // against, so anything offered here is accepted there.
+          targetParties: await loadPartyChoices(db, doc.termsWindow.target),
         }
       : null;
 
@@ -727,20 +743,27 @@ export default async function ConflictRecordPage({
       note: momentum.note,
       sideBLabel: doc.sideB.label,
     },
-    settlements: settlements.map((o) => ({
-      id: o._id.toString(),
-      // The leaver, not the sender: an offer runs in both directions, and "you
-      // get out" deals name the RECIPIENT as the departing country. Reading
-      // `fromCountry` here recorded the sender's withdrawal when the sender had
-      // actually asked the other party to leave and stayed in themselves
-      // (ticket #1246). `leaver` has been required since offers ran both ways;
-      // rows older than that carry no field and all meant the sender.
-      leaver: o.leaver ?? o.fromCountry,
-      other: o.toCountry,
-      term: o.term,
-      justification: o.justification ?? null,
-      turn: o.resolvedTurn ?? o.offeredTurn,
-    })),
+    settlements: settlements.map((o) => {
+      // Narrowed into a local: the `.find` callback below closes over the term
+      // and loses the discriminant otherwise.
+      const term = o.term;
+      const namedParty =
+        term.kind === "regime_change" && term.rulingPartyId != null ? term.rulingPartyId : null;
+      return {
+        // Who left and who they settled with comes from `settlementRow`, which
+        // reads the pair off `leaver` the way the engine does (ticket #1246).
+        ...settlementRow(o),
+        term,
+        // The term stores a party id and the record needs a name. Resolved from
+        // the batch loaded above, so a war with several converting settlements is
+        // still one query. Keyed on the RECIPIENT, because a term always lands on
+        // the recipient whichever party the deal removes.
+        rulingPartyName:
+          namedParty != null
+            ? partyDisplayName(settlementParties.get(o.toCountry), namedParty)
+            : null,
+      };
+    }),
     tier,
     canAct,
     viewerCountry,

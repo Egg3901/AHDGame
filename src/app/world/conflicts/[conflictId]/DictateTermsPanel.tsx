@@ -13,6 +13,13 @@ export interface DictateTermsView {
   target: string;
   targetName: string;
   turnsLeft: number;
+  /**
+   * The target's parties, for naming which one rules a one-party state.
+   *
+   * Loaded from the same helper the route validates against, so a party the
+   * victor can pick here is a party the route will accept.
+   */
+  targetParties: { id: number; name: string; abbreviation?: string }[];
 }
 
 type TermKind = "white_peace" | "indemnity" | "regime_change" | "demilitarisation";
@@ -41,6 +48,9 @@ export function DictateTermsPanel({ view }: { view: DictateTermsView }) {
   const [kind, setKind] = useState<TermKind>("indemnity");
   const [amount, setAmount] = useState("0");
   const [system, setSystem] = useState<string>("parliamentaryRepublic");
+  // Empty string means "let the conversion resolve it", which is what the term
+  // does when it names no party.
+  const [rulingParty, setRulingParty] = useState<string>("");
   const [turns, setTurns] = useState("240");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,7 +88,15 @@ export function DictateTermsPanel({ view }: { view: DictateTermsView }) {
       return submit({ kind: "indemnity", payer: view.target, amount: Number(amount) || 0 });
     }
     if (kind === "regime_change") {
-      return submit({ kind: "regime_change", targetSystem: system });
+      // The party rides along only for the system that HAS a ruling party. The
+      // route refuses the pairing outright otherwise, so sending it with a
+      // republic would turn a stale dropdown into a rejected settlement.
+      const named = system === "onePartyState" && rulingParty !== "";
+      return submit({
+        kind: "regime_change",
+        targetSystem: system,
+        ...(named ? { rulingPartyId: Number(rulingParty) } : {}),
+      });
     }
     return submit({ kind: "demilitarisation", turns: Number(turns) || 0 });
   }
@@ -146,6 +164,7 @@ export function DictateTermsPanel({ view }: { view: DictateTermsView }) {
           <label className="mt-1 block text-[11px] text-muted">
             New system
             <select
+              aria-label="New system"
               value={system}
               onChange={(e) => setSystem(e.target.value)}
               className="mt-1 block w-full rounded border border-card-border bg-card px-2 py-1 text-[12px]"
@@ -157,6 +176,30 @@ export function DictateTermsPanel({ view }: { view: DictateTermsView }) {
               ))}
             </select>
           </label>
+
+          {system === "onePartyState" && (
+            <label className="mt-2 block text-[11px] text-muted">
+              Ruling party
+              <select
+                aria-label="Ruling party"
+                value={rulingParty}
+                onChange={(e) => setRulingParty(e.target.value)}
+                className="mt-1 block w-full rounded border border-card-border bg-card px-2 py-1 text-[12px]"
+              >
+                <option value="">Let the strongest party take power</option>
+                {view.targetParties.map((p) => (
+                  <option key={p.id} value={String(p.id)}>
+                    {p.abbreviation ? `${p.abbreviation} (${p.name})` : p.name}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block">
+                The party you name rules alone. Every other party in {view.targetName} is banned.
+                Leave this on the default and the largest bench takes power, which may be the
+                government you just fought.
+              </span>
+            </label>
+          )}
         </Option>
 
         <Option

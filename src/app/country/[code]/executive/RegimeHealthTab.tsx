@@ -17,6 +17,7 @@
  * the country overview is the non-leader fallback.
  */
 import { useCallback, useEffect, useState } from "react";
+import { governmentSystemLabel } from "@/lib/military/peaceTerm";
 
 interface Scalars {
   popularLegitimacy: number;
@@ -722,7 +723,9 @@ export function RegimeHealthTab({ countryCode }: Props) {
               <>
                 {" "}
                 • target:{" "}
-                <strong className="text-foreground">{data.convention.targetSystem}</strong>
+                <strong className="text-foreground">
+                  {governmentSystemLabel(data.convention.targetSystem)}
+                </strong>
               </>
             )}{" "}
             • legacy {data.convention.legacyReservation}% • election delay{" "}

@@ -119,7 +119,12 @@ describe("Phase-6 conversion E2E smoke", () => {
       details: { subtype: string; path: string; targetSystem: string };
     };
     expect(evt.eventType).toBe("regime_escalation");
-    expect(evt.title).toMatch(/adopts parliamentaryRepublic/i);
+    // The country's NAME and the system's player-facing LABEL. This entry is read
+    // by players, and it had rendered as "CN adopts parliamentaryRepublic".
+    expect(evt.title).toMatch(/adopts a parliamentary republic/i);
+    expect(evt.title).not.toContain("parliamentaryRepublic");
+    // The raw value stays in `details`, for anything reading the entry as data.
+    expect(evt.details.targetSystem).toBe("parliamentaryRepublic");
     expect(evt.details.subtype).toBe("conversion");
     expect(evt.details.path).toBe("voluntary");
     expect(evt.details.targetSystem).toBe("parliamentaryRepublic");

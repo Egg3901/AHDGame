@@ -11,7 +11,6 @@ import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { NPP } from "@/lib/db/types";
 import type { Bill, BillChamber, ElectedOfficial, PoliticalParty } from "@/lib/db/types";
-import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import {
   checkDuplicateProvisions,
   checkCurrentPolicyLevel,
@@ -74,15 +73,16 @@ export async function proposeNppNationalBill(
   currentTurn: number,
   now: Date
 ): Promise<ProposeNppBillResult | ProposeNppBillError> {
-  const config = COUNTRY_CONFIGS[countryId];
-
   // ── One-party-state banned-party guard ─────────────────────────────────────
   const runtimeState = await getCountryState(db, countryId);
   if (runtimeState.governmentType === "onePartyState" && npp.party) {
     const sponsorParty = await db
       .collection<PoliticalParty>("politicalParties")
       .findOne({ sequentialId: parseInt(npp.party, 10), countryId });
-    if (isBannedParty(config, sponsorParty)) {
+    // RUNTIME shape, not `config` — the static config never learns about a
+    // conversion, so it would silently disable this guard for a runtime-converted
+    // one-party state. Matches the NPP bench-vote gate in `turn/npp/billVoting`.
+    if (isBannedParty({ governmentType: runtimeState.governmentType }, sponsorParty)) {
       return { ok: false, reason: "Banned parties cannot propose legislation." };
     }
   }

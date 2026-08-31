@@ -5,6 +5,7 @@ import {
   canonicalizeLegislationTypeId,
   getEquivalentLegislationTypeIds,
 } from "@/lib/legislationTypeAliases";
+import { regionalDefaultLevel } from "@/lib/politicalLegislation/regionalDefaults";
 import { resolveOptionLabel } from "./optionLabel";
 import { resolveProvisionPolicyOption, type ResolvableProvision } from "./resolvePolicyOption";
 import { policyStoreId, type SnapshotFields } from "./currentLaw";
@@ -142,6 +143,21 @@ export async function snapshotBillPolicyProvisions<T extends SnapshottableProvis
       seen.add(key);
       const option = legislationTypeMap.get(key)?.policyOptions?.[law.policyOptionIndex ?? -1];
       if (option?.id) currentPolicyIdMap.set(key, option.id);
+    }
+  }
+
+  // Region scope only: a new-generation `both` law the region has never
+  // legislated sits at level 0. Freezing that here is what lets a bill
+  // proposed today render its current law forever — the read path's own
+  // fallback covers the display, but a bill whose provision was never
+  // snapshotted has nothing to fall back TO once the law later moves.
+  if (scope.scope === "region") {
+    for (const id of canonicalIds) {
+      if (currentPolicyIdMap.has(id)) continue;
+      const level = regionalDefaultLevel(id);
+      if (level === undefined) continue;
+      const option = legislationTypeMap.get(id)?.policyOptions?.[level];
+      if (option?.id) currentPolicyIdMap.set(id, option.id);
     }
   }
 
