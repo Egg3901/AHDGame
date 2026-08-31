@@ -153,6 +153,27 @@ export async function getCountryAccessFromDb(db: Db, countryId: CountryId): Prom
     .collection<CountryGameState>("countryGameStates")
     .findOne({ _id: countryId });
 
+  // A DISSOLVED country is not merely disabled — it is out of the registry, the
+  // same answer `registeredBase()` gives the list paths. Without this, the
+  // single-country path contradicts the list paths: a merged country's page
+  // stays browsable "econ-only", its election gates read it as NPP-governed,
+  // and per-country processing that consults access keeps simulating a state
+  // that no longer exists.
+  if (doc?.dissolvedTurn != null) {
+    return {
+      enabledForPlayers: false,
+      // `dissolvedTurn` is deliberately NOT a `CountryStatus` member (see the
+      // field's doc in gameState.ts) — "coming-soon" is the nearest existing
+      // value that reads as fully unavailable, and `registered: false` is the
+      // load-bearing answer here.
+      status: "coming-soon",
+      economyPreview: false,
+      registered: false,
+      econOnly: false,
+      nppGoverned: false,
+    };
+  }
+
   // Resolve status first so the enabledForPlayers fallback uses the DB-driven value.
   const resolvedStatus = doc?.status ?? config.status;
   const enabledForPlayers = doc?.enabledForPlayers ?? resolvedStatus === "active";

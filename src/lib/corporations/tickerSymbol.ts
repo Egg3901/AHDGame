@@ -1,4 +1,33 @@
 import type { Db } from "mongodb";
+import type { Corporation } from "@/lib/db/types";
+import { isDuplicateKeyError } from "@/lib/api/errors";
+
+/**
+ * Insert a corporation, regenerating the ticker on a duplicate-key collision.
+ *
+ * `generateTickerSymbol` is check-then-insert: two concurrent creations (NPP
+ * spawns in one turn, simultaneous spin-offs) can both see a candidate as free
+ * and race the corporations_tickerSymbol_unique index. The loser lands here
+ * with E11000; regenerating (which re-reads the DB, so it now sees the
+ * winner's ticker) and retrying converges. Non-ticker duplicate keys rethrow.
+ */
+export async function insertCorporationWithTickerRetry(
+  db: Db,
+  corpDoc: Corporation,
+  maxRetries = 3
+): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await db.collection<Corporation>("corporations").insertOne(corpDoc);
+      return;
+    } catch (err) {
+      const isTickerCollision =
+        isDuplicateKeyError(err) && err instanceof Error && err.message.includes("tickerSymbol");
+      if (!isTickerCollision || attempt >= maxRetries) throw err;
+      corpDoc.tickerSymbol = await generateTickerSymbol(db, corpDoc.name);
+    }
+  }
+}
 
 /**
  * Generate a unique ticker symbol for a corporation.

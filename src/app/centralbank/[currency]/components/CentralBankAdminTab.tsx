@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { PRIME_RATE_STEP, snapToPrimeRateGrid } from "@/lib/db/types/centralBank";
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
 import type { CountryId } from "@/lib/constants/countries";
@@ -379,7 +380,14 @@ export function CentralBankAdminTab({ countryId }: Props) {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setPendingRate(Math.max(0, (pendingRate ?? primeRate) - 0.25))}
+                    onClick={() =>
+                      setPendingRate(
+                        Math.max(
+                          0,
+                          (pendingRate ?? snapToPrimeRateGrid(primeRate)) - PRIME_RATE_STEP
+                        )
+                      )
+                    }
                     className="flex h-9 w-9 items-center justify-center rounded-lg border border-card-border bg-card-elevated text-foreground hover:bg-primary/10 hover:border-primary/30 transition-colors"
                     disabled={submitting}
                   >
@@ -390,7 +398,14 @@ export function CentralBankAdminTab({ countryId }: Props) {
                   </span>
                   <button
                     type="button"
-                    onClick={() => setPendingRate(Math.min(25, (pendingRate ?? primeRate) + 0.25))}
+                    onClick={() =>
+                      setPendingRate(
+                        Math.min(
+                          25,
+                          (pendingRate ?? snapToPrimeRateGrid(primeRate)) + PRIME_RATE_STEP
+                        )
+                      )
+                    }
                     className="flex h-9 w-9 items-center justify-center rounded-lg border border-card-border bg-card-elevated text-foreground hover:bg-primary/10 hover:border-primary/30 transition-colors"
                     disabled={submitting}
                   >

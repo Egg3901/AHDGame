@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { badRequest, handleRouteError, notFound } from "@/lib/api/errors";
+import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
 import { parseJsonBody } from "@/lib/api/validate";
 import {
   isIndexFundsFullMode,
@@ -117,8 +118,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       fundFxRate = fxResult.rate;
     }
 
-    const session = db.client.startSession();
-    try {
+    {
       let result:
         | {
             redeemedUnits: number;
@@ -346,7 +346,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       };
 
       try {
-        await session.withTransaction(async () => await runRedemption(session));
+        // No session (standalone Mongo, probed by the helper): without a
+        // transaction to serialize concurrent redemptions, take the fund's
+        // redemption lock, exactly like the code 20/263 path below.
+        const lockBusy = await runTransactionWithSessionRetry(
+          async () => db.client,
+          async (session) => {
+            if (session) {
+              await runRedemption(session);
+              return false;
+            }
+            const releaseLock = await claimFundRedemptionLock(db, fund._id);
+            if (!releaseLock) return true;
+            try {
+              await runRedemption();
+            } finally {
+              await releaseLock();
+            }
+            return false;
+          }
+        );
+        if (lockBusy) {
+          return NextResponse.json(
+            { error: "Another redemption for this fund is still processing. Try again." },
+            { status: 409 }
+          );
+        }
       } catch (err) {
         const code = (err as { code?: number } | undefined)?.code;
         if (code === 20 || code === 263) {
@@ -424,8 +449,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         ...response
       } = result!;
       return NextResponse.json({ success: true, ...response });
-    } finally {
-      await session.endSession();
     }
   } catch (error) {
     return handleRouteError(error);

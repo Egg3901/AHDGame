@@ -814,7 +814,10 @@ export async function initElectionVoteTally(
     .findOne({ electionId }, { projection: { primaryVotes: 1 } });
 
   const doc: ElectionVoteTally = {
-    _id: electionId,
+    // Preserve the matched doc's _id: legacy tallies carry an auto-generated
+    // ObjectId, and replaceOne rejects a replacement whose _id differs from
+    // the matched document's (immutable-field MongoServerError).
+    _id: existing?._id ?? electionId,
     electionId,
     state,
     totalVotes,

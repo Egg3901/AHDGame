@@ -138,5 +138,18 @@ describe("reserveManpowerLabel", () => {
   // Guards against showing one nation's ladder on another's bill.
   it("is empty when the law belongs to a different country", () => {
     expect(reserveManpowerLabel("UK", "us.sec.reserveForces", 2)).toBe("");
+    // Even with a scope passed, another nation's law still carries ITS scope.
+    expect(reserveManpowerLabel("UK", "us.sec.reserveForces", 2, "us")).toBe("");
+  });
+
+  // A merge survivor holds a reserve law it never authored: the catalogue was
+  // re-scoped onto it, so the scope — not the compiled table — is the truth.
+  it("describes a CARRIED reserve law for the country that now owns it", () => {
+    expect(reserveManpowerLabel("DE", "dd.sec.reservesVoluntaryDefense", 4, "de")).toBe(
+      " · manpower ×2"
+    );
+    // Without the carry (no scope match) the table-only behaviour stands.
+    expect(reserveManpowerLabel("DE", "dd.sec.reservesVoluntaryDefense", 4, "dd")).toBe("");
+    expect(reserveManpowerLabel("DE", "dd.sec.reservesVoluntaryDefense", 4)).toBe("");
   });
 });

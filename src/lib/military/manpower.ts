@@ -74,13 +74,26 @@ export function stanceForReserveLevel(level: number): ConscriptionStance {
  * The manpower consequence of a reserve-law level, for the bill-proposal surface — so a
  * player sees what a level does to replacements before filing. Empty string when the
  * legislation is not that country's reserve law, so callers can concatenate blindly.
+ *
+ * `lawCountryScope` is the legislation type's own `countryScope`, and it is what makes
+ * this correct for a merge SURVIVOR: a country can hold a reserve law it never authored
+ * (a reunification re-scopes the absorbed state's catalogue onto it), which the compiled
+ * table cannot know. Matching the scope keeps the cross-country guard intact — another
+ * nation's law still carries that nation's scope — while recognising a carried one.
+ * Optional so callers without the type doc keep the table-only behaviour.
  */
 export function reserveManpowerLabel(
   countryId: string,
   legislationTypeId: string,
-  level: number
+  level: number,
+  lawCountryScope?: string
 ): string {
-  if (RESERVE_LAW_BY_COUNTRY[countryId] !== legislationTypeId) return "";
+  const isOwnLaw = RESERVE_LAW_BY_COUNTRY[countryId] === legislationTypeId;
+  const isCarriedLaw =
+    Object.values(RESERVE_LAW_BY_COUNTRY).includes(legislationTypeId) &&
+    !!lawCountryScope &&
+    lawCountryScope.toLowerCase() === countryId.toLowerCase();
+  if (!isOwnLaw && !isCarriedLaw) return "";
   const stance = stanceForReserveLevel(level);
   return ` · manpower ×${stance.poolMult}${stance.conscriptAllowed ? "" : ", no conscription"}`;
 }

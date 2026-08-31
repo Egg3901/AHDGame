@@ -210,11 +210,17 @@ export async function POST(request: Request, { params }: RouteParams) {
     const randomRoll = auditableRandomRoll();
     let resolution: SplitResolution | null = null;
     let rejection: SplitRejection | null = null;
+    // Production Mongo is standalone, so this body may run WITHOUT a transaction
+    // (see `runTransactionWithSessionRetry`). The attacker is debited before the
+    // plant writes, and on that path a later `SplitConflictError` will NOT roll
+    // the debit back, so record what was taken and refund it by hand.
+    let uncommittedDebit: { cashLocal: number; marketingStrength: number } | null = null;
 
     try {
       await runTransactionWithSessionRetry(getMongoClient, async (session) => {
         resolution = null;
         rejection = null;
+        uncommittedDebit = null;
 
         const [freshAttacker, freshTarget, freshDefender, existingOwnSector] = await Promise.all([
           db.collection<Corporation>("corporations").findOne({ _id: attacker._id }, { session }),
@@ -332,6 +338,14 @@ export async function POST(request: Request, { params }: RouteParams) {
           };
           return;
         }
+        // Only outside a transaction does this need undoing by hand; inside one
+        // the abort reverses it for us.
+        if (!session) {
+          uncommittedDebit = {
+            cashLocal: attackCostLocal,
+            marketingStrength: quote.marketingStrengthCost,
+          };
+        }
 
         const succeeded = didPlantSectorSplitSucceed(quote.successProbability, randomRoll);
         let capacityTransferred = 0;
@@ -441,8 +455,32 @@ export async function POST(request: Request, { params }: RouteParams) {
           capacityTransferred,
           bookValueTransferredAnchor,
         };
+        uncommittedDebit = null;
       });
     } catch (error) {
+      // Non-atomic path only: the cash and MS were already taken and no plant
+      // moved, so give them back before answering. Failing to refund would
+      // charge the attacker for a split that never happened.
+      const pendingRefund = uncommittedDebit as {
+        cashLocal: number;
+        marketingStrength: number;
+      } | null;
+      if (pendingRefund) {
+        uncommittedDebit = null;
+        await db
+          .collection<Corporation>("corporations")
+          .updateOne(
+            { _id: attacker._id },
+            {
+              $inc: {
+                liquidCapital: pendingRefund.cashLocal,
+                marketingStrength: pendingRefund.marketingStrength,
+              },
+              $set: { updatedAt: new Date() },
+            }
+          )
+          .catch(() => {});
+      }
       if (error instanceof SplitConflictError) {
         return NextResponse.json({ error: error.message }, { status: 409 });
       }

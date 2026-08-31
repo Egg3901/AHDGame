@@ -20,6 +20,7 @@ import { ObjectId, type ClientSession, type MongoServerError, type UpdateFilter 
 import { NextResponse } from "next/server";
 import type { Db } from "mongodb";
 import { getMongoClient } from "@/lib/mongodb";
+import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
 import { badRequest, notFound } from "@/lib/api/errors";
 import type { AdminLog, Character, PoliticalParty } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
@@ -106,24 +107,30 @@ export async function executeSendToMember(
     return null;
   };
 
-  const client = await getMongoClient();
-  const session = client.startSession();
   try {
-    try {
-      await session.withTransaction(async () => applyInTransaction(session));
-    } catch (err) {
-      const code = (err as MongoServerError | undefined)?.code;
-      if (code === 20 || code === 263) {
-        const fallbackResponse = await applyWithoutTransaction();
-        if (fallbackResponse) {
-          return { ok: false, response: fallbackResponse };
-        }
-      } else {
-        throw err;
+    // No session (standalone Mongo, probed by the helper) routes to the
+    // sequential path, which compensates for partial writes itself.
+    const fallbackResponse = await runTransactionWithSessionRetry(
+      getMongoClient,
+      async (session) => {
+        if (!session) return applyWithoutTransaction();
+        await applyInTransaction(session);
+        return null;
       }
+    );
+    if (fallbackResponse) {
+      return { ok: false, response: fallbackResponse };
     }
-  } finally {
-    await session.endSession();
+  } catch (err) {
+    const code = (err as MongoServerError | undefined)?.code;
+    if (code === 20 || code === 263) {
+      const fallbackResponse = await applyWithoutTransaction();
+      if (fallbackResponse) {
+        return { ok: false, response: fallbackResponse };
+      }
+    } else {
+      throw err;
+    }
   }
 
   // ─── Audit + activity logs ──────────────────────────────────────────────

@@ -7,7 +7,10 @@ import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currenc
 import { getNextSequentialId } from "@/lib/db/sequentialId";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { getEraFounderShares } from "@/lib/constants/sectorSeedEra";
-import { generateTickerSymbol } from "@/lib/corporations/tickerSymbol";
+import {
+  generateTickerSymbol,
+  insertCorporationWithTickerRetry,
+} from "@/lib/corporations/tickerSymbol";
 import { openCeoTenure } from "@/lib/corporations/ceoHistory";
 import { randomBrandColor } from "@/lib/corporations/brandColor";
 import { getDefaultLegalStructureId } from "@/lib/corporations/legalStructure";
@@ -208,7 +211,7 @@ export async function spinOff(
       createdAt: now,
       updatedAt: now,
     };
-    await db.collection<Corporation>("corporations").insertOne(corpDoc as Corporation);
+    await insertCorporationWithTickerRetry(db, corpDoc as Corporation);
     await openCeoTenure(db, newCorpId, { holderId: ceoId, ceoType: ceoTypeResolved, turn });
 
     // Transfer the parent's sectors of this type to the new corp, re-denominating

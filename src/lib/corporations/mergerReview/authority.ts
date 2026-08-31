@@ -18,7 +18,6 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { UnifiedCabinetMember } from "@/lib/db/types/unifiedCabinetMember";
 import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { isSeatActive, resolveSeatName } from "@/lib/cabinet/rosterEra";
-import type { LawCountryId } from "@/lib/politicalLegislation/types";
 import { MERGER_AUTHORITY_SEAT_BY_COUNTRY } from "./constants";
 
 export interface MergerAuthority {
@@ -45,7 +44,7 @@ export async function resolveMergerAuthority(
   countryId: string,
   currentYear: number | null
 ): Promise<MergerAuthority | null> {
-  const seatId = MERGER_AUTHORITY_SEAT_BY_COUNTRY[countryId as LawCountryId];
+  const seatId = MERGER_AUTHORITY_SEAT_BY_COUNTRY[countryId as CountryId];
   if (!seatId) return null;
 
   const position = getCabinetPositions(countryId).find((p) => p.id === seatId);

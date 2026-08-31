@@ -33,7 +33,10 @@ import { getNextSequentialId } from "@/lib/db/sequentialId";
 import { randomBrandColor } from "@/lib/corporations/brandColor";
 import { computeUnownedSeedRevenue } from "@/lib/admin/seed/seedUnownedSectors";
 import { createNPP } from "@/lib/npp/generator";
-import { generateTickerSymbol } from "@/lib/corporations/tickerSymbol";
+import {
+  generateTickerSymbol,
+  insertCorporationWithTickerRetry,
+} from "@/lib/corporations/tickerSymbol";
 import {
   computeUnownedHeadroomUnits,
   unownedHeadroomUnitsPerAnchor,
@@ -381,7 +384,7 @@ export async function spawnNppCorporation(
     updatedAt: now,
   };
 
-  await db.collection<Corporation>("corporations").insertOne(corpDoc as Corporation);
+  await insertCorporationWithTickerRetry(db, corpDoc as Corporation);
 
   // ─── Plants: the founding sector is GRANTED capacity, not a revenue line ──
   //
