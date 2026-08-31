@@ -488,7 +488,12 @@ export default function OverviewTab({
               </span>
             }
           />
-          <StatRow label="Growth rate" value={`${financials.currentGrowthRate.toFixed(2)}%/turn`} />
+          <StatRow
+            label={financials.growthRateIsRealized ? "Revenue growth" : "Growth rate"}
+            value={`${financials.currentGrowthRate.toFixed(2)}%${
+              financials.growthRateIsRealized ? "/yr" : "/turn"
+            }`}
+          />
         </SectionCard>
 
         {/* Credit & Debt card — hidden for national corps */}
