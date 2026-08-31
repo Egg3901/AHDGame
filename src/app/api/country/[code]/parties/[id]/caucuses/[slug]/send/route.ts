@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId, type ClientSession, type MongoServerError, type UpdateFilter } from "mongodb";
 import { getDb, getMongoClient } from "@/lib/mongodb";
+import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
 import { badRequest, handleRouteError, notFound } from "@/lib/api/errors";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -161,22 +162,18 @@ export async function POST(request: Request, { params }: RouteParams) {
       return null;
     };
 
-    const client = await getMongoClient();
-    const session = client.startSession();
     try {
-      try {
-        await session.withTransaction(async () => applySendInTransaction(session));
-      } catch (err) {
-        const code = (err as MongoServerError | undefined)?.code;
-        if (code === 20 || code === 263) {
-          const fallbackResponse = await applySendWithoutTransaction();
-          if (fallbackResponse) return fallbackResponse;
-        } else {
-          throw err;
-        }
+      await runTransactionWithSessionRetry(getMongoClient, async (session) =>
+        applySendInTransaction(session)
+      );
+    } catch (err) {
+      const code = (err as MongoServerError | undefined)?.code;
+      if (code === 20 || code === 263) {
+        const fallbackResponse = await applySendWithoutTransaction();
+        if (fallbackResponse) return fallbackResponse;
+      } else {
+        throw err;
       }
-    } finally {
-      await session.endSession();
     }
 
     const adminLog: AdminLog = {

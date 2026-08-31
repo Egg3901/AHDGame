@@ -16,6 +16,7 @@ import { ObjectId, type ClientSession, type MongoServerError, type UpdateFilter 
 import { NextResponse } from "next/server";
 import type { Db } from "mongodb";
 import { getMongoClient } from "@/lib/mongodb";
+import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
 import { badRequest } from "@/lib/api/errors";
 import type { PoliticalParty, StatePartyOrg, State } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
@@ -109,22 +110,18 @@ export async function executeTransferToStateParty(
     return null;
   };
 
-  const client = await getMongoClient();
-  const session = client.startSession();
   try {
-    try {
-      await session.withTransaction(async () => applyInTransaction(session));
-    } catch (err) {
-      const code = (err as MongoServerError | undefined)?.code;
-      if (code === 20 || code === 263) {
-        const fallbackResponse = await applyWithoutTransaction();
-        if (fallbackResponse) return { ok: false, response: fallbackResponse };
-      } else {
-        throw err;
-      }
+    await runTransactionWithSessionRetry(getMongoClient, async (session) =>
+      applyInTransaction(session)
+    );
+  } catch (err) {
+    const code = (err as MongoServerError | undefined)?.code;
+    if (code === 20 || code === 263) {
+      const fallbackResponse = await applyWithoutTransaction();
+      if (fallbackResponse) return { ok: false, response: fallbackResponse };
+    } else {
+      throw err;
     }
-  } finally {
-    await session.endSession();
   }
 
   // ─── Audit + activity logs ──────────────────────────────────────────────

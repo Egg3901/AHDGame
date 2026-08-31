@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, isDuplicateKeyError } from "@/lib/api/errors";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { z } from "zod";
 import { createNotification } from "@/lib/notifications";
@@ -212,6 +212,14 @@ export async function appointActingCabinetMember(
       // concurrent request wins the seat between the vacancy check and here,
       // which the seat's own unique index rejects.
       await refundActingCharge(db, chargeKey).catch(() => undefined);
+      // A duplicate key IS that lost race (seat filled, or the appointee was
+      // just seated elsewhere): a player-visible 409, not a server fault.
+      if (isDuplicateKeyError(error)) {
+        return NextResponse.json(
+          { error: "That seat or appointee was just claimed by another appointment." },
+          { status: 409 }
+        );
+      }
       throw error;
     }
 
