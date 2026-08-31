@@ -31,6 +31,12 @@ interface ForecastView {
   /** Nations pooled on each side by the projection; 1 means fighting alone. */
   alliedContingents?: number;
   enemyContingents?: number;
+  navalAirSupport?: {
+    closeAirSupportActive: boolean;
+    casWeight: number;
+    airSuperiority: number;
+    interdictionPct: number;
+  };
 }
 
 export function TheaterWarRoom({
@@ -255,6 +261,17 @@ export function TheaterWarRoom({
                   c: proj ? proj.supply.state.c : MIL_COLOR.textFaint,
                 },
                 { l: "ENEMY", v: proj ? proj.enemyBand : "—", c: MIL_COLOR.text },
+                {
+                  l: "CLOSE AIR SUPPORT",
+                  v: proj
+                    ? proj.navalAirSupport?.closeAirSupportActive
+                      ? `ACTIVE (+${proj.navalAirSupport.casWeight})`
+                      : "NO ELIGIBLE CAS"
+                    : "PENDING",
+                  c: proj?.navalAirSupport?.closeAirSupportActive
+                    ? MIL_COLOR.blue
+                    : MIL_COLOR.textFaint,
+                },
                 { l: "FORCES", v: String(deployed.length), c: MIL_COLOR.text },
               ].map((s) => (
                 <div
@@ -370,6 +387,7 @@ export function TheaterWarRoom({
                   {pending.declaredTurn + 1}).
                 </div>
                 <button
+                  disabled={!state.canWrite}
                   onClick={() => dispatch({ type: "WITHDRAW_DECLARATION", theaterId: frontId })}
                   style={{
                     fontFamily: MIL_FONT.sans,
@@ -380,7 +398,8 @@ export function TheaterWarRoom({
                     border: `1px solid ${MIL_COLOR.border}`,
                     borderRadius: 8,
                     padding: "7px 13px",
-                    cursor: "pointer",
+                    cursor: state.canWrite ? "pointer" : "not-allowed",
+                    opacity: state.canWrite ? 1 : 0.5,
                   }}
                 >
                   WITHDRAW
@@ -419,7 +438,7 @@ export function TheaterWarRoom({
                   ))}
                 </select>
                 <button
-                  disabled={!activeTarget}
+                  disabled={!activeTarget || !state.canWrite}
                   onClick={() =>
                     dispatch({ type: "DECLARE", theaterId: frontId, targetCountry: activeTarget })
                   }
@@ -433,8 +452,8 @@ export function TheaterWarRoom({
                     border: "none",
                     borderRadius: 9,
                     padding: 12,
-                    cursor: activeTarget ? "pointer" : "not-allowed",
-                    opacity: activeTarget ? 1 : 0.5,
+                    cursor: activeTarget && state.canWrite ? "pointer" : "not-allowed",
+                    opacity: activeTarget && state.canWrite ? 1 : 0.5,
                   }}
                 >
                   ⚔ DECLARE OFFENSIVE
