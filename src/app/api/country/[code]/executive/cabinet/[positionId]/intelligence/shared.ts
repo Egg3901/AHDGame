@@ -12,6 +12,7 @@ import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { resolveCabinetOfficeVisibility } from "@/lib/cabinet/officeVisibility";
+import { getCountryAccessFromDb } from "@/lib/countryAccess";
 import { getIntelligenceAgenciesCollection } from "@/lib/db/collections/intelligence";
 import type { IntelligenceAgency } from "@/lib/db/types/intelligence";
 import {
@@ -178,4 +179,36 @@ export async function getOrCreateAgency(
   const created = await agencies.findOne({ countryId });
   if (!created) throw new Error(`intelligence agency upsert failed for ${countryId}`);
   return created;
+}
+
+/**
+ * A target must be a REGISTERED country, not merely a configured one.
+ *
+ * `COUNTRY_CONFIGS` is static: a country dissolved by a merge is still in it
+ * forever. Checking only that map would let a service fund a network inside, and
+ * run operations against, a state that no longer exists — and would quietly
+ * recreate the very rows the dissolution purge just deleted.
+ */
+export async function requireRegisteredTarget(db: Db, raw: string, ownerCountryId: CountryId) {
+  const targetCountryId = raw.toUpperCase() as CountryId;
+  if (!COUNTRY_CONFIGS[targetCountryId]) {
+    return {
+      error: NextResponse.json({ error: "Invalid target country" }, { status: 400 }),
+    } as const;
+  }
+  if (targetCountryId === ownerCountryId) {
+    return {
+      error: NextResponse.json(
+        { error: "A service cannot work against its own country." },
+        { status: 400 }
+      ),
+    } as const;
+  }
+  const access = await getCountryAccessFromDb(db, targetCountryId);
+  if (access.registered === false) {
+    return {
+      error: NextResponse.json({ error: "That country no longer exists." }, { status: 404 }),
+    } as const;
+  }
+  return { targetCountryId } as const;
 }

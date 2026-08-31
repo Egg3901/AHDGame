@@ -9,12 +9,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getIntelligenceNetworksCollection } from "@/lib/db/collections/intelligence";
 import {
   getOrCreateAgency,
   loadCurrentTurn,
   requireIntelligenceHolder,
+  requireRegisteredTarget,
   type IntelligenceRouteParams,
 } from "../shared";
 
@@ -35,16 +35,9 @@ export async function POST(request: Request, { params }: IntelligenceRouteParams
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
 
-    const targetCountryId = parsed.data.targetCountryId.toUpperCase() as CountryId;
-    if (!COUNTRY_CONFIGS[targetCountryId]) {
-      return NextResponse.json({ error: "Invalid target country" }, { status: 400 });
-    }
-    if (targetCountryId === countryId) {
-      return NextResponse.json(
-        { error: "A service cannot run a network against its own country." },
-        { status: 400 }
-      );
-    }
+    const target = await requireRegisteredTarget(db, parsed.data.targetCountryId, countryId);
+    if ("error" in target) return target.error;
+    const { targetCountryId } = target;
 
     const turn = await loadCurrentTurn(db);
     const agency = await getOrCreateAgency(db, countryId, turn, member?.characterId ?? null);

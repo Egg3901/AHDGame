@@ -11,12 +11,14 @@ vi.mock("@/lib/api/requireConfirmedSecretary", () => ({
   requireConfirmedSecretary: vi.fn(() => null),
 }));
 vi.mock("@/lib/intelligence/runOperation", () => ({ runOperation: vi.fn() }));
+vi.mock("@/lib/countryAccess", () => ({ getCountryAccessFromDb: vi.fn() }));
 
 const { getDb } = await import("@/lib/mongodb");
 const { requireAuth } = await import("@/lib/api/requireAuth");
 const { resolveCabinetOfficeVisibility } = await import("@/lib/cabinet/officeVisibility");
 const { requireConfirmedSecretary } = await import("@/lib/api/requireConfirmedSecretary");
 const { runOperation } = await import("@/lib/intelligence/runOperation");
+const { getCountryAccessFromDb } = await import("@/lib/countryAccess");
 
 const HOLDER = "char_holder";
 
@@ -58,6 +60,7 @@ beforeEach(() => {
     canAct: true,
   } as never);
   vi.mocked(requireConfirmedSecretary).mockReturnValue(null);
+  vi.mocked(getCountryAccessFromDb).mockResolvedValue({ registered: true } as never);
   vi.mocked(runOperation).mockResolvedValue({
     ok: true,
     outcome: "success",
@@ -124,6 +127,19 @@ describe("POST intelligence operation", () => {
 
   it("400s on an unknown target country", async () => {
     expect((await run({ ...VALID, targetCountryId: "zz" })).status).toBe(400);
+  });
+
+  it("404s a target country that has been dissolved out of the registry", async () => {
+    // COUNTRY_CONFIGS is static and keeps a merged country forever, so checking
+    // it alone would let a service work inside a state that no longer exists and
+    // quietly recreate the rows the dissolution purge just deleted.
+    vi.mocked(getCountryAccessFromDb).mockResolvedValue({ registered: false } as never);
+    expect((await run(VALID)).status).toBe(404);
+    expect(runOperation).not.toHaveBeenCalled();
+  });
+
+  it("400s an operation aimed at your own country", async () => {
+    expect((await run({ ...VALID, targetCountryId: "US" })).status).toBe(400);
   });
 
   it("passes the resolved director stat multiplier through", async () => {
