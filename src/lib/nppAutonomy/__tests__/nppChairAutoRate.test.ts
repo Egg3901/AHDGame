@@ -154,4 +154,48 @@ describe("processNppChairAutoRate", () => {
     await processNppChairAutoRate(db, bank, "US" as any, 50);
     expect(updateOne).not.toHaveBeenCalled();
   });
+  it("writes a rate on the quarter-point grid the rate API enforces", async () => {
+    // Ticket #1238: the Taylor rule produces a continuous value. Storing it raw
+    // left the US bank at 4.653426586881501, and because the rate card offers
+    // base +/-0.25, every value the next human chair could submit was also
+    // off-grid and refused with "Rate must be in 0.25% increments".
+    const { db, updateOne } = mockRateDb(
+      { economicFactors: { inflationRate: 5.3 } },
+      { economic: { gdpGrowth: { value: 1.7 } } }
+    );
+    const bank = {
+      _id: "b" as any,
+      primeRate: 4.653426586881501,
+      lastRateChangeTurn: null,
+      chairMode: "npp",
+    } as any;
+
+    await processNppChairAutoRate(db, bank, "US" as any, 50);
+
+    expect(updateOne).toHaveBeenCalled();
+    const op = (
+      updateOne.mock.calls[0] as unknown as [unknown, { $set: { primeRate: number } }]
+    )[1];
+    const written = op.$set.primeRate;
+    expect(written * 4).toBe(Math.round(written * 4));
+  });
+
+  it("does not burn the cooldown when snapping lands back on the current rate", async () => {
+    // A sub-quarter-point step rounds to the rate the bank already has. Writing
+    // that would stamp lastRateChangeTurn for a move that never happened.
+    const { db, updateOne } = mockRateDb(
+      { economicFactors: { inflationRate: 2.02 } },
+      { economic: { gdpGrowth: { value: 2.0 } } }
+    );
+    const bank = {
+      _id: "b" as any,
+      primeRate: 3.0,
+      lastRateChangeTurn: null,
+      chairMode: "npp",
+    } as any;
+
+    await processNppChairAutoRate(db, bank, "US" as any, 50);
+
+    expect(updateOne).not.toHaveBeenCalled();
+  });
 });
