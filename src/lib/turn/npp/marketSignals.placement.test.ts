@@ -142,6 +142,28 @@ describe("state-resolution placement signals (supply dislocation, t202)", () => 
     expect(pick?.stateId).toBe("MN");
   });
 
+  it("founds an extraction mine on a rich deposit with ZERO local demand headroom", () => {
+    // The real prod case: every extraction pool carries zero demand headroom
+    // (revenue 0), which used to filter every mine out of candidacy. A mine's
+    // value is its DEPOSIT x commodity shortage, not local demand, so a rich
+    // deposit in a short commodity is now a valid founding target.
+    const pool = new Map([["US", [us("extraction", "WY", 0), us("extraction", "NJ", 0)]]]);
+    const pick = findBestUnownedSector(
+      "US",
+      "NJ",
+      "extraction",
+      null,
+      new Set(),
+      pool,
+      new Set(),
+      ratios({ oil: 1.6 }),
+      true, // plants enabled — headroom is the leading (zero) signal
+      1,
+      { extractionHeadroomOf: (stateId) => (stateId === "WY" ? 0.9 : 0) }
+    );
+    expect(pick?.stateId).toBe("WY");
+  });
+
   it("returns null when every extraction candidate is depositless", () => {
     const pool = new Map([["US", [us("extraction", "NY"), us("extraction", "NJ")]]]);
     const pick = findBestUnownedSector(
