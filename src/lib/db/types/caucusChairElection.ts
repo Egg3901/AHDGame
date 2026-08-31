@@ -19,6 +19,14 @@ export interface CaucusChairElection {
   endTurn: number;
   durationTurns: number;
   winnerId: ObjectId | null;
+  /**
+   * Mirrors the anchoring national chair election's `founding` flag. A caucus
+   * race copies its whole schedule from that election, so during the
+   * pre-iteration founding phase it runs in the same accelerated window — and
+   * must waive the same 24h new-character cooldown and party-tenure gate, or a
+   * brand-new player can vote for their party chair but not their caucus chair.
+   */
+  founding?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
