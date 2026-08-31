@@ -94,7 +94,7 @@ The knee is at 50%, below the 80% ceiling free repair reaches on station, so a f
 - damaged at all: 31
 - at zero, unrecoverable before this branch: 11
 - below the worn knee, blockading badly: 31
-- in the 80-100% band where only a home port or materiel helps: 0
+- above 80% and short of full, where only a home port helps: 0
 
 Live supply readings matter here: 15 formations currently sit at or below 35% supply, where free repair does nothing at all. Every one of those is either in a yard it should leave or holding water it cannot be sustained in.
 

@@ -224,14 +224,15 @@ async function main(): Promise<void> {
   const belowKnee = units.filter((u) => (u.integrity ?? 100) < BLOCKADE.wornKnee);
   const inBand = units.filter((u) => {
     const i = u.integrity ?? 100;
-    return i >= FREE_REPAIR_CEILING.station && i < 100;
+    // Strictly above: at the ceiling exactly, materiel still reaches it.
+    return i > FREE_REPAIR_CEILING.station && i < 100;
   });
   say(`- naval and air formations in the world: ${units.length}`);
   say(`- damaged at all: ${damaged.length}`);
   say(`- at zero, unrecoverable before this branch: ${wrecked.length}`);
   say(`- below the worn knee, blockading badly: ${belowKnee.length}`);
   say(
-    `- in the ${FREE_REPAIR_CEILING.station}-100% band where only a home port or materiel helps: ${inBand.length}`
+    `- above ${FREE_REPAIR_CEILING.station}% and short of full, where only a home port helps: ${inBand.length}`
   );
   say();
   say(
