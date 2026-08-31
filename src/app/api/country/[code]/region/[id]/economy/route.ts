@@ -21,7 +21,9 @@ import type {
 import { getEffectiveTariffRate, getSplitCaptureMultiplier } from "@/lib/tariffs/tariffEffects";
 import { loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
 import {
+  corpLiquidCapitalToAnchor,
   fxRateForSectorHostFromMap,
+  getCorpFxRate,
   loadFxRatesByCurrency,
   resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
@@ -46,12 +48,6 @@ import {
   calculateSplitCostAnchor,
   calculateSplitMsCost,
 } from "@/lib/corporations/marketActionCosts";
-import {
-  attackCapacityBasisAnchor,
-  attackCostAnchorUnderPlants,
-  capacityCaptureUnits,
-  resolveWorldYear,
-} from "@/lib/corporations/capacityCapture";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
 import { shouldRedactCorporation } from "@/lib/corporations/redaction";
@@ -59,6 +55,7 @@ import { effectiveMarketAnchor } from "@/lib/corporations/marketShare";
 import { aggregateCountrySectorMix } from "@/lib/economy/sectorMix";
 import { loadNationalGdpGrowth } from "@/lib/country/nationalGdpGrowth";
 import type { GameState } from "@/lib/db/types/gameState";
+import { calculatePlantSectorSplit } from "@/lib/corporations/plantSectorSplit";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string }>;
@@ -87,6 +84,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     let userCorporationId: string | null = null;
     let userCorporationSectorType: CorporationType | null = null;
     let userMarketingStrength = 0;
+    let userLiquidCapitalAnchor = 0;
     let userSplitEscalation = 0;
     let userCorpCountryId: string | null = null;
     const user = await getAuthUser();
@@ -107,6 +105,8 @@ export async function GET(request: Request, { params }: RouteParams) {
           _id: 1,
           type: 1,
           marketingStrength: 1,
+          liquidCapital: 1,
+          liquidCurrencyCode: 1,
           splitEscalation: 1,
           countryId: 1,
         },
@@ -145,6 +145,11 @@ export async function GET(request: Request, { params }: RouteParams) {
         userCorporationId = corp._id.toString();
         userCorporationSectorType = corp.type;
         userMarketingStrength = corp.marketingStrength ?? 0;
+        userLiquidCapitalAnchor = corpLiquidCapitalToAnchor(
+          corp.liquidCapital ?? 0,
+          corp,
+          await getCorpFxRate(db, corp)
+        );
         userSplitEscalation = corp.splitEscalation ?? 0;
         userCorpCountryId = corp.countryId ?? null;
       }
@@ -207,9 +212,6 @@ export async function GET(request: Request, { params }: RouteParams) {
     const economyPreset = await loadWorldPreset(db);
     const usdExchangeRate = getGdpAnchorRate(countryId, economyPreset);
     const eraUnitScale = getEraUnitScale(economyPreset);
-    // World year for plants build pricing in the attack quote below — resolved
-    // the same way the attack-sector route resolves it.
-    const worldYear = resolveWorldYear(growthGameState?.currentYear, growthGameState?.currentTurn);
     const totalMarketPerSector = Math.round(
       (state.gdp * usdExchangeRate * SECTOR_MARKET_GDP_FRACTION) / SECTOR_TYPE_COUNT
     );
@@ -395,6 +397,25 @@ export async function GET(request: Request, { params }: RouteParams) {
             : 0;
         const dominanceAttackMult = getDominanceAttackEaseMultiplier(sectorMarketShare);
         const underdogMult = getUnderdogAttackAmplifier(attackerShareInType, sectorMarketShare);
+        const hasPersistedPlantLedger =
+          Number.isInteger(s.plantCount) &&
+          (s.plantCount ?? 0) >= 2 &&
+          typeof s.capacityBookAnchor === "number" &&
+          Number.isFinite(s.capacityBookAnchor) &&
+          s.capacityBookAnchor >= 0;
+        const plantSplitQuote =
+          plantsMode &&
+          userCorporationId &&
+          userCorporationId !== s.corporationId.toString() &&
+          !isNatcorp &&
+          hasPersistedPlantLedger
+            ? calculatePlantSectorSplit({
+                defenderPlantCount: s.plantCount as number,
+                defenderBookValueAnchor: s.capacityBookAnchor as number,
+                attackerMarketingStrength: userMarketingStrength,
+                defenderMarketingStrength: corp?.marketingStrength ?? 0,
+              })
+            : null;
         return {
           sectorId: s._id.toString(),
           corporationId: s.corporationId.toString(),
@@ -409,6 +430,7 @@ export async function GET(request: Request, { params }: RouteParams) {
           ceoSequentialId: ceo?.sequentialId,
           revenue: Math.round(sectorRevenueAnchor),
           marketShare: sectorMarketShare,
+          ...(plantsMode && hasPersistedPlantLedger ? { plantCount: s.plantCount } : {}),
           workers: calculateWorkers(sectorRevenueAnchor, workforceSkill),
           targetGrowthRate: s.targetGrowthRate ?? s.currentGrowthRate ?? s.growthRate ?? 0,
           currentGrowthRate: s.currentGrowthRate ?? s.growthRate ?? 0,
@@ -429,69 +451,31 @@ export async function GET(request: Request, { params }: RouteParams) {
           // Cost denominated in ₳ so the UI formatter can convert to whatever
           // currency the attacker's wallet prefers. Dominance multiplier scales
           // the contested fraction so dominant defenders bleed more per attack.
-          ...(userCorporationId &&
+          ...(!plantsMode &&
+            userCorporationId &&
             userCorporationId !== s.corporationId.toString() &&
             !isNatcorp &&
             (() => {
-              // Quote the SAME cost/capture the attack-sector route enforces, or
-              // the card advertises a price the route then rejects (#1212: card
-              // showed the legacy revenue-based cost while the route charged the
-              // plants build-price floor — "Insufficient capital" on an attack
-              // the card said was affordable).
-              //
-              // Under plants the attack is sized against the defender's CAPACITY
-              // NAMEPLATE (not restated revenue) and priced at least at the build
-              // price of the units received × premium — mirror both here.
-              const attackBasisAnchor =
-                attackCapacityBasisAnchor(
-                  {
-                    sectorType: s.sectorType as CorporationType,
-                    capitalStock: s.capitalStock,
-                    strategyId: s.strategyId,
-                  },
-                  plantsMode,
-                  eraUnitScale
-                ) ?? sectorRevenueAnchor;
+              // Legacy worlds still quote the same cost and capture enforced by
+              // the attack route. Plant worlds use plantSplitQuote above.
               const defenderMS = corp?.marketingStrength ?? 0;
               const msSum = userMarketingStrength + defenderMS;
               const attackerShare = msSum > 0 ? userMarketingStrength / msSum : 1;
               const contestedAmount =
-                attackBasisAnchor *
+                sectorRevenueAnchor *
                 ATTACK_OWNED_CONTESTED_FRACTION *
                 dominanceAttackMult *
                 underdogMult;
               const actualCapture = Math.min(
                 Math.round(contestedAmount * attackerShare),
-                Math.max(0, Math.floor(attackBasisAnchor) - 1)
+                Math.max(0, Math.floor(sectorRevenueAnchor) - 1)
               );
-              const legacyCostAnchor = calculateAttackCostAnchor(attackBasisAnchor);
-              let attackCost = legacyCostAnchor;
-              if (plantsMode) {
-                const defenderStock =
-                  typeof s.capitalStock === "number" && Number.isFinite(s.capitalStock)
-                    ? Math.max(0, s.capitalStock)
-                    : 0;
-                const rawUnits = capacityCaptureUnits(
-                  actualCapture,
-                  s.sectorType as CorporationType,
-                  s.strategyId,
-                  eraUnitScale
-                );
-                const unitsTaken = Math.min(defenderStock, rawUnits.unitsTaken);
-                const unitsReceived =
-                  rawUnits.unitsTaken > 0
-                    ? rawUnits.unitsReceived * (unitsTaken / rawUnits.unitsTaken)
-                    : 0;
-                attackCost = attackCostAnchorUnderPlants({
-                  legacyCostAnchor,
-                  unitsReceived,
-                  sectorType: s.sectorType as CorporationType,
-                  year: worldYear,
-                  eraUnitScale,
-                });
-              }
-              return { attackCost, attackEstimatedCapture: actualCapture };
+              return {
+                attackCost: calculateAttackCostAnchor(sectorRevenueAnchor),
+                attackEstimatedCapture: actualCapture,
+              };
             })()),
+          ...(plantSplitQuote ? { plantSplitQuote } : {}),
         };
       });
 
@@ -629,6 +613,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       userCorporationId,
       userCorporationSectorType,
       userMarketingStrength: roundMarketingStrength(userMarketingStrength),
+      userLiquidCapitalAnchor: Math.round(userLiquidCapitalAnchor),
       // Rival attacks retain the escalation cost under plants even though
       // unowned-market splits are retired there.
       attackMsCost: calculateSplitMsCost(userSplitEscalation),

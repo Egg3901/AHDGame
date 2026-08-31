@@ -7,6 +7,7 @@ import { gameConfig as gameConfigDefaults } from "@/lib/seeds/reference/gameConf
 type NppAutonomyLevel = "off" | "v0" | "v1" | "v2" | "v3" | "v4";
 type NppForeignPolicyMode = "off" | "shadow" | "active";
 type NppForeignPolicyStage = "votes" | "proposals" | "trade" | "support" | "war";
+type NppEntryViabilityMode = "off" | "observe" | "enforce";
 
 interface BooleanGate {
   key: string;
@@ -215,6 +216,24 @@ const NPP_FOREIGN_POLICY_STAGES: {
   },
 ];
 
+const NPP_ENTRY_VIABILITY_MODES: {
+  value: NppEntryViabilityMode;
+  label: string;
+  blurb: string;
+}[] = [
+  { value: "off", label: "Off", blurb: "Use the legacy autonomous mine placement rules." },
+  {
+    value: "observe",
+    label: "Observe",
+    blurb: "Record which mature losing cohorts would be blocked, but place mines normally.",
+  },
+  {
+    value: "enforce",
+    label: "Enforce",
+    blurb: "Block only new autonomous mines in mature cohorts that fail the viability gate.",
+  },
+];
+
 /**
  * Graduated system modes that live on gameConfig instead of gameState. Writes
  * go through the existing per-system PATCH routes (NOT /feature-gates) because
@@ -302,6 +321,7 @@ interface GatesState {
   nppAutonomyLevel: NppAutonomyLevel;
   nppForeignPolicyMode: NppForeignPolicyMode;
   nppForeignPolicyStage: NppForeignPolicyStage;
+  nppEntryViabilityMode: NppEntryViabilityMode;
 }
 
 function DefaultBadge() {
@@ -386,13 +406,15 @@ export function FeatureGatesPanel() {
         data.booleans &&
         data.nppAutonomyLevel &&
         data.nppForeignPolicyMode &&
-        data.nppForeignPolicyStage
+        data.nppForeignPolicyStage &&
+        data.nppEntryViabilityMode
       ) {
         setState({
           booleans: data.booleans,
           nppAutonomyLevel: data.nppAutonomyLevel,
           nppForeignPolicyMode: data.nppForeignPolicyMode,
           nppForeignPolicyStage: data.nppForeignPolicyStage,
+          nppEntryViabilityMode: data.nppEntryViabilityMode,
         });
       }
     } catch {
@@ -635,6 +657,57 @@ export function FeatureGatesPanel() {
             }
           </p>
         </div>
+      </div>
+
+      <div className="mb-5 rounded-lg border border-card-border bg-background/40 p-4">
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold">NPP entry viability</span>
+            <DefaultBadge />
+          </div>
+          <span className="text-[10px] uppercase tracking-wider text-muted">
+            {
+              NPP_ENTRY_VIABILITY_MODES.find((mode) => mode.value === state.nppEntryViabilityMode)
+                ?.label
+            }
+          </span>
+        </div>
+        <p className="mb-3 text-xs text-muted">
+          Safety rollout for autonomous mine founding. Observe is the seed and legacy-world default,
+          so deployment cannot reject a placement until an admin explicitly promotes it.
+        </p>
+        <div className="inline-flex flex-wrap gap-1 rounded-lg border border-card-border bg-card p-1">
+          {NPP_ENTRY_VIABILITY_MODES.map((mode) => {
+            const active = state.nppEntryViabilityMode === mode.value;
+            return (
+              <button
+                key={mode.value}
+                type="button"
+                disabled={savingKey === "npp-entry-viability-mode"}
+                title={mode.blurb}
+                onClick={() =>
+                  void post(
+                    { kind: "npp-entry-viability-mode", value: mode.value },
+                    "npp-entry-viability-mode"
+                  )
+                }
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+                  active
+                    ? "bg-primary text-white"
+                    : "text-muted hover:bg-background hover:text-foreground"
+                }`}
+              >
+                {mode.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-3 border-t border-card-border pt-2.5 text-[11px] leading-relaxed text-muted">
+          {
+            NPP_ENTRY_VIABILITY_MODES.find((mode) => mode.value === state.nppEntryViabilityMode)
+              ?.blurb
+          }
+        </p>
       </div>
 
       {/* Graduated system modes (gameConfig) */}

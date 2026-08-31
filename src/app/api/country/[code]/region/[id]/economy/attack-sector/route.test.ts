@@ -3,7 +3,15 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
-vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+const withTransaction = vi.fn(async (callback: () => Promise<void>) => callback());
+const endSession = vi.fn().mockResolvedValue(undefined);
+vi.mock("@/lib/mongodb", () => ({
+  getDb: vi.fn(),
+  getMongoClient: vi.fn().mockResolvedValue({
+    startSession: () => ({ withTransaction, endSession }),
+  }),
+}));
+vi.mock("node:crypto", () => ({ randomInt: vi.fn().mockReturnValue(0) }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireHumanSession: vi.fn() }));
 vi.mock("@/lib/api/rateLimit", () => ({
   checkRateLimit: vi.fn().mockReturnValue({ ok: true }),
@@ -20,6 +28,10 @@ vi.mock("@/lib/wireEvent", () => ({
   wireHeadlineSectorAttack: vi.fn().mockReturnValue("headline"),
 }));
 vi.mock("@/lib/notifications", () => ({ createNotification: vi.fn() }));
+vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/lib/corporations/economicActionLog", () => ({
+  logEconomicAction: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@/lib/currency/corporationCapital", () => ({
   anchorToCorpLiquidCapital: vi.fn((v: number) => v),
   corpLiquidCapitalToAnchor: vi.fn((v: number) => v),
@@ -50,6 +62,11 @@ beforeEach(async () => {
   db.collection("corporateSectors");
   db.collection("unownedSectors");
   db.collection("exchangeRates");
+  db.collection("gameConfig");
+  db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+    _id: "default",
+    marketSystemMode: "plants",
+  });
 
   const { getDb } = await import("@/lib/mongodb");
   vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
@@ -138,7 +155,7 @@ describe("POST /api/country/[code]/region/[id]/economy/attack-sector", () => {
 
     expect(response.status).toBe(404);
     expect(data.error).toMatch(/dissolved/i);
-    expect(data.error).toMatch(/unowned/i);
+    expect(data.error).toMatch(/refresh/i);
     // The orphan sector row should be removed so subsequent reads stop
     // exposing it as an attackable defender.
     expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({
@@ -208,5 +225,173 @@ describe("POST /api/country/[code]/region/[id]/economy/attack-sector", () => {
     expect(data.error).toMatch(/suspended/i);
     // No capture, no charge.
     expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("atomically transfers the quoted whole plants on success", async () => {
+    const attackerCharId = new ObjectId();
+    const attackerCorpId = new ObjectId();
+    const defenderCorpId = new ObjectId();
+    const targetSectorId = new ObjectId();
+    const attacker = {
+      _id: attackerCorpId,
+      ceoId: attackerCharId,
+      name: "Attacker Corp",
+      liquidCapital: 1_000_000,
+      marketingStrength: 200,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+    };
+    const defender = {
+      _id: defenderCorpId,
+      name: "Defender Corp",
+      liquidCapital: 1_000_000,
+      marketingStrength: 100,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+    };
+    const target = {
+      _id: targetSectorId,
+      corporationId: defenderCorpId,
+      countryId: "US",
+      stateId: "CA",
+      sectorType: "energy",
+      strategyId: "standard",
+      revenue: 1_000_000,
+      capitalStock: 1_000,
+      capacityBookAnchor: 1_000_000,
+      plantCount: 100,
+      plantUnitRemainder: 0,
+    };
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 511,
+    });
+    db.collectionMocks.states.findOne.mockResolvedValue({
+      _id: "CA",
+      countryId: "US",
+      name: "California",
+    });
+    db.collectionMocks.users.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      activeCharacterType: "regular",
+    });
+    const { getCharacterByUserId } = await import("@/lib/db/characterLookup");
+    vi.mocked(getCharacterByUserId).mockResolvedValue({ _id: attackerCharId } as never);
+    db.collectionMocks.corporations.findOne
+      .mockResolvedValueOnce(attacker)
+      .mockResolvedValueOnce(defender)
+      .mockResolvedValueOnce(attacker)
+      .mockResolvedValueOnce(defender);
+    db.collectionMocks.corporations.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.corporateSectors.findOne
+      .mockResolvedValueOnce(target)
+      .mockResolvedValueOnce(target)
+      .mockResolvedValueOnce(null);
+    db.collectionMocks.corporateSectors.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.corporateSectors.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest({ sectorId: targetSectorId.toHexString() }), ctx());
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toMatchObject({
+      splitSucceeded: true,
+      plantsAtRisk: 25,
+      plantsTransferred: 25,
+      attackCost: 125_000,
+      msCost: 14,
+    });
+    expect(db.collectionMocks.corporations.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: attackerCorpId }),
+      expect.objectContaining({
+        $inc: expect.objectContaining({ liquidCapital: -125_000, marketingStrength: -14 }),
+      }),
+      expect.any(Object)
+    );
+    expect(db.collectionMocks.corporateSectors.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: targetSectorId, plantCount: 100 }),
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          plantCount: 75,
+          capitalStock: 750,
+          capacityBookAnchor: 750_000,
+        }),
+      }),
+      expect.any(Object)
+    );
+    expect(db.collectionMocks.corporateSectors.insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        corporationId: attackerCorpId,
+        plantCount: 25,
+        capitalStock: 250,
+        capacityBookAnchor: 250_000,
+      }),
+      expect.any(Object)
+    );
+    expect(withTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("spends the quoted cash and MS on failure without moving plants", async () => {
+    const { randomInt } = await import("node:crypto");
+    vi.mocked(randomInt as unknown as () => number).mockReturnValue(999_999_999);
+    const attackerCharId = new ObjectId();
+    const attackerCorpId = new ObjectId();
+    const defenderCorpId = new ObjectId();
+    const targetSectorId = new ObjectId();
+    const attacker = {
+      _id: attackerCorpId,
+      ceoId: attackerCharId,
+      name: "Attacker Corp",
+      liquidCapital: 1_000_000,
+      marketingStrength: 100,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+    };
+    const defender = {
+      _id: defenderCorpId,
+      name: "Defender Corp",
+      marketingStrength: 100,
+      countryId: "US",
+    };
+    const target = {
+      _id: targetSectorId,
+      corporationId: defenderCorpId,
+      countryId: "US",
+      stateId: "CA",
+      sectorType: "energy",
+      revenue: 1_000_000,
+      capitalStock: 1_000,
+      capacityBookAnchor: 1_000_000,
+      plantCount: 100,
+    };
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentTurn: 511 });
+    db.collectionMocks.states.findOne.mockResolvedValue({
+      _id: "CA",
+      countryId: "US",
+      name: "California",
+    });
+    db.collectionMocks.users.findOne.mockResolvedValue({ activeCharacterType: "regular" });
+    const { getCharacterByUserId } = await import("@/lib/db/characterLookup");
+    vi.mocked(getCharacterByUserId).mockResolvedValue({ _id: attackerCharId } as never);
+    db.collectionMocks.corporations.findOne
+      .mockResolvedValueOnce(attacker)
+      .mockResolvedValueOnce(defender)
+      .mockResolvedValueOnce(attacker)
+      .mockResolvedValueOnce(defender);
+    db.collectionMocks.corporations.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.corporateSectors.findOne
+      .mockResolvedValueOnce(target)
+      .mockResolvedValueOnce(target);
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest({ sectorId: targetSectorId.toHexString() }), ctx());
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toMatchObject({ splitSucceeded: false, plantsTransferred: 0 });
+    expect(db.collectionMocks.corporations.updateOne).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporateSectors.insertOne).not.toHaveBeenCalled();
   });
 });

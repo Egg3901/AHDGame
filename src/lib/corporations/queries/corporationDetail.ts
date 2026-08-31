@@ -43,6 +43,7 @@ import {
   reservedCorporatePositions,
 } from "@/lib/corporations/reservedCorporateHoldings";
 import { getLegalStructureForCorp } from "@/lib/corporations/legalStructure";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
@@ -1228,6 +1229,12 @@ export async function loadCorporationDetailView(args: {
     // rescaling is exactly how the two clocks got mixed up before.
     const capacityUnits =
       plantsMode && Number.isFinite(sector.capitalStock) ? (sector.capitalStock as number) : null;
+    const plantCount =
+      plantsMode && Number.isInteger(sector.plantCount) && (sector.plantCount ?? 0) >= 0
+        ? (sector.plantCount as number)
+        : plantsMode
+          ? seedPlantLedger(sector.sectorType, sector.capitalStock).plantCount
+          : null;
     const producedUnits =
       plantsMode && Number.isFinite(sector.producedUnits) ? (sector.producedUnits as number) : null;
     const soldUnits =
@@ -1341,6 +1348,7 @@ export async function loadCorporationDetailView(args: {
       // Plants-tier physicals. Null outside plants — never removed, so a
       // capital-tier client keeps reading exactly the fields it always did.
       capacityUnits,
+      plantCount,
       producedUnits,
       soldUnits,
       // Exact ratio. The API layer replaces this with null (and keeps only the

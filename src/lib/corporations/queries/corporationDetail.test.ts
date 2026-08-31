@@ -546,6 +546,7 @@ describe("loadCorporationDetailView — plants-tier physicals", () => {
 
     const row = result.sectors[0]!;
     expect(row.capacityUnits).toBe(5_000);
+    expect(row.plantCount).toBe(200);
     expect(row.producedUnits).toBe(4_000);
     expect(row.soldUnits).toBe(1_200);
     expect(row.constructionInProgressAnchor).toBe(250_000);

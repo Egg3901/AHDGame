@@ -148,7 +148,8 @@ export default function BuildCapacityDialog({
   }, [count, unitsPerFacility, q, plants]);
 
   const maxAffordableFacilities = Math.floor(q.maxAffordableUnits / unitsPerFacility);
-  const ownedFacilities = facilitiesFromUnits(sectorType, plants.capacityUnits ?? 0);
+  const ownedFacilities =
+    plants.plantCount ?? facilitiesFromUnits(sectorType, plants.capacityUnits ?? 0);
   const buyersRoomUnits = Math.min(plants.headroomUnits, plants.demandGapUnits ?? 0);
   const headroomFacilities = Math.floor(buyersRoomUnits / unitsPerFacility);
   // Which constraint actually bound, when there is no room at all. A market
