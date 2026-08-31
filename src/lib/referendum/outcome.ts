@@ -14,7 +14,6 @@
 import type { Db } from "mongodb";
 import type { MacroMetricsDoc } from "@/lib/db/types/macroMetrics";
 import type { Referendum } from "@/lib/db/types/referendum";
-import type { StateMetrics } from "@/lib/db/types";
 import { getReferendumCollection } from "@/lib/db/collections/referendum";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
 import {

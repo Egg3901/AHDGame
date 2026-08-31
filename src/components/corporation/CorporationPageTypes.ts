@@ -519,7 +519,15 @@ export interface Financials {
   dividendDistribution: number;
   /** Daily dominance regulatory burden in local currency. Already included in operatingCosts. */
   regulatoryBurden: number;
+  /**
+   * Annualized growth. Under plants this is MEASURED realized revenue growth
+   * over a trailing window; below plants (or with too little history) it is the
+   * legacy average of the sectors' `currentGrowthRate` field. See
+   * `growthRateIsRealized` before labelling it (#922).
+   */
   currentGrowthRate: number;
+  /** True when `currentGrowthRate` is measured realized revenue, not the legacy field. */
+  growthRateIsRealized?: boolean;
   subsidyBenefit: number;
 }
 

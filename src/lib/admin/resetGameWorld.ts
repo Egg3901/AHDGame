@@ -11,6 +11,7 @@ import { buildSeasonRecaps } from "@/lib/recap/buildSeasonRecaps";
 import type { CharacterRecap } from "@/lib/recap/types";
 import type { GameIteration } from "@/lib/db/types/gameState";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { isSeasonRecapEnabled } from "@/lib/recap/featureFlag";
 
 /**
  * Runtime collections that `resetGameWorld` handles with bespoke logic instead
@@ -179,12 +180,12 @@ export async function resetGameWorld(
         { _id: "current" },
         { projection: { iteration: 1, currentTurn: 1, seasonRecapEnabled: 1 } }
       );
-    if (gsForRecap?.seasonRecapEnabled === true) {
-      recapIteration = gsForRecap.iteration;
+    if (isSeasonRecapEnabled(gsForRecap)) {
+      recapIteration = gsForRecap?.iteration;
       const charsForRecap = await db.collection<Character>("characters").find({}).toArray();
       seasonRecaps = await buildSeasonRecaps(db, charsForRecap, {
         iteration: recapIteration,
-        currentTurn: gsForRecap.currentTurn ?? 1,
+        currentTurn: gsForRecap?.currentTurn ?? 1,
       });
     }
   }

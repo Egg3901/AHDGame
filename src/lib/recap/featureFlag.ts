@@ -10,12 +10,19 @@ import type { GameState } from "@/lib/db/types";
  * NOT in DEFAULT_GAME_STATE_FLAGS — staged rollout, default off; an explicit
  * enable survives resets (missingGameStateFlagDefaults only fills absent flags).
  */
-export async function isSeasonRecapEnabled(preloaded?: {
-  seasonRecapEnabled?: boolean;
-}): Promise<boolean> {
-  if (preloaded !== undefined) {
-    return preloaded.seasonRecapEnabled === true;
-  }
+export function isSeasonRecapEnabled(
+  preloaded?: {
+    seasonRecapEnabled?: boolean | null;
+  } | null
+): boolean {
+  return preloaded?.seasonRecapEnabled === true;
+}
+
+/**
+ * Same gate, for callers with no gameState in hand. Prefer the sync form and
+ * pass the doc you already loaded — this one costs a round trip.
+ */
+export async function fetchSeasonRecapEnabled(): Promise<boolean> {
   const db = await getDb();
   const gs = await db
     .collection<GameState>("gameState")

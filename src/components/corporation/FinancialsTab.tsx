@@ -210,11 +210,19 @@ export default function FinancialsTab({
                 tooltip="Total gross revenue from all owned sectors. Per-turn view shows one turn of income; annual view projects 48 turns (1 game year)."
               />
               <FinRowTip
-                label="Average Growth Rate"
+                label={
+                  financials.growthRateIsRealized
+                    ? "Revenue Growth (annual)"
+                    : "Average Growth Rate"
+                }
                 value={`${(financials.currentGrowthRate ?? 0).toFixed(2)}%`}
                 valueClass="text-muted"
                 indent
-                tooltip="Average growth rate across all sectors. Higher growth means revenue increases faster each turn, but costs more to maintain."
+                tooltip={
+                  financials.growthRateIsRealized
+                    ? "Growth in the revenue this company actually booked, measured over the past game year and stated as an annual rate. It reflects what your plants produced and sold, so it moves with output and prices rather than with a target you set."
+                    : "Average growth rate across all sectors. Higher growth means revenue increases faster each turn, but costs more to maintain."
+                }
               />
 
               {/* Cost of Revenue */}

@@ -24,7 +24,6 @@ import type {
   ElectionVoteTally,
   PoliticalParty,
   State,
-  StateMetrics,
   StatePartyOrg,
   StateRegistrationPool,
 } from "@/lib/db/types";

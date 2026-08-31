@@ -146,6 +146,10 @@ import { priceRealizationFactor } from "@/lib/market/priceRealization";
 import { buildNationalCommodityBalances } from "@/lib/commodity-map";
 import { isLabourWagesEnabled } from "@/lib/labour/featureFlag";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
+import {
+  CORP_GROWTH_TARGET_SPAN_TURNS,
+  computeCorpRealizedGrowthRate,
+} from "@/lib/corporations/realizedGrowth";
 import { computeFillRate, fillRateBand } from "@/lib/corporations/financialFogOfWar";
 import { summarizeBuildQueue } from "@/lib/corporations/sectorBuildQueue";
 import { readPlantsPnl } from "@/lib/corporations/plantsPnlBasis";
@@ -863,6 +867,34 @@ export async function loadCorporationDetailView(args: {
   // field. Below plants this is false and every field added below is null, so
   // a capital-tier world's payload is unchanged apart from the null keys.
   const plantsMode = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
+
+  // #922 — "Growth Rate always 0". Under plants, a sector's `currentGrowthRate`
+  // no longer drives revenue (revenue comes from produced units against plant
+  // capacity), so the field is vestigial and sits at 0 for most corporations.
+  // Averaging it and printing it as the corp's growth rate reported 0.00% for
+  // everyone. Measure the revenue the corp actually booked instead, over a
+  // trailing window wide enough that annualizing does not amplify churn.
+  const realizedGrowthRate = plantsMode
+    ? computeCorpRealizedGrowthRate(
+        (
+          await db
+            .collection<{ turn?: number; revenue?: number }>("corporationHistory")
+            .find(
+              { corporationId: corporation._id },
+              {
+                sort: { turn: -1 },
+                limit: CORP_GROWTH_TARGET_SPAN_TURNS + 1,
+                projection: { turn: 1, revenue: 1 },
+              }
+            )
+            .toArray()
+        ).flatMap((row) =>
+          typeof row.turn === "number" && typeof row.revenue === "number"
+            ? [{ turn: row.turn, revenue: row.revenue }]
+            : []
+        )
+      )
+    : null;
 
   // Corp-level physical rollups (plants only). These are the physical P&L's
   // top line: what the corporation can make, what it did make, what it sold,
@@ -2023,11 +2055,16 @@ export async function loadCorporationDetailView(args: {
     dividendRate: corporation.dividendRate ?? 0,
     effectiveDividendRate,
     dividendDistribution: Math.round(dividendDistribution),
+    // Realized revenue growth under plants; below plants (or with too little
+    // history to annualize honestly) the legacy sector average still applies.
     currentGrowthRate:
-      sectors.length > 0
+      realizedGrowthRate ??
+      (sectors.length > 0
         ? sectors.reduce((sum, s) => sum + (s.currentGrowthRate ?? s.growthRate ?? 0), 0) /
           sectors.length
-        : 0,
+        : 0),
+    /** True when `currentGrowthRate` is measured realized revenue, not the legacy field. */
+    growthRateIsRealized: realizedGrowthRate !== null,
     subsidyBenefit: Math.round(totalSubsidyBenefit),
   };
 

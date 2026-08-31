@@ -17,12 +17,7 @@ export {
   type LabourSystemMode,
 } from "@/lib/labour/modes";
 
-import {
-  LABOUR_MODE_ORDER,
-  isLabourSystemMode,
-  labourAtLeast,
-  type LabourSystemMode,
-} from "@/lib/labour/modes";
+import { isLabourSystemMode, labourAtLeast, type LabourSystemMode } from "@/lib/labour/modes";
 
 /**
  * Resolve the current labour-system mode.
