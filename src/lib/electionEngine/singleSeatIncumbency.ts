@@ -166,12 +166,19 @@ export async function resolveSingleSeatLegislativeIncumbent(
 // record, since `ElectedOfficial` rows don't survive past the current cycle)
 // can't reuse `getElectionWinnerIdentity`'s argmax-vote test — multi-seat
 // "winning" depends on the seat-allocation formula, not raw vote rank. Instead
-// this reuses the exact vote-share GATE the real allocator applies before a
+// this reuses the vote-share GATE the real allocator applies before a
 // candidate is eligible for a seat at all (`getMultiSeatMinShare("house")` —
 // 20%): clearing it each cycle is treated as "held at least one seat" that
-// cycle. That's a proxy, not an exact seat re-derivation, but it's the same
-// signal the allocator itself uses to admit a candidate, and consecutive-term
+// cycle. That's a proxy, not an exact seat re-derivation, and consecutive-term
 // COUNTING only needs a boolean per cycle, not the seat total.
+//
+// One deliberate simplification: the allocator pools a PARTY's nominees before
+// applying that gate, while this measures each candidate's own share. A party
+// fielding two nominees who each poll under 20% but over 20% combined would
+// seat them and still be recorded here as having no tenure. No US House race
+// has ever fielded more than one nominee per party (verified across all 292 US
+// House elections on 2026-08-31), so the two readings have never diverged in
+// practice; pooling here would be a balance change needing its own sim.
 
 /** Bounds the historical walk-back: personalStatTenureRetention saturates at
  *  PERSONAL_STAT_TENURE_EROSION_MAX/PERSONAL_STAT_TENURE_EROSION_PER_TERM = 5

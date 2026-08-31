@@ -43,6 +43,7 @@ import {
   stateOrgBonusFraction,
 } from "./constants";
 import {
+  legislativeTenureTermsHeld,
   orgVoteWeight,
   personalOrgFloor,
   personalStatTenureRetention,
@@ -105,10 +106,15 @@ function appealWeight(
     options?.legislativeIncumbentPartyId != null &&
     ec.party === options.legislativeIncumbentPartyId;
   const houseIncumbentTerms = options?.houseIncumbentTenureTermsByCandidateId?.get(ec.candidateId);
+  // The Senate lane reports the term being SOUGHT where the other two report
+  // terms already HELD; `legislativeTenureTermsHeld` reconciles them so
+  // identical service earns identical erosion in every lane. See its doc
+  // comment in electionFormulaFactors.ts.
+  const legislativeTermsHeld = legislativeTenureTermsHeld(options?.legislativeIncumbentTenureTerms);
   const tenureRetention = isTenuredExecutiveIncumbent
     ? personalStatTenureRetention(options?.incumbentConsecutiveTerms)
     : isTenuredLegislativeIncumbent
-      ? personalStatTenureRetention(options?.legislativeIncumbentTenureTerms)
+      ? personalStatTenureRetention(legislativeTermsHeld)
       : houseIncumbentTerms != null
         ? personalStatTenureRetention(houseIncumbentTerms)
         : 1;

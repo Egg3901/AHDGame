@@ -8,6 +8,7 @@ import {
   TRANSFERABLE_SHARE_FULL_REG,
   PERSUASION_RESISTANCE_NO_REG,
   PERSUASION_RESISTANCE_FULL_REG,
+  legislativeTenureTermsHeld,
   personalStatTenureRetention,
   PERSONAL_STAT_TENURE_EROSION_PER_TERM,
   PERSONAL_STAT_TENURE_EROSION_MAX,
@@ -1283,6 +1284,37 @@ describe("personalStatTenureRetention", () => {
       expect(personalStatTenureRetention(terms)).toBeGreaterThan(0);
     }
     expect(PERSONAL_STAT_TENURE_EROSION_MAX).toBeLessThan(1);
+  });
+});
+
+describe("legislativeTenureTermsHeld", () => {
+  // The three tenure sources disagree on units. The presidential ledger and the
+  // House map report terms ALREADY HELD; the Senate's
+  // `computeConsecutiveTermsFromWinners` reports the term being SOUGHT, because
+  // it seeds at 1 for the current term and then also counts the prior win that
+  // seated the incumbent. Fed raw into the retention curve, an identically-
+  // served senator ate a whole extra term of erosion.
+  it("converts a sought-term count into terms already held", () => {
+    // A senator seeking a 2nd term has served 1 — no erosion, matching a
+    // first-term president (`incumbentConsecutiveTerms` 1) and a first-term
+    // representative (House map 1).
+    expect(legislativeTenureTermsHeld(2)).toBe(1);
+    expect(personalStatTenureRetention(legislativeTenureTermsHeld(2))).toBe(1);
+    // Three terms served, seeking a fourth: same erosion in all three lanes.
+    expect(legislativeTenureTermsHeld(4)).toBe(3);
+    expect(personalStatTenureRetention(legislativeTenureTermsHeld(4))).toBeCloseTo(
+      personalStatTenureRetention(3),
+      10
+    );
+  });
+
+  it("passes undefined through, and never erodes below the no-tenure baseline", () => {
+    expect(legislativeTenureTermsHeld(undefined)).toBeUndefined();
+    expect(personalStatTenureRetention(legislativeTenureTermsHeld(undefined))).toBe(1);
+    // Defensive: the driver defaults an unset count to 1, which normalizes to 0
+    // and must stay a no-op rather than going negative through the curve.
+    expect(personalStatTenureRetention(legislativeTenureTermsHeld(1))).toBe(1);
+    expect(personalStatTenureRetention(legislativeTenureTermsHeld(0))).toBe(1);
   });
 });
 
