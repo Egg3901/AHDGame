@@ -22,7 +22,20 @@ export type PeaceTerm =
    */
   | { kind: "white_peace" }
   | { kind: "indemnity"; payer: CountryId; amount: number }
-  | { kind: "regime_change"; targetSystem: GovernmentType }
+  /**
+   * Convert the target's system of government.
+   *
+   * `rulingPartyId` names the party that takes power, and is meaningful ONLY
+   * when `targetSystem` is `onePartyState` — the other systems form a government
+   * from the chamber rather than having one installed. Optional: omitted, the
+   * install resolves the ruling party from the target's own formed government or
+   * largest bench, which is the shipped behaviour.
+   *
+   * The victor naming it matters. Left to resolve, a `regime_change` imposed on
+   * a country whose largest party is the one the victor just fought hands that
+   * party a monopoly and bans its rivals — the settlement installs the enemy.
+   */
+  | { kind: "regime_change"; targetSystem: GovernmentType; rulingPartyId?: number }
   | { kind: "demilitarisation"; turns: number };
 
 /**
@@ -59,6 +72,17 @@ export interface PeaceTermContext {
    * knows the GDP always passes the number.
    */
   maxIndemnity: number | null;
+  /**
+   * The target's party `sequentialId`s, for validating a named ruling party.
+   *
+   * Null means "no list passed", matching `maxIndemnity`'s stance: the check is
+   * skipped rather than failed, so a caller that cannot cheaply load the list
+   * does not have every `regime_change` refused. Callers that CAN load it always
+   * pass it, and `applyPeaceTerm` degrades safely either way —
+   * `installOnePartyState` ignores a `rulingPartyId` that names no party of the
+   * country.
+   */
+  targetPartyIds?: number[] | null;
 }
 
 export type PeaceTermCheck = { ok: true } | { ok: false; error: string };
@@ -105,6 +129,23 @@ export function validatePeaceTerm(term: PeaceTerm, ctx: PeaceTermContext): Peace
     // Converting a monarchy AWAY is allowed; only installing one is barred.
     if (term.targetSystem === "parliamentaryMonarchy") {
       return { ok: false, error: "A peace settlement cannot install a monarchy." };
+    }
+    if (term.rulingPartyId != null) {
+      // Only a one-party state HAS a ruling party to name. Naming one alongside
+      // a conversion to a republic is a contradiction, not a field to ignore:
+      // the offerer plainly meant something the term cannot deliver.
+      if (term.targetSystem !== "onePartyState") {
+        return {
+          ok: false,
+          error: "Only a conversion to a one-party state can name the ruling party.",
+        };
+      }
+      if (!Number.isInteger(term.rulingPartyId) || term.rulingPartyId <= 0) {
+        return { ok: false, error: "That is not a valid party." };
+      }
+      if (ctx.targetPartyIds != null && !ctx.targetPartyIds.includes(term.rulingPartyId)) {
+        return { ok: false, error: "That party does not exist in the country being converted." };
+      }
     }
     return { ok: true };
   }

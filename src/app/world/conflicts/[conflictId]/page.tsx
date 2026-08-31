@@ -10,6 +10,7 @@ import { entityName } from "@/app/world/international-organizations/entityLabel"
 import { getDb } from "@/lib/mongodb";
 import { getConflictByNumber } from "@/lib/db/collections/conflicts";
 import { getPeaceOffersCollection } from "@/lib/db/collections/peaceOffers";
+import { loadPartyChoices } from "@/lib/military/peaceOffer";
 import { warGoalLabel } from "@/lib/military/warGoals";
 import { getBattleReportsCollection, theaterRecord } from "@/lib/db/collections/battleReports";
 import { listDeclarationHistory } from "@/lib/db/collections/battleDeclarations";
@@ -368,6 +369,10 @@ export default async function ConflictRecordPage({
           target: doc.termsWindow.target,
           targetName: COUNTRY_CONFIGS[doc.termsWindow.target]?.name ?? doc.termsWindow.target,
           turnsLeft: Math.max(0, doc.termsWindow.closesTurn - currentTurn),
+          // The parties the victor may install, when they convert the loser to a
+          // one-party state. Loaded from the same helper the route validates
+          // against, so anything offered here is accepted there.
+          targetParties: await loadPartyChoices(db, doc.termsWindow.target),
         }
       : null;
 

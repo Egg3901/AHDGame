@@ -1,3 +1,4 @@
+import type { Db } from "mongodb";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import type { PeaceOfferDoc } from "@/lib/db/types/peaceOffer";
 import type { CountryId, GovernmentType } from "@/lib/constants/countries";
@@ -160,6 +161,56 @@ export function withdrawalGate(
  * country already in debt could never buy peace, which rules out most of the
  * countries that would want to.
  */
+/** One party the offerer may install as the ruling party. */
+export interface PeaceTermPartyChoice {
+  /** `sequentialId` — what the term carries and `installOnePartyState` reads. */
+  id: number;
+  name: string;
+  abbreviation?: string;
+}
+
+/**
+ * Every party in a country, for naming a ruling party on a `regime_change` term.
+ *
+ * One loader behind both uses — the picker the offerer chooses from and the list
+ * their choice is validated against — so a party that can be picked is by
+ * construction a party that will be accepted.
+ *
+ * Sorted by `sequentialId` so the list reads the same on every render rather
+ * than in whatever order Mongo returned it.
+ */
+export async function loadPartyChoices(
+  db: Db,
+  countryId: CountryId
+): Promise<PeaceTermPartyChoice[]> {
+  const parties = (await db
+    .collection("politicalParties")
+    .find({ countryId }, { projection: { sequentialId: 1, name: 1, abbreviation: 1 } })
+    .toArray()) as unknown as Array<{
+    sequentialId?: number;
+    name?: string;
+    abbreviation?: string;
+  }>;
+  return parties
+    .filter((p) => typeof p.sequentialId === "number" && Number.isInteger(p.sequentialId))
+    .map((p) => ({
+      id: p.sequentialId as number,
+      name: p.name ?? p.abbreviation ?? `Party ${p.sequentialId}`,
+      ...(p.abbreviation ? { abbreviation: p.abbreviation } : {}),
+    }))
+    .sort((a, b) => a.id - b.id);
+}
+
+/**
+ * The `sequentialId`s alone, for validating a named ruling party.
+ *
+ * Callers load this only when the term actually names a party — an indemnity
+ * should not pay for a query it never reads.
+ */
+export async function loadPartySequentialIds(db: Db, countryId: CountryId): Promise<number[]> {
+  return (await loadPartyChoices(db, countryId)).map((p) => p.id);
+}
+
 export function validatePeaceOffer(
   conflict: Pick<
     ConflictDoc,
@@ -178,7 +229,11 @@ export function validatePeaceOffer(
   // The target's CURRENT government type, so a regime change that would change
   // nothing can be refused. Optional for the same reason `maxAmount` is: a caller
   // running only the roster checks need not load it.
-  targetSystem?: GovernmentType
+  targetSystem?: GovernmentType,
+  // The target's party `sequentialId`s, so a named ruling party can be checked
+  // against the country it would rule. Optional for the same reason as the two
+  // above; `validatePeaceTerm` skips the check rather than failing when absent.
+  targetPartyIds?: number[] | null
 ): PeaceOfferCheck {
   // Concluded covers a war awaiting terms as well as a resolved one. A front that
   // has reached a pole is not a war anyone can still negotiate their way out of:
@@ -263,5 +318,6 @@ export function validatePeaceOffer(
     // an invalid term into a valid one, only the reverse.
     targetSystem: targetSystem ?? "presidential",
     maxIndemnity: maxAmount ?? null,
+    targetPartyIds: targetPartyIds ?? null,
   });
 }
