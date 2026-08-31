@@ -86,6 +86,21 @@ export function majorityThreshold(boardSize: number): number {
   return Math.floor(boardSize / 2) + 1;
 }
 
+/**
+ * Whether the committee can actually carry a motion right now.
+ *
+ * A motion needs a strict majority of the FULL board; vacant seats abstain and
+ * count against it. So the board is only functional while the number of seated
+ * members (any non-vacant occupant) is at least that threshold: with fewer, no
+ * motion can ever pass no matter how the seated members vote, and the
+ * committee is structurally dead (ticket #1238 follow-up — in the absence of a
+ * working board the chair holds the rate directly).
+ */
+export function boardCanCarryMotions(board: FomcSeat[]): boolean {
+  const seated = board.filter((s) => s.occupantType !== "vacant").length;
+  return seated >= majorityThreshold(board.length);
+}
+
 export interface FomcTally {
   agree: number;
   disagree: number;

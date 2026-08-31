@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { ObjectId } from "mongodb";
 import {
   seatDesiredStep,
   directionFromStep,
@@ -7,10 +8,11 @@ import {
   ballotAgrees,
   majorityThreshold,
   tallyMeeting,
+  boardCanCarryMotions,
   FOMC_MOVE_THRESHOLD,
   type FomcMacroContext,
 } from "./fomc";
-import type { FomcBallot, FomcVote } from "@/lib/db/types/centralBank";
+import type { FomcBallot, FomcSeat, FomcVote } from "@/lib/db/types/centralBank";
 
 // Neutral rate 4, target inflation 2. Vary inflation/growth to drive the rule.
 function ctx(overrides: Partial<FomcMacroContext> = {}): FomcMacroContext {
@@ -80,6 +82,45 @@ describe("majorityThreshold", () => {
   it("is a strict majority of the full board", () => {
     expect(majorityThreshold(7)).toBe(4);
     expect(majorityThreshold(5)).toBe(3);
+  });
+});
+
+describe("boardCanCarryMotions — the carry-a-motion threshold", () => {
+  const seat = (seatId: string, occupant: FomcSeat["occupantType"] = "npp"): FomcSeat => ({
+    seatId,
+    isChair: seatId === "seat-1",
+    occupantType: occupant,
+    characterId: null,
+    characterName: occupant === "npp" ? "Governor" : null,
+    nppId: occupant === "npp" ? new ObjectId() : null,
+    alignment: "hawk",
+    appointedByPresidentId: null,
+    appointedAtTurn: 1,
+    termExpiresAtTurn: null,
+  });
+
+  it("is functional while seated members can reach a full-board majority", () => {
+    // 7 seats, 4 seated: 4 >= 4 needed, so the board can carry a motion.
+    const board = ["seat-1", "seat-2", "seat-3", "seat-4"].map((s) => seat(s));
+    expect(boardCanCarryMotions(board)).toBe(true);
+  });
+
+  it("is dead once seated members fall below the majority threshold", () => {
+    // The ticket #1238 prod shape: player chair + 6 vacant.
+    const board = [seat("seat-1", "player"), seat("seat-2", "vacant"), seat("seat-3", "vacant")];
+    expect(boardCanCarryMotions(board)).toBe(false);
+  });
+
+  it("needs 3 of 5 seated to carry", () => {
+    const live3 = ["seat-1", "seat-2", "seat-3"].map((s) => seat(s));
+    expect(boardCanCarryMotions(live3)).toBe(true);
+    // A 5-seat board with only 2 seated: 2 < 3 needed, so it is dead.
+    const live2 = [
+      seat("seat-1"),
+      seat("seat-2"),
+      ...["seat-3", "seat-4", "seat-5"].map((s) => seat(s, "vacant")),
+    ];
+    expect(boardCanCarryMotions(live2)).toBe(false);
   });
 });
 

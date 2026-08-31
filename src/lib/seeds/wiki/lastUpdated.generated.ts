@@ -168,7 +168,7 @@ export const WIKI_LAST_UPDATED: Record<string, string> = {
   "sovereign-default": "2026-08-30",
   "stats-actions": "2026-08-30",
   "stock-market": "2026-08-21",
-  "strategy-guides": "2026-08-21",
+  "strategy-guides": "2026-08-30",
   "subsidiary-corporations": "2026-08-21",
   subsidies: "2026-08-21",
   "supply-agreements": "2026-08-24",

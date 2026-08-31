@@ -233,7 +233,9 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
   return (
     <div className="space-y-6">
       {/* Understaffed board (ticket #1238): vacant seats make every motion fail
-          on the full-board majority; surface why and who can fix it. */}
+          on the full-board majority; surface why and who can fix it. When the
+          board cannot carry a motion at all the chair holds the rate directly
+          until nominations restore a working board. */}
       {vacantSeats > 0 && (
         <div className="rounded-xl border border-danger/30 bg-danger/10 px-5 py-4">
           <h2 className="text-sm font-semibold text-danger">Board understaffed</h2>
@@ -243,7 +245,8 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
             {seatedCount < majorityNeeded
               ? `, so with only ${seatedCount} seat${seatedCount === 1 ? "" : "s"} seated no motion can carry`
               : ""}
-            . Seats are filled by presidential nomination and Senate confirmation.
+            . While the board cannot carry a motion, the chair sets the rate directly. Seats are
+            filled by presidential nomination and Senate confirmation.
             {state.canNominate && " Use the nominate panel below to fill them."}
           </p>
         </div>

@@ -294,7 +294,7 @@ describe("processFomcMeetings — vacancy signal (ticket #1238)", () => {
     expect(inputs).toHaveLength(1);
     expect(inputs[0].userId).toEqual(presidentUserId);
     expect(inputs[0].message).toContain("vacant");
-    expect(inputs[0].message).toContain("4");
+    expect(inputs[0].message).toContain("cannot carry");
     expect(createSystemNewsPost).toHaveBeenCalledTimes(1);
     expect(String(vi.mocked(createSystemNewsPost).mock.calls[0][1])).toBe("executive");
   });
@@ -596,6 +596,114 @@ describe("processFomcMeetings — player vote window", () => {
     expect(history).toHaveLength(1);
     expect(history[0].status).toBe("resolved");
     expect(result.meetingsResolved).toBe(1);
+  });
+});
+
+describe("processFomcMeetings — dead board (ticket #1238 follow-up)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("does not open a meeting when the board cannot carry a motion", async () => {
+    // Ticket #1238 prod shape: only the player chair of 7 seats is seated, so
+    // no motion can ever reach the 4-of-7 majority. Cadence must pause instead
+    // of re-running the 1-0-6 auto-fail loop.
+    const db = makeDb({
+      _id: "US",
+      countryId: "US",
+      primeRate: 5,
+      lastFomcMeetingTurn: 100,
+      fomcTermStartedAtTurn: 100,
+      fomcBoard: [
+        playerChairSeat(),
+        ...["seat-2", "seat-3", "seat-4", "seat-5", "seat-6", "seat-7"].map(vacantSeat),
+      ],
+    });
+
+    const result = await processFomcMeetings(db as unknown as Db, 108, 1956, new Date());
+
+    const $set = setOf(db);
+    expect($set.activeFomcMeeting).toBeUndefined();
+    expect($set.lastFomcMeetingTurn).toBeUndefined();
+    expect(result.meetingsOpened).toBe(0);
+    expect(result.meetingsResolved).toBe(0);
+  });
+
+  it("still resolves an already-open meeting on a board that later decays", async () => {
+    // A meeting opened while the board could carry a motion must resolve at its
+    // deadline even if seats lapse while it is open — turns never pause.
+    const openMeeting: FomcMeeting = {
+      meetingId: new ObjectId().toHexString(),
+      openedAtTurn: 100,
+      openedAt: new Date(),
+      motion: "cut",
+      proposedDelta: -0.25,
+      status: "voting",
+      // The motion was carried by the NPP governors seated at open (seats
+      // 2-5); the four agreeing ballots clear the 4-of-7 majority even with
+      // the rest of the board having lapsed (a lapsed seat abstains).
+      ballots: ["seat-2", "seat-3", "seat-4", "seat-5"].map((seatId) => ({
+        seatId,
+        vote: "cut" as const,
+        auto: true,
+        castAt: new Date(),
+      })),
+      playerVoteDeadline: new Date(Date.now() + 60_000),
+      resolvesOnTurn: 110,
+    };
+
+    const db = makeDb({
+      _id: "US",
+      countryId: "US",
+      primeRate: 5,
+      lastFomcMeetingTurn: 100,
+      fomcTermStartedAtTurn: 100,
+      activeFomcMeeting: openMeeting,
+      // The rest of the board lapsed while the meeting was open; the 4 seated
+      // members already carried the motion, and it must still resolve.
+      fomcBoard: [
+        playerChairSeat(),
+        seat({ seatId: "seat-2" }),
+        seat({ seatId: "seat-3" }),
+        seat({ seatId: "seat-4" }),
+        seat({ seatId: "seat-5" }),
+        ...["seat-6", "seat-7"].map(vacantSeat),
+      ],
+    });
+
+    const result = await processFomcMeetings(db as unknown as Db, 110, 1956, new Date());
+
+    const $set = setOf(db);
+    expect($set.activeFomcMeeting).toBeNull();
+    const history = $set.fomcMeetingHistory as FomcMeeting[];
+    expect(history).toHaveLength(1);
+    expect(history[0].status).toBe("resolved");
+    expect(history[0].result).toBe("passed");
+    expect(result.meetingsResolved).toBe(1);
+  });
+
+  it("opens meetings again once confirmations restore a working board", async () => {
+    const db = makeDb({
+      _id: "US",
+      countryId: "US",
+      primeRate: 5,
+      lastFomcMeetingTurn: 100,
+      fomcTermStartedAtTurn: 100,
+      fomcBoard: [
+        playerChairSeat(),
+        seat({ seatId: "seat-2" }),
+        seat({ seatId: "seat-3" }),
+        seat({ seatId: "seat-4" }),
+        ...["seat-5", "seat-6", "seat-7"].map(vacantSeat),
+      ],
+    });
+
+    const result = await processFomcMeetings(db as unknown as Db, 108, 1956, new Date());
+
+    // 4 of 7 seated is exactly the carry threshold, so the committee is live again.
+    const $set = setOf(db);
+    const meeting = $set.activeFomcMeeting as FomcMeeting;
+    expect(meeting).toBeTruthy();
+    expect(meeting.status).toBe("voting");
+    expect(result.meetingsOpened).toBe(1);
   });
 });
 
