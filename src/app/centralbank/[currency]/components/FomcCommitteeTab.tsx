@@ -58,6 +58,8 @@ interface CommitteeState {
   currentTurn?: number;
   nextMeetingAtTurn?: number | null;
   termEndsAtTurn?: number | null;
+  /** Votes needed to carry a motion: strict majority of the full board. */
+  majorityNeeded?: number;
   meetingHistory?: ResolvedMeeting[];
   canNominate: boolean;
   viewerIsSenator?: boolean;
@@ -208,6 +210,9 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
   const { board, meeting } = state;
   const budgetLeft = state.rateChangesPerTerm - state.rateChangesThisTerm;
   const currentTurn = state.currentTurn ?? null;
+  const vacantSeats = board.filter((s) => s.occupantType === "vacant").length;
+  const majorityNeeded = state.majorityNeeded ?? Math.floor(board.length / 2) + 1;
+  const seatedCount = board.length - vacantSeats;
   const turnsToNextSession =
     meeting === null && state.nextMeetingAtTurn != null && currentTurn != null
       ? Math.max(0, state.nextMeetingAtTurn - currentTurn)
@@ -227,6 +232,23 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
 
   return (
     <div className="space-y-6">
+      {/* Understaffed board (ticket #1238): vacant seats make every motion fail
+          on the full-board majority; surface why and who can fix it. */}
+      {vacantSeats > 0 && (
+        <div className="rounded-xl border border-danger/30 bg-danger/10 px-5 py-4">
+          <h2 className="text-sm font-semibold text-danger">Board understaffed</h2>
+          <p className="mt-1 text-xs text-foreground">
+            {vacantSeats} of {board.length} board seats are vacant. A motion needs {majorityNeeded}{" "}
+            of the full board to pass
+            {seatedCount < majorityNeeded
+              ? `, so with only ${seatedCount} seat${seatedCount === 1 ? "" : "s"} seated no motion can carry`
+              : ""}
+            . Seats are filled by presidential nomination and Senate confirmation.
+            {state.canNominate && " Use the nominate panel below to fill them."}
+          </p>
+        </div>
+      )}
+
       {/* Per-term budget + active meeting */}
       <div className="rounded-xl border border-card-border bg-card shadow-sm">
         <div className="border-b border-card-border px-5 py-4">
