@@ -36,6 +36,7 @@ export function PollBannerTab() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const [enabled, setEnabled] = useState(false);
   const [message, setMessage] = useState("");
@@ -45,10 +46,15 @@ export function PollBannerTab() {
   const [updatedBy, setUpdatedBy] = useState("");
   const [updatedAt, setUpdatedAt] = useState("");
 
-  const load = useCallback(async () => {
+  /**
+   * Returns whether the current banner actually came back. Callers decide what
+   * a failure means: on first mount it must block editing, but after a
+   * successful save a failed refresh is not a failed save.
+   */
+  const load = useCallback(async (): Promise<boolean> => {
     try {
       const res = await fetch("/api/admin/poll-banner");
-      if (!res.ok) return;
+      if (!res.ok) return false;
       const data = await res.json();
       setEnabled(Boolean(data.enabled));
       setMessage(data.message ?? "");
@@ -57,15 +63,24 @@ export function PollBannerTab() {
       setTone(data.tone === "warning" ? "warning" : "info");
       setUpdatedBy(data.updatedBy ?? "");
       setUpdatedAt(data.updatedAt ?? "");
+      return true;
     } catch {
-      setError("Could not load the current banner");
+      return false;
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void load();
+    void (async () => {
+      const ok = await load();
+      setLoadFailed(!ok);
+      if (!ok) {
+        // Falling through to a blank form would read as "no banner is
+        // configured", and saving that would wipe the real one.
+        setError("Could not load the current banner. Reload the page before editing it.");
+      }
+    })();
   }, [load]);
 
   const trimmedUrl = url.trim();
@@ -132,8 +147,9 @@ export function PollBannerTab() {
           <div>
             <h3 className="text-sm font-semibold">Poll Banner</h3>
             <p className="text-xs text-muted">
-              A strip under the navbar on every page, shown to everyone including signed-out
-              visitors. Players cannot dismiss it, so it stays up until you switch it off.
+              A strip under the navbar, shown to everyone including signed-out visitors. Players
+              cannot dismiss it, so it stays up until you switch it off. It stays off the sign in,
+              register, banned and maintenance pages, which carry no navigation.
             </p>
           </div>
           <span
@@ -276,7 +292,7 @@ export function PollBannerTab() {
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || loadFailed}
           className="mt-4 inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-white transition-colors disabled:opacity-50"
         >
           {saving && (

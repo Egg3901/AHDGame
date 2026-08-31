@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { PollBannerNotice, PollBannerStrip } from "./PollBannerNotice";
 import type { PollBannerSnapshot } from "@/lib/pollBanner";
@@ -23,6 +23,12 @@ const ENABLED: PollBannerSnapshot = {
   url: "https://forms.gle/abc123",
   tone: "info",
 };
+
+beforeEach(() => {
+  // Without this, a test that does not set a pathname silently inherits the
+  // one the previous test left, so reordering the file would change results.
+  setMockPathname("/world");
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -138,5 +144,61 @@ describe("PollBannerNotice on chromeless pages", () => {
     render(<PollBannerNotice />);
 
     await waitFor(() => expect(screen.getByRole("link", { name: "Click Here" })).toBeTruthy());
+  });
+});
+
+describe("PollBannerNotice request volume", () => {
+  it("does not refetch when navigating between two ordinary pages", async () => {
+    setMockPathname("/world");
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(ENABLED), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const view = render(<PollBannerNotice />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    // A client-side navigation to another ordinary page. The banner is already
+    // correct, so re-polling on every route change would be pure waste.
+    setMockPathname("/country/US");
+    view.rerender(<PollBannerNotice />);
+
+    await waitFor(() => expect(screen.getByRole("link", { name: "Click Here" })).toBeTruthy());
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts polling when leaving a chromeless page for an ordinary one", async () => {
+    setMockPathname("/login");
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(ENABLED), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const view = render(<PollBannerNotice />);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    setMockPathname("/world");
+    view.rerender(<PollBannerNotice />);
+
+    await waitFor(() => expect(screen.getByRole("link", { name: "Click Here" })).toBeTruthy());
+  });
+});
+
+describe("PollBannerStrip accessibility", () => {
+  it("announces itself, since it appears after the page has already loaded", () => {
+    render(<PollBannerStrip snapshot={ENABLED} />);
+    expect(screen.getByRole("status")).toBeTruthy();
+  });
+});
+
+describe("PollBannerStrip with an unbreakable token", () => {
+  it("wraps a long pasted url in the message instead of overflowing the page", () => {
+    const { container } = render(
+      <PollBannerStrip
+        snapshot={{
+          ...ENABLED,
+          message: "Survey: https://docs.google.com/forms/d/e/1FAIpQLSfabcdefghijklmnop/viewform",
+        }}
+      />
+    );
+    // Mobile has no horizontal scroll to fall back on (body is overflow-x: clip),
+    // so an unbroken token has to break rather than run off the edge.
+    expect((container.firstChild as HTMLElement).className).toContain("break-words");
   });
 });

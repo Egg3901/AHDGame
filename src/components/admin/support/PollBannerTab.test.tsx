@@ -111,3 +111,56 @@ describe("PollBannerTab", () => {
     await waitFor(() => expect(screen.getByText(/admin1/)).toBeTruthy());
   });
 });
+
+describe("PollBannerTab when the current banner cannot be loaded", () => {
+  it("says so and refuses to save, rather than showing a blank form", async () => {
+    const patches: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        if (init?.method === "PATCH") {
+          patches.push(JSON.parse(String(init.body)));
+          return new Response(JSON.stringify({ success: true }), { status: 200 });
+        }
+        return new Response("boom", { status: 500 });
+      })
+    );
+
+    render(<PollBannerTab />);
+
+    // Without this the admin sees an empty form that reads as "nothing is
+    // configured", and saving it would wipe the real banner.
+    await waitFor(() => expect(screen.getByText(/could not load/i)).toBeTruthy());
+
+    const save = screen.getByRole("button", { name: /Save/i }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+
+    fireEvent.click(save);
+    expect(patches).toHaveLength(0);
+  });
+
+  it("does not report failure when the save worked but the refresh afterwards did not", async () => {
+    let gets = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        if (init?.method === "PATCH") {
+          return new Response(JSON.stringify({ success: true }), { status: 200 });
+        }
+        gets += 1;
+        // First load succeeds; the refresh after saving does not.
+        return gets === 1
+          ? new Response(JSON.stringify(SAVED), { status: 200 })
+          : new Response("boom", { status: 500 });
+      })
+    );
+
+    render(<PollBannerTab />);
+    await waitFor(() => screen.getByLabelText(/Message/i));
+
+    fireEvent.click(screen.getByRole("button", { name: /Save/i }));
+
+    await waitFor(() => expect(screen.getByText(/^Saved\.$/)).toBeTruthy());
+    expect(screen.queryByText(/could not load/i)).toBeNull();
+  });
+});

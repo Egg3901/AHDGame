@@ -84,10 +84,11 @@ export interface GameConfig {
   maintenanceEnabledAt?: string;
 
   /**
-   * Site-wide poll/survey banner, shown under the navbar on every page to
-   * every visitor (signed in or not) while enabled. Purely an announcement
-   * surface: it reads nothing from game state and drives nothing. Absent
-   * means off, so existing worlds render exactly as before.
+   * Site-wide poll/survey banner, shown under the navbar to every visitor
+   * (signed in or not) while enabled, on every page that renders site chrome.
+   * Purely an announcement surface: it reads nothing from game state and
+   * drives nothing. Absent means off, so existing worlds render exactly as
+   * before.
    *
    * Never read `pollBannerUrl` straight out of this document — resolve the
    * whole group through `resolvePollBannerSnapshot` (`@/lib/pollBanner`),

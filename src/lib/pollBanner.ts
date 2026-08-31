@@ -31,14 +31,20 @@ export const POLL_BANNER_URL_MAX = 500;
  * The "nothing to show" snapshot. Deliberately carries no message and no URL:
  * a disabled banner must not hand a draft link to every anonymous visitor who
  * curls the public endpoint.
+ *
+ * Built fresh per call rather than shared as a module const, because the result
+ * is handed to a module-level cache that outlives the request; one caller
+ * mutating a shared object would corrupt every later reader in the process.
  */
-const DISABLED: PollBannerSnapshot = {
-  enabled: false,
-  message: "",
-  linkLabel: "",
-  url: "",
-  tone: "info",
-};
+function disabledSnapshot(): PollBannerSnapshot {
+  return {
+    enabled: false,
+    message: "",
+    linkLabel: "",
+    url: "",
+    tone: "info",
+  };
+}
 
 /**
  * True only for an absolute http(s) URL. The banner renders an admin-supplied
@@ -77,17 +83,17 @@ type PollBannerConfig = Pick<
  * Every "should this show at all" rule lives here, so the public route, the
  * admin preview and the component itself cannot drift apart: the toggle must
  * be on, the message must be non-blank, and the URL must survive
- * {@link isSafePollBannerUrl}. Any failure collapses to {@link DISABLED},
+ * {@link isSafePollBannerUrl}. Any failure collapses to {@link disabledSnapshot},
  * which is why a caller can render the result without re-checking anything.
  */
 export function resolvePollBannerSnapshot(
   config: PollBannerConfig | null | undefined
 ): PollBannerSnapshot {
-  if (!config?.pollBannerEnabled) return DISABLED;
+  if (!config?.pollBannerEnabled) return disabledSnapshot();
 
   const message = (config.pollBannerMessage ?? "").trim();
   const url = (config.pollBannerUrl ?? "").trim();
-  if (!message || !isSafePollBannerUrl(url)) return DISABLED;
+  if (!message || !isSafePollBannerUrl(url)) return disabledSnapshot();
 
   const linkLabel = (config.pollBannerLinkLabel ?? "").trim() || DEFAULT_POLL_BANNER_LINK_LABEL;
 

@@ -118,3 +118,14 @@ describe("resolvePollBannerSnapshot", () => {
     expect(snapshot.linkLabel).toBe("Here");
   });
 });
+
+describe("resolvePollBannerSnapshot isolation", () => {
+  it("hands back a fresh disabled snapshot each time, never one shared object", () => {
+    const a = resolvePollBannerSnapshot(null);
+    const b = resolvePollBannerSnapshot(null);
+    expect(a).toEqual(b);
+    // Distinct objects: one caller mutating its copy cannot corrupt another's,
+    // and these are handed to a module-level cache that outlives the request.
+    expect(a).not.toBe(b);
+  });
+});

@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * Site-wide poll/survey strip, shown under the navbar on every page while an
- * admin has it switched on (Admin > Support > Poll Banner).
+ * Site-wide poll/survey strip, shown under the navbar while an admin has it
+ * switched on (Admin > Support > Poll Banner). Every page except the handful
+ * that render no site chrome at all (see `isChromeHiddenPath`).
  *
  * Modeled on `MaintenancePartialBanner`: self-fetches the public
  * `/api/poll-banner` snapshot on mount, re-polls on a slow interval, and
@@ -34,7 +35,14 @@ export function PollBannerStrip({ snapshot }: { snapshot: PollBannerSnapshot }) 
   if (!snapshot.enabled) return null;
 
   return (
-    <div className={`border-b px-4 py-2 text-center text-sm ${TONE_CLASSES[snapshot.tone]}`}>
+    <div
+      // Carries the notice role for anyone not looking at the top of the
+      // screen. Note this region is inserted rather than pre-existing and
+      // later filled, so announcement on arrival is not guaranteed across
+      // every screen reader; the role is still correct and costs nothing.
+      role="status"
+      className={`border-b px-4 py-2 text-center text-sm break-words ${TONE_CLASSES[snapshot.tone]}`}
+    >
       <span>{snapshot.message} </span>
       <a
         href={snapshot.url}
@@ -52,12 +60,18 @@ export function PollBannerStrip({ snapshot }: { snapshot: PollBannerSnapshot }) 
 
 export function PollBannerNotice() {
   const pathname = usePathname();
+  // The effect keys off the BOOLEAN, not the pathname: every client-side
+  // navigation changes the pathname, and re-polling on each one would turn a
+  // once-a-minute request into one per page view. Only crossing the
+  // chrome boundary actually changes what this component should do.
+  const chromeHidden = isChromeHiddenPath(pathname);
   const [snapshot, setSnapshot] = useState<PollBannerSnapshot | null>(null);
 
   useEffect(() => {
     // Nothing to draw on a chromeless page, so do not poll for it either.
-    // Re-runs on navigation, which is what resumes polling on the way out.
-    if (isChromeHiddenPath(pathname)) return;
+    // Crossing back out flips `chromeHidden` and re-runs this, which is what
+    // resumes polling.
+    if (chromeHidden) return;
 
     let cancelled = false;
     async function load() {
@@ -76,11 +90,11 @@ export function PollBannerNotice() {
       cancelled = true;
       clearInterval(handle);
     };
-  }, [pathname]);
+  }, [chromeHidden]);
 
   // Login, register, banned and maintenance draw no navbar, so a strip here
   // would sit alone at the top of the page against no chrome at all.
-  if (isChromeHiddenPath(pathname)) return null;
+  if (chromeHidden) return null;
   if (!snapshot?.enabled) return null;
   return <PollBannerStrip snapshot={snapshot} />;
 }
