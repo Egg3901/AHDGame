@@ -82,6 +82,31 @@ export interface GameConfig {
   maintenanceEnabledBy?: string;
   /** When maintenance mode was last toggled on. */
   maintenanceEnabledAt?: string;
+
+  /**
+   * Site-wide poll/survey banner, shown under the navbar on every page to
+   * every visitor (signed in or not) while enabled. Purely an announcement
+   * surface: it reads nothing from game state and drives nothing. Absent
+   * means off, so existing worlds render exactly as before.
+   *
+   * Never read `pollBannerUrl` straight out of this document — resolve the
+   * whole group through `resolvePollBannerSnapshot` (`@/lib/pollBanner`),
+   * which withholds the link while the toggle is off and refuses any scheme
+   * other than http/https.
+   */
+  pollBannerEnabled?: boolean;
+  /** Admin-authored sentence that precedes the link. */
+  pollBannerMessage?: string;
+  /** Admin-authored anchor text, e.g. "Click Here". */
+  pollBannerLinkLabel?: string;
+  /** Absolute http(s) destination for the link. */
+  pollBannerUrl?: string;
+  /** Colour treatment: "info" for routine, "warning" for urgent. */
+  pollBannerTone?: "info" | "warning";
+  /** Username of the admin who last saved the banner. */
+  pollBannerUpdatedBy?: string;
+  /** ISO 8601 timestamp of the last save. */
+  pollBannerUpdatedAt?: string;
   /** Enable/disable NPP economic system (fund generation + action processing) */
   nppEconomyEnabled?: boolean;
   /**
