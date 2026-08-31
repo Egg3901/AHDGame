@@ -34,6 +34,11 @@ import { admitMember } from "@/lib/internationalOrganizations/joinApplication";
 import { isMember } from "@/lib/internationalOrganizations/service";
 import { removeOrganizationMembership } from "@/lib/internationalOrganizations/withdrawalBills";
 import {
+  INTELLIGENCE_AGENCIES,
+  INTELLIGENCE_COVERAGE,
+  INTELLIGENCE_NETWORKS,
+} from "@/lib/db/collections/intelligence";
+import {
   INTERNATIONAL_ORGANIZATIONS,
   type InternationalOrganizationId,
 } from "@/lib/constants/internationalOrganizations";
@@ -290,4 +295,23 @@ async function sweepNationalStrays(
   await db
     .collection("bills")
     .updateMany({ countryId: fromCountryId }, { $set: { countryId: toCountryId, updatedAt: now } });
+
+  // Intelligence is PURGED, not transferred.
+  //
+  // A dissolved country leaves the registry entirely (`countryAccess` answers
+  // `registered: false`), so rows naming it as owner or as target would be
+  // invisible to every surface while still being read by the turn phase and the
+  // operation gates. The absorbing country does not inherit them either: a
+  // network is an accumulation of access built by a service that no longer
+  // exists, and handing one country another's stations for free would make
+  // dissolving a state a cheap way to buy reach.
+  //
+  // The operation log is deliberately left alone: it is an append-only
+  // historical record, and the incidents did happen.
+  await db.collection(INTELLIGENCE_AGENCIES).deleteMany({ countryId: fromCountryId });
+  for (const collection of [INTELLIGENCE_NETWORKS, INTELLIGENCE_COVERAGE]) {
+    await db.collection(collection).deleteMany({
+      $or: [{ ownerCountryId: fromCountryId }, { targetCountryId: fromCountryId }],
+    });
+  }
 }

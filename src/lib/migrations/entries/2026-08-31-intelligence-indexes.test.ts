@@ -3,8 +3,10 @@ import type { Db } from "mongodb";
 import { migration } from "./2026-08-31-intelligence-indexes";
 
 function mockDb() {
-  const createIndex = vi.fn().mockResolvedValue("ok");
-  const collection = vi.fn(() => ({ createIndex }));
+  const createIndex = vi.fn<
+    (keys: unknown, options: { name: string; unique?: boolean }) => Promise<string>
+  >(async () => "ok");
+  const collection = vi.fn((_name: string) => ({ createIndex }));
   const db = { collection } as unknown as Db;
   return { db, createIndex, collection };
 }
@@ -16,7 +18,8 @@ describe("2026-08-31-intelligence-indexes migration", () => {
 
     expect(createIndex).toHaveBeenCalledTimes(5);
     expect(result.documentsUpdated).toBe(5);
-    expect(result.notes.every((n) => n.startsWith("created/verified"))).toBe(true);
+    expect(result.notes ?? []).toHaveLength(5);
+    expect((result.notes ?? []).every((n) => n.startsWith("created/verified"))).toBe(true);
   });
 
   it("guards the three invariants the read paths assume, as UNIQUE", async () => {
@@ -27,8 +30,8 @@ describe("2026-08-31-intelligence-indexes migration", () => {
     await migration.execute(db, { dryRun: false });
 
     const unique = createIndex.mock.calls
-      .filter((call) => (call[1] as { unique?: boolean }).unique === true)
-      .map((call) => (call[1] as { name: string }).name);
+      .filter((call) => call[1].unique === true)
+      .map((call) => call[1].name);
 
     expect(unique).toEqual([
       "intelligenceAgencies_countryId",
@@ -41,7 +44,7 @@ describe("2026-08-31-intelligence-indexes migration", () => {
     const { db, collection } = mockDb();
     await migration.execute(db, { dryRun: false });
 
-    expect(collection.mock.calls.map((c) => c[0])).toEqual([
+    expect(collection.mock.calls.map((call) => call[0])).toEqual([
       "intelligenceAgencies",
       "intelligenceNetworks",
       "intelligenceCoverage",
@@ -56,7 +59,8 @@ describe("2026-08-31-intelligence-indexes migration", () => {
 
     expect(createIndex).not.toHaveBeenCalled();
     expect(result.documentsUpdated).toBe(0);
-    expect(result.notes.every((n) => n.startsWith("would create"))).toBe(true);
+    expect(result.notes ?? []).toHaveLength(5);
+    expect((result.notes ?? []).every((n) => n.startsWith("would create"))).toBe(true);
   });
 
   it("is declared idempotent, since createIndex on an identical index is a no-op", () => {

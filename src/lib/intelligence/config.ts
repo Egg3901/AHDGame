@@ -52,6 +52,9 @@ export const ACTION_MIN_NETWORK_LEVEL = 2;
 export const ACTION_MIN_COVERAGE = 40;
 export const COLLECTION_COST = 75_000;
 export const ACTION_COST = 220_000;
+/** Baseline difficulty, 0..100, before network, coverage and tradecraft. */
+export const COLLECTION_DIFFICULTY = 20;
+export const ACTION_DIFFICULTY = 45;
 
 // ── Agency ──────────────────────────────────────────────────────────────────
 export const TRADECRAFT_MIN = 1;

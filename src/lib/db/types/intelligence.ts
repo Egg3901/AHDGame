@@ -90,7 +90,8 @@ export interface IntelligenceOpLog {
   domain: IntelligenceDomain;
   opType: string;
   directorCharacterId: ObjectId | null;
-  actorUserId: ObjectId | null;
+  /** The acting user's id. A string, matching how auth carries it. */
+  actorUserId: string | null;
   outcome: OperationOutcome;
   compromise: OperationCompromise;
   rollDetail: {

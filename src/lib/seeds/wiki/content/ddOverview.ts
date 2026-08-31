@@ -91,7 +91,7 @@ The distinctive seats:
 | Minister of Trade and Supply | Goods Distribution Priority: producer vs consumer priority |
 | Minister of Agriculture, Forestry and Food | Procurement Quotas over the collectivized LPG farms |
 | Minister of Heavy Industry and Machine Building | Combine Output Setting: modernization vs over-fulfilment |
-| Minister for State Security | Internal Security Posture: thaw vs crackdown |
+| Minister of Internal Affairs | Internal Security Posture: thaw vs crackdown |
 | Minister of Culture | Cultural Line: liberal vs orthodox (seat exists from 1954) |
 
 Era gating is real: the **Minister of National Defence seat only exists from 1956**, when the NVA stands up (before that the KVP sits under the Interior portfolio), and the Staatsbank liaison reads "Deutsche Notenbank" before the 1968 rename. See the [Cabinet Guide](/wiki/cabinet-guide).
