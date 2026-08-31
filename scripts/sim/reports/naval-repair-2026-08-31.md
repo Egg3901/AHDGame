@@ -1,4 +1,4 @@
-# Naval repair simulation, turn 528
+# Naval repair simulation, turn 530
 
 Constants under test: ceilings 100/90/80, REPAIR_LOT_SHARE 0.5, wornKnee 50.
 Existing calibration, unchanged: inPort 12, onStation 5, minSupply 35.
@@ -50,7 +50,7 @@ Lots each country's damaged naval and air formations would ask for, against what
 | ------- | ----------------- | ------------------- | ------------------ | ----------------- | ---------- |
 | UK      | 0/4               | 7                   | 60                 | 36                | 0          |
 | US      | 0/25              | 7                   | 28                 | 11                | 0          |
-| RU      | 27/18             | 8                   | 21                 | 0                 | 24         |
+| RU      | 27/21             | 8                   | 21                 | 0                 | 27         |
 | TR      | 0/0               | 3                   | 9                  | 30                | 0          |
 | PL      | 0/0               | 2                   | 5                  | 45                | 0          |
 | RO      | 0/0               | 1                   | 2                  | 23                | 0          |
@@ -69,7 +69,7 @@ Lots each country's damaged naval and air formations would ask for, against what
 | BAL     | 0/0               | 0                   | 0                  | 11                | 0          |
 | FR      | 0/0               | 0                   | 0                  | 102               | 0          |
 
-Only formations below the 80% station ceiling draw materiel at all: above it free repair reaches unaided, and a lot buys one point of condition there against a hundred at the bottom. Without that gate the sweep drains the store on scratches and starves refit, which runs immediately after it.
+Only formations at or below the 80% station ceiling draw materiel at all: above it free repair reaches unaided, and a lot buys one point of condition there against a hundred at the bottom. Without that gate the sweep drains the store on scratches and starves refit, which runs immediately after it. At the ceiling exactly is deliberately included, because free repair parks every forward-deployed hull on precisely that number.
 
 ## 3. Blockade pressure by hull condition
 

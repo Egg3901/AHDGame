@@ -171,7 +171,9 @@ async function main(): Promise<void> {
       const arch = getUnitArchetype(u.domain, u.type);
       if (!arch) continue;
       const full = lotsRequired(arch);
-      if ((u.integrity ?? 100) < FREE_REPAIR_CEILING.station) {
+      // `<=`, matching `applyNavalRepair`: free repair parks a forward hull on exactly
+      // the ceiling, and the paid tier has to be able to reach it there.
+      if ((u.integrity ?? 100) <= FREE_REPAIR_CEILING.station) {
         repair += lotsToRepair(u, full);
         n++;
       }
@@ -188,7 +190,7 @@ async function main(): Promise<void> {
   }
   say();
   say(
-    `Only formations below the ${FREE_REPAIR_CEILING.station}% station ceiling draw materiel at all: above it free repair reaches unaided, and a lot buys one point of condition there against a hundred at the bottom. Without that gate the sweep drains the store on scratches and starves refit, which runs immediately after it.`
+    `Only formations at or below the ${FREE_REPAIR_CEILING.station}% station ceiling draw materiel at all: above it free repair reaches unaided, and a lot buys one point of condition there against a hundred at the bottom. Without that gate the sweep drains the store on scratches and starves refit, which runs immediately after it. At the ceiling exactly is deliberately included, because free repair parks every forward-deployed hull on precisely that number.`
   );
   say();
 
