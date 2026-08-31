@@ -22,7 +22,8 @@ import {
 } from "./basing";
 import { cv, baseCv, alive } from "./engineCore";
 import { resolveEngagement, engagementControlBonus } from "./engagement";
-import { defaultMissionFor } from "./missions";
+import { defaultMissionFor, WITHDRAW_INTEGRITY } from "./missions";
+import { repairedIntegrity } from "./repair";
 import type { NavairUnit, RegionChannels, EngagementOutcome } from "./types";
 import type { CountryId } from "@/lib/constants/countries";
 import type { RegionCode } from "@/lib/military/types";
@@ -51,6 +52,8 @@ export interface NavairTurnResult {
   formationsUpdated: number;
   /** Formations given a standing mission because they had none. */
   missionsAssigned: number;
+  /** Formations that recovered hull or airframe condition this turn. */
+  formationsRepaired: number;
 }
 
 /**
@@ -189,6 +192,7 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
       formationsLost: 0,
       formationsUpdated: 0,
       missionsAssigned: 0,
+      formationsRepaired: 0,
     };
   }
 
@@ -322,6 +326,63 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
     byRegion.set(region, here.filter(alive));
   }
 
+  // ── repair ──────────────────────────────────────────────────────────────────
+  // Iterates `units` rather than `byRegion` deliberately. Two `alive` gates above have
+  // already dropped crippled hulls from `byRegion`, and a hull at zero integrity was
+  // never stationed in the first place — which is exactly why zero was permanent and the
+  // UK's entire navy sat unrecoverable on the live world. Reading the flat roster reaches
+  // those hulls without moving either gate, so berth demand, overcrowding and the contest
+  // are all untouched by this step.
+  let formationsRepaired = 0;
+  for (const u of units) {
+    const before = u.integrity ?? 100;
+
+    // A formation too damaged to fight withdraws to home water to mend, unless a
+    // commander deliberately stationed it where it is. `WITHDRAW_INTEGRITY` is the same
+    // threshold `defaultNavalMission` already uses for "save the ship" — reusing it keeps
+    // one doctrine rather than inventing a second.
+    //
+    // Withdrawing has to persist for as long as it takes, not for one turn. `stationOf`
+    // sends any formation with a theater straight back to the front, and a front is
+    // exactly where supply is too low for `supplyScale` to allow any repair at all — so a
+    // hull nudged off zero and immediately redeployed would stick a few points above zero
+    // forever. That is the plateau the config's own docblock warns about.
+    const withdrawing = before < WITHDRAW_INTEGRITY && u.stationSetByPlayer !== true;
+    if (withdrawing) {
+      const home = homeRegionOf(u.countryId);
+      if (home) u.station = home as RegionCode;
+    }
+
+    const station = u.station as RegionCode | null | undefined;
+    if (!station) continue;
+
+    const basing = basingStatus(
+      station,
+      u.countryId,
+      blocs,
+      hostility.get(u.countryId) ?? new Set<string>()
+    );
+
+    // A hull at zero never passed the `alive` gate above, so it was never stationed and
+    // the sustain pass never gave it a supply figure. Without this its repair would be
+    // scaled by a reading from whenever it was last seaworthy.
+    if (before <= 0 || withdrawing) {
+      u.supply = supplyCeiling(u, basing, 0, false);
+    }
+
+    // A withdrawn formation is in a yard by definition, whatever its last standing order
+    // said. One left forward under orders mends by the ordinary rules, which for a fleet
+    // sitting in unsupplied water correctly means barely at all.
+    u.integrity = withdrawing
+      ? repairedIntegrity({ ...u, mission: "PORT" }, basing)
+      : repairedIntegrity(u, basing);
+
+    if ((u.integrity ?? 100) !== before) {
+      formationsRepaired++;
+      touched.add(u);
+    }
+  }
+
   // Winning the water is worth more than sitting in it. Capped well below the full scale
   // by `engagementControlBonus`, so one good turn cannot hand over a region the loser has
   // held for twenty: the contest still has to be won by staying.
@@ -391,6 +452,7 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
     formationsLost: crippled.length,
     formationsUpdated: rowsWritten,
     missionsAssigned,
+    formationsRepaired,
   };
 }
 
