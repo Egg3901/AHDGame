@@ -4,9 +4,8 @@ import { useCallback, useReducer, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { FeedbackModal } from "@/components/FeedbackModal";
 import { useChromeSuppressed } from "@/hooks/useChromeSuppressed";
+import { isChromeHiddenPath } from "@/lib/constants/layoutPaths";
 import type { DisplayMode } from "@/lib/displayMode";
-
-const EXCLUDED_PATHS = ["/login", "/register", "/banned", "/maintenance"];
 
 interface FabState {
   feedbackOpen: boolean;
@@ -96,7 +95,7 @@ export function BugReportFab({ displayMode }: { displayMode?: DisplayMode | null
     dispatch({ type: "CLOSE_FEEDBACK" });
   }, []);
 
-  if (!chromeSuppressed || EXCLUDED_PATHS.includes(pathname)) {
+  if (!chromeSuppressed || isChromeHiddenPath(pathname)) {
     return null;
   }
 

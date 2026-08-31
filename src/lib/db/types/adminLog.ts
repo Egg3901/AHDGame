@@ -40,6 +40,8 @@ export type AdminLogAction =
   // Tri-state actions, same "X_set"/"X_disabled" split as labour_system_*.
   | "maintenance_mode_set"
   | "maintenance_mode_disabled"
+  | "poll_banner_set"
+  | "poll_banner_disabled"
   | "test_mode_enabled"
   | "test_mode_disabled"
   | "admin_registration_enabled"

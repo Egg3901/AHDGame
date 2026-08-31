@@ -35,8 +35,16 @@ const SuggestionsTab = dynamic(
   { ssr: false }
 );
 
+const PollBannerTab = dynamic(
+  () =>
+    import("@/components/admin/support/PollBannerTab").then((m) => ({
+      default: m.PollBannerTab,
+    })),
+  { ssr: false }
+);
+
 export type SupportSubTab =
-  "suggestions" | "feedback" | "logs" | "debug" | "migrations" | "mail-reports";
+  "suggestions" | "feedback" | "logs" | "debug" | "migrations" | "mail-reports" | "poll-banner";
 
 interface AdminSupportTabProps {
   activeSub: SupportSubTab;
@@ -61,6 +69,7 @@ export function AdminSupportTab({
         {activeSub === "logs" && <LogsTab />}
         {activeSub === "debug" && <DebugTab />}
         {activeSub === "migrations" && <MigrationsTab />}
+        {activeSub === "poll-banner" && <PollBannerTab />}
         {activeSub === "mail-reports" && (
           <MailReportsTab backHref="/admin?tab=support&sub=mail-reports" />
         )}
