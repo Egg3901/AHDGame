@@ -12,6 +12,7 @@ import type { MilitaryAction } from "@/lib/military/reducer";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import { COMMAND_TYPES, POSTURES } from "@/lib/military/config";
 import { getRegion } from "@/lib/military/regions";
+import { needsLogisticsPairing, LOGISTICS_PAIRING_ADVICE } from "@/lib/military/commands";
 import type { ConflictAssignment } from "@/lib/military/assignments";
 import {
   forceLoad,
@@ -359,6 +360,14 @@ export function CommandDetailPanel({
             </div>
           )}
         </div>
+        {/*
+          Regions are edited here and from the assign modal, so this is where a command
+          acquires a second theatre. The advice used to be computed for a draft only,
+          which meant the create dialog was the one place it could ever be read.
+        */}
+        {needsLogisticsPairing(c.type, c.regionIds) && (
+          <p className="mt-1.5 text-[11px] text-warning">⚠ {LOGISTICS_PAIRING_ADVICE}</p>
+        )}
       </div>
 
       {/* assigned forces */}

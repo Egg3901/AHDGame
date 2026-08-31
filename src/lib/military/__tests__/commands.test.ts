@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   createCommand,
   dedupeCommandIds,
+  needsLogisticsPairing,
   reconcileCommandCommanders,
   validateDraft,
   type CommandDraft,
@@ -266,6 +267,30 @@ describe("validateDraft", () => {
     expect(
       validateDraft(draft, stateWith([])).some((m) => m.includes("Logistics command recommended"))
     ).toBe(true);
+  });
+
+  // The advice has to be reachable from the detail panel too, which holds a saved
+  // MilitaryCommand rather than a draft, so the rule lives in its own predicate.
+  it("does not recommend logistics to a command whose regions are all one theatre", () => {
+    expect(needsLogisticsPairing("REGIONAL", ["sas", "eas", "sea"])).toBe(false);
+  });
+
+  it("recommends logistics to a command spanning two theatres", () => {
+    expect(needsLogisticsPairing("REGIONAL", ["weu", "sas"])).toBe(true);
+  });
+
+  it("never recommends logistics to a Logistics command", () => {
+    expect(needsLogisticsPairing("LOGISTICS", ["weu", "sas"])).toBe(false);
+  });
+
+  it("recommends nothing for a command with no regions", () => {
+    expect(needsLogisticsPairing("REGIONAL", [])).toBe(false);
+  });
+
+  // A saved command can name a region the map no longer has. An unknown id contributes
+  // no theatre rather than counting as its own, which would advise on a phantom spread.
+  it("ignores region ids the map does not know", () => {
+    expect(needsLogisticsPairing("REGIONAL", ["sas", "not-a-region"])).toBe(false);
   });
 
   // A Logistics command IS the sustainment structure, so it is never told to go find one.
