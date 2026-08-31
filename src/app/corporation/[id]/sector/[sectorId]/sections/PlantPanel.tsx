@@ -71,6 +71,8 @@ export default function PlantPanel({
   onMothball,
   onReactivate,
 }: PlantPanelProps) {
+  const ownedPlantCount =
+    plants.plantCount ?? facilitiesFromUnits(sectorType, plants.capacityUnits ?? 0);
   const { formatAmount } = useCurrency();
   const vocab = facilityVocabulary(sectorType);
   const sites = facilityPlural(sectorType);
@@ -145,13 +147,11 @@ export default function PlantPanel({
         </p>
         <p className="mt-1 flex items-baseline gap-2">
           <span className="text-display font-bold tabular-nums text-foreground">
-            {fmtUnits(facilitiesFromUnits(sectorType, plants.capacityUnits ?? 0))}
+            {fmtUnits(ownedPlantCount)}
           </span>
           <span className="text-body-sm text-muted">
-            {facilitiesFromUnits(sectorType, plants.capacityUnits ?? 0) === 1
-              ? facilitySingular(sectorType)
-              : sites}{" "}
-            · {fmtUnits(plants.capacityUnits)} units per day
+            {ownedPlantCount === 1 ? facilitySingular(sectorType) : sites} ·{" "}
+            {fmtUnits(plants.capacityUnits)} units per day
           </span>
         </p>
 

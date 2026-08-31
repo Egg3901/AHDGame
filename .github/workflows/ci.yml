@@ -56,7 +56,10 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit -p tsconfig.json
         env:
-          NODE_OPTIONS: --max-old-space-size=6144
+          # The full program now peaks just above 6 GiB on the two-core hosted
+          # runner. Leave a little heap headroom without consuming the runner's
+          # entire 7 GiB allocation.
+          NODE_OPTIONS: --max-old-space-size=6656
 
   # Split out of `verify` and sharded: the suite is ~3,500 files and its cost is
   # dominated by per-file module loading, so wall time tracks file count almost

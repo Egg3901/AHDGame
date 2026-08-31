@@ -29,10 +29,16 @@
  * money by ~87×. Nothing in this module touches an FX rate.
  */
 import type { CorporateSector, SectorBuildOrder } from "@/lib/db/types/corporation";
+import type { CorporationType } from "@/lib/constants/corporations";
+import { plantSizeUnits } from "@/lib/constants/facilityQuantum";
+import { seedPlantLedger, splitWholePlantCount } from "@/lib/corporations/plantLedger";
 
 /** The plant-state subset of a sector doc. Structural so projections fit. */
 export interface SectorPlantFields {
+  sectorType?: CorporationType | null;
   capitalStock?: number | null;
+  plantCount?: number | null;
+  plantUnitRemainder?: number | null;
   /**
    * P5 paid basis of `capitalStock`, in ₳. Moves PRO-RATA with the capacity in
    * every transfer: a merge sums it (both plants keep the cash that bought
@@ -56,6 +62,8 @@ export interface SectorPlantFields {
 /** The `$set` fragment a merge/carve produces. Keys match the sector doc. */
 export interface SectorPlantFieldsUpdate {
   capitalStock: number;
+  plantCount: number;
+  plantUnitRemainder: number;
   capacityBookAnchor: number;
   buildQueue: SectorBuildOrder[];
   constructionInProgressAnchor: number;
@@ -69,6 +77,20 @@ const num = (v: number | null | undefined): number =>
 
 const queue = (s: SectorPlantFields): SectorBuildOrder[] =>
   Array.isArray(s.buildQueue) ? s.buildQueue : [];
+
+const count = (s: SectorPlantFields): number => {
+  if (Number.isInteger(s.plantCount) && (s.plantCount ?? 0) >= 0) {
+    return s.plantCount as number;
+  }
+  return s.sectorType ? seedPlantLedger(s.sectorType, s.capitalStock).plantCount : 0;
+};
+
+const remainder = (s: SectorPlantFields): number =>
+  typeof s.plantUnitRemainder === "number" &&
+  Number.isFinite(s.plantUnitRemainder) &&
+  s.plantUnitRemainder > 0
+    ? s.plantUnitRemainder
+    : 0;
 
 /** A restore point, or `null` if this row has none / a corrupt one. */
 const shadow = (s: SectorPlantFields): number | null =>
@@ -120,8 +142,17 @@ export function mergeSectorPlantFields(
     (t): t is number => typeof t === "number" && Number.isFinite(t)
   );
   const shadows = [shadow(survivor), shadow(incoming)].filter((v): v is number => v !== null);
+  const sectorType = survivor.sectorType ?? incoming.sectorType ?? null;
+  const mergedRemainder = remainder(survivor) + remainder(incoming);
+  const completedFromRemainder = sectorType
+    ? Math.floor(mergedRemainder / plantSizeUnits(sectorType))
+    : 0;
   return {
     capitalStock: num(survivor.capitalStock) + num(incoming.capitalStock),
+    plantCount: count(survivor) + count(incoming) + completedFromRemainder,
+    plantUnitRemainder: sectorType
+      ? mergedRemainder - completedFromRemainder * plantSizeUnits(sectorType)
+      : mergedRemainder,
     // Summed like the capacity it prices. Note a side with NO recorded basis
     // contributes 0 rather than its list value: the survivor of such a merge is
     // under-booked, never over-booked, which is the only safe direction for a
@@ -154,6 +185,8 @@ export function mergeSectorPlantFields(
 export function identitySectorPlantFields(sector: SectorPlantFields): SectorPlantFieldsUpdate {
   return {
     capitalStock: num(sector.capitalStock),
+    plantCount: count(sector),
+    plantUnitRemainder: remainder(sector),
     capacityBookAnchor: num(sector.capacityBookAnchor),
     buildQueue: queue(sector),
     constructionInProgressAnchor: num(sector.constructionInProgressAnchor),
@@ -180,12 +213,19 @@ export function identitySectorPlantFields(sector: SectorPlantFields): SectorPlan
  */
 export function carveSectorPlantFields(
   sector: SectorPlantFields,
-  fraction: number
+  fraction: number,
+  plantCountOverride?: number
 ): SectorPlantFieldsUpdate {
   const f = Math.max(0, Math.min(1, Number.isFinite(fraction) ? fraction : 0));
   const sourceShadow = shadow(sector);
+  const carvedPlantCount =
+    plantCountOverride == null
+      ? splitWholePlantCount(count(sector), f).carved
+      : Math.max(0, Math.min(count(sector), Math.floor(plantCountOverride)));
   return {
     capitalStock: num(sector.capitalStock) * f,
+    plantCount: carvedPlantCount,
+    plantUnitRemainder: remainder(sector) * f,
     // Same fraction as the stock, so the per-unit basis is identical on both
     // halves and the two still sum to the original: a carve cannot mint basis.
     capacityBookAnchor: num(sector.capacityBookAnchor) * f,
@@ -207,6 +247,7 @@ export function carveSectorPlantFields(
 export function hasPlantState(sector: SectorPlantFields): boolean {
   return (
     num(sector.capitalStock) > 0 ||
+    count(sector) > 0 ||
     num(sector.constructionInProgressAnchor) > 0 ||
     queue(sector).length > 0 ||
     sector.mothballed === true ||
@@ -217,7 +258,10 @@ export function hasPlantState(sector: SectorPlantFields): boolean {
 /** Convenience: read the plant subset off a full sector doc. */
 export function readSectorPlantFields(sector: Partial<CorporateSector>): SectorPlantFields {
   return {
+    sectorType: sector.sectorType,
     capitalStock: sector.capitalStock,
+    plantCount: sector.plantCount,
+    plantUnitRemainder: sector.plantUnitRemainder,
     capacityBookAnchor: sector.capacityBookAnchor,
     buildQueue: sector.buildQueue,
     constructionInProgressAnchor: sector.constructionInProgressAnchor,

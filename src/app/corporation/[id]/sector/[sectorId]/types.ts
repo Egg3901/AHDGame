@@ -1,5 +1,6 @@
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { StateMetricMarginContribution } from "@/lib/corporations/stateMetricMarginTypes";
+import type { PlantSectorSplitQuote } from "@/lib/corporations/plantSectorSplit";
 
 export interface SectorData {
   _id: string;
@@ -427,6 +428,8 @@ export interface AttackInfo {
   userLiquidCurrencyCode?: string | null;
   stateId: string;
   countryId?: string;
+  plantCount?: number;
+  plantSplitQuote?: PlantSectorSplitQuote;
   /** Per-strength cost/capture breakdown. Present on pages loaded after the split-strength feature. */
   splitStrengths?: {
     full: SplitStrengthInfo;
@@ -550,6 +553,8 @@ export interface PlantBuildOrderView {
 }
 
 export interface PlantsData {
+  /** Persisted whole facilities owned by this sector. */
+  plantCount?: number;
   capacityUnits: number | null;
   producedUnits: number | null;
   soldUnits: number | null;
