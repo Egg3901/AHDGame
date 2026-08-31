@@ -249,6 +249,17 @@ export interface GameState {
   nppOffensiveJoinEnabled?: boolean;
   nppOffensiveJoinEnabledBy?: string;
   nppOffensiveJoinEnabledAt?: string;
+  /**
+   * When true, NPP-run countries build intelligence networks and run operations
+   * of their own. Default false, which leaves them purely defensive.
+   *
+   * This gates INITIATIVE only. Counter-intelligence posture is derived for every
+   * NPP country each turn regardless of this switch, because defence needs no
+   * order: a country nobody is playing still resists being spied on.
+   */
+  nppIntelligenceOperationsEnabled?: boolean;
+  nppIntelligenceOperationsEnabledBy?: string;
+  nppIntelligenceOperationsEnabledAt?: string;
   /** When true, crisis international-aid nodes use the slider + legislature-bill flow. */
   crisisAidBillsEnabled?: boolean;
   crisisAidBillsEnabledBy?: string;
