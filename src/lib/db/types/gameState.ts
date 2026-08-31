@@ -223,6 +223,32 @@ export interface GameState {
   nppForeignPolicyStage?: NppForeignPolicyStage;
   nppForeignPolicyStageBy?: string;
   nppForeignPolicyStageAt?: string;
+  /**
+   * May an NPP belligerent declare an offensive of its own? When false the
+   * `conduct_war` choice is never offered, so the country spends its foreign-policy
+   * slot elsewhere instead of queueing a battle declaration. Default false.
+   * Toggled from Admin → World → Conflicts. Player governments are unaffected:
+   * they declare through the cabinet battle route either way.
+   *
+   * Governs the DECISION, not the queue. A declaration already filed still resolves
+   * on the following turn after this is switched off, because an offensive always
+   * resolves a turn after it is declared — that gap is the defender's window, and
+   * cancelling a filed order here would be a hole in it. Expect at most one more tick
+   * of NPP offensives after turning this off.
+   */
+  nppOffensiveInitiationEnabled?: boolean;
+  nppOffensiveInitiationEnabledBy?: string;
+  nppOffensiveInitiationEnabledAt?: string;
+  /**
+   * May an NPP belligerent join an ally's offensive at a front where it already has
+   * troops posted? When true it is treated as having a standing auto-join order on
+   * every front it is deployed to, without one being written to `theaterState`.
+   * Default false, which leaves NPP allies fighting defensively only. Player
+   * governments keep their own explicit `theaterState.autoJoin` orders either way.
+   */
+  nppOffensiveJoinEnabled?: boolean;
+  nppOffensiveJoinEnabledBy?: string;
+  nppOffensiveJoinEnabledAt?: string;
   /** When true, crisis international-aid nodes use the slider + legislature-bill flow. */
   crisisAidBillsEnabled?: boolean;
   crisisAidBillsEnabledBy?: string;

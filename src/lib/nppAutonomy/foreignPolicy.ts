@@ -38,6 +38,7 @@ import {
   foreignPolicyModeFrom,
   foreignPolicyStageFrom,
 } from "./foreignPolicyRollout";
+import { nppOffensiveFlagFrom } from "./offensiveFlags";
 import { hostSideOf } from "@/lib/military/warEntryPolicy";
 
 export type ForeignPolicyMode = NppForeignPolicyMode;
@@ -120,6 +121,12 @@ interface ForeignPolicyContext {
   militaryUnits: MilitaryUnit[];
   pendingBattleDeclarations: BattleDeclarationDoc[];
   pendingPeaceOffers: PeaceOfferDoc[];
+  /**
+   * Admin switch for `conduct_war`. False suppresses the candidate outright rather
+   * than refusing it at execution, so the country ranks its remaining options and
+   * spends the slot on one of them instead of burning a whole Tier-1 slot on a refusal.
+   */
+  offensiveInitiationEnabled: boolean;
 }
 
 interface PersistedForeignPolicyDecision {
@@ -816,6 +823,7 @@ function warCandidates(
           offer.expiresTurn > context.currentTurn
       );
       if (
+        context.offensiveInitiationEnabled &&
         deployed.length > 0 &&
         deployedReadiness >= 40 &&
         context.approvalRating >= 40 &&
@@ -1043,6 +1051,7 @@ async function loadContext(
         _id: string;
         nppForeignPolicyMode?: ForeignPolicyMode;
         nppForeignPolicyStage?: NppForeignPolicyStage;
+        nppOffensiveInitiationEnabled?: boolean;
       }>("gameState")
       .findOne({ _id: "current" }),
     db.collection<CountryAlignment>("countryAlignments").find({}).toArray(),
@@ -1165,6 +1174,7 @@ async function loadContext(
     militaryUnits,
     pendingBattleDeclarations,
     pendingPeaceOffers,
+    offensiveInitiationEnabled: nppOffensiveFlagFrom(gameState?.nppOffensiveInitiationEnabled),
   };
 }
 
