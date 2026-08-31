@@ -19,10 +19,14 @@ import type { Db } from "mongodb";
 
 export async function carriedLawIdFor(
   db: Db,
-  countryId: string,
+  countryId: string | null | undefined,
   knownLawIds: readonly string[]
 ): Promise<string | null> {
-  if (knownLawIds.length === 0) return null;
+  // A caller can reach here with no country at all (a corporation whose
+  // `countryId` was never stamped). No country, no carried law — fail open the
+  // same way an unmapped country does, rather than throwing inside a gate whose
+  // whole contract is to be skippable.
+  if (!countryId || knownLawIds.length === 0) return null;
   const carried = await db.collection("legislationTypes").findOne(
     {
       _id: { $in: [...knownLawIds] },

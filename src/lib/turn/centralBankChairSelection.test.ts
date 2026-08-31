@@ -1242,6 +1242,9 @@ describe("processCentralBankChairSelection — NPP autonomy fallback", () => {
             findOne: vi
               .fn()
               .mockResolvedValue({ _id: id, enabledForPlayers: opts.enabledForPlayers }),
+            // Registered-country gate: no rows means nothing dissolved, so the
+            // static base is the registered set.
+            find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
           };
         }
         if (name === "npps") {
