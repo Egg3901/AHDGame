@@ -112,6 +112,53 @@ describe("mergeRegion", () => {
     expect(call?.[1].$unset).toHaveProperty("taxBases");
   });
 
+  it("re-homes the absorbed half's party organisations onto the survivor", async () => {
+    // Reunification fuse: the eastern orgs' parties do not exist in the western
+    // half, so every row re-points without collision.
+    db.collection("statePartyOrg").find.mockReturnValue(
+      cursorOf([{ _id: "org-sed-beo", partyId: "7", stateId: "BEO", treasury: 500 }])
+    );
+    db.collection("statePartyOrg").findOne.mockResolvedValue(null);
+
+    await run();
+
+    const call = db.collectionMocks["statePartyOrg"].updateOne.mock.calls.find(
+      (c) => c[0]._id === "org-sed-beo"
+    );
+    expect(call?.[1].$set.stateId).toBe("BE");
+    expect(db.collectionMocks["statePartyOrg"].deleteOne).not.toHaveBeenCalled();
+  });
+
+  it("merges treasuries when the same party is organised in both halves", async () => {
+    db.collection("statePartyOrg").find.mockReturnValue(
+      cursorOf([{ _id: "org-src", partyId: "7", stateId: "BEO", treasury: 500 }])
+    );
+    db.collection("statePartyOrg").findOne.mockResolvedValue({
+      _id: "org-dst",
+      partyId: "7",
+      stateId: "BE",
+      treasury: 200,
+    });
+
+    await run();
+
+    const inc = db.collectionMocks["statePartyOrg"].updateOne.mock.calls.find(
+      (c) => c[0]._id === "org-dst"
+    );
+    expect(inc?.[1].$inc.treasury).toBe(500);
+    expect(db.collectionMocks["statePartyOrg"].deleteOne).toHaveBeenCalledWith({ _id: "org-src" });
+  });
+
+  it("re-points the region party ledgers wholesale", async () => {
+    await run();
+    for (const coll of ["partyBudget", "orgRegLedger", "partyPoliticalStrengthLedger"]) {
+      const call = db.collectionMocks[coll].updateMany.mock.calls.find(
+        (c) => c[0].stateId === "BEO"
+      );
+      expect(call?.[1].$set.stateId, coll).toBe("BE");
+    }
+  });
+
   it("re-homes NPPs out of the retired region", async () => {
     await run();
     const call = db.collectionMocks["npps"].updateMany.mock.calls[0];
