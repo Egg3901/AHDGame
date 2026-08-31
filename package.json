@@ -162,7 +162,7 @@
     "topojson-server": "^3.0.1",
     "tsx": "^4.23.12",
     "typescript": "6.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "license": "PolyForm-Noncommercial-1.0.0"
 }
