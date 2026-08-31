@@ -81,7 +81,7 @@ Each region carries terrain, infrastructure, port and airbase capacity, strategi
 - **Uncovered**: no Command is responsible for it.
 - **Overlapping**: two Commands *of the same type* both claim it, which is a genuine role conflict rather than useful redundancy.
 
-**Region cap: 3 per Homeland Defense or Regional Command.** A **Logistics** command is exempt from the cap, which is the point of it: it is the structure meant to carry multi-region overseas responsibility. The builder warns any command past 4 assigned regions, and when a non-Logistics command reaches its cap it suggests a Logistics command for the overflow.
+**Region cap: 3 regions per Command.** The builder stops you at three, whatever the Command's type. A **Logistics** command is the structure meant to carry overseas sustainment, so the builder suggests pairing one with any non-Logistics Command whose regions span more than one macro theatre. Regions inside a single theatre share a supply tail: a Command that keeps to one theatre draws no such suggestion, however many of that theatre's regions it holds.
 
 ## Capacity and effectiveness
 
