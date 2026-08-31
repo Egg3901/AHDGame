@@ -78,25 +78,6 @@ export async function POST(
       );
     }
 
-    const userDoc = await db
-      .collection("users")
-      .findOne({ _id: auth.user.character.userId }, { projection: { createdAt: 1 } });
-    const cooldown = isInNewCharacterCooldown({
-      userCreatedAt: userDoc?.createdAt ?? new Date(0),
-      characterCreatedAt: auth.user.character.createdAt,
-      partyJoinedAt: auth.user.character.partyJoinedAt,
-      includePartyJoinedAt: false,
-    });
-    if (cooldown.blocked) {
-      return NextResponse.json(
-        {
-          error:
-            "New characters can't vote in caucus chair elections for 24 hours. Try again later.",
-        },
-        { status: 403 }
-      );
-    }
-
     const election = await db.collection<CaucusChairElection>("caucusChairElections").findOne({
       caucusId: caucus._id,
       status: "voting",
@@ -108,17 +89,48 @@ export async function POST(
       );
     }
 
-    // Minimum party tenure before voting in caucus chair elections (leadershipTenure.ts).
+    // 24h new-character cooldown, waived for founding elections exactly as the
+    // national and state party-leadership routes waive it. This check used to
+    // run BEFORE the election was loaded, so it could not see `founding` at
+    // all: a founding caucus race blocked new players that the other two
+    // routes let vote (#593).
+    if (!election.founding) {
+      const userDoc = await db
+        .collection("users")
+        .findOne({ _id: auth.user.character.userId }, { projection: { createdAt: 1 } });
+      const cooldown = isInNewCharacterCooldown({
+        userCreatedAt: userDoc?.createdAt ?? new Date(0),
+        characterCreatedAt: auth.user.character.createdAt,
+        partyJoinedAt: auth.user.character.partyJoinedAt,
+        includePartyJoinedAt: false,
+      });
+      if (cooldown.blocked) {
+        return NextResponse.json(
+          {
+            error:
+              "New characters can't vote in caucus chair elections for 24 hours. Try again later.",
+            unblockAt: cooldown.unblockAt.toISOString(),
+          },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Minimum party tenure before voting in caucus chair elections
+    // (leadershipTenure.ts). Orthogonal to the cooldown above; likewise waived
+    // for founding elections.
     const currentTurn = await getCurrentTurn(db);
-    const tenure = getPartyTenure(auth.user.character.partyJoinedTurn, currentTurn);
-    if (!tenure.eligible) {
-      return NextResponse.json(
-        {
-          error: `You must be a member of this party for ${tenure.turnsRemaining} more turn${tenure.turnsRemaining === 1 ? "" : "s"} before you can vote in leadership elections.`,
-          turnsRemaining: tenure.turnsRemaining,
-        },
-        { status: 403 }
-      );
+    if (!election.founding) {
+      const tenure = getPartyTenure(auth.user.character.partyJoinedTurn, currentTurn);
+      if (!tenure.eligible) {
+        return NextResponse.json(
+          {
+            error: `You must be a member of this party for ${tenure.turnsRemaining} more turn${tenure.turnsRemaining === 1 ? "" : "s"} before you can vote in leadership elections.`,
+            turnsRemaining: tenure.turnsRemaining,
+          },
+          { status: 403 }
+        );
+      }
     }
 
     const now = new Date();

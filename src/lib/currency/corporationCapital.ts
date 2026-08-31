@@ -225,6 +225,18 @@ export async function getCorpFxRate(db: Db, corp: CorpCapitalCurrencyInfo): Prom
 }
 
 /**
+ * FX rate (local per 1 ₳) for an explicit currency code — the country-currency
+ * sibling of {@link getCorpFxRate}, for money moving into a GOVERNMENT account
+ * rather than a corporation's. Same fallback chain: live rate, then the era
+ * rate, then 1.0.
+ */
+export async function getCurrencyFxRate(db: Db, code: CurrencyCode): Promise<number> {
+  const doc = await db.collection<ExchangeRate>("exchangeRates").findOne({ currencyCode: code });
+  if (doc?.rate && doc.rate > 0) return doc.rate;
+  return (await eraFallbackRate(db, code)) ?? 1.0;
+}
+
+/**
  * FX rate (local per 1 ₳) for a sector's HOST-state functional currency — the
  * currency its economic fields (revenue, growthCost, …) are stored in. Sibling
  * to {@link getCorpFxRate} for one-off routes; prefer the batch

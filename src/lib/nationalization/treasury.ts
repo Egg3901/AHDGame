@@ -3,6 +3,7 @@ import type { Corporation, FederalBudget } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { writeGovBudgetLocal } from "@/lib/currency/govBudgetFields";
+import { getCurrencyFxRate } from "@/lib/currency/corporationCapital";
 
 /**
  * Government cash account for nationalization money flows.
@@ -87,6 +88,34 @@ export async function creditTreasuryProceeds(
 ): Promise<number> {
   if (proceedsLocal <= 0) return 0;
   const amount = Math.round(proceedsLocal);
+  await incTreasuryBalance(db, countryId, amount, now);
+  return amount;
+}
+
+/**
+ * Credit a country's treasury with an amount denominated in ₳, converting to
+ * that country's OWN currency first.
+ *
+ * Use this instead of `creditTreasuryProceeds` whenever the payer and the
+ * receiving country can differ. Fines and assessments are debited from the
+ * corporation in the CORPORATION's currency; handing that same figure to
+ * `creditTreasuryProceeds`, which expects country-local units, silently treats
+ * (say) 50,000 GBP as 50,000 USD, so a cross-border payer over- or under-pays
+ * the government by the whole exchange-rate difference (#808).
+ *
+ * Returns the local amount credited.
+ */
+export async function creditTreasuryProceedsFromAnchor(
+  db: Db,
+  countryId: CountryId,
+  proceedsAnchor: number,
+  now: Date
+): Promise<number> {
+  if (!(proceedsAnchor > 0)) return 0;
+  const currency = (COUNTRY_CURRENCY_MAP[countryId] ?? "USD") as CurrencyCode;
+  const rate = await getCurrencyFxRate(db, currency);
+  const amount = Math.round(writeGovBudgetLocal(proceedsAnchor, currency, rate));
+  if (amount <= 0) return 0;
   await incTreasuryBalance(db, countryId, amount, now);
   return amount;
 }
