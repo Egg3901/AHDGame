@@ -3,7 +3,7 @@ import { findMergedRegionMetrics, findMergedRegionMetricsMany } from "@/lib/macr
 import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, getCountryConfig, type CountryId } from "@/lib/constants/countries";
-import type { StateMetrics, State, StateApprovalHistory, GameState } from "@/lib/db/types";
+import type { State, StateApprovalHistory, GameState } from "@/lib/db/types";
 import type { StateDemographics } from "@/lib/db/types/demographics";
 import { resolveGameYear } from "@/lib/era/era";
 import { getActiveAddressApprovalModifiers } from "@/lib/governorOffice/address/activeAddressModifiers";

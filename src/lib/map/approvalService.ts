@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 import { findMergedRegionMetrics, findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
-import type { StateMetrics, State } from "@/lib/db/types";
+import type { State } from "@/lib/db/types";
 import { getEraContext } from "@/lib/era/context";
 import type { CountryId } from "@/lib/constants/countries";
 import {
