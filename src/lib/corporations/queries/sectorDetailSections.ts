@@ -98,6 +98,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { projectStrategyRevenuePerTurn } from "@/lib/corporations/strategyRevenuePreview";
 import type { SectorBuildOrder } from "@/lib/db/types";
 import { STRIKE_REVENUE_THROTTLE } from "@/lib/labour/strikes";
+import { calculatePlantSectorSplit } from "@/lib/corporations/plantSectorSplit";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import { isNppOwned } from "@/lib/corporations/nppOwned";
 import {
@@ -258,6 +259,7 @@ export async function buildSectorCrisisSection(
 /** Attack/split panel info for the viewer's corporation (non-null viewer). */
 export function buildSectorAttackInfo(args: {
   viewerCorporation: Corporation;
+  defenderMarketingStrength: number;
   viewerCorpFxRate: number;
   sectorHostFxRate: number;
   sectorHostLiquidCode: CurrencyCode | undefined;
@@ -279,6 +281,7 @@ export function buildSectorAttackInfo(args: {
 }) {
   const {
     viewerCorporation,
+    defenderMarketingStrength,
     viewerCorpFxRate,
     sectorHostFxRate,
     sectorHostLiquidCode,
@@ -359,6 +362,28 @@ export function buildSectorAttackInfo(args: {
     projectedMarketShare: 0,
     exceedsDominanceThreshold: false,
   };
+  const userLiquidCapitalAnchor = Math.round(
+    corpLiquidCapitalToAnchor(
+      viewerCorporation.liquidCapital ?? 0,
+      viewerCorporation,
+      viewerCorpFxRate
+    )
+  );
+  const hasPersistedPlantLedger =
+    Number.isInteger(sector.plantCount) &&
+    (sector.plantCount ?? 0) >= 2 &&
+    typeof sector.capacityBookAnchor === "number" &&
+    Number.isFinite(sector.capacityBookAnchor) &&
+    sector.capacityBookAnchor >= 0;
+  const plantSplitQuote =
+    plantsMode && hasPersistedPlantLedger
+      ? calculatePlantSectorSplit({
+          defenderPlantCount: sector.plantCount as number,
+          defenderBookValueAnchor: sector.capacityBookAnchor as number,
+          attackerMarketingStrength: viewerCorporation.marketingStrength ?? 0,
+          defenderMarketingStrength,
+        })
+      : null;
 
   return {
     attackCost: calculateAttackCostFromLocalRevenue(
@@ -372,16 +397,12 @@ export function buildSectorAttackInfo(args: {
     splitEstimatedCapture: plantsMode ? 0 : fullStrengthInfo.splitEstimatedCapture,
     splitMsCost: plantsMode ? 0 : fullStrengthInfo.splitMsCost,
     userMarketingStrength: roundMarketingStrength(viewerCorporation.marketingStrength ?? 0),
-    userLiquidCapital: Math.round(
-      corpLiquidCapitalToAnchor(
-        viewerCorporation.liquidCapital ?? 0,
-        viewerCorporation,
-        viewerCorpFxRate
-      )
-    ),
+    userLiquidCapital: userLiquidCapitalAnchor,
     userLiquidCurrencyCode: resolveCorpLiquidCurrencyCode(viewerCorporation),
     stateId: sector.stateId,
     countryId: sectorCountryId,
+    ...(plantsMode && hasPersistedPlantLedger ? { plantCount: sector.plantCount } : {}),
+    ...(plantSplitQuote ? { plantSplitQuote } : {}),
     splitStrengths: plantsMode
       ? { full: zeroSplit, half: zeroSplit }
       : {

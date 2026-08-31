@@ -918,6 +918,13 @@ export interface CorporateSector {
   capitalStock?: number;
   capitalUtilization?: number;
   /**
+   * First-class whole facilities owned by this sector. Unlike capitalStock,
+   * this count does not become fractional through depreciation. PvP transfers
+   * this ownership unit; productive capacity and paid basis follow the plants
+   * pro-rata. Optional until the value-conserving plants migration runs.
+   */
+  plantCount?: number;
+  /**
    * Plants tier (marketSystemMode >= "plants"): anchors the launch-safety
    * governor's fade-in from the sector's first plants turn, exactly like
    * `clearingStartTurn` does for the clearing leg. Stamped once, on the turn
