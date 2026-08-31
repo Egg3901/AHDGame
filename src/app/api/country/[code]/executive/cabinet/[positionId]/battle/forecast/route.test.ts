@@ -74,6 +74,10 @@ describe("battle forecast route", () => {
     db.collection("militaryFormations");
     db.collection("nationalDoctrine");
     db.collection("conflicts");
+    db.collection("navairChannels");
+    db.collectionMocks.navairChannels.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
     // Standing orders. Empty by default: the projection pools auto-joining allies the
     // same way the resolver does, so the route reads this on every request.
     db.collection("theaterState");
@@ -116,6 +120,62 @@ describe("battle forecast route", () => {
     expect(body.ownStrength).toBeGreaterThan(0);
     expect(typeof body.enemyBand).toBe("string");
     expect(body.unopposed).toBe(false);
+  });
+
+  it("uses eligible close air support in the projection and reports it to the commander", async () => {
+    let casEnabled = false;
+    db.collectionMocks.conflicts.findOne.mockResolvedValue({ ...CONFLICT, region: "cas" });
+    db.collectionMocks.militaryUnits.find.mockImplementation(
+      (q: { theaterId?: string; domain?: unknown } = {}) => {
+        if (q.domain) {
+          const wings = casEnabled
+            ? Array.from({ length: 40 }, (_, i) =>
+                unit({
+                  _id: `cas${i}`,
+                  countryId: "US",
+                  domain: "air",
+                  type: "Fighter Wing",
+                  personnel: 1800,
+                  readiness: 100,
+                  basePower: 88,
+                  equipment: { firepower: 50, protection: 50, support: 50 },
+                  station: "cas",
+                  mission: "CAS",
+                  integrity: 100,
+                  supply: 100,
+                  theaterId: "reserve",
+                })
+              )
+            : [];
+          return { toArray: vi.fn().mockResolvedValue(wings) };
+        }
+        return {
+          toArray: vi.fn().mockResolvedValue([
+            unit({ countryId: "US", theaterId: q.theaterId ?? "afghan" }),
+            unit({ countryId: "CN", theaterId: q.theaterId ?? "afghan" }),
+          ]),
+        };
+      }
+    );
+
+    const { GET } = await import(ROUTE);
+    const without = await GET(req("theaterId=afghan&targetCountry=CN"), call);
+    casEnabled = true;
+    const withCas = await GET(req("theaterId=afghan&targetCountry=CN"), call);
+    const plain = await without.json();
+    const supported = await withCas.json();
+
+    // Odds are intentionally whole percentages, so a real contribution can be smaller
+    // than one displayed point. The explicit CAS readout below is what makes that
+    // contribution observable instead of forcing the commander to infer it from rounding.
+    expect(supported.navalAirSupport).toMatchObject({
+      closeAirSupportActive: true,
+    });
+    expect(supported.navalAirSupport.casWeight).toBeGreaterThan(0);
+    expect(supported.oddsPct).toBeGreaterThanOrEqual(plain.oddsPct);
+    expect(supported.ownStrength, JSON.stringify({ plain, supported })).toBeGreaterThan(
+      plain.ownStrength
+    );
   });
 
   // Fog: the payload must never carry the opponent's roster or strength.

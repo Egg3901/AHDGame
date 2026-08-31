@@ -10,6 +10,12 @@ interface ForecastView {
   oddsPct: number;
   counterOddsPct: number;
   unopposed: boolean;
+  navalAirSupport?: {
+    closeAirSupportActive: boolean;
+    casWeight: number;
+    airSuperiority: number;
+    interdictionPct: number;
+  };
 }
 
 interface DeclarationHistoryItem {
@@ -216,6 +222,14 @@ export function ConflictActions({
           ? "Nothing opposes you here, so the advance itself is uncontested — the percentage is the chance of a decisive result, not of taking ground."
           : "Both rows are separate engagements, not halves of one number: the defender holds terrain whichever way the attack runs, so both sides can sit under 50%."}{" "}
         Projection only — it moves if either side reinforces before the tick.
+        {proj.navalAirSupport && (
+          <>
+            {" "}
+            Close air support: {proj.navalAirSupport.closeAirSupportActive
+              ? `active (+${proj.navalAirSupport.casWeight} combat weight)`
+              : "no eligible CAS wing is reaching this front"}.
+          </>
+        )}
       </div>
     </>
   ) : null;

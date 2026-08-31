@@ -1148,7 +1148,7 @@ export function battleForecast(
   const dDeep = 0.32 * PD.deepBuff * PD.deepShare * dDeepEff * (0.6 + 0.5 * PD.rearShare);
   // Each side's generals debuff the opponent (genEnemyMin); the defender holds terrain.
   const attStr =
-    PA.combatMass *
+    aggA.mass *
     PA.supportBuff *
     PA.flankBuff *
     PA.tcBuff *
@@ -1157,7 +1157,7 @@ export function battleForecast(
     (1 - dDeep) *
     PD.genEnemyMin;
   const defStr =
-    PD.combatMass *
+    aggD.mass *
     PD.supportBuff *
     PD.flankBuff *
     PD.tcBuff *
