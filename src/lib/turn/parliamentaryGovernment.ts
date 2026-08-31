@@ -338,8 +338,14 @@ export async function updateParliamentaryGovernmentSeats(
       : 0;
   }
 
+  // RUNTIME governmentType, not the static config. A country converted at
+  // runtime — reunified Germany, or any `regime_change` peace term — is a
+  // one-party state that `getCountryConfig` will never describe as one, so the
+  // static read left the generic collapse path live in exactly the states it
+  // exists to protect.
+  const collapseRuntime = await getCountryState(db, countryId);
   const lostMajority =
-    canCollapseGovernment(getCountryConfig(countryId, preset)) &&
+    canCollapseGovernment({ governmentType: collapseRuntime.governmentType }) &&
     existing.status === "formed" &&
     (existing.formationType === "majority" || existing.formationType === "coalition") &&
     totalSeatsSupporting < majorityThreshold;
@@ -422,8 +428,13 @@ export async function resetParliamentaryGovernmentAfterElection(
         : 0;
     }
 
+    // RUNTIME governmentType — same argument as in
+    // `updateParliamentaryGovernmentSeats`: the static config never learns about
+    // a runtime conversion, so the one-party collapse lock did not apply to the
+    // states it exists to protect.
+    const collapseRuntime = await getCountryState(db, countryId);
     const lostMajority =
-      canCollapseGovernment(getCountryConfig(countryId)) &&
+      canCollapseGovernment({ governmentType: collapseRuntime.governmentType }) &&
       (existing.formationType === "majority" || existing.formationType === "coalition") &&
       totalSeatsSupporting < majorityThreshold;
 

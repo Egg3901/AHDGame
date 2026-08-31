@@ -20,7 +20,7 @@ import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { isSeatActive } from "@/lib/cabinet/rosterEra";
 import { getLiveGameYear } from "@/lib/cabinet/liveGameYear";
 import { getOfficeLabel } from "@/lib/utils/politics";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import type { Character, ElectedOfficial, CareerEvent, PoliticalParty } from "@/lib/db/types";
 import { isBannedParty } from "@/lib/turn/onePartyConstraints";
 import { getCountryState } from "@/lib/countryState";
@@ -149,9 +149,8 @@ export async function appointCabinetMemberHandler(request: Request, countryId: C
 
     // Government type drives the eligibility rule. Read runtime governmentType
     // (not the seed config) so a post-Stage-4 conversion takes effect
-    // immediately. (`config` is still needed for `isBannedParty`, which carries
-    // the seed-time per-country banned-list config.)
-    const config = COUNTRY_CONFIGS[countryId];
+    // immediately — and pass that same runtime shape to `isBannedParty` below,
+    // which re-tests `isOnePartyState` for itself.
     const runtime = await getCountryState(db, countryId);
     const isOps = runtime.governmentType === "onePartyState";
 
@@ -177,7 +176,11 @@ export async function appointCabinetMemberHandler(request: Request, countryId: C
       const appointeeParty = await db
         .collection<PoliticalParty>("politicalParties")
         .findOne({ sequentialId: appointeePartySeqId, countryId });
-      if (isBannedParty(config, appointeeParty)) {
+      // RUNTIME shape, not `config`. `isOps` above is already read from runtime;
+      // passing the static config here re-tested `isOnePartyState` against a
+      // value that never learns about a conversion, so the ban never bit for a
+      // runtime-converted country.
+      if (isBannedParty({ governmentType: runtime.governmentType }, appointeeParty)) {
         throw forbidden("Members of banned parties cannot be appointed to cabinet.");
       }
     }
