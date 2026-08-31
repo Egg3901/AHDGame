@@ -77,14 +77,16 @@ describe("proposeChairMotion", () => {
 });
 
 describe("majorityThreshold", () => {
-  it("is a strict majority of the full board", () => {
+  it("is a strict majority of the seated members", () => {
     expect(majorityThreshold(7)).toBe(4);
     expect(majorityThreshold(5)).toBe(3);
+    expect(majorityThreshold(2)).toBe(2);
+    expect(majorityThreshold(1)).toBe(1);
   });
 });
 
-describe("tallyMeeting — majority of the FULL board", () => {
-  it("passes only with a full-board majority; abstains count against", () => {
+describe("tallyMeeting — majority of seated members", () => {
+  it("passes only with a seated-majority; abstains count against", () => {
     // 7 seats, motion hike. 4 agree ⇒ pass.
     const ballots = [
       ballot("1", "hike"),
@@ -95,30 +97,29 @@ describe("tallyMeeting — majority of the FULL board", () => {
     ];
     const t = tallyMeeting(ballots, "hike", 7);
     expect(t.agree).toBe(4);
+    expect(t.needed).toBe(4);
     expect(t.passed).toBe(true);
     expect(t.decided).toBe(true);
   });
 
   it("fails when abstentions deny a majority even with no explicit opposition", () => {
-    // Only 3 of 7 voted hike; 4 seats never voted (no-show ⇒ abstain).
-    const ballots = [ballot("1", "hike"), ballot("2", "hike"), ballot("3", "hike")];
-    const t = tallyMeeting(ballots, "hike", 7);
-    expect(t.agree).toBe(3);
-    expect(t.abstain).toBe(4);
+    // 7 seats, 4 seated members. 2 voted hike; 2 seated members never voted
+    // (no-show ⇒ abstain). Threshold is 3 of 4 seated, so 2 agrees are short,
+    // and the 2 still-outstanding votes could still supply the third ⇒ open.
+    const ballots = [ballot("1", "hike"), ballot("2", "hike")];
+    const t = tallyMeeting(ballots, "hike", 7, 4);
+    expect(t.agree).toBe(2);
+    expect(t.abstain).toBe(2);
+    expect(t.needed).toBe(3);
     expect(t.passed).toBe(false);
-    // 3 agree + 4 possible = 7 ≥ 4, so not yet decided against.
     expect(t.decided).toBe(false);
   });
 
   it("decides early once a majority is mathematically impossible", () => {
-    // 7 seats, motion hike. 4 have voted cut ⇒ at most 3 can agree ⇒ dead.
-    const ballots = [
-      ballot("1", "cut"),
-      ballot("2", "cut"),
-      ballot("3", "cut"),
-      ballot("4", "cut"),
-    ];
-    const t = tallyMeeting(ballots, "hike", 7);
+    // 7 seats, 4 seated members, motion hike. 3 have voted cut ⇒ at most 1
+    // more can agree, which is short of 3 ⇒ dead.
+    const ballots = [ballot("1", "cut"), ballot("2", "cut"), ballot("3", "cut")];
+    const t = tallyMeeting(ballots, "hike", 7, 4);
     expect(t.passed).toBe(false);
     expect(t.decided).toBe(true);
   });
@@ -126,5 +127,33 @@ describe("tallyMeeting — majority of the FULL board", () => {
   it("treats a hold ballot as disagreement with a hike motion", () => {
     expect(ballotAgrees("hold", "hike")).toBe(false);
     expect(ballotAgrees("hike", "hike")).toBe(true);
+  });
+});
+
+describe("tallyMeeting — vacant seats are outside the quorum", () => {
+  it("lets a lone chair carry a motion on their own vote", () => {
+    // 7-seat board, 6 vacant. 1 ballot (the chair) ⇒ majority of 1 seated = 1.
+    const t = tallyMeeting([ballot("1", "hike")], "hike", 7, 1);
+    expect(t.agree).toBe(1);
+    expect(t.abstain).toBe(0);
+    expect(t.needed).toBe(1);
+    expect(t.passed).toBe(true);
+    expect(t.decided).toBe(true);
+  });
+
+  it("does not silently shrink the quorum for voter no-shows", () => {
+    // 7-seat board, only 1 member ever ballots but 4 are seated. Needs 3 of 4.
+    const t = tallyMeeting([ballot("1", "hike")], "hike", 7, 4);
+    expect(t.agree).toBe(1);
+    expect(t.abstain).toBe(3);
+    expect(t.needed).toBe(3);
+    expect(t.passed).toBe(false);
+  });
+
+  it("defaults the quorum to the full board when seats are not passed in", () => {
+    const t = tallyMeeting([ballot("1", "hike")], "hike", 7);
+    expect(t.needed).toBe(4);
+    expect(t.abstain).toBe(6);
+    expect(t.passed).toBe(false);
   });
 });

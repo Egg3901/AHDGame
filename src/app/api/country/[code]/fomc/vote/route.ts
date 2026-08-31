@@ -1,7 +1,7 @@
 /**
  * POST /api/country/[code]/fomc/vote — a seated player board member casts their
  * ballot (hike / cut / hold) on the bank's active FOMC meeting. If the ballot
- * gives the motion a full-board majority (or makes one impossible) the meeting
+ * carries the motion by a seated-majority (or makes one impossible) the meeting
  * resolves immediately, ahead of the 24h window.
  */
 import { NextResponse } from "next/server";

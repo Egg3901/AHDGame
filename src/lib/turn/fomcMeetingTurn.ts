@@ -122,9 +122,10 @@ function mirrorChairOntoBank(set: Record<string, unknown>, chair: FomcSeat): voi
  * VACATE any seat whose staggered term has expired. The seat is left empty
  * (occupantType "vacant"), NOT auto-filled with a technocrat NPP: the committee
  * is staffed by presidential nomination + Senate confirmation, never stocked by
- * the engine. A vacant seat abstains on rate motions, so an unstaffed board
- * simply cannot move the rate until the President fills it — which is the point.
- * Returns a new board when anything changed, else null.
+ * the engine. Vacant seats are outside the quorum — the motion runs on the
+ * seated members, so a lone seated chair can still move the rate — but a
+ * half-empty board is how rate decisions stop being deliberated. Returns a new
+ * board when anything changed, else null.
  *
  * `chairRefreshed` reports whether the CHAIR seat was one of the vacancies, so
  * the caller can hand it to the chair selection / nomination pipeline.
@@ -199,11 +200,11 @@ async function findNominationExecutives(
  * Tell the world a committee board has gone understaffed (ticket #1238).
  *
  * Vacant seats are by design (#1195: the engine never seats a machine
- * candidate; the President nominates and the Senate confirms), but before this
- * notice the vacancy was silent: motions just started failing 1-0-6 with no
- * signal to the one player who can fix it, and the board stayed dead for good.
- * Notifies every nominating executive in-app and posts a system news item so
- * the chair and community can see why the board cannot move the rate.
+ * candidate; the President nominates and the Senate confirms), and a lone
+ * chair can still set the rate on their own vote — but a board reduced to one
+ * voice is how rate-setting stops being deliberated. Notifies every nominating
+ * executive in-app and posts a system news item so the chair and community
+ * know the committee is understaffed and who can refill it.
  */
 async function notifyFomcVacancy(
   db: Db,
@@ -225,14 +226,14 @@ async function notifyFomcVacancy(
       userId: exec.userId,
       type: "system",
       title: `${bankLabel}: board seats vacant`,
-      message: `${vacantCount} of ${boardSize} committee seats are vacant, so no rate motion can reach the ${Math.floor(boardSize / 2) + 1} votes needed to pass. Nominate governors from the central bank's committee page; the Senate confirms them.`,
+      message: `${vacantCount} of ${boardSize} committee seats are vacant. The chair still sets the rate while fewer than two seats are seated (a lone chair carries a motion on their own vote), but the board votes as a single voice. Nominate governors from the central bank's committee page; the Senate confirms them.`,
       metadata: { type: "central_bank_fomc_vacancy", countryId, bankId: bank._id, at: now },
     });
   }
   await createNotifications(notifications);
 
   createSystemNewsPost(
-    `${vacantCount} of ${boardSize} seats on the ${bankLabel}'s rate-setting board are vacant. The board cannot carry a rate motion until the ${execTitle} nominates governors and the Senate confirms them.`,
+    `${vacantCount} of ${boardSize} seats on the ${bankLabel}'s rate-setting board are vacant. The committee is reduced to the seated members; until the ${execTitle} nominates governors and the Senate confirms them, every rate motion rests on the remaining votes.`,
     "executive"
   ).catch((err) => logger.error("FomcMeetingTurn", "vacancy news post failed", err));
 }
@@ -257,7 +258,8 @@ function openMeeting(
 
   const ballots: FomcBallot[] = [];
   for (const seat of board) {
-    // Vacant seats abstain (no ballot). NPP seats vote their own preference now.
+    // Vacant seats cast no ballot (outside the quorum). NPP seats vote their
+    // own preference now.
     if (seat.occupantType === "npp" && isAutoSeat(seat)) {
       ballots.push({
         seatId: seat.seatId,
@@ -317,7 +319,8 @@ export function resolveMeetingInto(
   now: Date,
   opts: ResolveOptions
 ): ResolveOutcome {
-  const tally = tallyMeeting(meeting.ballots, meeting.motion, board.length);
+  const seated = board.filter((s) => s.occupantType !== "vacant").length;
+  const tally = tallyMeeting(meeting.ballots, meeting.motion, board.length, seated);
   const awaitingPlayerBallot = playerSeats(board).some(
     (s) => !meeting.ballots.some((b) => b.seatId === s.seatId)
   );
@@ -526,11 +529,12 @@ export async function processFomcMeetings(
 
     // 0b. Vacancy signal (ticket #1238). Seats are staffed by presidential
     //     nomination + Senate confirmation only (#1195), so an expired board
-    //     stays vacant until the executive acts. That action was previously
-    //     invisible: motions just failed 1-0-6 forever. Tell the nominating
-    //     executive (and the news feed) when seats first fall vacant, and
-    //     re-remind at most once per reminder interval while no nomination is
-    //     already before the Senate.
+    //     stays vacant until the executive acts. Under the seated-majority
+    //     quorum a lone chair still sets the rate on their own vote, but a
+    //     one-voice board is how rate-setting stops being deliberated. Tell the
+    //     nominating executive (and the news feed) when seats first fall
+    //     vacant, and re-remind at most once per reminder interval while no
+    //     nomination is already before the Senate.
     const vacantSeatCount = board.filter((s) => s.occupantType === "vacant").length;
     if (
       vacantSeatCount > 0 &&

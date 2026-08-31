@@ -45,6 +45,7 @@ export async function GET(_request: Request, context: RouteContext) {
     if (!bank?.fomcBoard) return NextResponse.json({ hasCommittee: false });
 
     const board = bank.fomcBoard;
+    const seatedMembers = board.filter((s) => s.occupantType !== "vacant").length;
     const viewerId = auth.character._id;
     const viewerSeat = board.find(
       (s) => s.occupantType === "player" && s.characterId?.equals(viewerId)
@@ -105,7 +106,9 @@ export async function GET(_request: Request, context: RouteContext) {
 
     const meeting = bank.activeFomcMeeting ?? null;
     const votedSeatIds = new Set((meeting?.ballots ?? []).map((b) => b.seatId));
-    const tally = meeting ? tallyMeeting(meeting.ballots, meeting.motion, board.length) : null;
+    const tally = meeting
+      ? tallyMeeting(meeting.ballots, meeting.motion, board.length, seatedMembers)
+      : null;
 
     // Scheduling + budget context so players can see when sessions happen and
     // where their per-term rate-change budget went (ticket #1184).
@@ -121,7 +124,7 @@ export async function GET(_request: Request, context: RouteContext) {
         ? bank.fomcTermStartedAtTurn + FOMC_TERM_TURNS
         : null;
     const history = (bank.fomcMeetingHistory ?? []).slice(-MEETING_HISTORY_LIMIT).map((m) => {
-      const t = tallyMeeting(m.ballots, m.motion, board.length);
+      const t = tallyMeeting(m.ballots, m.motion, board.length, seatedMembers);
       return {
         motion: m.motion,
         proposedDelta: m.proposedDelta,
@@ -142,8 +145,10 @@ export async function GET(_request: Request, context: RouteContext) {
       currentTurn,
       nextMeetingAtTurn,
       termEndsAtTurn,
-      /** Votes needed to carry a motion: strict majority of the FULL board. */
-      majorityNeeded: majorityThreshold(board.length),
+      /** Votes needed to carry a motion: strict majority of SEATED members. */
+      majorityNeeded: majorityThreshold(seatedMembers),
+      /** Number of seats currently occupied (vacancy banner reads this). */
+      seatedMembers,
       meetingHistory: history,
       canNominate,
       viewerIsSenator,

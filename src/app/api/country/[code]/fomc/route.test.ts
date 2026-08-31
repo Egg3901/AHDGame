@@ -128,9 +128,10 @@ describe("GET /api/country/[code]/fomc", () => {
     expect(body.nextMeetingAtTurn).toBe(388);
     // Term started at turn 192 and runs 192 turns.
     expect(body.termEndsAtTurn).toBe(384);
-    // Majority of the full 7-seat board (ticket #1238: the understaffed-board
-    // banner reads this instead of re-deriving the threshold client-side).
+    // Majority of the SEATED members. The fixture board has seat-7 vacant, so
+    // 6 seats are seated and the threshold is a strict majority of 6 = 4.
     expect(body.majorityNeeded).toBe(4);
+    expect(body.seatedMembers).toBe(6);
 
     expect(body.meetingHistory).toHaveLength(3);
     // Newest-last storage order preserved; client renders newest first.
@@ -141,7 +142,9 @@ describe("GET /api/country/[code]/fomc", () => {
     expect(carried.result).toBe("passed");
     expect(carried.agree).toBe(4);
     expect(carried.disagree).toBe(0);
-    expect(carried.abstain).toBe(3); // vacant seats abstain against
+    // 4 ballots from 6 seated members; the 2 seated no-shows abstained. The
+    // vacant seat-7 casts no ballot and is outside the quorum entirely.
+    expect(carried.abstain).toBe(2);
 
     const failed = body.meetingHistory[1];
     expect(failed.result).toBe("failed");
@@ -171,7 +174,41 @@ describe("GET /api/country/[code]/fomc", () => {
     expect(body.nextMeetingAtTurn).toBeNull();
     expect(body.meeting.agree).toBe(0);
     expect(body.meeting.disagree).toBe(0);
+    // 6 seated members in the fixture ⇒ strict majority of 6.
     expect(body.meeting.needed).toBe(4);
+  });
+
+  it("reports the quorum and needs when only the chair is seated", async () => {
+    const sevenVacant = Array.from({ length: 7 }, (_, i) => ({
+      ...seat(i),
+      occupantType: i === 0 ? "player" : "vacant",
+      characterId: i === 0 ? new ObjectId() : null,
+      characterName: i === 0 ? "Poppy" : null,
+      termExpiresAtTurn: i === 0 ? 659 : null,
+    }));
+    const bank = bankFixture({
+      fomcBoard: sevenVacant,
+      activeFomcMeeting: {
+        meetingId: new ObjectId().toHexString(),
+        openedAtTurn: 516,
+        openedAt: new Date(),
+        motion: "cut",
+        proposedDelta: -0.75,
+        status: "voting",
+        ballots: [{ seatId: "seat-1", vote: "cut", auto: false, castAt: new Date() }],
+        playerVoteDeadline: new Date(Date.now() + 3600_000),
+        resolvesOnTurn: 540,
+      },
+    });
+    mockGetDb.mockResolvedValue(dbWith(bank));
+    const { req, ctx } = routeContext();
+    const res = await GET(req, ctx);
+    const body = await res.json();
+    expect(body.seatedMembers).toBe(1);
+    expect(body.majorityNeeded).toBe(1);
+    expect(body.meeting.agree).toBe(1);
+    expect(body.meeting.needed).toBe(1);
+    // The lone chair's own ballot carries the motion.
   });
 
   it("caps meeting history at 10 sessions", async () => {

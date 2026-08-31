@@ -58,8 +58,10 @@ interface CommitteeState {
   currentTurn?: number;
   nextMeetingAtTurn?: number | null;
   termEndsAtTurn?: number | null;
-  /** Votes needed to carry a motion: strict majority of the full board. */
+  /** Votes needed to carry a motion: strict majority of SEATED members. */
   majorityNeeded?: number;
+  /** Number of seats currently occupied (vacant seats are outside the quorum). */
+  seatedMembers?: number;
   meetingHistory?: ResolvedMeeting[];
   canNominate: boolean;
   viewerIsSenator?: boolean;
@@ -211,8 +213,8 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
   const budgetLeft = state.rateChangesPerTerm - state.rateChangesThisTerm;
   const currentTurn = state.currentTurn ?? null;
   const vacantSeats = board.filter((s) => s.occupantType === "vacant").length;
-  const majorityNeeded = state.majorityNeeded ?? Math.floor(board.length / 2) + 1;
-  const seatedCount = board.length - vacantSeats;
+  const seatedCount = state.seatedMembers ?? board.length - vacantSeats;
+  const majorityNeeded = state.majorityNeeded ?? Math.floor(Math.max(seatedCount, 1) / 2) + 1;
   const turnsToNextSession =
     meeting === null && state.nextMeetingAtTurn != null && currentTurn != null
       ? Math.max(0, state.nextMeetingAtTurn - currentTurn)
@@ -232,17 +234,18 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
 
   return (
     <div className="space-y-6">
-      {/* Understaffed board (ticket #1238): vacant seats make every motion fail
-          on the full-board majority; surface why and who can fix it. */}
+      {/* Understaffed board (ticket #1238): vacant seats fall outside the
+          quorum, so a lone chair still sets the rate alone. Tell the viewer the
+          board has shrunk to one voice and who can refill it. */}
       {vacantSeats > 0 && (
-        <div className="rounded-xl border border-danger/30 bg-danger/10 px-5 py-4">
-          <h2 className="text-sm font-semibold text-danger">Board understaffed</h2>
+        <div className="rounded-xl border border-warning/30 bg-warning/10 px-5 py-4">
+          <h2 className="text-sm font-semibold text-warning">Board understaffed</h2>
           <p className="mt-1 text-xs text-foreground">
             {vacantSeats} of {board.length} board seats are vacant. A motion needs {majorityNeeded}{" "}
-            of the full board to pass
-            {seatedCount < majorityNeeded
-              ? `, so with only ${seatedCount} seat${seatedCount === 1 ? "" : "s"} seated no motion can carry`
-              : ""}
+            of the {seatedCount} seated seat{seatedCount === 1 ? "" : "s"} to pass
+            {seatedCount <= 1
+              ? ", so the chair sets the rate alone"
+              : `, keeping the board workable while it is short-handed`}
             . Seats are filled by presidential nomination and Senate confirmation.
             {state.canNominate && " Use the nominate panel below to fill them."}
           </p>
@@ -254,9 +257,10 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
         <div className="border-b border-card-border px-5 py-4">
           <h2 className="text-sm font-semibold text-foreground">Federal Open Market Committee</h2>
           <p className="mt-0.5 text-xs text-muted">
-            The committee votes on rate moves. A motion passes only on a majority of the full board;
-            no-shows abstain. {budgetLeft} of {state.rateChangesPerTerm} rate changes remain this
-            term.
+            The committee votes on rate moves. A motion passes on a majority of the seated members;
+            no-shows abstain, and vacant seats are outside the quorum (the chair sets the rate alone
+            while fewer than two seats are seated). {budgetLeft} of {state.rateChangesPerTerm} rate
+            changes remain this term.
             {budgetLeft <= 0 &&
               (turnsToTermEnd != null
                 ? ` The budget resets when the term ends in ${turnsToTermEnd} turn${turnsToTermEnd === 1 ? "" : "s"}.`

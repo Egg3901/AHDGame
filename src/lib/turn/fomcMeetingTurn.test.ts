@@ -294,7 +294,7 @@ describe("processFomcMeetings — vacancy signal (ticket #1238)", () => {
     expect(inputs).toHaveLength(1);
     expect(inputs[0].userId).toEqual(presidentUserId);
     expect(inputs[0].message).toContain("vacant");
-    expect(inputs[0].message).toContain("4");
+    expect(inputs[0].message).toContain("single voice");
     expect(createSystemNewsPost).toHaveBeenCalledTimes(1);
     expect(String(vi.mocked(createSystemNewsPost).mock.calls[0][1])).toBe("executive");
   });
@@ -413,6 +413,109 @@ describe("processFomcMeetings — vacancy signal (ticket #1238)", () => {
     expect(createNotifications).toHaveBeenCalledTimes(1);
     expect(vi.mocked(createNotifications).mock.calls[0][0]).toHaveLength(0);
     expect(createSystemNewsPost).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── Quorum on an understaffed board (ticket #1238 follow-up) ────────────────
+//
+// Vacant seats are outside the quorum: a motion runs on the seated members and
+// carries on a strict majority of them, so a lone seated chair sets the rate on
+// their own vote. The board is not deadlocked by staffing shortfalls.
+
+describe("processFomcMeetings — quorum with vacant seats", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("lets a lone seated chair carry a rate motion on their own vote", async () => {
+    // An open meeting on a board where every non-chair seat is vacant casts no
+    // auto ballots (vacant seats are outside the quorum), and once the chair
+    // ballots, their single vote is a strict majority of the 1 seated member.
+    const loneChairMeeting: FomcMeeting = {
+      meetingId: new ObjectId().toHexString(),
+      openedAtTurn: 508,
+      openedAt: new Date(),
+      motion: "hike",
+      proposedDelta: 0.25,
+      status: "voting" as const,
+      ballots: [],
+      playerVoteDeadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      resolvesOnTurn: 532,
+    };
+    const db = makeDb({
+      _id: "US",
+      countryId: "US",
+      primeRate: 5,
+      lastFomcMeetingTurn: 508,
+      fomcTermStartedAtTurn: 384,
+      activeFomcMeeting: loneChairMeeting,
+      fomcBoard: [
+        playerChairSeat(),
+        ...["seat-2", "seat-3", "seat-4", "seat-5", "seat-6", "seat-7"].map(vacantSeat),
+      ],
+    });
+
+    const outcome = await castFomcBallot(
+      db as unknown as Db,
+      "US",
+      PLAYER_ID,
+      "hike",
+      509,
+      new Date()
+    );
+
+    expect(outcome).toEqual({ ok: true, resolved: true, motion: "hike", moved: true });
+    const $set = setOf(db);
+    const history = $set.fomcMeetingHistory as FomcMeeting[];
+    expect(history).toHaveLength(1);
+    expect(history[0].result).toBe("passed");
+    expect(history[0].ballots).toHaveLength(1);
+    expect($set.primeRate).toBe(5.25);
+  });
+
+  it("does not shrink the quorum for player no-shows on a short board", async () => {
+    // 2 seated members (chair + one governor, both players), 5 vacant. The
+    // chair votes but the governor no-shows: needs 2 of 2 seated ⇒ fails and
+    // stays decided against.
+    const governorId = new ObjectId();
+    const meeting = {
+      meetingId: new ObjectId().toHexString(),
+      openedAtTurn: 508,
+      openedAt: new Date(),
+      motion: "hike" as const,
+      proposedDelta: 0.25,
+      status: "voting" as const,
+      ballots: [{ seatId: "seat-1", vote: "hike" as const, auto: false, castAt: new Date() }],
+      playerVoteDeadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      resolvesOnTurn: 532,
+    };
+    const db = makeDb({
+      _id: "US",
+      countryId: "US",
+      primeRate: 5,
+      lastFomcMeetingTurn: 508,
+      fomcTermStartedAtTurn: 384,
+      activeFomcMeeting: meeting,
+      fomcBoard: [
+        playerChairSeat(),
+        seat({
+          seatId: "seat-2",
+          occupantType: "player",
+          characterId: governorId,
+          characterName: "Mariner",
+          nppId: null,
+        }),
+        ...["seat-3", "seat-4", "seat-5", "seat-6", "seat-7"].map(vacantSeat),
+      ],
+    });
+
+    const result = await processFomcMeetings(db as unknown as Db, 532, 1962, new Date());
+
+    const $set = setOf(db);
+    const history = $set.fomcMeetingHistory as FomcMeeting[];
+    expect(history).toHaveLength(1);
+    expect(history[0].result).toBe("failed");
+    expect($set.primeRate).toBeUndefined();
+    expect(result.meetingsResolved).toBe(1);
+    expect(result.ratesChanged).toBe(0);
   });
 });
 

@@ -8,10 +8,13 @@
  * The chair proposes a motion; every seat's ballot is a direction (hike/cut/hold)
  * and it "agrees" with the motion when the directions match.
  *
- * A motion passes only on a strict majority of the FULL board — unvoted (no-show)
- * and vacant seats abstain and count against it. So a divided or apathetic board
- * holds. NPP seats auto-vote their preference the moment a meeting opens; player
- * seats vote live or fall back to abstain at resolution.
+ * A motion passes on a strict majority of the SEATED members. A vacant seat
+ * (expired term, no nominee yet) is empty — not part of the quorum and not an
+ * abstention — so an understaffed board can still act: a lone seated chair
+ * carries a motion on their own vote. A seated member who has not cast a ballot
+ * abstains and counts against the motion, so a divided or apathetic board holds.
+ * NPP seats auto-vote their preference the moment a meeting opens; player seats
+ * vote live or fall back to abstain at resolution.
  */
 
 import {
@@ -81,9 +84,9 @@ export function ballotAgrees(ballot: FomcVote, motion: FomcVote): boolean {
   return ballot === motion;
 }
 
-/** Strict majority of a full board of `boardSize` seats. */
-export function majorityThreshold(boardSize: number): number {
-  return Math.floor(boardSize / 2) + 1;
+/** Strict majority of a board of `seatedMembers` seated members. */
+export function majorityThreshold(seatedMembers: number): number {
+  return Math.floor(seatedMembers / 2) + 1;
 }
 
 export interface FomcTally {
@@ -91,7 +94,7 @@ export interface FomcTally {
   disagree: number;
   /** Seats with no ballot cast (no-show / vacant). */
   abstain: number;
-  /** Votes needed to pass (majority of the full board). */
+  /** Votes needed to pass (majority of seated members). */
   needed: number;
   /** True once the outcome can no longer change: passed, or can't reach a majority. */
   decided: boolean;
@@ -99,27 +102,32 @@ export interface FomcTally {
 }
 
 /**
- * Tally a motion against the ballots cast. Every seat that has not cast a ballot
- * abstains and counts against the motion. `decided` reports early resolution:
- * the motion has passed, or enough abstentions/disagreements make a majority
- * impossible even if all remaining seats agreed. Note `decided` is pure math —
- * consumers must still hold a decided meeting open while a seated player can
- * ballot (see `resolveMeetingInto`), or NPP auto-votes at open would close the
- * meeting before the player vote window ever starts.
+ * Tally a motion against the ballots cast. The threshold is a strict majority
+ * of the SEATED (non-vacant) members — a vacant seat has no occupant, so it is
+ * neither part of the quorum nor an abstention against the motion. Every seated
+ * member that has not cast a ballot abstains and counts against the motion.
+ * `decided` reports early resolution: the motion has passed, or enough
+ * abstentions/disagreements make a majority impossible even if all remaining
+ * seated members agreed. Note `decided` is pure math — consumers must still
+ * hold a decided meeting open while a seated player can ballot (see
+ * `resolveMeetingInto`), or NPP auto-votes at open would close the meeting
+ * before the player vote window ever starts.
  */
 export function tallyMeeting(
   ballots: FomcBallot[],
   motion: FomcVote,
-  boardSize: number
+  boardSize: number,
+  seatedMembers: number = boardSize
 ): FomcTally {
+  const seated = Math.max(1, Math.min(seatedMembers, boardSize));
   const cast = ballots.length;
   let agree = 0;
   for (const b of ballots) if (ballotAgrees(b.vote, motion)) agree++;
   const disagree = cast - agree;
-  const abstain = Math.max(0, boardSize - cast);
-  const needed = majorityThreshold(boardSize);
+  const abstain = Math.max(0, seated - cast);
+  const needed = majorityThreshold(seated);
   const passed = agree >= needed;
-  const maxPossibleAgree = agree + abstain; // if every remaining seat agreed
+  const maxPossibleAgree = agree + abstain; // if every remaining seated member agreed
   const decided = passed || maxPossibleAgree < needed;
   return { agree, disagree, abstain, needed, decided, passed };
 }

@@ -54,7 +54,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Favorability**: A 0 to 100 stat representing public approval of your character. Used in primary scoring (worth up to 35 pts state, 25 pts presidential), general vote appeal (as an approval scalar), and national/PM approval ratings.
 
-**FOMC**: The US Federal Reserve's 7-seat rate-setting committee. The chair proposes hike, cut, or hold; a majority of the full board must agree, and abstains and vacant seats count against. Seats are filled by presidential nomination and Senate confirmation. Other central banks keep a single governor. See [FOMC / Rate-Setting Board](/wiki/fomc).
+**FOMC**: The US Federal Reserve's 7-seat rate-setting committee. The chair proposes hike, cut, or hold; a majority of the seated members must agree, and vacant seats fall outside the quorum. Seats are filled by presidential nomination and Senate confirmation. Other central banks keep a single governor. See [FOMC / Rate-Setting Board](/wiki/fomc).
 
 **FPTP (First Past the Post)**: In single-seat races, the candidate with the most votes wins. In the game's multi-seat FPTP families, the flag also enables a third-party spoiler transfer before the configured seat allocator distributes seats.
 

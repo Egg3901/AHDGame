@@ -30,7 +30,9 @@ function committeePayload(vacantCount: number): Record<string, unknown> {
     currentTurn: 514,
     nextMeetingAtTurn: 518,
     termEndsAtTurn: 576,
-    majorityNeeded: 4,
+    // Strict majority of the 1 seated member on the lone-chair board.
+    majorityNeeded: vacantCount === 6 ? 1 : 4,
+    seatedMembers: 7 - vacantCount,
     meetingHistory: [],
     canNominate: false,
     viewerIsSenator: false,
@@ -56,14 +58,15 @@ afterEach(() => {
 });
 
 describe("FomcCommitteeTab — understaffed board (ticket #1238)", () => {
-  it("shows why motions cannot pass when most seats are vacant", async () => {
+  it("keeps the chair unblocked and explains the shrunken quorum when seats are vacant", async () => {
     mockFetch(committeePayload(6));
 
     render(<FomcCommitteeTab countryId={"US" as CountryId} />);
 
     await waitFor(() => expect(screen.getByText("Board understaffed")).toBeTruthy());
     expect(screen.getByText(/6 of 7 board seats are vacant/)).toBeTruthy();
-    expect(screen.getByText(/no motion can carry/)).toBeTruthy();
+    expect(screen.getByText(/1 of the 1 seated seat to pass/)).toBeTruthy();
+    expect(screen.getByText(/so the chair sets the rate alone/)).toBeTruthy();
     expect(screen.getByText(/presidential nomination and Senate confirmation/)).toBeTruthy();
   });
 

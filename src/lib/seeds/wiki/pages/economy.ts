@@ -294,7 +294,7 @@ export const economyPages: readonly WikiSeedPage[] = [
     slug: "fomc",
     title: "FOMC / Rate-Setting Board",
     description:
-      "The US Federal Reserve's 7-seat committee: presidential nominations confirmed by the Senate, meetings every 8 turns, 24-hour player votes, majority of the full board, 16 rate changes per 192-turn term.",
+      "The US Federal Reserve's 7-seat committee: presidential nominations confirmed by the Senate, meetings every 8 turns, 24-hour player votes, majority of the seated members, 16 rate changes per 192-turn term.",
     content: fomcContent,
     category: "economy",
     extraTags: ["fed", "prime-rate", "monetary", "central-banks"],
