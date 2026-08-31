@@ -76,7 +76,14 @@ export async function updateCorporationSettings(request: Request, { params }: Ro
     const updates: Record<string, unknown> = { updatedAt: new Date() };
 
     // Enforce 150% overhead cap: combined marketing + logistics + R&D + CEO salary ≤ 1.5× daily revenue.
-    // Only checked when at least one budget field is being set and the corp has sectors.
+    // Checked whenever at least one budget field is being set. The cap is $0 for a
+    // corp with no gross revenue, mirroring the Bug #0728 CEO-salary rule: a
+    // zero-revenue shell cannot commit positive overhead budgets either. Before
+    // ticket #1237 the check was skipped entirely at zero revenue, so absurd
+    // typed values (1e+278 scale) were stored and the turn engine charged the
+    // uncapped logistics/R&D legs in full, cratering liquidCapital to -1e+277.
+    // A save that does not raise total overhead above what is already stored is
+    // still allowed, so a corp that lost revenue can lower or clear its budgets.
     const hasBudgetUpdate =
       marketingBudget !== undefined ||
       logisticsBudget !== undefined ||
@@ -91,11 +98,11 @@ export async function updateCorporationSettings(request: Request, { params }: Ro
         (sum, s) => sum + ((s as { revenue?: number }).revenue ?? 0),
         0
       );
-      // Bug #0728: CEO salary alone cannot exceed 1.25x daily gross revenue. Unlike
-      // the 150% combined-overhead cap below, this runs even when revenue is 0 — a
-      // zero-revenue shell may not set any positive salary, which closes the
-      // bond-mint → salary drain. Gross revenue excludes bond proceeds (these land
-      // in liquidCapital) and bond coupon income (a separate line).
+      // Bug #0728: CEO salary alone cannot exceed 1.25x daily gross revenue,
+      // including when revenue is 0 (a zero-revenue shell may not set any
+      // positive salary, which closes the bond-mint → salary drain). Gross
+      // revenue excludes bond proceeds (these land in liquidCapital) and bond
+      // coupon income (a separate line).
       if (ceoSalary !== undefined) {
         const maxCeoSalary = totalDailyRevenue * CEO_SALARY_MAX_REVENUE_MULTIPLE;
         if (ceoSalary > maxCeoSalary) {
@@ -107,20 +114,29 @@ export async function updateCorporationSettings(request: Request, { params }: Ro
           );
         }
       }
-      if (totalDailyRevenue > 0) {
-        const effectiveMarketing = marketingBudget ?? corporation.marketingBudget;
-        const effectiveLogistics = logisticsBudget ?? corporation.logisticsBudget ?? 0;
-        const effectiveRd = rdBudget ?? corporation.rdBudget ?? 0;
-        const effectiveSalary = ceoSalary ?? corporation.ceoSalary ?? 0;
-        const combined = effectiveMarketing + effectiveLogistics + effectiveRd + effectiveSalary;
-        if (combined > totalDailyRevenue * 1.5) {
-          return NextResponse.json(
-            {
-              error: `Combined operating budgets cannot exceed 150% of daily revenue ($${Math.round(totalDailyRevenue * 1.5).toLocaleString()}/day).`,
-            },
-            { status: 400 }
-          );
-        }
+      const effectiveMarketing = marketingBudget ?? corporation.marketingBudget ?? 0;
+      const effectiveLogistics = logisticsBudget ?? corporation.logisticsBudget ?? 0;
+      const effectiveRd = rdBudget ?? corporation.rdBudget ?? 0;
+      const effectiveSalary = ceoSalary ?? corporation.ceoSalary ?? 0;
+      const combined = effectiveMarketing + effectiveLogistics + effectiveRd + effectiveSalary;
+      const storedCombined =
+        (corporation.marketingBudget ?? 0) +
+        (corporation.logisticsBudget ?? 0) +
+        (corporation.rdBudget ?? 0) +
+        (corporation.ceoSalary ?? 0);
+      const overheadCeiling = totalDailyRevenue * 1.5;
+      if (combined > overheadCeiling && combined > storedCombined) {
+        return NextResponse.json(
+          {
+            error:
+              `Combined operating budgets cannot exceed 150% of daily gross revenue ` +
+              `($${Math.round(overheadCeiling).toLocaleString()}/day).` +
+              (totalDailyRevenue <= 0
+                ? ` A corporation with no gross revenue cannot set positive operating budgets.`
+                : ``),
+          },
+          { status: 400 }
+        );
       }
     }
 

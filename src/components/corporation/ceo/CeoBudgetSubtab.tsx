@@ -135,11 +135,20 @@ export default function CeoBudgetSubtab({
   const dailyCeoSalary = editCeoSalary;
 
   // Overhead cap: combined marketing + logistics + R&D + CEO salary cannot exceed
-  // 150% of daily revenue. Only enforced when the corp has sectors (revenue > 0).
+  // 150% of daily gross revenue. With no revenue the ceiling is $0, mirroring the
+  // server-side rule (ticket #1237): a zero-revenue corp cannot commit positive
+  // operating budgets. Saves that lower total overhead stay allowed so leftover
+  // budgets can always be cleared.
   const combinedDailyOverhead =
     dailyMarketingBudget + dailyLogisticsBudget + dailyRdBudget + dailyCeoSalary;
-  const maxDailyOverhead = financials.totalRevenue > 0 ? financials.totalRevenue * 1.5 : Infinity;
-  const isOverCap = isFinite(maxDailyOverhead) && combinedDailyOverhead > maxDailyOverhead;
+  const storedDailyOverhead =
+    (corporation.marketingBudget ?? 0) +
+    (corporation.logisticsBudget ?? 0) +
+    (corporation.rdBudget ?? 0) +
+    (corporation.ceoSalary ?? 0);
+  const maxDailyOverhead = Math.max(0, financials.totalRevenue) * 1.5;
+  const isOverCap =
+    combinedDailyOverhead > maxDailyOverhead && combinedDailyOverhead > storedDailyOverhead;
 
   // Bug #0728: CEO salary alone is capped at 1.25x daily gross revenue (server-
   // enforced at set time and pay time). Zero revenue ⇒ $0. Surfaced here so the
@@ -155,16 +164,13 @@ export default function CeoBudgetSubtab({
   const displayCeoSalary = Math.round(scaleMoney(dailyCeoSalary, periodView));
 
   // Shared scale for the budget sliders (in display units). Caps at the 150%
-  // overhead ceiling when revenue exists; otherwise falls back to 4× the largest
-  // current line. Sliders + the typed inputs both read/commit the same derived
-  // display value, so editing either keeps them in sync (last edit wins).
-  const overheadCapDisplay = isFinite(maxDailyOverhead)
-    ? Math.round(scaleMoney(maxDailyOverhead, periodView))
-    : null;
+  // overhead ceiling (which is 0 for a zero-revenue corp, making the sliders
+  // drag-to-lower only there); Math.max keeps room for clearing leftover
+  // over-cap values. Sliders + the typed inputs both read/commit the same
+  // derived display value, so editing either keeps them in sync (last edit wins).
+  const overheadCapDisplay = Math.round(scaleMoney(maxDailyOverhead, periodView));
   const budgetSliderMax = Math.max(
-    overheadCapDisplay ??
-      Math.max(displayMarketingBudget, displayLogisticsBudget, displayRdBudget, displayCeoSalary) *
-        4,
+    overheadCapDisplay,
     displayMarketingBudget,
     displayLogisticsBudget,
     displayRdBudget,
@@ -222,37 +228,14 @@ export default function CeoBudgetSubtab({
     setShowFundCompanyModal(true);
   }
 
-  // Period-only conversion: inputs are already in corp currency, no FX round-trip.
-  const handleSetMarketingBudget = (val: string) => {
-    const displayVal = Number(val) || 0;
-    const dailyLocal = unscaleMoney(displayVal, periodView);
-    setEditMarketingBudget(String(Math.round(dailyLocal)));
-  };
-
-  const handleSetLogisticsBudget = (val: string) => {
-    const displayVal = Number(val) || 0;
-    const dailyLocal = unscaleMoney(displayVal, periodView);
-    setEditLogisticsBudget(String(Math.round(dailyLocal)));
-  };
-
-  const handleSetRdBudget = (val: string) => {
-    const displayVal = Number(val) || 0;
-    const dailyLocal = unscaleMoney(displayVal, periodView);
-    setEditRdBudget(String(Math.round(dailyLocal)));
-  };
-
-  const handleSetCeoSalary = (val: number) => {
-    const dailyLocal = unscaleMoney(val, periodView);
-    // Clamp to the 1.25x-gross-revenue ceiling (Bug #0728) so the input can't
-    // commit a value the server will reject. Zero revenue ⇒ forced to 0.
-    setEditCeoSalary(Math.min(Math.round(dailyLocal), maxDailyCeoSalary));
-  };
-
   /**
    * Whole yen / display-currency amounts can exceed Number's safe integer range when typed
    * digit-by-digit. Parse via BigInt, then clamp to MAX_SAFE_INTEGER for downstream float math.
+   * Shared by the budget drafts and the CEO salary draft: Number("2997...0") on a
+   * 279-digit string silently becomes a 1e+278 float (ticket #1237), so budget
+   * drafts must parse digit-safe exactly like the salary draft always has.
    */
-  function parseCeoDisplayDigits(s: string): number {
+  function parseDisplayDigits(s: string): number {
     const cleaned = s.replace(/\D/g, "");
     if (cleaned === "") return 0;
     try {
@@ -266,9 +249,35 @@ export default function CeoBudgetSubtab({
     }
   }
 
+  // Period-only conversion: inputs are already in corp currency, no FX round-trip.
+  const handleSetMarketingBudget = (val: string) => {
+    const displayVal = parseDisplayDigits(val);
+    const dailyLocal = unscaleMoney(displayVal, periodView);
+    setEditMarketingBudget(String(Math.round(dailyLocal)));
+  };
+
+  const handleSetLogisticsBudget = (val: string) => {
+    const displayVal = parseDisplayDigits(val);
+    const dailyLocal = unscaleMoney(displayVal, periodView);
+    setEditLogisticsBudget(String(Math.round(dailyLocal)));
+  };
+
+  const handleSetRdBudget = (val: string) => {
+    const displayVal = parseDisplayDigits(val);
+    const dailyLocal = unscaleMoney(displayVal, periodView);
+    setEditRdBudget(String(Math.round(dailyLocal)));
+  };
+
+  const handleSetCeoSalary = (val: number) => {
+    const dailyLocal = unscaleMoney(val, periodView);
+    // Clamp to the 1.25x-gross-revenue ceiling (Bug #0728) so the input can't
+    // commit a value the server will reject. Zero revenue ⇒ forced to 0.
+    setEditCeoSalary(Math.min(Math.round(dailyLocal), maxDailyCeoSalary));
+  };
+
   function commitCeoDraft() {
     if (ceoDraft === null) return;
-    handleSetCeoSalary(parseCeoDisplayDigits(ceoDraft));
+    handleSetCeoSalary(parseDisplayDigits(ceoDraft));
     setCeoDraft(null);
   }
 
@@ -286,7 +295,7 @@ export default function CeoBudgetSubtab({
       setRdDraft(null);
     }
     if (ceoDraft !== null) {
-      handleSetCeoSalary(parseCeoDisplayDigits(ceoDraft));
+      handleSetCeoSalary(parseDisplayDigits(ceoDraft));
       setCeoDraft(null);
     }
   }
@@ -630,55 +639,55 @@ export default function CeoBudgetSubtab({
             </p>
           </div>
 
-          {/* Overhead cap meter + indicator — only shown when corp has revenue */}
-          {isFinite(maxDailyOverhead) && (
-            <div className="mt-2 space-y-1.5">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="font-semibold uppercase tracking-wider text-muted">
-                  Total operating overhead
-                </span>
-                <span
-                  className={`font-bold tabular-nums ${isOverCap ? "text-error" : "text-foreground"}`}
-                >
-                  {overheadPct.toFixed(0)}% of revenue
-                </span>
-              </div>
-              <Meter
-                value={Math.min(150, overheadPct)}
-                max={150}
-                tone={isOverCap ? "down" : overheadPct > 110 ? "warning" : "brand"}
-                height={8}
-              />
-              <div className="flex justify-between text-[10px] text-muted">
-                <span>combined budgets</span>
-                <span className={isOverCap ? "font-semibold text-error" : ""}>150% cap</span>
-              </div>
+          {/* Overhead cap meter + indicator — ceiling is $0 with no revenue */}
+          <div className="mt-2 space-y-1.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-semibold uppercase tracking-wider text-muted">
+                Total operating overhead
+              </span>
+              <span
+                className={`font-bold tabular-nums ${isOverCap ? "text-error" : "text-foreground"}`}
+              >
+                {overheadPct.toFixed(0)}% of revenue
+              </span>
             </div>
-          )}
-          {isFinite(maxDailyOverhead) && (
-            <div
-              className={`mt-1 rounded-md px-3 py-2 text-xs ${
-                isOverCap
-                  ? "bg-error/10 text-error border border-error/20"
-                  : "bg-card-elevated text-muted border border-card-border"
-              }`}
-            >
-              <span className="font-medium">Overhead budget:</span>{" "}
-              {formatAmount(
-                Math.round(toAnchor(scaleMoney(combinedDailyOverhead, periodView))),
-                liquidCode
-              )}{" "}
-              /{" "}
-              {formatAmount(
-                Math.round(toAnchor(scaleMoney(maxDailyOverhead, periodView))),
-                liquidCode
-              )}{" "}
-              cap (150% of revenue)
-              {isOverCap && (
-                <span className="block mt-0.5 font-medium">Reduce budgets before saving.</span>
-              )}
+            <Meter
+              value={Math.min(150, overheadPct)}
+              max={150}
+              tone={isOverCap ? "down" : overheadPct > 110 ? "warning" : "brand"}
+              height={8}
+            />
+            <div className="flex justify-between text-[10px] text-muted">
+              <span>combined budgets</span>
+              <span className={isOverCap ? "font-semibold text-error" : ""}>150% cap</span>
             </div>
-          )}
+          </div>
+          <div
+            className={`mt-1 rounded-md px-3 py-2 text-xs ${
+              isOverCap
+                ? "bg-error/10 text-error border border-error/20"
+                : "bg-card-elevated text-muted border border-card-border"
+            }`}
+          >
+            <span className="font-medium">Overhead budget:</span>{" "}
+            {formatAmount(
+              Math.round(toAnchor(scaleMoney(combinedDailyOverhead, periodView))),
+              liquidCode
+            )}{" "}
+            /{" "}
+            {formatAmount(
+              Math.round(toAnchor(scaleMoney(maxDailyOverhead, periodView))),
+              liquidCode
+            )}{" "}
+            cap (150% of revenue)
+            {isOverCap && (
+              <span className="block mt-0.5 font-medium">
+                {financials.totalRevenue > 0
+                  ? "Reduce budgets before saving."
+                  : "A corporation with no gross revenue cannot set positive operating budgets."}
+              </span>
+            )}
+          </div>
 
           <div className="pt-2">
             <button
