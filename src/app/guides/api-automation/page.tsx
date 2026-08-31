@@ -48,13 +48,14 @@ export default function ApiAutomationGuidePage() {
         <p className="text-sm text-muted">
           Public-scope keys can read the live game clock, countries and regions, national metrics
           and budgets, governments, elections, legislation, referendums, international
-          organizations, trade restrictions, sovereign risk, conflicts, corporations, stocks, bonds,
-          commodities, funds, and forex.
+          organizations, trade restrictions and flows, sovereign risk, historical economic and
+          fiscal series, conflicts, corporations, stocks, bonds, commodities, funds, and forex.
         </p>
         <p className="text-sm text-muted">
           Start with <code>/api/public/v1/meta</code> for the machine-readable route catalog. The
           catalog is tested against the route tree, so it cannot silently omit an implemented v1
-          endpoint.
+          endpoint. OpenAPI clients can load the complete contract from{" "}
+          <code>/api/public/v1/openapi.json</code>.
         </p>
       </section>
 
