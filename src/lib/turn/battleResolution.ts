@@ -43,6 +43,8 @@ import { frontSupportFor } from "@/lib/navair/frontSupport";
 import { loadNavairChannels } from "@/lib/db/collections/navairChannels";
 import type { NavairUnit } from "@/lib/navair/types";
 import { standDownCountry } from "@/lib/military/leaveConflict";
+import { getAllCountryAccess } from "@/lib/countryAccess";
+import { readNppOffensiveFlags } from "@/lib/nppAutonomy/offensiveFlags";
 import { principalOf, DICTATE_WINDOW_TURNS } from "@/lib/military/principal";
 import { OCCUPATION } from "@/lib/military/config";
 import {
@@ -380,6 +382,24 @@ export async function resolveBattleDeclarations(
     .find({ domain: { $in: ["naval", "air"] } })
     .toArray()) as unknown as NavairUnit[];
 
+  // Standing orders an NPP government cannot write for itself. A player sets
+  // `theaterState.autoJoin` from the cabinet battle route; an NPP-run country has
+  // nobody to press that button, so the admin switch stands in for it and every
+  // non-player-enabled country counts as opted in on every front. Read ONCE for the
+  // whole tick for the same reason as the bloc roll: the answer cannot change between
+  // fronts, and this runs inside a phase with a turn time budget.
+  //
+  // The permission is all this grants. `autoJoinersAtFront` still requires troops
+  // already posted at that front and on the attacking side, so nothing is teleported
+  // and no country is dragged into attacking its own coalition.
+  const nppAutoJoiners = new Set<string>();
+  if ((await readNppOffensiveFlags(db)).join) {
+    const access = await getAllCountryAccess(db);
+    for (const [countryId, record] of Object.entries(access)) {
+      if (!record.enabledForPlayers) nppAutoJoiners.add(countryId);
+    }
+  }
+
   // Group by front so each conflict document is loaded once no matter how many
   // allies declared against it.
   const byTheater = new Map<string, BattleDeclarationDoc[]>();
@@ -438,11 +458,12 @@ export async function resolveBattleDeclarations(
     // Standing orders: allies who fight in an offensive here without declaring one of
     // their own. Loaded once for the whole front, because the set cannot change between
     // offensives inside a tick.
-    const optedIn = new Set(
-      (await listTheaterStates(db))
+    const optedIn = new Set([
+      ...(await listTheaterStates(db))
         .filter((st) => st.autoJoin?.[theaterId])
-        .map((st) => String(st.countryId))
-    );
+        .map((st) => String(st.countryId)),
+      ...nppAutoJoiners,
+    ]);
     if (optedIn.size > 0) {
       for (const off of offensives) {
         // A matchup that resolves to no side enrols nobody -- the same rule that stops

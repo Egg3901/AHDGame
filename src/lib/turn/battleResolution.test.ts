@@ -23,6 +23,7 @@ const DECL_ID = {
   legacyBaselines: "aaaaaaaaaaaaaaaaaaaa0004",
   alliedAutoJoin: "aaaaaaaaaaaaaaaaaaaa0005",
   coalition: "aaaaaaaaaaaaaaaaaaaa0006",
+  nppAutoJoin: "aaaaaaaaaaaaaaaaaaaa0007",
 };
 
 // The era's bloc roll is an INPUT to resolution, not something it decides, so it is
@@ -1306,5 +1307,114 @@ describe("resolveBattleDeclarations - allied auto-join", () => {
     // live world by `scripts/sim/combatBalance2026-08-27.ts`, which resolves DD+RU as a
     // real coalition and checks the per-contingent losses sum to the side.
     expect(contingents.map((c) => c.country).sort()).toEqual(["UK", "US"]);
+  });
+});
+
+describe("resolveBattleDeclarations - NPP auto-join switch", () => {
+  let db: MockDb;
+
+  /**
+   * UK is the ally under test. It never declares and never writes a
+   * `theaterState.autoJoin` order, because an NPP-run country has no player to write
+   * one: `nppOffensiveJoinEnabled` is what stands in for that order.
+   */
+  const coalitionConflict = {
+    _id: "afghan",
+    name: "Central Asian Front",
+    hostCountry: "RU",
+    region: "cas",
+    terrain: "Arid / mountainous",
+    bloc: "contested",
+    severity: "HIGH",
+    baseStrength: 470,
+    terr: 1.15,
+    infra: 34,
+    enemyMix: ["armor", "mech", "infantry"],
+    supplyA: 60,
+    supplyB: 60,
+    supplyBaseA: 60,
+    supplyBaseB: 60,
+    sideA: { label: "Allies", countries: ["US", "UK"], kind: "coalition" },
+    sideB: { label: "Gov't", countries: ["CN"], kind: "state" },
+  };
+
+  const usDeclares = {
+    _id: new ObjectId(DECL_ID.nppAutoJoin),
+    declarerCountry: "US",
+    targetCountry: "CN",
+    theaterId: "afghan",
+    declaredByCharacterId: "char_1",
+    declaredTurn: 40,
+    status: "pending",
+  };
+
+  /**
+   * `joinEnabled` is the admin switch; `ukIsNpp` is whether UK reads as NPP-run. Both
+   * vary because the switch must be inert for a player government even when on.
+   */
+  function setup(joinEnabled: boolean, ukIsNpp = true) {
+    vi.clearAllMocks();
+    db = createMockDb();
+    for (const c of [
+      "militaryUnits",
+      "militaryFormations",
+      "nationalDoctrine",
+      "battleDeclarations",
+      "battleReports",
+      "conflicts",
+      "theaterState",
+      "gameState",
+      "countryGameStates",
+    ]) {
+      db.collection(c);
+    }
+    db.collectionMocks.militaryFormations.findOne.mockResolvedValue(null);
+    db.collectionMocks.nationalDoctrine.findOne.mockResolvedValue(null);
+    db.collectionMocks.conflicts.findOne.mockResolvedValue(coalitionConflict);
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      nppOffensiveJoinEnabled: joinEnabled,
+    });
+    db.collectionMocks.countryGameStates.find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([{ _id: "UK", status: "active", enabledForPlayers: !ukIsNpp }]),
+    });
+    db.collectionMocks.battleDeclarations.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([usDeclares]),
+    });
+    // No standing order anywhere: the switch is the only thing that can enrol UK.
+    db.collectionMocks.theaterState.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    wireUnits(
+      db,
+      [unit({ countryId: "US" }), unit({ countryId: "UK", theaterId: "afghan" })],
+      [unit({ countryId: "CN", theaterId: "afghan" })]
+    );
+  }
+
+  const reportOf = () =>
+    db.collectionMocks.battleReports.insertOne.mock.calls[0]?.[0] as { attackers?: string[] };
+
+  it("enrols an NPP ally deployed at the front when the switch is on", async () => {
+    setup(true);
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+    expect(reportOf().attackers).toEqual(["US", "UK"]);
+  });
+
+  it("leaves the NPP ally out when the switch is off", async () => {
+    // The default, and the whole point of the switch: silence stays defensive.
+    setup(false);
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+    expect(reportOf().attackers).toEqual(["US"]);
+  });
+
+  it("never enrols a player government, switch on or not", async () => {
+    // Players opt in through `theaterState.autoJoin` and nowhere else. If the switch
+    // reached them it would attack with an army whose owner never ordered it.
+    setup(true, false);
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+    expect(reportOf().attackers).toEqual(["US"]);
   });
 });
