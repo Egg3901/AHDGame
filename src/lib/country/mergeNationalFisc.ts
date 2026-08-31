@@ -142,11 +142,14 @@ export async function mergeNationalFisc(
   // fractions (gdpCostFraction, budgetCost's legacy percentage, multipliers)
   // are scale-free and stay.
   const laws = db.collection<EnactedLaw>("enactedLaws");
+  // `stateId: null` matches both an absent field and an explicit null in Mongo;
+  // the cast is because `EnactedLaw.stateId` is `string | undefined` and the
+  // driver's Filter type refuses a literal null for it.
   const nationalLaws = await laws
     .find({
       countryId: fromCountryId,
       $or: [{ stateId: { $exists: false } }, { stateId: null }],
-    })
+    } as import("mongodb").Filter<EnactedLaw>)
     .toArray();
 
   for (const law of nationalLaws) {

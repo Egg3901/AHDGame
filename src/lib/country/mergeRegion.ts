@@ -149,21 +149,29 @@ export async function mergeRegion(db: Db, args: MergeRegionArgs): Promise<MergeR
   // (party, region) pair would break the one-org-per-party read. Treasuries add;
   // the survivor's settings stand. Everything else in the list is ledger/history
   // shaped and re-points wholesale.
-  const partyOrgs = db.collection<Record<string, unknown>>("statePartyOrg");
+  interface RegionPartyOrg {
+    _id: unknown;
+    partyId?: string;
+    stateId?: string;
+    treasury?: number;
+    updatedAt?: Date;
+  }
+  const partyOrgs = db.collection<RegionPartyOrg>("statePartyOrg");
   const sourceOrgs = await partyOrgs.find({ stateId: fromRegionId }).toArray();
   for (const org of sourceOrgs) {
     const existing = await partyOrgs.findOne({ stateId: toRegionId, partyId: org.partyId });
     if (existing) {
       const treasury = typeof org.treasury === "number" ? org.treasury : 0;
-      await partyOrgs.updateOne({ _id: existing._id } as Record<string, unknown>, {
-        $inc: { treasury },
-        $set: { updatedAt: now },
-      });
-      await partyOrgs.deleteOne({ _id: org._id } as Record<string, unknown>);
+      await partyOrgs.updateOne(
+        { _id: existing._id },
+        { $inc: { treasury }, $set: { updatedAt: now } }
+      );
+      await partyOrgs.deleteOne({ _id: org._id });
     } else {
-      await partyOrgs.updateOne({ _id: org._id } as Record<string, unknown>, {
-        $set: { stateId: toRegionId, updatedAt: now },
-      });
+      await partyOrgs.updateOne(
+        { _id: org._id },
+        { $set: { stateId: toRegionId, updatedAt: now } }
+      );
     }
     documentsMoved++;
   }
