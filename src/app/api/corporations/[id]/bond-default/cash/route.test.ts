@@ -53,6 +53,8 @@ beforeEach(async () => {
     "characters",
     "imperialCharacters",
     "exchangeRates",
+    "indexFunds",
+    "npps",
   ]) {
     db.collection(name);
   }
@@ -479,5 +481,147 @@ describe("POST /api/corporations/[id]/bond-default/cash — ledger emission", ()
     expect(res.status).toBe(503);
     // No bonds.updateMany should have fired.
     expect(db.collectionMocks["bonds"]!.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/corporations/[id]/bond-default/cash — fund and NPP holders", () => {
+  it("pays index-fund and autonomous-NPP holders their principal before curing (#809)", async () => {
+    // Pre-fix the holder chain only handled character / imperial / corporation.
+    // Fund and NPP units were skipped, yet the corporation was still debited
+    // the WHOLE bond face (sumDefaultedBondPrincipal sums bond.totalIssued, not
+    // per-holder) and the bond was marked cured — so their principal was
+    // destroyed, not merely uncollected.
+    const corpId = new ObjectId();
+    const fundId = new ObjectId();
+    const nppId = new ObjectId();
+    const bondId = new ObjectId();
+
+    const corporation = {
+      _id: corpId,
+      name: "Test Issuer",
+      countryId: "US",
+      liquidCapital: 1_000_000,
+      liquidCurrencyCode: "USD",
+    };
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({ ok: true, corporation } as never);
+    db.collectionMocks["corporations"]!.findOne.mockResolvedValue(corporation as never);
+
+    db.collectionMocks["bonds"]!.find.mockReturnValue(
+      makeCursor([
+        {
+          _id: bondId,
+          corporationId: corpId,
+          currencyCode: "USD",
+          matured: false,
+          defaulted: true,
+          couponRate: 8,
+          totalIssued: 15_000,
+          holders: [
+            { fundId, units: 10 },
+            { nppId, units: 5 },
+          ],
+        },
+      ])
+    );
+    db.collectionMocks["exchangeRates"]!.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks["characters"]!.find.mockReturnValue({
+      project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+    });
+    db.collectionMocks["imperialCharacters"]!.find.mockReturnValue({
+      project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+    });
+    db.collectionMocks["corporations"]!.find.mockReturnValue(makeCursor([]));
+
+    const req = new Request(
+      `http://localhost/api/corporations/${corpId.toString()}/bond-default/cash`,
+      { method: "POST" }
+    );
+    const { POST } = await import("./route");
+    const res = await POST(req, { params: Promise.resolve({ id: corpId.toString() }) });
+    expect(res.status).toBe(200);
+
+    // 10 units x $1,000 face = 10,000 to the fund's anchor cash.
+    const fundWrite = db.collectionMocks["indexFunds"]!.bulkWrite.mock.calls[0]![0] as Array<{
+      updateOne: { filter: { _id: ObjectId }; update: { $inc: { cashAnchor: number } } };
+    }>;
+    expect(fundWrite).toHaveLength(1);
+    expect(fundWrite[0]!.updateOne.filter._id.toString()).toBe(fundId.toString());
+    expect(fundWrite[0]!.updateOne.update.$inc.cashAnchor).toBe(10_000);
+
+    // 5 units x $1,000 = 5,000 to the NPP's INVESTMENT account, not its war chest.
+    const nppWrite = db.collectionMocks["npps"]!.bulkWrite.mock.calls[0]![0] as Array<{
+      updateOne: {
+        filter: { _id: ObjectId };
+        update: { $inc: { nppInvestmentCashAnchor: number } };
+      };
+    }>;
+    expect(nppWrite).toHaveLength(1);
+    expect(nppWrite[0]!.updateOne.filter._id.toString()).toBe(nppId.toString());
+    expect(nppWrite[0]!.updateOne.update.$inc.nppInvestmentCashAnchor).toBe(5_000);
+  });
+
+  it("logs the fund payout but keeps NPP investment returns out of the tx log", async () => {
+    const corpId = new ObjectId();
+    const fundId = new ObjectId();
+    const nppId = new ObjectId();
+
+    const corporation = {
+      _id: corpId,
+      name: "Test Issuer",
+      countryId: "US",
+      liquidCapital: 1_000_000,
+      liquidCurrencyCode: "USD",
+    };
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({ ok: true, corporation } as never);
+    db.collectionMocks["corporations"]!.findOne.mockResolvedValue(corporation as never);
+    db.collectionMocks["bonds"]!.find.mockReturnValue(
+      makeCursor([
+        {
+          _id: new ObjectId(),
+          corporationId: corpId,
+          currencyCode: "USD",
+          matured: false,
+          defaulted: true,
+          couponRate: 8,
+          totalIssued: 15_000,
+          holders: [
+            { fundId, units: 10 },
+            { nppId, units: 5 },
+          ],
+        },
+      ])
+    );
+    db.collectionMocks["exchangeRates"]!.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks["characters"]!.find.mockReturnValue({
+      project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+    });
+    db.collectionMocks["imperialCharacters"]!.find.mockReturnValue({
+      project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+    });
+    db.collectionMocks["corporations"]!.find.mockReturnValue(makeCursor([]));
+
+    const req = new Request(
+      `http://localhost/api/corporations/${corpId.toString()}/bond-default/cash`,
+      { method: "POST" }
+    );
+    const { POST } = await import("./route");
+    expect((await POST(req, { params: Promise.resolve({ id: corpId.toString() }) })).status).toBe(
+      200
+    );
+
+    const { emitTxBulk } = await import("@/lib/financialTxLog/emit");
+    const rows = vi.mocked(emitTxBulk).mock.calls[0]![1] as Array<{
+      subjectId: ObjectId;
+      amount: number;
+      meta?: Record<string, unknown>;
+    }>;
+    // The fund's payout is auditable...
+    const fundRow = rows.find((r) => r.subjectId.toString() === fundId.toString());
+    expect(fundRow?.amount).toBe(10_000);
+    expect(fundRow?.meta?.fundId).toBe(fundId.toString());
+    // ...while NPP investment returns stay out, matching the bondTurn legs.
+    expect(rows.some((r) => r.subjectId.toString() === nppId.toString())).toBe(false);
   });
 });
