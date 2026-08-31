@@ -219,26 +219,83 @@ export function applyVoteReachFloor(reach: number): number {
  * first-term candidate SHOULD win decisively) — it's that the SAME party
  * carries the SAME gap into every election for 12 years straight because
  * nothing about the gap is tenure-aware. So — like the economic referendum
- * channel already does on the national-share side — this
- * erodes the tenure-holder's effective PI/favorability by a fixed number of
- * points per consecutive term beyond the first, gated on tenure data that's
- * only present for single-winner races with tracked incumbency (US
- * President via `incumbentConsecutiveTerms`, US Senate via
- * `legislativeIncumbentTenureTerms`). Absent tenure data (first term, open
- * seat, or a race family with no individual-tenure tracking, e.g. US House's
- * multi-seat aggregate) this is a complete no-op — existing single-election
+ * channel already does on the national-share side — this erodes the
+ * tenure-holder's effective PI/favorability per consecutive term beyond the
+ * first, gated on tenure data that's only present for races with tracked
+ * incumbency: US President via `incumbentConsecutiveTerms`, US Senate via
+ * `legislativeIncumbentTenureTerms`, and US House per-candidate via
+ * `houseIncumbentTenureTermsByCandidateId`. Absent tenure data (first term,
+ * open seat, or a race family with no individual-tenure tracking) this
+ * returns exactly 1.0 — a complete no-op, so existing single-election
  * balance tests are unaffected.
+ *
+ * ── Why this is a RETENTION FRACTION and not a points subtraction ──────────
+ *
+ * The original form subtracted a flat 10 POINTS per term (to a 100-point cap)
+ * from stats whose live values sit around 25-80. That operator is regressive:
+ * the same 40-point charge at five terms takes 100% of a PI-26.6 candidate and
+ * 0% of a PI-90 one, so it deleted exactly the ordinary officeholders it was
+ * least meant to touch. It went live on the 1962 US House: 35 of the 49 active
+ * US races carried it (41 of 55 counting every country), and in Florida (turn
+ * 522) both returning nominees held five terms, which drove their
+ * politicalInfluence to zero (floored at VOTE_REACH_FLOOR) and more than
+ * halved their favorability. A first-time nominee for a party holding 1.7% of
+ * the state's registration took 87.8% of the vote and all eight seats, where
+ * the same engine with no erosion returns a 39/39/22 three-way race.
+ *
+ * Scaling the stat instead is scale-free: every incumbent keeps the same
+ * FRACTION of their standing regardless of its size, no tenure however long
+ * can drive a candidate to zero, and the ordering the rest of the engine
+ * computes survives. The magnitude is correspondingly much smaller — this is
+ * a tilt against entrenchment, not a term limit. The cap binds at six terms
+ * held, and from there on every incumbent keeps 85% of their reach and
+ * approval no matter how long they stay.
+ *
+ * Note this leaves the underlying compounding described above unfixed: PI and
+ * favorability still have no per-cycle mean reversion the way
+ * `electionCandidates.support` does. Correcting that belongs in the stats
+ * themselves, not in a vote-time counterweight sized to overpower them.
  */
-export const PERSONAL_STAT_TENURE_FATIGUE_PER_TERM = 10;
-export const PERSONAL_STAT_TENURE_FATIGUE_MAX = 100;
+export const PERSONAL_STAT_TENURE_EROSION_PER_TERM = 0.03;
+export const PERSONAL_STAT_TENURE_EROSION_MAX = 0.15;
 
-export function personalStatTenureFatigue(consecutiveTerms: number | undefined): number {
-  if (consecutiveTerms == null || !Number.isFinite(consecutiveTerms)) return 0;
+/**
+ * Fraction of a tenure-holder's politicalInfluence / favorability that still
+ * counts, given their consecutive terms. Returns a multiplier in
+ * `[1 - PERSONAL_STAT_TENURE_EROSION_MAX, 1]`, never 0, so callers scale the
+ * stat (`stat * retention`) rather than subtracting from it.
+ */
+export function personalStatTenureRetention(consecutiveTerms: number | undefined): number {
+  if (consecutiveTerms == null || !Number.isFinite(consecutiveTerms)) return 1;
   const termsBeyondFirst = Math.max(0, Math.floor(consecutiveTerms) - 1);
-  return Math.min(
-    PERSONAL_STAT_TENURE_FATIGUE_MAX,
-    termsBeyondFirst * PERSONAL_STAT_TENURE_FATIGUE_PER_TERM
+  const erosion = Math.min(
+    PERSONAL_STAT_TENURE_EROSION_MAX,
+    termsBeyondFirst * PERSONAL_STAT_TENURE_EROSION_PER_TERM
   );
+  return 1 - erosion;
+}
+
+/**
+ * Convert the single-seat legislative lane's term count into the terms-held
+ * units {@link personalStatTenureRetention} expects.
+ *
+ * The three tenure sources disagree. The presidential ledger
+ * (`getPresidentialConsecutiveTerms`) and the House map
+ * (`resolveHouseIncumbentTenures`) both report terms ALREADY HELD, so a
+ * first-termer seeking re-election is 1. The Senate's
+ * `computeConsecutiveTermsFromWinners` reports the term being SOUGHT: it seeds
+ * at 1 for the current term and then also counts the prior win that seated the
+ * incumbent, so the same senator is 2. Fed raw, an identically-served senator
+ * ate a full extra term of erosion.
+ *
+ * Normalized here rather than in the counter itself, because the Senate
+ * incumbency shield in `persuasionDrivers.ts` consumes that raw sought-term
+ * value and was calibrated against it
+ * (`2026-07-15-senate-incumbency-driver-design.md`); moving the counter would
+ * silently retune a different driver.
+ */
+export function legislativeTenureTermsHeld(soughtTerm: number | undefined): number | undefined {
+  return soughtTerm == null ? undefined : soughtTerm - 1;
 }
 
 /**

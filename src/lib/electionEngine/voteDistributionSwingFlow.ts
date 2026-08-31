@@ -43,9 +43,10 @@ import {
   stateOrgBonusFraction,
 } from "./constants";
 import {
+  legislativeTenureTermsHeld,
   orgVoteWeight,
   personalOrgFloor,
-  personalStatTenureFatigue,
+  personalStatTenureRetention,
   regBaselineMultiplier,
   regResistanceMultiplier,
   supportMoodMultiplier,
@@ -84,38 +85,44 @@ function appealWeight(
   options: DistributeVotesOptions | undefined,
   trace?: AppealWeightTrace
 ): number {
-  // Personal-stat tenure fatigue (see `personalStatTenureFatigue`'s doc
+  // Personal-stat tenure erosion (see `personalStatTenureRetention`'s doc
   // comment in electionFormulaFactors.ts for the full root-cause writeup).
   // politicalInfluence / favorability have no tenure-aware decay of their
   // own — unlike the swing-side incumbency driver (which already erodes via
   // the economic referendum channel), a multi-term incumbent's reach/approval
-  // edge from these two stats never shrinks on its own. This mirrors that
-  // same per-term erosion directly onto the raw stat values feeding
+  // edge from these two stats never shrinks on its own. This scales that
+  // same per-term erosion onto the raw stat values feeding
   // reach/appeal/approval below, gated on tenure data that only exists for
   // tracked incumbencies: US President and US Senate (single scalar
   // party+terms — one seat, one incumbent) and US House (a per-candidate map,
   // since a multi-seat race can have several simultaneous incumbents — see
   // `resolveHouseIncumbentTenures`'s doc comment in singleSeatIncumbency.ts).
   // No tenure data (open seat, first term, fresh nominee, or an untracked race
-  // family) ⇒ 0 ⇒ complete no-op.
+  // family) ⇒ 1.0 ⇒ complete no-op. It is a FRACTION of the stat, never a
+  // points charge against it, so no tenure however long can zero a candidate.
   const isTenuredExecutiveIncumbent =
     options?.incumbentPartyId != null && ec.party === options.incumbentPartyId;
   const isTenuredLegislativeIncumbent =
     options?.legislativeIncumbentPartyId != null &&
     ec.party === options.legislativeIncumbentPartyId;
   const houseIncumbentTerms = options?.houseIncumbentTenureTermsByCandidateId?.get(ec.candidateId);
-  const personalStatFatigue = isTenuredExecutiveIncumbent
-    ? personalStatTenureFatigue(options?.incumbentConsecutiveTerms)
+  // The Senate lane reports the term being SOUGHT where the other two report
+  // terms already HELD; `legislativeTenureTermsHeld` reconciles them so
+  // identical service earns identical erosion in every lane. See its doc
+  // comment in electionFormulaFactors.ts.
+  const legislativeTermsHeld = legislativeTenureTermsHeld(options?.legislativeIncumbentTenureTerms);
+  const tenureRetention = isTenuredExecutiveIncumbent
+    ? personalStatTenureRetention(options?.incumbentConsecutiveTerms)
     : isTenuredLegislativeIncumbent
-      ? personalStatTenureFatigue(options?.legislativeIncumbentTenureTerms)
+      ? personalStatTenureRetention(legislativeTermsHeld)
       : houseIncumbentTerms != null
-        ? personalStatTenureFatigue(houseIncumbentTerms)
-        : 0;
+        ? personalStatTenureRetention(houseIncumbentTerms)
+        : 1;
 
   const rawReachSource = options?.useNationalInfluenceForReach
     ? ec.nationalInfluence
     : ec.politicalInfluence;
-  const rawReach = Math.max(0, rawReachSource - personalStatFatigue);
+  const rawReach = Math.max(0, rawReachSource * tenureRetention);
   const reach = applyVoteReachFloor(
     options?.useNationalInfluenceForReach && options?.presidentialPrimaryNationalReach
       ? normalizeNationalReachPresidentialPrimary(rawReach)
@@ -152,7 +159,7 @@ function appealWeight(
 
   const archetypeApproval = ec.archetypeApprovals?.[groupId] ?? 0;
   const effectiveFav = calcEffectiveFavorability(
-    Math.max(0, ec.favorability - personalStatFatigue),
+    Math.max(0, ec.favorability * tenureRetention),
     archetypeApproval
   );
   const approval = approvalScalar(effectiveFav);

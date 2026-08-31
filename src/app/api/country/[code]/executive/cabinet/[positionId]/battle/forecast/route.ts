@@ -18,8 +18,8 @@ import { buildCoalitionSide } from "@/lib/military/battleSides";
 import { resolveDefendingSides } from "@/lib/military/defendingSides";
 import { buildFactionSide } from "@/lib/military/factionSide";
 import { listPendingDeclarations } from "@/lib/db/collections/battleDeclarations";
-import { listTheaterStates } from "@/lib/db/collections/theaterState";
 import { autoJoinersAtFront } from "@/lib/military/coalition";
+import { loadOffensiveOptInSources, offensiveOptInsAtFront } from "@/lib/military/offensiveOptIns";
 import { battleForecast } from "@/lib/military/battle";
 import { enemyBand } from "@/lib/military/forecastFog";
 import { sideOf } from "@/lib/military/occupation";
@@ -136,17 +136,20 @@ export async function GET(request: Request, { params }: RouteParams) {
           .map((d) => d.declarerCountry)
       ),
     ];
-    // ...and every ally standing here under a standing order to join offensives.
+    // ...and every ally standing here who joins offensives without declaring one:
+    // a player standing order, or the admin switch that opts NPP belligerents in.
     //
     // `battleResolution` folds these into `off.attackers` before it builds the sides,
     // so leaving them out here understated an offensive by exactly the allies who were
     // going to fight in it. The route's own contract is that a forecast can never
     // disagree with the outcome it predicts, so it has to ask the same question with
-    // the same helper the resolver uses.
-    const optedIn = new Set(
-      (await listTheaterStates(db))
-        .filter((st) => st.autoJoin?.[theaterId])
-        .map((st) => String(st.countryId))
+    // the same loader the resolver uses — including when a new source of consent is
+    // added, which is why both sides read `offensiveOptInsAtFront` rather than
+    // re-deriving the set from `theaterState`.
+    const optedIn = offensiveOptInsAtFront(
+      await loadOffensiveOptInSources(db),
+      conflict,
+      theaterId
     );
     const autoJoiners = optedIn.size
       ? autoJoinersAtFront(conflict, atFront, theaterId, ownSide, blocs, optedIn)
