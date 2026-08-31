@@ -5,6 +5,7 @@ import {
   declarationOutcome,
   forceReadiness,
   recoveringCount,
+  settlementRow,
   type RecordExtrasInput,
 } from "./conflictRecordView";
 // From the leaf, not through the view module: the projection the panel shows and
@@ -559,5 +560,67 @@ describe("buildRecordExtras - enemy band and naval reach", () => {
   it("still produces a band when the caller omits sea access", () => {
     // Older callers pass nothing; that must degrade to the inland read, not throw.
     expect(buildRecordExtras(navalInput(undefined)).enemyBand).toBeDefined();
+  });
+});
+
+describe("settlementRow", () => {
+  const base = {
+    _id: { toString: () => "offer1" },
+    term: { kind: "white_peace" as const },
+    justification: "Exact terms to be negotiated and agreed upon in future talks.",
+    offeredTurn: 525,
+    resolvedTurn: 532,
+  };
+
+  it("names the sender as the leaver on a let-me-out deal", () => {
+    const row = settlementRow({
+      ...base,
+      fromCountry: "IE",
+      toCountry: "DD",
+      leaver: "IE",
+    });
+    expect(row.leaver).toBe("IE");
+    expect(row.other).toBe("DD");
+  });
+
+  it("names the RECIPIENT as the leaver on a you-get-out deal", () => {
+    // The War for Germany, turn 532: DD asked the UK to withdraw and stayed in the
+    // war itself. Reading the leaver off `fromCountry` printed "DD left the war,
+    // settling with UK" about a country still fighting.
+    const row = settlementRow({
+      ...base,
+      fromCountry: "DD",
+      toCountry: "UK",
+      leaver: "UK",
+    });
+    expect(row.leaver).toBe("UK");
+    expect(row.other).toBe("DD");
+  });
+
+  it("dates the row by when it was accepted, not when it was offered", () => {
+    const row = settlementRow({ ...base, fromCountry: "DD", toCountry: "UK", leaver: "UK" });
+    expect(row.turn).toBe(532);
+  });
+
+  it("falls back to the offered turn when nothing resolved it", () => {
+    const row = settlementRow({
+      ...base,
+      resolvedTurn: undefined,
+      fromCountry: "DD",
+      toCountry: "UK",
+      leaver: "UK",
+    });
+    expect(row.turn).toBe(525);
+  });
+
+  it("carries a missing justification through as null, not undefined", () => {
+    const row = settlementRow({
+      ...base,
+      justification: undefined,
+      fromCountry: "DD",
+      toCountry: "UK",
+      leaver: "UK",
+    });
+    expect(row.justification).toBeNull();
   });
 });
