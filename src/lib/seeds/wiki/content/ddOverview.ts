@@ -92,6 +92,7 @@ The distinctive seats:
 | Minister of Agriculture, Forestry and Food | Procurement Quotas over the collectivized LPG farms |
 | Minister of Heavy Industry and Machine Building | Combine Output Setting: modernization vs over-fulfilment |
 | Minister of Internal Affairs | Internal Security Posture: thaw vs crackdown |
+| Minister for State Security | Collection Posture: restrained vs aggressive; Counter-Intelligence Sweep and Informant Network Expansion orders. Runs the foreign networks and the files on everyone at home (seat exists from 1950) |
 | Minister of Culture | Cultural Line: liberal vs orthodox (seat exists from 1954) |
 
 Era gating is real: the **Minister of National Defence seat only exists from 1956**, when the NVA stands up (before that the KVP sits under the Interior portfolio), and the Staatsbank liaison reads "Deutsche Notenbank" before the 1968 rename. See the [Cabinet Guide](/wiki/cabinet-guide).
