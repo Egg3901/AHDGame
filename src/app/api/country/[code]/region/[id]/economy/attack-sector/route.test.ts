@@ -13,6 +13,10 @@ vi.mock("@/lib/mongodb", () => ({
   }),
 }));
 vi.mock("node:crypto", () => ({ randomInt: vi.fn().mockReturnValue(0) }));
+const assertTransactionSupport = vi.fn();
+vi.mock("@/lib/db/transactionSupport", () => ({
+  assertTransactionSupportAtBoot: () => assertTransactionSupport(),
+}));
 vi.mock("@/lib/api/requireAuth", () => ({ requireHumanSession: vi.fn() }));
 vi.mock("@/lib/api/rateLimit", () => ({
   checkRateLimit: vi.fn().mockReturnValue({ ok: true }),
@@ -54,6 +58,7 @@ const ctx = () => ({ params: Promise.resolve({ code: "US", id: "CA" }) });
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  assertTransactionSupport.mockResolvedValue(true);
   db = createMockDb();
   db.collection("gameState");
   db.collection("states");
@@ -492,5 +497,163 @@ describe("POST /api/country/[code]/region/[id]/economy/attack-sector", () => {
     expect(db.collectionMocks.corporations.updateOne).toHaveBeenCalledTimes(1);
     expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
     expect(db.collectionMocks.corporateSectors.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("completes the split on standalone Mongo, which cannot open a transaction", async () => {
+    // Ticket #1239: prod Mongo is standalone, so requiring a transaction turned
+    // every attack into an opaque 500. The split must run sequentially instead.
+    assertTransactionSupport.mockResolvedValue(false);
+    const attackerCharId = new ObjectId();
+    const attackerCorpId = new ObjectId();
+    const defenderCorpId = new ObjectId();
+    const targetSectorId = new ObjectId();
+    const attacker = {
+      _id: attackerCorpId,
+      ceoId: attackerCharId,
+      name: "Attacker Corp",
+      liquidCapital: 1_000_000,
+      marketingStrength: 200,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+    };
+    const defender = {
+      _id: defenderCorpId,
+      name: "Defender Corp",
+      liquidCapital: 1_000_000,
+      marketingStrength: 100,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+    };
+    const target = {
+      _id: targetSectorId,
+      corporationId: defenderCorpId,
+      countryId: "US",
+      stateId: "CA",
+      sectorType: "energy",
+      strategyId: "standard",
+      revenue: 1_000_000,
+      capitalStock: 1_000,
+      capacityBookAnchor: 1_000_000,
+      plantCount: 100,
+      plantUnitRemainder: 0,
+    };
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentTurn: 511 });
+    db.collectionMocks.states.findOne.mockResolvedValue({
+      _id: "CA",
+      countryId: "US",
+      name: "California",
+    });
+    db.collectionMocks.users.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      activeCharacterType: "regular",
+    });
+    const { getCharacterByUserId } = await import("@/lib/db/characterLookup");
+    vi.mocked(getCharacterByUserId).mockResolvedValue({ _id: attackerCharId } as never);
+    // A later-in-file sibling pins the roll high to force a miss, and
+    // clearAllMocks leaves implementations in place, so pin it back.
+    const { randomInt } = await import("node:crypto");
+    vi.mocked(randomInt as unknown as () => number).mockReturnValue(0);
+    db.collectionMocks.corporations.findOne
+      .mockResolvedValueOnce(attacker)
+      .mockResolvedValueOnce(defender)
+      .mockResolvedValueOnce(attacker)
+      .mockResolvedValueOnce(defender);
+    db.collectionMocks.corporations.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.corporateSectors.findOne
+      .mockResolvedValueOnce(target)
+      .mockResolvedValueOnce(target)
+      .mockResolvedValueOnce(null);
+    db.collectionMocks.corporateSectors.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.corporateSectors.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest({ sectorId: targetSectorId.toHexString() }), ctx());
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toMatchObject({ splitSucceeded: true, plantsTransferred: 25 });
+    // No transaction was ever opened, and the writes still landed.
+    expect(withTransaction).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporateSectors.insertOne).toHaveBeenCalled();
+  });
+
+  it("refunds the debit when a sequential split conflicts after charging the attacker", async () => {
+    // Without a transaction there is no abort to undo the debit, so the route
+    // has to hand the cash and MS back itself.
+    assertTransactionSupport.mockResolvedValue(false);
+    const attackerCharId = new ObjectId();
+    const attackerCorpId = new ObjectId();
+    const defenderCorpId = new ObjectId();
+    const targetSectorId = new ObjectId();
+    const attacker = {
+      _id: attackerCorpId,
+      ceoId: attackerCharId,
+      name: "Attacker Corp",
+      liquidCapital: 1_000_000,
+      marketingStrength: 200,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+    };
+    const defender = {
+      _id: defenderCorpId,
+      name: "Defender Corp",
+      liquidCapital: 1_000_000,
+      marketingStrength: 100,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+    };
+    const target = {
+      _id: targetSectorId,
+      corporationId: defenderCorpId,
+      countryId: "US",
+      stateId: "CA",
+      sectorType: "energy",
+      strategyId: "standard",
+      revenue: 1_000_000,
+      capitalStock: 1_000,
+      capacityBookAnchor: 1_000_000,
+      plantCount: 100,
+      plantUnitRemainder: 0,
+    };
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentTurn: 511 });
+    db.collectionMocks.states.findOne.mockResolvedValue({
+      _id: "CA",
+      countryId: "US",
+      name: "California",
+    });
+    db.collectionMocks.users.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      activeCharacterType: "regular",
+    });
+    const { getCharacterByUserId } = await import("@/lib/db/characterLookup");
+    vi.mocked(getCharacterByUserId).mockResolvedValue({ _id: attackerCharId } as never);
+    // A later-in-file sibling pins the roll high to force a miss, and
+    // clearAllMocks leaves implementations in place, so pin it back.
+    const { randomInt } = await import("node:crypto");
+    vi.mocked(randomInt as unknown as () => number).mockReturnValue(0);
+    db.collectionMocks.corporations.findOne
+      .mockResolvedValueOnce(attacker)
+      .mockResolvedValueOnce(defender)
+      .mockResolvedValueOnce(attacker)
+      .mockResolvedValueOnce(defender);
+    db.collectionMocks.corporations.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.corporateSectors.findOne
+      .mockResolvedValueOnce(target)
+      .mockResolvedValueOnce(target)
+      .mockResolvedValueOnce(null);
+    // The defender's plant ledger moves under us: the guarded write matches
+    // nothing, which raises SplitConflictError after the debit already landed.
+    db.collectionMocks.corporateSectors.updateOne.mockResolvedValue({ modifiedCount: 0 });
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest({ sectorId: targetSectorId.toHexString() }), ctx());
+
+    expect(response.status).toBe(409);
+    expect(db.collectionMocks.corporations.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: attackerCorpId }),
+      expect.objectContaining({
+        $inc: expect.objectContaining({ liquidCapital: 125_000, marketingStrength: 14 }),
+      })
+    );
   });
 });
