@@ -21,6 +21,9 @@ import { listPendingDeclarations } from "@/lib/db/collections/battleDeclarations
 import { listTheaterStates } from "@/lib/db/collections/theaterState";
 import { autoJoinersAtFront } from "@/lib/military/coalition";
 import { battleForecast } from "@/lib/military/battle";
+import { frontSupportFor } from "@/lib/navair/frontSupport";
+import { loadNavairChannels } from "@/lib/db/collections/navairChannels";
+import type { NavairUnit } from "@/lib/navair/types";
 import { enemyBand } from "@/lib/military/forecastFog";
 import { sideOf } from "@/lib/military/occupation";
 import { loadMilitaryBlocs } from "@/lib/military/blocLookup";
@@ -179,7 +182,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     // entirely, so building them separately paid for the viewer's own coalition twice
     // on a route the war room re-fetches every time the target changes.
     const ownRoster = [...new Set<string>([...attackerCountries, ...ownDefence.defenderCountries])];
-    const [ownSides, defenderSides] = await Promise.all([
+    const [ownSides, defenderSides, navairChannels, navairUnits] = await Promise.all([
       buildCoalitionSide(db, ownRoster, unitsByCountry, fronts, supplyFor(ownSide), ownSide),
       buildCoalitionSide(
         db,
@@ -189,6 +192,13 @@ export async function GET(request: Request, { params }: RouteParams) {
         supplyFor(enemySide),
         enemySide
       ),
+      // The naval and air layer, read the same way `battleResolution` reads it: the
+      // persisted channel state `navairOperations` wrote this turn, and every naval and
+      // air formation wherever it stands — reach from station is frontSupportFor's job.
+      loadNavairChannels(db),
+      unitsCol.find({ domain: { $in: ["naval", "air"] } }).toArray() as unknown as Promise<
+        NavairUnit[]
+      >,
     ]);
     const ownByCountry = new Map(ownSides.map((s) => [s.country, s]));
     // `filter(Boolean)` is not enough for the type narrowing, and a miss would be a
@@ -216,7 +226,24 @@ export async function GET(request: Request, { params }: RouteParams) {
       ownDefenderSides.push(ownFactionSide);
     }
 
-    const fc = battleForecast(attackerSides, defenderSides, theaterId);
+    // What the naval and air layer delivers to each roster at this front, computed with
+    // the resolver's own helper so the projection carries the same air superiority,
+    // close air support and interdiction the battle will be fought under. Omitting
+    // these was the bug: both sides projected at NO_SUPPORT, so the displayed odds and
+    // supply never moved when air deployed, while the resolver's battle did.
+    const frontRegion = conflict.region;
+    const supportFor = (sides: { country: string }[]) =>
+      frontSupportFor(
+        navairUnits,
+        navairChannels,
+        sides.map((s) => s.country),
+        frontRegion
+      );
+    const supportAttack = supportFor(attackerSides);
+    const supportEnemy = supportFor(defenderSides);
+    const supportOwnDefence = supportFor(ownDefenderSides);
+
+    const fc = battleForecast(attackerSides, defenderSides, theaterId, supportAttack, supportEnemy);
     // The same front from the other end. Derived from the sides already built here,
     // so it discloses nothing new — and it is NOT 100 − oddsPct, because the
     // defender holds terrain in whichever direction the attack runs.
@@ -226,7 +253,13 @@ export async function GET(request: Request, { params }: RouteParams) {
     // what they could bring — and the viewer meets it with `ownDefenderSides`, the
     // allies who are already standing on this ground, not the ones who happened to
     // file an offensive alongside them.
-    const counter = battleForecast(defenderSides, ownDefenderSides, theaterId);
+    const counter = battleForecast(
+      defenderSides,
+      ownDefenderSides,
+      theaterId,
+      supportEnemy,
+      supportOwnDefence
+    );
     // An undefended front fizzles at resolution rather than fighting — say so up front.
     const unopposed = defending.unopposed;
     const sup = fc.attackerProfile.sup;

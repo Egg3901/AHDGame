@@ -263,6 +263,98 @@ describe("battle forecast route", () => {
     expect(reinforced).toBeLessThan(alone);
   });
 
+  /**
+   * Regression: the projection ignored the naval and air layer entirely.
+   *
+   * `battleResolution` computes `frontSupportFor` for both sides and hands it to
+   * `resolvePvpBattle`, so air superiority, close air support and interdiction all move
+   * the battle it resolves. This route called `battleForecast` without the support
+   * arguments, so both sides projected at NO_SUPPORT and the displayed odds never moved
+   * when air deployed — on a route whose whole contract is that it cannot disagree with
+   * the outcome it predicts.
+   */
+  it("folds the air layer into the odds: enemy air superiority moves both rows", async () => {
+    db.collection("navairChannels");
+    const forecastWith = async (enemyHoldsSky: boolean) => {
+      vi.resetModules();
+      db.collectionMocks.navairChannels.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue(
+          enemyHoldsSky
+            ? [
+                {
+                  countryId: "CN",
+                  region: "cas",
+                  airSuperiority: 100,
+                  seaControl: 0,
+                  detection: 0,
+                  updatedTurn: 40,
+                },
+              ]
+            : []
+        ),
+      });
+      const { GET } = await import(ROUTE);
+      const res = await GET(req("theaterId=afghan&targetCountry=CN"), call);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      return { odds: body.oddsPct as number, counter: body.counterOddsPct as number };
+    };
+
+    // Nothing changes between the arms except who holds the sky over the front.
+    const clear = await forecastWith(false);
+    const contested = await forecastWith(true);
+    expect(contested.odds).toBeLessThan(clear.odds);
+    expect(contested.counter).toBeGreaterThan(clear.counter);
+  });
+
+  it("shows the supply the resolver fights at: enemy interdiction lowers it", async () => {
+    const supplyWith = async (bombersStriking: boolean) => {
+      vi.resetModules();
+      db.collectionMocks.militaryUnits.find.mockImplementation(
+        (q: { countryId?: string; theaterId?: string; domain?: unknown } = {}) => {
+          // The route's navair read, mirroring the resolver's: every naval and air
+          // formation, wherever it stands. The bomber is NOT at the front — it strikes
+          // the supply lines behind it from its station, so the ground rosters are
+          // identical in both arms.
+          if (q.domain) {
+            return {
+              toArray: vi.fn().mockResolvedValue(
+                bombersStriking
+                  ? [
+                      unit({
+                        countryId: "CN",
+                        domain: "air",
+                        type: "Bomber Squadron",
+                        mission: "STRIKE_AIRBASE",
+                        station: "cas",
+                        theaterId: "reserve",
+                        basePower: 200000,
+                      }),
+                    ]
+                  : []
+              ),
+            };
+          }
+          const docs = q.theaterId
+            ? [
+                unit({ countryId: "US", theaterId: q.theaterId }),
+                unit({ countryId: "CN", theaterId: q.theaterId }),
+              ]
+            : [unit({ countryId: q.countryId ?? "US", theaterId: "afghan" })];
+          return { toArray: vi.fn().mockResolvedValue(docs) };
+        }
+      );
+      const { GET } = await import(ROUTE);
+      const res = await GET(req("theaterId=afghan&targetCountry=CN"), call);
+      expect(res.status).toBe(200);
+      return (await res.json()).supply.level as number;
+    };
+
+    const fed = await supplyWith(false);
+    const strangled = await supplyWith(true);
+    expect(strangled).toBeLessThan(fed);
+  });
+
   // Fog is unchanged: the counter-projection is derived from sides already built.
   it("still leaks no enemy strength with the counter-projection present", async () => {
     const { GET } = await import(ROUTE);
