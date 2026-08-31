@@ -106,6 +106,7 @@ function decide(
     stateControlled?: Set<string>;
     placementSignals?: PlacementSignals;
     prices?: CommodityPriceRatioFn;
+    retailExpansionPaused?: boolean;
   } = {}
 ) {
   return makeNppCorpDecision(
@@ -116,6 +117,7 @@ function decide(
       now: new Date(),
       fxRate: extra.fxRate,
       modifiers: ceoArchetypeModifiers("cautious"),
+      retailExpansionPaused: extra.retailExpansionPaused,
     },
     new Map<string, UnownedSector[]>([["US", pools]]),
     extra.stateControlled ?? noState,
@@ -146,6 +148,21 @@ function pushedOrder(write: ReturnType<typeof queueWrites>[number]) {
 }
 
 describe("NPP capacity reinvestment — a selling-out, fully-utilized plant grows", () => {
+  it("maintains but does not grow Retail capacity during the demand unwind", () => {
+    const s = sector({ sectorType: "retail" });
+    const decision = decide(
+      corp({ type: "retail" }),
+      [s],
+      [pool({ sectorType: "retail" })],
+      plantsCtx,
+      { retailExpansionPaused: true }
+    );
+    const order = pushedOrder(queueWrites(decision)[0]);
+    const replacement = (s.producedUnits ?? 0) * CAPITAL_DEPRECIATION_PER_TURN;
+
+    expect(order.unitsOrdered).toBeCloseTo(replacement, 6);
+  });
+
   it("grows a maxed-out plant by a chunk of its throughput, built from nothing", () => {
     const s = sector();
     const decision = decide(corp(), [s], [pool()]);

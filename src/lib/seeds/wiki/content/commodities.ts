@@ -98,15 +98,7 @@ Beyond sector-level supply and demand, several macroeconomic forces inject addit
 
 ### Retail demand
 
-The **Consumer Goods** commodity is special: retail sectors both supply it and the demand for it is scaled by GDP growth. Positive GDP growth pushes retail commodity prices up; negative GDP shrinks them.
-
-The retail demand multiplier blends **50% national average GDP growth + 50% state-level GDP growth**, scaled by factor **15**:
-
-\`\`\`
-multiplier = 1 + (blendedGdpGrowth / 100) * 15
-\`\`\`
-
-Clamped between **0.5x and 2.0x**. At 2% blended GDP growth, demand is 1.30x; at -1%, demand is 0.85x.
+Retail sectors supply **Consumer Goods**. Demand comes independently from the household consumption ledger, based on population, income, employment, consumer confidence, basket share, and bounded price elasticity. Adding Retail supply does not add Retail demand, so overbuilding lowers seller fill while a genuine shortage rewards new capacity.
 
 ### Price administration
 
