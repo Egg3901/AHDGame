@@ -72,6 +72,8 @@ import {
   runParliamentaryGovernmentPhases,
   runParliamentaryVacancyWatcher,
 } from "@/lib/turn/countryPhases";
+import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
+import type { CountryId } from "@/lib/constants/countries";
 import { runNppGovernmentPhases } from "@/lib/nppAutonomy/processNppGovernment";
 import { TURNS_PER_YEAR, STARTING_YEAR } from "@/lib/constants/turnTime";
 import { isFiscalYearEnd, calculateFiscalYear, processFiscalYear } from "@/lib/budget/fiscalYear";
@@ -789,7 +791,14 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
       key: "billsCampaignsAndActivity",
       async execute(context, runtime) {
         const { realNow, phaseResults, newTurn, db, config, gameState } = context;
-        const countryBillPhaseEntries = Object.entries(COUNTRY_BILL_PHASES);
+        // Registered countries only: the registry is keyed on the static country
+        // list, and a country dissolved by a merge would otherwise keep running
+        // its bill lifecycle (and, for one-party entries, its legitimacy and
+        // escalation drift) for ever.
+        const registeredForBills = new Set(await getRegisteredCountryIds(db));
+        const countryBillPhaseEntries = Object.entries(COUNTRY_BILL_PHASES).filter(([id]) =>
+          registeredForBills.has(id as CountryId)
+        );
         const billPhaseResults = await Promise.all([
           runtime.runPhase("billLifecycle", () => processBillLifecycle(realNow)),
           ...countryBillPhaseEntries.map(([, entry]) =>
@@ -1152,11 +1161,20 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           withdrawInactiveCandidates(db, gameNow)
         );
 
+        // Registered countries only — a dissolved country's spawners are
+        // harmless today (they iterate regions it no longer has) but every one
+        // of them still runs queries every turn, and any spawner that ever
+        // grows a config-driven fallback would resurrect ghost races.
+        const registeredForElections = foundingActive
+          ? new Set<CountryId>()
+          : new Set(await getRegisteredCountryIds(db));
         const countryElectionPhasePromises = foundingActive
           ? []
-          : Object.entries(COUNTRY_ELECTION_PHASES).flatMap(([, entries]) =>
-              entries.map(({ name, fn }) => runtime.runPhase(name, () => fn(gameNow)))
-            );
+          : Object.entries(COUNTRY_ELECTION_PHASES)
+              .filter(([id]) => registeredForElections.has(id as CountryId))
+              .flatMap(([, entries]) =>
+                entries.map(({ name, fn }) => runtime.runPhase(name, () => fn(gameNow)))
+              );
 
         await Promise.all([
           ...(foundingActive

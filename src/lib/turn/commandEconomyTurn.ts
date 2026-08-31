@@ -43,6 +43,7 @@ import {
   SOE_PERF_BASELINE,
 } from "@/lib/economy/soe";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
+import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { capacityPricePerUnit, CAPACITY_ANCHOR_YEAR } from "@/lib/constants/capacityEconomy";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import {
@@ -197,10 +198,16 @@ export async function processCommandEconomyTurn(
   // regime was carried onto it by a merge (post-reunification DE), and (b) a
   // command country whose stored level outlived its schedule's `throughYear`.
   // The band check itself uses the same ceiling `isPlannedEconomy` does.
+  // A dissolved country keeps its budget doc for history, and the compiled
+  // schedule keeps calling it planned — without this it would be hydrated and
+  // planned for ever after a merge carried its regime to its successor.
+  const registeredForPlanning = new Set<string>(await getRegisteredCountryIds(db));
+
   const hydration: Array<[string, number]> = [];
   for (const budget of budgets) {
     const countryId = budget.countryId;
     if (!countryId || !enabled) continue;
+    if (!registeredForPlanning.has(countryId)) continue;
     const persisted = budget.economicFactors?.marketizationLevel;
     const level =
       typeof persisted === "number" && Number.isFinite(persisted)
@@ -214,6 +221,9 @@ export async function processCommandEconomyTurn(
   let countriesUpdated = 0;
   for (const budget of budgets) {
     const countryId = budget.countryId;
+    // Same registered gate as the hydration: an un-hydrated dissolved country
+    // would otherwise fall back to its compiled schedule and read planned.
+    if (!countryId || !registeredForPlanning.has(countryId)) continue;
     if (!isPlannedEconomy(countryId, currentYear, enabled)) continue;
 
     const share = plannedShare(countryId, currentYear, enabled);

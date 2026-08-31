@@ -15,6 +15,7 @@ import {
   COUNTRY_CONFIGS,
   COUNTRY_ORDER,
 } from "@/lib/constants/countries";
+import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import type { Election } from "@/lib/db/types";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
 import {
@@ -456,11 +457,13 @@ export async function runPostElectionGovernmentPhases(
   const preset = await getGameStatePreset(db);
 
   if (generalResolved > 0) {
-    // Iterate every country with a configured lower chamber (US included),
-    // not just parliamentary countries. New countries become dissolution-aware
-    // via config alone.
+    // Iterate every REGISTERED country with a configured lower chamber (US
+    // included), not just parliamentary countries. Registered, not the raw
+    // COUNTRY_ORDER: a country dissolved by a merge stays compiled into the
+    // static list forever, and this loop must stop visiting it.
+    const registered = new Set(await getRegisteredCountryIds(db));
     const countryIds = COUNTRY_ORDER.filter(
-      (id) => COUNTRY_CONFIGS[id].legislature.lowerChamber.key
+      (id) => registered.has(id) && COUNTRY_CONFIGS[id].legislature.lowerChamber.key
     );
     const parliamentary = new Set(getParliamentaryCountryIds(preset));
 
@@ -526,7 +529,14 @@ export async function runParliamentaryGovernmentPhases(
 ): Promise<void> {
   const db = await getDb();
   const preset = await getGameStatePreset(db);
-  const parliamentaryCountries = getParliamentaryCountryIds(preset);
+  // Registered only: `getParliamentaryCountryIds` filters the STATIC list by
+  // config, so a country dissolved by a merge would otherwise keep receiving
+  // seat sync, confidence processing and NPP PM appointment every turn — a
+  // ghost government for a state that no longer exists.
+  const registered = new Set(await getRegisteredCountryIds(db));
+  const parliamentaryCountries = getParliamentaryCountryIds(preset).filter((id) =>
+    registered.has(id)
+  );
 
   for (const countryId of parliamentaryCountries) {
     // Per-country isolation. 27 countries run in this one loop under a single

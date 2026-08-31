@@ -295,8 +295,10 @@ describe("reunification pipeline, end to end", () => {
     const writes = db.collectionMocks["countryGameStates"].updateOne.mock.calls;
     const deWrite = writes.find((c) => c[0]._id === "DE");
     expect(deWrite?.[1].$set).toMatchObject({ enabledForPlayers: true, status: "active" });
+    // The absorbed shell gets NO status write: `dissolvedTurn` (stamped by
+    // mergeCountry) is the one dissolution marker, by design.
     const ddWrite = writes.find((c) => c[0]._id === "DD");
-    expect(ddWrite?.[1].$set.status).toBe("disabled");
+    expect(ddWrite).toBeUndefined();
   });
 
   it("does not open an econ-only survivor when the absorbed side was not playable", async () => {

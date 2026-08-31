@@ -47,6 +47,30 @@ describe("getCountryAccess()", () => {
     });
   });
 
+  it("treats a dissolved country as unregistered, whatever its status says", async () => {
+    await setupDb();
+    // A merged country keeps its old status field — dissolution is the
+    // date-stamped `dissolvedTurn`, and it must win over everything else, or
+    // the single-country path contradicts registeredBase(): the ghost stays
+    // browsable econ-only and reads as NPP-governed to the election gates.
+    db.collectionMocks["countryGameStates"]!.findOne.mockResolvedValue({
+      _id: "DD",
+      enabledForPlayers: true,
+      status: "active",
+      dissolvedTurn: 510,
+    });
+
+    const { getCountryAccess } = await import("./countryAccess");
+    const result = await getCountryAccess("DD");
+
+    expect(result).toMatchObject({
+      enabledForPlayers: false,
+      registered: false,
+      econOnly: false,
+      nppGoverned: false,
+    });
+  });
+
   it("falls back to config when no document exists (US — active)", async () => {
     await setupDb();
     // US config has status: "active" → enabledForPlayers should be true

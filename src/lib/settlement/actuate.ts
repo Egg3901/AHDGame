@@ -259,20 +259,18 @@ export async function actuateSettlementOutcome(
   //    carried citizens are real accounts — 19 of them in the live German
   //    Question — and landing the WINNERS in a read-only econ country would
   //    lock every one of them out of the game they just won. The absorbed shell
-  //    is also stamped `disabled` so the single-country access path (which
-  //    reads `status`, not the registry) stops calling it active.
-  const gameStates = db.collection<CountryGameState>("countryGameStates");
+  //    needs nothing here: `mergeCountry` already stamped `dissolvedTurn`,
+  //    which is the one dissolution marker everything honors (deliberately NOT
+  //    a `CountryStatus` value — see that field's doc).
   if (absorbedWasPlayable) {
-    await gameStates.updateOne(
-      { _id: target },
-      { $set: { enabledForPlayers: true, status: "active", updatedAt: new Date() } },
-      { upsert: true }
-    );
+    await db
+      .collection<CountryGameState>("countryGameStates")
+      .updateOne(
+        { _id: target },
+        { $set: { enabledForPlayers: true, status: "active", updatedAt: new Date() } },
+        { upsert: true }
+      );
   }
-  await gameStates.updateOne(
-    { _id: challenger },
-    { $set: { status: "disabled", updatedAt: new Date() } }
-  );
 
   await recordCountryEvent(db, {
     countryId: target,

@@ -79,6 +79,13 @@ function makeDb(
           find: () => ({ toArray: async () => [] }),
         };
       }
+      // Registered-country gate (getRegisteredCountryIds) — no overrides means
+      // every static country is registered and none dissolved.
+      if (name === "countryGameStates") {
+        return {
+          find: () => ({ toArray: async () => [] }),
+        };
+      }
       // v2 P0 SOE refresh — no SOEs seeded in these fixtures.
       if (name === "corporations" || name === "corporateSectors") {
         return {
@@ -287,6 +294,8 @@ function makeSoeDb(
         };
       if (name === "corporateSectors")
         return { find: () => ({ toArray: async () => sectors }), updateOne: async () => ({}) };
+      // Registered-country gate — nothing dissolved in these fixtures.
+      if (name === "countryGameStates") return { find: () => ({ toArray: async () => [] }) };
       throw new Error(`unexpected collection: ${name}`);
     },
   } as unknown as Db;
@@ -400,6 +409,8 @@ function makeGovDb(
         };
       if (name === "corporateSectors")
         return { find: () => ({ toArray: async () => sectors }), updateOne: async () => ({}) };
+      // Registered-country gate — nothing dissolved in these fixtures.
+      if (name === "countryGameStates") return { find: () => ({ toArray: async () => [] }) };
       throw new Error(`unexpected collection: ${name}`);
     },
   } as unknown as Db;
