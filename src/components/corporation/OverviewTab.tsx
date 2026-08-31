@@ -510,7 +510,12 @@ export default function OverviewTab({
               </svg>
             }
           >
-            {bondInfo ? (
+            {/* `creditRating` is typed as required but arrives absent while bond
+                data is still loading or missing for the corp, which crashed this
+                card on `creditRating.effectiveCouponRate.toFixed`. Gate on it the
+                way CreditRatingTab already does, and fall through to the same
+                placeholder below. */}
+            {bondInfo?.creditRating ? (
               <>
                 <StatRow
                   label="Credit rating"

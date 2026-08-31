@@ -20,11 +20,15 @@
  *     intended (e.g. `{ timeZone: "UTC" }` on an admin/audit surface that must
  *     read UTC for everyone). This is the deliberate escape hatch.
  *
- * Scope: only .tsx client components ("use client") — server components render
- * once and never hydrate, so they cannot produce #418, and `<LocalTime>` cannot
- * be used mid-computation there. Number formatting (`n.toLocaleString()`) is
- * unaffected: it is only flagged when the receiver is a Date or the options
- * clearly describe a date/time.
+ * Scope: only .tsx client components — server components render once and never
+ * hydrate, so they cannot produce #418, and `<LocalTime>` cannot be used
+ * mid-computation there. A file counts as a client component when it carries the
+ * `"use client"` directive OR when it imports a hook (`useX`): a module that
+ * calls hooks only ever runs on the client, whether or not it declares the
+ * directive itself, because it is always pulled into an established client
+ * subtree. Gating on the directive alone missed every such file (#569).
+ * Number formatting (`n.toLocaleString()`) is unaffected: it is only flagged
+ * when the receiver is a Date or the options clearly describe a date/time.
  */
 "use strict";
 
@@ -82,6 +86,23 @@ function optionsPinTimeZone(optionsNode) {
   );
 }
 
+/**
+ * True when the module imports at least one hook (`useX`). Only import bindings
+ * count, so a local helper that merely happens to be named `useThing` does not
+ * make a server component look like a client one.
+ */
+function importsAHook(ast) {
+  for (const node of ast.body) {
+    if (node.type !== "ImportDeclaration") continue;
+    for (const spec of node.specifiers) {
+      const name =
+        spec.type === "ImportSpecifier" ? (spec.imported.name ?? spec.local.name) : spec.local.name;
+      if (/^use[A-Z]/.test(name)) return true;
+    }
+  }
+  return false;
+}
+
 module.exports = {
   meta: {
     type: "problem",
@@ -105,8 +126,14 @@ module.exports = {
     if (filename.replace(/\\/g, "/").endsWith("src/components/time/LocalTime.tsx")) return {};
 
     // Only client components hydrate, so only they can produce React #418.
+    // The `"use client"` directive is NOT required for that: a module that uses
+    // hooks runs entirely on the client once it is imported into an established
+    // client subtree, and gating on the directive alone let those files through
+    // (#569). Importing a `useX` hook is the reliable signal — a React Server
+    // Component cannot call one at all.
     const source = context.getSourceCode().getText();
-    if (!/^\s*(['"])use client\1/m.test(source.slice(0, 200))) return {};
+    const hasUseClient = /^\s*(['"])use client\1/m.test(source.slice(0, 200));
+    if (!hasUseClient && !importsAHook(context.getSourceCode().ast)) return {};
 
     return {
       CallExpression(node) {
