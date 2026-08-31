@@ -79,6 +79,27 @@ describe("NavairCommandClient repair", () => {
     expect(screen.getByText(/12 naval/)).toBeDefined();
   });
 
+  // A wing is not in a yard and does not put into port. Same rates, different words.
+  it("uses air wording for a wing and naval wording for a hull", () => {
+    render(
+      <NavairCommandClient
+        {...props}
+        formations={[
+          formation({
+            id: "a",
+            repair: { mending: true, text: "Mending 12% a turn at a home base, up to 100%." },
+          }),
+          formation({
+            id: "b",
+            repair: { mending: true, text: "Mending 12% a turn in a home yard, up to 100%." },
+          }),
+        ]}
+      />
+    );
+    expect(screen.getByText(/at a home base/)).toBeDefined();
+    expect(screen.getByText(/in a home yard/)).toBeDefined();
+  });
+
   it("says plainly when there is no materiel for paid repair", () => {
     render(<NavairCommandClient {...props} formations={[formation()]} />);
     expect(screen.getByText(/no naval or air materiel in store/i)).toBeDefined();

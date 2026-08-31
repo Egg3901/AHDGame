@@ -288,18 +288,30 @@ function repairNoteFor(unit: NavairUnit, basing: BasingKey): RepairNote {
   if (integrity >= ceiling) {
     return {
       mending: false,
-      text: `Holding at ${Math.round(integrity)}%. Free repair reaches ${ceiling}% here. The rest needs a home port or materiel from the arsenal.`,
+      text: `Holding at ${Math.round(integrity)}%. Free repair reaches ${ceiling}% here. The rest needs a home base or materiel from the arsenal.`,
     };
   }
 
   if (rate <= 0) {
     return {
       mending: false,
-      text: `Not mending: ${Math.round(unit.supply ?? 100)}% supply is below the ${REPAIR.minSupply}% a yard needs. Move it nearer home, or lift supply with an Airlift wing.`,
+      text: `Not mending: ${Math.round(unit.supply ?? 100)}% supply is below the ${REPAIR.minSupply}% repairs need. Move it nearer home, or lift supply with an Airlift wing.`,
     };
   }
 
-  const where = withdrawing ? "in a home yard" : resting ? "in port" : "on station";
+  // A wing is not in a yard and does not put into port. The rates are identical across
+  // the two domains; only the words differ, and getting them wrong is the kind of detail
+  // that makes a player doubt the rest of the readout.
+  const air = unit.domain === "air";
+  const where = withdrawing
+    ? air
+      ? "at a home base"
+      : "in a home yard"
+    : resting
+      ? air
+        ? "stood down at base"
+        : "in port"
+      : "on station";
   const limited =
     (unit.supply ?? 100) < 100 ? `, limited by ${Math.round(unit.supply ?? 100)}% supply` : "";
   return {
