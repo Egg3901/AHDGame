@@ -15,9 +15,8 @@ import { Navbar } from "./Navbar";
 import { ExperimentalNavbar } from "./ExperimentalNavbar";
 import { NavbarTopFlair } from "./NavbarTopFlair";
 import { FeedbackModal } from "./FeedbackModal";
-import { isLightweightLayoutPath } from "@/lib/constants/layoutPaths";
+import { isChromeHiddenPath, isLightweightLayoutPath } from "@/lib/constants/layoutPaths";
 
-const EXCLUDED_PATHS = ["/login", "/register", "/banned", "/maintenance"];
 const ALLOWED_WITHOUT_CHARACTER = [
   "/settings",
   "/create-character",
@@ -240,7 +239,7 @@ export function NavbarWrapper({
   const t = useTranslations("nav");
   const pathname = usePathname();
   const useLightweightNav = isLightweightLayoutPath(pathname);
-  const isExcludedPath = EXCLUDED_PATHS.includes(pathname);
+  const isExcludedPath = isChromeHiddenPath(pathname);
   const router = useRouter();
   const { showToast } = useToast();
   const { setStats: setCharacterStats } = useCharacterStats();
