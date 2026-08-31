@@ -729,7 +729,13 @@ export default async function ConflictRecordPage({
     },
     settlements: settlements.map((o) => ({
       id: o._id.toString(),
-      leaver: o.fromCountry,
+      // The leaver, not the sender: an offer runs in both directions, and "you
+      // get out" deals name the RECIPIENT as the departing country. Reading
+      // `fromCountry` here recorded the sender's withdrawal when the sender had
+      // actually asked the other party to leave and stayed in themselves
+      // (ticket #1246). `leaver` has been required since offers ran both ways;
+      // rows older than that carry no field and all meant the sender.
+      leaver: o.leaver ?? o.fromCountry,
       other: o.toCountry,
       term: o.term,
       justification: o.justification ?? null,

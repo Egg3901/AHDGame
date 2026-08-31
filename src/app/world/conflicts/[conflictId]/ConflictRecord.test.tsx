@@ -863,6 +863,28 @@ describe("separate peace on the record", () => {
     render(<ConflictRecord conflict={base} />);
     expect(screen.queryByText(/SEPARATE PEACE/)).toBeNull();
   });
+
+  // Ticket #1246: a "you get out" deal (leaver = the recipient) was rendered with
+  // the SENDER's name in "X left the war". The page maps `o.leaver ?? o.fromCountry`
+  // into the row; these pin the two renderings apart.
+  it("names the recipient as the leaver when the deal took the recipient out", () => {
+    const them: ConflictRecordView = {
+      ...base,
+      settlements: [
+        {
+          id: "o2",
+          leaver: "CN",
+          other: "UK",
+          term: { kind: "white_peace" as const },
+          justification: null,
+          turn: 532,
+        },
+      ],
+    };
+    render(<ConflictRecord conflict={them} />);
+    expect(screen.getByText(/CN left the war on turn 532, settling with UK/)).toBeTruthy();
+    expect(screen.queryByText(/UK left the war on turn 532/)).toBeNull();
+  });
 });
 
 describe("ConflictRecord — coalition engagements", () => {
