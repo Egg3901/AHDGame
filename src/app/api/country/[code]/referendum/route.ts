@@ -4,7 +4,6 @@ import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import type { StateMetrics } from "@/lib/db/types";
 import { getReferendumCollection } from "@/lib/db/collections/referendum";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
