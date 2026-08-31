@@ -400,11 +400,9 @@ export interface GameConfig {
    * budget derived from GDP and modulated by household signals (medianIncome,
    * unemploymentRate, consumerConfidence) buys a consumer basket with a bounded
    * price-elasticity response, and SUPERSEDES retail's SECTOR_DEMAND input proxy
-   * (those legs are suppressed in `computeRawSupplyDemand`). The retail-commodity
-   * output self-loop is kept — household population demand cannot replace
-   * plants-scale physical retail supply (ticket #1026). DEFAULT OFF and
-   * UNCALIBRATED — same rollout posture as `demographicsDemandEnabled`; tune
-   * HOUSEHOLD_CONSUMPTION_PER_CAPITA on the sandbox before enabling. Supersedes
+   * (those legs are suppressed in `computeRawSupplyDemand`). Retail's legacy
+   * supply-derived output demand is removed through the bounded transition
+   * below. DEFAULT OFF and UNCALIBRATED. Supersedes
    * `demographicsDemandEnabled` (do not enable both).
    */
   householdConsumptionEnabled?: boolean;
@@ -415,6 +413,14 @@ export interface GameConfig {
    * `householdConsumptionEnabled` is true.
    */
   householdConsumptionPerCapita?: number;
+  /**
+   * Turn when this world began removing Retail's legacy supply-derived demand.
+   * Absent preserves legacy behavior. Once started, the remaining self-loop
+   * share declines linearly and stays at zero after the configured duration.
+   */
+  retailDemandTransitionStartTurn?: number;
+  /** Duration of the Retail demand unwind. Defaults to 192 turns. */
+  retailDemandTransitionTurns?: number;
   /**
    * Whether NPP-run corporations are individually attackable in the state
    * economy view. DEFAULT ON (only an explicit `false` disables). When on, NPP
