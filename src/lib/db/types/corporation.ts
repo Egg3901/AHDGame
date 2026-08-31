@@ -925,6 +925,11 @@ export interface CorporateSector {
    */
   plantCount?: number;
   /**
+   * Delivered capacity fragments accumulated toward the next whole facility.
+   * Always less than the sector's facility quantum after normalization.
+   */
+  plantUnitRemainder?: number;
+  /**
    * Plants tier (marketSystemMode >= "plants"): anchors the launch-safety
    * governor's fade-in from the sector's first plants turn, exactly like
    * `clearingStartTurn` does for the clearing leg. Stamped once, on the turn

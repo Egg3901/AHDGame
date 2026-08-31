@@ -33,6 +33,7 @@ import type { FtaCoverage } from "@/lib/tariffs/ftaOverrides";
 import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
 import { deliveredFraction } from "@/lib/corporations/buildDelivery";
 import { readPlantsPnl, type PolicyStackRow } from "@/lib/corporations/plantsPnlBasis";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import {
   SPLIT_BASE_CAPTURE_FRACTION,
   UNOWNED_CAPTURE_BONUS_MULTIPLIER,
@@ -1104,6 +1105,8 @@ export interface PlantBuildOrderView {
  * basis as `capitalStock` / `producedUnits`.
  */
 export interface SectorPlantsSection {
+  /** Persisted whole facilities owned by this sector. */
+  plantCount: number;
   /** Installed capacity, units/day. Null before the sector's first plants turn. */
   capacityUnits: number | null;
   /** Units the plants actually made this turn. Null until a plants turn has run. */
@@ -1430,6 +1433,10 @@ export function buildSectorPlantsSection(args: {
   const nonNeg = (v: number) => (v > 0 ? v : 0);
 
   const capacityUnits = num(sector.capitalStock);
+  const plantCount =
+    Number.isInteger(sector.plantCount) && (sector.plantCount ?? 0) >= 0
+      ? (sector.plantCount as number)
+      : seedPlantLedger(sectorType, sector.capitalStock).plantCount;
   const producedUnits = num(sector.producedUnits);
   const soldUnits = num(sector.soldUnits);
   const mothballed = sector.mothballed === true;
@@ -1697,6 +1704,7 @@ export function buildSectorPlantsSection(args: {
         : { status: "not_at_current_fills", turns: null };
 
   return {
+    plantCount,
     capacityUnits,
     producedUnits,
     soldUnits,

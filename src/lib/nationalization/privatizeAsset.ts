@@ -10,6 +10,7 @@ import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFla
 import { getGameState } from "@/lib/gameState";
 import { sectorBookValueAnchor } from "@/lib/corporations/sectorProfitBasis";
 import { carveSectorPlantFields } from "@/lib/corporations/sectorTransferCapex";
+import { seedPlantLedger, splitWholePlantCount } from "@/lib/corporations/plantLedger";
 import { NATIONALIZATION_BOOK_PREMIUM } from "./constants";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
@@ -299,8 +300,12 @@ export async function privatizeAsset(
     // `legacyRevenueShadow` restore point rides along in the same fold and is
     // split by the same fraction — without it the carved corp would land in the
     // rollback script's "no restore point, needs a human decision" bucket.
-    const carvedPlant = carveSectorPlantFields(sector, fraction);
-    const keptPlant = carveSectorPlantFields(sector, keep);
+    const openingPlantCount = Number.isInteger(sector.plantCount)
+      ? (sector.plantCount as number)
+      : seedPlantLedger(sector.sectorType, sector.capitalStock).plantCount;
+    const plantCountSplit = splitWholePlantCount(openingPlantCount, fraction);
+    const carvedPlant = carveSectorPlantFields(sector, fraction, plantCountSplit.carved);
+    const keptPlant = carveSectorPlantFields(sector, keep, plantCountSplit.kept);
     await sectors.insertOne({
       _id: new ObjectId(),
       corporationId: newCorpId,

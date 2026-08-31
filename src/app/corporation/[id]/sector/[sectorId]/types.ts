@@ -553,6 +553,8 @@ export interface PlantBuildOrderView {
 }
 
 export interface PlantsData {
+  /** Persisted whole facilities owned by this sector. */
+  plantCount?: number;
   capacityUnits: number | null;
   producedUnits: number | null;
   soldUnits: number | null;
