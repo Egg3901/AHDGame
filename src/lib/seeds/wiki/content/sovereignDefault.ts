@@ -126,7 +126,9 @@ During this floor the country cannot roll debt, forcing it to run primary surplu
 
 \`GET /api/public/v1/sovereigns\` provides a world-wide sovereign watch feed for bots and dashboards. Each country row includes its credit rating, crisis state, debt-to-GDP ratio, auction-failure streak, demand ratio and band, demand components, and Debt Sustainability Assessment score. Values use the same calculations as the in-game sovereign watch surface.
 
-Any public or private scoped API key can read it. See the [public API documentation](https://docs.lakesidegames.net/api/public-v1.html) for the complete response shape.
+\`GET /api/public/v1/country/[code]/economy/history\` adds the historical view for one country: per-turn interest rates, inflation, and GDP growth plus annual GDP, revenue, spending, surplus, debt principal, debt-to-GDP, and credit-rating snapshots.
+
+Any public or private scoped API key can read both routes. See the [public API documentation](https://docs.lakesidegames.net/api/public-v1.html) for the complete response shapes and turn-range filters.
 
 See also: [Sovereign Bonds](/wiki/sovereign-bonds), [IMF & Bailouts](/wiki/imf), [Central Banks](/wiki/central-banks), [National Budget](/wiki/national-budget)
 `;
