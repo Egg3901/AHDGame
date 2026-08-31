@@ -50,6 +50,14 @@ export const ECON_COUNTRY_CABINET_POSITIONS = [
     name: "Minister of the Environment",
     order: 11,
   },
+  // Generic on purpose: nine countries share this list (FR, IT, ES, SE, TR, AT,
+  // FI, GR, BR), so the name cannot carry any one nation's service.
+  {
+    id: "director_of_intelligence",
+    yearEnabled: 1775,
+    name: "Director of the Intelligence Service",
+    order: 12,
+  },
 ] as const;
 
 export const ECON_COUNTRY_CABINET_MECHANICS = Object.fromEntries(

@@ -135,6 +135,14 @@ export const CABINET_POSITIONS = [
     description:
       "Protects the homeland from terrorism, natural disasters, and security threats. Manages border security through Customs and Border Protection, oversees immigration enforcement and citizenship services, coordinates cybersecurity efforts, and directs disaster response and recovery through FEMA. Created after September 11, 2001 to consolidate security functions.",
   },
+  {
+    id: "director_of_intelligence",
+    name: "Director of Central Intelligence",
+    order: 16,
+    yearEnabled: 1946,
+    description:
+      "Directs the national intelligence service: foreign collection, the networks that carry it, and counter-intelligence at home. Sets which countries are worked and how hard, and answers for what happens when an operation is traced back.",
+  },
 ] as const;
 
 export type CabinetPositionId = (typeof CABINET_POSITIONS)[number]["id"];

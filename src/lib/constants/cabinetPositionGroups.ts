@@ -10,6 +10,7 @@ export type CabinetGroup =
 
 const GROUPS: Record<string, Record<string, CabinetGroup>> = {
   US: {
+    director_of_intelligence: "Security & Foreign",
     secretary_of_state: "Security & Foreign",
     secretary_of_defense: "Security & Foreign",
     attorney_general: "Security & Foreign",
@@ -27,6 +28,7 @@ const GROUPS: Record<string, Record<string, CabinetGroup>> = {
     secretary_of_transportation: "Domestic",
   },
   UK: {
+    director_of_intelligence: "Security & Foreign",
     deputy_prime_minister: "Centre",
     first_secretary_of_state: "Centre",
     chancellor: "Economy",
@@ -112,6 +114,7 @@ const GROUPS: Record<string, Record<string, CabinetGroup>> = {
     minister_of_transport: "Domestic",
   },
   RU: {
+    director_of_intelligence: "Security & Foreign",
     premier: "Centre",
     first_deputy_premier: "Centre",
     chairman_of_gosplan: "Centre",
@@ -130,6 +133,7 @@ const GROUPS: Record<string, Record<string, CabinetGroup>> = {
     minister_of_railways: "Domestic",
   },
   NG: {
+    director_of_intelligence: "Security & Foreign",
     secretary_to_government: "Centre",
     minister_of_finance: "Economy",
     minister_of_petroleum_resources: "Economy",

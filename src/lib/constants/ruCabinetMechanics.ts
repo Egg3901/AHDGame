@@ -812,4 +812,53 @@ export const RU_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
       effects: { workforceSkill: 0.08, universityEnrollment: 0.05 },
     },
   },
+  director_of_intelligence: {
+    positionId: "director_of_intelligence",
+    department: "Committee for State Security",
+    sealImage: "",
+    tierSetting: {
+      name: "Collection Posture",
+      description:
+        "Set how hard the service is run. Pressing harder buys reach and cleaner files, and costs the liberties of the people it watches.",
+      defaultTier: "standing",
+      options: [
+        {
+          id: "restrained",
+          label: "Restrained",
+          description: "Keep the service on a short leash. Liberties widen; less is learned.",
+          effects: { civilLiberties: 0.025, publicTrust: 0.01 },
+        },
+        {
+          id: "standing",
+          label: "Standing Watch",
+          description: "The service's ordinary peacetime footing.",
+          effects: {},
+        },
+        {
+          id: "aggressive",
+          label: "Aggressive Collection",
+          description:
+            "Run the service hard at home and abroad. Corruption is rooted out; liberties narrow.",
+          effects: { corruptionIndex: -0.025, civilLiberties: -0.03 },
+        },
+      ],
+    },
+    nationalMetrics: [
+      {
+        category: "governance",
+        metricId: "publicTrust",
+        label: "Public Trust",
+        format: "index",
+        higherIsBetter: true,
+      },
+      {
+        category: "publicSafety",
+        metricId: "crimeRate",
+        label: "Crime Rate",
+        format: "rate",
+        higherIsBetter: false,
+      },
+    ],
+    regionalMetrics: [],
+  },
 };
