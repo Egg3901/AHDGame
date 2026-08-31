@@ -15,6 +15,7 @@ const seed = {
   country: "US",
   countryCode: "us",
   positionId: "secretary_of_defense",
+  canWrite: true,
 } as unknown as CombatSeed;
 
 afterEach(() => vi.unstubAllGlobals());
@@ -69,6 +70,26 @@ describe("useCombatState optimistic writes", () => {
     // Falls back to a generic reason when the body carries none.
     await waitFor(() => expect(result.current.state.refusal).toMatch(/withdrawal was refused/i));
     expect(result.current.state.pendingDeclarations).toHaveLength(1);
+  });
+
+  it("does not optimistically change orders for a read-only viewer", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const readOnly = {
+      ...seed,
+      canWrite: false,
+      units: [{ _id: "u1", posture: "standard" }],
+      positions: { u1: "support" },
+    } as unknown as CombatSeed;
+    const { result } = renderHook(() => useCombatState(readOnly));
+
+    act(() => {
+      result.current.dispatch({ type: "SET_ROLE", id: "u1", role: "frontline" });
+    });
+
+    expect(result.current.state.positions.u1).toBe("support");
+    expect(result.current.state.refusal).toMatch(/only the defence minister/i);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

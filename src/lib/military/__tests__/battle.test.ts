@@ -155,6 +155,22 @@ describe("battleForecast", () => {
     expect(fc.ratio).toBeLessThanOrEqual(0.98);
   });
 
+  it("folds close air support into the PvP strength that forecast and resolution use", () => {
+    const a = side("US", "A", [120], "afghan");
+    const d = side("CN", "B", [120], "afghan");
+    const noSupport = battleForecast([a], [d], "afghan");
+    const withCas = battleForecast([a], [d], "afghan", {
+      airSuperiority: 0,
+      seaControl: 0,
+      casWeight: 50,
+      interdiction: 0,
+    });
+
+    expect(withCas.attStr).toBeGreaterThan(noSupport.attStr);
+    expect(withCas.oddsPct).toBeGreaterThan(noSupport.oddsPct);
+    expect(withCas.defStr).toBe(noSupport.defStr);
+  });
+
   /**
    * THE contract every player-facing surface states: `oddsPct` is a chance of winning,
    * not a force share. `resolvePvpBattle` is the half that has to make it true.

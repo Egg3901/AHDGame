@@ -89,6 +89,8 @@ export interface CombatSeed {
   pendingDeclarations: PendingDeclarationView[];
   reports: BattleReportView[];
   conflicts: ConflictView[];
+  /** Whether this viewer may issue national combat orders. */
+  canWrite: boolean;
 }
 
 export interface CombatState {
@@ -103,6 +105,8 @@ export interface CombatState {
   conflicts: ConflictView[];
   turn: number;
   country: string;
+  /** False for observers who may inspect Combat Command but not issue orders. */
+  canWrite: boolean;
   /** Cabinet-scoped API base parts, so surfaces can call the gated battle routes. */
   countryCode: string;
   positionId: string;
@@ -137,6 +141,7 @@ function seedState(seed: CombatSeed): CombatState {
     conflicts: seed.conflicts,
     turn: seed.currentTurn,
     country: seed.country,
+    canWrite: seed.canWrite,
     countryCode: seed.countryCode,
     positionId: seed.positionId,
     refusal: null,
@@ -202,7 +207,7 @@ export function useCombatState(seed: CombatSeed): {
 } {
   const [state, rawDispatch] = useReducer(combatReducer, seed, seedState);
   const base = `/api/country/${seed.countryCode}/executive/cabinet/${seed.positionId}`;
-  const canWrite = !!seed.positionId;
+  const canWrite = seed.canWrite;
 
   // The optimistic slice is read through a ref so the async rollback restores the
   // state as it was when the action fired, not whatever the closure captured.
@@ -216,6 +221,19 @@ export function useCombatState(seed: CombatSeed): {
 
   const dispatch = useCallback<Dispatch<CombatAction>>(
     (action) => {
+      const mutatesOrders =
+        action.type === "SET_POSTURE" ||
+        action.type === "SET_ROLE" ||
+        action.type === "DECLARE" ||
+        action.type === "WITHDRAW_DECLARATION";
+      if (!canWrite && mutatesOrders) {
+        rawDispatch({
+          type: "ROLLBACK",
+          patch: {},
+          message: "Only the defence minister may issue combat orders.",
+        });
+        return;
+      }
       if (canWrite) {
         /**
          * Fire the write, and undo the optimistic dispatch if the server refuses.

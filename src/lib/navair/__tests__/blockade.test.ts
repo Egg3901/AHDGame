@@ -101,6 +101,11 @@ describe("blockadeClosureFor", () => {
     expect(closure).toBeLessThan(1);
   });
 
+  it("reaches total closure when pressure overwhelms port defence", () => {
+    const overwhelming = Array.from({ length: 20 }, () => hull("RU", "nat", "BLOCKADE"));
+    expect(blockadeClosureFor("US", overwhelming, hostileTo("RU"))).toBe(1);
+  });
+
   it("takes the worst approach, not the sum of them", () => {
     // Closing one of several routes into a country does not close the country.
     const oneRoute = [hull("RU", "nat", "BLOCKADE")];
