@@ -108,7 +108,7 @@ export default function IntelligenceTab({
   const coverageFor = (target: string) => view.coverage.filter((c) => c.targetCountryId === target);
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       <section className="rounded-xl border border-card-border bg-card p-4 shadow-card">
         <h2 className="font-serif text-lg text-foreground">The Service</h2>
         <p className="mt-0.5 max-w-2xl text-sm text-muted">
@@ -143,7 +143,7 @@ export default function IntelligenceTab({
         )}
       </section>
 
-      <section className="rounded-xl border border-card-border bg-card p-4 shadow-card">
+      <section className="min-w-0 overflow-hidden rounded-xl border border-card-border bg-card p-4 shadow-card">
         <h2 className="font-serif text-lg text-foreground">Networks</h2>
         {view.networks.length === 0 ? (
           <p className="mt-2 text-sm text-muted">
