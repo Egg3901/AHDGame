@@ -89,6 +89,12 @@ export function applyOperationToNetwork(
 
   // `detected` and `attributed` additionally burn the network. Attribution's extra
   // cost is diplomatic, applied by the caller, not structural.
+  //
+  // Suspicion RESETS here rather than climbing, and for a very hot network that
+  // is a drop. That is deliberate and mirrors `covertNuclear`'s crackdown, which
+  // also lands on a flat 30: the cell that was drawing attention is gone, so the
+  // heat goes with it. It is not a way to launder a hot network either, because
+  // the burn costs a level and twelve turns of use to buy it.
   return {
     ...base,
     level,
