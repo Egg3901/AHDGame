@@ -506,6 +506,31 @@ describe("actuateSettlementOutcome", () => {
     );
     expect(took).toBeDefined();
     expect(took![1].$set["currentOffice.type"]).toBe("chancellor");
+    // Filtered on the office being an OBJECT: `$set` on a dotted path throws
+    // when the parent is null.
+    expect(took![0].currentOffice).toEqual({ $type: "object" });
+  });
+
+  it("seats a carried leader who holds no office at all", async () => {
+    // A leader whose only office was a cabinet portfolio the remap retires
+    // reaches this with `currentOffice` already nulled. A dotted `$set` would
+    // throw there, aborting a merge that has already claimed its cooldown and
+    // cannot retry.
+    const gs = new ObjectId();
+    prime(db, "governmentFormations").findOne.mockResolvedValue({
+      _id: "DD",
+      pmCharacterId: gs,
+      pmNppId: null,
+    });
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+
+    const whole = prime(db, "characters").updateOne.mock.calls.find(
+      (c) => String(c[0]?._id) === String(gs) && c[1]?.$set?.currentOffice !== undefined
+    );
+    expect(whole).toBeDefined();
+    expect(whole![1].$set.currentOffice).toEqual({ type: "chancellor" });
+    expect(whole![0].currentOffice).toEqual({ $not: { $type: "object" } });
   });
 
   it("never installs the survivor's own party when the absorbed state names none", async () => {

@@ -345,6 +345,39 @@ interface GovernmentFormationHead {
 }
 
 /**
+ * Point one office holder's stored `currentOffice` at the surviving country's
+ * executive key.
+ *
+ * TWO WRITES, because `$set` on a dotted path THROWS when the parent is null:
+ * "Cannot create field 'type' in element {currentOffice: null}". A carried head
+ * of government reaches this with a null `currentOffice` whenever their only
+ * office was a cabinet portfolio the remap retired a few lines earlier — the
+ * clear runs first — and a throw there would abort the merge half-done, after
+ * the cooldown has already been claimed and cannot retry.
+ *
+ * The object case re-points `.type` alone, so `.state` and anything else on the
+ * sub-document survive. The null case writes the whole field, because there is
+ * nothing there to merge into.
+ */
+async function takeExecutiveOffice(
+  db: Db,
+  collection: "characters" | "npps",
+  holderId: ObjectId,
+  execKey: string,
+  now: Date
+): Promise<void> {
+  const coll = db.collection(collection);
+  await coll.updateOne(
+    { _id: holderId, currentOffice: { $type: "object" } },
+    { $set: { "currentOffice.type": execKey, updatedAt: now } }
+  );
+  await coll.updateOne(
+    { _id: holderId, currentOffice: { $not: { $type: "object" } } },
+    { $set: { currentOffice: { type: execKey }, updatedAt: now } }
+  );
+}
+
+/**
  * Let go of a portfolio that no longer exists.
  *
  * `cabinetPosition` and a `currentOffice` naming a portfolio would otherwise
@@ -606,14 +639,14 @@ async function retireNationalRemnants(
     // holder left on a key their country does not list shows a defunct title and
     // matches nothing that looks the office up in the country's config.
     //
-    // Only `.type` is written. `.state` is re-pointed by `mergeRegion` when the
-    // region it names is the one being fused away, which runs after this.
-    const takeOffice = { $set: { "currentOffice.type": execKey, updatedAt: now } };
+    // Only `.type` is written where there is an office to re-point. `.state` is
+    // left alone: `mergeRegion` re-points it when the region it names is the one
+    // being fused away, and that runs after this.
     if (absorbedGov.pmCharacterId) {
-      await db.collection("characters").updateOne({ _id: absorbedGov.pmCharacterId }, takeOffice);
+      await takeExecutiveOffice(db, "characters", absorbedGov.pmCharacterId, execKey, now);
     }
     if (absorbedGov.pmNppId) {
-      await db.collection("npps").updateOne({ _id: absorbedGov.pmNppId }, takeOffice);
+      await takeExecutiveOffice(db, "npps", absorbedGov.pmNppId, execKey, now);
     }
 
     // The confidence record is character-keyed, so only a PLAYER leader has one.
