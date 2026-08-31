@@ -62,45 +62,73 @@ export async function mergeNationalFisc(
   const to = await budgets.findOne({ _id: toCountryId });
   let treasuryMoved = 0;
 
-  if (from && to) {
+  // The `mergedInto` stamp is the idempotency guard for this whole block: a
+  // re-run after completion must not re-add a zero treasury, and must not
+  // re-carry levers over anything the unified government has since legislated.
+  if (from && to && !from.mergedInto) {
     const fromTreasury = from.treasuryBalance ?? 0;
     const fromDefence = from.defenseAppropriation?.balance ?? 0;
     treasuryMoved = fromTreasury * scale;
 
-    if (fromTreasury !== 0 || fromDefence !== 0) {
-      // The survivor's book: signed add, debt mirror recomputed from the new
-      // balance (treasuryBalance is the source of truth; debt.principal is
-      // derived = max(0, -balance)).
-      const newToTreasury = (to.treasuryBalance ?? 0) + fromTreasury * scale;
-      await budgets.updateOne(
-        { _id: toCountryId },
-        {
-          $set: {
-            treasuryBalance: newToTreasury,
-            "debt.principal": Math.max(0, -newToTreasury),
-            updatedAt: now,
-          },
-          ...(fromDefence !== 0
-            ? { $inc: { "defenseAppropriation.balance": fromDefence * scale } }
-            : {}),
-        }
-      );
-      // The absorbed book: zeroed, stamped. NOT deleted — history and the wiki
-      // still read it, and the fiscal loop stops visiting it via the dissolved
-      // guard rather than via absence.
-      await budgets.updateOne(
-        { _id: fromCountryId },
-        {
-          $set: {
-            treasuryBalance: 0,
-            "debt.principal": 0,
-            ...(from.defenseAppropriation ? { "defenseAppropriation.balance": 0 } : {}),
-            mergedInto: { countryId: toCountryId, turn: currentTurn },
-            updatedAt: now,
-          },
-        }
-      );
+    // THE WINNER'S FISCAL LAW TAKES OVER. Where both states carry a legislated
+    // version of the same lever, the absorbed (winning) side's governs the
+    // unified state — the merge direction runs winner-into-shell, so keeping
+    // the shell's levers would let the LOSER's tax code outlive its state.
+    // Rates and ratios are scale-free; the debt ceiling is money and converts.
+    // Levers the absorbed side never legislated are left alone rather than
+    // unset — absence is not a law. Deliberately NOT carried: `creditRating`,
+    // `sovereignRiskAnchor` and `debt.interestRate`, which are the market's
+    // assessment of the issuer, not legislation, and the fiscal machinery
+    // recomputes them from the combined balance sheet.
+    const lawSet: Record<string, unknown> = {};
+    if (from.taxRates) lawSet.taxRates = from.taxRates;
+    if (from.taxRatePhaseIn) lawSet.taxRatePhaseIn = from.taxRatePhaseIn;
+    if (typeof from.debt?.ceiling === "number") {
+      lawSet["debt.ceiling"] = from.debt.ceiling * scale;
+      if (typeof from.debt.ceilingLastRaisedYear === "number") {
+        lawSet["debt.ceilingLastRaisedYear"] = from.debt.ceilingLastRaisedYear;
+      }
     }
+    if (typeof from.minimumWageKaitzRatio === "number") {
+      lawSet.minimumWageKaitzRatio = from.minimumWageKaitzRatio;
+    }
+    if (typeof from.unionLawBias === "number") lawSet.unionLawBias = from.unionLawBias;
+    if (typeof from.unionsBanned === "boolean") lawSet.unionsBanned = from.unionsBanned;
+
+    // The survivor's book: signed add, debt mirror recomputed from the new
+    // balance (treasuryBalance is the source of truth; debt.principal is
+    // derived = max(0, -balance)).
+    const newToTreasury = (to.treasuryBalance ?? 0) + fromTreasury * scale;
+    await budgets.updateOne(
+      { _id: toCountryId },
+      {
+        $set: {
+          treasuryBalance: newToTreasury,
+          "debt.principal": Math.max(0, -newToTreasury),
+          ...lawSet,
+          updatedAt: now,
+        },
+        ...(fromDefence !== 0
+          ? { $inc: { "defenseAppropriation.balance": fromDefence * scale } }
+          : {}),
+      }
+    );
+    // The absorbed book: zeroed, stamped. NOT deleted — history and the wiki
+    // still read it (its levers stay in place as the record of the law that
+    // crossed), and the fiscal loop stops visiting it via the dissolved guard
+    // rather than via absence.
+    await budgets.updateOne(
+      { _id: fromCountryId },
+      {
+        $set: {
+          treasuryBalance: 0,
+          "debt.principal": 0,
+          ...(from.defenseAppropriation ? { "defenseAppropriation.balance": 0 } : {}),
+          mergedInto: { countryId: toCountryId, turn: currentTurn },
+          updatedAt: now,
+        },
+      }
+    );
   }
 
   // ── Sovereign bonds ────────────────────────────────────────────────────────

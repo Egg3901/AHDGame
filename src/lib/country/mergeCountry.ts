@@ -246,6 +246,31 @@ async function sweepNationalStrays(
   await db
     .collection("npps")
     .updateMany({ countryId: fromCountryId }, { $set: { countryId: toCountryId, updatedAt: now } });
+  // Tariffs are collision-aware in the winner's favour: where BOTH states
+  // legislated a tariff on the same scope (same sector, same origin country,
+  // same corporation, or both economy-wide), the absorbed side's record takes
+  // the slot — the merge direction runs winner-into-shell, and two live
+  // records on one scope would double-apply. Later legislation by the unified
+  // government supersedes either through the normal reconcile (enactment
+  // order), which is the ordinary lex-posterior rule.
+  const absorbedTariffs = (await db
+    .collection("tariffs")
+    .find({ countryId: fromCountryId })
+    .toArray()) as unknown as Array<{
+    scopeType: string;
+    targetSectorType?: unknown;
+    targetOriginCountryId?: unknown;
+    targetCorporationId?: unknown;
+  }>;
+  for (const tariff of absorbedTariffs) {
+    await db.collection("tariffs").deleteMany({
+      countryId: toCountryId,
+      scopeType: tariff.scopeType,
+      targetSectorType: tariff.targetSectorType ?? null,
+      targetOriginCountryId: tariff.targetOriginCountryId ?? null,
+      targetCorporationId: tariff.targetCorporationId ?? null,
+    });
+  }
   await db
     .collection("tariffs")
     .updateMany({ countryId: fromCountryId }, { $set: { countryId: toCountryId, updatedAt: now } });

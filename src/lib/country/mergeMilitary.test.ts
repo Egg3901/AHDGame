@@ -106,7 +106,7 @@ describe("mergeMilitary", () => {
     });
   });
 
-  it("adds the manpower pool and keeps the survivor's reinforcement mode", async () => {
+  it("adds the manpower pool and the winner's reinforcement mode governs", async () => {
     db.collection("nationalManpower")
       .findOne.mockResolvedValueOnce({ countryId: "DD", pool: 40_000, mode: "conscript" })
       .mockResolvedValueOnce({ countryId: "DE", pool: 25_000, mode: "volunteer" });
@@ -117,13 +117,15 @@ describe("mergeMilitary", () => {
     const [filter, update] = db.collectionMocks["nationalManpower"].updateOne.mock.calls[0];
     expect(filter).toEqual({ countryId: "DE" });
     expect(update.$inc.pool).toBe(40_000);
-    expect(update.$set).toBeUndefined(); // mode untouched
+    // The merge runs winner-into-shell: the absorbed side's rules for feeding
+    // its army stand, not the shell's.
+    expect(update.$set.mode).toBe("conscript");
     expect(db.collectionMocks["nationalManpower"].deleteOne).toHaveBeenCalledWith({
       countryId: "DD",
     });
   });
 
-  it("keeps the survivor's doctrine and drops the absorbed one", async () => {
+  it("the winner's doctrine replaces the survivor's", async () => {
     db.collection("nationalDoctrine")
       .findOne.mockResolvedValueOnce({ countryId: "DD", doctrine: "mass-mobilisation" })
       .mockResolvedValueOnce({ countryId: "DE", doctrine: "manoeuvre" });
@@ -131,9 +133,11 @@ describe("mergeMilitary", () => {
     await mergeMilitary(db as unknown as Db, args);
 
     expect(db.collectionMocks["nationalDoctrine"].deleteOne).toHaveBeenCalledWith({
-      countryId: "DD",
+      countryId: "DE",
     });
-    expect(db.collectionMocks["nationalDoctrine"].updateOne).not.toHaveBeenCalled();
+    const [filter, update] = db.collectionMocks["nationalDoctrine"].updateOne.mock.calls[0];
+    expect(filter).toEqual({ countryId: "DD" });
+    expect(update.$set.countryId).toBe("DE");
   });
 
   it("a re-run with nothing absorbed left is a clean no-op", async () => {

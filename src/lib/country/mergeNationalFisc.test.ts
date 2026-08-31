@@ -61,6 +61,78 @@ describe("mergeNationalFisc", () => {
     expect(ddSet.mergedInto).toEqual({ countryId: "DE", turn: 510 });
   });
 
+  it("the winner's fiscal law takes over: tax rates, phase-ins, ceiling, wage floor, union law", async () => {
+    // Where BOTH states carry a legislated version of the same lever, the
+    // absorbed (winning) side's governs the unified state. Rates and ratios are
+    // scale-free; the debt ceiling is money and converts.
+    db.collection("federalBudget")
+      .findOne.mockResolvedValueOnce({
+        _id: "DD",
+        treasuryBalance: -1000,
+        debt: { principal: 1000, ceiling: 5000, ceilingLastRaisedYear: 1953 },
+        taxRates: { incomeTax: 60, corporateTax: 80 },
+        taxRatePhaseIn: { incomeTax: 62 },
+        minimumWageKaitzRatio: 0.55,
+        unionLawBias: 50,
+        unionsBanned: false,
+      })
+      .mockResolvedValueOnce({
+        _id: "DE",
+        treasuryBalance: 5000,
+        debt: { principal: 0, ceiling: 90000, ceilingLastRaisedYear: 1950 },
+        taxRates: { incomeTax: 30, corporateTax: 25 },
+      });
+
+    await mergeNationalFisc(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 510,
+    });
+
+    const deSet = db.collectionMocks["federalBudget"].updateOne.mock.calls.find(
+      (c) => c[0]._id === "DE"
+    )![1].$set;
+    expect(deSet.taxRates).toEqual({ incomeTax: 60, corporateTax: 80 }); // rates: no FX
+    expect(deSet.taxRatePhaseIn).toEqual({ incomeTax: 62 }); // DD's pending ramps continue
+    expect(deSet["debt.ceiling"]).toBe(10000); // 5000 × 2 — money converts
+    expect(deSet["debt.ceilingLastRaisedYear"]).toBe(1953);
+    expect(deSet.minimumWageKaitzRatio).toBe(0.55);
+    expect(deSet.unionLawBias).toBe(50);
+    expect(deSet.unionsBanned).toBe(false);
+  });
+
+  it("levers the absorbed side never legislated do not clobber the survivor's", async () => {
+    db.collection("federalBudget")
+      .findOne.mockResolvedValueOnce({
+        _id: "DD",
+        treasuryBalance: -1000,
+        debt: { principal: 1000 },
+        taxRates: { incomeTax: 60 },
+      })
+      .mockResolvedValueOnce({
+        _id: "DE",
+        treasuryBalance: 5000,
+        debt: { principal: 0, ceiling: 90000 },
+        taxRates: { incomeTax: 30 },
+        minimumWageKaitzRatio: 0.4,
+        unionLawBias: -20,
+      });
+
+    await mergeNationalFisc(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 510,
+    });
+
+    const deSet = db.collectionMocks["federalBudget"].updateOne.mock.calls.find(
+      (c) => c[0]._id === "DE"
+    )![1].$set;
+    expect(deSet.taxRates).toEqual({ incomeTax: 60 });
+    expect(deSet.minimumWageKaitzRatio).toBeUndefined(); // DD never set one
+    expect(deSet.unionLawBias).toBeUndefined();
+    expect(deSet["debt.ceiling"]).toBeUndefined(); // DD had no ceiling of its own
+  });
+
   it("a deficit large enough to sink the survivor sets the survivor's debt mirror", async () => {
     db.collection("federalBudget")
       .findOne.mockResolvedValueOnce({
@@ -195,9 +267,15 @@ describe("mergeNationalFisc", () => {
     expect(deSet["debt.principal"]).toBe(500);
   });
 
-  it("a re-run is a no-op: zeroed treasury, no absorbed bonds or laws left", async () => {
+  it("a re-run is a no-op: the mergedInto stamp gates the whole fiscal block", async () => {
     db.collection("federalBudget")
-      .findOne.mockResolvedValueOnce({ _id: "DD", treasuryBalance: 0, debt: { principal: 0 } })
+      .findOne.mockResolvedValueOnce({
+        _id: "DD",
+        treasuryBalance: 0,
+        debt: { principal: 0 },
+        taxRates: { incomeTax: 60 },
+        mergedInto: { countryId: "DE", turn: 510 },
+      })
       .mockResolvedValueOnce({ _id: "DE", treasuryBalance: 3000, debt: { principal: 0 } });
 
     const res = await mergeNationalFisc(db as unknown as Db, {

@@ -242,6 +242,28 @@ describe("mergeCountry", () => {
     expect(prime(db, "tariffs").updateMany.mock.calls[0][1].$set.countryId).toBe("DE");
   });
 
+  it("the winner's tariff takes a colliding scope from the survivor", async () => {
+    // Both states tariffed the same sector: two live records on one scope
+    // would double-apply, and the merge rule is that the winner's law governs.
+    prime(db, "tariffs").find.mockReturnValue(
+      cursor([{ _id: "t-dd", scopeType: "sector", targetSectorType: "manufacturing" }])
+    );
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 412,
+    });
+    const del = prime(db, "tariffs").deleteMany.mock.calls[0][0];
+    expect(del).toEqual({
+      countryId: "DE",
+      scopeType: "sector",
+      targetSectorType: "manufacturing",
+      targetOriginCountryId: null,
+      targetCorporationId: null,
+    });
+  });
+
   it("records the absorption against the surviving country", async () => {
     const { mergeCountry } = await import("./mergeCountry");
     await mergeCountry(db as unknown as Db, {

@@ -148,7 +148,9 @@ export async function mergeMilitary(db: Db, args: MergeMilitaryArgs): Promise<Me
     arsenalMerged = true;
   }
 
-  // ── Manpower: pools add; the survivor keeps its own reinforcement mode ────
+  // ── Manpower: pools add; the ABSORBED side's reinforcement mode governs ───
+  // The merge direction runs winner-into-shell, so where both states hold a
+  // stance the winner's stands — its army, its rules for feeding it.
   const manpowerColl = db.collection<NationalManpower>("nationalManpower");
   const fromManpower = await manpowerColl.findOne({ countryId: fromCountryId });
   let manpowerMerged = false;
@@ -157,7 +159,10 @@ export async function mergeMilitary(db: Db, args: MergeMilitaryArgs): Promise<Me
     if (toManpower) {
       await manpowerColl.updateOne(
         { countryId: toCountryId },
-        { $inc: { pool: fromManpower.pool ?? 0 } }
+        {
+          $inc: { pool: fromManpower.pool ?? 0 },
+          ...(fromManpower.mode ? { $set: { mode: fromManpower.mode } } : {}),
+        }
       );
       await manpowerColl.deleteOne({ countryId: fromCountryId });
     } else {
@@ -169,19 +174,18 @@ export async function mergeMilitary(db: Db, args: MergeMilitaryArgs): Promise<Me
     manpowerMerged = true;
   }
 
-  // ── Doctrine: the survivor's stands; the absorbed one moves only into a void ─
+  // ── Doctrine: the ABSORBED side's replaces the survivor's, same reasoning ──
   const doctrineColl = db.collection("nationalDoctrine");
   const fromDoctrine = await doctrineColl.findOne({ countryId: fromCountryId });
   if (fromDoctrine) {
     const toDoctrine = await doctrineColl.findOne({ countryId: toCountryId });
     if (toDoctrine) {
-      await doctrineColl.deleteOne({ countryId: fromCountryId });
-    } else {
-      await doctrineColl.updateOne(
-        { countryId: fromCountryId },
-        { $set: { countryId: toCountryId, updatedAt: now } }
-      );
+      await doctrineColl.deleteOne({ countryId: toCountryId });
     }
+    await doctrineColl.updateOne(
+      { countryId: fromCountryId },
+      { $set: { countryId: toCountryId, updatedAt: now } }
+    );
   }
 
   return {
