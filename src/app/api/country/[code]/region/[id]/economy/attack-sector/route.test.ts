@@ -5,10 +5,11 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 const withTransaction = vi.fn(async (callback: () => Promise<void>) => callback());
 const endSession = vi.fn().mockResolvedValue(undefined);
+const makeSession = () => ({ withTransaction, endSession });
 vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
   getMongoClient: vi.fn().mockResolvedValue({
-    startSession: () => ({ withTransaction, endSession }),
+    startSession: () => makeSession(),
   }),
 }));
 vi.mock("node:crypto", () => ({ randomInt: vi.fn().mockReturnValue(0) }));
@@ -330,6 +331,104 @@ describe("POST /api/country/[code]/region/[id]/economy/attack-sector", () => {
       expect.any(Object)
     );
     expect(withTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("survives a stale-session ConflictingOperationInProgress (117) and retries on a fresh session", async () => {
+    const attackerCharId = new ObjectId();
+    const attackerCorpId = new ObjectId();
+    const defenderCorpId = new ObjectId();
+    const targetSectorId = new ObjectId();
+    const attacker = {
+      _id: attackerCorpId,
+      ceoId: attackerCharId,
+      name: "Attacker Corp",
+      liquidCapital: 1_000_000,
+      marketingStrength: 200,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+    };
+    const defender = {
+      _id: defenderCorpId,
+      name: "Defender Corp",
+      liquidCapital: 1_000_000,
+      marketingStrength: 100,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+    };
+    const target = {
+      _id: targetSectorId,
+      corporationId: defenderCorpId,
+      countryId: "US",
+      stateId: "CA",
+      sectorType: "energy",
+      strategyId: "standard",
+      revenue: 1_000_000,
+      capitalStock: 1_000,
+      capacityBookAnchor: 1_000_000,
+      plantCount: 100,
+      plantUnitRemainder: 0,
+    };
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 511,
+    });
+    db.collectionMocks.states.findOne.mockResolvedValue({
+      _id: "CA",
+      countryId: "US",
+      name: "California",
+    });
+    db.collectionMocks.users.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      activeCharacterType: "regular",
+    });
+    const { getCharacterByUserId } = await import("@/lib/db/characterLookup");
+    vi.mocked(getCharacterByUserId).mockResolvedValue({ _id: attackerCharId } as never);
+    db.collectionMocks.corporations.findOne
+      .mockResolvedValueOnce(attacker)
+      .mockResolvedValueOnce(defender)
+      .mockResolvedValueOnce(attacker)
+      .mockResolvedValueOnce(defender);
+    db.collectionMocks.corporations.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.corporateSectors.findOne
+      .mockResolvedValueOnce(target)
+      .mockResolvedValueOnce(target)
+      .mockResolvedValueOnce(null);
+    db.collectionMocks.corporateSectors.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.corporateSectors.insertOne.mockResolvedValue({
+      insertedId: new ObjectId(),
+    });
+
+    // First session is poisoned: transaction start fails with Mongo code 117
+    // (ConflictingOperationInProgress). The wrapper must open a fresh session
+    // and retry, with the callback only actually running on the good session.
+    const poisonedSession = {
+      withTransaction: vi.fn().mockRejectedValue({
+        code: 117,
+        message:
+          "Only servers in a sharded cluster can start a new transaction at the active transaction number",
+      }),
+      endSession: vi.fn().mockResolvedValue(undefined),
+    };
+    const { getMongoClient } = await import("@/lib/mongodb");
+    vi.mocked(getMongoClient).mockResolvedValue({
+      startSession: vi.fn().mockReturnValueOnce(poisonedSession).mockReturnValueOnce(makeSession()),
+    } as never);
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest({ sectorId: targetSectorId.toHexString() }), ctx());
+    const data = await response.json();
+
+    // The stale session must not surface as a 500; the retry commits the split.
+    expect(response.status).toBe(200);
+    expect(data).toMatchObject({ splitSucceeded: true, plantsTransferred: 25 });
+    expect(poisonedSession.withTransaction).toHaveBeenCalledTimes(1);
+    expect(poisonedSession.endSession).toHaveBeenCalledTimes(1);
+    expect(withTransaction).toHaveBeenCalledTimes(1);
+
+    // Restore the shared mock so later tests get the default session factory.
+    vi.mocked(getMongoClient).mockResolvedValue({
+      startSession: () => makeSession(),
+    } as never);
   });
 
   it("spends the quoted cash and MS on failure without moving plants", async () => {
