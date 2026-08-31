@@ -15,6 +15,10 @@ export const PLAYER_FACING_CATEGORIES: InboxCategory[] = [
 // Total map — the Record<NotificationType, …> type forces every type to be present;
 // adding a new NotificationType without a category here is a compile error.
 export const CATEGORY_OF: Record<NotificationType, InboxCategory> = {
+  // Ask service (quality credits and watch alerts)
+  ask_refund: "system",
+  ask_correction: "system",
+  ask_watch: "system",
   // crisis
   crisis: "crisis",
   player_attack: "crisis",
