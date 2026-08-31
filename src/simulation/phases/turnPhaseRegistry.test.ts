@@ -220,7 +220,11 @@ describe("turn phase registry", () => {
       realNow: new Date(),
       gameNow: new Date(),
       newTurn: 2,
-      db: {} as never,
+      // The dispatch reads the registered-country set (dissolved-country gate)
+      // before fanning phases out; an empty read means "all static countries".
+      db: {
+        collection: () => ({ find: () => ({ toArray: async () => [] }) }),
+      } as never,
       config: {} as never,
       gameState: { playerRandomEventsEnabled: false },
       phaseResults: {} as Record<string, unknown>,
