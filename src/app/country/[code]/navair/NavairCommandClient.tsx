@@ -10,6 +10,17 @@ export interface FormationWarning {
   severity: "bad" | "warn";
 }
 
+/**
+ * What this formation is recovering, and if it is not, why not.
+ *
+ * A percentage says what is wrong. This says what to do about it, which is the difference
+ * between a page that reports and a page that helps.
+ */
+export interface RepairNote {
+  mending: boolean;
+  text: string;
+}
+
 export interface CommandFormation {
   id: string;
   name: string;
@@ -25,6 +36,8 @@ export interface CommandFormation {
   /** True when the engine chose this posting, not the commander. */
   auto: boolean;
   warnings: FormationWarning[];
+  /** Hull or airframe repair status, in words the commander can act on. */
+  repair: RepairNote;
 }
 
 export interface MissionOption {
@@ -42,6 +55,10 @@ export interface ForceSummary {
   /** Formations at or near the supply floor. */
   starving: number;
   atWar: boolean;
+  /** Naval materiel in the national arsenal, for paid repair. */
+  navalLots: number;
+  /** Air materiel in the national arsenal, for paid repair. */
+  airLots: number;
 }
 
 export interface StationOption {
@@ -182,6 +199,21 @@ export function NavairCommandClient({
             </li>
           )}
 
+          <li className="text-neutral-400">
+            {summary.navalLots > 0 || summary.airLots > 0 ? (
+              <>
+                Arsenal: {summary.navalLots} naval and {summary.airLots} air lots in store. Materiel
+                repairs a formation past the limit free repair reaches, wherever it is stationed.
+              </>
+            ) : (
+              <>
+                You have no naval or air materiel in store, so nothing can be repaired past the
+                limit free repair reaches. Award a defence contract to a shipyard or an aircraft
+                plant to build a stock.
+              </>
+            )}
+          </li>
+
           {summary.starving > 0 && (
             <li className="text-red-400">
               {summary.starving} formation{summary.starving === 1 ? " is" : "s are"} out of supply.
@@ -239,6 +271,14 @@ export function NavairCommandClient({
                       ))}
                     </ul>
                   )}
+
+                  <p
+                    className={`mt-1 text-xs ${
+                      f.repair.mending ? "text-emerald-400" : "text-neutral-500"
+                    }`}
+                  >
+                    {f.repair.text}
+                  </p>
 
                   <div className="mt-3 flex flex-wrap gap-3">
                     <label className="text-xs text-neutral-400">

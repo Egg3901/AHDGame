@@ -50,8 +50,14 @@ export interface NavairUnitFields {
   integrity?: number;
   /** Supply level at station, 0..100. Set by the sustain pass. */
   supply?: number;
-  /** Set when this formation fought this turn. Blocks repair: you mend between
-   * engagements, not during one. */
+  /**
+   * Set when this formation fought this turn. Blocks repair: you mend between
+   * engagements, not during one.
+   *
+   * In memory ONLY, and it must stay that way. `persistCombatResults` writes only the
+   * formations it touched, so a stored `true` would never be cleared on a turn the
+   * formation did not fight, and that hull's repair would be blocked for ever.
+   */
   engaged?: boolean;
 }
 

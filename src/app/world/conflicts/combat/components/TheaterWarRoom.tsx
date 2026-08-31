@@ -7,6 +7,8 @@ import type { NatMods } from "@/lib/military/doctrineTree";
 import { MIL_COLOR, MIL_FONT } from "../../military/theme";
 import type { CombatState, CombatAction } from "../useCombatState";
 import { unitCV } from "./combatUi";
+import { BLOCKADE, wornPenalty } from "@/lib/navair/blockade";
+import { integrityMult } from "@/lib/navair/engineCore";
 import { FrontMap } from "./FrontMap";
 import { BattleOddsBar } from "./BattleOddsBar";
 
@@ -48,6 +50,24 @@ export function TheaterWarRoom({
   );
   const [frontId, setFrontId] = useState<string>(engagedIds[0] ?? "");
   const deployed = frontId ? state.units.filter((u) => u.theaterId === frontId) : [];
+
+  // Blockade pressure already falls with hull condition, and below the knee it falls
+  // faster than proportionally. Nothing has ever told a commander that, so a blockade
+  // that will not bite reads as a broken mechanic rather than as a worn fleet.
+  const wornHulls = deployed.filter(
+    (u) => u.domain === "naval" && (u.integrity ?? 100) < BLOCKADE.wornKnee
+  );
+  // Both terms, because both are real. `integrityMult` scales lane pressure linearly and
+  // `wornPenalty` adds the knee on top, so quoting the knee alone would badly understate
+  // the loss: a hull at 15% applies about 1% of its nominal pressure, not 9%.
+  const wornPressureLostPct = wornHulls.length
+    ? Math.round(
+        (1 -
+          wornHulls.reduce((t, u) => t + integrityMult(u.integrity) * wornPenalty(u.integrity), 0) /
+            wornHulls.length) *
+          100
+      )
+    : 0;
 
   const pending = state.pendingDeclarations.find((d) => d.theaterId === frontId);
   const frontReports = state.reports.filter((r) => r.theaterId === frontId);
@@ -293,6 +313,14 @@ export function TheaterWarRoom({
                 style={{ font: `500 11px ${mono}`, color: MIL_COLOR.textFaint, marginBottom: 12 }}
               >
                 Projection unavailable.
+              </div>
+            )}
+            {wornHulls.length > 0 && (
+              <div style={{ font: `500 11px ${mono}`, color: MIL_COLOR.amber, marginBottom: 12 }}>
+                {wornHulls.length} of your ships at this front are too badly damaged to blockade
+                effectively, costing about {wornPressureLostPct}% of the pressure they would
+                otherwise apply. Send them to a home port to repair, or award a defence contract to
+                a shipyard so the arsenal can repair them where they are.
               </div>
             )}
             {proj?.unopposed && (

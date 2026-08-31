@@ -321,3 +321,43 @@ export function freshMilitaryDiversion(
   if (t < currentTurn - 1) return 0;
   return Math.min(1, Math.max(0, f));
 }
+
+/**
+ * What share of a unit's full materiel load it costs to repair it from nothing.
+ *
+ * Expressed against the existing lot economy rather than as a fresh price, so it inherits
+ * `LOT_COST_UNITS`' calibration instead of adding a second thing to keep in sync. At 0.5 a
+ * wrecked hull costs half of what fully equipping one does: more than a top-up, which is
+ * worth at most a few percent of combat power, and well under a new platform, because the
+ * hull already exists and only has to be made seaworthy again.
+ *
+ * This is the pacing dial for paid repair. The calibration target is that a major navy can
+ * return roughly one crippled hull per turn or two without starving its refit pipeline,
+ * since repair draws from the same per-domain store.
+ */
+export const REPAIR_LOT_SHARE = 0.5;
+
+/**
+ * Lots of materiel needed to restore one formation to full condition.
+ *
+ * Rounded UP for the same reason `lotsToFillUnit` is: lots are indivisible, and rounding
+ * to nearest understates the requirement, so a minister orders the displayed amount and
+ * then sees the same shortfall afterwards.
+ */
+export function lotsToRepair(unit: { integrity?: number }, lotsFull: number): number {
+  const damage = (100 - (unit.integrity ?? 100)) / 100;
+  if (damage <= 0) return 0;
+  return Math.max(1, Math.ceil(lotsFull * damage * REPAIR_LOT_SHARE));
+}
+
+/**
+ * Repair order: worst damaged first.
+ *
+ * The mirror image of `refitOrder`, and deliberately so. Refit tops up the nearest to
+ * complete because a partly equipped unit is already fighting; repair goes to the worst
+ * hull because a wreck contributes literally nothing until it is seaworthy, so the
+ * marginal combat value of a lot is highest at the bottom.
+ */
+export function repairOrder<T extends { integrity?: number }>(units: T[]): T[] {
+  return [...units].sort((a, b) => (a.integrity ?? 100) - (b.integrity ?? 100));
+}
