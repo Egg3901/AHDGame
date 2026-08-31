@@ -14,7 +14,7 @@ import type { MergerReview, PendingDivestiture } from "@/lib/db/types/mergerRevi
 import type { CountryId } from "@/lib/constants/countries";
 import { createNotification } from "@/lib/notifications";
 import { recordAudit } from "@/lib/audit/recordAudit";
-import { creditTreasuryProceeds } from "@/lib/nationalization/treasury";
+import { creditTreasuryProceedsFromAnchor } from "@/lib/nationalization/treasury";
 import { atomicallyDebitCorpLiquidCapital } from "@/lib/financialTxLog/atomicCashGuard";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import {
@@ -252,7 +252,17 @@ export async function fineOverdueDivestitures(
     const debit = await atomicallyDebitCorpLiquidCapital(db, corp._id, fineLocal);
     if (!debit.ok) continue; // Cannot pay this turn; the order stands and it is retried next turn.
 
-    await creditTreasuryProceeds(db, obligation.countryId as CountryId, fineLocal, now);
+    // The fine was DEBITED in the corporation's currency, but the reviewing
+    // country's treasury keeps its books in its OWN currency. Credit the ₳
+    // amount converted for the receiving country, not the payer's local figure
+    // — otherwise a cross-border acquirer over- or under-pays the government by
+    // the exchange-rate difference (#808).
+    await creditTreasuryProceedsFromAnchor(
+      db,
+      obligation.countryId as CountryId,
+      corpLiquidCapitalToAnchor(fineLocal, corp, fxRate),
+      now
+    );
     await emitTx(db, {
       type: "corp_fine",
       turn: currentTurn,
