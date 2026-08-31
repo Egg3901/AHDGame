@@ -9,6 +9,9 @@ import {
   lotPrice,
   MATERIEL_SHARE_OF_UNIT_COST,
   applyEquipmentLots,
+  lotsToRepair,
+  repairOrder,
+  REPAIR_LOT_SHARE,
 } from "./arsenal";
 import { MILITARY_COUNTRY_SCALE } from "@/lib/constants/military";
 
@@ -214,5 +217,55 @@ describe("refitOrder", () => {
   it("tolerates a unit with missing equipment rather than throwing", () => {
     const legacy = {} as never;
     expect(() => refitOrder([legacy, unit(1) as never])).not.toThrow();
+  });
+});
+
+describe("lotsToRepair", () => {
+  // Priced against the existing lot economy rather than a fresh table, so it inherits
+  // LOT_COST_UNITS' calibration instead of introducing a second thing to keep in sync.
+  it("charges nothing for an undamaged hull", () => {
+    expect(lotsToRepair({ integrity: 100 }, 20)).toBe(0);
+  });
+
+  it("charges the full repair share for a wreck", () => {
+    expect(lotsToRepair({ integrity: 0 }, 20)).toBe(Math.ceil(20 * REPAIR_LOT_SHARE));
+  });
+
+  it("charges in proportion to the damage", () => {
+    const half = lotsToRepair({ integrity: 50 }, 20);
+    const full = lotsToRepair({ integrity: 0 }, 20);
+    expect(half).toBeLessThan(full);
+    expect(half).toBeGreaterThan(0);
+  });
+
+  // Lots are indivisible, and any damage worth mending is worth at least one lot.
+  it("never charges a fraction", () => {
+    expect(Number.isInteger(lotsToRepair({ integrity: 97 }, 20))).toBe(true);
+    expect(lotsToRepair({ integrity: 97 }, 20)).toBeGreaterThanOrEqual(1);
+  });
+
+  it("treats a missing integrity as undamaged", () => {
+    expect(lotsToRepair({}, 20)).toBe(0);
+  });
+});
+
+describe("repairOrder", () => {
+  // The mirror image of refitOrder. Refit tops up the nearest to complete because a partly
+  // equipped unit is already fighting; repair goes to the worst hull because a wreck
+  // contributes nothing at all until it is seaworthy.
+  it("puts the worst damaged formation first", () => {
+    const out = repairOrder([{ integrity: 80 }, { integrity: 5 }, { integrity: 40 }]);
+    expect(out.map((u) => u.integrity)).toEqual([5, 40, 80]);
+  });
+
+  it("does not mutate its input", () => {
+    const input = [{ integrity: 80 }, { integrity: 5 }];
+    repairOrder(input);
+    expect(input.map((u) => u.integrity)).toEqual([80, 5]);
+  });
+
+  it("treats a missing integrity as undamaged, so it sorts last", () => {
+    const out = repairOrder([{}, { integrity: 10 }]);
+    expect(out[0].integrity).toBe(10);
   });
 });
