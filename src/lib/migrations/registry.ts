@@ -61,6 +61,7 @@ import { migration as equityLiquidityIndexes } from "./entries/2026-08-28-equity
 import { migration as redistrictingAuthorityLegislative } from "./entries/2026-08-26-redistricting-authority-legislative";
 import { migration as purgeRetiredRuMetricRegions } from "./entries/2026-08-30-purge-retired-ru-metric-regions";
 import { migration as regionalDefaultLawsNewgen } from "./entries/2026-08-31-regional-default-laws-newgen";
+import { migration as healPhantomRegionalOrderLevels } from "./entries/2026-08-31-heal-phantom-regional-order-levels";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -187,6 +188,11 @@ export const MIGRATIONS: Migration[] = [
   // and LawProvisionComparison drops the fiscal comparison and metric chips
   // with it. Backfill the level-0 regional default the engine already assumes.
   regionalDefaultLawsNewgen,
+  // issueOrder resolved a missing prior policy to the ladder centre, so an order
+  // on a law the region had never legislated reverted, on expiry, to a level it
+  // never passed — and kept supplying a regional supplement for it. Reset only
+  // the rows whose order recorded no prior option at all.
+  healPhantomRegionalOrderLevels,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.
