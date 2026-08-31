@@ -57,6 +57,14 @@ export function regionalDefaultLaws(countryId: string, year?: number): Political
  * instead of a blank provision. Callers apply it only at region scope; at
  * national scope a missing row means something else is wrong and should not be
  * papered over.
+ *
+ * Deliberately NOT narrowed by country. Law ids are globally unique across the
+ * four catalogs — `getProjectedPoliticalLegislationTypes`' test asserts the
+ * projected `_id` set is as large as the catalog itself — so the id alone
+ * already identifies the country. A country parameter could only ever REJECT a
+ * correct answer: `resolveBillCountryId` falls back to "US" for a legacy bill it
+ * cannot place, which would silently drop a RU/UK/DD region back to the ladder
+ * centre. It buys no protection and adds a failure mode.
  */
 export function regionalDefaultLevel(lawId: string): number | undefined {
   const law = getLaw(lawId);

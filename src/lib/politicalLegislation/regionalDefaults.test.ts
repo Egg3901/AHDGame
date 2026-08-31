@@ -142,3 +142,23 @@ describe("projected docs stay inside the picker conditions the coverage test che
     }
   });
 });
+
+describe("era windows", () => {
+  /**
+   * The seeder filters `regionalDefaultLaws` by the world's year; the read
+   * fallbacks and the backfill migration do not, because no `both` law carries
+   * a window today. Adding one would make those three disagree — a law would
+   * seed on one path and not another. Fail here so whoever adds it has to
+   * decide, rather than discovering the split later.
+   */
+  it("no `both` law carries an era window", () => {
+    for (const countryId of LAW_COUNTRY_IDS) {
+      for (const law of regionalDefaultLaws(countryId)) {
+        expect(
+          law.window,
+          `${law.id} is windowed — thread the year through the read fallbacks and the migration`
+        ).toBeUndefined();
+      }
+    }
+  });
+});

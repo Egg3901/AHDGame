@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { getCatalog } from "@/lib/politicalLegislation/catalog";
+import { projectLawToLegislationType } from "@/lib/politicalLegislation/project";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -226,6 +228,77 @@ describe("checkCurrentPolicyLevel", () => {
     expect(result).not.toBeNull();
     expect(result!.error).toContain("Federal Domestic Corporate Tax Rate");
     expect(result!.error).toContain("already at this level");
+  });
+
+  it("treats a region's missing row for a new-generation `both` law as level 0", async () => {
+    // The propose modal disables the level-0 option (current-policies now
+    // reports 0 for these), so the API must agree — otherwise a direct caller
+    // files a no-op bill the UI already refuses to build.
+    const check = await loadHelper();
+    const bothLaw = getCatalog("RU").find(
+      (law) => law.kind !== "tax" && law.allowedScope === "both"
+    )!;
+    db.collectionMocks.statePolicies.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collection("enactedLaws");
+    db.collectionMocks.enactedLaws.find.mockReturnValue({
+      sort: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+    });
+    // The stored doc IS the projection, so the level-0 option is `l0`.
+    db.collectionMocks.legislationTypes.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([projectLawToLegislationType(bothLaw)]),
+    });
+    db.collectionMocks.legislationTypes.findOne.mockResolvedValue({
+      _id: bothLaw.id,
+      name: bothLaw.title,
+    });
+
+    const result = await check(db as unknown as Db, "MOW", [
+      { legislationTypeId: bothLaw.id, policyOptionId: "l0" },
+    ]);
+    expect(result).not.toBeNull();
+    expect(result!.error).toContain("already at this level");
+  });
+
+  it("still allows proposing a level above the region default", async () => {
+    const check = await loadHelper();
+    const bothLaw = getCatalog("RU").find(
+      (law) => law.kind !== "tax" && law.allowedScope === "both"
+    )!;
+    db.collectionMocks.statePolicies.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collection("enactedLaws");
+    db.collectionMocks.enactedLaws.find.mockReturnValue({
+      sort: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+    });
+
+    const result = await check(db as unknown as Db, "MOW", [
+      { legislationTypeId: bothLaw.id, policyOptionId: "l3" },
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it("does not apply the region default at national scope", async () => {
+    // National rows are seeded; a missing one is a different problem and must
+    // not start refusing level-0 proposals.
+    const check = await loadHelper();
+    const bothLaw = getCatalog("RU").find(
+      (law) => law.kind !== "tax" && law.allowedScope === "both"
+    )!;
+    db.collectionMocks.statePolicies.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collection("enactedLaws");
+    db.collectionMocks.enactedLaws.find.mockReturnValue({
+      sort: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+    });
+
+    const result = await check(db as unknown as Db, "su_national", [
+      { legislationTypeId: bothLaw.id, policyOptionId: "l0" },
+    ]);
+    expect(result).toBeNull();
   });
 
   it("returns null when no current policy exists for legislation type", async () => {

@@ -360,3 +360,46 @@ describe("loadLiveCurrentPolicies — regional default for new-generation `both`
     expect(out.get(bothLaw.id)).toEqual({ policyOptionIndex: 2 });
   });
 });
+
+describe("resolveCurrentLaw — pre-existing region bills and the level-0 fallback", () => {
+  const options = [
+    { id: "l0", name: "No programme", effectDirection: -1, explanation: "Nothing is provided." },
+    { id: "l1", name: "Token", effectDirection: -1, explanation: "A little." },
+    { id: "l2", name: "Moderate", effectDirection: 0, explanation: "Some." },
+    { id: "l3", name: "Broad", effectDirection: 1, explanation: "Most." },
+    { id: "l4", name: "Universal", effectDirection: 1, explanation: "All." },
+  ];
+  const newGenLt = { _id: "ru.x.primary", policyOptions: options } as unknown as LegislationType;
+
+  /**
+   * A bill filed before the fix carries no snapshot. The level-0 fallback now
+   * gives it a current law where it had none — an improvement, not the
+   * "renders its own outcome" bug: that one needs an ENACTED live row, and an
+   * un-enacted bill has none.
+   */
+  it("shows the level-0 option for an un-enacted bill with no snapshot", () => {
+    const out = resolveCurrentLaw(
+      newGenLt,
+      { effectDirection: 1, policyOptionId: "l3" },
+      {
+        policyOptionIndex: 0,
+      }
+    );
+    expect(out.index).toBe(0);
+    expect(out.label?.name).toBe("No programme");
+  });
+
+  /**
+   * Snapshot precedence is untouched: once a bill enacts, its own outcome is
+   * the live row, and the snapshot is what keeps the box honest.
+   */
+  it("REGRESSION: an enacted bill's snapshot still beats the live row", () => {
+    const out = resolveCurrentLaw(
+      newGenLt,
+      { effectDirection: 1, policyOptionId: "l3", currentPolicyOptionIdSnapshot: "l0" },
+      { policyOptionIndex: 3 }
+    );
+    expect(out.index).toBe(0);
+    expect(out.label?.name).toBe("No programme");
+  });
+});

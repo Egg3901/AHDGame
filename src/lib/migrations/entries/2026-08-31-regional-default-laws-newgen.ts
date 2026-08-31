@@ -60,6 +60,11 @@ async function backfillRegionalDefaultLaws(db: Db, dryRun: boolean): Promise<Mig
     }
 
     const lawIds = laws.map((law) => law.id);
+    // Scope-blind on purpose. `StatePolicy.scope` is optional on reads —
+    // pre-migration documents lack it — so filtering on it here would miss an
+    // existing row and, since `statePolicies` carries no unique index, insert a
+    // silent duplicate beside it. The upsert filter below still WRITES a scoped
+    // row; only the existence check is permissive.
     const existing = await db
       .collection<StatePolicyRecord>("statePolicies")
       .find({ stateId: { $in: regionIds }, legislationTypeId: { $in: lawIds } })

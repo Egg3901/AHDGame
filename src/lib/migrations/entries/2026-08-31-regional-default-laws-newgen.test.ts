@@ -111,6 +111,21 @@ describe("2026-08-31-regional-default-laws-newgen", () => {
     expect(result.documentsInserted).toBe(0);
   });
 
+  it("writes nothing against a world with no regions yet", async () => {
+    // A migration can reach a partially-bootstrapped world before the region
+    // seed has run. It must report that, not throw or write orphan rows.
+    db.collection("states").find.mockImplementation(() => ({
+      project: () => ({ toArray: async () => [] }),
+      toArray: async () => [],
+    }));
+
+    const result = await migration.execute(db as unknown as Db, { dryRun: false });
+
+    expect(db.collectionMocks["statePolicies"]!.bulkWrite).not.toHaveBeenCalled();
+    expect(result.documentsInserted).toBe(0);
+    expect(result.notes?.join(" ")).toContain("no regions found");
+  });
+
   it("skips DD regions outside the authored Land list", async () => {
     db.collection("states").find.mockImplementation((filter?: { countryId?: string }) => {
       const ids =
