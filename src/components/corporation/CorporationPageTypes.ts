@@ -651,6 +651,8 @@ export interface SectorDetail {
 
   /** Nameplate productive capacity, units/day. */
   capacityUnits?: number | null;
+  /** Persisted whole facilities owned by this sector. */
+  plantCount?: number | null;
   /** Units produced last turn. */
   producedUnits?: number | null;
   /** Units sold last turn. */

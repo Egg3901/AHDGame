@@ -174,9 +174,10 @@ const ALLOWED_WRITERS: Record<string, WriterEntry> = {
     reason: "Vacant/inactive-CEO shed moves capacity units to pool headroom under plants.",
   },
   "src/app/api/country/[code]/region/[id]/economy/attack-sector/route.ts": {
-    writeSites: 4,
+    writeSites: 1,
     status: "plants-gated",
-    reason: "Attack is a capacity transfer with attrition under plants.",
+    reason:
+      "Split is plants-only; a new row starts at zero revenue and the turn derives its revenue from transferred whole plants.",
   },
   "src/app/api/country/[code]/region/[id]/economy/attack/route.ts": {
     writeSites: 5,

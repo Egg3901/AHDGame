@@ -105,6 +105,7 @@ import {
   queueUndeliveredCost,
   unitsDeliveredThisTurn,
 } from "@/lib/corporations/buildDelivery";
+import { advanceSectorPlantLedger } from "@/lib/corporations/plantLedger";
 import {
   computeDisasterPenaltySplit,
   disasterProductionFactor,
@@ -540,6 +541,9 @@ export function processSector(
         )
       : storedCapacity
     : 0;
+  const plantLedger = plantsEnabled
+    ? advanceSectorPlantLedger(sector, plantsBaseStock, landedBuildUnits)
+    : null;
   const plantsPrevStock = plantsBaseStock + landedBuildUnits;
   const plantsCapacity = plantsEnabled
     ? advanceCapitalStock({
@@ -1704,6 +1708,8 @@ export function processSector(
     // ratio (per-unit basis) that has to survive round-tripping.
     if (plantsEnabled) {
       sectorUpdate.capacityBookAnchor = capacityBookAnchor;
+      sectorUpdate.plantCount = plantLedger?.plantCount ?? 0;
+      sectorUpdate.plantUnitRemainder = plantLedger?.plantUnitRemainder ?? 0;
     }
   }
   // Plants ramp anchor (stamped once, on the flip turn).
