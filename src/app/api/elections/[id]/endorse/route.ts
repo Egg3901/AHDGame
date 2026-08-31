@@ -5,6 +5,7 @@ import { z } from "zod";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { recordAudit } from "@/lib/audit/recordAudit";
+import { claimPlayerEndorsementLock } from "@/lib/elections/playerEndorsementLock";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
 import type { ElectionCandidate, PlayerEndorsement } from "@/lib/db/types";
 import { resolveElectionRouteParam } from "@/lib/elections/electionParamResolution";
@@ -19,7 +20,7 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-// POST /api/elections/[id]/endorse — Endorse a candidate in a presidential election, replacing any prior endorsement.
+// POST /api/elections/[id]/endorse: Endorse a candidate in a presidential election, replacing any prior endorsement.
 // Auth: requireHumanSessionWithCharacter (bot tokens rejected)
 // Errors: 400, 401, 403, 404, 429
 export async function POST(request: Request, { params }: RouteParams) {
@@ -78,7 +79,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "You cannot endorse yourself" }, { status: 400 });
     }
 
-    // Primaries are intra-party contests — the /president/primary/[partyId]
+    // Primaries are intra-party contests. The /president/primary/[partyId]
     // surface only ever offered this control to same-party members, so hold
     // the API to the same rule (ticket #1179). Cross-party endorsements open
     // up in the general phase. Turn-first phase check with Date fallback.
@@ -103,116 +104,132 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    // Reverse the Support bump of any endorsement we're about to replace. The
-    // bump is non-idempotent (applyEndorsementSupportBump docstring), and only the
-    // DELETE path previously applied the negative form — so re-POSTing endorse (same
-    // candidate, or flipping A→B→A) stacked +SUPPORT_ENDORSEMENT_BUMP every call
-    // with no reversal, letting a single account pump any candidate to the clamp.
-    // Reverse here so a replacement nets to zero on the old candidate before the new
-    // bump lands. Skip NPP candidates (bump was never applied to them).
-    const priorEndorsements = await db
-      .collection<PlayerEndorsement>("playerEndorsements")
-      .find({ characterId: character._id, electionId: electionObjectId, isActive: true })
-      .toArray();
-    for (const prior of priorEndorsements) {
-      const priorCandidate = await db
-        .collection<ElectionCandidate>("electionCandidates")
-        .findOne({ _id: prior.candidateId });
-      if (priorCandidate && !priorCandidate.isNPP && priorCandidate.characterId) {
-        await applyEndorsementSupportBump(db, priorCandidate.characterId, true);
-      }
+    const releaseEndorsementLock = await claimPlayerEndorsementLock(
+      db,
+      character._id,
+      electionObjectId
+    );
+    if (!releaseEndorsementLock) {
+      return NextResponse.json(
+        { error: "Your endorsement is already being updated. Try again." },
+        { status: 409 }
+      );
     }
 
-    // Withdraw any existing active endorsement for this election
-    await db.collection<PlayerEndorsement>("playerEndorsements").updateMany(
-      {
-        characterId: character._id,
-        electionId: electionObjectId,
-        isActive: true,
-      },
-      {
-        $set: { isActive: false, withdrawnAt: new Date() },
-      }
-    );
-
-    // Create new endorsement. Key by the candidate row id so consumers can
-    // join to electionCandidates without guessing the underlying character.
-    const endorsement: PlayerEndorsement = {
-      _id: new ObjectId(),
-      characterId: character._id,
-      characterName: character.name,
-      electionId: electionObjectId,
-      candidateId: candidate._id,
-      candidateName: candidate.characterName,
-      isActive: true,
-      createdAt: new Date(),
-    };
-
     try {
-      await db.collection<PlayerEndorsement>("playerEndorsements").insertOne(endorsement);
-    } catch (error) {
-      if (isActivePlayerEndorsementDuplicateKey(error)) {
-        const activeEndorsement = await db
-          .collection<PlayerEndorsement>("playerEndorsements")
-          .findOne({
-            characterId: character._id,
-            electionId: electionObjectId,
-            isActive: true,
-          });
-
-        if (activeEndorsement) {
-          return NextResponse.json({
-            success: true,
-            endorsement: {
-              id: activeEndorsement._id.toString(),
-              candidateId: activeEndorsement.candidateId.toString(),
-              candidateName: activeEndorsement.candidateName,
-            },
-          });
+      // Reverse the Support bump of any endorsement we're about to replace. The
+      // bump is non-idempotent (applyEndorsementSupportBump docstring), and only the
+      // DELETE path previously applied the negative form, so re-POSTing endorse (same
+      // candidate, or flipping A→B→A) stacked +SUPPORT_ENDORSEMENT_BUMP every call
+      // with no reversal, letting a single account pump any candidate to the clamp.
+      // Reverse here so a replacement nets to zero on the old candidate before the new
+      // bump lands. Skip NPP candidates (bump was never applied to them).
+      const priorEndorsements = await db
+        .collection<PlayerEndorsement>("playerEndorsements")
+        .find({ characterId: character._id, electionId: electionObjectId, isActive: true })
+        .toArray();
+      for (const prior of priorEndorsements) {
+        const priorCandidate = await db
+          .collection<ElectionCandidate>("electionCandidates")
+          .findOne({ _id: prior.candidateId });
+        if (priorCandidate && !priorCandidate.isNPP && priorCandidate.characterId) {
+          await applyEndorsementSupportBump(db, priorCandidate.characterId, true);
         }
       }
 
-      throw error;
-    }
+      // Withdraw any existing active endorsement for this election
+      await db.collection<PlayerEndorsement>("playerEndorsements").updateMany(
+        {
+          characterId: character._id,
+          electionId: electionObjectId,
+          isActive: true,
+        },
+        {
+          $set: { isActive: false, withdrawnAt: new Date() },
+        }
+      );
 
-    // B3 — endorsement landing bumps Support on the endorsed candidate.
-    // One-shot; revocation in DELETE applies the negative form. Skip
-    // for NPP candidates — applySupportDelta is keyed by characterId
-    // which doesn't map for NPPs, and NPP "support" isn't a meaningful
-    // game-state field.
-    if (!candidate.isNPP) {
-      await applyEndorsementSupportBump(db, candidate.characterId);
-    }
-
-    recordAudit({
-      source: "api",
-      action: "election.endorse",
-      category: "election",
-      subject: { type: "election", id: electionObjectId, name: `president — ${election.state}` },
-      counterparty: {
-        type: "character",
-        id: candidate.characterId ?? candidateObjectId,
-        name: candidate.characterName,
-      },
-      refs: { electionId: electionObjectId },
-      meta: { candidateId: candidateObjectId.toString() },
-      outcome: "ok",
-    });
-
-    return NextResponse.json({
-      success: true,
-      endorsement: {
-        id: endorsement._id.toString(),
-        candidateId: candidate._id.toString(),
+      // Create new endorsement. Key by the candidate row id so consumers can
+      // join to electionCandidates without guessing the underlying character.
+      const endorsement: PlayerEndorsement = {
+        _id: new ObjectId(),
+        characterId: character._id,
+        characterName: character.name,
+        electionId: electionObjectId,
+        candidateId: candidate._id,
         candidateName: candidate.characterName,
-      },
-    });
+        isActive: true,
+        createdAt: new Date(),
+      };
+
+      try {
+        await db.collection<PlayerEndorsement>("playerEndorsements").insertOne(endorsement);
+      } catch (error) {
+        if (isActivePlayerEndorsementDuplicateKey(error)) {
+          const activeEndorsement = await db
+            .collection<PlayerEndorsement>("playerEndorsements")
+            .findOne({
+              characterId: character._id,
+              electionId: electionObjectId,
+              isActive: true,
+            });
+
+          if (activeEndorsement) {
+            return NextResponse.json({
+              success: true,
+              endorsement: {
+                id: activeEndorsement._id.toString(),
+                candidateId: activeEndorsement.candidateId.toString(),
+                candidateName: activeEndorsement.candidateName,
+              },
+            });
+          }
+        }
+
+        throw error;
+      }
+
+      // B3: endorsement landing bumps Support on the endorsed candidate.
+      // One-shot; revocation in DELETE applies the negative form. Skip
+      // for NPP candidates. applySupportDelta is keyed by characterId
+      // which doesn't map for NPPs, and NPP "support" isn't a meaningful
+      // game-state field.
+      if (!candidate.isNPP) {
+        await applyEndorsementSupportBump(db, candidate.characterId);
+      }
+
+      recordAudit({
+        source: "api",
+        action: "election.endorse",
+        category: "election",
+        subject: { type: "election", id: electionObjectId, name: `president: ${election.state}` },
+        counterparty: {
+          type: "character",
+          id: candidate.characterId ?? candidateObjectId,
+          name: candidate.characterName,
+        },
+        refs: { electionId: electionObjectId },
+        meta: { candidateId: candidateObjectId.toString() },
+        outcome: "ok",
+      });
+
+      return NextResponse.json({
+        success: true,
+        endorsement: {
+          id: endorsement._id.toString(),
+          candidateId: candidate._id.toString(),
+          candidateName: candidate.characterName,
+        },
+      });
+    } finally {
+      await releaseEndorsementLock();
+    }
   } catch (error) {
     return handleRouteError(error);
   }
 }
 
-// DELETE /api/elections/[id]/endorse — Withdraw the authenticated character's active endorsement from a presidential election.
+// DELETE /api/elections/[id]/endorse: Withdraw the authenticated character's active endorsement from a presidential election.
 // Auth: requireHumanSessionWithCharacter
 // Errors: 400, 401, 403, 404, 429
 export async function DELETE(request: Request, { params }: RouteParams) {
@@ -237,86 +254,102 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     const electionObjectId = resolved.election._id;
 
-    // B3 — capture endorsed candidates before deactivating so we can
-    // reverse their Support bump. Only player-character candidates need
-    // the reverse — NPP endorsement candidates were skipped on the POST
-    // path so their revocation is a no-op too.
-    const activeEndorsements = await db
-      .collection<PlayerEndorsement>("playerEndorsements")
-      .find({
-        characterId: character._id,
-        electionId: electionObjectId,
-        isActive: true,
-      })
-      .project<{ candidateId: ObjectId }>({ candidateId: 1 })
-      .toArray();
-
-    // Resolve candidate rows so we can filter NPPs from the bump reversal.
-    // playerEndorsements.candidateId is the candidate row id, not the
-    // character id, so join by _id.
-    const candidateIds: ObjectId[] = activeEndorsements.map((e) => e.candidateId);
-    const candidateRows =
-      candidateIds.length > 0
-        ? await db
-            .collection<ElectionCandidate>("electionCandidates")
-            .find({
-              electionId: electionObjectId,
-              _id: { $in: candidateIds },
-            })
-            .project<{ _id: ObjectId; characterId: ObjectId; isNPP?: boolean }>({
-              _id: 1,
-              characterId: 1,
-              isNPP: 1,
-            })
-            .toArray()
-        : [];
-    const isNppByCandidateId = new Map<string, boolean>(
-      candidateRows.map((c) => [c._id.toString(), c.isNPP === true])
+    const releaseEndorsementLock = await claimPlayerEndorsementLock(
+      db,
+      character._id,
+      electionObjectId
     );
-    const characterIdByCandidateId = new Map<string, ObjectId>(
-      candidateRows.map((c) => [c._id.toString(), c.characterId])
-    );
-
-    const result = await db.collection<PlayerEndorsement>("playerEndorsements").updateMany(
-      {
-        characterId: character._id,
-        electionId: electionObjectId,
-        isActive: true,
-      },
-      {
-        $set: { isActive: false, withdrawnAt: new Date() },
-      }
-    );
-
-    // Apply the revocation Support penalty to each previously-endorsed
-    // player-character candidate. Symmetric with the landing bump in POST.
-    for (const e of activeEndorsements) {
-      const candidateId = e.candidateId.toString();
-      if (isNppByCandidateId.get(candidateId)) continue;
-      const candidateCharacterId = characterIdByCandidateId.get(candidateId);
-      if (!candidateCharacterId) continue;
-      await applyEndorsementSupportBump(db, candidateCharacterId, true);
+    if (!releaseEndorsementLock) {
+      return NextResponse.json(
+        { error: "Your endorsement is already being updated. Try again." },
+        { status: 409 }
+      );
     }
 
-    if (result.modifiedCount > 0) {
-      recordAudit({
-        source: "api",
-        action: "election.endorse_withdraw",
-        category: "election",
-        subject: { type: "election", id: electionObjectId },
-        refs: { electionId: electionObjectId },
-        meta: {
-          withdrawnCount: result.modifiedCount,
-          candidateIds: activeEndorsements.map((e) => e.candidateId.toString()),
+    try {
+      // B3: capture endorsed candidates before deactivating so we can
+      // reverse their Support bump. Only player-character candidates need
+      // the reverse. NPP endorsement candidates were skipped on the POST
+      // path so their revocation is a no-op too.
+      const activeEndorsements = await db
+        .collection<PlayerEndorsement>("playerEndorsements")
+        .find({
+          characterId: character._id,
+          electionId: electionObjectId,
+          isActive: true,
+        })
+        .project<{ candidateId: ObjectId }>({ candidateId: 1 })
+        .toArray();
+
+      // Resolve candidate rows so we can filter NPPs from the bump reversal.
+      // playerEndorsements.candidateId is the candidate row id, not the
+      // character id, so join by _id.
+      const candidateIds: ObjectId[] = activeEndorsements.map((e) => e.candidateId);
+      const candidateRows =
+        candidateIds.length > 0
+          ? await db
+              .collection<ElectionCandidate>("electionCandidates")
+              .find({
+                electionId: electionObjectId,
+                _id: { $in: candidateIds },
+              })
+              .project<{ _id: ObjectId; characterId: ObjectId; isNPP?: boolean }>({
+                _id: 1,
+                characterId: 1,
+                isNPP: 1,
+              })
+              .toArray()
+          : [];
+      const isNppByCandidateId = new Map<string, boolean>(
+        candidateRows.map((c) => [c._id.toString(), c.isNPP === true])
+      );
+      const characterIdByCandidateId = new Map<string, ObjectId>(
+        candidateRows.map((c) => [c._id.toString(), c.characterId])
+      );
+
+      const result = await db.collection<PlayerEndorsement>("playerEndorsements").updateMany(
+        {
+          characterId: character._id,
+          electionId: electionObjectId,
+          isActive: true,
         },
-        outcome: "ok",
-      });
-    }
+        {
+          $set: { isActive: false, withdrawnAt: new Date() },
+        }
+      );
 
-    return NextResponse.json({
-      success: true,
-      withdrawn: result.modifiedCount,
-    });
+      // Apply the revocation Support penalty to each previously-endorsed
+      // player-character candidate. Symmetric with the landing bump in POST.
+      for (const e of activeEndorsements) {
+        const candidateId = e.candidateId.toString();
+        if (isNppByCandidateId.get(candidateId)) continue;
+        const candidateCharacterId = characterIdByCandidateId.get(candidateId);
+        if (!candidateCharacterId) continue;
+        await applyEndorsementSupportBump(db, candidateCharacterId, true);
+      }
+
+      if (result.modifiedCount > 0) {
+        recordAudit({
+          source: "api",
+          action: "election.endorse_withdraw",
+          category: "election",
+          subject: { type: "election", id: electionObjectId },
+          refs: { electionId: electionObjectId },
+          meta: {
+            withdrawnCount: result.modifiedCount,
+            candidateIds: activeEndorsements.map((e) => e.candidateId.toString()),
+          },
+          outcome: "ok",
+        });
+      }
+
+      return NextResponse.json({
+        success: true,
+        withdrawn: result.modifiedCount,
+      });
+    } finally {
+      await releaseEndorsementLock();
+    }
   } catch (error) {
     return handleRouteError(error);
   }

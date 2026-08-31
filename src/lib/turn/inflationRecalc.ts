@@ -31,33 +31,6 @@ import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { advanceHouseholdPriceIndex } from "@/lib/economy/householdPriceIndex";
 
 /**
- * Dynamic wage growth target driven by labor-market signals.
- *
- * Baseline: 2.5% wage growth.
- * Tight labor market (unemployment below NAIRU=5%) pushes wages up.
- * Slack labor market (unemployment above NAIRU) pulls wages down.
- * Strong GDP growth contributes a smaller pro-cyclical bump.
- *
- * Without this, `budget.economicFactors.wageGrowth` stays frozen at its
- * seeded value forever, producing a permanent inflation cost-push floor
- * (bug #0575: JP/US runaway inflation).
- */
-const WAGE_BASELINE = 2.5;
-const WAGE_NAIRU = 5.0;
-const WAGE_COEFF_LABOR_TIGHT = 0.4; // pp wage growth per pp unemployment below NAIRU
-const WAGE_COEFF_LABOR_SLACK = 0.2; // pp wage growth per pp unemployment above NAIRU
-const WAGE_COEFF_GDP = 0.15; // pp wage growth per pp GDP growth above 2% trend
-const WAGE_INERTIA = 0.6; // smooth toward target so wages don't whipsaw
-
-function computeWageGrowthTarget(unemployment: number, gdpGrowth: number): number {
-  const uGap = WAGE_NAIRU - unemployment; // positive = tight labor
-  const laborTerm = uGap >= 0 ? uGap * WAGE_COEFF_LABOR_TIGHT : uGap * WAGE_COEFF_LABOR_SLACK;
-  const gdpTerm = Math.max(0, gdpGrowth - 2.0) * WAGE_COEFF_GDP;
-  // Realistic wage-growth range: -2% (deep recession) to +8% (overheating)
-  return Math.max(-2.0, Math.min(8.0, WAGE_BASELINE + laborTerm + gdpTerm));
-}
-
-/**
  * Lookback for the commodity cost-push signal: half a game year, annualized.
  *
  * Window choice is a lag-vs-noise trade and was picked off live prod data at
@@ -357,38 +330,18 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
           const budget = await ensureFederalBudget(db, countryId, preset);
           if (!budget) return;
 
-          // Update wageGrowth dynamically before computing inflation, so the wage
-          // cost-push reflects current labor-market conditions instead of a static
-          // seed value. Without this, JP's seeded 5% wage growth (or any other
-          // country's) produces a permanent +0.4pp inflation floor forever.
           const nationalDocId = getNationalDocId(countryId);
           const nationalMetrics = nationalDocId
-            ? // SP5: national economic rollup lives on macroMetrics.
-              await db.collection<StateMetrics>("macroMetrics").findOne({ _id: nationalDocId })
+            ? await db.collection<StateMetrics>("macroMetrics").findOne({ _id: nationalDocId })
             : null;
-          const unemployment = finiteOr(nationalMetrics?.economic?.unemploymentRate?.value, 5.0);
           const gdpGrowth = finiteOr(nationalMetrics?.economic?.gdpGrowth?.value, 2.0);
-          const currentWageGrowth = finiteOr(budget.economicFactors?.wageGrowth, WAGE_BASELINE);
-          const wageTarget = computeWageGrowthTarget(unemployment, gdpGrowth);
-          const newWageGrowth =
-            Math.round((WAGE_INERTIA * currentWageGrowth + (1 - WAGE_INERTIA) * wageTarget) * 100) /
-            100;
-
-          // Pass the updated wageGrowth into the inflation calculation by mutating
-          // the budget snapshot — the persisted update happens below in the same
-          // operation, so this preserves write-once semantics.
-          const budgetForCalc: FederalBudget = {
-            ...budget,
-            economicFactors: { ...budget.economicFactors, wageGrowth: newWageGrowth },
-          };
-
           const policyStancePressure = finiteOr(bank.policyInflationPressure, 0);
           const moneySupplyGrowthPct = finiteOr(moneyGrowthByCurrency.get(currencyCode), gdpGrowth);
 
           const newInflation = await calculateCountryInflation(
             db,
             countryId,
-            budgetForCalc,
+            budget,
             commodityPressure,
             forexPressure,
             savingsPressure,
@@ -408,7 +361,6 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
             {
               $set: {
                 "economicFactors.inflationRate": newInflation,
-                "economicFactors.wageGrowth": newWageGrowth,
                 "economicFactors.householdPriceIndex": householdPriceIndex,
                 "economicFactors.lastUpdated": new Date(),
               },

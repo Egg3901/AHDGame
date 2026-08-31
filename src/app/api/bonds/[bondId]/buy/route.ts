@@ -37,6 +37,7 @@ import { wasCeoWithinTurns } from "@/lib/corporations/ceoHistory";
 import { EX_CEO_BOND_PURCHASE_BLOCK_TURNS } from "@/lib/constants/bonds";
 import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
 import { sovereignBondCapError } from "@/lib/bonds/holderCap";
+import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 
 interface RouteParams {
   params: Promise<{ bondId: string }>;
@@ -69,6 +70,8 @@ export async function POST(request: Request, { params }: RouteParams) {
     // and individual players while an admin has paused corporation actions.
     const pausedGuard = await requireCorporationActionsEnabled(db);
     if (pausedGuard) return pausedGuard;
+    const turnGuard = await rejectDuringTurn(db);
+    if (turnGuard) return turnGuard;
 
     const forexEnabled = await isForexEnabled();
 

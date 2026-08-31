@@ -15,7 +15,9 @@ export function isRetryableRedemptionEntry(
     "status" | "units" | "paidAmountAnchor" | "requestedNavAnchor"
   >
 ): boolean {
-  if (entry.status === "paid" || entry.status === "cancelled") return false;
+  if (entry.status === "paid" || entry.status === "cancelled" || entry.status === "processing") {
+    return false;
+  }
   return remainingRedemptionUnits(entry) > 0;
 }
 

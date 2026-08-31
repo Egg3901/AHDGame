@@ -193,7 +193,7 @@ export async function processActionRefresh(
   }
 
   const ops: {
-    updateOne: { filter: { _id: ObjectId }; update: { $set: Record<string, unknown> } };
+    updateOne: { filter: Record<string, unknown>; update: { $set: Record<string, unknown> } };
   }[] = [];
 
   for (const character of characters) {
@@ -316,7 +316,34 @@ export async function processActionRefresh(
 
     ops.push({
       updateOne: {
-        filter: { _id: character._id },
+        // The turn context is a bootstrap snapshot. If a player spends AP,
+        // earns influence, or changes stats after that read, skip this refresh
+        // instead of overwriting the committed mutation with stale values.
+        filter: {
+          _id: character._id,
+          actions: character.actions,
+          politicalInfluence:
+            character.politicalInfluence === undefined
+              ? { $exists: false }
+              : character.politicalInfluence,
+          nationalInfluence:
+            character.nationalInfluence === undefined
+              ? { $exists: false }
+              : character.nationalInfluence,
+          infamy: character.infamy === undefined ? { $exists: false } : character.infamy,
+          favorability:
+            character.favorability === undefined ? { $exists: false } : character.favorability,
+          ...(character.stats === undefined
+            ? { stats: { $exists: false } }
+            : {
+                stats: character.stats,
+                statXp: character.statXp === undefined ? { $exists: false } : character.statXp,
+                debateDecayAnchor:
+                  character.debateDecayAnchor === undefined
+                    ? { $exists: false }
+                    : character.debateDecayAnchor,
+              }),
+        },
         update: { $set: setFields },
       },
     });

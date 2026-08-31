@@ -23,6 +23,7 @@ import type {
   GameConfig,
   IndexFund,
   IndexFundHolding,
+  IndexFundRedemptionQueueEntry,
   IndexFundTargetConstituent,
 } from "@/lib/db/types";
 import { isIndexFundsEnabled, INDEX_FUNDS_DISABLED_MESSAGE } from "@/lib/indexFunds/featureFlag";
@@ -33,10 +34,10 @@ import {
   updateFundConstituents,
   updateFundHoldings,
   listPendingRedemptions,
-  updateRedemptionEntry,
   insertFundTransaction,
   insertFundSnapshot,
   setFundStatus,
+  FUND_REDEMPTION_QUEUE_COLLECTION,
 } from "@/lib/indexFunds/fundQueries";
 import {
   INDEX_FUND_INITIAL_NAV,
@@ -700,7 +701,7 @@ export async function rebalanceConstituents(
 
 // ── Pass 3c: Process queued redemptions ───────────────────────────────
 
-async function processQueuedRedemptions(
+export async function processQueuedRedemptions(
   db: Db,
   fund: IndexFund,
   forexEnabled: boolean,
@@ -729,10 +730,47 @@ async function processQueuedRedemptions(
   let fundState = fund;
   let availableCash = fund.cashAnchor;
 
-  for (const entry of pending) {
+  for (const pendingEntry of pending) {
+    // Claim before any fund debit or holder credit. If a later write fails, a
+    // processing row is quarantined for manual reconciliation instead of being
+    // paid a second time on the next turn. Automatic replay is unsafe because a
+    // crash can occur on either side of the holder credit.
+    const entry = await db
+      .collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION)
+      .findOneAndUpdate(
+        {
+          _id: pendingEntry._id,
+          status: pendingEntry.status,
+          units: pendingEntry.units,
+          paidAmountAnchor: pendingEntry.paidAmountAnchor,
+        },
+        { $set: { status: "processing", processingStartedAt: new Date(), updatedAt: new Date() } },
+        { returnDocument: "before" }
+      );
+    if (!entry) continue;
+    const restoreQueueClaim = async () => {
+      await db
+        .collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION)
+        .updateOne(
+          { _id: entry._id, status: "processing" },
+          {
+            $set: { status: entry.status, updatedAt: new Date() },
+            $unset: { processingStartedAt: "" },
+          }
+        );
+    };
+
     const unitsRemaining = remainingRedemptionUnits(entry);
     if (unitsRemaining <= 0) {
-      await updateRedemptionEntry(db, entry._id, { status: "paid" });
+      await db
+        .collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION)
+        .updateOne(
+          { _id: entry._id, status: "processing" },
+          {
+            $set: { status: "paid", updatedAt: new Date() },
+            $unset: { processingStartedAt: "" },
+          }
+        );
       continue;
     }
 
@@ -749,7 +787,10 @@ async function processQueuedRedemptions(
       availableCash = fundState.cashAnchor;
     }
 
-    if (availableCash <= 0) break;
+    if (availableCash <= 0) {
+      await restoreQueueClaim();
+      break;
+    }
 
     const quote = quoteCashOnlyRedemption({
       quotedNav: redemptionNav,
@@ -757,7 +798,10 @@ async function processQueuedRedemptions(
       cashAnchor: availableCash,
     });
 
-    if (quote.redeemableUnits <= 0) break;
+    if (quote.redeemableUnits <= 0) {
+      await restoreQueueClaim();
+      break;
+    }
 
     const paidAmount = quote.paidAmountAnchor;
     // Native-currency equivalent for personal wallet credits (₳ × blended rate).
@@ -784,7 +828,10 @@ async function processQueuedRedemptions(
       $inc: debitInc,
       $set: { updatedAt: new Date() },
     });
-    if (debitResult.matchedCount === 0) break;
+    if (debitResult.matchedCount === 0) {
+      await restoreQueueClaim();
+      break;
+    }
     availableCash -= paidAmount;
 
     if (entry.characterId) {
@@ -794,9 +841,16 @@ async function processQueuedRedemptions(
         .updateOne({ _id: entry.characterId }, { $inc: inc, $set: { updatedAt: new Date() } });
       if (creditResult.matchedCount === 0) {
         // Character gone — refund the fund cash and skip this entry
-        await db
-          .collection<IndexFund>("indexFunds")
-          .updateOne({ _id: fund._id }, { $inc: { cashAnchor: paidAmount } });
+        await db.collection<IndexFund>("indexFunds").updateOne(
+          { _id: fund._id },
+          {
+            $inc: {
+              cashAnchor: paidAmount,
+              ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
+            },
+          }
+        );
+        await restoreQueueClaim();
         continue;
       }
     } else if (entry.imperialCharacterId) {
@@ -808,9 +862,16 @@ async function processQueuedRedemptions(
           { $inc: inc, $set: { updatedAt: new Date() } }
         );
       if (creditResult.matchedCount === 0) {
-        await db
-          .collection<IndexFund>("indexFunds")
-          .updateOne({ _id: fund._id }, { $inc: { cashAnchor: paidAmount } });
+        await db.collection<IndexFund>("indexFunds").updateOne(
+          { _id: fund._id },
+          {
+            $inc: {
+              cashAnchor: paidAmount,
+              ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
+            },
+          }
+        );
+        await restoreQueueClaim();
         continue;
       }
     } else if (entry.nppId) {
@@ -822,20 +883,46 @@ async function processQueuedRedemptions(
         }
       );
       if (creditResult.matchedCount === 0) {
-        await db
-          .collection<IndexFund>("indexFunds")
-          .updateOne({ _id: fund._id }, { $inc: { cashAnchor: paidAmount } });
+        await db.collection<IndexFund>("indexFunds").updateOne(
+          { _id: fund._id },
+          {
+            $inc: {
+              cashAnchor: paidAmount,
+              ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
+            },
+          }
+        );
+        await restoreQueueClaim();
         continue;
       }
+    } else {
+      await db.collection<IndexFund>("indexFunds").updateOne(
+        { _id: fund._id },
+        {
+          $inc: {
+            cashAnchor: paidAmount,
+            ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
+          },
+        }
+      );
+      await restoreQueueClaim();
+      continue;
     }
 
     const remainingAfterPay = quote.queuedUnits;
-    await updateRedemptionEntry(db, entry._id, {
-      status: redemptionEntryStatusAfterPayout(remainingAfterPay),
-      paidAmountAnchor: (entry.paidAmountAnchor ?? 0) + paidAmount,
-      units: remainingAfterPay,
-      requestedAmountAnchor: remainingAfterPay * redemptionNav,
-    });
+    await db.collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION).updateOne(
+      { _id: entry._id, status: "processing" },
+      {
+        $set: {
+          status: redemptionEntryStatusAfterPayout(remainingAfterPay),
+          paidAmountAnchor: (entry.paidAmountAnchor ?? 0) + paidAmount,
+          units: remainingAfterPay,
+          requestedAmountAnchor: remainingAfterPay * redemptionNav,
+          updatedAt: new Date(),
+        },
+        $unset: { processingStartedAt: "" },
+      }
+    );
 
     await insertFundTransaction(db, {
       fundId: fund._id,

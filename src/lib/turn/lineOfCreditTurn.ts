@@ -37,6 +37,14 @@ import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 
 const DEFAULT_PRIME = 2.5;
 
+export function resolvePrimeForCurrency(
+  primeByBankId: ReadonlyMap<string, number>,
+  currency: CurrencyCode
+): number {
+  const bankId = getBankId(getCountryIdForCurrency(currency));
+  return primeByBankId.get(bankId) ?? DEFAULT_PRIME;
+}
+
 function hasLocActivity(loc: NonNullable<Character["lineOfCredit"]>): boolean {
   const b = loc.balances ?? {};
   const a = loc.arrears ?? {};
@@ -92,8 +100,7 @@ export async function processLineOfCreditTurn(
   // DE but its bank doc is the shared "ECB" — a raw countryId lookup would
   // silently fall back to DEFAULT_PRIME for every EUR line of credit.
   const resolvePrime = (currency: CurrencyCode): number => {
-    const bankId = getBankId(getCountryIdForCurrency(currency));
-    return primeByCountryId.get(bankId) ?? DEFAULT_PRIME;
+    return resolvePrimeForCurrency(primeByCountryId, currency);
   };
 
   const chars = await db
@@ -140,8 +147,7 @@ export async function processLineOfCreditTurn(
         { projection: { creditCompositeSnapshot: 1 } }
       );
 
-    const homeCid = getCountryIdForCurrency(home);
-    const primeHome = primeByCountryId.get(homeCid) ?? DEFAULT_PRIME;
+    const primeHome = resolvePrime(home);
 
     const composite = computeLocBorrowerComposite({
       corpComposite: corp?.creditCompositeSnapshot ?? null,
@@ -154,6 +160,7 @@ export async function processLineOfCreditTurn(
 
     const balances: Partial<Record<CurrencyCode, number>> = { ...(loc.balances ?? {}) };
     const arrears: Partial<Record<CurrencyCode, number>> = { ...(loc.arrears ?? {}) };
+    let characterInterestAccruedInternal = 0;
 
     // Capture pre-turn obligation snapshot for logging.
     const preObligationByCurrency: Partial<Record<CurrencyCode, number>> = {};
@@ -180,7 +187,7 @@ export async function processLineOfCreditTurn(
       interestAccruals[c] = int;
       arrears[c] = roundSavingsAmount((arrears[c] ?? 0) + int, c);
       const rate = rates[c];
-      if (rate && rate > 0) totalInterestAccruedInternal += toInternalUnits(int, rate);
+      if (rate && rate > 0) characterInterestAccruedInternal += toInternalUnits(int, rate);
     }
 
     // 2. Scheduled auto-payment = LOC_PER_TURN_PAYMENT_RATE × (P+A) post-accrual.
@@ -297,10 +304,6 @@ export async function processLineOfCreditTurn(
     const distress = shortfallAny && !incomeCoversScheduled;
     const drawFrozen = distress;
 
-    if (distress) distressedAfterTurn += 1;
-    if (distress && !loc.drawFrozen) newlyFrozen += 1;
-    if (!distress && loc.drawFrozen) newlyUnfrozen += 1;
-
     // Clear empty currency keys so the LOC document stays tidy.
     const newP: Partial<Record<CurrencyCode, number>> = {};
     const newA: Partial<Record<CurrencyCode, number>> = {};
@@ -311,19 +314,7 @@ export async function processLineOfCreditTurn(
       if (a > 0) newA[c] = a;
     }
 
-    // 3. Only the interest portion credits the lending bank's reserves — that's
-    //    bank revenue. Principal is destroyed symmetrically to how `draw` created
-    //    it: origination doesn't debit any bank pool, so repayment of principal
-    //    doesn't credit one either. Crediting principal here would mint free
-    //    money for the bank on every hourly auto-payment.
-    for (const c of FOREX_ACTIVE_CURRENCIES) {
-      const interest = interestPortions[c] ?? 0;
-      if (interest <= 0) continue;
-      const cid = getCountryIdForCurrency(c) as string;
-      bankReserveInc.set(cid, (bankReserveInc.get(cid) ?? 0) + interest);
-    }
-
-    // 4. Deduct payments: tally total consumed per currency, then drain personal
+    // 3. Deduct payments: tally total consumed per currency, then drain personal
     //    wallet first and savings as overflow. Campaign funds are never touched.
     const totalDeductByCurrency: Partial<Record<CurrencyCode, number>> = {};
     for (const c of FOREX_ACTIVE_CURRENCIES) {
@@ -360,16 +351,47 @@ export async function processLineOfCreditTurn(
       },
       updatedAt: now,
     };
-    await db
+    const locWriteFilter: Record<string, unknown> = {
+      _id: char._id,
+      lineOfCredit: loc,
+    };
+    for (const [path, delta] of Object.entries(personalDeduct)) {
+      if (delta < 0) locWriteFilter[path] = { $gte: -delta };
+    }
+    // Compare-and-swap the exact LOC snapshot used for these calculations. A
+    // draw or repayment that commits after the turn read changes this embedded
+    // document, so the stale turn write is skipped instead of erasing debt or a
+    // repayment while still moving wallet cash.
+    const locUpdate = await db
       .collection<Character>("characters")
       .updateOne(
-        { _id: char._id },
+        locWriteFilter,
         Object.keys(personalDeduct).length > 0
           ? { $set: baseSet, $inc: personalDeduct }
           : { $set: baseSet }
       );
+    if (locUpdate.matchedCount === 0) {
+      console.warn(
+        `[line-of-credit] skipped stale turn write for character ${char._id.toString()} on turn ${turn}`
+      );
+      continue;
+    }
 
-    // 5. Ledger: one interest-accrual row per currency (as today), plus one
+    totalInterestAccruedInternal += characterInterestAccruedInternal;
+    if (distress) distressedAfterTurn += 1;
+    if (distress && !loc.drawFrozen) newlyFrozen += 1;
+    if (!distress && loc.drawFrozen) newlyUnfrozen += 1;
+
+    // Only committed interest payments credit the lending bank's reserves.
+    // Principal is destroyed symmetrically to how `draw` created it.
+    for (const c of FOREX_ACTIVE_CURRENCIES) {
+      const interest = interestPortions[c] ?? 0;
+      if (interest <= 0) continue;
+      const cid = getCountryIdForCurrency(c) as string;
+      bankReserveInc.set(cid, (bankReserveInc.get(cid) ?? 0) + interest);
+    }
+
+    // 4. Ledger: one interest-accrual row per currency (as today), plus one
     //    auto_payment row per currency that actually paid, carrying the
     //    principal/interest split.
     for (const c of FOREX_ACTIVE_CURRENCIES) {

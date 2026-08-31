@@ -63,6 +63,7 @@ import {
   resolveShareExecutionPrice,
 } from "@/lib/corporations/marketExecution";
 import { recordAudit } from "@/lib/audit/recordAudit";
+import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -98,6 +99,8 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
     const db = await getDb();
     const corpGuard = await requireCorporationActionsEnabled(db);
     if (corpGuard) return corpGuard;
+    const turnGuard = await rejectDuringTurn(db);
+    if (turnGuard) return turnGuard;
 
     const resolved = await resolveCorporation(db, id);
     if (!resolved.ok) return resolved.response;

@@ -82,20 +82,34 @@ export function computeExtractionCapacityMultipliers(
         : 0;
       const openAccessPool = Math.max(0, totalCapacity * (1 - contractedShareSum));
 
-      const contracted: ExtractionSectorInput[] = [];
+      const contractedByCorporation = new Map<string, ExtractionSectorInput[]>();
       const openAccess: ExtractionSectorInput[] = [];
       for (const sector of stateSectors) {
-        const hasContract = contractsForResource?.has(sector.corporationId.toString()) ?? false;
-        if (hasContract) contracted.push(sector);
-        else openAccess.push(sector);
+        const corporationId = sector.corporationId.toString();
+        const hasContract = contractsForResource?.has(corporationId) ?? false;
+        if (!hasContract) {
+          openAccess.push(sector);
+          continue;
+        }
+        const corporationSectors = contractedByCorporation.get(corporationId) ?? [];
+        corporationSectors.push(sector);
+        contractedByCorporation.set(corporationId, corporationSectors);
       }
 
-      for (const sector of contracted) {
-        const share = contractsForResource!.get(sector.corporationId.toString())!;
+      // A contract belongs to the corporation, not to each of its sectors.
+      // Price the corporation's combined demand against its one allocation so
+      // opening another sector cannot duplicate the same extraction rights.
+      for (const [corporationId, corporationSectors] of contractedByCorporation) {
+        const share = contractsForResource!.get(corporationId)!;
         const allocatedCap = totalCapacity * share;
-        const output = sector.revenueBasedOutput[resource] ?? 0;
-        const multiplier = output > 0 ? Math.min(1, allocatedCap / output) : 1;
-        setMultiplier(result, sector.sectorId, resource, multiplier);
+        const totalOutput = corporationSectors.reduce(
+          (sum, sector) => sum + (sector.revenueBasedOutput[resource] ?? 0),
+          0
+        );
+        const multiplier = totalOutput > 0 ? Math.min(1, allocatedCap / totalOutput) : 1;
+        for (const sector of corporationSectors) {
+          setMultiplier(result, sector.sectorId, resource, multiplier);
+        }
       }
 
       const totalOADemand = openAccess.reduce(

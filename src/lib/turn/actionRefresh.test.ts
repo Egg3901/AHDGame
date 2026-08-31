@@ -121,7 +121,12 @@ describe("processActionRefresh", () => {
     const [ops] = mockBulkWrite.mock.calls[0];
     expect(ops).toHaveLength(1);
     const op = ops[0];
-    expect(op.updateOne.filter).toEqual({ _id: "char1" });
+    expect(op.updateOne.filter).toMatchObject({
+      _id: "char1",
+      actions: 5,
+      politicalInfluence: 10,
+      nationalInfluence: 0,
+    });
     const update = op.updateOne.update.$set as Record<string, unknown>;
     expect(update.actions).toBe(9); // 5 + 4 base
     // politicalInfluence starts at 10, decays by 10 * 0.0075 = 0.075
