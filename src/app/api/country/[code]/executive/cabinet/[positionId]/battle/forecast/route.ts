@@ -26,6 +26,9 @@ import { sideOf } from "@/lib/military/occupation";
 import { loadMilitaryBlocs } from "@/lib/military/blocLookup";
 import { belligerentSideOf } from "@/lib/military/conflictVisibility";
 import { isFactionEntity } from "@/lib/military/factionEntity";
+import { frontSupportFor } from "@/lib/navair/frontSupport";
+import { loadNavairChannels } from "@/lib/db/collections/navairChannels";
+import type { NavairUnit } from "@/lib/navair/types";
 import type { Front } from "@/lib/military/combat";
 
 interface RouteParams {
@@ -96,6 +99,16 @@ export async function GET(request: Request, { params }: RouteParams) {
     const atFront = (await unitsCol.find({ theaterId }).toArray()).filter(
       (u) => u.readyAtTurn == null || u.readyAtTurn <= currentTurn
     );
+    // The turn resolver reads these same world-level dispositions before every battle.
+    // A forecast that omits them can claim that assigning CAS changed nothing even
+    // though the real engagement will count it, which makes the projection actively
+    // misleading rather than merely approximate.
+    const [navairChannels, navairUnits] = await Promise.all([
+      loadNavairChannels(db),
+      unitsCol.find({ domain: { $in: ["naval", "air"] } }).toArray() as unknown as Promise<
+        NavairUnit[]
+      >,
+    ]);
     const unitsByCountry = new Map<string, typeof atFront>();
     for (const u of atFront) {
       const list = unitsByCountry.get(u.countryId) ?? [];
@@ -216,7 +229,25 @@ export async function GET(request: Request, { params }: RouteParams) {
       ownDefenderSides.push(ownFactionSide);
     }
 
-    const fc = battleForecast(attackerSides, defenderSides, theaterId);
+    const frontRegion = conflict.region;
+    const supportFor = (sides: typeof attackerSides) =>
+      frontSupportFor(
+        navairUnits,
+        navairChannels,
+        sides.map((side) => side.country),
+        frontRegion
+      );
+    const attackerSupport = supportFor(attackerSides);
+    const defenderSupport = supportFor(defenderSides);
+    const ownDefenceSupport = supportFor(ownDefenderSides);
+
+    const fc = battleForecast(
+      attackerSides,
+      defenderSides,
+      theaterId,
+      attackerSupport,
+      defenderSupport
+    );
     // The same front from the other end. Derived from the sides already built here,
     // so it discloses nothing new — and it is NOT 100 − oddsPct, because the
     // defender holds terrain in whichever direction the attack runs.
@@ -226,7 +257,13 @@ export async function GET(request: Request, { params }: RouteParams) {
     // what they could bring — and the viewer meets it with `ownDefenderSides`, the
     // allies who are already standing on this ground, not the ones who happened to
     // file an offensive alongside them.
-    const counter = battleForecast(defenderSides, ownDefenderSides, theaterId);
+    const counter = battleForecast(
+      defenderSides,
+      ownDefenderSides,
+      theaterId,
+      defenderSupport,
+      ownDefenceSupport
+    );
     // An undefended front fizzles at resolution rather than fighting — say so up front.
     const unopposed = defending.unopposed;
     const sup = fc.attackerProfile.sup;
@@ -238,6 +275,14 @@ export async function GET(request: Request, { params }: RouteParams) {
       supply: { level: sup.level, state: sup.state },
       enemyBand: enemyBand(fc.attStr, fc.defStr, { unopposed }),
       unopposed,
+      // Own-side support is safe to expose and makes the eligibility rules observable.
+      // Keep opponent support private, just like its roster and exact strength.
+      navalAirSupport: {
+        closeAirSupportActive: attackerSupport.casWeight > 0,
+        casWeight: Math.round(attackerSupport.casWeight * 10) / 10,
+        airSuperiority: Math.round(attackerSupport.airSuperiority),
+        interdictionPct: Math.round(attackerSupport.interdiction * 100),
+      },
       /** How many nations the projection pooled on each side, for the war room. */
       alliedContingents: attackerSides.length,
       enemyContingents: defenderSides.length,

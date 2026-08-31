@@ -29,6 +29,12 @@ interface ForecastView {
   /** Nations pooled on each side by the projection; 1 means fighting alone. */
   alliedContingents?: number;
   enemyContingents?: number;
+  navalAirSupport?: {
+    closeAirSupportActive: boolean;
+    casWeight: number;
+    airSuperiority: number;
+    interdictionPct: number;
+  };
 }
 
 export function TheaterWarRoom({
@@ -235,6 +241,17 @@ export function TheaterWarRoom({
                   c: proj ? proj.supply.state.c : MIL_COLOR.textFaint,
                 },
                 { l: "ENEMY", v: proj ? proj.enemyBand : "—", c: MIL_COLOR.text },
+                {
+                  l: "CLOSE AIR SUPPORT",
+                  v: proj
+                    ? proj.navalAirSupport?.closeAirSupportActive
+                      ? `ACTIVE (+${proj.navalAirSupport.casWeight})`
+                      : "NO ELIGIBLE CAS"
+                    : "PENDING",
+                  c: proj?.navalAirSupport?.closeAirSupportActive
+                    ? MIL_COLOR.blue
+                    : MIL_COLOR.textFaint,
+                },
                 { l: "FORCES", v: String(deployed.length), c: MIL_COLOR.text },
               ].map((s) => (
                 <div
