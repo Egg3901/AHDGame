@@ -569,13 +569,18 @@ async function retireNationalRemnants(
   // `pmNppId` and holds no character-keyed record, which is why this reads
   // `pmCharacterId` alone rather than the same condition as the block above.
   if (absorbedGov?.pmCharacterId) {
+    // Era-aware. `officeTypes` IS overridden per preset for several countries,
+    // and reading the key without the active preset is the same class of bug as
+    // the static-config reads this change set exists to fix — it happens to be
+    // harmless for DE today only because DE has no override.
+    const preset = await getGameStatePresetOrDefault(db);
     await carryLeaderStateOnMerge(db, {
       fromCountryId: absorbed,
       toCountryId: survivor,
       leaderCharacterId: absorbedGov.pmCharacterId,
       // The SURVIVOR's executive key. The office the leader now holds is
       // Germany's chancellorship, not the GDR post the record was written under.
-      leaderOfficeType: getExecutiveOfficeKey(survivor),
+      leaderOfficeType: getExecutiveOfficeKey(survivor, preset),
       governingPartyId: rulingPartyId != null ? String(rulingPartyId) : null,
       currentTurn: params.currentTurn,
     });
