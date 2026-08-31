@@ -33,6 +33,7 @@ import type { FtaCoverage } from "@/lib/tariffs/ftaOverrides";
 import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
 import { deliveredFraction } from "@/lib/corporations/buildDelivery";
 import { readPlantsPnl, type PolicyStackRow } from "@/lib/corporations/plantsPnlBasis";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import {
   SPLIT_BASE_CAPTURE_FRACTION,
   UNOWNED_CAPTURE_BONUS_MULTIPLIER,
@@ -98,6 +99,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { projectStrategyRevenuePerTurn } from "@/lib/corporations/strategyRevenuePreview";
 import type { SectorBuildOrder } from "@/lib/db/types";
 import { STRIKE_REVENUE_THROTTLE } from "@/lib/labour/strikes";
+import { calculatePlantSectorSplit } from "@/lib/corporations/plantSectorSplit";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import { isNppOwned } from "@/lib/corporations/nppOwned";
 import {
@@ -258,6 +260,7 @@ export async function buildSectorCrisisSection(
 /** Attack/split panel info for the viewer's corporation (non-null viewer). */
 export function buildSectorAttackInfo(args: {
   viewerCorporation: Corporation;
+  defenderMarketingStrength: number;
   viewerCorpFxRate: number;
   sectorHostFxRate: number;
   sectorHostLiquidCode: CurrencyCode | undefined;
@@ -279,6 +282,7 @@ export function buildSectorAttackInfo(args: {
 }) {
   const {
     viewerCorporation,
+    defenderMarketingStrength,
     viewerCorpFxRate,
     sectorHostFxRate,
     sectorHostLiquidCode,
@@ -359,6 +363,28 @@ export function buildSectorAttackInfo(args: {
     projectedMarketShare: 0,
     exceedsDominanceThreshold: false,
   };
+  const userLiquidCapitalAnchor = Math.round(
+    corpLiquidCapitalToAnchor(
+      viewerCorporation.liquidCapital ?? 0,
+      viewerCorporation,
+      viewerCorpFxRate
+    )
+  );
+  const hasPersistedPlantLedger =
+    Number.isInteger(sector.plantCount) &&
+    (sector.plantCount ?? 0) >= 2 &&
+    typeof sector.capacityBookAnchor === "number" &&
+    Number.isFinite(sector.capacityBookAnchor) &&
+    sector.capacityBookAnchor >= 0;
+  const plantSplitQuote =
+    plantsMode && hasPersistedPlantLedger
+      ? calculatePlantSectorSplit({
+          defenderPlantCount: sector.plantCount as number,
+          defenderBookValueAnchor: sector.capacityBookAnchor as number,
+          attackerMarketingStrength: viewerCorporation.marketingStrength ?? 0,
+          defenderMarketingStrength,
+        })
+      : null;
 
   return {
     attackCost: calculateAttackCostFromLocalRevenue(
@@ -372,16 +398,12 @@ export function buildSectorAttackInfo(args: {
     splitEstimatedCapture: plantsMode ? 0 : fullStrengthInfo.splitEstimatedCapture,
     splitMsCost: plantsMode ? 0 : fullStrengthInfo.splitMsCost,
     userMarketingStrength: roundMarketingStrength(viewerCorporation.marketingStrength ?? 0),
-    userLiquidCapital: Math.round(
-      corpLiquidCapitalToAnchor(
-        viewerCorporation.liquidCapital ?? 0,
-        viewerCorporation,
-        viewerCorpFxRate
-      )
-    ),
+    userLiquidCapital: userLiquidCapitalAnchor,
     userLiquidCurrencyCode: resolveCorpLiquidCurrencyCode(viewerCorporation),
     stateId: sector.stateId,
     countryId: sectorCountryId,
+    ...(plantsMode && hasPersistedPlantLedger ? { plantCount: sector.plantCount } : {}),
+    ...(plantSplitQuote ? { plantSplitQuote } : {}),
     splitStrengths: plantsMode
       ? { full: zeroSplit, half: zeroSplit }
       : {
@@ -1083,6 +1105,8 @@ export interface PlantBuildOrderView {
  * basis as `capitalStock` / `producedUnits`.
  */
 export interface SectorPlantsSection {
+  /** Persisted whole facilities owned by this sector. */
+  plantCount: number;
   /** Installed capacity, units/day. Null before the sector's first plants turn. */
   capacityUnits: number | null;
   /** Units the plants actually made this turn. Null until a plants turn has run. */
@@ -1409,6 +1433,10 @@ export function buildSectorPlantsSection(args: {
   const nonNeg = (v: number) => (v > 0 ? v : 0);
 
   const capacityUnits = num(sector.capitalStock);
+  const plantCount =
+    Number.isInteger(sector.plantCount) && (sector.plantCount ?? 0) >= 0
+      ? (sector.plantCount as number)
+      : seedPlantLedger(sectorType, sector.capitalStock).plantCount;
   const producedUnits = num(sector.producedUnits);
   const soldUnits = num(sector.soldUnits);
   const mothballed = sector.mothballed === true;
@@ -1676,6 +1704,7 @@ export function buildSectorPlantsSection(args: {
         : { status: "not_at_current_fills", turns: null };
 
   return {
+    plantCount,
     capacityUnits,
     producedUnits,
     soldUnits,

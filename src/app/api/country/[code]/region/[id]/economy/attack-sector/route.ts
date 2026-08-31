@@ -1,36 +1,24 @@
-// POST /api/country/[code]/region/[id]/economy/attack-sector — Attack a rival corporation's sector to capture market share
-// Auth: requireHumanSession (bot tokens rejected)
-// Errors: 400, 401, 403, 404, 429
-/**
- * POST /api/country/[code]/region/[id]/economy/attack-sector
- * Attack another corporation's sector. Capture is based on your MS vs defender's MS.
- * Cost: fraction of target revenue (cash) + escalating MS cost (same as unowned split).
- */
+// POST /api/country/[code]/region/[id]/economy/attack-sector
+// Attempt to split whole plants from a rival corporation in the same market.
+import { randomInt } from "node:crypto";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
-import { getDb } from "@/lib/mongodb";
-import { emitBuildCapexTx } from "@/lib/corporations/capexTxLog";
+import { getDb, getMongoClient } from "@/lib/mongodb";
 import { requireHumanSession } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
 import { regionUrl } from "@/lib/urls";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
-import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
 import type { Corporation, CorporateSector, State, User, ImperialCharacter } from "@/lib/db/types";
 import type { GameState } from "@/lib/db/types/gameState";
 import {
-  ATTACK_OWNED_CONTESTED_FRACTION,
   DEFAULT_PROFIT_MARGIN,
   DEFAULT_SECTOR_STARTING_WORKERS,
   CORPORATION_TYPE_LABELS,
-  getDominanceAttackEaseMultiplier,
-  getUnderdogAttackAmplifier,
 } from "@/lib/constants/corporations";
-import { fetchAttackerDefenderShares } from "@/lib/corporations/marketShare";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { z } from "zod";
-import { logWireEvent, wireHeadlineSectorAttack } from "@/lib/wireEvent";
+import { logWireEvent } from "@/lib/wireEvent";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { createNotification } from "@/lib/notifications";
@@ -43,29 +31,44 @@ import {
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { insufficientCapitalMessage } from "@/lib/currency/insufficientCapitalMessage";
-import { readCorpEconomicAnchor, writeCorpEconomicLocal } from "@/lib/currency/corpEconomyFields";
-import {
-  calculateAttackCostAnchor,
-  calculateSplitMsCost,
-} from "@/lib/corporations/marketActionCosts";
 import { isCorporateSectorDuplicateKey } from "@/lib/corporations/sectorLocation";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
-import {
-  attackCostAnchorUnderPlants,
-  attackCapacityBasisAnchor,
-  capacityCaptureUnits,
-  capacityCaptureBookUpdates,
-  resolveWorldYear,
-} from "@/lib/corporations/capacityCapture";
 import { loadCommandEconomyBlockedCountries } from "@/lib/economy/queries/commandEconomyMarketGate";
+import {
+  calculatePlantSectorSplit,
+  didPlantSectorSplitSucceed,
+  type PlantSectorSplitQuote,
+} from "@/lib/corporations/plantSectorSplit";
+import { emitTx } from "@/lib/financialTxLog/emit";
 
-const attackSectorSchema = z.object({
-  sectorId: z.string().length(24),
-});
+const attackSectorSchema = z.object({ sectorId: z.string().length(24) });
 
 interface RouteParams {
   params: Promise<{ code: string; id: string }>;
+}
+
+interface SplitResolution {
+  quote: PlantSectorSplitQuote;
+  succeeded: boolean;
+  randomRoll: number;
+  attackCostLocal: number;
+  defenderCorporationName: string;
+  sectorType: CorporationType;
+  plantsTransferred: number;
+  capacityTransferred: number;
+  bookValueTransferredAnchor: number;
+}
+
+interface SplitRejection {
+  status: number;
+  error: string;
+}
+
+class SplitConflictError extends Error {}
+
+function auditableRandomRoll(): number {
+  return randomInt(0, 1_000_000_000) / 1_000_000_000;
 }
 
 export async function POST(request: Request, { params }: RouteParams) {
@@ -73,14 +76,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     const auth = await requireHumanSession(request);
     if (!auth.ok) return auth.response;
 
-    const rateLimit = checkRateLimit(auth.user.userId, 20, 60000);
+    const rateLimit = checkRateLimit(auth.user.userId, 20, 60_000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
     const db = await getDb();
-
-    // Block sector attacks when corporation actions are paused by admin
     const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
-    const eraUnitScale = getEraUnitScale(resolvePresetIdFromGameState(gameState));
     if (gameState?.corporationActionsPaused) {
       return NextResponse.json(
         { error: "Corporation actions are currently paused" },
@@ -88,27 +88,31 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const { code, id } = await params;
+    if (!marketAtLeast(await getMarketSystemModeForDb(db), "plants")) {
+      return NextResponse.json(
+        { error: "Sector splits require the plants economy." },
+        { status: 409 }
+      );
+    }
+
+    const { code, id: stateId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
       return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
     }
-    const stateId = id;
 
     const parsed = await parseJsonBody(request, attackSectorSchema);
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
-
-    const { sectorId } = parsed.data;
+    if (!ObjectId.isValid(parsed.data.sectorId)) {
+      return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
+    }
+    const targetSectorId = new ObjectId(parsed.data.sectorId);
 
     const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
-    if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
-    }
+    if (!state) return NextResponse.json({ error: "State not found" }, { status: 404 });
 
-    // Capturing a rival sector creates or enlarges private productive capacity,
-    // so it is the same forbidden market entry as founding one directly.
     const blockedCountries = await loadCommandEconomyBlockedCountries(db, [countryId]);
     if (blockedCountries.has(countryId)) {
       return NextResponse.json(
@@ -120,497 +124,423 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    // Get player's corporation — supports both regular and imperial characters
     const userDoc = await db
       .collection<User>("users")
       .findOne({ _id: new ObjectId(auth.user.userId) });
-
-    let corporation: Corporation | null = null;
-
+    let attacker: Corporation | null = null;
     if (userDoc?.activeCharacterType === "imperial" && userDoc.activeImperialCharacterId) {
       const imperial = await db.collection<ImperialCharacter>("imperialCharacters").findOne({
         _id: userDoc.activeImperialCharacterId,
         userId: new ObjectId(auth.user.userId),
       });
       if (imperial) {
-        corporation = await db
-          .collection<Corporation>("corporations")
-          .findOne({ ceoId: imperial._id, ceoType: "imperial", ceoVacant: { $ne: true } });
+        attacker = await db.collection<Corporation>("corporations").findOne({
+          ceoId: imperial._id,
+          ceoType: "imperial",
+          ceoVacant: { $ne: true },
+        });
       }
     } else {
       const character = await getCharacterByUserId(db, auth.user.userId);
       if (character) {
-        corporation = await db
+        attacker = await db
           .collection<Corporation>("corporations")
           .findOne({ ceoId: character._id, ceoVacant: { $ne: true } });
       }
     }
-
-    if (!corporation) {
+    if (!attacker) {
       return NextResponse.json({ error: "You don't own a corporation" }, { status: 400 });
-    }
-
-    if (!ObjectId.isValid(sectorId)) {
-      return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
     }
 
     const targetSector = await db
       .collection<CorporateSector>("corporateSectors")
-      .findOne({ _id: new ObjectId(sectorId), stateId });
+      .findOne({ _id: targetSectorId, stateId });
     if (!targetSector) {
       return NextResponse.json({ error: "Sector not found" }, { status: 404 });
     }
-
-    if (targetSector.corporationId.toString() === corporation._id.toString()) {
+    if (targetSector.corporationId.equals(attacker._id)) {
       return NextResponse.json({ error: "Cannot attack your own sector" }, { status: 400 });
     }
 
-    // Don't filter by countryId — corporations are headquartered in their home country
-    // but can hold sectors in any country. The sector record already confirms the link.
-    const defenderCorp = await db
+    const defender = await db
       .collection<Corporation>("corporations")
       .findOne({ _id: targetSector.corporationId });
-    if (!defenderCorp) {
-      // Orphan sector: defender corp was deleted but the sector row was left behind
-      // (historical dissolution that missed cleanup, hostile-takeover edge case, etc).
-      // Self-heal by removing the orphan so the region economy view stops surfacing it
-      // as an "Unknown" attackable target. The unowned-market split path is the right
-      // way to claim revenue that no longer has an owner.
+    if (!defender) {
       await db.collection<CorporateSector>("corporateSectors").deleteOne({ _id: targetSector._id });
-      // Under plants there is no Split control to point at, so don't send the
-      // player looking for one.
-      const splitRetired = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
       return NextResponse.json(
         {
-          error: splitRetired
-            ? "That corporation has been dissolved. Its share of this sector has been returned to the unowned pool — refresh and build capacity here to claim it."
-            : "That corporation has been dissolved. The sector's market share has been returned to the unowned pool — refresh and use Split Unowned Market.",
+          error:
+            "That corporation has been dissolved. Its sector record was removed; refresh this market.",
         },
         { status: 404 }
       );
     }
-
-    if (defenderCorp.countryOwnerId) {
+    if (defender.countryOwnerId) {
       return NextResponse.json(
         { error: "Cannot attack state-owned corporations." },
         { status: 400 }
       );
     }
-
-    if (defenderCorp.suspended) {
+    if (defender.suspended) {
       return NextResponse.json(
         { error: "Cannot attack a corporation that is suspended pending privatization auction." },
         { status: 400 }
       );
     }
 
-    // Market tier: at >= "plants" the attack moves CAPACITY, not revenue.
-    // PLANTS-GATED: under plants an attack is a CAPACITY transfer with attrition —
-    // the defender loses units, the attacker receives ATTACK_CAPTURE_EFFICIENCY of
-    // them, and pays at least build price × ATTACK_BUILD_PRICE_PREMIUM. Every
-    // revenue write in this file is ternary-gated and runs only below plants.
-    const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
-
-    const attackerMS = corporation.marketingStrength ?? 0;
-    const defenderMS = defenderCorp.marketingStrength ?? 0;
-
-    // Attacker and defender may be in different currencies. Normalize every
-    // value to ₳ (anchor) for the economic math, then convert back to each
-    // side's local currency at its own persistence boundary.
-    const corpFxRate = await getCorpFxRate(db, corporation);
-    const defenderFxRate = await getCorpFxRate(db, defenderCorp);
-    const attackerCurrencyCode = resolveCorpLiquidCurrencyCode(corporation);
-    const defenderCurrencyCode = resolveCorpLiquidCurrencyCode(defenderCorp);
-
-    // ATTACK BASIS. Below plants this is the defender's ₳ revenue, exactly as
-    // before. Under plants it is the defender's CAPACITY NAMEPLATE when it has
-    // any built capacity — see `attackCapacityBasisAnchor` for why: keying the
-    // threshold, the contested amount and the price on derived `revenue` made a
-    // mothballed factory both un-attackable AND free to attack. The capacity
-    // basis is already ₳ and currency-free, so it bypasses the FX conversion
-    // rather than being run through it.
-    const legacyRevenueAnchor = readCorpEconomicAnchor(
-      targetSector.revenue,
-      defenderCurrencyCode,
-      defenderFxRate
-    );
-    const targetRevenueAnchor =
-      attackCapacityBasisAnchor(
-        {
-          sectorType: targetSector.sectorType as CorporationType,
-          capitalStock: targetSector.capitalStock,
-          strategyId: targetSector.strategyId,
-        },
-        plantsEnabled,
-        eraUnitScale
-      ) ?? legacyRevenueAnchor;
-
-    // Capture = contested fraction × (attackerMS / (attackerMS + defenderMS)),
-    // boosted when the target dominates its (state, sectorType): 1.5× at the
-    // 50% dominance threshold scaling to 3.5× at 100% market share. Stacks
-    // multiplicatively with the underdog amplifier — a small attacker (<10%
-    // share) striking a dominant defender (>50% share) gets up to 1.75× more
-    // capture on top of the dominance multiplier.
-    // When defender has 0 MS, attacker gets 100% of contested amount.
-    // All values here are in ₳.
-    //
-    // Computed BEFORE the cost so the plants price can be floored against the
-    // capacity actually delivered (see `attackCostAnchorUnderPlants`). The order
-    // of the affordability / MS / capture guards below is unchanged, so the
-    // non-plants error precedence is exactly what it was.
-    const { defenderSharePercent, attackerSharePercent } = await fetchAttackerDefenderShares(
-      db,
-      targetSector,
-      defenderCorp,
-      corporation._id
-    );
-    const dominanceAttackMult = getDominanceAttackEaseMultiplier(defenderSharePercent);
-    const underdogMult = getUnderdogAttackAmplifier(attackerSharePercent, defenderSharePercent);
-    const contestedAmount =
-      targetRevenueAnchor * ATTACK_OWNED_CONTESTED_FRACTION * dominanceAttackMult * underdogMult;
-    const msSum = attackerMS + defenderMS;
-    const attackerShare = msSum > 0 ? attackerMS / msSum : 1;
-    const rawCapture = contestedAmount * attackerShare;
-    const actualCapture = Math.min(
-      Math.round(rawCapture),
-      Math.max(0, Math.floor(targetRevenueAnchor) - 1)
-    );
-
-    // ─── Plants: the capture is a CAPACITY transfer, not a revenue transfer ──
-    // Under plants `sector.revenue` is restated from `capitalStock × mixPrice`
-    // every turn, so the legacy revenue `$inc`s on both sides are erased on the
-    // next tick — the attacker pays and keeps nothing. The captured ₳ is
-    // therefore converted into capacity units at the DEFENDER's mix, the
-    // defender loses all of them, and the attacker receives only
-    // ATTACK_CAPTURE_EFFICIENCY of them (the rest is destroyed in the taking).
-    const defenderStock =
-      typeof targetSector.capitalStock === "number" && Number.isFinite(targetSector.capitalStock)
-        ? Math.max(0, targetSector.capitalStock)
-        : 0;
-    const rawUnits = capacityCaptureUnits(
-      actualCapture,
-      targetSector.sectorType as CorporationType,
-      targetSector.strategyId,
-      eraUnitScale
-    );
-    // Never take more plant than the defender actually has (a stale nameplate,
-    // or a sector mid-flip, could otherwise imply more units than exist).
-    const unitsTaken = Math.min(defenderStock, rawUnits.unitsTaken);
-    const unitsReceivedAtDefenderMix =
-      rawUnits.unitsTaken > 0 ? rawUnits.unitsReceived * (unitsTaken / rawUnits.unitsTaken) : 0;
-
-    const attackCostInternal = plantsEnabled
-      ? attackCostAnchorUnderPlants({
-          legacyCostAnchor: calculateAttackCostAnchor(targetRevenueAnchor),
-          unitsReceived: unitsReceivedAtDefenderMix,
-          sectorType: targetSector.sectorType as CorporationType,
-          year: resolveWorldYear(gameState?.currentYear, gameState?.currentTurn),
-          eraUnitScale,
-        })
-      : calculateAttackCostAnchor(targetRevenueAnchor);
-    const currentEscalation = corporation.splitEscalation ?? 0;
-    const msCost = calculateSplitMsCost(currentEscalation);
-
-    const corpCapitalAnchor = corpLiquidCapitalToAnchor(
-      corporation.liquidCapital,
-      corporation,
-      corpFxRate
-    );
-    if (corpCapitalAnchor < attackCostInternal) {
+    if (
+      !Number.isInteger(targetSector.plantCount) ||
+      (targetSector.plantCount ?? 0) < 2 ||
+      typeof targetSector.capacityBookAnchor !== "number" ||
+      !Number.isFinite(targetSector.capacityBookAnchor) ||
+      targetSector.capacityBookAnchor < 0
+    ) {
       return NextResponse.json(
         {
-          // Display in the attacker's local currency (the math runs in ₳).
-          error: insufficientCapitalMessage(
-            "Attack",
-            anchorToCorpLiquidCapital(attackCostInternal, corporation, corpFxRate),
-            corporation.liquidCapital,
-            attackerCurrencyCode
-          ),
+          error:
+            "This sector's whole-plant ledger is not ready yet. Try again after the next refresh.",
         },
-        { status: 400 }
+        { status: 503 }
       );
     }
 
-    const attackCost = attackCostInternal;
+    const attackerFxRate = await getCorpFxRate(db, attacker);
+    const attackerCurrencyCode = resolveCorpLiquidCurrencyCode(attacker);
+    const randomRoll = auditableRandomRoll();
+    const client = await getMongoClient();
+    const session = client.startSession();
+    let resolution: SplitResolution | null = null;
+    let rejection: SplitRejection | null = null;
 
-    if (corporation.marketingStrength < msCost) {
-      return NextResponse.json(
-        {
-          error: `Insufficient marketing strength. This attack costs ${msCost} MS. You have ${roundMarketingStrength(corporation.marketingStrength)} MS.`,
-        },
-        { status: 400 }
-      );
-    }
+    try {
+      await session.withTransaction(async () => {
+        resolution = null;
+        rejection = null;
 
-    if (actualCapture <= 0) {
-      return NextResponse.json(
-        { error: "Target sector is too small to capture meaningfully." },
-        { status: 400 }
-      );
-    }
-
-    const now = new Date();
-
-    // Convert the ₳ transfer back to each side's stored currency for persistence.
-    const captureInDefenderLocal = Math.round(
-      writeCorpEconomicLocal(actualCapture, defenderCurrencyCode, defenderFxRate)
-    );
-    const captureInAttackerLocal = Math.round(
-      writeCorpEconomicLocal(actualCapture, attackerCurrencyCode, corpFxRate)
-    );
-
-    // Add to attacker's sector (existing or new) — attacker's local currency.
-    // Read BEFORE the defender is written so the P5 basis transfer below sees
-    // both sides' pre-attack state.
-    const existingSectors = await db
-      .collection<CorporateSector>("corporateSectors")
-      .find({
-        stateId,
-        sectorType: targetSector.sectorType,
-        corporationId: corporation._id,
-      })
-      .toArray();
-
-    const existingOwnSector = existingSectors[0];
-
-    // P5: the paid basis moves with the plant. See `capacityCaptureBookUpdates`.
-    const captureBook = plantsEnabled
-      ? capacityCaptureBookUpdates({
-          defender: {
-            sectorType: targetSector.sectorType as CorporationType,
-            capitalStock: targetSector.capitalStock,
-            capacityBookAnchor: targetSector.capacityBookAnchor,
-          },
-          attacker: existingOwnSector
-            ? {
-                sectorType: existingOwnSector.sectorType,
-                capitalStock: existingOwnSector.capitalStock,
-                capacityBookAnchor: existingOwnSector.capacityBookAnchor,
-              }
-            : null,
-          unitsTaken,
-          unitsReceived: unitsReceivedAtDefenderMix,
-          year: resolveWorldYear(gameState?.currentYear, gameState?.currentTurn),
-          eraUnitScale,
-        })
-      : null;
-
-    // Reduce the target: capacity units under plants, revenue below it.
-    await db.collection<CorporateSector>("corporateSectors").updateOne(
-      { _id: targetSector._id },
-      plantsEnabled
-        ? {
-            $inc: { capitalStock: -(Math.round(unitsTaken * 100) / 100) },
-            $set: { updatedAt: now, ...(captureBook?.defenderSet ?? {}) },
-          }
-        : { $inc: { revenue: -captureInDefenderLocal }, $set: { updatedAt: now } }
-    );
-
-    // Capacity units are "output units/day", but a unit is only priced by the
-    // mix it is pointed at (D9). Moving plant from a defender running one
-    // strategy to an attacker running another must keep the ₳ NAMEPLATE
-    // invariant, exactly as a retool does — hence the same RPU ratio.
-    const unitsForAttacker = plantsEnabled
-      ? unitsReceivedAtDefenderMix *
-        capacityRescaleRatio(
-          targetSector.sectorType as CorporationType,
-          targetSector.strategyId,
-          existingOwnSector?.strategyId
-        )
-      : 0;
-    const capitalStockDelta = Math.round(unitsForAttacker * 100) / 100;
-
-    if (existingOwnSector) {
-      await db.collection<CorporateSector>("corporateSectors").updateOne(
-        { _id: existingOwnSector._id },
-        plantsEnabled
-          ? {
-              $inc: { capitalStock: capitalStockDelta },
-              $set: {
-                updatedAt: now,
-                capacityBookAnchor: captureBook?.attackerBookAnchor ?? 0,
-              },
-            }
-          : { $inc: { revenue: captureInAttackerLocal }, $set: { updatedAt: now } }
-      );
-    } else {
-      const newSector: Omit<CorporateSector, "_id"> = {
-        corporationId: corporation._id,
-        countryId,
-        stateId,
-        sectorType: targetSector.sectorType as CorporationType,
-        targetGrowthRate: 0,
-        currentGrowthRate: 0,
-        currentGrowthCost: 0,
-        // Under plants the sector is born with CAPACITY and no revenue: the
-        // turn processor derives revenue from `capitalStock × mixPrice` on the
-        // next tick. Writing revenue here would be double-counted for one turn
-        // and then overwritten. `plantsStartTurn` is stamped so the sector is
-        // not treated as a pre-flip legacy row (which would re-seed capacity
-        // from its — zero — revenue on its first processed turn).
-        revenue: plantsEnabled ? 0 : captureInAttackerLocal,
-        ...(plantsEnabled
-          ? {
-              capitalStock: capitalStockDelta,
-              // A brand-new sector owns only what it just took, so its basis is
-              // exactly what travelled with that plant.
-              capacityBookAnchor: captureBook?.attackerBookAnchor ?? 0,
-              plantsStartTurn: gameState?.currentTurn ?? 0,
-            }
-          : {}),
-        profitMargin: DEFAULT_PROFIT_MARGIN,
-        workers: DEFAULT_SECTOR_STARTING_WORKERS,
-        createdAt: now,
-        updatedAt: now,
-      };
-      try {
-        await db
-          .collection<CorporateSector>("corporateSectors")
-          .insertOne(newSector as CorporateSector);
-      } catch (error) {
-        if (isCorporateSectorDuplicateKey(error)) {
-          await db.collection<CorporateSector>("corporateSectors").updateOne(
+        const [freshAttacker, freshTarget, freshDefender, existingOwnSector] = await Promise.all([
+          db.collection<Corporation>("corporations").findOne({ _id: attacker._id }, { session }),
+          db
+            .collection<CorporateSector>("corporateSectors")
+            .findOne({ _id: targetSectorId, stateId, corporationId: defender._id }, { session }),
+          db.collection<Corporation>("corporations").findOne({ _id: defender._id }, { session }),
+          db.collection<CorporateSector>("corporateSectors").findOne(
             {
-              corporationId: corporation._id,
               stateId,
-              sectorType: targetSector.sectorType as CorporationType,
+              sectorType: targetSector.sectorType,
+              corporationId: attacker._id,
             },
-            plantsEnabled
-              ? {
-                  $inc: { capitalStock: capitalStockDelta },
-                  $set: {
-                    updatedAt: now,
-                    capacityBookAnchor: captureBook?.attackerBookAnchor ?? 0,
-                  },
-                }
-              : { $inc: { revenue: captureInAttackerLocal }, $set: { updatedAt: now } }
-          );
-        } else {
-          throw error;
+            { session }
+          ),
+        ]);
+        if (!freshAttacker || !freshTarget || !freshDefender) {
+          rejection = {
+            status: 409,
+            error: "The target changed before the split began. Refresh and try again.",
+          };
+          return;
         }
+
+        const defenderPlantCount = freshTarget.plantCount;
+        const defenderBookValueAnchor = freshTarget.capacityBookAnchor;
+        if (
+          !Number.isInteger(defenderPlantCount) ||
+          (defenderPlantCount ?? 0) < 2 ||
+          typeof defenderBookValueAnchor !== "number" ||
+          !Number.isFinite(defenderBookValueAnchor) ||
+          defenderBookValueAnchor < 0
+        ) {
+          rejection = {
+            status: 409,
+            error: "The target's plant ledger changed. Refresh and try again.",
+          };
+          return;
+        }
+        if (
+          existingOwnSector &&
+          (!Number.isInteger(existingOwnSector.plantCount) ||
+            typeof existingOwnSector.capacityBookAnchor !== "number" ||
+            !Number.isFinite(existingOwnSector.capacityBookAnchor) ||
+            existingOwnSector.capacityBookAnchor < 0)
+        ) {
+          rejection = {
+            status: 503,
+            error:
+              "Your sector's whole-plant ledger is not ready yet. Try again after the next refresh.",
+          };
+          return;
+        }
+
+        const quote = calculatePlantSectorSplit({
+          defenderPlantCount: defenderPlantCount as number,
+          defenderBookValueAnchor,
+          attackerMarketingStrength: freshAttacker.marketingStrength ?? 0,
+          defenderMarketingStrength: freshDefender.marketingStrength ?? 0,
+        });
+        if (quote.plantsAtRisk <= 0) {
+          rejection = { status: 400, error: "The defender must retain at least one plant." };
+          return;
+        }
+
+        const capitalAnchor = corpLiquidCapitalToAnchor(
+          freshAttacker.liquidCapital ?? 0,
+          freshAttacker,
+          attackerFxRate
+        );
+        if (capitalAnchor < quote.cashCostAnchor) {
+          rejection = {
+            status: 400,
+            error: insufficientCapitalMessage(
+              "Sector split",
+              anchorToCorpLiquidCapital(quote.cashCostAnchor, freshAttacker, attackerFxRate),
+              freshAttacker.liquidCapital,
+              attackerCurrencyCode
+            ),
+          };
+          return;
+        }
+        if ((freshAttacker.marketingStrength ?? 0) < quote.marketingStrengthCost) {
+          rejection = {
+            status: 400,
+            error: `Insufficient marketing strength. This split costs ${quote.marketingStrengthCost} MS. You have ${roundMarketingStrength(freshAttacker.marketingStrength ?? 0)} MS.`,
+          };
+          return;
+        }
+
+        const attackCostLocal = anchorToCorpLiquidCapital(
+          quote.cashCostAnchor,
+          freshAttacker,
+          attackerFxRate
+        );
+        const debit = await db.collection<Corporation>("corporations").updateOne(
+          {
+            _id: freshAttacker._id,
+            liquidCapital: { $gte: attackCostLocal },
+            marketingStrength: { $gte: quote.marketingStrengthCost },
+          },
+          {
+            $inc: {
+              liquidCapital: -attackCostLocal,
+              marketingStrength: -quote.marketingStrengthCost,
+            },
+            $set: { updatedAt: new Date() },
+          },
+          { session }
+        );
+        if (debit.modifiedCount !== 1) {
+          rejection = {
+            status: 409,
+            error: "Your corporation's resources changed. Refresh and try again.",
+          };
+          return;
+        }
+
+        const succeeded = didPlantSectorSplitSucceed(quote.successProbability, randomRoll);
+        let capacityTransferred = 0;
+        let bookValueTransferredAnchor = 0;
+        if (succeeded) {
+          const openingCount = defenderPlantCount as number;
+          const transferFraction = quote.plantsAtRisk / openingCount;
+          const defenderCapacity =
+            typeof freshTarget.capitalStock === "number" &&
+            Number.isFinite(freshTarget.capitalStock)
+              ? Math.max(0, freshTarget.capitalStock)
+              : 0;
+          capacityTransferred = defenderCapacity * transferFraction;
+          bookValueTransferredAnchor = defenderBookValueAnchor * transferFraction;
+          const now = new Date();
+
+          const targetWrite = await db.collection<CorporateSector>("corporateSectors").updateOne(
+            {
+              _id: freshTarget._id,
+              plantCount: openingCount,
+              capitalStock: freshTarget.capitalStock,
+              capacityBookAnchor: defenderBookValueAnchor,
+            },
+            {
+              $set: {
+                plantCount: openingCount - quote.plantsAtRisk,
+                capitalStock: defenderCapacity - capacityTransferred,
+                capacityBookAnchor: defenderBookValueAnchor - bookValueTransferredAnchor,
+                updatedAt: now,
+              },
+            },
+            { session }
+          );
+          if (targetWrite.modifiedCount !== 1) {
+            throw new SplitConflictError("The target changed during the split.");
+          }
+
+          const attackerCapacity =
+            capacityTransferred *
+            capacityRescaleRatio(
+              freshTarget.sectorType as CorporationType,
+              freshTarget.strategyId,
+              existingOwnSector?.strategyId
+            );
+
+          if (existingOwnSector) {
+            const attackerWrite = await db
+              .collection<CorporateSector>("corporateSectors")
+              .updateOne(
+                { _id: existingOwnSector._id },
+                {
+                  $inc: {
+                    plantCount: quote.plantsAtRisk,
+                    capitalStock: attackerCapacity,
+                    capacityBookAnchor: bookValueTransferredAnchor,
+                  },
+                  $set: { updatedAt: now },
+                },
+                { session }
+              );
+            if (attackerWrite.modifiedCount !== 1) {
+              throw new SplitConflictError("Your sector changed during the split.");
+            }
+          } else {
+            const newSector: Omit<CorporateSector, "_id"> = {
+              corporationId: freshAttacker._id,
+              countryId,
+              stateId,
+              sectorType: freshTarget.sectorType as CorporationType,
+              targetGrowthRate: 0,
+              currentGrowthRate: 0,
+              currentGrowthCost: 0,
+              // PLANTS-GATED: this route requires plants mode; the turn derives
+              // revenue from the transferred whole plants and their capacity.
+              revenue: 0,
+              capitalStock: attackerCapacity,
+              capacityBookAnchor: bookValueTransferredAnchor,
+              plantCount: quote.plantsAtRisk,
+              plantUnitRemainder: 0,
+              plantsStartTurn: gameState?.currentTurn ?? 0,
+              profitMargin: DEFAULT_PROFIT_MARGIN,
+              workers: DEFAULT_SECTOR_STARTING_WORKERS,
+              createdAt: now,
+              updatedAt: now,
+            };
+            try {
+              await db
+                .collection<CorporateSector>("corporateSectors")
+                .insertOne(newSector as CorporateSector, { session });
+            } catch (error) {
+              if (isCorporateSectorDuplicateKey(error)) {
+                throw new SplitConflictError("Your sector changed during the split.");
+              }
+              throw error;
+            }
+          }
+        }
+
+        resolution = {
+          quote,
+          succeeded,
+          randomRoll,
+          attackCostLocal,
+          defenderCorporationName: freshDefender.name,
+          sectorType: freshTarget.sectorType as CorporationType,
+          plantsTransferred: succeeded ? quote.plantsAtRisk : 0,
+          capacityTransferred,
+          bookValueTransferredAnchor,
+        };
+      });
+    } catch (error) {
+      if (error instanceof SplitConflictError) {
+        return NextResponse.json({ error: error.message }, { status: 409 });
       }
+      throw error;
+    } finally {
+      await session.endSession();
     }
 
-    // Deduct cost and escalate
-    const attackCostInCorpCapital = anchorToCorpLiquidCapital(
-      attackCostInternal,
-      corporation,
-      corpFxRate
-    );
-    await db.collection<Corporation>("corporations").updateOne(
-      { _id: corporation._id },
-      {
-        $inc: {
-          liquidCapital: -attackCostInCorpCapital,
-          marketingStrength: -msCost,
-          splitEscalation: 1,
-        },
-        $set: { updatedAt: now },
-      }
-    );
-
-    // ─── Ledger leg for the attack fee (plants) ──────────────────────────────
-    //
-    // The `liquidCapital` decrement above is a bare `$inc` with no counterpart
-    // anywhere; `logEconomicAction` below is telemetry, not a ledger entry. That
-    // was tolerable while the fee was a modest marketing spend, but under plants
-    // `attackCostAnchorUnderPlants` floors it at the BUILD PRICE of the capacity
-    // received times ATTACK_BUILD_PRICE_PREMIUM, which is materially larger — and
-    // an unattributed drain of that size reads to the shadow ledger as money
-    // vanishing from the world.
-    //
-    // It is booked as capacity capex because that is what it now is: the corp
-    // paid at least replacement cost and received real plant. Below plants the
-    // fee is still the legacy marketing spend and no row is emitted, so the
-    // ledger is byte-identical there. Best-effort, like every other capex leg:
-    // the cash has already moved, so a log failure must not 500 the caller into
-    // a retry that would charge twice.
-    if (plantsEnabled && attackCostInternal > 0 && attackCostInCorpCapital > 0) {
-      await emitBuildCapexTx(db, {
-        corporationId: corporation._id,
-        corporationName: corporation.name,
-        corporationSequentialId: corporation.sequentialId,
-        direction: "build",
-        amountLocal: Math.abs(attackCostInCorpCapital),
-        currencyCode: attackerCurrencyCode ?? "USD",
-        anchorAmount: attackCostInternal,
-        turn: gameState?.currentTurn ?? 0,
-        createdAt: now,
-        sectorId: targetSector._id,
-        sectorType: targetSector.sectorType,
-        units: capitalStockDelta,
-        meta: { reason: "sectorAttackCapture" },
-      }).catch(() => {});
+    const rejected = rejection as SplitRejection | null;
+    if (rejected) {
+      return NextResponse.json({ error: rejected.error }, { status: rejected.status });
+    }
+    if (!resolution) {
+      return NextResponse.json({ error: "The split could not be resolved." }, { status: 409 });
     }
 
-    const sectorLabel =
-      CORPORATION_TYPE_LABELS[targetSector.sectorType as CorporationType] ??
-      targetSector.sectorType;
-    const sectorHref = `${regionUrl(countryId, id)}?tab=economy&sector=${targetSector.sectorType}`;
+    const result: SplitResolution = resolution;
+    const sectorLabel = CORPORATION_TYPE_LABELS[result.sectorType] ?? result.sectorType;
+    const outcomeText = result.succeeded
+      ? `${attacker.name} seized ${result.plantsTransferred.toLocaleString("en-US")} whole plants from ${result.defenderCorporationName}'s ${sectorLabel} sector in ${state.name}.`
+      : `${attacker.name} failed to split ${result.defenderCorporationName}'s ${sectorLabel} sector in ${state.name}.`;
+    logWireEvent("sector_attack", outcomeText, {
+      href: `${regionUrl(countryId, stateId)}?tab=economy&sector=${result.sectorType}`,
+    });
 
-    logWireEvent(
-      "sector_attack",
-      wireHeadlineSectorAttack(
-        corporation.name,
-        actualCapture,
-        sectorLabel,
-        defenderCorp.name,
-        state.name
-      ),
-      { href: sectorHref }
-    );
+    void emitTx(db, {
+      type: "corp_sector_split_cost",
+      turn: gameState?.currentTurn ?? 0,
+      createdAt: new Date(),
+      subjectType: "corporation",
+      subjectId: attacker._id,
+      subjectName: attacker.name,
+      countryId,
+      amount: -Math.abs(result.attackCostLocal),
+      anchorAmount: -Math.abs(result.quote.cashCostAnchor),
+      currencyCode: attackerCurrencyCode ?? "USD",
+      counterpartyType: "system",
+      counterpartyName: "Sector split campaign",
+      meta: {
+        targetSectorId: targetSectorId.toString(),
+        defenderCorporationId: defender._id.toString(),
+        plantsAtRisk: result.quote.plantsAtRisk,
+        plantsTransferred: result.plantsTransferred,
+        successProbability: result.quote.successProbability,
+        randomRoll: result.randomRoll,
+        succeeded: result.succeeded,
+      },
+    }).catch(() => {});
 
-    // Log the economic action so the automation detector sees a unified
-    // per-actor action timeline (attack-sector bypasses the AP action logger).
     void logEconomicAction(db, {
-      characterId: corporation.ceoId,
+      characterId: attacker.ceoId,
       userId: auth.user.userId,
       actionType: "attackSector",
       targetState: stateId,
       turn: gameState?.currentTurn ?? 0,
-      characterName: corporation.name,
+      characterName: attacker.name,
       username: userDoc?.username,
       countryId,
-      // attackCost (= attackCostInternal) and actualCapture are already ₳ (anchor);
-      // msCost is marketing strength.
-      corpCashCostAnchor: attackCost,
-      msCost,
-      capturedRevenueAnchor: actualCapture,
+      corpCashCostAnchor: result.quote.cashCostAnchor,
+      msCost: result.quote.marketingStrengthCost,
       currencyCode: attackerCurrencyCode,
       result: {
-        success: true,
-        message: `Captured $${actualCapture.toLocaleString()} from ${defenderCorp.name}`,
-        fundsChange: -attackCostInCorpCapital,
+        success: result.succeeded,
+        message: outcomeText,
+        fundsChange: -result.attackCostLocal,
       },
     }).catch(() => {});
 
-    // Notify the defending CEO
-    if (defenderCorp.userId && !defenderCorp.ceoVacant) {
+    if (defender.userId && !defender.ceoVacant) {
       await createNotification({
-        userId: defenderCorp.userId,
+        userId: defender.userId,
         type: "corp_sector_attacked",
-        title: "Sector Attacked",
-        message: `${corporation.name} captured $${actualCapture.toLocaleString()} from your ${sectorLabel} sector in ${state.name}.`,
+        title: result.succeeded ? "Plants Seized" : "Sector Split Repelled",
+        message: outcomeText,
         metadata: {
-          attackerCorporationName: corporation.name,
-          attackerCorporationId: corporation._id.toString(),
-          sectorType: targetSector.sectorType,
+          attackerCorporationName: attacker.name,
+          attackerCorporationId: attacker._id.toString(),
+          sectorType: result.sectorType,
           stateId,
           stateName: state.name,
-          revenueLost: actualCapture,
+          plantsLost: result.plantsTransferred,
+          splitSucceeded: result.succeeded,
         },
       });
     }
 
     return NextResponse.json({
       success: true,
-      attackCost,
-      attackCostInternal,
-      msCost,
-      revenueCaptured: actualCapture,
-      defenderCorporationName: defenderCorp.name,
-      nextSplitMsCost: calculateSplitMsCost(currentEscalation + 1),
-      message: `Captured $${actualCapture.toLocaleString()} from ${defenderCorp.name}'s ${sectorLabel} sector (cost: $${attackCost.toLocaleString()} + ${msCost} MS)`,
+      splitSucceeded: result.succeeded,
+      plantsAtRisk: result.quote.plantsAtRisk,
+      plantsTransferred: result.plantsTransferred,
+      attackCost: result.quote.cashCostAnchor,
+      msCost: result.quote.marketingStrengthCost,
+      successProbability: result.quote.successProbability,
+      message: result.succeeded
+        ? `Sector split succeeded. You seized ${result.plantsTransferred.toLocaleString("en-US")} whole plants from ${result.defenderCorporationName}.`
+        : `Sector split failed. No plants transferred; the committed cash and MS were spent.`,
     });
   } catch (error) {
     return handleRouteError(error);
