@@ -286,10 +286,10 @@ export interface DistributeVotesOptions {
   /**
    * Executive own-race only: raw consecutive terms the incumbent PARTY has
    * already held the office (current term counts as 1). Feeds `appealWeight`'s
-   * nominal-share `personalStatTenureFatigue`, which erodes the
+   * nominal-share `personalStatTenureRetention`, which erodes the
    * PI/favorability-driven reach/approval terms. The "time for a change" drag
    * itself is priced by the economic referendum channel, not here. Unset ⇒ no
-   * fatigue (first term / open seat / non-executive races).
+   * erosion (first term / open seat / non-executive races).
    */
   incumbentConsecutiveTerms?: number;
   /**
@@ -303,9 +303,18 @@ export interface DistributeVotesOptions {
    */
   legislativeIncumbentPartyId?: string;
   /**
-   * Single-seat legislative own-race: consecutive terms the sitting officeholder
-   * has held this seat (current term counts as 1). Drives the tenure-fatigue
-   * decay. Defaults to 1 when unset.
+   * Single-seat legislative own-race: the term the sitting officeholder is
+   * SEEKING, not the count they have already served. `computeConsecutiveTerms
+   * FromWinners` seeds at 1 for the current term and then also counts the prior
+   * win that seated them, so a first-termer running for re-election arrives
+   * here as 2. Drives the incumbency shield's tenure decay, which is calibrated
+   * against exactly that. Defaults to 1 when unset.
+   *
+   * NOTE the units differ from `incumbentConsecutiveTerms` and
+   * `houseIncumbentTenureTermsByCandidateId`, which both count terms ALREADY
+   * held. `appealWeight` normalizes this one before applying
+   * `personalStatTenureRetention` so identical service earns identical erosion
+   * in every lane; anything else consuming it gets the raw sought-term value.
    */
   legislativeIncumbentTenureTerms?: number;
   /**
@@ -318,8 +327,8 @@ export interface DistributeVotesOptions {
    * a per-candidate map rather than one party id. See
    * `resolveHouseIncumbentTenures` in `singleSeatIncumbency.ts` for how this is
    * computed and why the House needs this different shape. No entry for a
-   * candidateId ⇒ personalStatTenureFatigue(undefined) ⇒ 0 ⇒ complete no-op
-   * (open seat, fresh nominee, or a non-House race).
+   * candidateId ⇒ personalStatTenureRetention(undefined) ⇒ 1.0 ⇒ complete
+   * no-op (open seat, fresh nominee, or a non-House race).
    */
   houseIncumbentTenureTermsByCandidateId?: Map<string, number>;
   /**

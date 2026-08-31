@@ -35,7 +35,6 @@ import { resolveDefendingSides } from "@/lib/military/defendingSides";
 import { buildFactionSide } from "@/lib/military/factionSide";
 import type { Front } from "@/lib/military/combat";
 import { getConflict, getConflictsCollection } from "@/lib/db/collections/conflicts";
-import { listTheaterStates } from "@/lib/db/collections/theaterState";
 import { conflictToFront } from "@/lib/military/createConflict";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import { resolveConflict } from "@/lib/military/resolveConflict";
@@ -43,6 +42,7 @@ import { frontSupportFor } from "@/lib/navair/frontSupport";
 import { loadNavairChannels } from "@/lib/db/collections/navairChannels";
 import type { NavairUnit } from "@/lib/navair/types";
 import { standDownCountry } from "@/lib/military/leaveConflict";
+import { loadOffensiveOptInSources, offensiveOptInsAtFront } from "@/lib/military/offensiveOptIns";
 import { principalOf, DICTATE_WINDOW_TURNS } from "@/lib/military/principal";
 import { OCCUPATION } from "@/lib/military/config";
 import {
@@ -380,6 +380,14 @@ export async function resolveBattleDeclarations(
     .find({ domain: { $in: ["naval", "air"] } })
     .toArray()) as unknown as NavairUnit[];
 
+  // Who fights an offensive here without declaring one: player standing orders, plus
+  // the countries the NPP join switch opts in wholesale. Read ONCE for the whole tick
+  // for the same reason as the bloc roll above — neither answer can change between
+  // fronts, and a per-front read would be a query per theatre inside a phase that
+  // already has a turn time budget. The same loader answers the cabinet forecast, so
+  // a prediction cannot disagree with the roster that then fights.
+  const optInSources = await loadOffensiveOptInSources(db);
+
   // Group by front so each conflict document is loaded once no matter how many
   // allies declared against it.
   const byTheater = new Map<string, BattleDeclarationDoc[]>();
@@ -435,14 +443,10 @@ export async function resolveBattleDeclarations(
       unitsByCountry.set(u.countryId, list);
     }
 
-    // Standing orders: allies who fight in an offensive here without declaring one of
-    // their own. Loaded once for the whole front, because the set cannot change between
-    // offensives inside a tick.
-    const optedIn = new Set(
-      (await listTheaterStates(db))
-        .filter((st) => st.autoJoin?.[theaterId])
-        .map((st) => String(st.countryId))
-    );
+    // Allies who fight in an offensive here without declaring one of their own. Cut
+    // from the tick-wide sources, because the set cannot change between offensives
+    // inside a tick.
+    const optedIn = offensiveOptInsAtFront(optInSources, conflict, theaterId);
     if (optedIn.size > 0) {
       for (const off of offensives) {
         // A matchup that resolves to no side enrols nobody -- the same rule that stops
