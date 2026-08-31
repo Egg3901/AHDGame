@@ -22,7 +22,7 @@ import {
   refundCharacterCash,
   refundCorpLiquidCapital,
 } from "@/lib/financialTxLog/atomicCashGuard";
-import { creditTreasuryProceeds } from "@/lib/nationalization/treasury";
+import { creditTreasuryProceedsFromAnchor } from "@/lib/nationalization/treasury";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { applyListingStandards, isMateriallyInsolvent } from "../listingStandards";
@@ -173,7 +173,15 @@ export async function fileListingPetition(opts: {
       await isForexEnabled()
     );
   } else {
-    await creditTreasuryProceeds(db, corporation.countryId as CountryId, contributionAnchor, now);
+    // `contributionAnchor` is in ₳; `creditTreasuryProceeds` expects the
+    // country's own units, so crediting it raw banked an unconverted figure
+    // for every non-anchor currency (#808, same unit confusion).
+    await creditTreasuryProceedsFromAnchor(
+      db,
+      corporation.countryId as CountryId,
+      contributionAnchor,
+      now
+    );
   }
 
   // Both legs, so the ledger nets to zero: the corporation pays and either the

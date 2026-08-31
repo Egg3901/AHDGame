@@ -8,6 +8,7 @@ import { requireHumanSession } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
 import { regionUrl } from "@/lib/urls";
+import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Corporation, CorporateSector, State, User, ImperialCharacter } from "@/lib/db/types";
 import type { GameState } from "@/lib/db/types/gameState";
@@ -207,13 +208,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     const attackerFxRate = await getCorpFxRate(db, attacker);
     const attackerCurrencyCode = resolveCorpLiquidCurrencyCode(attacker);
     const randomRoll = auditableRandomRoll();
-    const client = await getMongoClient();
-    const session = client.startSession();
     let resolution: SplitResolution | null = null;
     let rejection: SplitRejection | null = null;
 
     try {
-      await session.withTransaction(async () => {
+      await runTransactionWithSessionRetry(getMongoClient, async (session) => {
         resolution = null;
         rejection = null;
 
@@ -448,8 +447,6 @@ export async function POST(request: Request, { params }: RouteParams) {
         return NextResponse.json({ error: error.message }, { status: 409 });
       }
       throw error;
-    } finally {
-      await session.endSession();
     }
 
     const rejected = rejection as SplitRejection | null;
