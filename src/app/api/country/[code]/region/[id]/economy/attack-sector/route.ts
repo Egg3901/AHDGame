@@ -585,7 +585,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       msCost: result.quote.marketingStrengthCost,
       successProbability: result.quote.successProbability,
       message: result.succeeded
-        ? `Sector split succeeded. You seized ${result.plantsTransferred.toLocaleString("en-US")} whole plants from ${result.defenderCorporationName}.`
+        ? `Sector split succeeded. You seized ${result.plantsTransferred.toLocaleString("en-US")} whole ${result.plantsTransferred === 1 ? "plant" : "plants"} from ${result.defenderCorporationName}.`
         : `Sector split failed. No plants transferred; the committed cash and MS were spent.`,
     });
   } catch (error) {
