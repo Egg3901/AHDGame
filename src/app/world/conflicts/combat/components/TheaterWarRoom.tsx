@@ -342,6 +342,7 @@ export function TheaterWarRoom({
                   {pending.declaredTurn + 1}).
                 </div>
                 <button
+                  disabled={!state.canWrite}
                   onClick={() => dispatch({ type: "WITHDRAW_DECLARATION", theaterId: frontId })}
                   style={{
                     fontFamily: MIL_FONT.sans,
@@ -352,7 +353,8 @@ export function TheaterWarRoom({
                     border: `1px solid ${MIL_COLOR.border}`,
                     borderRadius: 8,
                     padding: "7px 13px",
-                    cursor: "pointer",
+                    cursor: state.canWrite ? "pointer" : "not-allowed",
+                    opacity: state.canWrite ? 1 : 0.5,
                   }}
                 >
                   WITHDRAW
@@ -391,7 +393,7 @@ export function TheaterWarRoom({
                   ))}
                 </select>
                 <button
-                  disabled={!activeTarget}
+                  disabled={!activeTarget || !state.canWrite}
                   onClick={() =>
                     dispatch({ type: "DECLARE", theaterId: frontId, targetCountry: activeTarget })
                   }
@@ -405,8 +407,8 @@ export function TheaterWarRoom({
                     border: "none",
                     borderRadius: 9,
                     padding: 12,
-                    cursor: activeTarget ? "pointer" : "not-allowed",
-                    opacity: activeTarget ? 1 : 0.5,
+                    cursor: activeTarget && state.canWrite ? "pointer" : "not-allowed",
+                    opacity: activeTarget && state.canWrite ? 1 : 0.5,
                   }}
                 >
                   ⚔ DECLARE OFFENSIVE

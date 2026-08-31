@@ -74,6 +74,14 @@ const props = {
 // its own tests already passed it, so nothing caught that the real caller never did.
 // The seat could not post a single general to a war.
 describe("CommandsTab", () => {
+  it("links the defense office to naval and air command", () => {
+    render(<CommandsTab {...props} />);
+
+    expect(
+      screen.getByRole("link", { name: "Open naval and air command" }).getAttribute("href")
+    ).toBe("/country/us/navair");
+  });
+
   it("offers the live conflicts as posting options", () => {
     render(<CommandsTab {...props} />);
 

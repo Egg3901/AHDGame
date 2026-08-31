@@ -36,6 +36,15 @@ export const BLOCKADE = {
    * the flow to `reachableBook` as unreachable supply.
    */
   minAffinityMultiplier: 0.1,
+  /**
+   * Pressure needed for literal closure, relative to port defence.
+   *
+   * The continuous curve reaches 90 percent at nine times defence. Beyond that point
+   * `minAffinityMultiplier` already flattened every partial result to the same 10 percent
+   * trade affinity, so snapping to total closure here makes the documented terminal state
+   * reachable without changing any pressure result below the existing floor.
+   */
+  totalClosurePressureRatio: 9,
 } as const;
 
 /**
@@ -85,7 +94,10 @@ export function blockadeClosureFor(
 
     const port = M.region(region)?.port ?? 0;
     const defence = Math.max(1, port * BLOCKADE.portDefenceScale);
-    const closure = clamp(pressure / (pressure + defence), 0, 1);
+    const closure =
+      pressure >= defence * BLOCKADE.totalClosurePressureRatio
+        ? 1
+        : clamp(pressure / (pressure + defence), 0, 1);
     if (closure > worst) worst = closure;
   }
 
