@@ -143,6 +143,11 @@ export const NOTIFICATION_TYPES = [
   // Defence procurement: a government offering one of this corp's plants an order.
   "defence_contract_offered",
   "defence_contract_cancelled",
+  // Ask (ask.lakesidegames.net): quality credits and watch alerts pushed by
+  // the Ask service through /api/webhooks/ask-notification.
+  "ask_refund",
+  "ask_correction",
+  "ask_watch",
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
