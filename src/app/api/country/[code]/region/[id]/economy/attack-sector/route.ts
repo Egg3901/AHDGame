@@ -222,21 +222,32 @@ export async function POST(request: Request, { params }: RouteParams) {
         rejection = null;
         uncommittedDebit = null;
 
-        const [freshAttacker, freshTarget, freshDefender, existingOwnSector] = await Promise.all([
-          db.collection<Corporation>("corporations").findOne({ _id: attacker._id }, { session }),
-          db
-            .collection<CorporateSector>("corporateSectors")
-            .findOne({ _id: targetSectorId, stateId, corporationId: defender._id }, { session }),
-          db.collection<Corporation>("corporations").findOne({ _id: defender._id }, { session }),
-          db.collection<CorporateSector>("corporateSectors").findOne(
-            {
-              stateId,
-              sectorType: targetSector.sectorType,
-              corporationId: attacker._id,
-            },
-            { session }
-          ),
-        ]);
+        // READ THESE IN SEQUENCE. A Mongo ClientSession cannot carry concurrent
+        // operations. Issued through Promise.all, all four reads raced to be the
+        // one that opens the transaction, each sending `startTransaction` at the
+        // same txnNumber; the first won and every loser came back with
+        // "Only servers in a sharded cluster can start a new transaction at the
+        // active transaction number" (ticket #1239). Despite the wording that is
+        // Mongo code 117 on an ordinary replica set, and because the race is in
+        // OUR call pattern rather than in the session, retrying on a fresh
+        // session cannot clear it: every attempt re-runs the same race.
+        const freshAttacker = await db
+          .collection<Corporation>("corporations")
+          .findOne({ _id: attacker._id }, { session });
+        const freshTarget = await db
+          .collection<CorporateSector>("corporateSectors")
+          .findOne({ _id: targetSectorId, stateId, corporationId: defender._id }, { session });
+        const freshDefender = await db
+          .collection<Corporation>("corporations")
+          .findOne({ _id: defender._id }, { session });
+        const existingOwnSector = await db.collection<CorporateSector>("corporateSectors").findOne(
+          {
+            stateId,
+            sectorType: targetSector.sectorType,
+            corporationId: attacker._id,
+          },
+          { session }
+        );
         if (!freshAttacker || !freshTarget || !freshDefender) {
           rejection = {
             status: 409,
@@ -574,7 +585,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       msCost: result.quote.marketingStrengthCost,
       successProbability: result.quote.successProbability,
       message: result.succeeded
-        ? `Sector split succeeded. You seized ${result.plantsTransferred.toLocaleString("en-US")} whole plants from ${result.defenderCorporationName}.`
+        ? `Sector split succeeded. You seized ${result.plantsTransferred.toLocaleString("en-US")} whole ${result.plantsTransferred === 1 ? "plant" : "plants"} from ${result.defenderCorporationName}.`
         : `Sector split failed. No plants transferred; the committed cash and MS were spent.`,
     });
   } catch (error) {
