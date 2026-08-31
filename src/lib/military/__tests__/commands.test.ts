@@ -232,6 +232,57 @@ describe("validateDraft", () => {
       validateDraft(draft, stateWith([])).some((m) => m.includes("naval command structure"))
     ).toBe(true);
   });
+
+  // Ticket #1244. The warning keyed on `regionIds.length >= REGION_CAP`, and REGION_CAP
+  // is a hard cap the dialog and the reducer both enforce, so it fired on every full
+  // non-Logistics command whatever the geography. South Asia, East Asia and Southeast
+  // Asia are one theatre; sustaining them needs no separate logistics tail, and any two
+  // of the three drew no warning at all.
+  it("does not recommend logistics when every assigned region is in one macro theatre", () => {
+    const draft: CommandDraft = {
+      name: "X",
+      type: "REGIONAL",
+      regionIds: ["sas", "eas", "sea"],
+      commanderIds: ["hale"],
+      commandingGeneralId: null,
+      posture: "Deterrence",
+      supply: "Normal",
+    };
+    expect(
+      validateDraft(draft, stateWith([])).some((m) => m.includes("Logistics command recommended"))
+    ).toBe(false);
+  });
+
+  it("recommends logistics when the assigned regions span two macro theatres", () => {
+    const draft: CommandDraft = {
+      name: "X",
+      type: "REGIONAL",
+      regionIds: ["weu", "sas"],
+      commanderIds: ["hale"],
+      commandingGeneralId: null,
+      posture: "Deterrence",
+      supply: "Normal",
+    };
+    expect(
+      validateDraft(draft, stateWith([])).some((m) => m.includes("Logistics command recommended"))
+    ).toBe(true);
+  });
+
+  // A Logistics command IS the sustainment structure, so it is never told to go find one.
+  it("never recommends logistics to a Logistics command spanning theatres", () => {
+    const draft: CommandDraft = {
+      name: "X",
+      type: "LOGISTICS",
+      regionIds: ["weu", "sas"],
+      commanderIds: ["hale"],
+      commandingGeneralId: null,
+      posture: "Expeditionary",
+      supply: "Normal",
+    };
+    expect(
+      validateDraft(draft, stateWith([])).some((m) => m.includes("Logistics command recommended"))
+    ).toBe(false);
+  });
 });
 
 /**

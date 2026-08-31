@@ -6,7 +6,7 @@ import type {
   MilitaryOperation,
   MilitaryState,
 } from "./types";
-import { COMMAND_TYPES, REGION_CAP } from "./config";
+import { COMMAND_TYPES } from "./config";
 import { getRegion } from "./regions";
 import { commandsOfRegion, draftEffectiveness } from "./calc";
 
@@ -63,8 +63,19 @@ export function validateDraft(draft: CommandDraft, state: MilitaryState): string
   if (overseasNaval && !navalCapable) {
     w.push("No naval command structure for an assigned sea region: coverage will be weak.");
   }
-  if (draft.regionIds.length >= REGION_CAP && draft.type !== "LOGISTICS") {
-    w.push("Logistics command recommended for multi-region overseas sustainment.");
+  // Sustainment strain comes from the spread across macro theatres, not from the number
+  // of regions. This counted regions against REGION_CAP, which the create dialog and the
+  // reducer both enforce as a hard cap, so the warning fired on every full non-Logistics
+  // command and never on a partial one: South Asia + East Asia + Southeast Asia drew it
+  // despite being one theatre, while any two of the three drew nothing. Regions sharing a
+  // theatre share the tail that supplies them; two theatres are two tails.
+  const theatres = new Set(
+    draft.regionIds
+      .map((rid) => getRegion(rid)?.macro)
+      .filter((macro): macro is string => Boolean(macro))
+  );
+  if (theatres.size > 1 && draft.type !== "LOGISTICS") {
+    w.push("Logistics command recommended for multi-theatre overseas sustainment.");
   }
   return w;
 }
