@@ -136,6 +136,8 @@ weight        = appeal × reach × approval × effectiveOrg × infamyMult × oth
 
 State races use influence for reach but not \`influenceAppeal\`; presidential generals include it. Directional bonuses are continuous around the center and may be suppressed when a leaning candidate points against their party on that axis. General-election factors also include registration resistance, seeded registration baseline, candidate Support, campaign presence, NPP and regime multipliers, and race-specific coattails where configured.
 
+**Tenure erosion.** Both \`influence\` and \`favorability\` are scaled down before they enter the lines above, for a candidate who has held the seat for more than one consecutive term. Each term beyond the first costs 3% of both, stopping at 15%, so a long-serving officeholder still carries 85% of their reach and approval into the race at worst. A first-term holder, an open seat and a fresh nominee are all untouched. This is separate from party-tenure fatigue in the National Mood channel: that one prices how a party wears a bad economy, this one prices the personal standing an individual builds up by holding office. It applies where the game tracks an individual's consecutive terms: the presidency, Senate seats, and each returning nominee in a House delegation.
+
 ### Office strength multipliers
 
 | Office | Strength weight |

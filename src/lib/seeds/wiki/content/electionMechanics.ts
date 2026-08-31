@@ -153,6 +153,8 @@ Each component is signed. A good economy pays the incumbent party a bonus, cappe
 
 This is now the only place party-tenure fatigue is priced. The older "time for a change" drag inside the incumbency persuasion driver has been removed; it only moved the thin persuadable slice of the vote and was too weak to feel.
 
+**Personal tenure erosion is a separate, smaller thing.** Party-tenure fatigue above prices how a party wears a bad economy. It says nothing about the individual. Holding a seat also builds up a personal advantage, because influence and favorability grow every turn you campaign and never fall back on their own, so an officeholder carries the same edge into every election forever. To stop that compounding without erasing it, an officeholder's influence and favorability are scaled down by 3% for each consecutive term beyond their first, stopping at 15%. Someone who has held a seat for decades still runs on 85% of their standing. A first-term holder, an open seat and a new nominee pay nothing. The game tracks this for the presidency, for Senate seats, and for each returning nominee in a House delegation.
+
 The shift is applied inside the normal vote accumulation, so it is already in the totals the card and tally show. It is not added twice.
 
 Because the inputs are live national metrics, this channel is a lever, not weather. Legislation and budget choices that pull unemployment, poverty, or inflation back toward their anchors shrink the penalty for whoever holds the office next election. Governing badly is a campaign cost.
