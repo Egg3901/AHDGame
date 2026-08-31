@@ -159,6 +159,7 @@ export async function processSavingsInterestTurn(
       const savings = char.currencyBalances?.savings ?? {};
       const holders = char.currencyBalances?.savingsHolder ?? {};
       const perCharInc: Record<string, number> = {};
+      const perCharFilter: Record<string, unknown> = { _id: char._id };
       for (const [code, bal] of Object.entries(savings)) {
         const oldBalance = typeof bal === "number" ? bal : 0;
         if (oldBalance <= 0) continue;
@@ -182,10 +183,15 @@ export async function processSavingsInterestTurn(
         );
         if (interest <= 0) continue;
         perCharInc[`currencyBalances.pendingSavingsInterest.${currency}`] = interest;
+        // Price interest only against the balance and holder snapshot we read.
+        // A concurrent deposit, withdrawal, or bank-routing change makes this
+        // operation miss rather than receiving stale-snapshot interest.
+        perCharFilter[`currencyBalances.savings.${currency}`] = oldBalance;
+        perCharFilter[`currencyBalances.savingsHolder.${currency}`] = holder ?? null;
       }
       if (Object.keys(perCharInc).length > 0) {
         accrualOps.push({
-          updateOne: { filter: { _id: char._id }, update: { $inc: perCharInc } },
+          updateOne: { filter: perCharFilter, update: { $inc: perCharInc } },
         });
       }
     }

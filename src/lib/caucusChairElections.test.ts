@@ -111,6 +111,69 @@ describe("caucusChairElections", () => {
     );
   });
 
+  it.each([
+    [true, true],
+    [undefined, undefined],
+  ])(
+    "inherits the anchoring national chair election's founding=%s",
+    async (anchorFounding, expected) => {
+      // A caucus race copies its whole schedule from the national chair
+      // election, so during the founding phase it runs in the same accelerated
+      // window. Without the flag the vote route cannot waive the same gates,
+      // and a new player could vote for their party chair but not their caucus
+      // chair (#593).
+      const caucusId = new ObjectId();
+      const electionInsert = setMockCollection("caucusChairElections", {
+        find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+        insertMany: vi.fn().mockResolvedValue({ insertedCount: 1 }),
+      });
+      setMockCollection("caucuses", {
+        find: vi.fn().mockReturnValue({
+          toArray: vi.fn().mockResolvedValue([
+            {
+              _id: caucusId,
+              countryId: "US",
+              partyId: "1",
+              name: "Unity Bloc",
+              chairId: null,
+              disbandedAt: null,
+            },
+          ]),
+        }),
+        updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+      });
+      setMockCollection("nationalPartyElections", {
+        find: vi.fn().mockReturnValue({
+          toArray: vi.fn().mockResolvedValue([
+            {
+              _id: new ObjectId(),
+              partyId: "1",
+              countryId: "US",
+              position: "chair",
+              status: "voting",
+              startTime: new Date("2026-04-01T00:00:00.000Z"),
+              endTime: new Date("2026-04-05T00:00:00.000Z"),
+              startTurn: 50,
+              endTurn: 62,
+              durationTurns: 12,
+              ...(anchorFounding === undefined ? {} : { founding: anchorFounding }),
+            },
+          ]),
+        }),
+      });
+      setMockCollection("caucusMemberships", {
+        find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+      });
+      setMockCollection("characters");
+
+      const { createMissingCaucusChairElections } = await import("./caucusChairElections");
+      await createMissingCaucusChairElections(99);
+
+      const inserted = electionInsert.insertMany.mock.calls[0][0][0];
+      expect(inserted.founding).toBe(expected);
+    }
+  );
+
   it("promotes the winner to caucus chair and demotes the prior chair", async () => {
     const caucusId = new ObjectId();
     const electionId = new ObjectId();

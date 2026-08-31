@@ -462,6 +462,98 @@ describe("processAutonomousForeignPolicy", () => {
     );
   });
 
+  it("conducts the war instead of routine diplomacy once it is the belligerent (ticket #1233)", async () => {
+    // The live failure shape: an autonomous belligerent with ready deployed
+    // forces spent every strategic slot on tariffs and embargoes against the
+    // enemy because `conduct_war`'s old base (25) sat below the routine
+    // 46-73 band, and only the top-ranked choice acts. Production recorded
+    // zero conduct_war selections while six NATO members sat deployed in an
+    // active war, so allies never appeared among a battle's attackers.
+    const db = setup({
+      alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
+      conflicts: [
+        {
+          _id: "war-for-germany",
+          name: "The War for Germany",
+          status: "active",
+          sideA: { label: "West", countries: ["FR", "US"] },
+          sideB: { label: "East", countries: ["RU"] },
+        },
+      ],
+      militaryUnits: [
+        {
+          _id: new ObjectId(),
+          countryId: "FR",
+          readiness: 72,
+          personnel: 10_000,
+          theaterId: "war-for-germany",
+          basePower: 100,
+        },
+      ],
+      approvalRating: 60,
+    });
+
+    const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 43, now);
+
+    expect(result.choice).toMatchObject({ type: "conduct_war", conflictId: "war-for-germany" });
+    const conductWar = recordedDecision(db).alternatives.find(
+      (choice) => choice.type === "conduct_war"
+    );
+    const routine = recordedDecision(db)
+      .alternatives.filter(
+        (choice) => choice.type !== "conduct_war" && choice.type !== "seek_peace"
+      )
+      .map((choice) => choice.score);
+    expect(conductWar?.score).toBeGreaterThan(Math.max(...routine));
+    expectNoGameplayWrites(db);
+  });
+
+  it("seeks peace instead of routine diplomacy once the war exhausts the government", async () => {
+    // seek_peace carried the same starvation: its old base (38) lost the slot
+    // to hostile tariffs and embargoes, so an exhausted autonomous belligerent
+    // kept filing trade actions while its army burned.
+    const db = setup({
+      alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
+      conflicts: [
+        {
+          _id: "war-for-germany",
+          name: "The War for Germany",
+          status: "active",
+          sideA: { label: "West", countries: ["FR", "US"] },
+          sideB: { label: "East", countries: ["RU"] },
+        },
+      ],
+      militaryUnits: [
+        {
+          _id: new ObjectId(),
+          countryId: "FR",
+          readiness: 25,
+          personnel: 10_000,
+          theaterId: "war-for-germany",
+          basePower: 100,
+        },
+      ],
+      approvalRating: 15,
+    });
+
+    const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 44, now);
+
+    expect(result.choice).toMatchObject({
+      type: "seek_peace",
+      conflictId: "war-for-germany",
+      targetCountryId: "RU",
+    });
+    const seekPeace = recordedDecision(db).alternatives.find(
+      (choice) => choice.type === "seek_peace"
+    );
+    const routine = recordedDecision(db)
+      .alternatives.filter(
+        (choice) => choice.type !== "conduct_war" && choice.type !== "seek_peace"
+      )
+      .map((choice) => choice.score);
+    expect(seekPeace?.score).toBeGreaterThan(Math.max(...routine));
+  });
+
   it("is idempotent for the same country and turn", async () => {
     const db = setup();
     db.collection("nppForeignPolicyDecisions")

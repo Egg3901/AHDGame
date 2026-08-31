@@ -11,6 +11,7 @@ import { getAuthUser } from "@/lib/auth";
 import { publicPageMetadata } from "@/lib/siteMetadata";
 import { MaintenanceCountdown } from "./MaintenanceCountdown";
 import { MaintenanceRecapLauncher } from "./MaintenanceRecapLauncher";
+import { isSeasonRecapEnabled } from "@/lib/recap/featureFlag";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +58,7 @@ export default async function MaintenancePage() {
             { sort: { retiredAt: -1 }, projection: { recap: 1 } }
           ),
       ]);
-      if (gs?.seasonRecapEnabled === true && retired?.recap) recap = retired.recap;
+      if (isSeasonRecapEnabled(gs) && retired?.recap) recap = retired.recap;
     }
   } catch {
     // best-effort — never let the recap lookup break the maintenance wall

@@ -131,3 +131,111 @@ describe("GET /api/country/UK/executive — government.seatsByParty", () => {
     expect(body.government.seatsByParty).toEqual({ "1": 400, "2": 250 });
   });
 });
+
+describe("GET /api/country/UK/executive — pmCharacterId shape", () => {
+  it("resolves a PM whose id was persisted as a string instead of an ObjectId", async () => {
+    // GlitchTip #566: `pmCharacterId` is typed ObjectId, but a string in the
+    // stored doc made `pmCharacterId.equals(...)` throw and 500 the whole
+    // executive page. A string id must resolve the PM, not crash.
+    const pmId = new ObjectId();
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 10,
+      currentYear: 1953,
+      lastTurnProcessed: new Date("2026-01-01T00:00:00Z"),
+      isActive: true,
+      pausedAt: null,
+      startingYear: 1953,
+    });
+    db.collection("governmentFormations").findOne.mockResolvedValue({
+      _id: "UK",
+      status: "formed",
+      // The defect: a string where the type promises an ObjectId.
+      pmCharacterId: pmId.toString(),
+      pmName: "Sarah Spencer",
+      formationType: "majority",
+      governingPartyId: "1",
+      totalSeats: 650,
+      formedAt: null,
+      seatsByParty: { "1": 400 },
+    });
+    db.collection("characters").findOne.mockResolvedValue({
+      _id: pmId,
+      name: "Sarah Spencer",
+      countryId: "UK",
+      party: "1",
+    });
+    db.collection("politicalParties").findOne.mockResolvedValue({
+      _id: "lab-uk",
+      sequentialId: 1,
+      countryId: "UK",
+      name: "Labour",
+      color: "#e4003b",
+    });
+    db.collection("electedOfficials").findOne.mockResolvedValue(null);
+    db.collection("electedOfficials").find.mockImplementation(() => ({
+      toArray: () => Promise.resolve([]),
+    }));
+    // Sign a user in. `isPrimeMinister` short-circuits on a null viewer, so
+    // without one the `.equals` call this regression is about is never reached.
+    const { getAuthUser } = await import("@/lib/auth");
+    vi.mocked(getAuthUser).mockResolvedValue({
+      userId: new ObjectId().toString(),
+      username: "viewer",
+    } as Awaited<ReturnType<typeof getAuthUser>>);
+
+    const { GET } = await import("./route");
+    const res = await GET(new Request("http://t/api/country/UK/executive"), {
+      params: Promise.resolve({ code: "uk" }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.primeMinister).toMatchObject({
+      id: pmId.toString(),
+      characterName: "Sarah Spencer",
+    });
+    // The viewer IS the PM here (the shared characters mock returns the same
+    // doc), which is precisely the comparison that used to throw on a string.
+    expect(body.isPrimeMinister).toBe(true);
+  });
+
+  it("degrades to no PM when the stored id is not a usable ObjectId", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 10,
+      currentYear: 1953,
+      lastTurnProcessed: new Date("2026-01-01T00:00:00Z"),
+      isActive: true,
+      pausedAt: null,
+      startingYear: 1953,
+    });
+    db.collection("governmentFormations").findOne.mockResolvedValue({
+      _id: "UK",
+      status: "formed",
+      pmCharacterId: "not-an-object-id",
+      pmName: "Ghost",
+      formationType: "majority",
+      governingPartyId: "1",
+      totalSeats: 650,
+      formedAt: null,
+      seatsByParty: {},
+    });
+    db.collection("electedOfficials").findOne.mockResolvedValue(null);
+    db.collection("electedOfficials").find.mockImplementation(() => ({
+      toArray: () => Promise.resolve([]),
+    }));
+    const { getAuthUser } = await import("@/lib/auth");
+    vi.mocked(getAuthUser).mockResolvedValue(null);
+
+    const { GET } = await import("./route");
+    const res = await GET(new Request("http://t/api/country/UK/executive"), {
+      params: Promise.resolve({ code: "uk" }),
+    });
+
+    // The page still renders; it just has no prime minister to show.
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.primeMinister).toBeNull();
+  });
+});

@@ -1,7 +1,7 @@
 import type { Db } from "mongodb";
 import { findMergedRegionMetrics } from "@/lib/macroMetrics/merge";
 import { isMacroMetricPath } from "@/lib/macroMetrics/paths";
-import type { State, LegislationType, CorporateSector, StateMetrics } from "@/lib/db/types";
+import type { State, LegislationType, CorporateSector } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import type { MetricCategoryId, StateMetricValue } from "@/lib/db/types/stateMetrics";
 import type { StatePolicy } from "@/lib/db/types/statePolicy";

@@ -4,7 +4,9 @@ import type { MergerReview } from "@/lib/db/types/mergerReview";
 
 vi.mock("@/lib/notifications", () => ({ createNotification: vi.fn() }));
 vi.mock("@/lib/audit/recordAudit", () => ({ recordAudit: vi.fn() }));
-vi.mock("@/lib/nationalization/treasury", () => ({ creditTreasuryProceeds: vi.fn() }));
+vi.mock("@/lib/nationalization/treasury", () => ({
+  creditTreasuryProceedsFromAnchor: vi.fn(),
+}));
 vi.mock("@/lib/financialTxLog/atomicCashGuard", () => ({
   atomicallyDebitCorpLiquidCapital: vi.fn(),
 }));
@@ -26,7 +28,7 @@ vi.mock("./divestiture", () => ({
 }));
 
 import { atomicallyDebitCorpLiquidCapital } from "@/lib/financialTxLog/atomicCashGuard";
-import { creditTreasuryProceeds } from "@/lib/nationalization/treasury";
+import { creditTreasuryProceedsFromAnchor } from "@/lib/nationalization/treasury";
 import { loadIndustryBasis } from "../corpMarketShare";
 import { controlledGroupIds, settleDivestitureIfSatisfied } from "./divestiture";
 import {
@@ -235,7 +237,15 @@ describe("fineOverdueDivestitures", () => {
       ACQ,
       1_000 * MERGER_REMEDY_OVERDUE_FINE_RATE
     );
-    expect(vi.mocked(creditTreasuryProceeds)).toHaveBeenCalledWith(db, "US", 50, expect.any(Date));
+    // The treasury is credited the ANCHOR amount, so the receiving country
+    // converts into its own currency rather than banking the payer's local
+    // figure verbatim (#808).
+    expect(vi.mocked(creditTreasuryProceedsFromAnchor)).toHaveBeenCalledWith(
+      db,
+      "US",
+      50,
+      expect.any(Date)
+    );
   });
 
   it("discharges instead of fining when the group has already sold down", async () => {
@@ -254,7 +264,7 @@ describe("fineOverdueDivestitures", () => {
     const { db, corpUpdate } = makeDb({ overdue: [overdueCorp] });
     const r = await fineOverdueDivestitures(db, 200);
     expect(r.fined).toBe(0);
-    expect(vi.mocked(creditTreasuryProceeds)).not.toHaveBeenCalled();
+    expect(vi.mocked(creditTreasuryProceedsFromAnchor)).not.toHaveBeenCalled();
     // No $unset of the obligation — it is retried next turn.
     expect(corpUpdate).not.toHaveBeenCalled();
   });

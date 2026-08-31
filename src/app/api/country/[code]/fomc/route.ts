@@ -18,7 +18,7 @@ import {
 } from "@/lib/db/types/centralBank";
 import type { NPP } from "@/lib/db/types/npp";
 import type { ElectedOfficial } from "@/lib/db/types";
-import { tallyMeeting } from "@/lib/centralBank/fomc";
+import { majorityThreshold, tallyMeeting } from "@/lib/centralBank/fomc";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 
 /** Resolved sessions returned to the panel (newest last in storage). */
@@ -142,6 +142,8 @@ export async function GET(_request: Request, context: RouteContext) {
       currentTurn,
       nextMeetingAtTurn,
       termEndsAtTurn,
+      /** Votes needed to carry a motion: strict majority of the FULL board. */
+      majorityNeeded: majorityThreshold(board.length),
       meetingHistory: history,
       canNominate,
       viewerIsSenator,

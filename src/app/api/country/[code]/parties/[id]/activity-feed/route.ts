@@ -38,7 +38,15 @@ export async function GET(
     if (before && Number.isNaN(before.getTime())) {
       return NextResponse.json({ error: "Invalid 'before' timestamp" }, { status: 400 });
     }
-    const limit = limitRaw ? Math.max(1, Math.min(100, Number(limitRaw))) : 30;
+    // `Math.max(1, Math.min(100, NaN))` is NaN, not 1, so an unparseable
+    // `?limit` used to reach Mongo's `.limit()` as NaN. Validate before
+    // clamping and fall back to the default rather than 400ing a feed read.
+    // `Number("")` is 0, not NaN, so an empty `?limit=` must be treated as
+    // absent here or it would clamp to 1 instead of falling back to 30.
+    const limitParsed = limitRaw === null || limitRaw.trim() === "" ? NaN : Number(limitRaw);
+    const limit = Number.isFinite(limitParsed)
+      ? Math.max(1, Math.min(100, Math.floor(limitParsed)))
+      : 30;
 
     return NextResponse.json(
       await getPartyActivityFeed(db, {

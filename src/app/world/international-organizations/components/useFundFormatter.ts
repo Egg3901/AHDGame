@@ -24,14 +24,14 @@ import { formatFundAmount } from "./fundCurrency";
 export function useFundFormatter(fund: {
   usdToFundRate?: number;
   currencyCountryId?: CountryId;
+  /** OrgInfluenceView's name for the fund country — same meaning as above. */
+  fundCurrencyCountryId?: CountryId;
   currencyCode?: string;
 }): (localAmount: number) => string {
   const { formatAmount } = useCurrency();
+  const countryId = fund.currencyCountryId ?? fund.fundCurrencyCountryId;
   const code =
-    fund.currencyCode ??
-    (fund.currencyCountryId
-      ? (COUNTRY_CONFIGS[fund.currencyCountryId]?.currencyCode ?? "USD")
-      : "USD");
+    fund.currencyCode ?? (countryId ? (COUNTRY_CONFIGS[countryId]?.currencyCode ?? "USD") : "USD");
   const rate = fund.usdToFundRate;
   return useCallback(
     (localAmount: number) =>

@@ -1033,6 +1033,10 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         const { db, gameNow, newTurn, phaseResults } = context;
         // Group 7 is strictly sequential. Reordering any of these steps corrupts
         // elections by dropping final-turn votes or resolving offices from stale tallies.
+        await runtime.runPhase("withdrawInactiveCandidates", () =>
+          withdrawInactiveCandidates(db, gameNow)
+        );
+
         await runtime.runPhase("candidatePartySweep", async () => {
           const { sweepPartyMismatchedCandidates } = await import("@/lib/utils/electionCandidacy");
           await sweepPartyMismatchedCandidates();
@@ -1154,14 +1158,6 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         // cycle-1 before the offset lands. Reads the start-of-turn snapshot, so
         // the turn that completes the phase still suppresses (resume next turn).
         const foundingActive = context.gameState.preIteration?.active === true;
-
-        // Withdraw inactive players' candidacies BEFORE election resolution and
-        // auto-reentry below, so a withdrawn inactive player is neither counted
-        // in a resolving race nor re-added the same turn (one-way; manual re-entry
-        // on return). Runs sequentially first for that ordering guarantee.
-        await runtime.runPhase("withdrawInactiveCandidates", () =>
-          withdrawInactiveCandidates(db, gameNow)
-        );
 
         // Registered countries only — a dissolved country's spawners are
         // harmless today (they iterate regions it no longer has) but every one

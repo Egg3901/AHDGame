@@ -162,6 +162,9 @@ export async function createMissingCaucusChairElections(currentTurn: number): Pr
       startTurn,
       endTurn,
       durationTurns: anchor?.durationTurns ?? NATIONAL_ELECTION_DURATION_TURNS,
+      // Inherit the anchor's founding status along with its schedule, so the
+      // vote route can waive the same gates the national race waives (#593).
+      ...(anchor?.founding ? { founding: true } : {}),
       winnerId: null,
       createdAt: now,
       updatedAt: now,

@@ -27,6 +27,7 @@ import type {
   User,
 } from "@/lib/db/types";
 import type { RetiredCharacter } from "@/lib/db/types/retiredCharacter";
+import { isSeasonRecapEnabled } from "@/lib/recap/featureFlag";
 
 /**
  * Whether to show the "Campaign Manager" navbar link. Returns true for: admins,
@@ -637,7 +638,7 @@ export async function GET() {
     // no active character, keeping this hot path cheap for the ~99% who do.
     // Re-viewing older recaps happens in character history, not here.
     let pendingSeasonRecapId: string | null = null;
-    if (gameState?.seasonRecapEnabled === true && !character) {
+    if (isSeasonRecapEnabled(gameState) && !character) {
       const pendingRecap = await db
         .collection<RetiredCharacter>("retiredCharacters")
         .findOne(

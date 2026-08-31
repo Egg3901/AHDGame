@@ -67,6 +67,15 @@ export const CORPORATION_FOUNDING_COST = 1_000_000;
  */
 export const CEO_SALARY_MAX_REVENUE_MULTIPLE = 1.25;
 
+/**
+ * Combined operating overhead (marketing + logistics + R&D + CEO salary) is
+ * capped at this multiple of gross revenue. Enforced at set time by
+ * `updateCorporationSettings` and at pay time by `sectorCalculations`, on the
+ * same gross-revenue basis as the CEO salary cap above. At zero gross revenue
+ * the ceiling is $0 (ticket #1237).
+ */
+export const CORP_OVERHEAD_MAX_REVENUE_MULTIPLE = 1.5;
+
 /** A user may found at most one corporation per this many turns (Bug #0728). */
 export const CORPORATION_FOUNDING_COOLDOWN_TURNS = 168;
 

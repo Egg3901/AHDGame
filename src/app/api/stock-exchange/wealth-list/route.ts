@@ -3,27 +3,19 @@ import { ObjectId, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
 import type { Bond, Character, Corporation, State, User, WealthListSnapshot } from "@/lib/db/types";
-import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getDiscordAvatarUrl } from "@/lib/discord";
 import { fetchBordersByUserIds } from "@/lib/db/patreonBorders";
 import { EXCHANGE_API_KEYS, getCountryForExchange } from "@/lib/constants/exchangeRegistry";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { getTotalPersonalWealth } from "@/lib/currency/characterFunds";
 import type { ExchangeRate } from "@/lib/db/types";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { loadValuationFxRates } from "@/lib/currency/corporationCapital";
 import {
-  corpLiquidCapitalToAnchor,
-  fxRateForCorpFromMap,
-  loadValuationFxRates,
-} from "@/lib/currency/corporationCapital";
-import { computeLocDebtInternal } from "@/lib/lineOfCredit/netWorth";
-import { getPublicShareQuote } from "@/lib/corporations/marketQuote";
-
-function roundCurrency(value: number): number {
-  return Math.round(value * 100) / 100;
-}
+  computeCharacterWealth,
+  sumBondValueByCharacter,
+  sumStockValueByCharacter,
+} from "@/lib/wealth/computeCharacterWealth";
 
 function resolveCountryId(character: Pick<Character, "countryId">): CountryId {
   return character.countryId as CountryId;
@@ -177,48 +169,18 @@ async function computeWealthListFallback(
   ]);
 
   const stateNameMap = new Map(states.map((s) => [s._id, s.name]));
-  const stockValueByCharId = new Map<string, number>();
+  // CEO display name, kept here rather than in the shared valuation module: it
+  // is presentation, not net worth, and only this route renders it.
   const ceoCorpByCharId = new Map<string, string>();
-
   for (const corp of corporations) {
     const ceoId = corp.ceoId?.toString();
     if (ceoId && !corp.ceoVacant && characterIdSet.has(ceoId) && !ceoCorpByCharId.has(ceoId)) {
       ceoCorpByCharId.set(ceoId, corp.name);
     }
-    // Same accessor every other valuation surface uses, including this route's
-    // own hourly snapshot in turn/investorWealthSnapshots. A MISSING price falls
-    // back to DEFAULT_SHARE_PRICE rather than dropping the holding to zero; an
-    // explicit 0 still skips.
-    const price = getPublicShareQuote(corp);
-    if (price <= 0) continue;
-    const corpFxRate = fxRateForCorpFromMap(corp, fxByCurrency);
-    for (const sh of corp.shareholders ?? []) {
-      if (!sh.characterId) continue;
-      const charId = sh.characterId.toString();
-      if (!characterIdSet.has(charId) || sh.shares <= 0) continue;
-      const holdingValueLocal = sh.shares * price;
-      const holdingValue = corpLiquidCapitalToAnchor(holdingValueLocal, corp, corpFxRate);
-      stockValueByCharId.set(charId, (stockValueByCharId.get(charId) ?? 0) + holdingValue);
-    }
   }
 
-  const bondValueByCharId = new Map<string, number>();
-  for (const bond of bonds) {
-    const bondCcy = (bond.currencyCode ??
-      (bond.countryId && bond.countryId in COUNTRY_CURRENCY_MAP
-        ? COUNTRY_CURRENCY_MAP[bond.countryId as keyof typeof COUNTRY_CURRENCY_MAP]
-        : undefined)) as CurrencyCode | undefined;
-    const bondRate = bondCcy ? (fxByCurrency.get(bondCcy) ?? 1) : 1;
-    for (const holder of bond.holders ?? []) {
-      if (!holder.characterId || holder.units <= 0) continue;
-      const charId = holder.characterId.toString();
-      if (!characterIdSet.has(charId)) continue;
-      const holdingValueLocal = holder.units * BOND_UNIT_FACE_VALUE * (bond.marketPrice ?? 1);
-      const holdingValue =
-        bondCcy && bondRate > 0 ? holdingValueLocal / bondRate : holdingValueLocal;
-      bondValueByCharId.set(charId, (bondValueByCharId.get(charId) ?? 0) + holdingValue);
-    }
-  }
+  const stockValueByCharId = sumStockValueByCharacter(corporations, characterIdSet, fxByCurrency);
+  const bondValueByCharId = sumBondValueByCharacter(bonds, characterIdSet, fxByCurrency);
 
   // Fetch border data
   const borderMap = await fetchBordersByUserIds(
@@ -229,16 +191,14 @@ async function computeWealthListFallback(
   return activeCharacters
     .map((character) => {
       const charId = character._id.toString();
-      const stockValue = roundCurrency(stockValueByCharId.get(charId) ?? 0);
-      const bondValue = roundCurrency(bondValueByCharId.get(charId) ?? 0);
-      const portfolioValue = roundCurrency(stockValue + bondValue);
-      const cashValue = roundCurrency(
-        getTotalPersonalWealth(character as Character, forexEnabled, exchangeRates)
-      );
-      const locDebtValue = roundCurrency(
-        computeLocDebtInternal(character as Character, exchangeRates ?? {})
-      );
-      const totalWealth = roundCurrency(Math.max(0, portfolioValue + cashValue - locDebtValue));
+      const { stockValue, bondValue, portfolioValue, cashValue, locDebtValue, totalWealth } =
+        computeCharacterWealth(
+          character as Character,
+          stockValueByCharId,
+          bondValueByCharId,
+          forexEnabled,
+          exchangeRates
+        );
       const countryId = resolveCountryId(character);
       const countryName = COUNTRY_CONFIGS[countryId]?.name ?? countryId;
       const user = userMap.get(character.userId.toString());

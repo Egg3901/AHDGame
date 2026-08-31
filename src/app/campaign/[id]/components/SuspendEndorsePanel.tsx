@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Modal } from "@/components/ui";
+import { LocalTime } from "@/components/time/LocalTime";
 
 interface SuspendEndorsePanelProps {
   campaignId: string;
@@ -79,7 +80,7 @@ export function SuspendEndorsePanel({
         </p>
         {suspendedAt && (
           <p className="mt-1 text-xs text-muted/70">
-            Suspended {new Date(suspendedAt).toLocaleString()}
+            Suspended <LocalTime value={suspendedAt} />
           </p>
         )}
       </div>

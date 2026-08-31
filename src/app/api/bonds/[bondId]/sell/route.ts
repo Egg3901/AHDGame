@@ -22,6 +22,7 @@ import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { emitTx } from "@/lib/financialTxLog/emit";
+import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 
 interface RouteParams {
   params: Promise<{ bondId: string }>;
@@ -92,6 +93,8 @@ export async function POST(request: Request, { params }: RouteParams) {
     // and individual players while an admin has paused corporation actions.
     const pausedGuard = await requireCorporationActionsEnabled(db);
     if (pausedGuard) return pausedGuard;
+    const turnGuard = await rejectDuringTurn(db);
+    if (turnGuard) return turnGuard;
 
     const forexEnabled = await isForexEnabled();
 

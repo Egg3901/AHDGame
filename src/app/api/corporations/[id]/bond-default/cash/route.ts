@@ -24,6 +24,10 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { sumDefaultedBondPrincipal } from "@/lib/bonds/corporateBondDefault";
 import { splitBondPaymentWithEscrow } from "@/lib/corporations/escrowFunding";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
+
+/** Shape `emitTxBulk` accepts (mirrors its private TxInput). */
+type TxLogInput = Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged">;
 import { getGameState } from "@/lib/gameState";
 import { withCorporationSettlementLock } from "@/lib/corporations/settlementLock";
 
@@ -134,11 +138,17 @@ export async function POST(_request: Request, { params }: RouteParams) {
         const charIncs = new Map<string, number>();
         const imperialIncs = new Map<string, number>();
         const corpIncs = new Map<string, number>();
+        // Index funds and autonomous NPPs hold bond units too (BondHolder.fundId
+        // / .nppId). They were silently dropped by the holder chain below while
+        // the bond was still marked cured, so their principal simply vanished
+        // (#809). Both hold in ₳, matching the bondTurn coupon/maturity legs.
+        const fundIncsAnchor = new Map<string, number>();
+        const nppIncsAnchor = new Map<string, number>();
         // Per-(holder, bond) snapshot so each holder gets a `bond_maturity` row at
         // emit time. Pre-fix the cash payoff moved cash silently — see audit on
         // corp 100 (Kaviori) where £500M+ flowed with no ledger trail.
         const pendingMaturityTxs: Array<{
-          holderType: "character" | "imperial" | "corp";
+          holderType: "character" | "imperial" | "corp" | "fund" | "npp";
           holderId: string;
           bondId: string;
           bondCcy: CurrencyCode | undefined;
@@ -188,6 +198,30 @@ export async function POST(_request: Request, { params }: RouteParams) {
               corpIncs.set(k, (corpIncs.get(k) ?? 0) + faceAnchor);
               pendingMaturityTxs.push({
                 holderType: "corp",
+                holderId: k,
+                bondId: bond._id.toString(),
+                bondCcy,
+                faceAnchor,
+                units: h.units,
+                couponRate: bond.couponRate,
+              });
+            } else if (h.fundId) {
+              const k = h.fundId.toString();
+              fundIncsAnchor.set(k, (fundIncsAnchor.get(k) ?? 0) + faceAnchor);
+              pendingMaturityTxs.push({
+                holderType: "fund",
+                holderId: k,
+                bondId: bond._id.toString(),
+                bondCcy,
+                faceAnchor,
+                units: h.units,
+                couponRate: bond.couponRate,
+              });
+            } else if (h.nppId) {
+              const k = h.nppId.toString();
+              nppIncsAnchor.set(k, (nppIncsAnchor.get(k) ?? 0) + faceAnchor);
+              pendingMaturityTxs.push({
+                holderType: "npp",
                 holderId: k,
                 bondId: bond._id.toString(),
                 bondCcy,
@@ -392,6 +426,35 @@ export async function POST(_request: Request, { params }: RouteParams) {
             });
             await db.collection<Corporation>("corporations").bulkWrite(corpOps, so);
           }
+
+          // Index funds hold in ₳ on `cashAnchor`; autonomous NPPs on
+          // `nppInvestmentCashAnchor` (investment returns, NOT campaign funds).
+          // Same accounts and units the bondTurn coupon/maturity legs credit.
+          if (fundIncsAnchor.size > 0) {
+            const fundOps = [...fundIncsAnchor.entries()].map(([fundIdStr, amtAnchor]) => ({
+              updateOne: {
+                filter: { _id: new ObjectId(fundIdStr) },
+                update: {
+                  $inc: { cashAnchor: Math.round(amtAnchor * 100) / 100 },
+                  $set: { updatedAt: now },
+                },
+              },
+            }));
+            await db.collection("indexFunds").bulkWrite(fundOps, so);
+          }
+
+          if (nppIncsAnchor.size > 0) {
+            const nppOps = [...nppIncsAnchor.entries()].map(([nppIdStr, amtAnchor]) => ({
+              updateOne: {
+                filter: { _id: new ObjectId(nppIdStr) },
+                update: {
+                  $inc: { nppInvestmentCashAnchor: Math.round(amtAnchor * 100) / 100 },
+                  $set: { updatedAt: now },
+                },
+              },
+            }));
+            await db.collection("npps").bulkWrite(nppOps, so);
+          }
         };
 
         try {
@@ -415,27 +478,65 @@ export async function POST(_request: Request, { params }: RouteParams) {
         // intentionally swallows its own write failures.
         if (pendingMaturityTxs.length > 0) {
           const currentTurn = cureTurn;
-          const txEntries = pendingMaturityTxs.map((t) => {
+          const txEntries: TxLogInput[] = pendingMaturityTxs.flatMap((t): TxLogInput[] => {
             const bondRate = t.bondCcy ? (fxByCurrency.get(t.bondCcy) ?? 1) : 1;
             const bondLocalAmount = t.faceAnchor * (bondRate > 0 ? bondRate : 1);
 
-            if (t.holderType === "corp") {
-              const info = holderCorpFxByHolderId.get(t.holderId);
-              const lcAmount = anchorToCorpLiquidCapital(
-                t.faceAnchor,
-                info?.doc,
-                info?.fxRate ?? 1
-              );
-              const lcCurrency = info?.currency ?? "USD";
-              return {
+            // Autonomous NPP investment returns are deliberately kept out of the
+            // tx log, matching the NPP investment-account isolation the bondTurn
+            // coupon/maturity legs already apply.
+            if (t.holderType === "npp") return [];
+
+            if (t.holderType === "corp" || t.holderType === "fund") {
+              // A fund holds in ₳ and has no corp FX doc, so it logs the anchor
+              // amount directly; a corporation logs in its own liquid currency.
+              const info =
+                t.holderType === "corp" ? holderCorpFxByHolderId.get(t.holderId) : undefined;
+              const lcAmount =
+                t.holderType === "fund"
+                  ? t.faceAnchor
+                  : anchorToCorpLiquidCapital(t.faceAnchor, info?.doc, info?.fxRate ?? 1);
+              const lcCurrency = t.holderType === "fund" ? "USD" : (info?.currency ?? "USD");
+              return [
+                {
+                  type: "bond_maturity" as const,
+                  turn: currentTurn,
+                  createdAt: now,
+                  subjectType: "corporation" as const,
+                  subjectId: new ObjectId(t.holderId),
+                  subjectName: nameById.get(t.holderId) ?? "(holder)",
+                  amount: Math.round(lcAmount * 100) / 100,
+                  currencyCode: lcCurrency as CurrencyCode,
+                  counterpartyType: "corporation" as const,
+                  counterpartyId: refreshedCorporation._id,
+                  counterpartyName: refreshedCorporation.name,
+                  meta: {
+                    bondId: t.bondId,
+                    units: t.units,
+                    couponRate: t.couponRate,
+                    source: "default_cash_payoff",
+                    ...(t.holderType === "fund" ? { fundId: t.holderId } : {}),
+                    ...(t.bondCcy
+                      ? {
+                          bondCurrency: t.bondCcy,
+                          bondAmount: Math.round(bondLocalAmount * 100) / 100,
+                        }
+                      : {}),
+                  },
+                },
+              ];
+            }
+
+            return [
+              {
                 type: "bond_maturity" as const,
                 turn: currentTurn,
                 createdAt: now,
-                subjectType: "corporation" as const,
+                subjectType: "character" as const,
                 subjectId: new ObjectId(t.holderId),
                 subjectName: nameById.get(t.holderId) ?? "(holder)",
-                amount: Math.round(lcAmount * 100) / 100,
-                currencyCode: lcCurrency as CurrencyCode,
+                amount: Math.round(bondLocalAmount * 100) / 100,
+                currencyCode: (t.bondCcy ?? "USD") as CurrencyCode,
                 counterpartyType: "corporation" as const,
                 counterpartyId: refreshedCorporation._id,
                 counterpartyName: refreshedCorporation.name,
@@ -444,36 +545,10 @@ export async function POST(_request: Request, { params }: RouteParams) {
                   units: t.units,
                   couponRate: t.couponRate,
                   source: "default_cash_payoff",
-                  ...(t.bondCcy
-                    ? {
-                        bondCurrency: t.bondCcy,
-                        bondAmount: Math.round(bondLocalAmount * 100) / 100,
-                      }
-                    : {}),
+                  ...(t.holderType === "imperial" ? { imperial: true } : {}),
                 },
-              };
-            }
-
-            return {
-              type: "bond_maturity" as const,
-              turn: currentTurn,
-              createdAt: now,
-              subjectType: "character" as const,
-              subjectId: new ObjectId(t.holderId),
-              subjectName: nameById.get(t.holderId) ?? "(holder)",
-              amount: Math.round(bondLocalAmount * 100) / 100,
-              currencyCode: (t.bondCcy ?? "USD") as CurrencyCode,
-              counterpartyType: "corporation" as const,
-              counterpartyId: refreshedCorporation._id,
-              counterpartyName: refreshedCorporation.name,
-              meta: {
-                bondId: t.bondId,
-                units: t.units,
-                couponRate: t.couponRate,
-                source: "default_cash_payoff",
-                ...(t.holderType === "imperial" ? { imperial: true } : {}),
               },
-            };
+            ];
           });
           const thresholds = await loadTxThresholds(db);
           await emitTxBulk(db, txEntries, thresholds);

@@ -16,12 +16,13 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { SettledPremium } from "@/lib/turn/corporation/settleSupplyAgreements";
 import {
   anchorToCorpLiquidCapital,
+  corpLiquidCapitalToAnchor,
   getCorpFxRate,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { atomicallyDebitCorpLiquidCapital } from "@/lib/financialTxLog/atomicCashGuard";
 import { emitTx } from "@/lib/financialTxLog/emit";
-import { creditTreasuryProceeds } from "@/lib/nationalization/treasury";
+import { creditTreasuryProceedsFromAnchor } from "@/lib/nationalization/treasury";
 import { createNotification } from "@/lib/notifications";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { resolveFormalizedGroups } from "./groupMembership";
@@ -138,7 +139,16 @@ export async function applyTransferPricingAudit(
       const debit = await atomicallyDebitCorpLiquidCapital(db, liable._id, localAmount);
       const collected = debit.ok ? localAmount : 0;
       if (collected > 0) {
-        await creditTreasuryProceeds(db, assessment.claimantCountryId as CountryId, collected, now);
+        // Same cross-border unit mismatch as the divestiture fine (#808):
+        // `collected` is in the LIABLE CORP's currency, and transfer pricing is
+        // by definition the cross-border case, so the claimant country must be
+        // credited the ₳ amount converted into its own currency.
+        await creditTreasuryProceedsFromAnchor(
+          db,
+          assessment.claimantCountryId as CountryId,
+          corpLiquidCapitalToAnchor(collected, liable as Corporation, fxRate),
+          now
+        );
         await emitTx(db, {
           type: "corp_fine",
           turn: currentTurn,

@@ -443,6 +443,71 @@ describe("processCentralBankChairTurn", () => {
     expect(processNppChairAutoRateMock).not.toHaveBeenCalled();
   });
 
+  it("runs the NPP auto-rate on a committee board too vacant to carry a motion", async () => {
+    // Ticket #1238 follow-up: with the board decayed below the carry-a-motion
+    // threshold the committee owns nothing, so an autonomous (NPP) chair holds
+    // the rate directly via the single-chair setter.
+    testBanks = [
+      {
+        _id: "US",
+        countryId: "US",
+        chairCharacterId: null,
+        chairCharacterName: null,
+        chairMode: "npp",
+        primeRate: 3.0,
+        lastRateChangeTurn: 50,
+        chairInfamy: 10,
+        // 1 of 7 seated (chair only): the rest vacant.
+        fomcBoard: [
+          { seatId: "seat-1", isChair: true, occupantType: "npp", nppId: new ObjectId() },
+          { seatId: "seat-2", occupantType: "vacant" },
+          { seatId: "seat-3", occupantType: "vacant" },
+          { seatId: "seat-4", occupantType: "vacant" },
+          { seatId: "seat-5", occupantType: "vacant" },
+          { seatId: "seat-6", occupantType: "vacant" },
+          { seatId: "seat-7", occupantType: "vacant" },
+        ],
+      },
+    ];
+
+    const { processCentralBankChairTurn } = await import("./centralBankChairTurn");
+    await processCentralBankChairTurn(mockDb as never, 100);
+
+    expect(processNppChairAutoRateMock).toHaveBeenCalledTimes(1);
+    const charMock = getCollectionMock("characters");
+    expect(charMock.bulkWrite).toHaveBeenCalledTimes(0);
+  });
+
+  it("skips the NPP auto-rate on a committee that can still carry a motion", async () => {
+    testBanks = [
+      {
+        _id: "US",
+        countryId: "US",
+        chairCharacterId: null,
+        chairCharacterName: null,
+        chairMode: "npp",
+        primeRate: 3.0,
+        lastRateChangeTurn: 50,
+        chairInfamy: 10,
+        // 4 of 7 seated: the committee is functional and owns the rate.
+        fomcBoard: [
+          { seatId: "seat-1", isChair: true, occupantType: "npp", nppId: new ObjectId() },
+          { seatId: "seat-2", occupantType: "npp", nppId: new ObjectId() },
+          { seatId: "seat-3", occupantType: "npp", nppId: new ObjectId() },
+          { seatId: "seat-4", occupantType: "npp", nppId: new ObjectId() },
+          { seatId: "seat-5", occupantType: "vacant" },
+          { seatId: "seat-6", occupantType: "vacant" },
+          { seatId: "seat-7", occupantType: "vacant" },
+        ],
+      },
+    ];
+
+    const { processCentralBankChairTurn } = await import("./centralBankChairTurn");
+    await processCentralBankChairTurn(mockDb as never, 100);
+
+    expect(processNppChairAutoRateMock).not.toHaveBeenCalled();
+  });
+
   it("treats absent chairMode as the character path (backward-compatible)", async () => {
     testBanks = [
       {

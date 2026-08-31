@@ -55,6 +55,7 @@ import { computeCountryTariffPressure } from "@/lib/tariffs/tariffEffects";
 import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
 import { buildCentralBankBootstrapUpdate, getCentralBankScope } from "@/lib/centralBank/helpers";
 import { isBankGovernmentControlledLive } from "@/lib/centralBank/governance";
+import { boardCanCarryMotions } from "@/lib/centralBank/fomc";
 import { isNationalIssuer } from "@/lib/extraction/contractIssuerAuth";
 import { buildFullReservePortfolioSummary } from "@/lib/centralBank/reservePortfolio";
 import {
@@ -614,6 +615,9 @@ export async function loadCountryCentralBankDetail(params: {
       .toArray(),
   ]);
 
+  const hasBoard = (bank.fomcBoard?.length ?? 0) > 0 && !governmentControlled;
+  const hasFunctionalBoard = hasBoard && boardCanCarryMotions(bank.fomcBoard ?? []);
+
   return {
     ok: true as const,
     body: {
@@ -625,9 +629,16 @@ export async function loadCountryCentralBankDetail(params: {
       primeRate: bank.primeRate,
       lastRateChangeTurn: bank.lastRateChangeTurn ?? null,
       chairControlsLocked: bank.chairControlsLocked === true,
-      // A seated committee owns the rate: the chair's direct control is gone and
+      // A working committee owns the rate: the chair's direct control is gone and
       // the card must send players to the committee room instead of a dead POST.
-      committeeSeated: (bank.fomcBoard?.length ?? 0) > 0,
+      // A board that has decayed below the carry-a-motion threshold (fewer seated
+      // members than a strict majority of the full board) is NOT seated for this
+      // purpose — the chair holds the rate directly until nominations restore it
+      // (ticket #1238 follow-up).
+      committeeSeated: hasFunctionalBoard,
+      // A committee exists on the bank but cannot carry a motion; the chair is
+      // setting the rate directly in the interim. Lets the page explain why.
+      committeeDead: hasBoard && !boardCanCarryMotions(bank.fomcBoard ?? []),
       currentSavingsPressure: bank.currentSavingsPressure ?? 0,
       currentInflation: displayInflation,
       targetInflation: getInflationTarget(countryId, gameState?.currentYear),

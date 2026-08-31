@@ -42,6 +42,7 @@ import {
   getChamberKeyForOfficeType,
   getOfficeTypeForChamber,
 } from "@/lib/legislature/chamberOfficeType";
+import { hasBillLifecycle } from "@/lib/legislature/hasBillLifecycle";
 
 const VOTING_DURATION_HOURS = 24;
 const VOTING_DURATION_MS = VOTING_DURATION_HOURS * 60 * 60 * 1000;
@@ -62,6 +63,20 @@ export async function proposeNationalBill(
   authUser: AuthUser,
   input: ProposeNationalBillInput
 ): Promise<LegislatureCommandResult> {
+  // A bill minted for a country no turn phase walks never advances, enacts,
+  // vetoes or fails — it just sits on the floor forever with nothing to close
+  // it and nothing that reports it (#806). Refuse it up front rather than
+  // creating the zombie. The same helper already gates auto-spawned bills.
+  if (!hasBillLifecycle(countryId)) {
+    return {
+      status: 400,
+      body: {
+        error:
+          "This legislature does not process national bills yet, so a bill filed here would never come to a vote.",
+      },
+    };
+  }
+
   const gameState = await getGameState(db);
   const preset = gameState?.preset;
   const config = getCountryConfig(countryId, preset);
@@ -234,10 +249,12 @@ export async function proposeNationalBill(
         },
         {
           $set: {
-            ...(npiCost > 0 ? { nationalInfluence: Math.max(0, currentNational - npiCost) } : {}),
             updatedAt: now,
           },
-          $inc: { actions: -actionCost },
+          $inc: {
+            actions: -actionCost,
+            ...(npiCost > 0 ? { nationalInfluence: -npiCost } : {}),
+          },
         }
       );
       if (spendResult.modifiedCount === 0) {
@@ -290,11 +307,11 @@ export async function proposeNationalBill(
         await db.collection<Character>("characters").updateOne(
           { _id: character._id },
           {
-            $inc: { actions: actionCost },
-            $set: {
-              ...(npiCost > 0 ? { nationalInfluence: currentNational } : {}),
-              updatedAt: new Date(),
+            $inc: {
+              actions: actionCost,
+              ...(npiCost > 0 ? { nationalInfluence: npiCost } : {}),
             },
+            $set: { updatedAt: new Date() },
           }
         );
       }
@@ -494,10 +511,12 @@ export async function proposeNationalBill(
       },
       {
         $set: {
-          ...(npiCost > 0 ? { nationalInfluence: Math.max(0, currentNational - npiCost) } : {}),
           updatedAt: now,
         },
-        $inc: { actions: -actionCost },
+        $inc: {
+          actions: -actionCost,
+          ...(npiCost > 0 ? { nationalInfluence: -npiCost } : {}),
+        },
       }
     );
     if (spendResult.modifiedCount === 0) {
@@ -569,11 +588,11 @@ export async function proposeNationalBill(
       await db.collection<Character>("characters").updateOne(
         { _id: character._id },
         {
-          $inc: { actions: actionCost },
-          $set: {
-            ...(npiCost > 0 ? { nationalInfluence: currentNational } : {}),
-            updatedAt: new Date(),
+          $inc: {
+            actions: actionCost,
+            ...(npiCost > 0 ? { nationalInfluence: npiCost } : {}),
           },
+          $set: { updatedAt: new Date() },
         }
       );
     }

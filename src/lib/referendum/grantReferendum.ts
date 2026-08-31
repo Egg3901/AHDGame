@@ -10,7 +10,6 @@ import type { Db } from "mongodb";
 import type { MacroMetricsDoc } from "@/lib/db/types/macroMetrics";
 import { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import type { StateMetrics } from "@/lib/db/types";
 import { getReferendumCollection } from "@/lib/db/collections/referendum";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import {
