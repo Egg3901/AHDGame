@@ -326,6 +326,65 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
     byRegion.set(region, here.filter(alive));
   }
 
+  // Winning the water is worth more than sitting in it. Capped well below the full scale
+  // by `engagementControlBonus`, so one good turn cannot hand over a region the loser has
+  // held for twenty: the contest still has to be won by staying.
+  const controlBonus = new Map<string, number>();
+  for (const outcome of engagements) {
+    const bonus = engagementControlBonus(outcome.marginPct);
+    for (const c of outcome.winner) {
+      const key = channelKey(c, outcome.region);
+      controlBonus.set(key, Math.max(controlBonus.get(key) ?? 0, bonus));
+    }
+  }
+
+  // ── score the contest and move the channels ─────────────────────────────────
+  const updates: Array<{ countryId: CountryId; region: RegionCode; channels: RegionChannels }> = [];
+  let regionsContested = 0;
+
+  for (const countryId of countries) {
+    const enemies = hostility.get(countryId) ?? new Set<string>();
+    const home = homeRegionOf(countryId);
+    const detection = detectionFromPresence(units, countryId, home ? [home] : []);
+
+    for (const [region, here] of byRegion) {
+      const mine = here.filter((u) => u.countryId === countryId);
+      const hostile = here.filter((u) => enemies.has(u.countryId));
+      if (!mine.length && !hostile.length) continue;
+
+      const sea: ContestInput = {
+        own: weigh(mine, "naval"),
+        hostile: weigh(hostile, "naval"),
+      };
+      const air: ContestInput = {
+        own: weigh(mine, "air"),
+        hostile: weigh(hostile, "air"),
+      };
+      if (sea.hostile > 0 || air.hostile > 0) regionsContested++;
+
+      // A country at peace is not "winning" the sky over its own coast, it is simply
+      // unopposed, and treating that as full control let a coalition inherit a freshly
+      // joined ally's stale 100 for the several turns it takes to decay. Only a country
+      // with something to contest builds a holding.
+      const contested = sea.hostile > 0 || air.hostile > 0 || enemies.size > 0;
+      if (!contested) continue;
+
+      const current = channelsFor(channels, countryId, region, turn);
+      const next = advanceChannels(current, { air, sea }, detection.get(region) ?? 0, turn);
+      const bonus = controlBonus.get(channelKey(countryId, region)) ?? 0;
+      if (bonus > 0) next.seaControl = Math.min(100, next.seaControl + bonus);
+      updates.push({ countryId, region, channels: next });
+      channels.set(channelKey(countryId, region), next);
+    }
+  }
+
+  const channelsWritten = await saveNavairChannels(db, updates);
+
+  // Repair runs HERE, after the contest, and the ordering is load-bearing. It changes a
+  // formation's station, supply and integrity, and `byRegion` above still indexes every
+  // hull by where it was at the start of the turn. Repairing before the contest therefore
+  // let a hull that had just withdrawn home go on contesting the water it left, at the
+  // better supply it found at home — a fleet in two places at once, slightly winning.
   // ── repair ──────────────────────────────────────────────────────────────────
   // Iterates `units` rather than `byRegion` deliberately. Two `alive` gates above have
   // already dropped crippled hulls from `byRegion`, and a hull at zero integrity was
@@ -382,60 +441,6 @@ export async function processNavairTurn(db: Db, turn: number): Promise<NavairTur
       touched.add(u);
     }
   }
-
-  // Winning the water is worth more than sitting in it. Capped well below the full scale
-  // by `engagementControlBonus`, so one good turn cannot hand over a region the loser has
-  // held for twenty: the contest still has to be won by staying.
-  const controlBonus = new Map<string, number>();
-  for (const outcome of engagements) {
-    const bonus = engagementControlBonus(outcome.marginPct);
-    for (const c of outcome.winner) {
-      const key = channelKey(c, outcome.region);
-      controlBonus.set(key, Math.max(controlBonus.get(key) ?? 0, bonus));
-    }
-  }
-
-  // ── score the contest and move the channels ─────────────────────────────────
-  const updates: Array<{ countryId: CountryId; region: RegionCode; channels: RegionChannels }> = [];
-  let regionsContested = 0;
-
-  for (const countryId of countries) {
-    const enemies = hostility.get(countryId) ?? new Set<string>();
-    const home = homeRegionOf(countryId);
-    const detection = detectionFromPresence(units, countryId, home ? [home] : []);
-
-    for (const [region, here] of byRegion) {
-      const mine = here.filter((u) => u.countryId === countryId);
-      const hostile = here.filter((u) => enemies.has(u.countryId));
-      if (!mine.length && !hostile.length) continue;
-
-      const sea: ContestInput = {
-        own: weigh(mine, "naval"),
-        hostile: weigh(hostile, "naval"),
-      };
-      const air: ContestInput = {
-        own: weigh(mine, "air"),
-        hostile: weigh(hostile, "air"),
-      };
-      if (sea.hostile > 0 || air.hostile > 0) regionsContested++;
-
-      // A country at peace is not "winning" the sky over its own coast, it is simply
-      // unopposed, and treating that as full control let a coalition inherit a freshly
-      // joined ally's stale 100 for the several turns it takes to decay. Only a country
-      // with something to contest builds a holding.
-      const contested = sea.hostile > 0 || air.hostile > 0 || enemies.size > 0;
-      if (!contested) continue;
-
-      const current = channelsFor(channels, countryId, region, turn);
-      const next = advanceChannels(current, { air, sea }, detection.get(region) ?? 0, turn);
-      const bonus = controlBonus.get(channelKey(countryId, region)) ?? 0;
-      if (bonus > 0) next.seaControl = Math.min(100, next.seaControl + bonus);
-      updates.push({ countryId, region, channels: next });
-      channels.set(channelKey(countryId, region), next);
-    }
-  }
-
-  const channelsWritten = await saveNavairChannels(db, updates);
 
   for (const u of touchedByMission) touched.add(u);
   const rowsWritten = await persistCombatResults(db, touched);

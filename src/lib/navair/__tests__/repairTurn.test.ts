@@ -162,6 +162,28 @@ describe("processNavairTurn repair", () => {
     expect(unitDocs[1].station).toBe("mea");
   });
 
+  // Ordering regression. Repair changes a formation's station, supply and integrity, while
+  // `byRegion` still indexes every hull by where it stood at the start of the turn. Run
+  // before the contest, a hull that had just withdrawn home went on contesting the water it
+  // left, at the better supply it found at home: a fleet in two places at once, slightly
+  // winning. Repair must therefore run after the channels are written.
+  it("does not let a withdrawing hull contest the water it left", async () => {
+    unitDocs.push(
+      hull({ integrity: 0, station: "mea", mission: "SEA_CONTROL", theaterId: "war-1" })
+    );
+
+    const db = mockDb();
+    await processNavairTurn(db, 100);
+
+    // The channel write is the contest's output. A hull that withdrew must not have moved
+    // any channel at its old station, because it was gone before the contest was scored.
+    const channelWrites = (db.collection as unknown as { mock: { calls: unknown[][] } }).mock.calls
+      .map((c) => String(c[0]))
+      .filter((n) => n === "navairChannels");
+    expect(channelWrites.length).toBeGreaterThan(0);
+    expect(unitDocs[0].station).toBe("weu");
+  });
+
   it("leaves an undamaged fleet alone", async () => {
     unitDocs.push(hull({ integrity: 100 }));
 
