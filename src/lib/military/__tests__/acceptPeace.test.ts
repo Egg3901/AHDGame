@@ -374,6 +374,27 @@ describe("the settlement stamp", () => {
     expect(stamp).toBeTruthy();
     expect(JSON.stringify(conflictUpdateSpy.mock.calls)).not.toContain("postedWireEvents");
   });
+
+  // Ticket #1246: the record surfaced the SENDER as the departing country on a
+  // "you get out" deal. The stamp is where the settlement text comes from.
+  it("stamps the recipient as target when the RECIPIENT is the leaver", async () => {
+    // UK asks CN to leave on a white peace and stays in the war itself. The
+    // term still lands on CN — it is the country the deal is asked of.
+    await acceptPeace(
+      db,
+      offer({ leaver: "CN", term: { kind: "white_peace" as const } }),
+      makeConflict(),
+      40,
+      "c1"
+    );
+    const stamp = conflictUpdateSpy.mock.calls.find((c) => c[1]?.$set?.settlement);
+    expect(stamp?.[1].$set.settlement).toMatchObject({
+      path: "negotiated",
+      imposedBy: "UK",
+      target: "CN",
+      turn: 40,
+    });
+  });
 });
 
 describe("a withdrawal asked of the recipient", () => {

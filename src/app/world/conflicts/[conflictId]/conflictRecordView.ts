@@ -1,4 +1,6 @@
 import { canLandMarines } from "@/lib/navair/frontSupport";
+import type { PeaceOfferDoc } from "@/lib/db/types/peaceOffer";
+import type { PeaceTerm } from "@/lib/military/peaceTerm";
 import type { FrontSupport } from "@/lib/navair/types";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import type { BattleReportDoc } from "@/lib/db/types/battleReport";
@@ -470,3 +472,42 @@ export function declarationOutcome(
   }
   return { label: "resolved", declarerWon: null };
 }
+
+/** One accepted settlement as the public record renders it. */
+export interface SettlementRow {
+  id: string;
+  leaver: string;
+  other: string;
+  term: PeaceTerm;
+  justification: string | null;
+  turn: number;
+}
+
+/**
+ * Who a settlement took out of the war, and who they settled with.
+ *
+ * Read off `leaver`, NOT off `fromCountry`. An offer runs in both directions: the
+ * sender may propose to leave itself, or ask the RECIPIENT to withdraw and stay in
+ * the war themselves. Taking the sender as the leaver reads a "you get out" deal
+ * exactly backwards and prints the country still fighting as the one that walked,
+ * which is what the record said about the War for Germany at turn 532.
+ */
+export function settlementRow(offer: SettlementOffer): SettlementRow {
+  const leaver = offer.leaver;
+  const other = leaver === offer.fromCountry ? offer.toCountry : offer.fromCountry;
+  return {
+    id: offer._id.toString(),
+    leaver,
+    other,
+    term: offer.term,
+    justification: offer.justification ?? null,
+    // An accepted offer always carries `resolvedTurn`; the fallback keeps a row
+    // written by an older shape from printing "turn undefined".
+    turn: offer.resolvedTurn ?? offer.offeredTurn,
+  };
+}
+
+type SettlementOffer = Pick<
+  PeaceOfferDoc,
+  "fromCountry" | "toCountry" | "leaver" | "term" | "justification" | "offeredTurn"
+> & { _id: { toString(): string }; resolvedTurn?: number };
