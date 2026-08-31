@@ -106,11 +106,17 @@ export async function transferRegion(
 
   // Shift the region's GDP-weighted share of national tax bases + spending
   // baselines from the source country to the target (the budget docs stay
-  // country-level; only their economy-sized magnitudes move). Best-effort: a
-  // failure here must not abort the otherwise-complete transfer.
-  await reapportionNationalBudget(db, regionId, fromCountryId, toCountryId).catch((err) =>
-    console.error(`${regionId} national-budget reapportion failed:`, err)
-  );
+  // country-level; only their economy-sized magnitudes move). The dissolving
+  // signal lets the LAST region of a merge carry the whole residual base
+  // (weight 1), which a surviving source's transfer must never do. Best-effort:
+  // a failure here must not abort the otherwise-complete transfer.
+  await reapportionNationalBudget(
+    db,
+    regionId,
+    fromCountryId,
+    toCountryId,
+    relocateToRegionId === null
+  ).catch((err) => console.error(`${regionId} national-budget reapportion failed:`, err));
 
   // Re-denominate the region's corps + resident players into the new country's
   // currency (NI pounds → euro). Best-effort: a forex hiccup must not abort the

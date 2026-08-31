@@ -183,7 +183,10 @@ describe("mergeNationalFisc", () => {
     });
 
     expect(res.bondsRescoped).toBe(1);
-    const set = db.collectionMocks["bonds"].updateOne.mock.calls[0][1].$set;
+    const ops = db.collectionMocks["bonds"].bulkWrite.mock.calls[0][0];
+    expect(ops).toHaveLength(1);
+    expect(String(ops[0].updateOne.filter._id)).toBe(String(bondId));
+    const set = ops[0].updateOne.update.$set;
     expect(set.countryId).toBe("DE");
     expect(set.totalIssued).toBe(1_000_000); // × 2
     expect(set.publicFloat).toBe(200);
@@ -221,13 +224,34 @@ describe("mergeNationalFisc", () => {
     });
 
     expect(res.lawsRescoped).toBe(1);
-    const [filter, update] = db.collectionMocks["enactedLaws"].updateOne.mock.calls[0];
-    expect(filter._id).toBe(lawId);
-    expect(update.$set.countryId).toBe("DE");
-    expect(update.$set.annualRevenueV2).toBe(430); // × 2
-    expect(update.$set.annualCostPerCapita).toBe(20); // × 2
-    expect(update.$set.gdpCostFraction).toBeUndefined(); // fraction: scale-free
-    expect(update.$set.budgetCost).toBeUndefined(); // legacy percentage: scale-free
+    const ops = db.collectionMocks["enactedLaws"].bulkWrite.mock.calls[0][0];
+    expect(String(ops[0].updateOne.filter._id)).toBe(String(lawId));
+    const set = ops[0].updateOne.update.$set;
+    expect(set.countryId).toBe("DE");
+    expect(set.annualRevenueV2).toBe(430); // × 2
+    expect(set.annualCostPerCapita).toBe(20); // × 2
+    expect(set.gdpCostFraction).toBeUndefined(); // fraction: scale-free
+    expect(set.budgetCost).toBeUndefined(); // legacy percentage: scale-free
+  });
+
+  it("at scale 1 the whole national book moves in one updateMany", async () => {
+    vi.mocked(isForexEnabled).mockResolvedValueOnce(false);
+    const lawId = new ObjectId();
+    db.collection("federalBudget").findOne.mockResolvedValue(null);
+    db.collection("enactedLaws").find.mockReturnValue(
+      cursorOf([{ _id: lawId, countryId: "DD", scope: "national", annualRevenueV2: 215 }])
+    );
+
+    await mergeNationalFisc(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 510,
+    });
+
+    const [filter, update] = db.collectionMocks["enactedLaws"].updateMany.mock.calls[0];
+    expect(filter._id.$in.map(String)).toEqual([String(lawId)]);
+    expect(update.$set).toEqual({ countryId: "DE" });
+    expect(db.collectionMocks["enactedLaws"].bulkWrite).not.toHaveBeenCalled();
   });
 
   it("queries the WHOLE national book, repealed history included, and never region laws", async () => {

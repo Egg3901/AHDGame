@@ -4,22 +4,30 @@
  * A merge that carried the chamber, the parties and the players but let the
  * winner's army evaporate would be absurd — and that is what the region sweep
  * does by omission, because none of the military collections are
- * region-scoped. Units are per-doc and simply re-flag; the org layer
- * (`militaryCommands`, `militaryFormations`) is ONE DOC PER COUNTRY whose
- * `findOne({countryId})` contract forbids a second doc, so absorbed contents
- * merge into the survivor's doc and the absorbed doc is deleted; the national
- * stores (`nationalArsenal`, `nationalManpower`) merge quantitatively.
+ * region-scoped. Units are per-doc and simply re-flag; everything else is ONE
+ * DOC PER COUNTRY (`findOne({countryId})` is the read contract), so the merge
+ * runs through one shared scaffold: read both docs, combine into the survivor
+ * (or let the absorbed doc replace it), and never leave two docs behind.
  *
- * No currency crosses here — stock lots, manpower and grades are all
- * real quantities, not money.
+ * WHOSE RULES SURVIVE. Quantities merge (stocks add, pools add, command lists
+ * concatenate) but STANCE follows the absorbed side: its doctrine and its
+ * reinforcement mode replace the survivor's. The merge direction runs
+ * winner-into-shell, so survivor-stance would leave the losing side's military
+ * rules governing the winner's army.
+ *
+ * No currency crosses here — stock lots, manpower and grades are all real
+ * quantities, not money.
  *
  * IDEMPOTENT: a re-run finds nothing keyed to the absorbed country.
  */
-import type { Db } from "mongodb";
+import type { Collection, Db, Document, UpdateFilter } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { NationalArsenal } from "@/lib/db/types/nationalArsenal";
 import type { NationalManpower } from "@/lib/db/types/nationalManpower";
 import { EMPTY_ARSENAL_STOCK } from "@/lib/db/types/nationalArsenal";
+import { blendGrade } from "@/lib/military/arsenal";
+import { getMilitaryCommandsCollection } from "@/lib/db/collections/militaryCommands";
+import { getMilitaryFormationsCollection } from "@/lib/db/collections/militaryFormations";
 
 export interface MergeMilitaryArgs {
   fromCountryId: CountryId;
@@ -33,6 +41,50 @@ export interface MergeMilitaryResult {
   manpowerMerged: boolean;
 }
 
+/**
+ * Merge one one-doc-per-country collection across the border.
+ *
+ * `combine(fromDoc, toDoc)` returns the survivor's update when the two docs
+ * merge, or null when the ABSORBED doc replaces the survivor's outright (the
+ * stance collections). Absent counterparts always degrade to a plain rescope,
+ * and the absorbed doc never survives under its old country — the shared
+ * scaffold is what keeps the one-doc contract and the `updatedAt` stamp from
+ * drifting between five hand-rolled copies.
+ */
+async function mergeOneDocPerCountry<T extends Document>(
+  coll: Collection<T>,
+  fromCountryId: CountryId,
+  toCountryId: CountryId,
+  now: Date,
+  combine: (fromDoc: T, toDoc: T) => UpdateFilter<T> | null
+): Promise<T | null> {
+  const fromDoc = await coll.findOne({ countryId: fromCountryId } as never);
+  if (!fromDoc) return null;
+  const toDoc = await coll.findOne({ countryId: toCountryId } as never);
+
+  if (toDoc) {
+    const update = combine(fromDoc as T, toDoc as T);
+    if (update) {
+      const withStamp = {
+        ...update,
+        $set: { ...(update.$set ?? {}), updatedAt: now },
+      } as UpdateFilter<T>;
+      await coll.updateOne({ countryId: toCountryId } as never, withStamp);
+      await coll.deleteOne({ countryId: fromCountryId } as never);
+      return fromDoc as T;
+    }
+    // Absorbed replaces survivor: drop the survivor's doc, rescope the
+    // absorbed one below.
+    await coll.deleteOne({ countryId: toCountryId } as never);
+  }
+
+  await coll.updateOne(
+    { countryId: fromCountryId } as never,
+    { $set: { countryId: toCountryId, updatedAt: now } } as unknown as UpdateFilter<T>
+  );
+  return fromDoc as T;
+}
+
 export async function mergeMilitary(db: Db, args: MergeMilitaryArgs): Promise<MergeMilitaryResult> {
   const { fromCountryId, toCountryId } = args;
   const now = new Date();
@@ -42,156 +94,89 @@ export async function mergeMilitary(db: Db, args: MergeMilitaryArgs): Promise<Me
     .collection("militaryUnits")
     .updateMany({ countryId: fromCountryId }, { $set: { countryId: toCountryId, updatedAt: now } });
 
-  // ── Command groups: one doc per country, so contents merge ────────────────
-  const commandsColl = db.collection("militaryCommands");
-  const fromCommands = (await commandsColl.findOne({ countryId: fromCountryId })) as {
-    commands?: unknown[];
-  } | null;
-  let commandsMerged = 0;
-  if (fromCommands?.commands?.length) {
-    const toCommands = (await commandsColl.findOne({ countryId: toCountryId })) as {
-      commands?: unknown[];
-    } | null;
-    if (toCommands) {
-      // Appended, not replaced: the absorbed commands cover regions the
-      // survivor's commands never did (they just changed country), so the two
-      // sets are disjoint by construction. The read path self-heals any
-      // duplicate commanding general.
-      await commandsColl.updateOne(
-        { countryId: toCountryId },
-        {
-          $set: {
-            commands: [...(toCommands.commands ?? []), ...fromCommands.commands],
-            updatedAt: now,
-          },
-        }
-      );
-      await commandsColl.deleteOne({ countryId: fromCountryId });
-    } else {
-      await commandsColl.updateOne(
-        { countryId: fromCountryId },
-        { $set: { countryId: toCountryId, updatedAt: now } }
-      );
-    }
-    commandsMerged = fromCommands.commands.length;
-  } else if (fromCommands) {
-    await commandsColl.deleteOne({ countryId: fromCountryId });
-  }
+  // ── Command groups: concatenated. The absorbed commands cover regions the
+  //    survivor's never did (they just changed country), so the sets are
+  //    disjoint by construction; the read path self-heals any duplicate
+  //    commanding general. ──────────────────────────────────────────────────
+  const fromCommands = await mergeOneDocPerCountry(
+    getMilitaryCommandsCollection(db),
+    fromCountryId,
+    toCountryId,
+    now,
+    (fromDoc, toDoc) => ({
+      $set: { commands: [...(toDoc.commands ?? []), ...(fromDoc.commands ?? [])] },
+    })
+  );
+  const commandsMerged = fromCommands?.commands?.length ?? 0;
 
-  // ── Formations/org layer: same one-doc contract ───────────────────────────
-  const formationsColl = db.collection("militaryFormations");
-  const fromFormations = (await formationsColl.findOne({ countryId: fromCountryId })) as {
-    conflictAssignments?: unknown[];
-    positions?: Record<string, string>;
-  } | null;
-  if (fromFormations) {
-    const toFormations = (await formationsColl.findOne({ countryId: toCountryId })) as {
-      conflictAssignments?: unknown[];
-      positions?: Record<string, string>;
-    } | null;
-    if (toFormations) {
-      await formationsColl.updateOne(
-        { countryId: toCountryId },
-        {
-          $set: {
-            conflictAssignments: [
-              ...(toFormations.conflictAssignments ?? []),
-              ...(fromFormations.conflictAssignments ?? []),
-            ],
-            // Survivor entries win a key collision: its own units were never
-            // repositioned by the merge.
-            positions: { ...(fromFormations.positions ?? {}), ...(toFormations.positions ?? {}) },
-            updatedAt: now,
-          },
-        }
-      );
-      await formationsColl.deleteOne({ countryId: fromCountryId });
-    } else {
-      await formationsColl.updateOne(
-        { countryId: fromCountryId },
-        { $set: { countryId: toCountryId, updatedAt: now } }
-      );
-    }
-  }
+  // ── Formations/org layer: assignments concatenate; on a position-key
+  //    collision the survivor's entry wins (its own units were never
+  //    repositioned by the merge). ────────────────────────────────────────────
+  await mergeOneDocPerCountry(
+    getMilitaryFormationsCollection(db),
+    fromCountryId,
+    toCountryId,
+    now,
+    (fromDoc, toDoc) => ({
+      $set: {
+        conflictAssignments: [
+          ...(toDoc.conflictAssignments ?? []),
+          ...(fromDoc.conflictAssignments ?? []),
+        ],
+        positions: { ...(fromDoc.positions ?? {}), ...(toDoc.positions ?? {}) },
+      },
+    })
+  );
 
-  // ── Arsenal: stocks add; grade is a volume-weighted mean, so it re-weights ─
-  const arsenalColl = db.collection<NationalArsenal>("nationalArsenal");
-  const fromArsenal = await arsenalColl.findOne({ countryId: fromCountryId });
-  let arsenalMerged = false;
-  if (fromArsenal) {
-    const toArsenal = await arsenalColl.findOne({ countryId: toCountryId });
-    if (toArsenal) {
-      const stock: Record<string, number> = { ...EMPTY_ARSENAL_STOCK, ...toArsenal.stock };
-      const grade: Record<string, number> = { ...toArsenal.grade };
-      for (const [domain, fromStock] of Object.entries(fromArsenal.stock ?? {})) {
+  // ── Arsenal: stocks add; grade re-blends through the same volume-weighted
+  //    mean deliveries use (`blendGrade`, which also clamps corrupted negative
+  //    stocks). Two empty stores keep the survivor's grade — the arsenal
+  //    contract says a drained store keeps its last grade. ───────────────────
+  const fromArsenal = await mergeOneDocPerCountry(
+    db.collection<NationalArsenal>("nationalArsenal"),
+    fromCountryId,
+    toCountryId,
+    now,
+    (fromDoc, toDoc) => {
+      const stock: Record<string, number> = { ...EMPTY_ARSENAL_STOCK, ...toDoc.stock };
+      const grade: Record<string, number> = { ...toDoc.grade };
+      for (const [domain, fromStock] of Object.entries(fromDoc.stock ?? {})) {
         const toStock = stock[domain] ?? 0;
-        const fromGrade = fromArsenal.grade?.[domain as keyof NationalArsenal["grade"]] ?? 0;
+        const fromGrade = fromDoc.grade?.[domain as keyof NationalArsenal["grade"]] ?? 0;
         const toGrade = grade[domain] ?? 0;
-        const combined = toStock + fromStock;
-        // Weighted by lots so a big low-grade stock cannot inherit a tiny
-        // high-grade one's tier. Empty stores keep the survivor's grade.
         grade[domain] =
-          combined > 0 ? (toGrade * toStock + fromGrade * fromStock) / combined : toGrade;
-        stock[domain] = combined;
+          toStock + fromStock > 0 ? blendGrade(toStock, toGrade, fromStock, fromGrade) : toGrade;
+        stock[domain] = Math.max(0, toStock) + Math.max(0, fromStock);
       }
-      await arsenalColl.updateOne(
-        { countryId: toCountryId },
-        { $set: { stock, grade, updatedAt: now } }
-      );
-      await arsenalColl.deleteOne({ countryId: fromCountryId });
-    } else {
-      await arsenalColl.updateOne(
-        { countryId: fromCountryId },
-        { $set: { countryId: toCountryId, updatedAt: now } }
-      );
+      return { $set: { stock, grade } };
     }
-    arsenalMerged = true;
-  }
+  );
 
-  // ── Manpower: pools add; the ABSORBED side's reinforcement mode governs ───
-  // The merge direction runs winner-into-shell, so where both states hold a
-  // stance the winner's stands — its army, its rules for feeding it.
-  const manpowerColl = db.collection<NationalManpower>("nationalManpower");
-  const fromManpower = await manpowerColl.findOne({ countryId: fromCountryId });
-  let manpowerMerged = false;
-  if (fromManpower) {
-    const toManpower = await manpowerColl.findOne({ countryId: toCountryId });
-    if (toManpower) {
-      await manpowerColl.updateOne(
-        { countryId: toCountryId },
-        {
-          $inc: { pool: fromManpower.pool ?? 0 },
-          ...(fromManpower.mode ? { $set: { mode: fromManpower.mode } } : {}),
-        }
-      );
-      await manpowerColl.deleteOne({ countryId: fromCountryId });
-    } else {
-      await manpowerColl.updateOne(
-        { countryId: fromCountryId },
-        { $set: { countryId: toCountryId } }
-      );
-    }
-    manpowerMerged = true;
-  }
+  // ── Manpower: pools add; the ABSORBED side's reinforcement mode governs. ──
+  const fromManpower = await mergeOneDocPerCountry(
+    db.collection<NationalManpower>("nationalManpower"),
+    fromCountryId,
+    toCountryId,
+    now,
+    (fromDoc) => ({
+      $inc: { pool: fromDoc.pool ?? 0 },
+      ...(fromDoc.mode ? { $set: { mode: fromDoc.mode } } : {}),
+    })
+  );
 
-  // ── Doctrine: the ABSORBED side's replaces the survivor's, same reasoning ──
-  const doctrineColl = db.collection("nationalDoctrine");
-  const fromDoctrine = await doctrineColl.findOne({ countryId: fromCountryId });
-  if (fromDoctrine) {
-    const toDoctrine = await doctrineColl.findOne({ countryId: toCountryId });
-    if (toDoctrine) {
-      await doctrineColl.deleteOne({ countryId: toCountryId });
-    }
-    await doctrineColl.updateOne(
-      { countryId: fromCountryId },
-      { $set: { countryId: toCountryId, updatedAt: now } }
-    );
-  }
+  // ── Doctrine: the ABSORBED side's replaces the survivor's outright. ───────
+  await mergeOneDocPerCountry(
+    db.collection("nationalDoctrine"),
+    fromCountryId,
+    toCountryId,
+    now,
+    () => null
+  );
 
   return {
     unitsRescoped: units?.modifiedCount ?? 0,
     commandsMerged,
-    arsenalMerged,
-    manpowerMerged,
+    arsenalMerged: fromArsenal !== null,
+    manpowerMerged: fromManpower !== null,
   };
 }

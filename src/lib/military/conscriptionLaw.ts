@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import { getEnactedLevel } from "@/lib/politicalLegislation/enactedLevels";
+import { carriedLawIdFor } from "@/lib/politicalLegislation/carriedLaw";
 import type { LawCountryId } from "@/lib/politicalLegislation/types";
 import {
   RESERVE_LAW_BY_COUNTRY,
@@ -34,25 +35,10 @@ export async function resolveConscriptionStanceFor(
   db: Db,
   countryId: string
 ): Promise<ConscriptionStance> {
-  const lawId = RESERVE_LAW_BY_COUNTRY[countryId] ?? (await carriedReserveLawId(db, countryId));
+  const lawId =
+    RESERVE_LAW_BY_COUNTRY[countryId] ??
+    (await carriedLawIdFor(db, countryId, Object.values(RESERVE_LAW_BY_COUNTRY)));
   if (!lawId) return resolveConscriptionStance(countryId);
   const level = await getEnactedLevel(db, countryId as LawCountryId, lawId);
   return stanceForReserveLevel(level);
-}
-
-/**
- * A reserve-forces law another country wrote that this country now OWNS —
- * i.e. one of the known reserve-law ids whose catalogue entry has been
- * re-scoped to this country by a merge. Null in the overwhelmingly common
- * case of a country that never absorbed one.
- */
-async function carriedReserveLawId(db: Db, countryId: string): Promise<string | null> {
-  const carried = await db.collection("legislationTypes").findOne(
-    {
-      _id: { $in: Object.values(RESERVE_LAW_BY_COUNTRY) },
-      countryScope: countryId.toLowerCase(),
-    } as never,
-    { projection: { _id: 1 } }
-  );
-  return carried ? String(carried._id) : null;
 }

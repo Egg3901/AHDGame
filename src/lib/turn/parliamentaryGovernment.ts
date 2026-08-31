@@ -1716,8 +1716,12 @@ export async function cancelActiveNoConfidenceVotes(
  * Non-terminal bill statuses that are cleared when the lower chamber
  * dissolves. Explicitly excludes `enrolled` and `cabinet_review` — those
  * are "past the lower chamber" and survive dissolution.
+ *
+ * Exported because `mergeCountry` composes its whole-country lapse list from
+ * this one (plus the past-the-chamber statuses a COUNTRY dissolution also
+ * overtakes) — one taxonomy, not two hand-maintained copies.
  */
-const LOWER_CHAMBER_FAIL_STATUSES: BillStatus[] = [
+export const LOWER_CHAMBER_FAIL_STATUSES: BillStatus[] = [
   "proposed",
   "active",
   "passed_origin",

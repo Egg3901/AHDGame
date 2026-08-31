@@ -115,10 +115,11 @@ describe("mergeRegion", () => {
   it("re-homes the absorbed half's party organisations onto the survivor", async () => {
     // Reunification fuse: the eastern orgs' parties do not exist in the western
     // half, so every row re-points without collision.
-    db.collection("statePartyOrg").find.mockReturnValue(
-      cursorOf([{ _id: "org-sed-beo", partyId: "7", stateId: "BEO", treasury: 500 }])
+    db.collection("statePartyOrg").find.mockImplementation((f: { stateId: string }) =>
+      f.stateId === "BEO"
+        ? cursorOf([{ _id: "org-sed-beo", partyId: "7", stateId: "BEO", treasury: 500 }])
+        : cursorOf([])
     );
-    db.collection("statePartyOrg").findOne.mockResolvedValue(null);
 
     await run();
 
@@ -130,15 +131,11 @@ describe("mergeRegion", () => {
   });
 
   it("merges treasuries when the same party is organised in both halves", async () => {
-    db.collection("statePartyOrg").find.mockReturnValue(
-      cursorOf([{ _id: "org-src", partyId: "7", stateId: "BEO", treasury: 500 }])
+    db.collection("statePartyOrg").find.mockImplementation((f: { stateId: string }) =>
+      f.stateId === "BEO"
+        ? cursorOf([{ _id: "org-src", partyId: "7", stateId: "BEO", treasury: 500 }])
+        : cursorOf([{ _id: "org-dst", partyId: "7", stateId: "BE", treasury: 200 }])
     );
-    db.collection("statePartyOrg").findOne.mockResolvedValue({
-      _id: "org-dst",
-      partyId: "7",
-      stateId: "BE",
-      treasury: 200,
-    });
 
     await run();
 

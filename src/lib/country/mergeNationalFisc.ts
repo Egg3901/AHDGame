@@ -29,6 +29,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { Bond } from "@/lib/db/types/bond";
 import type { EnactedLaw, FederalBudget } from "@/lib/db/types/budget";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { nationalDebtFromBalance } from "@/lib/budget/treasuryBalance";
 import { resolveMergeFxScale } from "./mergeFxScale";
 
 export interface MergeNationalFiscArgs {
@@ -95,16 +96,18 @@ export async function mergeNationalFisc(
     if (typeof from.unionLawBias === "number") lawSet.unionLawBias = from.unionLawBias;
     if (typeof from.unionsBanned === "boolean") lawSet.unionsBanned = from.unionsBanned;
 
-    // The survivor's book: signed add, debt mirror recomputed from the new
-    // balance (treasuryBalance is the source of truth; debt.principal is
-    // derived = max(0, -balance)).
-    const newToTreasury = (to.treasuryBalance ?? 0) + fromTreasury * scale;
+    // The survivor's book: signed add of the SAME number the caller records in
+    // its audit trail (`treasuryMoved` — one expression, so the recorded amount
+    // is by construction the credited amount), with the debt mirror recomputed
+    // through the canonical derivation (`nationalDebtFromBalance`), never a
+    // local copy of it.
+    const newToTreasury = (to.treasuryBalance ?? 0) + treasuryMoved;
     await budgets.updateOne(
       { _id: toCountryId },
       {
         $set: {
           treasuryBalance: newToTreasury,
-          "debt.principal": Math.max(0, -newToTreasury),
+          "debt.principal": nationalDebtFromBalance(newToTreasury),
           ...lawSet,
           updatedAt: now,
         },
@@ -122,7 +125,7 @@ export async function mergeNationalFisc(
       {
         $set: {
           treasuryBalance: 0,
-          "debt.principal": 0,
+          "debt.principal": nationalDebtFromBalance(0),
           ...(from.defenseAppropriation ? { "defenseAppropriation.balance": 0 } : {}),
           mergedInto: { countryId: toCountryId, turn: currentTurn },
           updatedAt: now,
@@ -138,29 +141,31 @@ export async function mergeNationalFisc(
     .find({ issuerType: "sovereign", countryId: fromCountryId, matured: false })
     .toArray();
 
-  for (const bond of absorbedBonds) {
-    const holders = (bond.holders ?? []).map((h) => ({
-      ...h,
-      units: h.units * scale,
-    }));
-    await bonds.updateOne(
-      { _id: bond._id },
-      {
-        $set: {
-          countryId: toCountryId,
-          totalIssued: (bond.totalIssued ?? 0) * scale,
-          publicFloat: (bond.publicFloat ?? 0) * scale,
-          ...(bond.centralBankHoldings != null
-            ? { centralBankHoldings: bond.centralBankHoldings * scale }
-            : {}),
-          ...(bond.originalTotalIssued != null
-            ? { originalTotalIssued: bond.originalTotalIssued * scale }
-            : {}),
-          holders,
-          ...(toCurrency ? { currencyCode: toCurrency } : {}),
-          updatedAt: now,
+  // One bulkWrite, not a per-doc await loop: the whole series re-scopes inside
+  // a single turn phase.
+  if (absorbedBonds.length > 0) {
+    await bonds.bulkWrite(
+      absorbedBonds.map((bond) => ({
+        updateOne: {
+          filter: { _id: bond._id },
+          update: {
+            $set: {
+              countryId: toCountryId,
+              totalIssued: (bond.totalIssued ?? 0) * scale,
+              publicFloat: (bond.publicFloat ?? 0) * scale,
+              ...(bond.centralBankHoldings != null
+                ? { centralBankHoldings: bond.centralBankHoldings * scale }
+                : {}),
+              ...(bond.originalTotalIssued != null
+                ? { originalTotalIssued: bond.originalTotalIssued * scale }
+                : {}),
+              holders: (bond.holders ?? []).map((h) => ({ ...h, units: h.units * scale })),
+              ...(toCurrency ? { currencyCode: toCurrency } : {}),
+              updatedAt: now,
+            },
+          },
         },
-      }
+      }))
     );
   }
 
@@ -180,17 +185,31 @@ export async function mergeNationalFisc(
     } as import("mongodb").Filter<EnactedLaw>)
     .toArray();
 
-  for (const law of nationalLaws) {
-    const moneySet: Record<string, number> = {};
-    if (scale !== 1) {
-      for (const field of LAW_MONEY_FIELDS) {
-        const value = law[field];
-        if (typeof value === "number" && Number.isFinite(value)) {
-          moneySet[field] = value * scale;
+  // Scale 1 needs no per-doc math and collapses to one updateMany; otherwise
+  // one bulkWrite carries every law's converted money fields in a round trip.
+  if (nationalLaws.length > 0 && scale === 1) {
+    await laws.updateMany(
+      { _id: { $in: nationalLaws.map((law) => law._id) } },
+      { $set: { countryId: toCountryId } }
+    );
+  } else if (nationalLaws.length > 0) {
+    await laws.bulkWrite(
+      nationalLaws.map((law) => {
+        const moneySet: Record<string, number> = {};
+        for (const field of LAW_MONEY_FIELDS) {
+          const value = law[field];
+          if (typeof value === "number" && Number.isFinite(value)) {
+            moneySet[field] = value * scale;
+          }
         }
-      }
-    }
-    await laws.updateOne({ _id: law._id }, { $set: { countryId: toCountryId, ...moneySet } });
+        return {
+          updateOne: {
+            filter: { _id: law._id },
+            update: { $set: { countryId: toCountryId, ...moneySet } },
+          },
+        };
+      })
+    );
   }
 
   return {

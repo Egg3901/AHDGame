@@ -67,7 +67,7 @@ describe("reapportionNationalBudget", () => {
         baselineStateGrants: 10,
       });
 
-    await reapportionNationalBudget(db as unknown as Db, "TH", "DD", "DE");
+    await reapportionNationalBudget(db as unknown as Db, "TH", "DD", "DE", true);
 
     const calls = db.collectionMocks["federalBudget"].updateOne.mock.calls;
     const ddSet = calls.find((c) => c[0]._id === "DD")![1].$set;
@@ -78,6 +78,18 @@ describe("reapportionNationalBudget", () => {
     expect(deSet.baselineSpendingByCategory.health).toBeCloseTo(140);
     expect(ddSet.baselineStateGrants).toBeCloseTo(0);
     expect(deSet.baselineStateGrants).toBeCloseTo(40);
+  });
+
+  it("a SURVIVING source never gives up its whole base, even at weight 1", async () => {
+    // Degenerate referendum case: the source's other regions carry zero GDP, so
+    // the arithmetic says weight 1 — but the country keeps existing and must
+    // not be left running fiscal years over an emptied book.
+    db.collection("states").findOne.mockResolvedValue({ _id: "NIR", gdp: 100 });
+    db.collection("states").find.mockReturnValue(cursorOf([{ gdp: 0 }]));
+
+    await reapportionNationalBudget(db as unknown as Db, "NIR", "UK", "IE");
+
+    expect(db.collection("federalBudget").updateOne).not.toHaveBeenCalled();
   });
 
   it("no-ops when the region carries no GDP", async () => {

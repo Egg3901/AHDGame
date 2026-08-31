@@ -200,14 +200,18 @@ export async function processCommandEconomyTurn(
   // The band check itself uses the same ceiling `isPlannedEconomy` does.
   // A dissolved country keeps its budget doc for history, and the compiled
   // schedule keeps calling it planned — without this it would be hydrated and
-  // planned for ever after a merge carried its regime to its successor.
-  const registeredForPlanning = new Set<string>(await getRegisteredCountryIds(db));
+  // planned for ever after a merge carried its regime to its successor. The
+  // registry read is skipped entirely with the feature off: the hydration is a
+  // guaranteed no-op then, and the processing loop's own `isPlannedEconomy`
+  // already carries the flag.
+  const registeredForPlanning = enabled
+    ? new Set<string>(await getRegisteredCountryIds(db))
+    : new Set<string>();
 
   const hydration: Array<[string, number]> = [];
   for (const budget of budgets) {
     const countryId = budget.countryId;
-    if (!countryId || !enabled) continue;
-    if (!registeredForPlanning.has(countryId)) continue;
+    if (!countryId || !registeredForPlanning.has(countryId)) continue;
     const persisted = budget.economicFactors?.marketizationLevel;
     const level =
       typeof persisted === "number" && Number.isFinite(persisted)

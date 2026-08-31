@@ -1167,16 +1167,15 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         // harmless today (they iterate regions it no longer has) but every one
         // of them still runs queries every turn, and any spawner that ever
         // grows a config-driven fallback would resurrect ghost races.
-        const registeredForElections = foundingActive
-          ? new Set<CountryId>()
-          : new Set(await getRegisteredCountryIds(db));
-        const countryElectionPhasePromises = foundingActive
-          ? []
-          : Object.entries(COUNTRY_ELECTION_PHASES)
-              .filter(([id]) => registeredForElections.has(id as CountryId))
-              .flatMap(([, entries]) =>
-                entries.map(({ name, fn }) => runtime.runPhase(name, () => fn(gameNow)))
-              );
+        let countryElectionPhasePromises: Promise<unknown>[] = [];
+        if (!foundingActive) {
+          const registeredForElections = new Set(await getRegisteredCountryIds(db));
+          countryElectionPhasePromises = Object.entries(COUNTRY_ELECTION_PHASES)
+            .filter(([id]) => registeredForElections.has(id as CountryId))
+            .flatMap(([, entries]) =>
+              entries.map(({ name, fn }) => runtime.runPhase(name, () => fn(gameNow)))
+            );
+        }
 
         await Promise.all([
           ...(foundingActive

@@ -27,6 +27,7 @@ import type { CountryGameState } from "@/lib/db/types/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { transferRegion } from "@/lib/referendum/transfer/transferRegion";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
+import { LOWER_CHAMBER_FAIL_STATUSES } from "@/lib/turn/parliamentaryGovernment";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { blocOrgFor } from "@/lib/world/blocMembership";
 import { admitMember } from "@/lib/internationalOrganizations/joinApplication";
@@ -155,23 +156,17 @@ export async function mergeCountry(db: Db, args: MergeCountryArgs): Promise<Merg
 }
 
 /**
- * Bill statuses a country's dissolution can still overtake. Everything not
- * listed (`signed`, `failed`, `withdrawn`, `override_failed`) is already
- * terminal. `vetoed`, `enrolled` and `cabinet_review` ARE listed: past the
- * floor they may be, but until signed they are pending business, and pending
- * business lapses with the state — a bill cannot be signed by a government
- * that no longer exists.
+ * Bill statuses a country's dissolution can still overtake: the chamber-
+ * dissolution list (one shared taxonomy — a status added there is
+ * automatically overtaken here too) PLUS the past-the-floor statuses a
+ * chamber dissolution spares but a COUNTRY dissolution cannot. `enrolled` and
+ * `cabinet_review` are pending business until signed, and a bill cannot be
+ * signed by a government that no longer exists. Everything else (`signed`,
+ * `failed`, `withdrawn`, `override_failed`) is already terminal.
  */
 const NON_TERMINAL_BILL_STATUSES: BillStatus[] = [
-  "proposed",
-  "active",
-  "passed_origin",
-  "active_other",
-  "active_both",
+  ...LOWER_CHAMBER_FAIL_STATUSES,
   "enrolled",
-  "vetoed",
-  "veto_override",
-  "override_shugiin",
   "cabinet_review",
   "filibustered",
 ];
@@ -269,13 +264,18 @@ async function sweepNationalStrays(
     targetOriginCountryId?: unknown;
     targetCorporationId?: unknown;
   }>;
-  for (const tariff of absorbedTariffs) {
+  if (absorbedTariffs.length > 0) {
+    // One $or delete for every colliding scope, not a round trip per tariff.
+    // An explicit null in each key matches both a missing and a null field, so
+    // "economy_wide vs economy_wide" collides exactly like a shared sector.
     await db.collection("tariffs").deleteMany({
       countryId: toCountryId,
-      scopeType: tariff.scopeType,
-      targetSectorType: tariff.targetSectorType ?? null,
-      targetOriginCountryId: tariff.targetOriginCountryId ?? null,
-      targetCorporationId: tariff.targetCorporationId ?? null,
+      $or: absorbedTariffs.map((tariff) => ({
+        scopeType: tariff.scopeType,
+        targetSectorType: tariff.targetSectorType ?? null,
+        targetOriginCountryId: tariff.targetOriginCountryId ?? null,
+        targetCorporationId: tariff.targetCorporationId ?? null,
+      })),
     });
   }
   await db

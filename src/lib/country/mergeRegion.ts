@@ -158,8 +158,14 @@ export async function mergeRegion(db: Db, args: MergeRegionArgs): Promise<MergeR
   }
   const partyOrgs = db.collection<RegionPartyOrg>("statePartyOrg");
   const sourceOrgs = await partyOrgs.find({ stateId: fromRegionId }).toArray();
+  // One read of the target's orgs up front, not a collision probe per source org.
+  const targetOrgsByParty = new Map(
+    sourceOrgs.length > 0
+      ? (await partyOrgs.find({ stateId: toRegionId }).toArray()).map((org) => [org.partyId, org])
+      : []
+  );
   for (const org of sourceOrgs) {
-    const existing = await partyOrgs.findOne({ stateId: toRegionId, partyId: org.partyId });
+    const existing = targetOrgsByParty.get(org.partyId);
     if (existing) {
       const treasury = typeof org.treasury === "number" ? org.treasury : 0;
       await partyOrgs.updateOne(

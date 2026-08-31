@@ -260,10 +260,14 @@ describe("mergeCountry", () => {
     const del = prime(db, "tariffs").deleteMany.mock.calls[0][0];
     expect(del).toEqual({
       countryId: "DE",
-      scopeType: "sector",
-      targetSectorType: "manufacturing",
-      targetOriginCountryId: null,
-      targetCorporationId: null,
+      $or: [
+        {
+          scopeType: "sector",
+          targetSectorType: "manufacturing",
+          targetOriginCountryId: null,
+          targetCorporationId: null,
+        },
+      ],
     });
   });
 

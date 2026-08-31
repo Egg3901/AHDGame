@@ -243,12 +243,15 @@ describe("reunification pipeline, end to end", () => {
     expect(deWrite?.[1].$set.treasuryBalance).toBe(4000);
     const ddWrite = budgetWrites.find((c) => c[0]._id === "DD" && c[1].$set?.mergedInto);
     expect(ddWrite?.[1].$set.treasuryBalance).toBe(0);
-    const bondWrite = db.collectionMocks["bonds"].updateOne.mock.calls.find(
-      (c) => String(c[0]._id) === String(bondId)
+    const bondOps = db.collectionMocks["bonds"].bulkWrite.mock.calls[0][0];
+    const bondWrite = bondOps.find(
+      (op: { updateOne: { filter: { _id: unknown } } }) =>
+        String(op.updateOne.filter._id) === String(bondId)
     );
-    expect(bondWrite?.[1].$set.countryId).toBe("DE");
-    const lawWrite = db.collectionMocks["enactedLaws"].updateOne.mock.calls.find(
-      (c) => String(c[0]._id) === String(lawId)
+    expect(bondWrite?.updateOne.update.$set.countryId).toBe("DE");
+    // Forex off in this harness → scale 1 → the law book moves in one updateMany.
+    const lawWrite = db.collectionMocks["enactedLaws"].updateMany.mock.calls.find((c) =>
+      c[0]._id?.$in?.some((id: unknown) => String(id) === String(lawId))
     );
     expect(lawWrite?.[1].$set.countryId).toBe("DE");
   });

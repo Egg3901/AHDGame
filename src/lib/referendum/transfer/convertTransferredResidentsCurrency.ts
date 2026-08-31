@@ -16,9 +16,8 @@
 import type { Db, Filter } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { Corporation, Character } from "@/lib/db/types";
-import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
-import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
+import { type CurrencyCode } from "@/lib/constants/currencies";
+import { loadFxScalePair } from "@/lib/country/mergeFxScale";
 import { convertCorpCurrency } from "@/lib/corporations/convertCorpCurrency";
 
 export async function convertTransferredResidentsCurrency(
@@ -27,18 +26,13 @@ export async function convertTransferredResidentsCurrency(
   fromCountryId: CountryId,
   toCountryId: CountryId
 ): Promise<void> {
-  const forexEnabled = await isForexEnabled();
-  if (!forexEnabled) return;
-
-  const oldCurrency = COUNTRY_CURRENCY_MAP[fromCountryId];
-  const newCurrency = COUNTRY_CURRENCY_MAP[toCountryId];
-  if (!oldCurrency || !newCurrency || oldCurrency === newCurrency) return;
-
-  const fxByCurrency = await loadFxRatesByCurrency(db);
-  const fromRate = fxByCurrency.get(oldCurrency);
-  const toRate = fxByCurrency.get(newCurrency);
-  if (fromRate === undefined || toRate === undefined) return;
-  const scale = toRate / fromRate;
+  // The SHARED merge rate source (`loadFxScalePair`), so every pot of money
+  // that crosses in one merge crosses at one price. This caller's missing-rate
+  // policy is REFUSE (the region already moved; balances can be re-converted
+  // later) — unlike the national merge, which fails open at 1.
+  const pair = await loadFxScalePair(db, fromCountryId, toCountryId);
+  if (pair.kind !== "convert") return;
+  const { scale, oldCurrency, newCurrency, fxByCurrency } = pair;
   const now = new Date();
 
   // Corps that followed the region into the new country re-denominate to its
@@ -49,7 +43,9 @@ export async function convertTransferredResidentsCurrency(
     .find({ headquartersState: regionId, countryId: toCountryId })
     .toArray();
   for (const corp of corps) {
-    await convertCorpCurrency(db, corp, newCurrency, fxByCurrency, now, forexEnabled);
+    // Forex is enabled by construction here — a "convert" pair only exists
+    // with the feature on.
+    await convertCorpCurrency(db, corp, newCurrency, fxByCurrency, now, true);
   }
 
   // Region party organisations that CARRIED with a dissolving source (the
