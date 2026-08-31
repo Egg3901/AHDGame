@@ -52,6 +52,14 @@ export async function convertTransferredResidentsCurrency(
     await convertCorpCurrency(db, corp, newCurrency, fxByCurrency, now, forexEnabled);
   }
 
+  // Region party organisations that CARRIED with a dissolving source (the
+  // evacuate path deletes them, so this matches nothing on a referendum
+  // transfer) hold their treasuries in the old currency. One multiplicative
+  // pass per region: the region moves exactly once, so this cannot re-run.
+  await db
+    .collection("statePartyOrg")
+    .updateMany({ stateId: regionId }, { $mul: { treasury: scale }, $set: { updatedAt: now } });
+
   // Resident players' home-currency wallet converts; other currencies stay as forex.
   const players = await db
     .collection<Character>("characters")
