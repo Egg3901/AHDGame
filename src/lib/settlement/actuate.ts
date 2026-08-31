@@ -568,6 +568,13 @@ async function retireNationalRemnants(
   const absorbedGov = await formations.findOne({ _id: absorbed });
 
   if (absorbedGov?.pmCharacterId || absorbedGov?.pmNppId) {
+    // Era-aware, and read ONCE for the whole handover below. `officeTypes` IS
+    // overridden per preset for several countries, so resolving the key without
+    // the active preset is the same class of bug as the static-config reads this
+    // change set exists to fix -- harmless for DE today only because DE carries
+    // no override.
+    const execKey = getExecutiveOfficeKey(survivor, await getGameStatePresetOrDefault(db));
+
     // THE DISPLACED LEADER STANDS DOWN FIRST.
     //
     // Clearing `pmNppId` takes the survivor's chancellor off the formation row,
@@ -580,7 +587,6 @@ async function retireNationalRemnants(
     //
     // Scoped by country AND executive key so it cannot reach a leader of another
     // country, or a minister of this one.
-    const execKey = getExecutiveOfficeKey(survivor, await getGameStatePresetOrDefault(db));
     const standDown = { $set: { currentOffice: null, updatedAt: now } };
     await db
       .collection("characters")
@@ -609,26 +615,6 @@ async function retireNationalRemnants(
         },
       }
     );
-  }
-
-  // THE MANDATE COMES WITH THE LEADER.
-  //
-  // `countryLeaderStates` is keyed `${countryId}_${characterId}`, so the record
-  // does not follow the head of government the way the formation row above
-  // does: the carried leader would arrive in the unified state with no mandate
-  // on record, and the next `installNewLeader` would seat them at a fresh 75 as
-  // though they had just taken power — erasing the tenure they won the war with.
-  //
-  // Only a PLAYER leader has one. An NPP head of government is carried by
-  // `pmNppId` and holds no character-keyed record, which is why this reads
-  // `pmCharacterId` alone rather than the same condition as the block above.
-  if (absorbedGov?.pmCharacterId || absorbedGov?.pmNppId) {
-    // Era-aware. `officeTypes` IS overridden per preset for several countries,
-    // and reading the key without the active preset is the same class of bug as
-    // the static-config reads this change set exists to fix — it happens to be
-    // harmless for DE today only because DE has no override.
-    const preset = await getGameStatePresetOrDefault(db);
-    const execKey = getExecutiveOfficeKey(survivor, preset);
 
     // THE CARRIED LEADER TAKES THE SURVIVOR'S OFFICE KEY.
     //
@@ -649,7 +635,18 @@ async function retireNationalRemnants(
       await takeExecutiveOffice(db, "npps", absorbedGov.pmNppId, execKey, now);
     }
 
-    // The confidence record is character-keyed, so only a PLAYER leader has one.
+    // THE MANDATE COMES WITH THE LEADER.
+    //
+    // `countryLeaderStates` is keyed `${countryId}_${characterId}`, so the
+    // record does not follow the head of government the way the formation row
+    // above does: the carried leader would arrive in the unified state with no
+    // mandate on record, and the next `installNewLeader` would seat them at a
+    // fresh 75 as though they had just taken power, erasing the tenure they won
+    // the war with.
+    //
+    // Only a PLAYER leader has one. An NPP head of government is carried by
+    // `pmNppId` and holds no character-keyed record, which is why this reads
+    // `pmCharacterId` alone rather than the same condition as the block above.
     if (absorbedGov.pmCharacterId) {
       await carryLeaderStateOnMerge(db, {
         fromCountryId: absorbed,
