@@ -65,7 +65,7 @@ The band is deterministic, so looking twice never gives you two different answer
 
 ### The forecast is the real thing
 
-The projection you see is computed by **the same code that resolves the battle**, from the same units, the same supply and the same terrain. It is not a separate estimate that might disagree.
+The projection you see is computed by **the same code that resolves the battle**, from the same units, the same supply, the same terrain and the same air and naval support over the front. It is not a separate estimate that might disagree.
 
 **But it is odds, not a promise.** The battle is fought at the projected chance plus the fortune of the day, so a 70 percent attack fails three times in ten and a 20 percent attack sometimes carries the field. Losing a fight you were favoured to win is the number working, not the number being wrong. Judge a plan over a campaign, not over one tick.
 
