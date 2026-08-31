@@ -172,6 +172,13 @@ export function resolveSourceLink(
     }
   }
 
+  // ── Ask service ───────────────────────────────────────────────────────────
+  // Ask notifications carry a prebuilt href (the Ask site) in metadata.
+  if (type.startsWith("ask_")) {
+    const href = asString(m.href);
+    if (href) return { label: "Open Ask", href };
+  }
+
   // ── Crisis ────────────────────────────────────────────────────────────────
   if (type === "crisis") {
     const crisisId = asString(m.crisisId);
