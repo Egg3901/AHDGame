@@ -235,3 +235,65 @@ describe("proposeNationalBill — bicameral proposal relief (#77)", () => {
     expect(guardStatusNin()).not.toContain("active_other");
   });
 });
+
+describe("proposeNationalBill — countries with no bill lifecycle (#806)", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+  });
+
+  const input = {
+    title: "A Bill",
+    summary: "Does something",
+    chamber: "holyrood",
+    provisions: [],
+  };
+
+  it("refuses to mint a bill for a legislature no turn phase walks", async () => {
+    // SCO has a chamber and elections but no registered bill lifecycle, so a
+    // bill filed there would never advance, enact, veto or fail — it would sit
+    // on the floor forever with nothing to close it and nothing reporting it.
+    const res = await proposeNationalBill(
+      db as unknown as Db,
+      "SCO" as never,
+      { userId: new ObjectId().toString() } as AuthUser,
+      input as never
+    );
+
+    expect(res.status).toBe(400);
+    expect(String((res.body as { error?: string }).error)).toMatch(
+      /does not process national bills/i
+    );
+  });
+
+  it("rejects before touching the database, so no partial bill is written", async () => {
+    await proposeNationalBill(
+      db as unknown as Db,
+      "SCO" as never,
+      { userId: new ObjectId().toString() } as AuthUser,
+      input as never
+    );
+
+    // The mock only materializes a collection once something asks for it, so
+    // an untouched map proves the guard returned before any DB access.
+    expect(Object.keys(db.collectionMocks)).toHaveLength(0);
+  });
+
+  it("does not block a country that DOES have a lifecycle", async () => {
+    // The guard must be the only thing that changed for supported countries:
+    // US has no COUNTRY_BILL_PHASES entry but does have an engine, so a bare
+    // table lookup here would wrongly refuse the game's main legislature.
+    const res = await proposeNationalBill(
+      db as unknown as Db,
+      "US" as never,
+      { userId: new ObjectId().toString() } as AuthUser,
+      { ...input, chamber: "house" } as never
+    );
+
+    expect(String((res.body as { error?: string }).error ?? "")).not.toMatch(
+      /does not process national bills/i
+    );
+  });
+});
