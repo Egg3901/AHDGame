@@ -759,4 +759,76 @@ describe("POST /api/country/[code]/region/[id]/economy/attack-sector", () => {
 
     expect(maxInFlight).toBe(1);
   });
+  it("says 'plant' not 'plants' when exactly one transfers", async () => {
+    const attackerCharId = new ObjectId();
+    const attackerCorpId = new ObjectId();
+    const defenderCorpId = new ObjectId();
+    const targetSectorId = new ObjectId();
+    const attacker = {
+      _id: attackerCorpId,
+      ceoId: attackerCharId,
+      name: "Attacker Corp",
+      liquidCapital: 1_000_000,
+      marketingStrength: 200,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+    };
+    const defender = {
+      _id: defenderCorpId,
+      name: "Flower News",
+      liquidCapital: 1_000_000,
+      marketingStrength: 100,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+    };
+    // 2 plants, so a 25% share seizes exactly 1.
+    const target = {
+      _id: targetSectorId,
+      corporationId: defenderCorpId,
+      countryId: "US",
+      stateId: "CA",
+      sectorType: "energy",
+      strategyId: "standard",
+      revenue: 1_000_000,
+      capitalStock: 1_000,
+      capacityBookAnchor: 1_000_000,
+      plantCount: 2,
+      plantUnitRemainder: 0,
+    };
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentTurn: 526 });
+    db.collectionMocks.states.findOne.mockResolvedValue({
+      _id: "CA",
+      countryId: "US",
+      name: "California",
+    });
+    db.collectionMocks.users.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      activeCharacterType: "regular",
+    });
+    const { getCharacterByUserId } = await import("@/lib/db/characterLookup");
+    vi.mocked(getCharacterByUserId).mockResolvedValue({ _id: attackerCharId } as never);
+    const { randomInt } = await import("node:crypto");
+    vi.mocked(randomInt as unknown as () => number).mockReturnValue(0);
+    db.collectionMocks.corporations.findOne
+      .mockResolvedValueOnce(attacker)
+      .mockResolvedValueOnce(defender)
+      .mockResolvedValueOnce(attacker)
+      .mockResolvedValueOnce(defender);
+    db.collectionMocks.corporations.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.corporateSectors.findOne
+      .mockResolvedValueOnce(target)
+      .mockResolvedValueOnce(target)
+      .mockResolvedValueOnce(null);
+    db.collectionMocks.corporateSectors.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.corporateSectors.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest({ sectorId: targetSectorId.toHexString() }), ctx());
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.plantsTransferred).toBe(1);
+    expect(data.message).toContain("1 whole plant from Flower News");
+    expect(data.message).not.toContain("whole plants");
+  });
 });
