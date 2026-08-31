@@ -21,11 +21,11 @@ import {
   COLLECTION_DIFFICULTY,
   COLLECTION_GAIN,
   COLLECTION_MIN_NETWORK_LEVEL,
+  OP_SLOTS_PER_TURN,
 } from "./config";
 import { clampCoverage, currentCoverage } from "./coverage";
 import { applyOperationToNetwork, isNetworkUsable } from "./network";
 import { resolveOperation } from "./resolveOperation";
-import { spendSlot } from "./slots";
 
 export type OperationKind = "collect" | "action";
 
@@ -108,13 +108,47 @@ export async function runOperation(args: RunOperationArgs): Promise<RunOperation
     );
   }
 
+  // ── Claim the budget and the slot ATOMICALLY ──────────────────────────────
+  //
+  // Read-then-write would let two concurrent operations each see one slot and a
+  // full purse, both pass, and both spend: the country runs more operations than
+  // it has and can overdraw. One conditional update instead, in the spirit of
+  // `debitAppropriation`'s `$expr` guard, so the loser of a race simply does not
+  // match and is refused.
   const cost = kind === "action" ? ACTION_COST : COLLECTION_COST;
-  if (agency.budgetRemaining < cost) {
-    return refuse(409, "The service cannot afford that operation.");
-  }
-
-  const slots = spendSlot(agency, turn);
-  if (!slots) {
+  const agencies = await getIntelligenceAgenciesCollection(db);
+  const claim = await agencies.updateOne(
+    {
+      _id: agency._id,
+      budgetRemaining: { $gte: cost },
+      // A budget stamped for an older turn is a full one, so it always qualifies.
+      $or: [{ "opSlots.turn": { $ne: turn } }, { "opSlots.remaining": { $gt: 0 } }],
+    },
+    [
+      {
+        $set: {
+          budgetRemaining: { $subtract: ["$budgetRemaining", cost] },
+          opSlots: {
+            turn,
+            remaining: {
+              $cond: [
+                { $eq: ["$opSlots.turn", turn] },
+                { $subtract: ["$opSlots.remaining", 1] },
+                OP_SLOTS_PER_TURN - 1,
+              ],
+            },
+          },
+          updatedAt: "$$NOW",
+        },
+      },
+    ]
+  );
+  if (claim.modifiedCount === 0) {
+    // Re-read to say WHICH constraint refused, rather than guessing.
+    const fresh = await agencies.findOne({ _id: agency._id });
+    if (fresh && fresh.budgetRemaining < cost) {
+      return refuse(409, "The service cannot afford that operation.");
+    }
     return refuse(429, "The service has run every operation it can this turn.");
   }
 
@@ -167,15 +201,6 @@ export async function runOperation(args: RunOperationArgs): Promise<RunOperation
         lastOpTurn: networkAfter.lastOpTurn,
         updatedAt: networkAfter.updatedAt,
       },
-    }
-  );
-
-  const agencies = await getIntelligenceAgenciesCollection(db);
-  await agencies.updateOne(
-    { _id: agency._id },
-    {
-      $set: { opSlots: slots, updatedAt: new Date() },
-      $inc: { budgetRemaining: -cost },
     }
   );
 

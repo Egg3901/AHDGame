@@ -48,13 +48,17 @@ export function stepNetwork(net: IntelligenceNetwork, turn: number): Intelligenc
   if (level >= NETWORK_MAX_LEVEL) progress = Math.min(progress, NETWORK_LEVEL_PROGRESS - 1);
 
   const cooledOff = net.status === "burned" && isNetworkUsable(net, turn);
+  // A network that has reached a level is no longer being stood up. Without this
+  // a fully grown network reads "building" forever on the console, which is not
+  // what the player is looking at.
+  const grewUp = net.status === "building" && level >= 1;
 
   return {
     ...net,
     level,
     progress,
     suspicion,
-    status: cooledOff ? "active" : net.status,
+    status: cooledOff || grewUp ? "active" : net.status,
     cooledUntilTurn: cooledOff ? null : net.cooledUntilTurn,
     updatedAt: new Date(),
   };

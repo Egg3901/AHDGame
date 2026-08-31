@@ -134,7 +134,22 @@ export async function getOrCreateAgency(
 ): Promise<IntelligenceAgency> {
   const agencies = await getIntelligenceAgenciesCollection(db);
   const existing = await agencies.findOne({ countryId });
-  if (existing) return existing;
+  if (existing) {
+    // Re-sync the denormalized holder. Cabinet seats change hands, and a stored
+    // director id silently goes stale the moment one does: operations would be
+    // logged against the previous holder and resolved on their stats. This is
+    // the same failure class as the stale corporation `ceoType`.
+    const live = directorCharacterId ? String(directorCharacterId) : null;
+    const stored = existing.directorCharacterId ? String(existing.directorCharacterId) : null;
+    if (live !== stored) {
+      await agencies.updateOne(
+        { _id: existing._id },
+        { $set: { directorCharacterId, updatedAt: new Date() } }
+      );
+      return { ...existing, directorCharacterId };
+    }
+    return existing;
+  }
 
   const fresh: Omit<IntelligenceAgency, "_id"> = {
     countryId,

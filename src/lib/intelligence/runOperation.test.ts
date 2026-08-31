@@ -7,8 +7,13 @@ const state = {
   network: null as Record<string, unknown> | null,
   coverage: null as Record<string, unknown> | null,
   targetAgency: null as Record<string, unknown> | null,
+  /** The acting agency as a re-read would find it after a failed claim. */
+  ownAgency: null as Record<string, unknown> | null,
+  /** Whether the atomic budget-and-slot claim matched. */
+  claimMatched: true,
   coverageWrites: [] as unknown[],
   networkWrites: [] as unknown[],
+  agencyClaims: [] as unknown[],
   logRows: [] as Record<string, unknown>[],
 };
 
@@ -26,8 +31,14 @@ vi.mock("@/lib/db/collections/intelligence", () => ({
     },
   }),
   getIntelligenceAgenciesCollection: async () => ({
-    findOne: async () => state.targetAgency,
-    updateOne: async () => undefined,
+    // `_id` in the filter means the acting agency being re-read after a refused
+    // claim; `countryId` means the TARGET's posture.
+    findOne: async (filter: Record<string, unknown>) =>
+      "_id" in filter ? state.ownAgency : state.targetAgency,
+    updateOne: async (_f: unknown, u: unknown) => {
+      state.agencyClaims.push(u);
+      return { modifiedCount: state.claimMatched ? 1 : 0 };
+    },
   }),
   getIntelligenceOpLogCollection: async () => ({
     insertOne: async (row: Record<string, unknown>) => {
@@ -91,8 +102,11 @@ beforeEach(() => {
   state.network = network();
   state.coverage = null;
   state.targetAgency = { counterIntel: 20 };
+  state.ownAgency = { budgetRemaining: 10_000_000, opSlots: { turn: 10, remaining: 2 } };
+  state.claimMatched = true;
   state.coverageWrites = [];
   state.networkWrites = [];
+  state.agencyClaims = [];
   state.logRows = [];
 });
 
@@ -126,14 +140,39 @@ describe("runOperation gates", () => {
     expect(await run({ kind: "action" })).toMatchObject({ ok: true });
   });
 
-  it("refuses when the budget cannot cover the operation", async () => {
-    const r = await run({ agency: agency({ budgetRemaining: COLLECTION_COST - 1 }) });
+  it("refuses when the claim finds the budget short", async () => {
+    // The claim is one conditional update, so a refusal is "did not match".
+    // The re-read is what tells the two refusals apart.
+    state.claimMatched = false;
+    state.ownAgency = { budgetRemaining: COLLECTION_COST - 1, opSlots: { turn: 10, remaining: 2 } };
+    const r = await run();
     expect(r).toMatchObject({ ok: false, status: 409 });
+    expect((r as { error: string }).error).toContain("afford");
   });
 
-  it("refuses with 429 when the turn's slots are spent", async () => {
-    const r = await run({ agency: agency({ opSlots: { turn: 10, remaining: 0 } }) });
+  it("refuses with 429 when the claim finds the turn's slots spent", async () => {
+    state.claimMatched = false;
+    state.ownAgency = { budgetRemaining: 10_000_000, opSlots: { turn: 10, remaining: 0 } };
+    const r = await run();
     expect(r).toMatchObject({ ok: false, status: 429 });
+  });
+
+  it("claims the budget and the slot in ONE conditional update", async () => {
+    // Read-then-write would let two concurrent operations both pass the gate and
+    // both spend. The guard is that the loser simply does not match.
+    await run();
+    expect(state.agencyClaims).toHaveLength(1);
+    const claim = state.agencyClaims[0] as unknown[];
+    expect(Array.isArray(claim)).toBe(true);
+  });
+
+  it("does no further work when the claim is refused", async () => {
+    state.claimMatched = false;
+    state.ownAgency = { budgetRemaining: 0, opSlots: { turn: 10, remaining: 2 } };
+    await run();
+    expect(state.coverageWrites).toHaveLength(0);
+    expect(state.networkWrites).toHaveLength(0);
+    expect(state.logRows).toHaveLength(0);
   });
 
   it("spends nothing when a gate refuses", async () => {

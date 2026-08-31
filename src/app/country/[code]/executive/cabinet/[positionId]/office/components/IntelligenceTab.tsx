@@ -3,8 +3,6 @@ import { useCallback, useEffect, useState } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import type { CountryId } from "@/lib/constants/countries";
 
-const POSITION_ID = "director_of_intelligence";
-
 interface AgencyView {
   tradecraft: number;
   counterIntel: number;
@@ -62,18 +60,33 @@ const COMPROMISE_LABEL: Record<string, string> = {
   attributed: "Attributed",
 };
 
-export default function IntelligenceClient({ countryId }: { countryId: CountryId }) {
+/**
+ * The intelligence console, rendered as a tab on the director's own cabinet
+ * office page.
+ *
+ * It lives here rather than at a top-level route because that is where this repo
+ * puts seat-owned machinery: the defence seat's Commands and Doctrine tabs, and
+ * the covert nuclear panel, are all inside the office. A standalone page would
+ * also have had no navigation into it.
+ */
+export default function IntelligenceTab({
+  countryId,
+  positionId,
+}: {
+  countryId: CountryId;
+  positionId: string;
+}) {
   const [view, setView] = useState<ServiceView | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     fetchJson<ServiceView>(
-      `/api/country/${countryId}/executive/cabinet/${POSITION_ID}/intelligence`,
+      `/api/country/${countryId}/executive/cabinet/${positionId}/intelligence`,
       { feature: "country-intelligence" }
     )
       .then(setView)
       .catch(() => setError("This office's records are not open to you."));
-  }, [countryId]);
+  }, [countryId, positionId]);
 
   useEffect(load, [load]);
 
