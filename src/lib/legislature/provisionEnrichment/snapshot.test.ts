@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { getCatalog } from "@/lib/politicalLegislation/catalog";
+import { projectLawToLegislationType } from "@/lib/politicalLegislation/project";
 import { snapshotBillPolicyProvisions } from "./snapshot";
 
 const LT = {
@@ -136,5 +138,59 @@ describe("snapshotBillPolicyProvisions", () => {
       []
     );
     expect(out).toEqual([]);
+  });
+});
+
+describe("snapshotBillPolicyProvisions — regional default for new-generation `both` laws", () => {
+  let db: MockDb;
+  const bothLaw = getCatalog("RU").find(
+    (law) => law.kind !== "tax" && law.allowedScope === "both"
+  )!;
+  const projected = projectLawToLegislationType(bothLaw);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    db.collection("legislationTypes").find.mockReturnValue({ toArray: async () => [projected] });
+    db.collection("statePolicies").find.mockReturnValue({ toArray: async () => [] });
+    db.collection("enactedLaws").find.mockReturnValue({
+      sort: () => ({ toArray: async () => [] }),
+    });
+  });
+
+  it("freezes the level-0 option as current law when the region has no row", async () => {
+    const [out] = await snapshotBillPolicyProvisions(
+      db as unknown as Db,
+      { scope: "region", countryId: "RU", regionId: "MOW" },
+      [{ legislationTypeId: bothLaw.id, policyOptionId: "l3", effectDirection: -1 }]
+    );
+
+    expect(out.currentPolicyOptionIdSnapshot).toBe("l0");
+    expect(out.currentPolicyOptionNameSnapshot).toBe(projected.policyOptions![0].name);
+  });
+
+  it("stamps nothing extra at national scope — the national row is seeded", async () => {
+    const [out] = await snapshotBillPolicyProvisions(
+      db as unknown as Db,
+      { scope: "national", countryId: "RU" },
+      [{ legislationTypeId: bothLaw.id, policyOptionId: "l3", effectDirection: -1 }]
+    );
+
+    expect(out.currentPolicyOptionIdSnapshot).toBeUndefined();
+  });
+
+  it("a real region row still wins over the level-0 default", async () => {
+    db.collection("statePolicies").find.mockReturnValue({
+      toArray: async () => [
+        { legislationTypeId: bothLaw.id, policyOptionId: "l2", policyOptionIndex: 2 },
+      ],
+    });
+    const [out] = await snapshotBillPolicyProvisions(
+      db as unknown as Db,
+      { scope: "region", countryId: "RU", regionId: "MOW" },
+      [{ legislationTypeId: bothLaw.id, policyOptionId: "l3", effectDirection: -1 }]
+    );
+
+    expect(out.currentPolicyOptionIdSnapshot).toBe("l2");
   });
 });

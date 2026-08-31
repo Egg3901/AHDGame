@@ -163,6 +163,23 @@ describe("mergeRegion", () => {
     expect(call?.[1].$set.homeState).toBe("BE");
   });
 
+  it("re-points office holders seated in the retired region", async () => {
+    // `currentOffice.state` is a NESTED denormalisation, not a region key, so
+    // the scoped table does not reach it. Left alone the holder names a region
+    // that is about to be deleted, which election resolution, deriveHighestOffice
+    // and the relocation paths all read.
+    await run();
+    for (const coll of ["characters", "npps"] as const) {
+      const call = db.collectionMocks[coll].updateMany.mock.calls.find(
+        (c) => c[0]?.["currentOffice.state"] === "BEO"
+      );
+      expect(call, `${coll} office re-point`).toBeDefined();
+      expect(call![1].$set["currentOffice.state"]).toBe("BE");
+      // The office TYPE and the rest of the sub-document are untouched.
+      expect(call![1].$set.currentOffice).toBeUndefined();
+    }
+  });
+
   it("refuses a cross-border fuse rather than seating officials in a foreign region", async () => {
     db.collection("states").findOne.mockImplementation(async (f: { _id: string }) =>
       f._id === "BEO"

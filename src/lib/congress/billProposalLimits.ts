@@ -12,6 +12,7 @@ import type { StatePolicy } from "@/lib/db/types/statePolicy";
 import type { EnactedLaw } from "@/lib/db/types/budget";
 import { ObjectId } from "mongodb";
 import { inferCountryIdFromStateId } from "@/lib/congress/resolveBillCountryId";
+import { regionalDefaultLevel } from "@/lib/politicalLegislation/regionalDefaults";
 import {
   canonicalizeLegislationTypeId,
   getEquivalentLegislationTypeIds,
@@ -325,6 +326,34 @@ export async function checkCurrentPolicyLevel(
         if (opt?.id) {
           const canonicalId = canonicalizeLegislationTypeId(law.legislationTypeId);
           if (canonicalId) policyMap.set(canonicalId, opt.id);
+        }
+      }
+    }
+
+    // Region scope only (a resolvable countryId means the store is national):
+    // a new-generation `both` law the region has never legislated sits at level
+    // 0. The propose modal already disables that option — /api/game/current-
+    // policies reports the same default — so without this the API would accept
+    // a no-op bill the UI refuses to build.
+    if (!countryId) {
+      const defaulted = canonicalLegTypeIds
+        .filter((id) => !policyMap.has(id))
+        .map((id) => ({ id, level: regionalDefaultLevel(id) }))
+        .filter((entry): entry is { id: string; level: number } => entry.level !== undefined);
+      if (defaulted.length > 0) {
+        // One batched fetch, not a findOne per law — the same N+1 the enacted-law
+        // lookup above was rewritten to avoid, on the same propose hot path.
+        const docs = await db
+          .collection<LegislationType>("legislationTypes")
+          .find(
+            { _id: { $in: defaulted.map((entry) => entry.id) } },
+            { projection: { policyOptions: 1 } }
+          )
+          .toArray();
+        const byId = new Map(docs.map((doc) => [doc._id, doc]));
+        for (const { id, level } of defaulted) {
+          const opt = byId.get(id)?.policyOptions?.[level];
+          if (opt?.id) policyMap.set(id, opt.id);
         }
       }
     }

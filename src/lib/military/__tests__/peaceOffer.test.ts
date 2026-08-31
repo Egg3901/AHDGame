@@ -4,6 +4,7 @@ import {
   validatePeaceOffer,
   sideWouldEmpty,
   maxIndemnityForGdp,
+  partyDisplayName,
   PEACE_INDEMNITY_MAX_GDP_SHARE,
 } from "../peaceOffer";
 import { PEACE_OFFER_DURATION_TURNS, TRUCE_TURNS } from "@/lib/db/types/peaceOffer";
@@ -508,5 +509,27 @@ describe("the buy-out gate", () => {
         1e12
       ).ok
     ).toBe(false);
+  });
+});
+
+describe("partyDisplayName", () => {
+  const choices = [
+    { id: 1, name: "Sozialdemokratische Partei", abbreviation: "SPD" },
+    { id: 7, name: "Sozialistische Einheitspartei" },
+  ];
+
+  it("prefers the abbreviation, which is what a field value and a clause both want", () => {
+    expect(partyDisplayName(choices, 1)).toBe("SPD");
+  });
+
+  it("falls back to the full name for a party carrying no abbreviation", () => {
+    // The wire resolved on `?.abbreviation` alone, so such a party reported as
+    // though the settlement had named nobody.
+    expect(partyDisplayName(choices, 7)).toBe("Sozialistische Einheitspartei");
+  });
+
+  it("is null for an id the country does not hold, and for no list at all", () => {
+    expect(partyDisplayName(choices, 99)).toBeNull();
+    expect(partyDisplayName(undefined, 1)).toBeNull();
   });
 });

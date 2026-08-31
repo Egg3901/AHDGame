@@ -104,6 +104,47 @@ describe("buildSettledDispatch: what each ending says", () => {
   });
 });
 
+describe("a settlement that installs a one-party state", () => {
+  const OPS: PeaceTerm = { kind: "regime_change", targetSystem: "onePartyState" };
+  const OPS_NAMED: PeaceTerm = {
+    kind: "regime_change",
+    targetSystem: "onePartyState",
+    rulingPartyId: 7,
+  };
+
+  it("never prints the raw system key at a player", () => {
+    // The enum reached the wire verbatim as "Regime change: onePartyState".
+    expect(termFieldValue(OPS)).not.toContain("onePartyState");
+    expect(termFieldValue(OPS)).toContain("one-party state");
+    expect(termFieldValue(REGIME)).not.toContain("parliamentaryRepublic");
+  });
+
+  it("names the installed party in the field and the prose", () => {
+    expect(termFieldValue(OPS_NAMED, "SED")).toContain("SED");
+    const d = buildSettledDispatch(war(OPS_NAMED), "SED");
+    expect(d.body).toContain("SED");
+    expect(d.body).toMatch(/every other party banned/);
+  });
+
+  it("says the strongest party took power when the settlement named none", () => {
+    // Implying a choice the victor did not make would be a different settlement.
+    const d = buildSettledDispatch(war(OPS));
+    expect(d.body).toMatch(/strongest party/);
+    expect(d.body).not.toMatch(/\$\{/);
+  });
+
+  it("does not describe a one-party conversion as going to the polls", () => {
+    const d = buildSettledDispatch(war(OPS_NAMED), "SED");
+    expect(d.body).not.toMatch(/go to the polls/);
+  });
+
+  it("keeps the no-digits house style", () => {
+    for (const d of [buildSettledDispatch(war(OPS)), buildSettledDispatch(war(OPS_NAMED), "SED")]) {
+      expect(d.body).not.toMatch(/\d/);
+    }
+  });
+});
+
 describe("termFieldValue", () => {
   it("names the payer of an indemnity, since it is quoted in their currency", () => {
     expect(termFieldValue(INDEMNITY)).toContain("Turkey");

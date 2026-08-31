@@ -6,6 +6,7 @@ import {
   canonicalizeLegislationTypeId,
   getEquivalentLegislationTypeIds,
 } from "@/lib/legislationTypeAliases";
+import { regionalDefaultLevel } from "@/lib/politicalLegislation/regionalDefaults";
 import { resolveOptionLabel, splitLegacySnapshot } from "./optionLabel";
 import { resolveProvisionPolicyOption, type ResolvableProvision } from "./resolvePolicyOption";
 import type { FiscalScope, ProvisionLabel } from "./types";
@@ -218,6 +219,20 @@ export async function loadLiveCurrentPolicies(
     if (!key || out.has(key)) continue;
     if (law.policyOptionIndex === undefined) continue;
     out.set(key, { policyOptionIndex: law.policyOptionIndex });
+  }
+
+  // Last resort at REGION scope only: a new-generation `both` law with no row
+  // anywhere sits at level 0, which is already what `getEnactedLevel` reports
+  // to the engine. Without this the provision renders with no current law at
+  // all, and `LawProvisionComparison` drops the fiscal comparison and the
+  // metric chips along with it. Deliberately not applied at national scope —
+  // there a missing row means something else is wrong and should surface.
+  if (scope.scope === "region") {
+    for (const id of canonical) {
+      if (out.has(id)) continue;
+      const level = regionalDefaultLevel(id);
+      if (level !== undefined) out.set(id, { policyOptionIndex: level });
+    }
   }
 
   return out;

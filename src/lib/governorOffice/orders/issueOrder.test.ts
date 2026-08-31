@@ -16,6 +16,8 @@ import { describe, expect, it, vi } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { issueOrder } from "./issueOrder";
 import { REDISTRICT_AUTHORITY_LAW } from "@/lib/redistricting/caps";
+import { getCatalog } from "@/lib/politicalLegislation/catalog";
+import { projectLawToLegislationType } from "@/lib/politicalLegislation/project";
 
 vi.mock("@/lib/turn/currentTurn", () => ({ getCurrentTurn: vi.fn().mockResolvedValue(100) }));
 vi.mock("@/lib/news", () => ({ generateOrderNews: vi.fn().mockResolvedValue(undefined) }));
@@ -113,5 +115,109 @@ describe("issueOrder — short option ladders", () => {
 
     expect(result.status).toBe(200);
     expect(result.body.policyOptionIndexAfter).toBe(1);
+  });
+});
+
+describe("issueOrder — new-generation `both` laws in a region", () => {
+  const bothLaw = getCatalog("RU").find(
+    (law) => law.kind !== "tax" && law.allowedScope === "both"
+  )!;
+  const projected = projectLawToLegislationType(bothLaw);
+
+  function setupNewGen(priorPolicy: unknown = null) {
+    const db = createMockDb() as unknown as MockDb;
+    db.collection("governorOfficeState").findOne.mockResolvedValue({
+      countryId: "RU",
+      stateId: "MOW",
+      gubernatorialActions: 99,
+    });
+    db.collection("governorExecutiveOrders").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+      sort: vi.fn().mockReturnThis(),
+    });
+    db.collection("statePolicies").findOne.mockResolvedValue(priorPolicy);
+    db.collection("legislationTypes").findOne.mockResolvedValue(projected);
+    return db;
+  }
+
+  /** `policyOptionIndexBefore` lives on the stored order doc, not the result body. */
+  function beforeIndexOf(db: MockDb): number {
+    const order = db.collectionMocks.governorExecutiveOrders.insertOne.mock.calls[0]![0] as {
+      policyOptionIndexBefore: number;
+    };
+    return order.policyOptionIndexBefore;
+  }
+
+  const NEWGEN_INPUT = {
+    countryId: "RU" as const,
+    stateId: "MOW",
+    characterId: "c1" as never,
+    characterName: "Governor",
+    legislationTypeId: bothLaw.id,
+  };
+
+  /**
+   * The region default is level 0, and /api/game/current-policies now reports
+   * it, so IssueOrderModal previews the step from 0. Falling back to the
+   * ladder centre here made the server write a level the region never had —
+   * and disagree with the preview the player was shown.
+   */
+  it("steps from level 0, not the ladder centre, when the region has no row", async () => {
+    const db = setupNewGen();
+
+    const result = await issueOrder(db as never, {
+      ...NEWGEN_INPUT,
+      effectDirection: 1,
+      steps: 1,
+    });
+
+    expect(result.status).toBe(200);
+    expect(beforeIndexOf(db)).toBe(0);
+    expect(result.body.policyOptionIndexAfter).toBe(1);
+  });
+
+  it("refuses to step below the region default instead of silently clamping", async () => {
+    const db = setupNewGen();
+
+    const result = await issueOrder(db as never, {
+      ...NEWGEN_INPUT,
+      effectDirection: -1,
+      steps: 1,
+    });
+
+    expect(result.status).toBe(400);
+  });
+
+  it("a real region row still wins over the default", async () => {
+    const db = setupNewGen({ policyOptionIndex: 3, policyOptionId: "l3" });
+
+    const result = await issueOrder(db as never, {
+      ...NEWGEN_INPUT,
+      effectDirection: 1,
+      steps: 1,
+    });
+
+    expect(result.status).toBe(200);
+    expect(beforeIndexOf(db)).toBe(3);
+    expect(result.body.policyOptionIndexAfter).toBe(4);
+  });
+
+  /**
+   * National rows ARE seeded for these laws. A missing one means something
+   * else is wrong; defaulting it to 0 would quietly rewrite a national order.
+   */
+  it("keeps the ladder centre at national scope", async () => {
+    const db = setupNewGen();
+
+    const result = await issueOrder(db as never, {
+      ...NEWGEN_INPUT,
+      stateId: "su_national",
+      scope: "national",
+      effectDirection: 1,
+      steps: 1,
+    });
+
+    expect(result.status).toBe(200);
+    expect(beforeIndexOf(db)).toBe(2);
   });
 });

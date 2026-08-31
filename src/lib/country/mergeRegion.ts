@@ -197,6 +197,27 @@ export async function mergeRegion(db: Db, args: MergeRegionArgs): Promise<MergeR
     .updateMany({ homeState: fromRegionId }, { $set: { homeState: toRegionId, updatedAt: now } });
   documentsMoved += nppMoved?.modifiedCount ?? 0;
 
+  // `currentOffice.state` is a NESTED denormalisation, not a region key, so the
+  // scoped table above does not reach it: that table re-points `homeState`,
+  // `stateId` and `state`, and this field is none of them. An office holder
+  // seated in the absorbed half would be left naming a region that is about to
+  // be deleted -- read by election resolution, `deriveHighestOffice` and the
+  // relocation paths, all of which would be resolving against a region no longer
+  // on the map.
+  //
+  // BOTH collections, because most of these seats are NPP-held rather than
+  // player-held. Nested-field `$set`, so a holder's office TYPE and everything
+  // else on the sub-document is untouched.
+  for (const coll of ["characters", "npps"] as const) {
+    const res = await db
+      .collection(coll)
+      .updateMany(
+        { "currentOffice.state": fromRegionId },
+        { $set: { "currentOffice.state": toRegionId, updatedAt: now } }
+      );
+    documentsMoved += res?.modifiedCount ?? 0;
+  }
+
   // A corporation headquartered in the absorbed region moves with it, the same
   // way one follows a region across a border.
   const corpsMoved = await db

@@ -1,7 +1,13 @@
 import type { Db } from "mongodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { bulkOps, createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
-import { getAllNewGenerationLawIds, getCatalog } from "@/lib/politicalLegislation/catalog";
+import {
+  baselineLevelFor,
+  getAllNewGenerationLawIds,
+  getCatalog,
+  getRegionalCatalog,
+} from "@/lib/politicalLegislation/catalog";
+import { regionalDefaultLaws } from "@/lib/politicalLegislation/regionalDefaults";
 import { lawTargets } from "@/lib/politicalLegislation/dynamics";
 import { LAW_COUNTRY_IDS } from "@/lib/politicalLegislation/types";
 import { POLITICAL_LEGISLATION_RETAINED_OLD_IDS } from "@/lib/politicalMetrics/pipelinePreset";
@@ -137,10 +143,18 @@ describe("seedPoliticalLegislationBaseline", () => {
   it("seeds one policy record per program law and enacted laws above level 0", async () => {
     await seedPoliticalLegislationBaseline(db as unknown as Db, vi.fn(), 1953);
     const policyUpserts = bulkOps(db.collectionMocks.statePolicies.bulkWrite);
-    // 103 national program laws × 4 countries + 6 DD Land laws × 6 Länder.
-    expect(policyUpserts.length).toBe(412 + 36);
-    const landScoped = policyUpserts.filter((c) => (c[0] as { scope?: string }).scope === "state");
-    expect(landScoped.length).toBe(36);
+    // 103 national program laws × 4 countries, + 6 DD Land laws × 6 Länder,
+    // + one level-0 regional default per `both` law per region (US/UK/RU have
+    // one region each in the mock, DD six). Derived rather than hardcoded so
+    // adding a law to a catalog updates the expectation with it.
+    const regionCount: Record<string, number> = { US: 1, UK: 1, RU: 1, DD: 6 };
+    const regionalDefaults = LAW_COUNTRY_IDS.reduce(
+      (sum, cc) => sum + regionalDefaultLaws(cc, 1953).length * regionCount[cc],
+      0
+    );
+    expect(policyUpserts.length).toBe(412 + 36 + regionalDefaults);
+    const stateScoped = policyUpserts.filter((c) => (c[0] as { scope?: string }).scope === "state");
+    expect(stateScoped.length).toBe(36 + regionalDefaults);
     const lawReplaces = bulkOps(db.collectionMocks.enactedLaws.bulkWrite);
     const expectedEnacted = LAW_COUNTRY_IDS.flatMap((cc) =>
       getCatalog(cc).filter(
@@ -153,6 +167,73 @@ describe("seedPoliticalLegislationBaseline", () => {
       const doc = call[1] as { costModelV2?: unknown; policyOptionIndex?: number };
       expect(doc.costModelV2).toBeDefined();
       expect(doc.policyOptionIndex).toBeGreaterThan(0);
+    }
+  });
+
+  it("seeds a regional default row for every `both` law in every region of the country", async () => {
+    await seedPoliticalLegislationBaseline(db as unknown as Db, vi.fn(), 1953);
+    const stateRows = bulkOps(db.collectionMocks.statePolicies.bulkWrite)
+      .map((c) => c[0] as { scope?: string; stateId?: string; legislationTypeId: string })
+      .filter((doc) => doc.scope === "state");
+
+    // The mock gives US/UK/RU one region each and DD the six authored Länder.
+    const regionsByCountry: Record<string, string[]> = {
+      US: ["US-1"],
+      UK: ["UK-1"],
+      RU: ["RU-1"],
+      DD: ["BEO", "MV", "BB", "ST", "SN", "TH"],
+    };
+    for (const countryId of LAW_COUNTRY_IDS) {
+      for (const law of regionalDefaultLaws(countryId, 1953)) {
+        for (const stateId of regionsByCountry[countryId]) {
+          expect(
+            stateRows.some((r) => r.stateId === stateId && r.legislationTypeId === law.id),
+            `${law.id} has no regional default row in ${stateId}`
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("seeds every `both` regional default at level 0 so day-one residuals are unchanged", async () => {
+    await seedPoliticalLegislationBaseline(db as unknown as Db, vi.fn(), 1953);
+    const bothIds = new Set(
+      LAW_COUNTRY_IDS.flatMap((cc) => regionalDefaultLaws(cc, 1953).map((law) => law.id))
+    );
+    const rows = bulkOps(db.collectionMocks.statePolicies.bulkWrite)
+      .filter((c) => {
+        const filter = c[0] as { scope?: string; legislationTypeId: string };
+        return filter.scope === "state" && bothIds.has(filter.legislationTypeId);
+      })
+      .map((c) => (c[1] as { $set: { policyOptionIndex: number; policyOptionId: string } }).$set);
+
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.policyOptionIndex).toBe(0);
+      expect(row.policyOptionId).toBe("l0");
+    }
+  });
+
+  it("leaves the DD Land sidecars on their authored baseline, not flattened to 0", async () => {
+    await seedPoliticalLegislationBaseline(db as unknown as Db, vi.fn(), 1953);
+    const sidecarIds = new Set(
+      getRegionalCatalog("DD", 1953)
+        .filter((law) => law.kind !== "tax")
+        .map((law) => law.id)
+    );
+    const rows = bulkOps(db.collectionMocks.statePolicies.bulkWrite)
+      .filter((c) => {
+        const filter = c[0] as { scope?: string; legislationTypeId: string };
+        return filter.scope === "state" && sidecarIds.has(filter.legislationTypeId);
+      })
+      .map(
+        (c) => (c[1] as { $set: { legislationTypeId: string; policyOptionIndex: number } }).$set
+      );
+
+    expect(rows.length).toBe(sidecarIds.size * 6);
+    for (const row of rows) {
+      const law = getRegionalCatalog("DD", 1953).find((l) => l.id === row.legislationTypeId)!;
+      expect(row.policyOptionIndex).toBe(baselineLevelFor(law, 1953));
     }
   });
 

@@ -14,7 +14,7 @@ import { getGameStateCollection } from "@/lib/db/collections/gameState";
 import { getConflict, getConflictsCollection } from "@/lib/db/collections/conflicts";
 import type { FederalBudget } from "@/lib/db/types";
 import { getCountryState } from "@/lib/countryState";
-import { maxIndemnityForGdp } from "@/lib/military/peaceOffer";
+import { maxIndemnityForGdp, loadPartySequentialIds } from "@/lib/military/peaceOffer";
 import { validatePeaceTerm, type PeaceTerm } from "@/lib/military/peaceTerm";
 import { applyPeaceTerm } from "@/lib/military/applyPeaceTerm";
 import { resolveConflict } from "@/lib/military/resolveConflict";
@@ -35,6 +35,10 @@ const bodySchema = z.object({
     z.object({
       kind: z.literal("regime_change"),
       targetSystem: z.enum(["presidential", "parliamentaryRepublic", "onePartyState"]),
+      // Which party takes power. Only meaningful for `onePartyState`, which
+      // `validatePeaceTerm` enforces — the schema accepts it either way so the
+      // contradiction is refused with a reason rather than a shape error.
+      rulingPartyId: z.number().int().positive().optional(),
     }),
     z.object({
       kind: z.literal("demilitarisation"),
@@ -122,12 +126,19 @@ export async function POST(
     }
 
     const targetState = await getCountryState(db, target);
+    // Loaded only for the term that can name a party, so an indemnity or a
+    // demilitarisation does not pay for a query it never reads.
+    const targetPartyIds =
+      term.kind === "regime_change" && term.rulingPartyId != null
+        ? await loadPartySequentialIds(db, target)
+        : null;
     const check = validatePeaceTerm(term, {
       from: countryId,
       to: target,
       target,
       targetSystem: targetState.governmentType,
       maxIndemnity,
+      targetPartyIds,
     });
     if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
 

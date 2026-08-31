@@ -28,14 +28,37 @@ function mockDb(opts: {
   govStatus?: string;
   rulingPartyId?: number | null;
   officials?: Array<{ party?: string; seatsHeld?: number }>;
+  /**
+   * What the SECOND `electedOfficials` find returns — the "still seated" probe
+   * the vacate sweep runs after its delete, to decide whose `currentOffice` to
+   * clear. Defaults to nobody, which is the ordinary case: a banned member's
+   * only seat was the one just removed.
+   */
+  stillSeated?: Array<{ characterId?: unknown; nppId?: unknown }>;
 }) {
   const writes: Array<{ coll: string; filter: unknown; update: unknown }> = [];
+  /** Every `find` filter, so the vacate sweep's party-token query can be asserted. */
+  const finds: Array<{ coll: string; filter: unknown }> = [];
+  const deletes: Array<{ coll: string; filter: unknown }> = [];
   const db = {
     collection: (name: string) => ({
-      find: () => ({
-        toArray: async () =>
-          name === "politicalParties" ? (opts.parties ?? []) : (opts.officials ?? []),
-      }),
+      find: (filter?: unknown) => {
+        finds.push({ coll: name, filter });
+        const nth = finds.filter((f) => f.coll === name).length;
+        return {
+          toArray: async () => {
+            if (name === "politicalParties") return opts.parties ?? [];
+            // The vacate sweep reads `electedOfficials` twice: the doomed rows,
+            // then who is still seated after the delete.
+            if (name === "electedOfficials" && nth > 1) return opts.stillSeated ?? [];
+            return opts.officials ?? [];
+          },
+        };
+      },
+      deleteMany: async (filter: unknown) => {
+        deletes.push({ coll: name, filter });
+        return { deletedCount: 0 };
+      },
       findOne: async () =>
         name === "governmentFormations"
           ? opts.governingPartyId !== undefined
@@ -48,7 +71,7 @@ function mockDb(opts: {
       },
     }),
   } as unknown as Db;
-  return { db, writes };
+  return { db, writes, finds, deletes };
 }
 
 const PARTIES: Party[] = [
@@ -171,7 +194,125 @@ describe("installOnePartyState", () => {
     const banned = writes.find(
       (w) => (w.update as { $set: { regimeStatus: string } }).$set.regimeStatus === "banned"
     );
-    expect((banned?.filter as { sequentialId: { $ne: number } }).sequentialId.$ne).toBe(2);
+    // Banned by an explicit id LIST rather than "everyone but the ruler": the
+    // list is what lets a caller tolerate a bloc (`toleratedPartyIds`) without
+    // the two writes racing over the same rows.
+    expect((banned?.filter as { sequentialId: { $in: number[] } }).sequentialId.$in).toEqual([1]);
+  });
+
+  it("marks tolerated parties approved rather than banned", async () => {
+    const { db, writes } = mockDb({ parties: PARTIES, governingPartyId: 1 });
+    await installOnePartyState(db, "DE", 470, { rulingPartyId: 2, toleratedPartyIds: [1] });
+    const approved = writes.find(
+      (w) => (w.update as { $set: { regimeStatus: string } }).$set.regimeStatus === "approved"
+    );
+    expect((approved?.filter as { sequentialId: { $in: number[] } }).sequentialId.$in).toEqual([1]);
+    // Nothing is left to ban, so no banned write is issued at all.
+    expect(
+      writes.find(
+        (w) => (w.update as { $set: { regimeStatus: string } }).$set.regimeStatus === "banned"
+      )
+    ).toBeUndefined();
+  });
+
+  it("does not unseat a tolerated party that shares an abbreviation with a banned one", async () => {
+    // Reunification leaves Germany holding TWO parties abbreviated "CDU": the
+    // western one it bans and the eastern one it tolerates. Matching benches on
+    // an abbreviation shared with a non-banned party would unseat both.
+    const twoCdus: Party[] = [
+      { sequentialId: 2, name: "Christlich Demokratische Union", abbreviation: "CDU" },
+      { sequentialId: 7, name: "Sozialistische Einheitspartei", abbreviation: "SED" },
+      { sequentialId: 8, name: "Christlich-Demokratische Union (Ost)", abbreviation: "CDU" },
+    ];
+    const { db, finds } = mockDb({ parties: twoCdus, governingPartyId: 7 });
+    await installOnePartyState(db, "DE", 470, {
+      rulingPartyId: 7,
+      toleratedPartyIds: [8],
+      vacateBannedSeats: true,
+    });
+
+    const vacate = finds.find(
+      (f) => f.coll === "electedOfficials" && (f.filter as { party?: unknown })?.party !== undefined
+    );
+    expect(vacate).toBeDefined();
+    const matched = (vacate!.filter as { party: { $in: string[] } }).party.$in;
+    // The banned party's own id is there.
+    expect(matched).toContain("2");
+    // Its abbreviation is NOT, because the tolerated eastern party shares it.
+    expect(matched).not.toContain("CDU");
+    // Its unambiguous full name still is.
+    expect(matched).toContain("Christlich Demokratische Union");
+    // And nothing that identifies the ruling or tolerated parties.
+    expect(matched).not.toContain("7");
+    expect(matched).not.toContain("8");
+    expect(matched).not.toContain("SED");
+  });
+
+  it("empties the banned benches and lets their holders go", async () => {
+    const banned = { _id: "row1", party: "1", characterId: "char1", nppId: null };
+    const bannedNpp = { _id: "row2", party: "1", characterId: null, nppId: "npp1" };
+    const { db, deletes, writes } = mockDb({
+      parties: PARTIES,
+      governingPartyId: 1,
+      officials: [banned, bannedNpp] as never,
+    });
+
+    await installOnePartyState(db, "DE", 470, { rulingPartyId: 2, vacateBannedSeats: true });
+
+    // The rows go.
+    const removed = deletes.find((d) => d.coll === "electedOfficials");
+    expect(removed).toBeDefined();
+    expect((removed!.filter as { _id: { $in: string[] } })._id.$in).toEqual(["row1", "row2"]);
+
+    // And so does the stored office pointer, for a player and an NPP alike --
+    // neither has a seat left, so neither may go on reading as seated.
+    const clearedChar = writes.find((w) => w.coll === "characters");
+    expect(clearedChar).toBeDefined();
+    expect(
+      (clearedChar!.update as { $set: { currentOffice: unknown } }).$set.currentOffice
+    ).toBeNull();
+    const clearedNpp = writes.find((w) => w.coll === "npps");
+    expect(clearedNpp).toBeDefined();
+    expect(
+      (clearedNpp!.update as { $set: { currentOffice: unknown } }).$set.currentOffice
+    ).toBeNull();
+  });
+
+  it("leaves the office pointer alone for a holder who still has a seat", async () => {
+    const banned = { _id: "row1", party: "1", characterId: "char1", nppId: null };
+    const { db, writes } = mockDb({
+      parties: PARTIES,
+      governingPartyId: 1,
+      officials: [banned] as never,
+      // They hold another seat that survived, so their pointer names a real office.
+      stillSeated: [{ characterId: "char1" }],
+    });
+
+    await installOnePartyState(db, "DE", 470, { rulingPartyId: 2, vacateBannedSeats: true });
+
+    expect(writes.find((w) => w.coll === "characters")).toBeUndefined();
+  });
+
+  it("touches no bench at all when vacating is not asked for", async () => {
+    // The shipped `regime_change` peace term must keep behaving exactly as it did.
+    const { db, deletes } = mockDb({
+      parties: PARTIES,
+      governingPartyId: 1,
+      officials: [{ _id: "row1", party: "1" }] as never,
+    });
+
+    await installOnePartyState(db, "DE", 470, { rulingPartyId: 2 });
+
+    expect(deletes.find((d) => d.coll === "electedOfficials")).toBeUndefined();
+  });
+
+  it("never demotes the ruling party to approved, even when named tolerated", async () => {
+    const { db, writes } = mockDb({ parties: PARTIES, governingPartyId: 1 });
+    await installOnePartyState(db, "DE", 470, { rulingPartyId: 2, toleratedPartyIds: [1, 2] });
+    const approved = writes.find(
+      (w) => (w.update as { $set: { regimeStatus: string } }).$set.regimeStatus === "approved"
+    );
+    expect((approved?.filter as { sequentialId: { $in: number[] } }).sequentialId.$in).toEqual([1]);
   });
 
   it("ignores an explicit party that does not exist in this country", async () => {

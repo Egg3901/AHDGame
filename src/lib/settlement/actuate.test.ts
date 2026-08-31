@@ -350,9 +350,28 @@ describe("actuateSettlementOutcome", () => {
     // The SED is sequentialId 1 in East Germany and 7 after the migration.
     // Germany's OWN governing party is also "1" (the SPD) -- the collision this
     // assertion exists to guard.
-    expect(vi.mocked(installOnePartyState)).toHaveBeenCalledWith(expect.anything(), "DE", 470, {
-      rulingPartyId: 7,
-    });
+    expect(vi.mocked(installOnePartyState)).toHaveBeenCalledWith(
+      expect.anything(),
+      "DE",
+      470,
+      expect.objectContaining({ rulingPartyId: 7 })
+    );
+  });
+
+  it("tolerates the parties that crossed and vacates the seats of those it bans", async () => {
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+    const { installOnePartyState } = await import("@/lib/onePartyState/installOnePartyState");
+    const opts = vi.mocked(installOnePartyState).mock.calls[0]?.[3] as {
+      toleratedPartyIds?: number[];
+      vacateBannedSeats?: boolean;
+    };
+    // The carried bloc arrives `approved`, not banned: the winning side does not
+    // dissolve its own coalition partners at the moment it wins.
+    expect(opts.toleratedPartyIds).toContain(7);
+    // And the survivor's own parties lose the offices they hold, rather than
+    // sitting as a banned majority of a chamber they are outlawed in.
+    expect(opts.vacateBannedSeats).toBe(true);
   });
 
   it("does not schedule a post-conversion election", async () => {
@@ -447,6 +466,73 @@ describe("actuateSettlementOutcome", () => {
     expect(call?.[1].$set.pmNppId).toBeNull();
   });
 
+  it("stands the displaced leader down from the office they no longer hold", async () => {
+    const gs = new ObjectId();
+    prime(db, "governmentFormations").findOne.mockResolvedValue({
+      _id: "DD",
+      pmCharacterId: gs,
+      pmNppId: null,
+    });
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+
+    // `currentOffice` is a STORED denormalisation: clearing `pmNppId` alone
+    // leaves the outgoing chancellor still reading as chancellor everywhere that
+    // ranks an office off that field. Scoped by country AND executive key.
+    for (const coll of ["characters", "npps"] as const) {
+      const cleared = prime(db, coll).updateMany.mock.calls.find(
+        (c) => c[0]?.countryId === "DE" && c[0]?.["currentOffice.type"] === "chancellor"
+      );
+      expect(cleared, `${coll} stand-down`).toBeDefined();
+      expect(cleared![1].$set.currentOffice).toBeNull();
+    }
+  });
+
+  it("gives the carried leader the surviving country's office key", async () => {
+    const gs = new ObjectId();
+    prime(db, "governmentFormations").findOne.mockResolvedValue({
+      _id: "DD",
+      pmCharacterId: gs,
+      pmNppId: null,
+    });
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+
+    // They arrive holding `generalSecretary`, which the Federal Republic does not
+    // define. Left alone they show a defunct title and match nothing that looks
+    // the office up in the country's config.
+    const took = prime(db, "characters").updateOne.mock.calls.find(
+      (c) => String(c[0]?._id) === String(gs) && c[1]?.$set?.["currentOffice.type"] !== undefined
+    );
+    expect(took).toBeDefined();
+    expect(took![1].$set["currentOffice.type"]).toBe("chancellor");
+    // Filtered on the office being an OBJECT: `$set` on a dotted path throws
+    // when the parent is null.
+    expect(took![0].currentOffice).toEqual({ $type: "object" });
+  });
+
+  it("seats a carried leader who holds no office at all", async () => {
+    // A leader whose only office was a cabinet portfolio the remap retires
+    // reaches this with `currentOffice` already nulled. A dotted `$set` would
+    // throw there, aborting a merge that has already claimed its cooldown and
+    // cannot retry.
+    const gs = new ObjectId();
+    prime(db, "governmentFormations").findOne.mockResolvedValue({
+      _id: "DD",
+      pmCharacterId: gs,
+      pmNppId: null,
+    });
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+
+    const whole = prime(db, "characters").updateOne.mock.calls.find(
+      (c) => String(c[0]?._id) === String(gs) && c[1]?.$set?.currentOffice !== undefined
+    );
+    expect(whole).toBeDefined();
+    expect(whole![1].$set.currentOffice).toEqual({ type: "chancellor" });
+    expect(whole![0].currentOffice).toEqual({ $not: { $type: "object" } });
+  });
+
   it("never installs the survivor's own party when the absorbed state names none", async () => {
     // A challenger that was not already a one-party state records no ruling
     // party. Letting the resolver fill the gap reads the SURVIVOR's formed
@@ -460,9 +546,12 @@ describe("actuateSettlementOutcome", () => {
     await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
     const { installOnePartyState } = await import("@/lib/onePartyState/installOnePartyState");
     // 7 is the carried party; 1 would be Germany's own SPD.
-    expect(vi.mocked(installOnePartyState)).toHaveBeenCalledWith(expect.anything(), "DE", 470, {
-      rulingPartyId: 7,
-    });
+    expect(vi.mocked(installOnePartyState)).toHaveBeenCalledWith(
+      expect.anything(),
+      "DE",
+      470,
+      expect.objectContaining({ rulingPartyId: 7 })
+    );
   });
 
   it("moves the governing party with the government", async () => {
@@ -499,14 +588,66 @@ describe("actuateSettlementOutcome", () => {
     expect(calls.some((c) => c[1].$unset?.cabinetPosition !== undefined)).toBe(true);
   });
 
-  it("retires the absorbed cabinet rather than seating it in unknown portfolios", async () => {
+  it("clears the SURVIVOR's cabinet so the defeated side does not govern", async () => {
     const { actuateSettlementOutcome } = await import("./actuate");
     await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+    // The merge runs winner-into-shell, so the shell's own ministers go. In the
+    // live German case they are NPP ministers of parties this settlement is
+    // about to ban, sitting in portfolios the carried ministers are given.
+    expect(prime(db, "cabinetMembers").deleteMany).toHaveBeenCalledWith({ countryId: "DE" });
+  });
+
+  it("carries a mapped portfolio to the surviving country's equivalent", async () => {
+    const minister = new ObjectId();
+    const row = new ObjectId();
+    prime(db, "cabinetMembers").find.mockImplementation((f: { countryId: string }) => ({
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      project: vi.fn().mockReturnThis(),
+      toArray: vi
+        .fn()
+        .mockResolvedValue(
+          f.countryId === "DD"
+            ? [{ _id: row, positionId: "minister_of_defence", characterId: minister }]
+            : []
+        ),
+    }));
+
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+
     // East Germany seats a `minister_of_defence`; Germany a `defense_minister`.
-    // Carrying the rows would create ministries the surviving country does not
-    // define, alongside the ones it already has.
-    expect(prime(db, "cabinetMembers").deleteMany).toHaveBeenCalledWith({ countryId: "DD" });
-    expect(prime(db, "cabinetMembers").updateMany).not.toHaveBeenCalled();
+    // The winner keeps the portfolio, under the survivor's name for it.
+    expect(prime(db, "cabinetMembers").updateOne).toHaveBeenCalledWith(
+      { _id: row },
+      expect.objectContaining({
+        $set: expect.objectContaining({ countryId: "DE", positionId: "defense_minister" }),
+      })
+    );
+  });
+
+  it("retires an absorbed portfolio the survivor has no counterpart for", async () => {
+    const minister = new ObjectId();
+    const row = new ObjectId();
+    prime(db, "cabinetMembers").find.mockImplementation((f: { countryId: string }) => ({
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      project: vi.fn().mockReturnThis(),
+      toArray: vi
+        .fn()
+        .mockResolvedValue(
+          f.countryId === "DD"
+            ? [{ _id: row, positionId: "minister_of_machine_building", characterId: minister }]
+            : []
+        ),
+    }));
+
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+
+    // The Federal Republic runs no Ministry for Machine Building, so the
+    // portfolio ends with the state that had it rather than being invented.
+    expect(prime(db, "cabinetMembers").deleteOne).toHaveBeenCalledWith({ _id: row });
   });
 
   it("retires a national office with no counterpart in the surviving country", async () => {
