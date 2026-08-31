@@ -346,10 +346,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       };
 
       try {
-        await runTransactionWithSessionRetry(
+        // No session (standalone Mongo, probed by the helper): without a
+        // transaction to serialize concurrent redemptions, take the fund's
+        // redemption lock, exactly like the code 20/263 path below.
+        const lockBusy = await runTransactionWithSessionRetry(
           async () => db.client,
-          async (session) => runRedemption(session)
+          async (session) => {
+            if (session) {
+              await runRedemption(session);
+              return false;
+            }
+            const releaseLock = await claimFundRedemptionLock(db, fund._id);
+            if (!releaseLock) return true;
+            try {
+              await runRedemption();
+            } finally {
+              await releaseLock();
+            }
+            return false;
+          }
         );
+        if (lockBusy) {
+          return NextResponse.json(
+            { error: "Another redemption for this fund is still processing. Try again." },
+            { status: 409 }
+          );
+        }
       } catch (err) {
         const code = (err as { code?: number } | undefined)?.code;
         if (code === 20 || code === 263) {

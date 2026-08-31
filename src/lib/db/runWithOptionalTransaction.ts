@@ -41,9 +41,11 @@ export async function runWithOptionalTransaction<T>(
 
   try {
     // Session lifecycle (and the retry on code 117, a poisoned pooled session)
-    // is owned by the retry helper: each attempt runs on a fresh session.
+    // is owned by the retry helper: each attempt runs on a fresh session. The
+    // helper re-probes transaction support and hands the callback `undefined`
+    // on standalone Mongo; route that to the caller's sequential fallback.
     return await runTransactionWithSessionRetry(getMongoClient, (session) =>
-      runInTransaction(session)
+      session ? runInTransaction(session) : runWithoutTransaction()
     );
   } catch (error) {
     const code = (error as MongoServerError | undefined)?.code;

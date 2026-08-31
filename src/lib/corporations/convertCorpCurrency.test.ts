@@ -7,6 +7,11 @@ import type { Corporation, CorporateSector, ShareOrder, ShareListing } from "@/l
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+// The retry helper probes transaction support before starting a session; keep
+// the probe out of the way so each test drives behavior via getMongoClient.
+vi.mock("@/lib/db/transactionSupport", () => ({
+  assertTransactionSupportAtBoot: vi.fn(async () => true),
+}));
 vi.mock("@/lib/corporations/cancelShareOrder", () => ({
   cancelShareOrderAndRefund: vi.fn(async () => ({ ok: true })),
 }));

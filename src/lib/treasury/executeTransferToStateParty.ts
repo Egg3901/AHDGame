@@ -111,9 +111,17 @@ export async function executeTransferToStateParty(
   };
 
   try {
-    await runTransactionWithSessionRetry(getMongoClient, async (session) =>
-      applyInTransaction(session)
+    // No session (standalone Mongo, probed by the helper) routes to the
+    // sequential path, which compensates for partial writes itself.
+    const fallbackResponse = await runTransactionWithSessionRetry(
+      getMongoClient,
+      async (session) => {
+        if (!session) return applyWithoutTransaction();
+        await applyInTransaction(session);
+        return null;
+      }
     );
+    if (fallbackResponse) return { ok: false, response: fallbackResponse };
   } catch (err) {
     const code = (err as MongoServerError | undefined)?.code;
     if (code === 20 || code === 263) {

@@ -163,9 +163,17 @@ export async function POST(request: Request, { params }: RouteParams) {
     };
 
     try {
-      await runTransactionWithSessionRetry(getMongoClient, async (session) =>
-        applySendInTransaction(session)
+      // No session (standalone Mongo, probed by the helper) routes to the
+      // sequential path, which compensates for partial writes itself.
+      const fallbackResponse = await runTransactionWithSessionRetry(
+        getMongoClient,
+        async (session) => {
+          if (!session) return applySendWithoutTransaction();
+          await applySendInTransaction(session);
+          return null;
+        }
       );
+      if (fallbackResponse) return fallbackResponse;
     } catch (err) {
       const code = (err as MongoServerError | undefined)?.code;
       if (code === 20 || code === 263) {
