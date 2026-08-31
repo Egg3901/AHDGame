@@ -8,7 +8,13 @@ The **US Federal Reserve** seats a **7-member rate-setting committee**, the FOMC
 - Seat 1 is the chair seat.
 - Occupants are players, NPPs, or vacant. Vacant seats **abstain**.
 - Terms are **192 turns** (4 game years), staggered so the whole board does not open at once.
-- **The engine does not staff the board.** When a governor's or the chair's term runs out, the seat falls **vacant** and waits for the President to nominate a successor and the Senate to confirm them. An understaffed committee simply cannot move the rate until it is filled. The chair seat is never auto-appointed either.
+- **The engine does not staff the board.** When a governor's or the chair's term runs out, the seat falls **vacant** and waits for the President to nominate a successor and the Senate to confirm them. The chair seat is never auto-appointed either.
+
+## The board falls below working strength
+
+A motion needs a **majority of the full board** to pass, and vacant seats abstain and count against it. Once enough seats lapse that the seated members can no longer reach that majority (for a 7-seat board: fewer than 4 seated), **no motion can ever carry**. In that state the committee stands down: meetings pause, and the **chair sets the rate directly** using the ordinary central-bank chair controls on the Overview page, bound by the usual cooldown and per-change size limits. The board returns to normal the moment enough governors are confirmed that it can carry a motion again.
+
+For a **player chair**, direct control appears as the normal Prime Rate adjuster. For an **autonomous (NPP) chair**, the Taylor-rule auto-setter takes over, exactly as for any single-governor bank.
 
 ## Nominations
 

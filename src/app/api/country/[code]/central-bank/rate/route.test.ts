@@ -253,6 +253,39 @@ describe("POST /api/country/[code]/central-bank/rate", () => {
     expect(sendMultiCountryGameEvent).not.toHaveBeenCalled();
   });
 
+  it("lets the chair set the rate directly when the board cannot carry a motion", async () => {
+    // Ticket #1238 prod shape: only the player chair is seated (1 of 7) — a
+    // board where no motion can ever carry. Rate authority returns to the chair.
+    await setup({
+      bank: makeMockBank({
+        fomcBoard: [
+          {
+            seatId: "seat-1",
+            isChair: true,
+            occupantType: "player",
+            characterId: chairCharacterId,
+          },
+          { seatId: "seat-2", occupantType: "vacant" },
+          { seatId: "seat-3", occupantType: "vacant" },
+          { seatId: "seat-4", occupantType: "vacant" },
+          { seatId: "seat-5", occupantType: "vacant" },
+          { seatId: "seat-6", occupantType: "vacant" },
+          { seatId: "seat-7", occupantType: "vacant" },
+        ],
+      }),
+    });
+    const { POST } = await import("./route");
+
+    const res = await POST(makeRequest({ rate: 1.75 }), ctx());
+
+    expect(res.status).toBe(200);
+    const set = db.collectionMocks.centralBanks.updateOne.mock.calls[0][1].$set;
+    expect(set.primeRate).toBe(1.75);
+    // The emergency chair set spends one of the term's moves so the restored
+    // committee is not handed free changes later in the term.
+    expect(set.rateChangesThisTerm).toBe(1);
+  });
+
   it("lets an admin override a seated committee, spending one of the term's moves", async () => {
     const adminUser = makeMockUser({
       isAdmin: true,
