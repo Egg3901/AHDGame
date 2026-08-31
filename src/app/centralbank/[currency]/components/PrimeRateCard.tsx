@@ -6,6 +6,8 @@ import {
   MAX_RATE_CUT_DELTA,
   AGGRESSIVE_CUT_SCRUTINY,
   RATE_CHANGE_COOLDOWN_TURNS,
+  PRIME_RATE_STEP,
+  snapToPrimeRateGrid,
 } from "@/lib/db/types/centralBank";
 
 export function PrimeRateCard({
@@ -78,6 +80,14 @@ export function PrimeRateCard({
   const turnsSinceLast = lastRateChangeTurn !== null ? currentTurn - lastRateChangeTurn : Infinity;
   const cooldownRemaining = Math.max(0, RATE_CHANGE_COOLDOWN_TURNS - turnsSinceLast);
   const onCooldown = cooldownRemaining > 0;
+  // The stored rate can sit off the quarter-point grid, because an autonomous
+  // chair sets a continuous Taylor-rule value. The API only accepts grid rates,
+  // so step from the nearest grid point rather than from the raw rate: from an
+  // off-grid base every offer would be off-grid too and the chair could never
+  // move the rate at all (ticket #1238). The floor and ceiling still key off
+  // the real current rate, since that is what the delta limits are measured
+  // against.
+  const gridBase = snapToPrimeRateGrid(primeRate);
   const rateFloor = Math.max(0, primeRate - MAX_RATE_CUT_DELTA);
   const rateCeiling = Math.min(25, primeRate + MAX_RATE_CHANGE_DELTA);
   const aggressiveCutThreshold = primeRate - MAX_RATE_CHANGE_DELTA;
@@ -191,11 +201,13 @@ export function PrimeRateCard({
             <div className="flex items-center gap-2">
               <button
                 onClick={() =>
-                  setPendingRate(Math.max(rateFloor, (pendingRate ?? primeRate) - 0.25))
+                  setPendingRate(Math.max(rateFloor, (pendingRate ?? gridBase) - PRIME_RATE_STEP))
                 }
                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-card-border bg-card-elevated text-foreground hover:bg-primary/10 hover:border-primary/30 transition-colors disabled:opacity-40"
                 disabled={
-                  submitting || onCooldown || (pendingRate ?? primeRate) - 0.25 < rateFloor - 1e-9
+                  submitting ||
+                  onCooldown ||
+                  (pendingRate ?? gridBase) - PRIME_RATE_STEP < rateFloor - 1e-9
                 }
               >
                 -
@@ -205,11 +217,13 @@ export function PrimeRateCard({
               </span>
               <button
                 onClick={() =>
-                  setPendingRate(Math.min(rateCeiling, (pendingRate ?? primeRate) + 0.25))
+                  setPendingRate(Math.min(rateCeiling, (pendingRate ?? gridBase) + PRIME_RATE_STEP))
                 }
                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-card-border bg-card-elevated text-foreground hover:bg-primary/10 hover:border-primary/30 transition-colors disabled:opacity-40"
                 disabled={
-                  submitting || onCooldown || (pendingRate ?? primeRate) + 0.25 > rateCeiling + 1e-9
+                  submitting ||
+                  onCooldown ||
+                  (pendingRate ?? gridBase) + PRIME_RATE_STEP > rateCeiling + 1e-9
                 }
               >
                 +
