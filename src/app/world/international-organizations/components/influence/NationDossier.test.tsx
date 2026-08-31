@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { InfluenceTarget, OrgInfluenceView } from "@/lib/alignment/queries/orgInfluence";
 import { NationDossier } from "./NationDossier";
@@ -10,6 +10,9 @@ const formatAmount = vi.fn((anchor: number) => `¥${Math.round(anchor)}`);
 vi.mock("@/contexts/CurrencyContext", () => ({
   useCurrency: () => ({ formatAmount }),
 }));
+
+// Cleared per test so call assertions read this render's calls, not the file's.
+beforeEach(() => formatAmount.mockClear());
 
 const VIEW = {
   poles: [
@@ -162,6 +165,25 @@ describe("NationDossier costs and the display-currency preference", () => {
     );
     expect(formatAmount).toHaveBeenCalledWith(152_000_000, "USD");
     expect(screen.getByText("¥152000000")).toBeTruthy();
+  });
+
+  it("prices a ruble-denominated fund in rubles, never with a dollar fallback", () => {
+    // The Warsaw Pact bug: the view names the fund country
+    // `fundCurrencyCountryId`, and a formatter that missed it fell back to USD,
+    // so the same point cost the form quoted in SUR read as dollars up here.
+    render(
+      <NationDossier
+        view={{ ...VIEW, fundCurrencyCountryId: "RU", usdToFundRate: 0.1 } as OrgInfluenceView}
+        target={TARGET}
+        orgId="WARSAW_PACT"
+        viewerCountryId="RU"
+        onCommitted={() => {}}
+      />
+    );
+    // 76M SUR a point at 0.1 anchor-per-ruble is 7.6M anchor, tagged SUR so the
+    // "local" display preference resolves to rubles, not dollars.
+    expect(formatAmount).toHaveBeenCalledWith(7_600_000, "SUR");
+    expect(formatAmount).not.toHaveBeenCalledWith(7_600_000, "USD");
   });
 
   it("leaves the commit input in the fund's own currency", () => {
