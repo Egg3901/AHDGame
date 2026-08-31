@@ -65,6 +65,11 @@ export { stampInitialGameClock } from "@/lib/admin/bootstrapGameWorld";
  *   src/simulation phase reading them. Harmless to enable, but adds no
  *   testable mechanic to a headless sim; flagging so this isn't mistaken for
  *   real new coverage.
+ * - `nppOffensiveInitiationEnabled: true`, `nppOffensiveJoinEnabled: true`: the two
+ *   admin switches that let an NPP belligerent declare an offensive and follow an
+ *   ally into one. Both ship OFF for real worlds, and both are real turn mechanics
+ *   (foreignPolicy's `conduct_war` candidate; battleResolution's auto-join roster),
+ *   so leaving them off would silently empty the war stage this helper selects.
  * - `autoSectorSeedEnabled: true`: user-requested; this one IS a real,
  *   self-contained turn mechanic (src/lib/turn/autoSectorSeed.ts, fires every
  *   48 turns) — no NPP-side wiring needed.
@@ -130,6 +135,20 @@ export async function forceFullAutonomy(
         sectorTechTreesEnabled: true,
         sectorTechTreesEnabledBy: "sim-harness",
         sectorTechTreesEnabledAt: new Date().toISOString(),
+        // Both ship OFF for real worlds (admin opt-in, Admin → World → Conflicts)
+        // and MUST be forced on here. This helper defaults `foreignPolicyStage` to
+        // "war", so the war stage is the thing a run at these settings exists to
+        // exercise — and with the switches off a belligerent is never offered
+        // `conduct_war` and never joins an ally's attack, so the harness would report
+        // a fully-wired war stage that produced zero offensives. Exactly the failure
+        // the `autoDisastersEnabled` note above records: a gate defaulting false and
+        // nothing in bootstrap setting it, found only after a run came back empty.
+        nppOffensiveInitiationEnabled: true,
+        nppOffensiveInitiationEnabledBy: "sim-harness",
+        nppOffensiveInitiationEnabledAt: new Date().toISOString(),
+        nppOffensiveJoinEnabled: true,
+        nppOffensiveJoinEnabledBy: "sim-harness",
+        nppOffensiveJoinEnabledAt: new Date().toISOString(),
         // The Cold War world-event catalog (sputnik 1955-62, Berlin crisis
         // 1958-62, space race 1957-75, detente 1969-79, the 1973 oil-embargo
         // shock) is authored and era-gated in

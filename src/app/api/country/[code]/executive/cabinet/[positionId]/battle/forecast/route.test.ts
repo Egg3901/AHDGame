@@ -217,6 +217,65 @@ describe("battle forecast route", () => {
   });
 
   /**
+   * The same regression, reached the other way. An NPP ally never writes a
+   * `theaterState.autoJoin` order — it has no player to write one — so the admin
+   * `nppOffensiveJoinEnabled` switch opts it in instead. The resolver enrols it; if
+   * the forecast kept deriving its own set from `theaterState` it would silently go
+   * back to understating the attack, on a route whose contract is that it cannot
+   * disagree with the outcome it predicts.
+   */
+  it("pools an NPP ally opted in by the admin switch, which writes no standing order", async () => {
+    const alliedConflict = {
+      ...CONFLICT,
+      sideA: { label: "A", countries: ["US", "UK"], kind: "coalition" },
+    };
+    const oddsWith = async (switchOn: boolean) => {
+      vi.resetModules();
+      db.collectionMocks.conflicts.findOne.mockResolvedValue(alliedConflict);
+      db.collectionMocks.gameState.findOne.mockResolvedValue({
+        conflictsEnabled: true,
+        currentTurn: 40,
+        nppOffensiveJoinEnabled: switchOn,
+      });
+      db.collection("countryGameStates");
+      db.collectionMocks.countryGameStates.find.mockReturnValue({
+        toArray: vi
+          .fn()
+          .mockResolvedValue([{ _id: "UK", status: "active", enabledForPlayers: false }]),
+      });
+      // Deliberately empty: the switch is the ONLY thing that can enrol UK here.
+      db.collectionMocks.theaterState.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      });
+      db.collectionMocks.militaryUnits.find.mockImplementation(
+        (q: { countryId?: string; theaterId?: string } = {}) => {
+          const atFront = [
+            unit({ countryId: "US", theaterId: "afghan" }),
+            unit({ countryId: "UK", theaterId: "afghan" }),
+            unit({ countryId: "CN", theaterId: "afghan" }),
+            unit({ countryId: "CN", theaterId: "afghan" }),
+          ];
+          const docs = q.theaterId
+            ? atFront.filter((u) => u.theaterId === q.theaterId)
+            : atFront.filter((u) => u.countryId === (q.countryId ?? "US"));
+          return { toArray: vi.fn().mockResolvedValue(docs) };
+        }
+      );
+      const { GET } = await import(ROUTE);
+      const res = await GET(req("theaterId=afghan&targetCountry=CN"), call);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      return { odds: body.oddsPct as number, contingents: body.alliedContingents as number };
+    };
+
+    const off = await oddsWith(false);
+    const on = await oddsWith(true);
+    expect(off.contingents).toBe(1);
+    expect(on.contingents).toBe(2);
+    expect(on.odds).toBeGreaterThan(off.odds);
+  });
+
+  /**
    * Regression: "They attack" projected the enemy's offensive against the viewer's
    * ATTACK roster — the viewer plus whichever allies had filed a declaration.
    *

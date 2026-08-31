@@ -227,8 +227,14 @@ export interface GameState {
    * May an NPP belligerent declare an offensive of its own? When false the
    * `conduct_war` choice is never offered, so the country spends its foreign-policy
    * slot elsewhere instead of queueing a battle declaration. Default false.
-   * Toggled from Admin to World to Conflicts. Player governments are unaffected:
+   * Toggled from Admin → World → Conflicts. Player governments are unaffected:
    * they declare through the cabinet battle route either way.
+   *
+   * Governs the DECISION, not the queue. A declaration already filed still resolves
+   * on the following turn after this is switched off, because an offensive always
+   * resolves a turn after it is declared — that gap is the defender's window, and
+   * cancelling a filed order here would be a hole in it. Expect at most one more tick
+   * of NPP offensives after turning this off.
    */
   nppOffensiveInitiationEnabled?: boolean;
   nppOffensiveInitiationEnabledBy?: string;

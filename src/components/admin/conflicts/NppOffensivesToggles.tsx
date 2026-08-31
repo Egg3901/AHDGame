@@ -62,8 +62,13 @@ export function NppOffensivesToggles() {
       const data = await res.json();
       if (res.ok) {
         setMessage(next ? COPY[flag].on : COPY[flag].off);
-        // Re-read rather than patch locally, so the attribution the server stamped is
-        // what the panel shows.
+        // Apply the new value locally FIRST, then re-read for the attribution the
+        // server stamped. The re-read is a second round trip, and `busy` clears as
+        // soon as this handler returns, so without the local write the button sits
+        // re-enabled showing the old state until the fetch lands.
+        setFlags((current) =>
+          current ? { ...current, [flag]: { ...current[flag], enabled: next } } : current
+        );
         load();
       } else {
         setMessage(data.error ?? "Failed to update the switch.");

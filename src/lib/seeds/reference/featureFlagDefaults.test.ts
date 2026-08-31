@@ -59,4 +59,20 @@ describe("missingGameStateFlagDefaults", () => {
     const out = missingGameStateFlagDefaults({ worldEventsEnabled: false });
     expect(out).not.toHaveProperty("worldEventsEnabled");
   });
+
+  it("ships both NPP offensive switches OFF for a fresh world", () => {
+    // The deliberate exception, alongside autoSectorSeedEnabled. NPP armies attack
+    // with no Generals or military-technology system behind them, so a fresh world
+    // must not start doing it before an admin says so.
+    expect(missingGameStateFlagDefaults(null)).toMatchObject({
+      nppOffensiveInitiationEnabled: false,
+      nppOffensiveJoinEnabled: false,
+    });
+  });
+
+  it("preserves an admin's explicit NPP offensive opt-in across a reset", () => {
+    const out = missingGameStateFlagDefaults({ nppOffensiveJoinEnabled: true });
+    expect(out).not.toHaveProperty("nppOffensiveJoinEnabled");
+    expect(out).toMatchObject({ nppOffensiveInitiationEnabled: false });
+  });
 });

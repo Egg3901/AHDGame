@@ -52,6 +52,24 @@ describe("forceFullAutonomy", () => {
     expect(gameState?.update.$set.nppForeignPolicyModeAt).toBeTruthy();
   });
 
+  it("forces the NPP offensive switches on, or the war stage simulates nothing", async () => {
+    // Both ship OFF for real worlds. This helper defaults the foreign-policy stage to
+    // "war", so a run at these settings exists to exercise offensives — and with the
+    // switches off a belligerent is never offered `conduct_war` and never joins an
+    // ally's attack, so the harness would report a fully-wired war stage that produced
+    // zero of them. Same failure the crisis-spawn gate had before it was forced here.
+    const { db, writes } = captureDb();
+    await forceFullAutonomy(db);
+    const gameState = writes.find((w) => w.collection === "gameState");
+
+    expect(gameState?.update.$set).toMatchObject({
+      nppOffensiveInitiationEnabled: true,
+      nppOffensiveInitiationEnabledBy: "sim-harness",
+      nppOffensiveJoinEnabled: true,
+      nppOffensiveJoinEnabledBy: "sim-harness",
+    });
+  });
+
   it("can preserve player-country access for a production-shaped policy run", async () => {
     const { db, writes } = captureDb();
     await forceFullAutonomy(db, "v3", "active", "war", true);
