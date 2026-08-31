@@ -93,6 +93,26 @@ export const ELECTION_LIST_FIELDS: ApiField[] = [
   },
   { name: "elections[].candidates[].partyColor", type: "string|null", desc: "Party colour hex" },
   { name: "elections[].candidates[].isNPP", type: "boolean", desc: "Non-party member" },
+  {
+    name: "elections[].results",
+    type: "object|null",
+    desc: "Present only with results=true: vote standings, optional multi-seat estimate, and candidate stats.",
+  },
+  {
+    name: "elections[].results.seatsEstimate",
+    type: "object|null",
+    desc: "Multi-seat races only: candidateId to estimated seat count. Absent for single-seat races.",
+  },
+  {
+    name: "elections[].results.candidates[].favorability",
+    type: "number|null",
+    desc: "Current candidate favorability from the linked character or NPP.",
+  },
+  {
+    name: "elections[].results.candidates[].politicalInfluence",
+    type: "number|null",
+    desc: "Current political influence from the linked character or NPP.",
+  },
 ];
 
 /** GET /api/public/v1/elections/[id] */

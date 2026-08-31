@@ -28,9 +28,14 @@ describe("queryElectionList", () => {
     gameClock.currentTurn = 100;
     gameClock.effectiveNow = new Date("2026-01-01T00:00:00Z");
     db = createMockDb();
-    ["elections", "electionCandidates", "electionVoteTallies", "politicalParties"].forEach((n) =>
-      db.collection(n)
-    );
+    [
+      "elections",
+      "electionCandidates",
+      "electionVoteTallies",
+      "politicalParties",
+      "characters",
+      "npps",
+    ].forEach((n) => db.collection(n));
   });
 
   it("returns empty list when no elections found", async () => {
@@ -173,6 +178,234 @@ describe("queryElectionList", () => {
       const result = await queryElectionList(db as unknown as Db, { country: "US", state: "CA" });
 
       expect(result.elections[0]).not.toHaveProperty("results");
+    });
+
+    // House/governor-style multi-seat races expose a projected seat split.
+    it("includes seatsEstimate for multi-seat races on results=true", async () => {
+      const elecId = new ObjectId();
+      const char1 = new ObjectId();
+      const char2 = new ObjectId();
+      db.collectionMocks.elections!.find.mockReturnValue({
+        sort: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue([
+          {
+            _id: elecId,
+            seatId: "US-house-CA-1",
+            electionType: "house",
+            state: "CA",
+            status: "general",
+            countryId: "US",
+            totalSeats: 4,
+            startTime: new Date("2025-01-01"),
+          },
+        ]),
+      } as never);
+      db.collectionMocks.electionCandidates!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      } as never);
+      db.collectionMocks.electionVoteTallies!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            electionId: elecId,
+            totalVotes: { [char1.toString()]: 400, [char2.toString()]: 600 },
+            candidateNames: { [char1.toString()]: "Jane Smith", [char2.toString()]: "John Doe" },
+            candidateParties: {
+              [char1.toString()]: "Democratic",
+              [char2.toString()]: "Republican",
+            },
+            seatsEstimate: { [char1.toString()]: 2, [char2.toString()]: 2 },
+            finalized: false,
+          },
+        ]),
+      } as never);
+      db.collectionMocks.politicalParties!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      } as never);
+      db.collectionMocks.characters!.find.mockReturnValue({
+        project: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue([]),
+      } as never);
+      db.collectionMocks.npps!.find.mockReturnValue({
+        project: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue([]),
+      } as never);
+
+      const { queryElectionList } = await import("./election");
+      const result = await queryElectionList(db as unknown as Db, {
+        country: "US",
+        state: "CA",
+        results: true,
+      });
+
+      expect((result.elections[0].results as { seatsEstimate: unknown }).seatsEstimate).toEqual({
+        [char1.toString()]: 2,
+        [char2.toString()]: 2,
+      });
+    });
+
+    // Single-seat races are the common case and must stay unchanged: no
+    // seatsEstimate key at all, so old clients testing for its absence survive.
+    it("omits seatsEstimate for single-seat races on results=true", async () => {
+      seedTalliedRace();
+      const { queryElectionList } = await import("./election");
+      const result = await queryElectionList(db as unknown as Db, {
+        country: "US",
+        state: "CA",
+        results: true,
+      });
+
+      expect(result.elections[0].results).not.toHaveProperty("seatsEstimate");
+    });
+
+    it("adds favorability and political influence for player candidates", async () => {
+      const elecId = new ObjectId();
+      const char1 = new ObjectId();
+      db.collectionMocks.elections!.find.mockReturnValue({
+        sort: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue([
+          {
+            _id: elecId,
+            seatId: "US-senate-CA-1",
+            electionType: "senate",
+            state: "CA",
+            status: "general",
+            countryId: "US",
+            totalSeats: 1,
+            startTime: new Date("2025-01-01"),
+          },
+        ]),
+      } as never);
+      db.collectionMocks.electionCandidates!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            _id: new ObjectId(),
+            electionId: elecId,
+            characterId: char1,
+            characterName: "Jane Smith",
+            party: "Democratic",
+            status: "active",
+            isNPP: false,
+          },
+          {
+            _id: new ObjectId(),
+            electionId: elecId,
+            characterId: new ObjectId(),
+            characterName: "NPC",
+            party: "Republican",
+            status: "active",
+            isNPP: false,
+          },
+        ]),
+      } as never);
+      db.collectionMocks.electionVoteTallies!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            electionId: elecId,
+            totalVotes: { [char1.toString()]: 700, other: 300 },
+            candidateNames: { [char1.toString()]: "Jane Smith", other: "NPC" },
+            candidateParties: { [char1.toString()]: "Democratic", other: "Republican" },
+            seatsEstimate: { [char1.toString()]: 1 },
+            finalized: false,
+          },
+        ]),
+      } as never);
+      db.collectionMocks.politicalParties!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      } as never);
+      db.collectionMocks.characters!.find.mockReturnValue({
+        project: vi.fn().mockReturnThis(),
+        toArray: vi
+          .fn()
+          .mockResolvedValue([{ _id: char1, favorability: 61, politicalInfluence: 42 }]),
+      } as never);
+      db.collectionMocks.npps!.find.mockReturnValue({
+        project: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue([]),
+      } as never);
+
+      const { queryElectionList } = await import("./election");
+      const result = await queryElectionList(db as unknown as Db, {
+        country: "US",
+        state: "CA",
+        results: true,
+      });
+
+      const player = (
+        result.elections[0].results as { candidates: Array<{ characterId: string }> }
+      ).candidates.find((c: { characterId: string }) => c.characterId === char1.toString());
+      expect(player).toMatchObject({ favorability: 61, politicalInfluence: 42 });
+    });
+
+    it("pulls favorability and political influence from npps for non-party candidates", async () => {
+      const elecId = new ObjectId();
+      const nppId = new ObjectId();
+      db.collectionMocks.elections!.find.mockReturnValue({
+        sort: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue([
+          {
+            _id: elecId,
+            seatId: "US-house-CA-1",
+            electionType: "house",
+            state: "CA",
+            status: "general",
+            isNPP: true,
+            countryId: "US",
+            totalSeats: 2,
+            startTime: new Date("2025-01-01"),
+          },
+        ]),
+      } as never);
+      db.collectionMocks.electionCandidates!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            _id: new ObjectId(),
+            electionId: elecId,
+            characterId: nppId,
+            characterName: "NPP Candidate",
+            party: "Independent",
+            status: "active",
+            isNPP: true,
+            nppId,
+          },
+        ]),
+      } as never);
+      db.collectionMocks.electionVoteTallies!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            electionId: elecId,
+            totalVotes: { [nppId.toString()]: 500 },
+            candidateNames: { [nppId.toString()]: "NPP Candidate" },
+            candidateParties: { [nppId.toString()]: "Independent" },
+            seatsEstimate: { [nppId.toString()]: 1 },
+            finalized: false,
+          },
+        ]),
+      } as never);
+      db.collectionMocks.politicalParties!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      } as never);
+      db.collectionMocks.characters!.find.mockReturnValue({
+        project: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue([]),
+      } as never);
+      db.collectionMocks.npps!.find.mockReturnValue({
+        project: vi.fn().mockReturnThis(),
+        toArray: vi
+          .fn()
+          .mockResolvedValue([{ _id: nppId, favorability: 73, politicalInfluence: 58 }]),
+      } as never);
+
+      const { queryElectionList } = await import("./election");
+      const result = await queryElectionList(db as unknown as Db, {
+        country: "US",
+        state: "CA",
+        results: true,
+      });
+
+      const nppCandidate = (
+        result.elections[0].results as { candidates: Array<{ characterId: string }> }
+      ).candidates.find((c: { characterId: string }) => c.characterId === nppId.toString());
+      expect(nppCandidate).toMatchObject({ favorability: 73, politicalInfluence: 58 });
     });
   });
 
