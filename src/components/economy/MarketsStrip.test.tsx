@@ -20,7 +20,11 @@ describe("MarketsStrip", () => {
 
     const stock = screen.getByRole("link", { name: /Stock Market/ });
     expect(stock.getAttribute("href")).toBe("/country/us/stockmarket");
-    expect(stock.textContent).toContain("$4.20T");
+    // `stockMarketCap` is anchor-denominated (lib/stockExchange/aggregate), so it
+    // renders through formatAmount exactly as the same figure does on the stock
+    // market page this card links to. It previously carried the country's local
+    // "$" prefix, which labelled an anchored total as local currency.
+    expect(stock.textContent).toContain("₳4.2T");
     expect(stock.textContent).toContain("NYSE");
 
     const forex = screen.getByRole("link", { name: /Forex/ });

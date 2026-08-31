@@ -35,7 +35,7 @@ const params = { params: Promise.resolve({ code: "uk" }) };
 const good = {
   conflictId: "war1",
   toCountry: "CN",
-  indemnity: { payer: "UK", amount: 100 },
+  term: { kind: "indemnity", payer: "UK", amount: 100 },
 };
 
 /** Allow or refuse the negotiator gate, optionally naming which office authorized. */
@@ -117,13 +117,13 @@ describe("POST offer", () => {
   it("uppercases the target and payer, so a lowercase body still matches rosters", async () => {
     const { POST } = await import("./route");
     const res = await POST(
-      req({ ...good, toCountry: "cn", indemnity: { payer: "uk", amount: 5 } }),
+      req({ ...good, toCountry: "cn", term: { kind: "indemnity", payer: "uk", amount: 5 } }),
       params
     );
     expect(res.status).toBe(200);
     const doc = db.collectionMocks.peaceOffers.insertOne.mock.calls[0][0];
     expect(doc.toCountry).toBe("CN");
-    expect(doc.indemnity.payer).toBe("UK");
+    expect((doc.term as { payer: string }).payer).toBe("UK");
   });
 
   it("refuses an offer to a country on the same side", async () => {
@@ -135,7 +135,10 @@ describe("POST offer", () => {
 
   it("refuses a negative indemnity at the schema", async () => {
     const { POST } = await import("./route");
-    const res = await POST(req({ ...good, indemnity: { payer: "UK", amount: -5 } }), params);
+    const res = await POST(
+      req({ ...good, term: { kind: "indemnity", payer: "UK", amount: -5 } }),
+      params
+    );
     expect(res.status).toBe(400);
   });
 
@@ -143,7 +146,10 @@ describe("POST offer", () => {
     // 2x GDP is the cap; 1e15 against a 1,000,000 GDP is far past it. Pre-fix this
     // was accepted and drained the payer treasury on accept.
     const { POST } = await import("./route");
-    const res = await POST(req({ ...good, indemnity: { payer: "UK", amount: 1e15 } }), params);
+    const res = await POST(
+      req({ ...good, term: { kind: "indemnity", payer: "UK", amount: 1e15 } }),
+      params
+    );
     expect(res.status).toBe(400);
     expect((await res.json()).error).toMatch(/GDP/i);
     expect(db.collectionMocks.peaceOffers.insertOne).not.toHaveBeenCalled();
@@ -217,7 +223,7 @@ describe("GET offers", () => {
       conflictId: "war1",
       fromCountry: "CN",
       toCountry: "UK",
-      indemnity: { payer: "CN", amount: 10 },
+      term: { kind: "indemnity", payer: "CN", amount: 10 },
       status: "pending",
       offeredTurn: 1,
       expiresTurn: 999,
@@ -227,7 +233,7 @@ describe("GET offers", () => {
       conflictId: "war1",
       fromCountry: "UK",
       toCountry: "CN",
-      indemnity: { payer: "UK", amount: 20 },
+      term: { kind: "indemnity", payer: "UK", amount: 20 },
       status: "pending",
       offeredTurn: 1,
       expiresTurn: 5,
@@ -246,7 +252,9 @@ describe("GET offers", () => {
     const body = await (await GET(getReq(), params)).json();
     expect(body.wars).toHaveLength(1);
     expect(body.wars[0].conflictId).toBe("war1");
-    expect(body.wars[0].enemies).toEqual(["CN"]);
+    // Each enemy now carries the withdrawal gate's verdict alongside its id, so the
+    // form can say what may be asked of them before an offer is composed.
+    expect(body.wars[0].enemies.map((e: { country: string }) => e.country)).toEqual(["CN"]);
   });
 
   it("does NOT offer an ally as a country to negotiate with", async () => {
@@ -330,5 +338,82 @@ describe("who may negotiate", () => {
     await negotiator(true, "foreign_minister");
     const { POST } = await import("./route");
     expect((await POST(req(good), params)).status).toBe(200);
+  });
+});
+
+describe("which party the deal removes", () => {
+  it("defaults to the sender leaving, so an existing client is unchanged", async () => {
+    const { POST } = await import("./route");
+    expect((await POST(req(good), params)).status).toBe(200);
+    const doc = db.collectionMocks.peaceOffers.insertOne.mock.calls[0][0];
+    expect(doc.leaver).toBe("UK");
+  });
+
+  it("records the recipient as the leaver when asked to withdraw", async () => {
+    // Side B must survive the departure, or this is a buy-out and the gate refuses
+    // it: the default fixture has CN alone on its side.
+    db.collectionMocks.conflicts.findOne.mockResolvedValue({
+      ...conflict,
+      sideB: { label: "PLA", countries: ["CN", "RU"], kind: "coalition" },
+    });
+    const { POST } = await import("./route");
+    const res = await POST(req({ ...good, leaver: "them" }), params);
+    expect(res.status).toBe(200);
+    const doc = db.collectionMocks.peaceOffers.insertOne.mock.calls[0][0];
+    expect(doc.leaver).toBe("CN");
+  });
+
+  it("refuses a withdrawal that would end the war from a standing start", () => {
+    // CN alone on its side, so its departure empties it and simply buys the war.
+    return (async () => {
+      const { POST } = await import("./route");
+      const res = await POST(req({ ...good, leaver: "them" }), params);
+      expect(res.status).toBe(400);
+    })();
+  });
+
+  it("allows that same withdrawal as a white peace", () => {
+    // No victor is recorded, so nothing is bought.
+    return (async () => {
+      const { POST } = await import("./route");
+      const res = await POST(
+        req({ ...good, leaver: "them", term: { kind: "white_peace" } }),
+        params
+      );
+      expect(res.status).toBe(200);
+    })();
+  });
+
+  it("refuses an unknown direction at the schema", async () => {
+    const { POST } = await import("./route");
+    const res = await POST(req({ ...good, leaver: "somebody-else" }), params);
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("GET tells the form what it may ask for", () => {
+  it("marks an enemy whose departure would end the war", async () => {
+    // CN is alone on its side in the fixture, so asking it to leave empties the side.
+    // Computed by the same `withdrawalGate` the POST runs, so the form and the route
+    // cannot disagree about what is allowed.
+    db.collectionMocks.conflicts.find.mockReturnValue({
+      toArray: async () => [{ ...conflict, control: 50, controlStart: 50 }],
+    });
+    const { GET } = await import("./route");
+    const body = await (await GET(getReq(), params)).json();
+    const cn = body.wars[0].enemies.find((e: { country: string }) => e.country === "CN");
+    expect(cn).toMatchObject({ endsWar: true, withdrawalBlocked: true, requiredPct: 75 });
+  });
+
+  it("clears the block once the front is deep enough", async () => {
+    // Side A (US, UK) wins as control falls toward 0.
+    db.collectionMocks.conflicts.find.mockReturnValue({
+      toArray: async () => [{ ...conflict, control: 10, controlStart: 100 }],
+    });
+    const { GET } = await import("./route");
+    const body = await (await GET(getReq(), params)).json();
+    const cn = body.wars[0].enemies.find((e: { country: string }) => e.country === "CN");
+    expect(cn).toMatchObject({ endsWar: true, withdrawalBlocked: false });
+    expect(cn.progressPct).toBeGreaterThanOrEqual(75);
   });
 });

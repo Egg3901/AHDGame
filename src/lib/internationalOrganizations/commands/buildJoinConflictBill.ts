@@ -22,12 +22,23 @@ export async function buildJoinConflictBill(params: {
   db: Db;
   countryId: CountryId;
   preset?: string;
-  sponsor: { characterId: ObjectId; characterName: string; party?: string };
+  sponsor: { characterId: ObjectId; characterName: string; party?: string; isNpp?: boolean };
   conflictName: string;
   organizationId: string;
   provision: JoinConflictProvision;
 }): Promise<ObjectId> {
   const { db, countryId, preset, sponsor, conflictName, organizationId, provision } = params;
+  const existing = await db.collection<Bill>("bills").findOne(
+    {
+      countryId,
+      provisions: {
+        $elemMatch: { type: "join_conflict", resolutionId: provision.resolutionId },
+      },
+    } as never,
+    { projection: { _id: 1 } }
+  );
+  if (existing) return existing._id;
+
   // ⚠️ getCountryConfig, NOT COUNTRY_CONFIGS[...] — buildMembershipBill reads the
   // static table directly, and legislature shape is preset-dependent (DE 1953 flips
   // `bicameral`; TR and ES flip `upperElectionSystem` between eras).
@@ -64,6 +75,7 @@ export async function buildJoinConflictBill(params: {
     sponsorId: sponsor.characterId,
     sponsorName: sponsor.characterName,
     sponsorParty: sponsor.party ?? undefined,
+    nppSponsored: sponsor.isNpp === true,
     votes: {},
     votesFor: 0,
     votesAgainst: 0,

@@ -32,7 +32,7 @@ Switching later hits Favorability and PI and resets Party Influence.
 4. Declare.
 5. **View Campaign.** Spend Campaign (PI), request NPP endorsements. Do not attack same-party rivals.
 
-Highest primary score per party goes to the general.
+Your primary score is your standing; ballots accumulate over the primary's closing window and the top count per party goes to the general.
 
 \`\`\`guide-screenshot
 elections

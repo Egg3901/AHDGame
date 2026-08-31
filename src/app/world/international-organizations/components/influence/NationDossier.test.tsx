@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { InfluenceTarget, OrgInfluenceView } from "@/lib/alignment/queries/orgInfluence";
 import { NationDossier } from "./NationDossier";
@@ -10,6 +10,9 @@ const formatAmount = vi.fn((anchor: number) => `¥${Math.round(anchor)}`);
 vi.mock("@/contexts/CurrencyContext", () => ({
   useCurrency: () => ({ formatAmount }),
 }));
+
+// Cleared per test so call assertions read this render's calls, not the file's.
+beforeEach(() => formatAmount.mockClear());
 
 const VIEW = {
   poles: [
@@ -164,6 +167,25 @@ describe("NationDossier costs and the display-currency preference", () => {
     expect(screen.getByText("¥152000000")).toBeTruthy();
   });
 
+  it("prices a ruble-denominated fund in rubles, never with a dollar fallback", () => {
+    // The Warsaw Pact bug: the view names the fund country
+    // `fundCurrencyCountryId`, and a formatter that missed it fell back to USD,
+    // so the same point cost the form quoted in SUR read as dollars up here.
+    render(
+      <NationDossier
+        view={{ ...VIEW, fundCurrencyCountryId: "RU", usdToFundRate: 0.1 } as OrgInfluenceView}
+        target={TARGET}
+        orgId="WARSAW_PACT"
+        viewerCountryId="RU"
+        onCommitted={() => {}}
+      />
+    );
+    // 76M SUR a point at 0.1 anchor-per-ruble is 7.6M anchor, tagged SUR so the
+    // "local" display preference resolves to rubles, not dollars.
+    expect(formatAmount).toHaveBeenCalledWith(7_600_000, "SUR");
+    expect(formatAmount).not.toHaveBeenCalledWith(7_600_000, "USD");
+  });
+
   it("leaves the commit input in the fund's own currency", () => {
     // The route takes `amountLocal` in the FUND's currency. A field that
     // accepted one currency while labelled another would spend the wrong number.
@@ -200,7 +222,7 @@ describe("NationDossier costs and the display-currency preference", () => {
       screen.getByText((_, el) => el?.textContent?.trim() === "$90.0M available")
     ).toBeTruthy();
 
-    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "152000000" } });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "152000000" } });
     // TARGET prices a point at 76m, so 152m is exactly two points.
     // Scoped to the preview line: "2.00" also appears on the share bar above.
     expect(
@@ -226,6 +248,65 @@ describe("NationDossier costs and the display-currency preference", () => {
     expect(screen.getByText(/the nation moves when the turn processes/i)).toBeTruthy();
   });
 
+  it("blocks and guides a spend too small to move the nation at all (ticket #1213)", () => {
+    render(
+      <NationDossier
+        view={{ ...VIEW, fundBalanceLocal: 90_000_000 } as OrgInfluenceView}
+        target={TARGET}
+        orgId="NATO"
+        viewerCountryId="US"
+        onCommitted={() => {}}
+      />
+    );
+    // The reporter's exact move: a handful of currency units against a nation
+    // that costs 76m a point. It buys 0.00 points, so the commit is refused
+    // client-side and the player is told the floor (a point is 76m, a hundredth
+    // of it is 760,000).
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "10" } });
+    expect(screen.getByText(/too little to move Yugoslavia/i)).toBeTruthy();
+    expect(screen.getByText(/spend at least/i).textContent).toContain("0.01");
+    const commit = screen.getByRole("button", { name: /commit play/i }) as HTMLButtonElement;
+    expect(commit.disabled).toBe(true);
+  });
+
+  it("takes the M shorthand the panel itself prints (ticket #1236)", () => {
+    // The reporter read "spend at least $4.0M" and "costs $399.0M a point",
+    // typed 1, then 49, in plain units, and bought nothing. The field now
+    // accepts the abbreviated token the preview prints, so 49m is 49 million.
+    render(
+      <NationDossier
+        view={{ ...VIEW, fundBalanceLocal: 26_000_000_000 } as OrgInfluenceView}
+        target={
+          {
+            ...TARGET,
+            pointCostLocal: 399_000_000,
+            turnCapCostLocal: 1_995_000_000,
+          } as InfluenceTarget
+        }
+        orgId="NATO"
+        viewerCountryId="US"
+        onCommitted={() => {}}
+      />
+    );
+    expect(screen.getByText(/shorthand works here/i)).toBeTruthy();
+
+    // One plain unit against a 399M point: still refused, as ticket #1213 set.
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "1" } });
+    expect(screen.getByText(/too little to move Yugoslavia/i)).toBeTruthy();
+    const commit = screen.getByRole("button", { name: /commit play/i }) as HTMLButtonElement;
+    expect(commit.disabled).toBe(true);
+
+    // The reporter's intended spend, typed the way they said it: "49m".
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "49m" } });
+    expect(commit.disabled).toBe(false);
+    expect(
+      screen.getByText((_, el) => {
+        const t = el?.textContent ?? "";
+        return t.startsWith("Buys") && t.includes("0.12") && t.includes("each");
+      })
+    ).toBeTruthy();
+  });
+
   it("warns when the amount is past the per-turn ceiling", () => {
     render(
       <NationDossier
@@ -237,7 +318,7 @@ describe("NationDossier costs and the display-currency preference", () => {
       />
     );
     // 76m a point, so the 5-point ceiling is 380m; 500m is past it.
-    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "500000000" } });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "500000000" } });
     expect(screen.getByText(/past the 5-point ceiling/i)).toBeTruthy();
   });
 });

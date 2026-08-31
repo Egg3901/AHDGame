@@ -31,6 +31,8 @@ import {
 } from "@/lib/constants/corporations";
 import { economyUrl, regionApiSubUrl, stockmarketUrl } from "@/lib/urls";
 import { CorporationLogo } from "@/components/corporation/CorporationLogo";
+import { PlantSplitPlannerModal } from "@/components/corporation/PlantSplitPlannerModal";
+import type { PlantSectorSplitQuote } from "@/lib/corporations/plantSectorSplit";
 import { getCountryFlagUrlForEra } from "@/lib/constants/flags";
 import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import { formatMarketingStrength, formatGDP } from "@/lib/utils/formatters";
@@ -84,6 +86,8 @@ interface SectorOwner {
   isNpp?: boolean;
   attackCost?: number | null;
   attackEstimatedCapture?: number | null;
+  plantCount?: number;
+  plantSplitQuote?: PlantSectorSplitQuote;
   /** Active for-sale listing — null when not on the secondary market */
   forSale?: {
     listedAt: string;
@@ -139,6 +143,7 @@ interface EconomyData {
   userCorporationId: string | null;
   userCorporationSectorType?: CorporationType | null;
   userMarketingStrength: number;
+  userLiquidCapitalAnchor?: number;
   /** MS charged by the owned-sector attack route. */
   attackMsCost?: number;
   /** MS charged by the retired unowned split action in legacy worlds. */
@@ -175,6 +180,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
   const [attackingId, setAttackingId] = useState<string | null>(null);
   const [attackMsg, setAttackMsg] = useState("");
   const [attackError, setAttackError] = useState("");
+  const [plannedSplitTarget, setPlannedSplitTarget] = useState<SectorOwner | null>(null);
   const [adjustingId, setAdjustingId] = useState<string | null>(null);
   const [adjustMsg, setAdjustMsg] = useState("");
   const [adjustError, setAdjustError] = useState("");
@@ -254,6 +260,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
       const result = await res.json();
       if (res.ok) {
         setAttackMsg(result.message);
+        setPlannedSplitTarget(null);
         fetchEconomy();
       } else {
         setAttackError(result.error || "Attack failed");
@@ -916,21 +923,55 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
                       </div>
                     )}
 
-                    {/* Attack controls for other corps' sectors (not natcorps) */}
+                    {/* Rival action lives with the target. Plant mode opens a
+                        full quote and confirmation instead of firing inline. */}
                     {!isOwn &&
                       !owner.isNatcorp &&
                       data.userCorporationId &&
-                      owner.attackCost != null &&
-                      owner.attackCost > 0 && (
+                      (data.plantsMode ? (
+                        owner.plantSplitQuote && owner.plantCount != null ? (
+                          <div className="flex items-center justify-between gap-4 border-t border-card-border/50 px-4 py-2">
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
+                              <span>
+                                Automatic split:{" "}
+                                <span className="font-medium text-foreground">
+                                  {(owner.plantSplitQuote.seizureFraction * 100).toFixed(
+                                    (owner.plantSplitQuote.seizureFraction * 100) % 1 === 0 ? 0 : 1
+                                  )}
+                                  %
+                                </span>
+                              </span>
+                              <span>
+                                {owner.plantSplitQuote.plantsAtRisk.toLocaleString("en-US")} plants
+                              </span>
+                              <span>
+                                {(owner.plantSplitQuote.successProbability * 100).toFixed(1)}%
+                                chance
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAttackError("");
+                                setAttackMsg("");
+                                setPlannedSplitTarget(owner);
+                              }}
+                              className="shrink-0 rounded border border-error/30 bg-error/10 px-3 py-1 text-xs font-medium text-error transition-colors hover:bg-error/20"
+                            >
+                              Plan split
+                            </button>
+                          </div>
+                        ) : null
+                      ) : owner.attackCost != null && owner.attackCost > 0 ? (
                         <div className="flex items-center justify-between gap-4 border-t border-card-border/50 px-4 py-2">
-                          <div className="flex items-center gap-3 text-xs text-muted flex-wrap">
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
                             <span>
                               Cost:{" "}
-                              <span className="text-foreground font-medium">
+                              <span className="font-medium text-foreground">
                                 {formatAmount(owner.attackCost)}
                               </span>{" "}
                               +{" "}
-                              <span className="text-foreground font-medium">
+                              <span className="font-medium text-foreground">
                                 {data.attackMsCost ?? data.splitMsCost} MS
                               </span>
                             </span>
@@ -938,7 +979,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
                               owner.attackEstimatedCapture > 0 && (
                                 <span>
                                   Est. capture:{" "}
-                                  <span className="text-success font-medium">
+                                  <span className="font-medium text-success">
                                     {formatAmount(owner.attackEstimatedCapture)}
                                   </span>
                                 </span>
@@ -950,17 +991,17 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
                               attackingId === owner.sectorId ||
                               data.userMarketingStrength < (data.attackMsCost ?? data.splitMsCost)
                             }
-                            className="rounded border border-error/30 bg-error/10 px-3 py-1 text-xs font-medium text-error hover:bg-error/20 transition-colors disabled:opacity-40 shrink-0"
+                            className="shrink-0 rounded border border-error/30 bg-error/10 px-3 py-1 text-xs font-medium text-error transition-colors hover:bg-error/20 disabled:opacity-40"
                             title={
                               data.userMarketingStrength < (data.attackMsCost ?? data.splitMsCost)
                                 ? `Need ${data.attackMsCost ?? data.splitMsCost} MS, have ${formatMarketingStrength(data.userMarketingStrength)}`
-                                : "Attack this sector — capture based on your MS vs theirs"
+                                : "Attack this sector to capture market share"
                             }
                           >
-                            {attackingId === owner.sectorId ? "Attacking…" : "Attack"}
+                            {attackingId === owner.sectorId ? "Attacking..." : "Attack"}
                           </button>
                         </div>
-                      )}
+                      ) : null)}
                   </div>
                 );
               })}
@@ -1208,6 +1249,26 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
       <CollapsibleSection title="National economic model">
         <EconomicModelCard countryId={countryId} />
       </CollapsibleSection>
+
+      {plannedSplitTarget?.plantSplitQuote && plannedSplitTarget.plantCount != null && (
+        <PlantSplitPlannerModal
+          open
+          targetName={plannedSplitTarget.displayName ?? plannedSplitTarget.corporationName}
+          defenderPlantCount={plannedSplitTarget.plantCount}
+          quote={plannedSplitTarget.plantSplitQuote}
+          userLiquidCapitalAnchor={data.userLiquidCapitalAnchor ?? 0}
+          userMarketingStrength={data.userMarketingStrength}
+          submitting={attackingId === plannedSplitTarget.sectorId}
+          errorMessage={attackError}
+          onClose={() => {
+            if (attackingId !== plannedSplitTarget.sectorId) {
+              setPlannedSplitTarget(null);
+              setAttackError("");
+            }
+          }}
+          onConfirm={() => handleAttackSector(plannedSplitTarget.sectorId)}
+        />
+      )}
     </div>
   );
 }

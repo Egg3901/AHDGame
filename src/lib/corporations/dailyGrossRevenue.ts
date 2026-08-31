@@ -32,10 +32,16 @@ import {
  * on that. The only thing that changes is that the amounts being added are
  * finally in the same unit.
  */
-export async function corpDailyGrossRevenueLocal(
+export interface CorpDailyGrossRevenuePricing {
+  dailyGrossRevenueLocal: number;
+  capacityFloorApplied: boolean;
+}
+
+/** The pricing basis plus whether owned plant capacity supplied its floor. */
+export async function corpDailyGrossRevenuePricingLocal(
   db: Db,
   corp: Pick<Corporation, "_id" | "countryId" | "liquidCurrencyCode">
-): Promise<number> {
+): Promise<CorpDailyGrossRevenuePricing> {
   const [sectors, plantsEnabled, eraUnitScale, fxByCurrency] = await Promise.all([
     db
       .collection<CorporateSector>("corporateSectors")
@@ -69,5 +75,19 @@ export async function corpDailyGrossRevenueLocal(
     );
   }
 
-  return anchorToCorpLiquidCapital(totalAnchor, corp, fxRateForCorpFromMap(corp, fxByCurrency));
+  return {
+    dailyGrossRevenueLocal: anchorToCorpLiquidCapital(
+      totalAnchor,
+      corp,
+      fxRateForCorpFromMap(corp, fxByCurrency)
+    ),
+    capacityFloorApplied: plantsEnabled,
+  };
+}
+
+export async function corpDailyGrossRevenueLocal(
+  db: Db,
+  corp: Pick<Corporation, "_id" | "countryId" | "liquidCurrencyCode">
+): Promise<number> {
+  return (await corpDailyGrossRevenuePricingLocal(db, corp)).dailyGrossRevenueLocal;
 }

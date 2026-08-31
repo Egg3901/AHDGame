@@ -9,6 +9,12 @@ import {
 } from "./census";
 
 vi.mock("@/lib/news", () => ({ createSystemNewsPost: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/lib/redistricting/regenerate", () => ({
+  regenerateCongressionalDistricts: vi.fn().mockResolvedValue({ regenerated: 0 }),
+}));
+vi.mock("@/lib/redistricting/autoNeutralizeStates", () => ({
+  getAutoNeutralizeStateIds: vi.fn().mockResolvedValue([]),
+}));
 
 describe("shouldRunCensus (decennial, Week-1-of-year-ending-in-0)", () => {
   it("fires on a year ending in 0 not yet censused", () => {
@@ -118,5 +124,43 @@ describe("runCensus (phase)", () => {
     setup(2020, 2020);
     const { runCensus } = await import("./census");
     expect((await runCensus(db as unknown as Db, 96)).ran).toBe(false);
+  });
+
+  it("redraws reapportioned states even when redistricting is off (#1190)", async () => {
+    // The district map is the delegation's size of record for the districted
+    // resolver, so it must track `houseDistricts` whether or not the flag is on.
+    // Regeneration used to be entirely flag-gated: a census that ran with the
+    // flag off left the maps at the OLD seat count, and enabling the flag later
+    // resurrected the #1190 mismatch — allocation over a stale district count
+    // against a correctly-sized race.
+    setup(2020, undefined); // no redistrictingEnabled on gameState
+    const { runCensus } = await import("./census");
+    const { regenerateCongressionalDistricts } = await import("@/lib/redistricting/regenerate");
+
+    const result = await runCensus(db as unknown as Db, 96);
+
+    expect(regenerateCongressionalDistricts).toHaveBeenCalledTimes(1);
+    const opts = vi.mocked(regenerateCongressionalDistricts).mock.calls[0][1];
+    // Exactly the states whose apportionment moved, and nothing else: the
+    // auto-neutralize sweep stays part of the redistricting system proper.
+    expect([...opts.stateIds].sort()).toEqual(result.deltas!.map((d) => d.state).sort());
+    const { getAutoNeutralizeStateIds } = await import("@/lib/redistricting/autoNeutralizeStates");
+    expect(getAutoNeutralizeStateIds).not.toHaveBeenCalled();
+  });
+
+  it("adds the auto-neutralize sweep only when redistricting is on", async () => {
+    setup(2020, undefined);
+    db.collectionMocks.gameState!.findOne = vi
+      .fn()
+      .mockResolvedValue({ _id: "current", currentYear: 2020, redistrictingEnabled: true });
+    const { runCensus } = await import("./census");
+    const { regenerateCongressionalDistricts } = await import("@/lib/redistricting/regenerate");
+    const { getAutoNeutralizeStateIds } = await import("@/lib/redistricting/autoNeutralizeStates");
+    vi.mocked(getAutoNeutralizeStateIds).mockResolvedValue(["NJ"]);
+
+    await runCensus(db as unknown as Db, 96);
+
+    expect(getAutoNeutralizeStateIds).toHaveBeenCalled();
+    expect(vi.mocked(regenerateCongressionalDistricts).mock.calls[0][1].stateIds).toContain("NJ");
   });
 });

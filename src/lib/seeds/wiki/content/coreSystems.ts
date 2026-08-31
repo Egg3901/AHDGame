@@ -92,12 +92,12 @@ Each hour the processor runs roughly a dozen top-level adapters that together ca
 | 4. NPP behavior | NPPs enter elections, vote on bills, back leadership | Sequential (shared context) |
 | 5. Bills & cabinets | Bill lifecycle, cabinet nominations | Parallel |
 | 6. Campaigns | Campaign-manager turn, NPP actions every 4 turns | Sequential |
-| 7. Election resolution | Primary → accumulation → timer → snapshot → general → leadership vacate | **Strict order** |
-| 8. UK government | PM formation, confidence motions | After elections |
-| 9. Election coverage | Spawn next cycles, leadership elections, stale cleanup | Parallel |
+| 7. Election resolution | Primary → accumulation → timer → snapshot (primary ballots) → general → leadership vacate | **Strict order** |
+| 8. Parliamentary government | PM formation, confidence motions | After elections |
+| 9. Election coverage & diplomacy | Spawn next cycles, leadership elections, stale cleanup, international organizations, alignment, settlement crises | Parallel |
 | 10. Fiscal year | October processing (turn 40 of 48) | Conditional |
-| 11. Effects & metrics | Policy effects, demographics, approval decay, unowned sector growth | Parallel |
-| 12. National aggregation | National metrics, inflation, central bank chair | After state effects |
+| 11. Effects & metrics | Policy effects, demographics, approval decay, unowned sector growth, naval/air operations, ministerial orders (battles resolve here) | Parallel |
+| 12. National aggregation | Census, national metrics, inflation, command economy, forex, central bank and FOMC | After state effects |
 | 13. History | Metric/approval/interest-rate snapshots | Parallel |
 | 14. Persistence | Increment turn, save log, emit SSE | **Critical, not retryable** |
 
@@ -108,7 +108,7 @@ Presidents and Prime Ministers appoint cabinets. In the US:
 - President nominates any character to one of **15 principal officer roles** (Secretary of State, Treasury, Defense, Attorney General, Interior, Agriculture, Commerce, Labor, HHS, HUD, Transportation, Energy, Education, Veterans Affairs, Homeland Security).
 - Senators vote For / Against / Abstain in a 24-hour window; simple majority confirms.
 - Confirmed members appear on the cabinet page and gain whatever role-specific benefits exist.
-- President can fire any confirmed member.
+- President can fire any confirmed member, and can bridge a vacancy with one 24-turn acting appointment per office per term (see [Cabinet](/wiki/cabinet)).
 
 In parliamentary systems (UK / DE / JP) the executive composition follows the country's real-world conventions. See the country hubs.
 

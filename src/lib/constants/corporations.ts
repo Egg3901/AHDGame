@@ -67,6 +67,15 @@ export const CORPORATION_FOUNDING_COST = 1_000_000;
  */
 export const CEO_SALARY_MAX_REVENUE_MULTIPLE = 1.25;
 
+/**
+ * Combined operating overhead (marketing + logistics + R&D + CEO salary) is
+ * capped at this multiple of gross revenue. Enforced at set time by
+ * `updateCorporationSettings` and at pay time by `sectorCalculations`, on the
+ * same gross-revenue basis as the CEO salary cap above. At zero gross revenue
+ * the ceiling is $0 (ticket #1237).
+ */
+export const CORP_OVERHEAD_MAX_REVENUE_MULTIPLE = 1.5;
+
 /** A user may found at most one corporation per this many turns (Bug #0728). */
 export const CORPORATION_FOUNDING_COOLDOWN_TURNS = 168;
 
@@ -297,16 +306,13 @@ export const DEFAULT_SECTOR_STARTING_WORKERS = 500;
 
 /**
  * Revenue generated per worker (daily rate).
- * At $1M revenue → 50,000 workers. At $10M → 500,000.
+ * At $1M revenue, a neutral-skill sector needs 500 workers.
  *
- * This anchor is purely a DISPLAY scale for the sector headcount: `workers` is
- * consumed only as a ratio-weight in the wage/automation indices (scale-cancels)
- * and proportionally in worker-shedding — actual labour cost is revenue-based,
- * and nothing sums headcount into population or unemployment. Lowered from 2_000
- * to 20 so a whole regional industry reads as tens of thousands of jobs instead
- * of a few hundred. Kept in lockstep with `CAPACITY_REVENUE_PER_WORKER`.
+ * Headcount is now enforced against the state's real labour force, so this is
+ * an economic productivity anchor rather than a display scale. Keep it in
+ * lockstep with `CAPACITY_REVENUE_PER_WORKER`.
  */
-const REVENUE_PER_WORKER = 20;
+const REVENUE_PER_WORKER = 2_000;
 
 /**
  * Maximum workforce skill adjustment to worker count (±30%).
@@ -1465,6 +1471,16 @@ export const LOGISTICS_BUDGET_DENOM = 500_000;
  * clamped to a 50% floor so very high scores cannot invert the penalty.
  */
 export const LOGISTICS_MAX_SPRAWL_EFFECT = 200;
+
+/**
+ * Sector footprint that current logistics strength can support without a
+ * sprawl penalty. Unlike a fixed corporation cap, this grows without bound as
+ * the corporation invests in logistics.
+ */
+export function getLogisticsSupportedSectorCount(logisticsStrength?: number): number {
+  const lsFraction = Math.max(0, logisticsStrength ?? 0) / LOGISTICS_MAX_SPRAWL_EFFECT;
+  return Math.floor(SPRAWL_SECTOR_THRESHOLD * (1 + lsFraction));
+}
 
 /**
  * Calculate logistics strength growth per turn.

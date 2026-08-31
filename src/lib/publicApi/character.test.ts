@@ -344,3 +344,41 @@ describe("queryCharacterAchievements", () => {
     expect(result!.achievements[0].earnedAt).toBe("2025-06-01T00:00:00.000Z");
   });
 });
+
+describe("queryCharactersBulk", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    ["characters", "users", "politicalParties", "elections"].forEach((n) => db.collection(n));
+  });
+
+  it("queries by sequential ids and skips invalid tokens", async () => {
+    const col = db.collectionMocks.characters!;
+    col.find.mockReturnValue({
+      limit: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([]),
+    } as never);
+
+    const { queryCharactersBulk } = await import("./character");
+    const result = await queryCharactersBulk(db as unknown as Db, "1, abc, 42,");
+    expect(result.found).toBe(false);
+    expect(result.requested).toBe(3);
+    const filter = col.find.mock.calls[0][0] as { sequentialId: { $in: number[] } };
+    expect(filter.sequentialId.$in).toEqual([1, 42]);
+  });
+
+  it("caps input at 100 ids", async () => {
+    const col = db.collectionMocks.characters!;
+    col.find.mockReturnValue({
+      limit: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([]),
+    } as never);
+
+    const { queryCharactersBulk } = await import("./character");
+    const ids = Array.from({ length: 150 }, (_, i) => String(i + 1)).join(",");
+    const result = await queryCharactersBulk(db as unknown as Db, ids);
+    expect(result.requested).toBe(100);
+  });
+});

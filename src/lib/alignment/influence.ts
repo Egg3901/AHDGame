@@ -17,6 +17,16 @@ import type { AlignmentShares } from "./normalize";
 /** Ceiling on one play, so a single cheque cannot end the Cold War. */
 export const PLAY_MAX_POINTS = 10;
 /**
+ * Floor on one play: the smallest movement the share grid can store (a
+ * hundredth of a point — see {@link roundToShareGrid}). A spend that buys less
+ * than this resolves to exactly zero applied points and is refunded, so it takes
+ * a submission and a turn to do nothing. The commit path refuses it up front
+ * instead, and the panel tells the player the minimum spend, so "I pushed and
+ * nothing moved" can no longer happen from typing an amount that is orders of
+ * magnitude too small (ticket #1213).
+ */
+export const MIN_PLAY_POINTS = 0.01;
+/**
  * Share of a target's annual GDP that buys one point of its alignment.
  *
  * A tenth of a percent. This was 1%, which priced every bloc out of its own

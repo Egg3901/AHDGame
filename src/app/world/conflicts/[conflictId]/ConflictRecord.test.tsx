@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { READINESS_DRIFT_STEP } from "@/lib/military/readinessDrift";
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import { ConflictRecord, type ConflictRecordView } from "./ConflictRecord";
@@ -30,6 +31,8 @@ const base: ConflictRecordView = {
   ownSide: null,
   chain: null,
   actions: null,
+  dictate: null,
+  postedHere: null,
   employ: null,
   whoDeclares: "The defense secretary — no Theater Commander is designated at this front.",
   committedCountry: null,
@@ -38,7 +41,7 @@ const base: ConflictRecordView = {
   type: "interstate",
   hostCountry: "CN",
   region: "East Asia",
-  years: "1953 – present",
+  years: "1953 to present",
   startYear: 1953,
   currentTurn: 120,
   status: "active",
@@ -59,9 +62,9 @@ const base: ConflictRecordView = {
   unopposedAdvances: 0,
   lastEventLabel: "LAST ENGAGEMENT",
   lastEventValue: "T41",
-  pending: [
-    { text: "No offensive declared — the line holds", when: "the line holds", tone: "quiet" },
-  ],
+  // Empty `when`, as the server now sends for a chip with nothing pending: the two
+  // halves were saying the same thing twice.
+  pending: [{ text: "No offensive declared — the line holds", when: "", tone: "quiet" }],
   momentum: {
     control: 70,
     fromTurn: 60,
@@ -83,8 +86,8 @@ const base: ConflictRecordView = {
       target: "CN",
       attackers: ["US"],
       defenders: ["CN"],
-      declarerLoss: 300,
-      targetLoss: 900,
+      attackerLosses: [{ country: "US", loss: 300 }],
+      defenderLosses: [{ country: "CN", loss: 900 }],
       groundPct: null,
     },
   ],
@@ -95,12 +98,36 @@ describe("ConflictRecord", () => {
     render(<ConflictRecord conflict={base} />);
     expect(screen.getByText("Manchurian Front")).toBeTruthy();
     expect(screen.getAllByText(/CN/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/1953 – present/)).toBeTruthy();
+    expect(screen.getByText(/1953 to present/)).toBeTruthy();
   });
 
   it("shows the conflict's public number and region", () => {
     render(<ConflictRecord conflict={base} />);
     expect(screen.getByText(/#1 · East Asia/)).toBeTruthy();
+  });
+
+  // A zone with nothing drawable rendered a 620px box holding the sentence "No
+  // mapped territory for DD" while every panel worth reading queued down the
+  // 452px rail beside it. The column goes and the rail becomes the board.
+  it("drops the map column when the zone has no drawable geometry", () => {
+    const { container } = render(<ConflictRecord conflict={{ ...base, hasMap: false }} />);
+    expect(container.querySelector(".cw-front-map")).toBeNull();
+    expect(container.querySelector(".cw-front-nomap")).toBeTruthy();
+  });
+
+  // Absent, not false: a payload serialized before `hasMap` shipped must lay out
+  // exactly as it did rather than losing its map.
+  it("keeps the map when the payload does not say either way", () => {
+    const { container } = render(<ConflictRecord conflict={base} />);
+    expect(container.querySelector(".cw-front-map")).toBeTruthy();
+    expect(container.querySelector(".cw-front-nomap")).toBeNull();
+  });
+
+  // The engagement count is a stat tile at the top of the page. Printing it again
+  // beside the offensive count made the scope note read as a contrast to work out.
+  it("scopes the war log without restating the engagement count", () => {
+    render(<ConflictRecord conflict={base} />);
+    expect(screen.getByText(/1 offensive · rosters withheld on both sides/)).toBeTruthy();
   });
 
   it("names both belligerents", () => {
@@ -145,14 +172,112 @@ describe("ConflictRecord", () => {
     expect(screen.getByText(/no engagements/i)).toBeTruthy();
   });
 
+  // The fog outlives the war. A public reader of a war that ended last turn sees
+  // exactly what they saw while it ran, and the panel has to say when that changes
+  // rather than promising a record that "opens when the war resolves" on a war
+  // that already has.
+  it("tells a public reader of a fogged resolved war when the record opens", () => {
+    const { container } = render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          status: "resolved",
+          statusLabel: "Resolved",
+          years: "1953 to 1955",
+          archiveOpensTurn: 577,
+        }}
+      />
+    );
+    expect(container.textContent).toMatch(/until turn 577/);
+    expect(container.textContent).not.toMatch(/opens to everyone when the war resolves/);
+  });
+
+  // A belligerent seat keeps its own rosters on a fogged resolved war, but every
+  // formation has gone home, so the live-war line about reading the enemy off the
+  // strength ratio describes a front that no longer exists.
+  it("tells a command reader of a fogged resolved war when the enemy's record opens", () => {
+    const { container } = render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          tier: "command",
+          ownSide: "A",
+          viewerCountry: "US",
+          status: "resolved",
+          statusLabel: "Resolved",
+          years: "1953 to 1955",
+          archiveOpensTurn: 577,
+          forceA: { divisions: 0, personnel: 0, readiness: null, recovery: null, casualties: 6000 },
+          forceB: { ...withheld, casualties: 6345 },
+        }}
+      />
+    );
+    expect(container.textContent).toMatch(/opens to everyone on turn 577/);
+    expect(container.textContent).not.toMatch(/one band from the strength ratio/);
+  });
+
+  // A war awaiting terms has stood both rosters down exactly as a resolved one has,
+  // but it has no opening turn yet: the window starts when the war resolves.
+  it("tells a command reader of a war awaiting terms that the formations have gone home", () => {
+    const { container } = render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          tier: "command",
+          ownSide: "A",
+          viewerCountry: "US",
+          status: "terms_pending",
+          statusLabel: "Terms Pending",
+          forceA: { divisions: 0, personnel: 0, readiness: null, recovery: null, casualties: 6000 },
+          forceB: { ...withheld, casualties: 6345 },
+        }}
+      />
+    );
+    expect(container.textContent).toMatch(/returned to reserve/);
+    expect(container.textContent).toMatch(/480 turns after the war resolves/);
+    expect(container.textContent).not.toMatch(/one band from the strength ratio/);
+  });
+
+  // The war log's withheld-roster note has the same problem as the force panel:
+  // "after the war resolves" on a war that has already resolved is a promise
+  // already broken. Once there is a date, it names the date.
+  it("dates a withheld engagement roster on a fogged resolved war", () => {
+    const { container } = render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          tier: "command",
+          ownSide: "A",
+          status: "resolved",
+          statusLabel: "Resolved",
+          archiveOpensTurn: 577,
+          battles: [
+            {
+              ...base.battles[0],
+              rostersWithheld: true,
+              rosters: [{ country: "US", power: 4444, units: [] }],
+            },
+          ],
+        }}
+      />
+    );
+    expect(container.textContent).toMatch(/Unlocks for everyone on turn 577/);
+    expect(container.textContent).not.toMatch(/turns after the war resolves/);
+  });
+
+  it("tells a public reader of a live war that the fog outlives it", () => {
+    const { container } = render(<ConflictRecord conflict={base} />);
+    expect(container.textContent).toMatch(/480 turns after the war resolves/);
+  });
+
   it("renders a resolved war", () => {
     render(
       <ConflictRecord
-        conflict={{ ...base, status: "resolved", statusLabel: "Resolved", years: "1953 – 1955" }}
+        conflict={{ ...base, status: "resolved", statusLabel: "Resolved", years: "1953 to 1955" }}
       />
     );
     expect(screen.getByText(/Resolved/)).toBeTruthy();
-    expect(screen.getByText(/1953 – 1955/)).toBeTruthy();
+    expect(screen.getByText(/1953 to 1955/)).toBeTruthy();
   });
 
   it("shows an unopposed advance as an outcome, not a blank row", () => {
@@ -188,6 +313,44 @@ describe("ConflictRecord tiers", () => {
     expect(screen.getByText("NOT PUBLIC")).toBeTruthy();
     // The withheld cell is a stated absence, not a zero.
     expect(container.textContent).toMatch(/\? \? \?/);
+  });
+
+  // All three composition rows are withheld on both sides at this tier, so the
+  // panel was spending six cells to say one thing — and pushing the casualties,
+  // the only real figures in it, down the rail behind them.
+  it("collapses the withheld composition into one row at the public tier", () => {
+    const { container } = render(<ConflictRecord conflict={base} />);
+    expect(screen.getByText("COMPOSITION")).toBeTruthy();
+    expect(screen.queryByText("DIVISIONS")).toBeNull();
+    expect(screen.queryByText("STRENGTH")).toBeNull();
+    expect(screen.queryByText("READINESS")).toBeNull();
+    expect(container.textContent!.match(/\? \? \?/g)).toHaveLength(2);
+  });
+
+  // The three rows are the point of the panel for anyone who can see them, so
+  // collapsing must be strictly a public-tier behaviour.
+  it("keeps the three composition rows for a seat that may see them", () => {
+    render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          tier: "command",
+          viewerCountry: "US",
+          ownSide: "A",
+          forceA: {
+            divisions: 4,
+            personnel: 40000,
+            readiness: 80,
+            recovery: null,
+            casualties: 6000,
+          },
+        }}
+      />
+    );
+    expect(screen.getByText("DIVISIONS")).toBeTruthy();
+    expect(screen.getByText("STRENGTH")).toBeTruthy();
+    expect(screen.getByText("READINESS")).toBeTruthy();
+    expect(screen.queryByText("COMPOSITION")).toBeNull();
   });
 
   it("publishes both sides' casualty totals even at the public tier", () => {
@@ -255,8 +418,11 @@ describe("ConflictRecord tiers", () => {
         }}
       />
     );
-    // standard settles at 72; (72 − 60) / 4 = 3 turns.
-    expect(screen.getByText(/\+4%\/turn · full in 3/)).toBeTruthy();
+    // standard settles at 72; ceil((72 - 60) / READINESS_DRIFT_STEP) turns.
+    const turns = Math.ceil(12 / READINESS_DRIFT_STEP);
+    expect(
+      screen.getByText(new RegExp(`\\+${READINESS_DRIFT_STEP}%/turn · full in ${turns}`))
+    ).toBeTruthy();
   });
 
   // The fog lifts when the war ends. Calling an open record "fog of war" beside
@@ -378,6 +544,7 @@ describe("ConflictRecord tiers", () => {
           battles: [
             {
               ...base.battles[0],
+              rostersWithheld: true,
               rosters: [
                 {
                   country: "US",
@@ -393,7 +560,7 @@ describe("ConflictRecord tiers", () => {
       />
     );
     expect(container.textContent).toMatch(/Roster withheld/);
-    expect(container.textContent).toMatch(/Unlocks for everyone when the war resolves/);
+    expect(container.textContent).toMatch(/Unlocks for everyone 480 turns after the war resolves/);
   });
 });
 
@@ -479,27 +646,115 @@ describe("ConflictRecord command surface", () => {
     expect(screen.getByRole("button", { name: /designate/i }).hasAttribute("disabled")).toBe(true);
     expect(screen.getByText("None designated")).toBeTruthy();
   });
+
+  // The chain panel's "Who is posted here" link scrolls to this roster. It used to
+  // point at /world/conflicts/generals, which has no page and answered 404.
+  it("answers who is posted here for a seat in a live war", () => {
+    render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          tier: "command",
+          ownSide: "A",
+          postedHere: [
+            {
+              id: "g1",
+              name: "Gen. Rodin",
+              rank: "General",
+              divisions: 2,
+              inCharge: true,
+              isViewer: false,
+            },
+          ],
+        }}
+      />
+    );
+    expect(screen.getByText(/POSTED AT THIS FRONT/)).toBeTruthy();
+    expect(screen.getByText("Gen. Rodin")).toBeTruthy();
+  });
+
+  // Guards the 404 class this branch fixed: the chain panel's link has to resolve
+  // to something. An in-page anchor is a plain <a>, not a route.
+  it("links the chain panel's roster handoff at the roster on this page", () => {
+    render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          tier: "command",
+          ownSide: "A",
+          chain: {
+            ...chain,
+            role: "postedGeneral",
+            handoffs: [
+              {
+                what: "Declare an offensive at this front",
+                who: "Gen. Rodin, the Theater Commander designated for this conflict.",
+                href: "#posted-here",
+                linkLabel: "Who is posted here",
+              },
+            ],
+          },
+          postedHere: [
+            {
+              id: "g1",
+              name: "Gen. Rodin",
+              rank: "General",
+              divisions: 2,
+              inCharge: true,
+              isViewer: false,
+            },
+          ],
+        }}
+      />
+    );
+    const link = screen.getByRole("link", { name: /who is posted here/i });
+    expect(link.getAttribute("href")).toBe("#posted-here");
+    expect(document.querySelector("#posted-here")).toBeTruthy();
+  });
+
+  it("withholds the roster from a reader who holds no seat", () => {
+    render(<ConflictRecord conflict={base} />);
+    expect(screen.queryByText(/POSTED AT THIS FRONT/)).toBeNull();
+  });
 });
 
 describe("ConflictRecord coalition rules", () => {
   it("warns that posting units here commits you to the war", () => {
-    render(<ConflictRecord conflict={base} />);
-    expect(screen.getByText(/commits your country to this war/i)).toBeTruthy();
+    render(<ConflictRecord conflict={{ ...base, viewerCountry: "US" }} />);
+    expect(screen.getByText(/commits your country the first time it fights/i)).toBeTruthy();
+    // The allies-defend-automatically rule lives in this banner now. It used to be
+    // restated as a standalone line at the foot of the record as well.
     expect(screen.getByText(/defend it automatically/i)).toBeTruthy();
+  });
+
+  // A reader with no nation cannot post units anywhere, so the widest strip above
+  // the fold should not be spent telling them what would happen if they did.
+  it("keeps the commitment banner off a page nobody can act on", () => {
+    render(<ConflictRecord conflict={{ ...base, viewerCountry: null }} />);
+    expect(screen.queryByText(/commits your country/i)).toBeNull();
+    expect(screen.queryByText(/defend it automatically/i)).toBeNull();
   });
 
   // Once your units have fought, the warning is no longer a warning — the
   // commitment has been incurred and the only exits are victory or a settlement.
   it("states the commitment as already incurred once your units have fought", () => {
-    render(<ConflictRecord conflict={{ ...base, committedCountry: "US", committedDead: 14206 }} />);
+    render(
+      <ConflictRecord
+        conflict={{ ...base, viewerCountry: "US", committedCountry: "US", committedDead: 14206 }}
+      />
+    );
     expect(screen.getByText("US IS COMMITTED")).toBeTruthy();
-    expect(screen.getByText(/14,206 of your men have died at this front/)).toBeTruthy();
-    expect(screen.queryByText(/commits your country to this war/i)).toBeNull();
+    expect(screen.getByText(/14,206 of your men have died here/)).toBeTruthy();
+    expect(screen.queryByText(/commits your country/i)).toBeNull();
   });
 
   it("does not claim dead a committed nation has not lost", () => {
-    render(<ConflictRecord conflict={{ ...base, committedCountry: "US", committedDead: 0 }} />);
-    expect(screen.getByText(/No one of yours has died here yet/)).toBeTruthy();
+    render(
+      <ConflictRecord
+        conflict={{ ...base, viewerCountry: "US", committedCountry: "US", committedDead: 0 }}
+      />
+    );
+    expect(screen.getByText(/None of yours has died here yet/)).toBeTruthy();
   });
 
   it("lists every belligerent in an engagement, not just two", () => {
@@ -534,7 +789,7 @@ describe("separate peace on the record", () => {
         id: "o1",
         leaver: "UK",
         other: "CN",
-        indemnity: { payer: "UK", amount: 5000 },
+        term: { kind: "indemnity" as const, payer: "UK" as const, amount: 5000 },
         justification: "We could not sustain the campaign.",
         turn: 90,
       },
@@ -548,7 +803,41 @@ describe("separate peace on the record", () => {
 
   it("shows the indemnity and who paid it", () => {
     const { container } = render(<ConflictRecord conflict={settled} />);
-    expect(container.textContent).toMatch(/UK paid 5,000/);
+    expect(container.textContent).toMatch(/UK paid an indemnity of 5,000/);
+  });
+
+  it("uses no em dash or en dash in the settlement line", () => {
+    // Project-wide rule for player-facing copy. Scoped to the settlement line
+    // deliberately: other copy in this component predates the rule and is not
+    // this change's to rewrite.
+    render(<ConflictRecord conflict={settled} />);
+    const line = screen.getByText(/UK left the war on turn 90/);
+    expect(line.textContent ?? "").not.toMatch(/[—–]/);
+  });
+
+  it("describes a regime change settlement", () => {
+    const regime: ConflictRecordView = {
+      ...settled,
+      settlements: [
+        {
+          ...settled.settlements![0],
+          term: { kind: "regime_change" as const, targetSystem: "presidential" as const },
+        },
+      ],
+    };
+    const { container } = render(<ConflictRecord conflict={regime} />);
+    expect(container.textContent).toMatch(/government fell/);
+  });
+
+  it("describes a demilitarisation settlement in turns", () => {
+    const demil: ConflictRecordView = {
+      ...settled,
+      settlements: [
+        { ...settled.settlements![0], term: { kind: "demilitarisation" as const, turns: 240 } },
+      ],
+    };
+    const { container } = render(<ConflictRecord conflict={demil} />);
+    expect(container.textContent).toMatch(/frozen for 240 turns/);
   });
 
   it("publishes the justification, so the war's history says WHY it ended", () => {
@@ -559,14 +848,131 @@ describe("separate peace on the record", () => {
   it("calls a zero indemnity a white peace", () => {
     const white: ConflictRecordView = {
       ...settled,
-      settlements: [{ ...settled.settlements![0], indemnity: { payer: "UK", amount: 0 } }],
+      settlements: [
+        {
+          ...settled.settlements![0],
+          term: { kind: "indemnity" as const, payer: "UK" as const, amount: 0 },
+        },
+      ],
     };
     const { container } = render(<ConflictRecord conflict={white} />);
-    expect(container.textContent).toMatch(/a white peace/);
+    expect(container.textContent).toMatch(/a white peace/i);
   });
 
   it("renders no settlement section on a war nobody has settled", () => {
     render(<ConflictRecord conflict={base} />);
     expect(screen.queryByText(/SEPARATE PEACE/)).toBeNull();
+  });
+});
+
+describe("ConflictRecord — coalition engagements", () => {
+  /** The live T420 shape: DD and RU attacked US together. */
+  const coalitionBattle = {
+    ...base.battles[0],
+    turn: 420,
+    declarer: "DD",
+    target: "US",
+    attackers: ["DD", "RU"],
+    defenders: ["US"],
+    attackerLosses: [
+      { country: "DD", loss: 5360 },
+      { country: "RU", loss: 10939 },
+    ],
+    defenderLosses: [{ country: "US", loss: 2313 }],
+  };
+
+  it("names all three belligerents' casualties, not two", () => {
+    const { container } = render(
+      <ConflictRecord
+        conflict={{ ...base, sideACountries: ["DD", "RU"], battles: [coalitionBattle] }}
+      />
+    );
+    const row = container.querySelector("[data-battle]")!;
+    expect(row.textContent).toMatch(/DD 5,360/);
+    expect(row.textContent).toMatch(/RU 10,939/);
+    expect(row.textContent).toMatch(/US 2,313/);
+    // The bug: the coalition's whole loss printed under the principal's flag.
+    expect(row.textContent).not.toMatch(/16,299/);
+  });
+
+  it("keeps showing both allies while still flagging the enemy roster as withheld", () => {
+    const { container } = render(
+      <ConflictRecord
+        conflict={{
+          ...base,
+          tier: "command",
+          ownSide: "A",
+          sideACountries: ["DD", "RU"],
+          battles: [
+            {
+              ...coalitionBattle,
+              rostersWithheld: true,
+              rosters: [
+                {
+                  country: "DD",
+                  power: 1650,
+                  units: [
+                    { id: "d1", name: "1. Mot-Schützendivision", type: "Rifle", casualties: 5360 },
+                  ],
+                },
+                {
+                  country: "RU",
+                  power: 3350,
+                  units: [{ id: "r1", name: "3rd Guards Tank", type: "Tank", casualties: 10939 }],
+                },
+              ],
+            },
+          ],
+        }}
+      />
+    );
+    expect(container.textContent).toMatch(/3rd Guards Tank/);
+    expect(container.textContent).toMatch(/Roster withheld/);
+  });
+});
+
+describe("the dictate panel on a won war", () => {
+  const dictate = {
+    conflictId: "w1",
+    countryCode: "uk",
+    target: "TR",
+    targetName: "Turkey",
+    turnsLeft: 18,
+  };
+
+  it("is absent for a viewer the server did not authorize", () => {
+    // The server returns null for everyone but the winning principal's negotiator,
+    // so the losing side and the winning side's allies never see it.
+    render(<ConflictRecord conflict={base} />);
+    expect(screen.queryByText(/NAME YOUR TERMS/)).toBeNull();
+  });
+
+  it("offers every term to the country that won the war", () => {
+    render(<ConflictRecord conflict={{ ...base, dictate }} />);
+    expect(screen.getByText(/NAME YOUR TERMS/)).toBeTruthy();
+    expect(screen.getByText("White peace")).toBeTruthy();
+    expect(screen.getByText("Indemnity")).toBeTruthy();
+    expect(screen.getByText("Regime change")).toBeTruthy();
+    expect(screen.getByText("Demilitarisation")).toBeTruthy();
+  });
+
+  it("counts the window down in turns and names who it lands on", () => {
+    render(<ConflictRecord conflict={{ ...base, dictate }} />);
+    expect(screen.getByText(/closes in 18 turns/)).toBeTruthy();
+    expect(screen.getByText(/Turkey has no ground left to hold/)).toBeTruthy();
+  });
+
+  it("offers a white peace, which records no victor at all", () => {
+    render(<ConflictRecord conflict={{ ...base, dictate }} />);
+    expect(screen.getByRole("button", { name: /Sign a white peace/ })).toBeTruthy();
+    expect(screen.getByText("White peace")).toBeTruthy();
+  });
+
+  it("lets exactly one term be selected at a time", () => {
+    // The payload is a discriminated union server-side; the radio group is what
+    // makes that visible rather than merely enforced.
+    render(<ConflictRecord conflict={{ ...base, dictate }} />);
+    const radios = screen.getAllByRole("radio");
+    expect(radios.filter((r) => (r as HTMLInputElement).checked)).toHaveLength(1);
   });
 });

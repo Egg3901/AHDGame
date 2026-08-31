@@ -15,7 +15,7 @@ import { getGameTime } from "@/lib/time/gameTime";
 import type { CabinetNomination, ElectedOfficial, Character } from "@/lib/db/types";
 import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { isSeatActive } from "@/lib/cabinet/rosterEra";
-import { getLiveGameYear } from "@/lib/cabinet/liveGameYear";
+import { getLiveGameYear, getManuallyEnabledSeats } from "@/lib/cabinet/liveGameYear";
 import { resolvePresidentialCountry } from "@/lib/executive/presidentialCountry";
 
 const VOTING_DURATION_HOURS = 24;
@@ -63,7 +63,11 @@ export async function POST(request: Request) {
 
     // Era gating: a seat outside its yearEnabled/yearRetired range cannot be
     // nominated for (hidden client-side too, but the server is the authority).
-    if (!isSeatActive(positionDef, await getLiveGameYear(db))) {
+    // Manually enabled seats included: a create_department bill brings a seat
+    // into existence regardless of era, and the roster the UI renders from
+    // already honours that. Without it the page offers a seat this route then
+    // refuses.
+    if (!isSeatActive(positionDef, await getLiveGameYear(db), await getManuallyEnabledSeats(db))) {
       return NextResponse.json(
         { error: "This cabinet position does not exist in the current era" },
         { status: 400 }

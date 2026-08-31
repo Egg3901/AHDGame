@@ -14,6 +14,8 @@ import {
 } from "@/lib/internationalOrganizations/service";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { getConflict } from "@/lib/db/collections/conflicts";
+import { hostSideOf } from "@/lib/military/warEntryPolicy";
+import { BLOC_DESIGNATED_ORG_IDS } from "@/lib/constants/orgCategory";
 
 export type ProposeResolutionInput =
   | { type: "free_trade_agreement"; parties: CountryId[]; title?: string; description?: string }
@@ -379,6 +381,9 @@ export async function proposeOrganizationLegislation(params: {
 
     const sideLabel = input.side === "A" ? conflict.sideA.label : conflict.sideB.label;
     const title = input.title?.trim() || `${orgId} Entry into ${conflict.name} (${sideLabel})`;
+    const collectiveDefense =
+      (BLOC_DESIGNATED_ORG_IDS as readonly string[]).includes(orgId) &&
+      hostSideOf(conflict) === input.side;
 
     await legislation.insertOne({
       _id: legislationId,
@@ -392,18 +397,21 @@ export async function proposeOrganizationLegislation(params: {
       proposingCountryId: countryId,
       proposedByCharacterId: actor.characterId,
       proposedByCharacterName: actor.characterName,
-      status: "pending",
+      status: collectiveDefense ? "active" : "pending",
       votes: [],
       proposedAt: now,
       proposedOnTurn: currentTurn,
-      closesOnTurn: currentTurn + ORG_PROPOSAL_VOTING_TURNS,
+      closesOnTurn: collectiveDefense ? currentTurn : currentTurn + ORG_PROPOSAL_VOTING_TURNS,
+      ...(collectiveDefense ? { enactedAt: now, enactedOnTurn: currentTurn } : {}),
     });
 
     await recordOrgHistoryEvent(
       db,
       countryId,
       currentTurn,
-      `${COUNTRY_CONFIGS[countryId].name} moved that ${orgId} enter ${conflict.name} alongside ${sideLabel}.`,
+      collectiveDefense
+        ? `${orgId} collective defense activated immediately for ${conflict.name}.`
+        : `${COUNTRY_CONFIGS[countryId].name} moved that ${orgId} enter ${conflict.name} alongside ${sideLabel}.`,
       { organizationId: orgId, legislationId: legislationId.toString() }
     );
 

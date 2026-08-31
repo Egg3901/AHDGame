@@ -170,6 +170,29 @@ export const UNREACHABLE_HOP_EQUIV = SEA_FREIGHT_HOP_EQUIV;
  */
 export const BUYER_TOLERANCE_SLACK = 0.35;
 
+/**
+ * A severely short local market is willing to search farther up the landed
+ * supply curve. The extra ceiling starts only below 50 percent local fill and
+ * rises linearly to 40 percentage points when no local supply exists. The
+ * feature remains dark unless the caller opts in.
+ */
+export const SHORTAGE_TOLERANCE_TRIGGER_FILL = 0.5;
+export const SHORTAGE_TOLERANCE_MAX_EXTRA = 0.4;
+
+export function shortageResponsiveToleranceSlack(args: {
+  localSupply: number;
+  localDemand: number;
+  enabled: boolean;
+}): number {
+  if (!args.enabled || !(args.localDemand > 0)) return BUYER_TOLERANCE_SLACK;
+  const localFill = Math.max(0, Math.min(1, args.localSupply / args.localDemand));
+  const severity = Math.max(
+    0,
+    Math.min(1, (SHORTAGE_TOLERANCE_TRIGGER_FILL - localFill) / SHORTAGE_TOLERANCE_TRIGGER_FILL)
+  );
+  return BUYER_TOLERANCE_SLACK + SHORTAGE_TOLERANCE_MAX_EXTRA * severity;
+}
+
 /** Flows below this many units are summed into the doc totals but not itemized. */
 export const FLOW_RECORD_FLOOR_UNITS = 1;
 
@@ -206,6 +229,8 @@ export interface SourcingCommoditySummary {
   toleranceBoundUnits: number;
   /** Units that could not ship because the origin state's shared freight capacity ran dry. */
   capacityBoundUnits: number;
+  /** Units accepted only because severe local shortage raised willingness to pay. */
+  shortageResponsiveUnits: number;
   /** Units that shipped only by pushing a state's network past nominal capacity. */
   congestionUnits: number;
   /** Extra shipping charge those overflow units paid. */
@@ -229,8 +254,15 @@ export interface ImportAggregate {
 export interface SourcingResult {
   flows: SourcingFlow[];
   summaries: SourcingCommoditySummary[];
-  /** TEU consumed per state per class — the load on each shipping network. */
+  /** TEU consumed per state per class, the load on each shipping network. */
   freightTeuByState: Map<string, Record<FreightClass, number>>;
+  /**
+   * Price-tolerant TEU demand per origin state and class. This includes the
+   * load that moved plus the final unplaced cargo that the origin state's
+   * capacity refused. It is the freight commodity demand book, while
+   * {@link freightTeuByState} remains the observed network load.
+   */
+  freightDemandTeuByState: Map<string, Record<FreightClass, number>>;
   /**
    * Per destination state, per commodity: units actually delivered (local fill
    * plus interstate plus import) and the extra cost over local ask those units
@@ -261,21 +293,50 @@ export interface SourcingResult {
    */
   unplacedSupplyByState: Map<CommodityType, Map<string, number>>;
   /**
+   * Canonical freight billing v1 (markets plan Phase 4): shipping money per
+   * DESTINATION state and commodity, from accepted domestic hauled flows only.
+   *
+   * charge = units x shippingPerUnit (freightPrice x priceTeuPerUnitHop x hops
+   * x route multiplier) plus the congestion surcharge those units actually
+   * paid. Accumulated at the accept site, like {@link landedPremiumByDestState},
+   * so the itemization floor on `flows` cannot make the aggregate drift.
+   *
+   * Deliberately excluded, so the transfer identity below holds exactly:
+   *  - refused hauls (capacity- or tolerance-bound): no units moved, so no TEU
+   *    is billed;
+   *  - grid legs: wheeling is priced off the seller's ask, not the freight
+   *    market, and the haulage fleet earns nothing from the wire;
+   *  - imports: no origin-state freight network is modeled for foreign
+   *    sellers, so billing the sea leg would create money with no earner.
+   *
+   * Identity: the sum over this map equals the sum over
+   * {@link haulRevenueByOriginState}. Billing is a transfer to the origin
+   * state's freight network, never a sink.
+   */
+  freightChargesByDestState: Map<string, Map<CommodityType, number>>;
+  /**
+   * The other half of the transfer: shipping money earned per ORIGIN state,
+   * i.e. what that state's freight network hauled for this turn. Same
+   * accepted-domestic-hauled-flows-only scope as
+   * {@link freightChargesByDestState}.
+   */
+  haulRevenueByOriginState: Map<string, number>;
+  /**
    * The share of {@link unplacedSupplyByState} that failed for a DELIVERY
    * reason rather than because nobody wanted the goods.
    *
    * Spare left over when the pass ends means one of two very different things,
    * and a player needs them told apart: "the market is full" says cut output,
-   * "it could not get there" says build freight. The test is whether any buyer
-   * is still short at the end of the pass. Residual unmet demand and unsold
-   * spare coexisting is the definition of a delivery failure, whatever stopped
-   * the haul (tolerance ceiling, shared freight capacity, embargo, no route).
+   * "it could not get there" says build freight.
    *
-   * Attributed proportionally and uniformly across the commodity's sellers:
-   * `min(1, residualUnmet / totalSpare)` of every state's spare. Per-flow
-   * origin blame is not available (a buyer's shortfall is not attributable to
-   * one seller), and a uniform share is honest about that rather than
-   * inventing precision.
+   * Only spare that the ORIGIN STATE'S OWN freight capacity refused to haul
+   * counts here, accumulated at the capacity gate where the origin is known.
+   * That is the only failure mode for which "build freight in this state" is
+   * the right instruction, and the only one attributable to a specific seller.
+   * A buyer who walked away over the landed price is a PRICE failure and is
+   * deliberately excluded: it belongs to `toleranceBoundUnits`, and calling it
+   * a delivery failure tells the seller to spend on trucks that would not have
+   * sold the unit anyway (ticket #1180).
    */
   deliveryLimitedSupplyByState: Map<CommodityType, Map<string, number>>;
 }
@@ -310,6 +371,8 @@ export interface SourcingInputs {
   tariffRatePct: (commodity: CommodityType, exporter: CountryId, importer: CountryId) => number;
   /** True when an embargo blocks the directed flow exporter→importer. */
   isBlocked: (commodity: CommodityType, exporter: CountryId, importer: CountryId) => boolean;
+  /** Raise the landed-price ceiling only for states below 50 percent local fill. */
+  shortageResponsiveSourcingEnabled?: boolean;
 }
 
 // ── Pass ─────────────────────────────────────────────────────────────────────
@@ -330,6 +393,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     shippingCostMultiplier,
     tariffRatePct,
     isBlocked,
+    shortageResponsiveSourcingEnabled = false,
   } = inputs;
 
   // Deterministic iteration: states sorted by id, countries sorted by id.
@@ -341,10 +405,12 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
   // that make freight look oversupplied while one cargo class cannot move.
   const freightCapacityByState = new Map<string, number>();
   const freightUsedByState = new Map<string, Record<FreightClass, number>>();
+  const freightDemandByState = new Map<string, Record<FreightClass, number>>();
   for (const { stateId } of sortedStates) {
     const freightSupply = byState.get(stateId)?.get("freight")?.supply ?? 0;
     freightCapacityByState.set(stateId, freightSupply);
     freightUsedByState.set(stateId, { bulk: 0, special: 0, grid: 0 });
+    freightDemandByState.set(stateId, { bulk: 0, special: 0, grid: 0 });
   }
 
   const flows: SourcingFlow[] = [];
@@ -353,6 +419,27 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
   const importAggregatesByCountry = new Map<string, ImportAggregate>();
   const unplacedSupplyByState = new Map<CommodityType, Map<string, number>>();
   const deliveryLimitedSupplyByState = new Map<CommodityType, Map<string, number>>();
+  const freightChargesByDestState = new Map<string, Map<CommodityType, number>>();
+  const haulRevenueByOriginState = new Map<string, number>();
+
+  const addFreightBilling = (
+    destStateId: string,
+    originStateId: string,
+    commodity: CommodityType,
+    amount: number
+  ) => {
+    if (!(amount > 0)) return;
+    let byCommodity = freightChargesByDestState.get(destStateId);
+    if (!byCommodity) {
+      byCommodity = new Map();
+      freightChargesByDestState.set(destStateId, byCommodity);
+    }
+    byCommodity.set(commodity, (byCommodity.get(commodity) ?? 0) + amount);
+    haulRevenueByOriginState.set(
+      originStateId,
+      (haulRevenueByOriginState.get(originStateId) ?? 0) + amount
+    );
+  };
 
   const addLandedPremium = (
     destStateId: string,
@@ -394,6 +481,26 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     const spareByState = new Map<string, number>();
     const localFillByState = new Map<string, number>();
     const unmetByState = new Map<string, number>();
+    // Units of an origin state's spare that a willing, in-tolerance buyer wanted
+    // and that state's own freight network could not haul. Accumulated at the
+    // capacity gate below, where the origin IS known, rather than inferred from
+    // world totals afterwards (ticket #1180).
+    const capacityBoundByOriginState = new Map<string, number>();
+    // Same rejected requests expressed in TEU. At the end of the commodity
+    // pass this is reduced to cargo that is still unplaced, matching the
+    // delivery warning instead of counting a request later served elsewhere.
+    const capacityBoundTeuByOriginState = new Map<string, number>();
+    const addCapacityBound = (stateId: string, units: number, teuPerUnit: number) => {
+      if (!(units > 0)) return;
+      capacityBoundByOriginState.set(
+        stateId,
+        (capacityBoundByOriginState.get(stateId) ?? 0) + units
+      );
+      capacityBoundTeuByOriginState.set(
+        stateId,
+        (capacityBoundTeuByOriginState.get(stateId) ?? 0) + units * teuPerUnit
+      );
+    };
     for (const { stateId } of sortedStates) {
       const bal = byState.get(stateId)?.get(commodity);
       const supply = bal?.supply ?? 0;
@@ -423,6 +530,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
       unmetUnits: 0,
       toleranceBoundUnits: 0,
       capacityBoundUnits: 0,
+      shortageResponsiveUnits: 0,
       congestionUnits: 0,
       congestionSurchargePaid: 0,
       gridLossUnits: 0,
@@ -433,7 +541,16 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
       let unmet = unmetByState.get(buyer.stateId) ?? 0;
       if (unmet <= 0) continue;
       const buyerPrice = statePrices[buyer.stateId] ?? basePrice;
-      const ceiling = buyerPrice * (1 + BUYER_TOLERANCE_SLACK);
+      const localBalance = byState.get(buyer.stateId)?.get(commodity);
+      const baseCeiling = buyerPrice * (1 + BUYER_TOLERANCE_SLACK);
+      const ceiling =
+        buyerPrice *
+        (1 +
+          shortageResponsiveToleranceSlack({
+            localSupply: localBalance?.supply ?? 0,
+            localDemand: localBalance?.demand ?? 0,
+            enabled: shortageResponsiveSourcingEnabled,
+          }));
 
       // Candidate sellers: same-country states with spare + foreign countries.
       type Candidate = {
@@ -506,7 +623,17 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
 
       for (const cand of candidates) {
         if (unmet <= 0) break;
-        if (cand.landed > ceiling) {
+        // The buyer-tolerance ceiling is a HAULAGE limit: past it, trucking the
+        // cargo costs more than the cargo is worth, so the demand goes unmet.
+        // Grid commodities (energy, natural gas) do not ride the haulage fleet —
+        // they are wheeled over wire and pipe, and the design is that a state
+        // gets power at a price rather than a blackout. So grid is NOT
+        // tolerance-bound: it keeps drawing from reachable generation (cheapest
+        // first, lossier the farther it comes) until supply is exhausted, which
+        // is what the consumption ledger already books. Applying the freight
+        // ceiling to grid was the whole energy book divergence: the ledger
+        // served it, the sourcing book called it unmet.
+        if (!isGrid && cand.landed > ceiling) {
           // Sorted ascending: everything past here also breaks the ceiling.
           summary.toleranceBoundUnits += unmet;
           break;
@@ -539,6 +666,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
             if (!(nominal > 0)) {
               // A state with no freight supply at all hauls nothing.
               summary.capacityBoundUnits += deliver;
+              addCapacityBound(cand.originId, deliver, teuPerUnit);
               continue;
             }
             const unitsToNominal = Math.max(0, nominal - totalUsed) / teuPerUnit;
@@ -555,12 +683,19 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
             const dispatchCeiling = unitsToNominal + (overflowAffordable ? unitsInOverflow : 0);
             if (dispatchCeiling <= 0) {
               summary.capacityBoundUnits += deliver;
+              addCapacityBound(cand.originId, deliver, teuPerUnit);
               continue;
             }
             if (dispatch > dispatchCeiling) {
               const lost = (dispatch - dispatchCeiling) * deliveryFactor;
-              if (overflowAffordable) summary.capacityBoundUnits += lost;
-              else summary.toleranceBoundUnits += lost;
+              // Only the capacity branch is a delivery failure. When the
+              // overflow surcharge is what broke the buyer's ceiling the goods
+              // were haulable and merely too expensive, which is a price
+              // outcome and must not tell the seller to build freight.
+              if (overflowAffordable) {
+                summary.capacityBoundUnits += lost;
+                addCapacityBound(cand.originId, lost, teuPerUnit);
+              } else summary.toleranceBoundUnits += lost;
               dispatch = dispatchCeiling;
               deliver = dispatch * deliveryFactor;
             }
@@ -570,10 +705,21 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
               overflowDispatch * cand.shippingPerUnit * FREIGHT_CONGESTION_SURCHARGE;
             teuConsumed = dispatch * teuPerUnit;
             used[freightClass] += teuConsumed;
+            freightDemandByState.get(cand.originId)![freightClass] += teuConsumed;
           }
         }
         if (deliver <= 0) continue;
         const take = deliver;
+        if (shortageResponsiveSourcingEnabled) {
+          if (cand.landed > baseCeiling) {
+            summary.shortageResponsiveUnits += take;
+          } else if (
+            overflowDispatch > 0 &&
+            congestedLandedPrice(cand.landed, cand.shippingPerUnit) > baseCeiling
+          ) {
+            summary.shortageResponsiveUnits += overflowDispatch * deliveryFactor;
+          }
+        }
         summary.gridLossUnits += Math.max(0, dispatch - deliver);
         summary.congestionUnits += overflowDispatch * deliveryFactor;
         summary.congestionSurchargePaid += congestionSurchargePaid;
@@ -593,6 +739,18 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         // of the itemization floor below (that floor only caps the doc's flow
         // list; the aggregates must stay exact).
         addLandedPremium(buyer.stateId, commodity, take, take * cand.shippingPerUnit + tariffPaid);
+        // Canonical freight billing: the shipping leg of a domestic hauled flow
+        // is the buyer state's charge and the origin state's haul revenue, one
+        // amount booked on both sides. Hauled classes lose nothing in transit
+        // (deliveryFactor 1), so `take` here is also what was dispatched.
+        if (cand.originType === "state" && isHauledClass(freightClass)) {
+          addFreightBilling(
+            buyer.stateId,
+            cand.originId,
+            commodity,
+            take * cand.shippingPerUnit + congestionSurchargePaid
+          );
+        }
         if (cand.originType === "country") {
           const agg = importAggregatesByCountry.get(buyer.countryId) ?? {
             tariffPaid: 0,
@@ -632,17 +790,33 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     // the freight seam. Kept unrounded; the price turn rounds on persist.
     unplacedSupplyByState.set(commodity, new Map(spareByState));
 
-    // Split that spare by REASON. `summary.unmetUnits` is still unrounded here
-    // and holds every buyer's residual shortfall, so spare with no residual
-    // unmet demand against it is a plain glut: the goods reached everyone who
-    // wanted them and stopped because want stopped. Spare standing against
-    // residual unmet demand is the seam this whole pass exists to measure.
-    const totalSpare = [...spareByState.values()].reduce((sum, spare) => sum + spare, 0);
-    const deliveryShare =
-      totalSpare > 0 ? Math.min(1, Math.max(0, summary.unmetUnits) / totalSpare) : 0;
+    // Split that spare by REASON, per state, from the capacity gate's own
+    // record of which origin could not haul (ticket #1180).
+    //
+    // The previous rule divided world residual unmet demand by world spare and
+    // stamped that one ratio on every state. It could not be right: the ratio
+    // carries no local information, so a state with idle trucks and a plain
+    // glut was blamed at exactly the same rate as a state whose network was
+    // genuinely full. Measured on prod at t361 it read 0.98947 in NJ, NY, OH,
+    // TX and CA alike, which lit the freight pill on essentially every physical
+    // sector in the world and told all of them to build freight they did not
+    // need. It also counted tolerance-bound demand, buyers refusing the landed
+    // price, as a delivery failure, which is the opposite instruction.
     const deliveryLimited = new Map<string, number>();
     for (const [stateId, spare] of spareByState) {
-      deliveryLimited.set(stateId, spare * deliveryShare);
+      // Bounded by what is actually left over: capacity-bound units the state
+      // later placed with someone else are not unsold, so they are not stuck.
+      const capacityBound = capacityBoundByOriginState.get(stateId) ?? 0;
+      const limited = Math.min(spare, capacityBound);
+      deliveryLimited.set(stateId, limited);
+      // Book only the capacity-bound requests that remain genuinely unserved.
+      // A failed attempt later placed with another buyer must not claim freight
+      // demand twice. Scaling preserves the attempted routes' TEU weighting.
+      if (limited > 0 && capacityBound > 0 && isHauledClass(freightClass)) {
+        const capacityBoundTeu = capacityBoundTeuByOriginState.get(stateId) ?? 0;
+        freightDemandByState.get(stateId)![freightClass] +=
+          capacityBoundTeu * (limited / capacityBound);
+      }
     }
     deliveryLimitedSupplyByState.set(commodity, deliveryLimited);
 
@@ -653,6 +827,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     summary.unmetUnits = round2(summary.unmetUnits);
     summary.toleranceBoundUnits = round2(summary.toleranceBoundUnits);
     summary.capacityBoundUnits = round2(summary.capacityBoundUnits);
+    summary.shortageResponsiveUnits = round2(summary.shortageResponsiveUnits);
     summary.congestionUnits = round2(summary.congestionUnits);
     summary.congestionSurchargePaid = round2(summary.congestionSurchargePaid);
     summary.gridLossUnits = round2(summary.gridLossUnits);
@@ -663,9 +838,12 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     flows,
     summaries,
     freightTeuByState: freightUsedByState,
+    freightDemandTeuByState: freightDemandByState,
     landedPremiumByDestState,
     importAggregatesByCountry,
     unplacedSupplyByState,
     deliveryLimitedSupplyByState,
+    freightChargesByDestState,
+    haulRevenueByOriginState,
   };
 }

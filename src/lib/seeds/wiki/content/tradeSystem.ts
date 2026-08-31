@@ -63,6 +63,14 @@ At a **20% tariff**, drag is approximately **0.625**, meaning trade affinity is 
 
 A **ministerial embargo** is a hard block on trade between two countries. When active, trade affinity between the embargoing country and the target is set to **zero**: no trade flows regardless of other modifiers.
 
+### The iron curtain
+
+In the Cold War eras the Soviet bloc trades behind a wall. Trade between a curtained country and the open world is **zero in both directions**; trade within the curtain (the Comecon market) and within the open world is unaffected. No FTA, bloc bonus or tariff setting reaches across it. The curtain is decided per era by history rather than by any minister: **Yugoslavia** broke with Moscow before the 1953 world opens and trades with the West, so it sits outside the curtain (and is cut off from the bloc's internal market) while keeping its planned economy at home.
+
+### Autonomous governments
+
+Countries nobody plays run their own trade policy. An autonomous government can table trade agreements, apply targeted tariff bills against a rival, and impose bounded ministerial embargoes, with cooldowns per country pair and a limit set by how much it actually depends on that partner's trade. Expect a hostile relationship to show up on your tariff and embargo screens even when no player is behind it.
+
 ## IPF convergence
 
 The trade clearing engine uses **iterative proportional fitting (IPF)**, a method that repeatedly adjusts trade numbers in small steps until every country's imports and exports line up, to balance trade flows across all country pairs. The engine runs **40 iterations**, which converges margins to below **0.5%**, meaning the result is effectively exact for gameplay purposes.
@@ -137,6 +145,16 @@ Note the FTA override: even though a 20% tariff is on the books, the FTA collaps
 - **Tariffs and FTAs interact.** An FTA makes tariffs irrelevant for covered partners: they pay zero. Use FTAs to shield partners from your own tariff policy.
 - **Embargoes are blunt and temporary.** They zero trade but expire after 96 turns and trigger a 168-turn cooldown. Use them for targeted pressure, not permanent isolation.
 - **IPF convergence is exact at 40 iterations.** You can trust that the trade matrix is self-consistent: there are no "approximate" affinity values in the final result.
+
+## Public API
+
+Trade restrictions are available to bots and dashboards through the public v1 API:
+
+- \`GET /api/public/v1/trade/tariffs\` lists active tariff layers and supports imposing-country, target-country, scope, and limit filters.
+- \`GET /api/public/v1/trade/embargoes\` combines active ministerial, legislative, and organization sanctions. Add \`includePending=true\` to include embargo bills still moving through a legislature.
+- \`GET /api/public/v1/trade/flows\` returns bounded world trade history. Filter by country, commodity, and turn range to chart exports, imports, net balances, and cleared volume.
+
+The restriction routes include their public bill or organization-resolution provenance. They do not expose the character IDs used internally to enact a restriction. Trade-flow history omits raw bilateral matrices and internal reachable market books. See the [public API documentation](https://docs.lakesidegames.net/api/public-v1.html) for parameters and response fields.
 
 ## Related systems
 

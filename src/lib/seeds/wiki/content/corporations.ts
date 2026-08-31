@@ -256,10 +256,10 @@ Combined daily spending on marketing, logistics, R&D, and CEO salary cannot exce
 
 Marketing Strength (MS) is your corporation's **economic-warfare currency**. It is not a sales stat: it does not raise demand, clear more of your output, improve your margin, or move your share price. What it decides is who takes market share from whom.
 
-MS grows each turn from your daily marketing spend:
+MS grows each turn from what you actually **spend on delivered advertising**, not from the budget you set. Your marketing budget is placed as advertising demand with the media and entertainment sectors, you pay only for the advertising that fills, unfilled budget stays in your treasury, and it is the delivered spend that feeds MS. With advertising typically filling only a fraction of what is asked for, strength accrues more slowly than the budget figure suggests. A budget you cannot fund next turn places no demand at all.
 
-- Base: 1 MS per turn (any spend at all)
-- Scaled: 0.65 × ln(1 + budget / 100,000)
+- Base: 1 MS per turn (any delivered spend at all)
+- Scaled: grows with the log of delivered spend
 - Diminishing returns on stored MS, doubling above MS 100
 
 Starting MS is 10, and it has three uses:
@@ -315,7 +315,7 @@ Each sector type has **4 to 8 operating strategies** that change which commoditi
 | Initiation cost | 25% of sector daily revenue |
 | Transition duration | 12 turns (rates interpolate linearly) |
 | Transition margin penalty | Progressive −5% over 12 turns (starts at 0%, reaches full −5% at completion) |
-| Cooldown | The 12-turn transition itself; another switch is allowed immediately after completion |
+| Cooldown | 24 turns from initiation, running alongside the 12-turn transition, before another switch is allowed |
 
 During the transition, commodity flows blend from the old strategy toward the new one. The penalty represents retooling disruption. You can see a before/after comparison of estimated margin impact in the sector detail panel before confirming a switch.
 
@@ -323,8 +323,6 @@ Computer-run corporations may automatically retool a sector onto a better strate
 
 ### Strategy overview by sector type
 
-| Sector | Strategies |
-| --- | --- |
 | Sector | Strategies | Count |
 | --- | --- | --- |
 | Energy | Hydraulic Fracturing, Conventional, Renewables Focus, Nuclear Expansion, Smart Grid, Fusion Generation | 6 |
@@ -338,7 +336,7 @@ Computer-run corporations may automatically retool a sector onto a better strate
 | Media | Streaming Media, Standard, Digital-First, Legacy Broadcast | 4 |
 | Defense | Directed-Energy Systems, Standard, Cyber Warfare, Heavy Armor, Munitions & Arms Export, Naval Systems, Missile & Rocket Systems, Aerospace Systems | 8 |
 | Real Estate | PropTech Platforms, Standard, Commercial Development, Green Building | 4 |
-| Construction | Modular Construction, General Contracting, Infrastructure Buildout, Modular Construction | 4 |
+| Construction | Modular Construction, General Contracting, Infrastructure Buildout, plus a research-gated factory-built Modular Construction method from 2019 | 4 |
 | Telecommunications | 5G/6G Networks, Standard, 5G/Infrastructure, Cloud Services | 4 |
 | Entertainment | Live-Service Platforms, Standard, Streaming/Digital, Live/Venue | 4 |
 | Retail | E-Commerce Fulfillment, Standard, E-Commerce, Brick & Mortar | 4 |

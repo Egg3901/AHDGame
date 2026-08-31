@@ -6,8 +6,8 @@ Elections in A House Divided run perpetually. Every office has continuous cycles
 
 Every election has two phases:
 
-1. **Primary phase**: intra-party competition. Candidates from the same party compete for one nomination slot. Resolution uses a **primary score** (no votes accumulate). Highest score per party advances.
-2. **General phase**: inter-party competition. Nominees from different parties compete. **Votes accumulate turn by turn**; the final 4 turns land 30% of the pool.
+1. **Primary phase**: intra-party competition. Candidates from the same party compete for one nomination slot. **Down-ballot races** (House, Senate, Governor, State Senate and their equivalents abroad) count **real primary ballots**: over the closing stretch of the primary, each party's registered voters release a slice of ballots every turn, split between that party's candidates by their standing that turn, and the nominee is whoever the cumulative count says. The standing is the **primary score** below, so the score still decides who is ahead each turn, but a late surge moves the result less than a sustained lead. **Presidential** primaries instead run staggered state voting that hands out **pledged delegates**, and the delegate leader is nominated, at a [convention](/wiki/nominating-convention) if no one holds a majority.
+2. **General phase**: inter-party competition. Nominees from different parties compete. **Votes accumulate turn by turn**; the final 4 turns land 30% of the pool. Only **registered** voters cast general ballots, and a race can never certify more ballots than it has voters.
 
 When the general resolves, winners take office and the next cycle spawns.
 
@@ -29,7 +29,7 @@ UK, DE, and JP use different cycle lengths; see each country hub for specifics.
 
 ## The primary score (state races)
 
-Primary scores go up to 100 points across four components, then a final infamy penalty applies:
+The score is each candidate's **standing** within their party's primary. It sets how each turn's slice of primary ballots is split between them, and it is the tiebreak path where a party has no registered voters to cast any (a party with no registration data on file resolves on score alone, the way every primary once did). Primary scores go up to 100 points across four components, then a final infamy penalty applies:
 
 | Bucket | Range | Formula |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ Of the 40 alignment points, 25 measure how closely you match your state's politi
 
 ## The primary score (presidential)
 
-Presidential primaries are national, so they weight party platform and national reach instead of state position:
+A presidential nomination is decided by the **pledged delegates** won across the staggered state waves (see below), settled at a [nominating convention](/wiki/nominating-convention) when no candidate holds a majority. The score below is the national ranking the game falls back to when there is no delegate or vote data to read (for example an admin-forced resolution that skips the waves). It weights party platform and national reach instead of state position:
 
 | Bucket | Range | Formula |
 | --- | --- | --- |
@@ -57,7 +57,7 @@ Presidential primaries are national, so they weight party platform and national 
 
 Same infamy penalty applies on the final score. Alignment stays dominant, but Favorability was repriced from 10 to 25 points so the primary selects for roughly what the general election rewards, and parties stop nominating candidates the electorate has already rejected.
 
-**Presidential primary stagger waves** (the final 6 turns of the primary) use a delegate accumulator. NPPs in stagger waves receive an **extra 0.6 multiplier** on top of the usual handicaps when a player is in the same party.
+**Presidential primary stagger waves** use a delegate accumulator. States vote in six waves modeled on the 2020 calendar (Iowa, then New Hampshire, then Nevada and South Carolina, then a 14-state Super Tuesday, then mid-March, then everyone remaining), each wave allocating pledged delegates. Older and unstamped races (including the 1960 race) run all six waves **compressed** into the final 6 turns; reworked races (1964 onward) run them **stretched** across the primary so results land with a reaction gap. A primary keeps whichever cadence it opened on. NPPs in stagger waves receive an **extra 0.6 multiplier** on top of the usual handicaps when a player is in the same party. See [Primaries](/wiki/primaries) and [the convention](/wiki/nominating-convention) for the full flow.
 
 ## Vote accumulation (general)
 
@@ -65,7 +65,7 @@ During the general phase, votes accumulate each turn via the **Total Appeal Pipe
 
 ### Per-turn weighting
 
-A three-tier closing surge, not a flat split:
+A three-tier closing surge, not a flat split. The same curve paces the primary ballot count over its closing window:
 
 - **Early band:** 50% of the pool spread over every turn before the ramp band.
 - **Ramp band:** the 8 turns before election day get 20% of the pool.
@@ -191,7 +191,7 @@ During the **general election only**, a presidential nominee may **suspend** the
 
 - You **stay on the ballot**: this is not a withdrawal.
 - Campaign operations stop: turn income, upgrades, rallies, travel, canvassing, contributions, and queued Support drips halt.
-- **One-time campaign-strength transfer** at the moment of endorsement: **25% of your campaign strength** is debited from you and credited to your endorsed nominee. This is a single transfer; no per-turn campaign-strength transfers occur after this.
+- **One-time campaign-strength transfer** at the moment of endorsement. A share of your campaign strength is debited from you and credited to your endorsed nominee, scaled by how ideologically and coalitionally aligned the two of you are: a well-aligned successor inherits about a quarter, a poorly aligned one much less. (Races that opened on the older ruleset still transfer a flat quarter.) This is a single transfer; no per-turn campaign-strength transfers occur after this.
 - **Org boost:** **25% of your per-state character org investment** (the primary-cycle organization you built as a candidate, not the shared party-wide campaign presence score) is debited from you and added to your endorsed nominee's effective org for vote distribution in each state, for as long as you stay suspended.
 - Your **existing vote tally is preserved**: votes already earned across every state stay counted. You remain on the ballot but accumulate **no further votes** in any subsequent turn.
 - Suspended nominees forfeit all passive bonuses (swing-state ground game, VP home-state effect, campaign strength multiplier).
@@ -206,18 +206,18 @@ No seat sits vacant. Mechanics:
 - **Senate / Governor / State Senate:** Perpetual check each turn; replacement spawned for any slot with no active/upcoming race.
 - **Governor bootstrap:** If no state has ever completed a governor race, one is spawned per state so cycle 1 exists.
 - **President:** Spawned via the canonical LARP schedule when no active/upcoming president race exists; the cycle window plus a 24h primary / 24h general floor keep spawns aligned to real-world presidential election years.
-- **New elections** inherit duration from the most recently completed equivalent race.
+- **New elections** inherit duration from the most recently completed equivalent race. A House race is sized from the current census apportionment, so a state reapportioned mid-game contests the right number of seats, and a race already on the ballot when a census fires is resized in place.
 
 ## Presidential election specifics
 
 - **National race.** Any home state can run.
 - **Campaign Presence (per-candidate, per-state):** Separate from party-wide state org. Build it on the Presidential Election page (the Campaign Presence map) or at Political Operations. Each +1 level costs 3 **campaign** actions plus an **escalating** cash price from the **campaign treasury** (about $250K for the first level, roughly a third more each level after), at most one level per state per turn. You need an active campaign to build it. There is **no level cap**, but the bonus curve flattens as the price compounds, so level 10 already delivers about three quarters of the maximum and the levels above it buy steadily less. Fully invested, a state approaches **+25% primary vote weight** and **+15% general vote weight** there. Levels drop to 25% after the presidential general resolves, so investment carries across cycles. This is the ground-game loop for a presidential run; party org is a different lever the chair controls.
-- **Electoral College** (538 votes, 270 to win). ME and NE split by congressional district (\`UNIT_LEAN\` modifiers).
+- **Electoral College**: winning outright takes a **majority of the college the election actually apportioned**, which depends on the era's census. The modern roster is 538 electors (270 to win); the 1950s college is 531 electors (266 to win). Every threshold below is derived the same way from the rosters on the ballot. ME and NE split by congressional district (\`UNIT_LEAN\` modifiers).
 - **Independent penalty:** 0.3x vote share on the general path (70% reduction).
 - **Running mate (VP):** After the primary, each nominee picks a VP. Cannot be the current President; cannot be the same person.
 - **Presidential Travel:** Active candidates can travel to a US state during the general. Cost is **3-10 actions** based on the state's electoral-vote count (<=5 EV = 3 actions; <=10 EV = 5; <=20 EV = 7; >20 EV = 10). +1% Favorability per turn while in-state, one state at a time.
 - **Governor Endorsement:** A sitting Governor who endorses a presidential candidate in their home state applies a **1.5% bonus** (\`GOVERNOR_ENDORSEMENT_STATE_BONUS = 1.015\`) to that candidate's vote total in the state.
-- **No EV majority:** If no candidate reaches 270 (including a **269-269** tie or a third party blocking a majority), a **contingent election** runs. The **House** elects the President from the top three EV finishers (one vote per state delegation; DC has EVs but no House vote; **26 states needed**). The **Senate** elects the Vice President from the top two running mates (**51 votes needed**). Representatives and senators vote primarily by party, then ideology proximity; tied state delegations abstain. Chamber composition is **snapshotted** when the contingent ballot first runs so same-turn House/Senate flips cannot change the ballot mid-resolution.
+- **No EV majority:** If no candidate reaches the majority (including an exact tie or a third party blocking a majority), a **contingent election** runs. The **House** elects the President from the top three EV finishers (one vote per state delegation; DC has EVs but no House vote; a majority of the delegations on the ballot is needed: 26 of 50 today, 25 of 48 in the 1950s). The **Senate** elects the Vice President from the top two running mates (a majority of the senators voting: 51 of 100 today, 49 of 96 in the 1950s). Representatives and senators vote primarily by party, then ideology proximity; tied state delegations abstain. Chamber composition is **snapshotted** when the contingent ballot first runs so same-turn House/Senate flips cannot change the ballot mid-resolution.
 - **MVP ballot:** Contingent races resolve on a **single simulated House/Senate ballot** per cycle. If neither chamber reaches its threshold, a deterministic deadlock breaker seats a winner (multi-turn contingent ballots with an acting VP are planned for a later version).
 - **Party-weighted positions:** In presidential general elections, candidate positions are blended toward their party platform with weight 1/3 (\`(partyPos + 3 * charPos) / 4\`). This keeps nominees aligned with their coalition while preserving individual identity: 75% candidate, 25% party.
 - **Swing-state ground game:** In swing states (|lean| < 0.5), candidates with invested ground game receive **+3% votes per ground-game level** (legacy level-based path); the newer Campaign Ops tree path grants the starter + branch magnitude instead of the flat per-level rate.

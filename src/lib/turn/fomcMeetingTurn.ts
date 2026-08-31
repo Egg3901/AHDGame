@@ -5,16 +5,20 @@ import type {
   FomcSeat,
   FomcMeeting,
   FomcBallot,
+  FomcNomination,
   RateChangeRecord,
 } from "@/lib/db/types/centralBank";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
+import type { Character } from "@/lib/db/types";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { isCommandEconomy } from "@/lib/constants/commandEconomy";
 import { getEraMonetaryBaseline } from "@/lib/constants/monetaryEra";
 import { getInflationTarget } from "@/lib/budget/inflation";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { isBankGovernmentControlledLive } from "@/lib/centralBank/governance";
+import { createNotifications, type NotificationInput } from "@/lib/notifications";
+import { createSystemNewsPost } from "@/lib/news";
 import { getNationalDocId } from "@/lib/constants/nationalScope";
 import {
   RATE_CHANGES_PER_TERM,
@@ -22,6 +26,8 @@ import {
   FOMC_MEETING_INTERVAL_TURNS,
   FOMC_PLAYER_VOTE_WINDOW_MS,
   FOMC_VOTE_WINDOW_TURNS,
+  FOMC_VACANCY_REMINDER_INTERVAL_TURNS,
+  FOMC_COMMITTEE_COUNTRY_IDS,
   RATE_CHANGE_COOLDOWN_TURNS,
   NPP_CHAIR_TARGET_GROWTH,
   COC_SMOOTHING_TURNS,
@@ -31,10 +37,10 @@ import {
   seatPreferredVote,
   tallyMeeting,
   isAutoSeat,
+  playerSeats,
   type FomcMacroContext,
 } from "@/lib/centralBank/fomc";
-import { spawnTechnocratNpp } from "@/lib/npp/generator";
-import { oppositeAlignment } from "@/lib/centralBank/chairAlignment";
+import { logger } from "../observability/logger";
 
 const FOMC_MEETING_HISTORY_MAX = 24;
 const RATE_HISTORY_MAX = 96;
@@ -95,6 +101,15 @@ function mirrorChairOntoBank(set: Record<string, unknown>, chair: FomcSeat): voi
     set.chairCharacterId = chair.characterId;
     set.chairCharacterName = chair.characterName;
     set.chairNppId = null;
+  } else if (chair.occupantType === "vacant") {
+    // A vacant chair mirrors as no one: clear the person fields but leave
+    // chairMode alone. The vacancy itself is signalled by chairCharacterId=null
+    // plus `vacancyAwaitingAutomaticSelection` (set by the caller), which the
+    // chair-selection phase reads to open nominations. Fabricating an NPP here
+    // is exactly the auto-stock we're removing.
+    set.chairCharacterId = null;
+    set.chairNppId = null;
+    set.chairCharacterName = null;
   } else {
     set.chairMode = "npp";
     set.chairNppId = chair.nppId;
@@ -104,19 +119,19 @@ function mirrorChairOntoBank(set: Record<string, unknown>, chair: FomcSeat): voi
 }
 
 /**
- * Vacate any seat whose staggered term has expired and appoint an autonomous
- * technocrat replacement (flipped alignment, fresh full term) so the board is
- * never short a governor. A player whose term lapses is removed and their seat
- * reverts to an NPP — the President can later re-nominate a player via the
- * confirmation flow. Returns a new board when anything changed, else null.
+ * VACATE any seat whose staggered term has expired. The seat is left empty
+ * (occupantType "vacant"), NOT auto-filled with a technocrat NPP: the committee
+ * is staffed by presidential nomination + Senate confirmation, never stocked by
+ * the engine. A vacant seat abstains on rate motions, so an unstaffed board
+ * simply cannot move the rate until the President fills it — which is the point.
+ * Returns a new board when anything changed, else null.
  *
- * `chairRefreshed` reports whether the CHAIR seat was one of the replacements,
- * so the caller can hand the vacancy to the player selection pipeline instead
- * of locking the technocrat in for a full 4-year term.
+ * `chairRefreshed` reports whether the CHAIR seat was one of the vacancies, so
+ * the caller can hand it to the chair selection / nomination pipeline.
  */
 async function refreshExpiredSeats(
-  db: Db,
-  bank: Pick<CentralBank, "_id" | "countryId">,
+  _db: Db,
+  _bank: Pick<CentralBank, "_id" | "countryId">,
   board: FomcSeat[],
   currentTurn: number
 ): Promise<{ board: FomcSeat[]; replaced: number; chairRefreshed: boolean } | null> {
@@ -125,17 +140,16 @@ async function refreshExpiredSeats(
   const next: FomcSeat[] = [];
   for (const seat of board) {
     if (seat.termExpiresAtTurn != null && seat.termExpiresAtTurn <= currentTurn) {
-      const npp = await spawnTechnocratNpp(db, bank.countryId, "fomcMember");
       next.push({
         ...seat,
-        occupantType: "npp",
+        occupantType: "vacant",
         characterId: null,
-        characterName: npp.name,
-        nppId: npp._id,
-        alignment: oppositeAlignment(seat.alignment),
+        characterName: null,
+        nppId: null,
         appointedByPresidentId: null,
         appointedAtTurn: currentTurn,
-        termExpiresAtTurn: currentTurn + FOMC_TERM_TURNS,
+        // No term on a vacant seat — it stays open until a nominee is confirmed.
+        termExpiresAtTurn: null,
       });
       replaced++;
       if (seat.isChair) chairRefreshed = true;
@@ -157,6 +171,70 @@ function canChangeRate(
   const last = bank.lastRateChangeTurn;
   if (typeof last === "number" && currentTurn - last < RATE_CHANGE_COOLDOWN_TURNS) return false;
   return true;
+}
+
+/**
+ * Player characters who currently hold a member country's nominating executive
+ * office (the same office the FOMC nominate route authorizes, e.g. the US
+ * President). These are the only players who can fill vacant committee seats.
+ */
+async function findNominationExecutives(
+  db: Db,
+  countryId: CountryId
+): Promise<Array<{ userId: ObjectId; characterName: string }>> {
+  // Committee banks are single-country institutions (FOMC_COMMITTEE_COUNTRY_IDS
+  // gates the whole vacancy path on bank.countryId), so one exec key suffices.
+  const execKey = COUNTRY_CONFIGS[countryId]?.officeTypes.find((o) => o.isExecutive)?.key;
+  if (!execKey) return [];
+
+  const chars = await db
+    .collection<Character>("characters")
+    .find({ countryId, userId: { $exists: true }, "currentOffice.type": execKey })
+    .project<Pick<Character, "name" | "userId">>({ name: 1, userId: 1 })
+    .toArray();
+  return chars.map((char) => ({ userId: char.userId, characterName: char.name }));
+}
+
+/**
+ * Tell the world a committee board has gone understaffed (ticket #1238).
+ *
+ * Vacant seats are by design (#1195: the engine never seats a machine
+ * candidate; the President nominates and the Senate confirms), but before this
+ * notice the vacancy was silent: motions just started failing 1-0-6 with no
+ * signal to the one player who can fix it, and the board stayed dead for good.
+ * Notifies every nominating executive in-app and posts a system news item so
+ * the chair and community can see why the board cannot move the rate.
+ */
+async function notifyFomcVacancy(
+  db: Db,
+  bank: Pick<CentralBank, "_id" | "countryId">,
+  vacantCount: number,
+  boardSize: number,
+  now: Date
+): Promise<void> {
+  const countryId = bank.countryId as CountryId;
+  const config = COUNTRY_CONFIGS[countryId];
+  const bankLabel = config?.centralBank.name ?? "the central bank";
+  const execTitle =
+    config?.officeTypes.find((o) => o.isExecutive)?.label.toLowerCase() ?? "the executive";
+
+  const notifications: NotificationInput[] = [];
+  const executives = await findNominationExecutives(db, countryId);
+  for (const exec of executives) {
+    notifications.push({
+      userId: exec.userId,
+      type: "system",
+      title: `${bankLabel}: board seats vacant`,
+      message: `${vacantCount} of ${boardSize} committee seats are vacant, so no rate motion can reach the ${Math.floor(boardSize / 2) + 1} votes needed to pass. Nominate governors from the central bank's committee page; the Senate confirms them.`,
+      metadata: { type: "central_bank_fomc_vacancy", countryId, bankId: bank._id, at: now },
+    });
+  }
+  await createNotifications(notifications);
+
+  createSystemNewsPost(
+    `${vacantCount} of ${boardSize} seats on the ${bankLabel}'s rate-setting board are vacant. The board cannot carry a rate motion until the ${execTitle} nominates governors and the Senate confirms them.`,
+    "executive"
+  ).catch((err) => logger.error("FomcMeetingTurn", "vacancy news post failed", err));
 }
 
 /**
@@ -221,6 +299,14 @@ interface ResolveOutcome {
  * route. Writes resolution mutations into `set` when the meeting resolves (a
  * majority is reached, a majority becomes impossible, or the deadline is hit).
  * Leaves `set` untouched and returns resolved:false while votes are still open.
+ *
+ * A decided tally alone never closes a meeting while a seated player can still
+ * ballot: NPP seats auto-vote the moment a meeting opens, so on a board where
+ * the NPP block alone holds the majority the meeting would otherwise open and
+ * resolve inside the same turn phase and the player seats would never see the
+ * documented 24-turn vote window. Early resolution therefore waits until every
+ * player seat has cast a ballot; the deadline still force-resolves with
+ * no-shows abstaining.
  */
 export function resolveMeetingInto(
   set: Record<string, unknown>,
@@ -232,7 +318,10 @@ export function resolveMeetingInto(
   opts: ResolveOptions
 ): ResolveOutcome {
   const tally = tallyMeeting(meeting.ballots, meeting.motion, board.length);
-  if (!tally.decided && !opts.forceDeadline) {
+  const awaitingPlayerBallot = playerSeats(board).some(
+    (s) => !meeting.ballots.some((b) => b.seatId === s.seatId)
+  );
+  if ((!tally.decided || awaitingPlayerBallot) && !opts.forceDeadline) {
     return { resolved: false, moved: false, changesThisTerm: opts.changesThisTerm };
   }
 
@@ -280,8 +369,8 @@ export type CastBallotResult =
 
 /**
  * Record a live player board member's ballot on the active meeting and, per the
- * "auto-pass before the timer" rule, resolve immediately if that ballot decides
- * the outcome (a full-board majority for or against the motion). Idempotent per
+ * "auto-pass before the timer" rule, resolve immediately once the outcome is
+ * decided and no other player seat is still waiting to ballot. Idempotent per
  * seat per meeting: a seat that has already voted is rejected.
  */
 export async function castFomcBallot(
@@ -330,7 +419,8 @@ export interface FomcMeetingTurnResult {
 /**
  * Per-turn FOMC committee phase. For every bank carrying a committee board:
  *   1. roll the 4-year term (resets the 16-change budget),
- *   2. resolve the active meeting if it is decided or has hit its deadline,
+ *   2. resolve the active meeting if it is decided with no player ballot
+ *      pending, or has hit its deadline,
  *   3. open a fresh meeting on cadence when none is active.
  *
  * No-op for banks without a `fomcBoard` (legacy single-chair banks are untouched).
@@ -403,9 +493,9 @@ export async function processFomcMeetings(
 
     const set: Record<string, unknown> = { updatedAt: now };
 
-    // 0. Vacate expired seats and appoint autonomous replacements so the board
-    //    stays full. Persist immediately so the meeting below votes on the new
-    //    roster and the single-chair mirror stays coherent when the chair lapses.
+    // 0. Vacate any seats whose term has expired. Persist immediately so the
+    //    meeting below votes on the new roster and the single-chair mirror stays
+    //    coherent when the chair lapses.
     const refreshed = await refreshExpiredSeats(db, bank, board, currentTurn);
     if (refreshed) {
       board = refreshed.board;
@@ -434,6 +524,32 @@ export async function processFomcMeetings(
       }
     }
 
+    // 0b. Vacancy signal (ticket #1238). Seats are staffed by presidential
+    //     nomination + Senate confirmation only (#1195), so an expired board
+    //     stays vacant until the executive acts. That action was previously
+    //     invisible: motions just failed 1-0-6 forever. Tell the nominating
+    //     executive (and the news feed) when seats first fall vacant, and
+    //     re-remind at most once per reminder interval while no nomination is
+    //     already before the Senate.
+    const vacantSeatCount = board.filter((s) => s.occupantType === "vacant").length;
+    if (
+      vacantSeatCount > 0 &&
+      FOMC_COMMITTEE_COUNTRY_IDS.has(countryId) &&
+      (refreshed !== null ||
+        typeof bank.lastFomcVacancyNoticeAtTurn !== "number" ||
+        currentTurn - bank.lastFomcVacancyNoticeAtTurn >= FOMC_VACANCY_REMINDER_INTERVAL_TURNS)
+    ) {
+      const activeNominations = await db
+        .collection<FomcNomination>("fomcNominations")
+        .find({ bankId: bank._id, status: "active" })
+        .project<{ _id: ObjectId }>({ _id: 1 })
+        .toArray();
+      if (activeNominations.length === 0) {
+        set.lastFomcVacancyNoticeAtTurn = currentTurn;
+        await notifyFomcVacancy(db, bank, vacantSeatCount, board.length, now);
+      }
+    }
+
     // 1. Term rollover — resets the per-term rate-change budget.
     let termStart = bank.fomcTermStartedAtTurn;
     let changesThisTerm = bank.rateChangesThisTerm ?? 0;
@@ -450,6 +566,7 @@ export async function processFomcMeetings(
     let meeting = bank.activeFomcMeeting ?? null;
 
     // 2. Open a meeting when none is active and cadence is due.
+    let justOpened = false;
     if (!meeting) {
       const dueForMeeting =
         typeof bank.lastFomcMeetingTurn !== "number" ||
@@ -463,13 +580,23 @@ export async function processFomcMeetings(
         );
         meeting = openMeeting(board, ctx, currentTurn, now, allowChange);
         set.lastFomcMeetingTurn = currentTurn;
+        set.activeFomcMeeting = meeting;
         result.meetingsOpened++;
+        justOpened = true;
       }
     }
 
     // 3. Resolve the active meeting if decided, past its wall-clock window, or
     //    at the game-clock deadline. Turns never pause: no-shows abstain.
-    if (meeting && meeting.status === "voting") {
+    //
+    // A meeting OPENED this very phase is never resolved in the same phase, even
+    // if the NPP/auto seats alone already decide the tally. Otherwise a board with
+    // no seated player — or one where the auto block holds the majority — opens and
+    // resolves a rate motion inside one turn, so the chair and members never see it
+    // ("bills insta-pass without the fed chair even seeing them", #1211). It stays
+    // open for its window; the deadline (which cannot fall on the opening turn,
+    // resolvesOnTurn = openedAtTurn + FOMC_VOTE_WINDOW_TURNS) still force-resolves.
+    if (meeting && meeting.status === "voting" && !justOpened) {
       const deadlineHit =
         currentTurn >= meeting.resolvesOnTurn ||
         now.getTime() >= meeting.playerVoteDeadline.getTime();

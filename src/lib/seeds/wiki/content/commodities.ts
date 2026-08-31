@@ -82,7 +82,7 @@ Raw D/S remains visible on market and admin screens. Prices and margins use the 
 
 Beyond sector-level supply and demand, several macroeconomic forces inject additional commodity demand each turn:
 
-**Advertising:** Corporate marketing budgets convert to advertising commodity demand. **90%** of a corporation's daily marketing budget becomes advertising demand, distributed to the corporation's HQ state.
+**Advertising:** Corporate marketing budgets convert to advertising commodity demand, distributed to the corporation's HQ state, but only as much as the corporation's liquid capital can actually fund for the next turn. The buyer pays only for the advertising that fills, at the clearing price, and that payment settles to the media and entertainment corporations whose offers filled it; unfilled budget stays in the buyer's treasury.
 
 **Healthcare services:** National healthcare budgets (Medicare, NHS, etc.) convert to healthcare_services demand. **1.5%** of annual healthcare spending is spread across turns as demand.
 
@@ -98,15 +98,7 @@ Beyond sector-level supply and demand, several macroeconomic forces inject addit
 
 ### Retail demand
 
-The **Consumer Goods** commodity is special: retail sectors both supply it and the demand for it is scaled by GDP growth. Positive GDP growth pushes retail commodity prices up; negative GDP shrinks them.
-
-The retail demand multiplier blends **50% national average GDP growth + 50% state-level GDP growth**, scaled by factor **15**:
-
-\`\`\`
-multiplier = 1 + (blendedGdpGrowth / 100) * 15
-\`\`\`
-
-Clamped between **0.5x and 2.0x**. At 2% blended GDP growth, demand is 1.30x; at -1%, demand is 0.85x.
+Retail sectors supply **Consumer Goods**. Demand comes independently from the household consumption ledger, based on population, income, employment, consumer confidence, basket share, and bounded price elasticity. Adding Retail supply does not add Retail demand, so overbuilding lowers seller fill while a genuine shortage rewards new capacity.
 
 ### Price administration
 

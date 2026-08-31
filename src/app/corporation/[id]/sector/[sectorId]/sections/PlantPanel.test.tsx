@@ -24,6 +24,8 @@ const plants = {
   depreciationPerTurn: 0.001,
   buildTurns: 72,
   workers: 1_867,
+  workersDesired: 3_734,
+  labourStaffingFactor: 0.5,
   unionizationPct: 31,
   laborIntensity: 0.93,
   governor: { active: false, startTurn: 1, rampTurns: 48, turnsRemaining: 0, cap: 0.15 },
@@ -55,6 +57,8 @@ describe("PlantPanel workforce", () => {
     expect(screen.getByText("1,867")).toBeTruthy();
     expect(screen.getByText("31% in a union")).toBeTruthy();
     expect(screen.getByText("Avg wage level 1.15×")).toBeTruthy();
+    expect(screen.getByText(/1,867 of 3,734 jobs filled/)).toBeTruthy();
+    expect(screen.getByText(/Higher pay can win a larger share/)).toBeTruthy();
 
     const unionLink = screen.getByRole("link", { name: "United Steelworkers" });
     expect(unionLink.getAttribute("href")).toBe("/unions/union-1");
@@ -63,5 +67,47 @@ describe("PlantPanel workforce", () => {
         (image.getAttribute("src") ?? "").includes("United_Steelworkers")
       )
     ).toBe(true);
+  });
+
+  it("separates a media sector's audience run from contractable ledger output", () => {
+    render(
+      <PlantPanel
+        plants={plants}
+        marketSupplies={[
+          {
+            commodity: "advertising",
+            label: "Advertising",
+            icon: "AD",
+            colors: "",
+            unit: "impressions",
+            units: 140,
+            rate: 1,
+            basePrice: 1,
+            globalPrice: 1,
+            nationalPrice: 1,
+            regionalPrice: 1,
+            marketPrice: 1,
+            weight: 100,
+            priceImpact: 0,
+          },
+        ]}
+        sectorType="media"
+        averageWageLevel={1}
+        isCeo={false}
+        busy={false}
+        message=""
+        onOpenBuild={noop}
+        onCancelOrder={noop}
+        onMothball={noop}
+        onReactivate={noop}
+      />
+    );
+
+    expect(
+      screen.getByText(/Commodity ledger output: Advertising 140 impressions\/day/)
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/eligible private supply agreements use the smaller ledger output/)
+    ).toBeTruthy();
   });
 });

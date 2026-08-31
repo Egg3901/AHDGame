@@ -107,4 +107,65 @@ describe("POST .../slate/[electionId]/invitations", () => {
       expect(body.error).not.toMatch(/primary has ended/i);
     }
   });
+
+  // Formerly-regional parties (Plaid Cymru, SNP, the NI parties) stand
+  // UK-wide. A chair may slate them into any region; geography is no longer a
+  // filing gate, only org and the electorate decide how they do there.
+  it("allows a formerly-regional party's candidate outside its historic home nation", async () => {
+    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+    vi.mocked(findPartyBySequentialId).mockResolvedValue({
+      sequentialId: 4,
+      countryId: "UK",
+      name: "Plaid Cymru",
+      abbreviation: "PC",
+    } as never);
+
+    db.collectionMocks["elections"]!.findOne.mockResolvedValue({
+      _id: new ObjectId(ELECTION_ID),
+      countryId: "UK",
+      electionType: "commons",
+      state: "EMI",
+      status: "active",
+      primaryEndTurn: 20,
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(postRequest({ candidateType: "npp", candidateId: CANDIDATE_ID }), {
+      params: Promise.resolve({ code: "uk", id: "4", electionId: ELECTION_ID }),
+    });
+
+    if (response.status === 400) {
+      const body = (await response.json()) as { error: string };
+      expect(body.error).not.toMatch(/does not stand for election in this region/i);
+    }
+  });
+
+  it("allows a formerly-regional party's candidate inside its historic home nation", async () => {
+    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+    vi.mocked(findPartyBySequentialId).mockResolvedValue({
+      sequentialId: 4,
+      countryId: "UK",
+      name: "Plaid Cymru",
+      abbreviation: "PC",
+    } as never);
+
+    db.collectionMocks["elections"]!.findOne.mockResolvedValue({
+      _id: new ObjectId(ELECTION_ID),
+      countryId: "UK",
+      electionType: "commons",
+      state: "WAL",
+      status: "active",
+      primaryEndTurn: 20,
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(postRequest({ candidateType: "npp", candidateId: CANDIDATE_ID }), {
+      params: Promise.resolve({ code: "uk", id: "4", electionId: ELECTION_ID }),
+    });
+
+    if (response.status === 400) {
+      const body = (await response.json()) as { error: string };
+      expect(body.error).not.toMatch(/does not stand for election in this region/i);
+    }
+  });
 });

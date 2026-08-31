@@ -15,7 +15,7 @@ describe("world entity map snapshot", () => {
       status: "sovereign",
       simulationTier: "full-autonomous",
       autonomousReady: true,
-      playerReady: false,
+      playerReady: true,
     });
   });
 

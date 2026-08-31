@@ -14,18 +14,33 @@ import type { CommodityType } from "../../constants/commodities";
  * `tradeFlowSnapshots` and are deliberately not duplicated here.
  */
 export interface CommodityFlow {
+  /**
+   * This document's demand fields come from the calibrated aggregate ledger,
+   * not from state buyer intents processed by the sourcing network.
+   */
+  basis: "ledger_aggregate";
+  /** Global clearing assumes one frictionless world pool. */
+  clearingBasis: "global_pooled_availability";
   commodity: CommodityType;
   turn: number;
   /** Units produced (revenue-derived supply, post capacity clamp). */
   supplyUnits: number;
   /** Units demanded (sector inputs + retail/macro/latent legs). */
   demandUnits: number;
+  /** Basis-explicit alias for `demandUnits`; preferred by new measurement consumers. */
+  demandUnitsLedger: number;
   /** Units that would transact this turn: min(supply, demand). */
   clearedUnits: number;
+  /** Basis-explicit alias for `clearedUnits`; preferred by new measurement consumers. */
+  clearedUnitsPooled: number;
   /** Demand that found no producer: max(0, demand − supply). */
   unmetDemandUnits: number;
+  /** Basis-explicit alias for `unmetDemandUnits`; preferred by new measurement consumers. */
+  unmetDemandUnitsPooled: number;
   /** Output that found no buyer: max(0, supply − demand). Inventory-to-be. */
   surplusUnits: number;
+  /** Basis-explicit alias for `surplusUnits`; preferred by new measurement consumers. */
+  surplusUnitsPooled: number;
   /** Applied global market price this turn. */
   price: number;
   /**
@@ -49,9 +64,13 @@ export interface CommodityFlow {
   byCountry: Record<
     string,
     {
+      /** This row nets only the named country's post-convergence ledger balance. */
+      basis: "country_scoped_ledger";
       supply: number;
       demand: number;
       cleared: number;
+      /** Basis-explicit alias for `cleared`; preferred by new measurement consumers. */
+      clearedUnitsScoped: number;
       price: number;
     }
   >;

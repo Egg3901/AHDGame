@@ -107,6 +107,8 @@ describe("mergeSectorPlantFields", () => {
   it("is a safe no-op shape for pre-plants documents", () => {
     expect(mergeSectorPlantFields({}, {})).toEqual({
       capitalStock: 0,
+      plantCount: 0,
+      plantUnitRemainder: 0,
       capacityBookAnchor: 0,
       buildQueue: [],
       constructionInProgressAnchor: 0,
@@ -234,6 +236,8 @@ describe("identitySectorPlantFields", () => {
     const survivor = midBuild({ mothballed: true, legacyRevenueShadow: 750_000 });
     expect(identitySectorPlantFields(survivor)).toEqual({
       capitalStock: 500,
+      plantCount: 0,
+      plantUnitRemainder: 0,
       capacityBookAnchor: 0,
       buildQueue: survivor.buildQueue,
       constructionInProgressAnchor: 1_000_000,

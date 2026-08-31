@@ -1,19 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
+import type { Db } from "mongodb";
 import type {
   Crisis,
   CrisisDecisionNode,
+  CrisisDecisionOption,
   CrisisInteraction,
   GlobalResponseOutcome,
 } from "@/lib/db/types/crisis";
+import { ApiError } from "@/lib/api/errors";
+import { createAsyncIterableCursor, createMockDb } from "@/lib/test-utils/mockDb";
 import {
   globalResponseRoleFor,
+  loadCampaignCapability,
   optionsForGlobalResponder,
+  prepareGlobalResponseOption,
   scoresForResponses,
   scoresForGlobalResponse,
   selectGlobalResponseOutcome,
   visibleGlobalResponses,
 } from "./globalResponse";
+import { EQUIPMENT_TRACK_MAX } from "@/lib/military/arsenal";
 import { VIETNAM_DEF } from "./defs/vietnam";
 import { allLivingConflictDefs } from "./registry";
 
@@ -220,5 +227,103 @@ describe("1.3 authored catalog", () => {
     for (const def of defs) {
       expect(def.phases.every((phase) => phase.events.some((event) => event.response))).toBe(true);
     }
+  });
+});
+
+// ── Capacity gate (ticket #1183) ────────────────────────────────────────────
+// A nation that cannot meet an option's campaign requirement is being refused,
+// not failing. The refusal travels through handleRouteError, which turns any
+// non-ApiError into a generic 500 "Internal server error", so the reasons the
+// UI already knows how to render never reach the player.
+
+describe("prepareGlobalResponseOption — capacity refusals", () => {
+  const CRISIS = {
+    globalResponse: {
+      conflictKey: "berlin",
+      eventKey: "berlin_bloc",
+      roleByCountry: { US: "bloc" as const },
+      defaultOptionIdByRole: { bloc: "allied_mediation" },
+      outcomes: [],
+      defaultOutcomeId: "stalemate",
+    },
+  } as unknown as Pick<Crisis, "globalResponse">;
+
+  const ALLIED_SUPPORT = {
+    optionId: "allied_support",
+    label: "Support the alliance line",
+    description: "Contribute money, logistics, and diplomatic backing.",
+    effects: [],
+    campaignRequirement: {
+      allowedStages: ["posture", "mobilization", "operations"],
+      minMilitaryReadiness: 42,
+      minLogistics: 38,
+    },
+  } as unknown as CrisisDecisionOption;
+
+  function dbWithNoMilitary(): Db {
+    const db = createMockDb();
+    ["livingConflicts", "federalBudget", "governmentApprovals", "militaryUnits"].forEach((c) =>
+      db.collection(c)
+    );
+    db.collectionMocks["livingConflicts"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["federalBudget"]!.findOne.mockResolvedValue({
+      countryId: "US",
+      gdp: 1_000_000_000_000,
+      treasuryBalance: 50_000_000_000,
+    });
+    db.collectionMocks["governmentApprovals"]!.findOne.mockResolvedValue({ approvalRating: 60 });
+    return db as unknown as Db;
+  }
+
+  it("refuses an option the nation cannot support as a 400 carrying the reasons", async () => {
+    const err = await prepareGlobalResponseOption(
+      dbWithNoMilitary(),
+      CRISIS,
+      "US",
+      ALLIED_SUPPORT
+    ).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(400);
+    expect((err as ApiError).message).toMatch(/military readiness 42/);
+  });
+
+  it("returns the capability snapshot when the requirement is met", async () => {
+    const capability = await prepareGlobalResponseOption(dbWithNoMilitary(), CRISIS, "US", {
+      optionId: "allied_mediation",
+      label: "Demand negotiations",
+      description: "Press the alliance toward talks.",
+      effects: [],
+    } as unknown as CrisisDecisionOption);
+
+    expect(capability.domesticSupport).toBe(60);
+  });
+});
+
+describe("loadCampaignCapability — national logistics", () => {
+  it("normalizes the military equipment track to the 0–100 capacity scale", async () => {
+    const db = createMockDb();
+    ["federalBudget", "governmentApprovals", "militaryUnits"].forEach((name) =>
+      db.collection(name)
+    );
+    db.collectionMocks["federalBudget"]!.findOne.mockResolvedValue({
+      countryId: "US",
+      gdp: 1_000_000,
+      treasuryBalance: -774_000,
+    });
+    db.collectionMocks["governmentApprovals"]!.findOne.mockResolvedValue({ approvalRating: 48 });
+    db.collectionMocks["militaryUnits"]!.find.mockReturnValue(
+      createAsyncIterableCursor([
+        {
+          personnel: 10_000,
+          readiness: 67,
+          equipment: { support: EQUIPMENT_TRACK_MAX },
+        },
+      ])
+    );
+
+    const result = await loadCampaignCapability(db as unknown as Db, "US");
+
+    expect(result.logistics).toBe(100);
   });
 });

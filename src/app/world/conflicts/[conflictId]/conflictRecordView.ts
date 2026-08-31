@@ -1,9 +1,12 @@
+import { canLandMarines } from "@/lib/navair/frontSupport";
+import type { FrontSupport } from "@/lib/navair/types";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import type { BattleReportDoc } from "@/lib/db/types/battleReport";
 import type { BattleDeclarationStatus } from "@/lib/db/types/battleDeclaration";
 import type { ConflictTier } from "@/lib/military/conflictVisibility";
+import { contingentsOf } from "@/lib/military/battle";
 import { strengthPct } from "@/lib/military/strength";
-import { theaterPool } from "@/lib/military/theaterPool";
+import { engageablePool } from "@/lib/military/theaterPool";
 import { enemyBand } from "@/lib/military/forecastFog";
 import { READINESS_DRIFT_STEP, readinessBaselineOf } from "@/lib/military/readinessDrift";
 
@@ -37,6 +40,12 @@ export interface EngagementRoster {
   units: { id: string; name: string; type: string; casualties: number }[];
 }
 
+/** One belligerent's own dead in a single engagement. */
+export interface CountryLoss {
+  country: string;
+  loss: number;
+}
+
 export interface RecordBattleRow {
   id: string;
   turn: number;
@@ -47,8 +56,17 @@ export interface RecordBattleRow {
    *  reports, which named only one country per side. */
   attackers: string[];
   defenders: string[];
-  declarerLoss: number;
-  targetLoss: number;
+  /**
+   * Dead per attacking nation, principal first — NOT a side total under the
+   * principal's flag, which is what this used to be. A DD+RU offensive reported
+   * "DD 16,299" when DD had lost 5,360 and RU 10,939.
+   *
+   * One entry per side on a pre-coalition report, carrying that side's whole loss:
+   * accurate, because those reports describe bilateral battles.
+   */
+  attackerLosses: CountryLoss[];
+  /** Dead per defending nation, principal first. */
+  defenderLosses: CountryLoss[];
   /**
    * True when the offensive met nothing — the front still moved, but no
    * engagement was fought. The war log tells the two apart; both are events.
@@ -60,8 +78,16 @@ export interface RecordBattleRow {
    * position was recorded — unknown, which must not read as a stalemate.
    */
   groundPct?: number | null;
-  /** Omitted for `public`; own side only for `command`; both for `archive`. */
+  /** Omitted for `public`; own side only for `command`; both for `archive`.
+   *  One entry PER NATION, so a coalition ally gets its own. */
   rosters?: EngagementRoster[];
+  /**
+   * True when rosters are present but the opposing side's were filtered out.
+   *
+   * The renderer used to infer this from a roster count of 1, which a two-nation
+   * coalition breaks — it would list both allies and imply nothing was hidden.
+   */
+  rostersWithheld?: boolean;
 }
 
 export interface RecordExtras {
@@ -80,7 +106,42 @@ export interface RecordExtras {
   ownForces?: ForceRow[];
   /** `command` only — a coarse read of the opposing force, never a number. */
   enemyBand?: string;
+  /** `command` only — what the naval and air layer is delivering to this front. */
+  navalAir?: NavalAirPanel;
   battles: RecordBattleRow[];
+}
+
+/**
+ * The naval and air picture at a front, as the record states it.
+ *
+ * The viewer's own figures are exact, because a government knows its own dispositions.
+ * The enemy's is a BAND and never a number, matching how this page already treats force
+ * composition: a commander learns they have lost the sky, not by how much.
+ */
+export interface NavalAirPanel {
+  /** 0..100, this side's hold on the sky over the front. */
+  airSuperiority: number;
+  /** 0..100, this side's hold on the adjacent water. */
+  seaControl: number;
+  /** Ground weight close air support delivered this turn. */
+  casWeight: number;
+  /** 0..1 of the enemy's supply this side is cutting. */
+  interdiction: number;
+  /** Coarse read of who holds the air, never a number. */
+  airBand: string;
+  /** Whether marines could be put ashore here right now. */
+  canLandMarines: boolean;
+  /** Recent surface actions in this theatre, newest first. */
+  recentActions: NavalActionRow[];
+}
+
+/** One surface action, as the record states it. */
+export interface NavalActionRow {
+  turn: number;
+  regionName: string;
+  winner: string;
+  marginPct: number;
+  sunk: string[];
 }
 
 export interface RecordExtrasInput {
@@ -92,7 +153,41 @@ export interface RecordExtrasInput {
   sideBCountries: string[];
   /** Every unit of both sides' countries (the caller scopes the query). */
   units: MilitaryUnit[];
+  /**
+   * Whether the fighting is over (`isConflictConcluded`). A concluded war has stood
+   * every roster down, so there is no live order of battle to show a command-tier
+   * viewer and no enemy front to read a band off; the history is in the reports.
+   */
+  concluded?: boolean;
+  /**
+   * Whether the front reaches the sea. Feeds the enemy band through
+   * `engageablePool`, so this page's coarse read of the enemy and the war room's odds
+   * agree about a fleet that cannot reach the fighting.
+   */
+  seaAccess?: boolean;
+  /** This side's support profile, from the naval and air layer. */
+  navairSupport?: FrontSupport;
+  /** The opposing side's, used ONLY to derive a band. Never surfaced as a number. */
+  navairEnemySupport?: FrontSupport;
+  /** Recent surface actions across every region this war is fought in. */
+  navairActions?: NavalActionRow[];
   reports: BattleReportDoc[];
+}
+
+/**
+ * Who holds the air, as a phrase.
+ *
+ * Bands rather than a difference, because "you are 34 points down on air superiority" is
+ * a number a player cannot act on, while "the enemy holds the air" is a decision.
+ */
+export function airSuperiorityBand(own: number, enemy: number): string {
+  const gap = own - enemy;
+  if (own <= 0 && enemy <= 0) return "Air uncontested";
+  if (gap >= 40) return "You hold the air";
+  if (gap >= 12) return "Air advantage";
+  if (gap > -12) return "Air contested";
+  if (gap > -40) return "Enemy air advantage";
+  return "Enemy holds the air";
 }
 
 /** One side's live force at a front, as the FORCE panel states it. */
@@ -194,6 +289,12 @@ export function casualtiesBySide(
   return out;
 }
 
+/** A contingent's public half: who, and how many of theirs died. Strength is not
+ *  public, so it is dropped here rather than filtered downstream. */
+function toCountryLoss(c: { country: string; loss: number }): CountryLoss {
+  return { country: c.country, loss: c.loss };
+}
+
 function toForceRow(u: MilitaryUnit): ForceRow {
   return {
     id: String(u._id),
@@ -207,16 +308,32 @@ function toForceRow(u: MilitaryUnit): ForceRow {
 }
 
 export function buildRecordExtras(input: RecordExtrasInput): RecordExtras {
-  const { tier, ownSide, theaterId, sideACountries, sideBCountries, units, reports } = input;
+  const {
+    tier,
+    ownSide,
+    theaterId,
+    sideACountries,
+    sideBCountries,
+    units,
+    concluded = false,
+    reports,
+    seaAccess,
+    navairSupport,
+    navairEnemySupport,
+    navairActions,
+  } = input;
 
   const ownCountries = ownSide === "A" ? sideACountries : ownSide === "B" ? sideBCountries : [];
   const enemyCountries = ownSide === "A" ? sideBCountries : ownSide === "B" ? sideACountries : [];
 
   const atFront = units.filter((u) => u.theaterId === theaterId);
 
-  // A resolved war has already returned its units to reserve, so `command`'s live
-  // order of battle is meaningless there — archive reads the reports instead.
-  const showsLiveForces = tier === "command" && ownSide !== null;
+  // A concluded war has already returned its units to reserve, so `command`'s live
+  // order of battle is meaningless there — the record reads the reports instead.
+  // Gated on the war, not the tier: a belligerent seat keeps command sight of a
+  // resolved war while its fog window runs, and would otherwise be shown an empty
+  // order of battle beside a band read off an empty enemy front.
+  const showsLiveForces = tier === "command" && ownSide !== null && !concluded;
   const ownAtFront = atFront.filter((u) => ownCountries.includes(u.countryId));
   const enemyAtFront = atFront.filter((u) => enemyCountries.includes(u.countryId));
 
@@ -242,8 +359,8 @@ export function buildRecordExtras(input: RecordExtrasInput): RecordExtras {
         target: r.targetCountry,
         attackers: r.attackers ?? [r.declarerCountry],
         defenders: r.defenders ?? [r.targetCountry],
-        declarerLoss: res?.attacker.loss ?? 0,
-        targetLoss: res?.defender.loss ?? 0,
+        attackerLosses: res ? contingentsOf(res.attacker).map(toCountryLoss) : [],
+        defenderLosses: res ? contingentsOf(res.defender).map(toCountryLoss) : [],
         groundPct: groundOf(r),
       };
       if (!res) {
@@ -252,28 +369,60 @@ export function buildRecordExtras(input: RecordExtrasInput): RecordExtras {
       }
       if (tier === "public") return row;
 
-      const sides: EngagementRoster[] = [res.attacker, res.defender].map((s) => ({
-        country: s.country,
-        power: s.power,
-        units: s.unitResults.map((u) => ({
-          id: u.id,
-          name: u.name,
-          type: u.type,
-          casualties: u.casualties,
-        })),
-      }));
+      // One roster PER NATION. Building one per SIDE labelled the whole coalition
+      // with its principal, so `command` tier handed an allied non-principal nothing
+      // (its own country never matched the side's scalar) and the archive credited
+      // an ally's formations to the coalition leader.
+      const sides: EngagementRoster[] = [res.attacker, res.defender].flatMap((s) =>
+        contingentsOf(s).map((c) => ({
+          country: c.country,
+          power: c.power,
+          // A pre-coalition report has no per-unit country, so every unit belongs to
+          // the one country the side names — which is exactly right for those reports.
+          units: s.unitResults
+            .filter((u) => (u.country ?? s.country) === c.country)
+            .map((u) => ({
+              id: u.id,
+              name: u.name,
+              type: u.type,
+              casualties: u.casualties,
+            })),
+        }))
+      );
 
       row.rosters =
         tier === "archive" ? sides : sides.filter((s) => ownCountries.includes(s.country));
+      row.rostersWithheld = row.rosters.length < sides.length;
       return row;
     });
 
   const extras: RecordExtras = { battles };
   if (showsLiveForces) {
     extras.ownForces = ownAtFront.map(toForceRow);
-    extras.enemyBand = enemyBand(theaterPool(ownAtFront), theaterPool(enemyAtFront), {
-      unopposed: enemyAtFront.length === 0,
-    });
+    extras.enemyBand = enemyBand(
+      engageablePool(ownAtFront, seaAccess),
+      engageablePool(enemyAtFront, seaAccess),
+      { unopposed: enemyAtFront.length === 0 }
+    );
+
+    // Same visibility rule as the force panel above: the viewer's own dispositions are
+    // exact, the enemy's are a band. Absent support means the naval and air layer has
+    // nothing to say about this front, which is different from holding nothing, so the
+    // panel is omitted rather than shown as zeros.
+    if (navairSupport) {
+      extras.navalAir = {
+        airSuperiority: navairSupport.airSuperiority,
+        seaControl: navairSupport.seaControl,
+        casWeight: navairSupport.casWeight,
+        interdiction: navairSupport.interdiction,
+        airBand: airSuperiorityBand(
+          navairSupport.airSuperiority,
+          navairEnemySupport?.airSuperiority ?? 0
+        ),
+        canLandMarines: canLandMarines(navairSupport.seaControl),
+        recentActions: navairActions ?? [],
+      };
+    }
   }
   return extras;
 }

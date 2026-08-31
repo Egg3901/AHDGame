@@ -21,7 +21,7 @@ export default function ApiAutomationGuidePage() {
       </nav>
 
       <h1 className="text-3xl font-bold">API Automation Guide</h1>
-      <p className="mt-2 text-sm text-muted">Last updated: May 2, 2026 (UTC)</p>
+      <p className="mt-2 text-sm text-muted">Last updated: August 30, 2026 (UTC)</p>
 
       <section className="mt-8 space-y-3 rounded-2xl border border-card-border bg-card/70 p-6">
         <h2 className="text-xl font-semibold">What this covers</h2>
@@ -31,18 +31,39 @@ export default function ApiAutomationGuidePage() {
           trading dashboards, and portfolio trackers on top of the live simulation. This page covers
           what scoped keys are allowed to do and how to handle them safely. For the full endpoint
           reference (routes, parameters, response shapes, and example requests), see the{" "}
-          <Link className="text-primary underline" href="/api-guide">
+          <a
+            className="text-primary underline"
+            href="https://docs.lakesidegames.net/api/public-v1.html"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             complete API documentation
-          </Link>
+          </a>
           .
+        </p>
+      </section>
+
+      <section className="mt-6 space-y-3 rounded-2xl border border-card-border bg-card/70 p-6">
+        <h2 className="text-xl font-semibold">What you can read</h2>
+        <p className="text-sm text-muted">
+          Public-scope keys can read the live game clock, countries and regions, national metrics
+          and budgets, governments, elections, legislation, referendums, international
+          organizations, trade restrictions and flows, sovereign risk, historical economic and
+          fiscal series, conflicts, corporations, stocks, bonds, commodities, funds, and forex.
+        </p>
+        <p className="text-sm text-muted">
+          Start with <code>/api/public/v1/meta</code> for the machine-readable route catalog. The
+          catalog is tested against the route tree, so it cannot silently omit an implemented v1
+          endpoint. OpenAPI clients can load the complete contract from{" "}
+          <code>/api/public/v1/openapi.json</code>.
         </p>
       </section>
 
       <section className="mt-8 space-y-3 rounded-2xl border border-card-border bg-card/70 p-6">
         <h2 className="text-xl font-semibold">What API keys can do</h2>
         <p className="text-sm text-muted">
-          View endpoints use the server&apos;s public bot token. Personal scoped keys are intended
-          for fund-transfer automation only.
+          View endpoints accept any personal API key (public or private scope) sent in the{" "}
+          <code>X-API-Key</code> header. Write endpoints require a <code>private</code> scope key.
         </p>
         <div className="mt-2 space-y-2">
           <p className="text-sm font-medium">Allowed via automation:</p>
@@ -80,7 +101,7 @@ export default function ApiAutomationGuidePage() {
           <li>Create a key from Settings → API Keys.</li>
           <li>Copy it once and save it in your bot/app secret store.</li>
           <li>
-            For personal action endpoints, send your key in the <code>X-Bot-Token</code> header.
+            For all API endpoints, send your key in the <code>X-API-Key</code> header.
           </li>
         </ol>
         <p className="text-sm">

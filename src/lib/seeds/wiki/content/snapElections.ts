@@ -2,7 +2,7 @@ export const snapElectionsContent = `# Snap Elections
 
 Parliamentary countries (UK, JP, DE, and IE) can dissolve their lower chamber **before** its regular term ends. This creates an early general election, a **snap**. The US has no snap mechanic: it does not have a no-confidence mechanism.
 
-Snaps can happen two ways: a sitting Prime Minister (or Chancellor in DE) calls one voluntarily, or the system auto-triggers one when a PM vacancy extends beyond 96 turns.
+Snaps can happen two ways: a sitting Prime Minister (or Chancellor in DE) calls one voluntarily, or the system auto-triggers one when a PM vacancy extends beyond 96 turns. A third kind of dissolution is not a snap at all and reaches any system: a **conversion** (a collapsed regime, a ratified constitutional convention, or a regime-change peace term) dissolves the legislature and holds the election it promises, without spending the head of government's own snap allowance and without moving the rest of the electoral calendar; where the next scheduled election would now fall too close to run a nomination period, it waits for the following cycle instead.
 
 For the regular cycles see [United Kingdom](/wiki/uk-overview), [Japan](/wiki/jp-overview), and [Germany](/wiki/de-overview). For the underlying confidence mechanics see [No-Confidence Votes](/wiki/no-confidence-votes) and [Government Formation](/wiki/government-formation).
 

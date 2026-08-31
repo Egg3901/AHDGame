@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui";
-import type { CommodityHistorySeries } from "@/lib/corporations/types";
+import type { CommodityHistoryBasisChange, CommodityHistorySeries } from "@/lib/corporations/types";
 
 type ChartMode = "share" | "output" | "stockpile";
 
@@ -35,6 +35,7 @@ export function MarketSharePanel({
   modViewEnabled?: boolean;
 }) {
   const [series, setSeries] = useState<CommodityHistorySeries[]>([]);
+  const [basisChange, setBasisChange] = useState<CommodityHistoryBasisChange | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeCommodity, setActiveCommodity] = useState<string | null>(null);
   const [chartMode, setChartMode] = useState<ChartMode>("share");
@@ -49,9 +50,13 @@ export function MarketSharePanel({
           : `/api/corporations/${corpId}/commodity-history`;
         const res = await fetch(url);
         if (res.ok && !cancelled) {
-          const data = (await res.json()) as { series?: CommodityHistorySeries[] };
+          const data = (await res.json()) as {
+            series?: CommodityHistorySeries[];
+            basisChange?: CommodityHistoryBasisChange | null;
+          };
           const next = data.series ?? [];
           setSeries(next);
+          setBasisChange(data.basisChange ?? null);
           setActiveCommodity((prev) => {
             if (prev && next.some((s) => s.commodity === prev)) return prev;
             return next[0]?.commodity ?? null;
@@ -147,6 +152,10 @@ export function MarketSharePanel({
 
   const lastPoint = points[points.length - 1];
   const currentVal = lastPoint ? getPrimary(lastPoint) : 0;
+  const basisPointIndex = basisChange
+    ? points.findIndex((point) => point.turn >= basisChange.turn)
+    : -1;
+  const basisX = basisPointIndex > 0 ? toX(basisPointIndex) : null;
 
   return (
     <div className="space-y-4">
@@ -155,6 +164,15 @@ export function MarketSharePanel({
         produced, not industry revenue. Toggle between share %, raw output vs global supply, and
         global stockpile (shadow inventory from the market ledger).
       </p>
+
+      {basisChange && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-foreground">
+          <span className="font-semibold">Reporting basis changed at turn {basisChange.turn}.</span>{" "}
+          Earlier points estimated output from revenue. From this turn onward, the chart uses
+          measured plant output. A step at this marker is a reporting correction, not production
+          disappearing.
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {series.map((s) => (
@@ -257,6 +275,24 @@ export function MarketSharePanel({
                   </g>
                 );
               })}
+
+              {basisX != null && (
+                <>
+                  <line
+                    x1={basisX}
+                    y1={C_PAD_TOP}
+                    x2={basisX}
+                    y2={C_PAD_TOP + C_INNER_H}
+                    stroke="currentColor"
+                    strokeWidth={1.5}
+                    strokeDasharray="4 3"
+                    className="text-amber-400"
+                  />
+                  <text x={basisX + 4} y={C_PAD_TOP + 10} fontSize={9} className="fill-amber-400">
+                    Basis changed
+                  </text>
+                </>
+              )}
 
               <polygon
                 points={`${line1[0].x},${C_PAD_TOP + C_INNER_H} ${polyline1} ${line1[line1.length - 1].x},${C_PAD_TOP + C_INNER_H}`}

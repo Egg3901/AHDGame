@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+
+const DOCS_URL = process.env.NEXT_PUBLIC_DOCS_URL ?? "https://docs.lakesidegames.net";
 import { useLocale, useTranslations } from "next-intl";
 
 type UserApiKey = {
@@ -84,9 +85,14 @@ export function ApiKeysSection() {
     <div className="space-y-6">
       <p className="text-sm text-muted">
         {t("apiKeys.intro")}{" "}
-        <Link href="/api-guide" className="text-primary underline hover:text-primary/80">
+        <a
+          href={`${DOCS_URL}/api/public-v1.html`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary underline hover:text-primary/80"
+        >
           {t("apiKeys.viewDocs")}
-        </Link>
+        </a>
       </p>
 
       {error && (

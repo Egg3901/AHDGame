@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { TreasuryMasthead, type BudgetLens } from "@/components/budget/treasury/TreasuryMasthead";
 import { FiscalStatStrip } from "@/components/budget/treasury/FiscalStatStrip";
 import { FiscalFlow } from "@/components/budget/treasury/FiscalFlow";
+import { displayRevenueEntries } from "@/components/budget/treasury/displayRevenue";
 import {
   BudgetBreakdownPanel,
   type BreakdownLine,
@@ -14,6 +15,8 @@ import { EconomicIndicators } from "@/components/budget/treasury/EconomicIndicat
 import { SovereignHealthPanel } from "@/components/budget/treasury/SovereignHealthPanel";
 import { GrantsPanel } from "@/components/budget/treasury/GrantsPanel";
 import { MinisterCallouts } from "@/components/budget/treasury/MinisterCallouts";
+import { FiscalMechanicsNote } from "@/components/budget/treasury/FiscalMechanicsNote";
+import { BudgetAuthoringPanel } from "@/components/uk/budget/BudgetAuthoringPanel";
 import { PlannedEconomyPanel } from "@/components/economy/PlannedEconomyPanel";
 import { Button, Skeleton, CardSkeleton, StatGridSkeleton, ListRowSkeleton } from "@/components/ui";
 import type { FederalBudget, EnactedLaw } from "@/lib/db/types/budget";
@@ -29,6 +32,8 @@ import { currencySymbolSep } from "@/lib/currency/symbolSep";
 import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { budgetApiUrl } from "@/lib/urls";
 import { getCurrencyPrefix } from "@/lib/utils/budgetCalculations";
+import { federalSurplus } from "@/lib/budget/federalSurplus";
+import { resolveRatioGdp } from "@/lib/budget/gdpDenominator";
 
 interface SnapshotLaw {
   title: string;
@@ -54,6 +59,9 @@ interface BudgetData {
   stateOwnershipConcentration?: number;
   /** Signed national treasury balance (local currency); negative = national debt. */
   treasuryReserve?: number;
+  /** Live national GDP in base currency units, summed from every region this
+   *  turn. `budget.gdp` is the fiscal-close snapshot and lags this. */
+  liveGdpUnits?: number;
   /** FY trend series (stat-strip compare + debt sparkline). */
   fyHistory?: FyHistoryPoint[];
   /** Live sovereign-default signals (Sovereign Health panel). */
@@ -849,9 +857,8 @@ export function NationalBudgetClient() {
     "costModel" in law ? law.costModel : describeLawCost(law as EnactedLaw);
 
   // Structured revenue lines for the expandable breakdown panel (rate + base).
-  const revenueLines: BreakdownLine[] = Object.entries(budget.revenue)
-    .filter(([key]) => key !== "total")
-    .map(([key, value]) => {
+  const revenueLines: BreakdownLine[] = displayRevenueEntries(budget.revenue).map(
+    ([key, value]) => {
       const taxRate = getNumericField(budget.taxRates, key);
       const taxBaseField = REVENUE_TO_TAX_BASE[key];
       const storedTaxBase =
@@ -874,7 +881,8 @@ export function NationalBudgetClient() {
         rate: taxRate ?? null,
         base: hasBase ? taxBase : null,
       };
-    });
+    }
+  );
 
   // Statutory tax laws govern revenue, not spending: the API enriches each with
   // `revenueTaxType` (the FederalTaxRates key it sets). File them under the
@@ -957,6 +965,11 @@ export function NationalBudgetClient() {
   const isLive = !(data.isSnapshot ?? false);
   const prevFyPoint = fyHistory.find((p) => p.fy === budget.fiscalYear - 1) ?? null;
   const treasuryBalance = data.treasuryReserve ?? -(budget.debt?.principal ?? 0);
+  // The `??` is load-bearing. `loadFederalBudgetDetail`'s historical-FY branch
+  // returns early and never sets `liveGdpUnits`, so a snapshot view falls back
+  // to that snapshot's own gdp rather than showing today's live figure. Do not
+  // "simplify" this to `data.liveGdpUnits`.
+  const displayGdp = data.liveGdpUnits ?? budget.gdp;
   // The minister lens is gated: a non-minister viewer (or a historical snapshot,
   // which never authorizes it) is always forced back to the Public lens. Derived
   // rather than reset via effect so toggling stays a pure render.
@@ -986,7 +999,8 @@ export function NationalBudgetClient() {
               sym={moneyPrefix}
               revenue={budget.revenue.total}
               spending={budget.spending.total}
-              gdp={budget.gdp}
+              gdp={displayGdp}
+              ratioGdp={resolveRatioGdp(budget)}
               gdpGrowth={budget.economicFactors.gdpGrowth}
               debtToGdp={budget.debtToGdpRatio}
               rating={budget.creditRating}
@@ -999,6 +1013,20 @@ export function NationalBudgetClient() {
             />
           }
         />
+
+        <FiscalMechanicsNote
+          sym={moneyPrefix}
+          debtPrincipal={budget.debt.principal}
+          rawGdp={budget.gdp}
+          smoothedGdp={budget.gdpSmoothed}
+          revenue={budget.revenue.total}
+          spending={budget.spending.total}
+          debtInterest={budget.spending.debtInterest ?? 0}
+        />
+
+        {isLive && countryId === COUNTRY_CONFIGS.UK.id ? (
+          <BudgetAuthoringPanel countryCode="uk" />
+        ) : null}
 
         {!isLive && (
           <div className="flex items-center gap-2.5 rounded-xl border border-warning/30 bg-warning/[0.06] px-4 py-3">
@@ -1027,7 +1055,10 @@ export function NationalBudgetClient() {
               sym: moneyPrefix,
               revenueTotal: budget.revenue.total,
               spendingTotal: budget.spending.total,
-              gdp: budget.gdp,
+              // Ratio basis, not the display level: these flags compare against
+              // deficit and debt thresholds, so they must sit on the same
+              // denominator as the stored `debtToGdpRatio` in the strip above.
+              gdp: resolveRatioGdp(budget),
               debtPrincipal: budget.debt.principal,
               debtCeiling: budget.debt.ceiling,
               ceilingLabel: labels.ceilingLabel,
@@ -1095,8 +1126,8 @@ export function NationalBudgetClient() {
             wageGrowth={budget.economicFactors.wageGrowth}
             primeRate={primeRate}
             deficitToGdp={
-              budget.gdp > 0
-                ? ((budget.revenue.total - budget.spending.total) / budget.gdp) * 100
+              resolveRatioGdp(budget) > 0
+                ? (federalSurplus(budget) / resolveRatioGdp(budget)) * 100
                 : 0
             }
           />

@@ -5,14 +5,16 @@
  * "which seat may this character act for", walking character → seat; this one
  * walks seat → offices → holder so the delegation blocks can name them.
  *
- * They MUST agree on who holds an office, so both read the same two constants
- * (`FOREIGN_AFFAIRS_POSITION_BY_COUNTRY` and the head-of-government resolver)
- * and both treat a null `characterId` as unheld. A panel that named a holder
- * the command would refuse is worse than a panel that named nobody.
+ * They MUST agree on who holds an office, so both read the same constants
+ * (`FOREIGN_AFFAIRS_POSITION_BY_COUNTRY`, `DEFENSE_POSITION_BY_COUNTRY`, and
+ * the head-of-government resolver) and both treat a null `characterId` as
+ * unheld. A panel that named a holder the command would refuse is worse than a
+ * panel that named nobody.
  */
 import type { Db, ObjectId } from "mongodb";
 import { SETTLEMENT_SEATS, type SettlementSeatKey } from "@/lib/constants/settlementCrisis";
 import { FOREIGN_AFFAIRS_POSITION_BY_COUNTRY } from "@/lib/constants/internationalOrganizations";
+import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
@@ -28,7 +30,7 @@ export interface SettlementSeatOffice {
   holder: string | null;
 }
 
-/** Both offices for every seat, head of government first. */
+/** All three offices for every seat, head of government first. */
 export type SettlementSeatOffices = Record<SettlementSeatKey, SettlementSeatOffice[]>;
 
 const SEAT_COUNTRIES: readonly SettlementSeatKey[] = SETTLEMENT_SEATS.map((s) => s.id);
@@ -50,8 +52,18 @@ function foreignMinisterOffice(seatId: SettlementSeatKey): {
   return { positionId, title: def?.name ?? "Foreign Minister" };
 }
 
+function defenseMinisterOffice(seatId: SettlementSeatKey): {
+  positionId: string | null;
+  title: string;
+} {
+  const positionId = DEFENSE_POSITION_BY_COUNTRY[seatId as CountryId] ?? null;
+  if (!positionId) return { positionId: null, title: "Defence Minister" };
+  const def = getCabinetPositions(seatId).find((p) => p.id === positionId);
+  return { positionId, title: def?.name ?? "Defence Minister" };
+}
+
 /**
- * Resolve both offices of all four delegations.
+ * Resolve all three offices of all four delegations.
  *
  * Four head-of-government lookups (each is a request-cached `getCountryState`
  * plus one findOne) and two batched queries, on the dossier's load path.
@@ -79,24 +91,27 @@ export async function resolveSeatOffices(db: Db): Promise<SettlementSeatOffices>
     }
   }
 
-  // `$or` of exact (country, position) pairs, not `$in` on each field: RU and
-  // DD share the position id `minister_of_foreign_affairs`, so crossing the two
-  // lists would match a pairing that does not exist. Same construction as
-  // `seatResolution` for the same reason.
   const ministerOffices = new Map(SEAT_COUNTRIES.map((id) => [id, foreignMinisterOffice(id)]));
+  const defenseOffices = new Map(SEAT_COUNTRIES.map((id) => [id, defenseMinisterOffice(id)]));
   const pairs = SEAT_COUNTRIES.flatMap((seatId) => {
-    const positionId = ministerOffices.get(seatId)?.positionId;
-    return positionId ? [{ countryId: seatId, positionId }] : [];
+    const ids: { countryId: CountryId; positionId: string }[] = [];
+    const foreignId = ministerOffices.get(seatId)?.positionId;
+    if (foreignId) ids.push({ countryId: seatId as CountryId, positionId: foreignId });
+    const defenseId = defenseOffices.get(seatId)?.positionId;
+    if (defenseId) ids.push({ countryId: seatId as CountryId, positionId: defenseId });
+    return ids;
   });
   const members =
     pairs.length > 0 ? await getCabinetMembersCollection(db).find({ $or: pairs }).toArray() : [];
 
-  // A null characterId is a vacant OR an NPP-held seat. Neither can act, so
-  // neither gets named — the row's `characterName` survives an NPP takeover and
-  // would otherwise print a holder the command refuses.
   const ministerNameByCountry = new Map<string, string>();
+  const defenseNameByCountry = new Map<string, string>();
   for (const member of members) {
-    if (member.characterId && member.characterName) {
+    if (!member.characterId || !member.characterName) continue;
+    const defenseId = defenseOffices.get(member.countryId as SettlementSeatKey)?.positionId;
+    if (member.positionId === defenseId) {
+      defenseNameByCountry.set(member.countryId, member.characterName);
+    } else {
       ministerNameByCountry.set(member.countryId, member.characterName);
     }
   }
@@ -114,6 +129,11 @@ export async function resolveSeatOffices(db: Db): Promise<SettlementSeatOffices>
         role: "foreignMinister",
         title: ministerOffices.get(seatId)!.title,
         holder: ministerNameByCountry.get(seatId) ?? null,
+      },
+      {
+        role: "defenseMinister",
+        title: defenseOffices.get(seatId)!.title,
+        holder: defenseNameByCountry.get(seatId) ?? null,
       },
     ];
   });

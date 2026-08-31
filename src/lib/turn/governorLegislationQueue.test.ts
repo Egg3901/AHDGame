@@ -130,4 +130,92 @@ describe("processGovernorLegislationQueue — NPP-office officer authority", () 
     expect(result.fired).toBe(1);
     expect(mockCancelQueue).not.toHaveBeenCalled();
   });
+
+  it("freezes the current law on the fired bill's provisions", async () => {
+    // Fire time is the queue's analogue of proposal. Without a snapshot here the
+    // bill detail page re-reads the live law, so after enactment the current-law
+    // box shows the bill's own outcome.
+    mockCanManageOffice.mockResolvedValue(true);
+    db.collection("governorLegislationQueue").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          ...pendingEntry(),
+          provisions: [{ legislationTypeId: "min_wage", policyOptionId: "o2", effectDirection: 1 }],
+        },
+      ]),
+    });
+    db.collection("legislationTypes").find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: "min_wage",
+          name: "Minimum Wage",
+          policyOptions: [
+            { id: "o1", name: "Federal Floor", effectDirection: 1, explanation: "No top-up." },
+            { id: "o2", name: "Living Wage", effectDirection: 1, explanation: "Indexed floor." },
+          ],
+        },
+      ],
+    });
+    db.collection("statePolicies").find.mockReturnValue({
+      toArray: async () => [
+        { legislationTypeId: "min_wage", policyOptionId: "o1", policyOptionIndex: 0 },
+      ],
+    });
+    db.collection("enactedLaws").find.mockReturnValue({
+      sort: () => ({ toArray: async () => [] }),
+    });
+
+    const { processGovernorLegislationQueue } = await import("./governorLegislationQueue");
+    const result = await processGovernorLegislationQueue(db as unknown as Db, 201);
+
+    expect(result.fired).toBe(1);
+    const inserted = db.collection("stateBills").insertOne.mock.calls[0]?.[0] as {
+      provisions: Array<Record<string, unknown>>;
+    };
+    expect(inserted.provisions[0]).toMatchObject({
+      currentPolicyOptionIdSnapshot: "o1",
+      currentPolicyOptionNameSnapshot: "Federal Floor",
+      currentPolicyOptionExplanationSnapshot: "No top-up.",
+      policyOptionNameSnapshot: "Living Wage",
+      policyOptionExplanationSnapshot: "Indexed floor.",
+    });
+  });
+
+  it("does not mutate the queue document when snapshotting the fired bill", async () => {
+    // The bill takes a copy: a queue entry that fails later must not carry
+    // snapshot fields written for a bill that was never inserted.
+    mockCanManageOffice.mockResolvedValue(true);
+    const entry = {
+      ...pendingEntry(),
+      provisions: [{ legislationTypeId: "min_wage", policyOptionId: "o2", effectDirection: 1 }],
+    };
+    db.collection("governorLegislationQueue").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([entry]),
+    });
+    db.collection("legislationTypes").find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: "min_wage",
+          name: "Minimum Wage",
+          policyOptions: [
+            { id: "o1", name: "Federal Floor", effectDirection: 1 },
+            { id: "o2", name: "Living Wage", effectDirection: 1 },
+          ],
+        },
+      ],
+    });
+    db.collection("statePolicies").find.mockReturnValue({
+      toArray: async () => [
+        { legislationTypeId: "min_wage", policyOptionId: "o1", policyOptionIndex: 0 },
+      ],
+    });
+    db.collection("enactedLaws").find.mockReturnValue({
+      sort: () => ({ toArray: async () => [] }),
+    });
+
+    const { processGovernorLegislationQueue } = await import("./governorLegislationQueue");
+    await processGovernorLegislationQueue(db as unknown as Db, 201);
+
+    expect(entry.provisions[0]).not.toHaveProperty("currentPolicyOptionIdSnapshot");
+  });
 });

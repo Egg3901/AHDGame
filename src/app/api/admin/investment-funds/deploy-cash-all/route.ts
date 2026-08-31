@@ -62,8 +62,6 @@ export async function POST(request: Request) {
     const totalsByCurrency: Record<string, number> = {};
     let injectedCount = 0;
 
-    // One turn read for the whole sweep rather than one per fund.
-    const injectionTurn = await getCurrentTurn(db);
     for (const fund of funds) {
       const holdingsValueAnchor = computeHoldingsValueAnchor(fund);
       const bondPrincipalAnchor = await sumFundBondHoldingsValueAnchor(db, fund, exchangeRates);

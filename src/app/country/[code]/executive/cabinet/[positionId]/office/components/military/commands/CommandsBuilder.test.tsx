@@ -239,6 +239,34 @@ describe("CommandsBuilder", () => {
     expect(screen.getByText("Infra")).toBeTruthy();
   });
 
+  // The player-visible face of the coverage bug. A Regional command holding a region
+  // while a Logistics command sustains it is the recommended overseas pairing, and the
+  // default COVERAGE filter labelled it UNASSIGNED, so the builder told the Secretary
+  // their correct structure was a gap. Asserted through the UI because the chip is
+  // where players actually met it.
+  it("shows a region held by two different command types as covered, not a gap", () => {
+    render(
+      <CommandsBuilder
+        commands={[
+          command({ id: "cmd-1", name: "Northern Command", type: "REGIONAL", regionIds: ["mea"] }),
+          command({ id: "cmd-2", name: "Supply Corps", type: "LOGISTICS", regionIds: ["mea"] }),
+        ]}
+        {...base}
+      />
+    );
+    // Different types are not a role conflict, so the same-type overlap banner stays away.
+    expect(screen.queryByText(/with two commands of the same type/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "ASSIGN" }));
+    // Scope to the assign-regions modal: the roster renders region names too.
+    const dialog = screen.getByRole("dialog");
+    const row = within(dialog).getByText("Middle East").closest("button");
+    expect(row).toBeTruthy();
+    // getByText matches exactly, so this cannot be satisfied by "UNASSIGNED".
+    expect(within(row as HTMLElement).getByText("ASSIGNED")).toBeTruthy();
+    expect(within(row as HTMLElement).queryByText("UNASSIGNED")).toBeNull();
+  });
+
   // A player holding this seat asked "where do I assign more troops to the battlefield
   // as SoD?" — a question with no button, because units are never sent to a front
   // directly. This page is where the chain starts, so it is where the rule belongs.
@@ -247,6 +275,66 @@ describe("CommandsBuilder", () => {
     expect(screen.getByText(/How your troops reach a front/i)).toBeTruthy();
     expect(screen.getByText(/wherever the general it is assigned to is posted/i)).toBeTruthy();
     expect(screen.getAllByText(/Commanding General/i).length).toBeGreaterThan(0);
+  });
+});
+
+describe("posture trade-offs", () => {
+  it("shows the selected posture's trade-offs in the create dialog and updates on change", () => {
+    render(<CommandsBuilder commands={[]} {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: /create command/i }));
+    const dialog = screen.getByRole("dialog");
+    // the default posture is Deterrence
+    expect(within(dialog).getByText("+ crisis response")).toBeTruthy();
+    expect(within(dialog).getByText("+ forward presence")).toBeTruthy();
+    fireEvent.change(within(dialog).getByRole("combobox", { name: "Posture" }), {
+      target: { value: "Training / Reserve" },
+    });
+    expect(within(dialog).getByText("+ readiness recovery")).toBeTruthy();
+    expect(within(dialog).getByText("− not deployable")).toBeTruthy();
+    expect(within(dialog).queryByText("+ crisis response")).toBeNull();
+  });
+
+  it("shows the command's posture trade-offs in the detail panel", () => {
+    render(<CommandsBuilder commands={[command({ posture: "Expeditionary" })]} {...base} />);
+    expect(screen.getByText("+ deployment speed")).toBeTruthy();
+    expect(screen.getByText("− higher supply cost")).toBeTruthy();
+  });
+
+  it("shows the trade-offs to a read-only viewer too", () => {
+    render(
+      <CommandsBuilder
+        commands={[command({ posture: "Rapid Response" })]}
+        units={base.units}
+        commanders={[]}
+        conflictAssignments={[]}
+        regionThreats={{}}
+        countryCode="br"
+        positionId=""
+      />
+    );
+    expect(screen.queryByRole("combobox", { name: "Command posture" })).toBeNull();
+    expect(screen.getByText("+ reaction speed")).toBeTruthy();
+    expect(screen.getByText("− sustainment depth")).toBeTruthy();
+  });
+});
+
+describe("command type bonuses", () => {
+  it("shows the selected type's bonuses in the create dialog and updates on change", () => {
+    render(<CommandsBuilder commands={[]} {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: /create command/i }));
+    const dialog = screen.getByRole("dialog");
+    // the default type is Regional
+    expect(within(dialog).getByText("+ balanced command")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Logistics" }));
+    expect(within(dialog).getByText("+ supply throughput")).toBeTruthy();
+    expect(within(dialog).getByText("+ overseas sustainment")).toBeTruthy();
+    expect(within(dialog).queryByText("+ balanced command")).toBeNull();
+  });
+
+  it("shows the command's type bonuses in the detail panel", () => {
+    render(<CommandsBuilder commands={[command({ type: "HOMELAND_DEFENSE" })]} {...base} />);
+    expect(screen.getByText("+ air-defense integration")).toBeTruthy();
+    expect(screen.getByText("+ faster reserve mobilization")).toBeTruthy();
   });
 });
 
@@ -323,5 +411,43 @@ describe("one command per commanding general", () => {
     expect(
       screen.getByRole("button", { name: /make gen\. real commanding general/i })
     ).toBeTruthy();
+  });
+
+  /**
+   * Live data: Russia's only command listed a general who had moved to the United
+   * Kingdom. The row could not render (the roster no longer held them), so the
+   * header counted a commander with no line to remove, and the commands PUT then
+   * refused every later edit over that same id.
+   */
+  describe("a commander who has left the country", () => {
+    const stale = [command({ commanderIds: ["char_9", "char_gone"], commandingGeneralId: null })];
+
+    it("does not count a commander it cannot show", () => {
+      render(<CommandsBuilder commands={stale} {...base} />);
+      expect(screen.getByText(/Commanders . 1/)).toBeTruthy();
+      expect(screen.queryByText(/Commanders . 2/)).toBeNull();
+    });
+
+    it("says why the roster came back shorter", () => {
+      render(<CommandsBuilder commands={stale} {...base} />);
+      expect(screen.getByRole("status").textContent).toMatch(
+        /no longer a commissioned general of this country/i
+      );
+    });
+
+    it("clears a lead who is the one who left, so the save is not refused twice", () => {
+      render(
+        <CommandsBuilder
+          commands={[command({ commanderIds: ["char_gone"], commandingGeneralId: "char_gone" })]}
+          {...base}
+        />
+      );
+      expect(screen.getByText(/none . −10% efficiency/i)).toBeTruthy();
+    });
+
+    it("says nothing when every commander is still on the roster", () => {
+      render(<CommandsBuilder commands={[command({ commanderIds: ["char_9"] })]} {...base} />);
+      expect(screen.queryByRole("status")).toBeNull();
+    });
   });
 });

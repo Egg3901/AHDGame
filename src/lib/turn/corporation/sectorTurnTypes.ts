@@ -24,9 +24,12 @@ export interface SectorTurnEnv {
    * Phase 1 labour market telemetry: per-state sum of every sector's
    * revenue-implied headcount. Accumulated unconditionally (not behind
    * `labour.wagesEnabled`) because desired headcount exists whether or not the
-   * wage system is on. Read-only measurement, nothing prices off it yet.
+   * wage system is on. The persisted reading feeds the next turn's labour
+   * allocation and workforce response.
    */
   labourDemandByState: LabourDemandByState;
+  /** Desired-worker-weighted wage bids, kept separate from actual-worker wage telemetry. */
+  labourDemandWageIndexByState?: Map<string, WageIndexAccumulator>;
   pendingStrikeEvents: SectorCalculationsResult["strikeEvents"];
   pendingCapacityBindingEvents: SectorCalculationsResult["capacityBindingEvents"];
   sectorOps: SectorUpdateOp[];

@@ -103,7 +103,16 @@ export function mergeOffensives(
     const lead = o.principal.declarerCountry;
     o.attackers = [lead, ...o.attackers.filter((c) => c !== lead).sort()];
   }
-  return [...groups.values()];
+  // Order the offensives themselves for the same reason the roster is ordered, and
+  // with more riding on it: the resolver fights them in sequence, and each one leaves
+  // the front moved and both armies bled for the next. Whichever goes first therefore
+  // fights at full strength and takes its ground first, which is not something to
+  // leave to the order Mongo happened to return the declarations in. Earliest
+  // declaration wins, tie-broken by id — the rule `outranks` already applies to pick
+  // the principal within a group.
+  return [...groups.values()].sort((a, b) =>
+    a.principal === b.principal ? 0 : outranks(a.principal, b.principal) ? -1 : 1
+  );
 }
 
 /**
@@ -127,6 +136,37 @@ export function defendersAtFront(
     const id = u.countryId as CountryId;
     if (out.includes(id)) continue;
     if (sideOf(conflict, u.countryId, blocs) === defendingSide) out.push(id);
+  }
+  return out;
+}
+
+/**
+ * Allies who join an offensive at this front without declaring one of their own.
+ *
+ * The exact mirror of `defendersAtFront`, with one condition added. Defence needs no
+ * opt-in because it is forced on you: an enemy attacking the ground your troops stand on
+ * is not a decision you get to make, and deployment is therefore consent enough. Attack
+ * IS a decision, so it takes a standing order — `optedIn` — set once per front instead of
+ * re-declared every turn.
+ *
+ * Having troops posted here is still required. Opting in does not teleport an army, and a
+ * country that resolves to the defending side is never dragged into attacking itself.
+ */
+export function autoJoinersAtFront(
+  conflict: ConflictDoc,
+  units: Array<{ countryId: string; theaterId: string }>,
+  theaterId: string,
+  attackingSide: Side,
+  blocs: BlocLookup,
+  optedIn: ReadonlySet<string>
+): CountryId[] {
+  const out: CountryId[] = [];
+  for (const u of units) {
+    if (u.theaterId !== theaterId) continue;
+    const id = u.countryId as CountryId;
+    if (out.includes(id)) continue;
+    if (!optedIn.has(id)) continue;
+    if (sideOf(conflict, u.countryId, blocs) === attackingSide) out.push(id);
   }
   return out;
 }

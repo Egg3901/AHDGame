@@ -4,13 +4,14 @@ import { getGameStateCollection } from "@/lib/db/collections";
 import { getSiteUrl } from "@/lib/siteMetadata";
 import { getAllWikiPagesForDisplay } from "@/lib/wiki/getWikiPageData";
 import { getCategoryById } from "@/lib/wiki/categories";
+import { getRedirectTarget } from "@/lib/wiki/redirects";
+import { getLowValueWikiSlugs } from "@/lib/wiki/starterStub";
 import { loadPublicPosts } from "@/lib/changelog/posts";
-import type { NewsPost } from "@/lib/db/types";
 
 /**
  * Rendered per request, never prerendered at build.
  *
- * This route reads live game state, news and wiki rows, and it deliberately THROWS when
+ * This route reads live game state and wiki rows, and it deliberately THROWS when
  * those queries fail (see the two catch blocks below — a 500 makes crawlers retry and keep
  * the previous sitemap, whereas a 200 missing most of its URLs de-lists those pages).
  *
@@ -46,7 +47,6 @@ const STATIC_PUBLIC_ROUTES: Array<{
 }> = [
   { path: "/about", changeFrequency: "monthly", priority: 0.6 },
   { path: "/faq", changeFrequency: "monthly", priority: 0.5 },
-  { path: "/api-guide", changeFrequency: "monthly", priority: 0.5 },
   { path: "/contact", changeFrequency: "yearly", priority: 0.4 },
   { path: "/privacy", changeFrequency: "yearly", priority: 0.3 },
   { path: "/terms", changeFrequency: "yearly", priority: 0.3 },
@@ -62,7 +62,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // Check if wiki is disabled to exclude it from the sitemap
   let wikiDisabled = false;
-  let newsEntries: MetadataRoute.Sitemap = [];
   let wikiEntries: MetadataRoute.Sitemap = [];
   let wikiCategoryEntries: MetadataRoute.Sitemap = [];
   try {
@@ -70,35 +69,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const col = await getGameStateCollection(db);
     const gameState = await col.findOne({ _id: "current" }, { projection: { wikiDisabled: 1 } });
     wikiDisabled = gameState?.wikiDisabled ?? false;
-
-    const newsPosts = await db
-      .collection<NewsPost>("newsPosts")
-      .find(
-        {
-          parentId: { $exists: false },
-          feedType: { $ne: "advertisement" },
-          // System wire posts are one-sentence auto-generated pages; indexing
-          // hundreds of them reads as thin content to search/ad reviewers.
-          isSystem: { $ne: true },
-          $or: [{ moderation: { $exists: false } }, { "moderation.status": "visible" }],
-        },
-        { projection: { _id: 1, updatedAt: 1, createdAt: 1 } }
-      )
-      .sort({ createdAt: -1 })
-      .limit(250)
-      .toArray();
-
-    newsEntries = newsPosts.map((post) => ({
-      url: `${baseUrl}/news/post/${post._id.toString()}`,
-      lastModified: post.updatedAt ?? post.createdAt,
-      changeFrequency: "monthly",
-      priority: 0.55,
-    }));
   } catch (error) {
-    // Fail the whole route rather than serve a sitemap silently missing the
-    // news cohort: crawlers treat a 500 as retry-later and keep the previous
+    // Fail the whole route rather than serve a sitemap silently missing a
+    // cohort: crawlers treat a 500 as retry-later and keep the previous
     // sitemap, but a 200 with the URLs absent de-lists them.
-    console.error("sitemap: game state / news query failed", error);
+    console.error("sitemap: game state query failed", error);
     throw error;
   }
 
@@ -127,7 +102,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Release posts are file-based and statically rendered, so this adds no
     // runtime dependency. /country/* routes are deliberately absent: they are
     // client-rendered stat surfaces with almost no server-side text and carry
-    // noindex (see src/app/country/[code]/layout.tsx).
+    // noindex (see src/app/country/[code]/layout.tsx). /news/post/* is absent
+    // for the same reason: every permalink is a few dozen words of player
+    // writing and all of them are noindex (see src/app/news/post/[id]/page.tsx).
     ...loadPublicPosts().map((post) => ({
       url: `${baseUrl}/changelog/${post.slug}`,
       lastModified: new Date(post.date),
@@ -144,7 +121,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.9,
     });
     try {
-      const wikiPages = await getAllWikiPagesForDisplay();
+      const allWikiPages = await getAllWikiPagesForDisplay();
+      // Incomplete pages are served noindex, while compatibility aliases
+      // redirect to their canonical page. Neither belongs in the sitemap.
+      const lowValueSlugs = new Set(await getLowValueWikiSlugs());
+      const wikiPages = allWikiPages.filter(
+        (page) => !lowValueSlugs.has(page.slug) && !getRedirectTarget(page.slug)
+      );
       const categoryLastModified = new Map<string, Date>();
 
       for (const page of wikiPages) {
@@ -190,7 +173,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   }
 
-  entries.push(...wikiCategoryEntries, ...wikiEntries, ...newsEntries);
+  entries.push(...wikiCategoryEntries, ...wikiEntries);
 
   return entries;
 }

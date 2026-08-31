@@ -4,6 +4,7 @@ import {
   commodityMixWeight,
   embargoSupplyFactorFor,
   plantsCapacityScaledUnits,
+  plantsSupplyScaledUnits,
   type CommodityType,
 } from "@/lib/constants/commodities";
 import {
@@ -29,6 +30,8 @@ export type SupplyAgreementCapacitySector = {
   embargoExportExposure?: number | null;
   /** Host country, for the planned-economy output remap and media derate. */
   countryId?: string | null;
+  /** Latest full-policy output after external constraints. */
+  contractAchievableUnits?: number | null;
 };
 
 /**
@@ -91,4 +94,51 @@ export function computeSupplierCommodityCapacityUnits(args: {
     capacityUnits += scaled * commodityMixWeight(supplyMix, COMMODITY_BASE_PRICES, args.commodity);
   }
   return capacityUnits;
+}
+
+/**
+ * Latest known damage ceiling for one commodity across a supplier's sectors.
+ * Returns null when any contributing sector has not produced rollout telemetry.
+ * Numeric zero is known zero and must remain distinct from unknown.
+ */
+export function computeSupplierCommodityAchievableUnits(args: {
+  sectors: readonly SupplyAgreementCapacitySector[];
+  commodity: CommodityType;
+  isNatcorp: boolean;
+  turn: number;
+  currentYear?: number | null;
+  commandEconomyEnabled?: boolean | null;
+}): number | null {
+  let units = 0;
+  for (const sector of args.sectors) {
+    const rates = getEffectiveStrategyRates(
+      sector.sectorType,
+      sector.strategyId ?? "standard",
+      sector.transitionFromStrategyId,
+      sector.transitionStartTurn,
+      args.turn
+    );
+    const plannedEconomy = isPlannedEconomy(
+      sector.countryId,
+      args.currentYear,
+      args.commandEconomyEnabled
+    );
+    const supplyMix = applyPlannedEconomyOutputMix(
+      sector.sectorType,
+      rates.supply ?? {},
+      plannedEconomy
+    );
+    const weight = commodityMixWeight(supplyMix, COMMODITY_BASE_PRICES, args.commodity);
+    if (!(weight > 0)) continue;
+    const scaled = plantsSupplyScaledUnits({
+      producedUnits: sector.contractAchievableUnits,
+      isNatcorp: args.isNatcorp,
+      embargoSupplyFactor:
+        embargoSupplyFactorFor(sector) *
+        plannedEconomyMediaSupplyFactor(sector.sectorType, plannedEconomy),
+    });
+    if (scaled === null) return null;
+    units += scaled * weight;
+  }
+  return units;
 }

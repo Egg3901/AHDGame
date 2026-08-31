@@ -6,6 +6,7 @@ import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { getDb } from "@/lib/mongodb";
 import { refreshNationalBudgetRevenue } from "@/lib/budget/revenue";
 import { buildCorporationLookups } from "./buildLookups";
+import { buildFreightBillingBySector } from "./freightBillingTurn";
 import { USE_GROWTH_INCREMENT, businessAcumenGrowthMultiplier } from "@/lib/stats/statsConstants";
 import { shedVacantCeoSectorsToUnowned } from "./vacantCeoSectorShed";
 import { shedInactiveCeoSectorsToUnowned } from "./inactiveCeoSectorShed";
@@ -41,6 +42,8 @@ import {
 import type { SupplyAgreement } from "@/lib/db/types/supplyAgreement";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { FREIGHT_CLASS_BY_COMMODITY, type FreightClass } from "@/lib/logistics/freightClass";
+import { isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
+import { migrateStateScopedSupplyAgreements } from "./migrateStateScopedSupplyAgreements";
 import {
   buildMinWageRatioByCountry,
   buildUnionLawBiasByCountry,
@@ -98,50 +101,23 @@ import { makeSeededRng } from "@/lib/events/substrate/rng";
 import { logger } from "../../observability/logger";
 import { recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
+import { advertisingDeliveredValueByCorp } from "./advertisingDeliveredValue";
+import { createCorporationTurnTimer, type CorporationTurnResult } from "./corporationTurnRuntime";
+
+export type { CorporationTurnResult } from "./corporationTurnRuntime";
 
 // Optional sim-run salt, same convention as nppActionProcessing.ts's RNG.
 const CORP_TURN_RNG_SALT = process.env.SIM_RNG_SALT ? `:${process.env.SIM_RNG_SALT}` : "";
 
-export interface CorporationTurnResult {
-  corporationsProcessed: number;
-  sectorsProcessed: number;
-  totalRevenueGenerated: number;
-  totalIncomeGenerated: number;
-  /** CEO salary + shareholder dividends this turn, internal units (for LOC cap / scoring). */
-  currencyIncomeInternalByCharacterId: Map<string, number>;
-  /** Same income as credited to personal, per currency (for LOC repayment allocation). */
-  currencyIncomeFaceByCharacterId: Map<string, Map<CurrencyCode, number>>;
-}
-
 /**
- * Process all corporations each turn:
- * 1. Build lookup maps from DB
- * 1b. Vacant-CEO and inactive-CEO (user offline >72 turns) corps shed 10% of each sector's revenue/workers back to unowned markets
- * 2. Process all sectors (revenue, margin modifiers, share price, credit)
- * 3. Bulk write sector + corp updates
- * 4. Update corporate profit tax bases in federal + state budgets
- * 5. Refresh national budget revenue (public-enterprise corps)
- * 6. Pay CEO salaries + dividends to characters
- * 7. Fill pending share orders
- * 8. Snapshot market cap + per-corp history
+ * Run the corporation economy, settlement, ownership, and reporting phases for one turn.
  */
 export async function processCorporationTurn(turn?: number): Promise<CorporationTurnResult> {
   const db = await getDb();
   const now = new Date();
 
-  // Env-gated sub-step timing (SIM_CORP_TIMING=1). Zero-cost when off, used to
-  // profile which of this phase's ~30 sequential steps actually dominate the
-  // wall clock, so optimization targets real cost, not guesses. Emits one JSON
-  // line per turn that a harness/analysis script can parse.
-  const timingOn = process.env.SIM_CORP_TIMING === "1";
-  const timings: Array<[string, number]> = [];
-  let _tPrev = timingOn ? Date.now() : 0;
-  const mark = (label: string): void => {
-    if (!timingOn) return;
-    const nowMs = Date.now();
-    timings.push([label, nowMs - _tPrev]);
-    _tPrev = nowMs;
-  };
+  const timer = createCorporationTurnTimer();
+  const mark = timer.mark;
 
   // The preamble reads are independent of each other, so they run as one
   // parallel round-trip instead of ~7 serial ones.
@@ -186,6 +162,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           privateBankingEnabled: 1,
           interstateMoneyWiringEnabled: 1,
           freightSettlementMode: 1,
+          canonicalFreightBillingEnabled: 1,
         },
       }
     ),
@@ -208,10 +185,18 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const freightSettlementActive =
     (marketGovernorConfig as { freightSettlementMode?: string } | null)?.freightSettlementMode ===
       "active" && marketAtLeast(marketSystemMode, "clearing");
+  // Canonical freight billing v1 (issue #897, default OFF): while on, last
+  // turn's per-state shipping money is loaded from the sourcingNetworkLoad doc
+  // and apportioned across sectors below. Off keeps both lookup maps empty and
+  // the whole billing path inert.
+  const canonicalFreightBillingEnabled =
+    (marketGovernorConfig as { canonicalFreightBillingEnabled?: boolean } | null)
+      ?.canonicalFreightBillingEnabled === true;
   const lookups = await buildCorporationLookups(db, {
     plantsEnabled: plantsEnabledForMarketShare,
     freightSettlementActive,
     moneyWiringEnabled: interstateMoneyWiringEnabled,
+    canonicalFreightBillingEnabled,
   });
   const currentYear = gameState?.currentYear;
   // Soft-budget gate for the turn path (see sectorTurn's affordability brake and
@@ -278,6 +263,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   let contractedByCorpCommodity: Map<string, Map<CommodityType, number>> | undefined;
   let settleableAgreements: SettleableSupplyAgreement[] | undefined;
   let buyerDemandByCorpCommodity: Map<string, Map<CommodityType, number>> | undefined;
+  // Corporation-wide agreements have no state identity. A live agreement for
+  // a state-local commodity must finish under the legacy national book rather
+  // than being silently reinterpreted or broken mid-contract. New agreements
+  // for these commodities are rejected at proposal time.
+  let stateLocalClearingBlockedByLegacyAgreement = false;
   // Populated during clearing: supplier corpId → commodity → contracted units that
   // actually cleared this turn. Drives the post-clearing premium settlement.
   const contractSettlementByCorp = new Map<string, Map<CommodityType, number>>();
@@ -286,6 +276,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // supply-agreement shortfall penalty, a contract is a promise about goods,
   // so under-PRODUCING against it is the breach, not under-selling it.
   const producedByCorpCommodity = new Map<string, Map<CommodityType, number>>();
+  // Ticket #1147: the involuntary-constraint ceiling, accumulated on exactly
+  // the same corp/commodity keys as `producedByCorpCommodity` so the damages
+  // leg can compare like with like. A supplier whose plants were starved of
+  // inputs, throttled by a glutted market or struck is billed against what it
+  // could have made, not against a nameplate it could never reach.
+  const achievableByCorpCommodity = new Map<string, Map<CommodityType, number | null>>();
   if (supplyAgreementsEnabled) {
     contractedByCorpCommodity = new Map();
     settleableAgreements = [];
@@ -293,12 +289,18 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // effective turn. Retire the ones whose notice has run out first, then load
     // everything still live. Ordering matters, a contract that expires this
     // turn must not settle again.
-    await db
-      .collection("supplyAgreements")
-      .updateMany(
-        { status: "cancelling", cancelEffectiveTurn: { $lte: turn ?? 0 } },
-        { $set: { status: "cancelled", updatedAt: now } }
+    const agreementMigration = await migrateStateScopedSupplyAgreements({
+      agreements: db.collection<SupplyAgreement>("supplyAgreements"),
+      turn: turn ?? 0,
+      now,
+    });
+    if (agreementMigration.noticeServed > 0 || agreementMigration.pendingCancelled > 0) {
+      console.info(
+        `[corporationTurn] retiring corporation-wide state-local agreements: ` +
+          `${agreementMigration.noticeServed} given notice, ` +
+          `${agreementMigration.pendingCancelled} pending withdrawn`
       );
+    }
     const agreements = await db
       .collection("supplyAgreements")
       .find(
@@ -311,6 +313,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
             volumeCap: 1,
             pricePremium: 1,
             volumeCapBasis: 1,
+            lastDeliveryTurn: 1,
+            lastDeliveredUnits: 1,
+            lastBuyerConsumptionUnits: 1,
+            previousDeliveryTurn: 1,
+            previousDeliveredUnits: 1,
+            previousBuyerConsumptionUnits: 1,
           },
         }
       )
@@ -323,7 +331,16 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       volumeCap: number;
       pricePremium?: number;
       volumeCapBasis?: SupplyAgreement["volumeCapBasis"];
+      lastDeliveryTurn?: number;
+      lastDeliveredUnits?: number;
+      lastBuyerConsumptionUnits?: number;
+      previousDeliveryTurn?: number;
+      previousDeliveredUnits?: number;
+      previousBuyerConsumptionUnits?: number;
     }[]) {
+      if (isStateScopedCommodity(a.commodity)) {
+        stateLocalClearingBlockedByLegacyAgreement = true;
+      }
       const cap = Math.max(0, a.volumeCap ?? 0);
       settleableAgreements.push({
         agreementId: a._id?.toString(),
@@ -338,7 +355,18 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         // premium as usual and are grandfathered out of the damages leg, see
         // the stamp in corporations/commands/supplyAgreements.
         shortfallEligible: a.volumeCapBasis === "scaledCapacity",
+        lastDeliveryTurn: a.lastDeliveryTurn,
+        lastDeliveredUnits: a.lastDeliveredUnits,
+        lastBuyerConsumptionUnits: a.lastBuyerConsumptionUnits,
+        previousDeliveryTurn: a.previousDeliveryTurn,
+        previousDeliveredUnits: a.previousDeliveredUnits,
+        previousBuyerConsumptionUnits: a.previousBuyerConsumptionUnits,
       });
+    }
+    if (stateLocalClearingBlockedByLegacyAgreement) {
+      console.warn(
+        "[corporationTurn] state-local clearing deferred: a legacy state-local supply agreement is still live"
+      );
     }
   }
   // The slice (A2b) only bites when BOTH the master flag and the slice gate are
@@ -349,6 +377,22 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     cap: marketGovernorConfig?.marketGovernorCap,
     rampTurns: marketGovernorConfig?.marketGovernorRampTurns,
   });
+  // Canonical freight billing (issue #897): apportion last turn's state-scoped
+  // shipping money onto sectors once, before the per-corp loop, and thread the
+  // result through the market context like the delivery-limited telemetry.
+  // Strictly flag-gated: with the flag off the lookup maps are empty, this
+  // block is skipped, and processSector neither computes nor persists billing.
+  if (canonicalFreightBillingEnabled) {
+    const billing = buildFreightBillingBySector({
+      lookups,
+      currentTurn: turn ?? gameState?.currentTurn ?? 0,
+      plantsEnabled: market.plantsEnabled,
+      currentYear,
+      commandEconomyEnabled,
+    });
+    market.freightBillingChargeBySectorId = billing.chargeBySectorId;
+    market.freightBillingCreditBySectorId = billing.creditBySectorId;
+  }
   // Brand loyalty (A2, shadow-safe): per-sector meta captured during the
   // clearing-input build, joined to clearing results after the pass.
   const loyaltySectorMeta = new Map<
@@ -375,6 +419,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     const clearingGroupBySector = lookups.countryClearingBooks
       ? new Map<string, string>()
       : undefined;
+    // State-scoped clearing: freight is a state's own haulage
+    // capacity, so it clears against that state's book rather than a national
+    // one. Built for every world, not just era worlds, because the constraint
+    // is physical rather than a trade-graph artifact.
+    const clearingStateBySector = new Map<string, string>();
     // Freight seam: per sector, the share of its offer that no network could
     // place. Populated only while settlement is active, so worlds with it off
     // (and every modern world) offer exactly what they offered before.
@@ -485,8 +534,10 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         const hostCode = resolveSectorHostCurrencyCode(sector, corp);
         const hostRate = fxRateForSectorHostFromMap(sector, corp, lookups.exchangeRatesByCurrency);
         const revenueAnchor = readCorpEconomicAnchor(sector.revenue, hostCode, hostRate);
+        // Shared ownership map for both bilateral supply agreements and the
+        // anonymous advertising settlement that follows clearing.
+        sectorCorpId.set(sectorId, corpId);
         if (supplyAgreementsEnabled) {
-          sectorCorpId.set(sectorId, corpId);
           supplyAgreementDemandSectors.push({
             corporationId: corpId,
             sectorType: sector.sectorType,
@@ -526,6 +577,50 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         // A mothballed sector contributes nothing and gets no entry, which the
         // settlement reads as zero produced (its documented meaning), a cold
         // plant owes damages on its whole contracted volume.
+        // The achievable ceiling is accumulated for EVERY sector including
+        // mothballed ones. A cold plant produces nothing and gets no entry in
+        // the produced map (its documented "zero produced" meaning), but its
+        // ceiling is still its full capacity because mothballing is the operator's
+        // own choice and must keep owing damages on the whole contracted
+        // volume. Skipping it here would hand back the exact exploit the
+        // damages leg exists to close.
+        if (supplyAgreementsEnabled && market.plantsEnabled) {
+          const achievableScaled = plantsSupplyScaledUnits({
+            producedUnits: sector.contractAchievableUnits,
+            isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
+            embargoSupplyFactor:
+              embargoSupplyFactorFor(sector) *
+              plannedEconomyMediaSupplyFactor(
+                sector.sectorType,
+                isPlannedEconomy(
+                  (sector as { countryId?: string }).countryId,
+                  currentYear,
+                  commandEconomyEnabled
+                )
+              ),
+          });
+          const supplyRates = rates.supply ?? {};
+          for (const commodity of Object.keys(supplyRates) as CommodityType[]) {
+            const weight = commodityMixWeight(
+              supplyRates,
+              eraScaledBasePrices(lookups.eraUnitScale),
+              commodity
+            );
+            if (!(weight > 0)) continue;
+            const byCommodity =
+              achievableByCorpCommodity.get(corpId) ?? new Map<CommodityType, number | null>();
+            const accumulated = byCommodity.get(commodity);
+            if (achievableScaled === null || accumulated === null) {
+              // One unknown contributing sector makes the group total unknown.
+              // A measured zero remains numeric zero and must not fall through
+              // to the settlement's intentionally-unclamped rollout behavior.
+              byCommodity.set(commodity, null);
+            } else {
+              byCommodity.set(commodity, (accumulated ?? 0) + achievableScaled * weight);
+            }
+            achievableByCorpCommodity.set(corpId, byCommodity);
+          }
+        }
         if (supplyAgreementsEnabled && market.plantsEnabled && sector.mothballed !== true) {
           const scaled = plantsSupplyScaledUnits({
             producedUnits: sector.producedUnits,
@@ -667,6 +762,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           deliveryLimitedBySectorId.set(sectorId, deliveryLimit.fraction);
           deliveryLimitedClassBySectorId.set(sectorId, deliveryLimit.freightClass);
         }
+        if (sector.stateId) clearingStateBySector.set(sectorId, sector.stateId);
         clearingInputs.push(clearingInput);
         // Brand loyalty (A2): remember what the rollup needs, joined post-clearing.
         if (brandLoyaltyEnabled) {
@@ -721,6 +817,17 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       // country's lagged reachable price. Sparse map; falls back to the
       // worldwide ratio per commodity. Modern worlds: no groups, unused.
       priceRatioByGroup: clearingGroupBySector ? lookups.reachablePriceRatioByCountry : undefined,
+      // Freight capacity clears where it is based. The whole context is
+      // withheld while a legacy freight agreement is live because old
+      // corporation-wide contracts carry no state identity and cannot be
+      // reinterpreted safely mid-contract.
+      stateMarkets: stateLocalClearingBlockedByLegacyAgreement
+        ? undefined
+        : {
+            stateBySector: clearingStateBySector,
+            balances: lookups.rawStateBalances,
+            priceRatios: lookups.statePriceRatioByState ?? new Map(),
+          },
       // The era table: clearing compares sector offers (era-based units under
       // plants) against the ledger's balances, which run on the same basis.
       basePrices: eraScaledBasePrices(lookups.eraUnitScale),
@@ -756,6 +863,35 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         }
       },
     });
+
+    // Marketing budgets are a real corporation cost, so filled advertising
+    // must have a real recipient. Reproduce clearing's offer normalization for
+    // this commodity, then value each seller's actually delivered units at its
+    // reachable price. processSectors routes that delivered value through one
+    // equal-and-opposite transfer.
+    const clearingBasePrices = eraScaledBasePrices(lookups.eraUnitScale);
+    const advertisingSellerDeliveredValueAnchorByCorpId = advertisingDeliveredValueByCorp({
+      inputs: clearingInputs.map((input) => ({
+        sectorId: input.sectorId,
+        supplyRates: input.supplyRates,
+        revenue: input.revenue,
+        producedUnits: input.producedUnits,
+        outputQuality: input.outputQuality,
+      })),
+      clearingBasePrices,
+      plantsEnabled: market.plantsEnabled,
+      clearingGroupBySector,
+      clearingBySectorId: market.clearingBySectorId,
+      countryClearingBooks: lookups.countryClearingBooks,
+      globalCommodityBalances: lookups.globalCommodityBalances,
+      reachablePriceRatioByCountry: lookups.reachablePriceRatioByCountry,
+      priceRatioByCommodity: lookups.priceRatioByCommodity,
+      sectorCorpId,
+      commodityMixWeight,
+      qualityPremiumPricingEnabled,
+    });
+    market.advertisingSellerDeliveredValueAnchorByCorpId =
+      advertisingSellerDeliveredValueAnchorByCorpId;
     if (bookViolations.length > 0) {
       console.warn(
         "[clearing] post-normalization order-book/ledger unit mismatch on " +
@@ -967,6 +1103,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     labourWageIndexByState,
     automationIndexByState,
     labourDemandByState,
+    labourDemandWageIndexByState,
     strikeEvents,
     capacityBindingEvents,
   } = processSectors(
@@ -1058,7 +1195,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // Phase 1 labour market telemetry: record how many jobs the corporate sector
   // wants per state and how that compares to the civilian labour force. Inert
   // measurement, deliberately not gated on the labour system being on.
-  await persistLabourMarketTelemetry({ db, labourDemandByState, turn });
+  await persistLabourMarketTelemetry({
+    db,
+    labourDemandByState,
+    labourDemandWageIndexByState,
+    turn,
+  });
 
   // Phase 3: Bulk write sector and corp updates
   if (sectorOps.length > 0) {
@@ -1359,6 +1501,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         contractSettlementByCorp,
         buyerDemandByCorpCommodity,
         producedByCorpCommodity: market.plantsEnabled ? producedByCorpCommodity : undefined,
+        achievableByCorpCommodity: market.plantsEnabled ? achievableByCorpCommodity : undefined,
         plantsEnabled: market.plantsEnabled,
         priceRatioByCommodity: lookups.priceRatioByCommodity,
         turn: turn ?? 0,
@@ -1839,10 +1982,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     recordAuditBulk(corpAuditEntries);
   }
 
-  if (timingOn) {
-    const total = timings.reduce((s, [, ms]) => s + ms, 0);
-    console.log(`[corp-timing] turn=${turn ?? "?"} total=${total}ms ${JSON.stringify(timings)}`);
-  }
+  timer.finish(turn);
 
   return {
     corporationsProcessed: lookups.corporations.length,

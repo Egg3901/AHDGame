@@ -18,7 +18,11 @@ import {
   resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
-import { COMMODITY_BASE_PRICES, EXTRACTABLE_RESOURCES } from "@/lib/constants/commodities";
+import { EXTRACTABLE_RESOURCES } from "@/lib/constants/commodities";
+import { extractionDesiredUnits } from "@/lib/extraction/capacityHaircut";
+import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { getExtractionOutputScaleEnabled } from "@/lib/market/featureFlag";
+import type { GameConfig } from "@/lib/db/types";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import type { CorporationType } from "@/lib/constants/corporations";
 
@@ -30,6 +34,16 @@ export async function computeSectorExtractionCapacityContext(
   // ── Extraction-only: resource capacity and per-resource multipliers ──
   // Must be computed before supply flows so stateResources is available
   // for capacity filtering and thisSectorMultipliers for the supplies map.
+  // Same unit basis as the turn clamp (era-scaled prices + per-resource output
+  // scale); without this the page reports ~1.0 multipliers while the engine
+  // rations the same sector 70-174x harder on era worlds.
+  const [eraUnitScale, gameConfigDoc] = await Promise.all([
+    loadWorldEraUnitScale(db),
+    db
+      .collection<GameConfig>("gameConfig")
+      .findOne({ _id: "default" }, { projection: { extractionOutputScaleEnabled: 1 } }),
+  ]);
+  const extractionOutputScaleEnabled = await getExtractionOutputScaleEnabled(gameConfigDoc);
   let stateResources: Partial<Record<ExtractableResource, number>> | null | undefined = undefined;
   let thisSectorMultipliers: Partial<Record<ExtractableResource, number>> = {};
   // Strategy-picker preview (turn-899 misallocation finding): per candidate
@@ -90,9 +104,13 @@ export async function computeSectorExtractionCapacityContext(
         for (const resource of EXTRACTABLE_RESOURCES) {
           const rate = supplyRates[resource] ?? 0;
           if (rate > 0) {
-            revenueBasedOutput[resource] =
-              (revenueAnchorOf(s.revenue) * rate) /
-              (COMMODITY_BASE_PRICES[resource as keyof typeof COMMODITY_BASE_PRICES] ?? 1);
+            revenueBasedOutput[resource] = extractionDesiredUnits(
+              revenueAnchorOf(s.revenue),
+              rate,
+              resource,
+              eraUnitScale,
+              extractionOutputScaleEnabled
+            );
           }
         }
         return {
@@ -132,9 +150,13 @@ export async function computeSectorExtractionCapacityContext(
           for (const resource of EXTRACTABLE_RESOURCES) {
             const rate = supplyRates[resource] ?? 0;
             if (rate > 0) {
-              candidateOutput[resource] =
-                (revenueAnchorOf(sector.revenue) * rate) /
-                (COMMODITY_BASE_PRICES[resource as keyof typeof COMMODITY_BASE_PRICES] ?? 1);
+              candidateOutput[resource] = extractionDesiredUnits(
+                revenueAnchorOf(sector.revenue),
+                rate,
+                resource,
+                eraUnitScale,
+                extractionOutputScaleEnabled
+              );
             }
           }
           const candidateInputs = sectorInputs.map((input) =>

@@ -30,12 +30,12 @@ function setup() {
 const inserted = (db: ReturnType<typeof setup>): Bill =>
   db.collectionMocks["bills"]!.insertOne.mock.calls[0]![0] as Bill;
 
-const run = (db: ReturnType<typeof setup>, countryId: "US" | "UK" | "RU" = "US") =>
+const run = (db: ReturnType<typeof setup>, countryId: "US" | "UK" | "RU" = "US", isNpp = false) =>
   buildJoinConflictBill({
     db: db as unknown as Db,
     countryId,
     preset: "1953-default",
-    sponsor: { characterId: new ObjectId(), characterName: "Foreign Secretary" },
+    sponsor: { characterId: new ObjectId(), characterName: "Foreign Secretary", isNpp },
     conflictName: "Korean War",
     organizationId: "NATO",
     provision: PROVISION,
@@ -77,6 +77,13 @@ describe("buildJoinConflictBill", () => {
     expect(doc.category).toBe("foreign policy");
   });
 
+  it("marks an NPP-sponsored ratification for the autonomous force preflight", async () => {
+    const db = setup();
+    await run(db, "US", true);
+
+    expect(inserted(db).nppSponsored).toBe(true);
+  });
+
   it("files a Soviet bill at su_national, not the id a naive fallback would build", async () => {
     // The bill is spawned in 17 countries; the national-scope map covers 10, and a
     // `${lower}_national` fallback yields "ru_national" — which, per that map's own
@@ -105,5 +112,16 @@ describe("buildJoinConflictBill", () => {
     await run(db, "UK");
 
     expect(notifyChambersVoteOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns the existing bill instead of filing the same resolution twice", async () => {
+    const db = setup();
+    const existingId = new ObjectId();
+    db.collectionMocks["bills"]!.findOne.mockResolvedValue({ _id: existingId });
+
+    await expect(run(db)).resolves.toEqual(existingId);
+
+    expect(db.collectionMocks["bills"]!.insertOne).not.toHaveBeenCalled();
+    expect(notifyChambersVoteOpen).not.toHaveBeenCalled();
   });
 });

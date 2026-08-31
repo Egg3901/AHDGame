@@ -47,7 +47,6 @@ export interface PersonalIncomeData {
   ceoSalaryCurrencyCode?: string | null;
   bondIncomePerTurn?: number;
   dividendIncomePerTurn?: number;
-  portfolioValue?: number;
   /** Per-currency wallet balances (post-forex). Personal is liquid; savings is high-yield. */
   forexBalances?: {
     personal: Partial<Record<CurrencyCode, number>>;

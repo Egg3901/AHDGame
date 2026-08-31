@@ -6,6 +6,7 @@ import type { CorporationType } from "@/lib/constants/corporations";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { NationalizationProvisionDetail } from "@/lib/nationalization/billTargetPreview";
 import type { BillVoteSnapshot } from "./voteSnapshot";
+import type { WarEntryPoliticalPressure, WarEntryStake } from "@/lib/military/warEntryPolicy";
 
 /**
  * Pre-whip vote snapshot, keyed by bare characterId (never npp_*).
@@ -17,6 +18,23 @@ import type { BillVoteSnapshot } from "./voteSnapshot";
  * string) or "unvoted". The apply functions enforce the right shape per target.
  */
 export type WhippedFromVoteMap = Record<string, string>;
+
+/** Economic and social ideology positions, -5..+5 on the 0.05 grid. */
+export interface AxisPositions {
+  economic: number;
+  social: number;
+}
+
+/**
+ * What one bill has done to one voter's positions. `baseline` is where they
+ * stood before this bill first moved them; `applied` is the net movement this
+ * bill currently accounts for. Re-votes are measured from `baseline`, so the
+ * net from a single bill can never exceed one step.
+ */
+export interface PolicyShiftLedgerEntry {
+  baseline: AxisPositions;
+  applied: AxisPositions;
+}
 
 export type BillStatus =
   | "proposed"
@@ -70,12 +88,20 @@ export interface PolicyProvision {
   type?: "policy"; // optional for backwards compat with existing docs
   legislationTypeId: string;
   policyOptionId?: string;
-  /** Frozen label for the proposed option so historical bill detail stays stable if seed text changes. */
+  /**
+   * Frozen NAME of the proposed option so historical bill detail stays stable if
+   * seed text changes. Documents written before the structured split may hold a
+   * combined "Name: explanation" string; the read path splits those.
+   */
   policyOptionNameSnapshot?: string;
+  /** Frozen explanation for the proposed option. Paired with policyOptionNameSnapshot. */
+  policyOptionExplanationSnapshot?: string;
   /** Frozen current-law option id at proposal time so history doesn't drift after enactment. */
   currentPolicyOptionIdSnapshot?: string;
-  /** Frozen label for the current law shown beside the proposal on the bill detail page. */
+  /** Frozen NAME of the current law shown beside the proposal on the bill detail page. */
   currentPolicyOptionNameSnapshot?: string;
+  /** Frozen explanation for the current law. Paired with currentPolicyOptionNameSnapshot. */
+  currentPolicyOptionExplanationSnapshot?: string;
   effectDirection: number;
   economic?: number;
   social?: number;
@@ -200,6 +226,10 @@ export interface JoinConflictProvision {
   organizationId: string;
   /** The resolution that spawned this bill. */
   resolutionId: string;
+  /** Political character of entry, derived from the conflict's host side. */
+  entryStake?: WarEntryStake;
+  /** Frozen national pressure snapshot used by autonomous legislative voting. */
+  politicalPressure?: WarEntryPoliticalPressure;
 }
 
 export interface EmbargoProvision {
@@ -400,6 +430,12 @@ export interface Bill {
   votesAbstain: number;
   votes: Record<string, "for" | "against" | "abstain">;
   whippedFromVote?: WhippedFromVoteMap;
+  /**
+   * Per-voter ideology movement this bill has caused, keyed by character id.
+   * A re-vote is measured from `baseline` so the net per bill stays within one
+   * step; entries are written by applyBillVotePolicyShift.
+   */
+  policyShiftLedger?: Record<string, PolicyShiftLedgerEntry>;
   otherChamberVotesFor?: number;
   otherChamberVotesAgainst?: number;
   otherChamberVotesAbstain?: number;
@@ -410,6 +446,13 @@ export interface Bill {
   countryId?: CountryId;
   /** Optional pseudo-state for country-scoped national bills (e.g. "uk_national"). */
   stateId?: string;
+  /**
+   * Set on the UK annual Budget's vote-vehicle bill (epic #856): links this bill
+   * to the UKBudget for that fiscal year. When such a bill resolves, the UK
+   * notifier applies the outcome to the budget (defeat → budgetDefeat confidence
+   * hit). The budget's tax/spend content lives in the UKBudget doc, not here.
+   */
+  budgetFiscalYear?: number;
   legislationTypeId?: string;
   effectDirection?: number;
   provisions?: BillProvision[];

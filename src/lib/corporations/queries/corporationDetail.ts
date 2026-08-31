@@ -43,6 +43,7 @@ import {
   reservedCorporatePositions,
 } from "@/lib/corporations/reservedCorporateHoldings";
 import { getLegalStructureForCorp } from "@/lib/corporations/legalStructure";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
@@ -66,7 +67,7 @@ import {
   corpCapitalToAnchor,
   corpLiquidCapitalToAnchor,
   fxRateForCorpFromMap,
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
   resolveCorpLiquidCurrencyCode,
   resolveSectorHostCurrencyCode,
   fxRateForSectorHostFromMap,
@@ -396,7 +397,11 @@ async function buildHostileTakeoverEligibility(
     .project({ _id: 1 })
     .toArray();
 
-  const fxByCurrency = await loadFxRatesByCurrency(db);
+  // Valuation map, not the settlement map: this value is DISPLAYED and RANKED.
+  // The settlement map leaves the six bloc currencies (PLZ/CSK/HUF/YUD/BGL/ROL,
+  // 102 corps) missing on purpose, which converted them at 1.0. See
+  // corporationCapital.ts.
+  const fxByCurrency = await loadValuationFxRates(db);
   for (const mc of myCorps) {
     const acqPct = acquirerOwnershipPercent(mc._id, corporation);
     if (acqPct > HOSTILE_TAKEOVER_OWNERSHIP_THRESHOLD_PERCENT) {
@@ -1224,6 +1229,12 @@ export async function loadCorporationDetailView(args: {
     // rescaling is exactly how the two clocks got mixed up before.
     const capacityUnits =
       plantsMode && Number.isFinite(sector.capitalStock) ? (sector.capitalStock as number) : null;
+    const plantCount =
+      plantsMode && Number.isInteger(sector.plantCount) && (sector.plantCount ?? 0) >= 0
+        ? (sector.plantCount as number)
+        : plantsMode
+          ? seedPlantLedger(sector.sectorType, sector.capitalStock).plantCount
+          : null;
     const producedUnits =
       plantsMode && Number.isFinite(sector.producedUnits) ? (sector.producedUnits as number) : null;
     const soldUnits =
@@ -1310,10 +1321,13 @@ export async function loadCorporationDetailView(args: {
       ...mods,
       commoditySupplyDemandBlendPct,
       profit: Math.round(profit),
-      workers: calculateWorkers(
-        sectorFieldToAnchor(sector.revenue, sector),
-        metrics.workforceSkill
-      ),
+      workers:
+        sector.workers ??
+        calculateWorkers(sectorFieldToAnchor(sector.revenue, sector), metrics.workforceSkill),
+      workersDesired:
+        sector.workersDesired ??
+        calculateWorkers(sectorFieldToAnchor(sector.revenue, sector), metrics.workforceSkill),
+      labourStaffingFactor: sector.labourStaffingFactor ?? 1,
       strategyId: sector.strategyId ?? "standard",
       stateResources: stateResourceCapacityByState.has(sector.stateId)
         ? (stateResourceCapacityByState.get(sector.stateId) ?? null)
@@ -1334,6 +1348,7 @@ export async function loadCorporationDetailView(args: {
       // Plants-tier physicals. Null outside plants — never removed, so a
       // capital-tier client keeps reading exactly the fields it always did.
       capacityUnits,
+      plantCount,
       producedUnits,
       soldUnits,
       // Exact ratio. The API layer replaces this with null (and keeps only the
@@ -1373,7 +1388,7 @@ export async function loadCorporationDetailView(args: {
   const heldBondIssuerMap = new Map(heldBondIssuerCorps.map((c) => [c._id.toString(), c.name]));
 
   const GAME_DAYS_PER_YEAR_RATIO = TURNS_PER_YEAR / TURNS_PER_DAY;
-  const portfolioFxByCurrency = await loadFxRatesByCurrency(db);
+  const portfolioFxByCurrency = await loadValuationFxRates(db);
   const heldBondsSummary = heldBondsRaw.map((bond) => {
     const holding = bond.holders.find(
       (h) => h.corporationId?.toString() === corporation._id.toString()

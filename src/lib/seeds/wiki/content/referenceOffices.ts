@@ -1,6 +1,6 @@
 export const referenceOfficesContent = `# Reference: Offices
 
-Complete reference for all playable offices across the six active countries (US, UK, DE, JP, CN, IE). Each entry shows how the office is won, term length, action bonus, and what it does for your character. Central bank chair roles are included: they are not elected through standard elections.
+Reference for the offices of the four longest-established playable countries (US, UK, DE, JP). Each entry shows how the office is won, term length, action bonus, and what it does for your character. Central bank chair roles are included: they are not elected through standard elections. For Ireland, Brazil, Nigeria, China, the Soviet Union and East Germany, the office tables live on each country hub (see [Getting Started](/wiki/getting-started)); the [Cabinet Guide](/wiki/cabinet-guide) reads every country's cabinet seats live from configuration.
 
 ---
 
@@ -12,12 +12,12 @@ The US uses a **presidential system** with directly elected executives. The legi
 
 | Field | Value |
 |---|---|
-| Won by | National general election (Electoral College, 270/538 votes to win) |
+| Won by | National general election (a majority of the Electoral College the era apportions: 270 of 538 modern, 266 of 531 in the 1950s) |
 | Term | 4 years (192 turns) |
 | Action bonus | +4/turn |
 | Party strength weight | 1.0 |
 
-The President is the most powerful office in the game. Winning requires a national campaign, strong NPI, and party organization in swing states. Cabinet nominations are made by the President and confirmed by the Senate. The President can veto federal legislation. Presidential approval feeds into national approval ratings.
+The President is the most powerful office in the game. Winning requires a national campaign, strong NPI, and party organization in swing states. Cabinet nominations are made by the President and confirmed by the Senate (with one acting appointment per seat per term to bridge a vacancy). The President can veto federal legislation. National approval is computed from the country's condition rather than the President's own favorability, but the President answers for it at the polls.
 
 **Running mate:** After winning the primary, the nominee selects a Vice President. The VP cannot be the sitting President and cannot be the same person as the nominee.
 
@@ -84,12 +84,12 @@ State Senators vote on state-level legislation and fill the state legislature. C
 
 | Field | Value |
 |---|---|
-| Won by | Presidential appointment (selected by central bank chair selection phase) |
-| Term | 4 years |
+| Won by | Presidential nomination, confirmed by the Senate |
+| Term | 4 years (192 turns) |
 | Action bonus | +3/turn |
 | Party strength weight | 0 (non-political) |
 
-The Fed Chair sets US interest rates, which affect bond yields, corporate borrowing costs, and the USD exchange rate. This is the highest action-bonus non-executive office. The chair is selected based on economic track record and presidential favor.
+The Fed Chair proposes US rate moves to the seven-seat FOMC, which affect bond yields, corporate borrowing costs, and the USD exchange rate. This is the highest action-bonus non-executive office. When a chair or governor seat's term ends it falls vacant and waits for a presidential nomination and a Senate vote; the engine never seats a machine candidate. See [FOMC / Rate-Setting Board](/wiki/fomc).
 
 ### US Cabinet positions (15 offices)
 
@@ -119,7 +119,7 @@ The Secretary of the Treasury is the Finance Minister equivalent and can authori
 
 ## United Kingdom
 
-The UK uses a **parliamentary system**. The Prime Minister emerges from a Commons majority, not direct election. All elections use FPTP from single-member constituencies.
+The UK uses a **parliamentary system**. The Prime Minister emerges from a Commons majority, not direct election. Commons and Regional Council seats are contested as one multi-seat race per region, allocated by vote share (with a majoritarian squeeze before 1999); see [United Kingdom](/wiki/uk-overview).
 
 ### Prime Minister
 
@@ -130,19 +130,19 @@ The UK uses a **parliamentary system**. The Prime Minister emerges from a Common
 | Action bonus | +4/turn |
 | Party strength weight | 1.0 |
 
-The PM is the head of government. No direct election: you must become your party's leader and your party must control the Commons. Snap elections can be called by the PM. The PM's favorability drives national approval ratings.
+The PM is the head of government. No direct election: you must become your party's leader and your party must control the Commons. Snap elections can be called by the PM. National approval is computed from the country's condition, not the PM's favorability.
 
 ### Member of Parliament (Commons)
 
 | Field | Value |
 |---|---|
-| Won by | Constituency general election (FPTP, single-seat) |
+| Won by | Regional multi-seat general election |
 | Term | Up to 5 years (variable, parliamentary dissolution) |
 | Action bonus | +1/turn |
 | Party strength weight | 0.85 |
-| Chamber | House of Commons (650 seats) |
+| Chamber | House of Commons (650 seats; 625 in the 1953 preset) |
 
-The primary legislature. Three candidates advance from UK primaries (vs 1 in the US), making primaries more competitive. All 650 seats are contested in each general election (no staggering).
+The primary legislature. Three candidates advance from UK primaries (vs 1 in the US), making primaries more competitive. All seats are contested in each general election (no staggering).
 
 ### Regional Councillor
 
@@ -160,12 +160,12 @@ Regional Councillors represent UK nations and regions in devolved assemblies. Re
 
 | Field | Value |
 |---|---|
-| Won by | Central bank chair selection (PM appointment) |
+| Won by | Central bank chair selection (PM nomination pool) |
 | Term | 4 years |
 | Action bonus | +3/turn |
 | Party strength weight | 0 (non-political) |
 
-Sets UK interest rates. Equivalent role to the Fed Chair in the US.
+Sets UK interest rates as a single governor (no rate committee). In a world that opens before 1997 the Treasury sets Bank Rate until Parliament legislates independence. Equivalent role to the Fed Chair in the US.
 
 ---
 
@@ -182,7 +182,7 @@ Germany uses a **parliamentary system** with **mixed-member proportional represe
 | Action bonus | +4/turn |
 | Party strength weight | 1.0 |
 
-Germany's head of government. The Chancellor is elected by a Bundestag majority vote, not by direct election. Coalition governments are common given AMS proportionality. The Chancellor's favorability drives national approval ratings.
+Germany's head of government. The Chancellor is elected by a Bundestag majority vote, not by direct election. Coalition governments are common given AMS proportionality. National approval is computed from the country's condition, not the Chancellor's favorability.
 
 ### Member of Bundestag (MdB)
 
@@ -192,7 +192,7 @@ Germany's head of government. The Chancellor is elected by a Bundestag majority 
 | Term | 4 years (192 turns) |
 | Action bonus | +1/turn |
 | Party strength weight | 0.85 |
-| Chamber | Bundestag (630 seats) |
+| Chamber | Bundestag (630 seats in the modern preset; 487 in the 1953 preset) |
 
 The German lower house. AMS means seats are allocated proportional to party vote share, so winning a constituency vote doesn't guarantee you a seat: list ranking matters too. Third parties regularly win seats.
 
@@ -234,7 +234,7 @@ Japan uses a **parliamentary system** with two elected chambers. The Shūgiin (l
 | Action bonus | +4/turn |
 | Party strength weight | 1.0 |
 
-Head of government. Must hold a Shūgiin confidence majority (233+ seats). The Shūgiin can be dissolved for snap elections. The PM's favorability drives national approval.
+Head of government. Must hold a Shūgiin confidence majority (233+ seats). The Shūgiin can be dissolved for snap elections. National approval is computed from the country's condition, not the PM's favorability.
 
 ### Member of the House of Representatives (Shūgiin)
 
@@ -265,7 +265,7 @@ Staggered 6-year terms, 124 seats contested per cycle (2 classes). The Sangiin *
 | Field | Value |
 |---|---|
 | Won by | Regional election |
-| Term | 6 years (288 turns) |
+| Term | 4 years (192 turns) |
 | Action bonus | +2/turn |
 | Party strength weight | 1.0 |
 | Sub-national | Yes |
@@ -281,7 +281,7 @@ Japan's regional chief executives. Signs regional legislation; controls regional
 | Action bonus | +3/turn |
 | Party strength weight | 0 |
 
-Sets Japanese interest rates (BoJ default prime rate: 0.25%). Controls JPY monetary policy.
+Sets Japanese interest rates (BoJ default prime rate: 1.0%, the lowest in the game). Controls JPY monetary policy.
 
 ---
 

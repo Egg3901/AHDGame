@@ -14,11 +14,8 @@ import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 import type { StateMetrics, MetricCategoryId, State } from "@/lib/db/types";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
 import type { StateApprovalHistory } from "@/lib/db/types/stateApproval";
-import {
-  getCountryConfig,
-  supportsActingAppointments,
-  type CountryId,
-} from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
+import { actingAppointmentsEnabled } from "@/lib/cabinet/actingEligibility";
 import {
   evaluateModifiers,
   applyModifiers,
@@ -29,6 +26,7 @@ import { isMetricActive } from "@/lib/era/metricCatalog";
 import { getActiveNationalAddressModifier } from "@/lib/governorOffice/address/activeAddressModifiers";
 import { getActiveOrgStatementModifiersByCountry } from "@/lib/internationalOrganizations/jointStatement";
 import { getActiveFairnessGapModifiers } from "@/lib/redistricting/fairnessApproval";
+import { computeWarApproval } from "@/lib/military/warApproval";
 import { IS_HIGHER_BETTER } from "@/lib/utils/metricScoring";
 import { axisAffinityFor, type AxisAffinity } from "@/lib/utils/metricAxisAffinity";
 import type { StateDemographicGroup, StateDemographics } from "@/lib/db/types/demographics";
@@ -41,6 +39,63 @@ import {
 
 const NO_CABINET_PENALTY = 7.5;
 const ACTING_APPOINTMENT_PENALTY = 0.5;
+
+/**
+ * The cabinet's own drag on national approval, as modifiers.
+ *
+ * Two penalties: an empty cabinet, and each acting (unconfirmed) secretary in a
+ * country whose government type requires legislative confirmation. Acting
+ * appointments are the executive's escape hatch for a vacancy, and this is what
+ * that escape hatch costs: cheap enough to use, dear enough that a president who
+ * never bothers with confirmation votes pays for it.
+ *
+ * Returned as {@link ActiveModifier}s so they go through the ONE applyModifiers
+ * call with everything else. They used to be subtracted after that call, which
+ * moved the rating while leaving nothing in `activeNationalModifiers` to explain
+ * it: a president could seat four acting secretaries, watch approval fall two
+ * points, and find no chip anywhere on the page saying why. The arithmetic is
+ * unchanged. Negatives are uncapped in applyModifiers, and both penalties are
+ * multiples of 0.5, so they land on the same tenth-of-a-point grid.
+ *
+ * Exported for its own test: this is the only pure part of an otherwise
+ * database-wide aggregate, and it shipped without coverage.
+ */
+export function buildCabinetApprovalModifiers(
+  cabinetMembers: Array<{ acting?: boolean }>,
+  countryId: CountryId
+): ActiveModifier[] {
+  const mods: ActiveModifier[] = [];
+
+  if (cabinetMembers.length === 0) {
+    mods.push({
+      id: "cabinet_none",
+      label: "No cabinet seated",
+      effect: -NO_CABINET_PENALTY,
+      // Explicit, like the war block's. Readers that see no marginEffect derive one
+      // from the modifier id, and a cabinet vacancy is not a profit-margin event.
+      marginEffect: 0,
+    });
+  }
+
+  // Parliamentary and one-party systems fill cabinet posts directly, so there is
+  // no confirmation gap for an acting appointment to bridge and nothing to charge.
+  // Narrower than `supportsActingAppointments`, which is true for every
+  // presidential country: NG is presidential but fills its cabinet directly, so
+  // it would otherwise carry a penalty for a state it can never enter.
+  if (actingAppointmentsEnabled(countryId)) {
+    const actingCount = cabinetMembers.filter((m) => m.acting === true).length;
+    if (actingCount > 0) {
+      mods.push({
+        id: "cabinet_acting",
+        label: actingCount === 1 ? "1 acting secretary" : `${actingCount} acting secretaries`,
+        effect: -(actingCount * ACTING_APPOINTMENT_PENALTY),
+        marginEffect: 0,
+      });
+    }
+  }
+
+  return mods;
+}
 
 const CATEGORIES: MetricCategoryId[] = [
   "economic",
@@ -589,7 +644,41 @@ export async function snapshotApprovalHistory(
       .toArray(),
   ]);
 
-  if (allMetrics.length === 0) return;
+  // The war block is computed BEFORE the metrics guard below, and persisted on
+  // both sides of it. Exhaustion integrates one point per in-game year in
+  // whichever direction the country is currently going, so it only reaches the
+  // right value if it is stepped EVERY turn. A country that returned early here
+  // would freeze its exhaustion — and, once at peace, never finish healing.
+  const approvalDoc = await db
+    .collection<GovernmentApproval>("governmentApprovals")
+    .findOne({ _id: countryId }, { projection: { warExhaustion: 1, warExhaustionConflictId: 1 } });
+  const war = await computeWarApproval(db, countryId, turn, {
+    exhaustion: approvalDoc?.warExhaustion,
+    conflictId: approvalDoc?.warExhaustionConflictId,
+  });
+
+  if (allMetrics.length === 0) {
+    // No rating to write, but the block still has to move. Only the war state is
+    // written: the address and org providers are not run on this path, so
+    // storing a war-only modifier list would drop those chips from beside a
+    // rating that still includes them. A stale list matching a stale rating is
+    // better than a fresh list that contradicts it.
+    //
+    // `upsert: false` — a country with neither metrics nor an approval document
+    // has no exhaustion to heal, and inventing one here would create a document
+    // missing every other required field.
+    await db.collection<GovernmentApproval>("governmentApprovals").updateOne(
+      { _id: countryId },
+      {
+        $set: {
+          warApprovalTotal: war.total,
+          warExhaustion: war.exhaustion,
+          warExhaustionConflictId: war.conflictId,
+        },
+      }
+    );
+    return;
+  }
 
   const statePopMap = new Map(allStates.map((s) => [s._id, s.population ?? 0]));
   const groupsByState = new Map<string, StateDemographicGroup[]>(
@@ -652,35 +741,45 @@ export async function snapshotApprovalHistory(
 
   let approval = calculateNationalApproval(dampedStateApprovals);
 
-  // National (head-of-government) address approval bump — applied at the
-  // country level rather than cascaded through per-state approvals, so the
-  // boost shows on the national rating without bumping every state.
+  // Every national-scope modifier goes through ONE applyModifiers call.
+  //
+  //  - the head-of-government address bump, applied at country level rather than
+  //    cascaded through per-state approvals so it shows on the national rating
+  //    without bumping every state;
+  //  - international joint statements about this country, bounded and time
+  //    limited, which lift cleanly when the statement lapses;
+  //  - the war block, one modifier per term (exhaustion, effort, alliance
+  //    contribution), each already stepped by computeWarApproval.
+  //
+  // One call rather than a chain: each call independently clamps to [0,100] and
+  // rounds to a tenth, and each gets its own POSITIVE_MODIFIER_NET_CAP — so
+  // chaining rounds twice and lets each source spend the cap the others are
+  // subject to. The stored modifier list is exactly what this call consumed, so
+  // the chips a reader shows cannot disagree with the rating beside them.
   const nationalAddressMods = await getActiveNationalAddressModifier(db, countryId, turn);
-  approval = applyModifiers(approval, nationalAddressMods);
-
-  // International joint statements (org endorsements / condemnations about this
-  // country) apply a bounded, time-limited approval effect at the national level
-  // — same recompute-folded mechanism as the address bump, so the effect
-  // persists across turns and lifts cleanly when the statement lapses.
   const orgStatementMods = await getActiveOrgStatementModifiersByCountry(db, countryId, turn);
-  approval = applyModifiers(approval, orgStatementMods);
 
-  // Penalise national approval if the country has no confirmed cabinet members.
-  const cabinetMembers = await db.collection("cabinetMembers").find({ countryId }).toArray();
-  if (cabinetMembers.length === 0) {
-    approval = Math.max(0, approval - NO_CABINET_PENALTY);
-  }
+  const cabinetMembers = await db
+    .collection<{ acting?: boolean }>("cabinetMembers")
+    .find({ countryId })
+    .toArray();
+  const cabinetMods = buildCabinetApprovalModifiers(cabinetMembers, countryId);
 
-  // Penalise approval for acting (unconfirmed) appointments when the country
-  // uses Senate confirmation — each acting member costs 0.5 approval points.
-  if (supportsActingAppointments(getCountryConfig(countryId))) {
-    const actingCount = cabinetMembers.filter(
-      (m) => (m as { acting?: boolean }).acting === true
-    ).length;
-    if (actingCount > 0) {
-      approval = Math.max(0, approval - actingCount * ACTING_APPOINTMENT_PENALTY);
-    }
-  }
+  // The war block now contributes one modifier per term rather than one netted
+  // total, so its positive terms compete for POSITIVE_MODIFIER_NET_CAP alongside
+  // the address bump and any joint statements, where the netted block used to be
+  // immune. It only matters when the national positives clear the cap at all —
+  // roughly an address plus two endorsements plus a war going well — and then a
+  // winning front is capped the same way every other positive is. That is the
+  // consistent reading and it is deliberate; raising or exempting the cap is a
+  // balance decision, not a side effect of splitting a chip.
+  const nationalMods = [
+    ...nationalAddressMods,
+    ...orgStatementMods,
+    ...war.modifiers,
+    ...cabinetMods,
+  ];
+  approval = applyModifiers(approval, nationalMods);
 
   await db.collection<GovernmentApproval>("governmentApprovals").updateOne(
     { _id: countryId },
@@ -691,6 +790,10 @@ export async function snapshotApprovalHistory(
         disapprovalRating: 100 - approval,
         netApproval: approval - (100 - approval),
         source: "aggregate" as const,
+        warApprovalTotal: war.total,
+        warExhaustion: war.exhaustion,
+        warExhaustionConflictId: war.conflictId,
+        activeNationalModifiers: nationalMods,
         updatedAt: new Date(),
       },
       $push: {

@@ -8,8 +8,12 @@ import WhiteHouseClient from "./WhiteHouseClient";
 
 // WhiteHouseClient renders NationalApprovalStat → ApprovalTooltip, which calls
 // useRouter(); without the App Router context that throws and crashes the tree.
+const tabParam = "";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), back: vi.fn() }),
+  // The shell seeds its initial tab from `?tab=`. No params here, so every test
+  // below opens on the overview exactly as it did before.
+  useSearchParams: () => new URLSearchParams(tabParam),
 }));
 
 const conflictsSpy = vi.fn().mockReturnValue(true);

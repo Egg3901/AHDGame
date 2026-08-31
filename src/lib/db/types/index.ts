@@ -35,6 +35,15 @@ export * from "./policy";
 export * from "./gameConfig";
 export * from "./gameState";
 export * from "./moneySupply";
+export type { EconomicMetric, EconomicVitalSigns } from "./economicVitalSigns";
+export type {
+  EmptyMarketCell,
+  EmptyMarketClassification,
+  MarketFormationSnapshot,
+  NppMarketEntryDiagnostic,
+  NppMarketEntryFunnel,
+  NppMarketEntryReason,
+} from "./marketFormation";
 export * from "./organizationFund";
 export * from "./adminLog";
 export * from "./events";
@@ -67,6 +76,7 @@ export * from "./ticket";
 export * from "./legislation";
 export * from "./leadership";
 export * from "./cabinet";
+export * from "./actingAppointmentCharge";
 export * from "./scotus";
 export * from "./newsPost";
 export * from "./userSubscription";

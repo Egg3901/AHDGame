@@ -70,6 +70,7 @@ describe("GET /api/country/[code]/overview-counts", () => {
       budgetBalancePctGdp: null,
       // Conflicts is off in this fixture, so no Cold War row is offered.
       coldWarDefcon: null,
+      navairFormations: 0,
     });
   });
 

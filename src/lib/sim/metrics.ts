@@ -12,6 +12,7 @@ import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import { loadExchangeRatesMap } from "@/lib/lineOfCredit/netWorth";
 import { toInternalUnits } from "@/lib/lineOfCredit/locMath";
+import type { EconomicVitalSigns } from "@/lib/db/types/economicVitalSigns";
 
 /**
  * Read-only balance-metric aggregations over a (sandbox) world DB, for the
@@ -34,6 +35,7 @@ export interface BalanceReport {
   crises: CrisisMetrics;
   economy: EconomyMetrics;
   capacity: CapacityMetrics;
+  marketAccess: MarketAccessMetrics;
 }
 
 export interface WealthMetrics {
@@ -94,6 +96,99 @@ export interface EconomyMetrics {
   inflationIndex: number;
   /** Population stdev of (globalPrice/basePrice) across commodities — cross-sectional price dispersion, not a time series. */
   priceVolatility: number;
+}
+
+export interface MarketAccessMetrics {
+  pooledFillRate: number | null;
+  countryScopedFillRate: number | null;
+  intentFulfillmentRate: number | null;
+  localShare: number | null;
+  interstateShare: number | null;
+  importShare: number | null;
+  toleranceBoundShareOfUnmet: number | null;
+  capacityBoundShareOfUnmet: number | null;
+  shortageResponsiveShareOfFulfillment: number | null;
+  physicalSellThrough: number | null;
+  labourStaffingRate: number | null;
+  marketCapHhi: number | null;
+  medianOwnershipAdjustedSellerHhi: number | null;
+  medianOwnershipAdjustedBuyerHhi: number | null;
+  highConcentrationLowFillShare: number | null;
+  emptyMarketShare: number | null;
+  facilityReadyEmptyMarketShare: number | null;
+  nppMarketEntryRate: number | null;
+  nppEntryOutcomesExplainedShare: number | null;
+  activeTradedListingShare: number | null;
+  noHolderBondShare: number | null;
+  sovereignNoHolderBondShare: number | null;
+  corporateNoHolderBondShare: number | null;
+  bondSubscriptionRate: number | null;
+  twoSidedListingShare: number | null;
+  medianQuotedSpreadPct: number | null;
+  depthToMarketCap: number | null;
+  medianFilledOrderExecutionHours: number | null;
+  medianAmihudIlliquidity48: number | null;
+  wealthGini: number | null;
+  annualizedM2GrowthPct: number | null;
+  transactionalMoneyShare: number | null;
+  externalBroadMoneyShare: number | null;
+  activeModeledBalanceShare48: number | null;
+  modeledGrossVelocity48: number | null;
+  measurementConfidence: string;
+  reconciliationStatus: string;
+}
+
+export function marketAccessMetricsFromSnapshot(
+  snapshot: EconomicVitalSigns | null
+): MarketAccessMetrics {
+  const entryFunnel = snapshot?.marketFormation?.entryFunnel;
+  return {
+    pooledFillRate: snapshot?.goods.pooledFillRate.value ?? null,
+    countryScopedFillRate: snapshot?.goods.countryScopedFillRate.value ?? null,
+    intentFulfillmentRate: snapshot?.trade.intentFulfillmentRate.value ?? null,
+    localShare: snapshot?.trade.localShare.value ?? null,
+    interstateShare: snapshot?.trade.interstateShare.value ?? null,
+    importShare: snapshot?.trade.importShare.value ?? null,
+    toleranceBoundShareOfUnmet: snapshot?.trade.toleranceBoundShareOfUnmet.value ?? null,
+    capacityBoundShareOfUnmet: snapshot?.trade.capacityBoundShareOfUnmet.value ?? null,
+    shortageResponsiveShareOfFulfillment:
+      snapshot?.trade.shortageResponsiveShareOfFulfillment.value ?? null,
+    physicalSellThrough: snapshot?.production.physicalSellThrough.value ?? null,
+    labourStaffingRate: snapshot?.production.labourStaffingRate.value ?? null,
+    marketCapHhi: snapshot?.firms.marketCapHhi.value ?? null,
+    medianOwnershipAdjustedSellerHhi:
+      snapshot?.competition?.medianOwnershipAdjustedSellerHhi.value ?? null,
+    medianOwnershipAdjustedBuyerHhi:
+      snapshot?.competition?.medianOwnershipAdjustedBuyerHhi.value ?? null,
+    highConcentrationLowFillShare:
+      snapshot?.competition?.highConcentrationLowFillShare.value ?? null,
+    emptyMarketShare: snapshot?.marketFormation?.emptyShare ?? null,
+    facilityReadyEmptyMarketShare: snapshot?.marketFormation?.facilityReadyEmptyShare ?? null,
+    nppMarketEntryRate:
+      entryFunnel && entryFunnel.corporationsObserved > 0
+        ? entryFunnel.entered / entryFunnel.corporationsObserved
+        : null,
+    nppEntryOutcomesExplainedShare: entryFunnel?.explainedOutcomeShare ?? null,
+    activeTradedListingShare: snapshot?.securities.activeTradedListingShare.value ?? null,
+    noHolderBondShare: snapshot?.securities.noHolderBondShare.value ?? null,
+    sovereignNoHolderBondShare: snapshot?.securities.sovereignNoHolderBondShare?.value ?? null,
+    corporateNoHolderBondShare: snapshot?.securities.corporateNoHolderBondShare?.value ?? null,
+    bondSubscriptionRate: snapshot?.securities.bondSubscriptionRate.value ?? null,
+    twoSidedListingShare: snapshot?.securities.twoSidedListingShare.value ?? null,
+    medianQuotedSpreadPct: snapshot?.securities.medianQuotedSpreadPct.value ?? null,
+    depthToMarketCap: snapshot?.securities.depthToMarketCap.value ?? null,
+    medianFilledOrderExecutionHours:
+      snapshot?.securities.medianFilledOrderExecutionHours.value ?? null,
+    medianAmihudIlliquidity48: snapshot?.securities.medianAmihudIlliquidity48.value ?? null,
+    wealthGini: snapshot?.households.wealthGini.value ?? null,
+    annualizedM2GrowthPct: snapshot?.money.medianAnnualizedM2GrowthPct.value ?? null,
+    transactionalMoneyShare: snapshot?.money.transactionalMoneyShare.value ?? null,
+    externalBroadMoneyShare: snapshot?.money.externalBroadMoneyShare.value ?? null,
+    activeModeledBalanceShare48: snapshot?.money.activeModeledBalanceShare48.value ?? null,
+    modeledGrossVelocity48: snapshot?.money.modeledGrossVelocity48.value ?? null,
+    measurementConfidence: snapshot?.measurement.confidence ?? "unavailable",
+    reconciliationStatus: snapshot?.reconciliation.status ?? "unavailable",
+  };
 }
 
 /** Gini coefficient over non-negative values. 0 = perfect equality, ~1 = max concentration. */
@@ -515,14 +610,27 @@ export async function collectBalanceMetrics(db: Db): Promise<BalanceReport> {
   const gameState = await db.collection("gameState").findOne({ _id: "current" as never });
   const turn = (gameState?.currentTurn as number | undefined) ?? 0;
 
-  const [wealth, electoral, officeTurnover, crises, economy, capacity] = await Promise.all([
-    collectWealthMetrics(db),
-    collectElectoralMetrics(db),
-    collectOfficeTurnoverMetrics(db),
-    collectCrisisMetrics(db),
-    collectEconomyMetrics(db),
-    collectCapacityMetrics(db),
-  ]);
+  const [wealth, electoral, officeTurnover, crises, economy, capacity, vitalSigns] =
+    await Promise.all([
+      collectWealthMetrics(db),
+      collectElectoralMetrics(db),
+      collectOfficeTurnoverMetrics(db),
+      collectCrisisMetrics(db),
+      collectEconomyMetrics(db),
+      collectCapacityMetrics(db),
+      db
+        .collection<EconomicVitalSigns>("economicVitalSigns")
+        .findOne({ turn }, { sort: { turn: -1 } }),
+    ]);
 
-  return { turn, wealth, electoral, officeTurnover, crises, economy, capacity };
+  return {
+    turn,
+    wealth,
+    electoral,
+    officeTurnover,
+    crises,
+    economy,
+    capacity,
+    marketAccess: marketAccessMetricsFromSnapshot(vitalSigns),
+  };
 }

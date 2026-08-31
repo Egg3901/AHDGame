@@ -32,6 +32,7 @@ export const WIKI_REDIRECTS: Record<string, string> = {
   "campaign-presence": "political-operations",
   monarch: "imperial-characters",
   emperor: "imperial-characters",
+  "rosenburgh-inc": "corp-194",
 };
 
 export function getRedirectTarget(slug: string): string | null {

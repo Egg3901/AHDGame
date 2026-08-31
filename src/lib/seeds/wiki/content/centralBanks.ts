@@ -108,7 +108,9 @@ Declaring a float cancels any standing intervention band. They are contradictory
 
 ## Chair selection
 
-When a term expires, a new Chair is selected from a single pool: characters nominated by the country's executives (President/PM/Chancellor). An earlier version of this system also drew 30% of picks from a wealth pool (the nation's richest players); that pool has been removed, a Chair is now always someone the executive put forward, not whoever the leaderboard says is rich this turn.
+**United States.** The Federal Reserve is staffed by appointment, not by the engine. When the chair's term (or any governor's) expires the seat falls vacant, the President nominates a successor, and the Senate votes on the nomination from the FOMC committee page. Nothing below in this section applies to the Fed; see [FOMC / Rate-Setting Board](/wiki/fomc).
+
+**Everywhere else.** When a term expires, a new Chair is selected from a single pool: characters nominated by the country's executives (PM/Chancellor/President). An earlier version of this system also drew 30% of picks from a wealth pool (the nation's richest players); that pool has been removed, a Chair is now always someone the executive put forward, not whoever the leaderboard says is rich this turn.
 
 Lobbying funds shift weights within the pool: spending ₳500,000 on lobbying **doubles** your selection weight.
 
@@ -119,7 +121,7 @@ The selected candidate must **accept** the offer. If they decline, the next elig
 
 ## Setting the prime rate
 
-The Chair sets monetary policy by adjusting the prime rate. The prime rate can be set between **0% and 25%** in **0.25% increments** (e.g., 2.00%, 2.25%, 2.50%). This is done through the character's available actions on the Central Bank page. The prime rate affects:
+The Chair sets monetary policy by adjusting the prime rate. The prime rate can be set between **0% and 25%** in **0.25% increments** (e.g., 2.00%, 2.25%, 2.50%). This is done through the character's available actions on the Central Bank page. At the US Federal Reserve the Chair proposes and the FOMC votes (see [FOMC / Rate-Setting Board](/wiki/fomc)); every other bank's governor sets the rate alone, or the government does where the bank is not independent. The prime rate affects:
 
 ### 1. Corporate bond costs
 

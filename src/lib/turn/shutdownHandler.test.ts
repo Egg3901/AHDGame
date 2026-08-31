@@ -29,16 +29,21 @@ type Handler = (...args: unknown[]) => Promise<void> | void;
 
 function makeFakeProcess(): {
   once: ReturnType<typeof vi.fn>;
+  prependOnceListener: ReturnType<typeof vi.fn>;
   exit: ReturnType<typeof vi.fn>;
   handlers: Map<string, Handler>;
 } {
   const handlers = new Map<string, Handler>();
-  const once = vi.fn((event: string, handler: Handler) => {
+  const register = (event: string, handler: Handler) => {
     handlers.set(event, handler);
     return undefined as unknown as EventEmitter;
-  });
+  };
+  // `once` is kept on the fake so a regression back to it is visible as an
+  // unexpected call, rather than silently registering nothing.
+  const once = vi.fn(register);
+  const prependOnceListener = vi.fn(register);
   const exit = vi.fn();
-  return { once, exit, handlers };
+  return { once, prependOnceListener, exit, handlers };
 }
 
 describe("installGracefulShutdown", () => {
@@ -58,8 +63,26 @@ describe("installGracefulShutdown", () => {
       releaseLock: vi.fn().mockResolvedValue(true),
     });
 
-    expect(fakeProc.once).toHaveBeenCalledWith("SIGTERM", expect.any(Function));
-    expect(fakeProc.once).toHaveBeenCalledWith("SIGINT", expect.any(Function));
+    expect(fakeProc.prependOnceListener).toHaveBeenCalledWith("SIGTERM", expect.any(Function));
+    expect(fakeProc.prependOnceListener).toHaveBeenCalledWith("SIGINT", expect.any(Function));
+  });
+
+  // Regression guard for the 2026-08-28 stuck-turn spate. Next's start-server.js
+  // registers its own SIGTERM handler (ending in process.exit(143)) BEFORE
+  // instrumentation.ts loads this module, so a plain `once` makes us listener #2
+  // and Next's exit truncates our in-flight lock release. We must prepend.
+  it("prepends its signal listeners so Next's exit(143) cannot preempt the release", async () => {
+    const fakeProc = makeFakeProcess();
+    const { installGracefulShutdown } = await import("./shutdownHandler");
+
+    installGracefulShutdown({
+      process: fakeProc as unknown as NodeJS.Process,
+      stopCron: vi.fn(),
+      releaseLock: vi.fn().mockResolvedValue(true),
+    });
+
+    expect(fakeProc.prependOnceListener).toHaveBeenCalledTimes(2);
+    expect(fakeProc.once).not.toHaveBeenCalled();
   });
 
   it("on SIGTERM: stops cron, releases the lock, flushes, then exits 0", async () => {

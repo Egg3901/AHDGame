@@ -54,7 +54,7 @@ So changing your manpower capacity means **passing a bill**. If you want to figh
 
 The bill-proposal modal shows the consequence directly on each level: you will see \` · manpower ×2\` or \` · manpower ×0.6, no conscription\` beside the option, so you can see what a level does to replacements before you file it.
 
-**Simulated nations have no such law**, so they cannot legislate their way up or down. They fall back to a default table, which puts them on **Limited Service**, ×0.8 and no conscription. A playable country that raises its reserve law therefore pulls decisively ahead of every AI-run nation in sustainable army size.
+**Only these four countries carry a reserve law.** Every other nation, playable or not (China, Japan, West Germany, Ireland, Brazil, Nigeria and the Eastern bloc satellites included), has no such law to legislate up or down. They fall back to a default table, which puts them on **Limited Service**, ×0.8 and no conscription. A country that can raise its reserve law therefore pulls decisively ahead of everyone else in sustainable army size, and a country that cannot has to plan its wars around a fixed pool.
 
 ## Replacement mode
 

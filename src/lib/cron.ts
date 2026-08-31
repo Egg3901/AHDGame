@@ -5,9 +5,10 @@ import { applyPriceMultipliers } from "@/lib/corporations/applyPriceMultipliers"
 import { updateCampaignFogOfWar } from "@/lib/campaigns/fogOfWar";
 import { processTurn, getGameState, initializeGameState } from "./turnSystem";
 import { shouldFireBackupTurn } from "./cron/backupFireGuard";
-import { getProcessingLockState } from "./turn/processingLock";
+import { getProcessingLockState, TURN_LOCK_STALE_MS } from "./turn/processingLock";
 import { recordTurnHeapDelta } from "@/lib/observability/heapWatchdog";
 import { getDb } from "@/lib/mongodb";
+import { deploymentServiceSlug } from "@/lib/deploymentIdentity";
 import { sweepPlayerRandomEventsRealtime } from "@/lib/events/pree/driver";
 import { persistApiAbuseScan } from "@/lib/api/abuseDetection";
 import { runRetention } from "@/lib/retention/retention";
@@ -29,11 +30,7 @@ import { runAltDigest } from "@/lib/altDetection/digest";
  * `checkinMargin` is tolerated; beyond that Sentry alerts.
  */
 export function deriveTurnCronMonitorSlug(env: NodeJS.ProcessEnv = process.env): string {
-  const tag = (env.RAILWAY_SERVICE_NAME ?? env.RAILWAY_ENVIRONMENT_NAME ?? "local")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return `turn-cron-${tag || "local"}`;
+  return `turn-cron-${deploymentServiceSlug(env)}`;
 }
 const TURN_CRON_MONITOR_SLUG = deriveTurnCronMonitorSlug();
 const TURN_CRON_MONITOR_CONFIG = {
@@ -49,7 +46,7 @@ const TURN_CRON_MONITOR_CONFIG = {
  * so trip events include the recent per-turn growth pattern.
  */
 async function runTurnWithHeapDiagnostics(
-  source: "primary" | "backup"
+  source: "primary" | "backup" | "stuckLockSweep"
 ): Promise<ReturnType<typeof processTurn>> {
   const before = process.memoryUsage();
   const t0 = Date.now();
@@ -73,6 +70,14 @@ let cronJob: ReturnType<typeof cron.schedule> | null = null;
 let stockExchangeRefreshCron: ReturnType<typeof cron.schedule> | null = null;
 let fogOfWarCron: ReturnType<typeof cron.schedule> | null = null;
 let backupCron: ReturnType<typeof cron.schedule> | null = null;
+let stuckLockRecoveryCron: ReturnType<typeof cron.schedule> | null = null;
+
+/**
+ * How long a turn lock must sit untouched before the 5-minute recovery sweep
+ * will repossess it. Two full stale windows, i.e. twice what the :00/:30 turn
+ * crons require — see the rationale at the sweep itself (#1208).
+ */
+const STUCK_LOCK_SWEEP_MIN_AGE_MS = 2 * TURN_LOCK_STALE_MS;
 let playerEventsSweepCron: ReturnType<typeof cron.schedule> | null = null;
 let apiAbuseScanCron: ReturnType<typeof cron.schedule> | null = null;
 let retentionCron: ReturnType<typeof cron.schedule> | null = null;
@@ -108,6 +113,9 @@ export async function initializeCronJobs() {
   }
   if (backupCron) {
     backupCron.stop();
+  }
+  if (stuckLockRecoveryCron) {
+    stuckLockRecoveryCron.stop();
   }
   if (playerEventsSweepCron) {
     playerEventsSweepCron.stop();
@@ -254,6 +262,101 @@ export async function initializeCronJobs() {
       } catch (error) {
         console.error("[Cron] Error in backup turn processing:", error);
         Sentry.captureException(error, { tags: { component: "cron", job: "backupTurn" } });
+      }
+    },
+    { timezone: "UTC" }
+  );
+
+  // Stuck-lock recovery sweep. STRICTLY a recovery path: it never starts a
+  // turn that is merely due, only repossesses one whose lock has gone stale.
+  //
+  // Why this exists (2026-08-28): when a process dies mid-turn — a redeploy's
+  // SIGTERM, a heapWatchdog trip, or a hard V8 OOM — gameState.isProcessing is
+  // left set with a frozen heartbeat. Recovery previously depended on the turn
+  // cron's own ticks, which are only :00 and :30, so a turn killed at :05 sat
+  // wedged on "Processing..." until :30, and one killed at :35 until the next
+  // :30 — most of an hour. Sweeping every 5 minutes bounds the wedge to roughly
+  // the stale window plus 5 minutes.
+  //
+  // TURN_LOCK_STALE_MS (20 min) is deliberately NOT shortened to speed this up:
+  // it is the safety interlock that stops a second process stealing the lock
+  // from a turn that is alive but not heart-beating (a long synchronous stretch
+  // starves the 30s heartbeat timer). Observed turns have run 666s and 495s.
+  stuckLockRecoveryCron = cron.schedule(
+    "*/5 * * * *",
+    async () => {
+      try {
+        const currentState = await getGameState();
+        if (!currentState?.isActive) return;
+        // Nothing held → nothing to recover. Never fall through to processTurn
+        // here; starting a turn is the :00 / :30 crons' job, not this sweep's.
+        if (!currentState.isProcessing) return;
+
+        // Only ever repossess a TURN lock. gameState's processing lock is shared
+        // with other long operations — the forex migration takes it as
+        // processingKind "forexMigration" — and processTurn's own crash-recovery
+        // guard (shouldRecoverCrashedTurn) bails on a non-turn kind, which means
+        // it would fall through and run a NORMAL turn instead. Since this sweep
+        // fires on every 5-minute boundary rather than only at :00/:30, that
+        // would advance the game clock at an arbitrary time off the hour.
+        // Clearing a stranded migration lock is the admin Reset Lock's job, not
+        // this sweep's: taking it over could corrupt a half-applied migration.
+        if (currentState.processingKind !== "turn") return;
+
+        const lockState = getProcessingLockState(currentState);
+        if (!lockState.isStale) return;
+
+        // Deliberately MORE conservative than the :00/:30 crons, which act as
+        // soon as the lock is stale at TURN_LOCK_STALE_MS.
+        //
+        // #1208 is a real production incident of the hazard: a turn that ran
+        // past the 20-minute threshold WITHOUT heartbeating was taken over by a
+        // second worker while still alive, re-running news-emitting phases and
+        // posting duplicate World News. The dedup added there is explicitly
+        // best-effort, so it mitigates the symptom rather than the race.
+        //
+        // This sweep checks every 5 minutes instead of every 30, so it is far
+        // likelier than those crons to catch a turn in the window where it is
+        // merely blocked (a long synchronous stretch starves the 30s heartbeat
+        // timer) rather than dead. A dead holder never heartbeats again, so
+        // waiting a second full window costs it nothing; a blocked one gets
+        // that much longer to recover and keep its lock. Worst-case wedge is
+        // still bounded well under the up-to-an-hour this sweep exists to fix.
+        const lastTouchMs = lockState.lastTouch?.getTime();
+        const lockAgeMs = lastTouchMs === undefined ? Infinity : Date.now() - lastTouchMs;
+        if (lockAgeMs < STUCK_LOCK_SWEEP_MIN_AGE_MS) return;
+
+        console.warn(
+          `[Cron] Stuck-lock sweep: stale processing lock (lastTouch=${
+            lockState.lastTouch?.toISOString() ?? "none"
+          }, phase=${currentState.processingPhase ?? "none"}, targetTurn=${
+            currentState.processingTargetTurn ?? "none"
+          }); allowing processTurn to take over.`
+        );
+        // Telemetry must never gate recovery: if the Sentry SDK is itself the
+        // failure mode, a throw here would skip the takeover below and leave
+        // the game wedged — the exact outcome this sweep exists to prevent.
+        try {
+          Sentry.captureMessage("Stuck turn lock recovered by sweep", {
+            level: "warning",
+            fingerprint: ["stuck-turn-lock-sweep"],
+            extra: {
+              lastTouch: lockState.lastTouch?.toISOString() ?? null,
+              processingPhase: currentState.processingPhase ?? null,
+              processingTargetTurn: currentState.processingTargetTurn ?? null,
+            },
+          });
+        } catch {
+          // Deliberately swallowed — see above.
+        }
+
+        const result = await runTurnWithHeapDiagnostics("stuckLockSweep");
+        console.log("[Cron] Stuck-lock sweep result:", result);
+      } catch (error) {
+        console.error("[Cron] Error in stuck-lock recovery sweep:", error);
+        Sentry.captureException(error, {
+          tags: { component: "cron", job: "stuckLockSweep" },
+        });
       }
     },
     { timezone: "UTC" }
@@ -459,6 +562,7 @@ export async function initializeCronJobs() {
       process.env.RETENTION_ENABLED === "1" ? "live" : "dry-run"
     }).`
   );
+  console.log("[Cron] Stuck turn-lock recovery sweep will run every 5 minutes.");
   console.log("[Cron] Alt-detection scoring will run every hour at :45 (flag-gated).");
   console.log("[Cron] Alt digest (new suspicious rings) will run daily at 13:00 UTC (flag-gated).");
 }
@@ -478,6 +582,10 @@ export async function restartCronWithSchedule() {
   if (backupCron) {
     backupCron.stop();
     backupCron = null;
+  }
+  if (stuckLockRecoveryCron) {
+    stuckLockRecoveryCron.stop();
+    stuckLockRecoveryCron = null;
   }
   if (playerEventsSweepCron) {
     playerEventsSweepCron.stop();
@@ -521,6 +629,10 @@ export function stopCronJobs() {
   if (backupCron) {
     backupCron.stop();
     backupCron = null;
+  }
+  if (stuckLockRecoveryCron) {
+    stuckLockRecoveryCron.stop();
+    stuckLockRecoveryCron = null;
   }
   if (playerEventsSweepCron) {
     playerEventsSweepCron.stop();

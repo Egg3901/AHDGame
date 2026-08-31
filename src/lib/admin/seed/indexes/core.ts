@@ -108,6 +108,13 @@ export async function seedCoreIndexes(db: Db, log: (msg: string) => void) {
     log
   );
   await ensureIndex(db, "npps", { countryId: 1 }, { name: "npps_countryId" }, log);
+  await ensureIndex(
+    db,
+    "nppForeignPolicyDecisions",
+    { countryId: 1, turn: 1 },
+    { unique: true, name: "nppForeignPolicyDecisions_country_turn" },
+    log
+  );
 
   await ensureIndex(
     db,

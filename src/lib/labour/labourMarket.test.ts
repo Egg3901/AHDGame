@@ -6,6 +6,7 @@ import {
   filledWorkers,
   glideStaffingFactor,
   makeLabourDemandByState,
+  nextLabourParticipationBonus,
   roundTightness,
   staffingFactorFromTightness,
 } from "./labourMarket";
@@ -93,6 +94,19 @@ describe("staffingFactorFromTightness", () => {
     expect(staffingFactorFromTightness(2)).toBe(0.5);
   });
 
+  it("lets higher wages win workers from lower-paying sectors without creating workers", () => {
+    const lowPay = staffingFactorFromTightness(2, 0.8, 1);
+    const highPay = staffingFactorFromTightness(2, 1.2, 1);
+
+    expect(lowPay).toBeCloseTo(0.4, 8);
+    expect(highPay).toBeCloseTo(0.6, 8);
+    expect(1_000 * lowPay + 1_000 * highPay).toBeCloseTo(1_000, 8);
+  });
+
+  it("does not reward a wage increase when every employer raises pay together", () => {
+    expect(staffingFactorFromTightness(2, 1.2, 1.2)).toBeCloseTo(0.5, 8);
+  });
+
   it("rations the live Arizona case down to well under one percent", () => {
     // Tightness ~200: 63.2M jobs wanted against a 314,613 person labour force.
     const factor = staffingFactorFromTightness(200.9);
@@ -109,6 +123,27 @@ describe("staffingFactorFromTightness", () => {
 
   it("ignores a negative tightness rather than inverting the sign of output", () => {
     expect(staffingFactorFromTightness(-3)).toBe(1);
+  });
+});
+
+describe("nextLabourParticipationBonus", () => {
+  it("gradually brings available residents into a tight labour market", () => {
+    const next = nextLabourParticipationBonus(4.8, 0);
+    expect(next).toBeGreaterThan(0);
+    expect(next).toBeLessThanOrEqual(0.25);
+  });
+
+  it("does not inflate participation in a slack market and unwinds prior pressure", () => {
+    expect(nextLabourParticipationBonus(0.8, 0)).toBe(0);
+    expect(nextLabourParticipationBonus(0.8, 2)).toBeLessThan(2);
+  });
+
+  it("stays bounded even when demand is extreme", () => {
+    let bonus = 0;
+    for (let turn = 0; turn < 100; turn++) {
+      bonus = nextLabourParticipationBonus(1_000, bonus);
+    }
+    expect(bonus).toBeLessThanOrEqual(6);
   });
 });
 

@@ -11,6 +11,7 @@ import {
 } from "@/lib/elections/cycleAnchorContext";
 import { electionToLarpYear } from "@/lib/utils/formatters";
 import { generateLandeslistenForCycle } from "@/lib/elections/germanyLandesliste";
+import { snapAnchorEndTime } from "@/lib/elections/snapShift";
 
 /**
  * Convert a prior endTime to a LARP turn number, anchored on `nowRef`'s
@@ -26,10 +27,13 @@ type Db = Awaited<ReturnType<typeof import("@/lib/mongodb").getDb>>;
 
 async function getCurrentTurnAndCtx(
   db: Db
-): Promise<{ currentTurn: number; ctx: CycleAnchorContext }> {
+): Promise<{ currentTurn: number; currentYear: number | undefined; ctx: CycleAnchorContext }> {
   const gs = await db.collection<GameState>("gameState").findOne({ _id: "current" });
   return {
     currentTurn: gs?.currentTurn ?? 1,
+    // Needed by `loadApportionment` so a state admitted mid-game stays in the
+    // seats map — without it the admitted set is built as of the preset year.
+    currentYear: gs?.currentYear,
     ctx: cycleAnchorContextFromGameState(gs),
   };
 }
@@ -84,7 +88,7 @@ export async function spawnHouseElection(db: Db, fromElection: Election, now: Da
   });
   if (existing) return;
 
-  const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
+  const { currentTurn, currentYear, ctx } = await getCurrentTurnAndCtx(db);
   // See foundingPhaseActive: the founding cycle re-spawn loop lives here.
   if (foundingPhaseActive(ctx)) return;
   const spawn = pickNextCanonicalCycle({
@@ -108,7 +112,7 @@ export async function spawnHouseElection(db: Db, fromElection: Election, now: Da
 
   // Live (census-updated) House apportionment; equals the preset seed until a
   // decennial census reapportions (P1d-2).
-  const { houseSeats: liveHouseSeats } = await loadApportionment(db, ctx.preset);
+  const { houseSeats: liveHouseSeats } = await loadApportionment(db, ctx.preset, currentYear);
 
   const newElection: Omit<Election, "_id"> = {
     state: fromElection.state,
@@ -122,7 +126,11 @@ export async function spawnHouseElection(db: Db, fromElection: Election, now: Da
       state: fromElection.state!,
     }),
     status,
-    totalSeats: fromElection.totalSeats ?? liveHouseSeats[fromElection.state!] ?? 1,
+    // Live apportionment FIRST (#1190): inheriting the resolving race's count
+    // handed a delegation reapportioned by the census its stale size, and that
+    // number then propagated to every later cycle. `fromElection.totalSeats`
+    // stays the fallback for a state the seats map does not carry.
+    totalSeats: liveHouseSeats[fromElection.state!] || fromElection.totalSeats || 1,
     startTime,
     primaryEndTime,
     endTime,
@@ -167,10 +175,10 @@ export async function spawnCommonsElection(
   const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
   // See foundingPhaseActive: the founding cycle re-spawn loop lives here.
   if (foundingPhaseActive(ctx)) return;
-  const priorEndTurn =
-    fromElection.electionType === "snap_commons" && fromElection.endTime
-      ? endTimeToLarpTurn(fromElection.endTime, now, currentTurn)
-      : null;
+  // See `snapAnchorEndTime`: a regular prior race and an IMPOSED snap both
+  // yield null, so neither drags the LARP calendar.
+  const snapAnchor = snapAnchorEndTime(fromElection, "snap_commons");
+  const priorEndTurn = snapAnchor ? endTimeToLarpTurn(snapAnchor, now, currentTurn) : null;
 
   const spawn = pickNextCanonicalCycle({
     electionType: "commons",

@@ -65,12 +65,41 @@ export interface CalendarClock {
  * calendar resumes at the era start the moment the real game begins.
  *
  * On normal (non-pre-iteration) worlds both fields are absent → identity, so
- * `calendarTurn(t) === t`. Election SCHEDULING must keep using the raw turn; only
- * calendar/date DISPLAY should route through this.
+ * `calendarTurn(t) === t`.
+ *
+ * Which callers route through this is decided by what the value MEANS, not by
+ * display versus logic:
+ *
+ * - A calendar YEAR or DATE goes through here. That covers display (the status
+ *   bar, crisis dates, career histories) and equally content authored against a
+ *   year: the SCOTUS docket's `decisionYear`, a justice's `departureYear`, an
+ *   era checkpoint's window. Firing those off the raw turn is what decided the
+ *   1962 docket in a world reading 1961 (#1208).
+ * - A COUNT of turns does not. Election scheduling, `durationTurns`, a tenure
+ *   hazard measuring turns served: these are spans and offsets on the raw
+ *   counter, and shifting them here would move the thing being measured.
  */
 export function calendarTurn(rawTurn: number, clock?: CalendarClock): number {
   if (clock?.preIterationActive) return 1;
   return Math.max(1, rawTurn - (clock?.preIterationTurns ?? 0));
+}
+
+/**
+ * The in-game calendar year a raw turn falls in.
+ *
+ * Routes through {@link calendarTurn}, so a founding-phase offset
+ * (`preIterationTurns`) does not push the year ahead of the status bar. Without
+ * a clock this is the plain `startingYear + floor((turn - 1) / TURNS_PER_YEAR)`
+ * every caller used before, so normal worlds are unchanged.
+ *
+ * Use this for ERA SCHEDULING as well as display: content authored against a
+ * calendar year (SCOTUS docket `decisionYear`, justice `departureYear`, cabinet
+ * seat `yearEnabled`) has to fire against the same year the player sees. Firing
+ * off the raw turn is what decided the 1962 docket in a world reading 1961.
+ */
+export function yearOfTurn(turn: number, startingYear: number, clock?: CalendarClock): number {
+  const cal = calendarTurn(turn, clock);
+  return startingYear + Math.floor(Math.max(0, cal - 1) / TURNS_PER_YEAR);
 }
 
 export function formatGameMonth(eventDate: Date | string, anchor: GameDateAnchor): string {

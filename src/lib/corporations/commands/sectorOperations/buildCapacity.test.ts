@@ -144,6 +144,7 @@ describe("buildCapacity — build", () => {
     db.collection("corporateSectors");
     db.collection("characters");
     db.collection("gameState");
+    db.collection("gameConfig");
     db.collection("unownedSectors");
   });
 
@@ -166,6 +167,23 @@ describe("buildCapacity — build", () => {
     expect(JSON.stringify(poolPipeline()[0].$set.headroomUnits)).toContain("$max");
     // `revenue` is restated FROM the post-draw units in its own stage.
     expect(JSON.stringify(poolPipeline()[1].$set.revenue)).toContain("$headroomUnits");
+  });
+
+  it("pauses new Retail capacity during the demand unwind", async () => {
+    await wireMocks(sectorDoc({ sectorType: "retail" }));
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      _id: "default",
+      retailDemandTransitionStartTurn: CURRENT_TURN - 48,
+      retailDemandTransitionTurns: 192,
+    });
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "build", units: 1_000 }), { params });
+    const body = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(body.error).toContain("144 turns remaining");
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
   });
 
   it("does not touch the pool when the order never queues", async () => {

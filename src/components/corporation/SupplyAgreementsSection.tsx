@@ -2,14 +2,19 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useLocale, useTranslations } from "next-intl";
 import {
   COMMODITY_TYPES,
   COMMODITY_LABELS,
   COMMODITY_UNITS,
   type CommodityType,
 } from "@/lib/constants/commodities";
-import { SUPPLY_AGREEMENT_PRICE_BAND } from "@/lib/db/types/supplyAgreement";
+import {
+  CONTRACT_SHORTFALL_PENALTY,
+  SUPPLY_AGREEMENT_PRICE_BAND,
+} from "@/lib/db/types/supplyAgreement";
 import { useToast } from "@/contexts/ToastContext";
+import { supportsCorporationWideSupplyAgreement } from "@/lib/market/commodityMarketScope";
 
 interface SupplyAgreement {
   _id: string;
@@ -26,19 +31,35 @@ interface SupplyAgreement {
   proposedByCorpId: string;
   lastDeliveryTurn?: number;
   lastDeliveredUnits?: number;
+  /** #1147: what the last settlement charged for, and the ceiling it used. */
+  lastShortfallUnits?: number;
+  lastAchievableUnits?: number;
+  lastCreditedProductionUnits?: number;
+  lastShortfallPenaltyAnchor?: number;
+  lastSupplierCashDelta?: number;
+  lastSupplierCashCurrency?: string;
+  lastUnpaidSettlementAnchor?: number;
+}
+
+interface CapacitySnapshot {
+  currentCapacityUnits: number;
+  maxContractUnits: number;
+  achievableUnits: number | null;
 }
 
 interface CorpSearchResult {
   id: string;
   name: string;
   ticker: string | null;
-  /** Home country of the buyer — shown so foreign counterparties are legible. */
+  /** Home country of the buyer, shown so foreign counterparties are legible. */
   countryId: string | null;
 }
 
 const BAND_PCT = Math.round(SUPPLY_AGREEMENT_PRICE_BAND * 100);
+const SHORTFALL_PENALTY_PCT = Math.round(CONTRACT_SHORTFALL_PENALTY * 100);
+const AGREEMENT_COMMODITIES = COMMODITY_TYPES.filter(supportsCorporationWideSupplyAgreement);
 
-/** Fraction premium → signed percent string, e.g. 0.2 → "+20%", -0.1 → "−10%". */
+/** Fraction premium to signed percent string, e.g. 0.2 to "+20%", -0.1 to "−10%". */
 function fmtPremium(fraction: number): string {
   const pct = Math.round(fraction * 100);
   if (pct === 0) return "at market";
@@ -53,7 +74,7 @@ const STATUS_STYLES: Record<SupplyAgreement["status"], string> = {
 };
 
 /**
- * CEO-only panel for private supply agreements — bilateral off-market commodity
+ * CEO-only panel for private supply agreements: bilateral off-market commodity
  * contracts. Lists the corp's agreements grouped by role (as supplier / as
  * buyer) and lets the supplier CEO propose a new one. Gated upstream on
  * `supplyAgreementsEnabled`; only mounted for the corp's CEO.
@@ -69,7 +90,12 @@ export default function SupplyAgreementsSection({
   countryId?: string;
 }) {
   const { showToast } = useToast();
+  const locale = useLocale();
+  const t = useTranslations("corporations.supplyAgreements");
   const [agreements, setAgreements] = useState<SupplyAgreement[]>([]);
+  const [capacityByCommodity, setCapacityByCommodity] = useState<
+    Partial<Record<CommodityType, CapacitySnapshot>>
+  >({});
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -79,7 +105,9 @@ export default function SupplyAgreementsSection({
   const [buyerQuery, setBuyerQuery] = useState("");
   const [buyerResults, setBuyerResults] = useState<CorpSearchResult[]>([]);
   const [selectedBuyer, setSelectedBuyer] = useState<CorpSearchResult | null>(null);
-  const [commodity, setCommodity] = useState<CommodityType>(COMMODITY_TYPES[0]);
+  const [commodity, setCommodity] = useState<CommodityType>(
+    AGREEMENT_COMMODITIES[0] ?? COMMODITY_TYPES[0]
+  );
   const [volumeCap, setVolumeCap] = useState("");
   const [premiumPct, setPremiumPct] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -88,8 +116,12 @@ export default function SupplyAgreementsSection({
     try {
       const res = await fetch(`/api/corporations/${corpId}/supply-agreements`);
       if (res.ok) {
-        const data = (await res.json()) as { agreements: SupplyAgreement[] };
+        const data = (await res.json()) as {
+          agreements: SupplyAgreement[];
+          capacityByCommodity?: Partial<Record<CommodityType, CapacitySnapshot>>;
+        };
         setAgreements(data.agreements ?? []);
+        setCapacityByCommodity(data.capacityByCommodity ?? {});
       }
     } catch {
       // ignore — render empty state
@@ -102,7 +134,7 @@ export default function SupplyAgreementsSection({
     void load();
   }, [load]);
 
-  // Debounced buyer search — player-run private corps across all countries, so
+  // Debounced buyer search for player-run private corps across all countries, so
   // the supplier can contract with a foreign player-owned corp (#106).
   useEffect(() => {
     if (selectedBuyer || buyerQuery.trim().length < 2) {
@@ -197,6 +229,23 @@ export default function SupplyAgreementsSection({
   const visible = showCancelled ? agreements : agreements.filter((a) => a.status !== "cancelled");
   const asSupplier = visible.filter((a) => a.supplierCorpId === corpId);
   const asBuyer = visible.filter((a) => a.buyerCorpId === corpId);
+  const selectedCapacity = capacityByCommodity[commodity];
+
+  const formatUnits = (value: number) => Math.round(value).toLocaleString(locale);
+  const formatAnchor = (value: number) => `₳${Math.round(value).toLocaleString(locale)}`;
+  const formatCash = (value: number, currency?: string) => {
+    if (!currency) return Math.round(value).toLocaleString(locale);
+    try {
+      return new Intl.NumberFormat(locale, {
+        style: "currency",
+        currency,
+        maximumFractionDigits: 0,
+        signDisplay: "always",
+      }).format(value);
+    } catch {
+      return `${currency} ${Math.round(value).toLocaleString(locale)}`;
+    }
+  };
 
   function renderAgreement(a: SupplyAgreement, role: "supplier" | "buyer") {
     const canAccept = role === "buyer" && a.status === "pending";
@@ -232,7 +281,7 @@ export default function SupplyAgreementsSection({
           <span>
             Volume cap:{" "}
             <span className="font-medium text-foreground tabular-nums">
-              {a.volumeCap.toLocaleString("en-US")}/turn
+              {formatUnits(a.volumeCap)}/turn
             </span>
           </span>
           <span>
@@ -246,7 +295,7 @@ export default function SupplyAgreementsSection({
               <>
                 Last delivery:{" "}
                 <span className="font-medium text-foreground tabular-nums">
-                  {Math.max(0, a.lastDeliveredUnits ?? 0).toLocaleString("en-US")}{" "}
+                  {formatUnits(Math.max(0, a.lastDeliveredUnits ?? 0))}{" "}
                   {COMMODITY_UNITS[a.commodity]} on turn {a.lastDeliveryTurn}
                 </span>
               </>
@@ -255,6 +304,68 @@ export default function SupplyAgreementsSection({
             )}
           </p>
         )}
+
+        {role === "supplier" &&
+          (a.status === "active" || a.status === "cancelling") &&
+          Number.isFinite(a.lastDeliveryTurn) &&
+          (a.lastAchievableUnits !== undefined || (a.lastShortfallUnits ?? 0) > 0) && (
+            <div
+              className={`rounded-lg border p-2.5 text-xs ${
+                (a.lastShortfallUnits ?? 0) > 0
+                  ? "border-danger/40 bg-danger/10"
+                  : "border-success/40 bg-success/10"
+              }`}
+            >
+              <p
+                className={`font-semibold ${
+                  (a.lastShortfallUnits ?? 0) > 0 ? "text-danger" : "text-success"
+                }`}
+              >
+                {(a.lastShortfallUnits ?? 0) > 0
+                  ? t("settlement.shortfallDamages")
+                  : t("settlement.noDamages")}
+              </p>
+              <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-muted">
+                <dt>{t("settlement.commitment")}</dt>
+                <dd className="text-right font-medium text-foreground tabular-nums">
+                  {formatUnits(a.volumeCap)} {COMMODITY_UNITS[a.commodity]}
+                </dd>
+                <dt>{t("settlement.damageCeiling")}</dt>
+                <dd className="text-right font-medium text-foreground tabular-nums">
+                  {a.lastAchievableUnits === undefined
+                    ? t("settlement.unknown")
+                    : `${formatUnits(a.lastAchievableUnits)} ${COMMODITY_UNITS[a.commodity]}`}
+                </dd>
+                <dt>{t("settlement.productionCredited")}</dt>
+                <dd className="text-right font-medium text-foreground tabular-nums">
+                  {a.lastCreditedProductionUnits === undefined
+                    ? t("settlement.unknown")
+                    : `${formatUnits(a.lastCreditedProductionUnits)} ${COMMODITY_UNITS[a.commodity]}`}
+                </dd>
+                <dt>{t("settlement.chargeableShortfall")}</dt>
+                <dd className="text-right font-medium text-foreground tabular-nums">
+                  {formatUnits(a.lastShortfallUnits ?? 0)} {COMMODITY_UNITS[a.commodity]}
+                </dd>
+                <dt>{t("settlement.damagesAssessed")}</dt>
+                <dd className="text-right font-medium text-foreground tabular-nums">
+                  {formatAnchor(a.lastShortfallPenaltyAnchor ?? 0)}
+                </dd>
+                <dt>{t("settlement.netCash")}</dt>
+                <dd className="text-right font-medium text-foreground tabular-nums">
+                  {formatCash(a.lastSupplierCashDelta ?? 0, a.lastSupplierCashCurrency)}
+                </dd>
+                {(a.lastUnpaidSettlementAnchor ?? 0) > 0 && (
+                  <>
+                    <dt>{t("settlement.unpaid")}</dt>
+                    <dd className="text-right font-medium text-warning tabular-nums">
+                      {formatAnchor(a.lastUnpaidSettlementAnchor ?? 0)}
+                    </dd>
+                  </>
+                )}
+              </dl>
+              <p className="mt-2 text-muted">{t("settlement.explanation")}</p>
+            </div>
+          )}
 
         {(canAccept || canCancel) && (
           <div className="flex flex-wrap gap-2 border-t border-card-border pt-3">
@@ -377,12 +488,17 @@ export default function SupplyAgreementsSection({
                 onChange={(e) => setCommodity(e.target.value as CommodityType)}
                 className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
               >
-                {COMMODITY_TYPES.map((c) => (
+                {AGREEMENT_COMMODITIES.map((c) => (
                   <option key={c} value={c}>
                     {COMMODITY_LABELS[c]}
                   </option>
                 ))}
               </select>
+              <p className="text-[11px] text-muted">
+                Freight agreements are state-local and cannot be represented by a corporation-wide
+                contract. Freight capacity instead serves haul demand in the state where it
+                operates.
+              </p>
             </div>
 
             {/* Volume cap */}
@@ -399,6 +515,28 @@ export default function SupplyAgreementsSection({
               <p className="text-[11px] text-muted">
                 Units/day reserved for the buyer. Anything your sectors make above this still sells
                 on the open market as normal.
+              </p>
+              {selectedCapacity && (
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-lg border border-card-border bg-card-elevated p-2 text-[11px] text-muted">
+                  <dt>{t("capacity.current")}</dt>
+                  <dd className="text-right font-medium text-foreground tabular-nums">
+                    {formatUnits(selectedCapacity.currentCapacityUnits)}{" "}
+                    {COMMODITY_UNITS[commodity]}
+                  </dd>
+                  <dt>{t("capacity.latestAchievable")}</dt>
+                  <dd className="text-right font-medium text-foreground tabular-nums">
+                    {selectedCapacity.achievableUnits === null
+                      ? t("settlement.unknown")
+                      : `${formatUnits(selectedCapacity.achievableUnits)} ${COMMODITY_UNITS[commodity]}`}
+                  </dd>
+                  <dt>{t("capacity.maximumContract")}</dt>
+                  <dd className="text-right font-medium text-foreground tabular-nums">
+                    {formatUnits(selectedCapacity.maxContractUnits)} {COMMODITY_UNITS[commodity]}
+                  </dd>
+                </dl>
+              )}
+              <p className="text-[11px] text-warning">
+                {t("capacity.penaltyWarning", { penaltyPercent: SHORTFALL_PENALTY_PCT })}
               </p>
             </div>
           </div>

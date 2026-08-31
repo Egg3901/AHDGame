@@ -1,11 +1,19 @@
+import type { PeaceTerm } from "@/lib/military/peaceTerm";
+import { NavalAirPanel } from "./NavalAirPanel";
+import type { NavalAirPanel as NavalAirPanelData } from "./conflictRecordView";
 import type { ReactNode } from "react";
 import { FrontLineMap } from "../combat/components/FrontLineMap";
 import type { ConflictTier } from "@/lib/military/conflictVisibility";
 import type { ForceRow, RecordBattleRow, SideForce } from "./conflictRecordView";
 import { ConflictActions } from "./ConflictActions";
+import { DictateTermsPanel, type DictateTermsView } from "./DictateTermsPanel";
+import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
+import type { ConflictStatus } from "@/lib/db/types/conflict";
 import { CommandChainPanel, CommandLockedPanel, HowThisFrontMoves } from "./CommandChainPanel";
+import { PostedGeneralsPanel, type PostedGeneralRow } from "./PostedGeneralsPanel";
 import { EmployCommandPanel, type EmployableGeneral } from "./EmployCommandPanel";
 import { MomentumPanel, type MomentumView } from "./MomentumPanel";
+import { BelligerentsPanel, type BelligerentsView } from "./BelligerentsPanel";
 import { ForcePanel } from "./ForcePanel";
 import { OrderOfBattlePanel } from "./OrderOfBattlePanel";
 import { WarLog } from "./WarLog";
@@ -29,6 +37,11 @@ export interface ConflictRecordView {
   currentTurn: number;
   status: string;
   statusLabel: string;
+  /**
+   * For a resolved war still under fog: the turn its full record opens to everyone.
+   * Absent on a live war and once the record has opened.
+   */
+  archiveOpensTurn?: number;
   /** What the war was declared for; absent on conflicts predating declarations. */
   warGoal?: string;
   sideALabel: string;
@@ -38,11 +51,27 @@ export interface ConflictRecordView {
   /** Faction entity on a proxy-war side (orients the front; not a belligerent). */
   sideAFaction?: string;
   sideBFaction?: string;
+  /**
+   * Belligerents present under a mutual-defence treaty rather than their own
+   * declaration, already humanised by the page. Optional so a conflict with none (and
+   * every existing test fixture) renders unchanged.
+   */
+  treatyNotes?: { country: string; organization: string; defending: string }[];
   /** Side B's share of the host, 0–100, and where it opened. */
   control: number;
   controlStart: number;
-  /** The host's own drawable regions — geometry only, never ownership. */
+  /** Every entity the war is fought over, anchor first — the conflict zone.
+   *  Absent means "just the anchor", as it does on the document. */
+  hostEntities?: string[];
+  /** The zone's drawable regions — geometry only, never ownership. */
   hostRegionCodes: string[];
+  /**
+   * Whether anything can actually be drawn for this zone: region shards OR a
+   * static proxy-host shard. False drops the map column and lets the rail flow as
+   * a board; absent means "assume yes", so a payload rendered before this shipped
+   * lays out exactly as it did.
+   */
+  hasMap?: boolean;
   /** Whether the host itself fights on either side. */
   hostIsBelligerent: boolean;
 
@@ -62,6 +91,10 @@ export interface ConflictRecordView {
   /** What resolves on the next tick. */
   pending: PendingChip[];
   momentum: MomentumView;
+  /** Who is at this war and what put them there — see `belligerentRoll`.
+   *  Optional for the same reason `hostEntities` is: a page rendered before this
+   *  shipped carries no roll, and the record must still render without it. */
+  belligerents?: BelligerentsView;
 
   /**
    * Settlements already agreed in this war, oldest first. Public: the war's
@@ -71,7 +104,7 @@ export interface ConflictRecordView {
     id: string;
     leaver: string;
     other: string;
-    indemnity: { payer: string; amount: number };
+    term: PeaceTerm;
     justification: string | null;
     turn: number;
   }>;
@@ -90,6 +123,12 @@ export interface ConflictRecordView {
    * reader of the public record does not need to be told they hold none.
    */
   chain: CommandChainView | null;
+  /**
+   * The dictate panel's props, or null. Non-null only for the negotiator of the
+   * country that won this war outright, so the winning side's allies and the losing
+   * side never see it.
+   */
+  dictate: DictateTermsView | null;
   /** Everything ConflictActions needs; null when the viewer may not act here. */
   actions: {
     theaterId: string;
@@ -98,6 +137,12 @@ export interface ConflictRecordView {
     targets: string[];
     pendingTarget: string | null;
   } | null;
+  /**
+   * The viewer nation's generals standing at this front, most senior posting
+   * first. Null outside `command` tier: who is standing where is not public, which
+   * is the same rule `ownForces` follows.
+   */
+  postedHere: PostedGeneralRow[] | null;
   /** The Commanding General's own generals + postings; null for every other seat. */
   employ: {
     countryCode: string;
@@ -122,6 +167,7 @@ export interface ConflictRecordView {
   ownForces?: ForceRow[];
   /** `command` only — a coarse read of the opposing force. */
   enemyBand?: string;
+  navalAir?: NavalAirPanelData;
   /**
    * The viewer nation's unfunded upkeep share (0..1). Readiness recovery is projected
    * against the baseline this suppresses, so a force its nation cannot pay for is not
@@ -135,6 +181,9 @@ const STATUS_COLOR: Record<string, string> = {
   active: "#eab308",
   escalating: "#ff5a3c",
   winding_down: "#86d978",
+  // Amber, like `active`: a war awaiting terms is not over and something is still
+  // owed. Without an entry it fell back to the resolved grey and read as finished.
+  terms_pending: "#eab308",
   resolved: "#8a8a9a",
 };
 
@@ -219,22 +268,47 @@ function Panel({ children }: { children: ReactNode }) {
  * Territory, cumulative casualties and battle outcomes are PUBLIC in every tier.
  * `command` (a posted general, the defense holder or the head of government of a
  * belligerent) additionally sees its own order of battle and a coarse read of the
- * enemy; `archive` (anyone, once the war resolves) sees both sides' per-engagement
- * rosters. The fog is applied SERVER-SIDE in conflictRecordView — this component
+ * enemy; `archive` (anyone, once a resolved war's fog window has lapsed, see
+ * `CONFLICT_ARCHIVE_DELAY_TURNS`) sees both sides' per-engagement rosters. The fog
+ * is applied SERVER-SIDE in conflictRecordView — this component
  * only renders what it was given, so nothing here is a client-side secret.
  *
  * Spec: docs/superpowers/specs/2026-07-26-conflict-ids-and-pages-design.md
  */
+/**
+ * One line describing what a settlement took.
+ *
+ * Player-facing copy, so no em or en dashes and no anchor units: an indemnity is
+ * quoted in the payer's own currency and is printed as a plain figure beside the
+ * country that paid it, never converted to a unit players do not use.
+ */
+function settlementTermText(term: PeaceTerm): string {
+  if (term.kind === "white_peace") {
+    return "A white peace. Neither side prevailed and nothing changed hands.";
+  }
+  if (term.kind === "indemnity") {
+    return term.amount > 0
+      ? `${term.payer} paid an indemnity of ${term.amount.toLocaleString("en-US")}.`
+      : "A white peace. No money changed hands.";
+  }
+  if (term.kind === "regime_change") {
+    return "The government fell and fresh elections were called.";
+  }
+  return `New defence procurement was frozen for ${term.turns} turns.`;
+}
+
 export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }) {
   const statusColor = STATUS_COLOR[c.status] ?? "#8a8a9a";
   const pctB = Math.round(c.control);
   const pctA = 100 - pctB;
   const publicOnly = c.tier === "public";
   // "Nothing opposes you here" is a claim about a LIVE front seen from a side. A
-  // resolved war has returned every unit to reserve, so both sides read as zero —
-  // which would otherwise invite the reader to take ground in a finished war.
+  // concluded war has returned every unit to reserve, so both sides read as zero,
+  // which would otherwise invite the reader to take ground in a finished war. A war
+  // awaiting terms stands its rosters down exactly as a resolved one does, so it has
+  // to be excluded here too.
   const unopposed =
-    c.status !== "resolved" &&
+    !isConflictConcluded(c.status as ConflictStatus) &&
     c.ownSide !== null &&
     (c.ownSide === "A" ? c.forceB : c.forceA).divisions === 0;
 
@@ -328,63 +402,71 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
         <NextTickStrip nextTurn={c.currentTurn + 1} chips={c.pending} />
 
         {/* Deploying to a friendly front is a commitment rather than a gesture,
-            and nothing said so where the decision is actually made. */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            border: "1px solid rgba(207,138,75,.35)",
-            borderRadius: 12,
-            background: "rgba(207,138,75,.06)",
-            padding: "12px 16px",
-            flexWrap: "wrap",
-          }}
-        >
-          <span
+            and nothing said so where the decision is actually made.
+
+            Only for a reader who holds a nation. A logged-out visitor cannot post
+            units anywhere, so the banner was spending the widest strip above the
+            fold on a rule that could never apply to them. It also absorbs the
+            allies-defend-automatically line that used to be restated in the page
+            footer. One rule, one place. */}
+        {c.viewerCountry && (
+          <div
             style={{
-              font: `600 9px ${mono}`,
-              letterSpacing: ".14em",
-              color: MIL_COLOR.amber,
-              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              border: "1px solid rgba(207,138,75,.35)",
+              borderRadius: 12,
+              background: "rgba(207,138,75,.06)",
+              padding: "9px 14px",
+              flexWrap: "wrap",
             }}
           >
-            {c.committedCountry ? `${c.committedCountry} IS COMMITTED` : "COMMITMENT"}
-          </span>
-          <span
-            className="cw-front-rule"
-            style={{
-              width: 1,
-              alignSelf: "stretch",
-              background: "rgba(207,138,75,.25)",
-              flexShrink: 0,
-            }}
-          />
-          <span
-            style={{
-              font: `500 11px ${mono}`,
-              color: "#c8c8d4",
-              lineHeight: 1.6,
-              flex: 1,
-              minWidth: 240,
-            }}
-          >
-            {c.committedCountry ? (
-              <>
-                Your units have fought here, so {c.committedCountry} is a full belligerent in this
-                war — it ends by victory, capitulation or a separate peace, not by walking away.
-                {c.committedDead > 0
-                  ? ` ${c.committedDead.toLocaleString("en-US")} of your men have died at this front.`
-                  : " No one of yours has died here yet."}
-              </>
-            ) : (
-              <>
-                Posting units here commits your country to this war the first time it fights — it
-                then ends by victory, capitulation or a separate peace, not by walking away.
-              </>
-            )}
-          </span>
-        </div>
+            <span
+              style={{
+                font: `600 9px ${mono}`,
+                letterSpacing: ".14em",
+                color: MIL_COLOR.amber,
+                flexShrink: 0,
+              }}
+            >
+              {c.committedCountry ? `${c.committedCountry} IS COMMITTED` : "COMMITMENT"}
+            </span>
+            <span
+              className="cw-front-rule"
+              style={{
+                width: 1,
+                alignSelf: "stretch",
+                background: "rgba(207,138,75,.25)",
+                flexShrink: 0,
+              }}
+            />
+            <span
+              style={{
+                font: `500 11px ${mono}`,
+                color: "#c8c8d4",
+                lineHeight: 1.6,
+                flex: 1,
+                minWidth: 240,
+              }}
+            >
+              {c.committedCountry ? (
+                <>
+                  {c.committedCountry} is a full belligerent: this war ends by victory, capitulation
+                  or a separate peace, not by walking away.
+                  {c.committedDead > 0
+                    ? ` ${c.committedDead.toLocaleString("en-US")} of your men have died here.`
+                    : " None of yours has died here yet."}
+                </>
+              ) : (
+                <>
+                  Posting units here commits your country the first time it fights, and allies
+                  posted to this front defend it automatically.
+                </>
+              )}
+            </span>
+          </div>
+        )}
 
         {c.settlements && c.settlements.length > 0 && (
           <Panel>
@@ -410,11 +492,8 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
                 }}
               >
                 <div style={{ font: `500 12px ${mono}`, color: "#c9c9d6" }}>
-                  {s.leaver} left the war on turn {s.turn}, settling with {s.other}
-                  {s.indemnity.amount > 0
-                    ? ` — ${s.indemnity.payer} paid ${s.indemnity.amount.toLocaleString("en-US")}`
-                    : " — a white peace"}
-                  .
+                  {s.leaver} left the war on turn {s.turn}, settling with {s.other}:{" "}
+                  {settlementTermText(s.term)}
                 </div>
                 {s.justification && (
                   <div
@@ -442,7 +521,7 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
             borderRadius: 14,
             background:
               "linear-gradient(90deg,rgba(59,130,246,.06),rgba(20,20,28,.4) 40%,rgba(220,38,38,.09))",
-            padding: "22px 26px",
+            padding: "16px 20px",
           }}
         >
           <div>
@@ -458,11 +537,11 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
             <div
               style={{
                 fontFamily: serif,
-                fontSize: 29,
+                fontSize: 23,
                 fontWeight: 600,
                 color: MIL_COLOR.textStrong,
                 lineHeight: 1.24,
-                marginTop: 9,
+                marginTop: 7,
                 textWrap: "pretty",
               }}
             >
@@ -472,8 +551,8 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
               style={{
                 font: `500 11.5px ${mono}`,
                 color: MIL_COLOR.textMuted,
-                marginTop: 10,
-                lineHeight: 1.65,
+                marginTop: 7,
+                lineHeight: 1.55,
               }}
             >
               {c.verdictDetail}
@@ -547,7 +626,11 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
                 </div>
               </div>
             </div>
-            <div style={{ marginTop: 14 }}>
+            {/* No treaty prose here. It restated, one sentence per ally, exactly
+                what the BELLIGERENTS roll's entry column already carries as
+                "Warsaw Pact → DD". Same fact, three lines further from the
+                roster it describes. */}
+            <div style={{ marginTop: 12 }}>
               <ControlTrack pctA={pctA} />
             </div>
             <div
@@ -568,39 +651,41 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
           </div>
         </div>
 
-        {/* ── the front, and the seat looking at it ───────────────────── */}
-        <div className="cw-front-body">
-          <div className="cw-front-map">
-            <FrontLineMap
-              hostCountry={c.hostCountry}
-              hostRegionCodes={c.hostRegionCodes}
-              control={c.control}
-              sideACountries={c.sideACountries}
-              sideBCountries={c.sideBCountries}
-              sideAFaction={c.sideAFaction}
-              sideBFaction={c.sideBFaction}
-              sideALabel={c.sideALabel}
-              sideBLabel={c.sideBLabel}
-            />
-          </div>
+        {/* ── the front, and the seat looking at it ─────────────────────
 
+            The map column is dropped entirely when the zone has no drawable
+            geometry (`hasMap`, decided on the server). It used to hold a 620px box
+            containing the sentence "No mapped territory for DD" while every panel
+            worth reading queued down a 452px rail beside it. Without the map the
+            rail stops being a rail and flows as a multi-column board. */}
+        <div className={c.hasMap === false ? "cw-front-body cw-front-nomap" : "cw-front-body"}>
+          {c.hasMap !== false && (
+            <div className="cw-front-map">
+              <FrontLineMap
+                hostCountry={c.hostCountry}
+                hostEntities={c.hostEntities}
+                hostRegionCodes={c.hostRegionCodes}
+                control={c.control}
+                sideACountries={c.sideACountries}
+                sideBCountries={c.sideBCountries}
+                sideAFaction={c.sideAFaction}
+                sideBFaction={c.sideBFaction}
+                sideALabel={c.sideALabel}
+                sideBLabel={c.sideBLabel}
+              />
+            </div>
+          )}
+
+          {/* Order: what this seat can DO, then what it can see, then the war at
+              large. The command surface used to sit fourth behind three reference
+              panels, so the one control on the page opened below the fold. */}
           <div className="cw-front-rail">
-            <MomentumPanel view={c.momentum} />
-
-            <ForcePanel
-              view={{
-                sideALabel: c.sideALabel,
-                sideBLabel: c.sideBLabel,
-                ownSide: c.ownSide,
-                a: c.forceA,
-                b: c.forceB,
-                enemyBand: c.enemyBand ?? null,
-                unopposed,
-                tier: c.tier,
-              }}
-            />
-
             {c.chain && <CommandChainPanel chain={c.chain} viewerCountry={c.viewerCountry} />}
+
+            {/* Above the command surface, not below it: a war awaiting terms takes
+                no more orders, so the one decision still open should be the first
+                thing its holder sees. */}
+            {c.dictate && <DictateTermsPanel view={c.dictate} />}
 
             {/* The command surface — only for a viewer canActAtTheater would admit,
                 and never on a resolved war. The routes enforce it again
@@ -611,9 +696,12 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
               c.chain?.locked && <CommandLockedPanel note={c.chain.locked} />
             )}
 
-            {c.employ && <EmployCommandPanel {...c.employ} />}
+            {/* Above the CG's own lever, because it is the state that lever acts on
+                — and it is the answer the chain panel's "Who is posted here" link
+                now scrolls to. */}
+            {c.postedHere && <PostedGeneralsPanel generals={c.postedHere} />}
 
-            {publicOnly && <HowThisFrontMoves whoDeclares={c.whoDeclares} />}
+            {c.employ && <EmployCommandPanel {...c.employ} />}
 
             {c.ownForces && (
               <OrderOfBattlePanel
@@ -635,6 +723,32 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
                 }}
               />
             )}
+
+            {/* Air and sea sits directly above the ground force panel on purpose: it is
+                the thing that decided part of the battle before the armies met, and
+                reading it after the ground picture makes it look like a footnote. */}
+            {c.navalAir && <NavalAirPanel data={c.navalAir} />}
+
+            <BelligerentsPanel view={c.belligerents} />
+
+            <ForcePanel
+              view={{
+                sideALabel: c.sideALabel,
+                sideBLabel: c.sideBLabel,
+                ownSide: c.ownSide,
+                a: c.forceA,
+                b: c.forceB,
+                enemyBand: c.enemyBand ?? null,
+                unopposed,
+                tier: c.tier,
+                concluded: isConflictConcluded(c.status as ConflictStatus),
+                archiveOpensTurn: c.archiveOpensTurn,
+              }}
+            />
+
+            <MomentumPanel view={c.momentum} />
+
+            {publicOnly && <HowThisFrontMoves whoDeclares={c.whoDeclares} />}
           </div>
         </div>
 
@@ -656,9 +770,14 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
             view={{
               battles: c.battles,
               sideACountries: c.sideACountries,
+              archiveOpensTurn: c.archiveOpensTurn,
+              // Offensives, not offensives AND engagements: the engagement count
+              // is a stat tile at the top of the page, and the two figures side by
+              // side read as a contrast the reader has to work out rather than the
+              // scope note this is meant to be.
               note: `${c.engagements + c.unopposedAdvances} offensive${
                 c.engagements + c.unopposedAdvances === 1 ? "" : "s"
-              } · ${c.engagements} engagement${c.engagements === 1 ? "" : "s"} · ${
+              } · ${
                 publicOnly
                   ? "rosters withheld on both sides"
                   : c.tier === "archive"
@@ -672,13 +791,6 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
             }}
           />
         )}
-
-        {/* The rule that turns a deployment into a war. Stated once more at the
-            foot of the record, where a reader who scrolled past the banner ends
-            up — a coalition front defends itself whether or not you meant it to. */}
-        <div style={{ font: `500 11px ${mono}`, color: MIL_COLOR.textFaint, lineHeight: 1.6 }}>
-          Allies posted to this front defend it automatically.
-        </div>
       </div>
     </div>
   );

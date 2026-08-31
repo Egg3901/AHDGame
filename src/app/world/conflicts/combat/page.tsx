@@ -18,8 +18,10 @@ import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import type { CountryId } from "@/lib/constants/countries";
 import { occupationOf } from "@/lib/military/occupation";
 import { regionCodesOfCountry } from "@/lib/maps/regionOwnership";
+import { hostEntitiesOf } from "@/lib/military/hostEntities";
 import { CombatCommandClient } from "./CombatCommandClient";
 import type { BattleReportView, ConflictView } from "./useCombatState";
+import { toBattleReportView } from "./battleReportView";
 
 // Combat Command — order-of-battle + PvP theater-resolution surface. Gated by
 // conflictsEnabled and styled to match the Cold-War themed island. Units + org come
@@ -76,55 +78,9 @@ export default async function CombatCommandPage() {
   };
 
   // Render each report from the viewer's perspective (offensive vs defensive).
-  const reportViews: BattleReportView[] = reports.map((r) => {
-    const isDeclarer = r.declarerCountry === (country as CountryId);
-    const theaterName = theaterNameOf(r.theaterId);
-    if (!r.result) {
-      return {
-        id: String(r._id),
-        theaterId: r.theaterId,
-        theaterName,
-        turn: r.turn,
-        noContact: true,
-        role: isDeclarer ? "offensive" : "defensive",
-        win: false,
-        ownLoss: 0,
-        enemyLoss: 0,
-        enemyCountry: isDeclarer ? r.targetCountry : r.declarerCountry,
-        // No contact still moves the front when the defender left the front empty.
-        verdict: r.unopposedAdvance
-          ? isDeclarer
-            ? "Unopposed advance"
-            : "Ground lost — no contact"
-          : "No contact",
-        retreat: null,
-        groundPct: groundFor(r),
-      };
-    }
-    const own = isDeclarer ? r.result.attacker : r.result.defender;
-    const enemy = isDeclarer ? r.result.defender : r.result.attacker;
-    return {
-      id: String(r._id),
-      theaterId: r.theaterId,
-      theaterName,
-      turn: r.turn,
-      noContact: false,
-      role: isDeclarer ? "offensive" : "defensive",
-      win: isDeclarer ? r.result.win : !r.result.win,
-      ownLoss: own.loss,
-      enemyLoss: enemy.loss,
-      enemyCountry: enemy.country,
-      verdict: r.result.verdict,
-      // Viewer-relative: the attacker is the declarer, so a break by the attacking
-      // side is "own" only when this viewer declared the offensive.
-      retreat: r.result.retreat
-        ? (r.result.retreat.side === "attacker") === isDeclarer
-          ? ("own" as const)
-          : ("enemy" as const)
-        : null,
-      groundPct: groundFor(r),
-    };
-  });
+  const reportViews: BattleReportView[] = reports.map((r) =>
+    toBattleReportView(r, country, theaterNameOf(r.theaterId), groundFor(r))
+  );
 
   // Territorial state for the fronts this nation actually has forces at — the war
   // room only ever renders those, and each one costs a region lookup. The host's
@@ -134,19 +90,29 @@ export default async function CombatCommandPage() {
   // conflict record page, and the war room's target picker has to be built from it.
   const engagedIds = new Set(units.map((u) => u.theaterId));
   const engagedConflicts = activeConflicts.filter((c) => engagedIds.has(c._id));
-  // Resolve each distinct host country's region codes once — repeated hosts
-  // previously issued one states query per conflict.
-  const hostCountries = [...new Set(engagedConflicts.map((c) => c.hostCountry))];
+  // Every host of every engaged war, not just each war's anchor: a conflict is
+  // fought over `hostEntities`, and the front line is placed as a share of the land
+  // the map can see. Resolving the anchor alone drew half a two-host theatre and
+  // measured the line against that half.
+  //
+  // Still deduped across the whole page, which is what the anchor-keyed version was
+  // for: two wars hosted in the same country previously issued one states query each.
+  const zoneHosts = [...new Set(engagedConflicts.flatMap((c) => hostEntitiesOf(c)))];
   const regionCodesByHost = new Map(
     await Promise.all(
-      hostCountries.map(async (host) => [host, await regionCodesOfCountry(db, host)] as const)
+      zoneHosts.map(async (host) => [host, await regionCodesOfCountry(db, host)] as const)
     )
   );
   const conflictViews: ConflictView[] = await Promise.all(
     engagedConflicts.map(async (c) => {
       const occ = occupationOf(c);
       const occupyingSide = occ.occupier === "A" ? c.sideA : occ.occupier === "B" ? c.sideB : null;
-      const hostRegionCodes = regionCodesByHost.get(c.hostCountry) ?? [];
+      const hostEntities = hostEntitiesOf(c) as string[];
+      // Deduped: two hosts never share a region today, but the union is what the
+      // map filters features against and a repeat would draw one Land twice.
+      const hostRegionCodes = [
+        ...new Set(hostEntities.flatMap((host) => regionCodesByHost.get(host) ?? [])),
+      ];
       // Roster membership only — deliberately NOT `sideOf`'s backer fallback, which
       // would hand a non-belligerent a target list at a war it has no part in. The
       // declare route applies the same rule, so the picker cannot offer a target the
@@ -177,6 +143,7 @@ export default async function CombatCommandPage() {
         occupier: occ.occupier,
         occupierCountry: occupyingSide?.countries[0] ?? null,
         ownSpectrum,
+        hostEntities,
         hostRegionCodes,
       };
     })

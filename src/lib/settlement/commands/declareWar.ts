@@ -113,7 +113,16 @@ export async function declareSettlementWar(
 
   await crises.updateOne(
     { _id: crisisId },
-    { $set: { conflictId: conflict._id, updatedAt: new Date() } }
+    {
+      $set: {
+        conflictId: conflict._id,
+        // Stamped here as well as on the attach road, so both roads into a war
+        // resolve through ONE mechanism. The sides are literal: `sideA` is NATO
+        // and `sideB` is the Warsaw Pact, three lines above.
+        conflictSides: { challenger: "B", incumbent: "A" },
+        updatedAt: new Date(),
+      },
+    }
   );
 
   return { ok: true, conflictId: conflict._id, conflictNumber: conflict.conflictId };

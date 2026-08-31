@@ -16,14 +16,18 @@ import {
   COUNTRY_CURRENCY_MAP,
   INITIAL_RATES,
   MONETARY_BASELINES,
+  eraRateForCurrency,
   getInitialRates,
 } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
   fxRateForCorpFromMap,
+  fxRateForSectorHostFromMap,
   resolveCorpLiquidCurrencyCode,
+  resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
+import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { costPassThroughMultiplier } from "@/lib/market/costPassThrough";
 import { eraForPreset } from "@/lib/seeds/presetSelector";
 import { commodityDemandCalibration } from "@/lib/constants/commodityDemandCalibration";
@@ -60,7 +64,11 @@ import {
   countryCommodityDemandMultiplier,
 } from "@/lib/constants/commodities";
 import { updateScarcityMultiplier } from "@/lib/market/scarcityDrift";
-import { loadActiveSectorDemandModifierPctMap } from "@/lib/events/worldEvents/sectorDemandModifierMap";
+import { retailLegacyDemandFactor } from "@/lib/market/retailDemandTransition";
+import {
+  loadActiveSectorDemandModifierPctMap,
+  loadActiveSectorOutputDemandModifierPctMap,
+} from "@/lib/events/worldEvents/sectorDemandModifierMap";
 import {
   getMarketSystemMode,
   marketAtLeast,
@@ -75,7 +83,11 @@ import {
 } from "@/lib/turn/householdConsumption";
 import { buildCommodityFlowDocs, COMMODITY_FLOW_RETENTION_TURNS } from "@/lib/market/flowLedger";
 import { applyFreightHaulDemand } from "@/lib/logistics/freightDemand";
-import { settleFreightNetwork, type FreightSettlement } from "@/lib/logistics/settlement";
+import {
+  settleFreightNetwork,
+  freightSettlementRampFraction,
+  type FreightSettlement,
+} from "@/lib/logistics/settlement";
 import { buildSourcingDocs, SOURCING_FLOW_RETENTION_TURNS } from "@/lib/logistics/sourcingLedger";
 import { stateHops } from "@/lib/logistics/stateDistance";
 import { importerTariffOnFlow } from "@/lib/trade/tariffDrag";
@@ -97,13 +109,17 @@ import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import type { State } from "@/lib/db/types/state";
 import { COUNTRY_ORDER } from "@/lib/constants/countries";
 import type { CountryId } from "@/lib/constants/countries";
-import { isPlannedEconomy, plannedShare } from "@/lib/constants/commandEconomy";
+import { isCurtained, isPlannedEconomy, plannedShare } from "@/lib/constants/commandEconomy";
 import { plannedEconomyMediaSupplyFactor } from "@/lib/constants/sectorStrategies";
 import { administeredNationalPrice, dualTrackPrice } from "@/lib/economy/administeredPricing";
 import type { GameState } from "@/lib/db/types/gameState";
 import { clearAllCommodities, valueTradeSnapshot } from "@/lib/trade/snapshot";
 import { buildReachableBooks, serializeReachableBooks } from "@/lib/trade/reachableBook";
 import { applyTradeConvergence } from "@/lib/trade/convergence";
+import { blockadeClosureByCountry } from "@/lib/navair/blockade";
+import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
+import { getConflictsCollection } from "@/lib/db/collections/conflicts";
+import type { NavairUnit } from "@/lib/navair/types";
 import { buildTradeAffinity } from "@/lib/trade/tradeAffinity";
 import { TRADE_PRICE_CONVERGENCE_K } from "@/lib/trade/constants";
 import { loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
@@ -265,6 +281,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
           projection: {
             sectorType: 1,
             revenue: 1,
+            countryId: 1,
             stateId: 1,
             corporationId: 1,
             strategyId: 1,
@@ -307,6 +324,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
           projection: {
             _id: 1,
             marketingBudget: 1,
+            liquidCapital: 1,
             headquartersState: 1,
             countryOwnerId: 1,
             countryId: 1,
@@ -388,9 +406,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       .map((c: Corporation) => c._id.toString())
   );
 
-  // Per-corp FX lookup: normalize sector.revenue and marketingBudget to ₳
-  // before feeding commodity-demand math, so corps in different home
-  // currencies contribute correctly to shared supply/demand curves.
+  // Per-corp FX lookup: normalize corp-level fields such as marketingBudget
+  // before feeding commodity-demand math, so corps in different home currencies
+  // contribute correctly to shared supply/demand curves.
   // fxByCurrency is also used later for government healthcare-spending
   // normalization (line ~410) — declared once here and reused below.
   const fxByCurrency = new Map<CurrencyCode, number>(
@@ -416,16 +434,26 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   );
   const activePreset = presetState?.preset ?? "";
   const ledgerCurrentYear = presetState?.currentYear ?? null;
+  for (const code of Object.values(COUNTRY_CURRENCY_MAP) as CurrencyCode[]) {
+    if (fxByCurrency.has(code)) continue;
+    const authoredRate = eraRateForCurrency(code, activePreset);
+    if (authoredRate !== undefined) fxByCurrency.set(code, authoredRate);
+  }
   // Resolved here, above the supply ledger, because a command economy's media
   // produces state information rather than sold advertising. Safe to add: every
   // positional cursor the turn tests stub is already consumed by the parallel
   // block above, so reads from here on fall through to the catch-all.
-  const ledgerCommandEconomyEnabled =
-    (
-      await db
-        .collection<GameConfig>("gameConfig")
-        .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } })
-    )?.commandEconomyEnabled === true;
+  const ledgerConfig = await db.collection<GameConfig>("gameConfig").findOne(
+    { _id: "default" },
+    {
+      projection: {
+        commandEconomyEnabled: 1,
+        retailDemandTransitionStartTurn: 1,
+        retailDemandTransitionTurns: 1,
+      },
+    }
+  );
+  const ledgerCommandEconomyEnabled = ledgerConfig?.commandEconomyEnabled === true;
   const eraRates = getInitialRates(activePreset);
   /** ₳-normalizing FX rate for a country's budget, era-aware. */
   const fxRateForCountry = (countryId: string | undefined): number => {
@@ -440,7 +468,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   };
 
   const currencyByCorpId = new Map<string, { code: CurrencyCode | undefined; rate: number }>();
+  const corporationById = new Map<string, Corporation>();
   for (const corp of allCorporations) {
+    corporationById.set(corp._id.toString(), corp);
     currencyByCorpId.set(corp._id.toString(), {
       code: resolveCorpLiquidCurrencyCode(corp),
       rate: fxRateForCorpFromMap(corp, fxByCurrency),
@@ -490,7 +520,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   const realizedFractionBySectorId = new Map<string, number>();
 
   const sectorData = allSectors.map((s: CorporateSector) => {
-    const fx = currencyByCorpId.get(s.corporationId.toString());
+    const corp = corporationById.get(s.corporationId.toString());
+    const hostCurrencyCode = resolveSectorHostCurrencyCode(s, corp);
+    const hostFxRate = fxRateForSectorHostFromMap(s, corp, fxByCurrency);
     // Embargo symmetry: the same factor sectorTurn applies to this sector's
     // revenue (see the embargoRevenueFactor there) also scales the units it
     // contributes to world supply. A total-embargo suspension is a hard 0.
@@ -513,9 +545,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       );
     return {
       sectorType: s.sectorType,
-      // Anchor-normalize sector.revenue (LOCAL in corp currency post-Task-18A)
-      // so cross-corp supply/demand aggregation compares coherent ₳.
-      revenue: readCorpEconomicAnchor(s.revenue, fx?.code, fx?.rate ?? 1),
+      // Sector economic fields are stored in the host state's currency. Normalize
+      // revenue at the host rate so foreign ownership cannot distort the ledger.
+      revenue: readCorpEconomicAnchor(s.revenue, hostCurrencyCode, hostFxRate),
       stateId: s.stateId,
       // sectorId / corporationId threaded through for dev's extraction-capacity
       // plumbing — used by downstream pricing phases.
@@ -601,6 +633,10 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   const extractionOutputScaleEnabled = await getExtractionOutputScaleEnabled();
   const demographicsDemandEnabled = await getDemographicsDemandEnabled();
   const householdConsumptionEnabled = await getHouseholdConsumptionEnabled();
+  const retailSelfLoopFactor =
+    plantsLedgerEnabled && householdConsumptionEnabled
+      ? retailLegacyDemandFactor(ledgerConfig, turn)
+      : 1;
 
   // Pre-compute extraction capacity multipliers
   const extractionSectors = sectorData.filter((s) => s.sectorType === "extraction");
@@ -715,7 +751,10 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
 
   // World Events v1 Phase 1: active sectorDemandModifier world-event
   // effects (e.g. royal-event's tourism bump), batch-loaded once per turn.
-  const sectorDemandModifierPct = await loadActiveSectorDemandModifierPctMap(db, turn);
+  const [sectorDemandModifierPct, sectorOutputDemandModifierPct] = await Promise.all([
+    loadActiveSectorDemandModifierPctMap(db, turn),
+    loadActiveSectorOutputDemandModifierPctMap(db, turn),
+  ]);
 
   // Compute raw supply/demand in units (retail demand scaled by GDP growth)
   // EXTRACTION SUPPLY = REAL RATIONED OUTPUT (plants).
@@ -753,7 +792,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     // ledger leg (intermediate inputs, macro GDP demand, legacy nameplate
     // supply) in the SAME era unit basis plants `producedUnits` uses. Below
     // plants, and on modern worlds (eraUnitScale 1), this is a pure no-op.
-    plantsLedgerEnabled ? ledgerEraUnitScale : 1
+    plantsLedgerEnabled ? ledgerEraUnitScale : 1,
+    sectorOutputDemandModifierPct,
+    retailSelfLoopFactor
   );
 
   // Plants tier: per-commodity produced/sold units from corporate plants, split
@@ -824,7 +865,21 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     if (budgetLocal <= 0 || !corp.headquartersState) continue;
     const fx = currencyByCorpId.get(corp._id.toString());
     const budgetAnchor = readCorpEconomicAnchor(budgetLocal, fx?.code, fx?.rate ?? 1);
-    const units = (budgetAnchor * MARKETING_ADVERTISING_DEMAND_RATE) / advertisingBasePrice;
+    // Demand is a daily flow, while settlement charges one twenty-fourth each
+    // turn. A corporation may therefore book at most the daily budget its
+    // current treasury can cover for the next turn. Anything beyond that is
+    // unfunded intent, not advertising demand.
+    const liquidCapitalAnchor = readCorpEconomicAnchor(
+      Number.isFinite(corp.liquidCapital) ? corp.liquidCapital : 0,
+      fx?.code,
+      fx?.rate ?? 1
+    );
+    const fundedBudgetAnchor = Math.min(
+      budgetAnchor,
+      Math.max(0, liquidCapitalAnchor) * TURNS_PER_DAY
+    );
+    if (!(fundedBudgetAnchor > 0)) continue;
+    const units = (fundedBudgetAnchor * MARKETING_ADVERTISING_DEMAND_RATE) / advertisingBasePrice;
 
     // Add to global
     const advertisingBal = global.get("advertising")!;
@@ -1188,17 +1243,28 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   }
   // Iron curtain: planned economies trade only among themselves until real
   // east-west trade mechanics exist (owner decision 2026-08-16). Membership is
-  // the engine's own MARKETIZATION_SCHEDULE via isPlannedEconomy, so the
-  // curtain lifts country-by-country on the historical marketization dates.
+  // the engine's own MARKETIZATION_SCHEDULE via isCurtained, so the curtain
+  // lifts country-by-country on the historical marketization dates and the
+  // Tito-split exemption keeps Yugoslavia trading with the open world.
   const curtainedCountries = new Set<string>(
-    COUNTRY_ORDER.filter((c) => isPlannedEconomy(c, ledgerCurrentYear, ledgerCommandEconomyEnabled))
+    COUNTRY_ORDER.filter((c) => isCurtained(c, ledgerCurrentYear, ledgerCommandEconomyEnabled))
   );
+  // Naval blockade pressure, read fresh rather than from persisted navair state.
+  //
+  // `commodityPrices` runs EARLIER in the turn than `navairOperations`, so reading the
+  // persisted channels here would silently use last turn's dispositions: a blockade
+  // would take a turn to bite and nothing in the output would say so. The read is one
+  // indexed query (militaryUnits_domain) and returns an empty map whenever nobody is
+  // blockading anybody, which is the common case.
+  const blockadeClosure = await loadBlockadeClosure(db);
+
   const { affinityFor, capUnitsFor } = buildTradeAffinity({
     ftaPairs,
     blocsByCountry,
     tariffs: tariffDocs,
     embargoes: embargoDocs,
     curtainedCountries,
+    blockadeClosure,
   });
 
   // Build existing price map early: the sourcing pass uses LAST turn's stored
@@ -1210,12 +1276,30 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // Freight is a separately-soaked rollout.  The market ladder enables the
   // ledger needed to observe routes, while this gate decides whether those
   // deliveries constrain next turn's local plant inputs.
-  const freightSettlementConfig = await db
-    .collection<GameConfig>("gameConfig")
-    .findOne({ _id: "default" }, { projection: { freightSettlementMode: 1 } });
+  const freightSettlementConfig = await db.collection<GameConfig>("gameConfig").findOne(
+    { _id: "default" },
+    {
+      projection: {
+        freightSettlementMode: 1,
+        canonicalFreightBillingEnabled: 1,
+        shortageResponsiveSourcingEnabled: 1,
+        freightSettlementRampStartTurn: 1,
+        freightSettlementRampTurns: 1,
+      },
+    }
+  );
   const freightSettlementActive =
     freightSettlementConfig?.freightSettlementMode === "active" &&
     marketAtLeast(marketSystemMode, "clearing");
+  // Gradual freight-settlement ramp (Phase 4): fade the ACTIVE effect in over a
+  // configured window instead of a hard balance step. R scales the cap here and
+  // the persisted billing money below; unset window → 1 (instant, unchanged).
+  const freightRampFraction = freightSettlementRampFraction(freightSettlementConfig, turn);
+  // Canonical freight billing v1 (issue #897): while on, the sourcing pass's
+  // per-state shipping money aggregates are persisted on the network doc for
+  // the next corporation turn to apportion. Off (the default) writes nothing.
+  const canonicalFreightBillingEnabled =
+    freightSettlementConfig?.canonicalFreightBillingEnabled === true;
   let freightSettlement: FreightSettlement | null = null;
 
   // ── Landed-price freight settlement (shadow or active) ──
@@ -1254,8 +1338,13 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       // affinity 0 ⇔ a blocking embargo matches the directed flow.
       isBlocked: (commodity, exporter, importer) =>
         affinityFor(commodity, exporter, importer) === 0,
+      shortageResponsiveSourcingEnabled:
+        freightSettlementConfig?.shortageResponsiveSourcingEnabled === true,
     });
-    const { commodityDocs, networkDoc } = buildSourcingDocs(freightSettlement.sourcing, turn, now);
+    const { commodityDocs, networkDoc } = buildSourcingDocs(freightSettlement.sourcing, turn, now, {
+      includeFreightBilling: canonicalFreightBillingEnabled,
+      billingRampFraction: freightRampFraction,
+    });
     if (commodityDocs.length > 0) {
       // Lazy index for the {commodity} + latest-turn read path, mirroring
       // commodityFlows. Fire-and-forget.
@@ -1274,6 +1363,16 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         }))
       );
     }
+    // Player/telemetry indicator: expose the ramp fraction while it is mid-flight
+    // so the phase-in is legible on the markets tracker and admin view. Only when
+    // an active effect is actually being scaled (mode active or billing on).
+    if (
+      (freightSettlementActive || canonicalFreightBillingEnabled) &&
+      freightRampFraction > 0 &&
+      freightRampFraction < 1
+    ) {
+      networkDoc.freightSettlementRampFraction = Math.round(freightRampFraction * 10000) / 10000;
+    }
     await db
       .collection("sourcingNetworkLoad")
       .updateOne({ turn }, { $set: networkDoc }, { upsert: true });
@@ -1285,9 +1384,10 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       ]);
     }
 
-    // Freight demand wiring (ticket #1039): haul TEU is booked as real freight
-    // demand before clearing, so the Logistics map and sold % read one market.
-    applyFreightHaulDemand(freightSettlement.sourcing.freightTeuByState, {
+    // Freight demand wiring (ticket #1039): price-tolerant haul TEU, including
+    // the final requests refused by local capacity, is booked before clearing.
+    // Observed network load remains separately available as freightTeuByState.
+    applyFreightHaulDemand(freightSettlement.sourcing.freightDemandTeuByState, {
       global,
       byState,
       byCountry,
@@ -1578,9 +1678,14 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
           countryId && nationalPrices[countryId] != null
             ? nationalPrices[countryId]
             : globalMktPrice;
+        // Ramp the cap in: blend from full supply (R=0) toward the
+        // freight-limited delivered supply (R=1). At R=1 this is the plain
+        // capped value; a partial ramp softens the sales cap proportionally.
+        const cappedDelivered =
+          freightSettlement?.deliveredSupplyByCommodity.get(commodity)?.get(stateId) ??
+          stateBal.supply;
         const deliveredSupply = freightSettlementActive
-          ? (freightSettlement?.deliveredSupplyByCommodity.get(commodity)?.get(stateId) ??
-            stateBal.supply)
+          ? stateBal.supply + freightRampFraction * (cappedDelivered - stateBal.supply)
           : stateBal.supply;
         const regionalLeg = isMacroPriceBlend
           ? nationalLeg
@@ -1807,4 +1912,44 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     statesWithActivity: statesWithActivity.size,
     tradeClearedVolume: tradeSnapshot.world.clearedVolume,
   };
+}
+
+/**
+ * Blockade closure per country for this turn.
+ *
+ * Returns an empty map when no war is running, so a peacetime world does two cheap
+ * indexed reads and nothing else. Kept here rather than in the navair turn pass because
+ * commodity prices resolve earlier in the turn and must not read stale dispositions.
+ */
+async function loadBlockadeClosure(db: Db): Promise<Map<string, number>> {
+  // Projection passed as a find option rather than via the cursor's .project(), which is
+  // this codebase's house style and does not require a cursor implementation of it.
+  const conflicts = (await getConflictsCollection(db)
+    .find({ status: "active" }, { projection: { "sideA.countries": 1, "sideB.countries": 1 } })
+    .toArray()) as unknown as Array<{
+    sideA?: { countries?: string[] };
+    sideB?: { countries?: string[] };
+  }>;
+  if (!conflicts.length) return new Map();
+
+  const hostility = new Map<string, Set<string>>();
+  const link = (a: string, b: string) => {
+    if (!hostility.has(a)) hostility.set(a, new Set());
+    hostility.get(a)!.add(b);
+  };
+  for (const c of conflicts) {
+    for (const a of c.sideA?.countries ?? []) {
+      for (const b of c.sideB?.countries ?? []) {
+        link(a, b);
+        link(b, a);
+      }
+    }
+  }
+
+  const navalUnits = (await getMilitaryUnitsCollection(db)
+    .find({ domain: "naval" })
+    .toArray()) as unknown as NavairUnit[];
+  if (!navalUnits.length) return new Map();
+
+  return blockadeClosureByCountry(navalUnits, hostility);
 }

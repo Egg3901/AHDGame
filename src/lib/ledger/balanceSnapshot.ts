@@ -6,6 +6,7 @@ import { accountId } from "@/lib/ledger/accounts";
 import type { BalanceSnapshot } from "@/lib/ledger/types";
 
 export const BALANCE_SNAPSHOTS_COLLECTION = "balanceSnapshots";
+export const BALANCE_CHECKPOINTS_COLLECTION = "balanceSnapshotCheckpoints";
 
 /**
  * Snapshot the authoritative money-balance fields into a per-turn account→₳ map.
@@ -44,6 +45,12 @@ function add(balances: Record<string, number>, account: string, anchor: number):
 }
 
 export async function collectBalances(db: Db): Promise<Record<string, number>> {
+  return (await collectBalanceState(db)).balances;
+}
+
+async function collectBalanceState(
+  db: Db
+): Promise<{ balances: Record<string, number>; anchorRates: Record<string, number> }> {
   const rates = await loadAnchorRates(db);
   const balances: Record<string, number> = {};
 
@@ -138,7 +145,7 @@ export async function collectBalances(db: Db): Promise<Record<string, number>> {
     );
   }
 
-  return balances;
+  return { balances, anchorRates: Object.fromEntries(rates) };
 }
 
 function countryCurrency(countryId?: string): CurrencyCode {
@@ -158,12 +165,13 @@ export async function writeBalanceSnapshot(
   opts: { rebaselined?: boolean } = {}
 ): Promise<number> {
   try {
-    const balances = await collectBalances(db);
+    const { balances, anchorRates } = await collectBalanceState(db);
     const doc: BalanceSnapshot = {
       _id: new ObjectId(),
       turn,
       createdAt: new Date(),
       balances,
+      anchorRates,
       ...(opts.rebaselined ? { rebaselined: true } : {}),
     };
     // Idempotent per turn — re-running a turn replaces its snapshot.
@@ -177,6 +185,38 @@ export async function writeBalanceSnapshot(
   }
 }
 
+/**
+ * Capture balances immediately before the one phase that reprices every
+ * currency. Reconciliation uses this checkpoint to separate cash movement
+ * from the valuation change caused by forexTurn.
+ */
+export async function writePreForexBalanceCheckpoint(db: Db, turn: number): Promise<number> {
+  try {
+    const { balances, anchorRates } = await collectBalanceState(db);
+    const doc: BalanceSnapshot = {
+      _id: new ObjectId(),
+      turn,
+      createdAt: new Date(),
+      balances,
+      anchorRates,
+    };
+    await db
+      .collection<BalanceSnapshot>(BALANCE_CHECKPOINTS_COLLECTION)
+      .replaceOne({ turn }, doc, { upsert: true });
+    return Object.keys(balances).length;
+  } catch (err) {
+    Sentry.captureException(err, { extra: { phase: "writePreForexBalanceCheckpoint", turn } });
+    return 0;
+  }
+}
+
 export async function loadBalanceSnapshot(db: Db, turn: number): Promise<BalanceSnapshot | null> {
   return db.collection<BalanceSnapshot>(BALANCE_SNAPSHOTS_COLLECTION).findOne({ turn });
+}
+
+export async function loadPreForexBalanceCheckpoint(
+  db: Db,
+  turn: number
+): Promise<BalanceSnapshot | null> {
+  return db.collection<BalanceSnapshot>(BALANCE_CHECKPOINTS_COLLECTION).findOne({ turn });
 }

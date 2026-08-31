@@ -5,6 +5,9 @@ import { DEFAULT_GAME_STATE_FLAGS } from "@/lib/seeds/reference/featureFlagDefau
 import { gameConfig as gameConfigDefaults } from "@/lib/seeds/reference/gameConfig";
 
 type NppAutonomyLevel = "off" | "v0" | "v1" | "v2" | "v3" | "v4";
+type NppForeignPolicyMode = "off" | "shadow" | "active";
+type NppForeignPolicyStage = "votes" | "proposals" | "trade" | "support" | "war";
+type NppEntryViabilityMode = "off" | "observe" | "enforce";
 
 interface BooleanGate {
   key: string;
@@ -167,6 +170,70 @@ const NPP_LEVELS: { value: NppAutonomyLevel; label: string; blurb: string }[] = 
   },
 ];
 
+const NPP_FOREIGN_POLICY_MODES: {
+  value: NppForeignPolicyMode;
+  label: string;
+  blurb: string;
+}[] = [
+  { value: "off", label: "Off", blurb: "Do not plan or execute autonomous foreign policy." },
+  {
+    value: "shadow",
+    label: "Shadow",
+    blurb: "Score and audit decisions without changing diplomacy, trade, or conflicts.",
+  },
+  {
+    value: "active",
+    label: "Active",
+    blurb: "Execute at most one scored action per country and strategic cycle.",
+  },
+];
+
+const NPP_FOREIGN_POLICY_STAGES: {
+  value: NppForeignPolicyStage;
+  label: string;
+  blurb: string;
+}[] = [
+  { value: "votes", label: "Votes", blurb: "Cast scored votes on pending organization business." },
+  {
+    value: "proposals",
+    label: "Proposals",
+    blurb: "Also table trade, aid, sanctions, and statement proposals.",
+  },
+  {
+    value: "trade",
+    label: "Trade",
+    blurb: "Also introduce targeted tariff bills and manage temporary embargoes.",
+  },
+  {
+    value: "support",
+    label: "Support",
+    blurb: "Also provide non-belligerent material support in existing wars.",
+  },
+  {
+    value: "war",
+    label: "War",
+    blurb: "Also seek guarded war entry, conduct operations, and pursue peace.",
+  },
+];
+
+const NPP_ENTRY_VIABILITY_MODES: {
+  value: NppEntryViabilityMode;
+  label: string;
+  blurb: string;
+}[] = [
+  { value: "off", label: "Off", blurb: "Use the legacy autonomous mine placement rules." },
+  {
+    value: "observe",
+    label: "Observe",
+    blurb: "Record which mature losing cohorts would be blocked, but place mines normally.",
+  },
+  {
+    value: "enforce",
+    label: "Enforce",
+    blurb: "Block only new autonomous mines in mature cohorts that fail the viability gate.",
+  },
+];
+
 /**
  * Graduated system modes that live on gameConfig instead of gameState. Writes
  * go through the existing per-system PATCH routes (NOT /feature-gates) because
@@ -252,6 +319,9 @@ const SYSTEM_MODES: SystemMode[] = [
 interface GatesState {
   booleans: Record<string, boolean>;
   nppAutonomyLevel: NppAutonomyLevel;
+  nppForeignPolicyMode: NppForeignPolicyMode;
+  nppForeignPolicyStage: NppForeignPolicyStage;
+  nppEntryViabilityMode: NppEntryViabilityMode;
 }
 
 function DefaultBadge() {
@@ -332,8 +402,20 @@ export function FeatureGatesPanel() {
         setError(data.error || "Failed to update gate");
         return;
       }
-      if (data.booleans && data.nppAutonomyLevel) {
-        setState({ booleans: data.booleans, nppAutonomyLevel: data.nppAutonomyLevel });
+      if (
+        data.booleans &&
+        data.nppAutonomyLevel &&
+        data.nppForeignPolicyMode &&
+        data.nppForeignPolicyStage &&
+        data.nppEntryViabilityMode
+      ) {
+        setState({
+          booleans: data.booleans,
+          nppAutonomyLevel: data.nppAutonomyLevel,
+          nppForeignPolicyMode: data.nppForeignPolicyMode,
+          nppForeignPolicyStage: data.nppForeignPolicyStage,
+          nppEntryViabilityMode: data.nppEntryViabilityMode,
+        });
       }
     } catch {
       setError("Network error");
@@ -433,7 +515,7 @@ export function FeatureGatesPanel() {
         </p>
       ) : null}
 
-      {/* NPP autonomy — 5-state level selector */}
+      {/* NPP autonomy level selector */}
       <div className="mb-5 rounded-lg border border-card-border bg-background/40 p-4">
         <div className="mb-1 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -445,7 +527,7 @@ export function FeatureGatesPanel() {
           </span>
         </div>
         <p className="mb-3 text-xs text-muted">
-          Fresh seeds start at <span className="font-semibold">v0</span>.{" "}
+          Fresh seeds start at <span className="font-semibold">v4</span>.{" "}
           {NPP_LEVELS.find((l) => l.value === state.nppAutonomyLevel)?.blurb}
         </p>
         <div className="inline-flex flex-wrap gap-1 rounded-lg border border-card-border bg-card p-1">
@@ -483,6 +565,149 @@ export function FeatureGatesPanel() {
             </li>
           ))}
         </ul>
+      </div>
+
+      <div className="mb-5 rounded-lg border border-card-border bg-background/40 p-4">
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <span className="text-sm font-semibold">NPP foreign policy</span>
+          <span className="text-[10px] uppercase tracking-wider text-muted">
+            {
+              NPP_FOREIGN_POLICY_MODES.find((mode) => mode.value === state.nppForeignPolicyMode)
+                ?.label
+            }
+          </span>
+        </div>
+        <p className="mb-3 text-xs text-muted">
+          Defaults to shadow when absent. Active mode can cast organization votes, table diplomacy,
+          aid allies, support alliance war entry, impose embargoes, and introduce tariff bills.
+        </p>
+        <div className="inline-flex flex-wrap gap-1 rounded-lg border border-card-border bg-card p-1">
+          {NPP_FOREIGN_POLICY_MODES.map((mode) => {
+            const active = state.nppForeignPolicyMode === mode.value;
+            return (
+              <button
+                key={mode.value}
+                type="button"
+                disabled={savingKey === "foreign-policy-mode"}
+                title={mode.blurb}
+                onClick={() =>
+                  void post(
+                    { kind: "foreign-policy-mode", value: mode.value },
+                    "foreign-policy-mode"
+                  )
+                }
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+                  active
+                    ? "bg-primary text-white"
+                    : "text-muted hover:bg-background hover:text-foreground"
+                }`}
+              >
+                {mode.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-3 border-t border-card-border pt-2.5 text-[11px] leading-relaxed text-muted">
+          {
+            NPP_FOREIGN_POLICY_MODES.find((mode) => mode.value === state.nppForeignPolicyMode)
+              ?.blurb
+          }
+        </p>
+        <div className="mt-3 border-t border-card-border pt-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold">Active capability stage</span>
+            <span className="text-[10px] uppercase tracking-wider text-muted">
+              {
+                NPP_FOREIGN_POLICY_STAGES.find(
+                  (stage) => stage.value === state.nppForeignPolicyStage
+                )?.label
+              }
+            </span>
+          </div>
+          <div className="inline-flex flex-wrap gap-1 rounded-lg border border-card-border bg-card p-1">
+            {NPP_FOREIGN_POLICY_STAGES.map((stage) => {
+              const active = state.nppForeignPolicyStage === stage.value;
+              return (
+                <button
+                  key={stage.value}
+                  type="button"
+                  disabled={savingKey === "foreign-policy-stage"}
+                  title={stage.blurb}
+                  onClick={() =>
+                    void post(
+                      { kind: "foreign-policy-stage", value: stage.value },
+                      "foreign-policy-stage"
+                    )
+                  }
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+                    active
+                      ? "bg-primary text-white"
+                      : "text-muted hover:bg-background hover:text-foreground"
+                  }`}
+                >
+                  {stage.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-muted">
+            {
+              NPP_FOREIGN_POLICY_STAGES.find((stage) => stage.value === state.nppForeignPolicyStage)
+                ?.blurb
+            }
+          </p>
+        </div>
+      </div>
+
+      <div className="mb-5 rounded-lg border border-card-border bg-background/40 p-4">
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold">NPP entry viability</span>
+            <DefaultBadge />
+          </div>
+          <span className="text-[10px] uppercase tracking-wider text-muted">
+            {
+              NPP_ENTRY_VIABILITY_MODES.find((mode) => mode.value === state.nppEntryViabilityMode)
+                ?.label
+            }
+          </span>
+        </div>
+        <p className="mb-3 text-xs text-muted">
+          Safety rollout for autonomous mine founding. Observe is the seed and legacy-world default,
+          so deployment cannot reject a placement until an admin explicitly promotes it.
+        </p>
+        <div className="inline-flex flex-wrap gap-1 rounded-lg border border-card-border bg-card p-1">
+          {NPP_ENTRY_VIABILITY_MODES.map((mode) => {
+            const active = state.nppEntryViabilityMode === mode.value;
+            return (
+              <button
+                key={mode.value}
+                type="button"
+                disabled={savingKey === "npp-entry-viability-mode"}
+                title={mode.blurb}
+                onClick={() =>
+                  void post(
+                    { kind: "npp-entry-viability-mode", value: mode.value },
+                    "npp-entry-viability-mode"
+                  )
+                }
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+                  active
+                    ? "bg-primary text-white"
+                    : "text-muted hover:bg-background hover:text-foreground"
+                }`}
+              >
+                {mode.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-3 border-t border-card-border pt-2.5 text-[11px] leading-relaxed text-muted">
+          {
+            NPP_ENTRY_VIABILITY_MODES.find((mode) => mode.value === state.nppEntryViabilityMode)
+              ?.blurb
+          }
+        </p>
       </div>
 
       {/* Graduated system modes (gameConfig) */}

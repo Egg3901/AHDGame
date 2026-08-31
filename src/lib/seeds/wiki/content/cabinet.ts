@@ -81,7 +81,18 @@ A cabinet position becomes vacant when:
 - The President is vacated (upon a new President taking office, all cabinet positions reset)
 - An election cycle changes the White House party (standard practice: all secretaries submit resignation letters)
 
-When vacant, the position is open for a new presidential nomination. The turn processor does not auto-fill cabinet positions; the President must actively nominate.
+When vacant, the position is open for a new presidential nomination. The turn processor never auto-fills cabinet positions; the President must actively nominate, or bridge the gap with an acting appointment.
+
+## Acting secretaries
+
+A President can seat an **acting secretary** in a vacant cabinet seat directly from the cabinet page, without a Senate vote. The appointment exists to stop a department going dark while confirmation is pending, and it is deliberately a caretaker post:
+
+- **One acting appointment per office per term.** When it lapses the seat falls vacant again and the charge is not given back, so that office can only be filled by Senate confirmation for the rest of the term.
+- **It lasts 24 turns.** The cabinet page shows an Acting badge with the turns remaining.
+- **It needs a vacant seat.** An acting appointment cannot remove a sitting confirmed secretary, cannot install a nominee the Senate has already rejected, and cannot fill a department that does not exist in the current era.
+- **Confirmation always wins.** An acting appointment does not cancel a pending nomination, and when the Senate confirms someone they replace the acting secretary at once.
+- **It runs the department, it does not commit it.** An acting secretary can issue ministerial orders, move and assign units, declare offensives, recruit, set funding levels and split an appropriated budget. They cannot change the department's stance, commission or dismiss commanders, adopt doctrine, move the nuclear programme, award or cancel defence contracts, run debt operations, or open, close and expand estates, plants and infrastructure projects. A locked control says so where it sits.
+- **It costs approval.** Each acting secretary on the books costs half a point of national approval, shown as its own line on the rating. An empty cabinet costs far more. See [Government Approval](/wiki/government-approval).
 
 ## Strategic considerations
 

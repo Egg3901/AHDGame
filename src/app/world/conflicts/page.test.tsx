@@ -59,8 +59,38 @@ vi.mock("@/lib/mongodb", () => ({
     }),
   })),
 }));
+const resolvedWar = {
+  _id: "c-manchuria",
+  conflictId: 3,
+  name: "Manchurian Front",
+  hostCountry: "CN",
+  region: "eas",
+  type: "interstate",
+  sideA: { label: "NATO", countries: ["US"], kind: "coalition", backer: "west" },
+  sideB: { label: "PLA", countries: ["CN"], kind: "state", backer: "east" },
+  bloc: "contested",
+  terrain: "Continental",
+  severity: "HIGH",
+  baseStrength: 470,
+  supplyA: 60,
+  supplyB: 60,
+  terr: 1.0,
+  infra: 60,
+  enemyMix: ["armor"],
+  intensity: 70,
+  control: 100,
+  controlStart: 50,
+  status: "resolved",
+  createdBy: "player",
+  startTurn: 1,
+  endTurn: 2,
+  outcome: { winner: "B", note: "PLA took full control of CN." },
+};
+
+const listResolvedConflicts = vi.fn(async (_db: unknown, _limit: number) => [resolvedWar]);
 vi.mock("@/lib/db/collections/conflicts", () => ({
   listActiveConflicts: vi.fn(async () => []),
+  listResolvedConflicts: (db: unknown, limit: number) => listResolvedConflicts(db, limit),
 }));
 vi.mock("@/lib/db/collections/battleReports", () => ({
   casualtiesByTheater: vi.fn(async () => ({})),
@@ -78,6 +108,27 @@ vi.mock("@/lib/coldwar/tension", () => ({
     vietnam: 0,
     crises: 0,
     nuclear: 0,
+    wars: 0,
+  })),
+}));
+vi.mock("@/lib/coldwar/standingPressure", () => ({
+  conflictWarPressureInput: vi.fn((conflict) => conflict),
+  buildStandingPressureSnapshot: vi.fn(() => ({
+    totalWarheads: 0,
+    pressures: {
+      escalationLevel: 0,
+      activeCrises: 2,
+      totalWarheads: 0,
+      nuclearWarIntensity: 0,
+      nuclearWarCount: 0,
+      otherWarIntensity: 0,
+    },
+    warSummary: {
+      nuclearWarIntensity: 0,
+      otherWarIntensity: 0,
+      activeWarCount: 0,
+      nuclearWarCount: 0,
+    },
   })),
 }));
 vi.mock("@/lib/coldwar/dials", () => ({
@@ -95,6 +146,34 @@ vi.mock("./_coldwar/GlobalConflictsBoard", () => ({
 }));
 
 afterEach(cleanup);
+
+describe("ConflictsPage historical conflicts", () => {
+  // The live board drops a war the moment it resolves, and nothing else linked to
+  // its record. The history section is the only way back to it.
+  it("lists a resolved war with its outcome and a link to its record", async () => {
+    render(await ConflictsPage());
+
+    expect(screen.getByText(/HISTORICAL CONFLICTS/)).toBeTruthy();
+    expect(screen.getByText("Manchurian Front")).toBeTruthy();
+    expect(screen.getByText("PLA victory")).toBeTruthy();
+    const link = screen.getByRole("link", { name: /open record/i });
+    expect(link.getAttribute("href")).toBe("/world/conflicts/3");
+    // Bounded: the hub is not the whole archive.
+    expect(listResolvedConflicts).toHaveBeenCalledWith(expect.anything(), 24);
+  });
+
+  it("says when a fresh war's full record opens", async () => {
+    render(await ConflictsPage());
+    // Ended on turn 2; the page's clock is turn 4, so the fog is still down.
+    expect(screen.getByText(/FOG LIFTS T482/)).toBeTruthy();
+  });
+
+  it("shows an empty state when no war has concluded", async () => {
+    listResolvedConflicts.mockResolvedValueOnce([]);
+    render(await ConflictsPage());
+    expect(screen.getByText(/No war has yet concluded/)).toBeTruthy();
+  });
+});
 
 describe("ConflictsPage global response feed", () => {
   it("shows international response crises even when their response scope is national", async () => {

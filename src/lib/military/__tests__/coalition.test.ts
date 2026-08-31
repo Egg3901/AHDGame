@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mergeOffensives, defendersAtFront } from "../coalition";
+import { mergeOffensives, defendersAtFront, autoJoinersAtFront } from "../coalition";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import type { BattleDeclarationDoc } from "@/lib/db/types/battleDeclaration";
 
@@ -28,6 +28,38 @@ const decl = (o: DeclOverrides) =>
   }) as unknown as BattleDeclarationDoc;
 
 describe("mergeOffensives", () => {
+  // Order is not cosmetic. The resolver fights the offensives it is handed in order,
+  // and each one leaves the front and both armies changed for the next, so whichever
+  // comes first fights at full strength and takes its ground first. Declarations
+  // arrive in database order, which is not specified — the same rule the attacker
+  // roster is already normalised by decides this too: earliest declaration wins.
+  it("orders offensives by the earliest declaration, not by database order", () => {
+    const out = mergeOffensives(
+      conflict,
+      [
+        decl({ _id: "d9", declarerCountry: "CN", targetCountry: "US", declaredTurn: 40 }),
+        decl({ _id: "d2", declarerCountry: "US", targetCountry: "CN", declaredTurn: 39 }),
+      ],
+      41,
+      BLOCS
+    );
+    expect(out).toHaveLength(2);
+    expect(out.map((o) => o.side)).toEqual(["A", "B"]);
+  });
+
+  it("breaks an order tie on the same turn by declaration id", () => {
+    const out = mergeOffensives(
+      conflict,
+      [
+        decl({ _id: "d9", declarerCountry: "CN", targetCountry: "US" }),
+        decl({ _id: "d2", declarerCountry: "US", targetCountry: "CN" }),
+      ],
+      41,
+      BLOCS
+    );
+    expect(out.map((o) => o.side)).toEqual(["A", "B"]);
+  });
+
   it("merges two allies attacking the same enemy side at the same front", () => {
     const out = mergeOffensives(
       conflict,
@@ -221,5 +253,58 @@ describe("defendersAtFront", () => {
       { countryId: "CN", theaterId: "t1" },
     ];
     expect(defendersAtFront(conflict, many, "t1", "B", BLOCS)).toEqual(["CN"]);
+  });
+});
+
+describe("autoJoinersAtFront", () => {
+  const units = [
+    { countryId: "US", theaterId: "t1" },
+    { countryId: "UK", theaterId: "t1" },
+    { countryId: "CN", theaterId: "t1" },
+    { countryId: "UK", theaterId: "t2" },
+  ];
+
+  it("includes an ally that opted in and has troops at the front", () => {
+    expect(autoJoinersAtFront(conflict, units, "t1", "A", BLOCS, new Set(["UK"]))).toEqual(["UK"]);
+  });
+
+  it("excludes an ally that has not opted in", () => {
+    // The whole point of the toggle: silence means the old behaviour.
+    expect(autoJoinersAtFront(conflict, units, "t1", "A", BLOCS, new Set())).toEqual([]);
+  });
+
+  it("excludes an opted-in country with no troops at THIS front", () => {
+    // US is posted to t1 only. Opting in does not teleport an army to t2, and UK, which
+    // IS at t2, has not opted in.
+    expect(autoJoinersAtFront(conflict, units, "t2", "A", BLOCS, new Set(["US"]))).toEqual([]);
+  });
+
+  it("never pulls in a country on the other side, however it opted in", () => {
+    // CN is at t1 and opted in, but resolves to the defending side.
+    expect(autoJoinersAtFront(conflict, units, "t1", "A", BLOCS, new Set(["CN", "UK"]))).toEqual([
+      "UK",
+    ]);
+  });
+
+  it("mirrors defendersAtFront when everyone has opted in", () => {
+    // The two functions ask the same question of opposite sides. With the opt-in
+    // satisfied, attacking-side membership must select exactly what defending-side
+    // membership would select for the other side.
+    const all = new Set(["US", "UK", "CN"]);
+    const attackers = autoJoinersAtFront(conflict, units, "t1", "A", BLOCS, all);
+    const defenders = defendersAtFront(conflict, units, "t1", "B", BLOCS);
+    expect(attackers.sort()).toEqual(["UK", "US"]);
+    expect(defenders).toEqual(["CN"]);
+    // No country can be in both.
+    expect(attackers.filter((c) => defenders.includes(c))).toEqual([]);
+  });
+
+  it("returns each country once even when it has many formations posted", () => {
+    const many = [
+      { countryId: "UK", theaterId: "t1" },
+      { countryId: "UK", theaterId: "t1" },
+      { countryId: "UK", theaterId: "t1" },
+    ];
+    expect(autoJoinersAtFront(conflict, many, "t1", "A", BLOCS, new Set(["UK"]))).toEqual(["UK"]);
   });
 });

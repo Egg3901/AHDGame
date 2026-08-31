@@ -12,7 +12,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **AMS (Additional Member System)**: The mixed-member proportional representation system used in Germany's Bundestag elections. Seat allocation is partially proportional to party vote share, making third parties more viable than in pure FPTP.
 
-**Approval rating**: A country-level aggregate of public opinion. In the US, derived from the President's favorability. In UK/JP/DE, derived from the PM/Chancellor's favorability. Tracked historically and visible on country pages.
+**Approval rating**: A country-level measure of public opinion, computed from the country's own metrics against the national picture, with national effects (a war, a national address, international statements, the state of the cabinet) layered on top. It is not any one politician's favorability. Tracked historically and visible on country pages. See [Government Approval](/wiki/government-approval).
 
 **Cell**: One combination of census buckets (for example white, mature, no college, middle income) used in vote appeal and turnout calculations. Each cell has an economic/social position averaged from its buckets and a turnout rate blended from theirs. Cells are what the vote engine counts.
 
@@ -26,13 +26,13 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Canvassing**: An action (₳100, 1 action) that boosts voter turnout for a specific demographic group in your active campaign state (home state for most characters; presidential candidates use their travel/primary state). Effect is subject to alignment multiplier, diminishing returns, and a ±20 cap. Doubles in effectiveness during campaign season.
 
-**Central bank**: Each country has a central bank (US: Federal Reserve; UK: Bank of England; DE: European Central Bank; JP: Bank of Japan) that sets interest rates, affecting bond yields, corporate borrowing, and currency strength. The bank's chair is a high-bonus office.
+**Central bank**: Each country has a central bank (US: Federal Reserve; UK: Bank of England; DE: European Central Bank; JP: Bank of Japan; planned economies a passive monobank) that sets interest rates, affecting bond yields, corporate borrowing, and currency strength. The bank's chair is a high-bonus office; in the US the rate is set by the FOMC rather than the chair alone.
 
 **Chancellor**: The head of government in Germany. Equivalent to Prime Minister in the parliamentary sense. Elected by the Bundestag majority.
 
 **Coalition**: A formal agreement between two or more parties to collectively hold a parliamentary majority. Coalitions allow smaller parties to share power. Coalitions can be dissolved by member vote.
 
-**Commons**: The House of Commons, the elected lower chamber of the UK Parliament. 650 seats, FPTP. Whoever commands a Commons majority (326+ seats) forms the government.
+**Commons**: The House of Commons, the elected lower chamber of the UK Parliament. 650 seats (625 in the 1953 preset), contested as one multi-seat race per region. Whoever commands a Commons majority forms the government.
 
 **Command economy**: A planned economy with administered prices, state-owned enterprises, and a monobank. Used by the USSR, China, and East Germany. See [Planned / Command Economies](/wiki/planned-economies).
 
@@ -44,7 +44,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Diminishing returns**: A mechanic that reduces the effectiveness of repeated actions on the same target. Canvassing a turnout modifier already at +18 returns ~10% of base effect. Applies to both canvassing and influence building.
 
-**Dissolution**: Ending a parliamentary term early to call snap elections (UK Commons, JP Shūgiin, DE Bundestag, IE Dáil). Triggers a compressed election cycle.
+**Dissolution**: Ending a parliamentary term early to call snap elections (UK Commons, JP Shūgiin, DE Bundestag, IE Dáil). Triggers a compressed election cycle. A system conversion (a collapsed regime or a ratified constitutional convention) also dissolves the legislature, in any system.
 
 **Econ axis**: The economic dimension of the two-axis ideology grid (−5 to +5). Negative = left (redistributive, regulated); positive = right (market, low tax). Alongside the social axis, determines party alignment scoring.
 
@@ -54,7 +54,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Favorability**: A 0 to 100 stat representing public approval of your character. Used in primary scoring (worth up to 35 pts state, 25 pts presidential), general vote appeal (as an approval scalar), and national/PM approval ratings.
 
-**FOMC**: The 7-seat rate-setting board at a market central bank (Federal Open Market Committee in the US). The chair proposes hike, cut, or hold; a majority of the full board must agree. Abstains count against. See [FOMC / Rate-Setting Board](/wiki/fomc).
+**FOMC**: The US Federal Reserve's 7-seat rate-setting committee. The chair proposes hike, cut, or hold; a majority of the full board must agree, and abstains and vacant seats count against. Seats are filled by presidential nomination and Senate confirmation. Other central banks keep a single governor. See [FOMC / Rate-Setting Board](/wiki/fomc).
 
 **FPTP (First Past the Post)**: In single-seat races, the candidate with the most votes wins. In the game's multi-seat FPTP families, the flag also enables a third-party spoiler transfer before the configured seat allocator distributes seats.
 
@@ -70,7 +70,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Ideology grid**: The two-axis system (econ × social) used to position characters, parties, NPPs, and voter groups. Alignment scoring uses Manhattan distance on this grid.
 
-**Infamy**: A stat increased by attacks, whip defiance, and certain actions. High infamy reduces NPP endorsement success rates and affects some approval metrics. It decays by 5% each turn rather than resetting at elections.
+**Infamy**: A stat increased by attacks, large personal campaign donations, and some random-event choices. High infamy reduces NPP endorsement success and trims your vote weight and primary standing. It decays by 5% each turn rather than resetting at elections. Defying a whip does not add infamy.
 
 **Influence**: Short for Political Influence (state level) or National Political Influence (national level). Used in primary score and general vote calculations. Built via Campaign actions; decays 0.75%/turn.
 
@@ -78,7 +78,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Layer 1**: The census dimensions a region carries and the buckets inside them. In the US: race, age, education, wealth (plus ideology, which canvassing can target). They are combined into the cells used for vote appeal and turnout.
 
-**Majority**: The seat count required to control a legislative chamber or form a government. US House: 218; UK Commons: 326; DE Bundestag: 316; JP Shūgiin: 233.
+**Majority**: The seat count required to control a legislative chamber or form a government: a bare majority of the chamber. US House: 218; UK Commons: 326; JP Shūgiin: 233; IE Dáil: 81; DE Bundestag: 316 in the modern preset, 244 in the 1953 preset (487 seats).
 
 **Manhattan distance**: The sum of absolute differences on the econ axis and social axis. Used to calculate ideological alignment. Distance 0 is a perfect match. State primaries price each point at 1.25 against state lean and 0.75 against party position; the party-only fallback prices it at 2.
 
@@ -104,11 +104,11 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Political Influence (PI)**: State-level reputation built via Campaign actions. Used in state primary scoring (up to 25 pts) and general vote reach calculations. Decays 0.75% per turn.
 
-**Primary**: The intra-party competition phase of an election. Candidates from the same party compete by primary score; the highest score per party advances to the general. Closed when the primary window ends.
+**Primary**: The intra-party competition phase of an election. Down-ballot primaries count real ballots from the party's registered voters over the primary's closing window, split each turn by primary-score standing; the top count per party advances to the general. Presidential primaries hand out pledged delegates. Closed when the primary window ends.
 
-**Primary score**: The calculated total (0 to 100) used to determine which candidate advances from a primary. Comprises alignment + favorability + influence. NPPs receive a 0.5× penalty when a player is competing.
+**Primary score**: The calculated standing (0 to 100) that sets a candidate's share of each turn's primary ballots. Comprises alignment + favorability + influence. NPPs receive a 0.5× penalty when a player is competing.
 
-**Prime Minister**: The head of government in the UK and Japan. Emerges from a parliamentary majority; no direct election. The PM's favorability drives national approval ratings.
+**Prime Minister**: The head of government in the UK, Japan and Ireland (Taoiseach). Emerges from a parliamentary majority; no direct election.
 
 **RCV (Ranked Choice Voting)**: An alternative to FPTP used in some US states (set by state legislation). Third parties compete on equal footing without the spoiler effect.
 
@@ -120,11 +120,11 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Shūgiin**: Japan's House of Representatives (lower house). 465 seats allocated through the configured multi-seat election path. The confidence-granting chamber: PM survival requires Shūgiin majority support. Can be dissolved for snap elections.
 
-**Snap election**: An early election called before the end of a parliamentary term. Available in the UK, JP, DE, and IE. Compresses the campaign cycle dramatically. See [Snap Elections](/wiki/snap-elections).
+**Snap election**: An early election called before the end of a parliamentary term. Available in the UK, JP, DE, and IE; also forced on any system by a regime conversion. Compresses the campaign cycle dramatically. See [Snap Elections](/wiki/snap-elections).
 
 **Social axis**: The social dimension of the two-axis ideology grid. Negative = progressive (individual rights, social liberalism); positive = conservative (traditional values, social order).
 
-**Spoiler effect**: In FPTP elections, a third-party candidate draws votes from the ideologically closest major party, potentially handing the race to the opposition. Modeled by transferring 10% of a third party's group-level votes from the nearest major-party candidate.
+**Spoiler effect**: In FPTP elections, a third-party candidate draws votes from the ideologically closest major party, potentially handing the race to the opposition. Modeled by transferring a small share (4%, halved in presidential races) of a third party's group-level votes from the nearest major-party candidate.
 
 **State metrics**: Per-state statistics (healthcare index, economic index, education index, environment index, etc.) that shift based on active policies, demographic effects, and spending. Used in approval calculations and vote appeal.
 
@@ -136,7 +136,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Turn log**: A record of everything that happened during a turn: which elections resolved, which bills advanced, which phases ran. Stored for 24 hours. Visible to admins; key events visible to players via notifications.
 
-**Whip directive**: An instruction from party leadership to NPP legislators on how to vote on a specific bill. NPPs in the party generally follow the whip. Players can defy the whip at an infamy cost.
+**Whip directive**: An instruction from party leadership to NPP legislators on how to vote on a specific bill. NPPs in the party generally follow the whip. Players can defy the whip freely; it costs leadership trust, not infamy. A vote a whip writes onto you never moves your own positions.
 
 **Withdrawal**: Cancelling an active candidacy. Once withdrawn, you cannot re-enter the same election. Your votes are permanently removed from the tally. Candidates whose party changes mid-election are auto-withdrawn.
 

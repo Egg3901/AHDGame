@@ -1,9 +1,5 @@
-import type { NationalizationProvisionDetail } from "@/lib/congress/billEnrichment";
-import type { BillDetail } from "@/lib/legislature/dto/billDetail";
-import type { BillProvisionDisplay } from "@/lib/legislature/dto/stateLegislature";
-import { splitPolicyLabel } from "@/lib/legislature/policyLabel";
-
-type NationalProvision = NonNullable<BillDetail["provisions"]>[number];
+import type { NationalizationProvisionDetail } from "@/lib/nationalization/billTargetPreview";
+import type { ProvisionDisplay } from "@/lib/legislature/provisionEnrichment";
 
 export interface BillProvisionView {
   legislationTypeName: string;
@@ -31,16 +27,25 @@ export interface BillProvisionView {
   };
 }
 
-/** National DTO → view. Labels are combined "Title: description"; split them.
- * Current is ALWAYS present ("Current law" fallback) so national renders
- * pixel-identically to before — the national DTO has no `type` to detect subsidies. */
-export function nationalProvisionToView(p: NationalProvision): BillProvisionView {
-  const proposed = splitPolicyLabel(p.policyOptionName);
-  const current = splitPolicyLabel(p.currentPolicyOptionName);
+/**
+ * Resolved provision -> card view.
+ *
+ * One mapper for both bill pages: the national and regional adapters now emit
+ * the same {@link ProvisionDisplay}. This is the rename from the DTO's
+ * name/explanation to the card's title/description, and the only place the two
+ * vocabularies meet.
+ *
+ * Subsidy and end-subsidy provisions have no current law, so they render as a
+ * proposed-only box.
+ */
+export function provisionToView(p: ProvisionDisplay): BillProvisionView {
+  const isSubsidy = p.type === "subsidy" || p.type === "end_subsidy";
   return {
     legislationTypeName: p.legislationTypeName,
-    current: { title: current.title ?? "Current law", description: current.description },
-    proposed: { title: proposed.title ?? "Unknown", description: proposed.description },
+    current: isSubsidy
+      ? null
+      : { title: p.current?.name ?? "Current law", description: p.current?.explanation },
+    proposed: { title: p.proposed.name, description: p.proposed.explanation },
     effectDirection: p.effectDirection,
     economic: p.economic,
     social: p.social,
@@ -52,33 +57,5 @@ export function nationalProvisionToView(p: NationalProvision): BillProvisionView
     policyOptionScores: p.policyOptionScores,
     nationalizationDetail: p.nationalizationDetail,
     fiscal: p.fiscal,
-  };
-}
-
-/** State DTO → view. Name/description are separate fields. Subsidy/end-subsidy
- * provisions have no current law → current = null (proposed-only box). */
-export function stateProvisionToView(p: BillProvisionDisplay): BillProvisionView {
-  const isSubsidy = p.type === "subsidy" || p.type === "end_subsidy";
-  return {
-    legislationTypeName: p.legislationTypeName ?? "Provision",
-    current: isSubsidy
-      ? null
-      : {
-          title: p.currentPolicyOptionName ?? "Current law",
-          description: p.currentPolicyOptionDescription ?? undefined,
-        },
-    proposed: {
-      title: p.policyOptionName ?? "Unknown",
-      description: p.policyOptionDescription ?? undefined,
-    },
-    effectDirection: p.effectDirection,
-    economic: p.economic ?? undefined,
-    social: p.social ?? undefined,
-    effects: p.effects,
-    archetypeApprovals: p.archetypeApprovals,
-    policyDomain: p.policyDomain ?? undefined,
-    currentPolicyIndex: p.currentPolicyIndex,
-    proposedPolicyIndex: p.proposedPolicyIndex,
-    policyOptionScores: p.policyOptionScores,
   };
 }

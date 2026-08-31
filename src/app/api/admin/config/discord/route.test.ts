@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAdmin", () => ({ requireAdmin: vi.fn() }));
@@ -137,5 +137,94 @@ describe("PATCH /api/admin/config/discord", () => {
 
     expect(res.status).toBe(400);
     expect(updateOne).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * #1208: the webhook URLs live in `gameConfig`, so a database restore carries
+ * them into another deployment. Saving them records which deployment owns them,
+ * which is what `discordWebhooks` checks before every send.
+ */
+describe("PATCH /api/admin/config/discord — webhook ownership stamp (#1208)", () => {
+  const originalService = process.env.RAILWAY_SERVICE_NAME;
+
+  afterEach(() => {
+    process.env.RAILWAY_SERVICE_NAME = originalService;
+  });
+
+  it("stamps the running deployment when a webhook url is saved", async () => {
+    process.env.RAILWAY_SERVICE_NAME = "Main Site";
+    const { PATCH } = await import("./route");
+    const res = await PATCH(patchReq({ general: { news: "https://discord.test/news" } }));
+
+    expect(res.status).toBe(200);
+    expect(capturedUpdate()?.$set).toMatchObject({
+      discordNewsWebhookUrl: "https://discord.test/news",
+      discordWebhookOwnerService: "main-site",
+    });
+  });
+
+  it("stamps when a country webhook is saved too", async () => {
+    process.env.RAILWAY_SERVICE_NAME = "Main Site";
+    const { PATCH } = await import("./route");
+    const res = await PATCH(patchReq({ countryWebhooks: { US: "https://discord.test/us2" } }));
+
+    expect(res.status).toBe(200);
+    expect(capturedUpdate()?.$set).toMatchObject({
+      "discordCountryGameWebhookUrls.US": "https://discord.test/us2",
+      discordWebhookOwnerService: "main-site",
+    });
+  });
+
+  /**
+   * Without this, the guard undoes itself: an admin poking at the Discord page
+   * of a restored world silently moves ownership to that deployment, and it
+   * resumes posting to the live channels it inherited.
+   */
+  it("refuses to take ownership from another deployment", async () => {
+    process.env.RAILWAY_SERVICE_NAME = "Sandbox Staging";
+    findOne.mockResolvedValue({ _id: "default", discordWebhookOwnerService: "main-site" });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(patchReq({ general: { news: "https://discord.test/news" } }));
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toEqual({
+      error: expect.stringContaining("main-site"),
+    });
+    expect(updateOne).not.toHaveBeenCalled();
+  });
+
+  it("transfers ownership only when the caller asks for it explicitly", async () => {
+    process.env.RAILWAY_SERVICE_NAME = "Sandbox Staging";
+    findOne.mockResolvedValue({ _id: "default", discordWebhookOwnerService: "main-site" });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(
+      patchReq({ general: { news: "https://discord.test/news" }, claimWebhooks: true })
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedUpdate()?.$set).toMatchObject({
+      discordWebhookOwnerService: "sandbox-staging",
+    });
+  });
+
+  it("lets the owning deployment save without claiming anything", async () => {
+    process.env.RAILWAY_SERVICE_NAME = "Main Site";
+    findOne.mockResolvedValue({ _id: "default", discordWebhookOwnerService: "main-site" });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(patchReq({ general: { news: "https://discord.test/news" } }));
+
+    expect(res.status).toBe(200);
+    expect(capturedUpdate()?.$set).toMatchObject({ discordWebhookOwnerService: "main-site" });
+  });
+
+  it("does not stamp when every url in the request is being cleared", async () => {
+    process.env.RAILWAY_SERVICE_NAME = "Main Site";
+    const { PATCH } = await import("./route");
+    const res = await PATCH(patchReq({ general: { news: "" } }));
+
+    expect(res.status).toBe(200);
+    expect(capturedUpdate()?.$unset).toMatchObject({ discordNewsWebhookUrl: 1 });
+    expect(capturedUpdate()?.$set?.discordWebhookOwnerService).toBeUndefined();
   });
 });

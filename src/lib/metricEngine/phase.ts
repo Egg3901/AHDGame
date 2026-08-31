@@ -13,10 +13,14 @@ import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getCountryConfig } from "@/lib/constants/countries";
 import { getBankId } from "@/lib/centralBank/helpers";
 import {
+  advanceRevenueEma,
   getNeutralFederalSalesTaxRate,
   getNeutralStateSalesTaxRate,
+  selectRevenueTrendBaseline,
   sumHostRealizedRevenue,
   sumRealizedRevenue,
+  updateRevenueSnapshots,
+  type RevenueSnapshot,
 } from "@/lib/turn/gdpGrowth";
 import { evaluateRegistry } from "./evaluate";
 import { compoundGdpLevel } from "./gdpLevel";
@@ -38,6 +42,7 @@ import {
 } from "./macroGrowthInputs";
 import { loadValuationFxRates } from "@/lib/currency/corporationCapital";
 import { getEraMonetaryBaseline } from "@/lib/constants/monetaryEra";
+import { nextLabourParticipationBonus } from "@/lib/labour/labourMarket";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import {
@@ -230,6 +235,8 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     "economic.unemploymentRate.value": 1,
     "economic.laborParticipation.value": 1,
     "economic.laborForce.value": 1,
+    "economic.labourTightness.value": 1,
+    "economic.labourParticipationDemandBonus.value": 1,
     // Generic nodes (P2+): prev value/simBaseline + external seed/lagged reads,
     // derived from the registry at module load.
     ...GENERIC_PROJECTION,
@@ -345,7 +352,13 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
   // engine compounds state.gdp each turn by the region's freshly-computed
   // gdpGrowth, so the GDP LEVEL (not just the rate) moves over time.
   const stateOps: Array<{
-    updateOne: { filter: { _id: string }; update: { $set: Record<string, number | string> } };
+    updateOne: {
+      filter: { _id: string };
+      update: {
+        $set: Record<string, number | string | RevenueSnapshot[]>;
+        $unset?: Record<string, "">;
+      };
+    };
   }> = [];
 
   // Active organization directives nudge a curated metric across every member
@@ -488,12 +501,33 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     const useHostRealized = state.sectorRealizedRevenueUnit === "host";
     const nowHost = sumHostRealizedRevenue(ownedForState);
     const nowAnchor = sumRealizedRevenue(ownedForState, sectorTax.plantsEnabled);
+    // Trailing revenue trend (host currency only, so FX cannot leak into it —
+    // same rule as the one-turn snapshot, ticket #1084). On the legacy→host
+    // flip turn the EMA seeds fresh from this turn's host sum and the snapshot
+    // log restarts; until a snapshot matures past the minimum span the node
+    // keeps using the one-turn fallback.
+    const startsHostTrend = sectorTax.plantsEnabled && !useHostRealized;
+    const trendActive = sectorTax.plantsEnabled;
+    const revenueEmaNow = trendActive
+      ? advanceRevenueEma(startsHostTrend ? undefined : finite(state.sectorRevenueEma), nowHost)
+      : undefined;
+    const priorSnapshots =
+      trendActive && !startsHostTrend ? state.sectorRevenueSnapshots : undefined;
+    const revenueTrendBaseline = trendActive
+      ? selectRevenueTrendBaseline(priorSnapshots, turn)
+      : null;
+    const nextSnapshots =
+      trendActive && revenueEmaNow !== undefined
+        ? updateRevenueSnapshots(priorSnapshots, turn, revenueEmaNow)
+        : undefined;
     const payload: SectorRevenueTaxPayload = {
       owned: ownedForState,
       plantsEnabled: sectorTax.plantsEnabled,
       realizedRevenueNow: useHostRealized ? nowHost : nowAnchor,
       realizedRevenuePrev: prevRealized,
       turnsSincePrev: prevRealizedTurn !== undefined ? turn - prevRealizedTurn : undefined,
+      revenueEmaNow,
+      revenueTrendBaseline,
       unowned: sectorTax.unownedByState.get(state._id) ?? [],
       federalSalesTax:
         sectorTax.federalSalesTaxByCountry.get(countryId) ??
@@ -549,10 +583,22 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
 
     // Supply-side POTENTIAL growth (§5.1): αL·g_L + αK·g_K + TFP. Computed BEFORE
     // the registry so it can be threaded to the gdpGrowth/unemployment nodes.
+    const priorMetricDoc = prevDocById.get(state._id);
+    const participationDemandBonus = labourMacroEnabled
+      ? nextLabourParticipationBonus(
+          readMetricPath(priorMetricDoc, "economic.labourTightness", "value"),
+          readMetricPath(priorMetricDoc, "economic.labourParticipationDemandBonus", "value")
+        )
+      : 0;
+    const effectiveLaborParticipation = Math.min(
+      100,
+      (laborParticipationByState.get(state._id) ?? NEUTRAL_LABOR_PARTICIPATION) +
+        participationDemandBonus
+    );
     const laborForce = computeLaborForce(
       state.workingAgePopulation ?? 0,
       state.militaryServicePopulation ?? 0,
-      laborParticipationByState.get(state._id) ?? NEUTRAL_LABOR_PARTICIPATION
+      effectiveLaborParticipation
     );
     const gL = annualizedGrowthRate(
       laborForce,
@@ -771,6 +817,7 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
       "economic.unemploymentRate.value": results["economic.unemploymentRate"].value,
       "economic.potentialGrowth.value": potential,
       "economic.laborForce.value": laborForce,
+      "economic.labourParticipationDemandBonus.value": participationDemandBonus,
       lastUpdated: now,
     };
     // Generic nodes (P2+): persist value + simBaseline per node — but ONLY for
@@ -842,7 +889,24 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
               : sumRealizedRevenue(ownedForState, false),
             sectorRealizedRevenueTurn: turn,
             ...(sectorTax.plantsEnabled ? { sectorRealizedRevenueUnit: "host" as const } : {}),
+            // Trailing-trend state (host-tagged plants worlds only). The first
+            // plants turn is unit-untagged, so this starts one turn later with
+            // a clean host-only series.
+            ...(revenueEmaNow !== undefined ? { sectorRevenueEma: revenueEmaNow } : {}),
+            ...(nextSnapshots !== undefined ? { sectorRevenueSnapshots: nextSnapshots } : {}),
           },
+          // Dropping below plants returns the stored one-turn baseline to the
+          // legacy unit. Remove the host tag and trend state so a later flip
+          // starts a fresh host-only EMA and snapshot log on that exact turn.
+          ...(!sectorTax.plantsEnabled
+            ? {
+                $unset: {
+                  sectorRealizedRevenueUnit: "" as const,
+                  sectorRevenueEma: "" as const,
+                  sectorRevenueSnapshots: "" as const,
+                },
+              }
+            : {}),
         },
       },
     });

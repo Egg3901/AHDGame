@@ -225,11 +225,127 @@ describe("reconcileLedger", () => {
     });
     expect(report.moneySupply.findings[0].currencyCode).toBe("USD");
     expect(report.moneySupply.findings[0].minted).toBeCloseTo(5200);
+    expect(report.moneySupply.status).toBe("amber");
     expect(report.unattributed[0].emitSite).toBe("sectorRevenue"); // ranked by |anchor|
     expect(report.unattributed[0].anchorAmount).toBeCloseTo(5000);
   });
 
-  it("skips stock-vs-flow when told to (reset/reseed epoch)", () => {
+  it("reports attributed net money creation without calling it a reconciliation failure", () => {
+    const entries: LedgerEntry[] = [
+      entry({
+        txType: "corp_revenue",
+        emitSite: "sectorRevenue",
+        legs: [
+          {
+            account: "corporation:a:USD",
+            amount: 5000,
+            currencyCode: "USD",
+            anchorAmount: 5000,
+            role: "primary",
+          },
+          {
+            account: "mint:sector_revenue:USD",
+            amount: -5000,
+            currencyCode: "USD",
+            anchorAmount: -5000,
+            role: "contra",
+          },
+        ],
+      }),
+    ];
+    const report = reconcileLedger({
+      turn: 10,
+      entries,
+      openingBalances: { "corporation:a:USD": 10_000 },
+      closingBalances: { "corporation:a:USD": 15_000 },
+    });
+
+    expect(report.moneySupply.findings[0].netDrift).toBe(5000);
+    expect(report.moneySupply.status).toBe("green");
+    expect(report.status).toBe("green");
+  });
+
+  it("ignores economically immaterial zero-value mint and sink legs", () => {
+    const entries: LedgerEntry[] = [
+      entry({
+        txType: "bond_issuance",
+        emitSite: "bondIssuance",
+        legs: [
+          {
+            account: "government:US:USD",
+            amount: 0,
+            currencyCode: "USD",
+            anchorAmount: 0,
+            role: "primary",
+          },
+          {
+            account: "mint:unattributed:USD",
+            amount: 0,
+            currencyCode: "USD",
+            anchorAmount: 0,
+            role: "contra",
+          },
+        ],
+      }),
+    ];
+
+    // Runs the stock-vs-flow check rather than skipping it, so the overall green
+    // status here means every check passed and not that one of them was waived.
+    const report = reconcileLedger({
+      turn: 10,
+      entries,
+      openingBalances: {},
+      closingBalances: {},
+    });
+
+    expect(report.moneySupply.status).toBe("green");
+    expect(report.moneySupply.findings).toEqual([]);
+    expect(report.unattributed).toEqual([]);
+    expect(report.stockVsFlow.skipped).toBe(false);
+    expect(report.status).toBe("green");
+  });
+
+  it("removes pure FX revaluation from stock-flow while retaining cash movement", () => {
+    const account = "corporation:fx-test:USD";
+    const entries: LedgerEntry[] = [
+      entry({
+        txType: "corp_revenue",
+        emitSite: "test/pre-forex-revenue",
+        legs: [
+          {
+            account,
+            amount: 20,
+            currencyCode: "USD",
+            anchorAmount: 20,
+            role: "primary",
+          },
+          {
+            account: "mint:sector_revenue:USD",
+            amount: -20,
+            currencyCode: "USD",
+            anchorAmount: -20,
+            role: "contra",
+          },
+        ],
+      }),
+    ];
+
+    const report = reconcileLedger({
+      turn: 10,
+      entries,
+      openingBalances: { [account]: 100 },
+      preForexBalances: { [account]: 120 },
+      closingBalances: { [account]: 60 },
+      openingAnchorRates: { USD: 1 },
+      preForexAnchorRates: { USD: 1 },
+      closingAnchorRates: { USD: 2 },
+    });
+
+    expect(report.stockVsFlow.divergentCount).toBe(0);
+    expect(report.status).toBe("green");
+  });
+
+  it("reports a skipped stock-vs-flow check as unverified, not as clean", () => {
     const report = reconcileLedger({
       turn: 10,
       entries: [],
@@ -238,6 +354,8 @@ describe("reconcileLedger", () => {
       skipStockVsFlow: true,
     });
     expect(report.stockVsFlow.skipped).toBe(true);
-    expect(report.stockVsFlow.divergentCount).toBe(0);
+    expect(report.stockVsFlow.divergentCount).toBeNull();
+    expect(report.stockVsFlow.status).toBe("amber");
+    expect(report.status).toBe("amber");
   });
 });

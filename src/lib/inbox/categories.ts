@@ -23,6 +23,8 @@ export const CATEGORY_OF: Record<NotificationType, InboxCategory> = {
   corp_nationalization_notice: "crisis",
   corp_nationalization_risk: "crisis",
   corp_hostile_takeover_available: "crisis",
+  // A war you did not choose is a crisis, not a standing-office notice.
+  treaty_defence_invoked: "crisis",
   // legislation
   bill_vote_open: "legislation",
   bill_passed_chamber: "legislation",
@@ -149,6 +151,7 @@ export const CATEGORY_OF: Record<NotificationType, InboxCategory> = {
   player_event: "system",
   player_event_resolved: "system",
   extraction_capacity_bound: "treasury",
+  corp_supply_agreement_damages: "treasury",
   world_event_offered: "system",
   world_event_resolved: "system",
 };

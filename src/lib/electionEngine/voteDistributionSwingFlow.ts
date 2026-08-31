@@ -31,7 +31,6 @@ import { calcAppeal, approvalScalar } from "@/lib/utils/demographicAppeal";
 import { normalizeNPI, normalizeNationalReachPresidentialPrimary } from "@/lib/utils/normalizeNPI";
 import { infamyPenaltyMultiplier } from "@/lib/utils/infamy";
 import { getMajorPartiesForRegion } from "@/lib/constants/countries";
-import { canPartyContestState } from "@/lib/parties/regionalContest";
 import { calcEffectiveFavorability } from "./voteCalculations";
 import { splitGroupPoolBySlate } from "./slateAllocation";
 import {
@@ -54,7 +53,7 @@ import {
   applyVoteReachFloor,
 } from "./electionFormulaFactors";
 import { persuasionDrivers } from "./persuasionDrivers";
-import type { EnrichedCandidate, DistributeVotesOptions } from "./types";
+import type { EnrichedCandidate, DistributeVotesOptions, AppealWeightTrace } from "./types";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -82,18 +81,9 @@ function appealWeight(
   demoSP: number,
   partyOrgByParty: Map<string, number>,
   groupId: string,
-  options: DistributeVotesOptions | undefined
+  options: DistributeVotesOptions | undefined,
+  trace?: AppealWeightTrace
 ): number {
-  if (
-    !canPartyContestState({
-      countryId: options?.countryId,
-      abbreviation: ec.partyAbbr,
-      stateId: options?.currentStateId,
-    })
-  ) {
-    return 0;
-  }
-
   // Personal-stat tenure fatigue (see `personalStatTenureFatigue`'s doc
   // comment in electionFormulaFactors.ts for the full root-cause writeup).
   // politicalInfluence / favorability have no tenure-aware decay of their
@@ -244,6 +234,37 @@ function appealWeight(
     }
   }
 
+  // UK manifesto policy-popularity factor (epic #856). Off by default: absent
+  // map ⇒ 1.0 (no effect). Mirrors the group-level engine so the two lanes
+  // cannot drift.
+  const manifestoMult = options?.manifestoMultipliers?.[ec.party]?.[groupId] ?? 1;
+
+  // Ledger decomposition (display-only): reach and candidate-fit (appeal) are
+  // teed out individually; every remaining structural multiplicand folds into
+  // `restMult`. This is recorded ALONGSIDE the unchanged return expression
+  // below — the return keeps its exact original left-to-right multiplication
+  // order so vote math stays byte-identical; the sink derives a self-consistent
+  // per-cell base from `reachMult * fitMult * restMult`, never from the return.
+  if (trace) {
+    trace.reachMult = reach;
+    trace.fitMult = appeal;
+    trace.restMult =
+      approval *
+      org *
+      nppPenalty *
+      infamyMult *
+      pgfMult *
+      regimeMult *
+      govMod *
+      presMod *
+      midtermOppositionMod *
+      regResist *
+      regBaseline *
+      stateOrgMult *
+      homeStateMult *
+      manifestoMult;
+  }
+
   return Math.max(
     0,
     appeal *
@@ -260,7 +281,8 @@ function appealWeight(
       regResist *
       regBaseline *
       stateOrgMult *
-      homeStateMult
+      homeStateMult *
+      manifestoMult
   );
 }
 
@@ -282,6 +304,12 @@ export function distributeVotesBySwingFlow(
 ): { votesPerCandidate: Record<string, number>; sharesPct: Record<string, number> } {
   const votesPerCandidate: Record<string, number> = {};
   for (const ec of enriched) votesPerCandidate[ec.candidateId] = 0;
+
+  // Factor-ledger tee. `sink` stays undefined for every non-presidential caller
+  // (and whenever no unit id is supplied), so the recording branches below are a
+  // complete no-op and the vote math is untouched.
+  const sink = options?.ledgerSink;
+  const sinkUnitId = options?.ledgerUnitId;
 
   if (totalPool <= 0) {
     const sharesPct: Record<string, number> = {};
@@ -326,16 +354,65 @@ export function distributeVotesBySwingFlow(
       // party between its own candidates. Byte-identical for the
       // one-candidate-per-party FPTP families; stops a multi-seat party from
       // buying nominal share with extra ballot slots. See slateAllocation.ts.
+      //
+      // The ledger sink (when present) captures the trace multiplicands here so
+      // it can decompose each cell's nominal votes. `appealWeight`'s return —
+      // the actual slate weight — is unchanged whether or not a trace is passed.
+      const traces = sink ? new Map<string, AppealWeightTrace>() : undefined;
       const groupSplit = splitGroupPoolBySlate(
         groupPool,
-        enriched.map((ec) => ({
-          candidateId: ec.candidateId,
-          party: ec.party,
-          weight: appealWeight(ec, demoEP, demoSP, partyOrgByParty, group.id, options),
-        }))
+        enriched.map((ec) => {
+          const trace: AppealWeightTrace | undefined = traces
+            ? { reachMult: 1, fitMult: 1, restMult: 1 }
+            : undefined;
+          const weight = appealWeight(
+            ec,
+            demoEP,
+            demoSP,
+            partyOrgByParty,
+            group.id,
+            options,
+            trace
+          );
+          if (traces && trace) traces.set(ec.candidateId, trace);
+          return { candidateId: ec.candidateId, party: ec.party, weight };
+        })
       );
       for (const ec of enriched) {
         candidateGroupVotes[ec.candidateId] += groupSplit[ec.candidateId] ?? 0;
+      }
+
+      if (sink && sinkUnitId) {
+        const bucketWeights = options?.ledgerBucketWeightsByGroup?.get(group.id);
+        for (const ec of enriched) {
+          const v = groupSplit[ec.candidateId] ?? 0;
+          const t = traces?.get(ec.candidateId);
+          const product = t ? t.reachMult * t.fitMult * t.restMult : 0;
+          let base = v;
+          let reachDelta = 0;
+          let fitDelta = 0;
+          let restDelta = 0;
+          if (t && v > 0 && product > 0) {
+            // Decompose fit BEFORE reach so candidate-fit's effective multiplier
+            // is the pure appeal term (influence-free), and reach carries the
+            // name-recognition term. Keeps the reach-not-fit attribution honest.
+            base = v / product;
+            const afterFit = base * t.fitMult;
+            const afterReach = afterFit * t.reachMult;
+            fitDelta = afterFit - base;
+            reachDelta = afterReach - afterFit;
+            restDelta = v - afterReach;
+          }
+          sink.recordCellAppeal(
+            sinkUnitId,
+            ec.candidateId,
+            v,
+            demoEP,
+            demoSP,
+            { base, reachDelta, fitDelta, restDelta },
+            bucketWeights
+          );
+        }
       }
     }
   }
@@ -468,6 +545,25 @@ export function distributeVotesBySwingFlow(
         votesPerCandidate[nearest.candidateId] -= actualSpoiled;
         votesPerCandidate[tp.candidateId] += actualSpoiled;
       }
+    }
+  }
+
+  // Ledger tee (close-out): record support plus the swing and spoiler deltas
+  // the engine has already computed. `swingDelta` is the party-level flow this
+  // candidate's within-party share carried; `spoilerDelta` is the post-swing
+  // FPTP transfer. Both are the exact locals above — nothing is recomputed.
+  if (sink && sinkUnitId) {
+    for (const ec of enriched) {
+      const partyNominal = partyAppealVotes.get(ec.party) ?? 0;
+      const partyFinal = partyFinalVotes.get(ec.party) ?? 0;
+      const withinPartyShare =
+        partyNominal > 0 ? candidateGroupVotes[ec.candidateId] / partyNominal : 0;
+      const preSpoiler = partyFinal * withinPartyShare;
+      sink.finalizeUnitCandidate(sinkUnitId, ec.candidateId, {
+        support: supportMoodMultiplier(ec.support),
+        swingDelta: preSpoiler - candidateGroupVotes[ec.candidateId],
+        spoilerDelta: (votesPerCandidate[ec.candidateId] ?? 0) - preSpoiler,
+      });
     }
   }
 

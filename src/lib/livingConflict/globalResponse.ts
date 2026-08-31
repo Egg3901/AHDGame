@@ -16,11 +16,14 @@ import type {
   GlobalResponseRole,
   ResolvedGlobalResponse,
 } from "@/lib/db/types/crisis";
+import { badRequest } from "@/lib/api/errors";
 import { spendFromTreasury } from "@/lib/budget/treasurySpend";
 import { applyCrisisEffects } from "@/lib/crises/applyEffects";
 import { getGameState } from "@/lib/gameState";
 import { logWireEvent } from "@/lib/wireEvent";
-import { applyTensionEvent } from "@/lib/coldwar/tension";
+import { applyTensionEvent, tensionFloor } from "@/lib/coldwar/tension";
+import { readStandingPressureSnapshot } from "@/lib/coldwar/standingPressure";
+import { EQUIPMENT_TRACK_MAX } from "@/lib/military/arsenal";
 import { adjustIntensity, applyCommitment, relieveCommitment } from "./engine";
 import { livingConflictDef } from "./registry";
 import { loadConflictState, saveConflictState } from "./driver";
@@ -68,7 +71,13 @@ function clamp(value: number, min = 0, max = 100): number {
   return Math.max(min, Math.min(max, Math.round(value * 10) / 10));
 }
 
-async function loadCampaignCapability(
+/**
+ * A nation's current capability snapshot. Country-scoped and independent of any
+ * one crisis, so a caller answering several crises in a single request should
+ * load it once and pass it back in rather than paying for the militaryUnits
+ * read per crisis.
+ */
+export async function loadCampaignCapability(
   db: Db,
   countryId: string
 ): Promise<CampaignCapabilitySnapshot> {
@@ -101,7 +110,9 @@ async function loadCampaignCapability(
     totalPersonnel > 0
       ? units.reduce(
           (sum, unit) =>
-            sum + clamp(unit.equipment?.support ?? 0) * Math.max(1, unit.personnel ?? 0),
+            sum +
+            clamp(((unit.equipment?.support ?? 0) / EQUIPMENT_TRACK_MAX) * 100) *
+              Math.max(1, unit.personnel ?? 0),
           0
         ) / totalPersonnel
       : 20;
@@ -115,6 +126,40 @@ async function loadCampaignCapability(
     intelligence: clamp(25 + militaryReadiness * 0.35 + logistics * 0.25),
     assessedAt: new Date(),
   };
+}
+
+/**
+ * The two country-scoped inputs every eligibility question needs: which campaign
+ * stage the conflict is in, and what the nation can currently bring to bear.
+ */
+async function responderContext(
+  db: Db,
+  definition: NonNullable<Crisis["globalResponse"]>,
+  countryId: string,
+  capability?: CampaignCapabilitySnapshot
+): Promise<{ stage: CampaignStage; capability: CampaignCapabilitySnapshot }> {
+  const state = await loadConflictState(db, definition.conflictKey);
+  const stage = definition.campaign?.stage ?? normalizeCampaignState(state.campaign).stage;
+  return { stage, capability: capability ?? (await loadCampaignCapability(db, countryId)) };
+}
+
+/**
+ * Per-option eligibility for one country. The Actions-page card and the crisis
+ * detail page both gate their buttons on this, so a player is never offered an
+ * option the command path is bound to refuse (ticket #1183). Null when the
+ * country has no role in this response.
+ */
+export async function optionAvailabilityForGlobalResponder(
+  db: Db,
+  crisis: Pick<Crisis, "globalResponse">,
+  countryId: string,
+  options: CrisisDecisionOption[],
+  capability?: CampaignCapabilitySnapshot
+): Promise<Record<string, CampaignRequirementResult> | null> {
+  const definition = crisis.globalResponse;
+  if (!definition || !globalResponseRoleFor(crisis, countryId)) return null;
+  const context = await responderContext(db, definition, countryId, capability);
+  return assessCampaignOptions(options, context.capability, context.stage);
 }
 
 export interface GlobalResponseCampaignBrief {
@@ -173,13 +218,15 @@ export async function prepareGlobalResponseOption(
   option: CrisisDecisionOption
 ): Promise<CampaignCapabilitySnapshot> {
   const definition = crisis.globalResponse;
+  // A missing definition is a data fault, not a player error: leave it bare so
+  // handleRouteError captures it.
   if (!definition) throw new Error("Global response definition missing");
-  const state = await loadConflictState(db, definition.conflictKey);
-  const stage = definition.campaign?.stage ?? normalizeCampaignState(state.campaign).stage;
-  const capability = await loadCampaignCapability(db, countryId);
+  const { stage, capability } = await responderContext(db, definition, countryId);
   const assessment = assessCampaignRequirement(option.campaignRequirement, capability, stage);
   if (!assessment.eligible) {
-    throw new Error(`National capacity is insufficient: ${assessment.reasons.join("; ")}`);
+    // A refusal the player can act on — the same reasons the crisis page lists
+    // under the option. Typed so it reaches them as a 400, not a generic 500.
+    throw badRequest(`National capacity is insufficient: ${assessment.reasons.join("; ")}`);
   }
   return capability;
 }
@@ -367,13 +414,25 @@ async function applyOutcomeTrajectory(
   }
   await saveConflictState(db, state);
   if (campaignResult.applied && outcome.tensionDelta) {
-    const gameState = await getGameState(db);
+    const minimumValue =
+      outcome.tensionDelta < 0
+        ? tensionFloor(
+            (
+              await readStandingPressureSnapshot(
+                db,
+                gameState ?? {},
+                gameState?.currentTurn ?? crisis.startTurn
+              )
+            ).pressures
+          )
+        : undefined;
     await applyTensionEvent(
       db,
       gameState?.currentTurn ?? crisis.startTurn,
       outcome.tensionDelta > 0 ? "escalation" : "detente",
       outcome.label,
-      outcome.tensionDelta
+      outcome.tensionDelta,
+      { minimumValue }
     );
   }
   return campaignResult;

@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import type { CountryId } from "@/lib/constants/countries";
-import { formatCurrencyCompactChip } from "@/lib/utils/formatters";
 import { getCurrencyPrefix } from "@/lib/utils/budgetCalculations";
+import { useCurrency } from "@/contexts/CurrencyContext";
 import { forexUrl, stockmarketUrl } from "@/lib/urls";
 
 interface MarketsData {
@@ -59,6 +59,11 @@ function Card({
  */
 export function MarketsStrip({ countryId, markets }: MarketsStripProps) {
   const prefix = getCurrencyPrefix(countryId as CountryId);
+  // `stockMarketCap` is ANCHOR-denominated (see lib/stockExchange/aggregate), so
+  // it goes through formatAmount like the identical figure on the stock market
+  // page this card links to. Stamping the country's local prefix on it, as this
+  // did before, labelled an anchored number as local currency.
+  const { formatAmount } = useCurrency();
 
   return (
     <div className="flex flex-col gap-3">
@@ -66,11 +71,7 @@ export function MarketsStrip({ countryId, markets }: MarketsStripProps) {
         <Card
           href={stockmarketUrl(countryId)}
           label="Stock Market"
-          stat={
-            markets.stockMarketCap != null
-              ? formatCurrencyCompactChip(markets.stockMarketCap, prefix)
-              : "—"
-          }
+          stat={markets.stockMarketCap != null ? formatAmount(markets.stockMarketCap) : "—"}
           sub={`total market cap${markets.exchangeName ? ` · ${markets.exchangeName}` : ""}`}
         />
         <Card

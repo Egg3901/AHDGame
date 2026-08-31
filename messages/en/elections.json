@@ -111,6 +111,17 @@
       "recordedTurn": "Read on turn {turn}.",
       "pts": "pts"
     },
+    "factorLedger": {
+      "title": "Factor Ledger",
+      "subtitle": "Why a candidate is ahead or behind, broken into named factors. This is already inside the vote totals.",
+      "candidateLabel": "Candidate",
+      "candidateFallback": "the candidate",
+      "baseline": "Baseline",
+      "totalVotes": "Projected votes",
+      "votesUnit": "votes",
+      "bucketsTitle": "Where the support comes from",
+      "recordedTurn": "Read on turn {turn}."
+    },
     "registration": {
       "title": "Registration Influence",
       "noData": "{state} ({stateId}): no registration data tracked for this state.",

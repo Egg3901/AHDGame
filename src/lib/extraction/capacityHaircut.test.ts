@@ -6,7 +6,6 @@ import {
   haircutScarcityRelief,
   weightedCapacityUtilization,
 } from "./capacityHaircut";
-import type { CommodityType } from "@/lib/constants/commodities";
 
 describe("weightedCapacityUtilization", () => {
   it("returns full utilization when there is no extractable output", () => {
@@ -102,28 +101,5 @@ describe("haircutScarcityRelief", () => {
     expect(haircutScarcityRelief(undefined, 100)).toBe(0);
     expect(haircutScarcityRelief(100, undefined)).toBe(0);
     expect(haircutScarcityRelief(100, 0)).toBe(0);
-  });
-});
-
-describe("weightedCapacityUtilization with scarcity relief", () => {
-  it("lifts a scarce resource's leg toward 1 and leaves glut legs alone", () => {
-    const rates = { rare_earth: 1, coal: 1 } as Partial<Record<CommodityType, number>>;
-    const multipliers = { rare_earth: 0.2, coal: 0.2 };
-    // No relief: utilization is the plain weighted mean (0.2).
-    expect(weightedCapacityUtilization(rates, multipliers).utilization).toBeCloseTo(0.2, 10);
-    // Full relief on rare_earth (shortage), none on coal (glut):
-    // rare_earth leg 0.2 → 1.0, coal leg stays 0.2 → mean 0.6.
-    const relieved = weightedCapacityUtilization(rates, multipliers, { rare_earth: 1 });
-    expect(relieved.utilization).toBeCloseTo(0.6, 10);
-    // Binding resource is now the unrelieved one.
-    expect(relieved.bindingResource).toBe("coal");
-  });
-
-  it("partial relief lifts proportionally", () => {
-    const rates = { iron: 1 } as Partial<Record<CommodityType, number>>;
-    // relief 0.5 on mult 0.4 → 0.4 + 0.6*0.5 = 0.7
-    expect(
-      weightedCapacityUtilization(rates, { iron: 0.4 }, { iron: 0.5 }).utilization
-    ).toBeCloseTo(0.7, 10);
   });
 });

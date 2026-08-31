@@ -1,6 +1,11 @@
 import type { Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import type { PartyMembershipEvent, PartyMembershipEventReason } from "@/lib/db/types";
+import type {
+  CommitteeProposal,
+  PartyMembershipEvent,
+  PartyMembershipEventReason,
+  PoliticalParty,
+} from "@/lib/db/types";
 
 /** Shape passed to the UI for one observed membership transition. */
 export interface PartyHistoryEntry {
@@ -18,9 +23,18 @@ export interface PartyHistoryEntry {
 }
 
 export type TenureStartKind =
-  "joined" | "founded" | "switched_to" | "became_independent" | "started";
+  "joined" | "founded" | "switched_to" | "became_independent" | "renamed" | "started";
 
-export type TenureEndKind = "left" | "switched_to" | "purged" | "present";
+export type TenureEndKind = "left" | "switched_to" | "purged" | "renamed" | "present";
+
+/** A successful party rename, resolved from the retained committee proposal. */
+export interface PartyNameChange {
+  partyId: string;
+  partyCountryId: CountryId;
+  newName: string;
+  effectiveAt: Date;
+  turn: number;
+}
 
 export interface PartyTenure {
   partyId: string | null; // null for Independent
@@ -54,8 +68,8 @@ export async function fetchPartyHistory(
     reason: d.reason,
     oldPartyId: d.oldPartyId,
     newPartyId: d.newPartyId,
-    oldPartyCountryId: d.oldPartyCountryId ?? null,
-    newPartyCountryId: d.newPartyCountryId ?? null,
+    oldPartyCountryId: d.oldPartyCountryId ?? d.countryId,
+    newPartyCountryId: d.newPartyCountryId ?? (isReal(d.newPartyId) ? d.countryId : null),
     oldPartyName: d.oldPartyName ?? null,
     newPartyName: d.newPartyName ?? null,
     characterCountryId: d.characterCountryId ?? null,
@@ -63,6 +77,68 @@ export async function fetchPartyHistory(
     turn: d.turn,
     synthetic: Boolean((d.metadata as Record<string, unknown> | undefined)?.synthetic),
   }));
+}
+
+/**
+ * Fetches successful party renames for parties present in a character's membership
+ * history. Committee proposals are the durable rename ledger, including renames
+ * that happened before membership-event name snapshots were added.
+ */
+export async function fetchPartyNameChanges(
+  db: Db,
+  events: PartyHistoryEntry[]
+): Promise<PartyNameChange[]> {
+  const partyKeys = new Set<string>();
+  for (const event of events) {
+    if (isReal(event.oldPartyId) && event.oldPartyCountryId) {
+      partyKeys.add(`${event.oldPartyCountryId}:${event.oldPartyId}`);
+    }
+    if (isReal(event.newPartyId) && event.newPartyCountryId) {
+      partyKeys.add(`${event.newPartyCountryId}:${event.newPartyId}`);
+    }
+  }
+  if (partyKeys.size === 0) return [];
+
+  const sequentialIds = [...partyKeys]
+    .map((key) => Number(key.slice(key.lastIndexOf(":") + 1)))
+    .filter((id) => Number.isInteger(id));
+  if (sequentialIds.length === 0) return [];
+
+  const parties = await db
+    .collection<PoliticalParty>("politicalParties")
+    .find({ sequentialId: { $in: sequentialIds } })
+    .project({ _id: 1, countryId: 1, sequentialId: 1 })
+    .toArray();
+  const relevantParties = parties.filter((party) =>
+    partyKeys.has(`${party.countryId}:${party.sequentialId}`)
+  );
+  if (relevantParties.length === 0) return [];
+
+  const partyByObjectId = new Map(relevantParties.map((party) => [party._id.toString(), party]));
+  const proposals = await db
+    .collection<CommitteeProposal>("committeeProposals")
+    .find({
+      type: "rename",
+      status: "passed",
+      partyId: { $in: relevantParties.map((party) => party._id) },
+    })
+    .project({ partyId: 1, rename: 1, resolvedAtTurn: 1, updatedAt: 1 })
+    .sort({ updatedAt: 1 })
+    .toArray();
+
+  return proposals.flatMap((proposal) => {
+    const party = partyByObjectId.get(proposal.partyId.toString());
+    if (!party || !proposal.rename || proposal.resolvedAtTurn === undefined) return [];
+    return [
+      {
+        partyId: String(party.sequentialId),
+        partyCountryId: party.countryId,
+        newName: proposal.rename.newName,
+        effectiveAt: proposal.updatedAt,
+        turn: proposal.resolvedAtTurn,
+      },
+    ];
+  });
 }
 
 /** Input describing the character's current state, used for tail reconciliation. */
@@ -133,7 +209,8 @@ function openParty(
 
 export function buildPartyTenures(
   events: PartyHistoryEntry[],
-  current: CurrentTenureInput
+  current: CurrentTenureInput,
+  partyNameChanges: PartyNameChange[] = []
 ): PartyTenure[] {
   const tenures: MutableTenure[] = [];
 
@@ -275,5 +352,57 @@ export function buildPartyTenures(
     }
   }
 
-  return tenures;
+  return splitTenuresAtPartyRenames(tenures, partyNameChanges);
+}
+
+function splitTenuresAtPartyRenames(
+  tenures: MutableTenure[],
+  partyNameChanges: PartyNameChange[]
+): PartyTenure[] {
+  const result: MutableTenure[] = [];
+
+  for (const tenure of tenures) {
+    if (tenure.partyId === null) {
+      result.push(tenure);
+      continue;
+    }
+
+    const matchingRenames = partyNameChanges
+      .filter(
+        (rename) =>
+          rename.partyId === tenure.partyId && rename.partyCountryId === tenure.partyCountryId
+      )
+      .sort((a, b) => a.effectiveAt.getTime() - b.effectiveAt.getTime());
+    // Legacy membership events can predate name snapshots. A rename that was
+    // already in effect when the tenure began is still enough to recover its
+    // label exactly; only the period before the first recorded rename remains
+    // unknowable on those legacy rows.
+    const nameAtStart = [...matchingRenames]
+      .reverse()
+      .find((rename) => rename.effectiveAt <= tenure.startedAt)?.newName;
+    const renames = matchingRenames.filter(
+      (rename) =>
+        rename.effectiveAt > tenure.startedAt &&
+        (tenure.endedAt === null || rename.effectiveAt < tenure.endedAt)
+    );
+
+    let segment = { ...tenure, partyName: tenure.partyName ?? nameAtStart ?? null };
+    for (const rename of renames) {
+      if (rename.newName === segment.partyName) continue;
+      segment.endedAt = rename.effectiveAt;
+      segment.endKind = "renamed";
+      segment.endSynthetic = false;
+      result.push(segment);
+      segment = {
+        ...tenure,
+        partyName: rename.newName,
+        startedAt: rename.effectiveAt,
+        startKind: "renamed",
+        startSynthetic: false,
+      };
+    }
+    result.push(segment);
+  }
+
+  return result;
 }

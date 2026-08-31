@@ -12,6 +12,7 @@ import type {
   Corporation,
   CorporateSector,
   GameState,
+  GameConfig,
   SectorBuildOrder,
   State,
   StateMetrics,
@@ -53,6 +54,10 @@ import {
   MAX_BUILD_UNITS_PER_ORDER,
   computeBuildCost,
 } from "@/lib/constants/capacityEconomy";
+import {
+  retailCapacityExpansionPaused,
+  retailDemandTransitionTurnsRemaining,
+} from "@/lib/market/retailDemandTransition";
 
 /**
  * Sector capacity commands (plants tier, P3a of the buildable-sectors plan).
@@ -216,6 +221,27 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
     const currentYear =
       gameState?.currentYear ??
       STARTING_YEAR + Math.floor((Math.max(1, currentTurn) - 1) / TURNS_PER_YEAR);
+
+    if (body.action === "build" && sector.sectorType === "retail") {
+      const transition = await db.collection<GameConfig>("gameConfig").findOne(
+        { _id: "default" },
+        {
+          projection: {
+            retailDemandTransitionStartTurn: 1,
+            retailDemandTransitionTurns: 1,
+          },
+        }
+      );
+      if (retailCapacityExpansionPaused(transition, currentTurn)) {
+        const remaining = retailDemandTransitionTurnsRemaining(transition, currentTurn);
+        return NextResponse.json(
+          {
+            error: `New Retail capacity is paused while consumer demand is rebalanced (${remaining} turns remaining). Existing stores may still operate, mothball, or cancel builds.`,
+          },
+          { status: 409 }
+        );
+      }
+    }
 
     let countryId = sector.countryId ?? corporation.countryId;
     if (!countryId) {

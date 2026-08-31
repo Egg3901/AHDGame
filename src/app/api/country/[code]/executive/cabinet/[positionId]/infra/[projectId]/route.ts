@@ -6,6 +6,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
+import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { getInfraProjectsCollection } from "@/lib/db/collections/infraProjects";
@@ -45,6 +46,10 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
         { status: 403 }
       );
     }
+
+    // Cancelling a project writes off work the successor may have wanted.
+    const actingDenied = requireConfirmedSecretary(member, "assets", !!auth.user.isAdmin);
+    if (actingDenied) return actingDenied;
 
     const result = await getInfraProjectsCollection(db).deleteOne({
       _id: new ObjectId(projectId),

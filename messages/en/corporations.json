@@ -1,0 +1,25 @@
+{
+  "corporations": {
+    "supplyAgreements": {
+      "settlement": {
+        "shortfallDamages": "Shortfall damages",
+        "noDamages": "No shortfall damages",
+        "commitment": "Commitment",
+        "damageCeiling": "Damage ceiling",
+        "productionCredited": "Production credited",
+        "chargeableShortfall": "Chargeable shortfall",
+        "damagesAssessed": "Damages assessed",
+        "netCash": "Net contract cash",
+        "unpaid": "Unpaid settlement",
+        "unknown": "Not known",
+        "explanation": "External production limits reduce the damage ceiling first. Only production below that ceiling is charged."
+      },
+      "capacity": {
+        "current": "Current contract capacity",
+        "latestAchievable": "Latest achievable output",
+        "maximumContract": "Maximum legal commitment",
+        "penaltyWarning": "This is a per-turn commitment. Production below the damage ceiling incurs shortfall damages equal to {penaltyPercent}% of the market value of each missing unit."
+      }
+    }
+  }
+}

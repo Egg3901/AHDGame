@@ -33,7 +33,8 @@ import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
-import { getStartingYearForPreset, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import { getStartingYearForPreset } from "@/lib/constants/turnTime";
+import { yearOfTurn } from "@/lib/utils/gameDate";
 import { enactRulingBill } from "@/lib/scotus/enactRulingBill";
 import type { DocketCase, DocketCaseEffect, SupremeCourtSeat } from "@/lib/db/types/scotus";
 import type { PolicyProvision } from "@/lib/db/types/legislation";
@@ -80,8 +81,14 @@ export async function processScotusSurpriseCaseTurn(
   const startingYear = gameState?.startingYear ?? getStartingYearForPreset(preset);
   // Inverse of turnConversion.ts's yearToTurn — surprise cases have no
   // authored decisionYear (they aren't scripted in advance), so this is
-  // simply "what calendar year is it right now."
-  const decisionYear = startingYear + Math.floor((currentTurn - 1) / TURNS_PER_YEAR);
+  // simply "what calendar year is it right now." Routed through the calendar
+  // clock: on a world with a founding phase the raw turn is a full game year
+  // ahead of the year the player sees, which stamped 1962 rulings on a 1961
+  // Court and fed the era filter the wrong year (#1208).
+  const decisionYear = yearOfTurn(currentTurn, startingYear, {
+    preIterationActive: gameState?.preIteration?.active,
+    preIterationTurns: gameState?.preIterationTurns,
+  });
 
   const usedTemplateKeys = new Set(
     (

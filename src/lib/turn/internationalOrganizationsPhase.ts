@@ -20,7 +20,7 @@ import {
 import { getAllCountryAccess } from "@/lib/countryAccess";
 import type { OrgMemberId } from "@/lib/db/types/internationalOrganization";
 import { dedupeOrganizationVotes } from "@/lib/internationalOrganizations/voteWrite";
-import { resolutionPasses } from "@/lib/internationalOrganizations/resolutionRules";
+import { ballotPasses, resolutionPasses } from "@/lib/internationalOrganizations/resolutionRules";
 import {
   applyOrganizationSanctions,
   liftOrganizationSanctions,
@@ -59,13 +59,70 @@ import {
   resolveJoinApplication,
 } from "@/lib/internationalOrganizations/joinApplication";
 import { castAutonomousOrgVotes } from "@/lib/nppAutonomy/autonomousOrgVoting";
+import { foreignPolicyModeFrom } from "@/lib/nppAutonomy/foreignPolicyRollout";
+import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
+import { reconcileAutonomousWarEntryBills } from "@/lib/internationalOrganizations/reconcileAutonomousWarEntry";
+import {
+  classifyWarEntry,
+  assessWarEntryPoliticalPressure,
+  enactImmediateWarEntry,
+  warEntryIsImmediate,
+} from "@/lib/military/warEntryPolicy";
 import type {
   OrganizationLegislation,
   ProposalVoteRecord,
 } from "@/lib/db/types/internationalOrganization";
+import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
+import type { NPP, NppForeignPolicyMode } from "@/lib/db/types";
 
 function countryName(countryId: string): string {
   return COUNTRY_CONFIGS[countryId as CountryId]?.name ?? countryId;
+}
+
+/**
+ * Voting roster for policy decisions. Shadow/off preserve the player-only
+ * baseline. Active mode adds modelled members that have a formed NPP government
+ * and a legislature capable of resolving the consequences of their vote.
+ */
+async function policyVotingMembers(db: Db, organizationId: string): Promise<CountryId[]> {
+  const players = await votingMembers(db, organizationId);
+  const rollout = await db
+    .collection<{ _id: string; nppForeignPolicyMode?: NppForeignPolicyMode }>("gameState")
+    .findOne({ _id: "current" }, { projection: { nppForeignPolicyMode: 1 } });
+  if (foreignPolicyModeFrom(rollout?.nppForeignPolicyMode) !== "active") return players;
+
+  const modelledMembers = (await getMembers(db, organizationId)).filter(
+    (member): member is CountryId =>
+      member in COUNTRY_CONFIGS && hasBillLifecycle(member as CountryId)
+  );
+  if (modelledMembers.length === 0) return players;
+  const formations = await db
+    .collection<GovernmentFormation>("governmentFormations")
+    .find({
+      _id: { $in: modelledMembers },
+      status: "formed",
+      $or: [{ pmNppId: { $ne: null } }, { presidentNppId: { $ne: null } }],
+    })
+    .toArray();
+  return Array.from(new Set([...players, ...formations.map((formation) => formation.countryId)]));
+}
+
+async function getPolicyHeadSponsor(
+  db: Db,
+  countryId: CountryId
+): Promise<{ _id: ObjectId; name: string; party?: string; isNpp: boolean } | null> {
+  const playerHead = await getHeadOfGovernmentCharacter(db, countryId);
+  if (playerHead) return { ...playerHead, isNpp: false };
+
+  const formation = await db
+    .collection<GovernmentFormation>("governmentFormations")
+    .findOne({ _id: countryId, status: "formed" });
+  const headNppId = formation?.presidentNppId ?? formation?.pmNppId ?? null;
+  if (!headNppId) return null;
+  const npp = await db
+    .collection<NPP>("npps")
+    .findOne({ _id: headNppId }, { projection: { _id: 1, name: 1, party: 1 } });
+  return npp ? { _id: npp._id, name: npp.name, party: npp.party, isNpp: true } : null;
 }
 
 /**
@@ -110,6 +167,7 @@ export async function processInternationalOrganizationsTurn(
   const autonomousVotesCast = await castAutonomousOrgVotes(db, currentTurn);
   const proposalsResolved = await resolveExpiredMembershipProposals(db, currentTurn);
   const legislationResolved = await resolveExpiredOrganizationLegislation(db, currentTurn);
+  await reconcileAutonomousWarEntryBills(db);
   const electionsResolved = await resolveExpiredLeadershipElections(db, currentTurn);
   const sanctionsExpired = await expireActiveSanctions(db, currentTurn);
   const directivesExpired = await expireActiveDirectives(db, currentTurn);
@@ -370,14 +428,15 @@ async function resolveExpiredMembershipProposals(db: Db, currentTurn: number): P
     // Only player-enabled members have a vote: a client state cannot withhold a
     // unanimous "yes" it was never entitled to cast, which is what keeps
     // unanimity workable once an alliance takes on clients.
-    const voters = (await votingMembers(db, proposal.organizationId)).filter(
+    const voters = (await policyVotingMembers(db, proposal.organizationId)).filter(
       (m: string) => m !== proposingCountryId
     );
     const uniqueVotes = dedupeOrganizationVotes(proposal.votes as ProposalVoteRecord[]);
 
     // Unanimous current members must vote "yes". Abstain or no-vote counts as
     // non-approval. Empty voter set (e.g., applying to a 0-member org) cannot
-    // succeed under unanimity — block instead of silently admitting.
+    // succeed under unanimity — `ballotPasses` blocks a zero-size ballot rather
+    // than silently admitting, so only the founding waiver reads through.
     let approved = false;
     if (voters.length === 0) {
       approved = members.includes(proposingCountryId);
@@ -387,7 +446,8 @@ async function resolveExpiredMembershipProposals(db: Db, currentTurn: number): P
           .filter((v: ProposalVoteRecord) => v.vote === "yes")
           .map((v: ProposalVoteRecord) => v.countryId)
       );
-      approved = voters.every((c: string) => yesVoters.has(c));
+      const yes = voters.filter((c: string) => yesVoters.has(c)).length;
+      approved = ballotPasses("membership_proposal", voters.length, yes);
     }
 
     // Parallel join (has a linked domestic Join bill): record the member-vote
@@ -475,7 +535,7 @@ async function resolveExpiredOrganizationLegislation(db: Db, currentTurn: number
     // that cannot vote would deadlock the agreement exactly as a silent member
     // would deadlock an admission. The agreement still *binds* every party once
     // ratified, so only the ballot is narrowed here, not the effect below.
-    const members = await votingMembers(db, item.organizationId);
+    const members = await policyVotingMembers(db, item.organizationId);
     const voterSet = new Set<string>(members);
     const votingParties = parties.filter((p): p is CountryId => voterSet.has(p));
     const uniqueVotes = dedupeOrganizationVotes(item.votes as ProposalVoteRecord[]);
@@ -562,6 +622,18 @@ async function resolveExpiredOrganizationLegislation(db: Db, currentTurn: number
           },
         }
       );
+      // A resolution that fails leaves the pending list without explanation
+      // otherwise, and under a roll-based threshold failing is ordinary. The
+      // proposer is the one country guaranteed to have a page to log it on.
+      if (item.proposingCountryId in COUNTRY_CONFIGS) {
+        await recordOrgHistoryEvent(
+          db,
+          item.proposingCountryId,
+          currentTurn,
+          `${item.organizationId} rejected ${item.title}.`,
+          { organizationId: item.organizationId, legislationId: item._id.toString() }
+        );
+      }
     }
     resolved++;
   }
@@ -583,20 +655,20 @@ async function resolveExpiredLeadershipElections(db: Db, currentTurn: number): P
     // Electing a chair is a vote like any other, so the roll is the voting one.
     // This also keeps the quorum honest: a silent client state would otherwise
     // count toward turnout it can never supply.
-    const members = await votingMembers(db, election.organizationId);
+    const members = await policyVotingMembers(db, election.organizationId);
     const uniqueVotes = dedupeOrganizationVotes(election.votes as ProposalVoteRecord[]);
-    // Tally yes/no/abstain. Members who didn't vote are treated as abstain.
+    // Only an active "yes" counts. A member who abstains or never votes withholds
+    // consent exactly as a "no" does, so the denominator is the roll rather than
+    // the turnout.
     let yes = 0;
-    let no = 0;
     for (const v of uniqueVotes) {
       if (!members.includes(v.countryId)) continue;
       if (v.vote === "yes") yes++;
-      else if (v.vote === "no") no++;
     }
-    // Simple majority of votes cast (excluding abstain). Tie or zero turnout
-    // leaves the seat unchanged — the org continues operating with the prior
-    // holder (or vacant) until a future election decides.
-    const elected = yes > no && yes > 0;
+    // A majority of the voting roll seats the chair. Falling short leaves the
+    // seat unchanged — the org continues operating with the prior holder (or
+    // vacant) until a future election decides.
+    const elected = ballotPasses("leadership_election", members.length, yes);
 
     if (elected) {
       const orgDef = await loadOrganizationDef(db, election.organizationId);
@@ -644,6 +716,16 @@ async function resolveExpiredLeadershipElections(db: Db, currentTurn: number): P
           },
         }
       );
+      const orgDef = await loadOrganizationDef(db, election.organizationId);
+      if (election.candidateCountryId in COUNTRY_CONFIGS) {
+        await recordOrgHistoryEvent(
+          db,
+          election.candidateCountryId as CountryId,
+          currentTurn,
+          `${election.candidateCharacterName} was not elected ${orgDef?.leadership.title ?? "leader"} of ${election.organizationId}.`,
+          { organizationId: election.organizationId, electionId: election._id.toString() }
+        );
+      }
     }
     resolved++;
   }
@@ -735,7 +817,10 @@ async function applyResolutionEffect(
       // A resolution sits for 24 turns; the war it was about can end inside that
       // window. Mirrors declareWar, which re-runs findWarBetween at enactment.
       const conflict = await getConflict(db, theaterId);
-      if (!conflict || conflict.status === "resolved") {
+      // Concluded, not merely resolved: a war awaiting terms is over for every
+      // purpose except the victor's choice, and admitting a new belligerent to it
+      // would put a country into a fight that has already stopped.
+      if (!conflict || isConflictConcluded(conflict.status)) {
         await recordOrgHistoryEvent(
           db,
           resolution.proposingCountryId,
@@ -754,7 +839,54 @@ async function applyResolutionEffect(
         side === "A" ? conflict.sideB.countries : conflict.sideA.countries
       ) as string[];
 
-      for (const countryId of votingMemberIds) {
+      const entryMembers = (await getMembers(db, resolution.organizationId)).filter(
+        (member): member is CountryId => member in COUNTRY_CONFIGS
+      );
+      for (const countryId of entryMembers) {
+        if (other.includes(countryId)) {
+          // A bloc resolution never switches a country's side mid-war.
+          await recordOrgHistoryEvent(
+            db,
+            countryId,
+            currentTurn,
+            `${countryName(countryId)} is already fighting on the other side of ${conflict.name}.`,
+            { organizationId: resolution.organizationId, legislationId: resolution._id.toString() }
+          );
+          continue;
+        }
+        if (chosen.includes(countryId)) continue;
+
+        const stake = classifyWarEntry({
+          conflict,
+          countryId,
+          side,
+          organizationId: resolution.organizationId,
+        });
+        if (warEntryIsImmediate(stake)) {
+          await enactImmediateWarEntry({
+            db,
+            conflict,
+            countryId,
+            side,
+            organizationId: resolution.organizationId,
+            currentTurn,
+            stake,
+          });
+          await recordOrgHistoryEvent(
+            db,
+            countryId,
+            currentTurn,
+            stake === "collective_defense"
+              ? `${resolution.organizationId} collective defense invoked: entered ${conflict.name} immediately.`
+              : `${countryName(countryId)} entered ${conflict.name} as a principal belligerent.`,
+            { organizationId: resolution.organizationId, legislationId: resolution._id.toString() }
+          );
+          continue;
+        }
+
+        // Offensive coalition entry remains a national political choice. A
+        // non-voting client does not acquire a fictional chamber for it.
+        if (!votingMemberIds.includes(countryId)) continue;
         // A bill minted for a country no engine walks never closes — it sits at
         // active_both forever, with nothing to resolve it and nothing reporting it.
         if (!hasBillLifecycle(countryId)) {
@@ -767,23 +899,9 @@ async function applyResolutionEffect(
           );
           continue;
         }
-        // Already in, on the side the bloc chose: nothing to ask.
-        if (chosen.includes(countryId)) continue;
-        if (other.includes(countryId)) {
-          // A bloc resolution never switches a country's side mid-war.
-          await recordOrgHistoryEvent(
-            db,
-            countryId,
-            currentTurn,
-            `${countryName(countryId)} is already fighting on the other side of ${conflict.name}.`,
-            { organizationId: resolution.organizationId, legislationId: resolution._id.toString() }
-          );
-          continue;
-        }
-
         // The head of government sponsors it — the bill arrives at a foreign
         // power's call, so it is filed in the government's name, not a member's.
-        const sponsor = await getHeadOfGovernmentCharacter(db, countryId);
+        const sponsor = await getPolicyHeadSponsor(db, countryId);
         if (!sponsor) {
           await recordOrgHistoryEvent(
             db,
@@ -799,7 +917,12 @@ async function applyResolutionEffect(
           db,
           countryId,
           preset,
-          sponsor: { characterId: sponsor._id, characterName: sponsor.name },
+          sponsor: {
+            characterId: sponsor._id,
+            characterName: sponsor.name,
+            party: sponsor.party,
+            isNpp: sponsor.isNpp,
+          },
           conflictName: conflict.name,
           organizationId: resolution.organizationId,
           provision: {
@@ -808,6 +931,14 @@ async function applyResolutionEffect(
             side,
             organizationId: resolution.organizationId,
             resolutionId: resolution._id.toString(),
+            entryStake: stake,
+            politicalPressure: await assessWarEntryPoliticalPressure({
+              db,
+              countryId,
+              organizationId: resolution.organizationId,
+              stake,
+              currentTurn,
+            }),
           },
         });
       }

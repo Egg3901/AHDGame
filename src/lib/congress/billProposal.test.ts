@@ -158,23 +158,33 @@ describe("snapshotBillPolicyProvisions", () => {
       ],
     });
 
-    const result = await snapshotBillPolicyProvisions(db as unknown as Db, "jp_national", [
-      {
-        legislationTypeId: "family_policy",
-        policyOptionId: "family_proposed",
-        effectDirection: 0,
-        economic: -1,
-        social: 0,
-      },
-    ]);
+    const result = await snapshotBillPolicyProvisions(
+      db as unknown as Db,
+      { scope: "national", countryId: "JP" },
+      [
+        {
+          legislationTypeId: "family_policy",
+          policyOptionId: "family_proposed",
+          effectDirection: 0,
+          economic: -1,
+          social: 0,
+        },
+      ]
+    );
 
+    // Both fixtures' explanations contain ": ", which is exactly the case the old
+    // combiner mishandled: it returned the explanation ALONE and dropped
+    // option.name, so the stored snapshot lost the law's actual option title.
+    // Structured snapshots keep both fields.
     expect(result).toEqual([
       {
         legislationTypeId: "family_policy",
         policyOptionId: "family_proposed",
-        policyOptionNameSnapshot: "Proposed Law: Expanded childcare support",
+        policyOptionNameSnapshot: "Proposed Law",
+        policyOptionExplanationSnapshot: "Proposed Law: Expanded childcare support",
         currentPolicyOptionIdSnapshot: "family_current",
-        currentPolicyOptionNameSnapshot: "Current Law: Existing policy before the bill",
+        currentPolicyOptionNameSnapshot: "Current Law",
+        currentPolicyOptionExplanationSnapshot: "Current Law: Existing policy before the bill",
         effectDirection: 0,
         economic: -1,
         social: 0,

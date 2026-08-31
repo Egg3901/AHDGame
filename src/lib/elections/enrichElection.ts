@@ -41,6 +41,7 @@ import {
   isOwnRegionalExecutiveRace,
 } from "@/lib/electionEngine/govCoattail";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
+import { applyFactorLedgerFogOfWar } from "@/lib/elections/factorLedgerFog";
 import { type GameTimeContext } from "@/lib/time/gameTime";
 import { computeElectionPhase } from "@/lib/elections/phases";
 import {
@@ -93,9 +94,12 @@ import { loadRegionalBonusMaps } from "@/lib/primaryRegionalBonusLoader";
 import { fetchEnrichedCandidates } from "@/lib/electionEngine/candidateEnrichment";
 import {
   getAllStaggerStates,
+  getPrimaryWaveSchedule,
   getTotalDelegatesForFamily,
   resolvePartyFamily,
+  type PrimaryWaveSchedule,
 } from "@/lib/constants/primaryCalendar";
+import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
 import {
   applyProjectedDelegatePolling,
   applyProjectedDelegateShares,
@@ -104,6 +108,7 @@ import {
 import { buildActiveVisibleNppEndorsementFilter } from "@/lib/nppEndorsements";
 import { parseSeatId } from "@/lib/seats/seatId";
 import { buildPartyDisplayById, buildPresidentialRegByStateInput } from "./presidentialRegByState";
+import { ballotSharesWithinParty } from "@/lib/turn/primaryBallots";
 import { resolveElectionDisplayParty } from "./resolveElectionParty";
 
 async function applyPresidentialPrimaryDisplay(
@@ -117,13 +122,17 @@ async function applyPresidentialPrimaryDisplay(
   byParty: PartyGroup[],
   polling: PollingData | null,
   preloadedStatePartyOrgs: StatePartyOrg[],
+  schedule: PrimaryWaveSchedule,
   preset?: string
 ): Promise<{
   byParty: PartyGroup[];
   polling: PollingData | null;
   displayCandidates: EnrichedCandidate[];
 }> {
-  const staggerStateIds = getAllStaggerStates();
+  // State membership is identical across schedules; the schedule is threaded so
+  // this display path stays coherent with the race's actual calendar even if a
+  // future schedule ever changes membership.
+  const staggerStateIds = getAllStaggerStates(schedule);
   const [categories, states, demographics, resolvedStatePartyOrgs, engineEnriched] =
     await Promise.all([
       loadDemographicCategories(db),
@@ -477,6 +486,26 @@ export async function _enrichElection(
   const partyMap = new Map(parties.map((p) => [String(p.sequentialId), p]));
   let byParty = groupCandidatesByParty(enrichedWithYou, partyMap);
 
+  // Ballot-consistent primary standings: where the primary has accrued real
+  // ballots (see recordPrimarySnapshots), the live page shows CUMULATIVE
+  // ballot shares — the figure resolution will actually pick the nominee from
+  // — instead of the instantaneous score softmax. Parties without ballots
+  // (missing registration data, legacy races) keep the score shares.
+  if (inPrimary && !isPresident && tally?.primaryVotes) {
+    const primaryVotes = tally.primaryVotes;
+    for (const group of byParty) {
+      const shares = ballotSharesWithinParty(
+        group.candidates.map((c) => c.id),
+        primaryVotes
+      );
+      if (!shares) continue;
+      for (const groupCandidate of group.candidates) {
+        groupCandidate.sharePct = shares.get(groupCandidate.id) ?? groupCandidate.sharePct;
+      }
+      group.candidates.sort((a, b) => (primaryVotes[b.id] ?? 0) - (primaryVotes[a.id] ?? 0));
+    }
+  }
+
   // Primary-winner cap for this race: US=1, UK=3, JP=3; single-winner
   // governor/president races are always 1. Resolved once here and returned as
   // `primaryAdvanceCount` so client surfaces read it instead of recomputing it.
@@ -642,6 +671,8 @@ export async function _enrichElection(
   let myEndorsedCandidateId: string | null = null;
   /** Read-through of the tally's economic-referendum snapshot (president only). */
   let economicReferendum: ElectionResponse["economicReferendum"];
+  /** Read-through of the tally's factor ledger, fog-of-war applied (president only). */
+  let factorLedger: ElectionResponse["factorLedger"];
 
   if (isPresident && inPrimary) {
     const projectedDisplay = await applyPresidentialPrimaryDisplay(
@@ -655,6 +686,7 @@ export async function _enrichElection(
       byParty,
       polling,
       statePartyOrgs,
+      getPrimaryWaveSchedule(presidentialRulesetFor(election)),
       gameState?.preset
     );
     byParty = projectedDisplay.byParty;
@@ -738,6 +770,21 @@ export async function _enrichElection(
           ...(referendumParty?.name ? { incumbentPartyName: referendumParty.name } : {}),
           ...(referendumParty?.color ? { incumbentPartyColor: referendumParty.color } : {}),
         };
+      }
+
+      // Factor Ledger card input. Read straight off the tally (never recomputed).
+      // Fog-of-war: the national factor waterfall is public for every candidate,
+      // but per-candidate `bucketAppeal` (where a candidate's appeal comes from)
+      // and the per-unit breakdown are stripped for candidates the viewer does
+      // not own, matching the Support fog on the persuasion card. Admins see all.
+      const factorLedgerSnapshot = resolvedTally.factorLedger ?? tally?.factorLedger;
+      if (isPresident && factorLedgerSnapshot) {
+        const ownedCandidateIds = new Set(
+          isAdmin
+            ? factorLedgerSnapshot.byCandidateNational.map((c) => c.candidateId)
+            : enrichedWithIsYou.filter((c) => c.isYou).map((c) => c.id)
+        );
+        factorLedger = applyFactorLedgerFogOfWar(factorLedgerSnapshot, ownedCandidateIds);
       }
 
       const filterRecord = <T>(rec: Record<string, T>): Record<string, T> => {
@@ -1087,11 +1134,36 @@ export async function _enrichElection(
   // battleground hover cards can resolve abbreviations (not raw sequentialIds).
   let regByState: ElectionResponse["regByState"];
   let partyDisplayById: ElectionResponse["partyDisplayById"];
+  // Attached to every full view, not just the presidential shell. `parties` is
+  // already loaded above for this country, so this costs nothing extra, and
+  // without it a non-presidential detail page has no way to print a party
+  // ABBREVIATION — it would have to fall back to the full registered name
+  // ("Sozialdemokratische Partei Deutschlands takes 9 of 19").
+  if (isFull) {
+    partyDisplayById = buildPartyDisplayById(parties);
+  }
+
+  // The seat's own region electorate, for the detail page's turnout figure.
+  // `statesForEnrichment` already holds this region's doc, so this costs no
+  // extra query. Prefer the voting-eligible count; fall back to total
+  // population and SAY so, because the two differ by roughly a quarter and a
+  // population figure passed off as an electorate understates turnout.
+  let regionElectorate: ElectionResponse["regionElectorate"];
+  let regionName: string | undefined;
+  if (isFull) {
+    const seatRegion = election.seatId ? parseSeatId(election.seatId).localRegionId : null;
+    const stateDoc = seatRegion ? statesForEnrichment.get(seatRegion) : undefined;
+    if (stateDoc?.name) regionName = stateDoc.name;
+    if (stateDoc?.votingEligiblePopulation) {
+      regionElectorate = { count: stateDoc.votingEligiblePopulation, basis: "eligible" };
+    } else if (stateDoc?.population) {
+      regionElectorate = { count: stateDoc.population, basis: "residents" };
+    }
+  }
   // General OR ended — the presidential shell (and this card) renders for both
   // (`!inPrimary && !isUpcoming`), and registration is a phase-agnostic
   // baseline, so populate it wherever the card is shown rather than only mid-race.
   if (isFull && isPresident && (inGeneral || isEnded)) {
-    partyDisplayById = buildPartyDisplayById(parties);
     const pools = await db
       .collection<StateRegistrationPool>("stateRegistrationPool")
       .find({ countryId })
@@ -1192,10 +1264,14 @@ export async function _enrichElection(
 
     // National Mood gauge input (president only, when the engine recorded one).
     ...(economicReferendum ? { economicReferendum } : {}),
+    ...(factorLedger ? { factorLedger } : {}),
 
     // Registration Influence card inputs (US presidential general only).
     ...(regByState ? { regByState } : {}),
     ...(partyDisplayById ? { partyDisplayById } : {}),
+    ...(regionElectorate ? { regionElectorate } : {}),
+    ...(regionName ? { regionName } : {}),
+    ...(tally?.primaryVotes ? { primaryVotes: tally.primaryVotes } : {}),
   };
 }
 

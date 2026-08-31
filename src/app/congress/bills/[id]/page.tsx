@@ -11,12 +11,13 @@ import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import { BillProvisionCard } from "@/components/legislature/BillProvisionCard";
 import { BillProposalChip } from "@/components/bills/BillProposalChip";
-import { nationalProvisionToView } from "@/lib/legislature/dto/provisionView";
+import { provisionToView } from "@/lib/legislature/dto/provisionView";
 import type { BillDetail } from "./types";
 import { chamberLabel } from "./billHelpers";
 import { otherChamber } from "@/lib/billLifecycleHelpers";
 import { StatusBadge } from "./components/StatusBadge";
 import { VoteBar } from "./components/VoteBar";
+import { VoteShiftPreview } from "@/components/bills/VoteShiftPreview";
 import { VoteTallyTable } from "./components/VoteTallyTable";
 import { VoteListTable } from "./components/VoteListTable";
 import { LocalTime } from "@/components/time/LocalTime";
@@ -308,7 +309,7 @@ function BillDetailContent() {
               {bill.provisions.map((p, i) => (
                 <BillProvisionCard
                   key={i}
-                  view={nationalProvisionToView(p)}
+                  view={provisionToView(p)}
                   billCountry={resolvedCountryId}
                   index={i}
                 />
@@ -462,6 +463,7 @@ function BillDetailContent() {
                     <div className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
                       Cast your vote
                     </div>
+                    <VoteShiftPreview preview={bill.voteShiftPreview} currentVote={bill.myVote} />
                     <div className="flex gap-2">
                       {(isCabinetReview
                         ? (["for", "against"] as const)
@@ -519,6 +521,7 @@ function BillDetailContent() {
                   onVote={(v) => handleVote(true, v)}
                   requiredPct={supermajorityPct ?? otherRequiredPct}
                   requiredLabel={supermajorityLabel}
+                  shiftPreview={bill.voteShiftPreview}
                 />
               </div>
             )}

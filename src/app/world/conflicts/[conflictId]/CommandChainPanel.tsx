@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import type { CommandChainView } from "@/lib/military/commandChain";
 import { MIL_COLOR, MIL_FONT } from "../military/theme";
 
@@ -109,9 +110,18 @@ export function CommandChainPanel({
               {h.href && (
                 <>
                   {" "}
-                  <Link href={h.href} style={{ color: "#7ba3ec", textDecoration: "underline" }}>
-                    {h.linkLabel ?? "Go"}
-                  </Link>
+                  {/* An in-page anchor is a plain <a>: it scrolls to a section of
+                      THIS record (the posted-generals roster) rather than routing
+                      anywhere, and next/link has no navigation to do for it. */}
+                  {h.href.startsWith("#") ? (
+                    <a href={h.href} style={{ color: "#7ba3ec", textDecoration: "underline" }}>
+                      {h.linkLabel ?? "Go"}
+                    </a>
+                  ) : (
+                    <Link href={h.href} style={{ color: "#7ba3ec", textDecoration: "underline" }}>
+                      {h.linkLabel ?? "Go"}
+                    </Link>
+                  )}
                 </>
               )}
             </span>
@@ -166,6 +176,23 @@ export function CommandLockedPanel({ note }: { note: string }) {
 
 const COMMANDS_HREF = "/world/conflicts/combat";
 
+/** The left column of `HowThisFrontMoves`: a key, not a card heading. */
+function RowLabel({ children }: { children: ReactNode }) {
+  return (
+    <div
+      style={{
+        font: `600 9px ${mono}`,
+        letterSpacing: ".12em",
+        color: MIL_COLOR.textFaint,
+        whiteSpace: "nowrap",
+        paddingTop: 2,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 /**
  * How this front is moved, for a reader who holds no seat in it.
  *
@@ -193,62 +220,20 @@ export function HowThisFrontMoves({ whoDeclares }: { whoDeclares: string }) {
       >
         HOW THIS FRONT IS MOVED
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <div
-          style={{
-            border: `1px solid ${MIL_COLOR.borderSoft}`,
-            borderRadius: 10,
-            background: MIL_COLOR.inset,
-            padding: "12px 14px",
-          }}
-        >
-          <div
-            style={{
-              font: `600 9px ${mono}`,
-              letterSpacing: ".12em",
-              color: MIL_COLOR.textFaint,
-              marginBottom: 8,
-            }}
-          >
-            WHO ORDERS AN OFFENSIVE
-          </div>
-          <div style={{ font: `500 11px ${mono}`, color: "#c8c8d4", lineHeight: 1.6 }}>
-            {whoDeclares}
-          </div>
+      {/* Two labelled rows, not two bordered cards inside a bordered panel. The
+          nesting cost three borders and ~90px of padding to carry two sentences. */}
+      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "9px 14px" }}>
+        <RowLabel>ORDERS</RowLabel>
+        <div style={{ font: `500 11px ${mono}`, color: "#c8c8d4", lineHeight: 1.6 }}>
+          {whoDeclares}
         </div>
-        <div
-          style={{
-            border: `1px solid ${MIL_COLOR.borderSoft}`,
-            borderRadius: 10,
-            background: MIL_COLOR.inset,
-            padding: "12px 14px",
-          }}
-        >
-          <div
-            style={{
-              font: `600 9px ${mono}`,
-              letterSpacing: ".12em",
-              color: MIL_COLOR.textFaint,
-              marginBottom: 8,
-            }}
-          >
-            HOW TROOPS REACH A FRONT
-          </div>
-          <div style={{ font: `500 11px ${mono}`, color: "#c8c8d4", lineHeight: 1.6 }}>
-            Units follow the{" "}
-            <span style={{ color: MIL_COLOR.text }}>general they are assigned to</span>. Post a
-            general here and their divisions come with them.
-          </div>
-          <Link
-            href={COMMANDS_HREF}
-            style={{
-              display: "inline-block",
-              marginTop: 9,
-              font: `600 10px ${mono}`,
-              color: "#7ba3ec",
-              textDecoration: "underline",
-            }}
-          >
+
+        <RowLabel>REINFORCE</RowLabel>
+        <div style={{ font: `500 11px ${mono}`, color: "#c8c8d4", lineHeight: 1.6 }}>
+          Units follow the{" "}
+          <span style={{ color: MIL_COLOR.text }}>general they are assigned to</span>. Post a
+          general here and their divisions come with them.{" "}
+          <Link href={COMMANDS_HREF} style={{ color: "#7ba3ec", textDecoration: "underline" }}>
             Military commands →
           </Link>
         </div>

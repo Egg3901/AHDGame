@@ -250,13 +250,6 @@ function makeCtx(
     billWhips: new Map(),
     activeStateBills: [],
     stateBillWhips: new Map(),
-    speakerElection: null,
-    speakerNominations: [],
-    houseLeadershipElections: [],
-    houseLeadershipNominations: [],
-    senateLeadershipElections: [],
-    senateLeadershipNominations: [],
-    leadershipWhips: [],
     statePartyOrgs: new Map(),
     partyByCompositeKey: new Map(),
     partyCountries: new Map(),
@@ -379,7 +372,7 @@ describe("processNppBillSponsorship — throttle", () => {
     const official = makeOfficial(npp._id, "US", "house", "1");
     const nppMap = new Map([[npp._id.toString(), npp]]);
     // cap is 2; set to 2 → throttled
-    const { db, insertSpy } = makeMockDb({
+    const { db, insertSpy, billsCollection } = makeMockDb({
       activeNppBillCount: 2,
       legTypes: [makeLegType("l1", "fiscal")],
     });
@@ -388,6 +381,9 @@ describe("processNppBillSponsorship — throttle", () => {
     const count = await processNppBillSponsorship(ctx);
     expect(count).toBe(0);
     expect(insertSpy).not.toHaveBeenCalled();
+    expect(billsCollection.countDocuments).toHaveBeenCalledWith(
+      expect.objectContaining({ category: { $ne: "foreign policy" } })
+    );
   });
 
   it("proposes nothing when cooldown has not elapsed", async () => {
@@ -398,7 +394,7 @@ describe("processNppBillSponsorship — throttle", () => {
     // We need cooldown not elapsed: lastTurn = 100 - 5 = 95 → votingEndsOnTurn = 95 + 24 = 119
     // Actually: lastNppSponsoredBillTurn = votingEndsOnTurn - 24 = 119 - 24 = 95
     // currentTurn - 95 = 5 < 12 → throttled
-    const { db, insertSpy } = makeMockDb({
+    const { db, insertSpy, billsCollection } = makeMockDb({
       activeNppBillCount: 0,
       lastNppBillVotingEndsOnTurn: 100 + 24 - 5, // => proposal turn 95, gap = 5 < 12
       legTypes: [makeLegType("l1", "fiscal")],
@@ -408,6 +404,10 @@ describe("processNppBillSponsorship — throttle", () => {
     const count = await processNppBillSponsorship(ctx);
     expect(count).toBe(0);
     expect(insertSpy).not.toHaveBeenCalled();
+    expect(billsCollection.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({ category: { $ne: "foreign policy" } }),
+      expect.anything()
+    );
   });
 
   it("allows proposal when cooldown has elapsed", async () => {

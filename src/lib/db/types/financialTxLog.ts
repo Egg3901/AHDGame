@@ -81,6 +81,7 @@ export type FinancialTxType =
   // so it emits nothing.
   | "corp_capacity_build" // corp cash → capitalized construction in progress (debit)
   | "corp_capacity_build_refund" // cancelled build returns unspent CIP to corp cash (credit)
+  | "corp_sector_split_cost" // PvP campaign spend, paid whether the plant split succeeds or fails
   | "stock_trade_buy"
   | "stock_trade_sell"
 

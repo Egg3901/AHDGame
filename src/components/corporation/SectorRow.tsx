@@ -159,10 +159,12 @@ export function SectorRow({
   // produced it moves into the tooltip.
   const isMothballed = plantsMode && sector.mothballed === true;
   const buildQueue = plantsMode ? (sector.buildQueueSummary ?? null) : null;
-  // How many discrete plants/stores/etc. make up this sector's capacity. Derived
-  // from capacity units, the same way the sector-detail Plant panel derives it.
+  // Whole facilities are persisted ownership. Capacity can wear down without
+  // deleting a plant, so only fall back to the old capacity-derived count for
+  // payloads served during deployment of the ledger migration.
   const plantCount = plantsMode
-    ? facilitiesFromUnits(sector.sectorType as CorporationType, sector.capacityUnits ?? 0)
+    ? (sector.plantCount ??
+      facilitiesFromUnits(sector.sectorType as CorporationType, sector.capacityUnits ?? 0))
     : 0;
   const plantNoun =
     plantCount === 1 ? facilitySingular(sector.sectorType) : facilityPlural(sector.sectorType);

@@ -21,6 +21,7 @@ import { processPoliticalMetricsDynamics } from "@/lib/turn/politicalMetricsDyna
 import { syncAllPartyChairHeadsOfState } from "@/lib/turn/partyChairHeadOfState";
 import { processCrisisTurn } from "@/lib/turn/crisisTurn";
 import { processMinisterialOrders } from "@/lib/turn/ministerialOrderProcessing";
+import { processNavairTurn } from "@/lib/navair/turn";
 import { processTopSectorsRecompute } from "@/lib/turn/state/topSectorsRecompute";
 import { processInvestorConfidenceDecay } from "@/lib/turn/investorConfidenceDecay";
 import { processStateOwnershipConcentration } from "@/lib/turn/stateOwnershipConcentration";
@@ -38,6 +39,8 @@ import { mirrorTradeGrowth } from "@/lib/turn/tradeGrowthMirror";
 import { recalculateInflationPerTurn } from "@/lib/turn/inflationRecalc";
 import { processCommandEconomyTurn } from "@/lib/turn/commandEconomyTurn";
 import { processForexTurn } from "@/lib/turn/forexTurn";
+import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
+import { writePreForexBalanceCheckpoint } from "@/lib/ledger/balanceSnapshot";
 import { processCentralBankChairTurn } from "@/lib/turn/centralBankChairTurn";
 import { processFomcMeetings } from "@/lib/turn/fomcMeetingTurn";
 import { processNppMonetaryOperations } from "@/lib/moneySupply/nppPolicy";
@@ -47,7 +50,7 @@ import { processIndependenceDesireDrift } from "@/lib/turn/independenceDesireDri
 import { processReferendumLifecycle } from "@/lib/referendum/processReferendumLifecycle";
 import { reconcilePartyMemberCounts } from "@/lib/turn/partyOrg";
 import { snapshotMetricHistory } from "@/lib/metricHistory";
-import { snapshotApprovalHistory } from "@/lib/utils/governmentApproval";
+import { snapshotApprovalsForTurn } from "@/lib/utils/approvalSnapshotRun";
 import { snapshotInterestRateHistory } from "@/lib/turn/interestRateSnapshot";
 import { snapshotPartyHistory } from "@/lib/turn/partyHistorySnapshot";
 import {
@@ -64,8 +67,8 @@ import { runAuditAnomalyScan } from "@/lib/audit/anomalyScan";
 import { processGameHealthSnapshot } from "@/lib/turn/gameHealthSnapshot";
 import { processNppStanceDrift } from "@/lib/turn/nppStanceDrift";
 import { resetVicePresidentActions } from "@/lib/turn/vicePresidentActionReset";
+import { resetRunningMateSurrogateActions } from "@/lib/turn/runningMateSurrogateActionReset";
 import { resetJusticeActions } from "@/lib/turn/justiceActionReset";
-import { COUNTRY_ORDER, COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type { TurnPhaseAdapter } from "@/simulation/engine/types";
 
 export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
@@ -105,16 +108,24 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       const crisisResult = await runtime.runPhase("crisisTurn", () =>
         processCrisisTurn(db, newTurn)
       );
+      // Naval and air operations resolve BEFORE ministerial orders, because
+      // `ministerialOrders` is what resolves battle declarations and a battle reads the
+      // sea control, air superiority and supply this pass leaves behind. Run the other
+      // way round and every battle fights on last turn's dispositions, which is
+      // invisible in the result and wrong in the same direction every time.
+      const navairResult = await runtime.runPhase("navairOperations", () =>
+        processNavairTurn(db, newTurn)
+      );
       const ministerialOrdersResult = await runtime.runPhase("ministerialOrders", () =>
         processMinisterialOrders(newTurn)
       );
       const policyResult = await runtime.runPhase("policyEffects", () =>
         processStatePolicyEffects(db)
       );
-      return { crisisResult, ministerialOrdersResult, policyResult };
+      return { crisisResult, navairResult, ministerialOrdersResult, policyResult };
     })();
     const [
-      { crisisResult, ministerialOrdersResult, policyResult },
+      { crisisResult, navairResult, ministerialOrdersResult, policyResult },
       demoEffectResult,
       ,
       archetypeDecayResult,
@@ -190,6 +201,12 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       // Appended (result intentionally not destructured): refill the seated
       // vice-president's self-serve action pool once per Eastern-time day (#67).
       runtime.runPhase("vicePresidentActionReset", () => resetVicePresidentActions(db)),
+      // Appended (result intentionally not destructured): refill each active
+      // presidential ticket's shared running-mate surrogate action pool once per
+      // Eastern-time day (mirrors vicePresidentActionReset above).
+      runtime.runPhase("runningMateSurrogateActionReset", () =>
+        resetRunningMateSurrogateActions(db)
+      ),
       // Appended (result intentionally not destructured): refill seated
       // Justices' self-serve action pool once per Eastern-time day (#3598,
       // mirrors vicePresidentActionReset above).
@@ -230,6 +247,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       : null;
     phaseResults.crisisTurn = { crisisesProcessed: crisisResult ?? 0 };
     phaseResults.ministerialOrders = ministerialOrdersResult ?? null;
+    (phaseResults as Record<string, unknown>).navairOperations = navairResult ?? null;
     phaseResults.topSectorsRecompute = topSectorsResult ?? null;
 
     if (archetypeDecayResult) {
@@ -391,6 +409,18 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       processCommandEconomyTurn(db, newTurn, currentYear)
     );
 
+    if (isLedgerShadowEnabledFromConfig(context.config)) {
+      await runtime.runPhase("ledgerPreForexSnapshot", () =>
+        writePreForexBalanceCheckpoint(db, newTurn)
+      );
+    } else {
+      await runtime.markPhaseSkipped(
+        "ledgerPreForexSnapshot",
+        "featureDisabled",
+        "Skipped because the shadow ledger is disabled."
+      );
+    }
+
     if (gameState.forexEnabled) {
       // Pass the world's reset preset so the macro-target anchor (baseRate)
       // stays the SEEDED era rate table for the world's life (1953/1979/1991
@@ -508,20 +538,21 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       phaseResults.partyMemberCountReconcile = memberCountReconcileResult;
     }
 
-    const [metricHistResult] = await Promise.all([
+    const [metricHistResult, approvalSnapshotResult] = await Promise.all([
       runtime.runPhase("metricHistory", () => snapshotMetricHistory(db, newTurn)),
-      runtime.runPhase("approvalSnapshot", async () => {
-        const activeIds = COUNTRY_ORDER.filter((id) => COUNTRY_CONFIGS[id].status === "active");
-        await Promise.all(activeIds.map((id) => snapshotApprovalHistory(db, id, newTurn)));
-      }),
+      // Covers the active countries plus any belligerent that is not one of
+      // them, so a war block is computed for every country actually fighting.
+      // The count is read back off the run rather than recomputed here: the
+      // roster is now turn-dependent, and a recomputed constant would report a
+      // number the phase did not do.
+      runtime.runPhase("approvalSnapshot", () => snapshotApprovalsForTurn(db, newTurn)),
       runtime.runPhase("interestRateSnapshot", () => snapshotInterestRateHistory(db, newTurn)),
       runtime.runPhase("partyHistorySnapshot", () => snapshotPartyHistory(db, newTurn)),
     ]);
     phaseResults.metricHistory = { snapshotsTaken: metricHistResult ?? 0 };
-    const activeCountryCount = COUNTRY_ORDER.filter(
-      (id) => COUNTRY_CONFIGS[id].status === "active"
-    ).length;
-    phaseResults.approvalSnapshot = { countriesProcessed: activeCountryCount };
+    phaseResults.approvalSnapshot = {
+      countriesProcessed: approvalSnapshotResult?.countriesProcessed ?? 0,
+    };
 
     const [portfolioSnapshotResult] = await Promise.all([
       runtime.runPhase("portfolioSnapshot", () => snapshotPortfolioValues(newTurn)),

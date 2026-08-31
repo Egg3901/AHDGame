@@ -53,9 +53,12 @@ Each country has its own set of default parties suited to its political system:
 | --- | --- | --- |
 | US | Presidential, FPTP | House, Senate, Governor, State Senate, President |
 | UK | Westminster parliamentary | Commons, Regional Councils |
-| CA | Westminster parliamentary | House of Commons (federal) |
-| DE | Mixed-member proportional | Bundestag |
-| JP | Mixed-member majoritarian | Shūgiin, Sangiin |
+| DE | Mixed-member proportional | Bundestag, Minister-President |
+| JP | Parliamentary, regional multi-seat | Shūgiin, Sangiin, Governor |
+| IE | Parliamentary, Hare-quota multi-seat | Dáil, Cathaoirleach, Uachtarán |
+| BR | Presidential, open-list PR | Chamber, Senate, Governor, President |
+| NG | Presidential, FPTP | House, Senate, State Assembly, Governor, President |
+| CN, RU, DD and the Eastern bloc | One-party states | Ruling, approved and banned party tiers; see [One-Party States](/wiki/one-party-states) |
 
 ## Related
 

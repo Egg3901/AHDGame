@@ -49,7 +49,7 @@ export const INDEX_TARGETS = [
     id: "indexesCabinet",
     label: "Indexes — Cabinet",
     description:
-      "Unified cabinetMembers + UK cabinet cooldowns/members indexes (TTL on cooldownUntil)",
+      "Unified cabinetMembers, acting-appointment charge ledger, and UK cabinet cooldowns. All turn-based, so none carry a TTL index",
   },
   {
     id: "indexesPerf",
@@ -163,6 +163,12 @@ export const INDEX_TARGETS = [
     label: "Indexes — Conflicts",
     description:
       "UNIQUE partial index on conflicts.conflictId — the public number that resolves /world/conflicts/<n>. Two conflicts sharing a number would make one unreachable.",
+  },
+  {
+    id: "indexesNavair",
+    label: "Indexes — Naval and air",
+    description:
+      "UNIQUE index on navairChannels (countryId, region), which saveNavairChannels upserts on every turn: without it concurrent upserts insert duplicate rows and a country's sea control flickers between two histories. Plus militaryUnits (domain) and a sparse (station), which the navairOperations phase and battleResolution both read every turn.",
   },
   {
     // AHDGame-only module. It has no target in the a-house-divided lineage this

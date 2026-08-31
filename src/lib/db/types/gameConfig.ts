@@ -1,3 +1,5 @@
+import type { EconomicInterventionPlan } from "@/lib/economy/interventionGovernance";
+
 export interface GameConfig {
   _id: string;
   /**
@@ -52,6 +54,15 @@ export interface GameConfig {
   discordChangelogWebhookUrl?: string;
   /** Discord webhook URL for in-game player suggestions (feedback modal). Optional. */
   discordSuggestionsWebhookUrl?: string;
+  /**
+   * Deployment slug ({@link deploymentServiceSlug}) that owns the webhook URLs
+   * above — stamped whenever an admin saves them. Every send is suppressed when
+   * the running deployment does not match, so a database restored into a
+   * sandbox, staging, or local world cannot post its events into the players'
+   * Discord (#1208). Absent on worlds whose webhooks predate the stamp, which
+   * post as before.
+   */
+  discordWebhookOwnerService?: string;
 
   /**
    * Maintenance mode, tri-state: "off" (normal), "partial" (site stays
@@ -212,6 +223,24 @@ export interface GameConfig {
   freightSettlementModeUpdatedAt?: string;
   /** World turn at which the freight-settlement rollout was last changed. */
   freightSettlementModeUpdatedTurn?: number;
+  /** Governance record required for active freight settlement. */
+  freightSettlementIntervention?: EconomicInterventionPlan;
+  /**
+   * Gradual freight-settlement ramp (markets plan Phase 4). When set, the
+   * ACTIVE effect fades in linearly instead of landing at full strength on the
+   * flip turn: a ramp fraction R = clamp01((turn - rampStartTurn) / rampTurns)
+   * scales both the delivered-supply cap (the state price leg blends from full
+   * supply toward the freight-limited delivered supply by R) and the canonical
+   * freight billing legs (charge/credit are multiplied by R). This turns a hard
+   * balance step into a measured phase-in so sales caps and the shipping bill
+   * arrive together, gradually, with the effect visible each turn on the
+   * markets tracker and the sector Freight tag. Unset (or rampTurns <= 0) → R is
+   * 1 whenever active, i.e. the pre-ramp instant-activation behavior, byte
+   * identical. Applies to whichever of freightSettlementMode:"active" /
+   * canonicalFreightBillingEnabled is on.
+   */
+  freightSettlementRampStartTurn?: number;
+  freightSettlementRampTurns?: number;
   /**
    * SIM-ONLY turn-phase profile (headless worldsim; never set in prod).
    * "elections-only" makes processTurn() skip the economy/finance/ledger
@@ -263,6 +292,47 @@ export interface GameConfig {
    * record-only sourcing pass behavior from before this flag existed.
    */
   interstateMoneyWiringEnabled?: boolean;
+  /**
+   * Canonical freight billing v1 (issue #897, markets plan Phase 4): when
+   * true, the sourcing pass's per-state shipping money (charge = freight price
+   * x price TEU weight x units x hops on each accepted domestic haul) is
+   * persisted on the sourcingNetworkLoad doc and the next corporation turn
+   * apportions it: charges across buyer sectors in the destination state
+   * proportional to their input demand for the hauled commodity, haul revenue
+   * across freight-supplying sectors in the origin state proportional to
+   * their freight supply share. Both legs are persisted per sector as named
+   * lines (freightBillingCharge / freightBillingCredit) and ride sector costs
+   * and revenue. A transfer, not a sink: world totals of the two legs match.
+   * Off (or unset) → nothing is computed or written, matching the shadow-price
+   * behavior from before this flag existed. ENABLING IS A BALANCE CHANGE
+   * (~22M/turn world-scale bill at audit calibration) and merges only with a
+   * simulation report from scripts/sim/ per CONTRIBUTING.md.
+   */
+  canonicalFreightBillingEnabled?: boolean;
+  /**
+   * When true, states below 50 percent local fill accept a progressively wider
+   * landed-price range, capped at 75 percent above the local price anchor.
+   * Default false until controlled simulation and rollout gates pass.
+   */
+  shortageResponsiveSourcingEnabled?: boolean;
+  /** Governance record required when shortage-responsive sourcing is enabled. */
+  shortageResponsiveSourcingIntervention?: EconomicInterventionPlan;
+  /** Dark gate for the index-fund 20 percent sovereign-bond allocation target. */
+  indexFundBondLiquidityEnabled?: boolean;
+  /** Governance record required when the sovereign-bond allocation target is enabled. */
+  indexFundBondLiquidityIntervention?: EconomicInterventionPlan;
+  /** Dark gate for bounded, index-fund-backed two-sided equity quotes. */
+  equityLiquidityFacilityEnabled?: boolean;
+  /** Governance record required when the equity-liquidity facility is enabled. */
+  equityLiquidityFacilityIntervention?: EconomicInterventionPlan;
+  /** Route each existing NPP entry slot to a facility-ready empty market first. */
+  nppMarketCoverageEnabled?: boolean;
+  /** Governance record required when empty-market coverage routing is enabled. */
+  nppMarketCoverageIntervention?: EconomicInterventionPlan;
+  /** Route existing eligible NPP entry slots toward four diagnosed fragile commodity markets. */
+  nppFragileMarketSupplyEnabled?: boolean;
+  /** Governance record required when fragile-market supply routing is enabled. */
+  nppFragileMarketSupplyIntervention?: EconomicInterventionPlan;
   /**
    * Legacy-stockpile cover cap (week-1 clearing balance pass): when true,
    * shadow-inventory stock above STOCK_COVER_CAP_TURNS × current demand takes
@@ -330,11 +400,9 @@ export interface GameConfig {
    * budget derived from GDP and modulated by household signals (medianIncome,
    * unemploymentRate, consumerConfidence) buys a consumer basket with a bounded
    * price-elasticity response, and SUPERSEDES retail's SECTOR_DEMAND input proxy
-   * (those legs are suppressed in `computeRawSupplyDemand`). The retail-commodity
-   * output self-loop is kept — household population demand cannot replace
-   * plants-scale physical retail supply (ticket #1026). DEFAULT OFF and
-   * UNCALIBRATED — same rollout posture as `demographicsDemandEnabled`; tune
-   * HOUSEHOLD_CONSUMPTION_PER_CAPITA on the sandbox before enabling. Supersedes
+   * (those legs are suppressed in `computeRawSupplyDemand`). Retail's legacy
+   * supply-derived output demand is removed through the bounded transition
+   * below. DEFAULT OFF and UNCALIBRATED. Supersedes
    * `demographicsDemandEnabled` (do not enable both).
    */
   householdConsumptionEnabled?: boolean;
@@ -345,6 +413,14 @@ export interface GameConfig {
    * `householdConsumptionEnabled` is true.
    */
   householdConsumptionPerCapita?: number;
+  /**
+   * Turn when this world began removing Retail's legacy supply-derived demand.
+   * Absent preserves legacy behavior. Once started, the remaining self-loop
+   * share declines linearly and stays at zero after the configured duration.
+   */
+  retailDemandTransitionStartTurn?: number;
+  /** Duration of the Retail demand unwind. Defaults to 192 turns. */
+  retailDemandTransitionTurns?: number;
   /**
    * Whether NPP-run corporations are individually attackable in the state
    * economy view. DEFAULT ON (only an explicit `false` disables). When on, NPP
@@ -601,4 +677,5 @@ export type PublicGameConfig = Omit<
   | "discordNewsWebhookUrl"
   | "discordChangelogWebhookUrl"
   | "discordSuggestionsWebhookUrl"
+  | "discordWebhookOwnerService"
 >;

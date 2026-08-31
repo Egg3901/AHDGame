@@ -108,7 +108,11 @@ The UK has an [imperial character](/wiki/imperial-characters): the Monarch. This
 
 **Party creation routes through a charter.** Founding a new party requires drafting a [Party Charter](/wiki/political-parties) co-signed by 3 human founders. The charter system is country-agnostic; UK-specific gates (presidential-primary lockout) don't apply here.
 
-**Government approval** is derived from the PM's favorability rating, not an aggregate of regional metrics as in some other systems.
+**Government approval** is computed from the country's own metrics and the national effects layered on them (a war, a national address, international statements, the state of the cabinet), not from the PM's favorability. See [Government Approval](/wiki/government-approval).
+
+**The Chancellor's Budget changes the law.** The annual Budget bundles real tax rates and statutory programme levels (the NHS included) into one Commons confidence vote. It shares a single fiscal ledger with ordinary legislation, so a later Act or a later Budget controls each setting; the Treasury page shows a forecast of revenue, spending, balance and the tax phase-in before the package is tabled. If no Chancellor is appointed, the Prime Minister may act until the vacancy is filled.
+
+**The Bank of England answers to the Treasury before 1997.** A world that opens before the 1997 independence grant starts with the Treasury setting Bank Rate and no rate committee; Parliament can legislate the transfer either way. There is no FOMC-style committee here in any era: the Governor sets the rate alone once the bank is independent.
 
 ---
 

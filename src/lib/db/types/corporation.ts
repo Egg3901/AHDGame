@@ -45,6 +45,11 @@ export interface ShareOrder {
    * fund's `cashAnchor`.
    */
   placerFundId?: ObjectId;
+  /** Standing quote created by the bounded equity-liquidity facility. */
+  liquidityProvider?: boolean;
+  /** Turn and reference price used to construct the standing quote. */
+  liquidityQuotedTurn?: number;
+  liquidityReferencePrice?: number;
   type: "buy" | "sell";
   shares: number;
   sharesRemaining: number;
@@ -337,6 +342,8 @@ export interface Corporation {
     underlyingUserId: ObjectId;
     /** Turn the caretaker was installed. */
     appointedTurn: number;
+    /** Whether the owner chose the caretaker or the turn loop filled a vacancy. */
+    appointmentSource?: "owner" | "vacancy";
   };
   /**
    * Turn until which a new caretaker may NOT be installed, stamped when the owner
@@ -654,6 +661,12 @@ export interface CorporateSector {
    */
   producedUnits?: number;
   /**
+   * Units this sector could have produced after external constraints but before
+   * the operator's production-policy and mothball choices. Used by supply
+   * agreement damages. Absent until the sector has run after rollout.
+   */
+  contractAchievableUnits?: number;
+  /**
    * Units telemetry: the share of `producedUnits` that cleared this turn,
    * `producedUnits × soldFraction` when market clearing ran, else equal to
    * `producedUnits`. Same DAILY, currency-free basis.
@@ -830,6 +843,26 @@ export interface CorporateSector {
   /** Cargo class of the output leg with the largest delivery-limited share. */
   deliveryLimitedFreightClass?: "bulk" | "special" | "grid" | null;
   /**
+   * Canonical freight billing v1 (issue #897,
+   * gameConfig.canonicalFreightBillingEnabled, default off): the shipping cost
+   * this sector was charged last turn for its state's inbound hauls of the
+   * commodities it consumes. Named cost line on the same daily basis and host
+   * currency as `revenue` / `laborCost`, persisted so a later financials
+   * bridge can show "freight" instead of a blended haircut. The amount also
+   * rides the sector's cost leg into corp income, so it is real money while
+   * the flag is on. Absent on worlds that never billed.
+   */
+  freightBillingCharge?: number;
+  /**
+   * The transfer's other half: haul revenue this sector's freight supply
+   * earned last turn, apportioned by supply share in its state. Named revenue
+   * leg, same basis and gate as `freightBillingCharge`; rides the sector's
+   * revenue into corp income while the flag is on.
+   */
+  freightBillingCredit?: number;
+  /** Turn the freight billing legs above were computed for. */
+  freightBillingTurn?: number;
+  /**
    * Posted-price market clearing (marketSystemMode >= "clearing", audit t806
    * Fix 2). `pricingPosture` is the CEO's posted price relative to market
    * (−0.2 … 0.2); null/absent = auto-position (NPP/unowned heuristic).
@@ -884,6 +917,18 @@ export interface CorporateSector {
    */
   capitalStock?: number;
   capitalUtilization?: number;
+  /**
+   * First-class whole facilities owned by this sector. Unlike capitalStock,
+   * this count does not become fractional through depreciation. PvP transfers
+   * this ownership unit; productive capacity and paid basis follow the plants
+   * pro-rata. Optional until the value-conserving plants migration runs.
+   */
+  plantCount?: number;
+  /**
+   * Delivered capacity fragments accumulated toward the next whole facility.
+   * Always less than the sector's facility quantum after normalization.
+   */
+  plantUnitRemainder?: number;
   /**
    * Plants tier (marketSystemMode >= "plants"): anchors the launch-safety
    * governor's fade-in from the sector's first plants turn, exactly like
@@ -992,11 +1037,12 @@ export interface CorporateSector {
    * are outside the margin's scope but inside the profit.
    *
    * Every field is on the DAILY basis and in the same stored currency as
-   * `revenue` and `laborCost`. Display and analytics only, exactly like
-   * `laborCost`: nothing in the engine reads it back, so it cannot feed the
-   * economy. Written on every physical-P&L turn, absent below plants and on
-   * sectors that have not run a plants turn since this shipped, and readers
-   * keep their old margin-inversion path as the fallback.
+   * `revenue` and `laborCost`. The NPP decision engine reads the persisted
+   * revenue, profit, and margin as its lagged profitability signal; the values
+   * never feed physical settlement itself. Written on every physical-P&L turn,
+   * absent below plants and on sectors that have not run a plants turn since
+   * this shipped, and readers keep their old margin-inversion path as the
+   * fallback.
    */
   plantsPnl?: {
     /**

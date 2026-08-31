@@ -28,12 +28,15 @@ import { resolveMetricPath } from "@/lib/cabinet/resolveMetricPath";
 import { applyMilitaryForceEffects } from "./militaryForceEffects";
 import { resolveBattleDeclarations } from "./battleResolution";
 import { resolveColdWarHolds } from "./coldWarHolds";
+import { resolvePeaceWindows } from "./peaceWindows";
+import { emitWarWire } from "@/lib/military/emitWarWire";
 import { processGeneralTenure } from "./generalTenure";
 import { applyReinforcement } from "./reinforcement";
 import { applyDefenseAppropriation } from "./defenseAppropriationTurn";
 import { settleDoctrineIncome } from "@/lib/db/collections/nationalDoctrine";
 import { applyDefenceDeliveries } from "./defenceDeliveryTurn";
 import { applyDefenceRefit } from "./defenceRefitTurn";
+import { applyStateArmsProduction } from "./stateArmsTurn";
 import { applyNuclearProduction } from "./nuclearProductionTurn";
 import { applyCovertNuclearTurn } from "./covertNuclearTurn";
 import { COVERT_CAPABLE } from "@/lib/military/covertNuclear";
@@ -387,6 +390,11 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
     if (defenceYear != null) {
       await applyDefenceDeliveries(db, cid, defenceYear, defenceEraMaxGrade, currentTurn);
     }
+    // Planned-defence economies have no contract pipeline for `applyDefenceDeliveries` to
+    // run, so their store is fed here instead. Before the refit for the same reason
+    // delivery is: materiel has to arrive before it can be issued. A no-op for every
+    // country not on the state-arms roster.
+    await applyStateArmsProduction(db, cid);
     await applyDefenceRefit(db, cid);
     // Nuclear stockpile accrual, right after refit so it competes for the same
     // appropriation AFTER conventional deliveries have settled: a nation short
@@ -443,6 +451,18 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
   // to be measured on turns where nobody fought at all. It reads `conflictsEnabled`
   // itself — it is the only conflict step with no declaration upstream to gate it.
   await resolveColdWarHolds(db, currentTurn);
+
+  // 4b-ii-a-ii. White-peace any won war whose dictate window has lapsed. A real
+  // sweep rather than lazy expiry: nothing forces a victor to open the conflict
+  // document, so a window nobody answered would leave the war frozen for ever with
+  // both rosters already stood down.
+  await resolvePeaceWindows(db, currentTurn);
+
+  // 4b-ii-a-iii. Report every war that has settled since the last tick. Reached from
+  // a STAMP rather than from the command that settled the war: both roads to a
+  // settlement are request paths, and a news post made from a request would put a
+  // network call on a player's request and fire again on a retry.
+  await emitWarWire(db, currentTurn);
 
   // 4b-ii-b. Tenure skill points for commissioned generals. Placed AFTER battle
   // resolution so a general promoted by this turn's fighting is already at their new

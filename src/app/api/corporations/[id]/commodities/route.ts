@@ -182,13 +182,24 @@ export async function GET(request: Request, { params }: RouteParams) {
             .project<
               Pick<
                 SupplyAgreement,
-                "commodity" | "volumeCap" | "lastDeliveryTurn" | "lastDeliveredUnits"
+                | "commodity"
+                | "volumeCap"
+                | "lastDeliveryTurn"
+                | "lastDeliveredUnits"
+                | "lastBuyerConsumptionUnits"
+                | "previousDeliveryTurn"
+                | "previousDeliveredUnits"
+                | "previousBuyerConsumptionUnits"
               >
             >({
               commodity: 1,
               volumeCap: 1,
               lastDeliveryTurn: 1,
               lastDeliveredUnits: 1,
+              lastBuyerConsumptionUnits: 1,
+              previousDeliveryTurn: 1,
+              previousDeliveredUnits: 1,
+              previousBuyerConsumptionUnits: 1,
             })
             .toArray()
         : Promise.resolve([]),
@@ -203,14 +214,26 @@ export async function GET(request: Request, { params }: RouteParams) {
     );
     const privateSupplyRollup = new Map<
       CommodityType,
-      { contractedUnits: number; deliveredUnits: number; latestTurn: number | null }
+      {
+        contractedUnits: number;
+        deliveredUnits: number;
+        consumptionUnits: number | null;
+        latestTurn: number | null;
+        previousDeliveredUnits: number;
+        previousConsumptionUnits: number | null;
+        previousTurn: number | null;
+      }
     >();
     if (gameConfig?.supplyAgreementsEnabled === true) {
       for (const agreement of supplyAgreements) {
         const existing = privateSupplyRollup.get(agreement.commodity) ?? {
           contractedUnits: 0,
           deliveredUnits: 0,
+          consumptionUnits: null,
           latestTurn: null,
+          previousDeliveredUnits: 0,
+          previousConsumptionUnits: null,
+          previousTurn: null,
         };
         existing.contractedUnits += Math.max(0, agreement.volumeCap);
         const deliveryTurn = agreement.lastDeliveryTurn;
@@ -218,8 +241,37 @@ export async function GET(request: Request, { params }: RouteParams) {
           if (existing.latestTurn === null || deliveryTurn! > existing.latestTurn) {
             existing.latestTurn = deliveryTurn!;
             existing.deliveredUnits = Math.max(0, agreement.lastDeliveredUnits ?? 0);
+            existing.consumptionUnits =
+              agreement.lastBuyerConsumptionUnits !== undefined
+                ? Math.max(0, agreement.lastBuyerConsumptionUnits)
+                : null;
           } else if (deliveryTurn === existing.latestTurn) {
             existing.deliveredUnits += Math.max(0, agreement.lastDeliveredUnits ?? 0);
+            if (agreement.lastBuyerConsumptionUnits !== undefined) {
+              existing.consumptionUnits = Math.max(
+                existing.consumptionUnits ?? 0,
+                agreement.lastBuyerConsumptionUnits
+              );
+            }
+          }
+        }
+        const previousTurn = agreement.previousDeliveryTurn;
+        if (Number.isFinite(previousTurn)) {
+          if (existing.previousTurn === null || previousTurn! > existing.previousTurn) {
+            existing.previousTurn = previousTurn!;
+            existing.previousDeliveredUnits = Math.max(0, agreement.previousDeliveredUnits ?? 0);
+            existing.previousConsumptionUnits =
+              agreement.previousBuyerConsumptionUnits !== undefined
+                ? Math.max(0, agreement.previousBuyerConsumptionUnits)
+                : null;
+          } else if (previousTurn === existing.previousTurn) {
+            existing.previousDeliveredUnits += Math.max(0, agreement.previousDeliveredUnits ?? 0);
+            if (agreement.previousBuyerConsumptionUnits !== undefined) {
+              existing.previousConsumptionUnits = Math.max(
+                existing.previousConsumptionUnits ?? 0,
+                agreement.previousBuyerConsumptionUnits
+              );
+            }
           }
         }
         privateSupplyRollup.set(agreement.commodity, existing);
@@ -227,7 +279,15 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
     const privateSupplyByCommodity = new Map<
       CommodityType,
-      { contractedUnits: number; deliveredUnits: number; turn: number }
+      {
+        contractedUnits: number;
+        deliveredUnits: number;
+        consumptionUnits?: number;
+        turn: number;
+        previousDeliveredUnits?: number;
+        previousConsumptionUnits?: number;
+        previousTurn?: number;
+      }
     >();
     for (const [commodity, rollup] of privateSupplyRollup) {
       if (rollup.latestTurn === null) continue;
@@ -235,6 +295,16 @@ export async function GET(request: Request, { params }: RouteParams) {
         contractedUnits: rollup.contractedUnits,
         deliveredUnits: rollup.deliveredUnits,
         turn: rollup.latestTurn,
+        ...(rollup.consumptionUnits !== null ? { consumptionUnits: rollup.consumptionUnits } : {}),
+        ...(rollup.previousTurn !== null
+          ? {
+              previousTurn: rollup.previousTurn,
+              previousDeliveredUnits: rollup.previousDeliveredUnits,
+              ...(rollup.previousConsumptionUnits !== null
+                ? { previousConsumptionUnits: rollup.previousConsumptionUnits }
+                : {}),
+            }
+          : {}),
       });
     }
 

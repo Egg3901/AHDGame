@@ -163,6 +163,7 @@ export async function GET(request: Request) {
     const TERMINAL_STATUSES = NATIONAL_TERMINAL_STATUSES;
 
     let myCharacterId: string | null = null;
+    let myPolicies: Character["policies"] | null = null;
     let canPropose = false;
     let inCongress = false;
     let myChamber: "house" | "senate" | null = null;
@@ -170,6 +171,7 @@ export async function GET(request: Request) {
     if (authUser) {
       const char = await getCharacterByUserId(db, authUser.userId);
       myCharacterId = char?._id?.toString() ?? null;
+      myPolicies = char?.policies ?? null;
       if (myCharacterId) {
         const [official, activeBill] = await Promise.all([
           db.collection<ElectedOfficial>("electedOfficials").findOne({
@@ -239,6 +241,7 @@ export async function GET(request: Request) {
       myVoteMap,
       myCharacterId,
       myChamber,
+      myPolicies,
     });
 
     return NextResponse.json({
@@ -942,7 +945,7 @@ export async function POST(request: Request) {
 
     const snapshottedPolicyProvisions = await snapshotBillPolicyProvisions(
       db,
-      "federal",
+      { scope: "national", countryId: "US" },
       validatedPolicyProvisions
     );
 

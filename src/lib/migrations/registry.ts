@@ -49,6 +49,17 @@ import { migration as campaignOpsTrees } from "./entries/2026-08-18-campaign-ops
 import { migration as backfillPoliticalLegislationTypes } from "./entries/2026-08-19-backfill-political-legislation-types";
 import { migration as seedGlobalResponseFoundations } from "./entries/2026-08-23-seed-global-response-foundations";
 import { migration as repairKazakhLawLevels } from "./entries/2026-08-23-repair-kazakh-law-levels";
+import { migration as crisesLivingEventPartialIndex } from "./entries/2026-08-25-crises-living-event-partial-index";
+import { migration as ukRegionalPartyOrgBackfill } from "./entries/2026-08-26-uk-regional-party-org-backfill";
+import { migration as easternDepositsCnSoeIron } from "./entries/2026-08-25-eastern-deposits-cn-soe-iron";
+import { migration as backfillRedistrictingAuthorityTypes } from "./entries/2026-08-26-backfill-redistricting-authority-types";
+import { migration as repairOutOfRangePolicyLevels } from "./entries/2026-08-26-repair-out-of-range-policy-levels";
+import { migration as dropOffRosterCommandCommanders } from "./entries/2026-08-26-drop-off-roster-command-commanders";
+import { migration as severEmigratedGenerals } from "./entries/2026-08-26-sever-emigrated-generals";
+import { migration as rescheduleEconCountryBills } from "./entries/2026-08-27-reschedule-econ-country-bills";
+import { migration as equityLiquidityIndexes } from "./entries/2026-08-28-equity-liquidity-indexes";
+import { migration as redistrictingAuthorityLegislative } from "./entries/2026-08-26-redistricting-authority-legislative";
+import { migration as purgeRetiredRuMetricRegions } from "./entries/2026-08-30-purge-retired-ru-metric-regions";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -130,6 +141,46 @@ export const MIGRATIONS: Migration[] = [
   // Ticket #1174: reconcile KAZ laws from their durable enacted-law and
   // pre-executive-order records after legacy order expiry left mismatched rows.
   repairKazakhLawLevels,
+  // Per-turn E11000 on crises_living_event: unset null keys, rebuild the
+  // sparse unique index as partial-on-string (GlitchTip AHD-1JV).
+  crisesLivingEventPartialIndex,
+  // The UK regional-party contest gate is gone (SNP/Plaid/DUP/SF/UUP now stand
+  // UK-wide); give them the statePartyOrg rows they were never seeded outside
+  // their home nation, or the presence gate keeps them off the ballot anyway.
+  ukRegionalPartyOrgBackfill,
+  // Ticket #1189: the three state redistricting laws stopped seeding when the
+  // old US catalog was superseded, leaving every state pinned to the default
+  // commission with no bill able to change it. Insert-missing only.
+  backfillRedistrictingAuthorityTypes,
+  // Ticket #1189: the executive-order ladder assumed a seven-option (0-6)
+  // policy list, so orders on the five-level new-generation laws wrote levels
+  // past the end. Clamp those rows down to the ladder top the game already
+  // coerces them to.
+  repairOutOfRangePolicyLevels,
+  // Markets repair P2a: eastern deposits were never authored for the playable
+  // bloc countries (every state resources:{}), and the CN extraction SOE was
+  // coal-locked in its four iron-rich states.
+  easternDepositsCnSoeIron,
+  // Ticket 1200: a commander who emigrated or was dismissed stayed in the saved
+  // command, and the commands PUT then refused every edit in that country.
+  dropOffRosterCommandCommanders,
+  // The other half of the same gap: the rosters above are cleared, but the units
+  // and postings those generals held are not, and a unit led by a foreign national
+  // can never be sent to a front. Runs AFTER the roster clear, on purpose — that
+  // one shrinks the set of holders this has to sever.
+  severEmigratedGenerals,
+  // Issue #996: the new lifecycle registrations make these bills resolvable;
+  // reopen their expired vote windows instead of replaying stale tallies.
+  rescheduleEconCountryBills,
+  equityLiquidityIndexes,
+  // Redistricting was unreachable: the authority law is orphaned from the v2
+  // catalog, so every US state defaulted to bipartisan commission (canDraw
+  // false). Backfill to legislature-drawn — historically correct for the era
+  // and what lets a trifecta redraw.
+  redistrictingAuthorityLegislative,
+  // UKR, BEL, and BLT were old RU regions. They now exist as separate country
+  // region sets, but their obsolete RU metric rows survived the split.
+  purgeRetiredRuMetricRegions,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.

@@ -8,7 +8,6 @@
 
 import { getDb } from "@/lib/mongodb";
 import type { Db, Filter } from "mongodb";
-import { isLeadershipElectionClosed } from "@/lib/congress/leadershipElections";
 import type {
   NPP,
   Election,
@@ -18,12 +17,6 @@ import type {
   StateBill,
   BillWhip,
   StatePartyOrg,
-  SpeakerElection,
-  SpeakerNomination,
-  HouseLeadershipElection,
-  HouseLeadershipNomination,
-  SenateLeadershipElection,
-  SenateLeadershipNomination,
   PoliticalParty,
   LegislationType,
   StateDemographics,
@@ -57,15 +50,6 @@ export interface NPPContext {
   billWhips: Map<string, BillWhip[]>; // billId -> whips
   activeStateBills: StateBill[];
   stateBillWhips: Map<string, BillWhip[]>; // stateBillId -> whips
-
-  // Leadership elections (Speaker + House/Senate leadership)
-  speakerElection: SpeakerElection | null;
-  speakerNominations: SpeakerNomination[];
-  houseLeadershipElections: HouseLeadershipElection[];
-  houseLeadershipNominations: HouseLeadershipNomination[];
-  senateLeadershipElections: SenateLeadershipElection[];
-  senateLeadershipNominations: SenateLeadershipNomination[];
-  leadershipWhips: BillWhip[]; // whips for speaker/leadership elections
 
   // State party leaders (for whip lookup)
   statePartyOrgs: Map<string, StatePartyOrg>; // stateId_partyId -> org
@@ -226,10 +210,6 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
     activeBills,
     activeStateBills,
     statePartyOrgsArr,
-    speakerElection,
-    houseLeadershipElections,
-    senateLeadershipElections,
-    leadershipWhips,
     allParties,
     allLegislationTypes,
     allStateDemographics,
@@ -289,26 +269,6 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
       })
       .toArray(),
     db.collection<StatePartyOrg>("statePartyOrg").find({}).toArray(),
-    db
-      .collection<SpeakerElection>("speakerElections")
-      .findOne({ _id: "current", status: "voting" }),
-    db
-      .collection<HouseLeadershipElection>("houseLeadershipElections")
-      .find({ status: "voting" })
-      .toArray(),
-    db
-      .collection<SenateLeadershipElection>("senateLeadershipElections")
-      .find({ status: "voting" })
-      .toArray(),
-    db
-      .collection<BillWhip>("billWhips")
-      .find({
-        targetType: { $in: ["speakerElection", "leadershipElection"] },
-        // Exclude character (player) whips — they don't drive NPP voting behavior.
-        // Legacy rows without `audience` are implicitly NPP.
-        $or: [{ audience: "npp" }, { audience: { $exists: false } }],
-      })
-      .toArray(),
     db.collection<PoliticalParty>("politicalParties").find({}).toArray(),
     // Phase 4: cross-pressure inputs. Projected to only the fields NPP
     // behavior actually reads (see NPPContext comment) — `legislationTypes`
@@ -374,22 +334,8 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
   const primaryIds = openPrimaries.map((e) => e._id);
   const billIds = activeBills.map((b) => b._id);
   const stateBillIds = activeStateBills.map((bill) => bill._id);
-  const activeHouseRoles = houseLeadershipElections
-    .filter((e) => !isLeadershipElectionClosed(e, currentTurn, now))
-    .map((e) => e._id);
-  const activeSenateRoles = senateLeadershipElections
-    .filter((e) => !isLeadershipElectionClosed(e, currentTurn, now))
-    .map((e) => e._id);
 
-  const [
-    allCandidates,
-    allActiveNPPCandidacies,
-    whips,
-    stateBillWhipsArr,
-    speakerNominations,
-    houseLeadershipNominations,
-    senateLeadershipNominations,
-  ] = await Promise.all([
+  const [allCandidates, allActiveNPPCandidacies, whips, stateBillWhipsArr] = await Promise.all([
     primaryIds.length > 0
       ? db
           .collection<ElectionCandidate>("electionCandidates")
@@ -426,24 +372,6 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
             targetId: { $in: stateBillIds },
             $or: [{ audience: "npp" }, { audience: { $exists: false } }],
           })
-          .toArray()
-      : Promise.resolve([]),
-    speakerElection && !isLeadershipElectionClosed(speakerElection, currentTurn, now)
-      ? db
-          .collection<SpeakerNomination>("speakerNominations")
-          .find({ status: { $in: ["open", "voting"] } })
-          .toArray()
-      : Promise.resolve([]),
-    activeHouseRoles.length > 0
-      ? db
-          .collection<HouseLeadershipNomination>("houseLeadershipNominations")
-          .find({ role: { $in: activeHouseRoles }, status: { $in: ["open", "voting"] } })
-          .toArray()
-      : Promise.resolve([]),
-    activeSenateRoles.length > 0
-      ? db
-          .collection<SenateLeadershipNomination>("senateLeadershipNominations")
-          .find({ role: { $in: activeSenateRoles }, status: { $in: ["open", "voting"] } })
           .toArray()
       : Promise.resolve([]),
   ]);
@@ -499,13 +427,6 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
     billWhips,
     activeStateBills,
     stateBillWhips,
-    speakerElection,
-    speakerNominations,
-    houseLeadershipElections,
-    houseLeadershipNominations,
-    senateLeadershipElections,
-    senateLeadershipNominations,
-    leadershipWhips,
     statePartyOrgs,
     partyByCompositeKey,
     partyCountries,

@@ -8,7 +8,9 @@ const specialWikiPrefixes = ["elections/", "party/", "seat/", "leadership/", "pa
 
 function isSpecialWikiTarget(target: string): boolean {
   return (
-    specialWikiRoutes.has(target) || specialWikiPrefixes.some((prefix) => target.startsWith(prefix))
+    specialWikiRoutes.has(target) ||
+    specialWikiPrefixes.some((prefix) => target.startsWith(prefix)) ||
+    /^corp-\d+$/.test(target)
   );
 }
 
@@ -38,6 +40,10 @@ describe("wiki navigation integrity", () => {
   it("points US party aliases at numeric party routes", () => {
     expect(WIKI_REDIRECTS.democrat).toBe("party/1?country=us");
     expect(WIKI_REDIRECTS.republican).toBe("party/2?country=us");
+  });
+
+  it("points the legacy Rosenburgh slug at its corporation-owned page", () => {
+    expect(WIKI_REDIRECTS["rosenburgh-inc"]).toBe("corp-194");
   });
 
   it("uses seeded pages for every learning-path step", () => {

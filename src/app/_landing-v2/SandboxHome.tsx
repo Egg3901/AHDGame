@@ -31,6 +31,7 @@ import {
 } from "@/components/landing/countryTierRosters";
 import { CookieSettingsLink } from "@/components/CookieSettingsLink";
 import { CrtCountdown, useCrtCountdown } from "./CrtCountdown";
+import { LANDING_FOOTER_SECTIONS, LANDING_TRAY_LINKS } from "./publicLinks";
 import type { GovernmentType } from "@/lib/constants/countries";
 import type { EraNation, EraTileKey } from "@/components/landing/eraThemes";
 import type { DiscordInviteStats } from "@/lib/discord/inviteStats";
@@ -129,34 +130,55 @@ function links(isSignedIn: boolean) {
 }
 
 const footerNav = (t: TFunc) =>
-  [
-    {
-      heading: t("landing.footer.game"),
-      links: [
-        { href: "/world", label: t("landing.footer.worldMap") },
-        { href: "/news", label: t("landing.footer.newsWire") },
-        { href: "/changelog", label: t("landing.footer.whatsNew") },
-        { href: "/register", label: t("landing.footer.createAccount") },
-      ],
-    },
-    {
-      heading: t("landing.footer.learn"),
-      links: [
-        { href: "/guides", label: t("landing.footer.guides") },
-        { href: "/wiki", label: t("landing.footer.wiki") },
-        { href: "/faq", label: t("landing.footer.faq") },
-        { href: "/about", label: t("landing.footer.about") },
-      ],
-    },
-    {
-      heading: t("landing.footer.legal"),
-      links: [
-        { href: "/privacy", label: t("landing.footer.privacy") },
-        { href: "/terms", label: t("landing.footer.terms") },
-        { href: "/contact", label: t("landing.footer.contact") },
-      ],
-    },
-  ] as const;
+  LANDING_FOOTER_SECTIONS.map((section) => ({
+    headingKey: section.headingKey,
+    heading: t(section.headingKey),
+    links: section.links.map((link) => ({
+      href: link.href,
+      label: t(link.labelKey),
+      external: link.external ?? false,
+    })),
+  }));
+
+const trayNav = (t: TFunc) =>
+  LANDING_TRAY_LINKS.map((link) => ({
+    href: link.href,
+    label: t(link.labelKey),
+    external: link.external ?? false,
+  }));
+
+/**
+ * next/link for in-app routes, a plain anchor for anything off-domain. The
+ * arrow is the only signal a visitor gets that a link leaves the site, so
+ * external entries must not render as a bare internal link.
+ */
+function LandingNavLink({
+  href,
+  label,
+  external,
+  className,
+}: {
+  href: string;
+  label: string;
+  external: boolean;
+  className: string;
+}) {
+  if (external) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
+        {label}
+        <span aria-hidden="true" className="ml-1">
+          ↗
+        </span>
+      </a>
+    );
+  }
+  return (
+    <Link href={href} className={className}>
+      {label}
+    </Link>
+  );
+}
 
 const learnLinks = (t: TFunc) =>
   [
@@ -348,6 +370,7 @@ export function SandboxHome({
   const bloc = useMemo(() => blocMeta(t), [t]);
   const tier = useMemo(() => tierChip(t), [t]);
   const footer = useMemo(() => footerNav(t), [t]);
+  const tray = useMemo(() => trayNav(t), [t]);
   const learn = useMemo(() => learnLinks(t), [t]);
 
   const wireframeColor = eraConfig.wireframeColor ?? undefined;
@@ -765,30 +788,54 @@ export function SandboxHome({
           </div>
         </section>
 
+        {/* Public-page tray. Every bento tile above sends a signed-out visitor
+            to /login, so without this strip the only way off the lander is the
+            sign-up form, while a dozen routes are readable with no account.
+            Inventory and the "actually anonymous-readable" rule: publicLinks.ts. */}
+        <section className="border-t border-card-border bg-card-muted/20">
+          <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8">
+            <SectionLabel as="h2">{t("landing.tray.heading")}</SectionLabel>
+            <p className="mb-6 max-w-2xl text-body leading-relaxed text-muted">
+              {t("landing.tray.dek")}
+            </p>
+            <nav aria-label={t("landing.tray.navLabel")} className="flex flex-wrap gap-2">
+              {tray.map((item) => (
+                <LandingNavLink
+                  key={item.href}
+                  href={item.href}
+                  label={item.label}
+                  external={item.external}
+                  className="inline-flex items-center rounded-full border border-card-border bg-card px-3.5 py-1.5 text-body-sm text-muted transition-colors duration-150 hover:border-muted/40 hover:text-foreground"
+                />
+              ))}
+            </nav>
+          </div>
+        </section>
+
         {/* Footer: site navigation + tagline + image attributions */}
         <footer className="border-t border-card-border bg-card-muted/30">
           <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
             <nav
               aria-label={t("landing.footer.navLabel")}
-              className="mx-auto mb-8 grid max-w-3xl grid-cols-2 gap-8 text-left sm:grid-cols-3"
+              className="mx-auto mb-8 grid max-w-4xl grid-cols-2 gap-x-8 gap-y-10 text-left sm:grid-cols-4"
             >
               {footer.map((col) => (
-                <div key={col.heading}>
+                <div key={col.headingKey}>
                   <h3 className="mb-2 text-body-xs font-semibold uppercase tracking-widest text-muted/80">
                     {col.heading}
                   </h3>
                   <ul className="space-y-1.5">
                     {col.links.map((link) => (
                       <li key={link.href}>
-                        <Link
+                        <LandingNavLink
                           href={link.href}
+                          label={link.label}
+                          external={link.external}
                           className="text-body-sm text-muted transition-colors hover:text-foreground"
-                        >
-                          {link.label}
-                        </Link>
+                        />
                       </li>
                     ))}
-                    {col.heading === t("landing.footer.legal") && (
+                    {col.headingKey === "landing.footer.legal" && (
                       <li>
                         <CookieSettingsLink
                           hideOnPrivacyPage

@@ -35,6 +35,11 @@ import { isArmed, nextHeat, outcomeFor } from "@/lib/settlement/outcome";
 import { isSettlementCrisisEnabled } from "@/lib/settlement/featureFlag";
 import { levyMobilisation } from "@/lib/settlement/mobilisation";
 import { settleFrozenCrisisFromConflict } from "@/lib/settlement/settleFromConflict";
+import {
+  attachCrisisToLiveWar,
+  detachCrisisFromWar,
+  resumeCrisisAfterWhitePeace,
+} from "@/lib/settlement/attachToWar";
 import { actuateSettlementOutcome } from "@/lib/settlement/actuate";
 import { emitSettlementWire } from "@/lib/settlement/emitWire";
 import { claimStatusTransition } from "@/lib/turn/atomicClaim";
@@ -101,6 +106,21 @@ export async function processSettlementTurn(
   // should not sit frozen for a turn longer than the fighting lasted.
   const frozen = await crises.findOne({ status: "frozen" } as Filter<SettlementCrisisDoc>);
   if (frozen) {
+    // A crisis that ATTACHED itself to somebody else's war goes back on the board
+    // if the Germany it attached through leaves that war. Checked before the
+    // settle sweep, which would otherwise be reasoning about a war that has
+    // stopped being about Germany at all.
+    // A war that ended in a WHITE PEACE decided nothing, so the question goes back
+    // on the board rather than settling or staying frozen against a finished war.
+    // Checked first: it is the only branch that applies to an already-resolved war,
+    // and the settle sweep below would otherwise refuse it and leave it frozen for
+    // ever.
+    const resumed = await resumeCrisisAfterWhitePeace(db, frozen);
+    if (resumed.detached) return idle();
+
+    const released = await detachCrisisFromWar(db, frozen);
+    if (released.detached) return idle();
+
     const settled = await settleFrozenCrisisFromConflict(db, frozen, currentTurn);
     // `war` is stamped, so this fires on the first frozen tick and not on the
     // dozens that follow while the fighting runs.
@@ -136,6 +156,19 @@ export async function processSettlementTurn(
     { $set: { lastTickedTurn: currentTurn } }
   );
   if (!wonTick) return idle();
+
+  // A war declared BY or AGAINST one of the Germanies, against the opposing
+  // bloc, settles the question by force — no ladder, no threshold, no index.
+  //
+  // AFTER the tick claim, deliberately. The claim is what makes the whole tick
+  // single-writer, and this sweep freezes the crisis: run before it, two
+  // overlapping turn runs would race, and the one whose freeze lost would carry
+  // on to write `status: "open"` back over the winner's frozen crisis. It still
+  // runs BEFORE the plays are drained, so a board about to freeze does not spend
+  // this turn's plays moving a meter nobody will read again. They stay pending
+  // and inert, exactly as they do when the crisis's own declaration freezes it.
+  const attached = await attachCrisisToLiveWar(db, crisis);
+  if (attached.attached) return idle();
 
   const plays = await getSettlementPlaysCollection(db);
   const pending = await plays
@@ -230,8 +263,14 @@ export async function processSettlementTurn(
 
   const seats = crisis.seats.map((seat) => accrue(seat, claimed, batch, currentTurn));
 
+  // GUARDED ON `open`. The tick claim makes this phase single-writer, but the
+  // crisis can still be frozen underneath it from a REQUEST — a `declare` press
+  // lands between the claim above and this write, and an unguarded `$set` would
+  // put `status: "open"` back over a crisis whose war is already on the board.
+  // Losing this tick's plays is the right trade: they are inert on a frozen
+  // crisis anyway, and the alternative silently un-declares a war.
   await crises.updateOne(
-    { _id: crisis._id },
+    { _id: crisis._id, status: "open" },
     {
       $set: {
         institutions,

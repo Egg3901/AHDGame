@@ -5,11 +5,23 @@ import type { MilitaryCommand, CommanderRef } from "@/lib/military/types";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import type { ConflictAssignment } from "@/lib/military/assignments";
 import { THEATER_COMMAND } from "@/lib/military/config";
+import { CommandStructurePanel } from "./CommandStructurePanel";
 
 /** A conflict a general can be posted to (dynamic — the retired static theaters are gone). */
 export interface ConflictOption {
   id: string;
   name: string;
+}
+
+/**
+ * The defence office this command was built in, offered only to a viewer who may
+ * actually open it. Null for a country with no defence seat, and null for the
+ * ordinary Commanding General, whom the cabinet fog-of-war gate keeps out.
+ */
+export interface DefenceOfficeLink {
+  href: string;
+  /** The seat's era-resolved name, so the link says where it goes. */
+  seatName: string;
 }
 
 /**
@@ -24,23 +36,35 @@ export function CommandingGeneralClient({
   countryCode,
   command,
   generals,
+  unitLeaders,
   units,
   conflictAssignments,
   conflicts = [],
-  commandStructureHref = null,
+  defenceOffice = null,
 }: {
   countryCode: string;
   command: MilitaryCommand;
+  /** This command's own generals — the ones the CG posts. */
   generals: CommanderRef[];
+  /**
+   * The country's whole general roster, used only to NAME whoever leads each unit.
+   * A unit in this command can be assigned to a general in another one, and reading
+   * that as unled would be wrong. Defaults to this command's generals.
+   */
+  unitLeaders?: CommanderRef[];
   units: MilitaryUnit[];
   conflictAssignments: ConflictAssignment[];
   /** The live conflicts a general can be posted to. Empty until one breaks out. */
   conflicts?: ConflictOption[];
   /**
-   * The defence seat's office, where this command's structure lives. Null for a
-   * country with no defence seat — then no link is offered rather than a broken one.
+   * Where this command was built, for the rare CG who also holds or oversees the
+   * defence seat. Null when the viewer may not open that office — the command's
+   * own structure is published below regardless, so nothing is lost by omitting it.
+   * The copy says where the command comes from rather than "edit it", because a
+   * head of government passes the same gate and may read that office without
+   * being able to pull any of its levers.
    */
-  commandStructureHref?: string | null;
+  defenceOffice?: DefenceOfficeLink | null;
 }) {
   // A posting's conflict resolves to its live name; a stale id falls back to itself.
   const theaterName = (id: string) => conflicts.find((c) => c.id === id)?.name ?? id;
@@ -129,14 +153,15 @@ export function CommandingGeneralClient({
           units there, so the strongest trait set matters more than the highest rank.
         </p>
         {/* A Command lives on two pages: built in the defence seat's office, employed
-            here. Linking back closes the loop — without it a CG has no route to see
-            their own command's makeup. */}
-        {commandStructureHref && (
+            here. Its makeup is published below rather than linked to, because the
+            cabinet fog-of-war gate shuts an ordinary CG out of that office. This
+            link is only for the viewer who may actually open it. */}
+        {defenceOffice && (
           <a
-            href={commandStructureHref}
+            href={defenceOffice.href}
             className="mt-2 inline-block text-[11px] font-semibold text-muted underline decoration-dotted underline-offset-2 hover:text-gov-soft"
           >
-            View this command&rsquo;s structure and units →
+            This command is built in the {defenceOffice.seatName}&rsquo;s office →
           </a>
         )}
         <div className="mt-3 flex items-center gap-3 text-[11px]">
@@ -146,90 +171,96 @@ export function CommandingGeneralClient({
         </div>
       </div>
 
-      {generals.length === 0 ? (
-        <div className="rounded-xl border border-card-border bg-card p-5">
-          <p className="text-[13px] text-muted">
-            Your command has no generals yet. The Secretary of Defense assigns commanders to a
-            command.
-          </p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {generals.map((g) => {
-            const posting = postingOf(g.id);
-            const led = units.filter((u) => u.assignedGeneralId === g.id);
-            return (
-              <div key={g.id} className="rounded-xl border border-card-border bg-card p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
-                    {g.name}
-                  </span>
-                  <span className="dossier-label text-muted">
-                    {g.spec} · Lvl {g.level}
-                  </span>
-                  {posting?.inCharge && (
-                    <span className="rounded-full border border-[var(--gov)] px-2 py-0.5 text-[10px] font-semibold text-gov-soft">
-                      ◉ THEATER COMMANDER
+      <CommandStructurePanel command={command} generals={unitLeaders ?? generals} units={units} />
+
+      {/* Named for the same reason the structure panel is: both list the command's
+          generals, one as a roster and one as the postings surface. */}
+      <section aria-label="Postings">
+        {generals.length === 0 ? (
+          <div className="rounded-xl border border-card-border bg-card p-5">
+            <p className="text-[13px] text-muted">
+              Your command has no generals yet. The Secretary of Defense assigns commanders to a
+              command.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {generals.map((g) => {
+              const posting = postingOf(g.id);
+              const led = units.filter((u) => u.assignedGeneralId === g.id);
+              return (
+                <div key={g.id} className="rounded-xl border border-card-border bg-card p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+                      {g.name}
                     </span>
-                  )}
-                </div>
-
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <select
-                    aria-label={`Post ${g.name} to a conflict`}
-                    value={posting?.theaterId ?? ""}
-                    onChange={(e) => setPosting(g.id, e.target.value || null)}
-                    className="min-w-0 flex-1 rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px] text-foreground"
-                  >
-                    <option value="">Not posted to a conflict</option>
-                    {conflicts.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                  {posting && !posting.inCharge && (
-                    <button
-                      type="button"
-                      onClick={() => setInCharge(g.id)}
-                      aria-label={`Put ${g.name} in charge of ${theaterName(posting.theaterId)}`}
-                      title="Make Theater Commander — only they may declare offensives at this front"
-                      className="shrink-0 rounded-md border border-card-border px-2.5 py-1.5 text-[11px] font-semibold text-muted hover:text-foreground"
-                    >
-                      MAKE TC
-                    </button>
-                  )}
-                </div>
-
-                {posting && (
-                  <div className="mt-3">
-                    <div className="dossier-label mb-1.5 text-muted">
-                      Force at {theaterName(posting.theaterId)} · {led.length}
-                    </div>
-                    {led.length === 0 ? (
-                      <p className="text-[11px] text-muted">
-                        No units assigned to this general yet — the Secretary of Defense assigns
-                        units to generals.
-                      </p>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {led.map((u) => (
-                          <span
-                            key={String(u._id)}
-                            className="rounded-md border border-card-border px-2 py-1 text-[11px] text-muted"
-                          >
-                            {u.name}
-                          </span>
-                        ))}
-                      </div>
+                    <span className="dossier-label text-muted">
+                      {g.spec} · Lvl {g.level}
+                    </span>
+                    {posting?.inCharge && (
+                      <span className="rounded-full border border-[var(--gov)] px-2 py-0.5 text-[10px] font-semibold text-gov-soft">
+                        ◉ THEATER COMMANDER
+                      </span>
                     )}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <select
+                      aria-label={`Post ${g.name} to a conflict`}
+                      value={posting?.theaterId ?? ""}
+                      onChange={(e) => setPosting(g.id, e.target.value || null)}
+                      className="min-w-0 flex-1 rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px] text-foreground"
+                    >
+                      <option value="">Not posted to a conflict</option>
+                      {conflicts.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                    {posting && !posting.inCharge && (
+                      <button
+                        type="button"
+                        onClick={() => setInCharge(g.id)}
+                        aria-label={`Put ${g.name} in charge of ${theaterName(posting.theaterId)}`}
+                        title="Make Theater Commander — only they may declare offensives at this front"
+                        className="shrink-0 rounded-md border border-card-border px-2.5 py-1.5 text-[11px] font-semibold text-muted hover:text-foreground"
+                      >
+                        MAKE TC
+                      </button>
+                    )}
+                  </div>
+
+                  {posting && (
+                    <div className="mt-3">
+                      <div className="dossier-label mb-1.5 text-muted">
+                        Force at {theaterName(posting.theaterId)} · {led.length}
+                      </div>
+                      {led.length === 0 ? (
+                        <p className="text-[11px] text-muted">
+                          No units assigned to this general yet — the Secretary of Defense assigns
+                          units to generals.
+                        </p>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                          {led.map((u) => (
+                            <span
+                              key={String(u._id)}
+                              className="rounded-md border border-card-border px-2 py-1 text-[11px] text-muted"
+                            >
+                              {u.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

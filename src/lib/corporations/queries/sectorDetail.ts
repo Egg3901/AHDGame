@@ -42,7 +42,7 @@ import type {
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { type CommodityType } from "@/lib/constants/commodities";
 import { sectorDemandGapUnits } from "@/lib/market/sectorDemandGap";
-import { reachableDemandGap } from "@/lib/trade/reachableBook";
+import { commodityDemandGap } from "@/lib/market/commodityMarketScope";
 import { bookFor, loadReachableBooks } from "@/lib/trade/queries/loadReachableBooks";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityPrice, GameConfig, GameState } from "@/lib/db/types";
@@ -93,6 +93,23 @@ import { corpToSectorCountrySpread } from "@/lib/currency/sectorFxSpread";
 interface RouteParams {
   params: Promise<{ id: string; sectorId: string }>;
 }
+
+/**
+ * The slice of a rival corporation the market-position panel needs: enough to
+ * name and colour it, plus the two fields that decide whether it is player-owned
+ * or part of the NPP field.
+ */
+type SiblingCorpProjection = Pick<
+  Corporation,
+  | "_id"
+  | "name"
+  | "sequentialId"
+  | "brandColor"
+  | "countryId"
+  | "liquidCurrencyCode"
+  | "ceoType"
+  | "caretakerCeo"
+>;
 
 /**
  * GET /api/corporations/[id]/sectors/[sectorId]
@@ -395,26 +412,22 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         ? db
             .collection<Corporation>("corporations")
             .find({ _id: { $in: siblingCorpIds } })
-            .project<
-              Pick<
-                Corporation,
-                "_id" | "name" | "sequentialId" | "brandColor" | "countryId" | "liquidCurrencyCode"
-              >
-            >({
+            .project<SiblingCorpProjection>({
               _id: 1,
               name: 1,
               sequentialId: 1,
               brandColor: 1,
               countryId: 1,
               liquidCurrencyCode: 1,
+              // Who actually OWNS the corp, for the market panel's player/NPP
+              // split. `caretakerCeo` rides along because an NPP caretaker runs
+              // a corp whose owner is still a player, and that corp belongs with
+              // the player corps.
+              ceoType: 1,
+              caretakerCeo: 1,
             })
             .toArray()
-        : Promise.resolve(
-            [] as Pick<
-              Corporation,
-              "_id" | "name" | "sequentialId" | "brandColor" | "countryId" | "liquidCurrencyCode"
-            >[]
-          ),
+        : Promise.resolve([] as SiblingCorpProjection[]),
       loadFxRatesByCurrency(db),
       db.collection<UnownedSector>("unownedSectors").findOne({
         stateId: sector.stateId,
@@ -735,10 +748,12 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       // (ticket #1077). Falls back to the aggregate when no book is persisted.
       const reachableBooks = await loadReachableBooks(db);
       const demandGapUnits = sectorDemandGapUnits(effectiveSupply, (gapCommodity) => {
-        const book = bookFor(reachableBooks, sectorCountryId, gapCommodity);
-        if (book) return reachableDemandGap(book);
-        const bal = globalBalances.get(gapCommodity);
-        return (bal?.demand ?? 0) - (bal?.supply ?? 0);
+        return commodityDemandGap({
+          commodity: gapCommodity,
+          stateBalance: stateBalances.get(gapCommodity),
+          reachableBook: bookFor(reachableBooks, sectorCountryId, gapCommodity),
+          globalBalance: globalBalances.get(gapCommodity),
+        });
       });
 
       plants = buildSectorPlantsSection({
@@ -776,7 +791,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           sectorDetailUnitScale
         ),
         demandGapUnits,
-        workers: calculateWorkers(sectorRevenueAnchor, metrics.workforceSkill),
+        workers: sector.workers ?? calculateWorkers(sectorRevenueAnchor, metrics.workforceSkill),
         money: {
           realizedRevenueAnchor: sectorAmountAnchor(sectorEconomicRevenue(sector)),
           maintenanceNetAnchor: sectorAmountAnchor(maintenanceNet),
@@ -847,7 +862,10 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         currentGrowthRate: sector.currentGrowthRate ?? sector.growthRate ?? 0,
         currentGrowthCost: Math.round(sectorAmountInCorpCurrency(sector.currentGrowthCost)),
         revenue: Math.round(sectorAmountInCorpCurrency(sector.revenue)),
-        workers: calculateWorkers(sectorRevenueAnchor, metrics.workforceSkill),
+        workers: sector.workers ?? calculateWorkers(sectorRevenueAnchor, metrics.workforceSkill),
+        workersDesired:
+          sector.workersDesired ?? calculateWorkers(sectorRevenueAnchor, metrics.workforceSkill),
+        labourStaffingFactor: sector.labourStaffingFactor ?? 1,
         productionPolicy: sector.productionPolicy ?? 0,
         productionPolicyLevel: sector.productionPolicyLevel ?? 0,
         // Labour system: CEO wage-level lever (1.0 = baseline), the sector's pay
@@ -1029,6 +1047,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       attackInfo: viewerCorporation
         ? buildSectorAttackInfo({
             viewerCorporation,
+            defenderMarketingStrength: corporation.marketingStrength ?? 0,
             viewerCorpFxRate,
             sectorHostFxRate,
             sectorHostLiquidCode,
@@ -1098,6 +1117,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       (payload.sector as Record<string, unknown>).revenue = null;
       (payload.sector as Record<string, unknown>).currentGrowthCost = null;
       (payload.sector as Record<string, unknown>).workers = null;
+      (payload.sector as Record<string, unknown>).workersDesired = null;
+      (payload.sector as Record<string, unknown>).labourStaffingFactor = null;
       payload.corporation = redactPrivateCorporation(
         payload.corporation as Record<string, unknown>
       );
@@ -1114,6 +1135,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       (payload.sector as Record<string, unknown>).revenue = null;
       (payload.sector as Record<string, unknown>).currentGrowthCost = null;
       (payload.sector as Record<string, unknown>).workers = null;
+      (payload.sector as Record<string, unknown>).workersDesired = null;
+      (payload.sector as Record<string, unknown>).labourStaffingFactor = null;
       payload.margins = null;
       payload.financials = null;
       payload.financialVisibility = {

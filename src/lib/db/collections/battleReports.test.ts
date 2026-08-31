@@ -4,7 +4,7 @@ import { createMockDb } from "@/lib/test-utils/mockDb";
 import { listBattleReportsForCountry } from "./battleReports";
 
 describe("listBattleReportsForCountry", () => {
-  it("queries reports where the country is declarer or target, newest first", async () => {
+  it("queries reports where the country is a principal OR a coalition ally, newest first", async () => {
     const db = createMockDb();
     db.collection("battleReports");
     const toArray = vi.fn().mockResolvedValue([{ turn: 9 }]);
@@ -14,8 +14,15 @@ describe("listBattleReportsForCountry", () => {
 
     const r = await listBattleReportsForCountry(db as unknown as Db, "US", 10);
 
+    // `attackers`/`defenders` matter because an ally in a merged offensive is
+    // neither the declarer nor the target of the report it fought in.
     expect(db.collectionMocks.battleReports.find).toHaveBeenCalledWith({
-      $or: [{ declarerCountry: "US" }, { targetCountry: "US" }],
+      $or: [
+        { declarerCountry: "US" },
+        { targetCountry: "US" },
+        { attackers: "US" },
+        { defenders: "US" },
+      ],
     });
     expect(sort).toHaveBeenCalledWith({ turn: -1 });
     expect(limit).toHaveBeenCalledWith(10);
@@ -85,5 +92,64 @@ describe("casualtiesByTheater", () => {
     await casualtiesByTheater(db as unknown as Db, ["front-a", "front-b"]);
     const pipeline = db.collectionMocks.battleReports.aggregate.mock.calls[0][0];
     expect(pipeline[0].$match.theaterId).toEqual({ $in: ["front-a", "front-b"] });
+  });
+});
+
+import { foldCasualtiesByCountry, type ReportSides } from "./battleReports";
+
+describe("foldCasualtiesByCountry", () => {
+  /** The live T420 report: DD led, RU joined, US defended. */
+  const coalition: ReportSides = {
+    att: {
+      country: "DD",
+      power: 5000,
+      loss: 16299,
+      contingents: [
+        { country: "DD", power: 1650, loss: 5360 },
+        { country: "RU", power: 3350, loss: 10939 },
+      ],
+    },
+    def: {
+      country: "US",
+      power: 2000,
+      loss: 2313,
+      contingents: [{ country: "US", power: 2000, loss: 2313 }],
+    },
+  };
+
+  it("credits each ally with its own dead instead of the principal with all of them", () => {
+    expect(foldCasualtiesByCountry([coalition])).toEqual({
+      DD: 5360,
+      RU: 10939,
+      US: 2313,
+    });
+  });
+
+  it("falls back to the principal on a pre-coalition report", () => {
+    const legacy: ReportSides = {
+      att: { country: "US", power: 4444, loss: 300 },
+      def: { country: "CN", power: 9999, loss: 900 },
+    };
+    expect(foldCasualtiesByCountry([legacy])).toEqual({ US: 300, CN: 900 });
+  });
+
+  it("accumulates a nation across the front's whole history", () => {
+    const legacy: ReportSides = {
+      att: { country: "DD", power: 100, loss: 40 },
+      def: { country: "US", power: 100, loss: 60 },
+    };
+    expect(foldCasualtiesByCountry([coalition, legacy])).toEqual({
+      DD: 5400,
+      RU: 10939,
+      US: 2373,
+    });
+  });
+
+  it("skips no-contact reports, which carry no sides at all", () => {
+    expect(foldCasualtiesByCountry([null, coalition, null])).toEqual({
+      DD: 5360,
+      RU: 10939,
+      US: 2313,
+    });
   });
 });

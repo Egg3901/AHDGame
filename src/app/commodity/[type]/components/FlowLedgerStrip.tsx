@@ -5,9 +5,9 @@ import type { CommodityDetail } from "../types";
 
 /**
  * Flow-ledger summary (marketSystemMode >= "ledger", audit t806 Fix 3/D0):
- * what this market actually moved last turn — cleared volume, demand that
- * found no producer, and output that found no buyer. Hidden entirely when the
- * ledger is off (`flows` absent).
+ * pooled world availability last turn. These figures are a frictionless global
+ * aggregate, not state buyer intent or route-level physical settlement. Hidden
+ * entirely when the ledger is off (`flows` absent).
  */
 export default function FlowLedgerStrip({
   flows,
@@ -20,7 +20,7 @@ export default function FlowLedgerStrip({
     <div className="rounded-xl border border-card-border bg-card px-5 py-4 mb-6">
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-semibold text-muted uppercase tracking-wider">
-          Market Flows
+          Global pooled ledger
         </span>
         <span className="text-[10px] text-muted tabular-nums">turn {flows.turn}</span>
       </div>
@@ -29,31 +29,31 @@ export default function FlowLedgerStrip({
           flows.stockUnits != null ? "grid-cols-2 sm:grid-cols-5" : "grid-cols-3"
         }`}
       >
-        <div title="Volume that transacted: the smaller of supply and demand. In a balanced market this equals both.">
+        <div title="Pooled availability: the smaller of world supply and world ledger demand. This does not apply route or country reachability.">
           <div className="text-sm font-bold tabular-nums text-foreground">
-            {formatUnits(flows.clearedUnits, unit)}
+            {formatUnits(flows.clearedUnitsPooled, unit)}
           </div>
-          <div className="text-[10px] text-muted mt-0.5">Cleared</div>
+          <div className="text-[10px] text-muted mt-0.5">Could clear</div>
         </div>
-        <div title="Demand that found no producer this turn. Persistent unmet demand means room to expand into this market.">
+        <div title="Calibrated world ledger demand above world supply. Reachable buyer intent can be higher because this pool ignores location and delivery limits.">
           <div
             className={`text-sm font-bold tabular-nums ${
-              flows.unmetDemandUnits > 0 ? "text-error" : "text-muted"
+              flows.unmetDemandUnitsPooled > 0 ? "text-error" : "text-muted"
             }`}
           >
-            {formatUnits(flows.unmetDemandUnits, unit)}
+            {formatUnits(flows.unmetDemandUnitsPooled, unit)}
           </div>
-          <div className="text-[10px] text-muted mt-0.5">Unmet demand</div>
+          <div className="text-[10px] text-muted mt-0.5">Pooled unmet</div>
         </div>
-        <div title="Output that found no buyer this turn. A surplus that lasts pushes prices down, which means producers here have built too much.">
+        <div title="World supply above calibrated world ledger demand. This pooled estimate does not apply route or country reachability.">
           <div
             className={`text-sm font-bold tabular-nums ${
-              flows.surplusUnits > 0 ? "text-warning" : "text-muted"
+              flows.surplusUnitsPooled > 0 ? "text-warning" : "text-muted"
             }`}
           >
-            {formatUnits(flows.surplusUnits, unit)}
+            {formatUnits(flows.surplusUnitsPooled, unit)}
           </div>
-          <div className="text-[10px] text-muted mt-0.5">Unsold</div>
+          <div className="text-[10px] text-muted mt-0.5">Pooled surplus</div>
         </div>
         {flows.stockUnits != null && (
           <div title="Global stockpile after this turn's flows and spoilage. Not yet affecting prices.">

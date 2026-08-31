@@ -81,3 +81,38 @@ describe("loadActiveSectorDemandModifierPctMap", () => {
     expect(map.size).toBe(0);
   });
 });
+
+describe("loadActiveSectorOutputDemandModifierPctMap", () => {
+  it("loads only output-demand modifiers and caps their stacked total", async () => {
+    const db = createMockDb();
+    mockModifiers(db, [
+      {
+        kind: "sectorOutputDemandModifier",
+        countryId: "US",
+        sectorType: "defense",
+        pct: 12,
+        expiresAtTurn: 100,
+      },
+      {
+        kind: "sectorOutputDemandModifier",
+        countryId: "US",
+        sectorType: "defense",
+        pct: 11,
+        expiresAtTurn: 100,
+      },
+      {
+        kind: "sectorDemandModifier",
+        countryId: "US",
+        sectorType: "defense",
+        pct: -20,
+        expiresAtTurn: 100,
+      },
+    ]);
+    const { loadActiveSectorOutputDemandModifierPctMap, SECTOR_DEMAND_MODIFIER_TOTAL_CAP_PCT } =
+      await import("./sectorDemandModifierMap");
+
+    const map = await loadActiveSectorOutputDemandModifierPctMap(db as unknown as Db, 10);
+
+    expect(map.get("US:defense")).toBe(SECTOR_DEMAND_MODIFIER_TOTAL_CAP_PCT);
+  });
+});

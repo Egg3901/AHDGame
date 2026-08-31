@@ -44,4 +44,11 @@ export interface OverviewCounts {
    * is the same behaviour the navbar and the `/world/conflicts` gate use.
    */
   coldWarDefcon?: number | null;
+  /**
+   * Naval and air formations this country owns.
+   *
+   * Gates the Naval and Air Command row in the directory: a nation with no fleet and no
+   * air force has nothing to command, so it gets no link rather than a page of nothing.
+   */
+  navairFormations?: number | null;
 }

@@ -12,6 +12,13 @@ vi.mock("@sentry/nextjs", () => ({
   captureMessage: (...args: unknown[]) => captureMessage(...args),
   flush: (...args: unknown[]) => flush(...args),
 }));
+// The trip path lazily imports turnSystem to release the in-flight turn lock.
+// Stub it so tests that don't inject `releaseTurnLock` stay hermetic —
+// turnSystem's module scope reaches the DB/network on load.
+const releaseLocalProcessingLock = vi.fn().mockResolvedValue(true);
+vi.mock("@/lib/turnSystem", () => ({
+  releaseLocalProcessingLock: (...args: unknown[]) => releaseLocalProcessingLock(...args),
+}));
 
 describe("checkHeapAndMaybeTrip", () => {
   beforeEach(() => {
@@ -101,6 +108,57 @@ describe("checkHeapAndMaybeTrip", () => {
       })
     );
     expect(flush).toHaveBeenCalledTimes(1);
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  // Regression guard for the 2026-08-28 stuck-turn spate. A trip that fires
+  // mid-turn used to exit(1) with gameState.isProcessing still set and the
+  // heartbeat frozen, so the game sat wedged until the 20-min stale window
+  // elapsed AND the :00 / :30 cron came round.
+  it("default onCritical releases the in-flight turn lock before exiting", async () => {
+    const exit = vi.fn();
+    const releaseTurnLock = vi.fn().mockResolvedValue(true);
+    const { checkHeapAndMaybeTrip } = await import("./heapWatchdog");
+
+    await checkHeapAndMaybeTrip({
+      thresholdPct: 0.85,
+      process: { exit } as unknown as NodeJS.Process,
+      releaseTurnLock,
+      getMemoryUsage: () => ({
+        heapUsed: 230_000_000,
+        heapTotal: 240_000_000,
+        external: 0,
+        rss: 0,
+        arrayBuffers: 0,
+      }),
+      getHeapStatistics: () => ({ heap_size_limit: 256_000_000 }),
+      getUptimeSec: () => 1,
+    });
+
+    expect(releaseTurnLock).toHaveBeenCalledTimes(1);
+    expect(releaseTurnLock).toHaveBeenCalledWith(expect.stringContaining("heap watchdog trip"));
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it("default onCritical still exits when the turn-lock release rejects", async () => {
+    const exit = vi.fn();
+    const { checkHeapAndMaybeTrip } = await import("./heapWatchdog");
+
+    await checkHeapAndMaybeTrip({
+      thresholdPct: 0.85,
+      process: { exit } as unknown as NodeJS.Process,
+      releaseTurnLock: vi.fn().mockRejectedValue(new Error("mongo unreachable")),
+      getMemoryUsage: () => ({
+        heapUsed: 230_000_000,
+        heapTotal: 240_000_000,
+        external: 0,
+        rss: 0,
+        arrayBuffers: 0,
+      }),
+      getHeapStatistics: () => ({ heap_size_limit: 256_000_000 }),
+      getUptimeSec: () => 1,
+    });
+
     expect(exit).toHaveBeenCalledWith(1);
   });
 

@@ -70,7 +70,6 @@ vi.mock("@/lib/nationalCommitteeElections", () => ({
 }));
 vi.mock("@/lib/turn/nppBehavior", () => ({
   processNPPTurn: vi.fn(),
-  recalculateNPPSpeakerVotes: vi.fn(),
 }));
 vi.mock("@/lib/budget/fiscalYear", () => ({
   isFiscalYearEnd: vi.fn().mockReturnValue(false),
@@ -104,6 +103,9 @@ vi.mock("@/lib/turn/independenceDesireDrift", () => ({
 vi.mock("@/lib/utils/governmentApproval", () => ({
   snapshotApprovalHistory: vi.fn(),
 }));
+vi.mock("@/lib/utils/approvalSnapshotRun", () => ({
+  snapshotApprovalsForTurn: vi.fn(),
+}));
 vi.mock("@/lib/demographicEffects", () => ({
   processAllStateDemographics: vi.fn(),
 }));
@@ -122,6 +124,17 @@ vi.mock("@/lib/events", () => ({
 }));
 vi.mock("@/lib/turn/commodityPriceTurn", () => ({
   processCommodityPriceTurn: vi.fn(),
+}));
+vi.mock("@/lib/navair/turn", () => ({
+  processNavairTurn: vi.fn().mockResolvedValue({
+    countriesProcessed: 0,
+    regionsContested: 0,
+    channelsWritten: 0,
+    unitsStationed: 0,
+    engagementsFought: 0,
+    formationsLost: 0,
+    formationsUpdated: 0,
+  }),
 }));
 
 describe("processTurn() — full turn flow", () => {
@@ -210,7 +223,6 @@ describe("processTurn() — full turn flow", () => {
       votescast: 0,
       speakerVotes: 0,
     } as never);
-    vi.mocked(nppBehavior.recalculateNPPSpeakerVotes).mockResolvedValue(undefined as never);
 
     const bills = await import("@/lib/billLifecycle");
     vi.mocked(bills.processBillLifecycle).mockResolvedValue({
@@ -260,6 +272,11 @@ describe("processTurn() — full turn flow", () => {
 
     const govApproval = await import("@/lib/utils/governmentApproval");
     vi.mocked(govApproval.snapshotApprovalHistory).mockResolvedValue(undefined as never);
+    const approvalRun = await import("@/lib/utils/approvalSnapshotRun");
+    vi.mocked(approvalRun.snapshotApprovalsForTurn).mockResolvedValue({
+      countriesProcessed: 0,
+      guestsReleased: [],
+    });
 
     const demographicEffects = await import("@/lib/demographicEffects");
     vi.mocked(demographicEffects.processAllStateDemographics).mockResolvedValue(undefined as never);

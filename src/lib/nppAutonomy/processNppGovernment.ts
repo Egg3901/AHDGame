@@ -23,6 +23,8 @@
  *      one-party direct-fill, not the US-only nomination lifecycle.
  *   4. ministerialGovernance — each NPP minister steers its tier setting and
  *      issues ministerial orders toward the agenda (runMinisterialGovernance).
+ *   5. foreignPolicy — score and audit one diplomatic intent. The planner
+ *      defaults to shadow mode and does not mutate gameplay state yet.
  *
  * The agenda compute also derives the V1.6 fiscal stance and intakes active
  * crises (V1.8) so emergencies dominate the agenda. Agenda-driven bill
@@ -62,6 +64,7 @@ import { claimTier1NppDecisionSlot } from "./tier1DecisionClaim";
 import type { Tier1DecisionSkipReason } from "./tier1DecisionSchedule";
 import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
 import { caretakerDecisionAllowed } from "@/lib/world/playerHandoff";
+import { processAutonomousForeignPolicy } from "./foreignPolicy";
 
 /**
  * How many turns an agenda stays valid before recompute. The agenda is
@@ -82,6 +85,8 @@ export interface NppGovernmentResult {
   cabinetPostsFilled: number;
   /** Number of ministerial orders issued this call (V1.4). */
   ministerialOrdersIssued: number;
+  /** Whether this call inserted a foreign-policy decision audit row. */
+  foreignPolicyDecisionRecorded: boolean;
   /** Why the staggered strategic batch was skipped, when applicable (#3724). */
   skipReason?: Tier1DecisionSkipReason;
 }
@@ -92,6 +97,7 @@ const INACTIVE: NppGovernmentResult = {
   agendaUpdated: false,
   cabinetPostsFilled: 0,
   ministerialOrdersIssued: 0,
+  foreignPolicyDecisionRecorded: false,
 };
 
 /**
@@ -109,7 +115,8 @@ export async function processNppGovernment(
   currentTurn: number,
   now: Date,
   currentYear?: number | null,
-  commandEconomyEnabled?: boolean
+  commandEconomyEnabled?: boolean,
+  preset?: string
 ): Promise<NppGovernmentResult> {
   if (!(await nppAutonomyAtLeast(db, countryId, "v1"))) return INACTIVE;
 
@@ -137,17 +144,18 @@ export async function processNppGovernment(
       agendaUpdated: false,
       cabinetPostsFilled: 0,
       ministerialOrdersIssued: caretaker.ordersIssued,
+      foreignPolicyDecisionRecorded: false,
       skipReason: "player-controlled",
     };
   }
 
-  const config = getCountryConfig(countryId);
+  const config = getCountryConfig(countryId, preset);
   const planned = isPlannedEconomy(countryId, currentYear, commandEconomyEnabled);
 
   // 1. Executive formation (presidential is the V1-new path).
   let seatedExecutive = false;
   if (isPresidentialGovernmentType(config.governmentType)) {
-    seatedExecutive = await appointNppPresident(db, countryId, currentTurn, now);
+    seatedExecutive = await appointNppPresident(db, countryId, currentTurn, now, preset);
   }
 
   // 2. Governing agenda.
@@ -176,12 +184,18 @@ export async function processNppGovernment(
   //    and as a no-op below the comingle tier.
   const caretaker = await runCaretakerMinisters(db, countryId, currentTurn, now);
 
+  // 6. Foreign policy. This stays inside the claimed Tier-1 slot so each
+  //    autonomous government considers at most one diplomatic intent per
+  //    six-hour cycle. Shadow mode only writes its audit decision.
+  const foreignPolicy = await processAutonomousForeignPolicy(db, countryId, currentTurn, now);
+
   return {
     ran: true,
     seatedExecutive,
     agendaUpdated,
     cabinetPostsFilled: cabinet.filled,
     ministerialOrdersIssued: ministerial.ordersIssued + caretaker.ordersIssued,
+    foreignPolicyDecisionRecorded: foreignPolicy.decisionRecorded,
   };
 }
 
@@ -350,7 +364,7 @@ export async function runNppGovernmentPhases(gameNow: Date, currentTurn: number)
   // Flag default OFF: omitted/false → isPlannedEconomy is false everywhere.
   const gameState = await db
     .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { currentYear: 1 } });
+    .findOne({ _id: "current" }, { projection: { currentYear: 1, preset: 1 } });
   const currentYear = gameState?.currentYear;
   const gameConfig = await db
     .collection<GameConfig>("gameConfig")
@@ -364,7 +378,8 @@ export async function runNppGovernmentPhases(gameNow: Date, currentTurn: number)
       currentTurn,
       gameNow,
       currentYear,
-      commandEconomyEnabled
+      commandEconomyEnabled,
+      gameState?.preset
     );
   }
 }

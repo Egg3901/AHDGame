@@ -8,6 +8,8 @@ import type {
   PoliticalMetricsHistoryDoc,
 } from "@/lib/db/types/politicalMetrics";
 import { getCountryDisplayName } from "@/lib/constants/countries";
+import { loadDemocraticCompetition } from "@/lib/governanceStyle/loadCompetition";
+import { scoreGovernanceStyle, type GovernanceStyleScore } from "@/lib/governanceStyle/score";
 import { getCatalog } from "@/lib/politicalLegislation/catalog";
 import { computeLawCost } from "@/lib/politicalLegislation/costEngine";
 import { getEnactedLevels } from "@/lib/politicalLegislation/enactedLevels";
@@ -44,6 +46,7 @@ export interface CountryPoliticalMetricsResponse {
   turn: number;
   overall: number;
   overallStatus: string;
+  governanceStyle: GovernanceStyleScore;
   categories: Array<{
     id: string;
     displayName: string;
@@ -194,18 +197,26 @@ export async function loadCountryPoliticalMetrics(
       .collection<State>("states")
       .find({ countryId }, { projection: { name: 1, population: 1, gdp: 1 } })
       .toArray(),
-    db
-      .collection<GameState>("gameState")
-      .findOne(
-        { _id: "current" },
-        { projection: { currentYear: 1, currentTurn: 1, startingYear: 1, preset: 1 } }
-      ),
+    db.collection<GameState>("gameState").findOne(
+      { _id: "current" },
+      {
+        projection: {
+          currentYear: 1,
+          currentTurn: 1,
+          startingYear: 1,
+          preset: 1,
+          presidentialTenureByCountry: 1,
+        },
+      }
+    ),
   ]);
   if (docs.length === 0) return null;
 
   const populationByRegion = new Map(states.map((s) => [s._id, s.population ?? 0]));
   const nameByRegion = new Map(states.map((s) => [s._id, s.name]));
   const national = aggregateNationalPoliticalMetrics(docs, populationByRegion);
+  const competition = await loadDemocraticCompetition(db, countryId, gameState?.preset, gameState);
+  const governanceStyle = scoreGovernanceStyle(national, competition);
   const { map: legislationByMetric, levels: enactedLevels } = await loadRelevantLegislation(
     db,
     countryId,
@@ -365,6 +376,7 @@ export async function loadCountryPoliticalMetrics(
     turn: gameState?.currentTurn ?? 1,
     overall: round1(overall),
     overallStatus: statusFor(overall),
+    governanceStyle,
     categories,
   };
 }

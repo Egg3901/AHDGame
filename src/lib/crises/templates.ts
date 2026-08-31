@@ -7,6 +7,7 @@ import {
   UNION_BAN_STRIKE_DURATION_TURNS,
   UNION_BAN_STRIKE_TEMPLATE_KEY,
 } from "@/lib/crises/unionBanStrikeCopy";
+import { WAR_EMERGENCY_CRISIS_TEMPLATES } from "@/lib/crises/warEmergencyCrises";
 
 /** Resolve a template's default duration for a given scope.
  *  Prefers `durationByScope[scope]`, then falls back to `durationTurns`,
@@ -5036,4 +5037,5 @@ export const ALL_CRISIS_TEMPLATES: Record<
   campus_unrest: CAMPUS_UNREST_TEMPLATE,
   urban_riots: URBAN_RIOTS_TEMPLATE,
   antiwar_protest: ANTIWAR_PROTEST_TEMPLATE,
+  ...WAR_EMERGENCY_CRISIS_TEMPLATES,
 };

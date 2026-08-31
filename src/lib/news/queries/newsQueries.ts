@@ -3,6 +3,7 @@ import { fetchBordersByUserIds } from "@/lib/db/patreonBorders";
 import { badRequest } from "@/lib/api/errors";
 import { ObjectId, type Db } from "mongodb";
 import type { Character, NewsPost, NewsReaction } from "@/lib/db/types";
+import { withPublicNewsVisibility } from "@/lib/news/publicModeration";
 import {
   serializeNewsPost,
   serializeNewsReply,
@@ -41,7 +42,7 @@ export async function getNewsFeed(
 
   const posts = await db
     .collection<NewsPost>("newsPosts")
-    .find(query)
+    .find(withPublicNewsVisibility(query))
     .sort({ createdAt: -1 })
     .skip(offset)
     .limit(limit)

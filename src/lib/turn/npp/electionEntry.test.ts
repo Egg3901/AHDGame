@@ -110,13 +110,6 @@ function buildContext(
     billWhips: new Map(),
     activeStateBills: [],
     stateBillWhips: new Map(),
-    speakerElection: null,
-    speakerNominations: [],
-    houseLeadershipElections: [],
-    houseLeadershipNominations: [],
-    senateLeadershipElections: [],
-    senateLeadershipNominations: [],
-    leadershipWhips: [],
     statePartyOrgs: new Map(),
     partyByCompositeKey: new Map(),
     partyCountries: new Map(),
@@ -810,7 +803,7 @@ describe("processElectionEntry — UK regional party geography", () => {
     });
   });
 
-  it("does not field an SNP NPP in a London race (ticket #1110)", async () => {
+  it("fields an SNP NPP in a London race now that geography is not a gate", async () => {
     const election = createTestElection({
       countryId: "UK",
       electionType: "commons",
@@ -837,8 +830,8 @@ describe("processElectionEntry — UK regional party geography", () => {
     ctx.nppElectionEligiblePartyKeys = new Set(["UK:3"]);
 
     const entered = await processElectionEntry(ctx);
-    expect(entered).toBe(0);
-    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+    expect(entered).toBe(1);
+    expect(db.collectionMocks.electionCandidates.insertOne).toHaveBeenCalledTimes(1);
   });
 
   it("still fields an SNP NPP in a Scotland race", async () => {
@@ -872,7 +865,7 @@ describe("processElectionEntry — UK regional party geography", () => {
     expect(db.collectionMocks.electionCandidates.insertOne).toHaveBeenCalledTimes(1);
   });
 
-  it("withdraws an already-filed SNP NPP from a London race (ticket #1110)", async () => {
+  it("leaves an already-filed SNP NPP standing in a London race", async () => {
     const election = createTestElection({
       countryId: "UK",
       electionType: "commons",
@@ -918,10 +911,10 @@ describe("processElectionEntry — UK regional party geography", () => {
 
     await processElectionEntry(ctx);
 
-    expect(db.collectionMocks.electionCandidates.updateOne).toHaveBeenCalledWith(
+    expect(db.collectionMocks.electionCandidates.updateOne).not.toHaveBeenCalledWith(
       { _id: candidacy._id },
       expect.objectContaining({ $set: expect.objectContaining({ status: "withdrawn" }) })
     );
-    expect(ctx.nppCandidacies.has(npp._id.toString())).toBe(false);
+    expect(ctx.nppCandidacies.has(npp._id.toString())).toBe(true);
   });
 });

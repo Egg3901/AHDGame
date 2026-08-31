@@ -1259,6 +1259,30 @@ html[data-high-contrast="true"] :focus-visible {
   }
 }
 
+/* Election wire ticker — two identical segments; -50% = one loop */
+@keyframes ahd-wire-marquee {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.ahd-wire-marquee-track {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: ahd-wire-marquee linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ahd-wire-marquee-track {
+    animation: none;
+    transform: none;
+  }
+}
+
 /* Navbar top accent — primary color only; mix with --background so it stays theme-native
    (color-mix + transparent is unreliable in sRGB). */
 .ahd-nav-flair-track {

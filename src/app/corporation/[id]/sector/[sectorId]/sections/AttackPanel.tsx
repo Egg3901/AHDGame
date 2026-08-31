@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Tooltip } from "@/components/Tooltip";
+import { PlantSplitPlannerModal } from "@/components/corporation/PlantSplitPlannerModal";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { formatMarketingStrength } from "@/lib/utils/formatters";
@@ -16,6 +17,8 @@ const STRENGTH_LABELS: Record<SplitStrength, string> = {
 
 interface AttackPanelProps {
   attackInfo: AttackInfo;
+  plantsMode: boolean;
+  targetName: string;
   showAttack: boolean;
   /**
    * Market splitting is retired under the plants tier: capacity is the
@@ -28,7 +31,7 @@ interface AttackPanelProps {
   attacking: boolean;
   attackError: string;
   attackMsg: string;
-  onAttack: () => void;
+  onAttack: () => Promise<boolean>;
   splitting: boolean;
   splitError: string;
   splitMsg: string;
@@ -39,6 +42,8 @@ interface AttackPanelProps {
 
 export default function AttackPanel({
   attackInfo,
+  plantsMode,
+  targetName,
   showAttack,
   showSplit,
   attacking,
@@ -54,6 +59,7 @@ export default function AttackPanel({
 }: AttackPanelProps) {
   const { formatAmount } = useCurrency();
   const [selectedStrength, setSelectedStrength] = useState<SplitStrength>("full");
+  const [plannerOpen, setPlannerOpen] = useState(false);
 
   const targetNativeCurrency = targetCurrencyCode ?? sectorCurrencyCode;
   const userNativeCurrency =
@@ -92,7 +98,11 @@ export default function AttackPanel({
     attackInfo.userLiquidCapital >= attackInfo.attackCost &&
     attackInfo.userMarketingStrength >= attackInfo.splitMsCost;
 
-  if (!showAttack && attackInfo.splitCost <= 0) return null;
+  if (
+    (plantsMode && (!showAttack || !attackInfo.plantSplitQuote || attackInfo.plantCount == null)) ||
+    (!plantsMode && !showAttack && attackInfo.splitCost <= 0)
+  )
+    return null;
 
   const canSplit =
     activeSplitCost > 0 &&
@@ -136,13 +146,69 @@ export default function AttackPanel({
     <div className="rounded-xl border border-card-border bg-card p-6">
       <h2 className="mb-1 text-lg font-bold text-foreground">Market Actions</h2>
       <p className="mb-4 text-xs text-muted">
-        {showSplit
-          ? "Attack this corporation or split the unowned share of this sector."
-          : "Attempt a takeover of this corporation's plants in this market. Untapped demand is built into, not split."}
+        {plantsMode
+          ? "Attempt a sector split against this rival's whole plants."
+          : showSplit
+            ? "Attack this corporation or split the unowned share of this sector."
+            : "Attack this corporation in this market."}
       </p>
 
       <div className={`grid gap-4 ${showAttack && showSplit ? "lg:grid-cols-2" : ""}`}>
-        {showAttack && (
+        {showAttack &&
+          plantsMode &&
+          attackInfo.plantSplitQuote &&
+          attackInfo.plantCount != null && (
+            <div className="rounded-xl border border-error/20 bg-background/40 p-4">
+              <h3 className="text-sm font-semibold text-foreground">Split Rival Plants</h3>
+              <p className="mt-1 text-xs text-muted">
+                Relative MS automatically sets the share and success chance. You do not choose a
+                percentage.
+              </p>
+              {attackMsg && (
+                <div className="mt-3 rounded-lg border border-success/30 bg-success/10 p-3 text-xs text-success">
+                  {attackMsg}
+                </div>
+              )}
+              <div className="mt-4 grid grid-cols-3 gap-3 rounded-lg border border-card-border/60 bg-card/60 p-3 text-center">
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-muted">Automatic share</p>
+                  <p className="mt-1 font-semibold tabular-nums text-foreground">
+                    {(attackInfo.plantSplitQuote.seizureFraction * 100).toFixed(
+                      (attackInfo.plantSplitQuote.seizureFraction * 100) % 1 === 0 ? 0 : 1
+                    )}
+                    %
+                  </p>
+                </div>
+                <div className="border-x border-card-border/60 px-2">
+                  <p className="text-[10px] uppercase tracking-wider text-muted">Plants at risk</p>
+                  <p className="mt-1 font-semibold tabular-nums text-foreground">
+                    {attackInfo.plantSplitQuote.plantsAtRisk.toLocaleString("en-US")}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-muted">Success chance</p>
+                  <p className="mt-1 font-semibold tabular-nums text-foreground">
+                    {(attackInfo.plantSplitQuote.successProbability * 100).toFixed(1)}%
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-muted">
+                  Committed: {formatAmount(attackInfo.plantSplitQuote.cashCostAnchor)} +{" "}
+                  {attackInfo.plantSplitQuote.marketingStrengthCost} MS, paid even on failure
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setPlannerOpen(true)}
+                  className="rounded-lg border border-error/30 bg-error/10 px-4 py-2 text-sm font-medium text-error transition-colors hover:bg-error/20"
+                >
+                  Plan sector split
+                </button>
+              </div>
+            </div>
+          )}
+
+        {showAttack && !plantsMode && (
           <div className="rounded-xl border border-error/20 bg-background/40 p-4">
             <h3 className="text-sm font-semibold text-foreground">
               {showSplit ? "Attack Sector" : "Take Over Plants"}
@@ -186,7 +252,7 @@ export default function AttackPanel({
                 </div>
               </div>
               <button
-                onClick={onAttack}
+                onClick={() => void onAttack()}
                 disabled={attacking || !canAttack}
                 className="rounded-lg border border-error/30 bg-error/10 px-4 py-2 text-sm font-medium text-error transition-colors hover:bg-error/20 disabled:cursor-not-allowed disabled:opacity-40"
                 title={attackReason}
@@ -336,6 +402,25 @@ export default function AttackPanel({
           </div>
         )}
       </div>
+
+      {plantsMode && attackInfo.plantSplitQuote && attackInfo.plantCount != null && (
+        <PlantSplitPlannerModal
+          open={plannerOpen}
+          targetName={targetName}
+          defenderPlantCount={attackInfo.plantCount}
+          quote={attackInfo.plantSplitQuote}
+          userLiquidCapitalAnchor={attackInfo.userLiquidCapital}
+          userMarketingStrength={attackInfo.userMarketingStrength}
+          submitting={attacking}
+          errorMessage={attackError}
+          onClose={() => {
+            if (!attacking) setPlannerOpen(false);
+          }}
+          onConfirm={async () => {
+            if (await onAttack()) setPlannerOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

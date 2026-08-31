@@ -1,0 +1,12 @@
+{
+  "worldConflicts": {
+    "tension": {
+      "howWorldTensionWorksLabel": "So funktioniert die Weltspannung",
+      "howWorldTensionWorksHelp": "Die Spannung ist ein gemeinsamer Wert von 0 bis 100. Tests, Kriegserklärungen und Krisenausgänge verändern ihn sofort. In jeder Runde bewegt er sich auf einen Mindestwert zu, den die Vietnam-Eskalation, aktive Krisen, die Kriege auf dieser Seite und das weltweite Atomwaffenarsenal bestimmen. Die Spannung allein kann DEFCON 2 erreichen, aber nie DEFCON 1.",
+      "pressureFloorHelp": "Einmalige Ausschläge klingen ab. Dieser anhaltende Druck bleibt. Der Index kann nicht unter diesen Mindestwert fallen. Liegt er darüber, sinkt die verbleibende Differenz pro Runde um 8 Prozent.",
+      "warsLabel": "KRIEGE",
+      "warsDetail": "{active, plural, one {# aktiv} other {# aktiv}}, {nuclear, plural, one {# nuklear} other {# nuklear}}",
+      "warsHelp": "Jeder aktive Krieg auf der Konfliktseite erhöht den Mindestwert entsprechend seiner Intensität. Jeder Krieg mit Atommächten auf gegnerischen Seiten garantiert mindestens die Krisenstufe. Andere Kriege werden nach ihrer Intensität gewichtet."
+    }
+  }
+}

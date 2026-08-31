@@ -1,5 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import type { PeaceTerm } from "@/lib/military/peaceTerm";
 
 /**
  * Turns a truce holds between two countries after ANY war between them ends —
@@ -35,17 +36,36 @@ export interface PeaceOfferDoc {
   fromCountry: CountryId;
   toCountry: CountryId;
   /**
-   * Who pays whom, and how much. `amount: 0` is a clean white peace — the same
-   * mechanism dialled to nothing rather than a separate code path.
+   * Which of the two parties this deal takes OUT of the war. Always `fromCountry`
+   * or `toCountry`.
    *
-   * `payer` is explicit rather than implied because EITHER party may pay: a losing
-   * country buys its way out, and a winning country may pay to disengage from a war
-   * it no longer wants.
+   * Explicit rather than implied, because an offer now runs in both directions:
    *
-   * ALWAYS quoted in the PAYER's local currency. Every treasuryBalance is
-   * denominated locally, so an amount with no stated denomination is meaningless.
+   *   - `leaver === fromCountry` is "let me out", the original shape. The sender
+   *     proposes to end their own participation.
+   *   - `leaver === toCountry` is "you get out": the sender asks the recipient to
+   *     withdraw and stays in the war themselves. This is how a coalition is peeled
+   *     apart by negotiation, which the player wiki has advised as strategy since
+   *     before it was possible.
+   *
+   * Either way the RECIPIENT is the one who accepts or refuses. Nobody is ever
+   * removed from a war without their own government agreeing to it.
    */
-  indemnity: { payer: CountryId; amount: number };
+  leaver: CountryId;
+  /**
+   * What this settlement takes. Exactly ONE term, enforced by the union rather
+   * than by the UI: a discriminated union makes a deal carrying two terms
+   * unrepresentable, so it cannot be stored or hand-rolled over the API.
+   *
+   * Replaced the old `indemnity` field. An indemnity is now one branch of the
+   * union, and `amount: 0` is still a clean white peace, the same mechanism
+   * dialled to nothing rather than a separate code path. Its `payer` stays
+   * explicit because EITHER party may pay: a losing country buys its way out, and
+   * a winning country may pay to disengage from a war it no longer wants. That
+   * amount is ALWAYS quoted in the payer's local currency, since every
+   * treasuryBalance is denominated locally.
+   */
+  term: PeaceTerm;
   /** Optional note, moderated. Public on the conflict record once accepted. */
   justification?: string;
   status: "pending" | "accepted" | "rejected" | "withdrawn" | "expired";

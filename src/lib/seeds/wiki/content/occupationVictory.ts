@@ -42,14 +42,14 @@ How far depends on how decisively it was won:
 - **A decisive victory takes the full step.**
 - **Narrower wins scale down** in proportion to the margin. A pyrrhic victory barely moves the line at all.
 - **A loser who broke off in order yields less ground** than one broken in place: an orderly retreat is genuinely better than a collapse.
-- **An advance slows once the winner is deep in enemy territory**, outrunning its logistics. The last stretch is the hardest.
+- **The step does not shrink with depth.** A decisive win deep in enemy territory takes the same ground as one at the border. What makes the last stretch hard is supply, covered below, not a smaller step.
 - **Defensive wins push the line back** by exactly the same rule. There is nothing special about attacking; a successful defence is territorial progress.
 
 The territorial result and the verdict come from the same number, so they can never disagree: a Decisive Victory always moves more ground than a Pyrrhic one.
 
 ### How long is a war?
 
-Deliberately long. A full campaign from one pole to the other takes on the order of **thirty to forty won battles**.
+Deliberately long. A full campaign from one pole to the other needs on the order of **twenty decisive wins that go unanswered**. Narrow wins and orderly retreats take smaller slices, and every defensive win the enemy scores pushes the line back by the same rule, so a contested front runs far longer than twenty battles.
 
 Combined with attrition, that means wars are not decided in an afternoon. You will win a battle, take a slice, discover half your divisions are at 60% strength, and have to pause and rebuild before you can push again. **The grind is the design**: see [Manpower & Conscription](/wiki/manpower-conscription) for why the pauses happen.
 
@@ -65,6 +65,8 @@ Supply is not a fixed property of a side. It is **derived from how far the front
 Because everything is measured from the starting line, **both sides sit at their neutral baseline at kickoff**, whatever that starting line happened to be. An invader does not begin the war at minimum supply merely because they hold 0% of the defender's soil.
 
 The war room shows your supply as **SUPPLIED · STRAINED · SHORTAGE · CUT OFF**. It is not decoration: degraded supply materially weakens your side in battle. A front that reads SHORTAGE is telling you that pushing further will make things worse, and that consolidating might be the better move.
+
+Displacement is one input to that readout, not the whole of it. The readout is what the front can haul against what you have posted there, so a huge force at one front reads short even at the starting line. **The side fighting on its own soil hauls 25 percent more**: the nation that was declared on, and its allies at that front, have depots, rail and interior lines behind them. An invader has to bring all of that with it.
 
 This produces the natural rhythm of a real campaign: **advance, overextend, stall, consolidate, advance again.**
 
@@ -86,21 +88,23 @@ Countries with no mapped region data fall back to the meter alone.
 
 ## Victory
 
-**Control reaching 0 or 100 ends the war.**
+**Control reaching 0 or 100 wins the war.** It does not end it on the spot.
 
 At that point:
 
-1. The conflict is marked **resolved**, with the winner and a note recorded.
-2. The end turn is stamped.
-3. **Every belligerent stands down.** For each country, its general postings at that conflict are dropped, which returns all of their units to reserve.
-4. **Truces are recorded between every cross-side pair**: 240 turns, about ten real days.
-5. **The fog lifts entirely.** The conflict page becomes an open archive: both sides' rosters, every engagement, what each formation lost.
+1. The fighting stops. The conflict moves to **terms pending**: it takes no more offensives, accepts no more peace offers and admits no new belligerents, but it still counts as a live war everywhere else, so the wartime strip stays up and no second war can be declared between the same countries.
+2. **Every belligerent stands down.** For each country, its general postings at that conflict are dropped, which returns all of their units to reserve.
+3. **The victor has 24 turns to name a settlement.** The country that began the war on the winning side chooses one term (an indemnity, a change of government, or a bar on re-arming), and it lands on the country that began it on the losing side. Nobody has to agree. Let the window lapse and the war ends with nothing taken. See [Peace, Indemnities & Truces](/wiki/peace-and-truces).
+4. When the term is applied or the window lapses, the conflict is marked **resolved**, the winner and end turn are recorded, and **truces are recorded between every cross-side pair**: 240 turns, about ten real days.
+5. **The fog stays down for 480 turns, then lifts entirely.** Until then the conflict page reads as it did during the war: territory, casualties and verdicts for everyone, your own side's rosters for a belligerent's seats. Once the window lapses the page becomes an open archive: both sides' rosters, every engagement, what each formation lost. The war is listed under Historical Conflicts on the conflicts hub from the turn it ends.
+
+Two exceptions skip the terms window and end the war the moment the front runs out: a war against an **insurgency** (no government to impose on), and a war whose losing **founder already left** on a separate peace (nobody is left holding the claim).
 
 Standing down works by removing the **posting**, not by clearing unit locations. Since a unit's position is a cache of its general's posting, clearing the location alone would simply be re-derived back to a dead front on the next reconcile. Removing the posting is what actually brings the army home.
 
 ### The war goal is not enforced at victory
 
-The war goal recorded at declaration is what peace terms negotiate *against*. Reaching a pole ends the conflict on territorial grounds regardless of what was declared.
+The war goal recorded at declaration is what peace terms negotiate *against*. Reaching a pole decides the war on territorial grounds regardless of what was declared; the settlement the victor names is where the goal is actually collected.
 
 **Conquest is not currently selectable** precisely because nothing transfers territory between countries yet: a war fought for conquest could not be won on its own terms. Occupation is a wartime position, not a permanent annexation.
 
@@ -108,7 +112,7 @@ The war goal recorded at declaration is what peace terms negotiate *against*. Re
 
 Territory is not the only exit. A war also ends when **one side's roster empties**: every country on it has made a separate peace and left. The last country to leave hands victory to the other side.
 
-That is often the realistic outcome. Thirty to forty won battles is a very long campaign; buying your way out is frequently cheaper than fighting to a pole. See [Peace, Indemnities & Truces](/wiki/peace-and-truces).
+That is often the realistic outcome. Twenty unanswered decisive wins is a very long campaign; buying your way out is frequently cheaper than fighting to a pole. See [Peace, Indemnities & Truces](/wiki/peace-and-truces).
 
 ## Practical guidance
 

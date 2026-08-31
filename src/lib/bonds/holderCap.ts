@@ -23,6 +23,21 @@ export function currentHolderUnits(bond: Bond, field: HolderField, id: ObjectId)
   return 0;
 }
 
+/** Remaining whole units available to one holder under the sovereign issue cap. */
+export function sovereignBondRemainingCapacityUnits(
+  bond: Bond,
+  field: HolderField,
+  id: ObjectId
+): number {
+  if (bond.issuerType !== "sovereign") return Number.MAX_SAFE_INTEGER;
+  const totalIssued = bond.totalIssued ?? 0;
+  if (totalIssued <= 0) return Number.MAX_SAFE_INTEGER;
+  const faceValue = bond.faceValue || BOND_UNIT_FACE_VALUE;
+  const totalUnitsIssued = totalIssued / faceValue;
+  const capUnits = Math.floor(SOVEREIGN_BOND_HOLDER_CAP * totalUnitsIssued);
+  return Math.max(0, capUnits - currentHolderUnits(bond, field, id));
+}
+
 /**
  * Returns an error string if buying `addUnits` would push this holder over the
  * per-holder sovereign cap, else null. No-op for non-sovereign bonds or when the
@@ -35,18 +50,13 @@ export function sovereignBondCapError(
   addUnits: number
 ): string | null {
   if (bond.issuerType !== "sovereign") return null;
-  const totalIssued = bond.totalIssued ?? 0;
-  if (totalIssued <= 0) return null;
-  // `totalIssued` is stored in currency (dollars); `currentHolderUnits`/`addUnits`
-  // are unit counts (each unit = BOND_UNIT_FACE_VALUE currency). Convert the cap to
-  // units before comparing, else the limit is ~BOND_UNIT_FACE_VALUE times too loose
-  // and a single holder can absorb an entire sovereign issue (the #3064 amplifier).
-  const faceValue = bond.faceValue || BOND_UNIT_FACE_VALUE;
-  const totalUnitsIssued = totalIssued / faceValue;
-  const capUnits = Math.floor(SOVEREIGN_BOND_HOLDER_CAP * totalUnitsIssued);
-  const resulting = currentHolderUnits(bond, field, id) + addUnits;
-  if (resulting > capUnits) {
+  const remainingCapacity = sovereignBondRemainingCapacityUnits(bond, field, id);
+  if (remainingCapacity === Number.MAX_SAFE_INTEGER) return null;
+  const currentUnits = currentHolderUnits(bond, field, id);
+  const resulting = currentUnits + addUnits;
+  if (addUnits > remainingCapacity) {
     const pct = Math.round(SOVEREIGN_BOND_HOLDER_CAP * 100);
+    const capUnits = currentUnits + remainingCapacity;
     return `Sovereign bond position limit: a single holder may hold at most ${pct}% of an issue (${capUnits.toLocaleString()} units). This purchase would leave you holding ${resulting.toLocaleString()}.`;
   }
   return null;

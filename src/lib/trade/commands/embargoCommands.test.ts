@@ -67,6 +67,10 @@ describe("imposeEmbargo", () => {
     const r = await imposeEmbargo(db as unknown as Db, baseInput);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(/cooldown/i);
+    expect(cooldownCol.createIndex).toHaveBeenCalledWith(
+      { sourceCountry: 1, targetCountry: 1 },
+      { unique: true, name: "embargoCooldowns_pair_unique" }
+    );
     // No embargo row was inserted when the gate rejects.
     expect(db.collectionMocks["tradeEmbargoes"]!.insertOne).not.toHaveBeenCalled();
   });
@@ -104,6 +108,75 @@ describe("imposeEmbargo", () => {
       baseInput.currentTurn + TRADE_EMBARGO_TARGET_COOLDOWN_TURNS
     );
     expect(opts).toMatchObject({ upsert: true });
+  });
+
+  // Ticket #1213: an equivalent pair index existing under a different name made
+  // ensureCooldownIndex's createIndex throw IndexOptionsConflict, which the
+  // route converted into a 500 "Internal server error" on the embargo button.
+  // The module caches "index ensured" per process, so these tests reset modules
+  // to force the createIndex path to actually run.
+  describe("cooldown index conflicts (ticket #1213)", () => {
+    const conflictError = () =>
+      Object.assign(
+        new Error("Index already exists with a different name: embargoCooldowns_pair_unique"),
+        { code: 85 }
+      );
+
+    it("imposes successfully when a unique pair index exists under a different name", async () => {
+      vi.resetModules();
+      const { imposeEmbargo: imposeEmbargoFresh } = await import("./embargoCommands");
+      const db = createMockDb();
+      const cooldownCol = db.collection("embargoCooldowns");
+      (cooldownCol.createIndex as ReturnType<typeof vi.fn>).mockRejectedValueOnce(conflictError());
+      (cooldownCol.listIndexes as ReturnType<typeof vi.fn>).mockReturnValueOnce({
+        toArray: vi.fn().mockResolvedValue([
+          { v: 2, key: { _id: 1 }, name: "_id_" },
+          {
+            v: 2,
+            key: { sourceCountry: 1, targetCountry: 1 },
+            name: "sourceCountry_1_targetCountry_1",
+            unique: true,
+          },
+        ]),
+      });
+      const r = await imposeEmbargoFresh(db as unknown as Db, baseInput);
+      expect(r.ok).toBe(true);
+      expect(db.collectionMocks["tradeEmbargoes"]!.insertOne).toHaveBeenCalledTimes(1);
+      expect(cooldownCol.findOneAndUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    it("rethrows the conflict when no unique full pair index exists", async () => {
+      vi.resetModules();
+      const { imposeEmbargo: imposeEmbargoFresh } = await import("./embargoCommands");
+      const db = createMockDb();
+      const cooldownCol = db.collection("embargoCooldowns");
+      const conflict = conflictError();
+      (cooldownCol.createIndex as ReturnType<typeof vi.fn>).mockRejectedValueOnce(conflict);
+      // Same keys but NOT unique — it cannot back the atomic cooldown gate.
+      (cooldownCol.listIndexes as ReturnType<typeof vi.fn>).mockReturnValueOnce({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            v: 2,
+            key: { sourceCountry: 1, targetCountry: 1 },
+            name: "sourceCountry_1_targetCountry_1",
+          },
+        ]),
+      });
+      await expect(imposeEmbargoFresh(db as unknown as Db, baseInput)).rejects.toBe(conflict);
+      expect(db.collectionMocks["tradeEmbargoes"]!.insertOne).not.toHaveBeenCalled();
+      expect(cooldownCol.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it("rethrows non-conflict index errors unchanged", async () => {
+      vi.resetModules();
+      const { imposeEmbargo: imposeEmbargoFresh } = await import("./embargoCommands");
+      const db = createMockDb();
+      const cooldownCol = db.collection("embargoCooldowns");
+      const failure = new Error("connection refused");
+      (cooldownCol.createIndex as ReturnType<typeof vi.fn>).mockRejectedValueOnce(failure);
+      await expect(imposeEmbargoFresh(db as unknown as Db, baseInput)).rejects.toBe(failure);
+      expect(cooldownCol.listIndexes).not.toHaveBeenCalled();
+    });
   });
 });
 

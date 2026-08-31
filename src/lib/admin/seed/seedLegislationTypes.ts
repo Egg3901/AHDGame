@@ -6,7 +6,7 @@ import {
   getProjectedPoliticalLegislationTypes,
   isPoliticalLegislationPreset,
 } from "./seedPoliticalLegislation";
-import { POLITICAL_LEGISLATION_EXCLUDED_SCOPES } from "@/lib/politicalMetrics/pipelinePreset";
+import { isOldLegislationTypeExcluded } from "@/lib/politicalMetrics/pipelinePreset";
 
 export async function seedLegislationTypes(
   db: Db,
@@ -32,9 +32,7 @@ export async function seedLegislationTypes(
 
   const politicalLegislation = isPoliticalLegislationPreset(preset);
   const baseTypes = politicalLegislation
-    ? legislationTypes.filter(
-        (t) => !POLITICAL_LEGISLATION_EXCLUDED_SCOPES.has(t.countryScope ?? "us")
-      )
+    ? legislationTypes.filter((t) => !isOldLegislationTypeExcluded(t))
     : legislationTypes;
   // Resolved here rather than plumbed through every caller: the projected
   // catalog must reflect the world's YEAR (era windows), and a caller that

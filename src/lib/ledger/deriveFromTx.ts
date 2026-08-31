@@ -54,6 +54,9 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   bond_maturity: "bond_settlement",
   gov_coupon_payment: "bond_coupon_settlement",
   bond_coupon: "bond_coupon_settlement",
+  // This is the issuer-side settlement row paired with dissolution payouts.
+  // It records a modeled default loss, not an unexplained money-supply leak.
+  bond_default: "bond_default_settlement",
   corp_tax_paid: "taxation",
   gov_tax_revenue: "taxation",
   corp_revenue: "sector_revenue",
@@ -93,6 +96,7 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   // `unattributed` Phase-3 backlog.
   corp_capacity_build: "capacity_capex",
   corp_capacity_build_refund: "capacity_capex",
+  corp_sector_split_cost: "sector_split_campaign",
   // Prop trading is the same shape as capacity capex: the contra side of a buy
   // is the bank's own trading book, an ASSET account the shadow ledger does not
   // carry. Both directions share ONE reason so the reconciler nets a purchase
@@ -114,6 +118,29 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   // is not a ledger account yet, so the character credit is attributed rather
   // than left in the unattributed backlog.
   union_contribution: "union_pac",
+  // Asset exchanges and modeled transfers whose contra account is outside the
+  // current money-balance snapshot. Naming them keeps the money-supply report
+  // honest without pretending the unmodeled asset account is a mint or sink.
+  bond_purchase: "bond_principal_investment",
+  corp_dividend: "corporate_dividend",
+  loc_repay: "credit_principal",
+  loc_interest: "credit_interest",
+  index_fund_subscribe: "fund_subscription",
+  index_fund_dividend: "fund_distribution",
+  corp_escrow_funding: "escrow_transfer",
+  corp_group_relief: "corporate_group_transfer",
+  caucus_tax_debit: "party_internal_transfer",
+  pension_benefit: "pension_transfer",
+  // One-directional modeled income channels with no payer account in the
+  // current balance-snapshot scope.
+  office_income: "public_salary",
+  savings_interest: "deposit_interest",
+  fundraise_credit: "political_fundraising",
+  // Fund-owned quotes are real equity transfers, but index funds are not yet
+  // financialTxLog counterparties. Name the cash leg instead of reporting an
+  // unexplained mint or sink while the fund holdings ledger records the asset.
+  stock_trade_buy: "equity_transfer",
+  stock_trade_sell: "equity_transfer",
 };
 
 /** Semantic mint/sink reason for a single-sided row; `unattributed` when unmapped. */

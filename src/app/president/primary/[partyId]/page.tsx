@@ -20,13 +20,13 @@ import { loadRegionalBonusMaps } from "@/lib/primaryRegionalBonusLoader";
 import { fetchEnrichedCandidates } from "@/lib/electionEngine";
 import type { Campaign, DemographicCategory, State, StateDemographics } from "@/lib/db/types";
 import {
-  PRIMARY_WAVES,
-  STAGGER_WINDOW_TURNS,
+  getPrimaryWaveSchedule,
   resolvePartyFamily,
   getTotalDelegatesForFamily,
   getDelegateMajority,
   type PrimaryCalendarFamily,
 } from "@/lib/constants/primaryCalendar";
+import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
 import { ELECTORAL_VOTE_UNITS, getTravelActionCost } from "@/lib/constants/states";
 import { getPartyHex } from "@/lib/utils/politics";
 import { getGameClock } from "@/lib/time/gameClock.server";
@@ -374,7 +374,11 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
   // Non-negative value for the calendar's "fires in N turns" labels.
   const displayTurnsToEnd = turnsToEnd != null ? Math.max(0, turnsToEnd) : null;
   const primaryEnded = turnsToEnd != null && turnsToEnd < 0;
-  const inStaggerWindow = isInStaggerWindow(turnsToEnd);
+  // Wave schedule the race actually runs (compressed for the live 1960 race,
+  // stretched for v3+ spawns) so the calendar rows and stagger label match the
+  // engine's spacing rather than assuming compressed.
+  const primaryWaveSchedule = getPrimaryWaveSchedule(presidentialRulesetFor(election));
+  const inStaggerWindow = isInStaggerWindow(turnsToEnd, primaryWaveSchedule);
   const wavesRun = tally?.primaryWaveHistory?.length ?? 0;
 
   const votedStates = new Set<string>();
@@ -549,7 +553,9 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
   const viewerInParty = viewerChar?.party === partyKey;
 
   const nextWave =
-    inStaggerWindow && wavesRun < PRIMARY_WAVES.length ? PRIMARY_WAVES[wavesRun] : null;
+    inStaggerWindow && wavesRun < primaryWaveSchedule.waves.length
+      ? primaryWaveSchedule.waves[wavesRun]
+      : null;
 
   // Phase 4 — build the view-model that feeds TierSelector + PrimaryCalendar +
   // CarveUpPanel. The projection.byState shape is reused from the existing data
@@ -571,6 +577,8 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
     currentTurn: clock.currentTurn,
     primaryEndTurn:
       election.primaryEndTurn ?? (turnsToEnd != null ? clock.currentTurn + turnsToEnd : undefined),
+    // Calendar rows follow the race's actual wave spacing.
+    schedule: primaryWaveSchedule,
     // State display names — fall back to the 2-letter id; the view-model
     // does the same defaulting if no entry is present.
   });
@@ -614,7 +622,7 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
           <div className="text-sm font-semibold">
             {inStaggerWindow ? (
               <span className="text-amber-400">
-                Stagger — Wave {wavesRun}/{PRIMARY_WAVES.length}
+                Stagger — Wave {wavesRun}/{primaryWaveSchedule.waves.length}
               </span>
             ) : primaryEnded ? (
               <span className="text-muted">Primary ended</span>
@@ -773,7 +781,7 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
               between projected/actual winners and per-state delegate counts. Delegates mode uses
               the same state-by-state allocation math shown above; once a state votes, its awarded
               delegates lock in while the remaining states keep projecting forward through the final{" "}
-              {STAGGER_WINDOW_TURNS} turns.
+              {primaryWaveSchedule.windowTurns} turns.
             </p>
           </div>
         }

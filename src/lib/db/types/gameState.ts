@@ -2,6 +2,8 @@ import type { ObjectId } from "mongodb";
 import type { CountryId, CountryStatus } from "../../constants/countries";
 import type { TurnPhaseTelemetryMap } from "./turnPhaseTelemetry";
 
+export type NppEntryViabilityMode = "off" | "observe" | "enforce";
+
 export type IterationType = "Alpha" | "Beta" | "Iteration";
 
 /**
@@ -19,6 +21,8 @@ export type IterationType = "Alpha" | "Beta" | "Iteration";
  * See plans/2026-06-23-npp-autonomy-v1-v2-plan.md.
  */
 export type NppAutonomyLevel = "off" | "v0" | "v1" | "v2" | "v3" | "v4";
+export type NppForeignPolicyMode = "off" | "shadow" | "active";
+export type NppForeignPolicyStage = "votes" | "proposals" | "trade" | "support" | "war";
 
 export interface GameIteration {
   type: IterationType;
@@ -208,6 +212,17 @@ export interface GameState {
   nppAutonomyEnabled?: boolean;
   nppAutonomyEnabledBy?: string;
   nppAutonomyEnabledAt?: string;
+  /**
+   * Foreign-policy planner rollout. Absent defaults to shadow so autonomous
+   * countries produce auditable intent without changing world state.
+   */
+  nppForeignPolicyMode?: NppForeignPolicyMode;
+  nppForeignPolicyModeBy?: string;
+  nppForeignPolicyModeAt?: string;
+  /** Highest autonomous action family permitted while foreign policy is active. */
+  nppForeignPolicyStage?: NppForeignPolicyStage;
+  nppForeignPolicyStageBy?: string;
+  nppForeignPolicyStageAt?: string;
   /** When true, crisis international-aid nodes use the slider + legislature-bill flow. */
   crisisAidBillsEnabled?: boolean;
   crisisAidBillsEnabledBy?: string;
@@ -289,6 +304,14 @@ export interface GameState {
   extractionAutoStrategyEnabled?: boolean;
   extractionAutoStrategyEnabledBy?: string;
   extractionAutoStrategyEnabledAt?: string;
+  /**
+   * Safety rollout for the realized-viability check on autonomous NPP mine
+   * founding. Absent resolves to observe so existing worlds collect evidence
+   * without changing placement. Only enforce can reject a candidate.
+   */
+  nppEntryViabilityMode?: NppEntryViabilityMode;
+  nppEntryViabilityModeBy?: string;
+  nppEntryViabilityModeAt?: string;
   /** Turn the extraction auto-strategy phase last acted. Guards its cadence. */
   lastExtractionAutoStrategyTurn?: number;
   /** Master gate for the US House districted-redistricting system. Default off. */

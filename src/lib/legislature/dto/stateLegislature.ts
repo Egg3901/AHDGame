@@ -1,3 +1,6 @@
+import type { ProvisionDisplay } from "@/lib/legislature/provisionEnrichment";
+import type { VoteShiftPreview } from "@/lib/legislature/voteShiftPreview";
+
 export interface LegislatureData {
   state: {
     id: string;
@@ -31,35 +34,14 @@ export interface LegislatureData {
   } | null;
 }
 
-export interface BillProvisionDisplay {
-  legislationTypeName: string | null;
-  policyOptionName: string | null;
-  /** Larp flavor text for the proposed option (LegislationPolicyOption.explanation). */
-  policyOptionDescription?: string | null;
-  /** Current-law option title + flavor (resolved from statePolicies / enactedLaws). */
-  currentPolicyOptionName?: string | null;
-  currentPolicyOptionDescription?: string | null;
-  effectDirection: number;
-  effectTargetsWeighted: Array<{ metricCategoryId: string; metricId: string; weight: number }>;
-  /** @deprecated Use archetypeApprovals instead */
-  groupApprovals?: Record<string, number>;
-  archetypeApprovals?: Record<string, number>;
-  annualCostPerCapita: number | null;
-  gdpPerCapitaMultiplier: number | null;
-  /** Proposed option's position axes (for PositionBadges). */
-  economic?: number | null;
-  social?: number | null;
-  policyDomain?: string | null;
-  currentPolicyIndex?: number;
-  proposedPolicyIndex?: number;
-  /** Per-option combined position score (economic+social), for correct approval shift direction. */
-  policyOptionScores?: number[];
-  /** Per-metric projected effects vs current law (for the effect chips). */
-  effects?: { metric: string; direction: "up" | "down"; isGood: boolean }[];
-  type?: "subsidy" | "end_subsidy";
-  scopeType?: "economy_wide" | "sector";
-  targetSectorType?: string | null;
-}
+/**
+ * One resolved provision on a regional bill page.
+ *
+ * An alias of the shared {@link ProvisionDisplay}: the regional and national
+ * pages emit the same shape so they cannot drift apart again. Kept as a named
+ * type so existing importers do not have to change.
+ */
+export type BillProvisionDisplay = ProvisionDisplay;
 
 export interface StateBillDisplay {
   id: string;
@@ -84,6 +66,8 @@ export interface StateBillDisplay {
   overrideVotingEndsAt?: string;
   overrideVotingEndsOnTurn?: number;
   myVote?: "for" | "against" | "abstain" | null;
+  /** What the viewer's Aye and Nay would each do to their positions; null for spectators. */
+  voteShiftPreview?: VoteShiftPreview | null;
   provisions?: BillProvisionDisplay[];
   /** Truthy when the bill carries a public veto message; UI renders 💬 indicator. */
   hasVetoMessage?: boolean;

@@ -533,4 +533,152 @@ export const WORLD_EVENT_SEED_DEFINITIONS: Omit<
     maxYear: 1979,
     schedule: { kind: "window", minGapTurns: 200, maxGapTurns: 350 },
   },
+  // High-tension society events. Gated on the global cold-war tension reading
+  // (`minTension`, see lib/coldwar/tension.ts bands: 50 is upper ELEVATED,
+  // 60+ is CRISIS, 80+ BRINK) rather than era bounds: they exist only while
+  // the world is actually frightened, and recur on short windows so a long
+  // war scare keeps producing consequences. All countries, executive decides,
+  // every default treasury-neutral (plan §7).
+  {
+    kind: "worldEvents.panicBuying",
+    status: "draft",
+    version: 1,
+    title: "Panic Buying",
+    headline: "Shoppers are stripping shelves as war fears spread.",
+    body: "With the crisis abroad dominating every broadcast, households are hoarding food, fuel, and staples. Queues form before dawn and shelves empty by noon. The executive must decide how to respond.",
+    eligibility: ["all"],
+    baseWeight: 10,
+    cooldownTurnsMin: 10,
+    cooldownTurnsMax: 24,
+    deciderRole: "executive",
+    defaultOptionId: "calm",
+    options: [
+      {
+        id: "ration",
+        label: "Impose emergency rationing",
+        description:
+          "Cap purchases by decree. Slows repeat crises, shifts demand into industry and defense, and damages civil liberties.",
+      },
+      {
+        id: "calm",
+        label: "Appeal for calm",
+        description: "Address the public and ask households to buy normally.",
+        isDefault: true,
+      },
+      {
+        id: "release",
+        label: "Release strategic stockpiles",
+        description:
+          "Spend reserves to keep shelves full and buy limited relief without emergency powers.",
+      },
+    ],
+    minTension: 60,
+    schedule: { kind: "window", minGapTurns: 10, maxGapTurns: 24 },
+  },
+  {
+    kind: "worldEvents.bankRun",
+    status: "draft",
+    version: 1,
+    title: "Run on the Banks",
+    headline: "Depositors are queueing to pull their savings out.",
+    body: "Fear that war will freeze accounts or gut the currency has depositors lining up at branch doors. Withdrawals are accelerating and small banks are wiring for help. The executive must decide how to respond.",
+    eligibility: ["all"],
+    baseWeight: 8,
+    cooldownTurnsMin: 16,
+    cooldownTurnsMax: 32,
+    deciderRole: "executive",
+    defaultOptionId: "standBy",
+    options: [
+      {
+        id: "guarantee",
+        label: "Guarantee all deposits",
+        description: "Spend heavily to stop the run and buy limited relief.",
+      },
+      {
+        id: "holiday",
+        label: "Declare a bank holiday",
+        description:
+          "Close banks by decree. Slows repeat crises, suppresses consumer demand, and damages democratic health.",
+      },
+      {
+        id: "standBy",
+        label: "Stand by the banks publicly",
+        description: "Express confidence and let the system ride it out.",
+        isDefault: true,
+      },
+    ],
+    minTension: 65,
+    schedule: { kind: "window", minGapTurns: 16, maxGapTurns: 32 },
+  },
+  {
+    kind: "worldEvents.civilDefenseFever",
+    status: "draft",
+    version: 1,
+    title: "Civil Defense Fever",
+    headline: "Families are digging shelters and demanding sirens.",
+    body: "Backyard shelters, evacuation maps, and duck-and-cover drills are the national obsession. Local officials are begging for guidance and funding. The executive must decide how far to lean in.",
+    eligibility: ["all"],
+    baseWeight: 8,
+    cooldownTurnsMin: 12,
+    cooldownTurnsMax: 28,
+    deciderRole: "executive",
+    defaultOptionId: "drills",
+    options: [
+      {
+        id: "fund",
+        label: "Fund a national shelter program",
+        description:
+          "Fund shelters and wartime production. Buys limited relief while shifting demand toward industry and defense.",
+      },
+      {
+        id: "drills",
+        label: "Order drills and leaflets",
+        description:
+          "Mobilize civil defense. Slows repeat crises modestly and slightly erodes civil liberties.",
+        isDefault: true,
+      },
+      {
+        id: "dismiss",
+        label: "Dismiss the panic",
+        description: "Call the fever overblown and refuse to feed it.",
+      },
+    ],
+    minTension: 50,
+    schedule: { kind: "window", minGapTurns: 12, maxGapTurns: 28 },
+  },
+  {
+    kind: "worldEvents.warScareProtests",
+    status: "draft",
+    version: 1,
+    title: "War Scare Protests",
+    headline: "Crowds are in the streets demanding peace.",
+    body: "Marches against the war fill the squares of every major city. Some carry candles, some carry effigies of the government. The executive must decide how to meet them.",
+    eligibility: ["all"],
+    baseWeight: 8,
+    cooldownTurnsMin: 10,
+    cooldownTurnsMax: 22,
+    deciderRole: "executive",
+    defaultOptionId: "acknowledge",
+    options: [
+      {
+        id: "address",
+        label: "Address the nation",
+        description: "Speak directly to the fear and buy a little breathing room.",
+      },
+      {
+        id: "acknowledge",
+        label: "Let them march",
+        description: "Acknowledge the protests and let them run their course.",
+        isDefault: true,
+      },
+      {
+        id: "crackdown",
+        label: "Disperse the marches",
+        description:
+          "Clear the squares. Strongly slows repeat crises and mobilizes wartime industry at a severe democratic cost.",
+      },
+    ],
+    minTension: 60,
+    schedule: { kind: "window", minGapTurns: 10, maxGapTurns: 22 },
+  },
 ];

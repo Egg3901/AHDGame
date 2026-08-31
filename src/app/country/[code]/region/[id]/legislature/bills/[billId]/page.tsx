@@ -18,7 +18,7 @@ import { getStateBillStatusDisplayLabel } from "@/lib/legislature/stateBillUiLab
 import { regionApiSubUrl, regionLegislatureUrl } from "@/lib/urls";
 import { BillEffectsSection } from "../../components/BillEffectsSection";
 import { BillProvisionCard } from "@/components/legislature/BillProvisionCard";
-import { stateProvisionToView } from "@/lib/legislature/dto/provisionView";
+import { provisionToView } from "@/lib/legislature/dto/provisionView";
 import type { StateBillDetail } from "@/lib/legislature/dto/stateBillDetail";
 import { mapStateStatusToBillStatus } from "@/lib/legislature/mapStateBillToBillDisplay";
 import { useGameClock } from "@/contexts/useGameClock";
@@ -253,7 +253,7 @@ function StateBillDetailContent() {
               {bill.provisions.map((p, i) => (
                 <BillProvisionCard
                   key={i}
-                  view={stateProvisionToView(p)}
+                  view={provisionToView(p)}
                   billCountry={bill.countryId}
                   index={i}
                 />
@@ -370,6 +370,7 @@ function StateBillDetailContent() {
             myVote={bill.myVote}
             canVote={bill.canVote && !voting && canCastOriginVote}
             onVote={canCastOriginVote ? (v) => void handleChamberVote(v) : undefined}
+            shiftPreview={bill.voteShiftPreview}
           />
         )}
 

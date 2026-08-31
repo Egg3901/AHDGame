@@ -183,3 +183,68 @@ describe("queryCorporationList", () => {
     expect(result[0].name).toBe("Acme Corp");
   });
 });
+
+describe("queryShareHistory", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    ["corporations", "shareTradeHistory"].forEach((n) => db.collection(n));
+  });
+
+  it("returns null when corporation not found", async () => {
+    db.collectionMocks.corporations!.findOne.mockResolvedValue(null);
+    const { queryShareHistory } = await import("./corporation");
+    const result = await queryShareHistory(db as unknown as Db, { name: "nope" });
+    expect(result).toBeNull();
+  });
+
+  it("paginates the trade tape newest first", async () => {
+    const corpId = new ObjectId();
+    db.collectionMocks.corporations!.findOne.mockResolvedValue({
+      _id: corpId,
+      sequentialId: 7,
+      name: "TestCorp",
+    });
+    const tapeCol = db.collectionMocks.shareTradeHistory!;
+    tapeCol.countDocuments.mockResolvedValue(2);
+    tapeCol.find.mockReturnValue({
+      sort: vi.fn().mockReturnThis(),
+      skip: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: new ObjectId(),
+          kind: "trade",
+          turn: 10,
+          createdAt: new Date("2026-01-01T00:00:00Z"),
+          shares: 5,
+          pricePerShareAnchor: 2,
+          totalAnchor: 10,
+          from: null,
+          to: { name: "Buyer" },
+        },
+        {
+          _id: new ObjectId(),
+          kind: "public_issuance",
+          turn: 9,
+          createdAt: new Date("2026-01-02T00:00:00Z"),
+          shares: 100,
+          pricePerShareAnchor: 1,
+          totalAnchor: 100,
+          from: null,
+          to: null,
+        },
+      ]),
+    } as never);
+
+    const { queryShareHistory } = await import("./corporation");
+    const result = await queryShareHistory(db as unknown as Db, { id: "7" });
+    if (!result || !("entries" in result)) throw new Error("expected result");
+    expect(result.corporation).toEqual({ id: 7, name: "TestCorp" });
+    expect(result.total).toBe(2);
+    expect(result.entries[0].to).toEqual({ name: "Buyer" });
+    expect(result.entries[0].createdAt).toBe("2026-01-01T00:00:00.000Z");
+  });
+});

@@ -21,6 +21,15 @@ import { getTotalUkCommonsSeats } from "@/lib/constants/states";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { lowerChamberMajorityThreshold } from "./lowerChamberSeats";
 import {
+  resetConfidenceGauge,
+  tickConfidenceForGov,
+} from "@/lib/uk/confidence/confidenceGaugeStore";
+import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
+import { tickNhsFromBudget } from "@/lib/uk/nhs/nhsStore";
+import { getGameState } from "@/lib/gameState";
+import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import { calculateFiscalYear } from "@/lib/budget/fiscalYear";
+import {
   tallySeatsByParty,
   getLargestParty as sharedGetLargestParty,
   updateParliamentaryGovernmentSeats,
@@ -169,6 +178,30 @@ async function seedGovernmentFormation(db: Db): Promise<void> {
       { upsert: true }
     );
   }
+
+  // Confidence gauge per-turn drift (epic #856): recovers when the government
+  // is popular, erodes when it isn't. The broken-promise bleed is added once
+  // manifesto-delivery evaluation is wired. Persists the value only — no
+  // consequence until UK_CONFIDENCE_GAUGE_DISSOLUTION is enabled.
+  const approvalDoc = await db
+    .collection<GovernmentApproval>("governmentApprovals")
+    .findOne({ _id: "UK" });
+  if (approvalDoc) {
+    await tickConfidenceForGov(db, { approval: approvalDoc.approvalRating, now });
+  }
+
+  // NHS quality per-turn drift (epic #856): pulled toward the target implied by
+  // the current passed Budget's healthcare share. Persists the value only.
+  const nhsGameState = await getGameState(db);
+  const nhsCurrentTurn = nhsGameState?.currentTurn ?? 1;
+  const nhsStartingYear = nhsGameState?.startingYear ?? STARTING_YEAR;
+  const nhsCurrentYear =
+    nhsGameState?.currentYear ??
+    nhsStartingYear + Math.floor((nhsCurrentTurn - 1) / TURNS_PER_YEAR);
+  await tickNhsFromBudget(db, {
+    fiscalYear: calculateFiscalYear(nhsCurrentYear, nhsCurrentTurn),
+    now,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -182,4 +215,8 @@ async function seedGovernmentFormation(db: Db): Promise<void> {
 export async function resetGovernmentAfterElection(now: Date): Promise<void> {
   const db = await getDb();
   await resetParliamentaryGovernmentAfterElection(db, "UK", now);
+  // Confidence gauge (epic #856): a fresh parliament starts with full
+  // confidence. Reset regardless of the dissolution flag — this is the value,
+  // not the consequence.
+  await resetConfidenceGauge(db, now);
 }

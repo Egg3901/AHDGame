@@ -3,6 +3,7 @@ import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import {
   listActiveConflicts,
+  listResolvedConflicts,
   getConflict,
   conflictExists,
   listConflictsForCountry,
@@ -22,6 +23,20 @@ describe("conflicts collection", () => {
     const out = await listActiveConflicts(db as unknown as Db);
     expect(db.collectionMocks.conflicts.find).toHaveBeenCalledWith({ status: { $ne: "resolved" } });
     expect(out).toEqual([{ _id: "c1" }]);
+  });
+
+  // The historical list is the one reader that WANTS resolved wars, newest ending
+  // first, and it is a bounded page rather than the whole archive.
+  it("listResolvedConflicts lists resolved wars, latest ending first, capped", async () => {
+    const toArray = vi.fn().mockResolvedValue([{ _id: "c2" }, { _id: "c1" }]);
+    const limit = vi.fn().mockReturnValue({ toArray });
+    const sort = vi.fn().mockReturnValue({ limit });
+    db.collectionMocks.conflicts.find = vi.fn().mockReturnValue({ sort });
+    const out = await listResolvedConflicts(db as unknown as Db, 25);
+    expect(db.collectionMocks.conflicts.find).toHaveBeenCalledWith({ status: "resolved" });
+    expect(sort).toHaveBeenCalledWith({ endTurn: -1, conflictId: -1 });
+    expect(limit).toHaveBeenCalledWith(25);
+    expect(out).toEqual([{ _id: "c2" }, { _id: "c1" }]);
   });
 
   it("getConflict returns the doc", async () => {

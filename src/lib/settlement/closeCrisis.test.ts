@@ -103,4 +103,63 @@ describe("closeSettlementCrisis", () => {
     expect(prime(db, "settlementCrises").deleteMany).not.toHaveBeenCalled();
     expect(prime(db, "settlementPlays").deleteMany).not.toHaveBeenCalled();
   });
+
+  describe("an attached war", () => {
+    const attachedCrisis = live({
+      status: "frozen",
+      conflictId: "war_us_dd_412",
+      conflictAttachment: {
+        anchor: "DD",
+        previousName: "United States vs East Germany",
+        previousHostEntities: null,
+      },
+    });
+
+    it("gives the war its own name back and drops the added hosts", async () => {
+      prime(db, "settlementCrises").findOne.mockResolvedValue(attachedCrisis);
+      prime(db, "conflicts").updateOne.mockResolvedValue({ matchedCount: 1 });
+      const { closeSettlementCrisis } = await import("./closeCrisis");
+      const res = await closeSettlementCrisis(db as unknown as Db, { turn: 412 });
+
+      expect(res.closed).toBe(true);
+      const update = prime(db, "conflicts").updateOne.mock.calls[0][1];
+      expect(update.$set.name).toBe("United States vs East Germany");
+      expect(update.$unset).toEqual({ hostEntities: "" });
+    });
+
+    it("clears the attachment so the record stops claiming marks it removed", async () => {
+      prime(db, "settlementCrises").findOne.mockResolvedValue(attachedCrisis);
+      prime(db, "conflicts").updateOne.mockResolvedValue({ matchedCount: 1 });
+      const { closeSettlementCrisis } = await import("./closeCrisis");
+      await closeSettlementCrisis(db as unknown as Db, { turn: 412 });
+
+      const cleared = prime(db, "settlementCrises").updateOne.mock.calls.find(
+        (c) => c[1]?.$set?.conflictAttachment === null
+      );
+      expect(cleared).toBeDefined();
+    });
+
+    it("leaves a war the crisis DECLARED alone", async () => {
+      // No attachment: this war was created under its own name for this crisis,
+      // and has nothing to be given back.
+      prime(db, "settlementCrises").findOne.mockResolvedValue(
+        live({ status: "frozen", conflictId: "gq_de_400" })
+      );
+      const { closeSettlementCrisis } = await import("./closeCrisis");
+      const res = await closeSettlementCrisis(db as unknown as Db, { turn: 412 });
+
+      expect(res.orphanedConflictId).toBe("gq_de_400");
+      expect(prime(db, "conflicts").updateOne).not.toHaveBeenCalled();
+    });
+
+    it("does not touch the war when the close claim was lost", async () => {
+      prime(db, "settlementCrises").findOne.mockResolvedValue(attachedCrisis);
+      prime(db, "settlementCrises").updateOne.mockResolvedValue({ matchedCount: 0 });
+      const { closeSettlementCrisis } = await import("./closeCrisis");
+      const res = await closeSettlementCrisis(db as unknown as Db, { turn: 412 });
+
+      expect(res.closed).toBe(false);
+      expect(prime(db, "conflicts").updateOne).not.toHaveBeenCalled();
+    });
+  });
 });

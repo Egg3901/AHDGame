@@ -187,6 +187,20 @@ export async function POST() {
       ).map((o) => o.state)
     );
 
+    // Live (census-updated) House apportionment. `state.houseDistricts` is what
+    // the decennial census rewrites, so the frozen preset map goes stale the
+    // moment a world reapportions and these races would be stood up at the old
+    // size — the drift #1190 fixes everywhere else. Prefer the live value and
+    // keep the preset map as the fallback for a state that carries none.
+    const liveHouseDistricts = new Map(
+      states
+        .filter((s) => (s as { countryId?: string }).countryId === "US")
+        .map((s) => [s._id as string, (s as { houseDistricts?: number }).houseDistricts])
+    );
+    const presetHouseSeats = getHouseSeats(ctx.preset);
+    const houseSeatsFor = (stateId: string): number =>
+      liveHouseDistricts.get(stateId) || presetHouseSeats[stateId] || 1;
+
     const toInsert: Omit<Election, "_id">[] = [];
 
     for (const stateId of stateIds) {
@@ -206,7 +220,7 @@ export async function POST() {
         countryId: "US",
         cycle: 1,
         status: "active",
-        totalSeats: getHouseSeats(ctx.preset)[stateId] ?? 1,
+        totalSeats: houseSeatsFor(stateId),
         startTime: now,
         primaryEndTime: housePrimaryEndTime,
         endTime: houseEndTime,

@@ -7,6 +7,7 @@ import {
   resolvePrimaryTurnsToEnd,
   type PrimaryCandidateInfo,
 } from "./primaryViewModel";
+import { STRETCHED_SCHEDULE, getPrimaryWaveSchedule } from "@/lib/constants/primaryCalendar";
 
 const candidates: PrimaryCandidateInfo[] = [
   { id: "c1", name: "Smith", color: "#ff0000", archetype: "Populist" },
@@ -109,13 +110,52 @@ describe("resolvePrimaryTurnsToEnd", () => {
 });
 
 describe("isInStaggerWindow", () => {
-  it("is true only for turnsToEnd in [0, 5]", () => {
+  it("is true only for turnsToEnd in [0, 5] on the default compressed schedule", () => {
     expect(isInStaggerWindow(5)).toBe(true);
     expect(isInStaggerWindow(0)).toBe(true);
     expect(isInStaggerWindow(6)).toBe(false);
     expect(isInStaggerWindow(27)).toBe(false); // the live incident — NOT in window
     expect(isInStaggerWindow(-1)).toBe(false);
     expect(isInStaggerWindow(null)).toBe(false);
+  });
+
+  it("widens to [0, 40] on the stretched schedule", () => {
+    // The compressed window (6 turns) would have excluded T-27; on the stretched
+    // calendar the primary is already staggering by then.
+    expect(isInStaggerWindow(40, STRETCHED_SCHEDULE)).toBe(true);
+    expect(isInStaggerWindow(27, STRETCHED_SCHEDULE)).toBe(true);
+    expect(isInStaggerWindow(0, STRETCHED_SCHEDULE)).toBe(true);
+    expect(isInStaggerWindow(41, STRETCHED_SCHEDULE)).toBe(false);
+    expect(isInStaggerWindow(-1, STRETCHED_SCHEDULE)).toBe(false);
+    expect(isInStaggerWindow(null, STRETCHED_SCHEDULE)).toBe(false);
+  });
+});
+
+describe("buildCalendarWaves — schedule awareness", () => {
+  it("uses compressed offsets by default", () => {
+    const waves = buildCalendarWaves({});
+    expect(waves.map((w) => w.turnsRemaining)).toEqual([5, 4, 3, 2, 1, 0]);
+  });
+
+  it("uses stretched offsets when the stretched schedule is passed", () => {
+    const schedule = getPrimaryWaveSchedule({ primaryCalendar: "stretched" });
+    const waves = buildCalendarWaves({ schedule });
+    expect(waves.map((w) => w.turnsRemaining)).toEqual([40, 32, 24, 16, 8, 0]);
+    // Same state membership, just re-spaced (IA still leads).
+    expect(waves[0].stateIds).toEqual(["IA"]);
+  });
+
+  it("computes isPast against the stretched spacing", () => {
+    // primaryEndTurn=100, currentTurn=68 -> turnsToEnd=32. On stretched, waves
+    // with turnsRemaining > 32 (i.e. 40) are past; 32 and below are not.
+    const schedule = getPrimaryWaveSchedule({ primaryCalendar: "stretched" });
+    const waves = buildCalendarWaves({ currentTurn: 68, primaryEndTurn: 100, schedule });
+    const t40 = waves.find((w) => w.turnsRemaining === 40);
+    const t32 = waves.find((w) => w.turnsRemaining === 32);
+    const t24 = waves.find((w) => w.turnsRemaining === 24);
+    expect(t40?.isPast).toBe(true);
+    expect(t32?.isPast).toBe(false);
+    expect(t24?.isPast).toBe(false);
   });
 });
 

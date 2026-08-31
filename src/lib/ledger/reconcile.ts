@@ -3,7 +3,7 @@ import { ObjectId, type Db } from "mongodb";
 import { accountCurrency, accountKind, isRealAccount } from "@/lib/ledger/accounts";
 import { epsilonFor, isAnchorBalanced, nativeImbalance } from "@/lib/ledger/epsilon";
 import { LEDGER_ENTRIES_COLLECTION } from "@/lib/ledger/emit";
-import { loadBalanceSnapshot } from "@/lib/ledger/balanceSnapshot";
+import { loadBalanceSnapshot, loadPreForexBalanceCheckpoint } from "@/lib/ledger/balanceSnapshot";
 import type {
   LedgerEntry,
   LedgerReconciliation,
@@ -28,6 +28,10 @@ export interface ReconcileInput {
   entries: LedgerEntry[];
   openingBalances: Record<string, number>;
   closingBalances: Record<string, number>;
+  preForexBalances?: Record<string, number>;
+  openingAnchorRates?: Record<string, number>;
+  preForexAnchorRates?: Record<string, number>;
+  closingAnchorRates?: Record<string, number>;
   /** Skip stock-vs-flow (e.g. a reset/reseed epoch legitimately rewrote balances). */
   skipStockVsFlow?: boolean;
 }
@@ -91,8 +95,7 @@ export function reconcileLedger(input: ReconcileInput): ReconcileReport {
     ]);
     for (const account of accounts) {
       if (!isRealAccount(account)) continue;
-      const actualDelta =
-        (input.closingBalances[account] ?? 0) - (input.openingBalances[account] ?? 0);
+      const actualDelta = cashMovementDelta(input, account);
       const led = ledgerDelta.get(account) ?? 0;
       const divergence = led - actualDelta;
       const eps = epsilonFor([actualDelta, led]);
@@ -108,7 +111,10 @@ export function reconcileLedger(input: ReconcileInput): ReconcileReport {
     }
     stockFindings.sort((a, b) => Math.abs(b.divergence) - Math.abs(a.divergence));
   }
-  const stockStatus: ReconcileStatus = stockFindings.length > 0 ? "amber" : "green";
+  // A skipped check is unverified, not passing. Reporting green here made a turn
+  // with no opening snapshot read as a perfect reconciliation.
+  const stockStatus: ReconcileStatus =
+    input.skipStockVsFlow || stockFindings.length > 0 ? "amber" : "green";
 
   // --- Check 3: money supply --------------------------------------------------
   // minted = Σ(-anchor) over mint legs; sunk = Σ(anchor) over sink legs.
@@ -124,6 +130,10 @@ export function reconcileLedger(input: ReconcileInput): ReconcileReport {
     for (const leg of entry.legs) {
       const kind = accountKind(leg.account);
       if (kind !== "mint" && kind !== "sink") continue;
+      // Rows with no economically material value can be emitted by a valid
+      // zero-quantity transaction. They do not create or retire money and
+      // must not manufacture an attribution failure in the confidence gate.
+      if (Math.abs(leg.anchorAmount) < epsilonFor([leg.anchorAmount])) continue;
       const currency = accountCurrency(leg.account);
       const bucket = supply.get(currency) ?? { minted: 0, sunk: 0, reasons: new Map() };
       const reason = leg.account.split(":")[1] ?? "unknown";
@@ -160,9 +170,11 @@ export function reconcileLedger(input: ReconcileInput): ReconcileReport {
       sink: r.sink,
     })),
   }));
-  const supplyStatus: ReconcileStatus = supplyFindings.some((f) => Math.abs(f.netDrift) >= 0.01)
-    ? "amber"
-    : "green";
+  // Net creation or retirement is an economic outcome, not a failed
+  // reconciliation. The confidence failure is an unexplained mint/sink leg.
+  // Keep reporting net drift by currency and reason, but turn amber only while
+  // the semantic attribution backlog is non-empty.
+  const supplyStatus: ReconcileStatus = unattributed.size > 0 ? "amber" : "green";
 
   const status = worseStatus(worseStatus(trialStatus, stockStatus), supplyStatus);
 
@@ -179,7 +191,7 @@ export function reconcileLedger(input: ReconcileInput): ReconcileReport {
     stockVsFlow: {
       status: stockStatus,
       skipped: Boolean(input.skipStockVsFlow),
-      divergentCount: stockFindings.length,
+      divergentCount: input.skipStockVsFlow ? null : stockFindings.length,
       findings: stockFindings.slice(0, MAX_FINDINGS),
     },
     moneySupply: {
@@ -190,6 +202,38 @@ export function reconcileLedger(input: ReconcileInput): ReconcileReport {
       .sort((a, b) => b.anchorAmount - a.anchorAmount)
       .slice(0, MAX_FINDINGS),
   };
+}
+
+function rateForAccount(account: string, rates: Record<string, number> | undefined): number {
+  const rate = rates?.[accountCurrency(account)];
+  return rate && Number.isFinite(rate) && rate > 0 ? rate : 1;
+}
+
+/**
+ * Value cash movement without treating a forex repricing as money entering or
+ * leaving an account. Before the checkpoint, flows are valued at the
+ * pre-forex rate. After it, flows are valued at the closing rate.
+ */
+function cashMovementDelta(input: ReconcileInput, account: string): number {
+  if (
+    !input.preForexBalances ||
+    !input.openingAnchorRates ||
+    !input.preForexAnchorRates ||
+    !input.closingAnchorRates
+  ) {
+    return (input.closingBalances[account] ?? 0) - (input.openingBalances[account] ?? 0);
+  }
+
+  const openingRate = rateForAccount(account, input.openingAnchorRates);
+  const preForexRate = rateForAccount(account, input.preForexAnchorRates);
+  const closingRate = rateForAccount(account, input.closingAnchorRates);
+  const openingNative = (input.openingBalances[account] ?? 0) * openingRate;
+  const preForexNative = (input.preForexBalances[account] ?? 0) * preForexRate;
+  const closingNative = (input.closingBalances[account] ?? 0) * closingRate;
+
+  return (
+    (preForexNative - openingNative) / preForexRate + (closingNative - preForexNative) / closingRate
+  );
 }
 
 /**
@@ -212,6 +256,7 @@ export async function reconcileTurn(
 
     const closing = await loadBalanceSnapshot(db, turn);
     const opening = await loadBalanceSnapshot(db, turn - 1);
+    const preForex = await loadPreForexBalanceCheckpoint(db, turn);
     // No opening snapshot (first shadow turn) or an explicit rebaseline epoch →
     // stock-vs-flow would alarm on the whole world; skip it for this turn.
     const skipStockVsFlow = opts.skipStockVsFlow || !opening || Boolean(closing?.rebaselined);
@@ -221,6 +266,10 @@ export async function reconcileTurn(
       entries,
       openingBalances: opening?.balances ?? {},
       closingBalances: closing?.balances ?? {},
+      preForexBalances: preForex?.balances,
+      openingAnchorRates: opening?.anchorRates,
+      preForexAnchorRates: preForex?.anchorRates,
+      closingAnchorRates: closing?.anchorRates,
       skipStockVsFlow,
     });
 

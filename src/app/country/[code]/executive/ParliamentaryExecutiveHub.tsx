@@ -44,6 +44,10 @@ import { getLiveGameYear } from "@/lib/cabinet/liveGameYear";
 import { getEligibleCabinetCharacters } from "@/lib/uk/cabinetEligibility";
 import { ShadowCabinetSection } from "./components/ShadowCabinetSection";
 import { ObjectId } from "mongodb";
+import { getConfidenceGauge } from "@/lib/uk/confidence/confidenceGaugeStore";
+import { ConfidenceGaugeReadout } from "@/components/uk/government/ConfidenceGaugeReadout";
+import { getNhsState } from "@/lib/uk/nhs/nhsStore";
+import { NhsQualityTile } from "@/components/uk/nhs/NhsQualityTile";
 
 type PartyRowMeta = {
   seqKey: string;
@@ -79,6 +83,13 @@ export async function ParliamentaryExecutiveHub({ countryId }: { countryId: Coun
   // with closesAt anchors written at vote creation.
   const executiveGameTime = await getGameTime();
   await processParliamentaryGovernmentVotes(db, countryId, executiveGameTime.effectiveNow);
+
+  // Confidence gauge readout — UK only (the gauge lives on the UK government
+  // singleton). eslint-disable justified: this is a UK-specific structure.
+  // eslint-disable-next-line local/no-country-literals
+  const isUK = countryId === "UK";
+  const confidenceGauge = isUK ? await getConfidenceGauge(db) : null;
+  const nhsState = isUK ? await getNhsState(db) : null;
 
   const [parlGov, govFormation, imperialPossessive, chamberSeats] = await Promise.all([
     // Legacy collection — only UK/JP ever wrote it; null elsewhere.
@@ -515,6 +526,13 @@ export async function ParliamentaryExecutiveHub({ countryId }: { countryId: Coun
         </div>
 
         <div className="space-y-6">
+          {confidenceGauge !== null && <ConfidenceGaugeReadout value={confidenceGauge} />}
+          {nhsState && (
+            <NhsQualityTile
+              quality={nhsState.quality}
+              healthcareShare={nhsState.lastHealthcareShare}
+            />
+          )}
           <OfficePlaques
             countryId={countryId}
             identity={getExecutiveIdentity(countryId)}

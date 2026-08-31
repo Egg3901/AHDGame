@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { MIL_COLOR, MIL_FONT } from "../military/theme";
 import type { ConflictTier } from "@/lib/military/conflictVisibility";
+import { CONFLICT_ARCHIVE_DELAY_TURNS } from "@/lib/military/conflictLifecycle";
 import type { SideForce } from "./conflictRecordView";
 
 const mono = MIL_FONT.mono;
@@ -23,6 +24,17 @@ export interface ForcePanelView {
   unopposed: boolean;
   /** How much of the war the viewer may see, which is what this panel is about. */
   tier: ConflictTier;
+  /**
+   * Whether the fighting is over (`isConflictConcluded`): resolved, or awaiting
+   * terms. Either way every formation has returned to reserve, so the live-war
+   * reading of the opposing force describes a front that no longer exists.
+   */
+  concluded?: boolean;
+  /**
+   * For a resolved war still under fog: the turn its full record opens. Absent on
+   * a live war, on one awaiting terms (no date yet), and on an open record.
+   */
+  archiveOpensTurn?: number;
 }
 
 /** The withheld cell. Not a zero and not a dash — a field the server never sent. */
@@ -121,9 +133,6 @@ export function ForcePanel({ view }: { view: ForcePanelView }) {
     </div>
   );
 
-  const num = (n: number | null) =>
-    n == null ? <Withheld /> : <Value>{n.toLocaleString("en-US")}</Value>;
-
   return (
     <div
       style={{
@@ -183,61 +192,15 @@ export function ForcePanel({ view }: { view: ForcePanelView }) {
         <div />
         {heading(view.sideBLabel, bIsOwn, "#f0a0a0", "right")}
 
-        <Row
-          label="DIVISIONS"
-          left={
-            a.divisions == null ? (
-              <Withheld />
-            ) : (
-              <Value tone={a.divisions === 0 ? "muted" : undefined}>
-                {a.divisions === 0 ? "none" : a.divisions}
-              </Value>
-            )
-          }
-          right={
-            b.divisions == null ? (
-              <Withheld />
-            ) : (
-              <Value tone={b.divisions === 0 ? "muted" : undefined}>
-                {b.divisions === 0 ? "none" : b.divisions}
-              </Value>
-            )
-          }
-        />
-
-        {/* The enemy's column carries the BAND, not a number: one string is the
-            whole readout, and it cannot contradict the odds shown below it. */}
-        <Row
-          label="STRENGTH"
-          left={
-            a.personnel == null ? (
-              aIsOwn || !view.enemyBand ? (
-                <Withheld />
-              ) : (
-                <div style={{ font: `600 12px ${mono}`, color: "#9cc0f5", lineHeight: 1.35 }}>
-                  {view.enemyBand}
-                </div>
-              )
-            ) : (
-              num(a.personnel)
-            )
-          }
-          right={
-            b.personnel == null ? (
-              bIsOwn || !view.enemyBand ? (
-                <Withheld />
-              ) : (
-                <div style={{ font: `600 12px ${mono}`, color: "#f0a0a0", lineHeight: 1.35 }}>
-                  {view.enemyBand}
-                </div>
-              )
-            ) : (
-              num(b.personnel)
-            )
-          }
-        />
-
-        <Row label="READINESS" left={<Readiness f={a} />} right={<Readiness f={b} />} />
+        {/* Public tier withholds all three composition rows on both sides, which
+            rendered six "? ? ?" cells telling the reader one thing, and pushed
+            the casualties, the only real figures here, below the fold of the
+            rail. One row states the same withholding. */}
+        {publicOnly ? (
+          <Row label="COMPOSITION" left={<Withheld />} right={<Withheld />} />
+        ) : (
+          <CompositionRows a={a} b={b} enemyBand={view.enemyBand} ownSide={ownSide} />
+        )}
 
         <Row
           label="CASUALTIES"
@@ -265,12 +228,35 @@ export function ForcePanel({ view }: { view: ForcePanelView }) {
             lineHeight: 1.65,
           }}
         >
-          {publicOnly ? (
+          {publicOnly && view.archiveOpensTurn != null ? (
+            // The fog outlives the war: a resolved war reads as it did while it ran
+            // until the delay lapses. Promising a record that opens "when the war
+            // resolves" on a war that already has would be a promise already broken.
             <>
-              Without a seat you get the{" "}
-              <span style={{ color: "#c8c8d4" }}>public record only</span> — territory, engagements
-              and the dead. Force composition is withheld on both sides, including your own
-              nation&rsquo;s. It unlocks for everyone when the war resolves.
+              This war has resolved. Casualties are public; composition stays under fog on both
+              sides <span style={{ color: "#c8c8d4" }}>until turn {view.archiveOpensTurn}</span>,
+              when the full record opens to everyone.
+            </>
+          ) : publicOnly ? (
+            <>
+              Casualties are public; composition is not, on either side and including your own
+              nation&rsquo;s. It opens to everyone {CONFLICT_ARCHIVE_DELAY_TURNS} turns after the
+              war resolves.
+            </>
+          ) : view.tier === "command" && (view.concluded || view.archiveOpensTurn != null) ? (
+            // Command sight of a concluded war still under fog. Every formation has
+            // gone home, so the live-war line about reading the enemy off the
+            // strength ratio describes a front that no longer exists. A war awaiting
+            // terms has no opening turn yet: its window starts when it resolves.
+            <>
+              The fighting is over and every formation has returned to reserve. Your own
+              side&rsquo;s rosters stay yours; the opposing side&rsquo;s composition{" "}
+              <span style={{ color: "#c8c8d4" }}>
+                {view.archiveOpensTurn != null
+                  ? `opens to everyone on turn ${view.archiveOpensTurn}`
+                  : `opens to everyone ${CONFLICT_ARCHIVE_DELAY_TURNS} turns after the war resolves`}
+              </span>
+              .
             </>
           ) : view.tier === "archive" ? (
             // The fog lifted when the war ended. Saying "composition is not
@@ -278,8 +264,7 @@ export function ForcePanel({ view }: { view: ForcePanelView }) {
             <>
               This war has resolved, so the record is{" "}
               <span style={{ color: "#c8c8d4" }}>open to everyone</span> — both sides&rsquo;
-              composition and every engagement&rsquo;s roster. What stood here is history now, and
-              these are the forces as they were returned to reserve.
+              composition and every engagement&rsquo;s roster.
             </>
           ) : view.unopposed ? (
             <>
@@ -288,15 +273,92 @@ export function ForcePanel({ view }: { view: ForcePanelView }) {
             </>
           ) : (
             <>
-              Casualties are public on both sides — they are in the record.{" "}
+              Casualties are public on both sides.{" "}
               <span style={{ color: "#c8c8d4" }}>Composition is not.</span> All you get of the
-              opposing force is one band, computed from the strength ratio: no counts, no unit
-              types, no readiness. It cannot contradict the odds below it, and it does not sharpen
-              with observation.
+              opposing force is one band from the strength ratio — it cannot contradict the odds you
+              are shown, and it does not sharpen with observation.
             </>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+/** The three fogged rows, for every tier that gets any of them. */
+function CompositionRows({
+  a,
+  b,
+  enemyBand,
+  ownSide,
+}: {
+  a: SideForce;
+  b: SideForce;
+  enemyBand: string | null;
+  ownSide: "A" | "B" | null;
+}) {
+  const aIsOwn = ownSide === "A";
+  const bIsOwn = ownSide === "B";
+  const num = (n: number | null) =>
+    n == null ? <Withheld /> : <Value>{n.toLocaleString("en-US")}</Value>;
+
+  return (
+    <>
+      <Row
+        label="DIVISIONS"
+        left={
+          a.divisions == null ? (
+            <Withheld />
+          ) : (
+            <Value tone={a.divisions === 0 ? "muted" : undefined}>
+              {a.divisions === 0 ? "none" : a.divisions}
+            </Value>
+          )
+        }
+        right={
+          b.divisions == null ? (
+            <Withheld />
+          ) : (
+            <Value tone={b.divisions === 0 ? "muted" : undefined}>
+              {b.divisions === 0 ? "none" : b.divisions}
+            </Value>
+          )
+        }
+      />
+
+      {/* The enemy's column carries the BAND, not a number: one string is the
+          whole readout, and it cannot contradict the odds shown below it. */}
+      <Row
+        label="STRENGTH"
+        left={
+          a.personnel == null ? (
+            aIsOwn || !enemyBand ? (
+              <Withheld />
+            ) : (
+              <div style={{ font: `600 12px ${mono}`, color: "#9cc0f5", lineHeight: 1.35 }}>
+                {enemyBand}
+              </div>
+            )
+          ) : (
+            num(a.personnel)
+          )
+        }
+        right={
+          b.personnel == null ? (
+            bIsOwn || !enemyBand ? (
+              <Withheld />
+            ) : (
+              <div style={{ font: `600 12px ${mono}`, color: "#f0a0a0", lineHeight: 1.35 }}>
+                {enemyBand}
+              </div>
+            )
+          ) : (
+            num(b.personnel)
+          )
+        }
+      />
+
+      <Row label="READINESS" left={<Readiness f={a} />} right={<Readiness f={b} />} />
+    </>
   );
 }

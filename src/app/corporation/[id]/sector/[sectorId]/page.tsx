@@ -455,7 +455,7 @@ export default function SectorDetailPage() {
   };
 
   const handleAttackSector = async () => {
-    if (!attackInfo || !sector) return;
+    if (!attackInfo || !sector) return false;
     dispatch({ type: "SET_ATTACKING", value: true });
     dispatch({ type: "SET_ATTACK_ERROR", value: "" });
     dispatch({ type: "SET_ATTACK_MSG", value: "" });
@@ -474,11 +474,14 @@ export default function SectorDetailPage() {
       if (res.ok) {
         dispatch({ type: "SET_ATTACK_MSG", value: result.message });
         fetchData();
+        return true;
       } else {
         dispatch({ type: "SET_ATTACK_ERROR", value: result.error || "Attack failed" });
+        return false;
       }
     } catch {
       dispatch({ type: "SET_ATTACK_ERROR", value: "Network error" });
+      return false;
     } finally {
       dispatch({ type: "SET_ATTACKING", value: false });
     }
@@ -721,6 +724,7 @@ export default function SectorDetailPage() {
                 <>
                   <PlantPanel
                     plants={plants}
+                    marketSupplies={commodities?.supplies ?? []}
                     sectorType={sector.sectorType}
                     unionId={sector.unionId}
                     unionName={sector.unionName}
@@ -797,6 +801,8 @@ export default function SectorDetailPage() {
               {attackInfo && (!isCeo || (!plantsEnabled && attackInfo.splitCost > 0)) && (
                 <AttackPanel
                   attackInfo={attackInfo}
+                  plantsMode={plantsEnabled}
+                  targetName={sector.displayName ?? corporation.name}
                   showAttack={!isCeo && !corporation.isStateOwned}
                   showSplit={!plantsEnabled}
                   attacking={attacking}

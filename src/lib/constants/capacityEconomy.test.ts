@@ -43,6 +43,11 @@ function liveImpliedUnits(sectorType: CorporationType): number {
 }
 
 describe("capacityEconomy — source-table wiring", () => {
+  it("uses an economic staffing anchor, not the old display-only headcount scale", () => {
+    expect(CAPACITY_REVENUE_PER_WORKER).toBe(2_000);
+    expect(calculateWorkers(1_000_000, 50)).toBe(500);
+  });
+
   it("prices every sector against a real, ungated default output mix", () => {
     for (const type of CORPORATION_TYPES) {
       const supply = defaultSupplyRates(type);

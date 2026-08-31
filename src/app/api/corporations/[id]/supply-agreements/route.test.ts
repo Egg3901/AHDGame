@@ -62,4 +62,49 @@ describe("GET corporation supply agreements", () => {
       buyerCorpTicker: "TCI",
     });
   });
+
+  it("returns current contract capacity and the latest achievable ceiling", async () => {
+    db.collectionMocks.corporations.findOne.mockResolvedValue({
+      _id: supplierId,
+      countryOwnerId: null,
+    });
+    db.collection("gameConfig");
+    db.collection("gameState");
+    db.collection("corporateSectors");
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      marketSystemMode: "plants",
+      commandEconomyEnabled: false,
+    });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 10,
+      currentYear: 2026,
+    });
+    db.collectionMocks.corporateSectors.find.mockReturnValue(
+      createAsyncIterableCursor([
+        {
+          corporationId: supplierId,
+          sectorType: "manufacturing",
+          capitalStock: 1_000,
+          strategyId: "standard",
+          productionPolicyLevel: 0,
+          contractAchievableUnits: 500,
+          countryId: "US",
+        },
+      ])
+    );
+
+    const { GET } = await import("./route");
+    const response = await GET(
+      new Request("http://localhost/api/corporations/601/supply-agreements"),
+      { params: Promise.resolve({ id: "601" }) }
+    );
+    const body = await response.json();
+
+    expect(body.capacityByCommodity.steel.currentCapacityUnits).toBeGreaterThan(0);
+    expect(body.capacityByCommodity.steel.maxContractUnits).toBeGreaterThan(
+      body.capacityByCommodity.steel.currentCapacityUnits
+    );
+    expect(body.capacityByCommodity.steel.achievableUnits).toBeGreaterThan(0);
+  });
 });

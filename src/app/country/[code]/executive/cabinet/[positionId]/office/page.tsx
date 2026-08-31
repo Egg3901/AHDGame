@@ -18,6 +18,8 @@ import { CabinetMonetaryStrip } from "./components/CabinetMonetaryStrip";
 import { CabinetBannerUploader } from "./components/CabinetBannerUploader";
 import { RegionalBreakdownTable } from "./components/RegionalBreakdownTable";
 import { TierSettingPanel } from "./components/TierSettingPanel";
+import { ActingLockProvider } from "./components/ActingLock";
+import { ActingOfficeNotice } from "./components/ActingOfficeNotice";
 import { RegionalTargetPanel } from "./components/RegionalTargetPanel";
 import { AdvocacyTogglePanel } from "./components/AdvocacyTogglePanel";
 import { MinisterialOrderPanel } from "./components/MinisterialOrderPanel";
@@ -185,6 +187,7 @@ export default function CabinetOfficePage() {
   }
 
   const canAct = data.canAct;
+
   const tabs = resolveCabinetTabs({
     countryId,
     positionId,
@@ -212,332 +215,349 @@ export default function CabinetOfficePage() {
   const hasMonetary = resolveFinancePosition(countryId) === positionId && Boolean(data.monetary);
 
   return (
-    <div className="min-h-screen bg-background pb-16">
-      <main className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
-        <CabinetOfficeLayout
-          positionName={data.position?.name ?? positionConfig.name}
-          department={data.position?.department ?? mechanics.department}
-          sealImage={mechanics.sealImage}
-          countryId={countryId as CountryId}
-          member={data.member}
-          bannerImageUrl={data.member?.bannerImageUrl}
-          identityGlyph={identity.glyph}
-          identitySerif={identity.serif}
-          group={getCabinetPositionGroup(countryId, positionId)}
-          registry={COUNTRY_CONFIGS[countryId as CountryId]?.name}
-          tabs={tabs}
-          activeTab={activeTab}
-          onSelectTab={setActiveTab}
-          statStrip={
-            hasForce && data.forceSummary ? (
-              <CabinetForceStrip
-                forceSummary={data.forceSummary}
-                currencySymbol={currencySymbol}
-                manpowerPool={data.manpower?.pool}
-              />
-            ) : hasEnergy && data.energySummary ? (
-              <CabinetEnergyStrip
-                energySummary={data.energySummary}
-                currencySymbol={currencySymbol}
-              />
-            ) : hasInfra && data.infraSummary ? (
-              <CabinetInfraStrip infraSummary={data.infraSummary} currencySymbol={currencySymbol} />
-            ) : hasEstates && data.estateSummary ? (
-              <CabinetEstateStrip
-                estateSummary={data.estateSummary}
-                currencySymbol={currencySymbol}
-              />
-            ) : hasMonetary && data.monetary ? (
-              <CabinetMonetaryStrip m={data.monetary} />
-            ) : (
-              <CabinetStatStrip
-                metrics={mechanics.nationalMetrics}
-                values={data.nationalMetrics}
-                currencySymbol={currencySymbol}
-              />
-            )
-          }
-          bannerOverlay={
-            canAct && data.member ? (
-              <CabinetBannerUploader
-                countryCode={countryCode}
-                positionId={positionId}
-                onUploaded={refetch}
-              />
-            ) : null
-          }
-        />
-
-        <div className="flex flex-col gap-6 lg:flex-row">
-          <CabinetPositionRail
-            countryCode={countryCode}
-            countryId={countryId}
-            activePositionId={positionId}
-            liveYear={data.liveYear}
+    // Published once, at the top of the office, so every lever inside it reads the
+    // same restrictions off the same payload the server gated on.
+    <ActingLockProvider member={data.member}>
+      <div className="min-h-screen bg-background pb-16">
+        <main className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
+          {data.member?.acting && (
+            <ActingOfficeNotice
+              turnsRemaining={
+                data.member.actingExpiresOnTurn != null
+                  ? Math.max(0, data.member.actingExpiresOnTurn - data.currentTurn)
+                  : null
+              }
+            />
+          )}
+          <CabinetOfficeLayout
+            positionName={data.position?.name ?? positionConfig.name}
+            department={data.position?.department ?? mechanics.department}
+            sealImage={mechanics.sealImage}
+            countryId={countryId as CountryId}
+            member={data.member}
+            bannerImageUrl={data.member?.bannerImageUrl}
+            identityGlyph={identity.glyph}
+            identitySerif={identity.serif}
+            group={getCabinetPositionGroup(countryId, positionId)}
+            registry={COUNTRY_CONFIGS[countryId as CountryId]?.name}
+            tabs={tabs}
+            activeTab={activeTab}
+            onSelectTab={setActiveTab}
+            statStrip={
+              hasForce && data.forceSummary ? (
+                <CabinetForceStrip
+                  forceSummary={data.forceSummary}
+                  currencySymbol={currencySymbol}
+                  manpowerPool={data.manpower?.pool}
+                />
+              ) : hasEnergy && data.energySummary ? (
+                <CabinetEnergyStrip
+                  energySummary={data.energySummary}
+                  currencySymbol={currencySymbol}
+                />
+              ) : hasInfra && data.infraSummary ? (
+                <CabinetInfraStrip
+                  infraSummary={data.infraSummary}
+                  currencySymbol={currencySymbol}
+                />
+              ) : hasEstates && data.estateSummary ? (
+                <CabinetEstateStrip
+                  estateSummary={data.estateSummary}
+                  currencySymbol={currencySymbol}
+                />
+              ) : hasMonetary && data.monetary ? (
+                <CabinetMonetaryStrip m={data.monetary} />
+              ) : (
+                <CabinetStatStrip
+                  metrics={mechanics.nationalMetrics}
+                  values={data.nationalMetrics}
+                  currencySymbol={currencySymbol}
+                />
+              )
+            }
+            bannerOverlay={
+              canAct && data.member ? (
+                <CabinetBannerUploader
+                  countryCode={countryCode}
+                  positionId={positionId}
+                  onUploaded={refetch}
+                />
+              ) : null
+            }
           />
 
-          <div className="min-w-0 flex-1 space-y-6">
-            {activeTab === "overview" && (
-              <>
-                {mechanics.tierSetting && (
-                  <TierSettingPanel
-                    config={mechanics.tierSetting}
-                    currentValue={
-                      data.currentSettings?.tierSetting ?? mechanics.tierSetting.defaultTier
-                    }
-                    canAct={canAct}
-                    countryCode={countryCode}
-                    positionId={positionId}
-                    onUpdate={refetch}
-                  />
-                )}
+          <div className="flex flex-col gap-6 lg:flex-row">
+            <CabinetPositionRail
+              countryCode={countryCode}
+              countryId={countryId}
+              activePositionId={positionId}
+              liveYear={data.liveYear}
+            />
 
-                {/* Extra portfolio levers (e.g. HEW education + welfare). */}
-                {mechanics.tierSettings?.map((tierCfg) =>
-                  tierCfg.key ? (
+            <div className="min-w-0 flex-1 space-y-6">
+              {activeTab === "overview" && (
+                <>
+                  {mechanics.tierSetting && (
                     <TierSettingPanel
-                      key={tierCfg.key}
-                      config={tierCfg}
-                      tierKey={tierCfg.key}
+                      config={mechanics.tierSetting}
                       currentValue={
-                        data.currentSettings?.tierSettings?.[tierCfg.key] ?? tierCfg.defaultTier
+                        data.currentSettings?.tierSetting ?? mechanics.tierSetting.defaultTier
                       }
                       canAct={canAct}
                       countryCode={countryCode}
                       positionId={positionId}
                       onUpdate={refetch}
                     />
-                  ) : null
-                )}
+                  )}
 
-                {/* Non-finance seats with a discretionary pool surface allocation on Overview
+                  {/* Extra portfolio levers (e.g. HEW education + welfare). */}
+                  {mechanics.tierSettings?.map((tierCfg) =>
+                    tierCfg.key ? (
+                      <TierSettingPanel
+                        key={tierCfg.key}
+                        config={tierCfg}
+                        tierKey={tierCfg.key}
+                        currentValue={
+                          data.currentSettings?.tierSettings?.[tierCfg.key] ?? tierCfg.defaultTier
+                        }
+                        canAct={canAct}
+                        countryCode={countryCode}
+                        positionId={positionId}
+                        onUpdate={refetch}
+                      />
+                    ) : null
+                  )}
+
+                  {/* Non-finance seats with a discretionary pool surface allocation on Overview
                     (finance ministers get it on the Treasury tab). */}
-                {mechanics.allocation && !isFinance && (
-                  <ChancellorFundingPanel
+                  {mechanics.allocation && !isFinance && (
+                    <ChancellorFundingPanel
+                      regionData={data.regionData}
+                      regionalBudgets={data.regionalBudgets}
+                      currentAllocations={data.currentSettings?.allocationPercents ?? null}
+                      canAct={canAct}
+                      countryCode={countryCode}
+                      positionId={positionId}
+                      onUpdate={refetch}
+                    />
+                  )}
+
+                  {mechanics.regionalTarget && (
+                    <RegionalTargetPanel
+                      config={mechanics.regionalTarget}
+                      regionData={data.regionData}
+                      currentRegionId={data.currentSettings?.targetRegionId ?? null}
+                      canAct={canAct}
+                      countryCode={countryCode}
+                      positionId={positionId}
+                      onUpdate={refetch}
+                    />
+                  )}
+
+                  {mechanics.advocacy && (
+                    <AdvocacyTogglePanel
+                      config={mechanics.advocacy}
+                      active={data.currentSettings?.advocacyActive ?? false}
+                      canAct={canAct}
+                      countryCode={countryCode}
+                      positionId={positionId}
+                      onUpdate={refetch}
+                    />
+                  )}
+
+                  {isTrade && (
+                    <TradeEmbargoPanel
+                      countryId={countryId as CountryId}
+                      canAct={canAct}
+                      actionsRemaining={data.member?.ministerialActions ?? 0}
+                    />
+                  )}
+
+                  {mechanics.emergency && (
+                    <EmergencyMechanicPanel
+                      config={mechanics.emergency}
+                      regionData={data.regionData}
+                      actionsRemaining={data.member?.ministerialActions ?? 0}
+                      canAct={canAct}
+                      countryCode={countryCode}
+                      positionId={positionId}
+                      onUpdate={refetch}
+                    />
+                  )}
+
+                  <MinisterialOrderPanel
+                    orders={data.orders}
+                    activeOrders={data.activeOrders}
+                    actionsRemaining={data.member?.ministerialActions ?? 0}
+                    canAct={canAct}
+                    countryCode={countryCode}
+                    positionId={positionId}
+                    singleRegionFocus={mechanics.singleRegionFocus ?? null}
                     regionData={data.regionData}
-                    regionalBudgets={data.regionalBudgets}
-                    currentAllocations={data.currentSettings?.allocationPercents ?? null}
-                    canAct={canAct}
-                    countryCode={countryCode}
-                    positionId={positionId}
                     onUpdate={refetch}
                   />
-                )}
 
-                {mechanics.regionalTarget && (
-                  <RegionalTargetPanel
-                    config={mechanics.regionalTarget}
-                    regionData={data.regionData}
-                    currentRegionId={data.currentSettings?.targetRegionId ?? null}
-                    canAct={canAct}
+                  {!mechanics.singleRegionFocus && mechanics.regionalMetrics.length > 0 && (
+                    <RegionalBreakdownTable
+                      metrics={mechanics.regionalMetrics}
+                      regionData={data.regionData}
+                      currencySymbol={currencySymbol}
+                    />
+                  )}
+                </>
+              )}
+
+              {activeTab === "treasury" && isFinance && (
+                <>
+                  {mechanics.allocation && (
+                    <ChancellorFundingPanel
+                      regionData={data.regionData}
+                      regionalBudgets={data.regionalBudgets}
+                      currentAllocations={data.currentSettings?.allocationPercents ?? null}
+                      canAct={canAct}
+                      countryCode={countryCode}
+                      positionId={positionId}
+                      onUpdate={refetch}
+                    />
+                  )}
+                  <StateEnterprisesPanel countryCode={countryCode} canAct={canAct} />
+                  {data.prospectingEnabled && (
+                    <GeologicalSurveyPanel
+                      countryId={countryId}
+                      canAct={canAct}
+                      stateOptions={regions}
+                    />
+                  )}
+                </>
+              )}
+
+              {activeTab === "overview" && holdsForeignPortfolio && conflictsEnabled && (
+                <div className="mb-4">
+                  <PeacePanel
                     countryCode={countryCode}
-                    positionId={positionId}
-                    onUpdate={refetch}
-                  />
-                )}
-
-                {mechanics.advocacy && (
-                  <AdvocacyTogglePanel
-                    config={mechanics.advocacy}
-                    active={data.currentSettings?.advocacyActive ?? false}
-                    canAct={canAct}
-                    countryCode={countryCode}
-                    positionId={positionId}
-                    onUpdate={refetch}
-                  />
-                )}
-
-                {isTrade && (
-                  <TradeEmbargoPanel
                     countryId={countryId as CountryId}
                     canAct={canAct}
-                    actionsRemaining={data.member?.ministerialActions ?? 0}
                   />
-                )}
+                </div>
+              )}
 
-                {mechanics.emergency && (
-                  <EmergencyMechanicPanel
-                    config={mechanics.emergency}
-                    regionData={data.regionData}
-                    actionsRemaining={data.member?.ministerialActions ?? 0}
-                    canAct={canAct}
-                    countryCode={countryCode}
-                    positionId={positionId}
-                    onUpdate={refetch}
-                  />
-                )}
-
-                <MinisterialOrderPanel
-                  orders={data.orders}
-                  activeOrders={data.activeOrders}
-                  actionsRemaining={data.member?.ministerialActions ?? 0}
+              {activeTab === "foreign" && isForeign && (
+                <ForeignSecPanels
+                  currentSettings={data.currentSettings}
+                  targetCountries={data.targetCountries}
                   canAct={canAct}
                   countryCode={countryCode}
                   positionId={positionId}
-                  singleRegionFocus={mechanics.singleRegionFocus ?? null}
-                  regionData={data.regionData}
                   onUpdate={refetch}
                 />
+              )}
 
-                {!mechanics.singleRegionFocus && mechanics.regionalMetrics.length > 0 && (
-                  <RegionalBreakdownTable
-                    metrics={mechanics.regionalMetrics}
-                    regionData={data.regionData}
-                    currencySymbol={currencySymbol}
-                  />
-                )}
-              </>
-            )}
+              {activeTab === "flagship" && (
+                <FlagshipRouter
+                  countryCode={countryCode}
+                  countryId={countryId}
+                  positionId={positionId}
+                  canAct={canAct}
+                  currencySymbol={currencySymbol}
+                  regions={regions}
+                  targetCountries={data.targetCountries}
+                  onUpdate={refetch}
+                  liveYear={data.liveYear}
+                  hasForce={hasForce}
+                  force={
+                    hasForce && data.forceSummary && data.units
+                      ? {
+                          units: data.units,
+                          forceSummary: data.forceSummary,
+                          manpower: data.manpower,
+                          commanders: data.commanders ?? [],
+                          arsenal: data.arsenal,
+                          contracts: data.contracts,
+                          suppliers: data.suppliers,
+                          lotPricePerLot: data.lotPricePerLot,
+                        }
+                      : null
+                  }
+                  estates={
+                    hasEstates && estatePortfolio && data.estateSummary && data.estates
+                      ? {
+                          portfolioKey: estatePortfolio,
+                          estates: data.estates,
+                          estateSummary: data.estateSummary,
+                        }
+                      : null
+                  }
+                  energy={
+                    hasEnergy && data.energySummary && data.plants
+                      ? { plants: data.plants, energySummary: data.energySummary }
+                      : null
+                  }
+                  infra={
+                    hasInfra && data.infraSummary && data.projects
+                      ? { projects: data.projects, infraSummary: data.infraSummary }
+                      : null
+                  }
+                  monetary={
+                    hasMonetary && data.monetary
+                      ? {
+                          monetary: data.monetary,
+                          debtPrincipal: data.debtPrincipal ?? 0,
+                          sovereignBondsOutstanding: data.sovereignBondsOutstanding ?? 0,
+                          sovereignBondProfile: data.sovereignBondProfile ?? null,
+                          currentTurn: data.currentTurn ?? 1,
+                        }
+                      : null
+                  }
+                  placeholderLabel={flagshipLabel}
+                />
+              )}
 
-            {activeTab === "treasury" && isFinance && (
-              <>
-                {mechanics.allocation && (
-                  <ChancellorFundingPanel
-                    regionData={data.regionData}
-                    regionalBudgets={data.regionalBudgets}
-                    currentAllocations={data.currentSettings?.allocationPercents ?? null}
-                    canAct={canAct}
+              {activeTab === "competition" && (
+                <MergerReviewQueuePanel
+                  data={mergerQueue}
+                  canAct={canAct}
+                  onDecided={refetchMergerQueue}
+                />
+              )}
+
+              {activeTab === "commands" && isDefense && conflictsEnabled && (
+                <div className="mb-4">
+                  <DeclareWarPanel
                     countryCode={countryCode}
-                    positionId={positionId}
-                    onUpdate={refetch}
-                  />
-                )}
-                <StateEnterprisesPanel countryCode={countryCode} canAct={canAct} />
-                {data.prospectingEnabled && (
-                  <GeologicalSurveyPanel
-                    countryId={countryId}
+                    countryId={countryId as CountryId}
                     canAct={canAct}
-                    stateOptions={regions}
                   />
-                )}
-              </>
-            )}
+                </div>
+              )}
 
-            {activeTab === "overview" && holdsForeignPortfolio && conflictsEnabled && (
-              <div className="mb-4">
-                <PeacePanel
+              {activeTab === "commands" && isDefense && conflictsEnabled && (
+                <CommandsTab
+                  commands={data.commands ?? []}
+                  units={(data.units ?? []) as unknown as MilitaryUnit[]}
+                  commanders={data.commanders ?? []}
+                  conflictAssignments={data.conflictAssignments ?? []}
+                  conflicts={data.conflicts ?? []}
+                  corps={data.corps ?? []}
+                  commissionCandidates={data.commissionCandidates ?? []}
+                  regionThreats={data.regionThreats ?? {}}
                   countryCode={countryCode}
-                  countryId={countryId as CountryId}
-                  canAct={canAct}
+                  positionId={positionId}
                 />
-              </div>
-            )}
+              )}
 
-            {activeTab === "foreign" && isForeign && (
-              <ForeignSecPanels
-                currentSettings={data.currentSettings}
-                targetCountries={data.targetCountries}
-                canAct={canAct}
-                countryCode={countryCode}
-                positionId={positionId}
-                onUpdate={refetch}
-              />
-            )}
-
-            {activeTab === "flagship" && (
-              <FlagshipRouter
-                countryCode={countryCode}
-                countryId={countryId}
-                positionId={positionId}
-                canAct={canAct}
-                currencySymbol={currencySymbol}
-                regions={regions}
-                targetCountries={data.targetCountries}
-                onUpdate={refetch}
-                liveYear={data.liveYear}
-                hasForce={hasForce}
-                force={
-                  hasForce && data.forceSummary && data.units
-                    ? {
-                        units: data.units,
-                        forceSummary: data.forceSummary,
-                        manpower: data.manpower,
-                        commanders: data.commanders ?? [],
-                        arsenal: data.arsenal,
-                        contracts: data.contracts,
-                        suppliers: data.suppliers,
-                        lotPricePerLot: data.lotPricePerLot,
-                      }
-                    : null
-                }
-                estates={
-                  hasEstates && estatePortfolio && data.estateSummary && data.estates
-                    ? {
-                        portfolioKey: estatePortfolio,
-                        estates: data.estates,
-                        estateSummary: data.estateSummary,
-                      }
-                    : null
-                }
-                energy={
-                  hasEnergy && data.energySummary && data.plants
-                    ? { plants: data.plants, energySummary: data.energySummary }
-                    : null
-                }
-                infra={
-                  hasInfra && data.infraSummary && data.projects
-                    ? { projects: data.projects, infraSummary: data.infraSummary }
-                    : null
-                }
-                monetary={
-                  hasMonetary && data.monetary
-                    ? {
-                        monetary: data.monetary,
-                        debtPrincipal: data.debtPrincipal ?? 0,
-                        sovereignBondsOutstanding: data.sovereignBondsOutstanding ?? 0,
-                        sovereignBondProfile: data.sovereignBondProfile ?? null,
-                        currentTurn: data.currentTurn ?? 1,
-                      }
-                    : null
-                }
-                placeholderLabel={flagshipLabel}
-              />
-            )}
-
-            {activeTab === "competition" && (
-              <MergerReviewQueuePanel
-                data={mergerQueue}
-                canAct={canAct}
-                onDecided={refetchMergerQueue}
-              />
-            )}
-
-            {activeTab === "commands" && isDefense && conflictsEnabled && (
-              <div className="mb-4">
-                <DeclareWarPanel
+              {activeTab === "doctrine" && isDefense && conflictsEnabled && (
+                <DoctrineTab
+                  currentEra={data.doctrineEra ?? latestEraIndex()}
+                  doctrine={data.doctrine ?? { adopted: {}, points: 0 }}
                   countryCode={countryCode}
-                  countryId={countryId as CountryId}
-                  canAct={canAct}
+                  positionId={positionId}
+                  onAdopt={refetch}
                 />
-              </div>
-            )}
-
-            {activeTab === "commands" && isDefense && conflictsEnabled && (
-              <CommandsTab
-                commands={data.commands ?? []}
-                units={(data.units ?? []) as unknown as MilitaryUnit[]}
-                commanders={data.commanders ?? []}
-                conflictAssignments={data.conflictAssignments ?? []}
-                corps={data.corps ?? []}
-                commissionCandidates={data.commissionCandidates ?? []}
-                regionThreats={data.regionThreats ?? {}}
-                countryCode={countryCode}
-                positionId={positionId}
-              />
-            )}
-
-            {activeTab === "doctrine" && isDefense && conflictsEnabled && (
-              <DoctrineTab
-                currentEra={data.doctrineEra ?? latestEraIndex()}
-                doctrine={data.doctrine ?? { adopted: {}, points: 0 }}
-                countryCode={countryCode}
-                positionId={positionId}
-                onAdopt={refetch}
-              />
-            )}
+              )}
+            </div>
           </div>
-        </div>
-      </main>
-    </div>
+        </main>
+      </div>
+    </ActingLockProvider>
   );
 }

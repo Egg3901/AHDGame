@@ -20,6 +20,7 @@
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type { CentralBank, ChairSelectionPending, FomcSeat } from "@/lib/db/types/centralBank";
+import { FOMC_COMMITTEE_COUNTRY_IDS } from "@/lib/db/types/centralBank";
 import type { Character } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
@@ -405,10 +406,22 @@ export async function processCentralBankChairSelection(
     const picked = await selectChairCandidate(db, bank, scope.memberCountries, excluded, rng);
 
     if (!picked) {
-      // When autonomy is globally enabled and no eligible human exists, keep
-      // monetary governance functioning with a technocrat. Human candidates
-      // were already preferred above, so this cannot displace a player pick.
-      if (await isNppAutonomyEnabled(db)) {
+      // FOMC-committee banks (the US Fed) are staffed by presidential nomination
+      // + Senate confirmation only — never by an engine-appointed technocrat.
+      // With no eligible human queued, leave the chair vacant and wait for a
+      // nomination rather than auto-stocking an NPP (the whole point of the
+      // rework: no AI chair that "keeps re-appointing itself").
+      if (FOMC_COMMITTEE_COUNTRY_IDS.has(countryId)) {
+        logger.warn(
+          "CentralBankChairSelection",
+          `No candidates for ${countryId}; leaving the Fed chair vacant for presidential nomination`
+        );
+        result.vacanciesRemaining++;
+        await persistVacancy(db, bank._id, gameNow);
+      } else if (await isNppAutonomyEnabled(db)) {
+        // Non-committee banks keep the caretaker technocrat when autonomy is on
+        // and no eligible human exists. Human candidates were already preferred
+        // above, so this cannot displace a player pick.
         await appointNppChair(db, bank, countryId, currentTurn);
       } else {
         logger.warn("CentralBankChairSelection", `No candidates for ${countryId}, leaving vacant`);

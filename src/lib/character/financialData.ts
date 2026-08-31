@@ -10,7 +10,7 @@ import {
 import {
   corpCapitalToAnchor,
   corpLiquidCapitalToAnchor,
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
   fxRateForCorpFromMap,
 } from "@/lib/currency/corporationCapital";
 import { getPublicShareQuote } from "@/lib/corporations/marketQuote";
@@ -53,8 +53,15 @@ export async function getFinancialData(characterId: ObjectId) {
   // Load FX rates before the corp loop so sharePrice can be anchor-normalized.
   // corp.sharePrice is stored in the corp's liquidCurrencyCode (post-v0.2.6 LOCAL);
   // raw multiplication without conversion produces wrong values for non-USD corps.
-  const fxByCurrencyProfile = await loadFxRatesByCurrency(db);
+  // Valuation map, not the settlement map: this value is DISPLAYED and RANKED.
+  // The settlement map leaves the six bloc currencies (PLZ/CSK/HUF/YUD/BGL/ROL,
+  // 102 corps) missing on purpose, which converted them at 1.0. See
+  // corporationCapital.ts.
+  const fxByCurrencyProfile = await loadValuationFxRates(db);
 
+  // EQUITIES ONLY, matching `investorRankingSnapshot.portfolioValue`. The wealth
+  // list's same-named field is stocks PLUS bonds (see wealthListSnapshot.ts), so
+  // the two are not comparable. Bonds surface here via `bondIncomePerTurn`.
   let portfolioValue = 0;
   let dividendIncomePerTurn = 0;
   for (const corp of corporationsWithShares) {

@@ -1,6 +1,6 @@
 export const ngOverviewContent = `# Nigeria
 
-Nigeria is a **federal presidential republic**: Africa's most populous democracy, with a directly elected President, a bicameral National Assembly, and 36 states plus the Federal Capital Territory. The President serves a fixed 4-year term with a 2-term limit per character. Nigeria uses First Past the Post (FPTP) for all federal elections, with single-member constituencies in both chambers.
+Nigeria is a **federal presidential republic**: Africa's most populous democracy, with a directly elected President and a bicameral National Assembly, modelled across **six geopolitical zones** (North West, North East, North Central, South West, South South, South East). The President serves a fixed 4-year term with a 2-term limit per character. Nigeria uses First Past the Post (FPTP) for all federal elections, with single-member constituencies in both chambers.
 
 Nigeria is fully authored (seeds, offices, and election systems) and is part of the **1991 scenario roster** (US, UK, JP, DE, CN, BR, IE, NG). Availability is seed and world dependent: a world seeded in an era that includes Nigeria can be played as Nigeria, while the current default world flags its status as coming soon.
 
@@ -12,10 +12,10 @@ Nigeria is fully authored (seeds, offices, and election systems) and is part of 
 | --- | --- | --- | --- |
 | President | Direct election | 4 years | 1 |
 | Vice President | Elected on presidential ticket | 4 years | 1 |
-| Senator | FPTP statewide election | 4 years | 109 |
+| Senator | FPTP zone election | 4 years | 109 |
 | Representative | FPTP district-level election | 4 years | 360 |
 | Assembly Member (State House of Assembly) | FPTP zone election | 4 years | 990 |
-| Governor | FPTP statewide election | 4 years | 1 per state (36) |
+| Governor | FPTP zone-wide election | 4 years | 1 per zone (6) |
 | Governor of the CBN | Appointed action | 5 years | 1 |
 
 The **President** is both head of state and head of government: directly elected for a fixed 4-year term. A 2-term limit per character applies, and a second-term run blocks running-mate selection (the VP cannot be changed on a re-election bid).
@@ -28,8 +28,8 @@ The **National Assembly** is bicameral and **both chambers participate in the pl
 
 Nigeria's legislature has two chambers:
 
-- **House of Representatives**: 360 Representatives elected by **FPTP from single-member constituencies** across Nigeria's 36 states and the Federal Capital Territory. 4-year terms. **All seats are contested** each cycle. The House is the primary legislative body and the source of the coalition threshold.
-- **Senate**: 109 senators elected by **FPTP from single-member statewide constituencies** (3 per state plus 1 for the FCT). 4-year terms. **All seats are contested** each cycle. The Senate reviews legislation from the House and can amend or reject bills.
+- **House of Representatives**: 360 Representatives elected by **FPTP from single-member constituencies**, allocated across the six geopolitical zones by population. 4-year terms. **All seats are contested** each cycle. The House is the primary legislative body and the source of the coalition threshold.
+- **Senate**: 109 senators elected by **FPTP from single-member constituencies**, allocated across the six zones by population. 4-year terms. **All seats are contested** each cycle. The Senate reviews legislation from the House and can amend or reject bills.
 
 ---
 

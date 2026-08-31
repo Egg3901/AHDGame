@@ -24,7 +24,7 @@ import { getPublicShareQuote } from "@/lib/corporations/marketQuote";
 import {
   corpLiquidCapitalToAnchor,
   fxRateForCorpFromMap,
-  loadFxRatesByCurrency,
+  loadValuationFxRates,
 } from "@/lib/currency/corporationCapital";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -110,7 +110,7 @@ export async function loadCharacterPortfolio(userId: string) {
   // each corp's liquidCurrencyCode (v0.2.6), so raw value += shares × quote
   // would mix ¥, £, $ numbers. Per-holding totalValue stays in the held
   // corp's local currency so the UI can render it with its own code.
-  const fxByCurrency = await loadFxRatesByCurrency(db);
+  const fxByCurrency = await loadValuationFxRates(db);
   const holdings: Holding[] = [];
   let totalValue = 0;
 

@@ -119,7 +119,8 @@ describe("appointNppPrimeMinister", () => {
       null,
       nppId,
       "PM Bot",
-      now
+      now,
+      undefined
     );
     // npps.findOne resolved the senior (400-seat) MP.
     expect(db.collectionMocks["npps"].findOne).toHaveBeenCalledWith({ _id: nppId });
@@ -156,5 +157,45 @@ describe("appointNppPrimeMinister", () => {
       db.collectionMocks["governmentFormations"].updateOne as ReturnType<typeof vi.fn>
     ).mock.calls[0];
     expect(op.$set.formationType).toBe("minority");
+  });
+
+  it("uses the era-specific lower chamber when forming Spain's 1953 government", async () => {
+    isActiveMock.mockResolvedValue(true);
+    setup({
+      gov: { _id: "ES", status: "pending", majorityThreshold: 285 },
+      officials: [
+        {
+          countryId: "ES",
+          officeType: "procurador",
+          party: "1",
+          isNPP: true,
+          nppId,
+          seatsHeld: 556,
+        },
+      ],
+      npp: { ...seniorNpp, party: "1" },
+    });
+
+    const seated = await appointNppPrimeMinister(
+      db as unknown as Db,
+      "ES",
+      439,
+      now,
+      "1953-default"
+    );
+
+    expect(seated).toBe(true);
+    expect(db.collectionMocks["electedOfficials"].find).toHaveBeenCalledWith(
+      expect.objectContaining({ countryId: "ES", officeType: "procurador" })
+    );
+    expect(appointPrimeMinisterMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "ES",
+      null,
+      nppId,
+      "PM Bot",
+      now,
+      "1953-default"
+    );
   });
 });

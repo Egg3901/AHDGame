@@ -37,7 +37,7 @@ The historic governing parties begin as Major; small and regional parties begin 
 
 ### Registration
 
-Registration grows automatically as your party builds Organization: Reg drifts toward your Org level each turn, raising the partisan base in states where you've put down roots. There is no per-click registration action; focus on Build Org, and Reg will follow on its own. Registration is a slow, durable partisan base that resists persuasion at election time, so the climb pays off across many election cycles.
+Registration grows automatically as your party builds Organization: Reg drifts toward your Org level each turn, raising the partisan base in states where you've put down roots. New registrations come first from the state's Independent and Unregistered voters; once that pool is spent, they come from parties whose registration has outrun their organization, in proportion to how far ahead of their Org they sit. A party that keeps its Org up defends its base; a party coasting on a seeded majority with little Org will see it erode toward organized rivals. There is no per-click registration action; focus on Build Org, and Reg will follow on its own. Registration is a slow, durable partisan base that resists persuasion at election time, so the climb pays off across many election cycles.
 
 ## Budget-based actions (percentage allocations)
 

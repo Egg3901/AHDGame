@@ -6,6 +6,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
+import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { getEnergyPlantsCollection } from "@/lib/db/collections/energyPlants";
@@ -47,6 +48,10 @@ export async function POST(_request: Request, { params }: RouteParams) {
         { status: 403 }
       );
     }
+
+    // An upgrade raises the standing cost the successor inherits.
+    const actingDenied = requireConfirmedSecretary(member, "assets", !!auth.user.isAdmin);
+    if (actingDenied) return actingDenied;
 
     const plant = await plantsCol.findOne({ _id: new ObjectId(plantId), countryId, positionId });
     if (!plant) {

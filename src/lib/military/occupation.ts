@@ -75,17 +75,33 @@ export function opposedBelligerents(
   return (a.includes(x) && b.includes(y)) || (b.includes(x) && a.includes(y));
 }
 
+/**
+ * Which side holds the host country: the side fighting on its own soil. Undefined when
+ * the host belongs to neither, which is every proxy war (its host is a world entity
+ * that is never a belligerent) and any ground neither side owns.
+ *
+ * Rosters are CountryId[]; the host may be a world entity that is not one. Widen the
+ * COMPARISON rather than the roster. Optional chaining because a trimmed or legacy
+ * document may carry no rosters at all.
+ */
+export function hostSideOf(
+  hostCountry: WorldEntityId,
+  sideA: Pick<ConflictSide, "countries"> | undefined,
+  sideB: Pick<ConflictSide, "countries"> | undefined
+): Side | undefined {
+  if ((sideA?.countries as string[] | undefined)?.includes(hostCountry)) return "A";
+  if ((sideB?.countries as string[] | undefined)?.includes(hostCountry)) return "B";
+  return undefined;
+}
+
 /** The `control` a conflict is born at — the host's own side holds all of its soil. */
 export function initialControl(
   hostCountry: WorldEntityId,
   sideA: ConflictSide,
   sideB: ConflictSide
 ): number {
-  // Rosters are CountryId[]; the host may be a world entity that is not one (a proxy
-  // war's host is never a belligerent). Widen the COMPARISON rather than the roster.
-  if ((sideA.countries as string[]).includes(hostCountry)) return 0;
-  if ((sideB.countries as string[]).includes(hostCountry)) return 100;
-  return 50;
+  const host = hostSideOf(hostCountry, sideA, sideB);
+  return host === "A" ? 0 : host === "B" ? 100 : 50;
 }
 
 /** A side's share (0–1) of the host country's territory. */
@@ -104,6 +120,26 @@ export function frontProgress(control: number, controlStart: number): number {
   return span > 0 ? Math.abs(control - controlStart) / span : 0;
 }
 
+/**
+ * How far the front has moved in ONE side's favour, 0..1.
+ *
+ * `frontProgress` above is direction-agnostic: it measures the distance travelled
+ * from the starting line whichever way the line went. That is the right answer to
+ * "how deep is this war", and the wrong answer to "am I winning", which is the
+ * question a side asks before demanding anything of the other. A side the line has
+ * moved AGAINST reads zero here rather than reading its opponent's gains as its own.
+ *
+ * Measured from the starting line for the same reason `frontProgress` is: an
+ * interstate war opens with the defender holding all of its own soil, so an
+ * absolute-share reading would call every invasion deep before the first shot.
+ */
+export function progressForSide(side: Side, control: number, controlStart: number): number {
+  // Side A wins as control falls toward 0; side B as it rises toward 100.
+  const gained = side === "A" ? controlStart - control : control - controlStart;
+  if (gained <= 0) return 0;
+  return frontProgress(control, controlStart);
+}
+
 export interface ShiftInput {
   control: number;
   winner: Side;
@@ -115,13 +151,21 @@ export interface ShiftInput {
 
 /**
  * `control` after an engagement. A decisive win takes the full step; narrower wins
- * scale down; a loser who withdrew in order yields less; and an advance halves once
- * the winner is deep in enemy territory and outrunning its logistics.
+ * scale down; a loser who withdrew in order yields less.
+ *
+ * There used to be a third drag here: the step halved once the winner held
+ * `deepPushDepth` of the host. Keyed on the winner, it halved the attacker's wins
+ * past that mark but not the defender's, so on a near-even front the line drifted
+ * back faster than it advanced: a wall, not a slowdown, on top of the supply
+ * penalties that already compound with distance from the start line
+ * (`derivedSupply` below, applied to throughput in `battle.ts`). It was removed;
+ * the report is `scripts/sim/reports/control-drift-deep-push.md`. `deepPushDepth`
+ * itself survives for the winding-down status and the peace-offer threshold, which
+ * read progress from the START line, not the winner's share.
  */
 export function occupationShift({ control, winner, margin, loserRetreated }: ShiftInput): number {
   let shift = Math.min(1, Math.abs(margin) / OCCUPATION.decisiveMargin) * OCCUPATION.maxShift;
   if (loserRetreated) shift *= OCCUPATION.retreatYield;
-  if (shareOf(control, winner) >= OCCUPATION.deepPushDepth) shift *= OCCUPATION.deepPushMult;
   const next = winner === "B" ? control + shift : control - shift;
   return Math.max(0, Math.min(100, next));
 }

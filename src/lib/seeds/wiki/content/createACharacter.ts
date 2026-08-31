@@ -18,10 +18,16 @@ Pick the country you actually want to play. It scopes elections, parties, legisl
 | --- | --- | --- |
 | United States | State (50) | State Senate, then House |
 | United Kingdom | ENG / SCO / WAL / NIR | MP (Commons) |
-| Germany | Land (16) | Bundestag MdB |
+| Germany | Land (11 in the 1953 preset, 16 modern) | Bundestag MdB |
 | Japan | Region (8) | Shūgiin or Sangiin |
 | China | Macro-region (7) | NPC delegate (one-party; disclaimer on pick) |
 | Ireland | Region (8) | TD (Dáil) |
+| Brazil | State (5 macro-regions) | Federal Deputy |
+| Nigeria | Zone (6) | Assembly Member |
+| Soviet Union | Republic (14) | Supreme Soviet or Nationalities Deputy |
+| East Germany | Land (6) | Volkskammer Deputy |
+
+Which of these are open depends on the world's era preset and the admin roster: the Soviet Union and East Germany exist only in the Cold War presets, and a country can be switched on for players later in a world's life. The country hubs on [Getting Started](/wiki/getting-started) cover each one.
 
 Confirm. You cannot campaign across countries.
 
@@ -33,7 +39,7 @@ Type a readable name. Optional avatar; skip it if you want the default tile. You
 
 This is where you canvass cheapest and where most local races live. National races (President, PM) are the exception.
 
-US: any of 50 states. UK: England, Scotland, Wales, or Northern Ireland. DE: one Land. JP: one of 8 regions. CN: one of 7. IE: one of 8.
+US: any of 50 states. UK: England, Scotland, Wales, or Northern Ireland. DE: one Land. JP: one of 8 regions. CN: one of 7. IE: one of 8. BR: one of 5 macro-regional states. NG: one of 6 zones. RU: one of 14 republics. DD: one of 6 Länder.
 
 You can [relocate](/wiki/relocation) later. You lose state Political Influence when you do. Pick once, carefully.
 
@@ -44,7 +50,7 @@ Two sliders, each -5 to +5:
 - **Economic:** -5 left / +5 right
 - **Social:** -5 progressive / +5 conservative
 
-These feed primaries (distance to your party), bill voting (each vote nudges you ±0.25), and demographic appeal.
+These feed primaries (distance to your party), bill voting, and demographic appeal. Each bill you vote on can move you at most 0.25 per axis: an Aye pulls you toward the bill's average position (never past it), a Nay pushes you away, and changing your vote later is measured from where you stood before that bill, so flipping Aye and Nay cannot stack. The vote buttons show you the exact move before you click.
 
 Do not slam both to -5 or +5 unless that party is actually extreme. Moderate parties punish extremes in the primary.
 

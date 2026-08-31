@@ -1,12 +1,19 @@
 import type { Db } from "mongodb";
 import type { BattleReportDoc } from "@/lib/db/types/battleReport";
 import type { CountryId } from "@/lib/constants/countries";
+import { contingentsOf, type SideOutcome } from "@/lib/military/battle";
 
 export function getBattleReportsCollection(db: Db) {
   return db.collection<BattleReportDoc>("battleReports");
 }
 
-/** The most recent battle reports involving a country (as declarer OR target). */
+/**
+ * The most recent battle reports a country took part in.
+ *
+ * Coalition rosters are matched too, not just the principals: an ally that joined a
+ * merged offensive is neither the declarer nor the target, so a nation could lose ten
+ * thousand men in a battle its own war room never listed.
+ */
 export async function listBattleReportsForCountry(
   db: Db,
   countryId: string,
@@ -14,7 +21,14 @@ export async function listBattleReportsForCountry(
 ): Promise<BattleReportDoc[]> {
   const cid = countryId as CountryId;
   return getBattleReportsCollection(db)
-    .find({ $or: [{ declarerCountry: cid }, { targetCountry: cid }] })
+    .find({
+      $or: [
+        { declarerCountry: cid },
+        { targetCountry: cid },
+        { attackers: cid },
+        { defenders: cid },
+      ],
+    })
     .sort({ turn: -1 })
     .limit(limit)
     .toArray();
@@ -60,6 +74,39 @@ export async function casualtiesByTheater(
   return out;
 }
 
+/** The two side summaries of one resolved report, as `theaterRecord` projects them. */
+export interface ReportSides {
+  att: SideSummary;
+  def: SideSummary;
+}
+type SideSummary = Pick<SideOutcome, "country" | "power" | "loss"> & {
+  contingents?: SideOutcome["contingents"];
+};
+
+/**
+ * Dead per belligerent across a front's reports.
+ *
+ * Goes through `contingentsOf`, so an allied offensive's casualties land on the
+ * nation that took them. Reading `result.attacker.country` beside
+ * `result.attacker.loss` instead credited the coalition's whole butcher's bill to
+ * the principal — live report 6a8fb6a1715ff52ed01059ce filed 10,939 Russian dead
+ * under East Germany.
+ */
+export function foldCasualtiesByCountry(sides: (ReportSides | null)[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const pair of sides) {
+    if (!pair) continue;
+    for (const side of [pair.att, pair.def]) {
+      if (!side?.country) continue;
+      for (const c of contingentsOf(side)) {
+        if (!c.country) continue;
+        out[c.country] = (out[c.country] ?? 0) + (c.loss ?? 0);
+      }
+    }
+  }
+  return out;
+}
+
 /** One front's cumulative record, counted across EVERY report ever filed there. */
 export interface TheaterRecord {
   /** Dead per belligerent country. Public — casualty totals are in the record. */
@@ -99,8 +146,8 @@ export async function theaterRecord(db: Db, theaterId: string): Promise<TheaterR
       unopposedAdvances: number;
       lastEngagementTurn: number | null;
       lastAdvanceTurn: number | null;
-      /** One entry per report: its two sides, or `[]` for a no-contact report. */
-      sides: { country: string; loss: number }[][];
+      /** One entry per report: its two side summaries, or null for a no-contact report. */
+      sides: (ReportSides | null)[];
       /** One entry per report: every country named on it, principals included. */
       engaged: string[][];
     }>([
@@ -116,15 +163,28 @@ export async function theaterRecord(db: Db, theaterId: string): Promise<TheaterR
           lastAdvanceTurn: {
             $max: { $cond: [{ $eq: ["$unopposedAdvance", true] }, "$turn", null] },
           },
+          // Both sides' summaries, contingents included. The fallback to the scalar
+          // for a pre-coalition report is applied in `foldCasualtiesByCountry` rather
+          // than here, so the rule is one testable place instead of a `$ifNull` pair.
           sides: {
             $push: {
               $cond: [
                 { $ne: ["$result", null] },
-                [
-                  { country: "$result.attacker.country", loss: "$result.attacker.loss" },
-                  { country: "$result.defender.country", loss: "$result.defender.loss" },
-                ],
-                [],
+                {
+                  att: {
+                    country: "$result.attacker.country",
+                    power: "$result.attacker.power",
+                    loss: "$result.attacker.loss",
+                    contingents: "$result.attacker.contingents",
+                  },
+                  def: {
+                    country: "$result.defender.country",
+                    power: "$result.defender.power",
+                    loss: "$result.defender.loss",
+                    contingents: "$result.defender.contingents",
+                  },
+                },
+                null,
               ],
             },
           },
@@ -144,14 +204,7 @@ export async function theaterRecord(db: Db, theaterId: string): Promise<TheaterR
     .toArray();
 
   const row = rows[0];
-  const casualtiesByCountry: Record<string, number> = {};
-  // `sides` is pushed one array per report; flatten before summing.
-  for (const pair of row?.sides ?? []) {
-    for (const s of pair ?? []) {
-      if (!s?.country) continue;
-      casualtiesByCountry[s.country] = (casualtiesByCountry[s.country] ?? 0) + (s.loss ?? 0);
-    }
-  }
+  const casualtiesByCountry = foldCasualtiesByCountry(row?.sides ?? []);
   const engaged = new Set<string>();
   for (const list of row?.engaged ?? []) {
     for (const country of list ?? []) if (country) engaged.add(country);

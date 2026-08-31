@@ -3,9 +3,16 @@
  * the BillDisplay DTO rows the bills list renders. Extracted from route.ts
  * verbatim (pure code motion; no behavior change).
  */
-import type { Bill, BillProvision, LegislationType, PoliticalParty } from "@/lib/db/types";
+import type {
+  AxisPositions,
+  Bill,
+  BillProvision,
+  LegislationType,
+  PoliticalParty,
+} from "@/lib/db/types";
 import { isPolicyProvision } from "@/lib/db/types/legislation";
 import type { BillDisplay } from "@/lib/legislature/dto/billDisplay";
+import { buildVoteShiftPreview } from "@/lib/legislature/voteShiftPreview";
 import { getPartyHex, formatBillPositionLabel } from "@/lib/utils/politics";
 import {
   directionLabel,
@@ -64,10 +71,27 @@ export function buildBillDisplays(
     myVoteMap: Map<string, { origin: string | null; other: string | null }>;
     myCharacterId: string | null;
     myChamber: "house" | "senate" | null;
+    /** The viewer's own positions, for the Aye/Nay shift preview. */
+    myPolicies?: AxisPositions | null;
   }
 ): BillDisplay[] {
-  const { partyMap, legislationTypeMap, myVoteMap, myCharacterId, myChamber } = ctx;
+  const { partyMap, legislationTypeMap, myVoteMap, myCharacterId, myChamber, myPolicies } = ctx;
   return bills.map((b) => {
+    const canVoteOrigin =
+      !!myCharacterId &&
+      (b.status === "active_both"
+        ? myChamber === "house"
+        : b.status === "active" &&
+          ((myChamber === "house" &&
+            (b.currentChamber === "house" || b.currentChamber === "joint")) ||
+            (myChamber === "senate" && b.currentChamber === "senate")));
+    // On a concurrent bill both chambers are open, so a senator may vote regardless of
+    // `currentChamber` — which is a display default on those bills, not the authority.
+    const canVoteOther =
+      !!myCharacterId &&
+      (b.status === "active_both"
+        ? myChamber === "senate"
+        : b.status === "active_other" && myChamber === b.currentChamber);
     const partySlug = b.sponsorParty ?? "";
     const party = partyMap.get(partySlug);
     const origin = b.originChamber;
@@ -205,21 +229,25 @@ export function buildBillDisplays(
         "for" | "against" | "abstain" | null,
       myOtherChamberVote: (myVoteMap.get(b._id.toString())?.other ?? null) as
         "for" | "against" | "abstain" | null,
-      canVoteOrigin:
-        !!myCharacterId &&
-        (b.status === "active_both"
-          ? myChamber === "house"
-          : b.status === "active" &&
-            ((myChamber === "house" &&
-              (b.currentChamber === "house" || b.currentChamber === "joint")) ||
-              (myChamber === "senate" && b.currentChamber === "senate"))),
-      // On a concurrent bill both chambers are open, so a senator may vote regardless of
-      // `currentChamber` — which is a display default on those bills, not the authority.
-      canVoteOther:
-        !!myCharacterId &&
-        (b.status === "active_both"
-          ? myChamber === "senate"
-          : b.status === "active_other" && myChamber === b.currentChamber),
+      canVoteOrigin,
+      canVoteOther,
+      voteShiftPreview: buildVoteShiftPreview({
+        provisions: (b.provisions ?? []).filter(isPolicyProvision),
+        ledger: b.policyShiftLedger,
+        characterId: myCharacterId,
+        policies: myPolicies ?? undefined,
+        previousVote: myCharacterId
+          ? canVoteOther
+            ? b.otherChamberVotes?.[myCharacterId]
+            : b.votes?.[myCharacterId]
+          : undefined,
+        whippedFrom: myCharacterId
+          ? canVoteOther
+            ? b.otherChamberWhippedFromVote?.[myCharacterId]
+            : b.whippedFromVote?.[myCharacterId]
+          : undefined,
+        canVote: canVoteOrigin || canVoteOther,
+      }),
       requiresExecutiveAction: billRequiresExecutiveAction(b),
       failedAt: b.failedAt?.toISOString() ?? null,
     };

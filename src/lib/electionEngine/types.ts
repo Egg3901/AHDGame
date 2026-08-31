@@ -7,6 +7,7 @@ import type {
   State,
   StateDemographics,
   StateDemographicTurnout,
+  StateRegistrationPool,
 } from "@/lib/db/types";
 import type { StatePartyOrg } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
@@ -117,6 +118,14 @@ export interface DistributeVotesOptions {
    * for FPTP spoiler modelling. Defaults to "US" when omitted.
    */
   countryId?: CountryId;
+  /**
+   * UK manifesto policy-popularity multipliers, keyed party → demographic group
+   * id → factor (centred on 1.0). Absent (the default) means the feature is off:
+   * the per-candidate weight is multiplied by 1.0. Precomputed by the manifesto
+   * layer (src/lib/uk/manifesto) so the vote engine stays generic and decoupled.
+   * Epic #856 / ticket #857. Enable only after worldsim coefficient calibration.
+   */
+  manifestoMultipliers?: Record<string, Record<string, number>>;
   /**
    * Runtime override for whether the country is currently a one-party state.
    * When supplied, takes precedence over `COUNTRY_CONFIGS[countryId].governmentType`.
@@ -345,6 +354,35 @@ export interface DistributeVotesOptions {
    * state map / compare to the candidate's home state.
    */
   currentStateId?: string;
+  /**
+   * Factor-ledger sink (see `factorLedger.ts`). When present the swing-flow
+   * TEES its already-computed per-cell appeal decomposition, swing, and spoiler
+   * values into the sink — pure observation, byte-identical vote math. Undefined
+   * (production default for every non-presidential caller) is a complete no-op.
+   */
+  ledgerSink?: import("./factorLedger").LedgerSink;
+  /** Electoral-unit id the ledger sink keys the current call under. */
+  ledgerUnitId?: string;
+  /**
+   * Per-group census `bucketWeights` ("dim:bucket" → 0..1) for the granular
+   * substrate, so the sink can fold each cell's appeal back onto census buckets.
+   * Absent (legacy archetype path) means the ledger emits no bucket appeal.
+   */
+  ledgerBucketWeightsByGroup?: Map<string, Record<string, number>>;
+}
+
+/**
+ * Optional multiplicand trace for `appealWeight`. When passed, the function
+ * records the exact multiplicands it ALREADY multiplies — reach, candidate-fit
+ * (appeal), and the product of every remaining structural term — so the ledger
+ * can decompose a cell's nominal votes without recomputing anything. The
+ * recorded values reproduce the return value byte-for-byte
+ * (`reachMult * fitMult * restMult === return`).
+ */
+export interface AppealWeightTrace {
+  reachMult: number;
+  fitMult: number;
+  restMult: number;
 }
 
 export interface AccumulateVoteTurnPreload {
@@ -373,6 +411,13 @@ export interface AccumulateVoteTurnPreload {
    * granular substrate to fold legislation-driven lean drift onto cells.
    */
   demographicDefaultsByState?: Map<string, StateDemographics>;
+  /**
+   * Per-region registration pools, for the registered-voter gate: the
+   * unregistered slice of a region's electorate cannot cast a general ballot,
+   * so the accrual scales its pool by (100 - unregistered)%. Regions absent
+   * from the map keep the full pool (no registration data seeded).
+   */
+  registrationPoolByState?: Map<string, StateRegistrationPool>;
   categories: DemographicCategory[];
   stateMap: Map<string, State>;
   demographicsMap: Map<string, StateDemographics>;

@@ -1,5 +1,49 @@
 import { describe, it, expect } from "vitest";
-import { evaluateModifiers, applyModifiers, type ActiveModifier } from "./approvalModifiers";
+import {
+  evaluateModifiers,
+  applyModifiers,
+  netModifierEffect,
+  type ActiveModifier,
+} from "./approvalModifiers";
+
+describe("netModifierEffect", () => {
+  const chip = (id: string, effect: number): ActiveModifier => ({
+    id,
+    label: id,
+    effect,
+    marginEffect: 0,
+    source: "war",
+  });
+
+  /**
+   * Russia's live war chips at turn 458. A raw reduce puts 0.8999999999999999 on
+   * screen: binary floating point cannot hold a tenth, and the war block is the
+   * only source of tenths in an otherwise whole-numbered list. One combined war
+   * chip made this rare enough to miss; one chip per term makes it the common
+   * case.
+   */
+  it("does not leak a floating point tail into the displayed net", () => {
+    const chips = [
+      chip("war_exhaustion", 0.1),
+      chip("war_effort", 0.1),
+      chip("alliance_contribution", 0.7),
+    ];
+    expect(chips.reduce((s, m) => s + m.effect, 0)).not.toBe(0.9);
+    expect(netModifierEffect(chips)).toBe(0.9);
+  });
+
+  it("sums whole numbered conditions unchanged", () => {
+    expect(netModifierEffect([chip("a", 2), chip("b", -1), chip("c", 1)])).toBe(2);
+  });
+
+  it("is zero for an empty list", () => {
+    expect(netModifierEffect([])).toBe(0);
+  });
+
+  it("never returns a non finite net", () => {
+    expect(netModifierEffect([chip("a", Number.NaN)])).toBe(0);
+  });
+});
 
 describe("approvalModifiers", () => {
   describe("evaluateModifiers", () => {
@@ -202,6 +246,23 @@ describe("approvalModifiers", () => {
       const result = prioritizeModifiers(mods, { max: 2 });
       expect(result.headline.map((m) => m.id)).toEqual(["big", "mid"]);
       expect(result.remainder.map((m) => m.id)).toEqual(["small"]);
+    });
+
+    /**
+     * Ranking is by |marginEffect| first, so a war chip — which declares
+     * marginEffect 0 precisely so it cannot touch profit margins — would sort
+     * below every economic condition and fall off the end of the headline list.
+     * The deepest approval swing in the game would be the one nobody sees.
+     */
+    it("headlines a war modifier despite its zero margin effect", async () => {
+      const { prioritizeModifiers } = await import("./approvalModifiers");
+      const mods = [
+        { id: "m1", label: "M1", effect: 1, marginEffect: 2, source: "metric" as const },
+        { id: "m2", label: "M2", effect: 1, marginEffect: 2, source: "metric" as const },
+        { id: "war", label: "War", effect: -8, marginEffect: 0, source: "war" as const },
+      ];
+      const result = prioritizeModifiers(mods, { max: 2 });
+      expect(result.headline.map((m) => m.id)).toContain("war");
     });
   });
 

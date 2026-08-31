@@ -651,6 +651,8 @@ export interface SectorDetail {
 
   /** Nameplate productive capacity, units/day. */
   capacityUnits?: number | null;
+  /** Persisted whole facilities owned by this sector. */
+  plantCount?: number | null;
   /** Units produced last turn. */
   producedUnits?: number | null;
   /** Units sold last turn. */
@@ -754,7 +756,17 @@ export interface BondData {
   issuedAtTurn: number;
   maturityTurn: number;
   marketPrice: number;
+  /**
+   * Face value outstanding in the BOND's own currency, which is not necessarily
+   * the issuer's current one (a relocation re-denominates the corp but leaves
+   * its outstanding bonds alone). Prefer `totalIssuedAnchor` for anything that
+   * sums across bonds or compares against a corp-level figure.
+   */
   totalIssued: number;
+  /** Currency `totalIssued` is denominated in; absent on pre-forex bonds. */
+  currencyCode?: string;
+  /** `totalIssued` normalized to ₳. Absent only on a response from an older deploy. */
+  totalIssuedAnchor?: number;
   publicFloat: number;
   defaulted: boolean;
   matured: boolean;
@@ -795,12 +807,23 @@ export interface BondInfo {
   totalDebt: number;
   /** Per-issuance cap in ₳: 25% of annual revenue, floored at $100M */
   maxPerIssuance?: number;
-  /** Effective issuance ceiling in ₳: min(per-issuance cap, 2x-equity headroom). */
+  /**
+   * Effective issuance ceiling in ₳: the smallest of the per-issuance cap, the
+   * 2x going-concern equity headroom, and the 1x exit-equity headroom (#1198).
+   * Authoritative — the POST enforces exactly this, so render it rather than
+   * re-deriving any one of the three rules here.
+   */
   maxAllowedIssuance?: number;
   /** Effective minimum issuance in ₳: the flat minimum clamped to the corp's ceiling. */
   minIssuance?: number;
   /** False when the corp's headroom is below the dust floor and bonds are unavailable. */
   bondsAvailable?: boolean;
+  /** What the corp could realize by selling up, in ₳ (#1198). */
+  exitEquity?: number;
+  /** Remaining debt-ceiling room in ₳, before the per-issuance cap (#1198). */
+  debtHeadroom?: number;
+  /** Which rule is currently binding on `maxAllowedIssuance` (#1198). */
+  issuanceLimitedBy?: "perIssuance" | "leverage" | "exitEquity";
   isCeo: boolean;
   cooldownTurnsRemaining: number;
   /** ISO instant until which issuance is frozen for the launch window, else null. */

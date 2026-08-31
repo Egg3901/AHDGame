@@ -1690,9 +1690,8 @@ function apply1953Tier1MatrixAdjustments(
     });
   }
 
-  // Nigeria 1953: contract-proven autonomous-ready; player-blocked on billLifecycle
-  // (presidential archetype — billLifecycle is player-parity only). Product decision
-  // 2026-07-25 promotes NG to the Tier-1 roster; readiness gaps are work items.
+  // Nigeria 1953: contract-proven autonomous-ready and player-ready now that
+  // the presidential national bill lifecycle is registered.
   const nigeria = byId.get("NG");
   if (nigeria) {
     byId.set("NG", {
@@ -1700,14 +1699,8 @@ function apply1953Tier1MatrixAdjustments(
       simulationTier: "full-autonomous",
       readiness: {
         autonomous: "ready",
-        player: "blocked",
-        hardBlockers: [
-          formatCapabilityBlocker(
-            "billLifecycle",
-            "No COUNTRY_BILL_PHASES entry.",
-            tier1FollowUpIssue("NG", "billLifecycle")
-          ),
-        ],
+        player: "ready",
+        hardBlockers: [],
         flavorGaps: ["bespokeEvents", "artAssets", "wikiMaterial"],
       },
       tierReclassification: undefined,

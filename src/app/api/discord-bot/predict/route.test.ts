@@ -12,6 +12,16 @@ vi.mock("@/lib/api/rateLimit", () => ({
   rateLimitResponse: vi.fn(),
 }));
 vi.mock("@/lib/time/gameTime", () => ({ getGameTime: vi.fn(async () => ({ currentTurn: 1000 })) }));
+vi.mock("@/lib/turn/lowerChamberSeats", () => ({
+  getLiveLowerChamberSeats: vi.fn(
+    async (_db, countryId: keyof typeof COUNTRY_CONFIGS) =>
+      COUNTRY_CONFIGS[countryId].legislature.lowerChamber.seats
+  ),
+  getLiveUpperChamberSeats: vi.fn(
+    async (_db, countryId: keyof typeof COUNTRY_CONFIGS) =>
+      COUNTRY_CONFIGS[countryId].legislature.upperChamber?.seats ?? 0
+  ),
+}));
 
 function makeCursor<T>(rows: T[]) {
   return {
@@ -81,7 +91,7 @@ describe("GET /api/discord-bot/predict", () => {
     expect(json.country).toBe("IE");
     expect(json.race).toBe("dail");
     expect(json.chamberName).toBe(COUNTRY_CONFIGS.IE.legislature.lowerChamber.name);
-    expect(json.totalSeats).toBe(80);
+    expect(json.totalSeats).toBe(COUNTRY_CONFIGS.IE.legislature.lowerChamber.seats);
   });
 
   it("resolves CN NPC and canonicalizes camelCase race regardless of input casing", async () => {
@@ -97,6 +107,17 @@ describe("GET /api/discord-bot/predict", () => {
     expect(json.race).toBe("npcDelegate");
     // chamberName resolves via the office's chamberKey (npc), not the race value.
     expect(json.chamberName).toBe(COUNTRY_CONFIGS.CN.legislature.lowerChamber.name);
+  });
+
+  it("reports the statutory US Senate size when seats are vacant", async () => {
+    seedComposition(db, { countryId: "US", officeType: "senate", party: "1", seats: 99 });
+    const { GET } = await import("./route");
+    const res = await GET(new Request("https://x/api/discord-bot/predict?country=US&race=senate"));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.current).toEqual([expect.objectContaining({ party: "1", seats: 99 })]);
+    expect(json.totalSeats).toBe(100);
   });
 
   it("rejects an invalid race with a non-empty valid-race list for the country", async () => {

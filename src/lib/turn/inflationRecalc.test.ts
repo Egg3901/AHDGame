@@ -29,13 +29,11 @@ vi.mock("@/lib/budget/inflation", () => ({
 // Minimal COUNTRY_CONFIGS with one presidential entry, one parliamentary entry,
 // DE on the ECB shared bank, and IE on its own Central Bank of Ireland.
 // COUNTRY_ORDER is required by getCentralBankScope / helpers.ts.
-vi.mock("@/lib/constants/countries", () => ({
-  COUNTRY_ORDER: ["US", "UK", "DE", "IE"],
-  // Something downstream of the recalc now formats a country name. The mock
-  // replaces the whole module, so an export it omits is a hard failure rather
-  // than a fallback to the real one.
-  getCountryDisplayName: (id: string) => id,
-  COUNTRY_CONFIGS: {
+vi.mock("@/lib/constants/countries", () => {
+  // The mock replaces the whole module, so an export it omits is a hard failure
+  // rather than a fallback to the real one. COUNTRY_CONFIGS is shared so
+  // getCountryConfig resolves against the same table.
+  const COUNTRY_CONFIGS: Record<string, unknown> = {
     US: { id: "US", governmentType: "presidential", centralBank: {}, officeTypes: [] },
     UK: { id: "UK", governmentType: "parliamentaryMonarchy", centralBank: {}, officeTypes: [] },
     DE: {
@@ -50,8 +48,16 @@ vi.mock("@/lib/constants/countries", () => ({
       centralBank: {},
       officeTypes: [],
     },
-  },
-}));
+  };
+  return {
+    COUNTRY_ORDER: ["US", "UK", "DE", "IE"],
+    getCountryDisplayName: (id: string) => id,
+    COUNTRY_CONFIGS,
+    // #901's budget path now resolves country config through getCountryConfig;
+    // mirror the real accessor (COUNTRY_CONFIGS[id], preset overrides unused here).
+    getCountryConfig: (id: string) => COUNTRY_CONFIGS[id],
+  };
+});
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

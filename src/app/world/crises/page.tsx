@@ -8,7 +8,8 @@ import { useEffect, useState, useCallback } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import Link from "next/link";
 import Image from "next/image";
-import { turnToLarpDate } from "@/lib/utils/formatters";
+import { rawTurnToLarpDate } from "@/lib/utils/formatters";
+import type { CalendarClock } from "@/lib/utils/gameDate";
 import { STARTING_YEAR } from "@/lib/constants/turnTime";
 import type { Crisis } from "@/lib/db/types/crisis";
 import { ALL_COUNTRY_IDS, COUNTRY_CONFIGS } from "@/lib/constants/countries";
@@ -102,10 +103,13 @@ function CrisisCard({
   crisis,
   currentTurn,
   startingYear,
+  clock,
 }: {
   crisis: Crisis;
   currentTurn: number;
   startingYear: number;
+  /** Founding-phase clock, so stored RAW turns date on the world calendar (#1208). */
+  clock: CalendarClock;
 }) {
   const scopeLabel =
     crisis.scope === "country" ? "National" : crisis.scope === "region" ? "Regional" : "Global";
@@ -152,7 +156,7 @@ function CrisisCard({
         <p className="text-xs text-muted leading-relaxed line-clamp-2 mb-3">{crisis.description}</p>
         <EffectPills effects={crisis.effects} />
         <div className="flex items-center justify-between mt-3 text-xs text-muted">
-          <span>Started {turnToLarpDate(crisis.startTurn, startingYear)}</span>
+          <span>Started {rawTurnToLarpDate(crisis.startTurn, startingYear, clock)}</span>
           <span
             className={
               crisis.status === "resolved"
@@ -268,6 +272,7 @@ function CountryGroup({
   startingYear,
   showRegions,
   regionNames,
+  clock,
 }: {
   countryId: string;
   crises: Crisis[];
@@ -275,6 +280,7 @@ function CountryGroup({
   startingYear: number;
   showRegions?: boolean;
   regionNames: Record<string, string>;
+  clock: CalendarClock;
 }) {
   return (
     <div className="space-y-3">
@@ -296,7 +302,12 @@ function CountryGroup({
                   regionNames={regionNames}
                 />
               )}
-              <CrisisCard crisis={crisis} currentTurn={currentTurn} startingYear={startingYear} />
+              <CrisisCard
+                crisis={crisis}
+                currentTurn={currentTurn}
+                startingYear={startingYear}
+                clock={clock}
+              />
             </div>
           ))}
         </div>
@@ -308,6 +319,7 @@ function CountryGroup({
               crisis={crisis}
               currentTurn={currentTurn}
               startingYear={startingYear}
+              clock={clock}
             />
           ))}
         </div>
@@ -324,6 +336,7 @@ export default function CrisesPage() {
   const [conflicts, setConflicts] = useState<Conflict[]>([]);
   const [currentTurn, setCurrentTurn] = useState(0);
   const [startingYear, setStartingYear] = useState<number | undefined>(undefined);
+  const [clock, setClock] = useState<CalendarClock>({});
   const [regionNames, setRegionNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -353,6 +366,10 @@ export default function CrisesPage() {
       setRegionNames(d.regionNames ?? {});
       setCurrentTurn(d.currentTurn ?? 0);
       setStartingYear(d.startingYear);
+      setClock({
+        preIterationTurns: d.preIterationTurns,
+        preIterationActive: d.preIterationActive,
+      });
     } catch {
       setCrises([]);
       setError("Network error - could not reach the server.");
@@ -565,6 +582,7 @@ export default function CrisesPage() {
                       crisis={crisis}
                       currentTurn={currentTurn}
                       startingYear={startingYear ?? STARTING_YEAR}
+                      clock={clock}
                     />
                   ))}
                 </div>
@@ -584,6 +602,7 @@ export default function CrisesPage() {
                         crises={countryGroups[cId]}
                         currentTurn={currentTurn}
                         startingYear={startingYear ?? STARTING_YEAR}
+                        clock={clock}
                         showRegions={activeTab === "region"}
                         regionNames={regionNames}
                       />
@@ -632,6 +651,7 @@ export default function CrisesPage() {
                               crisis={crisis}
                               currentTurn={currentTurn}
                               startingYear={startingYear ?? STARTING_YEAR}
+                              clock={clock}
                             />
                           ))}
                         </div>
@@ -649,6 +669,7 @@ export default function CrisesPage() {
                               crises={historicalCountryGroups[cId]}
                               currentTurn={currentTurn}
                               startingYear={startingYear ?? STARTING_YEAR}
+                              clock={clock}
                               showRegions={activeTab === "region"}
                               regionNames={regionNames}
                             />

@@ -2,12 +2,22 @@
  * @vitest-environment happy-dom
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
 import SupplyAgreementsSection from "./SupplyAgreementsSection";
+import enCorporations from "../../../messages/en/corporations.json";
 
 vi.mock("@/contexts/ToastContext", () => ({
   useToast: () => ({ showToast: vi.fn() }),
 }));
+
+function render(ui: React.ReactElement) {
+  return rtlRender(
+    <NextIntlClientProvider locale="en" messages={enCorporations}>
+      {ui}
+    </NextIntlClientProvider>
+  );
+}
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -22,8 +32,8 @@ beforeEach(() => {
             supplierCorpName: "Gridworks",
             supplierCorpTicker: "GRID",
             buyerCorpId: "buyer",
-            buyerCorpName: "Tinky Corporation",
-            buyerCorpTicker: "TCI",
+            buyerCorpName: "Buyer Industries",
+            buyerCorpTicker: "BUY",
             commodity: "energy",
             volumeCap: 80,
             pricePremium: 0,
@@ -31,8 +41,21 @@ beforeEach(() => {
             proposedByCorpId: "supplier",
             lastDeliveryTurn: 296,
             lastDeliveredUnits: 60,
+            lastAchievableUnits: 70,
+            lastCreditedProductionUnits: 60,
+            lastShortfallUnits: 10,
+            lastShortfallPenaltyAnchor: 250,
+            lastSupplierCashDelta: -250,
+            lastSupplierCashCurrency: "USD",
           },
         ],
+        capacityByCommodity: {
+          energy: {
+            currentCapacityUnits: 75,
+            achievableUnits: 70,
+            maxContractUnits: 90,
+          },
+        },
       }),
     })
   );
@@ -51,6 +74,33 @@ describe("SupplyAgreementsSection delivery outcome", () => {
     render(<SupplyAgreementsSection corpId="supplier" />);
 
     await waitFor(() => expect(screen.getByText("As supplier")).toBeTruthy());
-    expect(screen.getByRole("link", { name: /Tinky Corporation \(TCI\)/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Buyer Industries \(BUY\)/ })).toBeTruthy();
+    expect(screen.getByText("Shortfall damages")).toBeTruthy();
+    expect(screen.getByText("Chargeable shortfall")).toBeTruthy();
+    expect(screen.getByText("Damages assessed")).toBeTruthy();
+    expect(screen.getByText("Net contract cash")).toBeTruthy();
+  });
+
+  it("shows capacity and the penalty before the supplier proposes a commitment", async () => {
+    render(<SupplyAgreementsSection corpId="supplier" />);
+
+    await waitFor(() => expect(screen.getByText("As supplier")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Propose agreement" }));
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "energy" } });
+
+    expect(screen.getByText("Current contract capacity")).toBeTruthy();
+    expect(screen.getByText("Latest achievable output")).toBeTruthy();
+    expect(screen.getByText("Maximum legal commitment")).toBeTruthy();
+    expect(screen.getByText(/50% of the market value/)).toBeTruthy();
+  });
+
+  it("explains why freight is not a corporation-wide agreement option", async () => {
+    render(<SupplyAgreementsSection corpId="supplier" />);
+
+    await waitFor(() => expect(screen.getByText("As supplier")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Propose agreement" }));
+
+    expect(screen.getByText(/Freight agreements are state-local/i)).toBeTruthy();
+    expect(screen.getByText(/cannot be represented by a corporation-wide contract/i)).toBeTruthy();
   });
 });

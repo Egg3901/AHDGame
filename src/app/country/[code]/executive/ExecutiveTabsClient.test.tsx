@@ -6,6 +6,13 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { ExecutiveTabsClient } from "./ExecutiveTabsClient";
 
+let tabParam = "";
+vi.mock("next/navigation", () => ({
+  // The shell seeds its initial tab from `?tab=`. No params here, so every test
+  // below opens on the overview exactly as it did before.
+  useSearchParams: () => new URLSearchParams(tabParam),
+}));
+
 const conflictsSpy = vi.fn().mockReturnValue(true);
 vi.mock("@/contexts/AuthDataContext", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -105,5 +112,68 @@ describe("ExecutiveTabsClient foreign affairs tab", () => {
   it("does not render the tab body while another tab is active", () => {
     renderTabs({ viewerIsLeader: true });
     expect(screen.queryByTestId("foreign-affairs-tab")).toBeNull();
+  });
+});
+
+describe("ExecutiveTabsClient deep link", () => {
+  beforeEach(() => conflictsSpy.mockReturnValue(true));
+  afterEach(() => {
+    tabParam = "";
+  });
+
+  it("opens the Foreign Affairs tab when the URL asks for it", () => {
+    // What the peace strip's link depends on: without this it landed on Overview
+    // and the panel it promised was nowhere on screen. The overview body is only
+    // mounted while its own tab is active, so its absence is the switch.
+    tabParam = "tab=foreign";
+    renderTabs({ viewerIsLeader: true });
+    expect(screen.queryByTestId("ov")).toBeNull();
+  });
+
+  it("opens the overview when the URL asks for nothing", () => {
+    renderTabs({ viewerIsLeader: true });
+    expect(screen.getByTestId("ov")).toBeTruthy();
+  });
+
+  it("falls back to the overview on an unknown tab", () => {
+    // `?tab=` is untrusted input; anything unrecognised must not blank the page.
+    tabParam = "tab=nonsense";
+    renderTabs({ viewerIsLeader: true });
+    expect(screen.getByTestId("ov")).toBeTruthy();
+  });
+
+  it("ignores a private tab requested by someone who may not see it", () => {
+    // The tab nav is gated on the viewer, and a URL must not route around that.
+    tabParam = "tab=admin";
+    renderTabs({ viewerIsLeader: false, viewerIsAdmin: false });
+    expect(screen.queryByRole("button", { name: "Admin" })).toBeNull();
+  });
+});
+
+describe("ExecutiveTabsClient deep link cannot route around the nav", () => {
+  afterEach(() => {
+    tabParam = "";
+  });
+
+  it("does not open a private tab for a viewer with no button for it", () => {
+    // The `address` and `orders` BODIES carry no guard of their own, because until
+    // the URL could seed the tab, `active` was only reachable by clicking. So the
+    // seed has to enforce what the nav enforces.
+    tabParam = "tab=address";
+    renderTabs({ viewerIsLeader: false, viewerIsAdmin: false });
+    expect(screen.getByTestId("ov")).toBeTruthy();
+  });
+
+  it("does not open the admin tab for a non-admin leader", () => {
+    tabParam = "tab=admin";
+    renderTabs({ viewerIsLeader: true, viewerIsAdmin: false });
+    expect(screen.queryByTestId("executive-admin-tab")).toBeNull();
+    expect(screen.getByTestId("ov")).toBeTruthy();
+  });
+
+  it("still opens a private tab for a viewer who may see it", () => {
+    tabParam = "tab=address";
+    renderTabs({ viewerIsLeader: true });
+    expect(screen.queryByTestId("ov")).toBeNull();
   });
 });

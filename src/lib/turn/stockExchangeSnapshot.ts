@@ -61,6 +61,8 @@ import {
   ALL_EXCHANGES,
 } from "@/lib/constants/exchangeRegistry";
 import { getControllingCorporateParent } from "@/lib/corporations/corporateOwnership";
+import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
+import { corpLevelDailyCosts } from "./corpLevelDailyCosts";
 import { TURNS_PER_YEAR, TURNS_PER_DAY } from "@/lib/constants/turnTime";
 import { readCorpEconomicAnchor, writeCorpEconomicLocal } from "@/lib/currency/corpEconomyFields";
 import { STRATEGY_TRANSITION_TURNS } from "@/lib/constants/sectorStrategies";
@@ -507,7 +509,12 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
           const corpCountryId = corp.countryId;
 
           // Restate the sector's stored (host-currency) fields into corp currency.
-          const sectorRevenue = sectorFieldToCorpCcy(sector.revenue, sector);
+          // Realized, not nameplate: `sector.revenue` is the capacity figure,
+          // `realizedRevenue` is what the sector actually earned after every
+          // realization leg, and it is what the engine banks. Same basis the
+          // corporation page, the credit model and the Discord cards already
+          // use. See lib/corporations/sectorRevenueBasis.
+          const sectorRevenue = sectorFieldToCorpCcy(sectorEconomicRevenue(sector), sector);
           const sectorGrowthCost = sectorFieldToCorpCcy(sector.currentGrowthCost, sector);
 
           if (!stateMetrics || !state) {
@@ -663,11 +670,13 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
         }
 
         // Compute apportioned corporate tax matching the corp page formula:
-        //   corpLevelCosts = marketing + logistics + CEO salary
+        //   corpLevelCosts = marketing + logistics + R&D + CEO salary
         //   per sector: sectorNetIncome = profit − corpLevelCosts × revenueShare
         //   tax = max(0, sectorNetIncome) × (federalRate + stateRate) / 100
-        const corpLevelCostsDaily =
-          (corp.marketingBudget ?? 0) + (corp.logisticsBudget ?? 0) + (corp.ceoSalary ?? 0);
+        // R&D was previously missing here, which overstated taxable income for
+        // the 365 corps that carry one. See lib/turn/corpLevelDailyCosts for what
+        // this deliberately still leaves out.
+        const corpLevelCostsDaily = corpLevelDailyCosts(corp);
         let corpFederalTax = 0;
         let corpStateTax = 0;
         for (const s of sectorProfitSamples) {
@@ -735,11 +744,12 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
         );
         const imfFacilityPaymentDaily = imfFacilityPaymentDailyByCorpId.get(corpKey) ?? 0;
         const imfFacilityReceiptsDaily = imfFacilityReceiptsDailyByCorpId.get(corpKey) ?? 0;
+        // Same corp-level cost base the tax apportionment above uses, so the two
+        // cannot drift apart. It re-listed three of these lines by hand before,
+        // and omitted R&D from both.
         const incomePreDividends =
           sectorIncome -
-          corp.marketingBudget -
-          (corp.logisticsBudget ?? 0) -
-          (corp.ceoSalary ?? 0) -
+          corpLevelDailyCosts(corp) -
           corporateTax +
           bondCouponIncome -
           imfFacilityPaymentDaily +

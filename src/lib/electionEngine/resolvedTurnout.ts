@@ -340,3 +340,70 @@ export function buildLiveTurnouts(
 
   return liveTurnouts;
 }
+
+/**
+ * Cap a turn's released vote slice so the whole window cannot exceed the
+ * electorate.
+ *
+ * Deliberately scales the SLICE only. The distributors normalise each group's
+ * contribution by the totalPool they are handed and then multiply by the
+ * slice, so "capping" by shrinking both the slice and the pool cancels to the
+ * ballot and caps nothing (live-verified via the registered-voter gate's
+ * first, broken placement). The caller must keep passing the truthful,
+ * uncapped pool as the normalisation base.
+ */
+export function capTurnSliceToElectorate(
+  slice: number,
+  totalPool: number,
+  electorate: number
+): number {
+  if (totalPool > electorate && electorate > 0) return slice * (electorate / totalPool);
+  return slice;
+}
+
+/**
+ * Scale a general-election vote pool down to the REGISTERED share of the
+ * electorate.
+ *
+ * The registration-pool model (`stateRegistrationPool`) partitions the
+ * eligible electorate into party registrations + independents + unregistered.
+ * Registered partisans and independents vote in a general; the unregistered by
+ * definition cannot cast a ballot — yet the resolved turnout pool spans the
+ * whole electorate, so without this every general silently counted their
+ * ballots too (and the primary side, which draws only the registered-partisan
+ * slices, would not share a consistent electorate with the general).
+ *
+ * Vote SHARES are invariant to pool magnitude (the F-4 guarantee), so this
+ * changes reported ballot counts and turnout percentages only — never a
+ * winner, a seat, or an electoral vote.
+ *
+ * A missing or non-finite `unregisteredPct` (a region with no registration
+ * pool doc — most non-US worlds) leaves the pool untouched: prior behavior,
+ * no invented exclusion.
+ */
+export function scalePoolToRegistered(
+  pool: number,
+  unregisteredPct: number | null | undefined
+): number {
+  if (typeof unregisteredPct !== "number" || !Number.isFinite(unregisteredPct)) return pool;
+  const clamped = Math.min(100, Math.max(0, unregisteredPct));
+  return pool * (1 - clamped / 100);
+}
+
+/**
+ * Hard ceiling on CUMULATIVE ballots: this turn's slice can release at most
+ * the electorate that has not voted yet. The per-turn cap and registered
+ * gate above bound the slice, but the office-strength/approval multiplier
+ * is applied after them, so the closing surge could still push a race past
+ * 100% turnout (a DD governor race certified 102.1%). Shrinking the slice
+ * before distribution keeps shares invariant; only the final slice(s) lose
+ * magnitude. A non-positive electorate (no state doc) leaves the slice alone.
+ */
+export function capTurnSliceToRemainingElectorate(
+  slice: number,
+  alreadyCast: number,
+  electorate: number
+): number {
+  if (!(electorate > 0)) return slice;
+  return Math.max(0, Math.min(slice, electorate - alreadyCast));
+}

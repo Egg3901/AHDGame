@@ -1,7 +1,8 @@
 /**
  * GET /api/country/[code]/fomc — committee state for the FOMC panel: the board
  * roster, the active meeting (motion + live tally), the per-term rate-change
- * budget, and whether the viewer holds a seat / may nominate.
+ * budget, recent resolved sessions (how the votes went), the next scheduled
+ * session, and whether the viewer holds a seat / may nominate.
  */
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
@@ -9,10 +10,19 @@ import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { handleRouteError, notFound } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCentralBankScope } from "@/lib/centralBank/helpers";
-import type { CentralBank } from "@/lib/db/types/centralBank";
-import { RATE_CHANGES_PER_TERM } from "@/lib/db/types/centralBank";
+import type { CentralBank, FomcNomination } from "@/lib/db/types/centralBank";
+import {
+  RATE_CHANGES_PER_TERM,
+  FOMC_TERM_TURNS,
+  FOMC_MEETING_INTERVAL_TURNS,
+} from "@/lib/db/types/centralBank";
 import type { NPP } from "@/lib/db/types/npp";
-import { tallyMeeting } from "@/lib/centralBank/fomc";
+import type { ElectedOfficial } from "@/lib/db/types";
+import { majorityThreshold, tallyMeeting } from "@/lib/centralBank/fomc";
+import { getCurrentTurn } from "@/lib/turn/currentTurn";
+
+/** Resolved sessions returned to the panel (newest last in storage). */
+const MEETING_HISTORY_LIMIT = 10;
 
 interface RouteContext {
   params: Promise<{ code: string }>;
@@ -64,16 +74,80 @@ export async function GET(_request: Request, context: RouteContext) {
       callerOffice.type === execOffice.key
     );
 
+    // Active Senate confirmations for this bank, and whether the viewer is a
+    // senator who may vote on them. This is the "Senate confirms and it actually
+    // works" surface — player senators cast ballots via the vote route.
+    const [activeNoms, viewerSenator] = await Promise.all([
+      db
+        .collection<FomcNomination>("fomcNominations")
+        .find({ countryId, status: "active" })
+        .sort({ proposedAt: 1 })
+        .toArray(),
+      db
+        .collection<ElectedOfficial>("electedOfficials")
+        .findOne({ characterId: viewerId, officeType: "senate", countryId }),
+    ]);
+    const viewerIsSenator = Boolean(viewerSenator);
+    const seatLabelById = new Map(board.map((s) => [s.seatId, s.isChair ? "Chair" : s.seatId]));
+    const nominations = activeNoms.map((n) => ({
+      id: n._id.toString(),
+      seatId: n.seatId,
+      seatLabel: n.makeChair ? "Chair" : (seatLabelById.get(n.seatId) ?? n.seatId),
+      makeChair: n.makeChair === true,
+      nomineeName: n.nomineeName,
+      occupantType: n.occupantType,
+      votesFor: n.votesFor ?? 0,
+      votesAgainst: n.votesAgainst ?? 0,
+      votesAbstain: n.votesAbstain ?? 0,
+      votingEndsOnTurn: n.votingEndsOnTurn ?? null,
+      viewerHasVoted: viewerId.toString() in (n.votes ?? {}),
+    }));
+
     const meeting = bank.activeFomcMeeting ?? null;
     const votedSeatIds = new Set((meeting?.ballots ?? []).map((b) => b.seatId));
     const tally = meeting ? tallyMeeting(meeting.ballots, meeting.motion, board.length) : null;
+
+    // Scheduling + budget context so players can see when sessions happen and
+    // where their per-term rate-change budget went (ticket #1184).
+    const currentTurn = await getCurrentTurn(db);
+    const nextMeetingAtTurn =
+      meeting === null
+        ? typeof bank.lastFomcMeetingTurn === "number"
+          ? bank.lastFomcMeetingTurn + FOMC_MEETING_INTERVAL_TURNS
+          : currentTurn // No session yet on record: one opens on the next turn.
+        : null;
+    const termEndsAtTurn =
+      typeof bank.fomcTermStartedAtTurn === "number"
+        ? bank.fomcTermStartedAtTurn + FOMC_TERM_TURNS
+        : null;
+    const history = (bank.fomcMeetingHistory ?? []).slice(-MEETING_HISTORY_LIMIT).map((m) => {
+      const t = tallyMeeting(m.ballots, m.motion, board.length);
+      return {
+        motion: m.motion,
+        proposedDelta: m.proposedDelta,
+        result: m.result,
+        openedAtTurn: m.openedAtTurn,
+        resolvedAtTurn: m.resolvedAtTurn ?? null,
+        agree: t.agree,
+        disagree: t.disagree,
+        abstain: t.abstain,
+      };
+    });
 
     return NextResponse.json({
       hasCommittee: true,
       primeRate: bank.primeRate,
       rateChangesThisTerm: bank.rateChangesThisTerm ?? 0,
       rateChangesPerTerm: RATE_CHANGES_PER_TERM,
+      currentTurn,
+      nextMeetingAtTurn,
+      termEndsAtTurn,
+      /** Votes needed to carry a motion: strict majority of the FULL board. */
+      majorityNeeded: majorityThreshold(board.length),
+      meetingHistory: history,
       canNominate,
+      viewerIsSenator,
+      nominations,
       viewerSeatId: viewerSeat?.seatId ?? null,
       board: board.map((s) => ({
         seatId: s.seatId,

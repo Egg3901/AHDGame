@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { createCommand, dedupeCommandIds, validateDraft, type CommandDraft } from "../commands";
+import {
+  createCommand,
+  dedupeCommandIds,
+  reconcileCommandCommanders,
+  validateDraft,
+  type CommandDraft,
+} from "../commands";
 import type { MilitaryCommand, MilitaryState } from "../types";
 
 function cmd(over: Partial<MilitaryCommand> = {}): MilitaryCommand {
@@ -142,7 +148,7 @@ describe("dedupeCommandIds", () => {
 });
 
 describe("validateDraft", () => {
-  it("warns when an assigned region is already owned by another command", () => {
+  it("warns when an assigned region is already owned by a command of the same type", () => {
     const draft: CommandDraft = {
       name: "X",
       type: "REGIONAL",
@@ -152,8 +158,51 @@ describe("validateDraft", () => {
       posture: "Deterrence",
       supply: "Normal",
     };
-    const w = validateDraft(draft, stateWith([cmd({ regionIds: ["mea"] })]));
+    const w = validateDraft(draft, stateWith([cmd({ type: "REGIONAL", regionIds: ["mea"] })]));
     expect(w.some((m) => m.includes("already assigned"))).toBe(true);
+  });
+
+  // Only a same-type owner is a role conflict; overlappingRegions has always drawn the
+  // line there. The warning ignored type, so pairing a Logistics command with the
+  // Regional command already holding the region looked prohibited.
+  it("does not warn when the region's existing owner is a different command type", () => {
+    const draft: CommandDraft = {
+      name: "X",
+      type: "LOGISTICS",
+      regionIds: ["mea"],
+      commanderIds: ["hale"],
+      commandingGeneralId: null,
+      posture: "Expeditionary",
+      supply: "Normal",
+    };
+    const w = validateDraft(draft, stateWith([cmd({ type: "REGIONAL", regionIds: ["mea"] })]));
+    expect(w.some((m) => m.includes("already assigned"))).toBe(false);
+  });
+
+  // Mixed owners are the case the old code got wrong twice over: it warned when it
+  // should not have, and `owners[0]` could name whichever command happened to sort
+  // first, pointing the Secretary at a command that was not the clash.
+  it("names the same-type owner when a region also holds a command of another type", () => {
+    const draft: CommandDraft = {
+      name: "X",
+      type: "REGIONAL",
+      regionIds: ["mea"],
+      commanderIds: ["hale"],
+      commandingGeneralId: null,
+      posture: "Deterrence",
+      supply: "Normal",
+    };
+    const w = validateDraft(
+      draft,
+      stateWith([
+        cmd({ id: "supply", name: "Supply Corps", type: "LOGISTICS", regionIds: ["mea"] }),
+        cmd({ id: "north", name: "Northern Command", type: "REGIONAL", regionIds: ["mea"] }),
+      ])
+    );
+    const warning = w.find((m) => m.includes("already assigned"));
+    expect(warning).toBeDefined();
+    expect(warning).toContain("Northern Command");
+    expect(warning).not.toContain("Supply Corps");
   });
 
   it("warns when no commander is selected", () => {
@@ -182,5 +231,70 @@ describe("validateDraft", () => {
     expect(
       validateDraft(draft, stateWith([])).some((m) => m.includes("naval command structure"))
     ).toBe(true);
+  });
+});
+
+/**
+ * Live data really did this: Russia's only command listed a general who had since
+ * moved to the United Kingdom. The panel skipped the unresolvable row, so the
+ * Secretary saw "COMMANDERS - 1" over an empty list with no way to remove anyone,
+ * and the commands PUT refused every later edit because of that same id.
+ */
+describe("reconcileCommandCommanders", () => {
+  it("leaves a clean org untouched, and returns the same array", () => {
+    const commands = [cmd({ commanderIds: ["g1"], commandingGeneralId: "g1" })];
+    const out = reconcileCommandCommanders(commands, ["g1", "g2"]);
+    expect(out.commands).toBe(commands);
+    expect(out.removed).toBe(0);
+  });
+
+  it("drops a commander the country's roster no longer contains", () => {
+    const commands = [cmd({ commanderIds: ["g1", "gone"] })];
+    const out = reconcileCommandCommanders(commands, ["g1"]);
+    expect(out.commands[0].commanderIds).toEqual(["g1"]);
+    expect(out.removed).toBe(1);
+  });
+
+  // The route also requires the lead to be one of the command's own commanders, so
+  // leaving a dangling lead would swap one unsavable state for another.
+  it("clears the lead when the lead is who left", () => {
+    const commands = [cmd({ commanderIds: ["gone"], commandingGeneralId: "gone" })];
+    const out = reconcileCommandCommanders(commands, ["g1"]);
+    expect(out.commands[0].commanderIds).toEqual([]);
+    expect(out.commands[0].commandingGeneralId).toBeNull();
+  });
+
+  it("keeps a lead who is still on the roster while dropping a colleague", () => {
+    const commands = [cmd({ commanderIds: ["g1", "gone"], commandingGeneralId: "g1" })];
+    const out = reconcileCommandCommanders(commands, ["g1"]);
+    expect(out.commands[0].commandingGeneralId).toBe("g1");
+  });
+
+  it("counts every dropped commander across every command", () => {
+    const commands = [
+      cmd({ id: "a", commanderIds: ["gone1"] }),
+      cmd({ id: "b", commanderIds: ["g1", "gone2"] }),
+      cmd({ id: "c", commanderIds: ["g1"] }),
+    ];
+    const out = reconcileCommandCommanders(commands, ["g1"]);
+    expect(out.removed).toBe(2);
+    expect(out.commands.map((c) => c.commanderIds)).toEqual([[], ["g1"], ["g1"]]);
+  });
+
+  // A lead who was never on the command's own list is the same unsavable state by
+  // another route: the PUT requires the lead to be one of its commanders.
+  it("clears a lead who is not on the command's own list, dropping nobody", () => {
+    const commands = [cmd({ commanderIds: ["g1"], commandingGeneralId: "orphan" })];
+    const out = reconcileCommandCommanders(commands, ["g1", "orphan"]);
+    expect(out.commands[0].commanderIds).toEqual(["g1"]);
+    expect(out.commands[0].commandingGeneralId).toBeNull();
+    expect(out.removed).toBe(0);
+  });
+
+  it("empties every command when the roster is empty", () => {
+    const commands = [cmd({ commanderIds: ["g1"], commandingGeneralId: "g1" })];
+    const out = reconcileCommandCommanders(commands, []);
+    expect(out.commands[0].commanderIds).toEqual([]);
+    expect(out.commands[0].commandingGeneralId).toBeNull();
   });
 });

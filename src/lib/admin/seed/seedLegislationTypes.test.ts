@@ -69,3 +69,48 @@ describe("seedLegislationTypes", () => {
     expect(db.collection("stateBills").deleteMany).toHaveBeenCalledWith({});
   });
 });
+
+/**
+ * Ticket #1189 — the old US catalog is superseded wholesale by the
+ * new-generation political law book, but the three state redistricting levers
+ * have no new-generation equivalent and are read BY ID by
+ * src/lib/redistricting/caps.ts. Dropping them left every state pinned to the
+ * default bipartisan commission with no bill able to change it.
+ */
+describe("seedLegislationTypes — redistricting levers survive the old-catalog sweep", () => {
+  const REDISTRICT_IDS = [
+    "us_state_redistricting_authority",
+    "us_state_compactness",
+    "us_state_fairness",
+  ];
+
+  it("seeds the redistricting levers and keeps them out of the prune set", async () => {
+    const db = createMockDb() as unknown as MockDb;
+    const collection = db.collection("legislationTypes");
+
+    await seedLegislationTypes(db as never, false, vi.fn(), "1953-default");
+
+    const seededIds = (
+      collection.bulkWrite.mock.calls[0][0] as Array<{ replaceOne: { filter: { _id: string } } }>
+    ).map((op) => op.replaceOne.filter._id);
+    for (const id of REDISTRICT_IDS) expect(seededIds, id).toContain(id);
+
+    const pruneFilter = collection.deleteMany.mock.calls[0][0] as {
+      _id: { $nin: string[] };
+    };
+    for (const id of REDISTRICT_IDS) expect(pruneFilter._id.$nin, id).toContain(id);
+  });
+
+  it("still drops the rest of the old US catalog", async () => {
+    const db = createMockDb() as unknown as MockDb;
+    const collection = db.collection("legislationTypes");
+
+    await seedLegislationTypes(db as never, false, vi.fn(), "1953-default");
+
+    const seededIds = (
+      collection.bulkWrite.mock.calls[0][0] as Array<{ replaceOne: { filter: { _id: string } } }>
+    ).map((op) => op.replaceOne.filter._id);
+    const survivingOldUs = seededIds.filter((id) => id.startsWith("us_"));
+    expect(survivingOldUs.sort()).toEqual([...REDISTRICT_IDS].sort());
+  });
+});

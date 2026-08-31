@@ -17,6 +17,10 @@ When the market clears each turn, the contract is honored **before** the open ma
 2. **The supplier's excess** (whatever it makes beyond the contract) flows out to the open market as normal.
 3. **If the supplier falls short** of what it promised to produce, the buyer covers the gap on the open market **and** the supplier pays damages to the buyer (half the shortfall's market value, capped). A mothballed plant that still has a live contract is a damages machine.
 
+**You are only charged for a gap you could have closed.** Damages are measured against what your plants could actually have made that turn, not against the number on the contract. If inputs ran short, a strike hit, or the market was so glutted that production throttled back, the ceiling drops with it and the damages drop too. What stays fully chargeable are the levers you control: turning the production policy down, or mothballing. Cut output yourself and you still owe the whole contracted volume.
+
+The practical consequence: **size a volume cap to what your plants reliably make, not to their maximum.** Nameplate capacity is the best possible turn. Contracting at it means any ordinary bad turn is a shortfall.
+
 So a supply agreement is a *priority claim*, not a magic supply. It moves the buyer to the front of the supplier's queue; it doesn't create commodities that don't exist.
 
 ## Both sides must agree

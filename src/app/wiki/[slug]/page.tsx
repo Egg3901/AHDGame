@@ -23,6 +23,7 @@ import { PageMetadata } from "@/components/wiki/layout/PageMetadata";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
 import { getWikiCanonicalUrl } from "@/lib/siteMetadata";
+import { getLowValueWikiSlugs } from "@/lib/wiki/starterStub";
 
 interface WikiPageProps {
   params: Promise<{ slug: string }>;
@@ -61,9 +62,13 @@ export async function generateMetadata({ params }: WikiPageProps): Promise<Metad
   const title = `${page.title} | Game Wiki | A House Divided`;
   const description = page.description;
   const canonical = getWikiCanonicalUrl(`/wiki/${slug}`);
+  // Incomplete community pages stay out of search until the owner adds enough
+  // original content to make the page useful on its own.
+  const isLowValue = (await getLowValueWikiSlugs()).includes(slug);
   return {
     title,
     description,
+    ...(isLowValue ? { robots: { index: false, follow: true } } : {}),
     alternates: { canonical },
     openGraph: {
       title,

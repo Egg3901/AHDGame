@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRuntimeCountryConfig } from "@/hooks/useRuntimeCountryConfig";
 import { Button } from "@/components/ui/Button";
 import { CardSkeleton } from "@/components/ui/loading-skeletons";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { CountryPoliticalMetricsResponse } from "@/lib/politicalMetrics/queries/countryPoliticalMetrics";
 import type { PoliticalMetricsCountryId } from "@/lib/politicalMetrics/types";
+import { supportsGovernanceStyle } from "@/lib/governanceStyle/score";
 import { CategoryDetailView } from "./components/CategoryDetailView";
 import { CompareView } from "./components/CompareView";
 import { Masthead } from "./components/Masthead";
@@ -20,6 +22,7 @@ type View =
 
 export default function PoliticalMetricsClient({ code }: { code: string }) {
   const countryId = code.toUpperCase() as PoliticalMetricsCountryId;
+  const { config: runtimeCountry } = useRuntimeCountryConfig(countryId);
   const [data, setData] = useState<CountryPoliticalMetricsResponse | null>(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -114,7 +117,14 @@ export default function PoliticalMetricsClient({ code }: { code: string }) {
         onCompare={() => setView({ kind: "compare" })}
       />
       {view.kind === "overview" && (
-        <OverviewView data={data} onOpenCategory={onOpenCategory} onOpenMetric={onOpenMetric} />
+        <OverviewView
+          data={data}
+          onOpenCategory={onOpenCategory}
+          onOpenMetric={onOpenMetric}
+          showGovernanceStyle={
+            runtimeCountry ? supportsGovernanceStyle(runtimeCountry.governmentType) : false
+          }
+        />
       )}
       {view.kind === "category" &&
         (() => {

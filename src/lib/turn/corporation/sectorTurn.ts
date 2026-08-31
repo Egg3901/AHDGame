@@ -19,11 +19,10 @@ import { getSubsidyMarginModifier } from "@/lib/subsidies/subsidyEffects";
 import { politicalSoeInputs } from "@/lib/politicalLegislation/marginAdapter";
 import { computeExportPremium, computeExportExposure } from "@/lib/trade/exportPremium";
 import { TRADE_EMBARGO_EXPORT_LOSS_SHARE } from "@/lib/trade/constants";
-import type { CommodityType, ExtractableResource } from "@/lib/constants/commodities";
+import type { CommodityType } from "@/lib/constants/commodities";
 import {
   capacityHaircutFactor,
   CAPACITY_BINDING_THRESHOLD,
-  EXTRACTION_CAPACITY_HAIRCUT_FLOOR,
 } from "@/lib/extraction/capacityHaircut";
 import { computePriceRealization } from "@/lib/market/priceRealization";
 import { computeThroughput } from "@/lib/market/throughput";
@@ -106,6 +105,7 @@ import {
   queueUndeliveredCost,
   unitsDeliveredThisTurn,
 } from "@/lib/corporations/buildDelivery";
+import { advanceSectorPlantLedger } from "@/lib/corporations/plantLedger";
 import {
   computeDisasterPenaltySplit,
   disasterProductionFactor,
@@ -116,11 +116,12 @@ import {
   resolveSectorLabourEconomics,
   resolveSectorLabourProductionEffects,
 } from "./sectorLabour";
-import { computeSectorOutputUnits } from "./sectorOutputUnits";
-import { demandThrottleFactor } from "./demandThrottle";
+import { computeContractProduction } from "./contractProduction";
 import { advanceSectorInventory } from "@/lib/corporations/sectorInventory";
 import type { SectorTurnEnv, SectorTurnResult } from "./sectorTurnTypes";
 import { legacyRevenueShadowTelemetry, marketTelemetry } from "./sectorTelemetry";
+import { resolveSectorFreightBillingLegs } from "./freightBillingTurn";
+import { resolveSectorCapacityHaircut } from "./sectorCapacityHaircut";
 
 export { computeSectorOutputUnits } from "./sectorOutputUnits";
 export type { SectorTurnEnv, SectorTurnResult } from "./sectorTurnTypes";
@@ -293,11 +294,12 @@ export function processSector(
   // LABOUR_MODE_ORDER, but LabourContext doesn't enforce that, so this
   // reads `sector.strikeStartedAtTurn` regardless of wagesEnabled.
   const tightness = lookups.labourTightnessByState.get(sector.stateId);
+  const stateDemandWageIndex = lookups.labourDemandWageIndexByState?.get(sector.stateId);
   const {
     outputFactor: labourOutputFactor,
     strikeMarginModifier,
     staffingFactor,
-  } = resolveSectorLabourProductionEffects(labour, sector, tightness);
+  } = resolveSectorLabourProductionEffects(labour, sector, tightness, stateDemandWageIndex);
   // Effective strategy rates, resolved once here and reused below by the
   // capacity haircut, price realization, and the blended commodity margin
   // modifiers (so non-standard strategies are priced against what the
@@ -309,29 +311,10 @@ export function processSector(
     sector.transitionStartTurn,
     turn ?? 0
   );
-  // Extraction capacity haircut: a sector that can only extract a fraction of
-  // its revenue-based output realizes only that fraction of resource revenue.
-  // Ramped in over EXTRACTION_CAPACITY_HAIRCUT_TURNS from the sector's first
-  // exposure so it doesn't insta-bankrupt miners (audit t786). Applied to
-  // realized output (hourlyRevenue), NOT the stored revenue base — mirrors the
-  // nationalization transition so the growth trajectory stays clean.
-  const capacityUtil =
-    sector.sectorType === "extraction"
-      ? (lookups.extractionCapacityUtilBySector.get(sector._id.toString()) ?? {
-          utilization: 1,
-          bindingResource: null,
-        })
-      : { utilization: 1, bindingResource: null as ExtractableResource | null };
-  // Stamp the ramp start the first time an extraction sector is under-utilized.
-  const capacityHaircutStartTurn =
-    sector.sectorType === "extraction" && capacityUtil.utilization < 1
-      ? (sector.capacityHaircutStartTurn ?? currentTurn)
-      : sector.capacityHaircutStartTurn;
-  const capacityHaircut = capacityHaircutFactor(
-    capacityUtil.utilization,
-    capacityHaircutStartTurn,
-    currentTurn,
-    EXTRACTION_CAPACITY_HAIRCUT_FLOOR
+  const { capacityUtil, capacityHaircutStartTurn, capacityHaircut } = resolveSectorCapacityHaircut(
+    sector,
+    lookups.extractionCapacityUtilBySector,
+    currentTurn
   );
   // Business Acumen no longer scales revenue — it now lowers growth cost and
   // softens high interest rates (see calculateDailyGrowthCost above).
@@ -558,6 +541,9 @@ export function processSector(
         )
       : storedCapacity
     : 0;
+  const plantLedger = plantsEnabled
+    ? advanceSectorPlantLedger(sector, plantsBaseStock, landedBuildUnits)
+    : null;
   const plantsPrevStock = plantsBaseStock + landedBuildUnits;
   const plantsCapacity = plantsEnabled
     ? advanceCapitalStock({
@@ -869,37 +855,20 @@ export function processSector(
       ? 0
       : plantsCapacity * bankingCommodityScale
     : nameplateUnits * bankingCommodityScale;
-  // ─── Demand-aware production throttle (#1072) ────────────────────────────
-  //
-  // Revenue carries `soldFraction` (via `clearingRevenueLeg`); the cost lines
-  // do not. Inputs bill at `utilization`, labor at headcount, upkeep at
-  // capacity, `otherOpexPerUnit` per produced unit — and unsold output is not
-  // capitalised, it goes to the shadow stock in `market/inventory.ts`. A plant
-  // making 60k and selling 10k therefore paid full freight on 60k against
-  // revenue on 10k, which is the -254%/-500% margin players reported and no
-  // operator could manage out of.
-  //
-  // Firms do not run flat out into a market that will not take the goods.
-  // Target last turn's SALES plus a probe margin. A plant at capacity that
-  // clears its output is unaffected (its target exceeds what it can make), so
-  // this is a flip identity for every healthy sector and only gluts move.
-  //
-  // Applied to the tonnage, NOT as another factor inside `productionFactor`:
-  // it is a decision about how much to run, not a physical constraint on the
-  // run, and folding it in would have it re-multiply everywhere
-  // `productionFactor` is reused.
-  const plannedUnits = productionNameplateUnits * productionFactor;
-  const demandThrottle = plantsEnabled
-    ? demandThrottleFactor(plannedUnits, sector.soldUnits, sector.producedUnits)
-    : 1;
-  const { producedUnits, soldUnits } = computeSectorOutputUnits({
-    // Plants inverts the P1 decomposition: units come from owned capacity, not
-    // from the revenue nameplate. Everything downstream of `unitsBase` is the
-    // same production-leg chain.
-    // D12: mothballed plants are cold — zero units produced, hence zero offered
-    // to the clearing book next turn.
-    nameplateUnits: productionNameplateUnits,
-    productionFactor: productionFactor * demandThrottle,
+  const { producedUnits, soldUnits, contractAchievableUnits } = computeContractProduction({
+    plantsEnabled,
+    actualNameplateUnits: productionNameplateUnits,
+    actualProductionFactor: productionFactor,
+    fullPolicyNameplateUnits: plantsCapacity * bankingCommodityScale,
+    involuntaryProductionFactor:
+      disasterOutputFactor *
+      nationalizationTransition *
+      plantsExtractionHardMin *
+      throughputFactor *
+      plantsTechOutputMultiplier *
+      labourOutputFactor,
+    priorSoldUnits: sector.soldUnits,
+    priorProducedUnits: sector.producedUnits,
     soldFraction: market.clearingEnabled && clearing ? clearing.soldFraction : null,
   });
   // Plants: revenue is DERIVED from produced output, exactly inverting the P1
@@ -1250,12 +1219,14 @@ export function processSector(
   );
   // Ahead of the labor-cost split below, so labor is workers x wage-per-worker.
   const { desiredWorkers, workers: computedWorkers } = resolveSectorHeadcount({
-    revenue: newRevenue,
+    revenue: plantsEnabled ? plantsNameplateRevenue : newRevenue,
     stateId: sector.stateId,
     rawWorkforceSkillByState: lookups.rawWorkforceSkillByState,
     politicalBoard,
     staffingFactor,
     labourDemandByState,
+    labourDemandWageIndexByState: env.labourDemandWageIndexByState,
+    wageLevel: labour.wagesEnabled ? sector.wageLevel : 1,
   });
 
   const grossMaintenance = hourlyRevenue * (1 - effectiveMargin / 100);
@@ -1624,6 +1595,20 @@ export function processSector(
     : 0;
   const hourlyInventoryCarry = inventoryTurn ? inventoryTurn.carryCostAnchor / TURNS_PER_DAY : 0;
 
+  // Canonical freight billing (issue #897, gameConfig gate, default off):
+  // last turn's state-scoped shipping money as this sector's own named legs,
+  // ₳/turn. Charge rides `costs` and credit rides the returned revenue below;
+  // both legs and the flag-off stale-clear behavior live in
+  // `resolveSectorFreightBillingLegs`. Off ⇒ both 0 and no fields written.
+  const freightBilling = resolveSectorFreightBillingLegs({
+    market,
+    sector,
+    embargoLegacyMothball,
+    currentTurn,
+    sectorCurrencyCode,
+    sectorFxRate,
+  });
+
   // Persist countryId so API endpoints don't need to re-derive it from the state.
   // newRevenue / newGrowthCost are ₳ (computed from anchor inputs); convert
   // back to the sector's HOST-state functional currency for storage (the market
@@ -1655,6 +1640,10 @@ export function processSector(
     // economy.
     producedUnits: Math.round(producedUnits * 100) / 100,
     soldUnits: Math.round(soldUnits * 100) / 100,
+    // Ceiling the supply-agreement damages leg clamps a contracted volume to,
+    // so a supplier is never billed for output it could not physically have
+    // made. See the derivation beside `contractAchievableUnits` above.
+    contractAchievableUnits: Math.round(contractAchievableUnits * 100) / 100,
     currentGrowthRate: newCurrentGrowthRate,
     // Persisted so the brake is durable: without this the next turn's trend
     // simply pulls the rate straight back toward the old, unaffordable target.
@@ -1719,6 +1708,8 @@ export function processSector(
     // ratio (per-unit basis) that has to survive round-tripping.
     if (plantsEnabled) {
       sectorUpdate.capacityBookAnchor = capacityBookAnchor;
+      sectorUpdate.plantCount = plantLedger?.plantCount ?? 0;
+      sectorUpdate.plantUnitRemainder = plantLedger?.plantUnitRemainder ?? 0;
     }
   }
   // Plants ramp anchor (stamped once, on the flip turn).
@@ -1798,6 +1789,9 @@ export function processSector(
         ? (market.deliveryLimitedClassBySectorId?.get(sector._id.toString()) ?? null)
         : null;
   }
+  // Canonical freight billing: persist both legs as named daily lines (or
+  // clear stale ones); see `resolveSectorFreightBillingLegs`.
+  Object.assign(sectorUpdate, freightBilling.sectorUpdate);
   // Labour telemetry: persist the per-turn labor cost on a daily basis (like
   // `revenue`), in the sector's host-state currency. Display/analytics only;
   // never read back into the economy. Only written when the labour system is on.
@@ -1811,8 +1805,9 @@ export function processSector(
     );
   }
   // Persist the physical P&L the turn actually booked (ticket 1122). Display
-  // and analytics only, on the same daily basis and in the same currency as
-  // `revenue` / `laborCost`; nothing in the engine reads it back.
+  // and decision telemetry, on the same daily basis and in the same currency as
+  // `revenue` / `laborCost`. NPP behavior reads it on the following turn, but
+  // it never feeds physical settlement back into itself.
   //
   // Read surfaces used to rebuild these numbers by inverting
   // `effectiveProfitMargin`, which is this P&L's OUTPUT and is capped at 100.
@@ -1953,8 +1948,10 @@ export function processSector(
 
   return {
     // Inventory sell-down earns beside operating revenue and rides the same
-    // aggregation/tax rails; carry cost lands in `costs` below.
-    hourlyRevenue: hourlyRevenue + hourlyInventoryRevenue,
+    // aggregation/tax rails; carry cost lands in `costs` below. The freight
+    // billing credit (canonical freight billing, flag-gated, 0 otherwise) is
+    // haulage income and rides the same rails.
+    hourlyRevenue: hourlyRevenue + hourlyInventoryRevenue + freightBilling.credit,
     newCurrentGrowthRate,
     // P3.5: under plants this is the DERIVED margin (profit ÷ revenue), not the
     // modifier stack — see `reportedEffectiveMargin`.
@@ -1972,7 +1969,10 @@ export function processSector(
       ? 0
       : (physicalPnl?.totalCost ??
           maintenance + plantsUpkeepCost + hourlyGrowthCost + regulatoryBurden) +
-        hourlyInventoryCarry,
+        hourlyInventoryCarry +
+        // Canonical freight billing: the shipping bill is a real cost leg
+        // (flag-gated, 0 otherwise), the buyer half of the haul transfer.
+        freightBilling.charge,
     /** P3a: idle-capacity (or mothball) upkeep charged this turn, ₳/turn. */
     plantsUpkeepCost,
     /** P3a: ₳ of paid-but-not-yet-delivered build orders after this turn. */

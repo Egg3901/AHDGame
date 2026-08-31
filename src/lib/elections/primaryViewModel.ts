@@ -16,7 +16,7 @@
 
 import type { CalendarWave } from "@/components/elections/primary/PrimaryCalendar";
 import type { CarveUpSlice } from "@/components/elections/primary/CarveUpPanel";
-import { PRIMARY_WAVES, STAGGER_WINDOW_TURNS } from "@/lib/constants/primaryCalendar";
+import { COMPRESSED_SCHEDULE, type PrimaryWaveSchedule } from "@/lib/constants/primaryCalendar";
 
 const MS_PER_HOUR = 3_600_000;
 
@@ -50,12 +50,17 @@ export function resolvePrimaryTurnsToEnd(input: {
 }
 
 /**
- * True when `turnsToEnd` falls inside the 6-turn stagger window (T-5..T-0).
- * Mirrors `getDuePrimaryWaveCount`'s window bound so the UI's "Stagger" phase
- * label flips on the same turn the engine starts running waves.
+ * True when `turnsToEnd` falls inside the stagger window. Mirrors
+ * `getDuePrimaryWaveCount`'s window bound so the UI's "Stagger" phase label
+ * flips on the same turn the engine starts running waves. The window size is
+ * schedule-dependent (compressed = 6 turns, stretched = 41), so pass the race's
+ * schedule; defaults to compressed to preserve existing callers.
  */
-export function isInStaggerWindow(turnsToEnd: number | null): boolean {
-  return turnsToEnd !== null && turnsToEnd >= 0 && turnsToEnd <= STAGGER_WINDOW_TURNS - 1;
+export function isInStaggerWindow(
+  turnsToEnd: number | null,
+  schedule: PrimaryWaveSchedule = COMPRESSED_SCHEDULE
+): boolean {
+  return turnsToEnd !== null && turnsToEnd >= 0 && turnsToEnd <= schedule.windowTurns - 1;
 }
 
 export interface PrimaryCandidateInfo {
@@ -84,6 +89,11 @@ export interface PrimaryViewModelInput {
   topDemographicsByState?: Record<string, string[]>;
   /** Optional state-name lookup (id → display name) for the CarveUp header. */
   stateNameById?: Record<string, string>;
+  /**
+   * Wave schedule the race runs (from `getPrimaryWaveSchedule`). Defaults to
+   * compressed so the calendar rows match the race's actual spacing.
+   */
+  schedule?: PrimaryWaveSchedule;
 }
 
 export interface PrimaryViewModel {
@@ -104,6 +114,7 @@ export function buildPrimaryViewModel(input: PrimaryViewModelInput): PrimaryView
     votedStateIds: input.votedStateIds,
     currentTurn: input.currentTurn,
     primaryEndTurn: input.primaryEndTurn,
+    schedule: input.schedule,
   });
 
   const perStateSlices: Record<string, CarveUpSlice[]> = {};
@@ -162,31 +173,35 @@ export function buildCalendarWaves(input: {
   votedStateIds?: ReadonlySet<string>;
   currentTurn?: number;
   primaryEndTurn?: number;
+  schedule?: PrimaryWaveSchedule;
 }): CalendarWave[] {
   const turnsToEnd =
     input.primaryEndTurn !== undefined && input.currentTurn !== undefined
       ? Math.max(0, input.primaryEndTurn - input.currentTurn)
       : null;
 
-  return PRIMARY_WAVES.map((w) => {
-    let isPast: boolean;
-    if (input.votedStateIds && input.votedStateIds.size > 0) {
-      // Wave is past if any of its states already voted.
-      isPast = w.states.some((s) => input.votedStateIds!.has(s));
-    } else if (turnsToEnd !== null) {
-      // Wave fires at T-turnsRemaining. If turnsToEnd < turnsRemaining, the
-      // wave's turn has already passed.
-      isPast = turnsToEnd < w.turnsRemaining;
-    } else {
-      isPast = false;
-    }
-    return {
-      label: w.label,
-      turnsRemaining: w.turnsRemaining,
-      isPast,
-      stateIds: [...w.states],
-    };
-  }).sort((a, b) => b.turnsRemaining - a.turnsRemaining);
+  const schedule = input.schedule ?? COMPRESSED_SCHEDULE;
+  return schedule.waves
+    .map((w) => {
+      let isPast: boolean;
+      if (input.votedStateIds && input.votedStateIds.size > 0) {
+        // Wave is past if any of its states already voted.
+        isPast = w.states.some((s) => input.votedStateIds!.has(s));
+      } else if (turnsToEnd !== null) {
+        // Wave fires at T-turnsRemaining. If turnsToEnd < turnsRemaining, the
+        // wave's turn has already passed.
+        isPast = turnsToEnd < w.turnsRemaining;
+      } else {
+        isPast = false;
+      }
+      return {
+        label: w.label,
+        turnsRemaining: w.turnsRemaining,
+        isPast,
+        stateIds: [...w.states],
+      };
+    })
+    .sort((a, b) => b.turnsRemaining - a.turnsRemaining);
 }
 
 /**

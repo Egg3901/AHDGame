@@ -51,7 +51,7 @@ const c = new MongoClient(uri);
             incomeBandIndex: incomeBandIndexByCountry?.[cid] ?? null,
           } as any
         );
-      } catch (e: any) {
+      } catch {
         cost = NaN;
       }
       if (Number.isFinite(cost) && cost !== 0)

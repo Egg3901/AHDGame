@@ -1,5 +1,6 @@
 import type { GameIteration } from "@/lib/db/types/gameState";
-import { turnToLarpDate } from "@/lib/utils/formatters";
+import { rawTurnToLarpDate } from "@/lib/utils/formatters";
+import type { CalendarClock } from "@/lib/utils/gameDate";
 
 const TYPE_RANK: Record<GameIteration["type"], number> = {
   Alpha: 0,
@@ -7,8 +8,18 @@ const TYPE_RANK: Record<GameIteration["type"], number> = {
   Iteration: 2,
 };
 
+/**
+ * Display-name overrides for specific iterations. The iteration system stores
+ * iterations as `{type, number}` (e.g. `Iteration 4`), but the current run is
+ * branded to players with a version number. Keyed by `type:number`.
+ * Past iterations (Alpha 1, Beta 1/2) are intentionally left as-is.
+ */
+const ITERATION_DISPLAY_OVERRIDES: Record<string, string> = {
+  "Iteration:4": "1.0",
+};
+
 export function iterationLabel(it: GameIteration): string {
-  return `${it.type} ${it.number}`;
+  return ITERATION_DISPLAY_OVERRIDES[`${it.type}:${it.number}`] ?? `${it.type} ${it.number}`;
 }
 
 export function iterationKey(it: GameIteration): string {
@@ -43,8 +54,18 @@ export function orderIterations(
   return all.sort(compareIterations);
 }
 
-export function weekYearFromTurn(turn: number, startingYear: number): string {
-  return turnToLarpDate(turn, startingYear);
+/**
+ * Office-history turns are stored RAW, so a world with a founding phase needs
+ * its clock here or every career date reads a game year ahead of the status bar
+ * (#1208). Omitted
+ * clock is the identity, which is what the existing tests assert.
+ */
+export function weekYearFromTurn(
+  turn: number,
+  startingYear: number,
+  clock?: CalendarClock
+): string {
+  return rawTurnToLarpDate(turn, startingYear, clock);
 }
 
 export function weekYearFromFields(week: number, year: number): string {

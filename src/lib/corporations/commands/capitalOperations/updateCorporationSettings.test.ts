@@ -49,7 +49,11 @@ function makeCursor(docs: unknown[]) {
   };
 }
 
-async function callUpdate(body: Record<string, unknown>, sectorRevenueTotal: number) {
+async function callUpdate(
+  body: Record<string, unknown>,
+  sectorRevenueTotal: number,
+  corpOverrides: Record<string, unknown> = {}
+) {
   db = createMockDb();
   db.collection("corporateSectors");
   db.collection("corporations");
@@ -69,7 +73,7 @@ async function callUpdate(body: Record<string, unknown>, sectorRevenueTotal: num
   const { resolveCorporation, requireCeo } = await import("@/lib/api/corporations/resolveQuery");
   vi.mocked(resolveCorporation).mockResolvedValue({
     ok: true,
-    corporation: makeCorp(),
+    corporation: makeCorp(corpOverrides),
   } as never);
   vi.mocked(requireCeo).mockReturnValue(null as never);
 
@@ -98,6 +102,63 @@ describe("updateCorporationSettings — CEO salary revenue cap (Bug #0728)", () 
   it("accepts CEO salary at or below 1.25x daily gross revenue", async () => {
     const res = await callUpdate({ ceoSalary: 12_500 }, 10_000); // cap = 12_500
     expect(res.status).toBe(200);
+  });
+});
+
+describe("updateCorporationSettings — overhead cap at zero revenue (ticket #1237)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("rejects an astronomical logistics budget on a corp with no revenue (the #1237 repro)", async () => {
+    // Exact value stored on Tinky 3.0 (TRTW) at t513: a typed 279-digit string
+    // the old zero-revenue bypass admitted. One turn later the engine charged
+    // budget/24 as an uncapped cost leg and liquidCapital read -1.33e+277.
+    const res = await callUpdate({ logisticsBudget: 2.9971329020839937e278 }, 0);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain("no gross revenue");
+  });
+
+  it("rejects any positive combined overhead when gross revenue is zero", async () => {
+    const res = await callUpdate({ marketingBudget: 5, rdBudget: 0 }, 0); // ceiling = $0
+    expect(res.status).toBe(400);
+  });
+
+  it("allows lowering or clearing leftover budgets on a zero-revenue corp", async () => {
+    const res = await callUpdate({ logisticsBudget: 0 }, 0, { logisticsBudget: 5_000 });
+    expect(res.status).toBe(200);
+  });
+
+  it("allows a same-value save on a zero-revenue corp with leftover budgets (no worsening)", async () => {
+    const res = await callUpdate({ logisticsBudget: 5_000 }, 0, { logisticsBudget: 5_000 });
+    expect(res.status).toBe(200);
+  });
+
+  it("still enforces the 150% ceiling at positive revenue", async () => {
+    const res = await callUpdate({ marketingBudget: 20_000 }, 10_000); // ceiling = 15_000
+    expect(res.status).toBe(400);
+  });
+
+  it("still accepts budgets within the 150% ceiling at positive revenue", async () => {
+    const res = await callUpdate({ marketingBudget: 5_000 }, 10_000);
+    expect(res.status).toBe(200);
+  });
+
+  it("allows reductions for a legacy over-cap corp whose revenue fell", async () => {
+    const res = await callUpdate(
+      { marketingBudget: 1_300 },
+      100, // ceiling = 150, stored = 1_400
+      { marketingBudget: 1_400 }
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("rejects raising overhead on a legacy over-cap corp", async () => {
+    const res = await callUpdate(
+      { marketingBudget: 1_500 }, // ceiling = 150, stored = 1_400
+      100,
+      { marketingBudget: 1_400 }
+    );
+    expect(res.status).toBe(400);
   });
 });
 

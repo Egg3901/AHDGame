@@ -4,8 +4,10 @@ import { useState } from "react";
 import { POLE_TEXT, ShareBar } from "@/components/alignment/ShareBar";
 import type { InfluenceTarget, OrgInfluenceView } from "@/lib/alignment/queries/orgInfluence";
 import { formatShare, roundToShareGrid } from "@/lib/alignment/normalize";
+import { MIN_PLAY_POINTS } from "@/lib/alignment/influence";
 import { PER_NATION_TURN_CAP } from "@/lib/constants/alignmentEras";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import { parseMoneyAmountInput } from "@/lib/utils/parseMoneyAmountInput";
 import { useFundFormatter } from "../useFundFormatter";
 import { formatFundAmount } from "../fundCurrency";
 
@@ -162,8 +164,8 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
           </span>{" "}
           a point.{" "}
           {target.resistsAtHalfStrength
-            ? "That is twice the usual one percent of its economy, because of the resistance noted above."
-            : "That is one percent of its economy."}{" "}
+            ? "That is twice the usual tenth of a percent of its economy, because of the resistance noted above."
+            : "That is a tenth of a percent of its economy."}{" "}
           Moving it as far as a turn allows costs{" "}
           <span className="font-mono tabular-nums text-foreground">
             {fundAmount(target.turnCapCostLocal ?? 0)}
@@ -206,11 +208,44 @@ function CommitPlayForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Everything below is in the FUND's own currency, never the viewer's. The
+  // costs stated above this form read in the viewer's preferred currency, so
+  // quoting the balance or the preview in anything else would leave a player
+  // typing a number that means something different from the one they just read.
+  const fundCode = COUNTRY_CONFIGS[view.fundCurrencyCountryId]?.currencyCode ?? "USD";
+  const inFundCurrency = (n: number) => formatFundAmount(n, fundCode);
+
+  // The field takes the K/M/B shorthand the panel itself prints, via the same
+  // parser every other money input uses. A plain-units field next to figures
+  // quoted as "SUR 4.0M" reads as "type 4", which buys nothing (ticket #1236).
+  const typed = parseMoneyAmountInput(amount);
+  const pointCost = target.pointCostLocal ?? 0;
+  const hasPreview = typed > 0 && pointCost > 0;
+  // pointCostLocal already carries the non-aligned resistance, so this is points
+  // actually landed, not list price. The per-nation cap bounds the whole nation's
+  // turn, so anything past it is the ceiling talking, not this play.
+  const rawPoints = hasPreview ? typed / pointCost : 0;
+  const cappedPoints = Math.min(rawPoints, PER_NATION_TURN_CAP);
+  const overCap = rawPoints > PER_NATION_TURN_CAP;
+  const overBalance = typed > view.fundBalanceLocal;
+  // The smallest spend that lands a storable movement — one grid step (0.01),
+  // priced at this nation's per-point cost. A play below it resolves to zero and
+  // is refunded, so the commit path refuses it and this is what the player must
+  // reach instead (ticket #1213).
+  const minSpendLocal = pointCost > 0 ? Math.ceil(pointCost * MIN_PLAY_POINTS) : 0;
+  const buysNothing = hasPreview && roundToShareGrid(cappedPoints) < MIN_PLAY_POINTS;
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const amountLocal = Number(amount);
+    const amountLocal = parseMoneyAmountInput(amount);
     if (!(amountLocal > 0)) {
       setError("Enter an amount.");
+      return;
+    }
+    if (buysNothing) {
+      setError(
+        `That buys nothing. Spend at least ${inFundCurrency(minSpendLocal)} to move ${target.name} by ${formatShare(MIN_PLAY_POINTS)}.`
+      );
       return;
     }
     setSubmitting(true);
@@ -237,24 +272,6 @@ function CommitPlayForm({
     }
   }
 
-  // Everything below is in the FUND's own currency, never the viewer's. The
-  // costs stated above this form read in the viewer's preferred currency, so
-  // quoting the balance or the preview in anything else would leave a player
-  // typing a number that means something different from the one they just read.
-  const fundCode = COUNTRY_CONFIGS[view.fundCurrencyCountryId]?.currencyCode ?? "USD";
-  const inFundCurrency = (n: number) => formatFundAmount(n, fundCode);
-
-  const typed = Number(amount);
-  const pointCost = target.pointCostLocal ?? 0;
-  const hasPreview = typed > 0 && pointCost > 0;
-  // pointCostLocal already carries the non-aligned resistance, so this is points
-  // actually landed, not list price. The per-nation cap bounds the whole nation's
-  // turn, so anything past it is the ceiling talking, not this play.
-  const rawPoints = hasPreview ? typed / pointCost : 0;
-  const cappedPoints = Math.min(rawPoints, PER_NATION_TURN_CAP);
-  const overCap = rawPoints > PER_NATION_TURN_CAP;
-  const overBalance = typed > view.fundBalanceLocal;
-
   return (
     <form onSubmit={submit} className="space-y-2">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -272,33 +289,39 @@ function CommitPlayForm({
             Amount ({fundCode})
           </span>
           <input
-            type="number"
-            min={1}
+            type="text"
+            inputMode="decimal"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            placeholder="0"
+            placeholder="e.g. 49M"
             className="w-full rounded-lg border border-card-border bg-background px-3 py-2 font-mono text-body-sm tabular-nums text-foreground"
           />
         </label>
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || buysNothing}
           className="rounded-lg border border-card-border bg-card-muted px-4 py-2 text-body-sm font-semibold text-foreground transition-colors hover:bg-card disabled:opacity-50"
         >
           {submitting ? "Committing…" : "Commit play"}
         </button>
       </div>
 
+      <p className="text-body-xs text-muted">
+        Shorthand works here: 4.0M means 4,000,000, and the full number is fine too.
+      </p>
+
       {hasPreview && (
-        <p className="text-body-xs text-muted">
+        <p className={`text-body-xs ${buysNothing ? "text-warning" : "text-muted"}`}>
           Buys{" "}
           <span className="font-mono tabular-nums text-foreground">
             {formatShare(roundToShareGrid(cappedPoints))}
           </span>{" "}
           points at {inFundCurrency(pointCost)} each.{" "}
-          {overCap
-            ? `Past the ${PER_NATION_TURN_CAP}-point ceiling for one turn — the rest buys nothing unless a rival pushes back.`
-            : "One point is one share of this nation's alignment."}
+          {buysNothing
+            ? `That is too little to move ${target.name} at all — spend at least ${inFundCurrency(minSpendLocal)} to shift it by ${formatShare(MIN_PLAY_POINTS)}.`
+            : overCap
+              ? `Past the ${PER_NATION_TURN_CAP}-point ceiling for one turn — the rest buys nothing unless a rival pushes back.`
+              : "One point is one share of this nation's alignment."}
         </p>
       )}
 
