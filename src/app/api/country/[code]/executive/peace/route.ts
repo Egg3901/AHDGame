@@ -25,6 +25,7 @@ import {
   withdrawalGate,
   loadPartySequentialIds,
   loadPartyChoicesFor,
+  partyDisplayName,
 } from "@/lib/military/peaceOffer";
 import type { PeaceTerm } from "@/lib/military/peaceTerm";
 import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
@@ -156,9 +157,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     // several fronts would otherwise turn a single page load into ten round trips.
     const partiesByCountry = await loadPartyChoicesFor(db, [...enemyCountries]);
     const nameOf = (country: CountryId, partyId: number): string | null =>
-      partiesByCountry.get(country)?.find((p) => p.id === partyId)?.abbreviation ??
-      partiesByCountry.get(country)?.find((p) => p.id === partyId)?.name ??
-      null;
+      partyDisplayName(partiesByCountry.get(country), partyId);
 
     return NextResponse.json({
       currentTurn,

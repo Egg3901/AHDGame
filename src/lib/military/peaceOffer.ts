@@ -235,6 +235,27 @@ export async function loadPartyChoicesFor(
 }
 
 /**
+ * How a named ruling party reads to a player, or null when the list does not
+ * hold it.
+ *
+ * ONE definition, because the party a settlement installs is reported on three
+ * surfaces — the offer panel, the war record and the news wire — and they must
+ * not disagree about what to call it. The abbreviation is preferred (a field
+ * value and a sentence clause both want "SED", not the full name), with the full
+ * name as the fallback for a party that carries no abbreviation. Null means the
+ * id names nothing in this country, which reads as "no party was named" rather
+ * than as a broken lookup.
+ */
+export function partyDisplayName(
+  choices: PeaceTermPartyChoice[] | undefined,
+  partyId: number
+): string | null {
+  const party = choices?.find((p) => p.id === partyId);
+  if (!party) return null;
+  return party.abbreviation ?? party.name;
+}
+
+/**
  * The `sequentialId`s alone, for validating a named ruling party.
  *
  * Callers load this only when the term actually names a party — an indemnity

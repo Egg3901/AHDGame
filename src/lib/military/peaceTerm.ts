@@ -55,6 +55,43 @@ export const DEMILITARISATION_DEFAULT_TURNS = 240;
  */
 export const DEMILITARISATION_MAX_TURNS = 480;
 
+/**
+ * Player-facing names for the systems a settlement may install.
+ *
+ * ONE table, because the raw `GovernmentType` is camelCase and had been reaching
+ * players verbatim through the war wire ("Regime change: onePartyState"). The
+ * pickers carry the same strings, so a term reads identically where it is chosen
+ * and where it is reported.
+ */
+/**
+ * EXHAUSTIVE over the union, deliberately: a fifth system added to
+ * `GovernmentType` should fail this file to compile rather than quietly start
+ * printing its own key at players, which is the failure this table exists to
+ * end.
+ */
+export const GOVERNMENT_SYSTEM_LABELS: Record<GovernmentType, string> = {
+  parliamentaryRepublic: "parliamentary republic",
+  presidential: "presidential republic",
+  onePartyState: "one-party state",
+  parliamentaryMonarchy: "constitutional monarchy",
+};
+
+/**
+ * A system's player-facing name.
+ *
+ * Takes a plain `string`, not `GovernmentType`, because most callers are reading
+ * the value off a stored document or an API payload where it is typed loosely —
+ * and those are exactly the surfaces that were printing the raw key. Narrowing
+ * the parameter would push a cast onto every one of them.
+ *
+ * The fallback is not dead code even with an exhaustive table: a row written
+ * before a system was renamed can hold a key the table no longer has. Showing
+ * the raw key is a poor label but a better outcome than rendering "undefined".
+ */
+export function governmentSystemLabel(system: GovernmentType | string): string {
+  return GOVERNMENT_SYSTEM_LABELS[system as GovernmentType] ?? system;
+}
+
 export interface PeaceTermContext {
   /** The country offering or imposing. */
   from: CountryId;
