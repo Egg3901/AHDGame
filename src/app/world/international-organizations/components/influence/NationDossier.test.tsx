@@ -164,6 +164,25 @@ describe("NationDossier costs and the display-currency preference", () => {
     expect(screen.getByText("¥152000000")).toBeTruthy();
   });
 
+  it("prices a ruble-denominated fund in rubles, never with a dollar fallback", () => {
+    // The Warsaw Pact bug: the view names the fund country
+    // `fundCurrencyCountryId`, and a formatter that missed it fell back to USD,
+    // so the same point cost the form quoted in SUR read as dollars up here.
+    render(
+      <NationDossier
+        view={{ ...VIEW, fundCurrencyCountryId: "RU", usdToFundRate: 0.1 } as OrgInfluenceView}
+        target={TARGET}
+        orgId="WARSAW_PACT"
+        viewerCountryId="RU"
+        onCommitted={() => {}}
+      />
+    );
+    // 76M SUR a point at 0.1 anchor-per-ruble is 7.6M anchor, tagged SUR so the
+    // "local" display preference resolves to rubles, not dollars.
+    expect(formatAmount).toHaveBeenCalledWith(7_600_000, "SUR");
+    expect(formatAmount).not.toHaveBeenCalledWith(7_600_000, "USD");
+  });
+
   it("leaves the commit input in the fund's own currency", () => {
     // The route takes `amountLocal` in the FUND's currency. A field that
     // accepted one currency while labelled another would spend the wrong number.
