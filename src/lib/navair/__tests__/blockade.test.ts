@@ -168,6 +168,13 @@ describe("worn hulls close less", () => {
     expect(wornPenalty(0)).toBe(0);
   });
 
+  // `clamp` passes NaN through, and a NaN here would reach trade affinity, where tracing
+  // it back to a hull would be miserable. An unreadable condition reads as undamaged.
+  it("treats an unreadable condition as undamaged rather than poisoning the lane", () => {
+    expect(wornPenalty(Number.NaN)).toBe(1);
+    expect(wornPenalty(Number.POSITIVE_INFINITY)).toBe(1);
+  });
+
   it("makes a worn fleet close a lane less than a fresh one of the same tonnage", () => {
     const fresh = blockadeClosureFor(
       "DD",

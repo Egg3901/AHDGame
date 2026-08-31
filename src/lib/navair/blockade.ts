@@ -59,6 +59,10 @@ export const BLOCKADE = {
  * one at 25% should be far larger than twenty points of anything else.
  */
 export function wornPenalty(integrity: number | undefined): number {
+  // `clamp` passes NaN straight through, and a NaN here would propagate into blockade
+  // closure and from there into trade affinity, where it would be far harder to trace
+  // back. An unreadable condition reads as undamaged rather than poisoning the lane.
+  if (integrity !== undefined && !Number.isFinite(integrity)) return 1;
   const i = clamp(integrity ?? 100, 0, 100);
   if (i >= BLOCKADE.wornKnee) return 1;
   const ratio = i / BLOCKADE.wornKnee;

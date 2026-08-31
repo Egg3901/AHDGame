@@ -139,7 +139,7 @@ describe("applyNavalRepair", () => {
   // A lot buys one point of condition at 99% and a hundred at zero, and this sweep runs
   // before refit. Left unconditional it would drain the store on scratches and starve the
   // refit pipeline, so materiel is only spent where free repair cannot reach.
-  it("spends nothing on a formation free repair can still mend", async () => {
+  it("spends nothing on a formation above the ceiling free repair reaches", async () => {
     const w: World = {
       units: [hull({ integrity: FREE_REPAIR_CEILING.station + 5 })],
       stock: { naval: 50 },
@@ -148,6 +148,23 @@ describe("applyNavalRepair", () => {
 
     expect(await applyNavalRepair(stubDb(w), "UK")).toEqual({ unitsRepaired: 0, lotsUsed: 0 });
     expect(w.stock.naval).toBe(50);
+  });
+
+  // The case the paid tier exists for, and the one a `>=` gate silently excluded. Free
+  // repair parks every forward-deployed hull on exactly the ceiling and then stops, so a
+  // fleet that mended itself as far as it could while the arsenal was empty has to be
+  // able to spend the materiel when it finally arrives.
+  it("buys the last stretch for a hull parked exactly on the ceiling", async () => {
+    const w: World = {
+      units: [hull({ integrity: FREE_REPAIR_CEILING.station })],
+      stock: { naval: 500 },
+      writes: [],
+    };
+
+    const res = await applyNavalRepair(stubDb(w), "UK");
+
+    expect(res.unitsRepaired).toBe(1);
+    expect(w.writes[0].update.$set.integrity).toBe(100);
   });
 
   // Below the ceiling there is no cap. A forward hull bought out of the hole comes all the

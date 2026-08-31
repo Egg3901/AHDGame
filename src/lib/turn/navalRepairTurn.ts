@@ -24,10 +24,16 @@ export interface NavalRepairResult {
  * point of the tier, and what stops it being a mere speed-up on something a fleet would
  * get free anyway by rotating out.
  *
- * It DOES have an entry threshold. Nothing at or above the station ceiling is touched,
- * because free repair reaches that far unaided and a lot buys a single point of condition
- * up there against a hundred at the bottom. Without the threshold this sweep would drain
- * the store on scratches and starve `applyDefenceRefit`, which runs immediately after it.
+ * It DOES have an entry threshold: nothing ABOVE the station ceiling is touched, because
+ * a lot buys a single point of condition up there against a hundred at the bottom, and
+ * without the threshold this sweep would drain the store on scratches and starve
+ * `applyDefenceRefit`, which runs immediately after it. A formation sitting exactly ON the
+ * ceiling IS eligible, which matters because free repair parks every forward-deployed hull
+ * on exactly that number.
+ *
+ * The consequence, stated plainly: a formation between the station ceiling and full that
+ * is not resting somewhere better will stay there. It is above the worn-hull knee and
+ * fighting perfectly well, and a home port fixes it for nothing.
  *
  * Runs BEFORE `applyDefenceRefit`, which is a change to the established order and a
  * deliberate one: a wreck restored to service is worth far more per lot than topping up a
@@ -74,13 +80,18 @@ export async function applyNavalRepair(db: Db, countryId: string): Promise<Naval
 
       const integrity = unit.integrity ?? 100;
 
-      // Materiel is only spent where free repair cannot reach. Above the station ceiling
-      // a formation either mends itself for nothing or is a rounding error away from
-      // full, and a lot buys a single point of condition up there against a hundred at
-      // the bottom — so an unconditional sweep would drain the store on scratches and
-      // starve refit, which runs after this one. Below the ceiling there is no cap: a
-      // forward hull bought out of the hole is carried all the way back to full.
-      if (integrity >= FREE_REPAIR_CEILING.station) continue;
+      // Materiel is only spent where free repair cannot finish the job. Well above the
+      // station ceiling a lot buys a single point of condition against a hundred at the
+      // bottom, so an unconditional sweep would drain the store on scratches and starve
+      // refit, which runs immediately after this.
+      //
+      // At the ceiling EXACTLY is the important case, and the reason this is `>` and not
+      // `>=`. Free repair parks every forward-deployed hull on precisely this number and
+      // then stops. A `>=` gate therefore excluded the one formation the paid tier exists
+      // for: a fleet that mended itself as far as it could while the arsenal was empty
+      // could never spend the materiel once it finally arrived, and would sit at the
+      // ceiling for ever.
+      if (integrity > FREE_REPAIR_CEILING.station) continue;
 
       const needed = lotsToRepair(unit, lotsRequired(archetype));
       if (needed <= 0) continue;
