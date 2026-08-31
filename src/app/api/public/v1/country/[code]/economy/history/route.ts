@@ -13,7 +13,10 @@ import { parseBoundedInt } from "@/lib/publicApi/params";
 const MAX_TURN = 1_000_000_000;
 
 // GET /api/public/v1/country/[code]/economy/history?fromTurn=&toTurn=&limit=
-export async function GET(request: Request, { params }: { params: Promise<{ code: string }> }) {
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ code: string }> }
+): Promise<Response> {
   try {
     const guard = await publicApiGuard(request, "country-economy-history");
     if (!guard.ok) return guard.response;

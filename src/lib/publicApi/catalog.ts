@@ -1,5 +1,18 @@
+export interface PublicEndpointParameter {
+  name: string;
+  required: boolean;
+  inPath?: boolean;
+}
+
+export interface PublicEndpointDefinition {
+  method: "GET";
+  path: string;
+  description: string;
+  params: PublicEndpointParameter[];
+}
+
 /** Machine-readable public v1 route catalog shared by meta and OpenAPI. */
-export const ENDPOINTS = [
+export const ENDPOINTS: PublicEndpointDefinition[] = [
   {
     method: "GET",
     path: "/api/public/v1/game",
@@ -372,4 +385,4 @@ export const ENDPOINTS = [
     description: "Machine-readable catalog of the public v1 interface.",
     params: [],
   },
-] as const;
+];

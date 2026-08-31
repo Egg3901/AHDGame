@@ -15,7 +15,7 @@ import { parseBoundedInt } from "@/lib/publicApi/params";
 const MAX_TURN = 1_000_000_000;
 
 // GET /api/public/v1/trade/flows?country=&commodity=&fromTurn=&toTurn=&limit=
-export async function GET(request: Request) {
+export async function GET(request: Request): Promise<Response> {
   try {
     const guard = await publicApiGuard(request, "trade-flows");
     if (!guard.ok) return guard.response;

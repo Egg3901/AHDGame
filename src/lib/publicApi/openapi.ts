@@ -1,5 +1,16 @@
 import { ENDPOINTS } from "./catalog";
 
+export interface PublicOpenApiDocument extends Record<string, unknown> {
+  openapi: string;
+  paths: Record<string, unknown>;
+  components: {
+    securitySchemes: Record<string, Record<string, unknown>> & {
+      ApiKeyAuth: { name: string; [key: string]: unknown };
+    };
+    [key: string]: unknown;
+  };
+}
+
 const INTEGER_PARAMS = new Set([
   "beforeTurn",
   "fromTurn",
@@ -35,7 +46,7 @@ function tagFor(path: string) {
   return path.replace(/^\/api\/public\/v1\/?/, "").split("/")[0] || "meta";
 }
 
-export function buildPublicV1OpenApiDocument(baseUrl: string) {
+export function buildPublicV1OpenApiDocument(baseUrl: string): PublicOpenApiDocument {
   const paths: Record<string, unknown> = {};
   for (const endpoint of ENDPOINTS) {
     const successSchema = endpoint.path.endsWith("/openapi.json")
@@ -146,5 +157,5 @@ export function buildPublicV1OpenApiDocument(baseUrl: string) {
         },
       },
     },
-  } as const;
+  };
 }

@@ -4,7 +4,7 @@ import { publicApiGuard } from "@/lib/publicApi/middleware";
 import { buildPublicV1OpenApiDocument } from "@/lib/publicApi/openapi";
 
 // GET /api/public/v1/openapi.json
-export async function GET(request: Request) {
+export async function GET(request: Request): Promise<Response> {
   try {
     const guard = await publicApiGuard(request, "openapi");
     if (!guard.ok) return guard.response;

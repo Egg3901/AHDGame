@@ -1,9 +1,6 @@
-import type { Db, Filter } from "mongodb";
+import type { Db } from "mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { COMMODITY_LABELS, type CommodityType } from "@/lib/constants/commodities";
-import type { CentralBank } from "@/lib/db/types";
-import type { FederalBudgetSnapshot } from "@/lib/db/types/budget";
-import type { TradeFlowSnapshot } from "@/lib/db/types/tradeFlowSnapshot";
 
 export const PUBLIC_HISTORY_DEFAULT_POINTS = 48;
 export const PUBLIC_HISTORY_MAX_POINTS = 240;
@@ -19,6 +16,116 @@ interface TurnRate {
   rate: number;
 }
 
+export interface PublicHistoryPoint {
+  turn: number;
+  value: number;
+}
+
+export interface PublicCountryEconomyHistory {
+  found: boolean;
+  countryId: CountryId;
+  countryName: string;
+  range: { fromTurn: number | null; toTurn: number | null; limit: number };
+  series: {
+    primeRate: PublicHistoryPoint[];
+    inflation: PublicHistoryPoint[];
+    gdpGrowth: PublicHistoryPoint[];
+  };
+  fiscalYears: Array<{
+    fiscalYear: number;
+    turn: number;
+    recordedAt: string;
+    currencyCode: string | null;
+    gdp: number;
+    revenue: number;
+    spending: number;
+    surplus: number;
+    debtPrincipal: number;
+    debtToGdpRatio: number;
+    creditRating: string;
+    inflation: number;
+  }>;
+}
+
+export interface PublicTradeFlowPoint {
+  turn: number;
+  recordedAt: string;
+  world: { grossVolume: number; clearedVolume: number; unclearedSurplus: number };
+  country?: {
+    countryId: CountryId;
+    exports: number;
+    imports: number;
+    net: number;
+    topPartnerSurplus: { countryId: CountryId; net: number } | null;
+    topPartnerDeficit: { countryId: CountryId; net: number } | null;
+  } | null;
+  commodity?: {
+    key: CommodityType;
+    label: string;
+    worldVolume: number;
+    country?: { exports: number; imports: number; net: number; uncleared: number } | null;
+  } | null;
+}
+
+export interface PublicTradeFlowHistory {
+  found: boolean;
+  monetaryUnit: "anchor";
+  filters: {
+    country: CountryId | null;
+    commodity: CommodityType | null;
+    fromTurn: number | null;
+    toTurn: number | null;
+    limit: number;
+  };
+  points: PublicTradeFlowPoint[];
+}
+
+interface PublicCentralBankRow {
+  countryId: CountryId;
+  interestRateHistory?: TurnRate[];
+  inflationHistory?: TurnRate[];
+  gdpGrowthHistory?: TurnRate[];
+}
+
+interface PublicBudgetSnapshotRow {
+  countryId: CountryId;
+  fiscalYear: number;
+  turn: number;
+  createdAt: Date;
+  budget: {
+    currencyCode?: string;
+    revenue: { total: number };
+    spending: { total: number };
+    debt: { principal: number };
+    surplus: number;
+    gdp: number;
+    debtToGdpRatio: number;
+    creditRating: string;
+    economicFactors: { inflationRate: number };
+  };
+}
+
+interface PublicNationalTradeRow {
+  exports: number;
+  imports: number;
+  net: number;
+  topPartnerSurplus?: { countryId: CountryId; net: number };
+  topPartnerDeficit?: { countryId: CountryId; net: number };
+}
+
+interface PublicCommodityTradeRow {
+  worldVolume: number;
+  perCountry: Record<string, { exports: number; imports: number; net: number; uncleared: number }>;
+}
+
+interface PublicTradeFlowSnapshotRow {
+  turn: number;
+  updatedAt: Date;
+  world: { grossVolume: number; clearedVolume: number; unclearedSurplus: number };
+  national: Partial<Record<CountryId, PublicNationalTradeRow>>;
+  commodities: Partial<Record<CommodityType, PublicCommodityTradeRow>>;
+}
+
 function normalizedRange(range: PublicHistoryRange) {
   return {
     fromTurn: range.fromTurn,
@@ -30,7 +137,10 @@ function normalizedRange(range: PublicHistoryRange) {
   };
 }
 
-function selectRateHistory(points: TurnRate[] | undefined, range: PublicHistoryRange) {
+function selectRateHistory(
+  points: TurnRate[] | undefined,
+  range: PublicHistoryRange
+): PublicHistoryPoint[] {
   const normalized = normalizedRange(range);
   return (points ?? [])
     .filter(
@@ -62,18 +172,18 @@ export async function queryCountryEconomyHistory(
   db: Db,
   country: string,
   range: PublicHistoryRange = {}
-) {
+): Promise<PublicCountryEconomyHistory | null> {
   const countryId = country.toUpperCase() as CountryId;
   const config = COUNTRY_CONFIGS[countryId];
   if (!config) return null;
 
   const normalized = normalizedRange(range);
-  const fiscalFilter: Filter<FederalBudgetSnapshot> = {
+  const fiscalFilter: { countryId: CountryId; turn?: { $gte?: number; $lte?: number } } = {
     countryId,
     ...turnFilter(normalized),
   };
   const [centralBank, fiscalDescending] = await Promise.all([
-    db.collection<CentralBank>("centralBanks").findOne(
+    db.collection<PublicCentralBankRow>("centralBanks").findOne(
       { countryId },
       {
         projection: {
@@ -84,7 +194,7 @@ export async function queryCountryEconomyHistory(
       }
     ),
     db
-      .collection<FederalBudgetSnapshot>("federalBudgetSnapshots")
+      .collection<PublicBudgetSnapshotRow>("federalBudgetSnapshots")
       .find(fiscalFilter, {
         projection: {
           countryId: 1,
@@ -158,11 +268,14 @@ export interface PublicTradeFlowFilters extends PublicHistoryRange {
  * reachable books and full bilateral matrices stay private; callers receive
  * only world totals and the country or commodity rollups they requested.
  */
-export async function queryTradeFlowHistory(db: Db, filters: PublicTradeFlowFilters = {}) {
+export async function queryTradeFlowHistory(
+  db: Db,
+  filters: PublicTradeFlowFilters = {}
+): Promise<PublicTradeFlowHistory> {
   const normalized = normalizedRange(filters);
   const snapshotsDescending = await db
-    .collection<TradeFlowSnapshot>("tradeFlowSnapshots")
-    .find(turnFilter(normalized) as Filter<TradeFlowSnapshot>, {
+    .collection<PublicTradeFlowSnapshotRow>("tradeFlowSnapshots")
+    .find(turnFilter(normalized), {
       projection: {
         turn: 1,
         updatedAt: 1,
