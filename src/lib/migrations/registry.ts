@@ -60,6 +60,7 @@ import { migration as rescheduleEconCountryBills } from "./entries/2026-08-27-re
 import { migration as equityLiquidityIndexes } from "./entries/2026-08-28-equity-liquidity-indexes";
 import { migration as redistrictingAuthorityLegislative } from "./entries/2026-08-26-redistricting-authority-legislative";
 import { migration as purgeRetiredRuMetricRegions } from "./entries/2026-08-30-purge-retired-ru-metric-regions";
+import { migration as regionalDefaultLawsNewgen } from "./entries/2026-08-31-regional-default-laws-newgen";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -181,6 +182,11 @@ export const MIGRATIONS: Migration[] = [
   // UKR, BEL, and BLT were old RU regions. They now exist as separate country
   // region sets, but their obsolete RU metric rows survived the split.
   purgeRetiredRuMetricRegions,
+  // New-generation `both` laws are proposable in a region but only ever seeded
+  // a NATIONAL statePolicies row, so a region bill rendered no current law —
+  // and LawProvisionComparison drops the fiscal comparison and metric chips
+  // with it. Backfill the level-0 regional default the engine already assumes.
+  regionalDefaultLawsNewgen,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.

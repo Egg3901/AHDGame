@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { LegislationType } from "@/lib/db/types";
+import { getCatalog } from "@/lib/politicalLegislation/catalog";
 import { resolveCurrentLaw, resolveProposedLabel, loadLiveCurrentPolicies } from "./currentLaw";
 
 const lt = {
@@ -286,5 +287,76 @@ describe("loadLiveCurrentPolicies — scoping", () => {
     );
     expect(out.size).toBe(0);
     expect(db.collectionMocks["statePolicies"]!.find).not.toHaveBeenCalled();
+  });
+});
+
+describe("loadLiveCurrentPolicies — regional default for new-generation `both` laws", () => {
+  let db: MockDb;
+  const bothLaw = getCatalog("RU").find(
+    (law) => law.kind !== "tax" && law.allowedScope === "both"
+  )!;
+  const nationalLaw = getCatalog("RU").find((law) => law.allowedScope === "national")!;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    db.collection("statePolicies").find.mockReturnValue({ toArray: async () => [] });
+    db.collection("enactedLaws").find.mockReturnValue({
+      sort: () => ({ toArray: async () => [] }),
+    });
+  });
+
+  it("resolves a `both` law to level 0 in a region with no row, so the comparison block renders", async () => {
+    const out = await loadLiveCurrentPolicies(
+      db as unknown as Db,
+      { scope: "region", countryId: "RU", regionId: "MOW" },
+      [bothLaw.id]
+    );
+    expect(out.get(bothLaw.id)).toEqual({ policyOptionIndex: 0 });
+  });
+
+  it("never invents a national row — a missing national policy stays missing", async () => {
+    const out = await loadLiveCurrentPolicies(
+      db as unknown as Db,
+      { scope: "national", countryId: "RU" },
+      [bothLaw.id]
+    );
+    expect(out.has(bothLaw.id)).toBe(false);
+  });
+
+  it("leaves national-only and legacy-catalog laws alone at region scope", async () => {
+    const out = await loadLiveCurrentPolicies(
+      db as unknown as Db,
+      { scope: "region", countryId: "RU", regionId: "MOW" },
+      [nationalLaw.id, "us_state_transportation"]
+    );
+    expect(out.has(nationalLaw.id)).toBe(false);
+    expect(out.has("us_state_transportation")).toBe(false);
+  });
+
+  it("does not override a real statePolicies row", async () => {
+    db.collection("statePolicies").find.mockReturnValue({
+      toArray: async () => [{ legislationTypeId: bothLaw.id, policyOptionIndex: 3 }],
+    });
+    const out = await loadLiveCurrentPolicies(
+      db as unknown as Db,
+      { scope: "region", countryId: "RU", regionId: "MOW" },
+      [bothLaw.id]
+    );
+    expect(out.get(bothLaw.id)).toEqual({ policyOptionIndex: 3 });
+  });
+
+  it("does not override an enactedLaws fallback", async () => {
+    db.collection("enactedLaws").find.mockReturnValue({
+      sort: () => ({
+        toArray: async () => [{ legislationTypeId: bothLaw.id, policyOptionIndex: 2 }],
+      }),
+    });
+    const out = await loadLiveCurrentPolicies(
+      db as unknown as Db,
+      { scope: "region", countryId: "RU", regionId: "MOW" },
+      [bothLaw.id]
+    );
+    expect(out.get(bothLaw.id)).toEqual({ policyOptionIndex: 2 });
   });
 });
