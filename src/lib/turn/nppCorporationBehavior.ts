@@ -18,7 +18,6 @@ import type {
   CorporateSector,
   SectorBuildOrder,
   StateMetrics,
-  GameConfig,
   GameState,
   ExchangeRate,
   Bond,
@@ -117,6 +116,7 @@ import {
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { getEraNominalAmount } from "@/lib/constants/sectorSeedEra";
+import { loadNppBehaviorConfig } from "@/lib/turn/npp/behaviorConfig";
 import { pickBestNppTechNode } from "@/lib/turn/npp/corpBehaviorConfig";
 import {
   fragileReinvestmentPriority,
@@ -518,10 +518,7 @@ export async function processNppCorporationDecisions(
     .findOne({ _id: "current" }, { projection: { nppCorpStrategyEnabled: 1 } });
   const strategyLoopEnabled = strategyGate?.nppCorpStrategyEnabled !== false;
 
-  const labourCfg = await db
-    .collection<GameConfig>("gameConfig")
-    .findOne({ _id: "default" }, { projection: { labourSystemMode: 1 } });
-  const labourMode = labourCfg?.labourSystemMode;
+  const { labourMode, retailExpansionPaused } = await loadNppBehaviorConfig(db, turn);
   const labourWagesEnabled = isLabourSystemMode(labourMode) && labourAtLeast(labourMode, "wages");
 
   for (const corp of nppCorps) {
@@ -542,6 +539,7 @@ export async function processNppCorporationDecisions(
       strategyEligible: entryCohortEligible,
       ordinaryEntryEligible: entryCohortEligible,
       shortageEntryEligible: entryCohortEligible,
+      retailExpansionPaused,
       strategyLoopEnabled,
       debtServiceAnchor: netPerTurnDebtServiceAnchor({
         issuerBonds: issuerBondsByCorpId.get(corp._id.toString()),
@@ -1387,7 +1385,10 @@ export function makeNppCorpDecision(
     frontierStates
   );
   const expansion =
-    levers.allowExpansion && isProfitable && corpMargin >= effectiveExpansionMinMargin
+    levers.allowExpansion &&
+    isProfitable &&
+    corpMargin >= effectiveExpansionMinMargin &&
+    !(ctx.retailExpansionPaused && entryCandidate?.sectorType === "retail")
       ? entryCandidate
       : null;
   const {
@@ -1808,6 +1809,7 @@ export function makeNppCorpDecision(
       const canGrow =
         sp.isProfitable &&
         levers.allowGrowthCapex &&
+        !(ctx.retailExpansionPaused && sector.sectorType === "retail") &&
         queueDepth < NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH &&
         stateShortage > NPP_GROWTH_MIN_SHORTAGE &&
         utilization >= NPP_GROWTH_MIN_UTILIZATION;
