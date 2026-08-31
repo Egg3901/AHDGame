@@ -22,6 +22,7 @@ import { syncAllPartyChairHeadsOfState } from "@/lib/turn/partyChairHeadOfState"
 import { processCrisisTurn } from "@/lib/turn/crisisTurn";
 import { processMinisterialOrders } from "@/lib/turn/ministerialOrderProcessing";
 import { processNavairTurn } from "@/lib/navair/turn";
+import { processIntelligenceTurn } from "@/lib/turn/intelligenceTurn";
 import { processTopSectorsRecompute } from "@/lib/turn/state/topSectorsRecompute";
 import { processInvestorConfidenceDecay } from "@/lib/turn/investorConfidenceDecay";
 import { processStateOwnershipConcentration } from "@/lib/turn/stateOwnershipConcentration";
@@ -108,6 +109,15 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       const crisisResult = await runtime.runPhase("crisisTurn", () =>
         processCrisisTurn(db, newTurn)
       );
+      // Intelligence upkeep resolves before navair, so a later phase's sabotage
+      // lands on the dispositions this turn actually fights on. Note the honest
+      // limit: navair RECOMPUTES sea control and air superiority from live units
+      // every pass, and front supply is derived from `supplyBaseA`/`supplyBaseB`,
+      // so anything written straight to those readings is recomputed away in the
+      // same pass. Readiness and the seeded supply bases are the durable targets.
+      const intelligenceResult = await runtime.runPhase("intelligenceTurn", () =>
+        processIntelligenceTurn(db, newTurn)
+      );
       // Naval and air operations resolve BEFORE ministerial orders, because
       // `ministerialOrders` is what resolves battle declarations and a battle reads the
       // sea control, air superiority and supply this pass leaves behind. Run the other
@@ -122,7 +132,13 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       const policyResult = await runtime.runPhase("policyEffects", () =>
         processStatePolicyEffects(db)
       );
-      return { crisisResult, navairResult, ministerialOrdersResult, policyResult };
+      return {
+        intelligenceResult,
+        crisisResult,
+        navairResult,
+        ministerialOrdersResult,
+        policyResult,
+      };
     })();
     const [
       { crisisResult, navairResult, ministerialOrdersResult, policyResult },

@@ -142,6 +142,9 @@ export const MACRO_ONLY_PHASES: ReadonlySet<string> = new Set<string>([
  * ministerialOrders, billLifecycle, referendumLifecycle) — those are kept.
  */
 export const ELECTIONS_SKIP_PHASES: ReadonlySet<string> = new Set<string>([
+  // Intelligence is not election machinery. This list is a DENYLIST, so a phase
+  // left out of it RUNS and bills time in every election-balance run.
+  "intelligenceTurn",
   // Account / shareholder maintenance (groups 1-2)
   "bannedShareholderRelease",
   "inactiveShareholderShareRelease",

@@ -98,6 +98,9 @@ export const BASE_TURN_PHASE_NAMES = [
   // Runs BEFORE ministerialOrders, which is what resolves battle declarations. Sea
   // control, air superiority and supply have to be current for the turn before a battle
   // reads them, or every battle fights on last turn's dispositions.
+  // Intelligence upkeep runs first so a later phase's sabotage lands on the
+  // dispositions this turn actually fights on.
+  "intelligenceTurn",
   "navairOperations",
   "ministerialOrders",
   "metricEngine",
