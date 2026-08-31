@@ -7,9 +7,17 @@ import { assertTransactionSupportAtBoot } from "@/lib/db/transactionSupport";
  * pooled session whose internal transaction counter is ahead of the server's
  * active transaction number (typically a session that survived a failed or
  * aborted transaction). Retrying the transaction on a FRESH session succeeds,
- * so this failure is transient — but it carries no
+ * so this failure is transient, but it carries no
  * `TransientTransactionError` label, so `withTransaction`'s built-in retry
  * never runs and the error surfaces to players as an opaque 500.
+ *
+ * NOT every 117 is transient. The same code and the same message also fire when
+ * OUR code issues concurrent operations on ONE session (a `Promise.all` of
+ * session-bound reads): each racer sends `startTransaction` at the same
+ * txnNumber and every loser is rejected. That variant is a call-pattern bug and
+ * retrying cannot clear it, because each attempt re-runs the race. Ticket #1239
+ * was this. Before assuming a stale session, check the call site for concurrent
+ * session use.
  */
 const MONGO_CONFLICTING_OPERATION_IN_PROGRESS = 117;
 
