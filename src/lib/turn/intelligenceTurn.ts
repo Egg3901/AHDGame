@@ -111,7 +111,22 @@ export async function processIntelligenceTurn(
   }
 
   if (networkOps.length > 0) await networksCollection.bulkWrite(networkOps, { ordered: false });
-  if (agencyOps.length > 0) await agenciesCollection.bulkWrite(agencyOps, { ordered: false });
+  if (agencyOps.length > 0) {
+    // A console GET can create the same agency row at the same moment, and an
+    // upsert racing an insert on the unique countryId index throws E11000. That
+    // is a benign collision here: the row the other writer inserted is the row
+    // this pass wanted, and the next turn re-applies the posture. Anything else
+    // is a real fault and must not be swallowed.
+    try {
+      await agenciesCollection.bulkWrite(agencyOps, { ordered: false });
+    } catch (error) {
+      const codes = [
+        (error as { code?: number }).code,
+        ...((error as { writeErrors?: { code?: number }[] }).writeErrors ?? []).map((w) => w.code),
+      ];
+      if (!codes.every((code) => code === 11000)) throw error;
+    }
+  }
 
   return { networksStepped: networkOps.length, posturesRefreshed: agencyOps.length };
 }

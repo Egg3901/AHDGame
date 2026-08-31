@@ -163,7 +163,18 @@ export async function getOrCreateAgency(
   };
   // Upsert rather than insert: two concurrent first touches would otherwise race,
   // and the unique index on countryId would turn the loser into a 500.
-  await agencies.updateOne({ countryId }, { $setOnInsert: fresh }, { upsert: true });
+  //
+  // An upsert is NOT itself atomic against a unique index: two of them can both
+  // find nothing and both try to insert, and the loser gets E11000. The fix is
+  // the documented one, a single retry, which then matches the row the winner
+  // wrote. The turn phase upserts these same rows for NPP countries, so this is
+  // a real race and not a theoretical one.
+  try {
+    await agencies.updateOne({ countryId }, { $setOnInsert: fresh }, { upsert: true });
+  } catch (error) {
+    if ((error as { code?: number }).code !== 11000) throw error;
+    await agencies.updateOne({ countryId }, { $setOnInsert: fresh }, { upsert: true });
+  }
   const created = await agencies.findOne({ countryId });
   if (!created) throw new Error(`intelligence agency upsert failed for ${countryId}`);
   return created;
