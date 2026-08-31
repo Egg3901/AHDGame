@@ -48,6 +48,50 @@ describe("reapportionNationalBudget", () => {
     expect(ieSet.baselineStateGrants).toBeCloseTo(10);
   });
 
+  it("moves everything when the LAST region of a dissolving country transfers (weight 1)", async () => {
+    // Final DD region: nothing left behind it, so its weight is exactly 1 and
+    // the whole residual base must reach the survivor rather than being skipped.
+    db.collection("states").findOne.mockResolvedValue({ _id: "TH", gdp: 100 });
+    db.collection("states").find.mockReturnValue(cursorOf([]));
+    db.collection("federalBudget")
+      .findOne.mockResolvedValueOnce({
+        _id: "DD",
+        taxBases: { taxableIncome: 500 },
+        baselineSpendingByCategory: { health: 40 },
+        baselineStateGrants: 30,
+      })
+      .mockResolvedValueOnce({
+        _id: "DE",
+        taxBases: { taxableIncome: 900 },
+        baselineSpendingByCategory: { health: 100 },
+        baselineStateGrants: 10,
+      });
+
+    await reapportionNationalBudget(db as unknown as Db, "TH", "DD", "DE", true);
+
+    const calls = db.collectionMocks["federalBudget"].updateOne.mock.calls;
+    const ddSet = calls.find((c) => c[0]._id === "DD")![1].$set;
+    const deSet = calls.find((c) => c[0]._id === "DE")![1].$set;
+    expect(ddSet.taxBases.taxableIncome).toBeCloseTo(0);
+    expect(deSet.taxBases.taxableIncome).toBeCloseTo(1400);
+    expect(ddSet.baselineSpendingByCategory.health).toBeCloseTo(0);
+    expect(deSet.baselineSpendingByCategory.health).toBeCloseTo(140);
+    expect(ddSet.baselineStateGrants).toBeCloseTo(0);
+    expect(deSet.baselineStateGrants).toBeCloseTo(40);
+  });
+
+  it("a SURVIVING source never gives up its whole base, even at weight 1", async () => {
+    // Degenerate referendum case: the source's other regions carry zero GDP, so
+    // the arithmetic says weight 1 — but the country keeps existing and must
+    // not be left running fiscal years over an emptied book.
+    db.collection("states").findOne.mockResolvedValue({ _id: "NIR", gdp: 100 });
+    db.collection("states").find.mockReturnValue(cursorOf([{ gdp: 0 }]));
+
+    await reapportionNationalBudget(db as unknown as Db, "NIR", "UK", "IE");
+
+    expect(db.collection("federalBudget").updateOne).not.toHaveBeenCalled();
+  });
+
   it("no-ops when the region carries no GDP", async () => {
     db.collection("states").findOne.mockResolvedValue({ _id: "NIR", gdp: 0 });
     await reapportionNationalBudget(db as unknown as Db, "NIR", "UK", "IE");

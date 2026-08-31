@@ -5,6 +5,16 @@ import { createMockDb, type MockCollection, type MockDb } from "@/lib/test-utils
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/referendum/transfer/transferRegion", () => ({ transferRegion: vi.fn() }));
 vi.mock("@/lib/turn/history/recordCountryEvent", () => ({ recordCountryEvent: vi.fn() }));
+vi.mock("@/lib/db/collections/gameState", () => ({
+  getGameStatePresetOrDefault: vi.fn().mockResolvedValue("1953-default"),
+}));
+vi.mock("@/lib/internationalOrganizations/joinApplication", () => ({ admitMember: vi.fn() }));
+vi.mock("@/lib/internationalOrganizations/service", () => ({
+  isMember: vi.fn().mockResolvedValue(false),
+}));
+vi.mock("@/lib/internationalOrganizations/withdrawalBills", () => ({
+  removeOrganizationMembership: vi.fn(),
+}));
 
 function prime(db: MockDb, name: string): MockCollection {
   return db.collection(name) as unknown as MockCollection;
@@ -152,6 +162,112 @@ describe("mergeCountry", () => {
       regionsTransferred: 0,
       regionsSkipped: 3,
       retired: true,
+    });
+  });
+
+  it("transfers non-bloc memberships and leaves the bloc poles to the settlement", async () => {
+    prime(db, "organizationMemberships").find.mockReturnValue(
+      cursor([{ organizationId: "COMECON" }, { organizationId: "WARSAW_PACT" }])
+    );
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 412,
+    });
+
+    const { admitMember } = await import("@/lib/internationalOrganizations/joinApplication");
+    const { removeOrganizationMembership } =
+      await import("@/lib/internationalOrganizations/withdrawalBills");
+    // COMECON: survivor admitted, dissolved country withdrawn via the live path.
+    expect(vi.mocked(admitMember)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(admitMember).mock.calls[0].slice(1)).toEqual(["COMECON", "DE", 412]);
+    expect(vi.mocked(removeOrganizationMembership)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(removeOrganizationMembership).mock.calls[0][1]).toBe("DD");
+    expect(vi.mocked(removeOrganizationMembership).mock.calls[0][2]).toBe("COMECON");
+    // The Warsaw Pact row is untouched here: which pole the unified state joins
+    // is `adoptChallengerSettlement`'s carefully-ordered business.
+  });
+
+  it("does not re-admit a survivor already holding the seat", async () => {
+    prime(db, "organizationMemberships").find.mockReturnValue(
+      cursor([{ organizationId: "COMECON" }])
+    );
+    const { isMember } = await import("@/lib/internationalOrganizations/service");
+    vi.mocked(isMember).mockResolvedValueOnce(true);
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 412,
+    });
+    const { admitMember } = await import("@/lib/internationalOrganizations/joinApplication");
+    const { removeOrganizationMembership } =
+      await import("@/lib/internationalOrganizations/withdrawalBills");
+    expect(vi.mocked(admitMember)).not.toHaveBeenCalled();
+    expect(vi.mocked(removeOrganizationMembership)).toHaveBeenCalledTimes(1);
+  });
+
+  it("lapses pending bills, then hands the whole corpus to the survivor", async () => {
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 412,
+    });
+    const calls = prime(db, "bills").updateMany.mock.calls;
+    expect(calls).toHaveLength(2);
+    // First: every non-terminal status fails (the country dissolved under it).
+    expect(calls[0][0].countryId).toBe("DD");
+    expect(calls[0][0].status.$in).toContain("proposed");
+    expect(calls[0][0].status.$in).toContain("cabinet_review");
+    expect(calls[0][0].status.$in).not.toContain("signed");
+    expect(calls[0][1].$set.status).toBe("failed");
+    // Then: the corpus re-scopes, so the trade reconcilers rebuild the carried
+    // tariffs/embargoes under the survivor instead of resurrecting the ghost's.
+    expect(calls[1][0]).toEqual({ countryId: "DD" });
+    expect(calls[1][1].$set.countryId).toBe("DE");
+  });
+
+  it("carries national-pool npps and tariff records by countryId", async () => {
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 412,
+    });
+    expect(prime(db, "npps").updateMany.mock.calls[0][0]).toEqual({ countryId: "DD" });
+    expect(prime(db, "npps").updateMany.mock.calls[0][1].$set.countryId).toBe("DE");
+    expect(prime(db, "tariffs").updateMany.mock.calls[0][0]).toEqual({ countryId: "DD" });
+    expect(prime(db, "tariffs").updateMany.mock.calls[0][1].$set.countryId).toBe("DE");
+    // National-scope subsidies (region-scoped ones crossed with their regions).
+    expect(prime(db, "subsidies").updateMany.mock.calls[0][0]).toEqual({ countryId: "DD" });
+    expect(prime(db, "subsidies").updateMany.mock.calls[0][1].$set.countryId).toBe("DE");
+  });
+
+  it("the winner's tariff takes a colliding scope from the survivor", async () => {
+    // Both states tariffed the same sector: two live records on one scope
+    // would double-apply, and the merge rule is that the winner's law governs.
+    prime(db, "tariffs").find.mockReturnValue(
+      cursor([{ _id: "t-dd", scopeType: "sector", targetSectorType: "manufacturing" }])
+    );
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 412,
+    });
+    const del = prime(db, "tariffs").deleteMany.mock.calls[0][0];
+    expect(del).toEqual({
+      countryId: "DE",
+      $or: [
+        {
+          scopeType: "sector",
+          targetSectorType: "manufacturing",
+          targetOriginCountryId: null,
+          targetCorporationId: null,
+        },
+      ],
     });
   });
 

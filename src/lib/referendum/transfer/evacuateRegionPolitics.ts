@@ -43,7 +43,7 @@ import { officeRemapFor, remapOffice } from "@/lib/country/dissolvingOfficeRemap
  * cleared for the target to rebuild, while a dissolving one has no parties left
  * to protect and every organisation it built travels with it.
  */
-const REGION_PARTY_COLLECTIONS = [
+export const REGION_PARTY_COLLECTIONS = [
   "statePartyOrg",
   "partyBudget",
   "partyPoliticalStrengthLedger",

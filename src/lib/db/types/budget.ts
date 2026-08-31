@@ -437,6 +437,12 @@ export interface FederalBudget {
    */
   treasuryBalance: number;
   /**
+   * Audit stamp written by `mergeNationalFisc` when this country dissolved into
+   * another and its treasury, debt and bonds were assumed by the successor. The
+   * balance above is zeroed at the same moment; this records where it went.
+   */
+  mergedInto?: { countryId: string; turn: number };
+  /**
    * Defence account (see {@link DefenseAppropriation}). Absent on unmigrated docs — read
    * through `getDefenseAppropriation`, which HEALS rather than defaulting to zero: a silent
    * empty pot would refuse every purchase for a country the migration missed, which reads to

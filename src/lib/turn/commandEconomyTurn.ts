@@ -7,6 +7,7 @@ import {
   isPlannedEconomy,
   plannedShare,
   scheduledMarketizationLevel,
+  DUAL_TRACK_CEILING,
   hydrateStoredMarketizationLevels,
   setStoredMarketizationLevel,
   marketizationLevel,
@@ -42,6 +43,7 @@ import {
   SOE_PERF_BASELINE,
 } from "@/lib/economy/soe";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
+import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { capacityPricePerUnit, CAPACITY_ANCHOR_YEAR } from "@/lib/constants/capacityEconomy";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import {
@@ -188,23 +190,44 @@ export async function processCommandEconomyTurn(
   const budgets = await db.collection<FederalBudget>("federalBudget").find({}).toArray();
 
   // ── Hydrate the stored marketization registry for this turn ───────────────
+  //
+  // Gated on the PERSISTED level (schedule as fallback), never on
+  // `isPlannedEconomy`: that accessor reads the registry this loop is about to
+  // rebuild — empty after a restart — and falls back to the compiled schedule,
+  // which would silently drop (a) a country the schedule never listed whose
+  // regime was carried onto it by a merge (post-reunification DE), and (b) a
+  // command country whose stored level outlived its schedule's `throughYear`.
+  // The band check itself uses the same ceiling `isPlannedEconomy` does.
+  // A dissolved country keeps its budget doc for history, and the compiled
+  // schedule keeps calling it planned — without this it would be hydrated and
+  // planned for ever after a merge carried its regime to its successor. The
+  // registry read is skipped entirely with the feature off: the hydration is a
+  // guaranteed no-op then, and the processing loop's own `isPlannedEconomy`
+  // already carries the flag.
+  const registeredForPlanning = enabled
+    ? new Set<string>(await getRegisteredCountryIds(db))
+    : new Set<string>();
+
   const hydration: Array<[string, number]> = [];
   for (const budget of budgets) {
     const countryId = budget.countryId;
-    if (!isPlannedEconomy(countryId, currentYear, enabled)) continue;
+    if (!countryId || !registeredForPlanning.has(countryId)) continue;
     const persisted = budget.economicFactors?.marketizationLevel;
-    hydration.push([
-      countryId,
+    const level =
       typeof persisted === "number" && Number.isFinite(persisted)
         ? persisted
-        : scheduledMarketizationLevel(countryId, currentYear),
-    ]);
+        : scheduledMarketizationLevel(countryId, currentYear);
+    if (level >= DUAL_TRACK_CEILING) continue;
+    hydration.push([countryId, level]);
   }
   hydrateStoredMarketizationLevels(hydration);
 
   let countriesUpdated = 0;
   for (const budget of budgets) {
     const countryId = budget.countryId;
+    // Same registered gate as the hydration: an un-hydrated dissolved country
+    // would otherwise fall back to its compiled schedule and read planned.
+    if (!countryId || !registeredForPlanning.has(countryId)) continue;
     if (!isPlannedEconomy(countryId, currentYear, enabled)) continue;
 
     const share = plannedShare(countryId, currentYear, enabled);

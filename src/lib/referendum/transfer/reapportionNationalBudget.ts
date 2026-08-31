@@ -46,7 +46,18 @@ export async function reapportionNationalBudget(
   db: Db,
   regionId: string,
   fromCountryId: CountryId,
-  toCountryId: CountryId
+  toCountryId: CountryId,
+  /**
+   * True when the SOURCE country is dissolving (a merge), which is the one case
+   * where this region can legitimately carry the whole remaining base
+   * (weight 1). Told explicitly by the caller — `transferRegion` already knows
+   * (`relocateToRegionId === null` is the dissolution signal) — rather than
+   * inferred from the arithmetic, because weight 1 also arises degenerately on
+   * a SURVIVING source whose other regions carry zero GDP, and moving
+   * everything out of a country that keeps existing would strand it running
+   * fiscal years over an emptied book.
+   */
+  sourceDissolving = false
 ): Promise<void> {
   const region = await db
     .collection<State>("states")
@@ -63,7 +74,13 @@ export async function reapportionNationalBudget(
     .toArray();
   const sourceTotalBefore = remaining.reduce((s, r) => s + (r.gdp ?? 0), 0) + regionGdp;
   const weight = sourceTotalBefore > 0 ? regionGdp / sourceTotalBefore : 0;
-  if (!(weight > 0 && weight < 1)) return;
+  // Weight 1 is REAL only on a dissolving source: its last region has nothing
+  // left behind it, and skipping it would strand the whole residual base (tax
+  // bases, spending baselines, grants) on a country that no longer exists. On
+  // a SURVIVING source the same arithmetic is a degenerate case (the other
+  // regions carry zero GDP) and keeps the original strict guard.
+  if (!(weight > 0 && weight <= 1)) return;
+  if (weight === 1 && !sourceDissolving) return;
 
   const [from, to] = await Promise.all([
     db.collection<FederalBudget>("federalBudget").findOne({ _id: fromCountryId }),
