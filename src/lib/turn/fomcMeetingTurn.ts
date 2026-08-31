@@ -5,16 +5,20 @@ import type {
   FomcSeat,
   FomcMeeting,
   FomcBallot,
+  FomcNomination,
   RateChangeRecord,
 } from "@/lib/db/types/centralBank";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
+import type { Character } from "@/lib/db/types";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { isCommandEconomy } from "@/lib/constants/commandEconomy";
 import { getEraMonetaryBaseline } from "@/lib/constants/monetaryEra";
 import { getInflationTarget } from "@/lib/budget/inflation";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { isBankGovernmentControlledLive } from "@/lib/centralBank/governance";
+import { createNotifications, type NotificationInput } from "@/lib/notifications";
+import { createSystemNewsPost } from "@/lib/news";
 import { getNationalDocId } from "@/lib/constants/nationalScope";
 import {
   RATE_CHANGES_PER_TERM,
@@ -22,6 +26,8 @@ import {
   FOMC_MEETING_INTERVAL_TURNS,
   FOMC_PLAYER_VOTE_WINDOW_MS,
   FOMC_VOTE_WINDOW_TURNS,
+  FOMC_VACANCY_REMINDER_INTERVAL_TURNS,
+  FOMC_COMMITTEE_COUNTRY_IDS,
   RATE_CHANGE_COOLDOWN_TURNS,
   NPP_CHAIR_TARGET_GROWTH,
   COC_SMOOTHING_TURNS,
@@ -34,6 +40,7 @@ import {
   playerSeats,
   type FomcMacroContext,
 } from "@/lib/centralBank/fomc";
+import { logger } from "../observability/logger";
 
 const FOMC_MEETING_HISTORY_MAX = 24;
 const RATE_HISTORY_MAX = 96;
@@ -164,6 +171,70 @@ function canChangeRate(
   const last = bank.lastRateChangeTurn;
   if (typeof last === "number" && currentTurn - last < RATE_CHANGE_COOLDOWN_TURNS) return false;
   return true;
+}
+
+/**
+ * Player characters who currently hold a member country's nominating executive
+ * office (the same office the FOMC nominate route authorizes, e.g. the US
+ * President). These are the only players who can fill vacant committee seats.
+ */
+async function findNominationExecutives(
+  db: Db,
+  countryId: CountryId
+): Promise<Array<{ userId: ObjectId; characterName: string }>> {
+  // Committee banks are single-country institutions (FOMC_COMMITTEE_COUNTRY_IDS
+  // gates the whole vacancy path on bank.countryId), so one exec key suffices.
+  const execKey = COUNTRY_CONFIGS[countryId]?.officeTypes.find((o) => o.isExecutive)?.key;
+  if (!execKey) return [];
+
+  const chars = await db
+    .collection<Character>("characters")
+    .find({ countryId, userId: { $exists: true }, "currentOffice.type": execKey })
+    .project<Pick<Character, "name" | "userId">>({ name: 1, userId: 1 })
+    .toArray();
+  return chars.map((char) => ({ userId: char.userId, characterName: char.name }));
+}
+
+/**
+ * Tell the world a committee board has gone understaffed (ticket #1238).
+ *
+ * Vacant seats are by design (#1195: the engine never seats a machine
+ * candidate; the President nominates and the Senate confirms), but before this
+ * notice the vacancy was silent: motions just started failing 1-0-6 with no
+ * signal to the one player who can fix it, and the board stayed dead for good.
+ * Notifies every nominating executive in-app and posts a system news item so
+ * the chair and community can see why the board cannot move the rate.
+ */
+async function notifyFomcVacancy(
+  db: Db,
+  bank: Pick<CentralBank, "_id" | "countryId">,
+  vacantCount: number,
+  boardSize: number,
+  now: Date
+): Promise<void> {
+  const countryId = bank.countryId as CountryId;
+  const config = COUNTRY_CONFIGS[countryId];
+  const bankLabel = config?.centralBank.name ?? "the central bank";
+  const execTitle =
+    config?.officeTypes.find((o) => o.isExecutive)?.label.toLowerCase() ?? "the executive";
+
+  const notifications: NotificationInput[] = [];
+  const executives = await findNominationExecutives(db, countryId);
+  for (const exec of executives) {
+    notifications.push({
+      userId: exec.userId,
+      type: "system",
+      title: `${bankLabel}: board seats vacant`,
+      message: `${vacantCount} of ${boardSize} committee seats are vacant, so no rate motion can reach the ${Math.floor(boardSize / 2) + 1} votes needed to pass. Nominate governors from the central bank's committee page; the Senate confirms them.`,
+      metadata: { type: "central_bank_fomc_vacancy", countryId, bankId: bank._id, at: now },
+    });
+  }
+  await createNotifications(notifications);
+
+  createSystemNewsPost(
+    `${vacantCount} of ${boardSize} seats on the ${bankLabel}'s rate-setting board are vacant. The board cannot carry a rate motion until the ${execTitle} nominates governors and the Senate confirms them.`,
+    "executive"
+  ).catch((err) => logger.error("FomcMeetingTurn", "vacancy news post failed", err));
 }
 
 /**
@@ -422,9 +493,9 @@ export async function processFomcMeetings(
 
     const set: Record<string, unknown> = { updatedAt: now };
 
-    // 0. Vacate expired seats and appoint autonomous replacements so the board
-    //    stays full. Persist immediately so the meeting below votes on the new
-    //    roster and the single-chair mirror stays coherent when the chair lapses.
+    // 0. Vacate any seats whose term has expired. Persist immediately so the
+    //    meeting below votes on the new roster and the single-chair mirror stays
+    //    coherent when the chair lapses.
     const refreshed = await refreshExpiredSeats(db, bank, board, currentTurn);
     if (refreshed) {
       board = refreshed.board;
@@ -450,6 +521,32 @@ export async function processFomcMeetings(
             set.chairTermExpiresAtTurn = null;
           }
         }
+      }
+    }
+
+    // 0b. Vacancy signal (ticket #1238). Seats are staffed by presidential
+    //     nomination + Senate confirmation only (#1195), so an expired board
+    //     stays vacant until the executive acts. That action was previously
+    //     invisible: motions just failed 1-0-6 forever. Tell the nominating
+    //     executive (and the news feed) when seats first fall vacant, and
+    //     re-remind at most once per reminder interval while no nomination is
+    //     already before the Senate.
+    const vacantSeatCount = board.filter((s) => s.occupantType === "vacant").length;
+    if (
+      vacantSeatCount > 0 &&
+      FOMC_COMMITTEE_COUNTRY_IDS.has(countryId) &&
+      (refreshed !== null ||
+        typeof bank.lastFomcVacancyNoticeAtTurn !== "number" ||
+        currentTurn - bank.lastFomcVacancyNoticeAtTurn >= FOMC_VACANCY_REMINDER_INTERVAL_TURNS)
+    ) {
+      const activeNominations = await db
+        .collection<FomcNomination>("fomcNominations")
+        .find({ bankId: bank._id, status: "active" })
+        .project<{ _id: ObjectId }>({ _id: 1 })
+        .toArray();
+      if (activeNominations.length === 0) {
+        set.lastFomcVacancyNoticeAtTurn = currentTurn;
+        await notifyFomcVacancy(db, bank, vacantSeatCount, board.length, now);
       }
     }
 
