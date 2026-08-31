@@ -22,10 +22,20 @@
  */
 import type { Db } from "mongodb";
 import type { State } from "@/lib/db/types";
+import type { BillStatus } from "@/lib/db/types/legislation";
 import type { CountryGameState } from "@/lib/db/types/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { transferRegion } from "@/lib/referendum/transfer/transferRegion";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
+import { blocOrgFor } from "@/lib/world/blocMembership";
+import { admitMember } from "@/lib/internationalOrganizations/joinApplication";
+import { isMember } from "@/lib/internationalOrganizations/service";
+import { removeOrganizationMembership } from "@/lib/internationalOrganizations/withdrawalBills";
+import {
+  INTERNATIONAL_ORGANIZATIONS,
+  type InternationalOrganizationId,
+} from "@/lib/constants/internationalOrganizations";
 
 export interface MergeCountryArgs {
   /** The country being absorbed. Retired when this completes. */
@@ -110,6 +120,13 @@ export async function mergeCountry(db: Db, args: MergeCountryArgs): Promise<Merg
     else regionsTransferred++;
   }
 
+  // National remnants the region loop cannot reach. Every step is filter-
+  // idempotent (a re-run finds nothing still keyed to the source), and all run
+  // BEFORE the shell retires so a failure leaves a recoverable, still-live
+  // source rather than a retired country with dangling rows.
+  await transferOrRetireOrgMemberships(db, fromCountryId, toCountryId, currentTurn);
+  await sweepNationalStrays(db, fromCountryId, toCountryId);
+
   // Retire the shell. Not deletion — the documents stay for history and the
   // wiki; the country simply stops being enumerated, simulated, or joinable.
   await gameStates.updateOne(
@@ -135,4 +152,110 @@ export async function mergeCountry(db: Db, args: MergeCountryArgs): Promise<Merg
   });
 
   return { ok: true, regionsTransferred, regionsSkipped, retired: true };
+}
+
+/**
+ * Bill statuses a country's dissolution can still overtake. Everything not
+ * listed (`signed`, `failed`, `withdrawn`, `override_failed`) is already
+ * terminal. `vetoed`, `enrolled` and `cabinet_review` ARE listed: past the
+ * floor they may be, but until signed they are pending business, and pending
+ * business lapses with the state — a bill cannot be signed by a government
+ * that no longer exists.
+ */
+const NON_TERMINAL_BILL_STATUSES: BillStatus[] = [
+  "proposed",
+  "active",
+  "passed_origin",
+  "active_other",
+  "active_both",
+  "enrolled",
+  "vetoed",
+  "veto_override",
+  "override_shugiin",
+  "cabinet_review",
+  "filibustered",
+];
+
+/**
+ * Move the dissolving country's organisation memberships to the survivor.
+ *
+ * BLOC organisations (the era's two poles) are deliberately EXCLUDED: which
+ * alliance the unified state ends up in is a settlement outcome, decided by
+ * `adoptChallengerSettlement` with its own carefully-ordered joins and
+ * withdrawals — transferring a Pact seat here would race that logic. Everything
+ * else (COMECON, the UN, player-founded bodies) is ordinary membership: the
+ * survivor inherits the seat unless it already holds one, and the dissolved
+ * country comes off the roll either way — through `removeOrganizationMembership`,
+ * the shared live-withdrawal path, so pending leadership ballots are cleaned and
+ * the remaining members are told.
+ */
+async function transferOrRetireOrgMemberships(
+  db: Db,
+  fromCountryId: CountryId,
+  toCountryId: CountryId,
+  currentTurn: number
+): Promise<void> {
+  const memberships = (await db
+    .collection("organizationMemberships")
+    .find({ countryId: fromCountryId })
+    .toArray()) as unknown as Array<{ organizationId: string }>;
+  if (memberships.length === 0) return;
+
+  const preset = await getGameStatePresetOrDefault(db);
+  const blocOrgs = new Set(
+    [blocOrgFor(preset, "west"), blocOrgFor(preset, "east")].filter(Boolean) as string[]
+  );
+
+  for (const membership of memberships) {
+    const orgId = membership.organizationId as InternationalOrganizationId;
+    if (blocOrgs.has(orgId)) continue;
+
+    if (!(await isMember(db, orgId, toCountryId))) {
+      await admitMember(db, orgId, toCountryId, currentTurn);
+    }
+    const name =
+      INTERNATIONAL_ORGANIZATIONS[orgId as keyof typeof INTERNATIONAL_ORGANIZATIONS]?.name ?? orgId;
+    await removeOrganizationMembership(db, fromCountryId, orgId, name, currentTurn);
+  }
+}
+
+/**
+ * National rows with no region to ride and no dedicated merge module.
+ *
+ *  - NPPs in the national pool (`homeState: ""`) are invisible to the region
+ *    sweep, which keys on `homeState`; they cross by countryId.
+ *  - Tariff records are the dissolved state's trade policy; the unified state
+ *    inherits it.
+ *  - Bills still in flight LAPSE first: the same shape the chamber-dissolution
+ *    path writes (`failInProgressBills`), applied to every non-terminal status
+ *    because here the whole country, not one chamber, stops existing.
+ *  - THEN the whole legislative corpus re-scopes to the survivor. This is not
+ *    optional tidiness: the trade turn REBUILDS tariff and embargo records
+ *    from signed bills keyed by `bill.countryId`, so a carried tariff whose
+ *    enacting bill stayed behind would be deleted and re-created for the
+ *    dissolved country on the next reconcile. The survivor inherits the
+ *    predecessor state's bill history the same way it inherited its enacted
+ *    law book.
+ */
+async function sweepNationalStrays(
+  db: Db,
+  fromCountryId: CountryId,
+  toCountryId: CountryId
+): Promise<void> {
+  const now = new Date();
+  await db
+    .collection("npps")
+    .updateMany({ countryId: fromCountryId }, { $set: { countryId: toCountryId, updatedAt: now } });
+  await db
+    .collection("tariffs")
+    .updateMany({ countryId: fromCountryId }, { $set: { countryId: toCountryId, updatedAt: now } });
+  await db
+    .collection("bills")
+    .updateMany(
+      { countryId: fromCountryId, status: { $in: NON_TERMINAL_BILL_STATUSES } },
+      { $set: { status: "failed", failedAt: now, updatedAt: now } }
+    );
+  await db
+    .collection("bills")
+    .updateMany({ countryId: fromCountryId }, { $set: { countryId: toCountryId, updatedAt: now } });
 }
