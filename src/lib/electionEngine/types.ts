@@ -286,10 +286,10 @@ export interface DistributeVotesOptions {
   /**
    * Executive own-race only: raw consecutive terms the incumbent PARTY has
    * already held the office (current term counts as 1). Feeds `appealWeight`'s
-   * nominal-share `personalStatTenureFatigue`, which erodes the
+   * nominal-share `personalStatTenureRetention`, which erodes the
    * PI/favorability-driven reach/approval terms. The "time for a change" drag
    * itself is priced by the economic referendum channel, not here. Unset ⇒ no
-   * fatigue (first term / open seat / non-executive races).
+   * erosion (first term / open seat / non-executive races).
    */
   incumbentConsecutiveTerms?: number;
   /**
@@ -318,8 +318,8 @@ export interface DistributeVotesOptions {
    * a per-candidate map rather than one party id. See
    * `resolveHouseIncumbentTenures` in `singleSeatIncumbency.ts` for how this is
    * computed and why the House needs this different shape. No entry for a
-   * candidateId ⇒ personalStatTenureFatigue(undefined) ⇒ 0 ⇒ complete no-op
-   * (open seat, fresh nominee, or a non-House race).
+   * candidateId ⇒ personalStatTenureRetention(undefined) ⇒ 1.0 ⇒ complete
+   * no-op (open seat, fresh nominee, or a non-House race).
    */
   houseIncumbentTenureTermsByCandidateId?: Map<string, number>;
   /**

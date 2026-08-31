@@ -173,10 +173,12 @@ export async function resolveSingleSeatLegislativeIncumbent(
 // signal the allocator itself uses to admit a candidate, and consecutive-term
 // COUNTING only needs a boolean per cycle, not the seat total.
 
-/** Bounds the historical walk-back: personalStatTenureFatigue caps at
- *  PERSONAL_STAT_TENURE_FATIGUE_MAX/PERSONAL_STAT_TENURE_FATIGUE_MAX_PER_TERM
- *  = 10 terms, so looking back further can never change the fatigue applied —
- *  this just bounds the DB work for a race with a very long resolved history. */
+/** Bounds the historical walk-back: personalStatTenureRetention saturates at
+ *  PERSONAL_STAT_TENURE_EROSION_MAX/PERSONAL_STAT_TENURE_EROSION_PER_TERM = 5
+ *  terms beyond the first, so looking back further can never change the
+ *  erosion applied — this just bounds the DB work for a race with a very long
+ *  resolved history. Kept above that saturation point so a recalibration of
+ *  either constant does not silently truncate the count. */
 const MAX_HOUSE_TENURE_LOOKBACK = 12;
 
 /**

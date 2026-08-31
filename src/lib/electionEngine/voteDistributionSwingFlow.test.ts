@@ -8,9 +8,9 @@ import {
   TRANSFERABLE_SHARE_FULL_REG,
   PERSUASION_RESISTANCE_NO_REG,
   PERSUASION_RESISTANCE_FULL_REG,
-  personalStatTenureFatigue,
-  PERSONAL_STAT_TENURE_FATIGUE_PER_TERM,
-  PERSONAL_STAT_TENURE_FATIGUE_MAX,
+  personalStatTenureRetention,
+  PERSONAL_STAT_TENURE_EROSION_PER_TERM,
+  PERSONAL_STAT_TENURE_EROSION_MAX,
 } from "./electionFormulaFactors";
 import type { DistributeVotesOptions } from "./types";
 import {
@@ -1240,32 +1240,49 @@ describe("distributeVotesBySwingFlow — L2 party-sign gate in appeal", () => {
   });
 });
 
-// ─── Personal-stat (PI/favorability) tenure fatigue ─────────────────────────
+// ─── Personal-stat (PI/favorability) tenure erosion ─────────────────────────
 //
 // Root-cause coverage for the "same party wins every close race, every cycle,
 // for 12 years" defect: politicalInfluence and favorability compound without
-// any tenure-aware decay (see `personalStatTenureFatigue`'s doc comment in
-// electionFormulaFactors.ts). These tests prove (a) the fatigue formula's
-// own shape, (b) that a fresh (first-term) incumbent still gets the full,
-// genuine PI/favorability advantage the game intends, and (c) that a
-// multi-cycle simulation with the fatigue wired in lets a genuinely
-// better-positioned challenger break an entrenched incumbency, where the
-// same simulation with fatigue disabled (no tenure data threaded through)
-// reproduces the bug — the incumbent wins every cycle forever.
+// any tenure-aware decay (see `personalStatTenureRetention`'s doc comment in
+// electionFormulaFactors.ts). These tests prove (a) the retention curve's own
+// shape, (b) that a fresh (first-term) incumbent still gets the full, genuine
+// PI/favorability advantage the game intends, and (c) that erosion measurably
+// narrows an entrenched incumbent's margin without ever zeroing them out.
+//
+// The multi-cycle simulations below carry a long note on what this channel
+// does NOT deliver, and why: with the stats compounding unopposed, only the
+// retired points form's outright deletion of a candidate could flip the seat,
+// and that is the behaviour this change exists to remove.
 
-describe("personalStatTenureFatigue", () => {
-  it("is 0 for a first term / undefined / non-finite tenure", () => {
-    expect(personalStatTenureFatigue(undefined)).toBe(0);
-    expect(personalStatTenureFatigue(1)).toBe(0);
-    expect(personalStatTenureFatigue(NaN)).toBe(0);
-    expect(personalStatTenureFatigue(0)).toBe(0);
+describe("personalStatTenureRetention", () => {
+  it("is a full 1.0 no-op for a first term / undefined / non-finite tenure", () => {
+    expect(personalStatTenureRetention(undefined)).toBe(1);
+    expect(personalStatTenureRetention(1)).toBe(1);
+    expect(personalStatTenureRetention(NaN)).toBe(1);
+    expect(personalStatTenureRetention(0)).toBe(1);
   });
 
-  it("grows linearly per consecutive term beyond the first, then caps", () => {
-    expect(personalStatTenureFatigue(2)).toBe(PERSONAL_STAT_TENURE_FATIGUE_PER_TERM);
-    expect(personalStatTenureFatigue(3)).toBe(PERSONAL_STAT_TENURE_FATIGUE_PER_TERM * 2);
+  it("erodes linearly per consecutive term beyond the first, then caps", () => {
+    expect(personalStatTenureRetention(2)).toBeCloseTo(
+      1 - PERSONAL_STAT_TENURE_EROSION_PER_TERM,
+      10
+    );
+    expect(personalStatTenureRetention(3)).toBeCloseTo(
+      1 - PERSONAL_STAT_TENURE_EROSION_PER_TERM * 2,
+      10
+    );
     // Capped — doesn't grow without bound across an arbitrarily long tenure.
-    expect(personalStatTenureFatigue(50)).toBe(PERSONAL_STAT_TENURE_FATIGUE_MAX);
+    expect(personalStatTenureRetention(50)).toBeCloseTo(1 - PERSONAL_STAT_TENURE_EROSION_MAX, 10);
+  });
+
+  it("never reaches zero, so no tenure can delete a candidate outright", () => {
+    // The retired points form hit 0 politicalInfluence at four terms for an
+    // ordinary candidate; this is the invariant that replaced it.
+    for (const terms of [2, 5, 12, 40, 1000]) {
+      expect(personalStatTenureRetention(terms)).toBeGreaterThan(0);
+    }
+    expect(PERSONAL_STAT_TENURE_EROSION_MAX).toBeLessThan(1);
   });
 });
 
@@ -1413,6 +1430,7 @@ describe("multi-cycle simulation — entrenched incumbency vs. a genuinely bette
     let piB = 40;
     let favB = 40;
     const winners: string[] = [];
+    const margins: number[] = [];
 
     for (let cycle = 0; cycle < cycles; cycle++) {
       const candidates: EnrichedCandidate[] = [
@@ -1474,6 +1492,7 @@ describe("multi-cycle simulation — entrenched incumbency vs. a genuinely bette
 
       const winner = sharesPct.A >= sharesPct.B ? "A" : "B";
       winners.push(winner);
+      margins.push(Math.abs(sharesPct.A - sharesPct.B));
 
       if (winner === incumbentParty) {
         consecutiveTerms += 1;
@@ -1500,7 +1519,7 @@ describe("multi-cycle simulation — entrenched incumbency vs. a genuinely bette
       }
     }
 
-    return winners;
+    return { winners, margins };
   }
 
   function longestRun(winners: string[]): number {
@@ -1513,8 +1532,8 @@ describe("multi-cycle simulation — entrenched incumbency vs. a genuinely bette
     return longest;
   }
 
-  it("BUG REPRODUCTION — without tenure fatigue, the entrenched incumbent wins every cycle for 20 straight cycles", () => {
-    const winners = simulate(false, 20);
+  it("BUG REPRODUCTION — without tenure erosion, the entrenched incumbent wins every cycle for 20 straight cycles", () => {
+    const { winners } = simulate(false, 20);
     // Once A wins its first term, uncapped PI/favorability compounding locks
     // it in — every subsequent cycle, forever. This is the audit's
     // "same party wins every close race, every cycle, for 12 years" bug,
@@ -1523,13 +1542,51 @@ describe("multi-cycle simulation — entrenched incumbency vs. a genuinely bette
     expect(longestRun(winners)).toBe(20);
   });
 
-  it("THE FIX — with tenure fatigue, control changes hands within a two-decade span", () => {
-    const winners = simulate(true, 20);
-    // B (the better-fit challenger) must win at least once — control CAN
-    // change hands — and no single party may lock in the seat for the
-    // entire span the way the bug-reproduction case does.
-    expect(winners).toContain("B");
-    expect(longestRun(winners)).toBeLessThan(20);
+  // ── What this channel does, and what it deliberately does NOT do ─────────
+  //
+  // This pair of tests used to assert that tenure fatigue made control change
+  // hands inside twenty cycles. It did — but only because the retired
+  // points-subtraction form charged up to 100 points against stats that top
+  // out at 100, so a long-serving incumbent's favorability reached EXACTLY
+  // zero, and `approvalScalar(0)` is a hard zero: the incumbent was awarded
+  // literally no votes. That is annihilation, not contestability, and it is
+  // the same mechanism that handed a first-time nominee 87.8% and all eight
+  // Florida House seats on live turn 522 (see `personalStatTenureRetention`'s
+  // doc comment in electionFormulaFactors.ts).
+  //
+  // Measured with the real engine over this fixture, sweeping a retention
+  // floor from 1.0 down to 0.05: control NEVER changes hands at any floor
+  // above zero, and the incumbent's steady-state margin only falls from
+  // 87.2pp to 70.4pp. The old assertion was therefore unsatisfiable by any
+  // proportional erosion — it could only ever be met by deleting a candidate.
+  //
+  // The reason is upstream of this channel and is not a vote-engine defect:
+  // in this fixture A's PI/favorability compound 60 -> 100 while B's decay
+  // 40 -> 10, because neither stat mean-reverts per cycle the way
+  // `electionCandidates.support` does. A 10x stat gap is not something a
+  // nominal-share multiplier should be sized to overturn. Restoring genuine
+  // contestability means giving PI/favorability that mean reversion in the
+  // stats themselves; until then this channel is an honest tilt against
+  // entrenchment, and the assertion below is what it actually delivers.
+  it("tenure erosion narrows the entrenched incumbent's margin every cycle it holds the seat", () => {
+    const eroded = simulate(true, 20);
+    const untouched = simulate(false, 20);
+    // Same winner every cycle in both runs, so the margins are directly
+    // comparable cycle-for-cycle.
+    expect(eroded.winners).toEqual(untouched.winners);
+    // Erosion first applies at the third cycle (consecutiveTerms reaches 2);
+    // from there the incumbent's margin is strictly smaller than it would
+    // have been without the channel.
+    for (let cycle = 2; cycle < 20; cycle++) {
+      expect(eroded.margins[cycle]).toBeLessThan(untouched.margins[cycle]);
+    }
+  });
+
+  it("but it never zeroes the incumbent out — the seat is taxed, not confiscated", () => {
+    const { margins } = simulate(true, 20);
+    // A margin of 100pp means the loser received no votes at all. The retired
+    // points form reached exactly that; a retention fraction cannot.
+    for (const margin of margins) expect(margin).toBeLessThan(100);
   });
 });
 
@@ -1649,6 +1706,127 @@ describe("appealWeight — House per-candidate tenure fatigue", () => {
   });
 });
 
+// ─── Tenure erosion is proportional, so it can never delete a candidate ─────
+//
+// Regression coverage for the live 1962 US House defect (FL, turn 522): a
+// state's two returning nominees had each contested five prior cycles, so both
+// carried five terms of tenure. The erosion of the day subtracted a flat 10
+// POINTS per term from politicalInfluence and favorability — 40 points at five
+// terms — which drove both incumbents' influence to zero (floored at
+// VOTE_REACH_FLOOR) and more than halved their favorability. A first-time
+// nominee for a party holding 1.7% of the state's registration took 87.8% of
+// the vote and all eight seats. 41 of 55 active House races carried the same
+// erosion; the shape recurred wherever both major-party nominees were
+// long-serving and a new party fielded a fresh face.
+//
+// The root cause is the OPERATOR, not just its size: subtracting fixed points
+// from a 0-100 stat erases a candidate whose stat is small, while barely
+// scratching one whose stat is large. Erosion is proportional now, so a
+// candidate keeps a fixed FRACTION of their standing no matter how long they
+// have served, and the ordering the rest of the engine computes survives.
+describe("appealWeight — tenure erosion never deletes a long-serving candidate", () => {
+  // Modelled on the live FL race: two long-tenured incumbents with ordinary
+  // stats, against a fresh nominee whose stats are only marginally better.
+  function floridaShapedRace(): EnrichedCandidate[] {
+    return [
+      {
+        candidateId: "fresh", // Frances Ortiz (CUP) — first-time nominee
+        party: "C",
+        isNPP: true,
+        politicalInfluence: 42.7,
+        nationalInfluence: 42.7,
+        favorability: 78.4,
+        support: 50,
+        charEP: 0.8,
+        charSP: 1.6,
+        archetypeApprovals: {},
+        infamy: 0,
+      } as EnrichedCandidate,
+      {
+        candidateId: "tenuredHighPi", // Joseph Grant (FLP) — five terms
+        party: "A",
+        isNPP: true,
+        politicalInfluence: 40.0,
+        nationalInfluence: 40.0,
+        favorability: 75.9,
+        support: 50,
+        charEP: -0.5,
+        charSP: 1.0,
+        archetypeApprovals: {},
+        infamy: 0,
+      } as EnrichedCandidate,
+      {
+        candidateId: "tenuredLowPi", // Lisa Ross (DEM) — five terms, low PI
+        party: "B",
+        isNPP: true,
+        politicalInfluence: 26.6,
+        nationalInfluence: 26.6,
+        favorability: 73.3,
+        support: 50,
+        charEP: 0.8,
+        charSP: 1.1,
+        archetypeApprovals: {},
+        infamy: 0,
+      } as EnrichedCandidate,
+    ];
+  }
+
+  function runFlorida(terms: number) {
+    const opts: DistributeVotesOptions = {
+      isGeneralElection: true,
+      countryId: "US",
+      votingSystem: "fptp",
+      useNationalInfluenceForReach: false,
+      includeInfluenceInAppeal: false,
+      houseIncumbentTenureTermsByCandidateId: new Map([
+        ["tenuredHighPi", terms],
+        ["tenuredLowPi", terms],
+      ]),
+    };
+    return distributeVotesBySwingFlow(
+      floridaShapedRace(),
+      1_000_000,
+      1_000_000,
+      1_000_000,
+      fixtureDemographics(),
+      fixtureCategories(),
+      new Map(),
+      opts
+    );
+  }
+
+  it("a fresh nominee cannot sweep a field of long-serving rivals with comparable stats", () => {
+    const { sharesPct } = runFlorida(5);
+    // The live defect put the fresh nominee at 87.8% with the two incumbents
+    // on 10.1% and 2.1%. Tenure is a tilt, not a deletion: no candidate whose
+    // underlying stats are competitive may be reduced to a rounding error.
+    expect(sharesPct.fresh).toBeLessThan(55);
+    expect(sharesPct.tenuredHighPi).toBeGreaterThan(15);
+    expect(sharesPct.tenuredLowPi).toBeGreaterThan(15);
+  });
+
+  it("erosion saturates — an unbounded tenure cannot drive a candidate to zero", () => {
+    // MAX_HOUSE_TENURE_LOOKBACK is 12, but the curve must hold past it: the
+    // flat-points form hit zero PI at four terms for an ordinary candidate and
+    // zero favorability (hence zero votes) at eleven.
+    const long = runFlorida(40);
+    expect(long.sharesPct.tenuredLowPi).toBeGreaterThan(10);
+    // Saturated: past the cap, further terms change nothing at all.
+    const longer = runFlorida(120);
+    expect(longer.sharesPct.tenuredLowPi).toBeCloseTo(long.sharesPct.tenuredLowPi, 6);
+  });
+
+  it("a low-stat incumbent is eroded no harder, in relative terms, than a high-stat one", () => {
+    // The flat-points form was regressive: 40 points took 100% of a PI-26.6
+    // candidate and 0% of a PI-40 one. Proportional erosion is scale-free, so
+    // both incumbents keep the same fraction of their unfatigued share.
+    const base = runFlorida(1); // first term — no erosion
+    const worn = runFlorida(6);
+    const retention = (id: string) => worn.sharesPct[id] / base.sharesPct[id];
+    expect(retention("tenuredLowPi")).toBeCloseTo(retention("tenuredHighPi"), 1);
+  });
+});
+
 describe("multi-cycle simulation — US House control can change hands", () => {
   // Two parties' House nominees for one state's delegation. Mirrors the
   // presidential/Senate simulation above but keys tenure per-candidateId
@@ -1666,6 +1844,7 @@ describe("multi-cycle simulation — US House control can change hands", () => {
     let piB = 40;
     let favB = 40;
     const winners: string[] = [];
+    const sharesA: number[] = [];
 
     for (let cycle = 0; cycle < cycles; cycle++) {
       const candidates: EnrichedCandidate[] = [
@@ -1724,6 +1903,7 @@ describe("multi-cycle simulation — US House control can change hands", () => {
 
       const winner = sharesPct.A >= sharesPct.B ? "A" : "B";
       winners.push(winner);
+      sharesA.push(sharesPct.A);
 
       if (winner === incumbentCandidateId) {
         consecutiveTerms += 1;
@@ -1747,35 +1927,37 @@ describe("multi-cycle simulation — US House control can change hands", () => {
       }
     }
 
-    return winners;
+    return { winners, sharesA };
   }
 
-  function longestRun(winners: string[]): number {
-    let longest = 1;
-    let current = 1;
-    for (let i = 1; i < winners.length; i++) {
-      current = winners[i] === winners[i - 1] ? current + 1 : 1;
-      longest = Math.max(longest, current);
+  it("erosion narrows a long-serving House incumbent's margin without ever zeroing them", () => {
+    // B is genuinely the better fit (A starts 1.0 off-center). This used to
+    // assert that erosion let B take the delegation within twenty cycles; it
+    // only ever did so because the retired points form drove A's favorability
+    // to exactly zero, which awards zero votes. See the long note on the
+    // presidential/Senate simulation above for the measurement, and
+    // `personalStatTenureRetention`'s doc comment for the live House race
+    // that behaviour produced. What the channel honestly guarantees is that
+    // the tax is real and that it never becomes a confiscation.
+    const eroded = simulateHouse(true, 20, { rivalIsGenuinelyBetter: true });
+    const untouched = simulateHouse(false, 20, { rivalIsGenuinelyBetter: true });
+    expect(eroded.winners).toEqual(untouched.winners);
+    // The tax is real: from the third cycle on (consecutiveTerms reaches 2)
+    // A's share is strictly below what it would have been with no erosion.
+    for (let cycle = 2; cycle < 20; cycle++) {
+      expect(eroded.sharesA[cycle]).toBeLessThan(untouched.sharesA[cycle]);
     }
-    return longest;
-  }
-
-  it("House control can change hands when the fundamentals favor the challenger", () => {
-    // B is genuinely the better fit (A starts 1.0 off-center); over 20 cycles
-    // the fatigued PI/favorability channel must eventually let B break
-    // through — the same "same party wins every close race forever" defect
-    // the presidential/Senate sim above reproduces and fixes.
-    const winners = simulateHouse(true, 20, { rivalIsGenuinelyBetter: true });
-    expect(winners).toContain("B");
-    expect(longestRun(winners)).toBeLessThan(20);
+    // And it is never a confiscation: the incumbent stays a live candidate
+    // with a real share at every point in a twenty-cycle tenure.
+    for (const share of eroded.sharesA) expect(share).toBeGreaterThan(5);
   });
 
   it("a strong incumbent still usually wins when fundamentals are otherwise equal", () => {
     // Neither candidate is off-center here — the only edge A has is the
-    // genuine, real PI/favorability incumbency advantage. Tenure fatigue
-    // erodes that advantage over TIME but must not neuter it turn one: A
+    // genuine, real PI/favorability incumbency advantage. Tenure erosion
+    // shrinks that advantage over TIME but must not neuter it turn one: A
     // should still win most cycles, not merely at chance (~50%).
-    const winners = simulateHouse(true, 20, { rivalIsGenuinelyBetter: false });
+    const { winners } = simulateHouse(true, 20, { rivalIsGenuinelyBetter: false });
     const aWins = winners.filter((w) => w === "A").length;
     expect(aWins).toBeGreaterThan(winners.length / 2);
   });
