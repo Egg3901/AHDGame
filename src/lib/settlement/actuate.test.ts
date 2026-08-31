@@ -521,14 +521,66 @@ describe("actuateSettlementOutcome", () => {
     expect(calls.some((c) => c[1].$unset?.cabinetPosition !== undefined)).toBe(true);
   });
 
-  it("retires the absorbed cabinet rather than seating it in unknown portfolios", async () => {
+  it("clears the SURVIVOR's cabinet so the defeated side does not govern", async () => {
     const { actuateSettlementOutcome } = await import("./actuate");
     await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+    // The merge runs winner-into-shell, so the shell's own ministers go. In the
+    // live German case they are NPP ministers of parties this settlement is
+    // about to ban, sitting in portfolios the carried ministers are given.
+    expect(prime(db, "cabinetMembers").deleteMany).toHaveBeenCalledWith({ countryId: "DE" });
+  });
+
+  it("carries a mapped portfolio to the surviving country's equivalent", async () => {
+    const minister = new ObjectId();
+    const row = new ObjectId();
+    prime(db, "cabinetMembers").find.mockImplementation((f: { countryId: string }) => ({
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      project: vi.fn().mockReturnThis(),
+      toArray: vi
+        .fn()
+        .mockResolvedValue(
+          f.countryId === "DD"
+            ? [{ _id: row, positionId: "minister_of_defence", characterId: minister }]
+            : []
+        ),
+    }));
+
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+
     // East Germany seats a `minister_of_defence`; Germany a `defense_minister`.
-    // Carrying the rows would create ministries the surviving country does not
-    // define, alongside the ones it already has.
-    expect(prime(db, "cabinetMembers").deleteMany).toHaveBeenCalledWith({ countryId: "DD" });
-    expect(prime(db, "cabinetMembers").updateMany).not.toHaveBeenCalled();
+    // The winner keeps the portfolio, under the survivor's name for it.
+    expect(prime(db, "cabinetMembers").updateOne).toHaveBeenCalledWith(
+      { _id: row },
+      expect.objectContaining({
+        $set: expect.objectContaining({ countryId: "DE", positionId: "defense_minister" }),
+      })
+    );
+  });
+
+  it("retires an absorbed portfolio the survivor has no counterpart for", async () => {
+    const minister = new ObjectId();
+    const row = new ObjectId();
+    prime(db, "cabinetMembers").find.mockImplementation((f: { countryId: string }) => ({
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      project: vi.fn().mockReturnThis(),
+      toArray: vi
+        .fn()
+        .mockResolvedValue(
+          f.countryId === "DD"
+            ? [{ _id: row, positionId: "minister_of_machine_building", characterId: minister }]
+            : []
+        ),
+    }));
+
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+
+    // The Federal Republic runs no Ministry for Machine Building, so the
+    // portfolio ends with the state that had it rather than being invented.
+    expect(prime(db, "cabinetMembers").deleteOne).toHaveBeenCalledWith({ _id: row });
   });
 
   it("retires a national office with no counterpart in the surviving country", async () => {

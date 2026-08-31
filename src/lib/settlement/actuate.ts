@@ -45,6 +45,7 @@ import { mergeEconomicRegime } from "@/lib/country/mergeEconomicRegime";
 import { rescopeLegislationCatalogue } from "@/lib/country/rescopeLegislationCatalogue";
 import { installOnePartyState } from "@/lib/onePartyState/installOnePartyState";
 import { remapOffice } from "@/lib/country/dissolvingOfficeRemap";
+import { remapCabinetPosition } from "@/lib/country/dissolvingCabinetRemap";
 import { getSettlementCrisesCollection } from "@/lib/db/collections";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
 import { mergeCountry } from "@/lib/country/mergeCountry";
@@ -344,6 +345,54 @@ interface GovernmentFormationHead {
 }
 
 /**
+ * Let go of a portfolio that no longer exists.
+ *
+ * `cabinetPosition` and a `currentOffice` naming a portfolio would otherwise
+ * point at a row that has been deleted, in a country that may never have had it.
+ *
+ * A minister who ALSO holds an elected seat keeps the seat: only the portfolio
+ * is cleared, and their `currentOffice` was already re-pointed at the carried
+ * office by the region sweep. That is why the `currentOffice` null-out is
+ * filtered on `parliamentaryCabinet` while the `cabinetPosition` unset is not.
+ *
+ * A seat can be held by a player OR an NPP, and both carry the same stored
+ * office field — handling only the player leaves an NPP minister pointing at a
+ * portfolio that no longer exists.
+ */
+async function clearCabinetPointers(
+  db: Db,
+  ministers: Array<{ characterId?: ObjectId | null; nppId?: ObjectId | null }>,
+  now: Date
+): Promise<void> {
+  const characterIds = ministers.map((m) => m.characterId).filter(Boolean) as ObjectId[];
+  const nppIds = ministers.map((m) => m.nppId).filter(Boolean) as ObjectId[];
+
+  if (characterIds.length > 0) {
+    await db
+      .collection("characters")
+      .updateMany(
+        { _id: { $in: characterIds }, "currentOffice.type": "parliamentaryCabinet" },
+        { $set: { currentOffice: null, updatedAt: now }, $unset: { cabinetPosition: "" } }
+      );
+    await db
+      .collection("characters")
+      .updateMany(
+        { _id: { $in: characterIds }, "currentOffice.type": { $ne: null } },
+        { $unset: { cabinetPosition: "" }, $set: { updatedAt: now } }
+      );
+  }
+
+  if (nppIds.length > 0) {
+    await db
+      .collection("npps")
+      .updateMany(
+        { _id: { $in: nppIds }, "currentOffice.type": "parliamentaryCabinet" },
+        { $set: { currentOffice: null, updatedAt: now } }
+      );
+  }
+}
+
+/**
  * Deal with what the per-region sweep cannot reach.
  *
  * `evacuateRegionPolitics` runs once per region and matches officials on
@@ -392,59 +441,83 @@ async function retireNationalRemnants(
       );
   }
 
-  // THE CABINET IS RETIRED, NOT CARRIED.
+  // THE WINNER'S CABINET GOVERNS.
   //
-  // Cabinet seats are keyed by position id, and the two countries do not share
-  // that vocabulary: East Germany seats a `minister_of_defence`, Germany a
-  // `defense_minister`. Re-scoping the rows would seat ministers in portfolios
-  // the surviving country does not define, next to the ones it already has, and
-  // inventing a position map would be a political judgement rather than a
-  // migration. The head of government is carried separately below; the rest of
-  // the council goes with the state it served, and the new government appoints
-  // its own.
+  // The merge runs winner-into-shell, so the absorbed state's council is the
+  // council of the unified state. Portfolios cross through
+  // `dissolvingCabinetRemap` — the two constitutions do not share a vocabulary
+  // (East Germany seats a `minister_of_defence`, Germany a `defense_minister`),
+  // and the per-pair table is the same shape `dissolvingOfficeRemap` already
+  // uses for elected offices. A portfolio with no counterpart retires with the
+  // state that had it.
   //
-  // The holders' own denormalised office fields go with it: `cabinetPosition`
-  // and a `currentOffice` naming a portfolio would otherwise point at a row that
-  // no longer exists, in a country that never had it. Read BEFORE the delete,
-  // because the rows are how the holders are found.
+  // The SURVIVOR's own ministers go first, and unconditionally. Leaving them
+  // would seat the defeated side's cabinet beside the winner's — and in the live
+  // German case those are NPP ministers of parties this settlement is about to
+  // ban, holding portfolios the carried ministers are being given.
+  //
+  // `cabinetMembers.party` needs no remap here: it is in
+  // `PARTY_REF_COLLECTIONS`, so `mergePartiesIntoCountry` renumbered it in step
+  // 2, before any of this ran.
+  const survivorMinisters = (await db
+    .collection("cabinetMembers")
+    .find({ countryId: survivor })
+    .toArray()) as unknown as Array<{ characterId?: ObjectId | null; nppId?: ObjectId | null }>;
+  await db.collection("cabinetMembers").deleteMany({ countryId: survivor });
+  await clearCabinetPointers(db, survivorMinisters, now);
+
+  // Read BEFORE anything moves, because the rows are how the holders are found.
   const ministers = (await db
     .collection("cabinetMembers")
     .find({ countryId: absorbed })
-    .toArray()) as unknown as Array<{ characterId?: ObjectId | null; nppId?: ObjectId | null }>;
-  const ministerIds = ministers.map((m) => m.characterId).filter(Boolean) as ObjectId[];
-  // A seat can be held by a player OR an NPP, and both carry the same stored
-  // office field. Handling only the player leaves an NPP minister pointing at a
-  // portfolio that no longer exists.
-  const ministerNppIds = ministers.map((m) => m.nppId).filter(Boolean) as ObjectId[];
+    .toArray()) as unknown as Array<{
+    _id: ObjectId;
+    positionId?: string;
+    characterId?: ObjectId | null;
+    nppId?: ObjectId | null;
+  }>;
 
-  await db.collection("cabinetMembers").deleteMany({ countryId: absorbed });
-
-  if (ministerIds.length > 0) {
+  const retired: Array<{ characterId?: ObjectId | null; nppId?: ObjectId | null }> = [];
+  for (const minister of ministers) {
+    const target = minister.positionId
+      ? remapCabinetPosition(absorbed, survivor, minister.positionId)
+      : null;
+    if (target === null) {
+      await db.collection("cabinetMembers").deleteOne({ _id: minister._id });
+      retired.push(minister);
+      continue;
+    }
     await db
-      .collection("characters")
-      .updateMany(
-        { _id: { $in: ministerIds }, "currentOffice.type": "parliamentaryCabinet" },
-        { $set: { currentOffice: null, updatedAt: now }, $unset: { cabinetPosition: "" } }
+      .collection("cabinetMembers")
+      .updateOne(
+        { _id: minister._id },
+        { $set: { countryId: survivor, positionId: target, updatedAt: now } }
       );
-    // A minister who ALSO holds a seat keeps the seat: only the portfolio is
-    // cleared, and their `currentOffice` was already re-pointed at the carried
-    // office by the region sweep.
-    await db
-      .collection("characters")
-      .updateMany(
-        { _id: { $in: ministerIds }, "currentOffice.type": { $ne: null } },
-        { $unset: { cabinetPosition: "" }, $set: { updatedAt: now } }
+    // The holder's denormalised pointer names the OLD portfolio. Re-point it
+    // rather than clearing it: this minister keeps their seat at the table.
+    if (minister.characterId) {
+      await db.collection("characters").updateMany(
+        { _id: minister.characterId, "currentOffice.type": "parliamentaryCabinet" },
+        {
+          $set: {
+            "currentOffice.positionId": target,
+            cabinetPosition: target,
+            updatedAt: now,
+          },
+        }
       );
+    }
+    if (minister.nppId) {
+      await db
+        .collection("npps")
+        .updateMany(
+          { _id: minister.nppId, "currentOffice.type": "parliamentaryCabinet" },
+          { $set: { "currentOffice.positionId": target, updatedAt: now } }
+        );
+    }
   }
 
-  if (ministerNppIds.length > 0) {
-    await db
-      .collection("npps")
-      .updateMany(
-        { _id: { $in: ministerNppIds }, "currentOffice.type": "parliamentaryCabinet" },
-        { $set: { currentOffice: null, updatedAt: now } }
-      );
-  }
+  await clearCabinetPointers(db, retired, now);
 
   // THE HEAD OF GOVERNMENT IS CARRIED.
   //
