@@ -48,6 +48,12 @@ import {
 import { PENSION_SCHEMES, refreshSchemeInvestedValues } from "./schemeAssets";
 import { runPensionBenefitsTurn, type PensionBenefitsResult } from "./pensionBenefits";
 import { runPensionSchemeInvestments, type PensionInvestingResult } from "./schemeInvesting";
+import {
+  anchorToCorpLiquidCapital,
+  corpLiquidCapitalToAnchor,
+  fxRateForCorpFromMap,
+  loadFxRatesByCurrency,
+} from "@/lib/currency/corporationCapital";
 
 export { PENSION_SCHEMES };
 
@@ -177,9 +183,13 @@ export async function runPensionTurn(db: Db, currentTurn: number): Promise<Pensi
   );
   const employers = await db
     .collection<Corporation>("corporations")
-    .find({ _id: { $in: employerIds } }, { projection: { name: 1, liquidCurrencyCode: 1 } })
+    .find(
+      { _id: { $in: employerIds } },
+      { projection: { name: 1, countryId: 1, liquidCurrencyCode: 1 } }
+    )
     .toArray();
   const employerById = new Map(employers.map((c) => [c._id.toString(), c]));
+  const fxByCurrency = await loadFxRatesByCurrency(db);
 
   // Sectors live in their own collection, so load every covered sector for the
   // whole sweep in one read rather than per agreement.
@@ -202,23 +212,24 @@ export async function runPensionTurn(db: Db, currentTurn: number): Promise<Pensi
       const covered = agreement.sectorIds
         .map((id) => sectorById.get(id.toString()))
         .filter((s): s is CorporateSector => s !== undefined);
-      const wageBill = coveredWageBillPerTurn(covered);
-      if (wageBill <= 0) continue;
+      const wageBillLocal = coveredWageBillPerTurn(covered);
+      if (wageBillLocal <= 0) continue;
 
       const scheme = await ensurePensionScheme(db, union, currentTurn);
       const currency = (employer.liquidCurrencyCode ?? "USD") as CurrencyCode;
+      const fxRate = fxRateForCorpFromMap(employer, fxByCurrency);
       const now = new Date();
 
       // 1. Contribution.
-      const contribution = pensionContributionForTurn({
-        coveredWageBill: wageBill,
+      const contributionLocal = pensionContributionForTurn({
+        coveredWageBill: wageBillLocal,
         contributionRate: rate,
       });
-      let paid = 0;
-      if (contribution > 0) {
-        const debit = await atomicallyDebitCorpLiquidCapital(db, employer._id, contribution);
+      let paidLocal = 0;
+      if (contributionLocal > 0) {
+        const debit = await atomicallyDebitCorpLiquidCapital(db, employer._id, contributionLocal);
         if (debit.ok) {
-          paid = contribution;
+          paidLocal = contributionLocal;
         } else {
           // An employer that cannot pay does NOT get the claim forgiven. That
           // is the whole shape of an underfunded scheme: the promise stands and
@@ -231,35 +242,44 @@ export async function runPensionTurn(db: Db, currentTurn: number): Promise<Pensi
       // TOTAL assets, cash plus the marked value of the scheme's units. Reading
       // `scheme.assetsAnchor` alone here would treat every ₳ a scheme invested
       // as an ₳ it had lost and bill its employer for the difference.
-      const topUp = pensionTopUpForTurn({
-        assetsAnchor: pensionSchemeAssetsAnchor(scheme) + paid,
+      const paidAnchor = corpLiquidCapitalToAnchor(paidLocal, employer, fxRate);
+      const topUpAnchor = pensionTopUpForTurn({
+        assetsAnchor: pensionSchemeAssetsAnchor(scheme) + paidAnchor,
         liabilitiesAnchor: scheme.liabilitiesAnchor,
       });
-      let toppedUp = 0;
-      if (topUp > 0) {
-        const debit = await atomicallyDebitCorpLiquidCapital(db, employer._id, topUp);
-        if (debit.ok) toppedUp = topUp;
-        else result.shortfalls += 1;
+      const topUpLocal = anchorToCorpLiquidCapital(topUpAnchor, employer, fxRate);
+      let toppedUpAnchor = 0;
+      let toppedUpLocal = 0;
+      if (topUpLocal > 0) {
+        const debit = await atomicallyDebitCorpLiquidCapital(db, employer._id, topUpLocal);
+        if (debit.ok) {
+          toppedUpAnchor = topUpAnchor;
+          toppedUpLocal = topUpLocal;
+        } else result.shortfalls += 1;
       }
 
       // 3. Accrual, always, whether or not the employer could pay.
-      const accrual = pensionAccrualForTurn(wageBill);
+      const accrualAnchor = corpLiquidCapitalToAnchor(
+        pensionAccrualForTurn(wageBillLocal),
+        employer,
+        fxRate
+      );
 
       await db.collection<PensionScheme>(PENSION_SCHEMES).updateOne(
         { _id: scheme._id },
         {
           $inc: {
-            assetsAnchor: paid + toppedUp,
-            liabilitiesAnchor: accrual,
-            totalContributionsAnchor: paid,
-            totalTopUpsAnchor: toppedUp,
+            assetsAnchor: paidAnchor + toppedUpAnchor,
+            liabilitiesAnchor: accrualAnchor,
+            totalContributionsAnchor: paidAnchor,
+            totalTopUpsAnchor: toppedUpAnchor,
           },
           $set: { lastChargedTurn: currentTurn, updatedAt: now },
         }
       );
 
-      const moved = paid + toppedUp;
-      if (moved > 0) {
+      const movedLocal = paidLocal + toppedUpLocal;
+      if (movedLocal > 0) {
         // Both legs. The scheme is a real counterparty holding real assets, so
         // a one-sided debit would read as money destroyed.
         await emitTx(db, {
@@ -269,15 +289,15 @@ export async function runPensionTurn(db: Db, currentTurn: number): Promise<Pensi
           subjectType: "corporation",
           subjectId: employer._id,
           subjectName: employer.name,
-          amount: -moved,
+          amount: -movedLocal,
           currencyCode: currency,
           counterpartyType: "pension_scheme",
           counterpartyId: scheme._id,
           counterpartyName: `${union.name} pension scheme`,
           meta: {
             schemeId: scheme._id.toString(),
-            contribution: paid,
-            topUp: toppedUp,
+            contribution: paidLocal,
+            topUp: toppedUpLocal,
             rate,
           },
         });
@@ -288,7 +308,7 @@ export async function runPensionTurn(db: Db, currentTurn: number): Promise<Pensi
           subjectType: "pension_scheme",
           subjectId: scheme._id,
           subjectName: `${union.name} pension scheme`,
-          amount: moved,
+          amount: movedLocal,
           currencyCode: currency,
           counterpartyType: "corporation",
           counterpartyId: employer._id,
@@ -298,9 +318,9 @@ export async function runPensionTurn(db: Db, currentTurn: number): Promise<Pensi
       }
 
       result.schemesCharged += 1;
-      result.contributionsAnchor += paid;
-      result.topUpsAnchor += toppedUp;
-      result.accrualsAnchor += accrual;
+      result.contributionsAnchor += paidAnchor;
+      result.topUpsAnchor += toppedUpAnchor;
+      result.accrualsAnchor += accrualAnchor;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       result.errors.push(`Agreement ${agreement._id.toString()}: ${message}`);

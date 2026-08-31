@@ -13,7 +13,7 @@ const neutral: RegionPullMetrics = {
   gdpGrowth: 2.5,
   unemployment: 5,
   medianIncome: 50000,
-  costOfLiving: 50,
+  costOfLiving: 100,
 };
 
 describe("regionAttractiveness", () => {
@@ -30,6 +30,14 @@ describe("regionAttractiveness", () => {
     const pricey = regionAttractiveness({ ...neutral, costOfLiving: 80 }, 50000);
     expect(cheap).toBeGreaterThan(pricey);
   });
+  it("treats the canonical 100 cost-of-living index as neutral", () => {
+    const baseline = regionAttractiveness(neutral, 50000);
+    const cheaper = regionAttractiveness({ ...neutral, costOfLiving: 90 }, 50000);
+    const pricier = regionAttractiveness({ ...neutral, costOfLiving: 110 }, 50000);
+    expect(cheaper - baseline).toBeCloseTo(0.5);
+    expect(pricier - baseline).toBeCloseTo(-0.5);
+  });
+
   it("pulls workers toward persistent vacancies, with higher wages strengthening the signal", () => {
     const slack = regionAttractiveness({ ...neutral, labourTightness: 0.8 }, 50000);
     const shortage = regionAttractiveness(

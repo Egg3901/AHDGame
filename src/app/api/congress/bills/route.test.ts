@@ -215,10 +215,10 @@ describe("POST /api/congress/bills", () => {
     const charUpdates = db.collectionMocks["characters"]!.updateOne.mock.calls;
     expect(charUpdates.length).toBeGreaterThan(0);
     const lastCharUpdate = charUpdates[charUpdates.length - 1]?.[1] as {
-      $set?: { nationalInfluence?: number; politicalInfluence?: number };
+      $inc?: { nationalInfluence?: number; politicalInfluence?: number };
     };
-    expect(lastCharUpdate?.$set?.nationalInfluence).toBe(35); // 40 - 5 (1 provision costs 5 NPI)
-    expect(lastCharUpdate?.$set?.politicalInfluence).toBeUndefined();
+    expect(lastCharUpdate?.$inc?.nationalInfluence).toBe(-5);
+    expect(lastCharUpdate?.$inc?.politicalInfluence).toBeUndefined();
   });
 
   it("rejects a duplicate tariff scope across active US congress bills", async () => {

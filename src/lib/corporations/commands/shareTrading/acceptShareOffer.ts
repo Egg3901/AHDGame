@@ -35,6 +35,7 @@ import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import type { ShareTradeParty } from "@/lib/db/types/shareTradeHistory";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { emitTx } from "@/lib/financialTxLog/emit";
+import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 import type {
   Character,
   Corporation,
@@ -71,6 +72,8 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
     const forexEnabled = await isForexEnabled();
     const corpGuard = await requireCorporationActionsEnabled(db);
     if (corpGuard) return corpGuard;
+    const turnGuard = await rejectDuringTurn(db);
+    if (turnGuard) return turnGuard;
 
     const resolved = await resolveCorporation(db, id);
     if (!resolved.ok) return resolved.response;
@@ -145,7 +148,6 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
       Math.round(
         corpLiquidCapitalToAnchor(refundLocal, listingCorp ?? {}, listingCorpFxRate) * 100
       ) / 100;
-    const newListingRemaining = listing.sharesRemaining - sharesToAccept;
     const sellerChar = !listing.sellerCorporationId
       ? await db
           .collection<Character>("characters")
@@ -205,11 +207,8 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
         status: "open",
       },
       {
-        $set: {
-          sharesRemaining: newListingRemaining,
-          ...(newListingRemaining === 0 ? { status: "filled" } : {}),
-          updatedAt: now,
-        },
+        $inc: { sharesRemaining: -sharesToAccept },
+        $set: { updatedAt: now },
       },
       { returnDocument: "after" }
     );
@@ -221,7 +220,7 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
         .findOne({ _id: listing._id });
       await db
         .collection<ShareOffer>("shareOffers")
-        .updateOne({ _id: offer._id }, { $set: { status: "pending" } });
+        .updateOne({ _id: offer._id, status: "accepted" }, { $set: { status: "pending" } });
       if (!freshListing) {
         return NextResponse.json({ error: "Listing not found" }, { status: 404 });
       }
@@ -232,6 +231,15 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
         { error: "Not enough shares remaining (concurrent acceptance detected)" },
         { status: 400 }
       );
+    }
+    const listingSharesRemaining = listingUpdate.sharesRemaining;
+    if (listingSharesRemaining === 0) {
+      await db
+        .collection<ShareListing>("shareListings")
+        .updateOne(
+          { _id: listing._id, status: "open", sharesRemaining: 0 },
+          { $set: { status: "filled", updatedAt: now } }
+        );
     }
     const rollback: Array<() => Promise<void>> = [];
 
@@ -460,18 +468,21 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
       }
       await Promise.all([
         db.collection<ShareListing>("shareListings").updateOne(
-          { _id: listing._id },
           {
+            _id: listing._id,
+            status: { $in: ["open", "filled"] },
+          },
+          {
+            $inc: { sharesRemaining: sharesToAccept },
             $set: {
-              sharesRemaining: listing.sharesRemaining,
-              status: listing.status,
+              status: "open",
               updatedAt: new Date(),
             },
           }
         ),
         db
           .collection<ShareOffer>("shareOffers")
-          .updateOne({ _id: offer._id }, { $set: { status: "pending" } }),
+          .updateOne({ _id: offer._id, status: "accepted" }, { $set: { status: "pending" } }),
       ]);
       throw err;
     }
@@ -560,7 +571,7 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
       sharesTransferred: sharesToAccept,
       proceeds,
       refundedToOffer: refund,
-      listingSharesRemaining: newListingRemaining,
+      listingSharesRemaining,
     });
   } catch (error) {
     return handleRouteError(error);

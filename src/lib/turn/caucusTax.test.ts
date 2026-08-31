@@ -8,6 +8,7 @@ vi.mock("@/lib/mongodb", () => ({
 }));
 vi.mock("@/lib/utils/fundGeneration", () => ({
   projectCharacterGeneration: vi.fn(),
+  projectNppGeneration: vi.fn(),
 }));
 vi.mock("@/lib/financialTxLog/emit", () => ({
   loadTxThresholds: vi.fn().mockResolvedValue({}),
@@ -18,7 +19,7 @@ vi.mock("@/lib/treasury/emit", () => ({
 }));
 
 import { getDb } from "@/lib/mongodb";
-import { projectCharacterGeneration } from "@/lib/utils/fundGeneration";
+import { projectCharacterGeneration, projectNppGeneration } from "@/lib/utils/fundGeneration";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
 import { emitTxBulk } from "@/lib/financialTxLog/emit";
 import { processCaucusTax } from "./caucusTax";
@@ -366,5 +367,54 @@ describe("processCaucusTax", () => {
       .calls[0] as [Record<string, unknown>, { $inc: Record<string, number> }];
     expect(caucusFilter).toMatchObject({ _id: caucusId });
     expect(caucusUpdate.$inc).toEqual({ treasury: 1_000 });
+  });
+
+  it("taxes NPP per-turn generation instead of its accumulated balance", async () => {
+    const nppId = new ObjectId();
+    const caucusId = new ObjectId();
+    setupCollection("caucuses", [
+      {
+        _id: caucusId,
+        name: "NPP Caucus",
+        countryId: "US",
+        partyId: "1",
+        disbandedAt: null,
+        taxRate: 10,
+        treasury: 0,
+      },
+    ]);
+    setupCollection("caucusMemberships", [
+      {
+        _id: new ObjectId(),
+        caucusId,
+        memberType: "npp",
+        memberId: nppId,
+        status: "active",
+      },
+    ]);
+    setupCollection("characters", []);
+    setupCollection("npps", [
+      {
+        _id: nppId,
+        name: "NPP Member",
+        countryId: "US",
+        homeState: "US-CA",
+        donorBaseLevel: 3,
+        funds: 1_000_000,
+      },
+    ]);
+    setupCollection("states", [{ _id: "US-CA", population: 1_000_000 }]);
+    db.collection("gameConfig");
+    vi.mocked(projectNppGeneration).mockReturnValue(1_000);
+
+    const result = await processCaucusTax(true, 100);
+
+    expect(result).toMatchObject({ membersTaxed: 1, totalTaxed: 100 });
+    const [filter, update] = db.collectionMocks.npps!.updateOne.mock.calls[0] as [
+      Record<string, unknown>,
+      { $inc: Record<string, number> },
+    ];
+    expect(filter).toMatchObject({ _id: nppId, funds: { $gte: 100 } });
+    expect(update.$inc).toEqual({ funds: -100 });
   });
 });

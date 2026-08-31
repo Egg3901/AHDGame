@@ -68,6 +68,8 @@ export interface IndexFund {
   bondAllocations?: IndexFundBondAllocation[];
   backingRatio?: number;
   lastRebalancedAt?: Date;
+  /** Serializes non-transactional redemption fallback on standalone Mongo. */
+  redemptionLock?: { token: ObjectId; expiresAt: Date };
   /** A7: failing-corporation streaks, for the incumbent grace period. */
   listingFailureStreaks?: IndexFundListingFailureStreak[];
 
@@ -167,7 +169,7 @@ export interface IndexFundTransaction {
   createdAt: Date;
 }
 
-export type IndexFundRedemptionStatus = "queued" | "partial" | "paid" | "cancelled";
+export type IndexFundRedemptionStatus = "queued" | "partial" | "processing" | "paid" | "cancelled";
 
 export interface IndexFundRedemptionQueueEntry {
   _id: ObjectId;
@@ -197,6 +199,8 @@ export interface IndexFundRedemptionQueueEntry {
    */
   redeemFxRate?: number;
   status: IndexFundRedemptionStatus;
+  /** Set while the cron owns this payout. Processing rows require reconciliation after a crash. */
+  processingStartedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }

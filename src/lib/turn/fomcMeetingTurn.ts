@@ -38,6 +38,7 @@ import {
   tallyMeeting,
   isAutoSeat,
   playerSeats,
+  boardCanCarryMotions,
   type FomcMacroContext,
 } from "@/lib/centralBank/fomc";
 import { logger } from "../observability/logger";
@@ -208,8 +209,7 @@ async function findNominationExecutives(
 async function notifyFomcVacancy(
   db: Db,
   bank: Pick<CentralBank, "_id" | "countryId">,
-  vacantCount: number,
-  boardSize: number,
+  board: FomcSeat[],
   now: Date
 ): Promise<void> {
   const countryId = bank.countryId as CountryId;
@@ -217,6 +217,14 @@ async function notifyFomcVacancy(
   const bankLabel = config?.centralBank.name ?? "the central bank";
   const execTitle =
     config?.officeTypes.find((o) => o.isExecutive)?.label.toLowerCase() ?? "the executive";
+  const vacantCount = board.filter((s) => s.occupantType === "vacant").length;
+  // A board that still has enough seated members to carry a motion only needs a
+  // nudge to fill the gaps; a board below the threshold is dead and the chair
+  // holds the rate until it is filled.
+  const chairHoldsRate = !boardCanCarryMotions(board);
+  const message = chairHoldsRate
+    ? `${vacantCount} of ${board.length} committee seats are vacant, so the board cannot carry a rate motion. The chair holds the rate directly until enough governors are confirmed. Nominate replacements from the central bank's committee page; the Senate confirms them.`
+    : `${vacantCount} of ${board.length} committee seats are vacant. Nominate governors from the central bank's committee page; the Senate confirms them.`;
 
   const notifications: NotificationInput[] = [];
   const executives = await findNominationExecutives(db, countryId);
@@ -225,14 +233,16 @@ async function notifyFomcVacancy(
       userId: exec.userId,
       type: "system",
       title: `${bankLabel}: board seats vacant`,
-      message: `${vacantCount} of ${boardSize} committee seats are vacant, so no rate motion can reach the ${Math.floor(boardSize / 2) + 1} votes needed to pass. Nominate governors from the central bank's committee page; the Senate confirms them.`,
+      message,
       metadata: { type: "central_bank_fomc_vacancy", countryId, bankId: bank._id, at: now },
     });
   }
   await createNotifications(notifications);
 
   createSystemNewsPost(
-    `${vacantCount} of ${boardSize} seats on the ${bankLabel}'s rate-setting board are vacant. The board cannot carry a rate motion until the ${execTitle} nominates governors and the Senate confirms them.`,
+    chairHoldsRate
+      ? `${vacantCount} of ${board.length} seats on the ${bankLabel}'s rate-setting board are vacant, so the board cannot carry a rate motion. The chair is setting the rate directly until the ${execTitle} nominates governors and the Senate confirms them.`
+      : `${vacantCount} of ${board.length} seats on the ${bankLabel}'s rate-setting board are vacant. The board can still carry motions; the ${execTitle} should nominate governors and the Senate confirm them.`,
     "executive"
   ).catch((err) => logger.error("FomcMeetingTurn", "vacancy news post failed", err));
 }
@@ -546,7 +556,7 @@ export async function processFomcMeetings(
         .toArray();
       if (activeNominations.length === 0) {
         set.lastFomcVacancyNoticeAtTurn = currentTurn;
-        await notifyFomcVacancy(db, bank, vacantSeatCount, board.length, now);
+        await notifyFomcVacancy(db, bank, board, now);
       }
     }
 
@@ -565,13 +575,20 @@ export async function processFomcMeetings(
 
     let meeting = bank.activeFomcMeeting ?? null;
 
-    // 2. Open a meeting when none is active and cadence is due.
+    // 2. Open a meeting when none is active and cadence is due — unless the
+    //    board has decayed below the carry-a-motion threshold. With fewer seated
+    //    members than a strict majority of the full board, every motion fails
+    //    on the tally regardless of how the seated members vote, so opening
+    //    another meeting just re-runs the 1-0-6 auto-fail loop (ticket #1238
+    //    follow-up). The chairman holds the rate directly until nominations
+    //    restore a working board; an ALREADY-OPEN meeting still resolves
+    //    normally below.
     let justOpened = false;
     if (!meeting) {
       const dueForMeeting =
         typeof bank.lastFomcMeetingTurn !== "number" ||
         currentTurn - bank.lastFomcMeetingTurn >= FOMC_MEETING_INTERVAL_TURNS;
-      if (dueForMeeting) {
+      if (dueForMeeting && boardCanCarryMotions(board)) {
         const ctx = await loadMacroContext(db, bank, countryId, currentYear);
         const allowChange = canChangeRate(
           { rateChangesThisTerm: changesThisTerm, lastRateChangeTurn: bank.lastRateChangeTurn },

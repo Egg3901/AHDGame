@@ -40,6 +40,7 @@ import type {
 } from "@/lib/db/types";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { assertCeoAcquisitionWithinCap } from "@/lib/corporations/ceoShareAcquisitionCap";
+import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 
 interface RouteParams {
   params: Promise<{ id: string; listingId: string }>;
@@ -69,6 +70,8 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
     const db = await getDb();
     const corpGuard = await requireCorporationActionsEnabled(db);
     if (corpGuard) return corpGuard;
+    const turnGuard = await rejectDuringTurn(db);
+    if (turnGuard) return turnGuard;
 
     const resolved = await resolveCorporation(db, id);
     if (!resolved.ok) return resolved.response;
