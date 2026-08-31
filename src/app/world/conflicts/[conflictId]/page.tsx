@@ -47,6 +47,7 @@ import {
   declarationOutcome,
   forceReadiness,
   recoveringCount,
+  settlementRow,
   type SideForce,
 } from "./conflictRecordView";
 import { verdictOf, openingLine, momentumOf } from "./recordCopy";
@@ -727,14 +728,7 @@ export default async function ConflictRecordPage({
       note: momentum.note,
       sideBLabel: doc.sideB.label,
     },
-    settlements: settlements.map((o) => ({
-      id: o._id.toString(),
-      leaver: o.fromCountry,
-      other: o.toCountry,
-      term: o.term,
-      justification: o.justification ?? null,
-      turn: o.resolvedTurn ?? o.offeredTurn,
-    })),
+    settlements: settlements.map(settlementRow),
     tier,
     canAct,
     viewerCountry,
