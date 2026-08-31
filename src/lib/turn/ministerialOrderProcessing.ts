@@ -36,6 +36,7 @@ import { applyDefenseAppropriation } from "./defenseAppropriationTurn";
 import { settleDoctrineIncome } from "@/lib/db/collections/nationalDoctrine";
 import { applyDefenceDeliveries } from "./defenceDeliveryTurn";
 import { applyDefenceRefit } from "./defenceRefitTurn";
+import { applyNavalRepair } from "./navalRepairTurn";
 import { applyStateArmsProduction } from "./stateArmsTurn";
 import { applyNuclearProduction } from "./nuclearProductionTurn";
 import { applyCovertNuclearTurn } from "./covertNuclearTurn";
@@ -395,6 +396,12 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
     // delivery is: materiel has to arrive before it can be issued. A no-op for every
     // country not on the state-arms roster.
     await applyStateArmsProduction(db, cid);
+    // Before refit, and deliberately so: a wreck restored to service is worth far more per
+    // lot than topping up a working hull's racks, which `computeEffectivePower` caps at a
+    // few percent. When the store is short, the lots go where they buy the most fighting
+    // strength. Free repair has already run this turn in the naval and air pass, so this
+    // is buying only what the ceiling there would not give away.
+    await applyNavalRepair(db, cid);
     await applyDefenceRefit(db, cid);
     // Nuclear stockpile accrual, right after refit so it competes for the same
     // appropriation AFTER conventional deliveries have settled: a nation short
