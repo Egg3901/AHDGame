@@ -1,4 +1,5 @@
 import type { ClientSession } from "mongodb";
+import { assertTransactionSupportAtBoot } from "@/lib/db/transactionSupport";
 
 /**
  * Mongo error code 117 (`ConflictingOperationInProgress`). Despite the
@@ -19,6 +20,8 @@ export interface RunTransactionOptions {
   maxAttempts?: number;
   sleep?: (ms: number) => Promise<void>;
   onRetry?: (attempt: number, error: unknown) => void;
+  /** Called once when the body is run WITHOUT a transaction (standalone Mongo). */
+  onNonAtomic?: () => void;
 }
 
 function isConflictingOperationInProgress(error: unknown): boolean {
@@ -42,14 +45,46 @@ function defaultSleep(ms: number): Promise<void> {
  * surfacing raw `MongoServerError` 500s to players when the pooled session is
  * stale. All other errors propagate immediately. Every session is ended,
  * including on the failure path.
+ *
+ * STANDALONE FALLBACK. Production Mongo has no replica set, so `withTransaction`
+ * fails outright (code 20/263) rather than transiently. Retrying that on a fresh
+ * session is futile and turns every call into an opaque 500 for the player: the
+ * exact failure ticket #1239 reported on attack-sector. So the deployment is
+ * probed FIRST, and when it cannot do transactions the body runs with NO
+ * session; callers must treat that as non-atomic (`run` receives `undefined`)
+ * and compensate for a partial write themselves. Every write in the callers'
+ * bodies is already an optimistic compare-and-set that rejects on
+ * `modifiedCount !== 1`, so the sequential path stays correct under concurrency.
+ * It just is not atomic. This is the same trade `runWithOptionalTransaction`
+ * already makes for money flow.
+ *
+ * The probe is the ONLY thing that selects the sequential path. A transaction
+ * that fails once started is never re-run here, because `withTransaction` can
+ * fail at commit with the body's writes already applied, and retrying that
+ * sequentially would double-apply them.
  */
 export async function runTransactionWithSessionRetry<T>(
   getMongoClient: () => Promise<{ startSession: () => ClientSession }>,
-  run: (session: ClientSession) => Promise<T>,
+  run: (session?: ClientSession) => Promise<T>,
   options: RunTransactionOptions = {}
 ): Promise<T> {
   const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   const sleep = options.sleep ?? defaultSleep;
+
+  let transactionsSupported = true;
+  try {
+    transactionsSupported = await assertTransactionSupportAtBoot();
+  } catch {
+    // The topology probe itself is unavailable, so preserve the previous
+    // behaviour and attempt the transaction.
+    transactionsSupported = true;
+  }
+  // Deliberately OUTSIDE the probe's try: an error raised by the body must
+  // propagate to the caller, not get swallowed and re-run as a transaction.
+  if (!transactionsSupported) {
+    options.onNonAtomic?.();
+    return run(undefined);
+  }
 
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -59,6 +94,10 @@ export async function runTransactionWithSessionRetry<T>(
       return await session.withTransaction(() => run(session));
     } catch (error) {
       lastError = error;
+      // Deliberately NOT retried sequentially. `withTransaction` may fail at
+      // COMMIT, after the body has already written, so re-running it here could
+      // double-apply every write. The upfront probe is what decides the
+      // sequential path; by this point the only safe move is to surface it.
       if (!isConflictingOperationInProgress(error) || attempt === maxAttempts) {
         throw error;
       }

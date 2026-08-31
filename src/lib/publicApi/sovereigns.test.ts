@@ -65,4 +65,20 @@ describe("public sovereign watch query", () => {
       sustainability: { score: expect.any(Number), band: expect.any(String) },
     });
   });
+
+  it("does not quote a dissolved country", async () => {
+    // A merged country keeps its budget doc as a stamped husk — the public
+    // watchlist must not keep reporting a dead issuer's zeroed book.
+    const { getCurrentTurn } = await import("@/lib/turn/currentTurn");
+    vi.mocked(getCurrentTurn).mockResolvedValue(520);
+    db.collection("countryGameStates").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "DD", dissolvedTurn: 510 }]),
+    });
+
+    const { querySovereignWatch } = await import("./sovereigns");
+    const result = await querySovereignWatch(db as unknown as Db);
+
+    expect(result.countries.some((country) => country.countryId === "DD")).toBe(false);
+    expect(result.countries.some((country) => country.countryId === "US")).toBe(true);
+  });
 });

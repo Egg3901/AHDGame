@@ -997,6 +997,37 @@ describe("processFiscalYear", () => {
       expect($set.spending.total).toBe(6_200_000_000_000);
     });
   });
+
+  it("skips a dissolved country's budget entirely", async () => {
+    // The dissolved husk keeps its budget doc for history; running fiscal
+    // years over it would recompute revenue over merged-away bases and
+    // evaluate sovereign auctions for a state that no longer exists.
+    const us = makeFederalBudget();
+    const dd = makeFederalBudget({ _id: "DD", countryId: "DD" });
+    const db = makeDb({ federalBudgets: [us, dd] });
+    const orig = db.collection.getMockImplementation()!;
+    db.collection.mockImplementation((name: string) =>
+      name === "countryGameStates"
+        ? {
+            find: vi.fn().mockReturnValue({
+              toArray: vi.fn().mockResolvedValue([{ _id: "DD", dissolvedTurn: 500 }]),
+            }),
+          }
+        : orig(name)
+    );
+
+    await processFiscalYear(db as unknown as Db, 2026, 96);
+
+    const updatedIds = db._federalBudgetUpdateOne.mock.calls.map((c) => c[0]._id);
+    expect(updatedIds).toContain("federal"); // the US budget still rolls over
+    expect(updatedIds).not.toContain("DD");
+    const { evaluateSovereignAuctionForCountry } =
+      await import("@/lib/sovereignDefault/crisisDetection");
+    const auditedCountries = vi
+      .mocked(evaluateSovereignAuctionForCountry)
+      .mock.calls.map((c) => c[1]);
+    expect(auditedCountries).not.toContain("DD");
+  });
 });
 
 // ── processFiscalYear sovereign auction hook ──────────────────────────────────

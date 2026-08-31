@@ -79,6 +79,13 @@ function makeDb(
           find: () => ({ toArray: async () => [] }),
         };
       }
+      // Registered-country gate (getRegisteredCountryIds) — no overrides means
+      // every static country is registered and none dissolved.
+      if (name === "countryGameStates") {
+        return {
+          find: () => ({ toArray: async () => [] }),
+        };
+      }
       // v2 P0 SOE refresh — no SOEs seeded in these fixtures.
       if (name === "corporations" || name === "corporateSectors") {
         return {
@@ -157,6 +164,33 @@ describe("processCommandEconomyTurn", () => {
     const cnUpdate = updateOnes.find((u) => u.filter._id.equals(cn._id));
     expect(usUpdate).toBeUndefined();
     expect(cnUpdate).toBeDefined();
+  });
+
+  it("a stored planned level survives the compiled schedule (post-reunification DE)", async () => {
+    // DE is absent from MARKETIZATION_SCHEDULE (always market by seed), but a
+    // reunification carried the GDR's regime onto it: the persisted level must
+    // win over the schedule, or the carried command economy silently stops
+    // being simulated on the first restart.
+    const de = makeBudget("DE", { marketizationLevel: 0 });
+    const { db, updateOnes } = makeDb({ commandEconomyEnabled: true }, [de]);
+
+    const res = await processCommandEconomyTurn(db, TURN, YEAR_1953);
+
+    expect(res.countriesUpdated).toBeGreaterThanOrEqual(1);
+    const deUpdate = updateOnes.find((u) => u.filter._id.equals(de._id));
+    expect(deUpdate).toBeDefined();
+    expect(deUpdate!.update.$set).toHaveProperty("economicFactors.marketizationLevel");
+  });
+
+  it("a stored MARKET level does not drag a market country into the planned loop", async () => {
+    // Symmetric guard: persisting a high level (e.g. a healed field) must not
+    // start simulating a market country as planned.
+    const us = makeBudget("US", { marketizationLevel: 95 });
+    const { db, updateOnes } = makeDb({ commandEconomyEnabled: true }, [us]);
+
+    await processCommandEconomyTurn(db, TURN, YEAR_1953);
+
+    expect(updateOnes.find((u) => u.filter._id.equals(us._id))).toBeUndefined();
   });
 
   it("flag ON → persists an endogenous marketizationLevel", async () => {
@@ -260,6 +294,8 @@ function makeSoeDb(
         };
       if (name === "corporateSectors")
         return { find: () => ({ toArray: async () => sectors }), updateOne: async () => ({}) };
+      // Registered-country gate — nothing dissolved in these fixtures.
+      if (name === "countryGameStates") return { find: () => ({ toArray: async () => [] }) };
       throw new Error(`unexpected collection: ${name}`);
     },
   } as unknown as Db;
@@ -373,6 +409,8 @@ function makeGovDb(
         };
       if (name === "corporateSectors")
         return { find: () => ({ toArray: async () => sectors }), updateOne: async () => ({}) };
+      // Registered-country gate — nothing dissolved in these fixtures.
+      if (name === "countryGameStates") return { find: () => ({ toArray: async () => [] }) };
       throw new Error(`unexpected collection: ${name}`);
     },
   } as unknown as Db;

@@ -16,7 +16,7 @@
  * outcome, not a gap.
  */
 
-import type { LawCountryId } from "@/lib/politicalLegislation/types";
+import type { CountryId } from "@/lib/constants/countries";
 
 /**
  * The antitrust law whose 0-4 enacted level sets the trip threshold, per
@@ -37,7 +37,7 @@ import type { LawCountryId } from "@/lib/politicalLegislation/types";
  * structurally command economies, but the mapping is uniform rather than a
  * special case.
  */
-export const ANTITRUST_LAW_BY_COUNTRY: Record<LawCountryId, string> = {
+export const ANTITRUST_LAW_BY_COUNTRY: Partial<Record<CountryId, string>> = {
   US: "us.economy.competition.primary",
   UK: "uk.economy.competition.primary",
   RU: "ru.economy.competition.primary",
@@ -54,11 +54,18 @@ export const ANTITRUST_LAW_BY_COUNTRY: Record<LawCountryId, string> = {
  * RU/DD: Internal Trade, the ministry that would referee a market that these
  *     countries only have when the command-economy dial says they do.
  */
-export const MERGER_AUTHORITY_SEAT_BY_COUNTRY: Record<LawCountryId, string> = {
+export const MERGER_AUTHORITY_SEAT_BY_COUNTRY: Partial<Record<CountryId, string>> = {
   US: "attorney_general",
   UK: "business_secretary",
   RU: "minister_of_internal_trade",
   DD: "minister_of_internal_trade",
+  // Germany has no competition statute of its OWN — this seat exists for the
+  // CARRIED one: a reunification hands DE the GDR's competition primary
+  // (`carriedLawIdFor` resolves it on the ANTITRUST_LAW_BY_COUNTRY miss), and
+  // a statute with no referee would still fail open. The economy portfolio is
+  // the natural authority. Inert until a carried law exists, because the law
+  // lookup, not this seat map, is what arms the gate.
+  DE: "economy_minister",
 };
 
 /**
@@ -69,7 +76,7 @@ export const MERGER_AUTHORITY_SEAT_BY_COUNTRY: Record<LawCountryId, string> = {
  * `resolveMergerAuthority` and the command-economy gate.
  */
 export function isMergerAuthoritySeat(countryId: string, positionId: string): boolean {
-  return MERGER_AUTHORITY_SEAT_BY_COUNTRY[countryId as LawCountryId] === positionId;
+  return MERGER_AUTHORITY_SEAT_BY_COUNTRY[countryId as CountryId] === positionId;
 }
 
 /**

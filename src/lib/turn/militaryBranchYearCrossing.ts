@@ -4,6 +4,7 @@ import type { GameState } from "@/lib/db/types/gameState";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { MILITARY_BRANCHES_BY_COUNTRY, isMilitaryEraActive } from "@/lib/constants/military";
+import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import { buildCountryRoster } from "@/lib/admin/seed/seedMilitaryUnits";
 import { eraForPreset } from "@/lib/seeds/presetSelector";
@@ -95,7 +96,14 @@ export async function runMilitaryBranchYearCrossing(
   const postNews = !firstRun && !!gameState.eraSystemEnabled;
   const staged: MilitaryUnit[] = [];
 
+  // Registered countries only: an era crossing that activates a branch must
+  // not raise fresh units for a country dissolved by a merge — its army
+  // already crossed to the survivor, and a ghost service founded afterwards
+  // would be keyed to a state that no longer exists.
+  const registered = new Set(await getRegisteredCountryIds(db));
+
   for (const countryId of Object.keys(COUNTRY_CONFIGS) as CountryId[]) {
+    if (!registered.has(countryId)) continue;
     const branches = MILITARY_BRANCHES_BY_COUNTRY[countryId] ?? [];
     if (branches.length === 0) continue;
 

@@ -23,6 +23,7 @@ import type { CentralBank, ChairSelectionPending, FomcSeat } from "@/lib/db/type
 import { FOMC_COMMITTEE_COUNTRY_IDS } from "@/lib/db/types/centralBank";
 import type { Character } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
+import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { createNotifications } from "@/lib/notifications";
 import { createSystemNewsPost } from "@/lib/news";
@@ -329,8 +330,15 @@ export async function processCentralBankChairSelection(
 
   const rng = makeSeededRng(`cbchair:${currentTurn}${CB_CHAIR_RNG_SALT}`);
 
+  // Registered countries only: a country dissolved by a merge keeps its central
+  // bank document, and this phase would otherwise go on running chair terms —
+  // opening selections, appointing NPP chairs, posting news — for a dead
+  // state's monetary authority.
+  const registered = new Set(await getRegisteredCountryIds(db));
+
   const processedBankIds = new Set<string>();
   for (const countryId of COUNTRY_ORDER) {
+    if (!registered.has(countryId)) continue;
     result.countriesChecked++;
     const bankId = getBankId(countryId);
     if (processedBankIds.has(bankId)) continue;

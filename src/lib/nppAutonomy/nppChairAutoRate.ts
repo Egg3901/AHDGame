@@ -17,6 +17,7 @@ import {
   MAX_RATE_CHANGE_DELTA,
   MAX_RATE_CUT_DELTA,
   RATE_CHANGE_COOLDOWN_TURNS,
+  snapToPrimeRateGrid,
 } from "@/lib/db/types/centralBank";
 import { chairAlignmentPolicy, type ChairAlignment } from "@/lib/centralBank/chairAlignment";
 
@@ -134,7 +135,15 @@ export async function processNppChairAutoRate(
   });
   if (Math.abs(step) <= 1e-9) return;
 
-  const newRate = bank.primeRate + step;
+  // Snap onto the quarter-point grid the rate API enforces. The Taylor rule
+  // produces a continuous value, and storing it raw left the bank on a rate no
+  // human chair could ever step away from: the card offers base +/-0.25, which
+  // from an off-grid base is still off-grid, so every submission was refused
+  // with "Rate must be in 0.25% increments" (ticket #1238).
+  const newRate = snapToPrimeRateGrid(bank.primeRate + step);
+  // Snapping can land back on the current rate for a sub-quarter-point step;
+  // writing that would burn the cooldown on a no-op move.
+  if (newRate === bank.primeRate) return;
   await db.collection<CentralBank>("centralBanks").updateOne(
     { _id: bank._id },
     {

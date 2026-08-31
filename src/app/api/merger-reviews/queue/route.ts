@@ -11,6 +11,7 @@ import { MERGER_REVIEWS } from "@/lib/corporations/mergerReview/gate";
 import { resolveMergerAuthority } from "@/lib/corporations/mergerReview/authority";
 import { getGameState } from "@/lib/gameState";
 import { getEnactedLevel } from "@/lib/politicalLegislation/enactedLevels";
+import { carriedLawIdFor } from "@/lib/politicalLegislation/carriedLaw";
 import type { LawCountryId } from "@/lib/politicalLegislation/types";
 import { loadCommandEconomyBlockedCountries } from "@/lib/economy/queries/commandEconomyMarketGate";
 import {
@@ -92,7 +93,13 @@ async function handleGET() {
     // At "No Enforcement" nothing new can be referred. The surface still opens
     // if referrals opened under a stricter law are still pending, so repealing
     // the law never strands a referral with nobody able to decide it.
-    const lawId = ANTITRUST_LAW_BY_COUNTRY[authority.countryId as LawCountryId];
+    // Same carried-law resolution the gate uses: a merge survivor can hold an
+    // absorbed state's competition statute with no entry of its own, and this
+    // surface must read the law that actually armed the referrals — otherwise
+    // the authority who can decide them is told enforcement is dead.
+    const lawId =
+      ANTITRUST_LAW_BY_COUNTRY[authority.countryId as CountryId] ??
+      (await carriedLawIdFor(db, authority.countryId, Object.values(ANTITRUST_LAW_BY_COUNTRY)));
     const level = lawId ? await getEnactedLevel(db, authority.countryId as LawCountryId, lawId) : 0;
     const enforcementLive = thresholdForLevel(level) != null;
     if (!enforcementLive && pendingDocs.length === 0) return NextResponse.json({ applies: false });

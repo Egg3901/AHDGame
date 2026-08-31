@@ -54,6 +54,19 @@ describe("convertTransferredResidentsCurrency", () => {
     expect(set["currencyBalances.personal"].USD).toBe(200); // foreign holding kept as forex
   });
 
+  it("converts carried region party-org treasuries at the same scale", async () => {
+    // Dissolving-merge path: statePartyOrg rows were re-scoped, not deleted,
+    // and their treasuries are still in the old currency.
+    db.collection("corporations").find.mockReturnValue(cursorOf([]));
+    db.collection("characters").find.mockReturnValue(cursorOf([]));
+
+    await convertTransferredResidentsCurrency(db as unknown as Db, "SN", "UK", "IE");
+
+    const [filter, update] = db.collectionMocks["statePartyOrg"].updateMany.mock.calls[0];
+    expect(filter).toEqual({ stateId: "SN" });
+    expect(update.$mul.treasury).toBe(2); // IEP(1.0) / GBP(0.5)
+  });
+
   it("no-ops when forex is disabled", async () => {
     vi.mocked(isForexEnabled).mockResolvedValueOnce(false);
     await convertTransferredResidentsCurrency(db as unknown as Db, "NIR", "UK", "IE");

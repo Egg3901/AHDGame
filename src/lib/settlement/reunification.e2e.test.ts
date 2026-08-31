@@ -207,6 +207,134 @@ describe("reunification pipeline, end to end", () => {
     expect(db.collectionMocks["states"].deleteOne).toHaveBeenCalledWith({ _id: "BEO" });
   });
 
+  it("assumes the east's treasury, bonds and national law book", async () => {
+    db.collection("federalBudget").findOne.mockImplementation(async (f: { _id: string }) =>
+      f._id === "DD"
+        ? { _id: "DD", treasuryBalance: -1000, debt: { principal: 1000 }, economicFactors: {} }
+        : { _id: "DE", treasuryBalance: 5000, debt: { principal: 0 }, economicFactors: {} }
+    );
+    const bondId = new ObjectId();
+    const lawId = new ObjectId();
+    db.collection("bonds").find.mockReturnValue(
+      cursorOf([
+        {
+          _id: bondId,
+          issuerType: "sovereign",
+          countryId: "DD",
+          totalIssued: 500,
+          publicFloat: 1,
+          holders: [{ characterId: new ObjectId(), units: 2 }],
+          matured: false,
+        },
+      ])
+    );
+    db.collection("enactedLaws").find.mockReturnValue(
+      cursorOf([{ _id: lawId, countryId: "DD", scope: "national", annualRevenueV2: 215 }])
+    );
+
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis(), 470);
+
+    // Forex is off in this harness, so the scale is 1 and the signed sum is plain.
+    const budgetWrites = db.collectionMocks["federalBudget"].updateOne.mock.calls;
+    const deWrite = budgetWrites.find(
+      (c) => c[0]._id === "DE" && c[1].$set?.treasuryBalance != null
+    );
+    expect(deWrite?.[1].$set.treasuryBalance).toBe(4000);
+    const ddWrite = budgetWrites.find((c) => c[0]._id === "DD" && c[1].$set?.mergedInto);
+    expect(ddWrite?.[1].$set.treasuryBalance).toBe(0);
+    const bondOps = db.collectionMocks["bonds"].bulkWrite.mock.calls[0][0];
+    const bondWrite = bondOps.find(
+      (op: { updateOne: { filter: { _id: unknown } } }) =>
+        String(op.updateOne.filter._id) === String(bondId)
+    );
+    expect(bondWrite?.updateOne.update.$set.countryId).toBe("DE");
+    // Forex off in this harness → scale 1 → the law book moves in one updateMany.
+    const lawWrite = db.collectionMocks["enactedLaws"].updateMany.mock.calls.find((c) =>
+      c[0]._id?.$in?.some((id: unknown) => String(id) === String(lawId))
+    );
+    expect(lawWrite?.[1].$set.countryId).toBe("DE");
+  });
+
+  it("carries the east's military into the unified state", async () => {
+    db.collection("militaryUnits").updateMany.mockResolvedValue({ modifiedCount: 11 });
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis(), 470);
+    const [filter, update] = db.collectionMocks["militaryUnits"].updateMany.mock.calls[0];
+    expect(filter).toEqual({ countryId: "DD" });
+    expect(update.$set.countryId).toBe("DE");
+  });
+
+  it("carries the command-economy dial onto the survivor", async () => {
+    const { clearStoredMarketizationLevels, getStoredMarketizationLevel } =
+      await import("@/lib/constants/commandEconomy");
+    clearStoredMarketizationLevels();
+    db.collection("federalBudget").findOne.mockImplementation(async (f: { _id: string }) =>
+      f._id === "DD"
+        ? { _id: "DD", treasuryBalance: 0, economicFactors: { marketizationLevel: 0 } }
+        : { _id: "DE", treasuryBalance: 0, economicFactors: {} }
+    );
+
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis(), 470);
+
+    const regimeWrite = db.collectionMocks["federalBudget"].updateOne.mock.calls.find(
+      (c) => c[0]._id === "DE" && c[1].$set?.["economicFactors.marketizationLevel"] != null
+    );
+    expect(regimeWrite?.[1].$set["economicFactors.marketizationLevel"]).toBe(0);
+    expect(getStoredMarketizationLevel("DE")).toBe(0);
+    clearStoredMarketizationLevels();
+  });
+
+  it("opens the unified state to players when the absorbed side was playable", async () => {
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      _id: "DD",
+      enabledForPlayers: true,
+      status: "active",
+    });
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis(), 470);
+
+    const writes = db.collectionMocks["countryGameStates"].updateOne.mock.calls;
+    const deWrite = writes.find((c) => c[0]._id === "DE");
+    expect(deWrite?.[1].$set).toMatchObject({ enabledForPlayers: true, status: "active" });
+    // The absorbed shell gets NO status write: `dissolvedTurn` (stamped by
+    // mergeCountry) is the one dissolution marker, by design.
+    const ddWrite = writes.find((c) => c[0]._id === "DD");
+    expect(ddWrite).toBeUndefined();
+  });
+
+  it("does not open an econ-only survivor when the absorbed side was not playable", async () => {
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      _id: "DD",
+      enabledForPlayers: false,
+    });
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis(), 470);
+    const deWrite = db.collectionMocks["countryGameStates"].updateOne.mock.calls.find(
+      (c) => c[0]._id === "DE"
+    );
+    expect(deWrite).toBeUndefined();
+  });
+
+  it("deletes the absorbed government formation row after carrying its head", async () => {
+    const pm = new ObjectId();
+    db.collection("governmentFormations").findOne.mockResolvedValue({
+      _id: "DD",
+      pmCharacterId: pm,
+    });
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis(), 470);
+
+    const carried = db.collectionMocks["governmentFormations"].updateOne.mock.calls.find(
+      (c) => c[0]._id === "DE"
+    );
+    expect(String(carried?.[1].$set.pmCharacterId)).toBe(String(pm));
+    expect(db.collectionMocks["governmentFormations"].deleteOne).toHaveBeenCalledWith({
+      _id: "DD",
+    });
+  });
+
   it("stops before touching the world when the party migration fails", async () => {
     const { reserveSequentialIds } = await import("@/lib/db/sequentialId");
     vi.mocked(reserveSequentialIds).mockRejectedValue(new Error("counter unavailable"));

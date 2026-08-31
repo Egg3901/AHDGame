@@ -10,6 +10,10 @@ vi.mock("@/lib/db/sequentialId", () => ({
   reserveSequentialIds,
   realignPartyCountersToExisting,
 }));
+const { resolveMergeFxScale } = vi.hoisted(() => ({
+  resolveMergeFxScale: vi.fn(async () => 2),
+}));
+vi.mock("./mergeFxScale", () => ({ resolveMergeFxScale }));
 
 import { mergePartiesIntoCountry } from "./mergePartiesIntoCountry";
 
@@ -96,6 +100,50 @@ describe("mergePartiesIntoCountry", () => {
     expect(res.partiesMoved).toBe(0);
     // Critically, it must not reserve a second block of ids.
     expect(reserveSequentialIds).not.toHaveBeenCalled();
+  });
+
+  it("converts the moved treasuries once, stamped inside the same update", async () => {
+    await run();
+    const call = db.collectionMocks["politicalParties"].updateMany.mock.calls.find(
+      (c) => c[0]["mergedFrom.countryId"] === "DD"
+    );
+    expect(call?.[0]).toMatchObject({
+      countryId: "DE",
+      "mergedFrom.countryId": "DD",
+      "mergedFrom.treasuryConverted": { $ne: true },
+    });
+    expect(call?.[1].$mul).toEqual({ treasury: 2 });
+    expect(call?.[1].$set["mergedFrom.treasuryConverted"]).toBe(true);
+  });
+
+  it("stamps without multiplying when the two sides share a currency (scale 1)", async () => {
+    resolveMergeFxScale.mockResolvedValueOnce(1);
+    await run();
+    const call = db.collectionMocks["politicalParties"].updateMany.mock.calls.find(
+      (c) => c[0]["mergedFrom.countryId"] === "DD"
+    );
+    expect(call?.[1].$mul).toBeUndefined();
+    expect(call?.[1].$set["mergedFrom.treasuryConverted"]).toBe(true);
+  });
+
+  it("the already-moved path still converts an unstamped treasury", async () => {
+    db.collection("politicalParties").find.mockImplementation((filter: Record<string, unknown>) =>
+      filter.countryId === "DD"
+        ? cursorOf([])
+        : cursorOf([
+            {
+              _id: SED,
+              countryId: "DE",
+              sequentialId: 7,
+              mergedFrom: { countryId: "DD", sequentialId: 1 },
+            },
+          ])
+    );
+    await run();
+    const call = db.collectionMocks["politicalParties"].updateMany.mock.calls.find(
+      (c) => c[0]["mergedFrom.countryId"] === "DD"
+    );
+    expect(call?.[1].$mul).toEqual({ treasury: 2 });
   });
 
   it("remaps a sequentialId reference in the source country only", async () => {

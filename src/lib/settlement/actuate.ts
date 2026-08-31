@@ -39,6 +39,9 @@ import {
 } from "@/lib/constants/settlementCrisis";
 import { mergePartiesIntoCountry } from "@/lib/country/mergePartiesIntoCountry";
 import { mergeRegion } from "@/lib/country/mergeRegion";
+import { mergeNationalFisc } from "@/lib/country/mergeNationalFisc";
+import { mergeMilitary } from "@/lib/country/mergeMilitary";
+import { mergeEconomicRegime } from "@/lib/country/mergeEconomicRegime";
 import { rescopeLegislationCatalogue } from "@/lib/country/rescopeLegislationCatalogue";
 import { installOnePartyState } from "@/lib/onePartyState/installOnePartyState";
 import { remapOffice } from "@/lib/country/dissolvingOfficeRemap";
@@ -47,6 +50,10 @@ import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
 import { mergeCountry } from "@/lib/country/mergeCountry";
 import { getCountryState } from "@/lib/countryState";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
+import type { GameState } from "@/lib/db/types/gameState";
+import type { CountryGameState } from "@/lib/db/types/gameState";
+import { yearOfTurn } from "@/lib/utils/gameDate";
+import { STARTING_YEAR } from "@/lib/constants/turnTime";
 import { blocOrgFor } from "@/lib/world/blocMembership";
 import { admitMember } from "@/lib/internationalOrganizations/joinApplication";
 import { isMember } from "@/lib/internationalOrganizations/service";
@@ -122,6 +129,15 @@ export async function actuateSettlementOutcome(
   const absorbedState = await getCountryState(db, challenger);
   const absorbedRulingPartyId = absorbedState.rulingPartyId ?? null;
 
+  // 1b. Also read BEFORE the merge: `mergeCountry` retires the absorbed shell
+  //     (flips `enabledForPlayers` off), and whether the SURVIVOR opens to
+  //     players afterwards depends on whether the absorbed side was open. Read
+  //     it after the merge and the answer is always no.
+  const absorbedGameState = await db
+    .collection<CountryGameState>("countryGameStates")
+    .findOne({ _id: challenger }, { projection: { enabledForPlayers: 1, status: 1 } });
+  const absorbedWasPlayable = absorbedGameState?.enabledForPlayers === true;
+
   // 2. Parties before regions. `characters.party` and `electedOfficials.party`
   //    hold a per-country `sequentialId`, so a row that moves country before its
   //    party is renumbered is silently reinterpreted against the survivor's list
@@ -173,6 +189,43 @@ export async function actuateSettlementOutcome(
     rulingPartyId,
   });
 
+  // 3c. The national balance sheet: treasury, debt, defence account, the
+  //     sovereign bonds real players hold, and the national law book — all
+  //     FX-converted. Without this the ghost treasury pays coupons until it
+  //     defaults for a country that no longer exists, and the unified budget
+  //     forgets every national programme the absorbed state legislated.
+  const fisc = await mergeNationalFisc(db, {
+    fromCountryId: challenger,
+    toCountryId: target,
+    currentTurn,
+  });
+
+  // 3d. The armed forces. The military collections are country-keyed, not
+  //     region-keyed, so the region sweep never sees them — and a settlement
+  //     that let the winning side's army evaporate would be absurd.
+  await mergeMilitary(db, { fromCountryId: challenger, toCountryId: target });
+
+  // 3e. The ECONOMIC regime. `installOnePartyState` below converts the political
+  //     system, but the command economy is its own per-country dial; without
+  //     this carry a victorious SED would find itself running West Germany's
+  //     market machinery. Year through `yearOfTurn` (calendar, not raw turn —
+  //     the #1208 class of bug) for the schedule fallback.
+  const gameStateDoc = await db
+    .collection<GameState>("gameState")
+    .findOne(
+      { _id: "current" },
+      { projection: { startingYear: 1, preIteration: 1, preIterationTurns: 1 } }
+    );
+  const currentYear = yearOfTurn(currentTurn, gameStateDoc?.startingYear ?? STARTING_YEAR, {
+    preIterationActive: gameStateDoc?.preIteration?.active,
+    preIterationTurns: gameStateDoc?.preIterationTurns,
+  });
+  await mergeEconomicRegime(db, {
+    fromCountryId: challenger,
+    toCountryId: target,
+    currentYear,
+  });
+
   // 4. East Berlin into Berlin, AFTER the country merge and not before: both
   //    regions must be under one flag, and BEO is East German until step 3 runs.
   //    Germany's seed has no `DE-bundestag-BEO` because a unified Berlin is one
@@ -202,6 +255,23 @@ export async function actuateSettlementOutcome(
     absorbedRulingPartyId,
   });
 
+  // 6. The unified state opens to players when the absorbed side was open. The
+  //    carried citizens are real accounts — 19 of them in the live German
+  //    Question — and landing the WINNERS in a read-only econ country would
+  //    lock every one of them out of the game they just won. The absorbed shell
+  //    needs nothing here: `mergeCountry` already stamped `dissolvedTurn`,
+  //    which is the one dissolution marker everything honors (deliberately NOT
+  //    a `CountryStatus` value — see that field's doc).
+  if (absorbedWasPlayable) {
+    await db
+      .collection<CountryGameState>("countryGameStates")
+      .updateOne(
+        { _id: target },
+        { $set: { enabledForPlayers: true, status: "active", updatedAt: new Date() } },
+        { upsert: true }
+      );
+  }
+
   await recordCountryEvent(db, {
     countryId: target,
     turn: currentTurn,
@@ -212,6 +282,9 @@ export async function actuateSettlementOutcome(
       outcome: crisis.outcome,
       absorbed: challenger,
       regionsTransferred: merged.regionsTransferred,
+      treasuryMoved: fisc.treasuryMoved,
+      bondsAssumed: fisc.bondsRescoped,
+      lawsCarried: fisc.lawsRescoped,
     },
   });
   return { actuated: true, outcome: "challenger", deferred: false };
@@ -381,6 +454,8 @@ async function retireNationalRemnants(
   // A player leader is carried by `pmCharacterId` and an NPP one by `pmNppId`,
   // and the two are mutually exclusive: leaving the survivor's NPP chancellor in
   // place beside a carried player would leave two people holding one office.
+  // Read BEFORE the delete below — the row is how the carried head of
+  // government is found.
   const formations = db.collection<GovernmentFormationHead>("governmentFormations");
   const absorbedGov = await formations.findOne({ _id: absorbed });
 
@@ -406,6 +481,13 @@ async function retireNationalRemnants(
       }
     );
   }
+
+  // The absorbed state's own formation row goes with the state. Left in place
+  // it still reads "formed", with a prime minister and a governing party — and
+  // the parliamentary phase loop, which iterates the static country list, would
+  // keep running seat sync, confidence processing and NPP appointment against a
+  // government of a country that no longer exists.
+  await formations.deleteOne({ _id: absorbed });
 }
 
 /**

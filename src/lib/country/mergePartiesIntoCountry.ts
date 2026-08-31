@@ -22,6 +22,7 @@ import type { Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { PoliticalParty } from "@/lib/db/types";
 import { reserveSequentialIds, realignPartyCountersToExisting } from "@/lib/db/sequentialId";
+import { resolveMergeFxScale } from "./mergeFxScale";
 import {
   PARTY_REF_COLLECTIONS,
   PARTY_OBJECTID_COLLECTIONS,
@@ -81,6 +82,10 @@ export async function mergePartiesIntoCountry(
       .find({ countryId: toCountryId, "mergedFrom.countryId": fromCountryId })
       .toArray()) as unknown as PartyDoc[];
     if (alreadyMoved.length === 0) return empty;
+    // A re-run after a partial failure may have moved the docs but died before
+    // the money converted — the stamp filter inside makes this a no-op when it
+    // already did.
+    await convertMovedPartyTreasuries(db, fromCountryId, toCountryId);
     return {
       ok: true,
       partyIdMap: buildPartyIdMap(
@@ -163,10 +168,46 @@ export async function mergePartiesIntoCountry(
   // there reuses an id behind the unique index.
   await realignPartyCountersToExisting(db);
 
+  // The moved parties' money is still denominated in the DISSOLVED country's
+  // currency. Characters and corporations convert with their regions
+  // (`convertTransferredResidentsCurrency`); the national party treasuries live
+  // on `politicalParties.treasury` and cross here, at the same merge FX scale.
+  await convertMovedPartyTreasuries(db, fromCountryId, toCountryId);
+
   return {
     ok: true,
     partyIdMap,
     partiesMoved: moved.length,
     documentsRemapped,
   };
+}
+
+/**
+ * FX-convert the treasuries of parties this merge moved, exactly once.
+ *
+ * The `mergedFrom.treasuryConverted` stamp travels inside the same atomic
+ * update as the `$mul`, and the `$ne: true` filter makes a concurrent or
+ * repeated pass match nothing — a treasury can be scaled once or zero times,
+ * never twice. Stamped even at scale 1 (same currency / forex off) so a later
+ * re-run cannot re-convert after a rate appears.
+ */
+async function convertMovedPartyTreasuries(
+  db: Db,
+  fromCountryId: CountryId,
+  toCountryId: CountryId
+): Promise<void> {
+  const scale = await resolveMergeFxScale(db, fromCountryId, toCountryId);
+  const filter = {
+    countryId: toCountryId,
+    "mergedFrom.countryId": fromCountryId,
+    "mergedFrom.treasuryConverted": { $ne: true },
+  };
+  const stamp = { "mergedFrom.treasuryConverted": true, updatedAt: new Date() };
+  if (scale === 1) {
+    await db.collection("politicalParties").updateMany(filter, { $set: stamp });
+    return;
+  }
+  await db
+    .collection("politicalParties")
+    .updateMany(filter, { $mul: { treasury: scale }, $set: stamp });
 }
