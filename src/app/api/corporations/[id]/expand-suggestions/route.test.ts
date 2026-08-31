@@ -68,6 +68,28 @@ beforeEach(async () => {
 });
 
 describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
+  it("surfaces the temporary Retail expansion pause before offering greenfield builds", async () => {
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "plants",
+      retailDemandTransitionStartTurn: 100,
+      retailDemandTransitionTurns: 192,
+    });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 148,
+    });
+
+    const { GET } = await import("./route");
+    const response = await GET(makeRequest("sectorType=retail&mode=unowned"), ctx());
+    const data = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(data.error).toContain("144 turns remaining");
+    expect(data.error).toContain("plant transfers still operate normally");
+    expect(db.collectionMocks.unownedSectors.find).not.toHaveBeenCalled();
+  });
+
   it("quotes local freight room without state-scoping consulting from the same sector", async () => {
     db.collectionMocks.gameConfig.findOne.mockResolvedValue({
       _id: "default",

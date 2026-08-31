@@ -14,6 +14,7 @@ import type {
   Corporation,
   CorporateSector,
   GameState,
+  GameConfig,
   SectorBuildOrder,
   State,
   StateMetrics,
@@ -54,6 +55,10 @@ import { isSectorTechTreesEnabled } from "@/lib/corporations/techTree/featureFla
 import { insufficientCapitalMessage } from "@/lib/currency/insufficientCapitalMessage";
 import { loadCommandEconomyBlockedCountries } from "@/lib/economy/queries/commandEconomyMarketGate";
 import type { CountryId } from "@/lib/constants/countries";
+import {
+  retailCapacityExpansionPaused,
+  retailDemandTransitionTurnsRemaining,
+} from "@/lib/market/retailDemandTransition";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -158,6 +163,27 @@ export async function expandSector(request: Request, { params }: RouteParams) {
     const expansionDiscount = techEffects?.expansionDiscount ?? 0;
     // Fee + starter size share helpers with expand-suggestions / NPP founding.
     const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
+    if (plantsEnabled && sectorType === "retail") {
+      const currentTurn = gameState?.currentTurn ?? 0;
+      const transition = await db.collection<GameConfig>("gameConfig").findOne(
+        { _id: "default" },
+        {
+          projection: {
+            retailDemandTransitionStartTurn: 1,
+            retailDemandTransitionTurns: 1,
+          },
+        }
+      );
+      if (retailCapacityExpansionPaused(transition, currentTurn)) {
+        const remaining = retailDemandTransitionTurnsRemaining(transition, currentTurn);
+        return NextResponse.json(
+          {
+            error: `New Retail sectors are paused while consumer demand is rebalanced (${remaining} turns remaining).`,
+          },
+          { status: 409 }
+        );
+      }
+    }
     const worldPreset = resolvePresetIdFromGameState(gameState);
     const baseExpansionCost = sectorEntryFeeAnchor(worldPreset, expansionDiscount);
 

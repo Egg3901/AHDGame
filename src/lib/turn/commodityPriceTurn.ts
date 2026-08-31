@@ -64,6 +64,7 @@ import {
   countryCommodityDemandMultiplier,
 } from "@/lib/constants/commodities";
 import { updateScarcityMultiplier } from "@/lib/market/scarcityDrift";
+import { retailLegacyDemandFactor } from "@/lib/market/retailDemandTransition";
 import {
   loadActiveSectorDemandModifierPctMap,
   loadActiveSectorOutputDemandModifierPctMap,
@@ -442,12 +443,17 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // produces state information rather than sold advertising. Safe to add: every
   // positional cursor the turn tests stub is already consumed by the parallel
   // block above, so reads from here on fall through to the catch-all.
-  const ledgerCommandEconomyEnabled =
-    (
-      await db
-        .collection<GameConfig>("gameConfig")
-        .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } })
-    )?.commandEconomyEnabled === true;
+  const ledgerConfig = await db.collection<GameConfig>("gameConfig").findOne(
+    { _id: "default" },
+    {
+      projection: {
+        commandEconomyEnabled: 1,
+        retailDemandTransitionStartTurn: 1,
+        retailDemandTransitionTurns: 1,
+      },
+    }
+  );
+  const ledgerCommandEconomyEnabled = ledgerConfig?.commandEconomyEnabled === true;
   const eraRates = getInitialRates(activePreset);
   /** ₳-normalizing FX rate for a country's budget, era-aware. */
   const fxRateForCountry = (countryId: string | undefined): number => {
@@ -627,6 +633,10 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   const extractionOutputScaleEnabled = await getExtractionOutputScaleEnabled();
   const demographicsDemandEnabled = await getDemographicsDemandEnabled();
   const householdConsumptionEnabled = await getHouseholdConsumptionEnabled();
+  const retailSelfLoopFactor =
+    plantsLedgerEnabled && householdConsumptionEnabled
+      ? retailLegacyDemandFactor(ledgerConfig, turn)
+      : 1;
 
   // Pre-compute extraction capacity multipliers
   const extractionSectors = sectorData.filter((s) => s.sectorType === "extraction");
@@ -783,7 +793,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     // supply) in the SAME era unit basis plants `producedUnits` uses. Below
     // plants, and on modern worlds (eraUnitScale 1), this is a pure no-op.
     plantsLedgerEnabled ? ledgerEraUnitScale : 1,
-    sectorOutputDemandModifierPct
+    sectorOutputDemandModifierPct,
+    retailSelfLoopFactor
   );
 
   // Plants tier: per-commodity produced/sold units from corporate plants, split

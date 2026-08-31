@@ -29,6 +29,8 @@ export interface NppCorpDecisionContext {
   strategyLoopEnabled?: boolean;
   shortageEntryEligible?: boolean;
   shortageEntryCreditLocal?: number;
+  /** Pause new Retail entry/growth while fake supply-derived demand unwinds. */
+  retailExpansionPaused?: boolean;
 }
 
 /** A composable sector write emitted by the NPP corporation decision engine. */

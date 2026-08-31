@@ -17,6 +17,7 @@ import type {
   UnownedSector,
   State,
   Corporation,
+  GameConfig,
 } from "@/lib/db/types";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
@@ -47,6 +48,10 @@ import { loadCommandEconomyBlockedCountries } from "@/lib/economy/queries/comman
 import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
 import { pinStateInTopSuggestions } from "@/lib/corporations/expandSuggestionPin";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
+import {
+  retailCapacityExpansionPaused,
+  retailDemandTransitionTurnsRemaining,
+} from "@/lib/market/retailDemandTransition";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -107,6 +112,38 @@ export async function GET(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     const plantsMode = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
+
+    // Greenfield Retail builds are deliberately unavailable while the legacy
+    // supply-derived demand is fading out. Reject before calculating and
+    // presenting opportunities so the modal explains the pause instead of
+    // inviting a build that the command will later refuse. Competitor mode is
+    // still available because sector attacks transfer existing plants.
+    if (plantsMode && sectorType === "retail" && mode === "unowned") {
+      const [transition, gameState] = await Promise.all([
+        db.collection<GameConfig>("gameConfig").findOne(
+          { _id: "default" },
+          {
+            projection: {
+              retailDemandTransitionStartTurn: 1,
+              retailDemandTransitionTurns: 1,
+            },
+          }
+        ),
+        db
+          .collection<GameState>("gameState")
+          .findOne({ _id: "current" }, { projection: { currentTurn: 1 } }),
+      ]);
+      const currentTurn = gameState?.currentTurn ?? 0;
+      if (retailCapacityExpansionPaused(transition, currentTurn)) {
+        const remaining = retailDemandTransitionTurnsRemaining(transition, currentTurn);
+        return NextResponse.json(
+          {
+            error: `New Retail sectors are paused while consumer demand is rebalanced (${remaining} turns remaining). Existing stores and plant transfers still operate normally.`,
+          },
+          { status: 409 }
+        );
+      }
+    }
 
     // Demand gap for this sector type's output mix, per physical market (min
     // over legs because the market stops absorbing when the first leg
