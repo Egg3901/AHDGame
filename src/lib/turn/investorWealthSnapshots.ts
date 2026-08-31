@@ -16,23 +16,24 @@ import type {
   WealthListSnapshot,
   WealthListEntry,
 } from "@/lib/db/types";
-import { getTotalPersonalWealth } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import type { ExchangeRate } from "@/lib/db/types";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
   corpLiquidCapitalToAnchor,
   fxRateForCorpFromMap,
   loadValuationFxRates,
 } from "@/lib/currency/corporationCapital";
-import { computeLocDebtInternal } from "@/lib/lineOfCredit/netWorth";
-import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { getDiscordAvatarUrl } from "@/lib/discord";
 import { getPublicShareQuote } from "@/lib/corporations/marketQuote";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type { CountryId } from "@/lib/constants/countries";
 import { ALL_EXCHANGES, isStateRegister } from "@/lib/constants/exchangeRegistry";
+import {
+  computeCharacterWealth,
+  sumBondValueByCharacter,
+  sumStockValueByCharacter,
+} from "@/lib/wealth/computeCharacterWealth";
 
 /**
  * Generate pre-computed global investor rankings.
@@ -133,10 +134,6 @@ export async function generateInvestorRankingSnapshot(currentTurn: number, db?: 
 }
 
 // ─── Wealth list snapshot ────────────────────────────────────────────────────
-
-function roundCurrency(value: number): number {
-  return Math.round(value * 100) / 100;
-}
 
 function resolveCountryId(character: Pick<Character, "countryId">): CountryId {
   return character.countryId as CountryId;
@@ -298,61 +295,31 @@ export async function generateWealthListSnapshots(currentTurn: number, db?: Db):
 
   const stateNameMap = new Map(states.map((s) => [s._id, s.name]));
 
-  // Aggregate stock values and CEO corp names
-  const stockValueByCharId = new Map<string, number>();
+  // CEO display name (presentation, not net worth — the shared valuation
+  // module deliberately does not carry it).
   const ceoCorpByCharId = new Map<string, string>();
-
   for (const corp of corporations) {
     const ceoId = corp.ceoId?.toString();
     if (ceoId && !corp.ceoVacant && characterIdSet.has(ceoId) && !ceoCorpByCharId.has(ceoId)) {
       ceoCorpByCharId.set(ceoId, corp.name);
     }
-    const price = corp.sharePrice ?? 0;
-    if (price <= 0) continue;
-    const corpFxRate = fxRateForCorpFromMap(corp, fxByCurrency);
-    for (const sh of corp.shareholders ?? []) {
-      if (!sh.characterId) continue;
-      const charId = sh.characterId.toString();
-      if (!characterIdSet.has(charId) || sh.shares <= 0) continue;
-      const holdingValueLocal = sh.shares * price;
-      const holdingValue = corpLiquidCapitalToAnchor(holdingValueLocal, corp, corpFxRate);
-      stockValueByCharId.set(charId, (stockValueByCharId.get(charId) ?? 0) + holdingValue);
-    }
   }
 
-  // Aggregate bond values
-  const bondValueByCharId = new Map<string, number>();
-  for (const bond of bonds) {
-    const bondCcy = (bond.currencyCode ??
-      (bond.countryId && bond.countryId in COUNTRY_CURRENCY_MAP
-        ? COUNTRY_CURRENCY_MAP[bond.countryId as keyof typeof COUNTRY_CURRENCY_MAP]
-        : undefined)) as CurrencyCode | undefined;
-    const bondRate = bondCcy ? (fxByCurrency.get(bondCcy) ?? 1) : 1;
-    for (const holder of bond.holders ?? []) {
-      if (!holder.characterId || holder.units <= 0) continue;
-      const charId = holder.characterId.toString();
-      if (!characterIdSet.has(charId)) continue;
-      const holdingValueLocal = holder.units * BOND_UNIT_FACE_VALUE * (bond.marketPrice ?? 1);
-      const holdingValue =
-        bondCcy && bondRate > 0 ? holdingValueLocal / bondRate : holdingValueLocal;
-      bondValueByCharId.set(charId, (bondValueByCharId.get(charId) ?? 0) + holdingValue);
-    }
-  }
+  const stockValueByCharId = sumStockValueByCharacter(corporations, characterIdSet, fxByCurrency);
+  const bondValueByCharId = sumBondValueByCharacter(bonds, characterIdSet, fxByCurrency);
 
   // Build the global entry list sorted by totalWealth
   const globalEntries: WealthListEntry[] = activeCharacters
     .map((character) => {
       const charId = character._id.toString();
-      const stockValue = roundCurrency(stockValueByCharId.get(charId) ?? 0);
-      const bondValue = roundCurrency(bondValueByCharId.get(charId) ?? 0);
-      const portfolioValue = roundCurrency(stockValue + bondValue);
-      const cashValue = roundCurrency(
-        getTotalPersonalWealth(character as Character, forexEnabled, exchangeRates)
-      );
-      const locDebtValue = roundCurrency(
-        computeLocDebtInternal(character as Character, exchangeRates ?? {})
-      );
-      const totalWealth = roundCurrency(Math.max(0, portfolioValue + cashValue - locDebtValue));
+      const { stockValue, bondValue, portfolioValue, cashValue, locDebtValue, totalWealth } =
+        computeCharacterWealth(
+          character as Character,
+          stockValueByCharId,
+          bondValueByCharId,
+          forexEnabled,
+          exchangeRates
+        );
       const countryId = resolveCountryId(character);
       const countryName = COUNTRY_CONFIGS[countryId]?.name ?? countryId;
       const user = userMap.get(character.userId.toString());
