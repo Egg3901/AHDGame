@@ -171,7 +171,34 @@ describe("installOnePartyState", () => {
     const banned = writes.find(
       (w) => (w.update as { $set: { regimeStatus: string } }).$set.regimeStatus === "banned"
     );
-    expect((banned?.filter as { sequentialId: { $ne: number } }).sequentialId.$ne).toBe(2);
+    // Banned by an explicit id LIST rather than "everyone but the ruler": the
+    // list is what lets a caller tolerate a bloc (`toleratedPartyIds`) without
+    // the two writes racing over the same rows.
+    expect((banned?.filter as { sequentialId: { $in: number[] } }).sequentialId.$in).toEqual([1]);
+  });
+
+  it("marks tolerated parties approved rather than banned", async () => {
+    const { db, writes } = mockDb({ parties: PARTIES, governingPartyId: 1 });
+    await installOnePartyState(db, "DE", 470, { rulingPartyId: 2, toleratedPartyIds: [1] });
+    const approved = writes.find(
+      (w) => (w.update as { $set: { regimeStatus: string } }).$set.regimeStatus === "approved"
+    );
+    expect((approved?.filter as { sequentialId: { $in: number[] } }).sequentialId.$in).toEqual([1]);
+    // Nothing is left to ban, so no banned write is issued at all.
+    expect(
+      writes.find(
+        (w) => (w.update as { $set: { regimeStatus: string } }).$set.regimeStatus === "banned"
+      )
+    ).toBeUndefined();
+  });
+
+  it("never demotes the ruling party to approved, even when named tolerated", async () => {
+    const { db, writes } = mockDb({ parties: PARTIES, governingPartyId: 1 });
+    await installOnePartyState(db, "DE", 470, { rulingPartyId: 2, toleratedPartyIds: [1, 2] });
+    const approved = writes.find(
+      (w) => (w.update as { $set: { regimeStatus: string } }).$set.regimeStatus === "approved"
+    );
+    expect((approved?.filter as { sequentialId: { $in: number[] } }).sequentialId.$in).toEqual([1]);
   });
 
   it("ignores an explicit party that does not exist in this country", async () => {

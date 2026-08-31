@@ -554,8 +554,29 @@ async function adoptChallengerSettlement(
   // the whole point of the merge is that the carried chamber keeps sitting. A
   // snap election here would dissolve the seats this pipeline just preserved.
   // Do not "fix" the omission — `reunification.e2e.test.ts` asserts it.
+  // THE WINNER'S OWN SETTLEMENT, NOT A BARE ONE-PARTY INSTALL.
+  //
+  // `toleratedPartyIds` is every party that CROSSED — the map's values are the
+  // absorbed country's parties under their post-migration numbers — so the
+  // GDR's National Front bloc (CDU-Ost, LDPD, NDPD, DBD) arrives as `approved`
+  // rather than banned. Without this the winning side would dissolve its own
+  // coalition partners at the moment it won, which is not the settlement it
+  // fought for; the default (ban everyone but the ruler) stays right for the
+  // `regime_change` peace term, which is a system imposed from outside.
+  //
+  // Everything NOT in that set is the survivor's own party list, and those are
+  // banned — and `vacateBannedSeats` empties the offices they hold. Left seated
+  // they would be 71% of a chamber in a state where they are outlawed, and the
+  // ruling party would govern as a 28.9% minority of benches nominally opposed
+  // to it. The seats are vacated, not reassigned: the chamber keeps its nominal
+  // size and the western Laender stand empty until something fills them.
+  const carriedPartyIds = Object.values(params.partyIdMap)
+    .map((id) => Number(id))
+    .filter((id) => Number.isInteger(id));
   await installOnePartyState(db, params.survivor, params.currentTurn, {
     ...(mappedRulingParty != null ? { rulingPartyId: mappedRulingParty } : {}),
+    toleratedPartyIds: carriedPartyIds,
+    vacateBannedSeats: true,
   });
 
   // The survivor may now legislate in the catalogue it inherited. Without this a

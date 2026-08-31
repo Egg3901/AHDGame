@@ -350,9 +350,28 @@ describe("actuateSettlementOutcome", () => {
     // The SED is sequentialId 1 in East Germany and 7 after the migration.
     // Germany's OWN governing party is also "1" (the SPD) -- the collision this
     // assertion exists to guard.
-    expect(vi.mocked(installOnePartyState)).toHaveBeenCalledWith(expect.anything(), "DE", 470, {
-      rulingPartyId: 7,
-    });
+    expect(vi.mocked(installOnePartyState)).toHaveBeenCalledWith(
+      expect.anything(),
+      "DE",
+      470,
+      expect.objectContaining({ rulingPartyId: 7 })
+    );
+  });
+
+  it("tolerates the parties that crossed and vacates the seats of those it bans", async () => {
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+    const { installOnePartyState } = await import("@/lib/onePartyState/installOnePartyState");
+    const opts = vi.mocked(installOnePartyState).mock.calls[0]?.[3] as {
+      toleratedPartyIds?: number[];
+      vacateBannedSeats?: boolean;
+    };
+    // The carried bloc arrives `approved`, not banned: the winning side does not
+    // dissolve its own coalition partners at the moment it wins.
+    expect(opts.toleratedPartyIds).toContain(7);
+    // And the survivor's own parties lose the offices they hold, rather than
+    // sitting as a banned majority of a chamber they are outlawed in.
+    expect(opts.vacateBannedSeats).toBe(true);
   });
 
   it("does not schedule a post-conversion election", async () => {
@@ -460,9 +479,12 @@ describe("actuateSettlementOutcome", () => {
     await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
     const { installOnePartyState } = await import("@/lib/onePartyState/installOnePartyState");
     // 7 is the carried party; 1 would be Germany's own SPD.
-    expect(vi.mocked(installOnePartyState)).toHaveBeenCalledWith(expect.anything(), "DE", 470, {
-      rulingPartyId: 7,
-    });
+    expect(vi.mocked(installOnePartyState)).toHaveBeenCalledWith(
+      expect.anything(),
+      "DE",
+      470,
+      expect.objectContaining({ rulingPartyId: 7 })
+    );
   });
 
   it("moves the governing party with the government", async () => {
