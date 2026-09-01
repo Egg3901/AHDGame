@@ -5,6 +5,7 @@ import {
   type CountryId,
 } from "@/lib/constants/countries";
 import type { ElectedOfficial } from "@/lib/db/types";
+import { officialsCountryScope } from "@/lib/db/electedOfficialScope";
 import type { ImpeachmentVoteValue } from "@/lib/db/types/impeachment";
 import {
   getLowerChamberOfficeType,
@@ -41,21 +42,14 @@ export function senateConvictionVotesNeeded(seats: number): number {
   return Math.ceil((seats * num) / den);
 }
 
-/**
- * Country-scoped filter for chamber officials. US executive/legislative rows
- * predate the explicit countryId, so keep matching legacy US docs that lack it
- * (mirrors getExecutiveOfficialFilter).
- */
+/** Country-scoped filter for the officials seated in one impeachment chamber. */
 export function impeachmentChamberOfficialFilter(
   countryId: CountryId,
   officeType: string,
   state?: string
 ): Record<string, unknown> {
   const stateScope = state ? { state } : {};
-  if (countryId === COUNTRY_CONFIGS.US.id) {
-    return { officeType, ...stateScope, $or: [{ countryId }, { countryId: { $exists: false } }] };
-  }
-  return { officeType, countryId, ...stateScope };
+  return { officeType, ...stateScope, ...officialsCountryScope(countryId) };
 }
 
 /**

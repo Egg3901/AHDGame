@@ -5,8 +5,9 @@ import {
   getLowerChamberOfficeType,
   getUpperChamberOfficeType,
 } from "@/lib/legislature/chamberOfficeType";
-import { getSubNationalLegislatureKey, COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import { getSubNationalLegislatureKey } from "@/lib/constants/countries";
 import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilters";
+import { governorOfficialFilter } from "@/lib/db/electedOfficialScope";
 import {
   tallyImpeachmentChamber,
   passesHouseImpeachment,
@@ -19,21 +20,6 @@ import {
 import { IMPEACHMENT_SENATE_VOTING_TURNS } from "@/lib/constants/impeachment";
 import { createNotification } from "@/lib/notifications";
 import { autoVoteNppsForImpeachmentStage } from "@/lib/impeachment/autoVoteNpps";
-
-/** Country-scoped governor filter (US governor rows predate the explicit countryId). */
-function governorFilter(
-  countryId: Impeachment["countryId"],
-  state: string
-): Record<string, unknown> {
-  if (countryId === COUNTRY_CONFIGS.US.id) {
-    return {
-      officeType: "governor",
-      state,
-      $or: [{ countryId }, { countryId: { $exists: false } }],
-    };
-  }
-  return { officeType: "governor", countryId, state };
-}
 
 /**
  * Advance every open impeachment whose current-stage voting window has closed.
@@ -74,7 +60,7 @@ export async function processImpeachmentLifecycle(
     // lost office, already succeeded/removed).
     const holderFilter =
       isGovernor && imp.state
-        ? governorFilter(imp.countryId, imp.state)
+        ? governorOfficialFilter(imp.countryId, imp.state)
         : getExecutiveOfficialFilter(imp.countryId, "president");
     const holder = await db.collection<ElectedOfficial>("electedOfficials").findOne(holderFilter);
     const stillHolds =

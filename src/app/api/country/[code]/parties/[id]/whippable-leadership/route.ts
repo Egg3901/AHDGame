@@ -23,6 +23,7 @@ import {
 } from "@/lib/db/collections/governmentFormation";
 import type { CountryId } from "@/lib/constants/countries";
 import { getCabinetWhipChamber, getConfidenceWhipChamber } from "@/lib/partyWhips/constraints";
+import { officialsCountryScope } from "@/lib/db/electedOfficialScope";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import {
   summarizePlayerWhips,
@@ -150,6 +151,11 @@ export async function GET(request: Request, { params }: RouteParams) {
       .find({
         party: partyIdStr,
         officeType: { $in: officeTypes },
+        // Country-scope the officials: party sequentialIds collide across
+        // countries and "house"/"senate" are shared office types, so without
+        // this a chair saw whippable items on the strength of a foreign party's
+        // members (bug #0699). The sibling whippable-bills route already does.
+        ...officialsCountryScope(countryId),
       })
       .toArray();
 

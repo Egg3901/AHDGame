@@ -1,9 +1,9 @@
 import type { Db } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
-import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type { Character, ElectedOfficial, NPP, PoliticalParty } from "@/lib/db/types";
 import type { Impeachment, ImpeachmentVoteValue } from "@/lib/db/types/impeachment";
 import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilters";
+import { governorOfficialFilter } from "@/lib/db/electedOfficialScope";
 import {
   impeachmentChamberOfficialFilter,
   impeachmentStageChamberOfficeType,
@@ -98,14 +98,7 @@ function targetOfficialFilter(impeachment: Impeachment): Record<string, unknown>
   if (impeachment.targetOffice !== "governor" || !impeachment.state) {
     return getExecutiveOfficialFilter(impeachment.countryId, "president");
   }
-  const stateFilter = { officeType: "governor", state: impeachment.state };
-  if (impeachment.countryId === COUNTRY_CONFIGS.US.id) {
-    return {
-      ...stateFilter,
-      $or: [{ countryId: impeachment.countryId }, { countryId: { $exists: false } }],
-    };
-  }
-  return { ...stateFilter, countryId: impeachment.countryId };
+  return governorOfficialFilter(impeachment.countryId, impeachment.state);
 }
 
 export interface ImpeachmentFallbackContext {

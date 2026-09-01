@@ -19,6 +19,7 @@ import {
   getNoConfidenceVotesCollection,
 } from "@/lib/db/collections/governmentFormation";
 import { getCabinetWhipChamber, getConfidenceWhipChamber } from "@/lib/partyWhips/constraints";
+import { officialsCountryScope } from "@/lib/db/electedOfficialScope";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 import { isVoteClosed } from "@/lib/turn/parliamentaryGovernment";
@@ -131,9 +132,19 @@ export async function GET(_request: Request, { params }: RouteParams) {
       .find({
         party: partyIdStr,
         officeType: { $in: officeTypes },
-        $or: [
-          ...(caucusCharacterIds.length > 0 ? [{ characterId: { $in: caucusCharacterIds } }] : []),
-          ...(caucusNppIds.length > 0 ? [{ nppId: { $in: caucusNppIds } }] : []),
+        // Two independent disjunctions: the country scope (bug #0699) and the
+        // caucus membership match. They cannot both be a top-level $or, so
+        // they are joined under $and.
+        $and: [
+          officialsCountryScope(countryId),
+          {
+            $or: [
+              ...(caucusCharacterIds.length > 0
+                ? [{ characterId: { $in: caucusCharacterIds } }]
+                : []),
+              ...(caucusNppIds.length > 0 ? [{ nppId: { $in: caucusNppIds } }] : []),
+            ],
+          },
         ],
       })
       .toArray();
