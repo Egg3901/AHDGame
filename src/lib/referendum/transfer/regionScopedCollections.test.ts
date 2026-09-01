@@ -58,11 +58,41 @@ describe("rescopeRegionToCountry", () => {
       { collection: "stateRegistrationPool", key: "compositeCountryState" },
     ]);
     const mocks = db.collectionMocks["stateRegistrationPool"];
-    expect(mocks.deleteOne).toHaveBeenCalledWith({ _id: "UK_NIR" });
-    const inserted = mocks.insertOne.mock.calls[0][0];
+    const inserted = mocks.replaceOne.mock.calls[0][1];
     expect(inserted._id).toBe("IE_NIR");
     expect(inserted.countryId).toBe("IE");
     expect(inserted.independent).toBe(500); // payload preserved
+    // The old key is released only after the new one is secured, so a crash
+    // between the two leaves a re-keyed row the next attempt can absorb.
+    expect(mocks.deleteOne).toHaveBeenCalledWith({ _id: "UK_NIR" });
+    expect(mocks.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("absorbs a row already living under the new key instead of colliding on it", async () => {
+    // Ticket #1247: a merge that crashed mid-region left `DE_MV` re-keyed
+    // beside the source row `DD_MV`. A retry must replace the survivor, not
+    // die on the unique `_id`: that E11000 failed the impose request and,
+    // the crisis being one-shot, left Germany half-merged for good.
+    db.collection("stateRegistrationPool").findOne.mockResolvedValue({
+      _id: "DD_MV",
+      stateId: "MV",
+      countryId: "DD",
+      independent: 900,
+    });
+    db.collection("stateRegistrationPool").replaceOne.mockResolvedValue({
+      matchedCount: 1,
+      upsertedCount: 0,
+    });
+    await rescopeRegionToCountry(db as unknown as Db, "MV", "DD", "DE", [
+      { collection: "stateRegistrationPool", key: "compositeCountryState" },
+    ]);
+    const mocks = db.collectionMocks["stateRegistrationPool"];
+    // Replace targeted the existing row, upsert guarantees it exists.
+    expect(mocks.replaceOne.mock.calls[0][0]).toEqual({ _id: "DE_MV" });
+    expect(mocks.replaceOne.mock.calls[0][2]).toMatchObject({ upsert: true });
+    expect(mocks.replaceOne.mock.calls[0][1]._id).toBe("DE_MV");
+    expect(mocks.replaceOne.mock.calls[0][1].countryId).toBe("DE");
+    expect(mocks.insertOne).not.toHaveBeenCalled();
   });
 
   it("returns a matched-count report per collection", async () => {
