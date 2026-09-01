@@ -139,7 +139,7 @@ export const metadata: Metadata = {
     images: [CDN_LOGO_URL],
   },
   keywords:
-    "political simulation game, economic simulation, multiplayer elections, congress, parliament, campaigns, corporations, forex, US politics, UK politics, Germany politics, Japan politics",
+    "political simulation game, economic simulation, multiplayer elections, congress, parliament, campaigns, corporations, forex, US politics, UK politics, Soviet Union politics, East Germany politics",
 };
 
 const jsonLd = {
