@@ -825,6 +825,44 @@ export function calculateCollectiveReduction(
 }
 
 /**
+ * Turns cut from a crisis by the decisions its leaders actually took.
+ *
+ * `resolutionPath` accumulates the ids of every option chosen (and every node
+ * traversed) as the tree is walked, so the options that were picked are exactly
+ * those the tree declares whose `optionId` appears in it. Node ids never
+ * collide with option ids, and a node id simply matches no option.
+ *
+ * Separate from `calculateCollectiveReduction`, which measures funding of a
+ * shared aid tally rather than a choice; a crisis carrying both gets both.
+ */
+export function calculateDecisionDurationReduction(
+  interaction: Pick<CrisisInteraction, "decisionTree" | "resolutionPath">
+): number {
+  const chosen = new Set(interaction.resolutionPath ?? []);
+  if (chosen.size === 0) return 0;
+
+  // Counted per option id, not per authored entry: a role-specific menu and the
+  // plain `options` fallback may both declare the same option, and choosing it
+  // once must not be charged twice.
+  const counted = new Map<string, number>();
+  for (const node of interaction.decisionTree ?? []) {
+    const menus = [node.options ?? [], ...Object.values(node.optionsByRole ?? {})];
+    for (const menu of menus) {
+      for (const option of menu ?? []) {
+        if (!chosen.has(option.optionId) || counted.has(option.optionId)) continue;
+        const reduction = option.durationReductionTurns;
+        if (typeof reduction === "number" && Number.isFinite(reduction) && reduction > 0) {
+          counted.set(option.optionId, reduction);
+        }
+      }
+    }
+  }
+  let total = 0;
+  for (const reduction of counted.values()) total += reduction;
+  return total;
+}
+
+/**
  * Get all active crisis interactions that need auto-resolution.
  * Called by the cron/turn processor.
  */

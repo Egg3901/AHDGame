@@ -209,6 +209,19 @@ export function ProposeLegislationModal({
   // are standalone actions that leave the bias untouched at enactment.
   const [unionLawAction, setUnionLawAction] = useState<"bias" | "ban" | "repeal_ban">("bias");
 
+  // Provisions that stand on their own: they carry the whole bill and need no
+  // accompanying policy provision. "Return rate-setting to the government" and
+  // a franchise change are complete statutes by themselves, and requiring an
+  // unrelated policy row alongside them made a bank-independence bill
+  // impossible to propose at all (#1250) — the blank starter row could not be
+  // removed and could not pass the "every provision needs a policy type" gate.
+  // One provision each: an electoral-law bill carries the franchise and the
+  // registration regime on a single provision, however many axes it sets.
+  const standaloneProvisionCount =
+    (isCentralBankCat && includeCbIndependence ? 1 : 0) +
+    (isElectoralCat && (includeVotingAge || includeRegAccess) ? 1 : 0);
+  const hasStandaloneProvision = standaloneProvisionCount > 0;
+
   const blockedProvisionKeys = new Set(
     (blockedProvisions ?? []).map((bp) => `${bp.legislationTypeId}:${bp.policyOptionId}`)
   );
@@ -284,7 +297,7 @@ export function ProposeLegislationModal({
   }
 
   function removeRow(index: number) {
-    if (rows.length <= 1) return;
+    if (rows.length <= (hasStandaloneProvision ? 0 : 1)) return;
     setRows((prev) => prev.filter((_, i) => i !== index));
   }
 
@@ -346,11 +359,16 @@ export function ProposeLegislationModal({
         });
       }
     } else {
-      if (rows.some((r) => !r.legislationTypeId)) {
+      // A bill whose whole content is a standalone provision needs no policy
+      // row: an untouched blank starter row there is the ABSENCE of a policy
+      // provision, not an incomplete one, so drop it instead of refusing the
+      // bill. A row the player actually started still has to be finished.
+      const policyRows = hasStandaloneProvision ? rows.filter((r) => r.legislationTypeId) : rows;
+      if (policyRows.some((r) => !r.legislationTypeId)) {
         showToast("Every provision needs a policy type.", "error");
         return;
       }
-      for (const r of rows) {
+      for (const r of policyRows) {
         const lt = legislationTypes.find((t) => t._id === r.legislationTypeId);
         if (lt?.policyOptions?.length && !r.policyOptionId) {
           showToast("Every provision needs a policy option selected.", "error");
@@ -367,7 +385,7 @@ export function ProposeLegislationModal({
           }
         }
       }
-      provisionsPayload = rows.map((r) => ({
+      provisionsPayload = policyRows.map((r) => ({
         legislationTypeId: r.legislationTypeId,
         ...(r.policyOptionId ? { policyOptionId: r.policyOptionId } : {}),
         effectDirection: r.effectDirection,
@@ -431,7 +449,10 @@ export function ProposeLegislationModal({
           ? natRows.length
           : isSubsidyCat
             ? subsidyProvisions.length
-            : rows.length
+            : // Standalone provisions ride the same ladder server-side, so they
+              // have to be counted here too or the modal quotes a cost the
+              // proposal then charges more than.
+              rows.filter((r) => r.legislationTypeId).length + standaloneProvisionCount
   );
   const submitBlockedByActiveBill = hasActiveBill && !adminOverride;
   const submitDisabled =
@@ -441,11 +462,18 @@ export function ProposeLegislationModal({
     !summary.trim() ||
     // Custom (flavor) bills carry no provisions, so the default empty provision
     // row must not gate submission (#910 — Propose button dead for custom bills).
+    // A bill carrying a standalone provision is the same case: its content is
+    // complete without a policy row, so the untouched blank starter row must not
+    // grey out Propose either (#1250). Without one, an empty row list is not a
+    // proposable bill: every non-custom category needs at least one provision,
+    // and the player can reach zero rows by removing them and then clearing the
+    // standalone provision that allowed it.
     (!isCustomCat &&
       !isTradeCat &&
       !isSubsidyCat &&
       !isNatCat &&
-      rows.some((r) => !r.legislationTypeId));
+      !hasStandaloneProvision &&
+      (rows.length === 0 || rows.some((r) => !r.legislationTypeId)));
 
   const chamberSelectable = chambers.length > 1;
 
@@ -782,6 +810,20 @@ export function ProposeLegislationModal({
                   + Add Provision
                 </button>
               </div>
+              {hasStandaloneProvision && rows.some((r) => !r.legislationTypeId) && (
+                <p className="text-[11px] leading-snug text-muted">
+                  {rows.every((r) => !r.legislationTypeId)
+                    ? "This bill carries no policy provision. It will be proposed with only the provision selected below, which is a complete statute on its own."
+                    : "Provisions left blank will be dropped from this bill."}
+                </p>
+              )}
+              {rows.length === 0 && (
+                <p className="rounded-lg border border-dashed border-card-border bg-background/40 p-3 text-[11px] leading-snug text-muted">
+                  {hasStandaloneProvision
+                    ? "No policy provisions. This bill carries only the provision selected below."
+                    : "This bill has no provisions. Add one, or select a provision below, before proposing it."}
+                </p>
+              )}
               {rows.map((row, idx) => {
                 const lt = legislationTypes.find((t) => t._id === row.legislationTypeId);
                 const options = lt?.policyOptions ?? [];
@@ -795,7 +837,7 @@ export function ProposeLegislationModal({
                       <span className="text-xs font-semibold uppercase tracking-wider text-muted">
                         Provision {idx + 1}
                       </span>
-                      {rows.length > 1 && (
+                      {(rows.length > 1 || hasStandaloneProvision) && (
                         <button
                           type="button"
                           onClick={() => removeRow(idx)}

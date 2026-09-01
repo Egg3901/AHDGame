@@ -20,6 +20,7 @@ import {
   snapToPrimeRateGrid,
 } from "@/lib/db/types/centralBank";
 import { chairAlignmentPolicy, type ChairAlignment } from "@/lib/centralBank/chairAlignment";
+import { isBankGovernmentControlled } from "@/lib/centralBank/governance";
 
 /**
  * Taylor-rule target rate for the autonomous chair:
@@ -73,7 +74,8 @@ function finiteOr(value: unknown, fallback: number): number {
  * and stateMetrics.economic.gdpGrowth.value, keyed by getNationalBudgetId / getNationalDocId),
  * computes a Taylor-rule target, and moves primeRate toward it by a bounded step, respecting
  * the existing 6-turn cooldown and lastRateChangeTurn tracking. No-op when within cooldown,
- * when the step is ~0, or when the bank is not governed by an NPP technocrat chair.
+ * when the step is ~0, when the bank's rate belongs to the government, or when the bank is
+ * not governed by an NPP technocrat chair.
  *
  * No chairInfamy character debit — the NPP has no character to penalize.
  */
@@ -81,7 +83,12 @@ export async function processNppChairAutoRate(
   db: Db,
   bank: Pick<
     CentralBank,
-    "_id" | "chairMode" | "primeRate" | "lastRateChangeTurn" | "chairAlignment"
+    | "_id"
+    | "chairMode"
+    | "primeRate"
+    | "lastRateChangeTurn"
+    | "chairAlignment"
+    | "governmentControlled"
   >,
   countryId: CountryId,
   currentTurn: number,
@@ -92,9 +99,25 @@ export async function processNppChairAutoRate(
    */
   currentYear?: number | null,
   /** GameConfig.commandEconomyEnabled — default OFF / fail-safe when omitted. */
-  commandEconomyEnabled?: boolean
+  commandEconomyEnabled?: boolean,
+  /**
+   * Era START year (gameState.startingYear) — resolves whether the government,
+   * not the bank, holds the rate. This is the START year, not `currentYear`:
+   * see `isBankGovernmentControlled`, where a transfer of monetary power is a
+   * statute the calendar must never pass on the players' behalf.
+   */
+  startingYear?: number
 ): Promise<void> {
   if (bank.chairMode !== "npp") return;
+  // A government-controlled bank (the pre-1997 Bank of England) has no rate of
+  // its own to set: the head of government or the finance minister sets it, and
+  // the technocrat chair is a forecaster, not an authority. Without this the
+  // autonomous chair moved the rate anyway and stamped `lastRateChangeTurn`,
+  // and because the government shares that one cooldown field the Treasury's
+  // window slammed shut every time it opened — the rate card sat permanently on
+  // "on cooldown" and the government could never actually set the rate (#1250).
+  // `fomcMeetingTurn` and `seedFomcBoards` already make the same check.
+  if (isBankGovernmentControlled(bank, countryId, startingYear)) return;
   if (isCommandEconomy(countryId, currentYear, commandEconomyEnabled)) return;
 
   const lastChange = bank.lastRateChangeTurn;

@@ -970,11 +970,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // NPI cost: policy + subsidy + union-law rows share one ladder; tariffs do not cost NPI
+    // NPI cost: policy, subsidy, union-law and standalone rows share one ladder;
+    // tariffs do not cost NPI
     const influenceProvisionCount = countProvisionsChargedNationalInfluence({
       policyProvisionCount: validatedPolicyProvisions.length,
       subsidyProvisionCount: validatedSubsidyProvisions.length,
       unionLawProvisionCount: validatedUnionLawProvisions.length,
+      standaloneProvisionCount: validatedElectoralLawProvisions.length,
     });
     const npiCost = getProvisionCostTotal(influenceProvisionCount);
     const actionCost = BILL_PROPOSE_ACTION_COST;

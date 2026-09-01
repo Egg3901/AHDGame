@@ -180,6 +180,69 @@ describe("processNppChairAutoRate", () => {
     expect(written * 4).toBe(Math.round(written * 4));
   });
 
+  it("leaves a government-controlled bank alone (pre-1997 Bank of England)", async () => {
+    // #1250: the gate was `chairMode !== "npp"` and nothing else, so the
+    // autonomous chair kept setting Bank Rate on a bank whose rate belongs to
+    // the Treasury. Because the government shares the one `lastRateChangeTurn`
+    // cooldown field, every write slammed the Chancellor's window shut and the
+    // rate card sat permanently on "on cooldown".
+    const { db, updateOne } = mockRateDb(
+      { economicFactors: { inflationRate: 7.63 } },
+      { economic: { gdpGrowth: { value: -2.254 } } }
+    );
+    const bank = {
+      _id: "UK" as any,
+      primeRate: 0.25,
+      lastRateChangeTurn: 550,
+      chairMode: "npp",
+    } as any;
+
+    // Era START 1953 < BOE_INDEPENDENCE_YEAR, and no explicit statute, so the
+    // UK bank resolves to government-controlled.
+    await processNppChairAutoRate(db, bank, "UK" as any, 700, 1963, false, 1953);
+
+    expect(updateOne).not.toHaveBeenCalled();
+  });
+
+  it("still runs for the UK once independence has been granted by statute", async () => {
+    // An explicit `governmentControlled: false` written by legislation beats the
+    // historical default, and the technocrat chair takes the rate back.
+    const { db, updateOne } = mockRateDb(
+      { economicFactors: { inflationRate: 7.63 } },
+      { economic: { gdpGrowth: { value: -2.254 } } }
+    );
+    const bank = {
+      _id: "UK" as any,
+      primeRate: 0.25,
+      lastRateChangeTurn: null,
+      chairMode: "npp",
+      governmentControlled: false,
+    } as any;
+
+    await processNppChairAutoRate(db, bank, "UK" as any, 700, 1963, false, 1953);
+
+    expect(updateOne).toHaveBeenCalled();
+  });
+
+  it("still runs for a country that was never government-controlled", async () => {
+    // The gate must key on governance, not merely on an era that predates 1997:
+    // only the UK is in HISTORICALLY_GOVERNMENT_CONTROLLED.
+    const { db, updateOne } = mockRateDb(
+      { economicFactors: { inflationRate: 5.0 } },
+      { economic: { gdpGrowth: { value: 2.0 } } }
+    );
+    const bank = {
+      _id: "b" as any,
+      primeRate: 4.0,
+      lastRateChangeTurn: null,
+      chairMode: "npp",
+    } as any;
+
+    await processNppChairAutoRate(db, bank, "US" as any, 700, 1963, false, 1953);
+
+    expect(updateOne).toHaveBeenCalled();
+  });
+
   it("does not burn the cooldown when snapping lands back on the current rate", async () => {
     // A sub-quarter-point step rounds to the rate the bank already has. Writing
     // that would stamp lastRateChangeTurn for a move that never happened.

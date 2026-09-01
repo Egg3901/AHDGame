@@ -91,9 +91,17 @@ export async function updatePrimeRate(params: {
   // strict majority of the full board) is structurally dead: no motion can ever
   // pass, so the chair's direct authority returns until nominations restore a
   // working board (ticket #1238 follow-up).
+  //
+  // A government-controlled bank is exempt: its committee is dormant (the MPC
+  // was created BY the independence grant, so a board doc on a government-
+  // controlled bank is a leftover from before independence was revoked), and
+  // `fomcMeetingTurn` already skips it for exactly that reason. Without the
+  // exemption the Treasury would be refused here and sent to a committee tab
+  // that `CentralBankClient` hides for government-controlled banks — a dead end
+  // with no way back.
   const hasCommittee = (bank.fomcBoard?.length ?? 0) > 0;
   const boardFunctional = hasCommittee && boardCanCarryMotions(bank.fomcBoard ?? []);
-  if (hasCommittee && boardFunctional && !isAdmin) {
+  if (hasCommittee && boardFunctional && !governmentControlled && !isAdmin) {
     return {
       ok: false as const,
       status: 409,
