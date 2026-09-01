@@ -24,6 +24,28 @@ const REMAPS: Record<string, OfficeRemap> = {
     governor: "ministerPresident",
     chairmanOfStateCouncil: null,
   },
+  // Germany into East Germany — the SAME settlement, with the GDR as the shell
+  // that survives.
+  //
+  // WHY BOTH DIRECTIONS EXIST. Reunification was first built the other way round,
+  // on the argument that a country's name is immutable seed data and a unified
+  // Germany must not render as "East Germany". That reasoning weighed the name
+  // and nothing else. It is far more expensive on every other axis: the currency,
+  // the government type and the party regime statuses all belong to the GDR and
+  // are free when it is the shell, where the Federal Republic as the shell needs
+  // a runtime override for each — and the currency alone is read at 243 sites,
+  // with a reverse map at 106 more that assumes the Mark belongs to the GDR.
+  // The name needed an override EITHER way, because the Federal Republic renders
+  // as "West Germany" while the GDR exists. One override against three.
+  "DE>DD": {
+    bundestag: "volkskammerDeputy",
+    landtag: "landAssembly",
+    ministerPresident: "governor",
+    // The Federal Republic's presidency has no counterpart in a state whose head
+    // of state is the Council of State, and the chairmanship is not a seat a
+    // treaty hands to the side that lost.
+    president: null,
+  },
 };
 
 /** The table for a merging pair, or null when this pair has none. */

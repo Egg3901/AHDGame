@@ -137,6 +137,79 @@ describe("mergeNationalFisc", () => {
     expect(deSet["debt.ceiling"]).toBeUndefined(); // DD had no ceiling of its own
   });
 
+  it("does not re-count a survivor's ceiling that was already merged away", async () => {
+    // `mergedInto` on the SURVIVOR says its figures are remnants of a state that
+    // has already been absorbed, so its ceiling is already inside the other
+    // side's. Reversing a merge would otherwise hand the unified state its own
+    // former ceiling a second time.
+    db.collection("federalBudget")
+      .findOne.mockResolvedValueOnce({
+        _id: "DE",
+        treasuryBalance: 0,
+        debt: { principal: 0, ceiling: 30_000 },
+      })
+      .mockResolvedValueOnce({
+        _id: "DD",
+        treasuryBalance: 0,
+        debt: { principal: 0, ceiling: 10_000 },
+        mergedInto: { countryId: "DE", turn: 545 },
+      });
+
+    await mergeNationalFisc(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 546,
+    });
+
+    const ddSet = db.collectionMocks["federalBudget"].updateOne.mock.calls.find(
+      (c) => c[0]._id === "DD"
+    )![1].$set;
+    // 30_000 at this harness's scale, and NOT plus the survivor's stale 10_000 —
+    // which is what the unguarded sum produced.
+    expect(ddSet["debt.ceiling"]).toBe(15_000);
+    expect(ddSet["debt.ceiling"]).not.toBe(25_000);
+  });
+
+  it("leaves the winner's legislated levers alone when the SURVIVOR is the victor", async () => {
+    // The winner's-law rule assumes the absorbed side won. When the shell is the
+    // winner, carrying the absorbed side's levers imposes the LOSER's tax code on
+    // the victor. Quantities still cross.
+    db.collection("federalBudget")
+      .findOne.mockResolvedValueOnce({
+        _id: "DE",
+        treasuryBalance: 2000,
+        debt: { principal: 0, ceiling: 5000 },
+        taxRates: { incomeTax: 30 },
+        minimumWageKaitzRatio: 0.4,
+        unionsBanned: false,
+      })
+      .mockResolvedValueOnce({
+        _id: "DD",
+        treasuryBalance: 1000,
+        debt: { principal: 0, ceiling: 1000 },
+        taxRates: { incomeTax: 60 },
+      });
+
+    await mergeNationalFisc(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 546,
+      carryLegislatedLevers: false,
+    });
+
+    const ddSet = db.collectionMocks["federalBudget"].updateOne.mock.calls.find(
+      (c) => c[0]._id === "DD"
+    )![1].$set;
+    // The rules do NOT cross.
+    expect(ddSet.taxRates).toBeUndefined();
+    expect(ddSet.minimumWageKaitzRatio).toBeUndefined();
+    expect(ddSet.unionsBanned).toBeUndefined();
+    // The quantities do, at this harness's scale: treasury 1000 + 2000×0.5,
+    // ceiling 1000 + 5000×0.5.
+    expect(ddSet.treasuryBalance).toBe(2000);
+    expect(ddSet["debt.ceiling"]).toBe(3500);
+  });
+
   it("sums the debt ceilings rather than letting the absorbed side's replace one three times its size", async () => {
     // The live German case, in round numbers: replacing would have cut a state
     // with 3x the GDP down to the smaller ceiling it absorbed.

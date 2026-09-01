@@ -360,6 +360,19 @@ export const MOBILISATION_APPROVAL_HIT = 1;
 export const SETTLEMENT_REOPEN_COOLDOWN_TURNS = 144;
 
 /**
+ * How long an in-flight actuation may hold its claim before another runner may
+ * take it over, in milliseconds.
+ *
+ * Long enough that a slow merge is never stolen from itself — a country merge
+ * transfers every region one at a time and each one recomputes the world's
+ * national metrics, which measured about five seconds a region on the live
+ * world — and short enough that a killed attempt is picked up on the next tick
+ * rather than sitting for hours. Ten minutes is comfortably longer than the
+ * slowest plausible merge and comfortably shorter than the hourly tick.
+ */
+export const ACTUATION_LEASE_MS = 10 * 60 * 1000;
+
+/**
  * Turns between sentiment briefings on the World News wire.
  *
  * The public tier is one row per character who acted, so a post per action
