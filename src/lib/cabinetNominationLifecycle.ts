@@ -350,6 +350,18 @@ export async function processCabinetNominationLifecycle(
           // unscoped delete here could evict another country's seat holder.
           .deleteOne({ countryId: nom.countryId, positionId: nom.positionId });
 
+        // Vacate any seat the nominee already holds in this cabinet. The
+        // cabinetMembers_countryId_characterId unique index allows one seat
+        // per character, so without this a sitting secretary confirmed to a
+        // new position makes the insert below throw E11000 every turn and the
+        // nomination stays active forever, failing the whole phase. A
+        // Senate-confirmed move vacates the old office.
+        if (nom.nomineeCharacterId) {
+          await db
+            .collection<CabinetMember>("cabinetMembers")
+            .deleteMany({ countryId: nom.countryId, characterId: nom.nomineeCharacterId });
+        }
+
         const member: Omit<CabinetMember, "_id"> & {
           ministerialActions: number;
           lastMinisterialActionResetDay: string;
