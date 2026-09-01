@@ -17,8 +17,9 @@
  *
  * `reconcileLeadershipPartyEligibility` is the backstop for the paths that
  * mutate `characters.party` WITHOUT going through that cleanup — the admin heal
- * and bulk-edit routes. It vacates a holder whose live party no longer satisfies
- * the policy and opens the race itself.
+ * and bulk-edit routes write the field directly. It vacates a holder whose live
+ * party no longer satisfies the policy, then hands the seat to the same opener
+ * above so both routes into a vacancy behave identically.
  *
  * Neither one polls for empty seats, and that is deliberate: a race nobody
  * enters resolves by vacating the role and closing, so a poller would read that
