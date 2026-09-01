@@ -35,6 +35,12 @@ export async function autoVoteNppsForVacateMotion(
 
   const votes: Record<string, VacateVoteValue> = { ...(motion.votes ?? {}) };
 
+  // Plain `countryId` on purpose, NOT the `$or: [{countryId}, {$exists: false}]`
+  // legacy-tolerant form used elsewhere for US rows. The tally this feeds
+  // (computeCongressLeadershipTally → buildVoterPartyAndWeightMaps) filters on
+  // a plain countryId too, so a row missing it carries no seat weight and its
+  // ballot would be discarded. Widening this without widening the tally would
+  // just write votes that never count.
   const officials = await db
     .collection<ElectedOfficial>("electedOfficials")
     .find({ countryId: "US", officeType: "house", isNPP: true })
