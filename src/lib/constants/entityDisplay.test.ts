@@ -35,4 +35,17 @@ describe("entityFlag", () => {
     expect(entityFlag("NVN")).toBe("🏳️");
     expect(entityFlag("SVN")).toBe("🏳️");
   });
+
+  // Unicode has no GDR flag, and 🇩🇪 is West Germany's — using it made the GDR
+  // render as "DE" on every platform that shows an unassigned regional-indicator
+  // pair as its letters. 🇩🇩 has no glyph either, so it renders as "DD": the
+  // country's own code, which is the same trick the USSR's 🇸🇺 already relies on.
+  it("does not give East Germany West Germany's flag", () => {
+    expect(entityFlag("DD")).not.toBe(entityFlag("DE"));
+  });
+
+  it("encodes East Germany as its own regional-indicator pair", () => {
+    expect(entityFlag("DD")).toBe("🇩🇩");
+    expect(entityFlag("DE")).toBe("🇩🇪");
+  });
 });
