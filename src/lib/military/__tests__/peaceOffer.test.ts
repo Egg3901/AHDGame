@@ -559,6 +559,60 @@ describe("the buy-out gate", () => {
     if (!res.ok) expect(res.error).toMatch(/withdraw|leave/i);
   });
 
+  it("lets the INCUMBENT principal offer it, withdrawing itself", () => {
+    // Either founder may put it on the table. From the incumbent it reads as a
+    // capitulation: we leave the war, and Germany reunifies on your terms.
+    const res = validatePeaceOffer(
+      war(),
+      "US",
+      "DD",
+      { kind: "reunification" as const },
+      "US",
+      null,
+      "presidential",
+      null,
+      { challenger: "DD" }
+    );
+    expect(res.ok).toBe(true);
+  });
+
+  it("refuses it from a country that did not start the war", () => {
+    // RU was dragged in under the Pact. A guest cannot settle the question its
+    // principal is fighting over, in either direction.
+    const res = validatePeaceOffer(
+      war(),
+      "RU",
+      "US",
+      { kind: "reunification" as const },
+      "US",
+      null,
+      "presidential",
+      null,
+      { challenger: "DD" }
+    );
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/started|founder|principal/i);
+  });
+
+  it("refuses it when the country ADDRESSED did not start the war", () => {
+    const joined = {
+      sideA: { label: "United States", countries: ["US", "GR"], kind: "coalition" },
+      joinTurns: [{ countryId: "GR", turn: 20, control: 100 }],
+    } as unknown as Partial<ConflictDoc>;
+    const res = validatePeaceOffer(
+      war(joined),
+      "DD",
+      "GR",
+      { kind: "reunification" as const },
+      "GR",
+      null,
+      "presidential",
+      null,
+      { challenger: "DD" }
+    );
+    expect(res.ok).toBe(false);
+  });
+
   it("allows a reunification the OTHER side withdraws under", () => {
     const res = validatePeaceOffer(
       war(),

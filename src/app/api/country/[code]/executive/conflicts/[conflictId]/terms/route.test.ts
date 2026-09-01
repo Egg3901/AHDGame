@@ -101,12 +101,14 @@ describe("POST dictated reunification", () => {
     expect((await res.json()).error).toMatch(/German Question/i);
   });
 
-  it("refuses it from an imposer that is not the challenger", async () => {
-    // Winning the war does not make the incumbent able to impose the CHALLENGER's
-    // outcome on itself.
+  it("lets EITHER founder dictate it, including the incumbent", async () => {
+    // Either founding belligerent may settle Germany, and the victor holding this
+    // window is one by construction. The outcome is the challenger's either way, so
+    // an incumbent that imposes this is choosing to concede the question it won the
+    // war over. Odd, but it is the victor's term to name.
     questionRidesTheWar("TR");
     const { POST } = await import("./route");
-    expect((await POST(req(reunify), params)).status).toBe(400);
+    expect((await POST(req(reunify), params)).status).toBe(200);
   });
 });
 

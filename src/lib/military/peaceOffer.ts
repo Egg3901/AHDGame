@@ -138,6 +138,16 @@ export interface WithdrawalGate {
  * refuse, and a rule with two implementations is a rule that drifts. The server stays
  * the authority: this is the same function the POST runs.
  */
+/** Which roster holds this country, or null when neither does. */
+function rosterSideOf(
+  conflict: Pick<ConflictDoc, "sideA" | "sideB">,
+  country: CountryId
+): Side | null {
+  if ((conflict.sideA.countries as string[]).includes(country)) return "A";
+  if ((conflict.sideB.countries as string[]).includes(country)) return "B";
+  return null;
+}
+
 export function withdrawalGate(
   conflict: Pick<
     ConflictDoc,
@@ -414,11 +424,41 @@ export function validatePeaceOffer(
   // losing one) while the term settles the question for the challenger. Left open it
   // is not merely incoherent, it is an exploit: the challenger wins the German
   // Question by surrendering the war fought over it.
-  if (term.kind === "reunification" && settlement && leaver === settlement.challenger) {
-    return {
-      ok: false,
-      error: "Reunification cannot be settled by a deal you withdraw from the war under.",
-    };
+  if (term.kind === "reunification" && settlement) {
+    // EITHER FOUNDING BELLIGERENT MAY PROPOSE IT, and only they: from the challenger
+    // it is a demand, from the incumbent a capitulation, and the outcome is the
+    // challenger's either way. A guest cannot settle the question its principal is
+    // fighting over, and neither can it be settled AT one: a deal the opposing
+    // founder is not party to would decide Germany over their head.
+    //
+    // Checked here rather than in `validatePeaceTerm` because "founding belligerent"
+    // is a fact about the rosters, which that pure function does not hold.
+    const fromSide = rosterSideOf(conflict, from);
+    const toSide = rosterSideOf(conflict, to);
+    if (
+      fromSide === null ||
+      toSide === null ||
+      principalOf(conflict, fromSide) !== from ||
+      principalOf(conflict, toSide) !== to
+    ) {
+      return {
+        ok: false,
+        error: "Only the two countries that started this war can settle Germany between them.",
+      };
+    }
+    // A REUNIFICATION THE CHALLENGER WITHDRAWS UNDER IS A CONTRADICTION. The
+    // departure hands the war to the incumbent (the leaver's side is the losing one)
+    // while the term settles the question for the challenger. Left open it is not
+    // merely incoherent, it is an exploit: the challenger wins the German Question by
+    // surrendering the war fought over it. So the incumbent is always the one who
+    // leaves, whichever of the two composed the offer.
+    if (leaver === settlement.challenger) {
+      return {
+        ok: false,
+        error:
+          "Reunification cannot be settled by a deal East Germany withdraws from the war under.",
+      };
+    }
   }
 
   // The term's own rules live in `validatePeaceTerm`, shared with the impose route

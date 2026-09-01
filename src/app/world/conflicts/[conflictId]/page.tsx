@@ -385,11 +385,11 @@ export default async function ConflictRecordPage({
           // one-party state. Loaded from the same helper the route validates
           // against, so anything offered here is accepted there.
           targetParties: await loadPartyChoices(db, doc.termsWindow.target),
-          // Offered only to the CHALLENGER of a question this war is carrying. Same
-          // loader the route validates against, so anything the panel shows is a term
-          // the route will accept.
-          canDictateReunification:
-            (await loadTermSettlement(db, doc._id))?.challenger === viewerCountry,
+          // Offered on any war this question is riding. The victor holding the terms
+          // window is a founding belligerent by construction (`openTermsWindow` names
+          // `principalOf`), and EITHER founder may settle Germany, so nothing further
+          // needs checking here. Same loader the route validates against.
+          canDictateReunification: (await loadTermSettlement(db, doc._id)) !== null,
         }
       : null;
 

@@ -228,7 +228,9 @@ describe("choosing which term to offer", () => {
     // unhandled kind is not a broken button: it silently sends a different deal.
     const fetchMock = mockGet({
       currentTurn: 40,
-      wars: [{ ...war, canOfferReunification: true }],
+      wars: [
+        { ...war, reunificationLeaver: "them", enemies: [{ ...war.enemies[0], canReunify: true }] },
+      ],
       offers: [],
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -246,6 +248,36 @@ describe("choosing which term to offer", () => {
     });
   });
 
+  it("sends the incumbent's reunification as US leaving", async () => {
+    // The same term from the other founder is a capitulation: we withdraw, and
+    // Germany reunifies on their terms. The server decides which way it runs.
+    const fetchMock = mockGet({
+      currentTurn: 40,
+      wars: [
+        {
+          ...war,
+          reunificationLeaver: "us",
+          enemies: [{ ...war.enemies[0], canReunify: true }],
+        },
+      ],
+      offers: [],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<PeacePanel {...props} />);
+    fireEvent.change(await screen.findByLabelText(/country to negotiate with/i), {
+      target: { value: "CN" },
+    });
+    fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "them" } });
+    fireEvent.change(screen.getByLabelText(/term offered/i), {
+      target: { value: "reunification" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /send peace offer/i }));
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => c[1]?.method === "POST");
+      expect(JSON.parse(post![1].body).leaver).toBe("us");
+    });
+  });
+
   it("sends a reunification as the OTHER side leaving, whatever the picker said", async () => {
     // A reunification the challenger withdraws under is refused by the route: the
     // departure hands the war to the incumbent while the term settles it for the
@@ -253,7 +285,9 @@ describe("choosing which term to offer", () => {
     // would compose an offer that is always rejected.
     const fetchMock = mockGet({
       currentTurn: 40,
-      wars: [{ ...war, canOfferReunification: true }],
+      wars: [
+        { ...war, reunificationLeaver: "them", enemies: [{ ...war.enemies[0], canReunify: true }] },
+      ],
       offers: [],
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -560,7 +594,13 @@ describe("what accepting would actually do to the war", () => {
       "fetch",
       mockGet({
         currentTurn: 40,
-        wars: [{ ...war, canOfferReunification: true }],
+        wars: [
+          {
+            ...war,
+            reunificationLeaver: "them",
+            enemies: [{ ...war.enemies[0], canReunify: true }],
+          },
+        ],
         offers: [],
       })
     );

@@ -7,6 +7,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { requirePeaceNegotiator } from "@/lib/api/requirePeaceNegotiator";
 import { loadTermSettlement } from "@/lib/settlement/queries/termSettlement";
+import { principalOf } from "@/lib/military/principal";
 import { getSettlementCrisesCollection } from "@/lib/db/collections";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
@@ -196,10 +197,19 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
           // What OUR own departure would do, for the same reason: the panel must say
           // whether leaving ends the war rather than claiming the fighting always
           // carries on without us.
-          // The German Question term, shown only to the side whose outcome it is. The
-          // form cannot work this out for itself: it would have to know which war is
-          // carrying the crisis, which is a settlement fact rather than a war one.
-          canOfferReunification: challengerByWar.get(w._id) === countryId,
+          // Which way a reunification runs, when this war is carrying the question.
+          // The incumbent is always the side that withdraws, so the challenger asks
+          // THEM to leave and the incumbent offers to leave itself. Null when the
+          // term is not available on this war at all.
+          //
+          // Server-decided: the form would otherwise have to know which war carries
+          // the crisis and who its challenger is, both settlement facts rather than
+          // war ones.
+          reunificationLeaver: !challengerByWar.has(w._id)
+            ? null
+            : challengerByWar.get(w._id) === countryId
+              ? ("them" as const)
+              : ("us" as const),
           ourDeparture: (() => {
             const g = withdrawalGate(w, countryId, countryId);
             return {
@@ -214,6 +224,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
               const gate = withdrawalGate(w, countryId, e);
               return {
                 country: e,
+                // Reunification is settled BETWEEN THE TWO FOUNDERS, so it is offered
+                // only against the opposing principal, and only by ours. The route
+                // enforces the same rule; this keeps the option off a picker where it
+                // would always be refused.
+                canReunify:
+                  challengerByWar.has(w._id) &&
+                  principalOf(w, onA ? "A" : "B") === countryId &&
+                  principalOf(w, onA ? "B" : "A") === e,
                 endsWar: gate.endsWar,
                 endsWarReason: gate.endsWarReason,
                 guestsLeaving: gate.guests,

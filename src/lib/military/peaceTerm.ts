@@ -190,12 +190,11 @@ export function validatePeaceTerm(term: PeaceTerm, ctx: PeaceTermContext): Peace
         error: "Reunification can only be settled on a war the German Question is riding.",
       };
     }
-    if (ctx.from !== ctx.settlement.challenger) {
-      return {
-        ok: false,
-        error: "Only East Germany can put reunification on the table, as the challenger.",
-      };
-    }
+    // WHO may propose it is not decided here. Either founding belligerent may, and
+    // "founding" is a fact about the war's rosters that this pure function cannot
+    // see: `validatePeaceOffer` holds the conflict and makes that check. The outcome
+    // is the challenger's either way, so an offer from the incumbent is a concession
+    // rather than a different settlement.
     return { ok: true };
   }
 

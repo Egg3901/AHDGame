@@ -223,11 +223,10 @@ describe("validatePeaceTerm: reunification", () => {
     expect(res.ok).toBe(false);
   });
 
-  it("refuses it from the incumbent side", () => {
-    // Reunification is the CHALLENGER's outcome. The incumbent winning the question
-    // leaves both Germanies standing, which is not a term to impose.
-    const res = validatePeaceTerm(term, { ...gq, from: "US", to: "DD" });
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toMatch(/East German|challenger/i);
+  it("accepts it from the incumbent side too", () => {
+    // EITHER founding belligerent may put it on the table. From the incumbent it is
+    // an offer to concede: the outcome is still the challenger's, and who composed
+    // the offer does not change what it settles.
+    expect(validatePeaceTerm(term, { ...gq, from: "US", to: "DD" })).toEqual({ ok: true });
   });
 });

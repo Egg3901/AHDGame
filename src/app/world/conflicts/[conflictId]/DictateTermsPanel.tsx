@@ -21,9 +21,9 @@ export interface DictateTermsView {
    */
   targetParties: { id: number; name: string; abbreviation?: string }[];
   /**
-   * True when this war is carrying a settlement crisis the victor is the CHALLENGER
-   * of. Server-decided: the panel cannot tell which war a question is riding, and
-   * the route refuses the term from anyone else regardless.
+   * True when this war is carrying a settlement crisis. Server-decided: the panel
+   * cannot tell which war a question is riding. Either founding belligerent may
+   * settle it, and the victor holding this window is one by construction.
    */
   canDictateReunification?: boolean;
 }

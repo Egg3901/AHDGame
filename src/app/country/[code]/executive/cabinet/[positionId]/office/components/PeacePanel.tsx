@@ -33,6 +33,8 @@ export interface EnemyView {
   /** Asking them to withdraw would empty their side and end the war. */
   endsWar: boolean;
   endsWarReason?: "roster" | "principals" | null;
+  /** True when reunification can be settled with THIS country: both are founders. */
+  canReunify?: boolean;
   /** Treaty allies released alongside them, who leave at the same moment. */
   guestsLeaving: CountryId[];
   /** That withdrawal is refused at the current front. A white peace escapes it. */
@@ -55,8 +57,12 @@ export interface PeaceWar {
   /** Countries on the OTHER side, the only ones an offer can be made to. */
   enemies: EnemyView[];
   /** What OUR leaving would do to this war. */
-  /** True when this war carries a settlement crisis we are the challenger of. */
-  canOfferReunification?: boolean;
+  /**
+   * Which way a reunification runs on this war, or null when it is unavailable.
+   * The incumbent is always the side that withdraws, so the challenger asks THEM to
+   * leave and the incumbent offers to leave itself. Server-decided.
+   */
+  reunificationLeaver?: "us" | "them" | null;
   ourDeparture: {
     endsWar: boolean;
     endsWarReason?: "roster" | "principals" | null;
@@ -186,16 +192,6 @@ export function PeacePanel({
   const [termKind, setTermKind] = useState<
     "white_peace" | "indemnity" | "regime_change" | "demilitarisation" | "reunification"
   >("indemnity");
-  /**
-   * Who the offer actually removes.
-   *
-   * A reunification is always the OTHER side leaving: one the challenger withdraws
-   * under is refused outright, because the departure hands the war to the incumbent
-   * while the term settles the question for the challenger. The picker defaults to
-   * "we leave", so left to the raw state the form would compose an offer the route
-   * always rejects.
-   */
-  const effectiveLeaver: "us" | "them" = termKind === "reunification" ? "them" : leaver;
   const [targetSystem, setTargetSystem] = useState<string>("parliamentaryRepublic");
   // Empty string means "let the conversion resolve it", which is what the term
   // does when it names no party.
@@ -208,6 +204,17 @@ export function PeacePanel({
 
   const war = wars.find((w) => w.conflictId === warId);
   const selectedEnemy = war?.enemies.find((e) => e.country === enemy) ?? null;
+  /**
+   * Who the offer actually removes.
+   *
+   * A reunification is always the INCUMBENT leaving, whichever founder proposes it:
+   * one the challenger withdraws under is refused outright, because the departure
+   * hands the war to the incumbent while the term settles the question for the
+   * challenger. So the direction is the server's to decide, not the picker's, and
+   * left to the raw state the form would compose an offer the route always rejects.
+   */
+  const effectiveLeaver: "us" | "them" =
+    termKind === "reunification" ? (war?.reunificationLeaver ?? "them") : leaver;
   /**
    * The gate bites only when we are asking THEM to leave and the term is not a white
    * peace. A white peace records no victor, so there is nothing to buy and nothing to
@@ -482,7 +489,7 @@ export function PeacePanel({
               {/* Only on a war the German Question is riding, and only for the side
                   whose outcome reunification is. The server decides both: the form
                   has no way to know which war carries the crisis. */}
-              {war?.canOfferReunification && (
+              {selectedEnemy?.canReunify && (
                 <option value="reunification">German reunification</option>
               )}
             </select>
