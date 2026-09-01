@@ -41,10 +41,14 @@ export type PeaceTerm =
    * German reunification, on the challenger's terms.
    *
    * Carries no fields: the settlement crisis already names the two Germanies, and a
-   * term that restated them could disagree with it. Only valid on a war the German
-   * Question is riding, and only from the crisis CHALLENGER, because reunification
-   * is the challenger's outcome. The incumbent winning the question leaves both
-   * Germanies standing, which is the absence of a term rather than one to impose.
+   * term that restated them could disagree with it.
+   *
+   * Only valid on a war the German Question is riding, and EITHER of the two
+   * founding belligerents may propose it: from the challenger it is a demand, from
+   * the incumbent a capitulation. The outcome is the challenger's either way, which
+   * is why the incumbent's version always has the incumbent withdrawing. The
+   * challenger must be a party to it, and a country that merely joined the war
+   * cannot settle Germany in either direction.
    *
    * Deliberately UNGATED on the front. Every other way to reach this outcome runs
    * through winning the war; this is the one that can be put on the table while it
