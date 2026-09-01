@@ -749,18 +749,27 @@ export default async function ConflictRecordPage({
       note: momentum.note,
       sideBLabel: doc.sideB.label,
     },
-    // The record needs a party NAME and the term stores an id. Resolved from the
-    // batch loaded above, so a war with several converting settlements is still one
-    // query. Always keyed on `toCountry`: the term lands on the recipient whichever
-    // side the deal removes from the war.
-    settlements: settlements.map((o) =>
-      settlementRow(
-        o,
-        o.term.kind === "regime_change" && o.term.rulingPartyId != null
-          ? partyDisplayName(settlementParties.get(o.toCountry), o.term.rulingPartyId)
-          : null
-      )
-    ),
+    settlements: settlements.map((o) => {
+      // Narrowed into a local: the `.find` callback below closes over the term
+      // and loses the discriminant otherwise.
+      const term = o.term;
+      const namedParty =
+        term.kind === "regime_change" && term.rulingPartyId != null ? term.rulingPartyId : null;
+      return {
+        // Who left and who they settled with comes from `settlementRow`, which
+        // reads the pair off `leaver` the way the engine does (ticket #1246).
+        ...settlementRow(o),
+        term,
+        // The term stores a party id and the record needs a name. Resolved from
+        // the batch loaded above, so a war with several converting settlements is
+        // still one query. Keyed on the RECIPIENT, because a term always lands on
+        // the recipient whichever party the deal removes.
+        rulingPartyName:
+          namedParty != null
+            ? partyDisplayName(settlementParties.get(o.toCountry), namedParty)
+            : null,
+      };
+    }),
     tier,
     canAct,
     viewerCountry,

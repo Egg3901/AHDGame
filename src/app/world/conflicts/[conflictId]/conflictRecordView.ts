@@ -479,11 +479,6 @@ export interface SettlementRow {
   leaver: string;
   other: string;
   term: PeaceTerm;
-  /**
-   * The party a `regime_change` term installs, already resolved to a name. Null on
-   * every other term, and on a conversion that named no party.
-   */
-  rulingPartyName: string | null;
   justification: string | null;
   turn: number;
 }
@@ -497,10 +492,7 @@ export interface SettlementRow {
  * exactly backwards and prints the country still fighting as the one that walked,
  * which is what the record said about the War for Germany at turn 532.
  */
-export function settlementRow(
-  offer: SettlementOffer,
-  rulingPartyName?: string | null
-): SettlementRow {
+export function settlementRow(offer: SettlementOffer): SettlementRow {
   const leaver = offer.leaver;
   const other = leaver === offer.fromCountry ? offer.toCountry : offer.fromCountry;
   return {
@@ -508,7 +500,6 @@ export function settlementRow(
     leaver,
     other,
     term: offer.term,
-    rulingPartyName: rulingPartyName ?? null,
     justification: offer.justification ?? null,
     // An accepted offer always carries `resolvedTurn`; the fallback keeps a row
     // written by an older shape from printing "turn undefined".
