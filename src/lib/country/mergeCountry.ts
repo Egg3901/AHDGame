@@ -297,26 +297,29 @@ async function sweepNationalStrays(
   //
   // Later legislation by the unified government supersedes either through the
   // normal reconcile (enactment order), which is the ordinary lex-posterior rule.
-  const absorbedTariffs = (await db
+  // BOTH SIDES OF THE COMPARISON MOVE TOGETHER. The scopes are read from the side
+  // that WINS and the delete lands on the side that loses; taking the scopes from
+  // one fixed side and only flipping the delete would match every one of the
+  // loser's own records against its own scope list and wipe its entire trade
+  // policy, colliding or not.
+  const tariffWinner = absorbedTariffsWin ? fromCountryId : toCountryId;
+  const tariffLoser = absorbedTariffsWin ? toCountryId : fromCountryId;
+  const winningTariffs = (await db
     .collection("tariffs")
-    .find({ countryId: fromCountryId })
+    .find({ countryId: tariffWinner })
     .toArray()) as unknown as Array<{
     scopeType: string;
     targetSectorType?: unknown;
     targetOriginCountryId?: unknown;
     targetCorporationId?: unknown;
   }>;
-  if (absorbedTariffs.length > 0) {
+  if (winningTariffs.length > 0) {
     // One $or delete for every colliding scope, not a round trip per tariff.
     // An explicit null in each key matches both a missing and a null field, so
     // "economy_wide vs economy_wide" collides exactly like a shared sector.
-    //
-    // The LOSING side's records are the ones deleted, which is why the country id
-    // here is a variable: the scopes are the same either way, only the owner of
-    // the record that yields changes.
     await db.collection("tariffs").deleteMany({
-      countryId: absorbedTariffsWin ? toCountryId : fromCountryId,
-      $or: absorbedTariffs.map((tariff) => ({
+      countryId: tariffLoser,
+      $or: winningTariffs.map((tariff) => ({
         scopeType: tariff.scopeType,
         targetSectorType: tariff.targetSectorType ?? null,
         targetOriginCountryId: tariff.targetOriginCountryId ?? null,

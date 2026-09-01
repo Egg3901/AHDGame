@@ -311,8 +311,17 @@ describe("mergeCountry", () => {
     // The same collision, decided the other way. A tariff is legislated policy,
     // so it follows the side that WON -- and when the victor is the surviving
     // shell, deleting its record would keep the defeated state's trade policy.
-    prime(db, "tariffs").find.mockReturnValue(
-      cursor([{ _id: "t-de", scopeType: "sector", targetSectorType: "manufacturing" }])
+    //
+    // The two sides carry DIFFERENT scopes on purpose: the delete must be built
+    // from the WINNER's list and land on the loser. Reading the scopes from the
+    // absorbed side and only flipping the target country would match each of its
+    // records against its own scope and delete the lot.
+    prime(db, "tariffs").find.mockImplementation((f: { countryId: string }) =>
+      cursor(
+        f.countryId === "DD"
+          ? [{ _id: "t-dd", scopeType: "sector", targetSectorType: "chemicals" }]
+          : [{ _id: "t-de", scopeType: "sector", targetSectorType: "manufacturing" }]
+      )
     );
     const { mergeCountry } = await import("./mergeCountry");
     await mergeCountry(db as unknown as Db, {
@@ -322,8 +331,19 @@ describe("mergeCountry", () => {
       absorbedTariffsWin: false,
     });
     const del = prime(db, "tariffs").deleteMany.mock.calls[0][0];
-    // The ABSORBED side's record is the one that yields; the scopes are unchanged.
-    expect(del.countryId).toBe("DE");
+    expect(del).toEqual({
+      // The ABSORBED side's record is the one that yields ...
+      countryId: "DE",
+      // ... and only where it meets a scope the SURVIVOR actually legislated.
+      $or: [
+        {
+          scopeType: "sector",
+          targetSectorType: "chemicals",
+          targetOriginCountryId: null,
+          targetCorporationId: null,
+        },
+      ],
+    });
   });
 
   it("records the absorption against the surviving country", async () => {
