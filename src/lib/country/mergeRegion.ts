@@ -26,6 +26,71 @@ import { REGION_SCOPED_COLLECTIONS } from "@/lib/referendum/transfer/regionScope
 import { REGION_PARTY_COLLECTIONS } from "@/lib/referendum/transfer/evacuateRegionPolitics";
 import { rescaleRegionDelegations } from "./apportionChamber";
 
+/**
+ * The UNIQUE indexes on `collection` that include `field`, as their key lists.
+ *
+ * Fails OPEN — a collection that does not exist yet, or a driver that will not
+ * report indexes, answers "none" and takes the ordinary re-point path. That is
+ * what this did before the check existed, so an introspection problem cannot make
+ * a merge worse than it already was.
+ */
+async function uniqueIndexesOver(db: Db, collection: string, field: string): Promise<string[][]> {
+  try {
+    const indexes = await db.collection(collection).indexes();
+    return indexes
+      .filter((index) => index.unique === true && (index.key as Record<string, unknown>)?.[field])
+      .map((index) => Object.keys(index.key as Record<string, unknown>));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Re-point one region-keyed collection onto the surviving region, for a FUSE.
+ *
+ * A transfer can always re-point: the region keeps its identity under a new
+ * owner. A FUSE cannot, because two regions become one and any UNIQUE index over
+ * the region field then has two rows competing for a single key. That is not
+ * hypothetical — `stateResourceCapacity` is unique on `stateId` alone and
+ * `unownedSectors` on `{stateId, sectorType}`, and both threw mid-merge on a live
+ * reunification, after half a country had already moved.
+ *
+ * WHERE THE TWO ROWS COLLIDE, THE SURVIVOR'S STANDS and the absorbed region's is
+ * dropped — the same answer the `idIsState` branch above already gives, for the
+ * same reason: fusing them would mean merging their CONTENTS, and the survivor
+ * already has its own. Rows that do NOT collide still cross, so a sector East
+ * Berlin had and Berlin lacked is carried rather than thrown away.
+ */
+async function fuseRegionKeyedCollection(
+  db: Db,
+  collection: string,
+  field: string,
+  fromRegionId: string,
+  toRegionId: string,
+  now: Date
+): Promise<number> {
+  const coll = db.collection<Record<string, unknown>>(collection);
+  for (const keys of await uniqueIndexesOver(db, collection, field)) {
+    const others = keys.filter((key) => key !== field);
+    const sourceRows = await coll.find({ [field]: fromRegionId }).toArray();
+    for (const row of sourceRows) {
+      // What this row would become once re-pointed. An explicit null matches a
+      // missing field too, so a row that omits one of the key parts is compared
+      // the same way the index compares it.
+      const wouldBecome: Record<string, unknown> = { [field]: toRegionId };
+      for (const key of others) wouldBecome[key] = row[key] ?? null;
+      if (await coll.findOne(wouldBecome)) {
+        await coll.deleteOne({ _id: row._id } as Record<string, unknown>);
+      }
+    }
+  }
+  const res = await coll.updateMany(
+    { [field]: fromRegionId },
+    { $set: { [field]: toRegionId, updatedAt: now } }
+  );
+  return res?.modifiedCount ?? 0;
+}
+
 export interface MergeRegionArgs {
   fromRegionId: string;
   toRegionId: string;
@@ -130,10 +195,19 @@ export async function mergeRegion(db: Db, args: MergeRegionArgs): Promise<MergeR
       documentsMoved += gone?.deletedCount ?? 0;
       continue;
     }
-    const res = await db
-      .collection(scope.collection)
-      .updateMany({ [field]: fromRegionId }, { $set: { [field]: toRegionId, updatedAt: now } });
-    documentsMoved += res?.modifiedCount ?? 0;
+    // Collision-aware, because this is a FUSE: any unique index over the region
+    // field has two rows competing for one key once the two regions become one.
+    // Read off the live indexes rather than a hand-kept list — the failure mode is
+    // a duplicate-key throw in the middle of a merge that has already moved half a
+    // country, and a list is exactly the thing that goes stale.
+    documentsMoved += await fuseRegionKeyedCollection(
+      db,
+      scope.collection,
+      field,
+      fromRegionId,
+      toRegionId,
+      now
+    );
   }
 
   // The region PARTY collections are also not in the table above — the transfer

@@ -185,10 +185,20 @@ export async function actuateSettlementOutcome(
   //     (flips `enabledForPlayers` off), and whether the SURVIVOR opens to
   //     players afterwards depends on whether the absorbed side was open. Read
   //     it after the merge and the answer is always no.
-  const absorbedGameState = await db
-    .collection<CountryGameState>("countryGameStates")
-    .findOne({ _id: challenger }, { projection: { enabledForPlayers: 1, status: 1 } });
-  const absorbedWasPlayable = absorbedGameState?.enabledForPlayers === true;
+  //
+  //     ⚠️ PERSISTED ON FIRST LOOK, because this function is re-enterable. "Before
+  //     the merge" is only true of the FIRST attempt; a resume arrives after the
+  //     shell is already retired and would read false every time. That is not
+  //     theoretical — it happened on the live reunification and left nineteen
+  //     real accounts locked out of the country they had just won.
+  let absorbedWasPlayable = crisis.absorbedWasPlayable ?? null;
+  if (absorbedWasPlayable == null) {
+    const absorbedGameState = await db
+      .collection<CountryGameState>("countryGameStates")
+      .findOne({ _id: challenger }, { projection: { enabledForPlayers: 1, status: 1 } });
+    absorbedWasPlayable = absorbedGameState?.enabledForPlayers === true;
+    await crises.updateOne({ _id: crisis._id }, { $set: { absorbedWasPlayable } });
+  }
 
   // 2. Parties before regions. `characters.party` and `electedOfficials.party`
   //    hold a per-country `sequentialId`, so a row that moves country before its

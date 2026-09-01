@@ -204,6 +204,16 @@ export interface SettlementCrisisDoc {
    * a later tick instead of wedging the crisis for ever.
    */
   actuationClaimedAt?: Date | null;
+  /**
+   * Whether the absorbed country was open to players, captured the FIRST time
+   * actuation looked.
+   *
+   * ⚠️ Durable because actuation is re-enterable. The merge retires the absorbed
+   * shell, so on a resume the live answer is always "no" — and the survivor only
+   * opens to players when the absorbed side was open. Re-deriving it on a second
+   * pass locked nineteen real accounts out of the country they had just won.
+   */
+  absorbedWasPlayable?: boolean | null;
   createdAt: Date;
   updatedAt: Date;
 }

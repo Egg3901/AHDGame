@@ -153,8 +153,8 @@ describe("actuateSettlementOutcome", () => {
     // The cooldown and the completion stamp land together, at the end.
     const done = calls.find((c) => c[1]?.$set?.actuationCompletedTurn != null);
     expect(done).toBeDefined();
-    expect(done[1].$set.cooldownUntilTurn).toBe(412 + SETTLEMENT_REOPEN_COOLDOWN_TURNS);
-    expect(done[1].$set.actuationClaimedAt).toBeNull();
+    expect(done![1].$set.cooldownUntilTurn).toBe(412 + SETTLEMENT_REOPEN_COOLDOWN_TURNS);
+    expect(done![1].$set.actuationClaimedAt).toBeNull();
   });
 
   it("records the close against both Germanies on a Western win", async () => {

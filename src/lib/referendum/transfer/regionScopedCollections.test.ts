@@ -59,10 +59,19 @@ describe("rescopeRegionToCountry", () => {
     ]);
     const mocks = db.collectionMocks["stateRegistrationPool"];
     expect(mocks.deleteOne).toHaveBeenCalledWith({ _id: "UK_NIR" });
-    const inserted = mocks.insertOne.mock.calls[0][0];
-    expect(inserted._id).toBe("IE_NIR");
-    expect(inserted.countryId).toBe("IE");
-    expect(inserted.independent).toBe(500); // payload preserved
+    // REPLACE with upsert, not insert: the target key can already be occupied by
+    // an orphan from an earlier transfer or an old seed, and a bare insert throws
+    // E11000 there -- after the old row has already been deleted, so it takes the
+    // region's real data with it. The live German world carried four such orphans.
+    const [filter, replacement, opts] = mocks.replaceOne.mock.calls[0];
+    expect(filter).toEqual({ _id: "IE_NIR" });
+    expect(opts).toEqual({ upsert: true });
+    expect(replacement.countryId).toBe("IE");
+    expect(replacement.stateId).toBe("NIR");
+    // `_id` must NOT ride along in the replacement, or Mongo rejects it as an
+    // attempt to change an immutable field.
+    expect(replacement._id).toBeUndefined();
+    expect(replacement.independent).toBe(500); // payload preserved
   });
 
   it("returns a matched-count report per collection", async () => {

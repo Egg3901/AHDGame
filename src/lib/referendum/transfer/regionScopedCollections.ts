@@ -150,12 +150,23 @@ export async function rescopeRegionToCountry(
       let matched = 0;
       if (doc) {
         await coll.deleteOne({ _id: oldId } as Record<string, unknown>);
-        await coll.insertOne({
-          ...doc,
-          _id: newId,
-          countryId: toCountryId,
-          updatedAt: now,
-        } as Record<string, unknown>);
+        // REPLACE, not insert. The target key can already exist — a world can
+        // carry an orphaned `${toCountryId}_${regionId}` from an earlier transfer
+        // or an old seed, and the live German world carried four of them. A bare
+        // `insertOne` throws E11000 there, and because the old doc has ALREADY
+        // been deleted by then, the throw both aborts the whole merge and takes
+        // the region's real row with it. The moving region's document is the
+        // authoritative one, so it overwrites whatever was squatting on the key.
+        //
+        // `_id` is dropped from the spread: it comes from the filter on an upsert,
+        // and passing it in a replacement is how you get an immutable-field error
+        // instead of the row you wanted.
+        const { _id: _oldKey, ...carried } = doc as Record<string, unknown>;
+        await coll.replaceOne(
+          { _id: newId } as Record<string, unknown>,
+          { ...carried, countryId: toCountryId, updatedAt: now },
+          { upsert: true }
+        );
         matched = 1;
       }
       report.push({ collection: scope.collection, matched });
