@@ -87,27 +87,53 @@ export async function reconcileLeadershipPartyEligibility(
   // of them at once.
   if (ctx.majorityParty === null) return [];
 
+  const roles = MAJORITY_GATED_ROLES[chamber];
+
+  // Three queries total, not three per role: this runs on the congress page
+  // GETs, right beside `vacateLeadershipBulkIfLostSeat`, which exists in bulk
+  // form for exactly this reason.
+  const leaders = await db
+    .collection<CongressLeader>("congressLeaders")
+    .find({ role: { $in: roles.map((r) => r.leaderRole) } })
+    .toArray();
+  const holderIds = leaders.flatMap((l) => (l.characterId ? [l.characterId] : []));
+  if (holderIds.length === 0) return [];
+
+  const [seats, characters] = await Promise.all([
+    db
+      .collection<ElectedOfficial>("electedOfficials")
+      .find({
+        officeType: chamber,
+        $or: [{ characterId: { $in: holderIds } }, { nppId: { $in: holderIds } }],
+      })
+      .toArray(),
+    db
+      .collection<Character>("characters")
+      .find({ _id: { $in: holderIds } }, { projection: { party: 1 } })
+      .toArray(),
+  ]);
+
+  const seatByHolder = new Map<string, ElectedOfficial>();
+  for (const seat of seats) {
+    if (seat.characterId) seatByHolder.set(seat.characterId.toString(), seat);
+    if (seat.nppId) seatByHolder.set(seat.nppId.toString(), seat);
+  }
+  const charByHolder = new Map(characters.map((c) => [c._id.toString(), c]));
+  const leaderByRole = new Map(leaders.map((l) => [l.role, l]));
+
   const vacated: LeadershipPartyVacancy[] = [];
 
-  for (const { leaderRole, role } of MAJORITY_GATED_ROLES[chamber]) {
-    const leader = await db
-      .collection<CongressLeader>("congressLeaders")
-      .findOne({ role: leaderRole });
+  for (const { leaderRole, role } of roles) {
+    const leader = leaderByRole.get(leaderRole);
     if (!leader?.characterId) continue;
+    const holderKey = leader.characterId.toString();
 
     // A holder with no seat is the seat-loss sweep's business, not ours —
     // vacating here as well would spuriously open a party-switch election.
-    const seat = await db.collection<ElectedOfficial>("electedOfficials").findOne({
-      officeType: chamber,
-      $or: [{ characterId: leader.characterId }, { nppId: leader.characterId }],
-    });
+    const seat = seatByHolder.get(holderKey);
     if (!seat) continue;
 
-    const char = await db
-      .collection<Character>("characters")
-      .findOne({ _id: leader.characterId }, { projection: { party: 1 } });
-
-    const party = resolveSeatHolderParty(seat, char);
+    const party = resolveSeatHolderParty(seat, charByHolder.get(holderKey) ?? null);
     if (isPartyEligible(POLICY_BY_ROLE[leaderRole], party, ctx)) continue;
 
     await vacateCongressLeadershipRole(db, leaderRole, now);

@@ -28,14 +28,41 @@ const SENATE_CTX = buildChamberLeadershipContext({
 
 const NOW = new Date("2026-05-30T12:00:00Z");
 
+function cursorOf(docs: unknown[]) {
+  return { toArray: vi.fn().mockResolvedValue(docs) };
+}
+
 /** Seat the given leader roles, all held by `holderId`. */
 function seatLeaders(db: MockDb, roles: string[], holderId: ObjectId, cachedParty: string) {
-  db.collectionMocks["congressLeaders"]!.findOne.mockImplementation(async (query) => {
-    const role = (query as { role?: string }).role ?? "";
-    return roles.includes(role)
-      ? { role, characterId: holderId, characterName: "Estes Kefauver", party: cachedParty }
-      : null;
-  });
+  db.collectionMocks["congressLeaders"]!.find.mockImplementation(() =>
+    cursorOf(
+      roles.map((role) => ({
+        role,
+        characterId: holderId,
+        characterName: "Estes Kefauver",
+        party: cachedParty,
+      }))
+    )
+  );
+}
+
+/** The holder's live seat row and character row, as the bulk lookups see them. */
+function seatHolder(
+  db: MockDb,
+  holderId: ObjectId,
+  chamber: "house" | "senate",
+  liveParty: string | null
+) {
+  db.collectionMocks["electedOfficials"]!.find.mockImplementation(() =>
+    cursorOf(
+      liveParty === null
+        ? []
+        : [{ _id: new ObjectId(), officeType: chamber, characterId: holderId, party: liveParty }]
+    )
+  );
+  db.collectionMocks["characters"]!.find.mockImplementation(() =>
+    cursorOf(liveParty === null ? [] : [{ _id: holderId, party: liveParty }])
+  );
 }
 
 describe("reconcileLeadershipPartyEligibility", () => {
@@ -57,22 +84,13 @@ describe("reconcileLeadershipPartyEligibility", () => {
     }
     db.collectionMocks["senateLeadershipElections"]!.findOne.mockResolvedValue(null);
     db.collectionMocks["houseLeadershipElections"]!.findOne.mockResolvedValue(null);
-    db.collectionMocks["congressLeaders"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["congressLeaders"]!.find.mockImplementation(() => cursorOf([]));
   });
 
   it("vacates a Pro Tempore who has gone independent and opens a 24-turn election", async () => {
     const holder = new ObjectId();
     seatLeaders(db, ["president_pro_tempore"], holder, "MAJ");
-    db.collectionMocks["electedOfficials"]!.findOne.mockResolvedValue({
-      _id: new ObjectId(),
-      officeType: "senate",
-      characterId: holder,
-      party: "independent",
-    });
-    db.collectionMocks["characters"]!.findOne.mockResolvedValue({
-      _id: holder,
-      party: "independent",
-    });
+    seatHolder(db, holder, "senate", "independent");
 
     const { reconcileLeadershipPartyEligibility } = await import("./reconcilePartyEligibility");
     const vacated = await reconcileLeadershipPartyEligibility(
@@ -110,13 +128,7 @@ describe("reconcileLeadershipPartyEligibility", () => {
     // switch, so trusting it would make every defection invisible.
     const holder = new ObjectId();
     seatLeaders(db, ["majority_leader_senate"], holder, "MAJ");
-    db.collectionMocks["electedOfficials"]!.findOne.mockResolvedValue({
-      _id: new ObjectId(),
-      officeType: "senate",
-      characterId: holder,
-      party: "OPP",
-    });
-    db.collectionMocks["characters"]!.findOne.mockResolvedValue({ _id: holder, party: "OPP" });
+    seatHolder(db, holder, "senate", "OPP");
 
     const { reconcileLeadershipPartyEligibility } = await import("./reconcilePartyEligibility");
     const vacated = await reconcileLeadershipPartyEligibility(
@@ -138,13 +150,7 @@ describe("reconcileLeadershipPartyEligibility", () => {
       holder,
       "MAJ"
     );
-    db.collectionMocks["electedOfficials"]!.findOne.mockResolvedValue({
-      _id: new ObjectId(),
-      officeType: "senate",
-      characterId: holder,
-      party: "MAJ",
-    });
-    db.collectionMocks["characters"]!.findOne.mockResolvedValue({ _id: holder, party: "MAJ" });
+    seatHolder(db, holder, "senate", "MAJ");
 
     const { reconcileLeadershipPartyEligibility } = await import("./reconcilePartyEligibility");
     const vacated = await reconcileLeadershipPartyEligibility(
@@ -160,11 +166,9 @@ describe("reconcileLeadershipPartyEligibility", () => {
   });
 
   it("is idempotent: a second pass over the now-vacant seat does nothing", async () => {
-    db.collectionMocks["congressLeaders"]!.findOne.mockResolvedValue({
-      role: "president_pro_tempore",
-      characterId: null,
-      characterName: "Vacant",
-    });
+    db.collectionMocks["congressLeaders"]!.find.mockImplementation(() =>
+      cursorOf([{ role: "president_pro_tempore", characterId: null, characterName: "Vacant" }])
+    );
 
     const { reconcileLeadershipPartyEligibility } = await import("./reconcilePartyEligibility");
     const vacated = await reconcileLeadershipPartyEligibility(
@@ -183,13 +187,7 @@ describe("reconcileLeadershipPartyEligibility", () => {
     // transient empty-composition read.
     const holder = new ObjectId();
     seatLeaders(db, ["president_pro_tempore"], holder, "MAJ");
-    db.collectionMocks["electedOfficials"]!.findOne.mockResolvedValue({
-      _id: new ObjectId(),
-      officeType: "senate",
-      characterId: holder,
-      party: "MAJ",
-    });
-    db.collectionMocks["characters"]!.findOne.mockResolvedValue({ _id: holder, party: "MAJ" });
+    seatHolder(db, holder, "senate", "MAJ");
 
     const emptyCtx = buildChamberLeadershipContext({
       composition: [],
@@ -214,7 +212,7 @@ describe("reconcileLeadershipPartyEligibility", () => {
     // and a de-seated member must not trigger a party-switch election here.
     const holder = new ObjectId();
     seatLeaders(db, ["president_pro_tempore"], holder, "MAJ");
-    db.collectionMocks["electedOfficials"]!.findOne.mockResolvedValue(null);
+    seatHolder(db, holder, "senate", null);
 
     const { reconcileLeadershipPartyEligibility } = await import("./reconcilePartyEligibility");
     const vacated = await reconcileLeadershipPartyEligibility(
@@ -231,13 +229,7 @@ describe("reconcileLeadershipPartyEligibility", () => {
   it("does not re-seed the defector onto the ballot of the election it just opened", async () => {
     const holder = new ObjectId();
     seatLeaders(db, ["majority_whip_senate"], holder, "MAJ");
-    db.collectionMocks["electedOfficials"]!.findOne.mockResolvedValue({
-      _id: new ObjectId(),
-      officeType: "senate",
-      characterId: holder,
-      party: "OPP",
-    });
-    db.collectionMocks["characters"]!.findOne.mockResolvedValue({ _id: holder, party: "OPP" });
+    seatHolder(db, holder, "senate", "OPP");
 
     const { reconcileLeadershipPartyEligibility } = await import("./reconcilePartyEligibility");
     await reconcileLeadershipPartyEligibility(db as unknown as Db, "senate", SENATE_CTX, NOW);
@@ -248,16 +240,7 @@ describe("reconcileLeadershipPartyEligibility", () => {
   it("announces the vacancy to the country feed", async () => {
     const holder = new ObjectId();
     seatLeaders(db, ["president_pro_tempore"], holder, "MAJ");
-    db.collectionMocks["electedOfficials"]!.findOne.mockResolvedValue({
-      _id: new ObjectId(),
-      officeType: "senate",
-      characterId: holder,
-      party: "independent",
-    });
-    db.collectionMocks["characters"]!.findOne.mockResolvedValue({
-      _id: holder,
-      party: "independent",
-    });
+    seatHolder(db, holder, "senate", "independent");
 
     const { reconcileLeadershipPartyEligibility } = await import("./reconcilePartyEligibility");
     await reconcileLeadershipPartyEligibility(db as unknown as Db, "senate", SENATE_CTX, NOW);
@@ -280,13 +263,7 @@ describe("reconcileLeadershipPartyEligibility", () => {
       holder,
       "MAJ"
     );
-    db.collectionMocks["electedOfficials"]!.findOne.mockResolvedValue({
-      _id: new ObjectId(),
-      officeType: "house",
-      characterId: holder,
-      party: "OPP",
-    });
-    db.collectionMocks["characters"]!.findOne.mockResolvedValue({ _id: holder, party: "OPP" });
+    seatHolder(db, holder, "house", "OPP");
 
     const { reconcileLeadershipPartyEligibility } = await import("./reconcilePartyEligibility");
     const vacated = await reconcileLeadershipPartyEligibility(
