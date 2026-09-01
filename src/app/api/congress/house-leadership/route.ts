@@ -27,6 +27,7 @@ import {
 import { castLeadershipVoteBallot } from "@/lib/congress/leadershipVoteBallots";
 import {
   vacateLeadershipBulkIfLostSeat,
+  refreshStaleCongressLeaderParties,
   resolveLeadershipElection,
   clearIneligibleHouseLeadershipNominations,
 } from "@/lib/congress/leadershipElections";
@@ -108,6 +109,15 @@ export async function GET() {
       { leaderRole: "minority_leader_house", chamber: "house" },
       { leaderRole: "majority_whip_house", chamber: "house" },
       { leaderRole: "minority_whip_house", chamber: "house" },
+    ]);
+    // Lazy self-heal (#1251): refresh party snapshots that no longer match the
+    // holder's live party before rendering.
+    await refreshStaleCongressLeaderParties(db, [
+      "speaker_of_the_house",
+      "majority_leader_house",
+      "minority_leader_house",
+      "majority_whip_house",
+      "minority_whip_house",
     ]);
 
     await clearIneligibleHouseLeadershipNominations(db, chamberCtx, new Date());

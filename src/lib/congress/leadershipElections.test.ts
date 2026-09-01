@@ -283,6 +283,73 @@ describe("triggerLeadershipElectionsAfterChamberVote", () => {
     expect(db.collectionMocks["speakerNominations"]!.updateOne).not.toHaveBeenCalled();
   });
 
+  it("reopens a race when the holder's LIVE party drifted from the expected one even though the snapshot still matches (#1251)", async () => {
+    // Kefauver case: the defected PPT's congressLeaders snapshot still said
+    // "1" (Dem) so the old snapshot-only comparison saw no drift and never
+    // reopened his election. The comparison now reads the holder's live party.
+    const incumbentId = new ObjectId();
+    const { getSenateComposition } = await import("@/lib/congress/senateComposition");
+    vi.mocked(getSenateComposition).mockResolvedValue({
+      majorityBloc: { partySlugs: new Set(["1"]), displayName: "Majority" },
+      majorityParty: "1",
+      composition: [{ party: "1" }, { party: "5" }],
+    } as never);
+
+    db.collectionMocks["congressLeaders"]!.findOne.mockImplementation(async (query) => {
+      return (query as { role?: string }).role === "president_pro_tempore"
+        ? {
+            role: "president_pro_tempore",
+            characterId: incumbentId,
+            characterName: "Defected Pro Tempore",
+            party: "1", // stale snapshot
+          }
+        : null;
+    });
+    // Live record: holder defected to party 5.
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue({
+      _id: incumbentId,
+      party: "5",
+    });
+
+    const { triggerLeadershipElectionsAfterChamberVote } = await import("./leadershipElections");
+    await triggerLeadershipElectionsAfterChamberVote(db as unknown as Db, "senate", new Date());
+
+    expect(db.collectionMocks["senateLeadershipElections"]!.updateOne).toHaveBeenCalledWith(
+      { _id: "pro_tempore" },
+      expect.objectContaining({
+        $set: expect.objectContaining({ _id: "pro_tempore", status: "voting" }),
+      }),
+      { upsert: true }
+    );
+  });
+
+  it("falls back to the snapshot when the holder has no live character/NPP record", async () => {
+    const incumbentId = new ObjectId();
+    const { getHouseComposition } = await import("@/lib/congress/houseComposition");
+    vi.mocked(getHouseComposition).mockResolvedValue({
+      majorityBloc: { partySlugs: new Set(["MAJ"]), displayName: "Majority Bloc" },
+      majorityParty: "MAJ",
+      minorityParty: "OPP",
+      composition: [{ party: "MAJ" }, { party: "OPP" }],
+    } as never);
+    db.collectionMocks["congressLeaders"]!.findOne.mockImplementation(async (query) => {
+      return (query as { role?: string }).role === "speaker_of_the_house"
+        ? {
+            role: "speaker_of_the_house",
+            characterId: incumbentId,
+            characterName: "Snapshot Speaker",
+            party: "MAJ",
+          }
+        : null;
+    });
+    // characters.findOne and npps.findOne both return null (MockDb default).
+
+    const { triggerLeadershipElectionsAfterChamberVote } = await import("./leadershipElections");
+    await triggerLeadershipElectionsAfterChamberVote(db as unknown as Db, "house", new Date());
+
+    expect(db.collectionMocks["speakerElections"]!.updateOne).not.toHaveBeenCalled();
+  });
+
   it("reopens the House Minority Leader race when the incumbent's seat is vacant", async () => {
     const { getHouseComposition } = await import("@/lib/congress/houseComposition");
     vi.mocked(getHouseComposition).mockResolvedValue({
@@ -386,5 +453,130 @@ describe("clearIneligibleHouseLeadershipNominations", () => {
     await clearIneligibleHouseLeadershipNominations(db as unknown as Db, ctx, new Date());
 
     expect(db.collectionMocks["houseLeadershipNominations"]!.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("vacateCongressLeadershipForCharacters", () => {
+  it("vacates every role doc still pointing at the departing characters", async () => {
+    const db = createMockDb();
+    for (const name of ["congressLeaders", "npps"]) db.collection(name);
+    const leaverA = new ObjectId();
+    const leaverB = new ObjectId();
+    db.collectionMocks["congressLeaders"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { role: "president_pro_tempore", characterId: leaverA, party: "1" },
+        { role: "majority_whip_house", characterId: leaverB, party: "2" },
+      ]),
+    });
+
+    const { vacateCongressLeadershipForCharacters } = await import("./leadershipElections");
+    const vacated = await vacateCongressLeadershipForCharacters(db as unknown as Db, [
+      leaverA,
+      leaverB,
+    ]);
+
+    expect(vacated).toBe(2);
+    const vacatedRoles = db.collectionMocks["congressLeaders"]!.updateOne.mock.calls.map(
+      ([filter]) => (filter as { role?: string }).role
+    );
+    expect(vacatedRoles).toEqual(
+      expect.arrayContaining(["president_pro_tempore", "majority_whip_house"])
+    );
+    // Each vacate nulls the holder and drops the party snapshot.
+    for (const call of db.collectionMocks["congressLeaders"]!.updateOne.mock.calls) {
+      const updateJson = JSON.stringify(call[1]);
+      expect(updateJson).toContain("Vacant");
+      expect(updateJson).toContain("$unset");
+    }
+  });
+
+  it("is a no-op for an empty id list", async () => {
+    const db = createMockDb();
+    db.collection("congressLeaders");
+    const { vacateCongressLeadershipForCharacters } = await import("./leadershipElections");
+    const vacated = await vacateCongressLeadershipForCharacters(db as unknown as Db, []);
+    expect(vacated).toBe(0);
+    expect(db.collectionMocks["congressLeaders"]!.find).not.toHaveBeenCalled();
+  });
+});
+
+describe("refreshStaleCongressLeaderParties", () => {
+  it("repoints snapshots whose holder's live party differs", async () => {
+    const db = createMockDb();
+    for (const name of ["congressLeaders", "characters", "npps"]) db.collection(name);
+    const defectedId = new ObjectId();
+    const nppId = new ObjectId();
+    db.collectionMocks["congressLeaders"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: new ObjectId(),
+          role: "president_pro_tempore",
+          characterId: defectedId,
+          party: "1",
+        },
+        {
+          _id: new ObjectId(),
+          role: "majority_leader_senate",
+          characterId: nppId,
+          party: "2",
+        },
+      ]),
+    });
+    db.collectionMocks["characters"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: defectedId, party: "5" }]),
+    });
+    db.collectionMocks["npps"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: nppId, party: "3" }]),
+    });
+
+    const { refreshStaleCongressLeaderParties } = await import("./leadershipElections");
+    const refreshed = await refreshStaleCongressLeaderParties(db as unknown as Db, [
+      "president_pro_tempore",
+      "majority_leader_senate",
+    ]);
+
+    expect(refreshed).toBe(2);
+    expect(db.collectionMocks["congressLeaders"]!.updateOne).toHaveBeenCalledTimes(2);
+  });
+
+  it("writes nothing when every snapshot already matches the live party", async () => {
+    const db = createMockDb();
+    for (const name of ["congressLeaders", "characters", "npps"]) db.collection(name);
+    const holderId = new ObjectId();
+    db.collectionMocks["congressLeaders"]!.find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([
+          { _id: new ObjectId(), role: "president_pro_tempore", characterId: holderId, party: "1" },
+        ]),
+    });
+    db.collectionMocks["characters"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: holderId, party: "1" }]),
+    });
+
+    const { refreshStaleCongressLeaderParties } = await import("./leadershipElections");
+    const refreshed = await refreshStaleCongressLeaderParties(db as unknown as Db, [
+      "president_pro_tempore",
+    ]);
+
+    expect(refreshed).toBe(0);
+    expect(db.collectionMocks["congressLeaders"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("skips vacant roles and unknown holders", async () => {
+    const db = createMockDb();
+    for (const name of ["congressLeaders", "characters", "npps"]) db.collection(name);
+    db.collectionMocks["congressLeaders"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+
+    const { refreshStaleCongressLeaderParties } = await import("./leadershipElections");
+    const refreshed = await refreshStaleCongressLeaderParties(db as unknown as Db, [
+      "president_pro_tempore",
+      "majority_leader_senate",
+    ]);
+
+    expect(refreshed).toBe(0);
+    expect(db.collectionMocks["characters"]!.find).not.toHaveBeenCalled();
   });
 });

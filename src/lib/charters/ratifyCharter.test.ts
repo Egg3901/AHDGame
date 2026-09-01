@@ -89,6 +89,10 @@ function makeDb(opts: StubOpts) {
   const updatedParties: unknown[] = [];
   const updatedManyParties: unknown[] = [];
   const deletedNationalElections: Record<string, unknown>[] = [];
+  const electedOfficialsUpdates: unknown[] = [];
+  const leadershipVacates: unknown[] = [];
+  // #1251 — congressLeaders docs the vacate sweep should "find" held by founders.
+  const heldLeadershipDocs: Array<{ role: string; characterId?: ObjectId; party?: string }> = [];
 
   let charterReadCount = 0;
   const collection = vi.fn().mockImplementation((name: string) => {
@@ -117,9 +121,9 @@ function makeDb(opts: StubOpts) {
           .mockResolvedValue(
             opts.founderCharacters?.[0] ?? { _id: new ObjectId(), homeState: "US-CA" }
           ),
-        find: () => ({
+        find: vi.fn(() => ({
           toArray: vi.fn().mockResolvedValue(opts.founderCharacters ?? []),
-        }),
+        })),
         // Used by recomputePartyMemberCount when a founder leaves a real party.
         countDocuments: vi.fn().mockResolvedValue(0),
         updateOne: vi.fn().mockImplementation((filter: unknown, update: unknown) => {
@@ -209,6 +213,30 @@ function makeDb(opts: StubOpts) {
     if (name === "nationalPartyCandidates") {
       return { updateMany: vi.fn().mockResolvedValue({ modifiedCount: 0 }) };
     }
+    if (name === "electedOfficials") {
+      // #1251 seat re-point sweep — captured for assertions.
+      return {
+        updateMany: vi.fn().mockImplementation((filter: unknown, update: unknown) => {
+          electedOfficialsUpdates.push({ filter, update });
+          return Promise.resolve({ modifiedCount: 1 });
+        }),
+        find: vi.fn().mockReturnValue({
+          toArray: vi.fn().mockResolvedValue([]),
+        }),
+      };
+    }
+    if (name === "congressLeaders") {
+      // #1251 leadership-role sweep — no held roles unless a test overrides find.
+      return {
+        find: vi.fn().mockReturnValue({
+          toArray: vi.fn().mockResolvedValue(heldLeadershipDocs),
+        }),
+        updateOne: vi.fn().mockImplementation((filter: unknown, update: unknown) => {
+          leadershipVacates.push({ filter, update });
+          return Promise.resolve({ modifiedCount: 1 });
+        }),
+      };
+    }
     if (name === "nationalPartyVotes") {
       return { deleteMany: vi.fn().mockResolvedValue({ deletedCount: 0 }) };
     }
@@ -228,6 +256,9 @@ function makeDb(opts: StubOpts) {
     updatedParties,
     updatedManyParties,
     deletedNationalElections,
+    electedOfficialsUpdates,
+    leadershipVacates,
+    heldLeadershipDocs,
   };
 }
 
@@ -437,6 +468,81 @@ describe("ratifyCharter", () => {
     expect(updateJson).toContain("treasurerId");
     // It references the founder ids it is vacating.
     expect(updateJson).toContain(charter.foundersCharacterIds[0]!.toString());
+  });
+
+  it("vacates congressional leadership roles and re-points seats for founders leaving a real party (#1251)", async () => {
+    // Regression (#1251): a sitting President pro tempore chartered a new
+    // party; ratification moved `character.party` but never swept
+    // `congressLeaders`, so the chamber kept listing him as PPT under the
+    // old party until the next election cycle. Party-affiliated chamber
+    // roles must end at ratification, and any seat rows must be re-pointed.
+    const charter = makeCharter();
+    // All 3 founders currently belong to old party seqId "1".
+    const founderChars = charter.foundersCharacterIds.map((cid) => ({
+      _id: cid,
+      userId: new ObjectId(),
+      party: "1",
+      homeState: "US-CA",
+    }));
+    const { db, leadershipVacates, electedOfficialsUpdates, heldLeadershipDocs } = makeDb({
+      charter,
+      states: [{ _id: "US-CA" }],
+      founderCharacters: founderChars,
+    });
+    heldLeadershipDocs.push({
+      role: "president_pro_tempore",
+      characterId: founderChars[0]!._id,
+      party: "1",
+    });
+
+    await ratifyCharter(charter._id, db);
+
+    // The held role doc was vacated (Vacant + party unset).
+    expect(leadershipVacates).toHaveLength(1);
+    const vacate = leadershipVacates[0] as {
+      filter: { role: string };
+      update: Record<string, unknown>;
+    };
+    expect(vacate.filter.role).toBe("president_pro_tempore");
+    const vacateJson = JSON.stringify(vacate.update);
+    expect(vacateJson).toContain("Vacant");
+
+    // Seat rows of every moving founder were re-pointed to the new party "77".
+    expect(electedOfficialsUpdates).toHaveLength(1);
+    const seatSweep = electedOfficialsUpdates[0] as {
+      filter: { characterId: { $in: ObjectId[] } };
+      update: { $set: { party: string } };
+    };
+    expect(seatSweep.filter.characterId.$in).toEqual(charter.foundersCharacterIds);
+    expect(seatSweep.update.$set.party).toBe("77");
+  });
+
+  it("does not vacate congressional leadership when founders came from independence", async () => {
+    const charter = makeCharter();
+    const founderChars = charter.foundersCharacterIds.map((cid) => ({
+      _id: cid,
+      userId: new ObjectId(),
+      party: "independent",
+      homeState: "US-CA",
+    }));
+    const { db, leadershipVacates, electedOfficialsUpdates, heldLeadershipDocs } = makeDb({
+      charter,
+      states: [{ _id: "US-CA" }],
+      founderCharacters: founderChars,
+    });
+    heldLeadershipDocs.push({
+      role: "president_pro_tempore",
+      characterId: founderChars[0]!._id,
+      party: "1",
+    });
+
+    await ratifyCharter(charter._id, db);
+
+    // Joining from independence is not a party departure: no chamber role is
+    // vacated (same rule as the join path), though seat rows are still
+    // re-pointed to the new party.
+    expect(leadershipVacates).toHaveLength(0);
+    expect(electedOfficialsUpdates).toHaveLength(1);
   });
 
   it("returns the existing partyId when the charter was already ratified (idempotent)", async () => {

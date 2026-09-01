@@ -35,6 +35,7 @@ import type {
   ElectedOfficial,
   Character,
   LeadershipRole,
+  NPP,
 } from "@/lib/db/types";
 
 const LEADERSHIP_ELECTION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -79,6 +80,33 @@ export async function vacateCongressLeadershipRole(
     },
     { upsert: true }
   );
+}
+
+/**
+ * Vacates every congressional leadership role still held by any of
+ * `characterIds`, whatever the role.
+ *
+ * Party-switch paths that move members between parties (leave, purge, and the
+ * join path via `cleanupPartyPositionsOnSwitch`) run this shape of cleanup so
+ * a departing member does not keep a party-affiliated chamber role under the
+ * old party's label. The charter-ratification path moves founders without
+ * going through those routes, so it calls this directly (ticket #1251: a
+ * sitting President pro tempore chartered a new party and kept the role
+ * carrying the old party snapshot).
+ */
+export async function vacateCongressLeadershipForCharacters(
+  db: Db,
+  characterIds: ObjectId[]
+): Promise<number> {
+  if (characterIds.length === 0) return 0;
+  const held = await db
+    .collection<CongressLeader>("congressLeaders")
+    .find({ characterId: { $in: characterIds } })
+    .toArray();
+  if (held.length === 0) return 0;
+  const now = new Date();
+  await Promise.all(held.map((doc) => vacateCongressLeadershipRole(db, doc.role, now)));
+  return held.length;
 }
 
 /**
@@ -174,6 +202,71 @@ export async function vacateLeadershipBulkIfLostSeat(
       )
     );
   }
+}
+
+/**
+ * Lazy self-heal: refresh `congressLeaders.party` snapshots that no longer
+ * match the holder's live party. The snapshot is written at election
+ * resolution and by admin assignment; a holder who changes party mid-term
+ * through a path that does not touch this collection (e.g. charter
+ * ratification before the #1251 fix, NPP party reassignment at election
+ * resolution) leaves it stale, so the leadership page shows the old party.
+ * Reading the LIVE record at display time keeps the page truthful, and lets
+ * `hasControllingPartyChanged`-style triggers see the real drift on the next
+ * chamber vote instead of the frozen label.
+ *
+ * Batched: one find for the leader docs, one characters + one npps query per
+ * call. Holder ids may reference either collection; characters win (a leader
+ * id is a character id unless no character doc exists).
+ */
+export async function refreshStaleCongressLeaderParties(
+  db: Db,
+  roles: LeadershipRole[]
+): Promise<number> {
+  if (roles.length === 0) return 0;
+  const docs = await db
+    .collection<CongressLeader>("congressLeaders")
+    .find({ role: { $in: roles }, characterId: { $ne: null } })
+    .toArray();
+  if (docs.length === 0) return 0;
+
+  const holderIds = [...new Set(docs.map((d) => d.characterId!.toString()))].map(
+    (id) => new ObjectId(id)
+  );
+
+  const liveParty = new Map<string, string>();
+  if (holderIds.length > 0) {
+    const chars = await db
+      .collection<Character>("characters")
+      .find({ _id: { $in: holderIds } }, { projection: { _id: 1, party: 1 } })
+      .toArray();
+    for (const c of chars) liveParty.set(c._id.toString(), c.party ?? "independent");
+    const foundCharIds = new Set(chars.map((c) => c._id.toString()));
+    const nppIds = holderIds.filter((id) => !foundCharIds.has(id.toString()));
+    if (nppIds.length > 0) {
+      const npps = await db
+        .collection<NPP>("npps")
+        .find({ _id: { $in: nppIds } }, { projection: { _id: 1, party: 1 } })
+        .toArray();
+      for (const n of npps) liveParty.set(n._id.toString(), n.party ?? "independent");
+    }
+  }
+
+  const now = new Date();
+  let refreshed = 0;
+  for (const doc of docs) {
+    if (!doc.characterId) continue;
+    const live = liveParty.get(doc.characterId.toString());
+    if (live === undefined || live === doc.party) continue;
+    await db
+      .collection<CongressLeader>("congressLeaders")
+      .updateOne({ _id: doc._id }, { $set: { party: live, updatedAt: now } });
+    refreshed++;
+  }
+  if (refreshed > 0) {
+    console.log(`[Leadership] Refreshed ${refreshed} stale party snapshot(s) on congressLeaders`);
+  }
+  return refreshed;
 }
 
 /**
@@ -506,6 +599,13 @@ export async function clearIneligibleHouseLeadershipNominations(
  * Returns true (a new election is warranted) when there's no chamber-majority
  * data yet, when the role is currently vacant (no seated characterId), or
  * when the seated holder's party no longer matches `expectedParty`.
+ *
+ * The comparison uses the holder's LIVE party (characters / npps record),
+ * falling back to the `congressLeaders.party` snapshot only when no live
+ * record exists. The snapshot is written at election resolution and can go
+ * stale when the holder changes party mid-term without an intervening
+ * resolution (ticket #1251: a defected President pro tempore kept matching
+ * the expected party via the frozen snapshot, so no re-election ever opened).
  */
 async function hasControllingPartyChanged(
   db: Db,
@@ -517,7 +617,17 @@ async function hasControllingPartyChanged(
     .collection<CongressLeader>("congressLeaders")
     .findOne({ role: leaderRole });
   if (!current?.characterId) return true;
-  return current.party !== expectedParty;
+  const char = await db
+    .collection<Character>("characters")
+    .findOne({ _id: current.characterId }, { projection: { party: 1 } });
+  let holderParty = char?.party;
+  if (holderParty === undefined) {
+    const npp = await db
+      .collection<NPP>("npps")
+      .findOne({ _id: current.characterId }, { projection: { party: 1 } });
+    holderParty = npp?.party;
+  }
+  return (holderParty ?? current.party ?? null) !== expectedParty;
 }
 
 export async function triggerLeadershipElectionsAfterChamberVote(

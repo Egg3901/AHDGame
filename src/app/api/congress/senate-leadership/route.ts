@@ -29,6 +29,7 @@ import {
 import { castLeadershipVoteBallot } from "@/lib/congress/leadershipVoteBallots";
 import {
   vacateLeadershipBulkIfLostSeat,
+  refreshStaleCongressLeaderParties,
   resolveLeadershipElection,
 } from "@/lib/congress/leadershipElections";
 import { buildLeadershipElectionState } from "@/lib/congress/leadershipState";
@@ -113,6 +114,17 @@ export async function GET() {
       { leaderRole: "minority_leader_senate", chamber: "senate" },
       { leaderRole: "majority_whip_senate", chamber: "senate" },
       { leaderRole: "minority_whip_senate", chamber: "senate" },
+    ]);
+    // Lazy self-heal (#1251): a leader who changed party mid-term through a
+    // path that does not touch congressLeaders (charter ratification, NPP
+    // party reassignment) left a stale party snapshot on display. Refresh
+    // from the live record before rendering.
+    await refreshStaleCongressLeaderParties(db, [
+      "president_pro_tempore",
+      "majority_leader_senate",
+      "minority_leader_senate",
+      "majority_whip_senate",
+      "minority_whip_senate",
     ]);
 
     const roles: Array<{ role: SenateLeadershipElectionRole; partyLabel: string }> = [

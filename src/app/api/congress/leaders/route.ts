@@ -16,6 +16,7 @@ import { getHouseComposition } from "@/lib/congress/houseComposition";
 import { getSenateComposition } from "@/lib/congress/senateComposition";
 import { getPartyHex } from "@/lib/utils/politics";
 import { LEADERSHIP_ROLES } from "@/lib/congress/leadershipRoles";
+import { refreshStaleCongressLeaderParties } from "@/lib/congress/leadershipElections";
 import type { CongressLeader, Character, NPP } from "@/lib/db/types";
 import type { LeadershipRole } from "@/lib/db/types";
 import { fetchBordersByUserIds } from "@/lib/db/patreonBorders";
@@ -61,6 +62,13 @@ export async function GET() {
     if (enabledCountries && !enabledCountries.includes("US")) {
       return NextResponse.json({ leaders: [], isAdmin } satisfies CongressLeadersResponse);
     }
+
+    // Lazy self-heal (#1251): refresh party snapshots that no longer match the
+    // holder's live party before rendering.
+    await refreshStaleCongressLeaderParties(
+      db,
+      LEADERSHIP_ROLES.map((r) => r.role)
+    );
 
     const docs = await db.collection<CongressLeader>("congressLeaders").find({}).toArray();
     const byRole = new Map(docs.map((d) => [d.role, d]));

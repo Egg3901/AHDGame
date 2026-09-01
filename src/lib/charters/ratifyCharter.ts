@@ -15,6 +15,7 @@ import { recomputePartyMemberCount } from "@/lib/parties/recomputePartyMemberCou
 import { withdrawFromPartyLeadershipElections } from "@/lib/elections/withdrawFromPartyLeadershipElections";
 import { cleanupCaucusParticipationForCharacters } from "@/lib/caucus/cleanupCaucusParticipationForCharacters";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
+import { vacateCongressLeadershipForCharacters } from "@/lib/congress/leadershipElections";
 
 /**
  * Phase 6 — internal helper called by `signCharter` once the 3-of-3
@@ -276,14 +277,36 @@ export async function ratifyCharter(
       /* non-fatal */
     }
   }
-  // Drop former-party caucus membership for every founder who actually moved.
-  // Charter ratification is a party-switch and must clear factionId the same
-  // way leave/join do, or founders stay blocked from founding caucuses in the
-  // new party (ticket #1030).
+  // F2c (#1251) — a founder defecting from a real party must also drop any
+  // congressional leadership role they hold (Speaker, whips, PPT, SML). Those
+  // roles are party-affiliated: the join/leave/purge paths end them via
+  // `cleanupPartyPositionsOnSwitch`, but ratification moved `character.party`
+  // directly and never swept `congressLeaders`, so a sitting President pro
+  // tempore kept the role displaying under the old party until the next
+  // leadership election cycle. Founders coming from independence hold no
+  // party-affiliated role to end (same rule as the join path, which skips
+  // cleanup for independents) — `departuresByOldParty` only holds founders
+  // that actually left a numbered party.
+  const departingFounderIds = [...departuresByOldParty.values()].flat();
+  if (departingFounderIds.length > 0) {
+    await vacateCongressLeadershipForCharacters(db, departingFounderIds);
+  }
+  // Re-point any chamber seat rows a moving founder still holds so
+  // legislature composition shows the new party immediately (the join route
+  // does the same via applyCharacterPartyJoin), and drop former-party caucus
+  // membership: charter ratification is a party-switch and must clear
+  // factionId the same way leave/join do, or founders stay blocked from
+  // founding caucuses in the new party (ticket #1030).
   const foundersWhoMoved = founderCharacters
     .filter((ch) => ch.party !== partyIdStr)
     .map((ch) => ch._id);
   if (foundersWhoMoved.length > 0) {
+    await db
+      .collection("electedOfficials")
+      .updateMany(
+        { characterId: { $in: foundersWhoMoved } },
+        { $set: { party: partyIdStr, updatedAt: now } }
+      );
     try {
       await cleanupCaucusParticipationForCharacters(db, foundersWhoMoved, {
         removeMembership: true,
