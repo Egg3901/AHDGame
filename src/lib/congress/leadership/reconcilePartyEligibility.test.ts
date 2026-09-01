@@ -380,6 +380,31 @@ describe("openElectionsForVacatedMajorityRoles", () => {
     );
   });
 
+  it.each([
+    ["president_pro_tempore", "senateLeadershipElections", "pro_tempore"],
+    ["majority_leader_senate", "senateLeadershipElections", "majority_leader"],
+    ["majority_whip_senate", "senateLeadershipElections", "majority_whip"],
+    ["majority_leader_house", "houseLeadershipElections", "majority_leader"],
+    ["majority_whip_house", "houseLeadershipElections", "majority_whip"],
+  ] as const)("opens %s as %s/%s", async (leaderRole, collection, electionId) => {
+    // The canonical role and the per-chamber election id are different
+    // vocabularies, and getting the pairing wrong opens a real race under the
+    // wrong key — the seat stays vacant while a phantom election runs elsewhere.
+    const { openElectionsForVacatedMajorityRoles } = await import("./reconcilePartyEligibility");
+    await openElectionsForVacatedMajorityRoles(
+      db as unknown as Db,
+      [{ leaderRole }],
+      SENATE_CTX_BY_CHAMBER,
+      NOW
+    );
+
+    expect(db.collectionMocks[collection]!.updateOne).toHaveBeenCalledWith(
+      { _id: electionId },
+      expect.objectContaining({ $set: expect.objectContaining({ status: "voting" }) }),
+      { upsert: true }
+    );
+  });
+
   it("ignores roles outside the majority-gated set", async () => {
     // Minority leadership, the Speaker, and the DE/CN chairs share the
     // congressLeaders collection but are not this module's business.
