@@ -639,6 +639,39 @@ describe("the buy-out gate", () => {
     if (!res.ok) expect(res.error).toMatch(/East Germany|challenger/i);
   });
 
+  it("is UNGATED on the front, where the same demand as an indemnity is refused", () => {
+    // The differential is the whole assertion. `war()` opens at control 100 from a
+    // start of 100, so side A has taken no ground at all: an indemnity demanding the
+    // same withdrawal is refused on exactly this board, and a reunification is not.
+    // Asserting only that it passes would not distinguish "ungated" from "the gate
+    // happened not to fire".
+    const indemnity = validatePeaceOffer(
+      war(),
+      "US",
+      "DD",
+      { kind: "indemnity" as const, payer: "DD" as const, amount: 10 },
+      "DD",
+      1e12,
+      "presidential",
+      null,
+      { challenger: "US" }
+    );
+    expect(indemnity.ok).toBe(false);
+
+    const reunification = validatePeaceOffer(
+      war(),
+      "US",
+      "DD",
+      { kind: "reunification" as const },
+      "DD",
+      null,
+      "presidential",
+      null,
+      { challenger: "US" }
+    );
+    expect(reunification.ok).toBe(true);
+  });
+
   it("allows a reunification the OTHER side withdraws under", () => {
     const res = validatePeaceOffer(
       war(),

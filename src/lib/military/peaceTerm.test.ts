@@ -203,12 +203,6 @@ describe("validatePeaceTerm: reunification", () => {
     expect(validatePeaceTerm(term, gq)).toEqual({ ok: true });
   });
 
-  it("has no threshold: the front does not gate it", () => {
-    // Deliberately ungated. The term is available for as long as the question is
-    // attached to the war, whatever the ground looks like.
-    expect(validatePeaceTerm(term, gq)).toEqual({ ok: true });
-  });
-
   it("refuses it on a war that carries no German Question", () => {
     const res = validatePeaceTerm(term, { ...gq, settlement: null });
     expect(res.ok).toBe(false);
