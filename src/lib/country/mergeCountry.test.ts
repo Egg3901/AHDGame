@@ -281,6 +281,97 @@ describe("mergeCountry", () => {
     expect(prime(db, "subsidies").updateMany.mock.calls[0][1].$set.countryId).toBe("DE");
   });
 
+  it("leaves ONE primary National Corporation, folding the absorbed shell in", async () => {
+    // Ticket #1254. Every resolver reads the primary with a single-document
+    // query, so a second flagged corporation is picked by natural order and
+    // silently takes every merge-back, nationalisation and bond tranche.
+    const corps = prime(db, "corporations");
+    corps.findOne.mockResolvedValue({
+      _id: "survivor",
+      name: "East Germany",
+      liquidCapital: 100,
+      liquidCurrencyCode: "DDM",
+    });
+    corps.find.mockReturnValue(
+      cursor([{ _id: "shell", name: "Germany", liquidCapital: 40, liquidCurrencyCode: "DDM" }])
+    );
+
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 412,
+    });
+
+    // The absorbed state's corporations become the survivor's.
+    expect(corps.updateMany).toHaveBeenCalledWith(
+      { countryOwnerId: "DE" },
+      expect.objectContaining({ $set: expect.objectContaining({ countryOwnerId: "DD" }) })
+    );
+    // Sectors and bonds follow the shell onto the survivor...
+    expect(prime(db, "corporateSectors").updateMany).toHaveBeenCalledWith(
+      { corporationId: "shell" },
+      expect.objectContaining({ $set: expect.objectContaining({ corporationId: "survivor" }) })
+    );
+    expect(prime(db, "bonds").updateMany).toHaveBeenCalledWith(
+      { corporationId: "shell" },
+      expect.objectContaining({ $set: expect.objectContaining({ corporationId: "survivor" }) })
+    );
+    // ...its cash moves at matching currency, and the empty shell is dissolved.
+    expect(corps.updateOne).toHaveBeenCalledWith(
+      { _id: "survivor" },
+      expect.objectContaining({ $inc: { liquidCapital: 40 } })
+    );
+    expect(corps.deleteOne).toHaveBeenCalledWith({ _id: "shell" });
+  });
+
+  it("keeps a shell whose cash is in another currency, but demotes it", async () => {
+    // Redenomination is the regime/FX merge's job. Adding across denominations
+    // would mis-state the unified treasury, so the balance stays visible on a
+    // named corporation rather than being silently absorbed or deleted.
+    const corps = prime(db, "corporations");
+    corps.findOne.mockResolvedValue({
+      _id: "survivor",
+      name: "East Germany",
+      liquidCapital: 100,
+      liquidCurrencyCode: "DDM",
+    });
+    corps.find.mockReturnValue(
+      cursor([{ _id: "shell", name: "Germany", liquidCapital: 40, liquidCurrencyCode: "EUR" }])
+    );
+
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 412,
+    });
+
+    expect(corps.deleteOne).not.toHaveBeenCalledWith({ _id: "shell" });
+    expect(corps.updateOne).toHaveBeenCalledWith(
+      { _id: "shell" },
+      expect.objectContaining({
+        $set: expect.objectContaining({ isPrimaryNationalCorporation: false }),
+      })
+    );
+  });
+
+  it("keeps the absorbed primary when the survivor has none of its own", async () => {
+    // Demoting it would leave the unified country with no primary at all.
+    const corps = prime(db, "corporations");
+    corps.findOne.mockResolvedValue(null);
+    corps.find.mockReturnValue(cursor([{ _id: "shell", name: "Germany", liquidCapital: 0 }]));
+
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 412,
+    });
+
+    expect(corps.deleteOne).not.toHaveBeenCalledWith({ _id: "shell" });
+  });
+
   it("the winner's tariff takes a colliding scope from the survivor", async () => {
     // Both states tariffed the same sector: two live records on one scope
     // would double-apply, and the merge rule is that the winner's law governs.

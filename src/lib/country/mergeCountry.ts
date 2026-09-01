@@ -339,4 +339,99 @@ async function sweepNationalStrays(
   await db
     .collection("bills")
     .updateMany({ countryId: fromCountryId }, { $set: { countryId: toCountryId, updatedAt: now } });
+  await mergeNationalCorporations(db, fromCountryId, toCountryId, now);
+}
+
+/**
+ * Fold the absorbed state's National Corporations into the survivor's, leaving
+ * exactly ONE `isPrimaryNationalCorporation`.
+ *
+ * A National Corporation is national by definition, so it has no region to ride
+ * across and no dedicated merge module — it reached the survivor only by having
+ * its `countryOwnerId` rewritten, with its primary flag still set. That leaves
+ * two flagged corporations for one country, and every resolver reads the primary
+ * with a SINGLE-document query: `ensurePrimaryNationalCorporation`, the sovereign
+ * bond issuer lookup, the state-ownership page, and the State Enterprises panel.
+ * A single read over two matches returns whichever the natural order yields — on
+ * live data the ABSORBED shell — so every merge-back, every nationalisation and
+ * every bond tranche routes into a corporation whose state no longer exists,
+ * while the survivor's own corporation keeps the coupon liability and earns
+ * nothing against it (ticket #1254).
+ *
+ * The fold is money-neutral, matching `mergeBackSectorType`: a National
+ * Corporation has no private shareholders, so its sectors, its bonds and its
+ * cash simply follow it onto the survivor and the empty shell is dissolved.
+ *
+ * Cash moves ONLY at a matching currency. The absorbed state's corporations are
+ * redenominated by the regime/FX merge, not here, and adding a balance across
+ * two denominations would silently mis-state the unified treasury. When they
+ * still differ the shell keeps its cash and is left standing rather than
+ * dissolved, so the mismatch is visible instead of swallowed.
+ */
+async function mergeNationalCorporations(
+  db: Db,
+  fromCountryId: CountryId,
+  toCountryId: CountryId,
+  now: Date
+): Promise<void> {
+  const corps = db.collection("corporations");
+
+  const survivor = await corps.findOne({
+    countryOwnerId: toCountryId,
+    isPrimaryNationalCorporation: true,
+  });
+  const absorbed = await corps
+    .find({ countryOwnerId: fromCountryId, isPrimaryNationalCorporation: true })
+    .toArray();
+
+  // Everything the dissolved state owned is now owned by the survivor.
+  await corps.updateMany(
+    { countryOwnerId: fromCountryId },
+    { $set: { countryOwnerId: toCountryId, updatedAt: now } }
+  );
+
+  // No incumbent primary: the absorbed one simply becomes the survivor's, and
+  // there is nothing to reconcile. Demoting it here would leave the unified
+  // country with none at all.
+  if (!survivor) return;
+
+  for (const shell of absorbed) {
+    if (String(shell._id) === String(survivor._id)) continue;
+
+    await db
+      .collection("corporateSectors")
+      .updateMany(
+        { corporationId: shell._id },
+        { $set: { corporationId: survivor._id, updatedAt: now } }
+      );
+    await db
+      .collection("bonds")
+      .updateMany(
+        { corporationId: shell._id },
+        { $set: { corporationId: survivor._id, issuerName: survivor.name, updatedAt: now } }
+      );
+
+    const cash = Number(shell.liquidCapital ?? 0);
+    const sameCurrency =
+      (shell.liquidCurrencyCode ?? null) === (survivor.liquidCurrencyCode ?? null);
+    if (cash !== 0 && sameCurrency) {
+      await corps.updateOne(
+        { _id: survivor._id },
+        { $inc: { liquidCapital: cash }, $set: { updatedAt: now } }
+      );
+      await corps.updateOne({ _id: shell._id }, { $set: { liquidCapital: 0, updatedAt: now } });
+    }
+
+    if (cash === 0 || sameCurrency) {
+      await corps.deleteOne({ _id: shell._id });
+    } else {
+      // Demote but keep: the invariant that matters is one PRIMARY, and the
+      // stranded balance is easier to find on a named corporation than in a
+      // deleted one.
+      await corps.updateOne(
+        { _id: shell._id },
+        { $set: { isPrimaryNationalCorporation: false, updatedAt: now } }
+      );
+    }
+  }
 }
