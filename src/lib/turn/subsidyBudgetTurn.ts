@@ -24,6 +24,7 @@ import {
   SECTOR_SUBSIDIES_SPENDING_KEY,
 } from "@/lib/budget/spending";
 import { loadAnnualSubsidyCostMaps } from "@/lib/subsidies/subsidyBudgetCosts";
+import { getRegisteredCountryIdSet } from "@/lib/country/registeredCountries";
 
 export { SUBSIDY_COST_MULTIPLIER } from "@/lib/subsidies/subsidyBudgetCosts";
 
@@ -32,12 +33,19 @@ export { SUBSIDY_COST_MULTIPLIER } from "@/lib/subsidies/subsidyBudgetCosts";
  * Returns the number of budget documents updated.
  */
 export async function processSubsidyBudget(db: Db): Promise<number> {
-  const [{ nationalCostByBudgetId, stateCostByStateId }, federalBudgets, stateBudgets] =
+  const [{ nationalCostByBudgetId, stateCostByStateId }, allFederalBudgets, stateBudgets] =
     await Promise.all([
       loadAnnualSubsidyCostMaps(db),
       db.collection<FederalBudget>("federalBudget").find({}).toArray(),
       db.collection<StateBudget>("stateBudgets").find({}).toArray(),
     ]);
+
+  // Dissolved countries keep their budget doc but must not be simulated against
+  // it; see `getRegisteredCountryIdSet`.
+  const liveCountries = await getRegisteredCountryIdSet(db);
+  const federalBudgets = allFederalBudgets.filter((b) =>
+    liveCountries.has(String(b.countryId ?? b._id))
+  );
 
   const now = new Date();
   let updatedCount = 0;

@@ -4,6 +4,7 @@ import type { StateMetrics } from "@/lib/db/types/stateMetrics";
 import type { State } from "@/lib/db/types/state";
 import type { CountryId } from "@/lib/constants/countries";
 import { getNationalDocId, NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
+import { getRegisteredCountryIdSet } from "@/lib/country/registeredCountries";
 import {
   applyPerTurnGrowthToFederalBases,
   applyPerTurnGrowthToStateBases,
@@ -47,12 +48,19 @@ export async function processFiscalBaseGrowth(
   _turn: number
 ): Promise<{ countriesProcessed: number; statesProcessed: number }> {
   const db = await getDb();
-  const [federalBudgets, stateBudgets, allStateMetrics, states] = await Promise.all([
+  const [allFederalBudgets, stateBudgets, allStateMetrics, states] = await Promise.all([
     db.collection<FederalBudget>("federalBudget").find({}).toArray(),
     db.collection<StateBudget>("stateBudgets").find({}).toArray(),
     db.collection<StateMetrics>("macroMetrics").find({}).toArray(),
     db.collection<State>("states").find({}).toArray(),
   ]);
+
+  // Dissolved countries keep their budget doc but must not be simulated against
+  // it; see `getRegisteredCountryIdSet`.
+  const liveCountries = await getRegisteredCountryIdSet(db);
+  const federalBudgets = allFederalBudgets.filter((b) =>
+    liveCountries.has(String(b.countryId ?? b._id))
+  );
 
   const metricsById = new Map(allStateMetrics.map((m) => [String(m._id), m]));
   const stateBudgetById = new Map(stateBudgets.map((b) => [String(b._id), b]));
