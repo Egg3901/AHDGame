@@ -17,7 +17,6 @@ const war = {
       requiredPct: 75,
     },
   ],
-  ourDeparture: { endsWar: false, guestsLeaving: [] },
 };
 
 const incoming = {
@@ -221,6 +220,89 @@ describe("choosing which term to offer", () => {
       "regime_change",
       "demilitarisation",
     ]);
+  });
+
+  it("posts a reunification as its own term, not as an indemnity", async () => {
+    // buildTerm falls through to indemnity for anything it does not recognise, so an
+    // unhandled kind is not a broken button: it silently sends a different deal.
+    const fetchMock = mockGet({
+      currentTurn: 40,
+      wars: [
+        { ...war, reunificationLeaver: "them", enemies: [{ ...war.enemies[0], canReunify: true }] },
+      ],
+      offers: [],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<PeacePanel {...props} />);
+    fireEvent.change(await screen.findByLabelText(/country to negotiate with/i), {
+      target: { value: "CN" },
+    });
+    fireEvent.change(screen.getByLabelText(/term offered/i), {
+      target: { value: "reunification" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /send peace offer/i }));
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => c[1]?.method === "POST");
+      expect(JSON.parse(post![1].body).term).toEqual({ kind: "reunification" });
+    });
+  });
+
+  it("sends the incumbent's reunification as US leaving", async () => {
+    // The same term from the other founder is a capitulation: we withdraw, and
+    // Germany reunifies on their terms. The server decides which way it runs.
+    const fetchMock = mockGet({
+      currentTurn: 40,
+      wars: [
+        {
+          ...war,
+          reunificationLeaver: "us",
+          enemies: [{ ...war.enemies[0], canReunify: true }],
+        },
+      ],
+      offers: [],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<PeacePanel {...props} />);
+    fireEvent.change(await screen.findByLabelText(/country to negotiate with/i), {
+      target: { value: "CN" },
+    });
+    fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "them" } });
+    fireEvent.change(screen.getByLabelText(/term offered/i), {
+      target: { value: "reunification" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /send peace offer/i }));
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => c[1]?.method === "POST");
+      expect(JSON.parse(post![1].body).leaver).toBe("us");
+    });
+  });
+
+  it("sends a reunification as the OTHER side leaving, whatever the picker said", async () => {
+    // A reunification the challenger withdraws under is refused by the route: the
+    // departure hands the war to the incumbent while the term settles it for the
+    // challenger. The default picker value is "we leave", so left alone the form
+    // would compose an offer that is always rejected.
+    const fetchMock = mockGet({
+      currentTurn: 40,
+      wars: [
+        { ...war, reunificationLeaver: "them", enemies: [{ ...war.enemies[0], canReunify: true }] },
+      ],
+      offers: [],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<PeacePanel {...props} />);
+    fireEvent.change(await screen.findByLabelText(/country to negotiate with/i), {
+      target: { value: "CN" },
+    });
+    fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "us" } });
+    fireEvent.change(screen.getByLabelText(/term offered/i), {
+      target: { value: "reunification" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /send peace offer/i }));
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => c[1]?.method === "POST");
+      expect(JSON.parse(post![1].body).leaver).toBe("them");
+    });
   });
 
   it("posts a white peace as a term of its own, not as a zero indemnity", async () => {
@@ -455,9 +537,10 @@ describe("what accepting would actually do to the war", () => {
         withdrawalBlocked: true,
         progressPct: 0,
         requiredPct: 75,
+        // Per enemy: what OUR leaving would do, settled with this country.
+        ourDeparture: { endsWar: true, endsWarReason: "roster", guestsLeaving: [] },
       },
     ],
-    ourDeparture: { endsWar: true, guestsLeaving: [] },
   };
 
   async function ready(w: unknown) {
@@ -481,6 +564,119 @@ describe("what accepting would actually do to the war", () => {
     expect(text).toMatch(/released from the treaty that brought it in/i);
   });
 
+  it("says OUR leaving ends the war when the answer depends on who we settle with", async () => {
+    // The old shape asked once per war, with no counterparty, so it could only ever
+    // answer the roster question and told the reader the fighting would carry on
+    // after the single most consequential move on the board.
+    await ready({
+      ...war,
+      enemies: [
+        {
+          country: "CN",
+          endsWar: false,
+          endsWarReason: null,
+          guestsLeaving: [],
+          withdrawalBlocked: false,
+          progressPct: 10,
+          requiredPct: 75,
+          ourDeparture: { endsWar: true, endsWarReason: "principals", guestsLeaving: [] },
+        },
+      ],
+    });
+    const text = document.body.textContent ?? "";
+    expect(text).toMatch(/ends this war outright/i);
+    expect(text).not.toMatch(/fighting continues for everyone else/i);
+  });
+
+  it("does not claim an empty roster when it is the PRINCIPALS that end the war", async () => {
+    // A settlement between the two founders ends the war with the loser's allies
+    // still on its roster. Telling the reader nobody would be left is plainly false.
+    await ready({
+      ...war,
+      enemies: [
+        {
+          country: "CN",
+          endsWar: true,
+          endsWarReason: "principals" as const,
+          guestsLeaving: [],
+          withdrawalBlocked: false,
+          progressPct: 90,
+          requiredPct: 75,
+        },
+      ],
+    });
+    fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "them" } });
+    const text = document.body.textContent ?? "";
+    expect(text).toMatch(/ends this war outright/i);
+    expect(text).not.toMatch(/nobody would be left/i);
+    expect(text).toMatch(/started the war/i);
+  });
+
+  it("offers the reunification term when the question rides this war", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockGet({
+        currentTurn: 40,
+        wars: [
+          {
+            ...war,
+            reunificationLeaver: "them",
+            enemies: [{ ...war.enemies[0], canReunify: true }],
+          },
+        ],
+        offers: [],
+      })
+    );
+    render(<PeacePanel {...props} />);
+    fireEvent.change(await screen.findByLabelText(/country to negotiate with/i), {
+      target: { value: "CN" },
+    });
+    const terms = screen.getByLabelText(/term offered/i) as HTMLSelectElement;
+    expect([...terms.options].map((o) => o.value)).toContain("reunification");
+  });
+
+  it("hides it on an ordinary war", async () => {
+    vi.stubGlobal("fetch", mockGet({ currentTurn: 40, wars: [war], offers: [] }));
+    render(<PeacePanel {...props} />);
+    fireEvent.change(await screen.findByLabelText(/country to negotiate with/i), {
+      target: { value: "CN" },
+    });
+    const terms = screen.getByLabelText(/term offered/i) as HTMLSelectElement;
+    expect([...terms.options].map((o) => o.value)).not.toContain("reunification");
+  });
+
+  it("does not describe a capitulation as something got in return", async () => {
+    // The same term runs both ways: from the incumbent it is an offer to withdraw AND
+    // concede. "In return for" reads as the price they are being paid.
+    vi.stubGlobal(
+      "fetch",
+      mockGet({
+        currentTurn: 40,
+        wars: [war],
+        offers: [{ ...incoming, leaver: "CN", term: { kind: "reunification" as const } }],
+      })
+    );
+    render(<PeacePanel {...props} />);
+    const text = (await screen.findByText(/reunif/i)).textContent ?? "";
+    expect(text).toMatch(/offers to leave the war/i);
+    expect(text).not.toMatch(/in return for/i);
+  });
+
+  it("describes an incoming reunification offer as reunification", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockGet({
+        currentTurn: 40,
+        wars: [war],
+        offers: [{ ...incoming, term: { kind: "reunification" as const } }],
+      })
+    );
+    render(<PeacePanel {...props} />);
+    const text = (await screen.findByText(/reunif/i)).textContent ?? "";
+    expect(text).not.toMatch(/procurement/i);
+    expect(text).not.toMatch(/[—–]/);
+  });
+
   it("still says the fighting continues when the side really would survive", async () => {
     await ready({
       ...war,
@@ -494,7 +690,6 @@ describe("what accepting would actually do to the war", () => {
           requiredPct: 75,
         },
       ],
-      ourDeparture: { endsWar: false, guestsLeaving: [] },
     });
     expect(screen.getByText(/fighting continues for everyone else/i)).toBeTruthy();
   });

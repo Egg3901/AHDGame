@@ -148,6 +148,32 @@ describe("accepting", () => {
   });
 });
 
+describe("accepting a reunification", () => {
+  it("can be accepted, because the re-check loads the crisis too", async () => {
+    // `settlement` FAILS CLOSED in the validator: a re-check that does not load it
+    // refuses the term outright, so an offer that was legal to send would be
+    // impossible to accept and the whole term would be dead on arrival.
+    db.collection("settlementCrises");
+    db.collectionMocks.settlementCrises.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      status: "frozen",
+      conflictId: "war1",
+      challengerEntityId: "CN",
+      targetEntityId: "DE",
+    });
+    db.collectionMocks.peaceOffers.findOne.mockResolvedValue({
+      ...baseOffer,
+      fromCountry: "CN",
+      toCountry: "US",
+      leaver: "US",
+      term: { kind: "reunification" },
+    });
+    const { POST } = await import("./route");
+    const res = await POST(req("accept"), params("us"));
+    expect(res.status).toBe(200);
+  });
+});
+
 describe("rejecting and withdrawing", () => {
   it("lets the recipient reject", async () => {
     const { POST } = await import("./route");

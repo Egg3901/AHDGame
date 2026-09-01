@@ -307,7 +307,10 @@ function settlementTermText(term: PeaceTerm, rulingPartyName?: string | null): s
     }
     return `The government fell and fresh elections were called under a ${governmentSystemLabel(term.targetSystem)}.`;
   }
-  return `New defence procurement was frozen for ${term.turns} turns.`;
+  if (term.kind === "demilitarisation") {
+    return `New defence procurement was frozen for ${term.turns} turns.`;
+  }
+  return "Germany was reunified on East German terms, as one state under a single government.";
 }
 
 export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }) {
