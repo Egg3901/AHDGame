@@ -215,6 +215,15 @@ describe("validatePeaceTerm: reunification", () => {
     if (!res.ok) expect(res.error).toMatch(/German Question/i);
   });
 
+  it("refuses it when the challenger is neither party to the deal", () => {
+    // Shared with the IMPOSE road, which never runs `validatePeaceOffer` and so has
+    // no other check standing between it and settling Germany over the head of the
+    // country whose outcome it is.
+    const res = validatePeaceTerm(term, { ...gq, from: "RU", to: "US" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/East Germany|challenger|party/i);
+  });
+
   it("refuses it when the caller did not load the settlement at all", () => {
     // Fails CLOSED, unlike maxIndemnity and targetPartyIds: a term whose whole
     // meaning is the crisis cannot be waved through when the crisis is unknown.

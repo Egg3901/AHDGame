@@ -402,8 +402,9 @@ export function validatePeaceOffer(
   // something, but it is not COERCIVE: the recipient must accept it, refusing costs
   // them nothing, and what is on the table is the very question the war is being
   // fought over rather than a cheque for it. Gating it on the front would also make
-  // the term unofferable in practice, since a reunification the challenger withdraws
-  // under is barred above, so every reunification offer asks the other side to leave.
+  // the term unofferable in practice: a reunification the challenger withdraws under
+  // is barred below, so every reunification offer asks the other side to leave, and
+  // every one of them would meet this gate.
   if (
     leaver === to &&
     term.kind !== "white_peace" &&
@@ -446,17 +447,10 @@ export function validatePeaceOffer(
         error: "Only the two countries that started this war can settle Germany between them.",
       };
     }
-    // THE CHALLENGER MUST BE AT THE TABLE. `qualifyWar` only bars an anchor Germany
-    // that a TREATY dragged in, so a DD that merely joined a war can still be its
-    // challenger without founding a side. Without this, two other founders could
-    // settle Germany between themselves and decide the question over the head of the
-    // country whose outcome it is.
-    if (from !== settlement.challenger && to !== settlement.challenger) {
-      return {
-        ok: false,
-        error: "Germany cannot be reunified by a deal East Germany is not a party to.",
-      };
-    }
+    // NOTE: "the challenger must be at the table" is NOT checked here. It is
+    // roster-free, so it lives in `validatePeaceTerm` where the impose road sees it
+    // too — that road never runs this function, and a rule only the offer road
+    // enforces is a rule with a second door.
     // A REUNIFICATION THE CHALLENGER WITHDRAWS UNDER IS A CONTRADICTION. The
     // departure hands the war to the incumbent (the leaver's side is the losing one)
     // while the term settles the question for the challenger. Left open it is not

@@ -17,7 +17,6 @@ const war = {
       requiredPct: 75,
     },
   ],
-  ourDeparture: { endsWar: false, guestsLeaving: [] },
 };
 
 const incoming = {
@@ -538,9 +537,10 @@ describe("what accepting would actually do to the war", () => {
         withdrawalBlocked: true,
         progressPct: 0,
         requiredPct: 75,
+        // Per enemy: what OUR leaving would do, settled with this country.
+        ourDeparture: { endsWar: true, endsWarReason: "roster", guestsLeaving: [] },
       },
     ],
-    ourDeparture: { endsWar: true, guestsLeaving: [] },
   };
 
   async function ready(w: unknown) {
@@ -564,6 +564,30 @@ describe("what accepting would actually do to the war", () => {
     expect(text).toMatch(/released from the treaty that brought it in/i);
   });
 
+  it("says OUR leaving ends the war when the answer depends on who we settle with", async () => {
+    // The old shape asked once per war, with no counterparty, so it could only ever
+    // answer the roster question and told the reader the fighting would carry on
+    // after the single most consequential move on the board.
+    await ready({
+      ...war,
+      enemies: [
+        {
+          country: "CN",
+          endsWar: false,
+          endsWarReason: null,
+          guestsLeaving: [],
+          withdrawalBlocked: false,
+          progressPct: 10,
+          requiredPct: 75,
+          ourDeparture: { endsWar: true, endsWarReason: "principals", guestsLeaving: [] },
+        },
+      ],
+    });
+    const text = document.body.textContent ?? "";
+    expect(text).toMatch(/ends this war outright/i);
+    expect(text).not.toMatch(/fighting continues for everyone else/i);
+  });
+
   it("does not claim an empty roster when it is the PRINCIPALS that end the war", async () => {
     // A settlement between the two founders ends the war with the loser's allies
     // still on its roster. Telling the reader nobody would be left is plainly false.
@@ -580,7 +604,6 @@ describe("what accepting would actually do to the war", () => {
           requiredPct: 75,
         },
       ],
-      ourDeparture: { endsWar: false, endsWarReason: null, guestsLeaving: [] },
     });
     fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "them" } });
     const text = document.body.textContent ?? "";
@@ -667,7 +690,6 @@ describe("what accepting would actually do to the war", () => {
           requiredPct: 75,
         },
       ],
-      ourDeparture: { endsWar: false, guestsLeaving: [] },
     });
     expect(screen.getByText(/fighting continues for everyone else/i)).toBeTruthy();
   });

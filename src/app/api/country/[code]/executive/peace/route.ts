@@ -210,14 +210,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
             : challengerByWar.get(w._id) === countryId
               ? ("them" as const)
               : ("us" as const),
-          ourDeparture: (() => {
-            const g = withdrawalGate(w, countryId, countryId);
-            return {
-              endsWar: g.endsWar,
-              endsWarReason: g.endsWarReason,
-              guestsLeaving: g.guests,
-            };
-          })(),
           enemies: (onA ? w.sideB.countries : w.sideA.countries)
             .filter((e) => opposedBelligerents(w, countryId, e))
             .map((e) => {
@@ -236,6 +228,21 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
                 endsWarReason: gate.endsWarReason,
                 guestsLeaving: gate.guests,
                 withdrawalBlocked: gate.blocked,
+                // WHAT OUR OWN DEPARTURE WOULD DO, and it has to be asked once PER
+                // ENEMY rather than once per war. Our leaving ends the war outright
+                // when we and the country we settle with both founded it, so the
+                // answer depends on who is across the table and a single war-level
+                // reading has no counterparty to be right about. Asked with the roles
+                // swapped, which is what the gate's own arguments mean: they are the
+                // ones staying, we are the ones leaving.
+                ourDeparture: (() => {
+                  const ours = withdrawalGate(w, e, countryId);
+                  return {
+                    endsWar: ours.endsWar,
+                    endsWarReason: ours.endsWarReason,
+                    guestsLeaving: ours.guests,
+                  };
+                })(),
                 // Whole percents, for copy. The form shows the reader how far off
                 // they are rather than only that they are.
                 progressPct: Math.round(gate.progress * 100),

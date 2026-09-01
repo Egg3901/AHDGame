@@ -190,11 +190,22 @@ export function validatePeaceTerm(term: PeaceTerm, ctx: PeaceTermContext): Peace
         error: "Reunification can only be settled on a war the German Question is riding.",
       };
     }
-    // WHO may propose it is not decided here. Either founding belligerent may, and
-    // "founding" is a fact about the war's rosters that this pure function cannot
-    // see: `validatePeaceOffer` holds the conflict and makes that check. The outcome
-    // is the challenger's either way, so an offer from the incumbent is a concession
-    // rather than a different settlement.
+    // THE CHALLENGER MUST BE AT THE TABLE, and this check lives HERE rather than in
+    // `validatePeaceOffer` because the IMPOSE road never runs that function. Left
+    // there, a victor and a loser who are neither of them the challenger could
+    // reunify Germany between themselves, deciding the question over the head of the
+    // country whose outcome it is. Roster-free, so this pure function can make it.
+    if (ctx.from !== ctx.settlement.challenger && ctx.to !== ctx.settlement.challenger) {
+      return {
+        ok: false,
+        error: "Germany cannot be reunified by a settlement East Germany is not a party to.",
+      };
+    }
+    // WHICH of the two proposes it is not decided here. Either founding belligerent
+    // may, and "founding" is a fact about the war's rosters that this pure function
+    // cannot see: `validatePeaceOffer` holds the conflict and makes that check. The
+    // outcome is the challenger's either way, so a proposal from the incumbent is a
+    // concession rather than a different settlement.
     return { ok: true };
   }
 

@@ -92,6 +92,17 @@ describe("POST dictated reunification", () => {
     expect((await POST(req(reunify), params)).status).toBe(200);
   });
 
+  it("refuses it when East Germany is not one of the two settling", async () => {
+    // The impose road runs `validatePeaceTerm` alone. Without the check living
+    // there, a victor and a loser who are neither of them the challenger could
+    // reunify Germany between themselves.
+    questionRidesTheWar("DD");
+    const { POST } = await import("./route");
+    const res = await POST(req(reunify), params);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/East Germany|party/i);
+  });
+
   it("refuses it on a war carrying no German Question", async () => {
     db.collection("settlementCrises");
     db.collectionMocks.settlementCrises.findOne.mockResolvedValue(null);

@@ -35,6 +35,18 @@ export interface EnemyView {
   endsWarReason?: "roster" | "principals" | null;
   /** True when reunification can be settled with THIS country: both are founders. */
   canReunify?: boolean;
+  /**
+   * What OUR leaving would do to the war, settled with THIS country.
+   *
+   * Per enemy, not per war: our departure ends the war outright when we and the
+   * country we settle with both founded it, so the answer has no meaning without a
+   * counterparty. Optional for a response written before the field existed.
+   */
+  ourDeparture?: {
+    endsWar: boolean;
+    endsWarReason?: "roster" | "principals" | null;
+    guestsLeaving: CountryId[];
+  };
   /** Treaty allies released alongside them, who leave at the same moment. */
   guestsLeaving: CountryId[];
   /** That withdrawal is refused at the current front. A white peace escapes it. */
@@ -63,11 +75,6 @@ export interface PeaceWar {
    * leave and the incumbent offers to leave itself. Server-decided.
    */
   reunificationLeaver?: "us" | "them" | null;
-  ourDeparture: {
-    endsWar: boolean;
-    endsWarReason?: "roster" | "principals" | null;
-    guestsLeaving: CountryId[];
-  };
 }
 
 /**
@@ -573,9 +580,9 @@ export function PeacePanel({
                   )
                 : departureConsequence(
                     COUNTRY_CONFIGS[countryId]?.name ?? countryId,
-                    war.ourDeparture.endsWar,
-                    war.ourDeparture.guestsLeaving,
-                    war.ourDeparture.endsWarReason ?? "roster"
+                    selectedEnemy.ourDeparture?.endsWar ?? false,
+                    selectedEnemy.ourDeparture?.guestsLeaving ?? [],
+                    selectedEnemy.ourDeparture?.endsWarReason ?? "roster"
                   )}
             </p>
           )}

@@ -132,6 +132,38 @@ describe("GET: whether reunification is on the table", () => {
     expect(body.wars[0].reunificationLeaver).toBe(null);
   });
 
+  it("says OUR departure ends the war when we and they both founded it", async () => {
+    // Read per enemy, not once per war. Our leaving ends the war only when the
+    // country we settle WITH is the opposing founder, so a single war-level answer
+    // cannot be right: it has no counterparty to be right about.
+    frozenCrisis("UK");
+    const { GET } = await import("./route");
+    const body = await (await GET(getReq(), params)).json();
+    const cn = body.wars[0].enemies.find((e: { country: string }) => e.country === "CN");
+    expect(cn.ourDeparture.endsWar).toBe(true);
+    expect(cn.ourDeparture.endsWarReason).toBe("principals");
+  });
+
+  it("says our departure does NOT end it against a mere joiner", async () => {
+    frozenCrisis("UK");
+    db.collectionMocks.conflicts.find.mockReturnValue({
+      toArray: async () => [
+        {
+          ...ukFounded,
+          sideB: { label: "PLA", countries: ["CN", "RU"], kind: "coalition" },
+          joinTurns: [
+            { countryId: "US", turn: 5, control: 50 },
+            { countryId: "RU", turn: 5, control: 50 },
+          ],
+        },
+      ],
+    });
+    const { GET } = await import("./route");
+    const body = await (await GET(getReq(), params)).json();
+    const ru = body.wars[0].enemies.find((e: { country: string }) => e.country === "RU");
+    expect(ru.ourDeparture.endsWar).toBe(false);
+  });
+
   it("does not offer it against an enemy that merely joined the war", async () => {
     // UK is side A's principal here, but the offer has to reach side B's founder.
     frozenCrisis("UK");
