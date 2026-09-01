@@ -21,6 +21,7 @@ import { GDP_MILLIONS_TO_USD } from "@/lib/constants/internationalOrganizations"
 import { closeDueCrises, openCrisisTargets, openDueCrises } from "@/lib/alignment/crisisTurn";
 import { JOIN_SHARE, SUSTAIN_TURNS, standingFor } from "@/lib/alignment/membershipEligibility";
 import { resolveOpeningShares } from "@/lib/alignment/seedAlignment";
+import { getDissolvedCountryIds } from "@/lib/country/registeredCountries";
 import { isIntOrgAlignmentEnabled } from "@/lib/alignment/featureFlag";
 import { applyAlignmentToMembership } from "@/lib/alignment/sphereProjection";
 import { leadFor } from "@/lib/alignment/project";
@@ -151,7 +152,7 @@ export async function processAlignmentTurn(
   const poles = polesForYear(year);
 
   const col = await getCountryAlignmentsCollection(db);
-  const [docs, memberships] = await Promise.all([
+  const [allDocs, memberships, dissolved] = await Promise.all([
     col.find({}).toArray(),
     db
       .collection<OrganizationMembership>("organizationMemberships")
@@ -168,7 +169,20 @@ export async function processAlignmentTurn(
         joinedTurn: 1,
       })
       .toArray(),
+    getDissolvedCountryIds(db),
   ]);
+
+  // A country absorbed into another keeps its alignment row, and that row keeps
+  // whatever join-ready clock was running when it died. Dropping the row here,
+  // at the one place every later loop reads from, retires the dead state from
+  // drift, accession and the self-heal together — a state that no longer exists
+  // does not lean toward a bloc, and must not go on asking to join one.
+  //
+  // The test is dissolution, NOT registry membership: most entities the world
+  // models (Canada, the Benelux, Albania, the Soviet republics) have no
+  // countryGameStates row at all and are perfectly alive. Gating on the registry
+  // would freeze out the very population accession exists for.
+  const docs = allDocs.filter((d) => !dissolved.has(d.entityId));
 
   const orgsByCountry = new Map<CountryId, Set<string>>();
   for (const m of memberships) {
@@ -345,6 +359,10 @@ export async function processAlignmentTurn(
   for (const candidate of healCandidates) {
     const key = candidate.key;
     if (haveRows.has(key) || !(key in ROSTER_BY_KEY)) continue;
+    // A dissolved country whose membership rows have not been cleaned up yet
+    // would otherwise be healed a BRAND NEW alignment row here, undoing the
+    // filter above on the very same turn.
+    if (dissolved.has(key)) continue;
 
     // Stamp the era the opening shares are actually expressed in — the preset's,
     // which is NOT the live era once a 1953 world has run past 1991. The loop
@@ -564,6 +582,11 @@ export async function processAlignmentTurn(
     // nation stopped being Western: their membership answers to history and to
     // their own accession rules.
     if (!standing.governsMembership) continue;
+
+    // Defection is an act of foreign policy by a state that exists. A dissolved
+    // country's leftover membership rows are the merge's to clean up, not the
+    // drift engine's to walk out of the building.
+    if (dissolved.has(membership.countryId)) continue;
 
     if (!standing.wantsOut) {
       // Recovered, or sitting in the 41-59 deadband: clear the run so leaving
