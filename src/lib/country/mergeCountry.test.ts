@@ -359,4 +359,80 @@ describe("mergeCountry", () => {
     expect(event.eventType).toBe("region_transferred");
     expect(event.title).toContain("absorbed into");
   });
+
+  it("cancels the absorbed country's live races still keyed to it", async () => {
+    // A race the region sweep missed (or that the re-key never matched) would
+    // keep campaigning for a country the merge is dissolving.
+    const electionId = { _id: "e-stray" };
+    prime(db, "elections").find.mockImplementation((f: { countryId?: string }) =>
+      cursor(f.countryId === "DD" ? [electionId] : [])
+    );
+    prime(db, "elections").deleteMany.mockResolvedValue({ deletedCount: 1 });
+    const { mergeCountry } = await import("./mergeCountry");
+    const res = await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 412,
+    });
+    expect(res.electionsCancelled).toBe(1);
+    expect(prime(db, "electionCandidates").deleteMany).toHaveBeenCalledWith({
+      electionId: { $in: [electionId._id] },
+    });
+    expect(prime(db, "elections").deleteMany).toHaveBeenCalledWith({
+      _id: { $in: [electionId._id] },
+    });
+  });
+
+  it("cancels survivor-keyed races of the absorbed constitution, leaves its own alone", async () => {
+    // The live #1252 shape: rescopeRegionToCountry re-keyed the absorbed side's
+    // active races onto the survivor, so they no longer carry the dissolved
+    // countryId and the per-region sweep never saw them. The GDR survives here,
+    // so DE-family races (bundestag, landtag) on DD are the ghosts; the
+    // Volkskammer race is DD's own calendar and must survive the merge.
+    const ghostBundestag = { _id: "e-bt", electionType: "bundestag" };
+    const ghostLandtag = { _id: "e-lt", electionType: "landtag" };
+    const ownVolkskammer = { _id: "e-vk", electionType: "volkskammerDeputy" };
+    prime(db, "elections").find.mockImplementation((f: { countryId?: string }) =>
+      cursor(f.countryId === "DD" ? [ownVolkskammer, ghostBundestag, ghostLandtag] : [])
+    );
+    prime(db, "elections").deleteMany.mockResolvedValue({ deletedCount: 2 });
+    const { mergeCountry } = await import("./mergeCountry");
+    const res = await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 412,
+    });
+    expect(res.electionsCancelled).toBe(2);
+    const del = prime(db, "elections").deleteMany.mock.calls[0][0];
+    expect(del._id.$in).toEqual(expect.arrayContaining([ghostBundestag._id, ghostLandtag._id]));
+    expect(del._id.$in).not.toContain(ownVolkskammer._id);
+  });
+
+  it("leaves survivor races of a type the remap table does not name", async () => {
+    // The filter is scoped to the pair's declared mapping: a live race of some
+    // third constitution's type is not this merge's business.
+    prime(db, "elections").find.mockImplementation((f: { countryId?: string }) =>
+      cursor(f.countryId === "DD" ? [{ _id: "e-vk", electionType: "volkskammerDeputy" }] : [])
+    );
+    const { mergeCountry } = await import("./mergeCountry");
+    const res = await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 412,
+    });
+    expect(res.electionsCancelled).toBe(0);
+    expect(prime(db, "elections").deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("cancels nothing when there is nothing live to cancel", async () => {
+    prime(db, "elections").find.mockReturnValue(cursor([]));
+    const { mergeCountry } = await import("./mergeCountry");
+    const res = await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 412,
+    });
+    expect(res.electionsCancelled).toBe(0);
+    expect(prime(db, "elections").deleteMany).not.toHaveBeenCalled();
+  });
 });
