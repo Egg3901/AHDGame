@@ -11,10 +11,12 @@
  * the offer has been accepted, and a player who has just agreed to reunification
  * should not load a map that still shows two Germanies until the next hour turns.
  *
- * ONLY EVER THE CHALLENGER. `validatePeaceTerm` refuses the term from anyone else,
- * and the outcome is hardcoded here rather than passed in, so a future caller cannot
- * quietly use this to hand the question to the incumbent. The incumbent outcome is
- * not a settlement anybody imposes: it is what happens when nothing changes.
+ * ALWAYS THE CHALLENGER'S OUTCOME, whoever proposed the term. Either founding
+ * belligerent may put a reunification on the table — from the incumbent it is a
+ * capitulation — but what it settles does not change with the sender, so the outcome
+ * is hardcoded here rather than passed in and a future caller cannot quietly use this
+ * to hand the question to the incumbent instead. That outcome is not a settlement
+ * anybody imposes: it is what happens when nothing changes.
  */
 import type { Db } from "mongodb";
 import type { SettlementCrisisDoc } from "@/lib/db/types/settlementCrisis";

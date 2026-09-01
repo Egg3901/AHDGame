@@ -164,8 +164,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     const partiesByCountry = await loadPartyChoicesFor(db, [...enemyCountries]);
 
     // Which of these wars is carrying a settlement crisis, and who its challenger is.
-    // ONE query for every war on the page: reunification is offerable only by the
-    // challenger, and only while the question is riding that particular war.
+    // ONE query for every war on the page. The challenger's identity is what decides
+    // the DIRECTION of a reunification rather than who may propose one: either
+    // founding belligerent may, and the incumbent is the side that withdraws.
     const crises = await getSettlementCrisesCollection(db);
     const frozen = await crises
       .find({
