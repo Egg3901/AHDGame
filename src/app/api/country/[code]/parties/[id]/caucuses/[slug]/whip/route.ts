@@ -433,11 +433,13 @@ export async function POST(request: Request, { params }: RouteParams) {
       const motion = await db
         .collection<SpeakerVacateMotion>("speakerVacateMotions")
         .findOne({ _id: "current", status: "voting" });
-      // Resolution is lazy (on read of the Speaker page), so a motion can sit
-      // in "voting" past its deadline. Gate on the clock as well as the status.
-      const vacateGameTime = await getGameTime();
+      // Resolution is lazy (on read of the Speaker page), so a motion can sit in
+      // "voting" past its deadline. Gate on the clock as well as the status, or
+      // a chair could whip a motion that is already over.
+      const vacateGameTime = motion ? await getGameTime() : null;
       if (
         !motion ||
+        !vacateGameTime ||
         isLeadershipElectionClosed(motion, vacateGameTime.currentTurn, vacateGameTime.effectiveNow)
       ) {
         return NextResponse.json(notFound("No motion to vacate is currently open").toJson(), {
