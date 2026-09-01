@@ -85,6 +85,8 @@ describe("reconcileLeadershipPartyEligibility", () => {
     db.collectionMocks["senateLeadershipElections"]!.findOne.mockResolvedValue(null);
     db.collectionMocks["houseLeadershipElections"]!.findOne.mockResolvedValue(null);
     db.collectionMocks["congressLeaders"]!.find.mockImplementation(() => cursorOf([]));
+    // The vacate is a conditional update; by default this pass wins the claim.
+    db.collectionMocks["congressLeaders"]!.updateOne.mockResolvedValue({ matchedCount: 1 });
   });
 
   it("vacates a Pro Tempore who has gone independent and opens a 24-turn election", async () => {
@@ -108,11 +110,11 @@ describe("reconcileLeadershipPartyEligibility", () => {
       }),
     ]);
     expect(db.collectionMocks["congressLeaders"]!.updateOne).toHaveBeenCalledWith(
-      { role: "president_pro_tempore" },
+      { role: "president_pro_tempore", characterId: holder },
       expect.objectContaining({
         $set: expect.objectContaining({ characterId: null, characterName: "Vacant" }),
       }),
-      { upsert: true }
+      { upsert: false }
     );
     expect(db.collectionMocks["senateLeadershipElections"]!.updateOne).toHaveBeenCalledWith(
       { _id: "pro_tempore" },
@@ -235,6 +237,30 @@ describe("reconcileLeadershipPartyEligibility", () => {
     await reconcileLeadershipPartyEligibility(db as unknown as Db, "senate", SENATE_CTX, NOW);
 
     expect(db.collectionMocks["senateLeadershipNominations"]!.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("lets only one concurrent pass claim the vacancy and announce it", async () => {
+    // Two overlapping page loads both see the defector. The vacate is a
+    // conditional update scoped to the holder still being seated, so the loser
+    // matches nothing and must not open a second election or post a duplicate
+    // notice to the feed.
+    const holder = new ObjectId();
+    seatLeaders(db, ["president_pro_tempore"], holder, "MAJ");
+    seatHolder(db, holder, "senate", "independent");
+    db.collectionMocks["congressLeaders"]!.updateOne.mockResolvedValue({ matchedCount: 0 });
+
+    const { reconcileLeadershipPartyEligibility } = await import("./reconcilePartyEligibility");
+    const vacated = await reconcileLeadershipPartyEligibility(
+      db as unknown as Db,
+      "senate",
+      SENATE_CTX,
+      NOW
+    );
+
+    expect(vacated).toEqual([]);
+    expect(db.collectionMocks["senateLeadershipElections"]!.updateOne).not.toHaveBeenCalled();
+    const { sendCountryGameEvent } = await import("@/lib/discordWebhooks");
+    expect(sendCountryGameEvent).not.toHaveBeenCalled();
   });
 
   it("announces the vacancy to the country feed", async () => {

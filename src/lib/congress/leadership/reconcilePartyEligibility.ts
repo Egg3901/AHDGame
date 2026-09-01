@@ -136,7 +136,11 @@ export async function reconcileLeadershipPartyEligibility(
     const party = resolveSeatHolderParty(seat, charByHolder.get(holderKey) ?? null);
     if (isPartyEligible(POLICY_BY_ROLE[leaderRole], party, ctx)) continue;
 
-    await vacateCongressLeadershipRole(db, leaderRole, now);
+    // Scoped to the holder we just read, so of two overlapping page loads only
+    // one opens the election and only one posts the notice.
+    const claimed = await vacateCongressLeadershipRole(db, leaderRole, now, leader.characterId);
+    if (!claimed) continue;
+
     await openCongressLeadershipElection(db, {
       role,
       chamber,
