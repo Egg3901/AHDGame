@@ -26,6 +26,13 @@
  * the route intended.
  *
  * DRY RUN BY DEFAULT. Pass `--apply` to write. Run against MONGODB_URI_LIVE.
+ *
+ * STATUS: DONE. This ran against the live world and the crisis carries
+ * `actuationCompletedTurn`, so `actuateSettlementOutcome` now returns immediately
+ * and a re-run is a no-op. It is kept as the record of the repair. Note that the
+ * merge has since been INVERTED — the GDR is the shell that survives, not the
+ * Federal Republic — so this script no longer describes what a fresh reunification
+ * would do, only what was done to heal this one.
  */
 import { MongoClient, type Db } from "mongodb";
 import fs from "node:fs";

@@ -24,7 +24,7 @@ import {
   type CountryId,
   type GovernmentType,
 } from "@/lib/constants/countries";
-import { getCountryState } from "@/lib/countryState";
+import { getCountryState, primeCountryStates } from "@/lib/countryState";
 
 /** Everything a header, card or listing needs to name a country correctly. */
 export interface CountryIdentity {
@@ -100,16 +100,18 @@ export async function resolveCountryIdentity(
 /**
  * The same for several countries at once, for listings.
  *
- * `getCountryState` caches per-Db, so this is not N round trips for a page that
- * has already touched these countries — but it is still one call each, and a
- * listing that renders every country in the world should say so plainly rather
- * than hide it inside a map.
+ * PRIMED FIRST, deliberately. `getCountryState` memoises per Db instance and
+ * `MongoClient.db()` hands back a new instance every call, so that memo is cold
+ * at the top of every request: resolving the whole world one at a time is eighty
+ * sequential round trips on a public endpoint. One `$in` read up front turns the
+ * loop below into cache hits.
  */
 export async function resolveCountryIdentities(
   db: Db,
   countryIds: CountryId[],
   preset?: string
 ): Promise<Map<CountryId, CountryIdentity>> {
+  await primeCountryStates(db, countryIds);
   const out = new Map<CountryId, CountryIdentity>();
   for (const id of countryIds) {
     out.set(id, await resolveCountryIdentity(db, id, preset));

@@ -245,6 +245,10 @@ export async function actuateSettlementOutcome(
     fromCountryId: absorbed,
     toCountryId: survivor,
     currentTurn,
+    // The winner's trade policy stands where both states taxed the same scope.
+    // Same rule as the tax code and the reserve law: the shell is the victor
+    // here, so the absorbed side does not get to keep its tariffs.
+    absorbedTariffsWin: false,
   });
   if (!merged.ok) {
     // The claim is GIVEN BACK, so the next tick resumes this merge from the
@@ -290,13 +294,31 @@ export async function actuateSettlementOutcome(
   // 3d. The armed forces. The military collections are country-keyed, not
   //     region-keyed, so the region sweep never sees them — and a settlement
   //     that let the winning side's army evaporate would be absurd.
-  await mergeMilitary(db, { fromCountryId: absorbed, toCountryId: survivor });
+  //     ⚠️ STANCE DOES NOT CROSS, for the same reason the legislated levers do
+  //     not: `mergeMilitary` defaults to the absorbed side's doctrine and
+  //     reinforcement mode because a merge normally runs winner-into-shell. Here
+  //     the SURVIVOR is the winner, so carrying them would hand the victor the
+  //     military rules of the army it just defeated. The units, stock and
+  //     manpower pool still cross — those are what the unified state has.
+  await mergeMilitary(db, {
+    fromCountryId: absorbed,
+    toCountryId: survivor,
+    carryStance: false,
+  });
 
   // 3e. The ECONOMIC regime. `installOnePartyState` below converts the political
-  //     system, but the command economy is its own per-country dial; without
-  //     this carry a victorious SED would find itself running West Germany's
-  //     market machinery. Year through `yearOfTurn` (calendar, not raw turn —
-  //     the #1208 class of bug) for the schedule fallback.
+  //     system, but the command economy is its own per-country dial.
+  //
+  //     A NO-OP FOR THIS PAIRING, and deliberately left in. `mergeEconomicRegime`
+  //     is ONE-DIRECTIONAL — it only ever makes the survivor more planned — so
+  //     with the GDR as the shell the market half cannot "reform" the winner as a
+  //     side effect of being absorbed, and the call returns without writing. It
+  //     stays because the direction is a property of the settlement rather than of
+  //     this pipeline, and because the guard doing the work lives in that function
+  //     where a reader will look for it.
+  //
+  //     Year through `yearOfTurn` (calendar, not raw turn — the #1208 class of
+  //     bug) for the schedule fallback.
   const gameStateDoc = await db
     .collection<GameState>("gameState")
     .findOne(
@@ -314,9 +336,15 @@ export async function actuateSettlementOutcome(
   });
 
   // 4. East Berlin into Berlin, AFTER the country merge and not before: both
-  //    regions must be under one flag, and BEO is East German until step 3 runs.
-  //    Germany's seed has no `DE-bundestag-BEO` because a unified Berlin is one
-  //    city, which is the whole reason this step exists.
+  //    regions must be under one flag, and BE arrives from the Federal Republic
+  //    only when step 3 runs.
+  //
+  //    BEO IS DISSOLVED EVEN THOUGH ITS COUNTRY WON, and that is not the shell
+  //    rule contradicting itself. Region codes are geography, not sovereignty:
+  //    `seedDD` treats the eastern Laender codes as DE's in a UNIFIED era and
+  //    DD's only while the country is divided, with `BEO` the one code that is
+  //    DD-exclusive. A unified Berlin is one city under the shared code, so the
+  //    exclusive half is the half that goes.
   const berlin = await mergeRegion(db, {
     fromRegionId: GERMAN_QUESTION_EAST_BERLIN,
     toRegionId: GERMAN_QUESTION_BERLIN,
@@ -701,8 +729,12 @@ async function adoptChallengerSettlement(
     flagEmojiOverride: COUNTRY_CONFIGS[params.absorbed]?.flagEmoji ?? null,
   });
 
-  // The survivor may now legislate in the catalogue it inherited. Without this a
-  // one-party socialist Germany could propose nothing but West German tax law.
+  // The survivor inherits the absorbed side's catalogue, and needs it for the
+  // territory more than for the politics: the western Laender arrive already
+  // holding enacted programmes whose legislation types are scoped to a country
+  // that no longer exists. Left unscoped those regions read as having no current
+  // law at all -- the same defect a regional default law was added to prevent --
+  // and nothing they had passed could be amended or repealed.
   await rescopeLegislationCatalogue(db, params.absorbed, params.survivor);
 
   const preset = await getGameStatePresetOrDefault(db);
@@ -726,11 +758,14 @@ async function adoptChallengerSettlement(
   // down to the order Mongo happened to return two documents in, and every
   // military and alignment call downstream reads that map.
   //
-  // WEST FIRST, THEN EAST, and the order is load-bearing. `actuateSettlementOutcome`
-  // claims the cooldown before any of this runs, so it never retries: whatever
-  // state a throw in the middle leaves behind is permanent. Ending up in NEITHER
-  // pole is wrong but deterministic and legible to an admin; ending up in BOTH is
-  // the non-deterministic read above. Fail toward the one somebody can see.
+  // WEST FIRST, THEN EAST, and the order is load-bearing. A throw between the two
+  // is no longer permanent -- the actuation holds a LEASE now, and the next tick
+  // re-enters and finishes -- but it is still visible to whoever looks before that
+  // tick, and the withdrawal is not guaranteed to be the step that failed. Ending
+  // up in NEITHER pole is wrong, deterministic, and legible to an admin; ending up
+  // in BOTH is the non-deterministic read above, which resolves differently on
+  // successive reads and would not obviously be a fault at all. Fail toward the
+  // one somebody can see.
   await leaveBloc(db, westOrg, pactOrg, {
     countryId: params.survivor,
     currentTurn: params.currentTurn,
@@ -759,8 +794,9 @@ async function adoptChallengerSettlement(
   //
   // LAST, and after the admission, by the same argument as the ordering above: a
   // throw here leaves the survivor correctly in the Pact with a stale GDR row
-  // beside it, which is untidy. Moving it earlier would trade that for a survivor
-  // in no alliance at all, which is the state the design has no name for.
+  // beside it, which is untidy and which the resuming tick clears. Moving it
+  // earlier would trade that for a survivor in no alliance at all, which is the
+  // state the design has no name for.
   //
   // A Set because the two poles can resolve to the same organisation in a
   // misconfigured era, and withdrawing twice would write the history entry twice.

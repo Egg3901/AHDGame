@@ -180,6 +180,48 @@ describe("mergeRegion", () => {
     }
   });
 
+  it("drops an absorbed row that would collide on a unique region index", async () => {
+    const row = new ObjectId();
+    const cands = db.collection("statePartyCandidates");
+    cands.indexes = vi.fn().mockResolvedValue([
+      { name: "_id_", key: { _id: 1 } },
+      { name: "uniq", key: { stateId: 1, partyId: 1, characterId: 1 }, unique: true },
+    ]);
+    cands.find.mockReturnValue(cursorOf([{ _id: row, stateId: "BEO", partyId: 3 }]));
+    cands.findOne.mockResolvedValue({ _id: new ObjectId(), stateId: "BE", partyId: 3 });
+
+    await run();
+
+    // Two regions become one, so both rows want the same key. A blind re-point
+    // throws E11000 half way through a merge that has already moved a country.
+    expect(cands.deleteOne).toHaveBeenCalledWith({ _id: row });
+  });
+
+  it("keeps a row a PARTIAL unique index never constrained", async () => {
+    const cands = db.collection("statePartyCandidates");
+    cands.indexes = vi.fn().mockResolvedValue([
+      {
+        name: "uniq_active",
+        key: { stateId: 1, partyId: 1, characterId: 1 },
+        unique: true,
+        partialFilterExpression: { status: "active" },
+      },
+    ]);
+    cands.find.mockReturnValue(cursorOf([]));
+    cands.findOne.mockResolvedValue(null);
+
+    await run();
+
+    // The index binds only `status: "active"` rows, so only those can collide.
+    // Checking without the filter would let a WITHDRAWN candidacy sitting on the
+    // target key delete a live one coming from the absorbed region.
+    const scan = cands.find.mock.calls.find(
+      (c: [Record<string, unknown>]) => c[0]?.stateId === "BEO"
+    );
+    expect(scan?.[0]).toEqual({ stateId: "BEO", status: "active" });
+    expect(cands.deleteOne).not.toHaveBeenCalled();
+  });
+
   it("refuses a cross-border fuse rather than seating officials in a foreign region", async () => {
     db.collection("states").findOne.mockImplementation(async (f: { _id: string }) =>
       f._id === "BEO"

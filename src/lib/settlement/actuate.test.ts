@@ -171,7 +171,7 @@ describe("actuateSettlementOutcome", () => {
     expect(vi.mocked(recordCountryEvent).mock.calls[0][1].title).toContain("stays sovereign");
   });
 
-  it("absorbs the GDR into the surviving Germany on a reunification win", async () => {
+  it("absorbs the Federal Republic into the surviving GDR on a reunification win", async () => {
     const { actuateSettlementOutcome } = await import("./actuate");
     const res = await actuateSettlementOutcome(
       db as unknown as Db,
@@ -184,6 +184,9 @@ describe("actuateSettlementOutcome", () => {
       fromCountryId: "DE",
       toCountryId: "DD",
       currentTurn: 412,
+      // The winner is the shell, so the absorbed side does not keep its trade
+      // policy on a scope both states legislated.
+      absorbedTariffsWin: false,
     });
   });
 

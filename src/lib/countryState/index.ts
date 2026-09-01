@@ -86,6 +86,31 @@ export async function getCountryState(db: Db, countryId: CountryId): Promise<Cou
 }
 
 /**
+ * Warm the cache for many countries in ONE round trip.
+ *
+ * `getCountryState` memoises per Db INSTANCE, and `MongoClient.db()` returns a
+ * new instance on every call, so the memo lives exactly as long as one `getDb()`
+ * result and is cold at the start of every request. A listing that resolves
+ * eighty countries therefore pays eighty sequential `findOne`s unless it primes
+ * first. Countries with no row are left alone: `getCountryState` self-heals them
+ * from seed config individually, which is the rare path.
+ */
+export async function primeCountryStates(db: Db, countryIds: CountryId[]): Promise<void> {
+  const missing = countryIds.filter((id) => !getCachedCountryState(db, id));
+  if (missing.length === 0) return;
+  // Defensive, matching `getCountryState`: MockDbs that don't stub `find`
+  // fall through to the per-country path rather than crashing the caller.
+  try {
+    const docs = await getCountryStateCollection(db)
+      .find({ _id: { $in: missing } })
+      .toArray();
+    for (const doc of docs) setCachedCountryState(db, doc);
+  } catch {
+    /* ignore — callers still resolve one at a time */
+  }
+}
+
+/**
  * Apply a partial patch to a country's runtime state. Stamps updatedAt
  * and invalidates the cache so subsequent reads see fresh data.
  *

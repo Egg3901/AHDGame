@@ -307,6 +307,25 @@ describe("mergeCountry", () => {
     });
   });
 
+  it("leaves the SURVIVOR's tariff standing when the survivor is the winner", async () => {
+    // The same collision, decided the other way. A tariff is legislated policy,
+    // so it follows the side that WON -- and when the victor is the surviving
+    // shell, deleting its record would keep the defeated state's trade policy.
+    prime(db, "tariffs").find.mockReturnValue(
+      cursor([{ _id: "t-de", scopeType: "sector", targetSectorType: "manufacturing" }])
+    );
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 412,
+      absorbedTariffsWin: false,
+    });
+    const del = prime(db, "tariffs").deleteMany.mock.calls[0][0];
+    // The ABSORBED side's record is the one that yields; the scopes are unchanged.
+    expect(del.countryId).toBe("DE");
+  });
+
   it("records the absorption against the surviving country", async () => {
     const { mergeCountry } = await import("./mergeCountry");
     await mergeCountry(db as unknown as Db, {

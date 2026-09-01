@@ -46,6 +46,16 @@ export interface MergeCountryArgs {
   /** The country that survives and takes the regions. */
   toCountryId: CountryId;
   currentTurn: number;
+  /**
+   * On a colliding TARIFF scope, whether the ABSORBED side's record takes the
+   * slot. Defaults true, which is the winner-into-shell contract.
+   *
+   * ⚠️ FALSE WHEN THE SHELL IS THE WINNER. A tariff is legislated policy, not a
+   * quantity: with the victor as the surviving shell, letting the absorbed side
+   * win the collision would keep the LOSER's trade policy and delete the
+   * winner's on the scopes where both had legislated.
+   */
+  absorbedTariffsWin?: boolean;
 }
 
 export interface MergeCountryResult {
@@ -57,7 +67,7 @@ export interface MergeCountryResult {
 }
 
 export async function mergeCountry(db: Db, args: MergeCountryArgs): Promise<MergeCountryResult> {
-  const { fromCountryId, toCountryId, currentTurn } = args;
+  const { fromCountryId, toCountryId, currentTurn, absorbedTariffsWin = true } = args;
   const empty = { regionsTransferred: 0, regionsSkipped: 0, retired: false };
 
   if (fromCountryId === toCountryId) {
@@ -149,7 +159,7 @@ export async function mergeCountry(db: Db, args: MergeCountryArgs): Promise<Merg
   // BEFORE the shell retires so a failure leaves a recoverable, still-live
   // source rather than a retired country with dangling rows.
   await transferOrRetireOrgMemberships(db, fromCountryId, toCountryId, currentTurn);
-  await sweepNationalStrays(db, fromCountryId, toCountryId);
+  await sweepNationalStrays(db, fromCountryId, toCountryId, absorbedTariffsWin);
 
   // Retire the shell. Not deletion — the documents stay for history and the
   // wiki; the country simply stops being enumerated, simulated, or joinable.
@@ -243,7 +253,8 @@ async function transferOrRetireOrgMemberships(
  *  - NPPs in the national pool (`homeState: ""`) are invisible to the region
  *    sweep, which keys on `homeState`; they cross by countryId.
  *  - Tariff records are the dissolved state's trade policy; the unified state
- *    inherits it.
+ *    inherits the ones that do not collide with its own, and `absorbedTariffsWin`
+ *    decides which side yields on the ones that do.
  *  - Bills still in flight LAPSE first: the same shape the chamber-dissolution
  *    path writes (`failInProgressBills`), applied to every non-terminal status
  *    because here the whole country, not one chamber, stops existing.
@@ -258,7 +269,8 @@ async function transferOrRetireOrgMemberships(
 async function sweepNationalStrays(
   db: Db,
   fromCountryId: CountryId,
-  toCountryId: CountryId
+  toCountryId: CountryId,
+  absorbedTariffsWin: boolean
 ): Promise<void> {
   const now = new Date();
   await db
@@ -271,13 +283,20 @@ async function sweepNationalStrays(
   await db
     .collection("subsidies")
     .updateMany({ countryId: fromCountryId }, { $set: { countryId: toCountryId, updatedAt: now } });
-  // Tariffs are collision-aware in the winner's favour: where BOTH states
+  // Tariffs are collision-aware IN THE WINNER'S FAVOUR: where BOTH states
   // legislated a tariff on the same scope (same sector, same origin country,
-  // same corporation, or both economy-wide), the absorbed side's record takes
-  // the slot — the merge direction runs winner-into-shell, and two live
-  // records on one scope would double-apply. Later legislation by the unified
-  // government supersedes either through the normal reconcile (enactment
-  // order), which is the ordinary lex-posterior rule.
+  // same corporation, or both economy-wide), one record has to go, because two
+  // live records on one scope would double-apply.
+  //
+  // WHICH ONE depends on which side won, not on which side is the shell. A merge
+  // normally runs winner-into-shell, so the absorbed side's record takes the slot
+  // and that is the default. When the SURVIVOR is the victor the rule inverts:
+  // keeping the absorbed record would leave the defeated state's trade policy
+  // standing and delete the winner's. A tariff is legislated policy, so it
+  // follows the winner exactly as the tax code and the reserve law do.
+  //
+  // Later legislation by the unified government supersedes either through the
+  // normal reconcile (enactment order), which is the ordinary lex-posterior rule.
   const absorbedTariffs = (await db
     .collection("tariffs")
     .find({ countryId: fromCountryId })
@@ -291,8 +310,12 @@ async function sweepNationalStrays(
     // One $or delete for every colliding scope, not a round trip per tariff.
     // An explicit null in each key matches both a missing and a null field, so
     // "economy_wide vs economy_wide" collides exactly like a shared sector.
+    //
+    // The LOSING side's records are the ones deleted, which is why the country id
+    // here is a variable: the scopes are the same either way, only the owner of
+    // the record that yields changes.
     await db.collection("tariffs").deleteMany({
-      countryId: toCountryId,
+      countryId: absorbedTariffsWin ? toCountryId : fromCountryId,
       $or: absorbedTariffs.map((tariff) => ({
         scopeType: tariff.scopeType,
         targetSectorType: tariff.targetSectorType ?? null,

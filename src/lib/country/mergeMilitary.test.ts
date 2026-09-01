@@ -125,6 +125,36 @@ describe("mergeMilitary", () => {
     });
   });
 
+  it("keeps the survivor's reinforcement mode when the SURVIVOR is the winner", async () => {
+    db.collection("nationalManpower")
+      .findOne.mockResolvedValueOnce({ countryId: "DD", pool: 40_000, mode: "conscript" })
+      .mockResolvedValueOnce({ countryId: "DE", pool: 25_000, mode: "volunteer" });
+
+    await mergeMilitary(db as unknown as Db, { ...args, carryStance: false });
+
+    const [, update] = db.collectionMocks["nationalManpower"].updateOne.mock.calls[0];
+    // The pool is a QUANTITY and crosses either way; the mode is a rule, and the
+    // side that lost does not get to say how the winner feeds its army.
+    expect(update.$inc.pool).toBe(40_000);
+    expect(update.$set?.mode).toBeUndefined();
+  });
+
+  it("keeps the survivor's doctrine when the SURVIVOR is the winner", async () => {
+    db.collection("nationalDoctrine")
+      .findOne.mockResolvedValueOnce({ countryId: "DD", doctrine: "mass-mobilisation" })
+      .mockResolvedValueOnce({ countryId: "DE", doctrine: "manoeuvre" });
+
+    await mergeMilitary(db as unknown as Db, { ...args, carryStance: false });
+
+    // The survivor's doc STANDS and the absorbed one is dropped -- the reverse of
+    // the default, where the survivor's is the one deleted.
+    expect(db.collectionMocks["nationalDoctrine"].deleteOne).toHaveBeenCalledWith({
+      countryId: "DD",
+    });
+    const [filter] = db.collectionMocks["nationalDoctrine"].updateOne.mock.calls[0];
+    expect(filter).toEqual({ countryId: "DE" });
+  });
+
   it("the winner's doctrine replaces the survivor's", async () => {
     db.collection("nationalDoctrine")
       .findOne.mockResolvedValueOnce({ countryId: "DD", doctrine: "mass-mobilisation" })

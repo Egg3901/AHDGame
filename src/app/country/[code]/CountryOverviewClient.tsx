@@ -14,6 +14,7 @@ import {
   getCountryDisplayName,
   getHeadOfStateOfficeType,
   type CountryId,
+  type GovernmentType,
 } from "@/lib/constants/countries";
 import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import { useRuntimeCountryConfig } from "@/hooks/useRuntimeCountryConfig";
@@ -330,13 +331,29 @@ export default function CountryOverviewClient({
    * It is wrong for one that has — a reunified Germany read as "West Germany", a
    * "Parliamentary Republic", long after both had stopped being true.
    */
-  identity?: { name: string; governmentTypeLabel: string } | null;
+  identity?: {
+    name: string;
+    governmentTypeLabel: string;
+    /**
+     * The LIVE system, which decides which executive this page renders. The
+     * leadership hook above already resolves this at runtime; reading the
+     * compiled value here instead is how the two came to disagree.
+     */
+    governmentType?: GovernmentType;
+  } | null;
 }) {
   const config = COUNTRY_CONFIGS[countryId];
   const activePreset = useActivePreset();
   const name = identity?.name ?? getCountryDisplayName(countryId, activePreset);
   const governmentTypeLabel = identity?.governmentTypeLabel ?? config.governmentTypeLabel;
-  const isPresidential = config.governmentType === "presidential";
+  // RUNTIME, to agree with `useCountryLeadershipData`, which has always resolved
+  // the system at runtime. While this read the compiled config the two could
+  // disagree for a converted country: the hook fetched the head of state and prime
+  // minister of a one-party state, and the markup below asked for a `president`
+  // the hook had deliberately set to null -- rendering "Vacant" for an office that
+  // was filled, in a system the country no longer had.
+  const governmentType = identity?.governmentType ?? config.governmentType;
+  const isPresidential = governmentType === "presidential";
   // Whether this country HAS a head of state as an office at all. Distinct from
   // whether one is currently seated — the executive route returns null for both, and
   // conflating them is what produced a permanent false "Vacant".
@@ -508,7 +525,7 @@ export default function CountryOverviewClient({
                 of state was vacant when its ruling party plainly had a chair. */}
             {!isPresidential && (
               <>
-                {config.governmentType === "parliamentaryMonarchy" ? (
+                {governmentType === "parliamentaryMonarchy" ? (
                   <ImperialHeadOfState countryId={countryId} />
                 ) : hasHeadOfStateOffice ? (
                   <LeaderStatItem

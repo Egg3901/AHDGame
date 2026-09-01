@@ -26,20 +26,39 @@ import { REGION_SCOPED_COLLECTIONS } from "@/lib/referendum/transfer/regionScope
 import { REGION_PARTY_COLLECTIONS } from "@/lib/referendum/transfer/evacuateRegionPolitics";
 import { rescaleRegionDelegations } from "./apportionChamber";
 
+/** A unique index that constrains `field`, as the fuse needs to see it. */
+interface UniqueIndexOverField {
+  /** The indexed key names, in order. */
+  keys: string[];
+  /**
+   * The index's `partialFilterExpression`, or null when it constrains every row.
+   * A PARTIAL index only constrains rows matching this, so two rows sharing a key
+   * are only in conflict when BOTH match it.
+   */
+  partial: Record<string, unknown> | null;
+}
+
 /**
- * The UNIQUE indexes on `collection` that include `field`, as their key lists.
+ * The UNIQUE indexes on `collection` that include `field`.
  *
  * Fails OPEN — a collection that does not exist yet, or a driver that will not
  * report indexes, answers "none" and takes the ordinary re-point path. That is
  * what this did before the check existed, so an introspection problem cannot make
  * a merge worse than it already was.
  */
-async function uniqueIndexesOver(db: Db, collection: string, field: string): Promise<string[][]> {
+async function uniqueIndexesOver(
+  db: Db,
+  collection: string,
+  field: string
+): Promise<UniqueIndexOverField[]> {
   try {
     const indexes = await db.collection(collection).indexes();
     return indexes
       .filter((index) => index.unique === true && (index.key as Record<string, unknown>)?.[field])
-      .map((index) => Object.keys(index.key as Record<string, unknown>));
+      .map((index) => ({
+        keys: Object.keys(index.key as Record<string, unknown>),
+        partial: (index.partialFilterExpression as Record<string, unknown> | undefined) ?? null,
+      }));
   } catch {
     return [];
   }
@@ -54,6 +73,9 @@ async function uniqueIndexesOver(db: Db, collection: string, field: string): Pro
  * hypothetical — `stateResourceCapacity` is unique on `stateId` alone and
  * `unownedSectors` on `{stateId, sectorType}`, and both threw mid-merge on a live
  * reunification, after half a country had already moved.
+ *
+ * Only rows a unique index ACTUALLY constrains are considered: a partial index
+ * binds the rows matching its filter and no others.
  *
  * WHERE THE TWO ROWS COLLIDE, THE SURVIVOR'S STANDS and the absorbed region's is
  * dropped — the same answer the `idIsState` branch above already gives, for the
@@ -70,16 +92,27 @@ async function fuseRegionKeyedCollection(
   now: Date
 ): Promise<number> {
   const coll = db.collection<Record<string, unknown>>(collection);
-  for (const keys of await uniqueIndexesOver(db, collection, field)) {
+  for (const { keys, partial } of await uniqueIndexesOver(db, collection, field)) {
     const others = keys.filter((key) => key !== field);
-    const sourceRows = await coll.find({ [field]: fromRegionId }).toArray();
+    // A PARTIAL index constrains only the rows matching its filter, so only those
+    // can collide. Asking the server to evaluate the filter — rather than
+    // interpreting it here — is the only way to get the same answer the index
+    // gives for expressions like `{ status: "active", partyId: { $exists: true } }`.
+    //
+    // Without this the check deletes rows that were never in conflict:
+    // `statePartyCandidates` is unique on `{stateId, partyId, characterId}` only
+    // while `status` is "active", so a withdrawn candidacy sitting on the target
+    // key would take a LIVE one from the absorbed region with it.
+    const sourceRows = await coll.find({ [field]: fromRegionId, ...(partial ?? {}) }).toArray();
     for (const row of sourceRows) {
       // What this row would become once re-pointed. An explicit null matches a
       // missing field too, so a row that omits one of the key parts is compared
       // the same way the index compares it.
       const wouldBecome: Record<string, unknown> = { [field]: toRegionId };
       for (const key of others) wouldBecome[key] = row[key] ?? null;
-      if (await coll.findOne(wouldBecome)) {
+      // Filter first, key values second: an explicit equality on a key must not
+      // be overwritten by the filter's own condition on that same field.
+      if (await coll.findOne({ ...(partial ?? {}), ...wouldBecome })) {
         await coll.deleteOne({ _id: row._id } as Record<string, unknown>);
       }
     }
