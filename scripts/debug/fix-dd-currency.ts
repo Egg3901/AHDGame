@@ -60,6 +60,12 @@ async function main() {
   const db = client.db(process.env.MONGODB_DB_LIVE || undefined);
 
   const gs = await db.collection("gameState").findOne({ _id: "current" as never });
+  // Refuse mid-turn, as the national-corp heal does: the turn phases read and
+  // rewrite these same documents, so a relabel landing between two phases can be
+  // half-overwritten by the rest of the tick.
+  if (APPLY && gs?.processingStartedAt) {
+    throw new Error(`turn ${gs.currentTurn} is PROCESSING — refusing to write mid-turn`);
+  }
   console.log(
     `${APPLY ? "APPLY" : "DRY RUN"} — turn ${gs?.currentTurn} processing=${gs?.processingStartedAt ?? "-"}\n`
   );
