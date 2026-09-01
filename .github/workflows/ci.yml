@@ -25,10 +25,7 @@ jobs:
       - name: Lint
         run: npm run lint
       - name: Architecture audit
-        # Advisory for now: 3 known pre-existing blockers. Flip to a gating step
-        # (remove continue-on-error) once those are cleared.
         run: npm run architecture:audit
-        continue-on-error: true
 
   format:
     runs-on: ubuntu-latest
