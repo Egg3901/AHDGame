@@ -253,3 +253,294 @@ describe("GET /api/crises/active-for-character — aid nodes with aid bills off"
     expect(body.crises[0]!.canInteract).toBe(true);
   });
 });
+
+/**
+ * Players reported active recessions they never saw. `shouldShowCrisisOnActionsPage`
+ * dropped any crisis whose prompt the character could not take, so a Recession —
+ * whose only node is gated on `headOfState` — was invisible to everyone in the
+ * country but its leader, and invisible to the leader too once they answered,
+ * while it went on draining GDP, employment, confidence and approval for the rest
+ * of its run. It must stay on the page as an effects-only card.
+ */
+describe("GET /api/crises/active-for-character — an active crisis the character cannot act on", () => {
+  const STIMULUS_NODE = {
+    nodeId: "stimulus",
+    type: "choice" as const,
+    title: "Recession response",
+    description: "The economy is in recession. What is your fiscal response?",
+    requiredRoles: ["headOfState"],
+    timeLimitMinutes: null,
+    options: [
+      { optionId: "stimulus_austerity", label: "Austerity", description: "Cut.", effects: [] },
+    ],
+    optionsByRole: undefined,
+  };
+
+  const RECESSION_EFFECT = {
+    effectType: "tick" as const,
+    targetType: "metric" as const,
+    metricCategory: "economic",
+    metricField: "gdpGrowth",
+    sectorType: null,
+    strategyId: null,
+    value: -0.66,
+    label: "GDP contraction from recession",
+  };
+
+  function stubRecession(interactionOverrides: Record<string, unknown> = {}) {
+    db.collectionMocks["crises"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          ...makeCrisis(),
+          name: "Recession",
+          scope: "country",
+          countryIds: ["US"],
+          effects: [RECESSION_EFFECT],
+          globalResponse: undefined,
+          interactionDefinition: { decisionTree: [STIMULUS_NODE] },
+        },
+      ]),
+    });
+    db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue({
+      ...makeInteraction(),
+      decisionTree: [STIMULUS_NODE],
+      currentNodeId: "stimulus",
+      ...interactionOverrides,
+    });
+  }
+
+  /** Re-auth as an ordinary backbencher who holds no executive role. */
+  async function authAsBackbencher() {
+    ["governmentFormations", "electedOfficials"].forEach((c) => db.collection(c));
+    db.collectionMocks["governmentFormations"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["electedOfficials"]!.findOne.mockResolvedValue(null);
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: {
+        userId: new ObjectId().toString(),
+        username: "backbencher",
+        email: "backbencher@example.com",
+        role: "user",
+        isAdmin: false,
+        hasCharacter: true,
+        character: {
+          _id: characterId,
+          name: "Test Backbencher",
+          countryId: "US",
+          homeState: "US-NY",
+          currentOffice: { type: "houseRep" },
+        },
+      },
+    } as unknown as Awaited<ReturnType<typeof requireAuthWithCharacter>>);
+  }
+
+  it("shows the crisis to a player who cannot answer it, without the prompt", async () => {
+    stubRecession();
+    await authAsBackbencher();
+
+    const res = await get();
+    const body = (await res.json()) as {
+      crises: Array<{
+        crisis: { name: string; effects: unknown[] };
+        currentNode: unknown;
+        canInteract: boolean;
+      }>;
+    };
+
+    expect(body.crises).toHaveLength(1);
+    expect(body.crises[0]!.crisis.name).toBe("Recession");
+    expect(body.crises[0]!.crisis.effects).toHaveLength(1);
+    // The decision is not theirs, so it is stripped — but they still see the hit.
+    expect(body.crises[0]!.canInteract).toBe(false);
+    expect(body.crises[0]!.currentNode).toBeNull();
+  });
+
+  it("keeps the crisis on the leader's page after they have answered it", async () => {
+    stubRecession({ resolvedAt: new Date(), currentNodeId: null });
+
+    const res = await get();
+    const body = (await res.json()) as {
+      crises: Array<{ crisis: { name: string }; canInteract: boolean }>;
+    };
+
+    expect(body.crises).toHaveLength(1);
+    expect(body.crises[0]!.crisis.name).toBe("Recession");
+    expect(body.crises[0]!.canInteract).toBe(false);
+  });
+
+  it("still offers the prompt to the leader while it is unanswered", async () => {
+    stubRecession();
+
+    const res = await get();
+    const body = (await res.json()) as {
+      crises: Array<{ canInteract: boolean; currentNode: { nodeId: string } | null }>;
+    };
+
+    expect(body.crises).toHaveLength(1);
+    expect(body.crises[0]!.canInteract).toBe(true);
+    expect(body.crises[0]!.currentNode?.nodeId).toBe("stimulus");
+  });
+});
+
+/**
+ * The feed carries the same interaction document the crisis page reads, so it
+ * has to redact the same things — otherwise the Actions poll is the cheaper way
+ * to read a ledger the crisis page deliberately hides — and it has to put a
+ * decision the character can actually take above the ambient cards that now
+ * accompany it.
+ */
+describe("GET /api/crises/active-for-character — redaction and ordering", () => {
+  const OTHERS_COVERT = {
+    countryId: "RU",
+    characterId: new ObjectId(),
+    characterName: "Other Leader",
+    nodeId: "response",
+    optionId: "allied_support",
+    optionLabel: "Support the alliance line",
+    visibility: "covert" as const,
+    respondedAt: new Date(),
+  };
+
+  it("redacts another government's covert choice", async () => {
+    db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue({
+      ...makeInteraction(),
+      leaderResponses: [OTHERS_COVERT],
+    });
+
+    const res = await get();
+    const body = (await res.json()) as {
+      crises: Array<{
+        interaction: { leaderResponses: Array<{ optionId: string; optionLabel: string }> } | null;
+      }>;
+    };
+
+    const responses = body.crises[0]!.interaction!.leaderResponses;
+    expect(responses[0]!.optionId).toBe("undisclosed");
+    expect(responses[0]!.optionLabel).toBe("Undisclosed action");
+  });
+
+  it("sends no response ledger at all once the leader has answered", async () => {
+    // Having answered, they can no longer act, so the entry survives only as an
+    // ambient card and the whole interaction is stripped. The full ledger, with
+    // their own covert choice legible, stays on the crisis page.
+    db.collectionMocks["crises"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          ...makeCrisis(),
+          effects: [{ effectType: "tick", targetType: "metric", value: -0.2, label: "drag" }],
+        },
+      ]),
+    });
+    db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue({
+      ...makeInteraction(),
+      leaderResponses: [{ ...OTHERS_COVERT, countryId: "US" }],
+    });
+
+    const res = await get();
+    const body = (await res.json()) as {
+      crises: Array<{
+        crisis: { interactionDefinition?: unknown };
+        interaction: unknown;
+        canInteract: boolean;
+        currentNode: unknown;
+      }>;
+    };
+
+    expect(body.crises).toHaveLength(1);
+    expect(body.crises[0]!.canInteract).toBe(false);
+    expect(body.crises[0]!.interaction).toBeNull();
+    expect(body.crises[0]!.currentNode).toBeNull();
+    expect(body.crises[0]!.crisis.interactionDefinition).toBeUndefined();
+  });
+
+  it("puts the decision the leader can take above the ambient cards", async () => {
+    const ambientId = new ObjectId();
+    db.collectionMocks["crises"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        // Ambient, and newer — it would sort first on recency alone.
+        {
+          ...makeCrisis(),
+          _id: ambientId,
+          name: "Trade War",
+          scope: "global",
+          startTurn: 99,
+          effects: [{ effectType: "tick", targetType: "metric", value: -0.2, label: "drag" }],
+          globalResponse: undefined,
+          interactionDefinition: undefined,
+        },
+        { ...makeCrisis(), startTurn: 1 },
+      ]),
+    });
+    db.collectionMocks["crisisInteractions"]!.findOne.mockImplementation(
+      async (filter: { crisisId: ObjectId }) =>
+        filter.crisisId.equals(crisisId) ? makeInteraction() : null
+    );
+
+    const res = await get();
+    const body = (await res.json()) as {
+      crises: Array<{ crisis: { name: string }; canInteract: boolean }>;
+    };
+
+    expect(body.crises).toHaveLength(2);
+    expect(body.crises[0]!.canInteract).toBe(true);
+    expect(body.crises[0]!.crisis.name).toBe("Berlin Crisis");
+    expect(body.crises[1]!.crisis.name).toBe("Trade War");
+  });
+});
+
+describe("GET /api/crises/active-for-character — a character with no country", () => {
+  it("sends no response ledger at all", async () => {
+    db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue({
+      ...makeInteraction(),
+      leaderResponses: [
+        {
+          countryId: "RU",
+          characterId: new ObjectId(),
+          characterName: "Other Leader",
+          nodeId: "response",
+          optionId: "allied_support",
+          optionLabel: "Support the alliance line",
+          visibility: "covert" as const,
+          respondedAt: new Date(),
+        },
+      ],
+    });
+    db.collectionMocks["crises"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          ...makeCrisis(),
+          globalResponse: undefined,
+          effects: [{ effectType: "tick", targetType: "metric", value: -0.2, label: "drag" }],
+        },
+      ]),
+    });
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: {
+        userId: new ObjectId().toString(),
+        username: "stateless",
+        email: "stateless@example.com",
+        role: "user",
+        isAdmin: false,
+        hasCharacter: true,
+        character: {
+          _id: characterId,
+          name: "Stateless",
+          countryId: undefined,
+          homeState: undefined,
+          currentOffice: { type: "president" },
+        },
+      },
+    } as unknown as Awaited<ReturnType<typeof requireAuthWithCharacter>>);
+
+    const res = await get();
+    const body = (await res.json()) as {
+      crises: Array<{ interaction: { leaderResponses: unknown[] } | null }>;
+    };
+
+    expect(body.crises).toHaveLength(1);
+    expect(body.crises[0]!.interaction?.leaderResponses ?? []).toEqual([]);
+  });
+});

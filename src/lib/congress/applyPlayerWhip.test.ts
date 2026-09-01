@@ -7,6 +7,7 @@ import {
   applyPlayerWhipToLeadership,
   applyPlayerWhipToGovernmentVote,
   applyPlayerWhipToCabinet,
+  applyPlayerWhipToVacateMotion,
 } from "./applyPlayerWhip";
 import type { Bill, SpeakerNomination } from "@/lib/db/types";
 
@@ -507,5 +508,76 @@ describe("applyPlayerWhipToBill - concurrent (active_both) bills", () => {
     const inc = (update as { $inc?: Record<string, number> }).$inc ?? {};
     expect(inc.votesFor).toBe(1);
     expect(inc.otherChamberVotesFor).toBe(1);
+  });
+});
+
+describe("applyPlayerWhipToVacateMotion", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    db = createMockDb();
+  });
+
+  const openMotion = (votes: Record<string, string> = {}) => ({
+    _id: "current",
+    status: "voting",
+    targetSpeakerName: "Sitting Speaker",
+    startedAt: new Date("2026-09-01T00:00:00Z"),
+    votes,
+  });
+
+  it("writes the direction verbatim and snapshots the prior ballot", async () => {
+    const c1 = new ObjectId();
+    const c2 = new ObjectId();
+    db.collection("speakerVacateMotions").findOne.mockResolvedValueOnce(
+      openMotion({ [c1.toString()]: "against" })
+    );
+
+    const result = await applyPlayerWhipToVacateMotion(db as unknown as Db, "for", [c1, c2]);
+
+    expect(result).toEqual({ overridden: 2, alreadyAligned: 0 });
+    const [filter, update] = db.collectionMocks["speakerVacateMotions"]!.updateOne.mock
+      .calls[0] as [unknown, { $set: Record<string, unknown> }];
+    expect(filter).toEqual({ _id: "current", status: "voting" });
+    expect(update.$set[`votes.${c1.toString()}`]).toBe("for");
+    expect(update.$set[`votes.${c2.toString()}`]).toBe("for");
+    expect(update.$set[`whippedFromVote.${c1.toString()}`]).toBe("against");
+    expect(update.$set[`whippedFromVote.${c2.toString()}`]).toBe("unvoted");
+  });
+
+  it("counts an already-aligned member without a tally field in sight", async () => {
+    const c1 = new ObjectId();
+    db.collection("speakerVacateMotions").findOne.mockResolvedValueOnce(
+      openMotion({ [c1.toString()]: "for" })
+    );
+
+    const result = await applyPlayerWhipToVacateMotion(db as unknown as Db, "for", [c1]);
+
+    expect(result).toEqual({ overridden: 0, alreadyAligned: 1 });
+    const [, update] = db.collectionMocks["speakerVacateMotions"]!.updateOne.mock.calls[0] as [
+      unknown,
+      Record<string, unknown>,
+    ];
+    // The motion caches no counters, so there must be no $inc at all.
+    expect(update.$inc).toBeUndefined();
+  });
+
+  it("no-ops when the motion is already resolved", async () => {
+    db.collection("speakerVacateMotions").findOne.mockResolvedValueOnce({
+      ...openMotion(),
+      status: "passed",
+    });
+
+    const result = await applyPlayerWhipToVacateMotion(db as unknown as Db, "for", [
+      new ObjectId(),
+    ]);
+
+    expect(result).toEqual({ overridden: 0, alreadyAligned: 0 });
+    expect(db.collectionMocks["speakerVacateMotions"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("no-ops when there are no eligible characters", async () => {
+    const result = await applyPlayerWhipToVacateMotion(db as unknown as Db, "for", []);
+    expect(result).toEqual({ overridden: 0, alreadyAligned: 0 });
   });
 });

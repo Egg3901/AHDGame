@@ -25,6 +25,7 @@ import { reserveSequentialIds, realignPartyCountersToExisting } from "@/lib/db/s
 import { resolveMergeFxScale } from "./mergeFxScale";
 import {
   PARTY_REF_COLLECTIONS,
+  PARTY_KEYED_MAP_COLLECTIONS,
   PARTY_OBJECTID_COLLECTIONS,
   NON_PARTY_SENTINELS,
   buildPartyIdMap,
@@ -139,15 +140,47 @@ export async function mergePartiesIntoCountry(
   // the old numeric value is never touched. That filter is the whole safety
   // property of this function.
   for (const ref of PARTY_REF_COLLECTIONS) {
+    // `countryKey` because not every collection carries a `countryId`: a
+    // one-doc-per-country row is keyed by the country id itself, and filtering
+    // such a collection on `countryId` matches nothing and reports no error.
+    const countryKey = ref.countryKey ?? "countryId";
     for (const [oldId, newId] of Object.entries(partyIdMap)) {
       if (NON_PARTY_SENTINELS.has(oldId)) continue;
       const res = await db
         .collection(ref.collection)
         .updateMany(
-          { countryId: fromCountryId, [ref.field]: oldId },
+          { [countryKey]: fromCountryId, [ref.field]: oldId },
           { $set: { [ref.field]: newId, updatedAt: now } }
         );
       documentsRemapped += res?.modifiedCount ?? 0;
+    }
+  }
+
+  // Maps whose KEYS are party ids. `$set` on a path rewrites a value and cannot
+  // rename a key, so these are read, rebuilt and written back whole — and two old
+  // keys landing on one new key SUM rather than one of them quietly winning.
+  for (const ref of PARTY_KEYED_MAP_COLLECTIONS) {
+    const countryKey = ref.countryKey ?? "countryId";
+    const docs = await db
+      .collection(ref.collection)
+      .find({ [countryKey]: fromCountryId } as Record<string, unknown>)
+      .toArray();
+    for (const doc of docs) {
+      const current = (doc as Record<string, unknown>)[ref.field] as
+        Record<string, number> | undefined;
+      if (!current) continue;
+      const rebuilt: Record<string, number> = {};
+      let changed = false;
+      for (const [key, value] of Object.entries(current)) {
+        const mapped = NON_PARTY_SENTINELS.has(key) ? key : (partyIdMap[key] ?? key);
+        if (mapped !== key) changed = true;
+        rebuilt[mapped] = (rebuilt[mapped] ?? 0) + value;
+      }
+      if (!changed) continue;
+      await db.collection(ref.collection).updateOne({ _id: doc._id } as Record<string, unknown>, {
+        $set: { [ref.field]: rebuilt, updatedAt: now },
+      });
+      documentsRemapped += 1;
     }
   }
 

@@ -381,6 +381,38 @@ export async function cleanupPartyPositionsOnSwitch(
     heldLeadershipRoles.map((doc) => vacateCongressLeadershipRole(db, doc.role, now))
   );
 
+  // Vacating alone left the chair empty until an admin noticed — the Speaker has
+  // refilled itself since `vacateSpeakerIfLostSeat`, but Pro Tempore and the
+  // Majority Leader/Whip seats had no equivalent. Open their 24-turn race here,
+  // at the vacancy transition. Lazy import keeps the congress leadership module
+  // (and the two chamber compositions it reads) out of every party switch that
+  // touches no leadership at all.
+  if (heldLeadershipRoles.length > 0) {
+    try {
+      const { openElectionsForVacatedMajorityRoles, buildContextsForRoles } =
+        await import("@/lib/congress/leadership/reconcilePartyEligibility");
+      // Names come from the docs read BEFORE the vacate above, so the feed
+      // notice can still say who left rather than "Vacant".
+      const vacatedRoles = heldLeadershipRoles.map((doc) => ({
+        leaderRole: doc.role,
+        formerHolderName: doc.characterName,
+      }));
+      const contexts = await buildContextsForRoles(db, vacatedRoles);
+      await openElectionsForVacatedMajorityRoles(db, vacatedRoles, contexts, now);
+    } catch (err) {
+      // A failure to open the follow-up election must not roll back the party
+      // switch itself, which has already been applied by the caller.
+      console.error(
+        JSON.stringify({
+          error: "leadership_election_open_failed",
+          operation: "cleanup_party_positions_on_switch",
+          characterId: characterId.toString(),
+          details: err instanceof Error ? err.message : "Unknown error",
+        })
+      );
+    }
+  }
+
   // 7. Withdraw player endorsements that now violate primary-phase party
   // alignment (ticket #1179). A member who endorsed their party's presidential
   // candidate must not keep boosting it — standings count and per-turn

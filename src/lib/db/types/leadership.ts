@@ -164,6 +164,12 @@ export interface SpeakerVacateMotion {
   endsOnTurn?: number;
   /** One vote per seated House member: "for" = vacate, "against" = keep. */
   votes: Record<string, "for" | "against">;
+  /**
+   * Pre-whip ballot of each player a hard Player Whip overwrote, keyed by
+   * character id ("for" | "against" | "unvoted"), so the whipped member can
+   * revert. Mirrors the same field on bills and impeachments.
+   */
+  whippedFromVote?: WhippedFromVoteMap;
   /** Set when the motion resolves. */
   resolvedAt?: Date;
   updatedAt: Date;

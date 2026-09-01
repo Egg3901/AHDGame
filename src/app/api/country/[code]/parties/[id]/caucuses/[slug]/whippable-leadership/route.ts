@@ -5,12 +5,21 @@ import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { findCaucusBySlug, listCaucusMemberships } from "@/lib/db/caucusLookup";
 import { getCountryConfig, COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import type { BillWhip, CabinetNomination, ElectedOfficial } from "@/lib/db/types";
+import type {
+  BillWhip,
+  CabinetNomination,
+  ElectedOfficial,
+  SpeakerVacateMotion,
+} from "@/lib/db/types";
+import { isLeadershipElectionClosed } from "@/lib/congress/leadershipElections";
+import { impeachmentStageChamberKey } from "@/lib/impeachment/impeachmentTally";
+import type { Impeachment } from "@/lib/db/types/impeachment";
 import {
   getPMAppointmentVotesCollection,
   getNoConfidenceVotesCollection,
 } from "@/lib/db/collections/governmentFormation";
 import { getCabinetWhipChamber, getConfidenceWhipChamber } from "@/lib/partyWhips/constraints";
+import { officialsCountryScope } from "@/lib/db/electedOfficialScope";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 import { isVoteClosed } from "@/lib/turn/parliamentaryGovernment";
@@ -123,9 +132,19 @@ export async function GET(_request: Request, { params }: RouteParams) {
       .find({
         party: partyIdStr,
         officeType: { $in: officeTypes },
-        $or: [
-          ...(caucusCharacterIds.length > 0 ? [{ characterId: { $in: caucusCharacterIds } }] : []),
-          ...(caucusNppIds.length > 0 ? [{ nppId: { $in: caucusNppIds } }] : []),
+        // Two independent disjunctions: the country scope (bug #0699) and the
+        // caucus membership match. They cannot both be a top-level $or, so
+        // they are joined under $and.
+        $and: [
+          officialsCountryScope(countryId),
+          {
+            $or: [
+              ...(caucusCharacterIds.length > 0
+                ? [{ characterId: { $in: caucusCharacterIds } }]
+                : []),
+              ...(caucusNppIds.length > 0 ? [{ nppId: { $in: caucusNppIds } }] : []),
+            ],
+          },
         ],
       })
       .toArray();
@@ -149,7 +168,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
       .collection<BillWhip>("billWhips")
       .find({
         targetType: {
-          $in: ["pmAppointmentVote", "noConfidenceVote", "cabinetNomination"],
+          $in: [
+            "pmAppointmentVote",
+            "noConfidenceVote",
+            "cabinetNomination",
+            "speakerVacateMotion",
+            "impeachmentVote",
+          ],
         },
         partyId: partyIdStr,
         issuedBy: "caucus",
@@ -166,9 +191,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
       target.get(key)!.push(whip);
     }
 
-    const buildSummaries = (key: string) => {
-      const npp = nppWhipsByTarget.get(key) ?? [];
-      const character = charWhipsByTarget.get(key) ?? [];
+    // `since` scopes a singleton target (the motion to vacate reuses the id
+    // "current") to the instance currently open, so whips from a previous
+    // motion do not freeze this one's attempt counter (ticket #959).
+    const buildSummaries = (key: string, since?: Date) => {
+      const inWindow = (whip: BillWhip) => !since || whip.createdAt >= since;
+      const npp = (nppWhipsByTarget.get(key) ?? []).filter(inWindow);
+      const character = (charWhipsByTarget.get(key) ?? []).filter(inWindow);
       const nppSummary: WhipSummary = {
         existingWhips: npp.map((whip) => ({
           candidacyId: whip.candidacyId?.toString(),
@@ -185,6 +214,84 @@ export async function GET(_request: Request, { params }: RouteParams) {
       };
       return { nppSummary, playerSummary };
     };
+
+    // The motion to vacate the chair is a US House singleton. Resolution is
+    // lazy, so gate on the game clock as well as the status.
+    if (hasLowerMembers && countryId === COUNTRY_CONFIGS.US.id) {
+      const motion = await db
+        .collection<SpeakerVacateMotion>("speakerVacateMotions")
+        .findOne({ _id: "current", status: "voting" });
+      if (motion && !isLeadershipElectionClosed(motion, currentTurnForLeadership, now)) {
+        const whipKey = `speakerVacateMotion_current_${lowerKey}`;
+        const { nppSummary, playerSummary } = buildSummaries(whipKey, motion.startedAt);
+        result[lowerKey].push({
+          id: "current",
+          type: "speakerVacateMotion",
+          chamber: lowerKey,
+          endsAt: motion.endsAt,
+          candidacies: [
+            {
+              id: "current",
+              nomineeName: `Motion to vacate ${motion.targetSpeakerName}`,
+              votesFor: 0,
+            },
+          ],
+          nppWhip: nppSummary,
+          playerWhip: playerSummary,
+          existingWhips: nppSummary.existingWhips,
+          canWhip: nppSummary.canWhip,
+        });
+      }
+    }
+
+    // Open presidential impeachments, on whichever chamber sits at the case's
+    // current stage. Governor cases belong to the state party's panel.
+    const openImpeachments = await db
+      .collection<Impeachment>("impeachments")
+      .find({ countryId, stage: { $in: ["house", "senate"] }, targetOffice: { $ne: "governor" } })
+      .toArray();
+
+    for (const impeachment of openImpeachments) {
+      const stageChamber = impeachmentStageChamberKey(impeachment);
+      if (!stageChamber || !result[stageChamber]) continue;
+
+      const stageEndsOnTurn =
+        impeachment.stage === "house"
+          ? impeachment.houseVotingEndsOnTurn
+          : impeachment.senateVotingEndsOnTurn;
+      if (stageEndsOnTurn != null && currentTurnForLeadership > stageEndsOnTurn) continue;
+
+      const seated = stageChamber === lowerKey ? hasLowerMembers : hasUpperMembers;
+      if (!seated) continue;
+
+      const whipKey = `impeachmentVote_${impeachment._id}_${stageChamber}`;
+      const { nppSummary, playerSummary } = buildSummaries(whipKey);
+      result[stageChamber].push({
+        id: impeachment._id.toString(),
+        type: "impeachmentVote",
+        chamber: stageChamber,
+        // The case stores only a closing TURN, and turns are hourly, so project
+        // it forward from the game clock rather than reporting "now".
+        endsAt:
+          stageEndsOnTurn != null
+            ? new Date(now.getTime() + (stageEndsOnTurn - currentTurnForLeadership) * 3_600_000)
+            : now,
+        candidacies: [
+          {
+            id: impeachment._id.toString(),
+            nomineeName:
+              impeachment.stage === "house"
+                ? `Impeachment of ${impeachment.targetName}`
+                : `Trial of ${impeachment.targetName}`,
+            votesFor: 0,
+          },
+        ],
+        nppWhip: nppSummary,
+        playerWhip: playerSummary,
+        existingWhips: nppSummary.existingWhips,
+        canWhip: nppSummary.canWhip,
+      });
+    }
 
     if (hasLowerMembers) {
       const [activePMVotes, activeNCVotes] = await Promise.all([

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { CountryId } from "@/lib/constants/countries";
+import { WhippedBadge } from "@/components/bills/WhippedBadge";
 
 type Stage = "house" | "senate" | "convicted" | "acquitted" | "dismissed" | "cancelled";
 
@@ -20,6 +21,11 @@ interface ImpeachmentDoc {
   senateVotingEndsOnTurn: number | null;
   /** All-seats bar for the open stage: chamber size + ayes needed to pass. */
   chamber?: { seats: number; needed: number } | null;
+  /**
+   * The viewer's own pre-whip ballot when a hard Player Whip force-set their
+   * vote on this case ("for" | "against" | "abstain" | "unvoted"), else null.
+   */
+  myWhippedFromOriginal?: string | null;
 }
 
 type Office = "president" | "governor";
@@ -209,6 +215,27 @@ export default function ImpeachmentPanel({
               </span>{" "}
               needed to {active.stage === "house" ? "impeach" : "convict"}. Currently{" "}
               {votes?.for ?? 0} aye.
+            </div>
+          )}
+          {active.myWhippedFromOriginal && (
+            <div>
+              <WhippedBadge
+                originalVote={active.myWhippedFromOriginal}
+                originalLabel={
+                  active.myWhippedFromOriginal === "for"
+                    ? "AYE"
+                    : active.myWhippedFromOriginal === "against"
+                      ? "NAY"
+                      : active.myWhippedFromOriginal === "abstain"
+                        ? "ABSTAIN"
+                        : "no prior vote"
+                }
+                onRevert={async (v) => {
+                  if (v === "for") await vote("aye");
+                  else if (v === "against") await vote("nay");
+                  else if (v === "abstain") await vote("abstain");
+                }}
+              />
             </div>
           )}
           <div className="flex gap-2">

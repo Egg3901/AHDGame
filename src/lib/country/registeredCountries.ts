@@ -28,6 +28,22 @@ export async function getRegisteredCountryIds(db: Db): Promise<CountryId[]> {
 }
 
 /**
+ * The live countries, as a set, for filtering a collection scan.
+ *
+ * A DISSOLVED COUNTRY KEEPS ITS BUDGET DOC — for history, for the wiki, and so a
+ * merge has somewhere to stamp `mergedInto`. Every fiscal phase that scans
+ * `federalBudget.find({})` therefore has to exclude it explicitly, or an absorbed
+ * country goes on running a full simulation for ever: tax bases growing, treasury
+ * accruing, reporting a national economy it has neither the regions nor the
+ * population to earn. A reunified Germany left its predecessor shell computing
+ * the same GDP and tax bases as the live unified state, and a treasury the merge
+ * had zeroed climbed back into the billions.
+ */
+export async function getRegisteredCountryIdSet(db: Db): Promise<Set<string>> {
+  return new Set<string>(await getRegisteredCountryIds(db));
+}
+
+/**
  * Mark a latent country live: idempotent upsert of an active+enabled row. Called
  * by the SP2d secession actuation (and admin tools). Surfacing is immediate —
  * getRegisteredCountryIds + the access layer both read this row at runtime.
