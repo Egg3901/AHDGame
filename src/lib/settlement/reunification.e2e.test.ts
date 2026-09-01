@@ -349,19 +349,28 @@ describe("reunification pipeline, end to end", () => {
     expect(deWrite).toBeUndefined();
   });
 
-  it("deletes the absorbed government formation row after carrying its head", async () => {
+  it("deletes the absorbed government formation row and stands its head down", async () => {
     const pm = new ObjectId();
-    db.collection("governmentFormations").findOne.mockResolvedValue({
-      _id: "DE",
-      pmCharacterId: pm,
-    });
+    db.collection("governmentFormations").findOne.mockImplementation(async (q: { _id: string }) =>
+      q._id === "DE" ? { _id: "DE", pmCharacterId: pm } : null
+    );
     const { actuateSettlementOutcome } = await import("./actuate");
     await actuateSettlementOutcome(db as unknown as Db, crisis(), 470);
 
-    const carried = db.collectionMocks["governmentFormations"].updateOne.mock.calls.find(
-      (c) => c[0]._id === "DD"
+    // Nothing is carried: the survivor is the WINNER and its government is
+    // already seated. The losing formation row goes, and its head -- whose
+    // `currentOffice` is stored, not derived -- stops reading as chancellor of a
+    // country that no longer exists.
+    const seated = db.collectionMocks["governmentFormations"].updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.pmCharacterId !== undefined
     );
-    expect(String(carried?.[1].$set.pmCharacterId)).toBe(String(pm));
+    expect(seated).toBeUndefined();
+
+    const stoodDown = db.collectionMocks["characters"].updateOne.mock.calls.find(
+      (c) => String(c[0]?._id) === String(pm)
+    );
+    expect(stoodDown?.[1].$set.currentOffice).toBeNull();
+
     expect(db.collectionMocks["governmentFormations"].deleteOne).toHaveBeenCalledWith({
       _id: "DE",
     });

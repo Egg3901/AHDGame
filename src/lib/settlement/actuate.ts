@@ -49,13 +49,12 @@ import { mergeEconomicRegime } from "@/lib/country/mergeEconomicRegime";
 import { rescopeLegislationCatalogue } from "@/lib/country/rescopeLegislationCatalogue";
 import { installOnePartyState } from "@/lib/onePartyState/installOnePartyState";
 import { remapOffice } from "@/lib/country/dissolvingOfficeRemap";
-import { remapCabinetPosition } from "@/lib/country/dissolvingCabinetRemap";
 import { getSettlementCrisesCollection } from "@/lib/db/collections";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
 import { mergeCountry } from "@/lib/country/mergeCountry";
 import { getCountryState, updateCountryState } from "@/lib/countryState";
-import { getExecutiveOfficeKey } from "@/lib/constants/countries";
-import { carryLeaderStateOnMerge } from "@/lib/turn/rulingPartyConfidence";
+import { adjustLeaderConfidence, REUNIFICATION_BUMP } from "@/lib/turn/rulingPartyConfidence";
+import { getCountryLeaderStatesCollection } from "@/lib/db/collections/countryLeaderState";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import type { GameState } from "@/lib/db/types/gameState";
 import type { CountryGameState } from "@/lib/db/types/gameState";
@@ -386,36 +385,35 @@ interface GovernmentFormationHead {
 }
 
 /**
- * Point one office holder's stored `currentOffice` at the surviving country's
- * executive key.
+ * Credit the reunification to the leader who delivered it.
  *
- * TWO WRITES, because `$set` on a dotted path THROWS when the parent is null:
- * "Cannot create field 'type' in element {currentOffice: null}". A carried head
- * of government reaches this with a null `currentOffice` whenever their only
- * office was a cabinet portfolio the remap retired a few lines earlier — the
- * clear runs first — and a throw there would abort the merge half-done, after
- * the cooldown has already been claimed and cannot retry.
+ * The winner's leader already holds their own `countryLeaderStates` record under
+ * the surviving country, with their real tenure on it, so nothing has to move —
+ * this is the bump, not a carry. It reads the sitting head of government off the
+ * formation row rather than taking one as an argument, because the point is the
+ * person actually holding the office after everything above has run.
  *
- * The object case re-points `.type` alone, so `.state` and anything else on the
- * sub-document survive. The null case writes the whole field, because there is
- * nothing there to merge into.
+ * A no-op for an NPP leader: the record is character-keyed and an NPP holds none.
+ * Best-effort, like the other credit paths — a settlement that has already moved
+ * a country's borders must not fail over a confidence write.
  */
-async function takeExecutiveOffice(
+async function creditReunificationToLeader(
   db: Db,
-  collection: "characters" | "npps",
-  holderId: ObjectId,
-  execKey: string,
-  now: Date
+  survivor: CountryId,
+  currentTurn: number
 ): Promise<void> {
-  const coll = db.collection(collection);
-  await coll.updateOne(
-    { _id: holderId, currentOffice: { $type: "object" } },
-    { $set: { "currentOffice.type": execKey, updatedAt: now } }
-  );
-  await coll.updateOne(
-    { _id: holderId, currentOffice: { $not: { $type: "object" } } },
-    { $set: { currentOffice: { type: execKey }, updatedAt: now } }
-  );
+  const gov = await db
+    .collection<GovernmentFormationHead>("governmentFormations")
+    .findOne({ _id: survivor });
+  if (!gov?.pmCharacterId) return;
+  await adjustLeaderConfidence(
+    db,
+    survivor,
+    gov.pmCharacterId,
+    REUNIFICATION_BUMP,
+    "Confidence gained from reunification",
+    currentTurn
+  ).catch((err) => console.error(`${survivor} reunification confidence credit failed:`, err));
 }
 
 /**
@@ -517,229 +515,88 @@ async function retireNationalRemnants(
 
   // THE WINNER'S CABINET GOVERNS.
   //
-  // The merge runs winner-into-shell, so the absorbed state's council is the
-  // council of the unified state. Portfolios cross through
-  // `dissolvingCabinetRemap` — the two constitutions do not share a vocabulary
-  // (East Germany seats a `minister_of_defence`, Germany a `defense_minister`),
-  // and the per-pair table is the same shape `dissolvingOfficeRemap` already
-  // uses for elected offices. A portfolio with no counterpart retires with the
-  // state that had it.
+  // THE LOSING GOVERNMENT FALLS. The winner is the shell, so its council is
+  // already seated and needs nothing done to it; what has to happen is that the
+  // ABSORBED state's ministers stop being ministers.
   //
-  // The SURVIVOR's own ministers go first, and unconditionally. Leaving them
-  // would seat the defeated side's cabinet beside the winner's — and in the live
-  // German case those are NPP ministers of parties this settlement is about to
-  // ban, holding portfolios the carried ministers are being given.
+  // The executive does not merge, and this is the one place where that is a
+  // decision rather than a mechanic. A unified CHAMBER holds both sides' benches
+  // — the seats carried above are real seats that real elections filled — but a
+  // cabinet is the government of the day, and the settlement is precisely that
+  // the losing side's government ends. Carrying its ministers into portfolios
+  // beside the winner's would seat the defeated administration in the state that
+  // defeated it.
   //
-  // `cabinetMembers.party` needs no remap here: it is in
-  // `PARTY_REF_COLLECTIONS`, so `mergePartiesIntoCountry` renumbered it in step
-  // 2, before any of this ran.
-  //
-  // ⚠️ SCOPED OFF THE CARRIED ROWS. Actuation is resumable, so this can run a
-  // second time — and by then the absorbed ministers ARE the survivor's. Deleting
-  // every row under the survivor would throw the winning cabinet away on the
-  // resume that was meant to finish seating it. `mergedFrom` is the stamp that
-  // tells them apart; `$ne` also matches rows with no stamp at all, which is
-  // exactly the survivor's own.
-  const notCarried = {
-    countryId: survivor,
-    "mergedFrom.countryId": { $ne: absorbed },
-  };
-  const survivorMinisters = (await db
-    .collection("cabinetMembers")
-    .find(notCarried)
-    .toArray()) as unknown as Array<{ characterId?: ObjectId | null; nppId?: ObjectId | null }>;
-  await db.collection("cabinetMembers").deleteMany(notCarried);
-  await clearCabinetPointers(db, survivorMinisters, now);
-
-  // Read BEFORE anything moves, because the rows are how the holders are found.
+  // Read BEFORE the delete, because the rows are how the holders are found.
   const ministers = (await db
     .collection("cabinetMembers")
     .find({ countryId: absorbed })
-    .toArray()) as unknown as Array<{
-    _id: ObjectId;
-    positionId?: string;
-    characterId?: ObjectId | null;
-    nppId?: ObjectId | null;
-  }>;
+    .toArray()) as unknown as Array<{ characterId?: ObjectId | null; nppId?: ObjectId | null }>;
+  await db.collection("cabinetMembers").deleteMany({ countryId: absorbed });
+  await clearCabinetPointers(db, ministers, now);
 
-  const retired: Array<{ characterId?: ObjectId | null; nppId?: ObjectId | null }> = [];
-  for (const minister of ministers) {
-    const target = minister.positionId
-      ? remapCabinetPosition(absorbed, survivor, minister.positionId)
-      : null;
-    if (target === null) {
-      await db.collection("cabinetMembers").deleteOne({ _id: minister._id });
-      retired.push(minister);
-      continue;
-    }
-    await db.collection("cabinetMembers").updateOne(
-      { _id: minister._id },
-      {
-        $set: {
-          countryId: survivor,
-          positionId: target,
-          // The stamp that keeps a resume from deleting this row as though it
-          // were the survivor's own.
-          mergedFrom: { countryId: absorbed, positionId: minister.positionId ?? null },
-          updatedAt: now,
-        },
-      }
-    );
-    // The holder's denormalised pointer names the OLD portfolio. Re-point it
-    // rather than clearing it: this minister keeps their seat at the table.
-    if (minister.characterId) {
-      await db.collection("characters").updateMany(
-        { _id: minister.characterId, "currentOffice.type": "parliamentaryCabinet" },
-        {
-          $set: {
-            "currentOffice.positionId": target,
-            cabinetPosition: target,
-            updatedAt: now,
-          },
-        }
-      );
-    }
-    if (minister.nppId) {
-      await db
-        .collection("npps")
-        .updateMany(
-          { _id: minister.nppId, "currentOffice.type": "parliamentaryCabinet" },
-          { $set: { "currentOffice.positionId": target, updatedAt: now } }
-        );
-    }
-  }
-
-  await clearCabinetPointers(db, retired, now);
-
-  // THE HEAD OF GOVERNMENT IS CARRIED.
+  // THE WINNER'S GOVERNMENT STAYS. The winner is the shell, so its head of
+  // government is already seated and already holds the right office key; there is
+  // nothing to carry and nobody to displace. What has to happen is that the
+  // LOSING head of government stops holding an office in a country that no longer
+  // exists.
   //
-  // The winning side's leader leads the unified state — that is the whole
-  // constitutional point of the settlement. The office KEY stays the survivor's
-  // (`chancellor`); the title a player sees is resolved from `governmentType`,
-  // which `installOnePartyState` is about to set to `onePartyState`.
-  //
-  // A player leader is carried by `pmCharacterId` and an NPP one by `pmNppId`,
-  // and the two are mutually exclusive: leaving the survivor's NPP chancellor in
-  // place beside a carried player would leave two people holding one office.
-  // Read BEFORE the delete below — the row is how the carried head of
-  // government is found.
+  // This block used to run the other way, and had to: when the shell was the
+  // loser, the winner's leader had to be moved into it, their office key
+  // re-pointed, and the displaced incumbent stood down without catching the
+  // incoming leader in the same sweep. All of that machinery exists only because
+  // the wrong side was surviving.
   const formations = db.collection<GovernmentFormationHead>("governmentFormations");
   const absorbedGov = await formations.findOne({ _id: absorbed });
 
   if (absorbedGov?.pmCharacterId || absorbedGov?.pmNppId) {
-    // Era-aware, and read ONCE for the whole handover below. `officeTypes` IS
-    // overridden per preset for several countries, so resolving the key without
-    // the active preset is the same class of bug as the static-config reads this
-    // change set exists to fix -- harmless for DE today only because DE carries
-    // no override.
-    const execKey = getExecutiveOfficeKey(survivor, await getGameStatePresetOrDefault(db));
-
-    // THE DISPLACED LEADER STANDS DOWN FIRST.
-    //
-    // Clearing `pmNppId` takes the survivor's chancellor off the formation row,
-    // but `currentOffice` is a STORED denormalisation and does not follow: the
-    // outgoing leader would go on reading as chancellor on their own profile,
-    // in `deriveHighestOffice`, and everywhere else that ranks an office off
-    // that field — two people holding one office, which is the exact thing the
-    // note above says this must not do. `parliamentaryGovernment` clears it the
-    // same way whenever it seats a new PM; this path had simply never done it.
-    //
-    // Scoped by country AND executive key so it cannot reach a leader of another
-    // country, or a minister of this one.
-    //
-    // ⚠️ THE INCOMING LEADER IS EXCLUDED. Actuation is resumable, so this can run
-    // again after the carried leader has already taken the survivor's executive
-    // key — and an unqualified sweep would then stand down the very person it is
-    // seating.
+    // `currentOffice` is a STORED denormalisation and does not follow the
+    // formation row being deleted below. Left alone the defeated leader goes on
+    // reading as head of government on their own profile, in
+    // `deriveHighestOffice`, and everywhere else that ranks an office off that
+    // field.
     const standDown = { $set: { currentOffice: null, updatedAt: now } };
-    await db.collection("characters").updateMany(
-      {
-        countryId: survivor,
-        "currentOffice.type": execKey,
-        ...(absorbedGov.pmCharacterId ? { _id: { $ne: absorbedGov.pmCharacterId } } : {}),
-      },
-      standDown
-    );
-    await db.collection("npps").updateMany(
-      {
-        countryId: survivor,
-        "currentOffice.type": execKey,
-        ...(absorbedGov.pmNppId ? { _id: { $ne: absorbedGov.pmNppId } } : {}),
-      },
-      standDown
-    );
-
-    await formations.updateOne(
-      { _id: survivor },
-      {
-        $set: {
-          pmCharacterId: absorbedGov.pmCharacterId ?? null,
-          pmNppId: absorbedGov.pmNppId ?? null,
-          // THE GOVERNING PARTY MOVES WITH THE GOVERNMENT.
-          //
-          // `updateParliamentaryGovernmentSeats` does NOT recompute this for an
-          // already-formed government -- it reads `existing.governingPartyId` to
-          // size the government's support -- so a stale value does not heal on
-          // the next tick. Left alone, unified Germany would go on naming the
-          // SPD as its governing party while the SED ruled: its support would be
-          // counted from the wrong benches, and `applyWhipVotes` would treat the
-          // opposition's members as the government's.
-          ...(rulingPartyId != null ? { governingPartyId: String(rulingPartyId) } : {}),
-          updatedAt: now,
-        },
-      }
-    );
-
-    // THE CARRIED LEADER TAKES THE SURVIVOR'S OFFICE KEY.
-    //
-    // `currentOffice.type` still names the office they held in the country that
-    // no longer exists — East Germany's `generalSecretary`, which is not an
-    // office the Federal Republic defines. That is the same defect
-    // `evacuateRegionPolitics` re-points every ordinary official to avoid: a
-    // holder left on a key their country does not list shows a defunct title and
-    // matches nothing that looks the office up in the country's config.
-    //
-    // Only `.type` is written where there is an office to re-point. `.state` is
-    // left alone: `mergeRegion` re-points it when the region it names is the one
-    // being fused away, and that runs after this.
     if (absorbedGov.pmCharacterId) {
-      await takeExecutiveOffice(db, "characters", absorbedGov.pmCharacterId, execKey, now);
+      await db.collection("characters").updateOne({ _id: absorbedGov.pmCharacterId }, standDown);
     }
     if (absorbedGov.pmNppId) {
-      await takeExecutiveOffice(db, "npps", absorbedGov.pmNppId, execKey, now);
-    }
-
-    // THE MANDATE COMES WITH THE LEADER.
-    //
-    // `countryLeaderStates` is keyed `${countryId}_${characterId}`, so the
-    // record does not follow the head of government the way the formation row
-    // above does: the carried leader would arrive in the unified state with no
-    // mandate on record, and the next `installNewLeader` would seat them at a
-    // fresh 75 as though they had just taken power, erasing the tenure they won
-    // the war with.
-    //
-    // Only a PLAYER leader has one. An NPP head of government is carried by
-    // `pmNppId` and holds no character-keyed record, which is why this reads
-    // `pmCharacterId` alone rather than the same condition as the block above.
-    if (absorbedGov.pmCharacterId) {
-      await carryLeaderStateOnMerge(db, {
-        fromCountryId: absorbed,
-        toCountryId: survivor,
-        leaderCharacterId: absorbedGov.pmCharacterId,
-        // The SURVIVOR's executive key. The office the leader now holds is
-        // Germany's chancellorship, not the GDR post the record was written under.
-        leaderOfficeType: execKey,
-        governingPartyId: rulingPartyId != null ? String(rulingPartyId) : null,
-        currentTurn: params.currentTurn,
-      });
+      await db.collection("npps").updateOne({ _id: absorbedGov.pmNppId }, standDown);
     }
   }
 
-  // The absorbed state's own formation row goes with the state. Left in place
-  // it still reads "formed", with a prime minister and a governing party — and
-  // the parliamentary phase loop, which iterates the static country list, would
-  // keep running seat sync, confidence processing and NPP appointment against a
-  // government of a country that no longer exists.
+  // THE GOVERNING PARTY IS RESTATED, not moved.
+  //
+  // `updateParliamentaryGovernmentSeats` does NOT recompute this for an
+  // already-formed government -- it reads `existing.governingPartyId` to size the
+  // government's support -- so a value that has drifted does not heal on the next
+  // tick, and the unified state would count its support from the wrong benches
+  // while `applyWhipVotes` treated the opposition as the government.
+  if (rulingPartyId != null) {
+    await formations.updateOne(
+      { _id: survivor },
+      { $set: { governingPartyId: String(rulingPartyId), updatedAt: now } }
+    );
+  }
+
+  // THE MANDATE IS NOT CARRIED, IT IS CREDITED.
+  //
+  // The winner's leader already holds their own `countryLeaderStates` record
+  // under the surviving country, with their real tenure on it -- nothing needs
+  // to move. What they have not been given is the reunification itself, which is
+  // the largest thing that will ever happen to their leadership.
+  //
+  // Only a PLAYER leader has such a record; an NPP head of government holds none.
+  await creditReunificationToLeader(db, survivor, params.currentTurn);
+
+  // The DEFEATED side's confidence records are orphaned, not carried.
+  //
+  // These are keyed `${countryId}_${characterId}`, so they do not follow the
+  // country being dissolved and nothing else reaps them -- every reader queries
+  // by a live country id, so the rows are unreachable rather than wrong. They
+  // are deleted anyway: a dissolved state holding leadership records is the kind
+  // of debris that reads as real the moment anyone re-enables the shell.
+  await getCountryLeaderStatesCollection(db).deleteMany({ countryId: absorbed });
+
   await formations.deleteOne({ _id: absorbed });
 }
 
