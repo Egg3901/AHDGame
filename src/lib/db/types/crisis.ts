@@ -149,6 +149,30 @@ export interface CrisisDecisionOption {
   optionId: string;
   label: string;
   description: string;
+  /**
+   * Turns cut from the crisis when this option is chosen, on top of any
+   * collective-aid reduction. A decisive response ends the crisis sooner; the
+   * do-nothing option carries no reduction and the crisis runs its full length.
+   *
+   * Several templates advertised "reduces duration by N turns" in their copy
+   * for a mechanic that did not exist, so a government could spend 1.5% of GDP
+   * on stimulus and watch the recession run its full term regardless (#1250).
+   * Any option whose description promises a shorter crisis MUST set this.
+   *
+   * Applied by `calculateDecisionDurationReduction`, which reads the options
+   * named in the interaction's `resolutionPath`. Reduction is floored so a
+   * crisis always lasts at least one turn.
+   *
+   * CAUTION when adding one to a node that carries a `timeLimitMinutes`:
+   * `autoResolveCrisisInteraction` falls back to the `"decline"` option, or to
+   * `options[0]` when there is none, and pushes it onto the resolution path. A
+   * reduction on that fallback is therefore granted to a government that never
+   * answered. The templates carrying a reduction today all have
+   * `timeLimitMinutes: null`, so they never auto-resolve and the question does
+   * not arise; order the options so the fallback is the do-nothing one if you
+   * ever give such a node a deadline.
+   */
+  durationReductionTurns?: number;
   effects: CrisisEffect[];
   nextNodeId: string | null;
   requiredBudget?: number;

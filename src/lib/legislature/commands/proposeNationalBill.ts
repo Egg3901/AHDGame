@@ -484,6 +484,8 @@ export async function proposeNationalBill(
       policyProvisionCount: validatedPolicyProvisions.length,
       subsidyProvisionCount: validatedSubsidyProvisions.length,
       unionLawProvisionCount: validatedUnionLawProvisions.length,
+      standaloneProvisionCount:
+        validatedCentralBankProvisions.length + validatedElectoralLawProvisions.length,
     })
   );
   const actionCost = BILL_PROPOSE_ACTION_COST;

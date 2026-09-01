@@ -219,6 +219,22 @@ export const electoralLawProvisionSchema = z.object({
   registrationAccess: z.number().min(-50).max(50).optional(),
 });
 
+/**
+ * Central bank independence: `grant` hands rate-setting to the bank, `revoke`
+ * returns it to the head of government and the finance seat. The economy-only
+ * category rule and the shared-bank (ECB) refusal live in
+ * `validateBillProvisions`, which is the single gate both proposal paths run
+ * through — this schema only has to let the provision through the door.
+ *
+ * Without it the provision matched no member of the `proposeBillSchema` union,
+ * so every bill carrying one was rejected by the body parser with a union error
+ * before the validator, the UI, or the enactment path ever saw it (#1250).
+ */
+export const centralBankIndependenceProvisionSchema = z.object({
+  type: z.literal("central_bank_independence"),
+  action: z.enum(["grant", "revoke"]),
+});
+
 export const unionLawProvisionSchema = z.object({
   type: z.literal("union_law"),
   bias: z.number().min(-50).max(50),
@@ -267,6 +283,7 @@ export const proposeBillSchema = z
           endEmbargoProvisionSchema,
           unionLawProvisionSchema,
           electoralLawProvisionSchema,
+          centralBankIndependenceProvisionSchema,
           policyProvisionSchema,
         ])
       )

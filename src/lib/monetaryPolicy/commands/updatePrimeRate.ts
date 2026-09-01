@@ -7,6 +7,7 @@ import {
   AGGRESSIVE_CUT_SCRUTINY,
   RATE_CHANGE_COOLDOWN_TURNS,
   RATE_CHANGES_PER_TERM,
+  RATE_HISTORY_MAX,
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
@@ -91,9 +92,17 @@ export async function updatePrimeRate(params: {
   // strict majority of the full board) is structurally dead: no motion can ever
   // pass, so the chair's direct authority returns until nominations restore a
   // working board (ticket #1238 follow-up).
+  //
+  // A government-controlled bank is exempt: its committee is dormant (the MPC
+  // was created BY the independence grant, so a board doc on a government-
+  // controlled bank is a leftover from before independence was revoked), and
+  // `fomcMeetingTurn` already skips it for exactly that reason. Without the
+  // exemption the Treasury would be refused here and sent to a committee tab
+  // that `CentralBankClient` hides for government-controlled banks — a dead end
+  // with no way back.
   const hasCommittee = (bank.fomcBoard?.length ?? 0) > 0;
   const boardFunctional = hasCommittee && boardCanCarryMotions(bank.fomcBoard ?? []);
-  if (hasCommittee && boardFunctional && !isAdmin) {
+  if (hasCommittee && boardFunctional && !governmentControlled && !isAdmin) {
     return {
       ok: false as const,
       status: 409,
@@ -219,7 +228,10 @@ export async function updatePrimeRate(params: {
               ...(reason ? { reason } : {}),
             },
           ],
-          $slice: -50,
+          // Was -50 while the committee path sliced at 96, so whichever writer
+          // moved the rate last silently truncated the other's records. One
+          // shared cap, so the published history means the same on every bank.
+          $slice: -RATE_HISTORY_MAX,
         },
       },
     }

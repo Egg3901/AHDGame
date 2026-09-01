@@ -155,9 +155,22 @@ export function countProvisionsChargedNationalInfluence(args: {
   policyProvisionCount: number;
   subsidyProvisionCount: number;
   unionLawProvisionCount?: number;
+  /**
+   * Provisions that carry a bill on their own: central-bank independence, and
+   * electoral law (franchise / registration access). They use the same ladder
+   * for the same reason union-law rows do. Left uncharged, a statute that moves
+   * monetary authority between the government and the bank, or rewrites who may
+   * vote, was the one kind of bill that cost its sponsor nothing at all, and a
+   * bill carrying one alongside an ordinary policy row cost strictly more than
+   * the same statute proposed by itself.
+   */
+  standaloneProvisionCount?: number;
 }): number {
   return Math.max(
     0,
-    args.policyProvisionCount + args.subsidyProvisionCount + (args.unionLawProvisionCount ?? 0)
+    args.policyProvisionCount +
+      args.subsidyProvisionCount +
+      (args.unionLawProvisionCount ?? 0) +
+      (args.standaloneProvisionCount ?? 0)
   );
 }
