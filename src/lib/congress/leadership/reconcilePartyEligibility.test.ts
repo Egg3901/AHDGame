@@ -16,6 +16,9 @@ vi.mock("@/lib/discordWebhooks", () => ({
   sendCountryGameEvent: vi.fn().mockResolvedValue(undefined),
   DISCORD_COLORS: { leadership: 0 },
 }));
+vi.mock("@/lib/db/partyMap", () => ({ getPartyMap: vi.fn().mockResolvedValue(new Map()) }));
+vi.mock("@/lib/congress/senateComposition", () => ({ getSenateComposition: vi.fn() }));
+vi.mock("@/lib/congress/houseComposition", () => ({ getHouseComposition: vi.fn() }));
 
 const SENATE_CTX = buildChamberLeadershipContext({
   composition: [
@@ -446,5 +449,148 @@ describe("openElectionsForVacatedMajorityRoles", () => {
     );
 
     expect(opened).toEqual([]);
+  });
+});
+
+describe("buildContextsForRoles", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+  });
+
+  it("fetches only the chambers the given roles need", async () => {
+    const { getSenateComposition } = await import("@/lib/congress/senateComposition");
+    const { getHouseComposition } = await import("@/lib/congress/houseComposition");
+    vi.mocked(getHouseComposition).mockResolvedValue({
+      composition: [{ party: "MAJ" }],
+      majorityParty: "MAJ",
+      majorityBloc: null,
+    } as never);
+
+    const { buildContextsForRoles } = await import("./reconcilePartyEligibility");
+    const contexts = await buildContextsForRoles(db as unknown as Db, [
+      { leaderRole: "majority_whip_house" },
+    ]);
+
+    expect(getHouseComposition).toHaveBeenCalled();
+    expect(getSenateComposition).not.toHaveBeenCalled();
+    expect(contexts.senate).toBeNull();
+    expect(contexts.house?.majorityParty).toBe("MAJ");
+  });
+
+  it("reads no composition at all when no role is majority-gated", async () => {
+    const { getSenateComposition } = await import("@/lib/congress/senateComposition");
+    const { getHouseComposition } = await import("@/lib/congress/houseComposition");
+
+    const { buildContextsForRoles } = await import("./reconcilePartyEligibility");
+    const contexts = await buildContextsForRoles(db as unknown as Db, [
+      { leaderRole: "speaker_of_the_house" },
+      { leaderRole: "minority_whip_senate" },
+    ]);
+
+    expect(contexts).toEqual({ house: null, senate: null });
+    expect(getHouseComposition).not.toHaveBeenCalled();
+    expect(getSenateComposition).not.toHaveBeenCalled();
+  });
+});
+
+describe("reconcileAllLeadershipPartyEligibility", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    for (const name of [
+      "congressLeaders",
+      "electedOfficials",
+      "characters",
+      "senateLeadershipElections",
+      "senateLeadershipNominations",
+      "houseLeadershipElections",
+      "houseLeadershipNominations",
+    ]) {
+      db.collection(name);
+    }
+    db.collectionMocks["senateLeadershipElections"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["houseLeadershipElections"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["congressLeaders"]!.find.mockImplementation(() => cursorOf([]));
+    db.collectionMocks["congressLeaders"]!.updateOne.mockResolvedValue({ matchedCount: 1 });
+  });
+
+  it("judges each chamber against its OWN composition", async () => {
+    // Pinned because crossing the two fails SILENTLY. A House leader measured
+    // against the Senate's majority reads as "the majority moved under them",
+    // which is the one case the reconciler deliberately ignores — so the bug
+    // shows up as leadership that never gets reconciled, not as an error. The
+    // House holder below is a genuine defector, so a crossed context turns a
+    // vacancy into a no-op and this test fails.
+    const { getSenateComposition } = await import("@/lib/congress/senateComposition");
+    const { getHouseComposition } = await import("@/lib/congress/houseComposition");
+    vi.mocked(getSenateComposition).mockResolvedValue({
+      composition: [{ party: "SEN_MAJ" }],
+      majorityParty: "SEN_MAJ",
+      majorityBloc: null,
+    } as never);
+    vi.mocked(getHouseComposition).mockResolvedValue({
+      composition: [{ party: "HOUSE_MAJ" }],
+      majorityParty: "HOUSE_MAJ",
+      majorityBloc: null,
+    } as never);
+
+    const senator = new ObjectId();
+    const rep = new ObjectId();
+    db.collectionMocks["congressLeaders"]!.find.mockImplementation((query) => {
+      const roles = (query as { role?: { $in?: string[] } }).role?.$in ?? [];
+      return cursorOf(
+        roles.includes("president_pro_tempore")
+          ? [
+              {
+                role: "majority_leader_senate",
+                characterId: senator,
+                characterName: "Senate Leader",
+                party: "SEN_MAJ",
+              },
+            ]
+          : [
+              {
+                role: "majority_leader_house",
+                characterId: rep,
+                characterName: "House Leader",
+                party: "HOUSE_MAJ",
+              },
+            ]
+      );
+    });
+    db.collectionMocks["electedOfficials"]!.find.mockImplementation((query) => {
+      const officeType = (query as { officeType?: string }).officeType;
+      return cursorOf(
+        officeType === "senate"
+          ? [{ _id: new ObjectId(), officeType, characterId: senator, party: "SEN_MAJ" }]
+          : // The House leader has walked out to a third party.
+            [{ _id: new ObjectId(), officeType, characterId: rep, party: "DEFECTED" }]
+      );
+    });
+    db.collectionMocks["characters"]!.find.mockImplementation(() =>
+      cursorOf([
+        { _id: senator, party: "SEN_MAJ" },
+        { _id: rep, party: "DEFECTED" },
+      ])
+    );
+
+    const { reconcileAllLeadershipPartyEligibility } = await import("./reconcilePartyEligibility");
+    const vacated = await reconcileAllLeadershipPartyEligibility(db as unknown as Db, NOW);
+
+    // The senator is still in the Senate majority and keeps their seat; the
+    // representative left the House majority and loses theirs.
+    expect(vacated.map((v) => v.leaderRole)).toEqual(["majority_leader_house"]);
+    expect(db.collectionMocks["congressLeaders"]!.updateOne).toHaveBeenCalledWith(
+      { role: "majority_leader_house", characterId: rep },
+      expect.objectContaining({
+        $set: expect.objectContaining({ characterId: null, characterName: "Vacant" }),
+      }),
+      { upsert: false }
+    );
   });
 });
