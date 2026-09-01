@@ -496,11 +496,10 @@ async function clearCabinetPointers(
  * Deal with what the per-region sweep cannot reach.
  *
  * `evacuateRegionPolitics` runs once per region and matches officials on
- * `state`, so anything held at NATIONAL level is invisible to it. East Germany's
- * Chairman of the Council of State carries no region at all, and would otherwise
- * sit for ever on a country that no longer exists. NPP-held cabinet seats have
- * the same shape: the region sweep only re-scopes the ones a resident PLAYER
- * holds.
+ * `state`, so anything held at NATIONAL level is invisible to it. The Federal
+ * Republic's central bank chair carries no region at all, and would otherwise sit
+ * for ever on a country that no longer exists. NPP-held cabinet seats have the
+ * same shape: the region sweep only re-scopes the ones a resident PLAYER holds.
  *
  * Offices with a counterpart are carried; offices without one retire. Seat counts
  * are NOT rescaled here, because a national office that is not tied to a region
@@ -515,7 +514,10 @@ async function retireNationalRemnants(
     absorbed: CountryId;
     survivor: CountryId;
     currentTurn: number;
-    /** The absorbed ruling party under its NEW number, or null. */
+    /**
+     * The SURVIVOR's ruling party, or null. It needs no renumbering: the survivor
+     * is the winner and its parties are not the ones the migration moved.
+     */
     rulingPartyId: number | null;
   }
 ): Promise<void> {
@@ -541,8 +543,6 @@ async function retireNationalRemnants(
       );
   }
 
-  // THE WINNER'S CABINET GOVERNS.
-  //
   // THE LOSING GOVERNMENT FALLS. The winner is the shell, so its council is
   // already seated and needs nothing done to it; what has to happen is that the
   // ABSORBED state's ministers stop being ministers.
