@@ -14,6 +14,7 @@ import { getGameStateCollection } from "@/lib/db/collections/gameState";
 import { getConflict } from "@/lib/db/collections/conflicts";
 import { getPeaceOffersCollection } from "@/lib/db/collections/peaceOffers";
 import { isOfferLive, validatePeaceOffer, maxIndemnityForGdp } from "@/lib/military/peaceOffer";
+import { loadTermSettlement } from "@/lib/settlement/queries/termSettlement";
 import { acceptPeace } from "@/lib/military/acceptPeace";
 import { getCountryState } from "@/lib/countryState";
 import type { FederalBudget } from "@/lib/db/types";
@@ -129,6 +130,12 @@ export async function POST(
     // The target's system is re-read too: a country converted by some other route
     // while this offer sat must not be converted again to what it already is.
     const targetState = await getCountryState(db, offer.toCountry);
+    // The crisis is re-read for the same reason as the GDP cap and the target's
+    // system: it may have moved while the offer sat. It is also LOAD-BEARING here in
+    // a way those two are not, because `settlement` fails closed — omit it and every
+    // reunification offer becomes impossible to accept, however legal it was to send.
+    const settlement =
+      offer.term.kind === "reunification" ? await loadTermSettlement(db, conflict._id) : null;
     const still = validatePeaceOffer(
       conflict,
       offer.fromCountry,
@@ -136,7 +143,9 @@ export async function POST(
       offer.term,
       offer.leaver,
       maxAmount,
-      targetState.governmentType
+      targetState.governmentType,
+      null,
+      settlement
     );
     if (!still.ok) {
       return NextResponse.json({ error: still.error }, { status: 409 });

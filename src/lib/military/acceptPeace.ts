@@ -8,6 +8,7 @@ import { standDownCountry } from "./leaveConflict";
 import { recordTruce } from "./truce";
 import { resolveConflict } from "./resolveConflict";
 import { sideWouldEmpty } from "./peaceOffer";
+import { principalOf } from "./principal";
 import { applyPeaceTerm } from "./applyPeaceTerm";
 import type { Side } from "./occupation";
 
@@ -52,6 +53,22 @@ function opposingRosterOf(
   const onA = conflict.sideA.countries.includes(ally);
   const enemies = onA ? conflict.sideB.countries : conflict.sideA.countries;
   return enemies.filter((c) => c !== principal && c !== ally);
+}
+
+/**
+ * Which roster holds this country, or null when neither does.
+ *
+ * Roster-only, deliberately NOT `sideOf`: its bloc fallback can name a side the
+ * country was never rostered on, and every caller here uses the answer to pick a
+ * roster to edit or a victor to stamp.
+ */
+function rosterSideOf(
+  conflict: Pick<ConflictDoc, "sideA" | "sideB">,
+  country: CountryId
+): Side | null {
+  if ((conflict.sideA.countries as string[]).includes(country)) return "A";
+  if ((conflict.sideB.countries as string[]).includes(country)) return "B";
+  return null;
 }
 
 export async function acceptPeace(
@@ -133,18 +150,30 @@ export async function acceptPeace(
   // the war sits active with an empty roster and no victor.
   const emptied = sideWouldEmpty(conflict, leaving);
 
+  // THE PRINCIPAL-TO-PRINCIPAL RULE. A war between two founding belligerents is
+  // THEIRS, and when both of them settle it the war ends for every guest on both
+  // rosters — rather than leaving allies to fight on over a question the two
+  // countries that started it have already answered between themselves.
+  //
+  // Read BEFORE the splice below, for the same reason as `emptied` and
+  // `enemiesByAlly`: afterwards the leaver is gone from its roster and `principalOf`
+  // names its SUCCESSOR, so the rule would quietly stop firing for the one case it
+  // exists to catch.
+  //
+  // BOTH must be founders. A principal cannot lose its side's war to a guest that did
+  // not start it, and in that deal the opposing principal is not a party at all.
+  const leaverSide = rosterSideOf(conflict, leaver);
+  const bothPrincipals =
+    leaverSide !== null &&
+    principalOf(conflict, leaverSide) === leaver &&
+    principalOf(conflict, leaverSide === "A" ? "B" : "A") === other;
+
   for (const country of leaving) {
     await standDownCountry(db, conflict, country);
   }
 
   for (const country of leaving) {
-    // Roster-only, deliberately NOT `sideOf`: its bloc fallback could name a side the
-    // country was never rostered on, and this value picks which roster to edit.
-    const side: Side | null = conflict.sideA.countries.includes(country)
-      ? "A"
-      : conflict.sideB.countries.includes(country)
-        ? "B"
-        : null;
+    const side: Side | null = rosterSideOf(conflict, country);
     if (!side) continue;
     const path = `side${side}.countries` as const;
     await getConflictsCollection(db).updateOne({ _id: conflict._id }, {
@@ -167,17 +196,27 @@ export async function acceptPeace(
     }
   }
 
-  if (emptied) {
-    // The side the leaver was on is now empty, so the other side won. resolveConflict
-    // truces every remaining cross-side pair, which is why the roster edit above has
-    // to have happened first: the leaver already has its truce and must not be
-    // included again with a later expiry.
-    // A negotiated WHITE PEACE names no victor, even though one side's roster is the
-    // one that emptied. Both governments walked away, and the record should say so.
+  // The side that LOST this war, by either road. `emptied` is by construction the
+  // leaver's own side — the release set is drawn from it — so the two roads name the
+  // same loser, and the victor is read off the LEAVER rather than off the sender.
+  //
+  // That distinction is the whole point. An offer runs in both directions: "I
+  // withdraw" and "you withdraw" are one deal written from its two ends. Stamping the
+  // sender as victor would hand the war to whichever government happened to compose
+  // the offer, and award it to a principal that had just offered to quit.
+  const losingSide = emptied ?? leaverSide;
+  if (losingSide !== null && (emptied !== null || bothPrincipals)) {
+    // resolveConflict truces every remaining cross-side pair, which is why the roster
+    // edit above has to have happened first: the leaver already has its truce and must
+    // not be included again with a later expiry.
+    //
+    // A negotiated WHITE PEACE names no victor either way. Both governments walked
+    // away, and the record should say so — a settlement crisis frozen on this war
+    // reads the stalemate and goes back on the board rather than being decided.
     await resolveConflict(
       db,
       conflict,
-      offer.term.kind === "white_peace" ? "stalemate" : emptied === "A" ? "B" : "A",
+      offer.term.kind === "white_peace" ? "stalemate" : losingSide === "A" ? "B" : "A",
       currentTurn
     );
     return { applied: true, resolved: true };

@@ -840,6 +840,18 @@ describe("separate peace on the record", () => {
     expect(container.textContent).toMatch(/frozen for 240 turns/);
   });
 
+  it("describes a reunification settlement without calling it a procurement freeze", () => {
+    // Every term reader fell through to demilitarisation, so an unknown term was
+    // published to the public record as whatever the last branch happened to be.
+    const reunify: ConflictRecordView = {
+      ...settled,
+      settlements: [{ ...settled.settlements![0], term: { kind: "reunification" as const } }],
+    };
+    const { container } = render(<ConflictRecord conflict={reunify} />);
+    expect(container.textContent).toMatch(/reunif/i);
+    expect(container.textContent).not.toMatch(/procurement/i);
+  });
+
   it("publishes the justification, so the war's history says WHY it ended", () => {
     render(<ConflictRecord conflict={settled} />);
     expect(screen.getByText(/We could not sustain the campaign\./)).toBeTruthy();

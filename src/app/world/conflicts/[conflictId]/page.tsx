@@ -57,6 +57,7 @@ import type { PendingChip } from "./NextTickStrip";
 import { ConflictRecord, type ConflictRecordView } from "./ConflictRecord";
 import { conflictToFront } from "@/lib/military/createConflict";
 import { getTheaterState } from "@/lib/db/collections/theaterState";
+import { loadTermSettlement } from "@/lib/settlement/queries/termSettlement";
 
 /** How many engagements the record lists, newest first. */
 const BATTLE_LIMIT = 50;
@@ -384,6 +385,11 @@ export default async function ConflictRecordPage({
           // one-party state. Loaded from the same helper the route validates
           // against, so anything offered here is accepted there.
           targetParties: await loadPartyChoices(db, doc.termsWindow.target),
+          // Offered on any war this question is riding. The victor holding the terms
+          // window is a founding belligerent by construction (`openTermsWindow` names
+          // `principalOf`), and EITHER founder may settle Germany, so nothing further
+          // needs checking here. Same loader the route validates against.
+          canDictateReunification: (await loadTermSettlement(db, doc._id)) !== null,
         }
       : null;
 

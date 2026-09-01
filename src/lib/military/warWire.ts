@@ -58,6 +58,7 @@ function settledTitle(conflict: ConflictDoc): string {
   if (term.kind === "white_peace") return `${conflict.name} ends where it began`;
   if (term.kind === "regime_change") return `${name(loser)} is made to change its government`;
   if (term.kind === "demilitarisation") return `${name(loser)} is disarmed by treaty`;
+  if (term.kind === "reunification") return "Germany is made one";
   if (term.amount > 0) return `${name(loser)} pays for the peace`;
   return `${conflict.name} ends with nothing taken`;
 }
@@ -114,6 +115,20 @@ function settledBody(conflict: ConflictDoc, rulingPartyName?: string | null): st
       `orders for as long as the settlement holds, while what it already bought keeps arriving.`
     );
   }
+  if (s.term.kind === "reunification") {
+    // NAMES NEITHER PARTY, deliberately. `imposedBy` and `target` record which end of
+    // the deal was written where, and for this term that says nothing about who
+    // prevailed: either founder may propose it, and from the incumbent it is an offer
+    // to withdraw AND concede, which stamps the WINNER as the target. Casting the
+    // target as the side that gave way then reports the war exactly backwards. The
+    // term settles the question rather than landing on a country, so the prose says
+    // so and leaves both signatories out of the claim.
+    return (
+      `${conflict.name} is over, and the German question is answered on the East's ` +
+      `terms: the two states become one, and the settlement is carried into a single ` +
+      `German government.`
+    );
+  }
   if (s.term.amount > 0) {
     return (
       `${conflict.name} is over, and ${loser} ${how}. The bill falls due in its own ` +
@@ -149,7 +164,8 @@ export function termFieldValue(term: PeaceTerm, rulingPartyName?: string | null)
       ? `Regime change: ${system} under the ${rulingPartyName}`
       : `Regime change: ${system}`;
   }
-  return `Demilitarisation: ${term.turns} turns`;
+  if (term.kind === "demilitarisation") return `Demilitarisation: ${term.turns} turns`;
+  return "German reunification";
 }
 
 /**
