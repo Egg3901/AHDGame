@@ -103,7 +103,13 @@ async function fuseRegionKeyedCollection(
     // `statePartyCandidates` is unique on `{stateId, partyId, characterId}` only
     // while `status` is "active", so a withdrawn candidacy sitting on the target
     // key would take a LIVE one from the absorbed region with it.
-    const sourceRows = await coll.find({ [field]: fromRegionId, ...(partial ?? {}) }).toArray();
+    // FILTER FIRST, REGION SECOND. A partial expression routinely constrains the
+    // region field itself (`statePartyCandidates` filters on
+    // `stateId: {$exists: true}`), and spreading it last would overwrite the one
+    // key that scopes this scan to the region being absorbed -- turning it into a
+    // sweep of every region in the world, whose rows would then be measured for
+    // collision against the survivor and deleted.
+    const sourceRows = await coll.find({ ...(partial ?? {}), [field]: fromRegionId }).toArray();
     for (const row of sourceRows) {
       // What this row would become once re-pointed. An explicit null matches a
       // missing field too, so a row that omits one of the key parts is compared

@@ -204,7 +204,12 @@ describe("mergeRegion", () => {
         name: "uniq_active",
         key: { stateId: 1, partyId: 1, characterId: 1 },
         unique: true,
-        partialFilterExpression: { status: "active" },
+        // The REAL shape of this index, which constrains `stateId` itself.
+        partialFilterExpression: {
+          status: "active",
+          stateId: { $exists: true },
+          partyId: { $exists: true },
+        },
       },
     ]);
     cands.find.mockReturnValue(cursorOf([]));
@@ -215,10 +220,18 @@ describe("mergeRegion", () => {
     // The index binds only `status: "active"` rows, so only those can collide.
     // Checking without the filter would let a WITHDRAWN candidacy sitting on the
     // target key delete a live one coming from the absorbed region.
+    //
+    // And the scan stays SCOPED TO THE ABSORBED REGION: this filter constrains
+    // `stateId` too, so merging it over the region key would widen the sweep to
+    // every region in the world.
     const scan = cands.find.mock.calls.find(
-      (c: [Record<string, unknown>]) => c[0]?.stateId === "BEO"
+      (c: [Record<string, unknown>]) => c[0]?.status === "active"
     );
-    expect(scan?.[0]).toEqual({ stateId: "BEO", status: "active" });
+    expect(scan?.[0]).toEqual({
+      status: "active",
+      stateId: "BEO",
+      partyId: { $exists: true },
+    });
     expect(cands.deleteOne).not.toHaveBeenCalled();
   });
 
