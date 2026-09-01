@@ -18,7 +18,7 @@ const FAQS: FAQItem[] = [
   {
     question: "What is A House Divided?",
     answer:
-      "A House Divided is a persistent multiplayer political and economic simulation. Players create characters, run for office, draft legislation, found corporations, trade stocks and forex, and shape the simulated United States, United Kingdom, Germany, and Japan. One real hour equals one simulated political week.",
+      "A House Divided is a persistent multiplayer political and economic simulation. Players create characters, run for office, draft legislation, found corporations, trade stocks and forex, and shape the simulated United States, United Kingdom, Soviet Union, and East Germany. One real hour equals one simulated political week.",
   },
   {
     question: "Do I need to know real-world politics to play?",
@@ -33,7 +33,7 @@ const FAQS: FAQItem[] = [
   {
     question: "How do I create a character?",
     answer:
-      "Register an account, then choose a name and country (US, UK, Germany, or Japan). Each country has its own legislature, election cycle, and economic rules. You can create multiple characters across different countries.",
+      "Register an account, then choose a name and country (United States, United Kingdom, Soviet Union, or East Germany). Each country has its own legislature, election cycle, and economic rules. You can create multiple characters across different countries.",
   },
   {
     question: "How do elections work?",
@@ -58,7 +58,7 @@ const FAQS: FAQItem[] = [
   {
     question: "What countries are available?",
     answer:
-      "Currently the United States, United Kingdom, Germany, and Japan. Each has unique legislative structures, election timings, and economic starting conditions. More countries are planned for future releases.",
+      "Currently the United States, United Kingdom, Soviet Union, and East Germany. Each has unique legislative structures, election timings, and economic starting conditions. Other nations such as West Germany, Japan, France, and Italy are simulated in the world economy and browsable, but are not yet open to play. More countries are planned for future releases.",
   },
   {
     question: "How do I report a bug or suggest a feature?",
