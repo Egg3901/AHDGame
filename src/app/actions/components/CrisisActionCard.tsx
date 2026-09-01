@@ -219,7 +219,11 @@ export default function CrisisActionCard() {
                       ? "National"
                       : "Regional"}
                 </span>
-                {timeRemainingMinutes !== null && (
+                {/* The countdown belongs to the decision, not to the crisis. On an
+                    ambient card there is no prompt to run out, so a bare
+                    "Expired" chip beside a crisis that is still very much
+                    running would read as the crisis itself having lapsed. */}
+                {canInteract && timeRemainingMinutes !== null && (
                   <span className="text-xs text-muted tabular-nums">
                     {formatTimeRemaining(timeRemainingMinutes)}
                   </span>

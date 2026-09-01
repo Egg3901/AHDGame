@@ -253,3 +253,132 @@ describe("GET /api/crises/active-for-character — aid nodes with aid bills off"
     expect(body.crises[0]!.canInteract).toBe(true);
   });
 });
+
+/**
+ * Players reported active recessions they never saw. `shouldShowCrisisOnActionsPage`
+ * dropped any crisis whose prompt the character could not take, so a Recession —
+ * whose only node is gated on `headOfState` — was invisible to everyone in the
+ * country but its leader, and invisible to the leader too once they answered,
+ * while it went on draining GDP, employment, confidence and approval for the rest
+ * of its run. It must stay on the page as an effects-only card.
+ */
+describe("GET /api/crises/active-for-character — an active crisis the character cannot act on", () => {
+  const STIMULUS_NODE = {
+    nodeId: "stimulus",
+    type: "choice" as const,
+    title: "Recession response",
+    description: "The economy is in recession. What is your fiscal response?",
+    requiredRoles: ["headOfState"],
+    timeLimitMinutes: null,
+    options: [
+      { optionId: "stimulus_austerity", label: "Austerity", description: "Cut.", effects: [] },
+    ],
+    optionsByRole: undefined,
+  };
+
+  const RECESSION_EFFECT = {
+    effectType: "tick" as const,
+    targetType: "metric" as const,
+    metricCategory: "economic",
+    metricField: "gdpGrowth",
+    sectorType: null,
+    strategyId: null,
+    value: -0.66,
+    label: "GDP contraction from recession",
+  };
+
+  function stubRecession(interactionOverrides: Record<string, unknown> = {}) {
+    db.collectionMocks["crises"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          ...makeCrisis(),
+          name: "Recession",
+          scope: "country",
+          countryIds: ["US"],
+          effects: [RECESSION_EFFECT],
+          globalResponse: undefined,
+          interactionDefinition: { decisionTree: [STIMULUS_NODE] },
+        },
+      ]),
+    });
+    db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue({
+      ...makeInteraction(),
+      decisionTree: [STIMULUS_NODE],
+      currentNodeId: "stimulus",
+      ...interactionOverrides,
+    });
+  }
+
+  /** Re-auth as an ordinary backbencher who holds no executive role. */
+  async function authAsBackbencher() {
+    ["governmentFormations", "electedOfficials"].forEach((c) => db.collection(c));
+    db.collectionMocks["governmentFormations"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["electedOfficials"]!.findOne.mockResolvedValue(null);
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: {
+        userId: new ObjectId().toString(),
+        username: "backbencher",
+        email: "backbencher@example.com",
+        role: "user",
+        isAdmin: false,
+        hasCharacter: true,
+        character: {
+          _id: characterId,
+          name: "Test Backbencher",
+          countryId: "US",
+          homeState: "US-NY",
+          currentOffice: { type: "houseRep" },
+        },
+      },
+    } as unknown as Awaited<ReturnType<typeof requireAuthWithCharacter>>);
+  }
+
+  it("shows the crisis to a player who cannot answer it, without the prompt", async () => {
+    stubRecession();
+    await authAsBackbencher();
+
+    const res = await get();
+    const body = (await res.json()) as {
+      crises: Array<{
+        crisis: { name: string; effects: unknown[] };
+        currentNode: unknown;
+        canInteract: boolean;
+      }>;
+    };
+
+    expect(body.crises).toHaveLength(1);
+    expect(body.crises[0]!.crisis.name).toBe("Recession");
+    expect(body.crises[0]!.crisis.effects).toHaveLength(1);
+    // The decision is not theirs, so it is stripped — but they still see the hit.
+    expect(body.crises[0]!.canInteract).toBe(false);
+    expect(body.crises[0]!.currentNode).toBeNull();
+  });
+
+  it("keeps the crisis on the leader's page after they have answered it", async () => {
+    stubRecession({ resolvedAt: new Date(), currentNodeId: null });
+
+    const res = await get();
+    const body = (await res.json()) as {
+      crises: Array<{ crisis: { name: string }; canInteract: boolean }>;
+    };
+
+    expect(body.crises).toHaveLength(1);
+    expect(body.crises[0]!.crisis.name).toBe("Recession");
+    expect(body.crises[0]!.canInteract).toBe(false);
+  });
+
+  it("still offers the prompt to the leader while it is unanswered", async () => {
+    stubRecession();
+
+    const res = await get();
+    const body = (await res.json()) as {
+      crises: Array<{ canInteract: boolean; currentNode: { nodeId: string } | null }>;
+    };
+
+    expect(body.crises).toHaveLength(1);
+    expect(body.crises[0]!.canInteract).toBe(true);
+    expect(body.crises[0]!.currentNode?.nodeId).toBe("stimulus");
+  });
+});

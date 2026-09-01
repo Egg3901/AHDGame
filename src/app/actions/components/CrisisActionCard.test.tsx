@@ -227,3 +227,83 @@ describe("CrisisActionCard — refusals are attributed to their own crisis", () 
     expect(shown).toHaveLength(1);
   });
 });
+
+/**
+ * An active crisis the character cannot answer now reaches the card as an
+ * "ambient" entry: the feed sends the crisis and its effects but nulls
+ * `currentNode`. The card must show what it is doing to them and nothing that
+ * implies a decision is pending.
+ */
+describe("CrisisActionCard — ambient crises the character cannot answer", () => {
+  function stubAmbientFeed(timeRemainingMinutes: number | null) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          crises: [
+            {
+              crisis: {
+                _id: "65b0000000000000000000bb",
+                name: "Recession",
+                description: "Two consecutive quarters of negative GDP growth.",
+                scope: "country",
+                effects: [
+                  {
+                    effectType: "tick",
+                    targetType: "metric",
+                    metricCategory: "economic",
+                    metricField: "gdpGrowth",
+                    value: -0.66,
+                    label: "GDP contraction from recession",
+                  },
+                ],
+              },
+              interaction: null,
+              currentNode: null,
+              canInteract: false,
+              timeRemainingMinutes,
+              hasContributed: false,
+              optionAvailability: null,
+            },
+          ],
+        }),
+      }))
+    );
+  }
+
+  it("shows the crisis and what it is doing to the player", async () => {
+    stubAmbientFeed(null);
+    render(<CrisisActionCard />);
+
+    expect(await screen.findByText("Recession")).toBeTruthy();
+    expect(screen.getByText(/GDP contraction from recession/)).toBeTruthy();
+  });
+
+  it("offers no decision controls", async () => {
+    stubAmbientFeed(null);
+    render(<CrisisActionCard />);
+
+    await screen.findByText("Recession");
+    expect(screen.queryByText("Recession response")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Austerity/ })).toBeNull();
+  });
+
+  it("does not run a decision countdown on a card with no decision", async () => {
+    // The feed can still carry a deadline from an interaction that has since
+    // been answered. Rendering it here would read as the crisis expiring.
+    stubAmbientFeed(0);
+    render(<CrisisActionCard />);
+
+    await screen.findByText("Recession");
+    expect(screen.queryByText("Expired")).toBeNull();
+  });
+
+  it("can be dismissed like any other card", async () => {
+    stubAmbientFeed(null);
+    render(<CrisisActionCard />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Dismiss crisis from Actions" }));
+    expect(screen.queryByText("Recession")).toBeNull();
+  });
+});
