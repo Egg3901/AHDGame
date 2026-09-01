@@ -26,6 +26,12 @@
  * DRY RUN BY DEFAULT. Pass `--apply` to write. Point it at a database with
  * `--live` (MONGODB_URI_LIVE) or leave it on the default MONGODB_URI.
  *
+ * `--apply` POSTS TO THE COUNTRY FEED, one "Leadership Vacancy" notice per seat,
+ * because it opens the replacement races through the shipped opener rather than
+ * a private copy of it. That is deliberate — players should see the same
+ * announcement they would have seen had the engine done it — but it means a run
+ * against live is player-visible the moment it writes. Check the dry run first.
+ *
  * STATUS: NOT RUN.
  */
 import { MongoClient, type Db } from "mongodb";
