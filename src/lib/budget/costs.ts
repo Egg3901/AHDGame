@@ -249,10 +249,14 @@ export function calculatePolicyOptionAnnualCost(
   typeId?: string
 ): number | undefined {
   if (!policyOption) return undefined;
-  // §5.1 generation discriminator: costModelV2 routes FIRST; the legacy paths
-  // below run byte-identically for every old-generation option.
   if (policyOption.costModelV2) {
-    return v2AnnualCost(policyOption.costModelV2, context);
+    const prefix = typeId?.split(".")[0]?.toUpperCase();
+    const anchorCountryId =
+      prefix && prefix in COST_INCOME_ANCHORS ? (prefix as LawCountryId) : undefined;
+    return v2AnnualCost(policyOption.costModelV2, {
+      ...context,
+      countryId: anchorCountryId ?? context.countryId,
+    });
   }
   const era = eraSpendingCost(
     typeId,
@@ -273,11 +277,13 @@ export function calculatePolicyOptionAnnualCost(
 }
 
 export function calculateEnactedLawAnnualCost(law: EnactedLaw, context: BudgetCostContext): number {
-  // §5.1 generation discriminator — see calculatePolicyOptionAnnualCost.
   if (law.costModelV2) {
+    const prefix = law.legislationTypeId?.split(".")[0]?.toUpperCase();
+    const anchorCountryId =
+      prefix && prefix in COST_INCOME_ANCHORS ? (prefix as LawCountryId) : undefined;
     return v2AnnualCost(law.costModelV2, {
       ...context,
-      countryId: context.countryId ?? law.countryId,
+      countryId: anchorCountryId ?? context.countryId ?? law.countryId,
     });
   }
   const era = eraSpendingCost(
