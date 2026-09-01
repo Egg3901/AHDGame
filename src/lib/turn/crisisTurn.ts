@@ -17,6 +17,7 @@ import {
   getExpiredInteractions,
   autoResolveCrisisInteraction,
   calculateCollectiveReduction,
+  calculateDecisionDurationReduction,
 } from "@/lib/crises/interactionEngine";
 import { processCrisisAidResolutions, reverseCrisisAidPenalties } from "@/lib/crises/aidFinalize";
 import { processCrisisChain, processVietnamChainOpening } from "@/lib/crises/crisisChain";
@@ -122,7 +123,11 @@ export async function processCrisisTurn(db: Db, turn: number): Promise<number> {
         .collection<CrisisInteraction>("crisisInteractions")
         .findOne({ crisisId: crisis._id });
       if (interaction && effectiveDuration !== null) {
-        const reduction = calculateCollectiveReduction(interaction, effectiveDuration);
+        // Two independent ways to shorten a crisis: funding a shared aid tally,
+        // and taking a decisive response. A crisis carrying both earns both.
+        const reduction =
+          calculateCollectiveReduction(interaction, effectiveDuration) +
+          calculateDecisionDurationReduction(interaction);
         effectiveDuration = Math.max(1, effectiveDuration - reduction);
       }
     }

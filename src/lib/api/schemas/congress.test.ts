@@ -25,6 +25,41 @@ describe("proposeBillSchema — custom category", () => {
   });
 });
 
+describe("proposeBillSchema — central bank independence", () => {
+  // #1250: the provision had a UI, a validator and an enactment path, but no
+  // member of the body-schema union, so every bill carrying one was rejected by
+  // the parser before any of that ran. Players read it as "the bill is bugged".
+  it("accepts a bill whose only provision returns rate-setting to the government", () => {
+    const r = proposeBillSchema.safeParse({
+      ...base,
+      category: "economy",
+      provisions: [{ type: "central_bank_independence", action: "revoke" }],
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("accepts a grant alongside an ordinary policy provision", () => {
+    const r = proposeBillSchema.safeParse({
+      ...base,
+      category: "economy",
+      provisions: [
+        { legislationTypeId: "x", effectDirection: 0 },
+        { type: "central_bank_independence", action: "grant" },
+      ],
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("rejects an action that is neither grant nor revoke", () => {
+    const r = proposeBillSchema.safeParse({
+      ...base,
+      category: "economy",
+      provisions: [{ type: "central_bank_independence", action: "abolish" }],
+    });
+    expect(r.success).toBe(false);
+  });
+});
+
 describe("stateBillProvisionSchema — strict governor-queue provisions (audit S6)", () => {
   it("accepts a policy provision", () => {
     const r = stateBillProvisionSchema.safeParse({
