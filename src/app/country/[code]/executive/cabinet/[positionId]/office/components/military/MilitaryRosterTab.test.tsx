@@ -209,4 +209,106 @@ describe("MilitaryRosterTab", () => {
     expect(screen.getByText("Marine")).toBeTruthy();
     expect(screen.getByText("Luftwaffe")).toBeTruthy();
   });
+
+  // Ticket #1248: reunification carried East Germany's NVA units into DE
+  // (mergeMilitary re-flags them), but the branch tabs built from DE's own
+  // catalog had no tab for landstreitkraefte / volksmarine / luftstreitkraefte,
+  // so the war veterans rendered nowhere and the roster read as "my units were
+  // deleted and replaced by west German ones".
+  it("shows a tab for an absorbed branch and renders its inherited units", () => {
+    render(
+      <MilitaryRosterTab
+        countryCode="de"
+        countryId="DE"
+        positionId="defense_minister"
+        units={[
+          unit({
+            _id: "u-nva-1",
+            countryId: "DE",
+            branchId: "landstreitkraefte",
+            name: "1st tank division",
+          }),
+          unit({ _id: "u-de-1", countryId: "DE", branchId: "heer", name: "West Heer Unit" }),
+        ]}
+        commanders={COMMANDERS}
+        canAct={true}
+        currencySymbol="€"
+        gdp={387_000_000_000}
+        hasBudget={true}
+        baselineGdp={387_000_000_000}
+        appropriation={100_000_000_000}
+        appropriationNetPerTurn={1_000_000_000}
+        arrearsRatio={0}
+        upkeepPerIndexUnit={1_000}
+        onUpdate={vi.fn()}
+        liveYear={1963}
+      />
+    );
+    // The absorbed branch resolves its label from the absorbed country's table.
+    expect(screen.getByText("Land Forces")).toBeTruthy();
+    fireEvent.click(screen.getByText("Land Forces"));
+    expect(screen.getByText("1st tank division")).toBeTruthy();
+    // The country's own services still render beside it.
+    expect(screen.getByText("Heer")).toBeTruthy();
+  });
+
+  it("hides the recruit button on an absorbed branch tab", () => {
+    render(
+      <MilitaryRosterTab
+        countryCode="de"
+        countryId="DE"
+        positionId="defense_minister"
+        units={[
+          unit({
+            _id: "u-nva",
+            countryId: "DE",
+            branchId: "landstreitkraefte",
+            name: "1st tank division",
+          }),
+        ]}
+        commanders={COMMANDERS}
+        canAct={true}
+        currencySymbol="€"
+        gdp={387_000_000_000}
+        hasBudget={true}
+        baselineGdp={387_000_000_000}
+        appropriation={100_000_000_000}
+        appropriationNetPerTurn={1_000_000_000}
+        arrearsRatio={0}
+        upkeepPerIndexUnit={1_000}
+        onUpdate={vi.fn()}
+        liveYear={1963}
+      />
+    );
+    fireEvent.click(screen.getByText("Land Forces"));
+    expect(screen.queryByText("Recruit unit")).toBeNull();
+    // The inherited units stay manageable: the bulk assign control remains.
+    expect(
+      screen.getByRole("combobox", { name: /assign all land forces units/i })
+    ).toBeTruthy();
+  });
+
+  it("titles an unknown absorbed branch from its raw id rather than hiding the units", () => {
+    render(
+      <MilitaryRosterTab
+        countryCode="de"
+        countryId="DE"
+        positionId="defense_minister"
+        units={[unit({ _id: "u-x", countryId: "DE", branchId: "mystery_corps", name: "Ghost Unit" })]}
+        commanders={COMMANDERS}
+        canAct={true}
+        currencySymbol="€"
+        gdp={387_000_000_000}
+        hasBudget={true}
+        baselineGdp={387_000_000_000}
+        appropriation={100_000_000_000}
+        appropriationNetPerTurn={1_000_000_000}
+        arrearsRatio={0}
+        upkeepPerIndexUnit={1_000}
+        onUpdate={vi.fn()}
+      />
+    );
+    fireEvent.click(screen.getByText("Mystery Corps"));
+    expect(screen.getByText("Ghost Unit")).toBeTruthy();
+  });
 });

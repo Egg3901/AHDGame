@@ -4,6 +4,7 @@ import {
   MILITARY_COUNTRY_SCALE,
   DEFENSE_POSITION_BY_COUNTRY,
   getBranches,
+  absorbedBranchesOf,
 } from "./military";
 import { getCabinetPositions } from "./cabinetMechanics";
 import { isSeatActive } from "@/lib/cabinet/rosterEra";
@@ -112,5 +113,45 @@ describe("military branches for in-scope countries", () => {
     expect(getBranches("NG", 1953)).toHaveLength(0);
     expect(getBranches("NG", 1960).map((b) => b.id)).toContain("army");
     expect(getBranches("NG", 1964).map((b) => b.id)).toContain("airforce");
+  });
+});
+
+// Ticket #1248: after a country merge the survivor holds the absorbed side's
+// units, whose branchIds its own catalog has never named. The roster UI derives
+// tabs from the branch list, so those units need derived branch definitions to
+// be visible at all.
+describe("absorbedBranchesOf", () => {
+  it("derives the absorbed side's branches from live units the catalog does not name", () => {
+    const units = [
+      { branchId: "heer", domain: "ground" as const },
+      { branchId: "landstreitkraefte", domain: "ground" as const },
+      { branchId: "volksmarine", domain: "naval" as const },
+    ];
+    const out = absorbedBranchesOf("DE", units);
+    expect(out.map((b) => b.id)).toEqual(["landstreitkraefte", "volksmarine"]);
+    // Labels resolve from the absorbed country's own table (DD names LaSK/VM).
+    const lask = out.find((b) => b.id === "landstreitkraefte")!;
+    expect(lask.name).toBe("Land Forces");
+    expect(lask.abbr).toBe("LaSK");
+    expect(lask.domain).toBe("ground");
+  });
+
+  it("returns nothing for a roster entirely within the country's own catalog", () => {
+    expect(absorbedBranchesOf("DE", [{ branchId: "heer", domain: "ground" as const }])).toEqual([]);
+    expect(absorbedBranchesOf("DE", [])).toEqual([]);
+  });
+
+  it("degrades an unknown branch id to a titled placeholder, not a hidden tab", () => {
+    const out = absorbedBranchesOf("DE", [{ branchId: "mystery_corps", domain: "ground" as const }]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ id: "mystery_corps", name: "Mystery Corps" });
+  });
+
+  it("never lists a branch the country's own catalog already names", () => {
+    const out = absorbedBranchesOf(
+      "US",
+      [{ branchId: "army", domain: "ground" as const }, { branchId: "navy", domain: "naval" as const }]
+    );
+    expect(out).toEqual([]);
   });
 });

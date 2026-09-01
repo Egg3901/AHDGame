@@ -679,6 +679,62 @@ export function getBranches(countryId: string, liveYear?: number | null): Branch
   return all.filter((b) => isMilitaryEraActive(b, liveYear));
 }
 
+/**
+ * Branches a country holds live units in that its own catalog does not name.
+ *
+ * The only way this happens today is a country merge (`mergeMilitary` re-flags
+ * the absorbed side's units to the survivor's `countryId`, and the absorbed
+ * state's branches are not copied into the survivor's table — East Germany's
+ * LaSK/Volksmarine/LSK arrive in Germany under branch ids Germany's own list
+ * has never contained). The units are live, commanded and reinforced, but a UI
+ * that tabs by `getBranches(countryId)` builds no tab for them, so a merged
+ * army renders as if the veteran formations had been deleted and replaced by
+ * the survivor's own services.
+ *
+ * Labels resolve from the ABSORBED country's table when that table names the
+ * branch id (DD's are the only live case); a wholly unknown branch id degrades
+ * to a titled case of the raw id rather than hiding the units. These derived
+ * branches are VIEW-AND-MANAGE only: they must never reach the recruit path,
+ * so the survivor cannot raise new formations for a service it did not inherit
+ * an establishment for.
+ */
+export function absorbedBranchesOf(
+  countryId: string,
+  units: ReadonlyArray<Pick<MilitaryUnit, "branchId"> & { domain: UnitDomain | string }>
+): Branch[] {
+  const known = new Set((MILITARY_BRANCHES_BY_COUNTRY[countryId as CountryId] ?? []).map((b) => b.id));
+  const seen = new Set<string>();
+  const out: Branch[] = [];
+  for (const u of units) {
+    const branchId = u.branchId;
+    if (!branchId || known.has(branchId) || seen.has(branchId)) continue;
+    seen.add(branchId);
+    // First country whose table names this branch wins. Cross-side branch ids
+    // are unique in practice (each state names its own services); the scan is
+    // cheap and keeps this correct without a new lookup index.
+    let def: Branch | undefined;
+    for (const rows of Object.values(MILITARY_BRANCHES_BY_COUNTRY)) {
+      const hit = rows.find((b) => b.id === branchId);
+      if (hit) {
+        def = hit;
+        break;
+      }
+    }
+    out.push(
+      def ?? {
+        id: branchId,
+        name: branchId
+          .split(/[_\s]+/)
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" "),
+        abbr: branchId.toUpperCase(),
+        domain: u.domain,
+      }
+    );
+  }
+  return out;
+}
+
 /** Unit archetypes for a domain, optionally filtered to those active in `liveYear`. */
 export function getUnitTypesForYear(domain: UnitDomain, liveYear?: number | null): UnitArchetype[] {
   const all = UNIT_TYPES[domain] ?? [];

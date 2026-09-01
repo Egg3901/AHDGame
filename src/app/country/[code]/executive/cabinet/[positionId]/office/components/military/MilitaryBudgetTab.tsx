@@ -1,7 +1,7 @@
 "use client";
 
 import type { MilitaryUnitView, ForceSummaryView } from "../../useCabinetOffice";
-import { getBranches } from "@/lib/constants/military";
+import { getBranches, absorbedBranchesOf } from "@/lib/constants/military";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { SectionCard, Meter } from "../dossier";
 import { fmtMoneyAbs } from "./militaryUi";
@@ -37,7 +37,12 @@ export function MilitaryBudgetTab({
   const toMoney = (share: number) =>
     forceSummary.totalUpkeep > 0 ? (share / forceSummary.totalUpkeep) * upkeep : 0;
 
-  const branches = getBranches(countryId, liveYear);
+  // Own services plus any absorbed branch a merge carried in, so the cost
+  // breakdown accounts for every unit the unified state actually pays for.
+  const branches = [
+    ...getBranches(countryId, liveYear),
+    ...absorbedBranchesOf(countryId, units),
+  ];
   const branchCosts = branches
     .map((b) => ({
       abbr: b.abbr,

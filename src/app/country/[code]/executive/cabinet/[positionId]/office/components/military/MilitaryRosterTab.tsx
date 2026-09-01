@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import type { MilitaryUnitView } from "../../useCabinetOffice";
 import type { CommanderRef } from "@/lib/military/types";
-import { getBranches } from "@/lib/constants/military";
+import { getBranches, absorbedBranchesOf } from "@/lib/constants/military";
 import { AggTile, MilIcon, domainIcon, fmtUpkeepMoney } from "./militaryUi";
 import { ARREARS_READINESS_WEIGHT } from "@/lib/military/readinessDrift";
 import { UnitCard } from "./UnitCard";
@@ -55,12 +55,23 @@ export function MilitaryRosterTab({
   /** Live in-game year for era-gated branches (null = modern catalog). */
   liveYear?: number | null;
 }) {
-  const branches = getBranches(countryId, liveYear);
+  // Branch tabs from the country's own catalog PLUS any absorbed branch a merge
+  // carried in (units whose branchId the catalog does not name). Without the
+  // second list, a unified Germany's inherited NVA formations have no tab to
+  // render under and read as deleted.
+  const branches = [
+    ...getBranches(countryId, liveYear),
+    ...absorbedBranchesOf(countryId, units),
+  ];
   const [branchId, setBranchId] = useState(branches[0]?.id ?? "");
   const [recruiting, setRecruiting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const branch = branches.find((b) => b.id === branchId) ?? branches[0];
+  // True only when the active tab is one of the country's OWN branches — the
+  // recruit button (and its panel) render for those alone.
+  const catalogHasBranch =
+    !!branch && getBranches(countryId, liveYear).some((b) => b.id === branch.id);
   const basePath = `/api/country/${countryCode}/executive/cabinet/${positionId}/military`;
 
   const branchUnits = useMemo(
@@ -199,13 +210,18 @@ export function MilitaryRosterTab({
               <option value="__staff__">General Staff (unassigned)</option>
             </select>
           )}
-          <button
-            onClick={() => setRecruiting(true)}
-            disabled={!canAct || busy}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[color-mix(in_srgb,var(--gov)_40%,transparent)] bg-[color-mix(in_srgb,var(--gov)_10%,transparent)] px-3 py-1.5 text-[12px] font-semibold text-gov-soft hover:bg-[color-mix(in_srgb,var(--gov)_20%,transparent)] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Recruit unit
-          </button>
+          {/* Recruit only into the country's own services. An absorbed branch has no
+              establishment on the survivor's books — recruiting into it would mint
+              formations the recruit route's own catalog check would refuse. */}
+          {catalogHasBranch && (
+            <button
+              onClick={() => setRecruiting(true)}
+              disabled={!canAct || busy}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[color-mix(in_srgb,var(--gov)_40%,transparent)] bg-[color-mix(in_srgb,var(--gov)_10%,transparent)] px-3 py-1.5 text-[12px] font-semibold text-gov-soft hover:bg-[color-mix(in_srgb,var(--gov)_20%,transparent)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Recruit unit
+            </button>
+          )}
         </div>
       </div>
 
