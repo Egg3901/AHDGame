@@ -24,12 +24,14 @@
  * no-op. The `mergedInto` stamp on the absorbed budget is the audit trail, not
  * the guard.
  */
-import type { Db } from "mongodb";
+import type { Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { Bond } from "@/lib/db/types/bond";
 import type { EnactedLaw, FederalBudget } from "@/lib/db/types/budget";
+import type { GameState } from "@/lib/db/types/gameState";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { nationalDebtFromBalance } from "@/lib/budget/treasuryBalance";
+import { countryFiscalBase } from "@/lib/politicalLegislation/fiscalBase";
 import { resolveMergeFxScale } from "./mergeFxScale";
 
 export interface MergeNationalFiscArgs {
@@ -55,6 +57,38 @@ export interface MergeNationalFiscArgs {
    * the half it took on.
    */
   carryLegislatedLevers?: boolean;
+  /**
+   * The two countries' fiscal bases (Σ state.gdp, Σ state.population) captured
+   * BEFORE the region transfers moved, plus each side's live income-band index.
+   *
+   * Fraction-priced laws price their terms against the LIVE fiscal base of the
+   * country they are keyed to. The merge does not change what either state's
+   * programmes ARE — a 5.93%-of-GDP army is 4x more expensive the moment the
+   * same fraction applies to the merged economy — so without a re-base the
+   * unified treasury inherits a law book sized for one economy and prices it
+   * against a base several times larger, while the revenue side stays under
+   * its Laffer cap. Both books together then price to ~87% of merged GDP
+   * against a ~52-58% revenue ceiling: a permanent structural deficit no
+   * player decision can close (the live German reunification landed at
+   * -103bn/yr from +29bn combined surplus for exactly this reason).
+   *
+   * With the bases present, every national law keeps the ABSOLUTE annual cost
+   * it priced at in its own country — gdp-fraction and income-fraction terms
+   * (v2 and legacy) and GDP-multiplier terms are rescaled onto the merged base
+   * at merge time. Thereafter each law still tracks the unified economy as any
+   * fraction does. Optional only for backwards compatibility: callers that
+   * capture nothing get the old behaviour.
+   */
+  mergeBases?: MergeFiscalBases;
+}
+
+export interface MergeFiscalBases {
+  fromGdp: number;
+  fromPopulation: number;
+  fromIncomeBand: number;
+  toGdp: number;
+  toPopulation: number;
+  toIncomeBand: number;
 }
 
 export interface MergeNationalFiscResult {
@@ -72,7 +106,13 @@ export async function mergeNationalFisc(
   db: Db,
   args: MergeNationalFiscArgs
 ): Promise<MergeNationalFiscResult> {
-  const { fromCountryId, toCountryId, currentTurn, carryLegislatedLevers = true } = args;
+  const {
+    fromCountryId,
+    toCountryId,
+    currentTurn,
+    carryLegislatedLevers = true,
+    mergeBases,
+  } = args;
   const now = new Date();
   const scale = await resolveMergeFxScale(db, fromCountryId, toCountryId);
   const budgets = db.collection<FederalBudget>("federalBudget");
@@ -223,9 +263,9 @@ export async function mergeNationalFisc(
 
   // ── National enacted laws ──────────────────────────────────────────────────
   // Region law books rode their regions across; the NATIONAL book (scope
-  // "national", no stateId) is what nothing else moves. Money fields convert;
-  // fractions (gdpCostFraction, budgetCost's legacy percentage, multipliers)
-  // are scale-free and stay.
+  // "national", no stateId) is what nothing else moves. Money fields convert
+  // (currency only) and the fraction terms re-base onto the merged economy
+  // below, because their pricing base is changed BY the merge.
   const laws = db.collection<EnactedLaw>("enactedLaws");
   // `stateId: null` matches both an absent field and an explicit null in Mongo;
   // the cast is because `EnactedLaw.stateId` is `string | undefined` and the
@@ -237,9 +277,138 @@ export async function mergeNationalFisc(
     } as import("mongodb").Filter<EnactedLaw>)
     .toArray();
 
-  // Scale 1 needs no per-doc math and collapses to one updateMany; otherwise
-  // one bulkWrite carries every law's converted money fields in a round trip.
-  if (nationalLaws.length > 0 && scale === 1) {
+  // ── Fraction-term re-base ──────────────────────────────────────────────────
+  // Fraction-priced terms (v2 costModelV2 and the legacy fraction/multiplier
+  // fields) price against the LIVE fiscal base of the country keying the law.
+  // The merge re-keys the absorbed book and GROWS the survivor's base, so left
+  // alone every one of these laws silently reprices onto the merged economy:
+  // the GDR's 45%-of-GDP law book alone went from 45bn to 168bn the day it
+  // absorbed a country four times its size, and the two books together priced
+  // to ~87% of merged GDP against a ~52-58% Laffer-capped revenue ceiling — a
+  // structural deficit no player decision could close. The live German
+  // reunification swung from +29bn combined surplus to -103bn/yr on this alone.
+  //
+  // The rule the rest of this module already obeys: QUANTITIES CROSS. Each law
+  // keeps the ABSOLUTE annual cost it priced at in its own country, re-expressed
+  // in the survivor frame; after the merge every fraction still tracks the
+  // unified economy from that anchor.
+  //
+  // Ownership decides each law's pre-merge base: a law read from the absorbed
+  // book priced against `fromGdp`/`fromPopulation`; a law the SHELL already
+  // held priced against `toGdp`/`toPopulation`. Both sides get the same
+  // treatment — the unified treasury inherits both states' obligations at their
+  // authored sizes, not the absorbed book resized and the shell's book inflated.
+  //
+  // Idempotency: every re-based law is stamped, and the stamp filter skips
+  // stamped rows, so a re-entered merge (or a re-run after a prior attempt's
+  // rescope landed) cannot apply the ratio twice.
+  const rebaseOps: Array<{
+    updateOne: { filter: { _id: ObjectId }; update: { $set: Record<string, unknown> } };
+  }> = [];
+  if (mergeBases && from && to && !from.mergedInto) {
+    // The merged base is the LIVE rollup over the states as they now stand
+    // (both sides' regions plus any fused region). The two pre-merge bases are
+    // what the caller captured BEFORE the region transfers moved; reading them
+    // here would find every region already re-keyed and a zero absorbed side.
+    const merged = await countryFiscalBase(db, toCountryId);
+    if (merged.gdp > 0 && merged.population > 0) {
+      // The v2 income term is `incomeCostFraction × incomeAnchor × band ×
+      // population`. The anchor is per-law-prefix and does not move; the band
+      // is the pricing country's live band, which for the survivor may differ
+      // from the band each side priced at before the merge. Both the population
+      // and the band change fold into the term's factor.
+      const gs = await db
+        .collection<GameState>("gameState")
+        .findOne({ _id: "current" as const }, { projection: { incomeBandIndexByCountry: 1 } });
+      const liveBandTo = gs?.incomeBandIndexByCountry?.[toCountryId] ?? mergeBases.toIncomeBand;
+
+      const stamp = { from: fromCountryId, to: toCountryId, turn: currentTurn };
+      const pushRebase = (
+        law: EnactedLaw,
+        own: { gdp: number; population: number; band: number }
+      ): void => {
+        const set: Record<string, unknown> = {};
+        const gdpFactor = own.gdp / merged.gdp;
+        const popBandFactor = (own.population * own.band) / (merged.population * liveBandTo);
+        const v2 = law.costModelV2;
+        if (v2) {
+          if (typeof v2.gdpCostFraction === "number" && Number.isFinite(v2.gdpCostFraction)) {
+            set["costModelV2.gdpCostFraction"] = v2.gdpCostFraction * gdpFactor;
+          }
+          if (typeof v2.gdpRevenueFraction === "number" && Number.isFinite(v2.gdpRevenueFraction)) {
+            set["costModelV2.gdpRevenueFraction"] = v2.gdpRevenueFraction * gdpFactor;
+          }
+          if (typeof v2.incomeCostFraction === "number" && Number.isFinite(v2.incomeCostFraction)) {
+            set["costModelV2.incomeCostFraction"] = v2.incomeCostFraction * popBandFactor;
+          }
+        }
+        // Legacy Spec-B fraction fields price on the budget GDP (`frac × gdp`;
+        // the income class via `frac × incomeToGdp × gdp`): the same GDP ratio.
+        if (typeof law.gdpCostFraction === "number" && Number.isFinite(law.gdpCostFraction)) {
+          set.gdpCostFraction = law.gdpCostFraction * gdpFactor;
+        }
+        if (typeof law.incomeCostFraction === "number" && Number.isFinite(law.incomeCostFraction)) {
+          set.incomeCostFraction = law.incomeCostFraction * gdpFactor;
+        }
+        // `gdpPerCapitaMultiplier × budget.gdp` — the budget gdp converges on
+        // the merged rollup at the next fiscal close, so the same factor keeps
+        // the absolute cost in place.
+        if (
+          typeof law.gdpPerCapitaMultiplier === "number" &&
+          Number.isFinite(law.gdpPerCapitaMultiplier)
+        ) {
+          set.gdpPerCapitaMultiplier = law.gdpPerCapitaMultiplier * gdpFactor;
+        }
+        if (Object.keys(set).length > 0) {
+          rebaseOps.push({
+            updateOne: {
+              filter: { _id: law._id },
+              update: { $set: { ...set, mergeRebased: stamp, updatedAt: now } },
+            },
+          });
+        }
+      };
+
+      // The carried book: these are the rows this call is re-scoping, priced in
+      // the absorbed country before it moved.
+      for (const law of nationalLaws) {
+        pushRebase(law, {
+          gdp: mergeBases.fromGdp,
+          population: mergeBases.fromPopulation,
+          band: mergeBases.fromIncomeBand,
+        });
+      }
+      // The shell's own book: everything national keyed to the survivor that is
+      // not one of the carried rows and not already re-based. The `mergedInto`
+      // gate above means only the first merge run gets here; the stamp covers
+      // the re-entered attempt that arrives after a crash mid-write.
+      const shellLaws = await laws
+        .find({
+          countryId: toCountryId,
+          $or: [{ stateId: { $exists: false } }, { stateId: null }],
+          _id: { $nin: nationalLaws.map((law) => law._id) },
+          mergeRebased: { $exists: false },
+        } as import("mongodb").Filter<EnactedLaw>)
+        .toArray();
+      for (const law of shellLaws) {
+        pushRebase(law, {
+          gdp: mergeBases.toGdp,
+          population: mergeBases.toPopulation,
+          band: mergeBases.toIncomeBand,
+        });
+      }
+    }
+  }
+
+  // Scale 1 with no re-base needs no per-doc math and collapses to one
+  // updateMany. Otherwise one bulkWrite carries each law's rescope, converted
+  // money fields and re-based fraction terms TOGETHER, so a crash between them
+  // cannot leave a law re-keyed but un-rebased (or re-keyed twice): the write
+  // is the unit of recovery.
+  const rebaseByCarried = new Map(
+    rebaseOps.map((op) => [String(op.updateOne.filter._id), op.updateOne.update.$set])
+  );
+  if (nationalLaws.length > 0 && scale === 1 && rebaseOps.length === 0) {
     await laws.updateMany(
       { _id: { $in: nationalLaws.map((law) => law._id) } },
       { $set: { countryId: toCountryId } }
@@ -254,14 +423,30 @@ export async function mergeNationalFisc(
             moneySet[field] = value * scale;
           }
         }
+        const rebaseSet = rebaseByCarried.get(String(law._id));
         return {
           updateOne: {
             filter: { _id: law._id },
-            update: { $set: { countryId: toCountryId, ...moneySet } },
+            update: {
+              $set: {
+                countryId: toCountryId,
+                ...moneySet,
+                ...(rebaseSet ?? {}),
+              },
+            },
           },
         };
       })
     );
+  }
+
+  // The shell's own book re-bases in its own write: these rows are not being
+  // re-scoped (they already key to the survivor), and the stamp filter in the
+  // query above is what keeps a re-run from applying the ratio twice.
+  const carriedIdSet = new Set(nationalLaws.map((law) => String(law._id)));
+  const shellOnlyOps = rebaseOps.filter((op) => !carriedIdSet.has(String(op.updateOne.filter._id)));
+  if (shellOnlyOps.length > 0) {
+    await laws.bulkWrite(shellOnlyOps);
   }
 
   return {
