@@ -179,7 +179,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
           // carries on without us.
           ourDeparture: (() => {
             const g = withdrawalGate(w, countryId, countryId);
-            return { endsWar: g.endsWar, guestsLeaving: g.guests };
+            return {
+              endsWar: g.endsWar,
+              endsWarReason: g.endsWarReason,
+              guestsLeaving: g.guests,
+            };
           })(),
           enemies: (onA ? w.sideB.countries : w.sideA.countries)
             .filter((e) => opposedBelligerents(w, countryId, e))
@@ -188,6 +192,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
               return {
                 country: e,
                 endsWar: gate.endsWar,
+                endsWarReason: gate.endsWarReason,
                 guestsLeaving: gate.guests,
                 withdrawalBlocked: gate.blocked,
                 // Whole percents, for copy. The form shows the reader how far off

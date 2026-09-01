@@ -32,6 +32,7 @@ export interface EnemyView {
   country: CountryId;
   /** Asking them to withdraw would empty their side and end the war. */
   endsWar: boolean;
+  endsWarReason?: "roster" | "principals" | null;
   /** Treaty allies released alongside them, who leave at the same moment. */
   guestsLeaving: CountryId[];
   /** That withdrawal is refused at the current front. A white peace escapes it. */
@@ -54,7 +55,11 @@ export interface PeaceWar {
   /** Countries on the OTHER side, the only ones an offer can be made to. */
   enemies: EnemyView[];
   /** What OUR leaving would do to this war. */
-  ourDeparture: { endsWar: boolean; guestsLeaving: CountryId[] };
+  ourDeparture: {
+    endsWar: boolean;
+    endsWarReason?: "roster" | "principals" | null;
+    guestsLeaving: CountryId[];
+  };
 }
 
 /**
@@ -127,7 +132,14 @@ function offerDirectionText(o: OfferView): string {
  * EITHER departure ends that war, and a player reading the old line would have
  * expected the survivors to fight on.
  */
-function departureConsequence(leaverName: string, endsWar: boolean, guests: CountryId[]): string {
+function departureConsequence(
+  leaverName: string,
+  endsWar: boolean,
+  guests: CountryId[],
+  // Absent on a response written before the field existed. Treated as the roster
+  // road, which is what every such response meant when it was written.
+  reason: "roster" | "principals" | null = "roster"
+): string {
   const released =
     guests.length > 0
       ? ` ${guests.map((g) => COUNTRY_CONFIGS[g]?.name ?? g).join(" and ")} ${
@@ -136,9 +148,15 @@ function departureConsequence(leaverName: string, endsWar: boolean, guests: Coun
           guests.length === 1 ? "it" : "them"
         } in.`
       : "";
-  return endsWar
-    ? `Accepting ends this war outright: nobody would be left on ${leaverName}'s side.${released}`
-    : `Accepting takes ${leaverName} out and the fighting continues for everyone else.${released}`;
+  if (!endsWar) {
+    return `Accepting takes ${leaverName} out and the fighting continues for everyone else.${released}`;
+  }
+  // The two roads end the war for opposite-looking reasons, and only one of them
+  // empties a roster. A principal settlement ends the fighting with that side's
+  // allies still on it, so the roster sentence would be simply untrue.
+  return reason === "principals"
+    ? `Accepting ends this war outright: ${leaverName} is one of the two governments that started the war, and a settlement between the founders ends it for every ally on both sides.${released}`
+    : `Accepting ends this war outright: nobody would be left on ${leaverName}'s side.${released}`;
 }
 
 export function PeacePanel({
@@ -512,17 +530,19 @@ export function PeacePanel({
                 ? departureConsequence(
                     COUNTRY_CONFIGS[selectedEnemy.country]?.name ?? selectedEnemy.country,
                     selectedEnemy.endsWar,
-                    selectedEnemy.guestsLeaving
+                    selectedEnemy.guestsLeaving,
+                    selectedEnemy.endsWarReason ?? "roster"
                   )
                 : departureConsequence(
                     COUNTRY_CONFIGS[countryId]?.name ?? countryId,
                     war.ourDeparture.endsWar,
-                    war.ourDeparture.guestsLeaving
+                    war.ourDeparture.guestsLeaving,
+                    war.ourDeparture.endsWarReason ?? "roster"
                   )}
             </p>
           )}
 
-          {leaver === "them" && !withdrawalBarred && (
+          {leaver === "them" && !withdrawalBarred && !selectedEnemy?.endsWar && (
             <p className="text-[11px] text-muted">
               They withdraw and we keep fighting. A withdrawal that would end the war outright needs
               the front well in our favour first, unless it is a white peace.

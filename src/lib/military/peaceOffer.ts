@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
+import { principalOf } from "./principal";
 import type { PeaceOfferDoc } from "@/lib/db/types/peaceOffer";
 import type { CountryId, GovernmentType } from "@/lib/constants/countries";
 import { validatePeaceTerm, type PeaceTerm } from "@/lib/military/peaceTerm";
@@ -96,8 +97,20 @@ export function sideWouldEmpty(
 }
 
 export interface WithdrawalGate {
-  /** True when this departure would empty their side, handing the asker the war. */
+  /**
+   * True when this departure hands the asker the war, by EITHER road: it empties the
+   * leaver's roster, or it is a principal-to-principal settlement, which ends the war
+   * for every guest on both sides without either roster running out.
+   */
   endsWar: boolean;
+  /**
+   * WHICH road, so copy describing the consequence can be true.
+   *
+   * `roster` leaves nobody behind on the losing side; `principals` ends the war with
+   * that side's allies still on it, which is the opposite picture. A reader told the
+   * roster story about a principal settlement is told something plainly false.
+   */
+  endsWarReason: "roster" | "principals" | null;
   /**
    * Treaty allies released alongside this country, because they were pulled in to
    * defend it. They leave with it, which is how one departure can empty a side that
@@ -126,7 +139,10 @@ export interface WithdrawalGate {
  * the authority: this is the same function the POST runs.
  */
 export function withdrawalGate(
-  conflict: Pick<ConflictDoc, "sideA" | "sideB" | "treatyEntries" | "control" | "controlStart">,
+  conflict: Pick<
+    ConflictDoc,
+    "sideA" | "sideB" | "treatyEntries" | "joinTurns" | "control" | "controlStart"
+  >,
   asker: CountryId,
   leaver: CountryId
 ): WithdrawalGate {
@@ -135,9 +151,26 @@ export function withdrawalGate(
   const guests = (conflict.treatyEntries ?? [])
     .filter((e) => e.defending === leaver)
     .map((e) => e.countryId as CountryId);
-  const endsWar = sideWouldEmpty(conflict, [leaver, ...guests]) !== null;
 
   const side: Side = (conflict.sideA.countries as string[]).includes(asker) ? "A" : "B";
+  const leaverSide: Side = (conflict.sideA.countries as string[]).includes(leaver) ? "A" : "B";
+
+  // A principal-to-principal settlement ends the war for everyone (`acceptPeace`),
+  // so demanding the opposing FOUNDER quit buys the war just as completely as
+  // emptying its roster would — and has to clear the same bar. Asking a mere joiner
+  // to leave decides nothing and stays ungated however the front looks.
+  const bothPrincipals =
+    principalOf(conflict, leaverSide) === leaver &&
+    principalOf(conflict, leaverSide === "A" ? "B" : "A") === asker;
+  // Roster first: when a departure does both, "nobody is left on that side" is the
+  // more concrete thing to tell the reader.
+  const endsWarReason: WithdrawalGate["endsWarReason"] =
+    sideWouldEmpty(conflict, [leaver, ...guests]) !== null
+      ? "roster"
+      : bothPrincipals
+        ? "principals"
+        : null;
+  const endsWar = endsWarReason !== null;
   const progress = progressForSide(
     side,
     conflict.control ?? 50,
@@ -146,6 +179,7 @@ export function withdrawalGate(
 
   return {
     endsWar,
+    endsWarReason,
     guests,
     progress,
     required: PRINCIPAL_BUYOUT_PROGRESS,
@@ -268,7 +302,7 @@ export async function loadPartySequentialIds(db: Db, countryId: CountryId): Prom
 export function validatePeaceOffer(
   conflict: Pick<
     ConflictDoc,
-    "status" | "sideA" | "sideB" | "treatyEntries" | "control" | "controlStart"
+    "status" | "sideA" | "sideB" | "treatyEntries" | "joinTurns" | "control" | "controlStart"
   >,
   from: CountryId,
   to: CountryId,

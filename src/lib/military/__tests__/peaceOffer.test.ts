@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   isOfferLive,
   validatePeaceOffer,
+  withdrawalGate,
   sideWouldEmpty,
   maxIndemnityForGdp,
   partyDisplayName,
@@ -479,6 +480,64 @@ describe("the buy-out gate", () => {
     // It records no victor and moves nothing, so nothing is bought: a war fought
     // over a question ends with the question still open.
     expect(buyOut(war(), "DD", { kind: "white_peace" } as never).ok).toBe(true);
+  });
+
+  it("refuses buying out the opposing PRINCIPAL even when its side still stands", () => {
+    // Poland joined on its own rather than under the Pact, so DD leaving releases
+    // nobody and the roster does not empty. The war ends anyway, because both
+    // principals settled it — so this is a buy-out and the gate has to see it.
+    const withJoiner = war({
+      sideB: { label: "East Germany", countries: ["DD", "PL"], kind: "coalition" },
+      treatyEntries: [],
+      joinTurns: [{ countryId: "PL", turn: 20, control: 100 }],
+    } as unknown as Partial<ConflictDoc>);
+    const res = buyOut(withJoiner, "DD");
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/not far enough forward/i);
+  });
+
+  it("allows that buy-out once the front is deep enough", () => {
+    const withJoiner = war({
+      sideB: { label: "East Germany", countries: ["DD", "PL"], kind: "coalition" },
+      treatyEntries: [],
+      joinTurns: [{ countryId: "PL", turn: 20, control: 100 }],
+      control: 25,
+    } as unknown as Partial<ConflictDoc>);
+    expect(buyOut(withJoiner, "DD").ok).toBe(true);
+  });
+
+  it("still allows peeling a mere JOINER off the opposing side", () => {
+    // PL is not its side's principal, so its departure decides nothing and the gate
+    // stays out of the way however the front looks.
+    const withJoiner = war({
+      sideB: { label: "East Germany", countries: ["DD", "PL"], kind: "coalition" },
+      treatyEntries: [],
+      joinTurns: [{ countryId: "PL", turn: 20, control: 100 }],
+    } as unknown as Partial<ConflictDoc>);
+    expect(
+      validatePeaceOffer(
+        withJoiner,
+        "US",
+        "PL",
+        { kind: "indemnity" as const, payer: "US", amount: 10 },
+        "PL",
+        1e12
+      ).ok
+    ).toBe(true);
+  });
+
+  it("says WHY the departure ends the war, so the copy can tell the truth", () => {
+    // The two roads end the war for different reasons, and the panel says something
+    // false if it assumes the roster one: on the principal road the losing side is
+    // still full of allies.
+    const joined = {
+      sideB: { label: "East Germany", countries: ["DD", "PL"], kind: "coalition" },
+      treatyEntries: [],
+      joinTurns: [{ countryId: "PL", turn: 20, control: 100 }],
+    } as unknown as Partial<ConflictDoc>;
+    expect(withdrawalGate(war(joined), "US", "DD").endsWarReason).toBe("principals");
+    expect(withdrawalGate(war(), "US", "DD").endsWarReason).toBe("roster");
+    expect(withdrawalGate(war(joined), "US", "PL").endsWarReason).toBe(null);
   });
 
   it("never gates an offer to leave YOURSELF", () => {

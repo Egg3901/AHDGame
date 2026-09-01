@@ -481,6 +481,31 @@ describe("what accepting would actually do to the war", () => {
     expect(text).toMatch(/released from the treaty that brought it in/i);
   });
 
+  it("does not claim an empty roster when it is the PRINCIPALS that end the war", async () => {
+    // A settlement between the two founders ends the war with the loser's allies
+    // still on its roster. Telling the reader nobody would be left is plainly false.
+    await ready({
+      ...war,
+      enemies: [
+        {
+          country: "CN",
+          endsWar: true,
+          endsWarReason: "principals" as const,
+          guestsLeaving: [],
+          withdrawalBlocked: false,
+          progressPct: 90,
+          requiredPct: 75,
+        },
+      ],
+      ourDeparture: { endsWar: false, endsWarReason: null, guestsLeaving: [] },
+    });
+    fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "them" } });
+    const text = document.body.textContent ?? "";
+    expect(text).toMatch(/ends this war outright/i);
+    expect(text).not.toMatch(/nobody would be left/i);
+    expect(text).toMatch(/started the war/i);
+  });
+
   it("still says the fighting continues when the side really would survive", async () => {
     await ready({
       ...war,
