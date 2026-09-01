@@ -54,4 +54,12 @@ export const SEED_TAX_RATES_1953: Record<LawCountryId, Record<SeedTaxType, numbe
     salesTax: 28, // product levy — the revenue anchor
     tariffs: 0,
   },
+  DE: {
+    incomeTax: 12,
+    domesticCorporateTax: 60,
+    foreignCorporateTax: 60,
+    payrollTax: 8,
+    salesTax: 28,
+    tariffs: 0,
+  },
 };
