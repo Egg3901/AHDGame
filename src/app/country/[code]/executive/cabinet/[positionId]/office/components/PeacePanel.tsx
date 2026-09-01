@@ -32,6 +32,21 @@ export interface EnemyView {
   country: CountryId;
   /** Asking them to withdraw would empty their side and end the war. */
   endsWar: boolean;
+  endsWarReason?: "roster" | "principals" | null;
+  /** True when reunification can be settled with THIS country: both are founders. */
+  canReunify?: boolean;
+  /**
+   * What OUR leaving would do to the war, settled with THIS country.
+   *
+   * Per enemy, not per war: our departure ends the war outright when we and the
+   * country we settle with both founded it, so the answer has no meaning without a
+   * counterparty. Optional for a response written before the field existed.
+   */
+  ourDeparture?: {
+    endsWar: boolean;
+    endsWarReason?: "roster" | "principals" | null;
+    guestsLeaving: CountryId[];
+  };
   /** Treaty allies released alongside them, who leave at the same moment. */
   guestsLeaving: CountryId[];
   /** That withdrawal is refused at the current front. A white peace escapes it. */
@@ -54,7 +69,12 @@ export interface PeaceWar {
   /** Countries on the OTHER side, the only ones an offer can be made to. */
   enemies: EnemyView[];
   /** What OUR leaving would do to this war. */
-  ourDeparture: { endsWar: boolean; guestsLeaving: CountryId[] };
+  /**
+   * Which way a reunification runs on this war, or null when it is unavailable.
+   * The incumbent is always the side that withdraws, so the challenger asks THEM to
+   * leave and the incumbent offers to leave itself. Server-decided.
+   */
+  reunificationLeaver?: "us" | "them" | null;
 }
 
 /**
@@ -94,7 +114,13 @@ function offerTermText(term: PeaceTerm, rulingPartyName?: string | null): string
     }
     return " in return for a change of government and fresh elections";
   }
-  return ` in return for freezing new defence procurement for ${term.turns} turns`;
+  if (term.kind === "demilitarisation") {
+    return ` in return for freezing new defence procurement for ${term.turns} turns`;
+  }
+  // NOT "in return for": the same term runs both ways, and from the incumbent it is an
+  // offer to withdraw AND concede, where "in return for" reads as the price they are
+  // being paid for leaving. This phrasing is true from either end of the deal.
+  return " with Germany reunified on East German terms";
 }
 
 /**
@@ -127,7 +153,14 @@ function offerDirectionText(o: OfferView): string {
  * EITHER departure ends that war, and a player reading the old line would have
  * expected the survivors to fight on.
  */
-function departureConsequence(leaverName: string, endsWar: boolean, guests: CountryId[]): string {
+function departureConsequence(
+  leaverName: string,
+  endsWar: boolean,
+  guests: CountryId[],
+  // Absent on a response written before the field existed. Treated as the roster
+  // road, which is what every such response meant when it was written.
+  reason: "roster" | "principals" | null = "roster"
+): string {
   const released =
     guests.length > 0
       ? ` ${guests.map((g) => COUNTRY_CONFIGS[g]?.name ?? g).join(" and ")} ${
@@ -136,9 +169,15 @@ function departureConsequence(leaverName: string, endsWar: boolean, guests: Coun
           guests.length === 1 ? "it" : "them"
         } in.`
       : "";
-  return endsWar
-    ? `Accepting ends this war outright: nobody would be left on ${leaverName}'s side.${released}`
-    : `Accepting takes ${leaverName} out and the fighting continues for everyone else.${released}`;
+  if (!endsWar) {
+    return `Accepting takes ${leaverName} out and the fighting continues for everyone else.${released}`;
+  }
+  // The two roads end the war for opposite-looking reasons, and only one of them
+  // empties a roster. A principal settlement ends the fighting with that side's
+  // allies still on it, so the roster sentence would be simply untrue.
+  return reason === "principals"
+    ? `Accepting ends this war outright: ${leaverName} is one of the two governments that started the war, and a settlement between the founders ends it for every ally on both sides.${released}`
+    : `Accepting ends this war outright: nobody would be left on ${leaverName}'s side.${released}`;
 }
 
 export function PeacePanel({
@@ -161,7 +200,7 @@ export function PeacePanel({
   /** Who this deal removes: us, or the country we are addressing. */
   const [leaver, setLeaver] = useState<"us" | "them">("us");
   const [termKind, setTermKind] = useState<
-    "white_peace" | "indemnity" | "regime_change" | "demilitarisation"
+    "white_peace" | "indemnity" | "regime_change" | "demilitarisation" | "reunification"
   >("indemnity");
   const [targetSystem, setTargetSystem] = useState<string>("parliamentaryRepublic");
   // Empty string means "let the conversion resolve it", which is what the term
@@ -176,12 +215,26 @@ export function PeacePanel({
   const war = wars.find((w) => w.conflictId === warId);
   const selectedEnemy = war?.enemies.find((e) => e.country === enemy) ?? null;
   /**
+   * Who the offer actually removes.
+   *
+   * A reunification is always the INCUMBENT leaving, whichever founder proposes it:
+   * one the challenger withdraws under is refused outright, because the departure
+   * hands the war to the incumbent while the term settles the question for the
+   * challenger. So the direction is the server's to decide, not the picker's, and
+   * left to the raw state the form would compose an offer the route always rejects.
+   */
+  const effectiveLeaver: "us" | "them" =
+    termKind === "reunification" ? (war?.reunificationLeaver ?? "them") : leaver;
+  /**
    * The gate bites only when we are asking THEM to leave and the term is not a white
    * peace. A white peace records no victor, so there is nothing to buy and nothing to
    * gate: the form must not block the one route that is always open.
    */
   const withdrawalBarred =
-    leaver === "them" && termKind !== "white_peace" && selectedEnemy?.withdrawalBlocked === true;
+    effectiveLeaver === "them" &&
+    termKind !== "white_peace" &&
+    termKind !== "reunification" &&
+    selectedEnemy?.withdrawalBlocked === true;
 
   /**
    * Changing who we are negotiating with resets who pays.
@@ -253,7 +306,7 @@ export function PeacePanel({
         conflictId: warId,
         toCountry: enemy,
         term: buildTerm(),
-        leaver,
+        leaver: effectiveLeaver,
         ...(justification.trim() ? { justification: justification.trim() } : {}),
       },
       "Offer sent."
@@ -299,6 +352,9 @@ export function PeacePanel({
     }
     if (termKind === "demilitarisation") {
       return { kind: "demilitarisation", turns: Number(demilTurns) || 0 };
+    }
+    if (termKind === "reunification") {
+      return { kind: "reunification" };
     }
     return { kind: "indemnity", payer, amount: Number(amount) || 0 };
   }
@@ -422,7 +478,8 @@ export function PeacePanel({
             </select>
             <select
               aria-label="Who leaves"
-              value={leaver}
+              value={effectiveLeaver}
+              disabled={termKind === "reunification"}
               onChange={(e) => setLeaver(e.target.value as "us" | "them")}
               className="min-w-[150px] flex-1 rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px]"
             >
@@ -439,6 +496,12 @@ export function PeacePanel({
               <option value="indemnity">Indemnity</option>
               <option value="regime_change">Regime change</option>
               <option value="demilitarisation">Demilitarisation</option>
+              {/* Only on a war the German Question is riding, and only for the side
+                  whose outcome reunification is. The server decides both: the form
+                  has no way to know which war carries the crisis. */}
+              {selectedEnemy?.canReunify && (
+                <option value="reunification">German reunification</option>
+              )}
             </select>
           </div>
 
@@ -508,21 +571,23 @@ export function PeacePanel({
 
           {selectedEnemy && war && (
             <p className="text-[11px] text-muted">
-              {leaver === "them"
+              {effectiveLeaver === "them"
                 ? departureConsequence(
                     COUNTRY_CONFIGS[selectedEnemy.country]?.name ?? selectedEnemy.country,
                     selectedEnemy.endsWar,
-                    selectedEnemy.guestsLeaving
+                    selectedEnemy.guestsLeaving,
+                    selectedEnemy.endsWarReason ?? "roster"
                   )
                 : departureConsequence(
                     COUNTRY_CONFIGS[countryId]?.name ?? countryId,
-                    war.ourDeparture.endsWar,
-                    war.ourDeparture.guestsLeaving
+                    selectedEnemy.ourDeparture?.endsWar ?? false,
+                    selectedEnemy.ourDeparture?.guestsLeaving ?? [],
+                    selectedEnemy.ourDeparture?.endsWarReason ?? "roster"
                   )}
             </p>
           )}
 
-          {leaver === "them" && !withdrawalBarred && (
+          {effectiveLeaver === "them" && !withdrawalBarred && !selectedEnemy?.endsWar && (
             <p className="text-[11px] text-muted">
               They withdraw and we keep fighting. A withdrawal that would end the war outright needs
               the front well in our favour first, unless it is a white peace.

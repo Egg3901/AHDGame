@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
+import { principalOf } from "./principal";
 import type { PeaceOfferDoc } from "@/lib/db/types/peaceOffer";
 import type { CountryId, GovernmentType } from "@/lib/constants/countries";
 import { validatePeaceTerm, type PeaceTerm } from "@/lib/military/peaceTerm";
@@ -96,8 +97,20 @@ export function sideWouldEmpty(
 }
 
 export interface WithdrawalGate {
-  /** True when this departure would empty their side, handing the asker the war. */
+  /**
+   * True when this departure hands the asker the war, by EITHER road: it empties the
+   * leaver's roster, or it is a principal-to-principal settlement, which ends the war
+   * for every guest on both sides without either roster running out.
+   */
   endsWar: boolean;
+  /**
+   * WHICH road, so copy describing the consequence can be true.
+   *
+   * `roster` leaves nobody behind on the losing side; `principals` ends the war with
+   * that side's allies still on it, which is the opposite picture. A reader told the
+   * roster story about a principal settlement is told something plainly false.
+   */
+  endsWarReason: "roster" | "principals" | null;
   /**
    * Treaty allies released alongside this country, because they were pulled in to
    * defend it. They leave with it, which is how one departure can empty a side that
@@ -125,8 +138,21 @@ export interface WithdrawalGate {
  * refuse, and a rule with two implementations is a rule that drifts. The server stays
  * the authority: this is the same function the POST runs.
  */
+/** Which roster holds this country, or null when neither does. */
+function rosterSideOf(
+  conflict: Pick<ConflictDoc, "sideA" | "sideB">,
+  country: CountryId
+): Side | null {
+  if ((conflict.sideA.countries as string[]).includes(country)) return "A";
+  if ((conflict.sideB.countries as string[]).includes(country)) return "B";
+  return null;
+}
+
 export function withdrawalGate(
-  conflict: Pick<ConflictDoc, "sideA" | "sideB" | "treatyEntries" | "control" | "controlStart">,
+  conflict: Pick<
+    ConflictDoc,
+    "sideA" | "sideB" | "treatyEntries" | "joinTurns" | "control" | "controlStart"
+  >,
   asker: CountryId,
   leaver: CountryId
 ): WithdrawalGate {
@@ -135,9 +161,26 @@ export function withdrawalGate(
   const guests = (conflict.treatyEntries ?? [])
     .filter((e) => e.defending === leaver)
     .map((e) => e.countryId as CountryId);
-  const endsWar = sideWouldEmpty(conflict, [leaver, ...guests]) !== null;
 
   const side: Side = (conflict.sideA.countries as string[]).includes(asker) ? "A" : "B";
+  const leaverSide: Side = (conflict.sideA.countries as string[]).includes(leaver) ? "A" : "B";
+
+  // A principal-to-principal settlement ends the war for everyone (`acceptPeace`),
+  // so demanding the opposing FOUNDER quit buys the war just as completely as
+  // emptying its roster would — and has to clear the same bar. Asking a mere joiner
+  // to leave decides nothing and stays ungated however the front looks.
+  const bothPrincipals =
+    principalOf(conflict, leaverSide) === leaver &&
+    principalOf(conflict, leaverSide === "A" ? "B" : "A") === asker;
+  // Roster first: when a departure does both, "nobody is left on that side" is the
+  // more concrete thing to tell the reader.
+  const endsWarReason: WithdrawalGate["endsWarReason"] =
+    sideWouldEmpty(conflict, [leaver, ...guests]) !== null
+      ? "roster"
+      : bothPrincipals
+        ? "principals"
+        : null;
+  const endsWar = endsWarReason !== null;
   const progress = progressForSide(
     side,
     conflict.control ?? 50,
@@ -146,6 +189,7 @@ export function withdrawalGate(
 
   return {
     endsWar,
+    endsWarReason,
     guests,
     progress,
     required: PRINCIPAL_BUYOUT_PROGRESS,
@@ -268,7 +312,7 @@ export async function loadPartySequentialIds(db: Db, countryId: CountryId): Prom
 export function validatePeaceOffer(
   conflict: Pick<
     ConflictDoc,
-    "status" | "sideA" | "sideB" | "treatyEntries" | "control" | "controlStart"
+    "status" | "sideA" | "sideB" | "treatyEntries" | "joinTurns" | "control" | "controlStart"
   >,
   from: CountryId,
   to: CountryId,
@@ -287,7 +331,11 @@ export function validatePeaceOffer(
   // The target's party `sequentialId`s, so a named ruling party can be checked
   // against the country it would rule. Optional for the same reason as the two
   // above; `validatePeaceTerm` skips the check rather than failing when absent.
-  targetPartyIds?: number[] | null
+  targetPartyIds?: number[] | null,
+  // The settlement crisis riding this war, for a term that settles one. Unlike the
+  // three above, absence REFUSES rather than skipping the check — see
+  // `PeaceTermContext.settlement` for why this one fails closed.
+  settlement?: { challenger: CountryId } | null
 ): PeaceOfferCheck {
   // Concluded covers a war awaiting terms as well as a resolved one. A front that
   // has reached a pole is not a war anyone can still negotiate their way out of:
@@ -348,13 +396,74 @@ export function validatePeaceOffer(
   // A WHITE PEACE IS ALWAYS EXEMPT. It records no victor and moves nothing, so
   // nothing is bought: a war fought over a question ends with the question still
   // open rather than answered in the buyer's favour.
-  if (leaver === to && term.kind !== "white_peace" && withdrawalGate(conflict, from, to).blocked) {
+  //
+  // A REUNIFICATION IS EXEMPT TOO, and for a different reason than the white peace.
+  // The white peace is exempt because it buys nothing. This one plainly does buy
+  // something, but it is not COERCIVE: the recipient must accept it, refusing costs
+  // them nothing, and what is on the table is the very question the war is being
+  // fought over rather than a cheque for it. Gating it on the front would also make
+  // the term unofferable in practice: a reunification the challenger withdraws under
+  // is barred below, so every reunification offer asks the other side to leave, and
+  // every one of them would meet this gate.
+  if (
+    leaver === to &&
+    term.kind !== "white_peace" &&
+    term.kind !== "reunification" &&
+    withdrawalGate(conflict, from, to).blocked
+  ) {
     return {
       ok: false,
       error:
         "That withdrawal would end the war outright, and your armies are not far " +
         "enough forward to demand it. Push the front further, or offer a white peace.",
     };
+  }
+
+  // A REUNIFICATION THE CHALLENGER WITHDRAWS UNDER IS A CONTRADICTION, and it is
+  // checked here rather than in `validatePeaceTerm` because only the offer knows who
+  // is leaving. The departure hands the war to the incumbent (the leaver's side is the
+  // losing one) while the term settles the question for the challenger. Left open it
+  // is not merely incoherent, it is an exploit: the challenger wins the German
+  // Question by surrendering the war fought over it.
+  if (term.kind === "reunification" && settlement) {
+    // EITHER FOUNDING BELLIGERENT MAY PROPOSE IT, and only they: from the challenger
+    // it is a demand, from the incumbent a capitulation, and the outcome is the
+    // challenger's either way. A guest cannot settle the question its principal is
+    // fighting over, and neither can it be settled AT one: a deal the opposing
+    // founder is not party to would decide Germany over their head.
+    //
+    // Checked here rather than in `validatePeaceTerm` because "founding belligerent"
+    // is a fact about the rosters, which that pure function does not hold.
+    const fromSide = rosterSideOf(conflict, from);
+    const toSide = rosterSideOf(conflict, to);
+    if (
+      fromSide === null ||
+      toSide === null ||
+      principalOf(conflict, fromSide) !== from ||
+      principalOf(conflict, toSide) !== to
+    ) {
+      return {
+        ok: false,
+        error: "Only the two countries that started this war can settle Germany between them.",
+      };
+    }
+    // NOTE: "the challenger must be at the table" is NOT checked here. It is
+    // roster-free, so it lives in `validatePeaceTerm` where the impose road sees it
+    // too — that road never runs this function, and a rule only the offer road
+    // enforces is a rule with a second door.
+    // A REUNIFICATION THE CHALLENGER WITHDRAWS UNDER IS A CONTRADICTION. The
+    // departure hands the war to the incumbent (the leaver's side is the losing one)
+    // while the term settles the question for the challenger. Left open it is not
+    // merely incoherent, it is an exploit: the challenger wins the German Question by
+    // surrendering the war fought over it. So the incumbent is always the one who
+    // leaves, whichever of the two composed the offer.
+    if (leaver === settlement.challenger) {
+      return {
+        ok: false,
+        error:
+          "Reunification cannot be settled by a deal East Germany withdraws from the war under.",
+      };
+    }
   }
 
   // The term's own rules live in `validatePeaceTerm`, shared with the impose route
@@ -373,5 +482,6 @@ export function validatePeaceOffer(
     targetSystem: targetSystem ?? "presidential",
     maxIndemnity: maxAmount ?? null,
     targetPartyIds: targetPartyIds ?? null,
+    settlement: settlement ?? null,
   });
 }

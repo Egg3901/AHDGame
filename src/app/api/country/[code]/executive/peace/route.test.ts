@@ -84,6 +84,173 @@ beforeEach(async () => {
   await negotiator(true);
 });
 
+describe("GET: whether reunification is on the table", () => {
+  /**
+   * UK founded side A here: the shared fixture lists US first, and `principalOf`
+   * names the first country with no join stamp. Reunification is settled between the
+   * two FOUNDERS, so the viewer has to be one.
+   */
+  const ukFounded = {
+    ...conflict,
+    joinTurns: [{ countryId: "US", turn: 5, control: 50 }],
+  };
+
+  function frozenCrisis(challenger: string | null) {
+    db.collection("settlementCrises");
+    db.collectionMocks.conflicts.find.mockReturnValue({ toArray: async () => [ukFounded] });
+    db.collectionMocks.settlementCrises.find.mockReturnValue({
+      toArray: async () =>
+        challenger === null
+          ? []
+          : [{ status: "frozen", conflictId: "war1", challengerEntityId: challenger }],
+    });
+  }
+
+  it("offers it to the challenger, who asks the other side to leave", async () => {
+    frozenCrisis("UK");
+    const { GET } = await import("./route");
+    const body = await (await GET(getReq(), params)).json();
+    expect(body.wars[0].enemies[0].canReunify).toBe(true);
+    expect(body.wars[0].reunificationLeaver).toBe("them");
+  });
+
+  it("offers it to the INCUMBENT too, who leaves itself", async () => {
+    // Either founder may propose it. From this side it is a capitulation, so the
+    // country that withdraws is us.
+    frozenCrisis("CN");
+    const { GET } = await import("./route");
+    const body = await (await GET(getReq(), params)).json();
+    expect(body.wars[0].enemies[0].canReunify).toBe(true);
+    expect(body.wars[0].reunificationLeaver).toBe("us");
+  });
+
+  it("does not offer it on an ordinary war", async () => {
+    frozenCrisis(null);
+    const { GET } = await import("./route");
+    const body = await (await GET(getReq(), params)).json();
+    expect(body.wars[0].enemies[0].canReunify).toBe(false);
+    expect(body.wars[0].reunificationLeaver).toBe(null);
+  });
+
+  it("says OUR departure ends the war when we and they both founded it", async () => {
+    // Read per enemy, not once per war. Our leaving ends the war only when the
+    // country we settle WITH is the opposing founder, so a single war-level answer
+    // cannot be right: it has no counterparty to be right about.
+    frozenCrisis("UK");
+    const { GET } = await import("./route");
+    const body = await (await GET(getReq(), params)).json();
+    const cn = body.wars[0].enemies.find((e: { country: string }) => e.country === "CN");
+    expect(cn.ourDeparture.endsWar).toBe(true);
+    expect(cn.ourDeparture.endsWarReason).toBe("principals");
+  });
+
+  it("says our departure does NOT end it against a mere joiner", async () => {
+    frozenCrisis("UK");
+    db.collectionMocks.conflicts.find.mockReturnValue({
+      toArray: async () => [
+        {
+          ...ukFounded,
+          sideB: { label: "PLA", countries: ["CN", "RU"], kind: "coalition" },
+          joinTurns: [
+            { countryId: "US", turn: 5, control: 50 },
+            { countryId: "RU", turn: 5, control: 50 },
+          ],
+        },
+      ],
+    });
+    const { GET } = await import("./route");
+    const body = await (await GET(getReq(), params)).json();
+    const ru = body.wars[0].enemies.find((e: { country: string }) => e.country === "RU");
+    expect(ru.ourDeparture.endsWar).toBe(false);
+  });
+
+  it("does not offer it against an enemy that merely joined the war", async () => {
+    // UK is side A's principal here, but the offer has to reach side B's founder.
+    frozenCrisis("UK");
+    db.collectionMocks.conflicts.find.mockReturnValue({
+      toArray: async () => [
+        {
+          ...ukFounded,
+          sideB: { label: "PLA", countries: ["CN", "RU"], kind: "coalition" },
+          joinTurns: [
+            { countryId: "US", turn: 5, control: 50 },
+            { countryId: "RU", turn: 5, control: 50 },
+          ],
+        },
+      ],
+    });
+    const { GET } = await import("./route");
+    const body = await (await GET(getReq(), params)).json();
+    const ru = body.wars[0].enemies.find((e: { country: string }) => e.country === "RU");
+    expect(ru.canReunify).toBe(false);
+  });
+});
+
+describe("POST a reunification offer", () => {
+  /** Put a frozen German Question on war1, with the sender as its challenger. */
+  function questionRidesTheWar(challenger: string) {
+    db.collection("settlementCrises");
+    // UK founds side A: reunification runs between the two founders.
+    db.collectionMocks.conflicts.findOne.mockResolvedValue({
+      ...conflict,
+      joinTurns: [{ countryId: "US", turn: 5, control: 50 }],
+    });
+    db.collectionMocks.settlementCrises.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      status: "frozen",
+      conflictId: "war1",
+      challengerEntityId: challenger,
+      targetEntityId: "DE",
+    });
+  }
+
+  // `leaver: "them"` because a reunification the challenger withdraws under is a
+  // contradiction the validator refuses. The form composes it this way too.
+  const reunify = {
+    conflictId: "war1",
+    toCountry: "CN",
+    leaver: "them",
+    term: { kind: "reunification" },
+  };
+
+  it("accepts it from the challenger while the war is still being fought", async () => {
+    // Ungated on the front deliberately: the term is available for as long as the
+    // question is riding the war.
+    questionRidesTheWar("UK");
+    const { POST } = await import("./route");
+    expect((await POST(req(reunify), params)).status).toBe(200);
+  });
+
+  it("refuses it on a war carrying no German Question", async () => {
+    db.collection("settlementCrises");
+    db.collectionMocks.settlementCrises.findOne.mockResolvedValue(null);
+    const { POST } = await import("./route");
+    const res = await POST(req(reunify), params);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/German Question/i);
+  });
+
+  it("refuses one the challenger would withdraw under", async () => {
+    // CN is the challenger here and `reunify` names CN as the leaver, so this is the
+    // contradiction: the departure hands the war to the incumbent while the term
+    // settles the question for the challenger.
+    questionRidesTheWar("CN");
+    const { POST } = await import("./route");
+    const res = await POST(req(reunify), params);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/withdraw/i);
+  });
+
+  it("lets the INCUMBENT offer it, withdrawing itself", async () => {
+    // Either founder may propose it. From the incumbent it is a capitulation, so we
+    // are the side that leaves.
+    questionRidesTheWar("CN");
+    const { POST } = await import("./route");
+    const capitulate = { ...reunify, leaver: "us" };
+    expect((await POST(req(capitulate), params)).status).toBe(200);
+  });
+});
+
 describe("POST offer", () => {
   it("lets the negotiator make an offer", async () => {
     const { POST } = await import("./route");

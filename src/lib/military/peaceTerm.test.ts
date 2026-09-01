@@ -186,3 +186,50 @@ describe("validatePeaceTerm: white peace", () => {
     });
   });
 });
+
+describe("validatePeaceTerm: reunification", () => {
+  const term: PeaceTerm = { kind: "reunification" };
+  /** DD is the challenger of the German Question frozen on this war. */
+  const gq: PeaceTermContext = {
+    from: "DD",
+    to: "US",
+    target: "US",
+    targetSystem: "presidential",
+    maxIndemnity: null,
+    settlement: { challenger: "DD" },
+  };
+
+  it("accepts it from the challenger on a German Question war", () => {
+    expect(validatePeaceTerm(term, gq)).toEqual({ ok: true });
+  });
+
+  it("refuses it on a war that carries no German Question", () => {
+    const res = validatePeaceTerm(term, { ...gq, settlement: null });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/German Question/i);
+  });
+
+  it("refuses it when the challenger is neither party to the deal", () => {
+    // Shared with the IMPOSE road, which never runs `validatePeaceOffer` and so has
+    // no other check standing between it and settling Germany over the head of the
+    // country whose outcome it is.
+    const res = validatePeaceTerm(term, { ...gq, from: "RU", to: "US" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/East Germany|challenger|party/i);
+  });
+
+  it("refuses it when the caller did not load the settlement at all", () => {
+    // Fails CLOSED, unlike maxIndemnity and targetPartyIds: a term whose whole
+    // meaning is the crisis cannot be waved through when the crisis is unknown.
+    const { settlement: _omitted, ...withoutSettlement } = gq;
+    const res = validatePeaceTerm(term, withoutSettlement);
+    expect(res.ok).toBe(false);
+  });
+
+  it("accepts it from the incumbent side too", () => {
+    // EITHER founding belligerent may put it on the table. From the incumbent it is
+    // an offer to concede: the outcome is still the challenger's, and who composed
+    // the offer does not change what it settles.
+    expect(validatePeaceTerm(term, { ...gq, from: "US", to: "DD" })).toEqual({ ok: true });
+  });
+});

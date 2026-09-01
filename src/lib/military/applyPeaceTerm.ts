@@ -14,6 +14,7 @@ import {
   FORCED_VOTE_SHARE_PENALTY,
 } from "@/lib/onePartyState/systemConversion";
 import type { PeaceTerm } from "./peaceTerm";
+import { reunifyByPeaceTerm } from "@/lib/settlement/reunifyByPeaceTerm";
 
 export interface ApplyTermContext {
   /** The country imposing or offering. Receives an indemnity it is not paying. */
@@ -68,7 +69,16 @@ export async function applyPeaceTerm(
     return;
   }
 
-  // Exhaustive. If a fourth term is ever added, this line stops compiling rather
+  if (term.kind === "reunification") {
+    // Everything this term does belongs to the settlement pipeline, so nothing is
+    // done here: no money moves, and the TARGET's own system is untouched. The two
+    // Germanies are named by the crisis, not by the pair who signed the treaty, and
+    // converting the signatory as well would convert the wrong country.
+    await reunifyByPeaceTerm(db, ctx.conflictId, ctx.currentTurn);
+    return;
+  }
+
+  // Exhaustive. If another term is ever added, this line stops compiling rather
   // than letting a settlement report success and change nothing.
   const unreachable: never = term;
   throw new Error(`applyPeaceTerm: unsupported term ${JSON.stringify(unreachable)}`);

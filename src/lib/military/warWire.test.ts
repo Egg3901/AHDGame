@@ -184,3 +184,47 @@ describe("buildSettledDispatch: a white peace", () => {
     expect(termFieldValue(WHITE_PEACE)).toMatch(/status quo/i);
   });
 });
+
+describe("the reunification term on the wire", () => {
+  const REUNIFY: PeaceTerm = { kind: "reunification" };
+
+  it("names the field value for what it is", () => {
+    expect(termFieldValue(REUNIFY)).toBe("German reunification");
+  });
+
+  it("does not report it as a demilitarisation", () => {
+    // Every one of these readers used to fall through to the last variant, so a term
+    // it did not know about was announced as whatever the final branch happened to be.
+    expect(termFieldValue(REUNIFY)).not.toMatch(/demilitarisation/i);
+  });
+
+  it("uses no dash characters, like the rest of the player-facing copy", () => {
+    expect(termFieldValue(REUNIFY)).not.toMatch(/[\u2014\u2013]/);
+  });
+});
+
+describe("who the reunification dispatch names", () => {
+  const REUNIFY2: PeaceTerm = { kind: "reunification" };
+
+  it("does not cast the settlement's target as the side that gave way", () => {
+    // The stamp records the term's RECIPIENT, which for a capitulation is the winner:
+    // the incumbent may offer to withdraw AND concede reunification, and then the
+    // recipient is East Germany. Calling them the side that agreed to the terms
+    // reports the war exactly backwards.
+    const body = buildSettledDispatch(war(REUNIFY2, "negotiated")).body;
+    expect(body).not.toMatch(/agreed to the terms/i);
+    expect(body).not.toMatch(/in no position to refuse/i);
+    expect(body).toMatch(/German/);
+  });
+
+  it("says the same thing whichever founder composed the deal", () => {
+    // The term settles the question, not a country, so the prose cannot depend on
+    // which end of the deal the stamp happens to record.
+    const asDemand = buildSettledDispatch(war(REUNIFY2, "negotiated")).body;
+    const asCapitulation = buildSettledDispatch({
+      ...war(REUNIFY2, "negotiated"),
+      settlement: { term: REUNIFY2, path: "negotiated", imposedBy: "TR", target: "UK", turn: 400 },
+    } as unknown as ConflictDoc).body;
+    expect(asCapitulation).toBe(asDemand);
+  });
+});

@@ -36,7 +36,25 @@ export type PeaceTerm =
    * party a monopoly and bans its rivals — the settlement installs the enemy.
    */
   | { kind: "regime_change"; targetSystem: GovernmentType; rulingPartyId?: number }
-  | { kind: "demilitarisation"; turns: number };
+  | { kind: "demilitarisation"; turns: number }
+  /**
+   * German reunification, on the challenger's terms.
+   *
+   * Carries no fields: the settlement crisis already names the two Germanies, and a
+   * term that restated them could disagree with it.
+   *
+   * Only valid on a war the German Question is riding, and EITHER of the two
+   * founding belligerents may propose it: from the challenger it is a demand, from
+   * the incumbent a capitulation. The outcome is the challenger's either way, which
+   * is why the incumbent's version always has the incumbent withdrawing. The
+   * challenger must be a party to it, and a country that merely joined the war
+   * cannot settle Germany in either direction.
+   *
+   * Deliberately UNGATED on the front. Every other way to reach this outcome runs
+   * through winning the war; this is the one that can be put on the table while it
+   * is still being fought, which is the point of having it.
+   */
+  | { kind: "reunification" };
 
 /**
  * Default demilitarisation length, in turns. Matches `TRUCE_TURNS`, so the bar on
@@ -120,6 +138,16 @@ export interface PeaceTermContext {
    * country.
    */
   targetPartyIds?: number[] | null;
+  /**
+   * The settlement crisis riding THIS war, when one is.
+   *
+   * ⚠️ Unlike `maxIndemnity` and `targetPartyIds`, absence FAILS CLOSED. Those two
+   * skip a check when the caller could not cheaply load them, which can only ever
+   * refuse a valid term. Here the crisis IS the term's whole meaning, so treating
+   * "not loaded" as "no objection" would let a reunification through on a war that
+   * has nothing to do with Germany. Callers that can offer the term always load it.
+   */
+  settlement?: { challenger: CountryId } | null;
 }
 
 export type PeaceTermCheck = { ok: true } | { ok: false; error: string };
@@ -154,6 +182,34 @@ export function validatePeaceTerm(term: PeaceTerm, ctx: PeaceTermContext): Peace
         error: "An indemnity cannot exceed twice the paying country's annual GDP.",
       };
     }
+    return { ok: true };
+  }
+
+  if (term.kind === "reunification") {
+    // Both roads to this term load the crisis, so a missing one is a war that is not
+    // carrying the German Question rather than a caller that skipped a query.
+    if (!ctx.settlement) {
+      return {
+        ok: false,
+        error: "Reunification can only be settled on a war the German Question is riding.",
+      };
+    }
+    // THE CHALLENGER MUST BE AT THE TABLE, and this check lives HERE rather than in
+    // `validatePeaceOffer` because the IMPOSE road never runs that function. Left
+    // there, a victor and a loser who are neither of them the challenger could
+    // reunify Germany between themselves, deciding the question over the head of the
+    // country whose outcome it is. Roster-free, so this pure function can make it.
+    if (ctx.from !== ctx.settlement.challenger && ctx.to !== ctx.settlement.challenger) {
+      return {
+        ok: false,
+        error: "Germany cannot be reunified by a settlement East Germany is not a party to.",
+      };
+    }
+    // WHICH of the two proposes it is not decided here. Either founding belligerent
+    // may, and "founding" is a fact about the war's rosters that this pure function
+    // cannot see: `validatePeaceOffer` holds the conflict and makes that check. The
+    // outcome is the challenger's either way, so a proposal from the incumbent is a
+    // concession rather than a different settlement.
     return { ok: true };
   }
 
