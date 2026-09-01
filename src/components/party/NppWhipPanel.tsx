@@ -358,7 +358,7 @@ export function NppWhipPanel({
   const handleGovernmentVoteWhip = async (
     voteId: string,
     direction: "for" | "against",
-    targetType: "pmAppointmentVote" | "noConfidenceVote"
+    targetType: "pmAppointmentVote" | "noConfidenceVote" | "speakerVacateMotion"
   ) => {
     setWhippingId(`cv_${voteId}_${direction}`);
     try {
@@ -604,13 +604,17 @@ export function NppWhipPanel({
                   election.type === "noConfidenceVote" ||
                   election.type === "No-Confidence Motion" ||
                   election.type === "PM Confidence Vote";
+                const isVacate = election.type === "speakerVacateMotion";
                 const nominee = election.candidacies[0];
                 const headerLabel = isPM
                   ? `PM Appointment — ${nominee?.nomineeName ?? "(unknown nominee)"}`
                   : isNC
                     ? (nominee?.nomineeName ?? "No-Confidence Motion")
-                    : (election.type?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) ??
-                      "Leadership Election");
+                    : isVacate
+                      ? (nominee?.nomineeName ?? "Motion to Vacate the Chair")
+                      : (election.type
+                          ?.replace(/_/g, " ")
+                          .replace(/\b\w/g, (c) => c.toUpperCase()) ?? "Leadership Election");
 
                 return (
                   <div
@@ -677,6 +681,35 @@ export function NppWhipPanel({
                           {whippingId === `cv_${election.id}_against`
                             ? "Issuing..."
                             : "Whip AGAINST (Keep PM)"}
+                        </button>
+                      </div>
+                    ) : isVacate ? (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() =>
+                            handleGovernmentVoteWhip(election.id, "for", "speakerVacateMotion")
+                          }
+                          disabled={!whip.canWhip || whippingId === `cv_${election.id}_for`}
+                          className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          style={{
+                            backgroundColor: whip.canWhip ? `${partyColor}20` : undefined,
+                            color: whip.canWhip ? partyColor : undefined,
+                          }}
+                        >
+                          {whippingId === `cv_${election.id}_for`
+                            ? "Issuing..."
+                            : "Whip FOR (Vacate)"}
+                        </button>
+                        <button
+                          onClick={() =>
+                            handleGovernmentVoteWhip(election.id, "against", "speakerVacateMotion")
+                          }
+                          disabled={!whip.canWhip || whippingId === `cv_${election.id}_against`}
+                          className="px-3 py-1.5 text-xs font-medium rounded-md border border-card-border bg-card hover:bg-muted/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {whippingId === `cv_${election.id}_against`
+                            ? "Issuing..."
+                            : "Whip AGAINST (Keep Speaker)"}
                         </button>
                       </div>
                     ) : (

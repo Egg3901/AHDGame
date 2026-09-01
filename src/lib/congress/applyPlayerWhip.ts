@@ -2,7 +2,13 @@ import type { Db, ObjectId } from "mongodb";
 import { resolveBillVoteField } from "@/lib/congress/billVoteField";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import type { CountryId } from "@/lib/constants/countries";
-import type { Bill, CabinetNomination, ElectedOfficial, SpeakerNomination } from "@/lib/db/types";
+import type {
+  Bill,
+  CabinetNomination,
+  ElectedOfficial,
+  SpeakerNomination,
+  SpeakerVacateMotion,
+} from "@/lib/db/types";
 import {
   getPMAppointmentVotesCollection,
   getNoConfidenceVotesCollection,
@@ -373,6 +379,53 @@ export async function applyPlayerWhipToGovernmentVote(
     { _id: voteId },
     Object.keys(incFields).length > 0 ? { $set: setFields, $inc: incFields } : { $set: setFields }
   );
+
+  return { overridden, alreadyAligned };
+}
+
+/**
+ * Force-cast for/against votes on the open motion to vacate the Speaker.
+ *
+ * The motion's ballot values already are "for"/"against", so the whip
+ * direction is stored verbatim and the snapshot needs no translation. The
+ * motion caches no tally counters (`computeCongressLeadershipTally` derives
+ * them from `votes` on read), so unlike the government-vote path there is
+ * nothing to `$inc`.
+ */
+export async function applyPlayerWhipToVacateMotion(
+  db: Db,
+  direction: "for" | "against",
+  eligibleCharacterIds: ObjectId[]
+): Promise<PlayerWhipResult> {
+  if (eligibleCharacterIds.length === 0) {
+    return { overridden: 0, alreadyAligned: 0 };
+  }
+
+  const coll = db.collection<SpeakerVacateMotion>("speakerVacateMotions");
+  const motion = await coll.findOne({ _id: "current" });
+  if (!motion || motion.status !== "voting") {
+    return { overridden: 0, alreadyAligned: 0 };
+  }
+
+  const existing = motion.votes ?? {};
+  const now = new Date();
+
+  let overridden = 0;
+  let alreadyAligned = 0;
+  const setFields: Record<string, unknown> = { updatedAt: now };
+
+  for (const charId of eligibleCharacterIds) {
+    const key = charId.toString();
+    const prev = existing[key];
+
+    setFields[`whippedFromVote.${key}`] = prev ?? "unvoted";
+    setFields[`votes.${key}`] = direction;
+
+    if (prev === direction) alreadyAligned++;
+    else overridden++;
+  }
+
+  await coll.updateOne({ _id: "current", status: "voting" }, { $set: setFields });
 
   return { overridden, alreadyAligned };
 }

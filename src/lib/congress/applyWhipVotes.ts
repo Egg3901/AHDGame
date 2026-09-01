@@ -18,9 +18,15 @@ import type {
   NPP,
   NPPVotePrediction,
   SpeakerNomination,
+  SpeakerVacateMotion,
   StateBill,
   StateDemographics,
 } from "@/lib/db/types";
+import {
+  loadVacateSpeakerContext,
+  nppStance,
+  nppVacateMotionVote,
+} from "@/lib/congress/speaker/nppVacateVote";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 import { computeCrossPressureForces, verdictFromForces } from "@/lib/turn/npp/crossPressure";
 import {
@@ -745,6 +751,82 @@ export async function applyWhipVotesToGovernmentVote(
     } else {
       await getNoConfidenceVotesCollection(db).updateOne({ _id: voteId }, updateOp);
     }
+  }
+
+  return { fellInLine, ignored };
+}
+
+/**
+ * Cast votes for NPPs on an open motion to vacate the Speaker's chair.
+ *
+ * Whip direction "for" means vacate, "against" means keep the Speaker, which
+ * matches the ballot values stored on the motion, so no translation is needed.
+ *
+ * Unlike leadership elections this OVERWRITES an NPP's existing ballot: the
+ * motion may already carry auto-cast votes from a closing window, and a whip
+ * issued afterwards must be able to move them. The motion caches no tally
+ * fields (`computeCongressLeadershipTally` derives them from `votes` on read),
+ * so there is no counter bookkeeping to keep in step.
+ *
+ * Hard whips are binding, matching the other leadership-style targets. Soft
+ * whips keep the probabilistic compliance gate and fall back to the bloc's own
+ * vacate heuristic when an NPP resists.
+ */
+export async function applyWhipVotesToVacateMotion(
+  db: Db,
+  direction: "for" | "against",
+  nppOfficials: ElectedOfficial[],
+  nppMap: Map<string, NPP>,
+  mode: NppWhipMode = "hard",
+  statecraftBonus = 0
+): Promise<ApplyWhipResult> {
+  const motions = db.collection<SpeakerVacateMotion>("speakerVacateMotions");
+  const motion = await motions.findOne({ _id: "current" });
+  if (!motion || motion.status !== "voting") return { fellInLine: 0, ignored: 0 };
+
+  const votes = motion.votes ?? {};
+  const speakerContext = await loadVacateSpeakerContext(db, motion);
+
+  let fellInLine = 0;
+  let ignored = 0;
+  const setFields: Record<string, unknown> = { updatedAt: new Date() };
+
+  const seenNppIds = new Set<string>();
+  for (const official of nppOfficials) {
+    if (!official.nppId) continue;
+    const nppIdStr = official.nppId.toString();
+    if (seenNppIds.has(nppIdStr)) continue;
+    seenNppIds.add(nppIdStr);
+
+    const nppKey = `npp_${nppIdStr}`;
+    const previousVote = votes[nppKey];
+    const npp = nppMap.get(nppIdStr);
+
+    const resolvedVote =
+      mode !== "hard" && npp && !resolveNppWhipSuccess(npp, mode, statecraftBonus).success
+        ? nppVacateMotionVote({
+            nppParty: npp.party,
+            nppStance: nppStance(npp),
+            speakerParty: speakerContext.speakerParty,
+            speakerStance: speakerContext.speakerStance,
+            majorPartyIds: speakerContext.majorPartyIds,
+            rng: Math.random,
+          })
+        : direction;
+
+    if (previousVote === resolvedVote) {
+      if (resolvedVote === direction) fellInLine++;
+      else ignored++;
+      continue;
+    }
+
+    setFields[`votes.${nppKey}`] = resolvedVote;
+    if (resolvedVote === direction) fellInLine++;
+    else ignored++;
+  }
+
+  if (Object.keys(setFields).length > 1) {
+    await motions.updateOne({ _id: "current", status: "voting" }, { $set: setFields });
   }
 
   return { fellInLine, ignored };

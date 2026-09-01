@@ -11,6 +11,7 @@ import type {
   ElectedOfficial,
   SpeakerElection,
   SpeakerNomination,
+  SpeakerVacateMotion,
   HouseLeadershipElection,
   HouseLeadershipNomination,
   SenateLeadershipElection,
@@ -200,6 +201,19 @@ export async function GET(request: Request, { params }: RouteParams) {
           .findOne({ _id: "current", status: "voting" })
       : null;
 
+    // Get the open motion to vacate the chair (US only). Resolution is lazy, so
+    // filter on the game clock as well as the status: a motion left in "voting"
+    // past its deadline is over and must not appear as whippable.
+    const vacateMotionDoc = isUS
+      ? await db
+          .collection<SpeakerVacateMotion>("speakerVacateMotions")
+          .findOne({ _id: "current", status: "voting" })
+      : null;
+    const vacateMotion =
+      vacateMotionDoc && !isLeadershipElectionClosed(vacateMotionDoc, currentTurnForLeadership, now)
+        ? vacateMotionDoc
+        : null;
+
     // Get Speaker nominations if election is active
     let speakerNominations: SpeakerNomination[] = [];
     if (
@@ -263,6 +277,7 @@ export async function GET(request: Request, { params }: RouteParams) {
             "pmAppointmentVote",
             "noConfidenceVote",
             "cabinetNomination",
+            "speakerVacateMotion",
           ],
         },
         partyId: partyIdStr,
@@ -328,6 +343,32 @@ export async function GET(request: Request, { params }: RouteParams) {
           nomineeParty: n.nomineeParty,
           votesFor: n.votesFor,
         })),
+        nppWhip: nppSummary,
+        playerWhip: playerSummary,
+        existingWhips: nppSummary.existingWhips,
+        canWhip: nppSummary.canWhip,
+      });
+    }
+
+    // Add the open motion to vacate the chair. Unlike a leadership election
+    // this is not gated on a role policy: every party seated in the House votes
+    // on it, and its absolute-majority-of-all-seats bar means a party's blocs
+    // matter even when it holds no leadership office.
+    if (hasLowerNPPs && vacateMotion) {
+      const whipKey = `speakerVacateMotion_current_${lowerKey}`;
+      const { nppSummary, playerSummary } = buildSummaries(whipKey, vacateMotion.startedAt);
+      result[lowerKey].push({
+        id: "current",
+        type: "speakerVacateMotion",
+        chamber: lowerKey,
+        endsAt: vacateMotion.endsAt,
+        candidacies: [
+          {
+            id: "current",
+            nomineeName: `Motion to vacate ${vacateMotion.targetSpeakerName}`,
+            votesFor: 0,
+          },
+        ],
         nppWhip: nppSummary,
         playerWhip: playerSummary,
         existingWhips: nppSummary.existingWhips,

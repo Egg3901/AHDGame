@@ -10,6 +10,7 @@ import type {
   NPP,
   SenateLeadershipNomination,
   SpeakerNomination,
+  SpeakerVacateMotion,
   WhipAudience,
   WhipDirection,
   WhipIssuer,
@@ -355,6 +356,28 @@ async function loadCabinetTarget(db: Db, whip: BillWhip): Promise<TargetContext 
   };
 }
 
+async function loadVacateTarget(db: Db, whip: BillWhip): Promise<TargetContext | null> {
+  const motion = await db
+    .collection<SpeakerVacateMotion>("speakerVacateMotions")
+    .findOne({ _id: "current", status: "voting" });
+  // Only whips issued during THIS motion describe the ballots on it; the
+  // singleton "current" id is reused, so an older whip must not be scored
+  // against a fresh motion's votes.
+  if (!motion || whip.createdAt < motion.startedAt) return null;
+  return {
+    label: motion.targetSpeakerName
+      ? `Motion to Vacate: ${motion.targetSpeakerName}`
+      : "Motion to Vacate the Chair",
+    votes: Object.entries(motion.votes ?? {}).map(([voterKey, vote]) => ({
+      voterKey,
+      comparableVote: toComparableStandardVote(vote),
+      // "FOR"/"AGAINST" reads as ambiguous on a motion to vacate, so name the
+      // outcome each ballot produces instead.
+      displayVote: vote === "for" ? "VACATE" : vote === "against" ? "KEEP" : "Unknown",
+    })),
+  };
+}
+
 async function loadLeadershipTarget(db: Db, whip: BillWhip): Promise<TargetContext | null> {
   const collectionName =
     whip.targetType === "speakerElection"
@@ -414,6 +437,8 @@ async function loadTargetContext(db: Db, whip: BillWhip): Promise<TargetContext 
       return loadGovernmentTarget(db, whip);
     case "cabinetNomination":
       return loadCabinetTarget(db, whip);
+    case "speakerVacateMotion":
+      return loadVacateTarget(db, whip);
     default:
       return null;
   }

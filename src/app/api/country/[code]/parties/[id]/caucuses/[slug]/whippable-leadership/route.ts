@@ -5,7 +5,13 @@ import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { findCaucusBySlug, listCaucusMemberships } from "@/lib/db/caucusLookup";
 import { getCountryConfig, COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import type { BillWhip, CabinetNomination, ElectedOfficial } from "@/lib/db/types";
+import type {
+  BillWhip,
+  CabinetNomination,
+  ElectedOfficial,
+  SpeakerVacateMotion,
+} from "@/lib/db/types";
+import { isLeadershipElectionClosed } from "@/lib/congress/leadershipElections";
 import {
   getPMAppointmentVotesCollection,
   getNoConfidenceVotesCollection,
@@ -149,7 +155,12 @@ export async function GET(_request: Request, { params }: RouteParams) {
       .collection<BillWhip>("billWhips")
       .find({
         targetType: {
-          $in: ["pmAppointmentVote", "noConfidenceVote", "cabinetNomination"],
+          $in: [
+            "pmAppointmentVote",
+            "noConfidenceVote",
+            "cabinetNomination",
+            "speakerVacateMotion",
+          ],
         },
         partyId: partyIdStr,
         issuedBy: "caucus",
@@ -166,9 +177,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
       target.get(key)!.push(whip);
     }
 
-    const buildSummaries = (key: string) => {
-      const npp = nppWhipsByTarget.get(key) ?? [];
-      const character = charWhipsByTarget.get(key) ?? [];
+    // `since` scopes a singleton target (the motion to vacate reuses the id
+    // "current") to the instance currently open, so whips from a previous
+    // motion do not freeze this one's attempt counter (ticket #959).
+    const buildSummaries = (key: string, since?: Date) => {
+      const inWindow = (whip: BillWhip) => !since || whip.createdAt >= since;
+      const npp = (nppWhipsByTarget.get(key) ?? []).filter(inWindow);
+      const character = (charWhipsByTarget.get(key) ?? []).filter(inWindow);
       const nppSummary: WhipSummary = {
         existingWhips: npp.map((whip) => ({
           candidacyId: whip.candidacyId?.toString(),
@@ -185,6 +200,35 @@ export async function GET(_request: Request, { params }: RouteParams) {
       };
       return { nppSummary, playerSummary };
     };
+
+    // The motion to vacate the chair is a US House singleton. Resolution is
+    // lazy, so gate on the game clock as well as the status.
+    if (hasLowerMembers && countryId === COUNTRY_CONFIGS.US.id) {
+      const motion = await db
+        .collection<SpeakerVacateMotion>("speakerVacateMotions")
+        .findOne({ _id: "current", status: "voting" });
+      if (motion && !isLeadershipElectionClosed(motion, currentTurnForLeadership, now)) {
+        const whipKey = `speakerVacateMotion_current_${lowerKey}`;
+        const { nppSummary, playerSummary } = buildSummaries(whipKey, motion.startedAt);
+        result[lowerKey].push({
+          id: "current",
+          type: "speakerVacateMotion",
+          chamber: lowerKey,
+          endsAt: motion.endsAt,
+          candidacies: [
+            {
+              id: "current",
+              nomineeName: `Motion to vacate ${motion.targetSpeakerName}`,
+              votesFor: 0,
+            },
+          ],
+          nppWhip: nppSummary,
+          playerWhip: playerSummary,
+          existingWhips: nppSummary.existingWhips,
+          canWhip: nppSummary.canWhip,
+        });
+      }
+    }
 
     if (hasLowerMembers) {
       const [activePMVotes, activeNCVotes] = await Promise.all([
