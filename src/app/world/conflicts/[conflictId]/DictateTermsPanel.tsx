@@ -20,9 +20,16 @@ export interface DictateTermsView {
    * victor can pick here is a party the route will accept.
    */
   targetParties: { id: number; name: string; abbreviation?: string }[];
+  /**
+   * True when this war is carrying a settlement crisis the victor is the CHALLENGER
+   * of. Server-decided: the panel cannot tell which war a question is riding, and
+   * the route refuses the term from anyone else regardless.
+   */
+  canDictateReunification?: boolean;
 }
 
-type TermKind = "white_peace" | "indemnity" | "regime_change" | "demilitarisation";
+type TermKind =
+  "white_peace" | "indemnity" | "regime_change" | "demilitarisation" | "reunification";
 
 /** Systems a settlement may install. A crown cannot be created by treaty. */
 const SYSTEMS = [
@@ -97,6 +104,9 @@ export function DictateTermsPanel({ view }: { view: DictateTermsView }) {
         targetSystem: system,
         ...(named ? { rulingPartyId: Number(rulingParty) } : {}),
       });
+    }
+    if (kind === "reunification") {
+      return submit({ kind: "reunification" });
     }
     return submit({ kind: "demilitarisation", turns: Number(turns) || 0 });
   }
@@ -219,6 +229,20 @@ export function DictateTermsPanel({ view }: { view: DictateTermsView }) {
             />
           </label>
         </Option>
+
+        {view.canDictateReunification && (
+          <Option
+            checked={kind === "reunification"}
+            onSelect={() => setKind("reunification")}
+            title="German reunification"
+            blurb={`The German question is settled on your terms: the two German states become one.`}
+          >
+            <p className="mt-1 text-[11px] text-muted">
+              This settles the question itself rather than landing on {view.targetName}. The unified
+              state carries the eastern government across, and the crisis closes with it.
+            </p>
+          </Option>
+        )}
       </fieldset>
 
       {error && <p className="mt-2 text-[12px] text-error">{error}</p>}

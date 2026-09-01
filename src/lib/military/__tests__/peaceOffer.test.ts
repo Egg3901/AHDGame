@@ -540,6 +540,40 @@ describe("the buy-out gate", () => {
     expect(withdrawalGate(war(joined), "US", "PL").endsWarReason).toBe(null);
   });
 
+  it("refuses a reunification the challenger itself withdraws under", () => {
+    // "We leave the war AND Germany reunifies on our terms" is winning the question
+    // by surrendering: the departure hands the war to the incumbent while the term
+    // settles the crisis for the challenger. The two cannot both be true.
+    const res = validatePeaceOffer(
+      war(),
+      "DD",
+      "US",
+      { kind: "reunification" as const },
+      "DD",
+      null,
+      "presidential",
+      null,
+      { challenger: "DD" }
+    );
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/withdraw|leave/i);
+  });
+
+  it("allows a reunification the OTHER side withdraws under", () => {
+    const res = validatePeaceOffer(
+      war(),
+      "DD",
+      "US",
+      { kind: "reunification" as const },
+      "US",
+      null,
+      "presidential",
+      null,
+      { challenger: "DD" }
+    );
+    expect(res.ok).toBe(true);
+  });
+
   it("never gates an offer to leave YOURSELF", () => {
     // Walking away is always yours to propose, whatever the ground looks like.
     expect(validatePeaceOffer(war(), "US", "DD", { kind: "white_peace" as const }, "US").ok).toBe(

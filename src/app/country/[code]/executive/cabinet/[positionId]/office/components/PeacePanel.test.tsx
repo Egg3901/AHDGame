@@ -223,6 +223,55 @@ describe("choosing which term to offer", () => {
     ]);
   });
 
+  it("posts a reunification as its own term, not as an indemnity", async () => {
+    // buildTerm falls through to indemnity for anything it does not recognise, so an
+    // unhandled kind is not a broken button: it silently sends a different deal.
+    const fetchMock = mockGet({
+      currentTurn: 40,
+      wars: [{ ...war, canOfferReunification: true }],
+      offers: [],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<PeacePanel {...props} />);
+    fireEvent.change(await screen.findByLabelText(/country to negotiate with/i), {
+      target: { value: "CN" },
+    });
+    fireEvent.change(screen.getByLabelText(/term offered/i), {
+      target: { value: "reunification" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /send peace offer/i }));
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => c[1]?.method === "POST");
+      expect(JSON.parse(post![1].body).term).toEqual({ kind: "reunification" });
+    });
+  });
+
+  it("sends a reunification as the OTHER side leaving, whatever the picker said", async () => {
+    // A reunification the challenger withdraws under is refused by the route: the
+    // departure hands the war to the incumbent while the term settles it for the
+    // challenger. The default picker value is "we leave", so left alone the form
+    // would compose an offer that is always rejected.
+    const fetchMock = mockGet({
+      currentTurn: 40,
+      wars: [{ ...war, canOfferReunification: true }],
+      offers: [],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<PeacePanel {...props} />);
+    fireEvent.change(await screen.findByLabelText(/country to negotiate with/i), {
+      target: { value: "CN" },
+    });
+    fireEvent.change(screen.getByLabelText(/who leaves/i), { target: { value: "us" } });
+    fireEvent.change(screen.getByLabelText(/term offered/i), {
+      target: { value: "reunification" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /send peace offer/i }));
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find((c) => c[1]?.method === "POST");
+      expect(JSON.parse(post![1].body).leaver).toBe("them");
+    });
+  });
+
   it("posts a white peace as a term of its own, not as a zero indemnity", async () => {
     // The distinction is load-bearing: a zero indemnity still names a winner, and a
     // white peace does not.
@@ -504,6 +553,48 @@ describe("what accepting would actually do to the war", () => {
     expect(text).toMatch(/ends this war outright/i);
     expect(text).not.toMatch(/nobody would be left/i);
     expect(text).toMatch(/started the war/i);
+  });
+
+  it("offers the reunification term when the question rides this war", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockGet({
+        currentTurn: 40,
+        wars: [{ ...war, canOfferReunification: true }],
+        offers: [],
+      })
+    );
+    render(<PeacePanel {...props} />);
+    fireEvent.change(await screen.findByLabelText(/country to negotiate with/i), {
+      target: { value: "CN" },
+    });
+    const terms = screen.getByLabelText(/term offered/i) as HTMLSelectElement;
+    expect([...terms.options].map((o) => o.value)).toContain("reunification");
+  });
+
+  it("hides it on an ordinary war", async () => {
+    vi.stubGlobal("fetch", mockGet({ currentTurn: 40, wars: [war], offers: [] }));
+    render(<PeacePanel {...props} />);
+    fireEvent.change(await screen.findByLabelText(/country to negotiate with/i), {
+      target: { value: "CN" },
+    });
+    const terms = screen.getByLabelText(/term offered/i) as HTMLSelectElement;
+    expect([...terms.options].map((o) => o.value)).not.toContain("reunification");
+  });
+
+  it("describes an incoming reunification offer as reunification", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockGet({
+        currentTurn: 40,
+        wars: [war],
+        offers: [{ ...incoming, term: { kind: "reunification" as const } }],
+      })
+    );
+    render(<PeacePanel {...props} />);
+    const text = (await screen.findByText(/reunif/i)).textContent ?? "";
+    expect(text).not.toMatch(/procurement/i);
+    expect(text).not.toMatch(/[—–]/);
   });
 
   it("still says the fighting continues when the side really would survive", async () => {

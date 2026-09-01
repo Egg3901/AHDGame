@@ -57,6 +57,7 @@ import type { PendingChip } from "./NextTickStrip";
 import { ConflictRecord, type ConflictRecordView } from "./ConflictRecord";
 import { conflictToFront } from "@/lib/military/createConflict";
 import { getTheaterState } from "@/lib/db/collections/theaterState";
+import { loadTermSettlement } from "@/lib/settlement/queries/termSettlement";
 
 /** How many engagements the record lists, newest first. */
 const BATTLE_LIMIT = 50;
@@ -384,6 +385,11 @@ export default async function ConflictRecordPage({
           // one-party state. Loaded from the same helper the route validates
           // against, so anything offered here is accepted there.
           targetParties: await loadPartyChoices(db, doc.termsWindow.target),
+          // Offered only to the CHALLENGER of a question this war is carrying. Same
+          // loader the route validates against, so anything the panel shows is a term
+          // the route will accept.
+          canDictateReunification:
+            (await loadTermSettlement(db, doc._id))?.challenger === viewerCountry,
         }
       : null;
 

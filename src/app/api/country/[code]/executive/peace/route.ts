@@ -6,6 +6,8 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { requirePeaceNegotiator } from "@/lib/api/requirePeaceNegotiator";
+import { loadTermSettlement } from "@/lib/settlement/queries/termSettlement";
+import { getSettlementCrisesCollection } from "@/lib/db/collections";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
 import { z } from "zod";
@@ -68,6 +70,9 @@ const bodySchema = z.object({
       kind: z.literal("demilitarisation"),
       turns: z.number().int().positive(),
     }),
+    // Carries no fields: the crisis names the two Germanies, and the validator
+    // checks that this war is the one carrying it.
+    z.object({ kind: z.literal("reunification") }),
   ]),
   // Player-authored text another player reads, so it takes the body-copy policy —
   // not the stricter name filter reserved for public page titles.
@@ -156,6 +161,20 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     // ONE query for every country involved, not one per country: a nation on
     // several fronts would otherwise turn a single page load into ten round trips.
     const partiesByCountry = await loadPartyChoicesFor(db, [...enemyCountries]);
+
+    // Which of these wars is carrying a settlement crisis, and who its challenger is.
+    // ONE query for every war on the page: reunification is offerable only by the
+    // challenger, and only while the question is riding that particular war.
+    const crises = await getSettlementCrisesCollection(db);
+    const frozen = await crises
+      .find({
+        status: "frozen",
+        conflictId: { $in: wars.map((w) => w._id) },
+      } as Parameters<typeof crises.find>[0])
+      .toArray();
+    const challengerByWar = new Map(
+      frozen.map((c) => [c.conflictId as string, c.challengerEntityId as string])
+    );
     const nameOf = (country: CountryId, partyId: number): string | null =>
       partyDisplayName(partiesByCountry.get(country), partyId);
 
@@ -177,6 +196,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
           // What OUR own departure would do, for the same reason: the panel must say
           // whether leaving ends the war rather than claiming the fighting always
           // carries on without us.
+          // The German Question term, shown only to the side whose outcome it is. The
+          // form cannot work this out for itself: it would have to know which war is
+          // carrying the crisis, which is a settlement fact rather than a war one.
+          canOfferReunification: challengerByWar.get(w._id) === countryId,
           ourDeparture: (() => {
             const g = withdrawalGate(w, countryId, countryId);
             return {
@@ -305,6 +328,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         ? await loadPartySequentialIds(db, toCountry)
         : null;
 
+    // Loaded only for the term that can settle a crisis, so an indemnity does not pay
+    // for a query it never reads. Null is a REFUSAL for a reunification term, not a
+    // skipped check: see `PeaceTermContext.settlement`.
+    const settlement =
+      term.kind === "reunification" ? await loadTermSettlement(db, parsed.data.conflictId) : null;
+
     const check = validatePeaceOffer(
       conflict,
       countryId,
@@ -313,7 +342,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       leaver,
       maxAmount,
       targetState.governmentType,
-      targetPartyIds
+      targetPartyIds,
+      settlement
     );
     if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
 

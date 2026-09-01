@@ -55,6 +55,8 @@ export interface PeaceWar {
   /** Countries on the OTHER side, the only ones an offer can be made to. */
   enemies: EnemyView[];
   /** What OUR leaving would do to this war. */
+  /** True when this war carries a settlement crisis we are the challenger of. */
+  canOfferReunification?: boolean;
   ourDeparture: {
     endsWar: boolean;
     endsWarReason?: "roster" | "principals" | null;
@@ -99,7 +101,10 @@ function offerTermText(term: PeaceTerm, rulingPartyName?: string | null): string
     }
     return " in return for a change of government and fresh elections";
   }
-  return ` in return for freezing new defence procurement for ${term.turns} turns`;
+  if (term.kind === "demilitarisation") {
+    return ` in return for freezing new defence procurement for ${term.turns} turns`;
+  }
+  return " in return for the reunification of Germany on East German terms";
 }
 
 /**
@@ -179,8 +184,18 @@ export function PeacePanel({
   /** Who this deal removes: us, or the country we are addressing. */
   const [leaver, setLeaver] = useState<"us" | "them">("us");
   const [termKind, setTermKind] = useState<
-    "white_peace" | "indemnity" | "regime_change" | "demilitarisation"
+    "white_peace" | "indemnity" | "regime_change" | "demilitarisation" | "reunification"
   >("indemnity");
+  /**
+   * Who the offer actually removes.
+   *
+   * A reunification is always the OTHER side leaving: one the challenger withdraws
+   * under is refused outright, because the departure hands the war to the incumbent
+   * while the term settles the question for the challenger. The picker defaults to
+   * "we leave", so left to the raw state the form would compose an offer the route
+   * always rejects.
+   */
+  const effectiveLeaver: "us" | "them" = termKind === "reunification" ? "them" : leaver;
   const [targetSystem, setTargetSystem] = useState<string>("parliamentaryRepublic");
   // Empty string means "let the conversion resolve it", which is what the term
   // does when it names no party.
@@ -199,7 +214,10 @@ export function PeacePanel({
    * gate: the form must not block the one route that is always open.
    */
   const withdrawalBarred =
-    leaver === "them" && termKind !== "white_peace" && selectedEnemy?.withdrawalBlocked === true;
+    effectiveLeaver === "them" &&
+    termKind !== "white_peace" &&
+    termKind !== "reunification" &&
+    selectedEnemy?.withdrawalBlocked === true;
 
   /**
    * Changing who we are negotiating with resets who pays.
@@ -271,7 +289,7 @@ export function PeacePanel({
         conflictId: warId,
         toCountry: enemy,
         term: buildTerm(),
-        leaver,
+        leaver: effectiveLeaver,
         ...(justification.trim() ? { justification: justification.trim() } : {}),
       },
       "Offer sent."
@@ -317,6 +335,9 @@ export function PeacePanel({
     }
     if (termKind === "demilitarisation") {
       return { kind: "demilitarisation", turns: Number(demilTurns) || 0 };
+    }
+    if (termKind === "reunification") {
+      return { kind: "reunification" };
     }
     return { kind: "indemnity", payer, amount: Number(amount) || 0 };
   }
@@ -440,7 +461,8 @@ export function PeacePanel({
             </select>
             <select
               aria-label="Who leaves"
-              value={leaver}
+              value={effectiveLeaver}
+              disabled={termKind === "reunification"}
               onChange={(e) => setLeaver(e.target.value as "us" | "them")}
               className="min-w-[150px] flex-1 rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[13px]"
             >
@@ -457,6 +479,12 @@ export function PeacePanel({
               <option value="indemnity">Indemnity</option>
               <option value="regime_change">Regime change</option>
               <option value="demilitarisation">Demilitarisation</option>
+              {/* Only on a war the German Question is riding, and only for the side
+                  whose outcome reunification is. The server decides both: the form
+                  has no way to know which war carries the crisis. */}
+              {war?.canOfferReunification && (
+                <option value="reunification">German reunification</option>
+              )}
             </select>
           </div>
 
@@ -526,7 +554,7 @@ export function PeacePanel({
 
           {selectedEnemy && war && (
             <p className="text-[11px] text-muted">
-              {leaver === "them"
+              {effectiveLeaver === "them"
                 ? departureConsequence(
                     COUNTRY_CONFIGS[selectedEnemy.country]?.name ?? selectedEnemy.country,
                     selectedEnemy.endsWar,
@@ -542,7 +570,7 @@ export function PeacePanel({
             </p>
           )}
 
-          {leaver === "them" && !withdrawalBarred && !selectedEnemy?.endsWar && (
+          {effectiveLeaver === "them" && !withdrawalBarred && !selectedEnemy?.endsWar && (
             <p className="text-[11px] text-muted">
               They withdraw and we keep fighting. A withdrawal that would end the war outright needs
               the front well in our favour first, unless it is a white peace.

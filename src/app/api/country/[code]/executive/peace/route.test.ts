@@ -84,6 +84,85 @@ beforeEach(async () => {
   await negotiator(true);
 });
 
+describe("GET: whether reunification is on the table", () => {
+  function frozenCrisis(challenger: string | null) {
+    db.collection("settlementCrises");
+    db.collectionMocks.settlementCrises.find.mockReturnValue({
+      toArray: async () =>
+        challenger === null
+          ? []
+          : [{ status: "frozen", conflictId: "war1", challengerEntityId: challenger }],
+    });
+  }
+
+  it("offers it to the challenger of a question riding the war", async () => {
+    frozenCrisis("UK");
+    const { GET } = await import("./route");
+    const body = await (await GET(getReq(), params)).json();
+    expect(body.wars[0].canOfferReunification).toBe(true);
+  });
+
+  it("does not offer it to the incumbent", async () => {
+    frozenCrisis("CN");
+    const { GET } = await import("./route");
+    const body = await (await GET(getReq(), params)).json();
+    expect(body.wars[0].canOfferReunification).toBe(false);
+  });
+
+  it("does not offer it on an ordinary war", async () => {
+    frozenCrisis(null);
+    const { GET } = await import("./route");
+    const body = await (await GET(getReq(), params)).json();
+    expect(body.wars[0].canOfferReunification).toBe(false);
+  });
+});
+
+describe("POST a reunification offer", () => {
+  /** Put a frozen German Question on war1, with the sender as its challenger. */
+  function questionRidesTheWar(challenger: string) {
+    db.collection("settlementCrises");
+    db.collectionMocks.settlementCrises.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      status: "frozen",
+      conflictId: "war1",
+      challengerEntityId: challenger,
+      targetEntityId: "DE",
+    });
+  }
+
+  // `leaver: "them"` because a reunification the challenger withdraws under is a
+  // contradiction the validator refuses. The form composes it this way too.
+  const reunify = {
+    conflictId: "war1",
+    toCountry: "CN",
+    leaver: "them",
+    term: { kind: "reunification" },
+  };
+
+  it("accepts it from the challenger while the war is still being fought", async () => {
+    // Ungated on the front deliberately: the term is available for as long as the
+    // question is riding the war.
+    questionRidesTheWar("UK");
+    const { POST } = await import("./route");
+    expect((await POST(req(reunify), params)).status).toBe(200);
+  });
+
+  it("refuses it on a war carrying no German Question", async () => {
+    db.collection("settlementCrises");
+    db.collectionMocks.settlementCrises.findOne.mockResolvedValue(null);
+    const { POST } = await import("./route");
+    const res = await POST(req(reunify), params);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/German Question/i);
+  });
+
+  it("refuses it from the incumbent side", async () => {
+    questionRidesTheWar("CN");
+    const { POST } = await import("./route");
+    expect((await POST(req(reunify), params)).status).toBe(400);
+  });
+});
+
 describe("POST offer", () => {
   it("lets the negotiator make an offer", async () => {
     const { POST } = await import("./route");

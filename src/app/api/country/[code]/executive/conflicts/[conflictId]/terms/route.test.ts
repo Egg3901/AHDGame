@@ -72,6 +72,44 @@ beforeEach(async () => {
   await negotiator(true);
 });
 
+describe("POST dictated reunification", () => {
+  const reunify = { term: { kind: "reunification" } };
+
+  function questionRidesTheWar(challenger: string) {
+    db.collection("settlementCrises");
+    db.collectionMocks.settlementCrises.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      status: "frozen",
+      conflictId: "war1",
+      challengerEntityId: challenger,
+      targetEntityId: "DE",
+    });
+  }
+
+  it("lets the victor dictate it when the question rides the war", async () => {
+    questionRidesTheWar("UK");
+    const { POST } = await import("./route");
+    expect((await POST(req(reunify), params)).status).toBe(200);
+  });
+
+  it("refuses it on a war carrying no German Question", async () => {
+    db.collection("settlementCrises");
+    db.collectionMocks.settlementCrises.findOne.mockResolvedValue(null);
+    const { POST } = await import("./route");
+    const res = await POST(req(reunify), params);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/German Question/i);
+  });
+
+  it("refuses it from an imposer that is not the challenger", async () => {
+    // Winning the war does not make the incumbent able to impose the CHALLENGER's
+    // outcome on itself.
+    questionRidesTheWar("TR");
+    const { POST } = await import("./route");
+    expect((await POST(req(reunify), params)).status).toBe(400);
+  });
+});
+
 describe("POST impose terms", () => {
   it("lets the winning principal's negotiator impose a term", async () => {
     const { POST } = await import("./route");

@@ -321,7 +321,11 @@ export function validatePeaceOffer(
   // The target's party `sequentialId`s, so a named ruling party can be checked
   // against the country it would rule. Optional for the same reason as the two
   // above; `validatePeaceTerm` skips the check rather than failing when absent.
-  targetPartyIds?: number[] | null
+  targetPartyIds?: number[] | null,
+  // The settlement crisis riding this war, for a term that settles one. Unlike the
+  // three above, absence REFUSES rather than skipping the check — see
+  // `PeaceTermContext.settlement` for why this one fails closed.
+  settlement?: { challenger: CountryId } | null
 ): PeaceOfferCheck {
   // Concluded covers a war awaiting terms as well as a resolved one. A front that
   // has reached a pole is not a war anyone can still negotiate their way out of:
@@ -382,12 +386,38 @@ export function validatePeaceOffer(
   // A WHITE PEACE IS ALWAYS EXEMPT. It records no victor and moves nothing, so
   // nothing is bought: a war fought over a question ends with the question still
   // open rather than answered in the buyer's favour.
-  if (leaver === to && term.kind !== "white_peace" && withdrawalGate(conflict, from, to).blocked) {
+  //
+  // A REUNIFICATION IS EXEMPT TOO, and for a different reason than the white peace.
+  // The white peace is exempt because it buys nothing. This one plainly does buy
+  // something, but it is not COERCIVE: the recipient must accept it, refusing costs
+  // them nothing, and what is on the table is the very question the war is being
+  // fought over rather than a cheque for it. Gating it on the front would also make
+  // the term unofferable in practice, since a reunification the challenger withdraws
+  // under is barred above, so every reunification offer asks the other side to leave.
+  if (
+    leaver === to &&
+    term.kind !== "white_peace" &&
+    term.kind !== "reunification" &&
+    withdrawalGate(conflict, from, to).blocked
+  ) {
     return {
       ok: false,
       error:
         "That withdrawal would end the war outright, and your armies are not far " +
         "enough forward to demand it. Push the front further, or offer a white peace.",
+    };
+  }
+
+  // A REUNIFICATION THE CHALLENGER WITHDRAWS UNDER IS A CONTRADICTION, and it is
+  // checked here rather than in `validatePeaceTerm` because only the offer knows who
+  // is leaving. The departure hands the war to the incumbent (the leaver's side is the
+  // losing one) while the term settles the question for the challenger. Left open it
+  // is not merely incoherent, it is an exploit: the challenger wins the German
+  // Question by surrendering the war fought over it.
+  if (term.kind === "reunification" && settlement && leaver === settlement.challenger) {
+    return {
+      ok: false,
+      error: "Reunification cannot be settled by a deal you withdraw from the war under.",
     };
   }
 
@@ -407,5 +437,6 @@ export function validatePeaceOffer(
     targetSystem: targetSystem ?? "presidential",
     maxIndemnity: maxAmount ?? null,
     targetPartyIds: targetPartyIds ?? null,
+    settlement: settlement ?? null,
   });
 }

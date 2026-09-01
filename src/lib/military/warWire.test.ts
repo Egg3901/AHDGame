@@ -184,3 +184,21 @@ describe("buildSettledDispatch: a white peace", () => {
     expect(termFieldValue(WHITE_PEACE)).toMatch(/status quo/i);
   });
 });
+
+describe("the reunification term on the wire", () => {
+  const REUNIFY: PeaceTerm = { kind: "reunification" };
+
+  it("names the field value for what it is", () => {
+    expect(termFieldValue(REUNIFY)).toBe("German reunification");
+  });
+
+  it("does not report it as a demilitarisation", () => {
+    // Every one of these readers used to fall through to the last variant, so a term
+    // it did not know about was announced as whatever the final branch happened to be.
+    expect(termFieldValue(REUNIFY)).not.toMatch(/demilitarisation/i);
+  });
+
+  it("uses no dash characters, like the rest of the player-facing copy", () => {
+    expect(termFieldValue(REUNIFY)).not.toMatch(/[\u2014\u2013]/);
+  });
+});

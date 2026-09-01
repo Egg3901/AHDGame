@@ -36,7 +36,21 @@ export type PeaceTerm =
    * party a monopoly and bans its rivals — the settlement installs the enemy.
    */
   | { kind: "regime_change"; targetSystem: GovernmentType; rulingPartyId?: number }
-  | { kind: "demilitarisation"; turns: number };
+  | { kind: "demilitarisation"; turns: number }
+  /**
+   * German reunification, on the challenger's terms.
+   *
+   * Carries no fields: the settlement crisis already names the two Germanies, and a
+   * term that restated them could disagree with it. Only valid on a war the German
+   * Question is riding, and only from the crisis CHALLENGER, because reunification
+   * is the challenger's outcome. The incumbent winning the question leaves both
+   * Germanies standing, which is the absence of a term rather than one to impose.
+   *
+   * Deliberately UNGATED on the front. Every other way to reach this outcome runs
+   * through winning the war; this is the one that can be put on the table while it
+   * is still being fought, which is the point of having it.
+   */
+  | { kind: "reunification" };
 
 /**
  * Default demilitarisation length, in turns. Matches `TRUCE_TURNS`, so the bar on
@@ -120,6 +134,16 @@ export interface PeaceTermContext {
    * country.
    */
   targetPartyIds?: number[] | null;
+  /**
+   * The settlement crisis riding THIS war, when one is.
+   *
+   * ⚠️ Unlike `maxIndemnity` and `targetPartyIds`, absence FAILS CLOSED. Those two
+   * skip a check when the caller could not cheaply load them, which can only ever
+   * refuse a valid term. Here the crisis IS the term's whole meaning, so treating
+   * "not loaded" as "no objection" would let a reunification through on a war that
+   * has nothing to do with Germany. Callers that can offer the term always load it.
+   */
+  settlement?: { challenger: CountryId } | null;
 }
 
 export type PeaceTermCheck = { ok: true } | { ok: false; error: string };
@@ -152,6 +176,24 @@ export function validatePeaceTerm(term: PeaceTerm, ctx: PeaceTermContext): Peace
       return {
         ok: false,
         error: "An indemnity cannot exceed twice the paying country's annual GDP.",
+      };
+    }
+    return { ok: true };
+  }
+
+  if (term.kind === "reunification") {
+    // Both roads to this term load the crisis, so a missing one is a war that is not
+    // carrying the German Question rather than a caller that skipped a query.
+    if (!ctx.settlement) {
+      return {
+        ok: false,
+        error: "Reunification can only be settled on a war the German Question is riding.",
+      };
+    }
+    if (ctx.from !== ctx.settlement.challenger) {
+      return {
+        ok: false,
+        error: "Only East Germany can put reunification on the table, as the challenger.",
       };
     }
     return { ok: true };

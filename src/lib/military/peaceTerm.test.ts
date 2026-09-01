@@ -186,3 +186,48 @@ describe("validatePeaceTerm: white peace", () => {
     });
   });
 });
+
+describe("validatePeaceTerm: reunification", () => {
+  const term: PeaceTerm = { kind: "reunification" };
+  /** DD is the challenger of the German Question frozen on this war. */
+  const gq: PeaceTermContext = {
+    from: "DD",
+    to: "US",
+    target: "US",
+    targetSystem: "presidential",
+    maxIndemnity: null,
+    settlement: { challenger: "DD" },
+  };
+
+  it("accepts it from the challenger on a German Question war", () => {
+    expect(validatePeaceTerm(term, gq)).toEqual({ ok: true });
+  });
+
+  it("has no threshold: the front does not gate it", () => {
+    // Deliberately ungated. The term is available for as long as the question is
+    // attached to the war, whatever the ground looks like.
+    expect(validatePeaceTerm(term, gq)).toEqual({ ok: true });
+  });
+
+  it("refuses it on a war that carries no German Question", () => {
+    const res = validatePeaceTerm(term, { ...gq, settlement: null });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/German Question/i);
+  });
+
+  it("refuses it when the caller did not load the settlement at all", () => {
+    // Fails CLOSED, unlike maxIndemnity and targetPartyIds: a term whose whole
+    // meaning is the crisis cannot be waved through when the crisis is unknown.
+    const { settlement: _omitted, ...withoutSettlement } = gq;
+    const res = validatePeaceTerm(term, withoutSettlement);
+    expect(res.ok).toBe(false);
+  });
+
+  it("refuses it from the incumbent side", () => {
+    // Reunification is the CHALLENGER's outcome. The incumbent winning the question
+    // leaves both Germanies standing, which is not a term to impose.
+    const res = validatePeaceTerm(term, { ...gq, from: "US", to: "DD" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/East German|challenger/i);
+  });
+});

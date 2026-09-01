@@ -58,6 +58,7 @@ function settledTitle(conflict: ConflictDoc): string {
   if (term.kind === "white_peace") return `${conflict.name} ends where it began`;
   if (term.kind === "regime_change") return `${name(loser)} is made to change its government`;
   if (term.kind === "demilitarisation") return `${name(loser)} is disarmed by treaty`;
+  if (term.kind === "reunification") return "Germany is made one";
   if (term.amount > 0) return `${name(loser)} pays for the peace`;
   return `${conflict.name} ends with nothing taken`;
 }
@@ -114,6 +115,16 @@ function settledBody(conflict: ConflictDoc, rulingPartyName?: string | null): st
       `orders for as long as the settlement holds, while what it already bought keeps arriving.`
     );
   }
+  if (s.term.kind === "reunification") {
+    // The loser here is whoever signed, which is NOT necessarily a Germany: the term
+    // settles the question rather than landing on the country that accepted it. So the
+    // line talks about Germany and leaves the signatory out of the claim.
+    return (
+      `${conflict.name} is over, and ${loser} ${how}. The German question is answered ` +
+      `on the East's terms: the two states become one, and the settlement is carried ` +
+      `into a single German government.`
+    );
+  }
   if (s.term.amount > 0) {
     return (
       `${conflict.name} is over, and ${loser} ${how}. The bill falls due in its own ` +
@@ -149,7 +160,8 @@ export function termFieldValue(term: PeaceTerm, rulingPartyName?: string | null)
       ? `Regime change: ${system} under the ${rulingPartyName}`
       : `Regime change: ${system}`;
   }
-  return `Demilitarisation: ${term.turns} turns`;
+  if (term.kind === "demilitarisation") return `Demilitarisation: ${term.turns} turns`;
+  return "German reunification";
 }
 
 /**
