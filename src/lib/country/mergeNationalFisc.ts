@@ -122,9 +122,17 @@ export async function mergeNationalFisc(
     // `ceilingLastRaisedYear` takes the LATER of the two: the combined ceiling is
     // new, and dating it to the older of the two raises would make the unified
     // state look overdue for a raise it just effectively had.
+    //
+    // ⚠️ A SURVIVOR THAT WAS ITSELF ABSORBED CONTRIBUTES NOTHING. `mergedInto` on
+    // the survivor's own budget says its figures are the remnants of a state that
+    // was already merged away, and its ceiling has therefore ALREADY been counted
+    // into the absorbed side's. Adding it again double-counts: reversing a merge
+    // would hand the unified state its own former ceiling a second time. The
+    // remnant is superseded, not additive.
+    const survivorCeiling = to.mergedInto ? 0 : (to.debt?.ceiling ?? 0);
     const fromCeiling = from.debt?.ceiling;
     if (typeof fromCeiling === "number") {
-      lawSet["debt.ceiling"] = (to.debt?.ceiling ?? 0) + fromCeiling * scale;
+      lawSet["debt.ceiling"] = survivorCeiling + fromCeiling * scale;
       const raisedYears = [from.debt?.ceilingLastRaisedYear, to.debt?.ceilingLastRaisedYear].filter(
         (year): year is number => typeof year === "number"
       );

@@ -26,6 +26,8 @@ import type { BillStatus } from "@/lib/db/types/legislation";
 import type { CountryGameState } from "@/lib/db/types/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { transferRegion } from "@/lib/referendum/transfer/transferRegion";
+import { computeNationalMetrics } from "@/lib/nationalMetrics";
+import { reseedJoinedRegionElections } from "@/lib/referendum/transfer/reseedJoinedRegionElections";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
 import { LOWER_CHAMBER_FAIL_STATUSES } from "@/lib/turn/parliamentaryGovernment";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
@@ -101,6 +103,12 @@ export async function mergeCountry(db: Db, args: MergeCountryArgs): Promise<Merg
       // reunifying country already run the same elections, and switching them is a
       // constitutional change nobody agreed to.
       votingSystem: region.votingSystem,
+      // The two COUNTRY-wide passes are deferred and run ONCE below. Per region
+      // they are the same whole-world metrics recompute and the same
+      // whole-country election re-seed, repeated for every Land — sixteen times
+      // over for a German reunification. That is what made this too slow to
+      // finish inside the request that started it.
+      deferCountryWidePasses: true,
       // NULL: the source is dissolving, so nobody retreats into it.
       relocateToRegionId: null,
       currentTurn,
@@ -120,6 +128,21 @@ export async function mergeCountry(db: Db, args: MergeCountryArgs): Promise<Merg
     if (result.skipped === "already-transferred") regionsSkipped++;
     else regionsTransferred++;
   }
+
+  // The country-wide passes each region transfer deferred, run ONCE now that the
+  // whole border has moved. Same end state, a fraction of the work: both read the
+  // world as it stands rather than as it stood mid-loop, so running them per
+  // region only ever produced intermediate answers that the next region replaced.
+  //
+  // Best-effort, matching how `transferRegion` treats the election re-seed: the
+  // regions have already moved, and the turn's own phases recompute both. A
+  // failure here must not fail a merge that has otherwise completed.
+  await computeNationalMetrics(db).catch((err) =>
+    console.error(`${fromCountryId}->${toCountryId} national metrics recompute failed:`, err)
+  );
+  await reseedJoinedRegionElections(db, toCountryId, new Date()).catch((err) =>
+    console.error(`${toCountryId} election re-seed failed (retries next turn):`, err)
+  );
 
   // National remnants the region loop cannot reach. Every step is filter-
   // idempotent (a re-run finds nothing still keyed to the source), and all run
