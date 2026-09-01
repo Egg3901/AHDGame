@@ -5,6 +5,7 @@ import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import { getNationalDoctrine } from "@/lib/db/collections/nationalDoctrine";
 import { getMilitaryFormations } from "@/lib/db/collections/militaryFormations";
 import { getMilitaryCommands } from "@/lib/db/collections/militaryCommands";
+import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { loadGeneralsById } from "@/lib/db/collections/characterGenerals";
 import { listPendingForCountry } from "@/lib/db/collections/battleDeclarations";
 import { listBattleReportsForCountry } from "@/lib/db/collections/battleReports";
@@ -41,15 +42,27 @@ export default async function CombatCommandPage() {
 
   const gameState = await getGameState();
   const currentTurn = gameState?.currentTurn ?? 1;
+  const defensePositionId = DEFENSE_POSITION_BY_COUNTRY[country as CountryId] ?? "";
 
-  const [doctrine, org, generalsById, pending, reports, activeConflicts] = await Promise.all([
-    getNationalDoctrine(db, country),
-    getMilitaryFormations(db, country),
-    loadGeneralsById(db, country),
-    listPendingForCountry(db, country),
-    listBattleReportsForCountry(db, country, 10),
-    listActiveConflicts(db),
-  ]);
+  const [doctrine, org, generalsById, pending, reports, activeConflicts, defenseMember] =
+    await Promise.all([
+      getNationalDoctrine(db, country),
+      getMilitaryFormations(db, country),
+      loadGeneralsById(db, country),
+      listPendingForCountry(db, country),
+      listBattleReportsForCountry(db, country, 10),
+      listActiveConflicts(db),
+      defensePositionId
+        ? getCabinetMembersCollection(db).findOne({
+            countryId: country,
+            positionId: defensePositionId,
+          })
+        : null,
+    ]);
+  const viewerCharacterId = authUser?.character?._id ? String(authUser.character._id) : null;
+  const canWrite =
+    authUser?.isAdmin === true ||
+    (!!viewerCharacterId && String(defenseMember?.characterId ?? "") === viewerCharacterId);
 
   // A report's theater name comes from the live conflict it was fought at; a report
   // for a since-resolved conflict falls back to its id (reserve reads "Reserve").
@@ -154,7 +167,7 @@ export default async function CombatCommandPage() {
   // click from the war and cannot find the door, because postings live on the CG's
   // own page. Shown only while there is something to act on: a live conflict to post
   // to, and at least one general still unposted.
-  const viewerCharId = authUser?.character?._id ? String(authUser.character._id) : null;
+  const viewerCharId = viewerCharacterId;
   const myCommand = viewerCharId
     ? ((await getMilitaryCommands(db, country)).find(
         (c) => c.commandingGeneralId === viewerCharId
@@ -177,7 +190,8 @@ export default async function CombatCommandPage() {
       units={units}
       country={country}
       countryCode={country.toLowerCase()}
-      positionId={DEFENSE_POSITION_BY_COUNTRY[country as CountryId] ?? ""}
+      positionId={defensePositionId}
+      canWrite={canWrite}
       currentTurn={currentTurn}
       natMods={natMods(doctrine.adopted)}
       conflictAssignments={org.conflictAssignments}

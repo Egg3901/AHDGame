@@ -6,7 +6,7 @@
 
 import type { PoliticalMetricCategoryId, PoliticalMetricId } from "../politicalMetrics/types";
 
-export type LawCountryId = "US" | "UK" | "RU" | "DD";
+export type LawCountryId = "US" | "UK" | "RU" | "DD" | "DE";
 export const LAW_COUNTRY_IDS: readonly LawCountryId[] = ["US", "UK", "RU", "DD"] as const;
 
 export interface LawLevel {
