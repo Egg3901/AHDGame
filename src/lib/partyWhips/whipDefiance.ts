@@ -23,6 +23,8 @@ import {
 } from "@/lib/db/collections/governmentFormation";
 import type { CountryId } from "@/lib/constants/countries";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
+import { impeachmentStageChamberKey } from "@/lib/impeachment/impeachmentTally";
+import type { Impeachment } from "@/lib/db/types/impeachment";
 
 export interface WhipDefianceScope {
   countryId: CountryId;
@@ -378,6 +380,43 @@ async function loadVacateTarget(db: Db, whip: BillWhip): Promise<TargetContext |
   };
 }
 
+async function loadImpeachmentTarget(db: Db, whip: BillWhip): Promise<TargetContext | null> {
+  if (!(whip.targetId instanceof ObjectId)) return null;
+  const impeachment = await db
+    .collection<Impeachment>("impeachments")
+    .findOne({ _id: whip.targetId, stage: { $in: ["house", "senate"] } });
+  if (!impeachment) return null;
+
+  // Read the map for the stage the whip was issued against. A whip from the
+  // House stage must not be scored against Senate ballots: the two chambers
+  // hold different members and the case keeps both maps.
+  const stageChamber = impeachmentStageChamberKey(impeachment);
+  if (stageChamber !== whip.chamber) return null;
+
+  const votes = impeachment.stage === "house" ? impeachment.houseVotes : impeachment.senateVotes;
+  return {
+    label:
+      impeachment.stage === "house"
+        ? `Impeachment: ${impeachment.targetName}`
+        : `Impeachment Trial: ${impeachment.targetName}`,
+    votes: Object.entries(votes ?? {}).map(([voterKey, vote]) => ({
+      voterKey,
+      // Impeachment ballots are aye/nay/abstain; the first two map onto the
+      // whip's for/against, and an abstention is never a whipped direction so
+      // it always reads as defiance.
+      comparableVote: vote === "abstain" ? "abstain" : toComparableGovernmentVote(vote),
+      displayVote:
+        vote === "aye"
+          ? "REMOVE"
+          : vote === "nay"
+            ? "ACQUIT"
+            : vote === "abstain"
+              ? "ABSTAIN"
+              : "Unknown",
+    })),
+  };
+}
+
 async function loadLeadershipTarget(db: Db, whip: BillWhip): Promise<TargetContext | null> {
   const collectionName =
     whip.targetType === "speakerElection"
@@ -439,6 +478,8 @@ async function loadTargetContext(db: Db, whip: BillWhip): Promise<TargetContext 
       return loadCabinetTarget(db, whip);
     case "speakerVacateMotion":
       return loadVacateTarget(db, whip);
+    case "impeachmentVote":
+      return loadImpeachmentTarget(db, whip);
     default:
       return null;
   }

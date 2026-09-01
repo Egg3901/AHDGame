@@ -45,6 +45,8 @@ interface CandidacyInfo {
 interface LeadershipElectionItem {
   id: string;
   type?: string;
+  /** Chamber the item is voted in. Impeachments move chamber between stages. */
+  chamber?: string;
   candidacies: CandidacyInfo[];
   nppWhip?: {
     existingWhips: Array<{ candidacyId?: string; attemptNumber: number }>;
@@ -358,13 +360,25 @@ export function NppWhipPanel({
   const handleGovernmentVoteWhip = async (
     voteId: string,
     direction: "for" | "against",
-    targetType: "pmAppointmentVote" | "noConfidenceVote" | "speakerVacateMotion"
+    targetType:
+      "pmAppointmentVote" | "noConfidenceVote" | "speakerVacateMotion" | "impeachmentVote",
+    /** Impeachments move between chambers as the case advances, so the item
+     *  carries its own chamber rather than always using the lower one. */
+    chamberOverride?: string
   ) => {
     setWhippingId(`cv_${voteId}_${direction}`);
     try {
       const config = getCountryConfig((countryId ?? "US").toUpperCase() as CountryId);
-      const chamber = config.legislature.lowerChamber.key;
-      const url = endpointConfig?.whipUrl ?? whipUrl;
+      const chamber = chamberOverride ?? config.legislature.lowerChamber.key;
+      // A state party panel must post to its own region route. This handler
+      // previously always resolved the national URL, which was harmless while
+      // it only served PM and no-confidence votes (never shown on a state
+      // panel) but breaks a governor impeachment, which is.
+      const url = endpointConfig?.whipUrl
+        ? endpointConfig.whipUrl
+        : isNational
+          ? whipUrl
+          : regionApiSubUrl(effectiveCountryId, stateId!, `party/${partyId}/whip`);
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -605,6 +619,7 @@ export function NppWhipPanel({
                   election.type === "No-Confidence Motion" ||
                   election.type === "PM Confidence Vote";
                 const isVacate = election.type === "speakerVacateMotion";
+                const isImpeachment = election.type === "impeachmentVote";
                 const nominee = election.candidacies[0];
                 const headerLabel = isPM
                   ? `PM Appointment — ${nominee?.nomineeName ?? "(unknown nominee)"}`
@@ -612,9 +627,11 @@ export function NppWhipPanel({
                     ? (nominee?.nomineeName ?? "No-Confidence Motion")
                     : isVacate
                       ? (nominee?.nomineeName ?? "Motion to Vacate the Chair")
-                      : (election.type
-                          ?.replace(/_/g, " ")
-                          .replace(/\b\w/g, (c) => c.toUpperCase()) ?? "Leadership Election");
+                      : isImpeachment
+                        ? (nominee?.nomineeName ?? "Impeachment")
+                        : (election.type
+                            ?.replace(/_/g, " ")
+                            .replace(/\b\w/g, (c) => c.toUpperCase()) ?? "Leadership Election");
 
                 return (
                   <div
@@ -710,6 +727,45 @@ export function NppWhipPanel({
                           {whippingId === `cv_${election.id}_against`
                             ? "Issuing..."
                             : "Whip AGAINST (Keep Speaker)"}
+                        </button>
+                      </div>
+                    ) : isImpeachment ? (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() =>
+                            handleGovernmentVoteWhip(
+                              election.id,
+                              "for",
+                              "impeachmentVote",
+                              election.chamber
+                            )
+                          }
+                          disabled={!whip.canWhip || whippingId === `cv_${election.id}_for`}
+                          className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          style={{
+                            backgroundColor: whip.canWhip ? `${partyColor}20` : undefined,
+                            color: whip.canWhip ? partyColor : undefined,
+                          }}
+                        >
+                          {whippingId === `cv_${election.id}_for`
+                            ? "Issuing..."
+                            : "Whip FOR (Remove)"}
+                        </button>
+                        <button
+                          onClick={() =>
+                            handleGovernmentVoteWhip(
+                              election.id,
+                              "against",
+                              "impeachmentVote",
+                              election.chamber
+                            )
+                          }
+                          disabled={!whip.canWhip || whippingId === `cv_${election.id}_against`}
+                          className="px-3 py-1.5 text-xs font-medium rounded-md border border-card-border bg-card hover:bg-muted/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {whippingId === `cv_${election.id}_against`
+                            ? "Issuing..."
+                            : "Whip AGAINST (Acquit)"}
                         </button>
                       </div>
                     ) : (

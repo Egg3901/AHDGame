@@ -144,6 +144,11 @@ export async function processImpeachmentLifecycle(
               senateVotingEndsOnTurn: currentTurn + IMPEACHMENT_SENATE_VOTING_TURNS,
               updatedAt: now,
             },
+            // whippedFromVote is a single map shared by both stages, so a
+            // House-stage snapshot would otherwise follow the case into the
+            // Senate stage and show those members a "Whipped by Party" badge
+            // for a vote they can no longer cast.
+            $unset: { whippedFromVote: "" },
           }
         );
         if (advanced.modifiedCount > 0) resolved++;

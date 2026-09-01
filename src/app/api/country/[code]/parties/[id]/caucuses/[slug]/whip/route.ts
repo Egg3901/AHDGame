@@ -18,6 +18,7 @@ import {
   applyWhipVotesToGovernmentVote,
   applyWhipVotesToCabinet,
   applyWhipVotesToVacateMotion,
+  applyWhipVotesToImpeachment,
 } from "@/lib/congress/applyWhipVotes";
 import { statecraftWhipBonus } from "@/lib/partyWhips/whipSuccess";
 import { USE_GROWTH_INCREMENT } from "@/lib/stats/statsConstants";
@@ -27,6 +28,7 @@ import {
   applyPlayerWhipToGovernmentVote,
   applyPlayerWhipToLeadership,
   applyPlayerWhipToVacateMotion,
+  applyPlayerWhipToImpeachment,
 } from "@/lib/congress/applyPlayerWhip";
 import { sendSystemMail } from "@/lib/mail/systemMail";
 import { createNotification } from "@/lib/notifications";
@@ -40,6 +42,8 @@ import {
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { getGameTime } from "@/lib/time/gameTime";
 import { isLeadershipElectionClosed } from "@/lib/congress/leadershipElections";
+import { impeachmentStageChamberKey } from "@/lib/impeachment/impeachmentTally";
+import type { Impeachment } from "@/lib/db/types/impeachment";
 import type {
   Bill,
   BillWhip,
@@ -69,6 +73,7 @@ const whipSchema = z.object({
     "noConfidenceVote",
     "cabinetNomination",
     "speakerVacateMotion",
+    "impeachmentVote",
   ]),
   targetId: z.string().min(1, "Target ID required"),
   chamber: z.string().min(1, "Chamber required"),
@@ -176,7 +181,9 @@ async function buildCaucusPlayerWhipMessage(
           ? "the cabinet nomination"
           : targetType === "speakerVacateMotion"
             ? "the motion to vacate the chair"
-            : "the assigned leadership vote";
+            : targetType === "impeachmentVote"
+              ? "the impeachment"
+              : "the assigned leadership vote";
 
   return {
     subject: isSoft ? `${caucusName}: Vote ${dir}` : `${caucusName} whip: Vote ${dir}`,
@@ -447,6 +454,45 @@ export async function POST(request: Request, { params }: RouteParams) {
         });
       }
       whipWindowStart = motion.startedAt;
+    } else if (targetType === "impeachmentVote") {
+      if (!targetOid) {
+        return NextResponse.json(badRequest("Invalid target ID").toJson(), { status: 400 });
+      }
+      const impeachment = await db
+        .collection<Impeachment>("impeachments")
+        .findOne({ _id: targetOid, countryId, stage: { $in: ["house", "senate"] } });
+      if (!impeachment) {
+        return NextResponse.json(
+          notFound("Impeachment not found or no longer open for voting").toJson(),
+          { status: 404 }
+        );
+      }
+      if (impeachment.targetOffice === "governor") {
+        return NextResponse.json(
+          badRequest("Governor impeachments are whipped from the state party").toJson(),
+          { status: 400 }
+        );
+      }
+      const stageChamber = impeachmentStageChamberKey(impeachment);
+      if (!stageChamber || chamber !== stageChamber) {
+        return NextResponse.json(
+          badRequest(
+            `This impeachment is being voted in the ${stageChamber ?? "no open"} chamber`
+          ).toJson(),
+          { status: 400 }
+        );
+      }
+      const stageEndsOnTurn =
+        impeachment.stage === "house"
+          ? impeachment.houseVotingEndsOnTurn
+          : impeachment.senateVotingEndsOnTurn;
+      const impeachGameTime = await getGameTime();
+      if (stageEndsOnTurn != null && impeachGameTime.currentTurn > stageEndsOnTurn) {
+        return NextResponse.json(
+          notFound("Voting for this impeachment stage has closed").toJson(),
+          { status: 404 }
+        );
+      }
     } else if (targetType === "cabinetNomination") {
       if (!targetOid) {
         return NextResponse.json(badRequest("Invalid target ID").toJson(), { status: 400 });
@@ -599,6 +645,15 @@ export async function POST(request: Request, { params }: RouteParams) {
           alreadyAligned = result.alreadyAligned;
         } else if (targetType === "speakerVacateMotion") {
           const result = await applyPlayerWhipToVacateMotion(db, direction, eligible);
+          overridden = result.overridden;
+          alreadyAligned = result.alreadyAligned;
+        } else if (targetType === "impeachmentVote") {
+          const result = await applyPlayerWhipToImpeachment(
+            db,
+            requireTargetObjectId(),
+            direction,
+            eligible
+          );
           overridden = result.overridden;
           alreadyAligned = result.alreadyAligned;
         }
@@ -844,6 +899,19 @@ export async function POST(request: Request, { params }: RouteParams) {
     } else if (targetType === "speakerVacateMotion") {
       const result = await applyWhipVotesToVacateMotion(
         db,
+        direction,
+        nppOfficials,
+        nppMap,
+        mode,
+        whipStatecraftBonus
+      );
+      fellInLine = result.fellInLine;
+      ignored = result.ignored;
+      if (actorCharacter.stats) await grantStatecraftXp();
+    } else if (targetType === "impeachmentVote") {
+      const result = await applyWhipVotesToImpeachment(
+        db,
+        requireTargetObjectId(),
         direction,
         nppOfficials,
         nppMap,

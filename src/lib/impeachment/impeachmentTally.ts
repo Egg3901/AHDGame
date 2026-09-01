@@ -137,6 +137,30 @@ export function impeachmentStageChamberOfficeType(
     : getUpperChamberOfficeType(impeachment.countryId);
 }
 
+/**
+ * The whippable chamber KEY for an open case's current stage, as opposed to
+ * {@link impeachmentStageChamberOfficeType}'s office type. Whip documents and
+ * the whip panels address chambers by key, and the two differ for some
+ * countries (CN's key "npc" vs office "npcDelegate"), so a whip must never be
+ * keyed off the office type. Null once the case is no longer open.
+ */
+export function impeachmentStageChamberKey(
+  impeachment: Pick<ImpeachmentLite, "targetOffice" | "stage" | "countryId">
+): string | null {
+  if (impeachment.stage !== "house" && impeachment.stage !== "senate") return null;
+  // A governor is tried in a single sitting of the state legislature, which the
+  // case models as its "senate" (conviction) stage; it has no House stage.
+  if (impeachment.targetOffice === "governor") {
+    return impeachment.stage === "senate"
+      ? getSubNationalLegislatureKey(impeachment.countryId)
+      : null;
+  }
+  const config = COUNTRY_CONFIGS[impeachment.countryId];
+  const lowerKey = config.legislature.lowerChamber.key;
+  if (impeachment.stage === "house") return lowerKey;
+  return config.legislature.upperChamber?.key ?? lowerKey;
+}
+
 /** Minimal shape of an impeachment doc the chamber helpers need. */
 export interface ImpeachmentLite {
   targetOffice: string;

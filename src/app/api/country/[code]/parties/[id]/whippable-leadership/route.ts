@@ -31,6 +31,8 @@ import {
 import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 import { isVoteClosed } from "@/lib/turn/parliamentaryGovernment";
 import { isLeadershipElectionClosed } from "@/lib/congress/leadershipElections";
+import { impeachmentStageChamberKey } from "@/lib/impeachment/impeachmentTally";
+import type { Impeachment } from "@/lib/db/types/impeachment";
 import { getGameTime } from "@/lib/time/gameTime";
 import { getPartyMap } from "@/lib/db/partyMap";
 import { getHouseComposition } from "@/lib/congress/houseComposition";
@@ -278,6 +280,7 @@ export async function GET(request: Request, { params }: RouteParams) {
             "noConfidenceVote",
             "cabinetNomination",
             "speakerVacateMotion",
+            "impeachmentVote",
           ],
         },
         partyId: partyIdStr,
@@ -366,6 +369,52 @@ export async function GET(request: Request, { params }: RouteParams) {
           {
             id: "current",
             nomineeName: `Motion to vacate ${vacateMotion.targetSpeakerName}`,
+            votesFor: 0,
+          },
+        ],
+        nppWhip: nppSummary,
+        playerWhip: playerSummary,
+        existingWhips: nppSummary.existingWhips,
+        canWhip: nppSummary.canWhip,
+      });
+    }
+
+    // Add open presidential impeachments, on whichever chamber is sitting at the
+    // case's current stage. Governor cases are tried by a state legislature and
+    // belong to the state party's panel, so they are excluded here.
+    const openImpeachments = await db
+      .collection<Impeachment>("impeachments")
+      .find({ countryId, stage: { $in: ["house", "senate"] }, targetOffice: { $ne: "governor" } })
+      .toArray();
+
+    for (const impeachment of openImpeachments) {
+      const stageChamber = impeachmentStageChamberKey(impeachment);
+      if (!stageChamber || !result[stageChamber]) continue;
+
+      const stageEndsOnTurn =
+        impeachment.stage === "house"
+          ? impeachment.houseVotingEndsOnTurn
+          : impeachment.senateVotingEndsOnTurn;
+      if (stageEndsOnTurn != null && currentTurnForLeadership > stageEndsOnTurn) continue;
+
+      // Only offer it to a chair whose members actually sit in that chamber.
+      const seated = stageChamber === lowerKey ? hasLowerNPPs : hasUpperNPPs;
+      if (!seated) continue;
+
+      const whipKey = `impeachmentVote_${impeachment._id}_${stageChamber}`;
+      const { nppSummary, playerSummary } = buildSummaries(whipKey);
+      result[stageChamber].push({
+        id: impeachment._id.toString(),
+        type: "impeachmentVote",
+        chamber: stageChamber,
+        endsAt: now,
+        candidacies: [
+          {
+            id: impeachment._id.toString(),
+            nomineeName:
+              impeachment.stage === "house"
+                ? `Impeachment of ${impeachment.targetName}`
+                : `Trial of ${impeachment.targetName}`,
             votesFor: 0,
           },
         ],

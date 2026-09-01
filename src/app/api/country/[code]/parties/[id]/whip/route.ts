@@ -22,6 +22,8 @@ import type {
 } from "@/lib/db/types";
 import { getGameTime } from "@/lib/time/gameTime";
 import { isLeadershipElectionClosed } from "@/lib/congress/leadershipElections";
+import { impeachmentStageChamberKey } from "@/lib/impeachment/impeachmentTally";
+import type { Impeachment } from "@/lib/db/types/impeachment";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import {
   getPMAppointmentVotesCollection,
@@ -33,6 +35,7 @@ import {
   applyWhipVotesToGovernmentVote,
   applyWhipVotesToCabinet,
   applyWhipVotesToVacateMotion,
+  applyWhipVotesToImpeachment,
 } from "@/lib/congress/applyWhipVotes";
 import { statecraftWhipBonus } from "@/lib/partyWhips/whipSuccess";
 import { USE_GROWTH_INCREMENT } from "@/lib/stats/statsConstants";
@@ -42,6 +45,7 @@ import {
   applyPlayerWhipToGovernmentVote,
   applyPlayerWhipToCabinet,
   applyPlayerWhipToVacateMotion,
+  applyPlayerWhipToImpeachment,
 } from "@/lib/congress/applyPlayerWhip";
 import { getEligibleCharactersForWhip } from "@/lib/partyWhips/playerWhip";
 import { sendSystemMail } from "@/lib/mail/systemMail";
@@ -75,6 +79,7 @@ const whipSchema = z.object({
     "noConfidenceVote",
     "cabinetNomination",
     "speakerVacateMotion",
+    "impeachmentVote",
   ]),
   targetId: z.string().min(1, "Target ID required"),
   chamber: z.string().min(1, "Chamber required"),
@@ -368,6 +373,51 @@ export async function POST(request: Request, { params }: RouteParams) {
           { status: 400 }
         );
       }
+    } else if (targetType === "impeachmentVote") {
+      if (!targetOid) {
+        return NextResponse.json(badRequest("Invalid target ID").toJson(), { status: 400 });
+      }
+      const impeachment = await db
+        .collection<Impeachment>("impeachments")
+        .findOne({ _id: targetOid, countryId, stage: { $in: ["house", "senate"] } });
+      if (!impeachment) {
+        return NextResponse.json(
+          notFound("Impeachment not found or no longer open for voting").toJson(),
+          { status: 404 }
+        );
+      }
+      // A governor is tried by its own state legislature, which is the state
+      // party's surface, not the national one.
+      if (impeachment.targetOffice === "governor") {
+        return NextResponse.json(
+          badRequest(
+            "Governor impeachments are whipped from the state party, not the national party"
+          ).toJson(),
+          { status: 400 }
+        );
+      }
+      // Only the chamber sitting at the CURRENT stage may be whipped: the lower
+      // chamber while the case is impeaching, the upper chamber while it tries.
+      const stageChamber = impeachmentStageChamberKey(impeachment);
+      if (!stageChamber || chamber !== stageChamber) {
+        return NextResponse.json(
+          badRequest(
+            `This impeachment is being voted in the ${stageChamber ?? "no open"} chamber`
+          ).toJson(),
+          { status: 400 }
+        );
+      }
+      const stageEndsOnTurn =
+        impeachment.stage === "house"
+          ? impeachment.houseVotingEndsOnTurn
+          : impeachment.senateVotingEndsOnTurn;
+      const impeachGameTime = await getGameTime();
+      if (stageEndsOnTurn != null && impeachGameTime.currentTurn > stageEndsOnTurn) {
+        return NextResponse.json(
+          notFound("Voting for this impeachment stage has closed").toJson(),
+          { status: 404 }
+        );
+      }
     } else if (targetType === "cabinetNomination") {
       if (!targetOid) {
         return NextResponse.json(badRequest("Invalid target ID").toJson(), { status: 400 });
@@ -538,6 +588,15 @@ export async function POST(request: Request, { params }: RouteParams) {
           alreadyAligned = r.alreadyAligned;
         } else if (targetType === "speakerVacateMotion") {
           const r = await applyPlayerWhipToVacateMotion(db, direction, eligible);
+          overridden = r.overridden;
+          alreadyAligned = r.alreadyAligned;
+        } else if (targetType === "impeachmentVote") {
+          const r = await applyPlayerWhipToImpeachment(
+            db,
+            requireTargetObjectId(),
+            direction,
+            eligible
+          );
           overridden = r.overridden;
           alreadyAligned = r.alreadyAligned;
         }
@@ -812,6 +871,19 @@ export async function POST(request: Request, { params }: RouteParams) {
       fellInLine = r.fellInLine;
       ignored = r.ignored;
       if (authData.character.stats) await grantStatecraftXp();
+    } else if (targetType === "impeachmentVote") {
+      const r = await applyWhipVotesToImpeachment(
+        db,
+        requireTargetObjectId(),
+        direction,
+        nppOfficials,
+        nppMap,
+        mode,
+        whipStatecraftBonus
+      );
+      fellInLine = r.fellInLine;
+      ignored = r.ignored;
+      if (authData.character.stats) await grantStatecraftXp();
     }
 
     const ignoredFlavor = ["defied the whip", "remained unconvinced", "stood their ground"][
@@ -908,6 +980,18 @@ async function buildPlayerWhipMessage(
       body: isSoft
         ? `Your national party suggests that you vote to ${action} on the motion to vacate.`
         : `Your national party has whipped you to vote to ${action} on the motion to vacate. You may change your vote at any time.`,
+      notificationTitle,
+    };
+  }
+  if (targetType === "impeachmentVote") {
+    // Name the outcome rather than the ballot value: AYE on an impeachment is
+    // a vote to remove, which is worth saying out loud.
+    const action = direction === "for" ? "remove" : "acquit";
+    return {
+      subject: isSoft ? `Party suggestion: Vote to ${action}` : `Party Whip: Vote to ${action}`,
+      body: isSoft
+        ? `Your national party suggests that you vote to ${action} on the impeachment.`
+        : `Your national party has whipped you to vote to ${action} on the impeachment. You may change your vote at any time.`,
       notificationTitle,
     };
   }

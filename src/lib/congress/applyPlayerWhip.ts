@@ -13,6 +13,7 @@ import {
   getPMAppointmentVotesCollection,
   getNoConfidenceVotesCollection,
 } from "@/lib/db/collections/governmentFormation";
+import type { Impeachment, ImpeachmentVoteValue } from "@/lib/db/types/impeachment";
 
 export interface PlayerWhipResult {
   /** Number of characters whose votes were overwritten (did not already match). */
@@ -426,6 +427,99 @@ export async function applyPlayerWhipToVacateMotion(
   }
 
   await coll.updateOne({ _id: "current", status: "voting" }, { $set: setFields });
+
+  return { overridden, alreadyAligned };
+}
+
+/**
+ * Force-cast aye/nay votes on an open impeachment, at whichever stage it is in.
+ *
+ * Whip "for" maps to "aye" (remove), "against" to "nay" (acquit). The snapshot
+ * is stored in bill-vote semantics ("for"/"against"/"abstain"/"unvoted") so the
+ * revert affordance reads the same as every other target.
+ */
+export async function applyPlayerWhipToImpeachment(
+  db: Db,
+  impeachmentId: ObjectId,
+  direction: "for" | "against",
+  eligibleCharacterIds: ObjectId[]
+): Promise<PlayerWhipResult> {
+  if (eligibleCharacterIds.length === 0) {
+    return { overridden: 0, alreadyAligned: 0 };
+  }
+
+  const coll = db.collection<Impeachment>("impeachments");
+  const impeachment = await coll.findOne({ _id: impeachmentId });
+  if (!impeachment || (impeachment.stage !== "house" && impeachment.stage !== "senate")) {
+    return { overridden: 0, alreadyAligned: 0 };
+  }
+
+  const stage = impeachment.stage;
+  const voteField = stage === "house" ? "houseVotes" : "senateVotes";
+  const forField = stage === "house" ? "houseVotesFor" : "senateVotesFor";
+  const againstField = stage === "house" ? "houseVotesAgainst" : "senateVotesAgainst";
+  const abstainField = stage === "house" ? "houseVotesAbstain" : "senateVotesAbstain";
+
+  const officials = await db
+    .collection<ElectedOfficial>("electedOfficials")
+    .find(
+      { characterId: { $in: eligibleCharacterIds } },
+      { projection: { characterId: 1, seatsHeld: 1 } }
+    )
+    .toArray();
+  const weightByCharId = new Map<string, number>(
+    officials
+      .filter((o) => o.characterId != null)
+      .map((o) => [o.characterId!.toString(), o.seatsHeld ?? 1])
+  );
+
+  const voteChoice: ImpeachmentVoteValue = direction === "for" ? "aye" : "nay";
+  const existing = impeachment[voteField] ?? {};
+  const now = new Date();
+
+  let overridden = 0;
+  let alreadyAligned = 0;
+  const setFields: Record<string, unknown> = { updatedAt: now };
+  const deltas: Record<ImpeachmentVoteValue, number> = { aye: 0, nay: 0, abstain: 0 };
+
+  for (const charId of eligibleCharacterIds) {
+    const key = charId.toString();
+    const prev = existing[key];
+
+    // Snapshot in bill-vote semantics so the UI is consistent across targets.
+    setFields[`whippedFromVote.${key}`] =
+      prev === "aye"
+        ? "for"
+        : prev === "nay"
+          ? "against"
+          : prev === "abstain"
+            ? "abstain"
+            : "unvoted";
+    setFields[`${voteField}.${key}`] = voteChoice;
+
+    if (prev === voteChoice) {
+      alreadyAligned++;
+      continue;
+    }
+    overridden++;
+
+    const weight = weightByCharId.get(key) ?? 1;
+    if (prev) deltas[prev] -= weight;
+    deltas[voteChoice] += weight;
+  }
+
+  const incFields: Record<string, number> = {};
+  if (deltas.aye !== 0) incFields[forField] = deltas.aye;
+  if (deltas.nay !== 0) incFields[againstField] = deltas.nay;
+  if (deltas.abstain !== 0) incFields[abstainField] = deltas.abstain;
+
+  await coll.updateOne(
+    { _id: impeachmentId, stage },
+    {
+      $set: setFields,
+      ...(Object.keys(incFields).length > 0 ? { $inc: incFields } : {}),
+    }
+  );
 
   return { overridden, alreadyAligned };
 }
