@@ -55,7 +55,7 @@ export const WIKI_LAST_UPDATED: Record<string, string> = {
   "commodity-vehicles": "2026-08-20",
   "confirmation-process": "2026-08-30",
   "conflicts-overview": "2026-08-30",
-  "congress-leadership": "2026-08-20",
+  "congress-leadership": "2026-09-01",
   "contingent-election": "2026-08-30",
   "core-systems": "2026-08-30",
   "corporate-bonds": "2026-08-30",

@@ -365,7 +365,7 @@ describe("clearIneligibleHouseLeadershipNominations", () => {
     );
   });
 
-  it("is a no-op for any-seated policy roles (Speaker / Pro Tem / Bundestagspraesident)", async () => {
+  it("is a no-op for any-seated policy roles (Speaker / Bundestagspraesident)", async () => {
     // The function only iterates House election roles, none of which are
     // currently any-seated. But within the loop the early-`continue` for
     // any-seated should never call find()/updateMany() for those roles.
