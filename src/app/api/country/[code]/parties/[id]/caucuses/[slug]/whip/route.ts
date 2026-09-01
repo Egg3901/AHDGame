@@ -17,6 +17,8 @@ import {
   applyWhipVotesToLeadership,
   applyWhipVotesToGovernmentVote,
   applyWhipVotesToCabinet,
+  applyWhipVotesToVacateMotion,
+  applyWhipVotesToImpeachment,
 } from "@/lib/congress/applyWhipVotes";
 import { statecraftWhipBonus } from "@/lib/partyWhips/whipSuccess";
 import { USE_GROWTH_INCREMENT } from "@/lib/stats/statsConstants";
@@ -25,6 +27,8 @@ import {
   applyPlayerWhipToCabinet,
   applyPlayerWhipToGovernmentVote,
   applyPlayerWhipToLeadership,
+  applyPlayerWhipToVacateMotion,
+  applyPlayerWhipToImpeachment,
 } from "@/lib/congress/applyPlayerWhip";
 import { sendSystemMail } from "@/lib/mail/systemMail";
 import { createNotification } from "@/lib/notifications";
@@ -36,6 +40,10 @@ import {
   getChamberLeaderRole,
 } from "@/lib/partyWhips/constraints";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
+import { getGameTime } from "@/lib/time/gameTime";
+import { isLeadershipElectionClosed } from "@/lib/congress/leadershipElections";
+import { impeachmentStageChamberKey } from "@/lib/impeachment/impeachmentTally";
+import type { Impeachment } from "@/lib/db/types/impeachment";
 import type {
   Bill,
   BillWhip,
@@ -46,6 +54,7 @@ import type {
   LegislationType,
   NPP,
   PlayerWhipMode,
+  SpeakerVacateMotion,
   StateDemographics,
   User,
   WhipIssuerRole,
@@ -63,6 +72,8 @@ const whipSchema = z.object({
     "pmAppointmentVote",
     "noConfidenceVote",
     "cabinetNomination",
+    "speakerVacateMotion",
+    "impeachmentVote",
   ]),
   targetId: z.string().min(1, "Target ID required"),
   chamber: z.string().min(1, "Chamber required"),
@@ -168,7 +179,11 @@ async function buildCaucusPlayerWhipMessage(
         ? "the no-confidence motion"
         : targetType === "cabinetNomination"
           ? "the cabinet nomination"
-          : "the assigned leadership vote";
+          : targetType === "speakerVacateMotion"
+            ? "the motion to vacate the chair"
+            : targetType === "impeachmentVote"
+              ? "the impeachment"
+              : "the assigned leadership vote";
 
   return {
     subject: isSoft ? `${caucusName}: Vote ${dir}` : `${caucusName} whip: Vote ${dir}`,
@@ -251,21 +266,33 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const confidenceChamber = getConfidenceWhipChamber(countryId);
     const cabinetChamber = getCabinetWhipChamber(countryId);
+    // The motion to vacate is a singleton keyed "current"; pin it server-side so
+    // a client cannot address some other document through this target type.
     const normalizedTargetId =
-      countryId === COUNTRY_CONFIGS.US.id &&
-      targetType === "speakerElection" &&
-      targetId === "current"
+      targetType === "speakerVacateMotion"
         ? "current"
-        : targetId;
+        : countryId === COUNTRY_CONFIGS.US.id &&
+            targetType === "speakerElection" &&
+            targetId === "current"
+          ? "current"
+          : targetId;
     const targetOid = ObjectId.isValid(normalizedTargetId)
       ? new ObjectId(normalizedTargetId)
       : null;
     const isUSCongressLeadershipTarget =
       countryId === COUNTRY_CONFIGS.US.id &&
       (targetType === "speakerElection" || targetType === "leadershipElection");
-    const storedTargetId: ObjectId | string = isUSCongressLeadershipTarget
-      ? normalizedTargetId
-      : (targetOid ?? normalizedTargetId);
+    const storedTargetId: ObjectId | string =
+      isUSCongressLeadershipTarget || targetType === "speakerVacateMotion"
+        ? normalizedTargetId
+        : (targetOid ?? normalizedTargetId);
+
+    // Leadership-style targets reuse a stable _id ("current" for the Speaker
+    // election and the vacate motion, the role name for chamber leaders), so
+    // whips from a previous instance would otherwise count against the current
+    // one's attempt cap and freeze the panel (ticket #959). Each branch below
+    // sets this to the instant its target opened.
+    let whipWindowStart: Date | undefined;
     const requireTargetObjectId = (): ObjectId => {
       if (!targetOid) throw badRequest("Invalid target ID");
       return targetOid;
@@ -307,10 +334,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     } else if (targetType === "speakerElection") {
       const speakerElection = isUSCongressLeadershipTarget
         ? normalizedTargetId === "current"
-          ? await db.collection<{ _id: string; status: string }>("speakerElections").findOne({
-              _id: "current",
-              status: "voting",
-            })
+          ? await db
+              .collection<{ _id: string; status: string; startedAt?: Date }>("speakerElections")
+              .findOne({
+                _id: "current",
+                status: "voting",
+              })
           : null
         : targetOid
           ? await db.collection("speakerElections").findOne({ _id: targetOid, status: "active" })
@@ -319,6 +348,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         return NextResponse.json(notFound("Speaker election not found or not active").toJson(), {
           status: 404,
         });
+      }
+      if (isUSCongressLeadershipTarget) {
+        whipWindowStart = (speakerElection as { startedAt?: Date }).startedAt;
       }
       if (!candidacyId) {
         return NextResponse.json(badRequest("candidacyId required for leadership whips").toJson(), {
@@ -331,6 +363,7 @@ export async function POST(request: Request, { params }: RouteParams) {
             .collection<{
               _id: string;
               status: string;
+              startedAt?: Date;
             }>(chamber === "senate" ? "senateLeadershipElections" : "houseLeadershipElections")
             .findOne({ _id: normalizedTargetId, status: "voting" })
         : targetOid
@@ -340,6 +373,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         return NextResponse.json(notFound("Leadership election not found or not active").toJson(), {
           status: 404,
         });
+      }
+      if (isUSCongressLeadershipTarget) {
+        whipWindowStart = (leadershipElection as { startedAt?: Date }).startedAt;
       }
       if (!candidacyId) {
         return NextResponse.json(badRequest("candidacyId required for leadership whips").toJson(), {
@@ -388,6 +424,75 @@ export async function POST(request: Request, { params }: RouteParams) {
           { status: 400 }
         );
       }
+    } else if (targetType === "speakerVacateMotion") {
+      if (countryId !== COUNTRY_CONFIGS.US.id) {
+        return NextResponse.json(
+          badRequest("Motions to vacate are only held in the US House").toJson(),
+          { status: 400 }
+        );
+      }
+      if (chamber !== confidenceChamber) {
+        return NextResponse.json(
+          badRequest(`Motions to vacate can only be whipped in the ${confidenceChamber}`).toJson(),
+          { status: 400 }
+        );
+      }
+      const motion = await db
+        .collection<SpeakerVacateMotion>("speakerVacateMotions")
+        .findOne({ _id: "current", status: "voting" });
+      // Resolution is lazy (on read of the Speaker page), so a motion can sit in
+      // "voting" past its deadline. Gate on the clock as well as the status, or
+      // a chair could whip a motion that is already over.
+      const vacateGameTime = motion ? await getGameTime() : null;
+      if (
+        !motion ||
+        !vacateGameTime ||
+        isLeadershipElectionClosed(motion, vacateGameTime.currentTurn, vacateGameTime.effectiveNow)
+      ) {
+        return NextResponse.json(notFound("No motion to vacate is currently open").toJson(), {
+          status: 404,
+        });
+      }
+      whipWindowStart = motion.startedAt;
+    } else if (targetType === "impeachmentVote") {
+      if (!targetOid) {
+        return NextResponse.json(badRequest("Invalid target ID").toJson(), { status: 400 });
+      }
+      const impeachment = await db
+        .collection<Impeachment>("impeachments")
+        .findOne({ _id: targetOid, countryId, stage: { $in: ["house", "senate"] } });
+      if (!impeachment) {
+        return NextResponse.json(
+          notFound("Impeachment not found or no longer open for voting").toJson(),
+          { status: 404 }
+        );
+      }
+      if (impeachment.targetOffice === "governor") {
+        return NextResponse.json(
+          badRequest("Governor impeachments are whipped from the state party").toJson(),
+          { status: 400 }
+        );
+      }
+      const stageChamber = impeachmentStageChamberKey(impeachment);
+      if (!stageChamber || chamber !== stageChamber) {
+        return NextResponse.json(
+          badRequest(
+            `This impeachment is being voted in the ${stageChamber ?? "no open"} chamber`
+          ).toJson(),
+          { status: 400 }
+        );
+      }
+      const stageEndsOnTurn =
+        impeachment.stage === "house"
+          ? impeachment.houseVotingEndsOnTurn
+          : impeachment.senateVotingEndsOnTurn;
+      const impeachGameTime = await getGameTime();
+      if (stageEndsOnTurn != null && impeachGameTime.currentTurn > stageEndsOnTurn) {
+        return NextResponse.json(
+          notFound("Voting for this impeachment stage has closed").toJson(),
+          { status: 404 }
+        );
+      }
     } else if (targetType === "cabinetNomination") {
       if (!targetOid) {
         return NextResponse.json(badRequest("Invalid target ID").toJson(), { status: 400 });
@@ -421,6 +526,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         ...(audience === "npp"
           ? { $or: [{ audience: "npp" }, { audience: { $exists: false } }] }
           : {}),
+        ...(whipWindowStart ? { createdAt: { $gte: whipWindowStart } } : {}),
       })
       .toArray();
 
@@ -442,6 +548,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           issuedBy: "caucus",
           caucusId: caucus._id,
           audience: "character",
+          ...(whipWindowStart ? { createdAt: { $gte: whipWindowStart } } : {}),
         })
         .toArray();
       const existingSameModeWhip = existingCharacterWhips.find(
@@ -529,6 +636,19 @@ export async function POST(request: Request, { params }: RouteParams) {
           alreadyAligned = result.alreadyAligned;
         } else if (targetType === "cabinetNomination") {
           const result = await applyPlayerWhipToCabinet(
+            db,
+            requireTargetObjectId(),
+            direction,
+            eligible
+          );
+          overridden = result.overridden;
+          alreadyAligned = result.alreadyAligned;
+        } else if (targetType === "speakerVacateMotion") {
+          const result = await applyPlayerWhipToVacateMotion(db, direction, eligible);
+          overridden = result.overridden;
+          alreadyAligned = result.alreadyAligned;
+        } else if (targetType === "impeachmentVote") {
+          const result = await applyPlayerWhipToImpeachment(
             db,
             requireTargetObjectId(),
             direction,
@@ -765,6 +885,31 @@ export async function POST(request: Request, { params }: RouteParams) {
       if (actorCharacter.stats) await grantStatecraftXp();
     } else if (targetType === "cabinetNomination") {
       const result = await applyWhipVotesToCabinet(
+        db,
+        requireTargetObjectId(),
+        direction,
+        nppOfficials,
+        nppMap,
+        mode,
+        whipStatecraftBonus
+      );
+      fellInLine = result.fellInLine;
+      ignored = result.ignored;
+      if (actorCharacter.stats) await grantStatecraftXp();
+    } else if (targetType === "speakerVacateMotion") {
+      const result = await applyWhipVotesToVacateMotion(
+        db,
+        direction,
+        nppOfficials,
+        nppMap,
+        mode,
+        whipStatecraftBonus
+      );
+      fellInLine = result.fellInLine;
+      ignored = result.ignored;
+      if (actorCharacter.stats) await grantStatecraftXp();
+    } else if (targetType === "impeachmentVote") {
+      const result = await applyWhipVotesToImpeachment(
         db,
         requireTargetObjectId(),
         direction,

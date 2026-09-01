@@ -1,4 +1,5 @@
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
+import { officialsCountryScope } from "@/lib/db/electedOfficialScope";
 
 export type ExecutiveOfficeType = "president" | "vicePresident";
 
@@ -11,12 +12,5 @@ export function getExecutiveOfficialFilter(
   countryId: CountryId,
   officeType: ExecutiveOfficeType
 ): Record<string, unknown> {
-  if (countryId === COUNTRY_CONFIGS.US.id) {
-    return {
-      officeType,
-      $or: [{ countryId }, { countryId: { $exists: false } }],
-    };
-  }
-
-  return { officeType, countryId };
+  return { officeType, ...officialsCountryScope(countryId) };
 }

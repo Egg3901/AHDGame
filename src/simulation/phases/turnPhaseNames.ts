@@ -73,6 +73,7 @@ export const BASE_TURN_PHASE_NAMES = [
   "perpetualElections",
   "byElectionWatcher",
   "leadershipElections",
+  "leadershipPartyEligibility",
   "staleCandidateCleanup",
   "withdrawInactiveCandidates",
   "autoReelectionEntry",
