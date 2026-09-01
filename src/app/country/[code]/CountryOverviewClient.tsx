@@ -317,14 +317,25 @@ export default function CountryOverviewClient({
   countryId,
   availability,
   activePresidentElection,
+  identity,
 }: {
   countryId: CountryId;
   availability: CountryAvailability;
   activePresidentElection?: { id: string; seatId?: string; status: string } | null;
+  /**
+   * Name and system resolved SERVER-side against runtime state.
+   *
+   * Optional so nothing that renders this without it breaks; absent, the compiled
+   * config answers, which is right for every country no runtime event has changed.
+   * It is wrong for one that has — a reunified Germany read as "West Germany", a
+   * "Parliamentary Republic", long after both had stopped being true.
+   */
+  identity?: { name: string; governmentTypeLabel: string } | null;
 }) {
   const config = COUNTRY_CONFIGS[countryId];
   const activePreset = useActivePreset();
-  const name = getCountryDisplayName(countryId, activePreset);
+  const name = identity?.name ?? getCountryDisplayName(countryId, activePreset);
+  const governmentTypeLabel = identity?.governmentTypeLabel ?? config.governmentTypeLabel;
   const isPresidential = config.governmentType === "presidential";
   // Whether this country HAS a head of state as an office at all. Distinct from
   // whether one is currently seated — the executive route returns null for both, and
@@ -536,9 +547,7 @@ export default function CountryOverviewClient({
               <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
                 Government Type
               </span>
-              <span className="text-base font-bold text-foreground">
-                {config.governmentTypeLabel}
-              </span>
+              <span className="text-base font-bold text-foreground">{governmentTypeLabel}</span>
             </div>
           </div>
         </header>

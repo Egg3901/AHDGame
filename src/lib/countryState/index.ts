@@ -25,6 +25,8 @@ export type CountryStatePatch = Partial<
     | "pendingPostConversionElection"
     | "socialAxisPosition"
     | "socialAxisDriftTurn"
+    | "displayNameOverride"
+    | "flagEmojiOverride"
   >
 >;
 
