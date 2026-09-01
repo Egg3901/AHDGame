@@ -76,4 +76,91 @@ describe("loadOrganizationSummaries — member vote and country flags", () => {
     expect(members.get("TR")?.flagEmoji).toBe("🇹🇷");
     expect(members.get("JO")?.flagEmoji).toBe("🇯🇴");
   });
+
+  /**
+   * The roster named every member from its COMPILED config, so it was the one
+   * country surface that never saw a runtime event. A reunified Germany sat in
+   * the Warsaw Pact still billed as "East Germany", and in a 1979 world the
+   * USSR sat in it as "Russia" — its era alias was ignored too.
+   */
+  describe("runtime identity", () => {
+    /** Seat one extra member alongside the three the suite already seats. */
+    const alsoSeat = (countryId: string) =>
+      db.collection("organizationMemberships").find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          { organizationId: "NATO", countryId: "UK", status: "founding", joinedTurn: 0 },
+          { organizationId: "NATO", countryId: "JO", status: "active", joinedTurn: 0 },
+          { organizationId: "NATO", countryId, status: "active", joinedTurn: 0 },
+        ]),
+        sort: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        project: vi.fn().mockReturnThis(),
+      });
+
+    const runtimeState = (docs: object[]) => {
+      db.collection("countryState").find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue(docs),
+        project: vi.fn().mockReturnThis(),
+      });
+      db.collection("countryState").findOne.mockImplementation(async (q: { _id: string }) =>
+        docs.find((d) => (d as { _id: string })._id === q._id)
+      );
+    };
+
+    it("names a member by its runtime rename rather than its compiled config", async () => {
+      alsoSeat("DD");
+      runtimeState([
+        {
+          _id: "DD",
+          countryId: "DD",
+          governmentType: "onePartyState",
+          displayNameOverride: "Germany",
+        },
+      ]);
+      const members = await nato();
+      expect(members.get("DD")?.countryName).toBe("Germany");
+    });
+
+    it("shows the flag a runtime event put on a country, not its compiled one", async () => {
+      alsoSeat("DD");
+      runtimeState([
+        {
+          _id: "DD",
+          countryId: "DD",
+          governmentType: "onePartyState",
+          displayNameOverride: "Germany",
+          flagEmojiOverride: "🇩🇪",
+        },
+      ]);
+      const members = await nato();
+      expect(members.get("DD")?.flagEmoji).toBe("🇩🇪");
+    });
+
+    it("honours the era alias for a country nothing has renamed", async () => {
+      // The 1979 preset calls RU "Soviet Union". Reading the compiled config
+      // alone printed "Russia" into a Cold War bloc roster.
+      alsoSeat("RU");
+      runtimeState([]);
+      const members = await nato();
+      expect(members.get("RU")?.countryName).toBe("Soviet Union");
+    });
+
+    it("keeps the compiled name when no runtime event has touched the country", async () => {
+      alsoSeat("DD");
+      runtimeState([]);
+      const members = await nato();
+      expect(members.get("DD")?.countryName).toBe("East Germany");
+    });
+
+    it("still names and flags an entity that has no country config at all", async () => {
+      // Jordan is roster-only: it has no CountryConfig and no countryState row,
+      // so the identity resolver cannot answer for it and the roster fallback
+      // has to. Wiring the resolver in must not blank these out.
+      alsoSeat("DD");
+      runtimeState([]);
+      const members = await nato();
+      expect(members.get("JO")?.countryName).toBe("Jordan");
+      expect(members.get("JO")?.flagEmoji).toBe("🇯🇴");
+    });
+  });
 });
