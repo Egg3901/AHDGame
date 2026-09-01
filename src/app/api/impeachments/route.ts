@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
+import { getAuthUser } from "@/lib/auth";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
@@ -92,8 +93,25 @@ export async function GET(request: Request) {
       })
     );
 
+    // Resolve the viewer so each case can carry THEIR pre-whip ballot, and so
+    // the raw whippedFromVote map never leaves the server: it names every
+    // member a party force-voted, which is nobody else's business.
+    const viewer = await getAuthUser().catch(() => null);
+    const viewerCharacterId = viewer
+      ? ((await getCharacterByUserId(db, viewer.userId))?._id?.toString() ?? null)
+      : null;
+
     return NextResponse.json({
-      impeachments: impeachments.map((imp, i) => ({ ...imp, chamber: chambers[i] })),
+      impeachments: impeachments.map((imp, i) => {
+        const { whippedFromVote, ...rest } = imp;
+        return {
+          ...rest,
+          chamber: chambers[i],
+          myWhippedFromOriginal: viewerCharacterId
+            ? (whippedFromVote?.[viewerCharacterId] ?? null)
+            : null,
+        };
+      }),
     });
   } catch (error) {
     return handleRouteError(error);

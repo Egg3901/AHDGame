@@ -12,6 +12,7 @@ import type {
 function makeCursor<T>(docs: T[]) {
   return {
     toArray: vi.fn().mockResolvedValue(docs),
+    project: vi.fn().mockReturnThis(),
   };
 }
 
@@ -76,6 +77,37 @@ function createCollectionMap() {
       findOne: vi.fn(),
       updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
     },
+    speakerVacateMotions: {
+      findOne: vi.fn(),
+      updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+    },
+    electedOfficials: {
+      findOne: vi.fn().mockResolvedValue(null),
+      find: vi.fn(),
+    },
+    characters: {
+      findOne: vi.fn().mockResolvedValue(null),
+    },
+    politicalParties: {
+      find: vi.fn(),
+    },
+  };
+}
+
+/** A motion to vacate in its open, votable state. */
+function makeVacateMotion(overrides: Record<string, unknown> = {}) {
+  return {
+    _id: "current" as const,
+    status: "voting" as const,
+    filedById: new ObjectId(),
+    filedByName: "Filer",
+    targetSpeakerId: new ObjectId(),
+    targetSpeakerName: "Sitting Speaker",
+    startedAt: new Date("2026-09-01T00:00:00Z"),
+    endsAt: new Date("2026-09-02T00:00:00Z"),
+    votes: {},
+    updatedAt: new Date(),
+    ...overrides,
   };
 }
 
@@ -821,5 +853,163 @@ describe("applyWhipVotes fallback handling", () => {
     expect(collections.bills.updateOne).not.toHaveBeenCalled();
     expect(collections.nppVotePredictions.bulkWrite).not.toHaveBeenCalled();
     randomSpy.mockRestore();
+  });
+});
+
+describe("applyWhipVotesToVacateMotion", () => {
+  /** Wire a db whose collections back a single open motion to vacate. */
+  function makeVacateDb(
+    collections: ReturnType<typeof createCollectionMap>,
+    motion: ReturnType<typeof makeVacateMotion> | null,
+    opts: { speakerParty?: string; speakerStance?: { economic: number; social: number } } = {}
+  ) {
+    collections.speakerVacateMotions.findOne.mockResolvedValue(motion);
+    collections.electedOfficials.findOne.mockResolvedValue(
+      opts.speakerParty ? { party: opts.speakerParty } : null
+    );
+    collections.characters.findOne.mockResolvedValue(
+      opts.speakerStance ? { policies: opts.speakerStance } : null
+    );
+    collections.politicalParties.find.mockReturnValue(
+      makeCursor([
+        { sequentialId: 1, tier: "major" },
+        { sequentialId: 2, tier: "major" },
+      ])
+    );
+    return {
+      collection: vi.fn((name: string) => collections[name as keyof typeof collections]),
+    } as unknown as Db;
+  }
+
+  it("overwrites an NPP's existing ballot under a hard whip", async () => {
+    // The motion may already carry auto-cast votes from a closing window; a
+    // whip issued afterwards has to be able to move them.
+    const npp = makeNpp();
+    const official = makeOfficial(npp._id);
+    const nppKey = `npp_${npp._id.toString()}`;
+    const motion = makeVacateMotion({ votes: { [nppKey]: "against" } });
+
+    const collections = createCollectionMap();
+    const db = makeVacateDb(collections, motion, { speakerParty: "2" });
+
+    const { applyWhipVotesToVacateMotion } = await import("./applyWhipVotes");
+    const result = await applyWhipVotesToVacateMotion(
+      db,
+      "for",
+      [official],
+      new Map([[npp._id.toString(), npp]]),
+      "hard"
+    );
+
+    expect(result).toEqual({ fellInLine: 1, ignored: 0 });
+    expect(collections.speakerVacateMotions.updateOne).toHaveBeenCalledWith(
+      { _id: "current", status: "voting" },
+      expect.objectContaining({ $set: expect.objectContaining({ [`votes.${nppKey}`]: "for" }) })
+    );
+  });
+
+  it("counts an already-aligned NPP without rewriting the motion", async () => {
+    const npp = makeNpp();
+    const official = makeOfficial(npp._id);
+    const nppKey = `npp_${npp._id.toString()}`;
+    const motion = makeVacateMotion({ votes: { [nppKey]: "for" } });
+
+    const collections = createCollectionMap();
+    const db = makeVacateDb(collections, motion, { speakerParty: "2" });
+
+    const { applyWhipVotesToVacateMotion } = await import("./applyWhipVotes");
+    const result = await applyWhipVotesToVacateMotion(
+      db,
+      "for",
+      [official],
+      new Map([[npp._id.toString(), npp]]),
+      "hard"
+    );
+
+    expect(result).toEqual({ fellInLine: 1, ignored: 0 });
+    expect(collections.speakerVacateMotions.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the bloc's own heuristic when a soft whip is resisted", async () => {
+    // roll 100 fails even the best compliance chance, so this NPP resists.
+    // It shares the Speaker's party, so its own heuristic keeps the chair.
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    const npp = makeNpp({ party: "1" });
+    const official = makeOfficial(npp._id);
+    const nppKey = `npp_${npp._id.toString()}`;
+
+    const collections = createCollectionMap();
+    const db = makeVacateDb(collections, makeVacateMotion(), { speakerParty: "1" });
+
+    const { applyWhipVotesToVacateMotion } = await import("./applyWhipVotes");
+    const result = await applyWhipVotesToVacateMotion(
+      db,
+      "for",
+      [official],
+      new Map([[npp._id.toString(), npp]]),
+      "soft"
+    );
+
+    expect(result).toEqual({ fellInLine: 0, ignored: 1 });
+    expect(collections.speakerVacateMotions.updateOne).toHaveBeenCalledWith(
+      { _id: "current", status: "voting" },
+      expect.objectContaining({ $set: expect.objectContaining({ [`votes.${nppKey}`]: "against" }) })
+    );
+    randomSpy.mockRestore();
+  });
+
+  it("is a no-op when no motion is open", async () => {
+    const npp = makeNpp();
+    const official = makeOfficial(npp._id);
+    const collections = createCollectionMap();
+    const db = makeVacateDb(collections, null);
+
+    const { applyWhipVotesToVacateMotion } = await import("./applyWhipVotes");
+    const result = await applyWhipVotesToVacateMotion(
+      db,
+      "for",
+      [official],
+      new Map([[npp._id.toString(), npp]]),
+      "hard"
+    );
+
+    expect(result).toEqual({ fellInLine: 0, ignored: 0 });
+    expect(collections.speakerVacateMotions.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("ignores a resolved motion", async () => {
+    const npp = makeNpp();
+    const official = makeOfficial(npp._id);
+    const collections = createCollectionMap();
+    const db = makeVacateDb(collections, makeVacateMotion({ status: "passed" }));
+
+    const { applyWhipVotesToVacateMotion } = await import("./applyWhipVotes");
+    const result = await applyWhipVotesToVacateMotion(
+      db,
+      "for",
+      [official],
+      new Map([[npp._id.toString(), npp]]),
+      "hard"
+    );
+
+    expect(result).toEqual({ fellInLine: 0, ignored: 0 });
+    expect(collections.speakerVacateMotions.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("counts a multi-seat bloc once even when it holds several official rows", async () => {
+    const npp = makeNpp();
+    const collections = createCollectionMap();
+    const db = makeVacateDb(collections, makeVacateMotion(), { speakerParty: "2" });
+
+    const { applyWhipVotesToVacateMotion } = await import("./applyWhipVotes");
+    const result = await applyWhipVotesToVacateMotion(
+      db,
+      "for",
+      [makeOfficial(npp._id), makeOfficial(npp._id)],
+      new Map([[npp._id.toString(), npp]]),
+      "hard"
+    );
+
+    expect(result).toEqual({ fellInLine: 1, ignored: 0 });
   });
 });

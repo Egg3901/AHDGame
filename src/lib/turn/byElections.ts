@@ -2,6 +2,7 @@ import { ObjectId } from "mongodb";
 import type { Db } from "@/lib/mongodb";
 import type { Election, ElectedOfficial } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
+import { officialsCountryScope } from "@/lib/db/electedOfficialScope";
 import { getCountryAccessFromDb } from "@/lib/countryAccess";
 import { getSeatIdFromElection } from "@/lib/seats/seatId";
 import { turnToWallClock } from "@/lib/elections/canonicalCycle";
@@ -54,19 +55,8 @@ export const BY_ELECTION_RETRY_COOLDOWN_TURNS = 48;
  */
 export const BY_ELECTION_COUNTRIES: readonly CountryId[] = ["US", "RU"];
 
-/** Countries whose governor rows predate the explicit countryId field. */
-const LEGACY_UNTAGGED_ROW_COUNTRIES: ReadonlySet<CountryId> = new Set(["US"]);
-
 /** Countries whose runtime status (beta/active) gates the watcher. */
 const STATUS_GATED_COUNTRIES: ReadonlySet<CountryId> = new Set(["RU"]);
-
-/** Per-country scope filter, matching legacy untagged rows where applicable. */
-function countryScope(countryId: CountryId) {
-  if (LEGACY_UNTAGGED_ROW_COUNTRIES.has(countryId)) {
-    return { $or: [{ countryId }, { countryId: { $exists: false } }] };
-  }
-  return { countryId };
-}
 
 /**
  * Spawn one governor by-election for a vacant state seat. Timing is set directly
@@ -139,7 +129,7 @@ export async function processByElectionWatcher(
       const { status } = await getCountryAccessFromDb(db, countryId);
       if (status !== "beta" && status !== "active") continue;
     }
-    const scope = countryScope(countryId);
+    const scope = officialsCountryScope(countryId);
 
     const govRows = await officials.find({ officeType: "governor", ...scope }).toArray();
     const vacantStates = [
