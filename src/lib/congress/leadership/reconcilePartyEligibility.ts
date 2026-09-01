@@ -168,15 +168,14 @@ export async function reconcileLeadershipPartyEligibility(
     // and deliberately never touched afterwards. If it STILL satisfies the
     // policy then the office has not moved, so the ineligibility is the holder's
     // own doing. If it does not, the majority flipped and this is case (b).
+    //
+    // A row with no recorded party gives no baseline at all, so it falls out
+    // here too. Both skips stay silent on purpose: this runs on a public GET and
+    // the condition persists across every page load, so logging it would spam.
+    // `scripts/debug/heal-ineligible-majority-leadership.ts` reports these on
+    // demand instead.
     const qualifiedUnder = leader.party ?? null;
-    if (qualifiedUnder === null) {
-      // No baseline to attribute the change to, and vacating an office is not a
-      // coin toss. Leave it to the chamber-vote path.
-      console.warn(
-        `[Leadership] ${leaderRole} holder ${leader.characterName} is ineligible (${party ?? "no party"}) but the row records no qualifying party; skipping`
-      );
-      continue;
-    }
+    if (qualifiedUnder === null) continue;
     if (!isPartyEligible(policy, qualifiedUnder, ctx)) continue;
 
     // Scoped to the holder we just read, so of two overlapping page loads only
