@@ -58,20 +58,46 @@ describe("rescopeRegionToCountry", () => {
       { collection: "stateRegistrationPool", key: "compositeCountryState" },
     ]);
     const mocks = db.collectionMocks["stateRegistrationPool"];
+    const inserted = mocks.replaceOne.mock.calls[0][1];
+    expect(inserted._id).toBe("IE_NIR");
+    expect(inserted.countryId).toBe("IE");
+    expect(inserted.independent).toBe(500); // payload preserved
+    // The old key is released only after the new one is secured, so a crash
+    // between the two leaves a re-keyed row the next attempt can absorb.
     expect(mocks.deleteOne).toHaveBeenCalledWith({ _id: "UK_NIR" });
-    // REPLACE with upsert, not insert: the target key can already be occupied by
-    // an orphan from an earlier transfer or an old seed, and a bare insert throws
-    // E11000 there -- after the old row has already been deleted, so it takes the
-    // region's real data with it. The live German world carried four such orphans.
-    const [filter, replacement, opts] = mocks.replaceOne.mock.calls[0];
-    expect(filter).toEqual({ _id: "IE_NIR" });
-    expect(opts).toEqual({ upsert: true });
-    expect(replacement.countryId).toBe("IE");
-    expect(replacement.stateId).toBe("NIR");
-    // `_id` must NOT ride along in the replacement, or Mongo rejects it as an
-    // attempt to change an immutable field.
-    expect(replacement._id).toBeUndefined();
-    expect(replacement.independent).toBe(500); // payload preserved
+    expect(mocks.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("absorbs a row already living under the new key instead of colliding on it", async () => {
+    // Ticket #1247: a merge that crashed mid-region left `DE_MV` re-keyed
+    // beside the source row `DD_MV`. A retry must replace the survivor, not
+    // die on the unique `_id`: that E11000 failed the impose request and, the
+    // crisis being one-shot AT THE TIME, left Germany half-merged for good.
+    //
+    // Actuation is resumable now -- it holds a lease and stamps completion only
+    // once the consequences land -- so a collision here no longer strands the
+    // world. It still must not happen: the retry that resumes the merge is the
+    // very thing that meets the re-keyed row.
+    db.collection("stateRegistrationPool").findOne.mockResolvedValue({
+      _id: "DD_MV",
+      stateId: "MV",
+      countryId: "DD",
+      independent: 900,
+    });
+    db.collection("stateRegistrationPool").replaceOne.mockResolvedValue({
+      matchedCount: 1,
+      upsertedCount: 0,
+    });
+    await rescopeRegionToCountry(db as unknown as Db, "MV", "DD", "DE", [
+      { collection: "stateRegistrationPool", key: "compositeCountryState" },
+    ]);
+    const mocks = db.collectionMocks["stateRegistrationPool"];
+    // Replace targeted the existing row, upsert guarantees it exists.
+    expect(mocks.replaceOne.mock.calls[0][0]).toEqual({ _id: "DE_MV" });
+    expect(mocks.replaceOne.mock.calls[0][2]).toMatchObject({ upsert: true });
+    expect(mocks.replaceOne.mock.calls[0][1]._id).toBe("DE_MV");
+    expect(mocks.replaceOne.mock.calls[0][1].countryId).toBe("DE");
+    expect(mocks.insertOne).not.toHaveBeenCalled();
   });
 
   it("returns a matched-count report per collection", async () => {

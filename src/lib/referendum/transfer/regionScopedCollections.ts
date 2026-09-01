@@ -149,24 +149,36 @@ export async function rescopeRegionToCountry(
       const doc = await coll.findOne({ _id: oldId } as Record<string, unknown>);
       let matched = 0;
       if (doc) {
-        await coll.deleteOne({ _id: oldId } as Record<string, unknown>);
-        // REPLACE, not insert. The target key can already exist — a world can
-        // carry an orphaned `${toCountryId}_${regionId}` from an earlier transfer
-        // or an old seed, and the live German world carried four of them. A bare
-        // `insertOne` throws E11000 there, and because the old doc has ALREADY
-        // been deleted by then, the throw both aborts the whole merge and takes
-        // the region's real row with it. The moving region's document is the
-        // authoritative one, so it overwrites whatever was squatting on the key.
+        // SECURE THE NEW KEY BEFORE RELEASING THE OLD ONE, and never blindly
+        // insert. This re-key is not guarded by the region-doc idempotency
+        // check above: a merge that crashed between this write and
+        // `convertRegionDoc` leaves a region that straddles the two keys. The
+        // retry re-reads the old `DD_MV` and finds a `DE_MV` from the first
+        // attempt already seated under the new key, and a blind insert there
+        // died with E11000, aborting the whole transfer half-done (ticket
+        // #1247: a reunification dictated in the won-war panel stalled at its
+        // second Land and never resumed). Upsert-replace instead: an existing
+        // row under the new key is absorbed, its payload replaced with the
+        // old row's, which is the authoritative one, and the delete below
+        // then frees the old key.
         //
-        // `_id` is dropped from the spread: it comes from the filter on an upsert,
-        // and passing it in a replacement is how you get an immutable-field error
-        // instead of the row you wanted.
-        const { _id: _oldKey, ...carried } = doc as Record<string, unknown>;
+        // A CRASHED RETRY IS NOT THE ONLY WAY THE NEW KEY IS TAKEN. A world can
+        // also carry an orphan under `${toCountryId}_${regionId}` from an
+        // earlier transfer or an old seed, with no failed attempt behind it --
+        // the live German world held four of them before any of this ran. Same
+        // collision, same answer: the moving region's document wins, because it
+        // is the one describing a region that actually exists.
         await coll.replaceOne(
           { _id: newId } as Record<string, unknown>,
-          { ...carried, countryId: toCountryId, updatedAt: now },
+          {
+            ...doc,
+            _id: newId,
+            countryId: toCountryId,
+            updatedAt: now,
+          } as Record<string, unknown>,
           { upsert: true }
         );
+        await coll.deleteOne({ _id: oldId } as Record<string, unknown>);
         matched = 1;
       }
       report.push({ collection: scope.collection, matched });
