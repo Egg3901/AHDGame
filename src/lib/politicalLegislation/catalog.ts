@@ -17,7 +17,6 @@ const CORE_CATALOGS: Record<LawCountryId, PoliticalLaw[]> = {
   UK: UK_LAWS,
   RU: RU_LAWS,
   DD: DD_LAWS,
-  DE: [],
 };
 
 /** Regional-only sidecars (not part of the 109-law core). */
@@ -31,7 +30,6 @@ const CATALOGS: Record<LawCountryId, PoliticalLaw[]> = {
   UK: CORE_CATALOGS.UK,
   RU: CORE_CATALOGS.RU,
   DD: [...CORE_CATALOGS.DD, ...DD_LAND_LAWS],
-  DE: [],
 };
 
 const LAWS_BY_ID = new Map<string, PoliticalLaw>(
