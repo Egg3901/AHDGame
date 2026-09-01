@@ -4,14 +4,25 @@
  *
  * Pro Tempore, Majority Leader and Majority Whip are `largest-single-party`
  * roles: the chamber's biggest party runs for them, votes on them, and holds
- * them. Nothing enforced the *holding* half — a member elected as Majority
- * Leader could cross the aisle or go independent and keep the gavel
- * indefinitely, because the only sweep that ever vacated leadership
- * (`vacateLeadershipBulkIfLostSeat`) checks for a lost seat, not a lost party.
+ * them.
  *
- * This module closes that gap: a holder whose live party no longer satisfies
- * their role's policy is vacated and the seat goes straight to a fresh 24-turn
- * election.
+ * Two pieces live here.
+ *
+ * `openElectionsForVacatedMajorityRoles` is the one that does the day-to-day
+ * work. `cleanupPartyPositionsOnSwitch` has always vacated these seats on a
+ * party switch, but it stopped there, so the chair read "Vacant" until an admin
+ * hand-started a race. This opens that race at the vacancy transition — the same
+ * shape as `vacateSpeakerIfLostSeat` → `openSpeakerElection`, which is why the
+ * Speaker never had this problem.
+ *
+ * `reconcileLeadershipPartyEligibility` is the backstop for the paths that
+ * mutate `characters.party` WITHOUT going through that cleanup — the admin heal
+ * and bulk-edit routes. It vacates a holder whose live party no longer satisfies
+ * the policy and opens the race itself.
+ *
+ * Neither one polls for empty seats, and that is deliberate: a race nobody
+ * enters resolves by vacating the role and closing, so a poller would read that
+ * as a fresh vacancy and re-open forever.
  *
  * Deliberately NOT extended to the minority roles or the Speaker — see the
  * scope decision recorded on the branch. The minority roles are `non-coalition`
@@ -65,8 +76,13 @@ export interface LeadershipPartyVacancy {
 }
 
 /**
- * Vacate every majority-gated leadership role in `chamber` whose holder no
- * longer belongs to the majority party, opening a 24-turn election for each.
+ * Vacate every majority-gated leadership role in `chamber` whose holder has
+ * left the qualifying party, opening a 24-turn election for each.
+ *
+ * A backstop, not the main path: an ordinary switch is already caught by
+ * `cleanupPartyPositionsOnSwitch`, which vacates the seat before this ever runs.
+ * What reaches here is the admin routes that write `characters.party` directly
+ * and bypass that cleanup entirely.
  *
  * Idempotent: it vacates before opening, so a repeat pass sees an empty seat
  * and returns without touching anything. That matters because this runs on the
@@ -133,46 +149,186 @@ export async function reconcileLeadershipPartyEligibility(
     const seat = seatByHolder.get(holderKey);
     if (!seat) continue;
 
+    const policy = POLICY_BY_ROLE[leaderRole];
     const party = resolveSeatHolderParty(seat, charByHolder.get(holderKey) ?? null);
-    if (isPartyEligible(POLICY_BY_ROLE[leaderRole], party, ctx)) continue;
+    if (isPartyEligible(policy, party, ctx)) continue;
+
+    // Ineligible — but for one of two very different reasons:
+    //   (a) the holder walked out of the qualifying party, or
+    //   (b) the chamber's majority moved out from under a holder who stayed put.
+    //
+    // Only (a) belongs here. Case (b) is already handled, more gently, by
+    // `triggerLeadershipElectionsAfterChamberVote`: it opens a race at the next
+    // chamber-changing vote and leaves the incumbent seated (and auto-nominated)
+    // until it resolves. Vacating here would pre-empt that and leave the chamber
+    // with no leaders for 24 turns over a shift they had no part in.
+    //
+    // `congressLeaders.party` is the party the holder qualified under when they
+    // took the office — stamped by the resolver and by the admin assign route,
+    // and deliberately never touched afterwards. If it STILL satisfies the
+    // policy then the office has not moved, so the ineligibility is the holder's
+    // own doing. If it does not, the majority flipped and this is case (b).
+    const qualifiedUnder = leader.party ?? null;
+    if (qualifiedUnder === null) {
+      // No baseline to attribute the change to, and vacating an office is not a
+      // coin toss. Leave it to the chamber-vote path.
+      console.warn(
+        `[Leadership] ${leaderRole} holder ${leader.characterName} is ineligible (${party ?? "no party"}) but the row records no qualifying party; skipping`
+      );
+      continue;
+    }
+    if (!isPartyEligible(policy, qualifiedUnder, ctx)) continue;
 
     // Scoped to the holder we just read, so of two overlapping page loads only
     // one opens the election and only one posts the notice.
     const claimed = await vacateCongressLeadershipRole(db, leaderRole, now, leader.characterId);
     if (!claimed) continue;
 
-    await openCongressLeadershipElection(db, {
-      role,
-      chamber,
-      ctx,
-      now,
-      // The holder was just vacated for being ineligible; re-seeding them onto
-      // the ballot they were removed from is exactly what must not happen.
-      skipIncumbentNomination: true,
-    });
-
-    const label = leadershipRoleLabel(leaderRole);
     vacated.push({
       leaderRole,
       role,
       characterName: leader.characterName,
       party: party ?? "independent",
     });
-    console.log(
-      `[Leadership] Vacated ${leaderRole}: ${leader.characterName} left the majority party; 24-turn election opened`
+  }
+
+  // One place opens the race and posts the notice, shared with the party-switch
+  // path, so the two cannot drift in behaviour or wording.
+  if (vacated.length > 0) {
+    await openElectionsForVacatedMajorityRoles(
+      db,
+      vacated.map((v) => ({ leaderRole: v.leaderRole, formerHolderName: v.characterName })),
+      chamber === "senate" ? { senate: ctx, house: null } : { senate: null, house: ctx },
+      now
     );
+  }
+
+  return vacated;
+}
+
+const LEADER_ROLE_TO_CHAMBER = new Map(
+  (["house", "senate"] as const).flatMap((chamber) =>
+    MAJORITY_GATED_ROLES[chamber].map(
+      ({ leaderRole, role }) => [leaderRole, { chamber, role }] as const
+    )
+  )
+);
+
+/** A role that has just been emptied, plus who was holding it. */
+export interface VacatedRole {
+  leaderRole: LeadershipRole;
+  /** Outgoing holder, read BEFORE the vacate. Only used for the feed notice. */
+  formerHolderName?: string;
+}
+
+/** Per-chamber composition contexts, or null for a chamber that is not needed. */
+export interface ChamberContexts {
+  house: ChamberLeadershipContext | null;
+  senate: ChamberLeadershipContext | null;
+}
+
+/**
+ * Open a 24-turn race for each majority-gated role in `vacatedRoles`.
+ *
+ * Called at the moment a party switch empties the chair, mirroring
+ * `vacateSpeakerIfLostSeat` → `openSpeakerElection`: the Speaker vacates AND
+ * refills itself, while these five roles only ever vacated, so the seat sat
+ * empty until an admin noticed. Roles outside the majority-gated set are
+ * ignored — `congressLeaders` also holds the minority roles, the Speaker, and
+ * the DE/CN chairs, none of which are this module's business.
+ *
+ * This deliberately fires on the vacancy *transition* rather than polling for
+ * empty seats. A poller would re-open forever: a race nobody enters resolves by
+ * vacating the role and closing, which would look like a fresh vacancy on the
+ * next pass.
+ *
+ * @returns the leader roles an election was actually opened for.
+ */
+export async function openElectionsForVacatedMajorityRoles(
+  db: Db,
+  vacatedRoles: readonly VacatedRole[],
+  contexts: ChamberContexts,
+  now: Date
+): Promise<LeadershipRole[]> {
+  const opened: LeadershipRole[] = [];
+
+  for (const { leaderRole, formerHolderName } of vacatedRoles) {
+    const target = LEADER_ROLE_TO_CHAMBER.get(leaderRole);
+    if (!target) continue;
+
+    const ctx = contexts[target.chamber];
+    // Same guard as the reconciler: with no majority party there is nobody
+    // eligible to run, so opening a race would just time out into a vacancy.
+    if (!ctx || ctx.majorityParty === null) continue;
+
+    const didOpen = await openCongressLeadershipElection(db, {
+      role: target.role,
+      chamber: target.chamber,
+      ctx,
+      now,
+      // The seat was just emptied; there is no incumbent to seed.
+      skipIncumbentNomination: true,
+    });
+    // A race was already running for this seat — leave it be, and do not
+    // announce a second time.
+    if (!didOpen) continue;
+
+    opened.push(leaderRole);
+    const label = leadershipRoleLabel(leaderRole);
+    console.log(`[Leadership] ${leaderRole} vacated by a party change; 24-turn election opened`);
     sendCountryGameEvent("US", {
       title: `Leadership Vacancy — ${label}`,
-      description:
-        `**${leader.characterName}** has left the majority party and no longer qualifies to hold ` +
-        `**${label}**. The office is vacant and a 24 turn election has opened.`,
+      description: formerHolderName
+        ? `**${formerHolderName}** has changed party and no longer qualifies to hold **${label}**. ` +
+          `The office is vacant and a 24 turn election has opened.`
+        : `**${label}** is vacant after a party change. A 24 turn election has opened.`,
       color: DISCORD_COLORS.leadership,
       footer: { text: "A House Divided" },
       timestamp: now.toISOString(),
     }).catch(() => {});
   }
 
-  return vacated;
+  return opened;
+}
+
+/**
+ * Build only the chamber contexts the given roles actually need, so a switch
+ * that touches no congressional leadership costs nothing.
+ */
+export async function buildContextsForRoles(
+  db: Db,
+  roles: readonly VacatedRole[]
+): Promise<ChamberContexts> {
+  const needed = new Set(
+    roles.flatMap((r) => {
+      const target = LEADER_ROLE_TO_CHAMBER.get(r.leaderRole);
+      return target ? [target.chamber] : [];
+    })
+  );
+  if (needed.size === 0) return { house: null, senate: null };
+
+  const partyMap = await getPartyMap(db, "US");
+  const [senate, house] = await Promise.all([
+    needed.has("senate") ? getSenateComposition(db, partyMap) : null,
+    needed.has("house") ? getHouseComposition(db, partyMap) : null,
+  ]);
+
+  return {
+    senate: senate
+      ? buildChamberLeadershipContext({
+          composition: senate.composition,
+          majorityParty: senate.majorityParty,
+          majorityBloc: senate.majorityBloc,
+        })
+      : null,
+    house: house
+      ? buildChamberLeadershipContext({
+          composition: house.composition,
+          majorityParty: house.majorityParty,
+          majorityBloc: house.majorityBloc,
+        })
+      : null,
+  };
 }
 
 /**

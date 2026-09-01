@@ -31,9 +31,7 @@ import type {
   Character,
   CongressLeader,
   ElectedOfficial,
-  HouseLeadershipElection,
   HouseLeadershipElectionRole,
-  HouseLeadershipNomination,
   SenateLeadershipElection,
   SenateLeadershipElectionRole,
   SenateLeadershipNomination,
@@ -42,6 +40,17 @@ import type {
 export const LEADERSHIP_ELECTION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours = 24 turns
 
 export type ChamberElectionRole = SenateLeadershipElectionRole | HouseLeadershipElectionRole;
+
+/**
+ * The Senate and House election/nomination documents are identical apart from
+ * the role key, so widening just that key gives one type that describes either
+ * collection. Derived from the real interfaces rather than hand-written, so a
+ * schema change still typechecks the reads and writes below — the alternative,
+ * casting the union away, would silently accept a misspelled `endsOnTurn`,
+ * which is the exact bug this module exists to prevent.
+ */
+type ChamberElection = Omit<SenateLeadershipElection, "_id"> & { _id: ChamberElectionRole };
+type ChamberNomination = Omit<SenateLeadershipNomination, "role"> & { role: ChamberElectionRole };
 
 export interface OpenLeadershipElectionArgs {
   role: ChamberElectionRole;
@@ -92,13 +101,8 @@ export async function openCongressLeadershipElection(
   const nominationCollection =
     chamber === "senate" ? "senateLeadershipNominations" : "houseLeadershipNominations";
 
-  type ChamberElection = SenateLeadershipElection | HouseLeadershipElection;
-  type ChamberNomination = SenateLeadershipNomination | HouseLeadershipNomination;
-
   const gameTime = await getGameTime();
-  const existing = await db
-    .collection<ChamberElection>(electionCollection)
-    .findOne({ _id: role } as never);
+  const existing = await db.collection<ChamberElection>(electionCollection).findOne({ _id: role });
   if (
     existing?.status === "voting" &&
     !isLeadershipElectionClosed(existing, gameTime.currentTurn, gameTime.effectiveNow)
@@ -108,22 +112,23 @@ export async function openCongressLeadershipElection(
 
   await db
     .collection<ChamberNomination>(nominationCollection)
-    .updateMany({ role, status: { $in: ["open", "voting"] } } as never, {
-      $set: { status: "failed", updatedAt: now },
-    });
+    .updateMany(
+      { role, status: { $in: ["open", "voting"] } },
+      { $set: { status: "failed", updatedAt: now } }
+    );
 
   // Both anchors, always. `endsAt` is derived from the game clock (not wall
   // time) so the two agree even when real time has drifted ahead of the last
   // processed turn.
   const endsAt = new Date(gameTime.effectiveNow.getTime() + LEADERSHIP_ELECTION_DURATION_MS);
   const endsOnTurn = gameTime.currentTurn + LEADERSHIP_ELECTION_DURATION_MS / 3_600_000;
-  await db.collection<ChamberElection>(electionCollection).updateOne(
-    { _id: role } as never,
-    {
-      $set: { _id: role, status: "voting", startedAt: now, endsAt, endsOnTurn, updatedAt: now },
-    } as never,
-    { upsert: true }
-  );
+  await db
+    .collection<ChamberElection>(electionCollection)
+    .updateOne(
+      { _id: role },
+      { $set: { _id: role, status: "voting", startedAt: now, endsAt, endsOnTurn, updatedAt: now } },
+      { upsert: true }
+    );
 
   if (skipIncumbentNomination) return true;
 
@@ -167,7 +172,7 @@ export async function openCongressLeadershipElection(
     votes: {},
     createdAt: now,
     updatedAt: now,
-  } as never);
+  });
 
   return true;
 }
