@@ -149,13 +149,34 @@ export async function rescopeRegionToCountry(
       const doc = await coll.findOne({ _id: oldId } as Record<string, unknown>);
       let matched = 0;
       if (doc) {
+        // UPSERT, NOT INSERT. The destination may ALREADY hold a row under the new
+        // key: a country merge moves a region into a country that was seeded with
+        // its own row for that same region, and this collection is keyed by the
+        // pair. A bare insert throws E11000 there — with the source row already
+        // deleted, so the region's data is gone and the whole transfer aborts
+        // part-way. That is how the live German reunification died on its second
+        // Land, and every remaining Land would have died the same way.
+        //
+        // THE MOVING REGION'S ROW WINS, because the region is the thing that moves
+        // and its row is the live one; the destination's is for a region it never
+        // actually held. A region FUSE resolves the same collision the other way
+        // and keeps the target's row — see `mergeRegion`, where both regions stay
+        // inside one country and it is the SURVIVOR's row that is real.
+        //
+        // WRITE FIRST, DELETE SECOND, reversing the original order. That is the
+        // difference between a failure that can simply be re-run and one that has
+        // already destroyed the row it was moving.
+        await coll.replaceOne(
+          { _id: newId } as Record<string, unknown>,
+          {
+            ...doc,
+            _id: newId,
+            countryId: toCountryId,
+            updatedAt: now,
+          } as Record<string, unknown>,
+          { upsert: true }
+        );
         await coll.deleteOne({ _id: oldId } as Record<string, unknown>);
-        await coll.insertOne({
-          ...doc,
-          _id: newId,
-          countryId: toCountryId,
-          updatedAt: now,
-        } as Record<string, unknown>);
         matched = 1;
       }
       report.push({ collection: scope.collection, matched });
