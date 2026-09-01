@@ -4,11 +4,17 @@ import { createMockDb, type MockCollection, type MockDb } from "@/lib/test-utils
 import type { SettlementCrisisDoc } from "@/lib/db/types/settlementCrisis";
 
 const { actuateSettlementOutcome } = vi.hoisted(() => ({
-  actuateSettlementOutcome: vi.fn(async (..._a: unknown[]) => ({
-    actuated: true,
-    outcome: "challenger",
-    deferred: false,
-  })),
+  // Typed on the way in rather than inferred from the happy-path literal: inference
+  // narrows the shape to the fields THIS value happens to carry, and a later case
+  // overriding it with a failure (which adds `error`) then fails to compile.
+  actuateSettlementOutcome: vi.fn<
+    (...a: unknown[]) => Promise<{
+      actuated: boolean;
+      outcome: string;
+      deferred: boolean;
+      error?: string;
+    }>
+  >(async () => ({ actuated: true, outcome: "challenger", deferred: false })),
 }));
 vi.mock("@/lib/settlement/actuate", () => ({ actuateSettlementOutcome }));
 
