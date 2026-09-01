@@ -21,7 +21,24 @@ describe("dissolvingOfficeRemap", () => {
     expect(remapOffice("UK", "IE", "house")).toBeNull();
   });
 
-  it("is directional: the reverse pair has no table", () => {
-    expect(officeRemapFor("DE", "DD")).toBeNull();
+  it("maps the other direction too, for a settlement the GDR survives", () => {
+    // Reunification can leave either Germany standing. With the GDR as the shell
+    // the currency, government type and party statuses are already right and only
+    // the NAME needs an override — the cheaper side of the trade.
+    expect(remapOffice("DE", "DD", "bundestag")).toBe("volkskammerDeputy");
+    expect(remapOffice("DE", "DD", "landtag")).toBe("landAssembly");
+    expect(remapOffice("DE", "DD", "ministerPresident")).toBe("governor");
+    expect(remapOffice("DE", "DD", "president")).toBeNull();
+  });
+
+  it("round-trips the chambers, so neither direction invents a seat", () => {
+    for (const [from, to] of [
+      ["volkskammerDeputy", "bundestag"],
+      ["landAssembly", "landtag"],
+      ["governor", "ministerPresident"],
+    ] as const) {
+      expect(remapOffice("DD", "DE", from)).toBe(to);
+      expect(remapOffice("DE", "DD", to)).toBe(from);
+    }
   });
 });

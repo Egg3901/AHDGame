@@ -6,8 +6,21 @@
 
 import type { PoliticalMetricCategoryId, PoliticalMetricId } from "../politicalMetrics/types";
 
-export type LawCountryId = "US" | "UK" | "RU" | "DD" | "DE";
+export type LawCountryId = "US" | "UK" | "RU" | "DD";
 export const LAW_COUNTRY_IDS: readonly LawCountryId[] = ["US", "UK", "RU", "DD"] as const;
+
+/**
+ * Countries that PRICE v2 laws without carrying a catalogue of their own.
+ *
+ * A reunified Germany holds a law book of rescoped `dd.*` laws but authors no
+ * legislation of its own, so it needs a cost anchor and nothing else. Widening
+ * `LawCountryId` to include it looked equivalent and is not: that type keys the
+ * exhaustive `Record<LawCountryId, ...>` tables for the catalogue, the budget
+ * keys, the seed tax rates and the calibration baselines, so adding a member
+ * silently demands a full law catalogue for a country that has none. Anchors are
+ * their own axis.
+ */
+export type CostAnchorCountryId = LawCountryId | "DE";
 
 export interface LawLevel {
   name: string;

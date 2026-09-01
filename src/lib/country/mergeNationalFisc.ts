@@ -36,6 +36,25 @@ export interface MergeNationalFiscArgs {
   fromCountryId: CountryId;
   toCountryId: CountryId;
   currentTurn: number;
+  /**
+   * Whether the absorbed side's LEGISLATED levers govern the unified state.
+   *
+   * Defaults true, which is the winner's-law rule: a merge runs winner-into-shell,
+   * so the absorbed side is the one that won and its tax code, wage floor and union
+   * law outlive the state that wrote them.
+   *
+   * ⚠️ FALSE WHEN THE SHELL IS THE WINNER. A settlement can be run in either
+   * direction — the German Question can leave either Germany standing — and when
+   * the SURVIVOR is the victor, carrying the absorbed side's levers would impose
+   * the LOSER's law on the winner, which is the rule stood on its head.
+   *
+   * QUANTITIES ARE NOT LEVERS and cross either way: the treasury, the defence
+   * account, the sovereign bonds and the debt CEILING are how much the unified
+   * state holds and may borrow, not rules about how it behaves. A state that has
+   * absorbed another has not thereby lost the money or the borrowing capacity of
+   * the half it took on.
+   */
+  carryLegislatedLevers?: boolean;
 }
 
 export interface MergeNationalFiscResult {
@@ -53,7 +72,7 @@ export async function mergeNationalFisc(
   db: Db,
   args: MergeNationalFiscArgs
 ): Promise<MergeNationalFiscResult> {
-  const { fromCountryId, toCountryId, currentTurn } = args;
+  const { fromCountryId, toCountryId, currentTurn, carryLegislatedLevers = true } = args;
   const now = new Date();
   const scale = await resolveMergeFxScale(db, fromCountryId, toCountryId);
   const budgets = db.collection<FederalBudget>("federalBudget");
@@ -82,8 +101,10 @@ export async function mergeNationalFisc(
     // assessment of the issuer, not legislation, and the fiscal machinery
     // recomputes them from the combined balance sheet.
     const lawSet: Record<string, unknown> = {};
-    if (from.taxRates) lawSet.taxRates = from.taxRates;
-    if (from.taxRatePhaseIn) lawSet.taxRatePhaseIn = from.taxRatePhaseIn;
+    if (carryLegislatedLevers) {
+      if (from.taxRates) lawSet.taxRates = from.taxRates;
+      if (from.taxRatePhaseIn) lawSet.taxRatePhaseIn = from.taxRatePhaseIn;
+    }
     // THE DEBT CEILING IS THE ONE LEVER THAT SUMS RATHER THAN REPLACING.
     //
     // Every other carried lever is a RULE — a rate, a ratio, a prohibition — and
@@ -101,9 +122,17 @@ export async function mergeNationalFisc(
     // `ceilingLastRaisedYear` takes the LATER of the two: the combined ceiling is
     // new, and dating it to the older of the two raises would make the unified
     // state look overdue for a raise it just effectively had.
+    //
+    // ⚠️ A SURVIVOR THAT WAS ITSELF ABSORBED CONTRIBUTES NOTHING. `mergedInto` on
+    // the survivor's own budget says its figures are the remnants of a state that
+    // was already merged away, and its ceiling has therefore ALREADY been counted
+    // into the absorbed side's. Adding it again double-counts: reversing a merge
+    // would hand the unified state its own former ceiling a second time. The
+    // remnant is superseded, not additive.
+    const survivorCeiling = to.mergedInto ? 0 : (to.debt?.ceiling ?? 0);
     const fromCeiling = from.debt?.ceiling;
     if (typeof fromCeiling === "number") {
-      lawSet["debt.ceiling"] = (to.debt?.ceiling ?? 0) + fromCeiling * scale;
+      lawSet["debt.ceiling"] = survivorCeiling + fromCeiling * scale;
       const raisedYears = [from.debt?.ceilingLastRaisedYear, to.debt?.ceilingLastRaisedYear].filter(
         (year): year is number => typeof year === "number"
       );
@@ -111,11 +140,13 @@ export async function mergeNationalFisc(
         lawSet["debt.ceilingLastRaisedYear"] = Math.max(...raisedYears);
       }
     }
-    if (typeof from.minimumWageKaitzRatio === "number") {
-      lawSet.minimumWageKaitzRatio = from.minimumWageKaitzRatio;
+    if (carryLegislatedLevers) {
+      if (typeof from.minimumWageKaitzRatio === "number") {
+        lawSet.minimumWageKaitzRatio = from.minimumWageKaitzRatio;
+      }
+      if (typeof from.unionLawBias === "number") lawSet.unionLawBias = from.unionLawBias;
+      if (typeof from.unionsBanned === "boolean") lawSet.unionsBanned = from.unionsBanned;
     }
-    if (typeof from.unionLawBias === "number") lawSet.unionLawBias = from.unionLawBias;
-    if (typeof from.unionsBanned === "boolean") lawSet.unionsBanned = from.unionsBanned;
 
     // The survivor's book: signed add of the SAME number the caller records in
     // its audit trail (`treasuryMoved` — one expression, so the recorded amount

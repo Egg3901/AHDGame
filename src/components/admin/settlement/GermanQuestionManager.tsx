@@ -366,7 +366,7 @@ export function GermanQuestionManager() {
                 }
                 className="rounded-lg border border-error/50 px-3 py-1.5 text-sm font-semibold text-error hover:bg-error/10 disabled:opacity-50"
               >
-                Reunification carries — absorbs the GDR
+                Reunification carries — the GDR absorbs the Federal Republic
               </button>
             </div>
           </section>

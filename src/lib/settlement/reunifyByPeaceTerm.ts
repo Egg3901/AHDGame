@@ -29,9 +29,10 @@ export interface ReunifyByTermResult {
   /**
    * True when the crisis was CLAIMED and its consequences then did not complete.
    *
-   * Distinct from "nothing to do". Actuation claims the reopen cooldown as its first
-   * act, so nothing retries a half-done settlement and no sweep will notice it: this
-   * flag and the log below are the only trace it leaves.
+   * Distinct from "nothing to do". A half-done settlement IS recoverable now --
+   * actuation holds a lease and stamps completion only at the end, so the next
+   * turn sweep finds it un-actuated and resumes -- but that is the next tick, not
+   * this request. The caller is being told its own attempt did not finish.
    */
   deferred: boolean;
   error?: string;
@@ -87,10 +88,11 @@ export async function reunifyByPeaceTerm(
   const result = await actuateSettlementOutcome(db, resolved, currentTurn);
 
   // FILE THE DISPATCH HERE, because no tick will file it for us. `settlementPhase`
-  // announces a settlement when IT actuates one, and its sweep is keyed on
-  // `cooldownUntilTurn: null` — which `actuateSettlementOutcome` claims as its first
-  // act. Actuating from a request therefore hides the crisis from the only code that
-  // would have announced it, and Germany reunifies in silence.
+  // announces a settlement when IT actuates one, and its sweep skips anything
+  // already carrying `actuationCompletedTurn` — which a successful actuation on
+  // this path has just written. Actuating from a request therefore hides the
+  // crisis from the only code that would have announced it, and Germany reunifies
+  // in silence.
   //
   // Safe from a request path, unlike most posts: `emitSettlementWire` claims the
   // `postedWireEvents` stamp with a `$ne` guard BEFORE sending, so a retried request
@@ -105,9 +107,11 @@ export async function reunifyByPeaceTerm(
     return { actuated: true, deferred: false };
   }
 
-  // LOUD, because nothing else will say it. On the turn road a failed actuation at
-  // least shows up in the phase's result; this runs inside a request whose caller
-  // discards the outcome, and the cooldown claim means no later tick retries it.
+  // LOUD, because nothing else will say it HERE. On the turn road a failed
+  // actuation at least shows up in the phase's result; this runs inside a request
+  // whose caller discards the outcome. The settlement is not lost -- no completion
+  // was stamped, so the next sweep resumes it and announces it then -- but that is
+  // an hour away and invisible until it happens, so the attempt is logged now.
   console.error(
     `[Settlement] reunification by peace term did not complete for ${conflictId}:`,
     result.error ?? "no reason given"

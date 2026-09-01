@@ -11,6 +11,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { COUNTRY_CONFIGS, getCountryDisplayName } from "@/lib/constants/countries";
+import { resolveCountryIdentities } from "@/lib/country/countryIdentity";
 import { getCountryFlagUrlForEra } from "@/lib/constants/flags";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { calendarTurn } from "@/lib/utils/gameDate";
@@ -95,16 +96,25 @@ export async function GET() {
     const gameState = await getGameState();
     const preset = gameState?.preset ?? DEFAULT_SEED_PRESET;
 
-    const countries: CountryCreationInfo[] = Object.values(COUNTRY_CONFIGS)
-      .filter((cfg) => enabledSet.has(cfg.id))
-      .map((cfg) => ({
+    // Runtime identity: a country unified or converted at runtime must not be
+    // offered under the name and system it no longer has.
+    const eligible = Object.values(COUNTRY_CONFIGS).filter((cfg) => enabledSet.has(cfg.id));
+    const identities = await resolveCountryIdentities(
+      await getDb(),
+      eligible.map((cfg) => cfg.id),
+      preset
+    );
+    const countries: CountryCreationInfo[] = eligible.map((cfg) => {
+      const identity = identities.get(cfg.id);
+      return {
         id: cfg.id.toLowerCase(),
-        name: getCountryDisplayName(cfg.id, preset),
+        name: identity?.name ?? getCountryDisplayName(cfg.id, preset),
         flagUrl: getCountryFlagUrlForEra(cfg.code, preset),
-        desc: cfg.governmentTypeLabel,
+        desc: identity?.governmentTypeLabel ?? cfg.governmentTypeLabel,
         playerCount: playerCountsByCountry[cfg.id] ?? 0,
-        governmentType: cfg.governmentType,
-      }));
+        governmentType: identity?.governmentType ?? cfg.governmentType,
+      };
+    });
 
     const startingYear = gameState?.startingYear ?? getStartingYearForPreset(preset);
     // Display date must go through the pre-iteration clock, exactly as the

@@ -8,9 +8,9 @@
  * UK income-term costs ~10× out of proportion.
  */
 
-import type { LawCountryId } from "./types";
+import type { CostAnchorCountryId } from "./types";
 
-export const COST_INCOME_ANCHORS: Record<LawCountryId, number> = {
+export const COST_INCOME_ANCHORS: Record<CostAnchorCountryId, number> = {
   US: 1840,
   UK: 265,
   RU: 5170,
