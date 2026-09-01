@@ -407,7 +407,12 @@ export async function GET(request: Request, { params }: RouteParams) {
         id: impeachment._id.toString(),
         type: "impeachmentVote",
         chamber: stageChamber,
-        endsAt: now,
+        // The case stores only a closing TURN, and turns are hourly, so project
+        // it forward from the game clock rather than reporting "now".
+        endsAt:
+          stageEndsOnTurn != null
+            ? new Date(now.getTime() + (stageEndsOnTurn - currentTurnForLeadership) * 3_600_000)
+            : now,
         candidacies: [
           {
             id: impeachment._id.toString(),
