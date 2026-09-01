@@ -702,7 +702,9 @@ export function absorbedBranchesOf(
   countryId: string,
   units: ReadonlyArray<Pick<MilitaryUnit, "branchId"> & { domain: UnitDomain | string }>
 ): Branch[] {
-  const known = new Set((MILITARY_BRANCHES_BY_COUNTRY[countryId as CountryId] ?? []).map((b) => b.id));
+  const known = new Set(
+    (MILITARY_BRANCHES_BY_COUNTRY[countryId as CountryId] ?? []).map((b) => b.id)
+  );
   const seen = new Set<string>();
   const out: Branch[] = [];
   for (const u of units) {
@@ -728,7 +730,7 @@ export function absorbedBranchesOf(
           .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
           .join(" "),
         abbr: branchId.toUpperCase(),
-        domain: u.domain,
+        domain: u.domain as UnitDomain,
       }
     );
   }

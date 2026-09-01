@@ -142,16 +142,18 @@ describe("absorbedBranchesOf", () => {
   });
 
   it("degrades an unknown branch id to a titled placeholder, not a hidden tab", () => {
-    const out = absorbedBranchesOf("DE", [{ branchId: "mystery_corps", domain: "ground" as const }]);
+    const out = absorbedBranchesOf("DE", [
+      { branchId: "mystery_corps", domain: "ground" as const },
+    ]);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ id: "mystery_corps", name: "Mystery Corps" });
   });
 
   it("never lists a branch the country's own catalog already names", () => {
-    const out = absorbedBranchesOf(
-      "US",
-      [{ branchId: "army", domain: "ground" as const }, { branchId: "navy", domain: "naval" as const }]
-    );
+    const out = absorbedBranchesOf("US", [
+      { branchId: "army", domain: "ground" as const },
+      { branchId: "navy", domain: "naval" as const },
+    ]);
     expect(out).toEqual([]);
   });
 });

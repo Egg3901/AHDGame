@@ -39,10 +39,7 @@ export function MilitaryBudgetTab({
 
   // Own services plus any absorbed branch a merge carried in, so the cost
   // breakdown accounts for every unit the unified state actually pays for.
-  const branches = [
-    ...getBranches(countryId, liveYear),
-    ...absorbedBranchesOf(countryId, units),
-  ];
+  const branches = [...getBranches(countryId, liveYear), ...absorbedBranchesOf(countryId, units)];
   const branchCosts = branches
     .map((b) => ({
       abbr: b.abbr,

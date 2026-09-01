@@ -59,10 +59,7 @@ export function MilitaryRosterTab({
   // carried in (units whose branchId the catalog does not name). Without the
   // second list, a unified Germany's inherited NVA formations have no tab to
   // render under and read as deleted.
-  const branches = [
-    ...getBranches(countryId, liveYear),
-    ...absorbedBranchesOf(countryId, units),
-  ];
+  const branches = [...getBranches(countryId, liveYear), ...absorbedBranchesOf(countryId, units)];
   const [branchId, setBranchId] = useState(branches[0]?.id ?? "");
   const [recruiting, setRecruiting] = useState(false);
   const [busy, setBusy] = useState(false);

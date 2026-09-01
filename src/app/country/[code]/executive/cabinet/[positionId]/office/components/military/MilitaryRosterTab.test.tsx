@@ -283,9 +283,7 @@ describe("MilitaryRosterTab", () => {
     fireEvent.click(screen.getByText("Land Forces"));
     expect(screen.queryByText("Recruit unit")).toBeNull();
     // The inherited units stay manageable: the bulk assign control remains.
-    expect(
-      screen.getByRole("combobox", { name: /assign all land forces units/i })
-    ).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: /assign all land forces units/i })).toBeTruthy();
   });
 
   it("titles an unknown absorbed branch from its raw id rather than hiding the units", () => {
@@ -294,7 +292,9 @@ describe("MilitaryRosterTab", () => {
         countryCode="de"
         countryId="DE"
         positionId="defense_minister"
-        units={[unit({ _id: "u-x", countryId: "DE", branchId: "mystery_corps", name: "Ghost Unit" })]}
+        units={[
+          unit({ _id: "u-x", countryId: "DE", branchId: "mystery_corps", name: "Ghost Unit" }),
+        ]}
         commanders={COMMANDERS}
         canAct={true}
         currencySymbol="€"
