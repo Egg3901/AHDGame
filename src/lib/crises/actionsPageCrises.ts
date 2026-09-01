@@ -45,10 +45,50 @@ export function shouldShowCrisisOnActionsPage(
   return entry.crisis.effects.length > 0;
 }
 
-/** Strip decision prompts the character cannot act on before sending to the client. */
+/**
+ * Strip everything about the decision from an entry the character cannot act on,
+ * before it is sent to the client.
+ *
+ * All three pieces describe a prompt that is not theirs to take:
+ *
+ *  - `currentNode` is the prompt itself.
+ *  - `interaction` is the live decision state. It also carries
+ *    `leaderResponses`, which is where covert campaign choices live, so shipping
+ *    it to a bystander would hand them a ledger the crisis page deliberately
+ *    redacts. The card reads it only under `canInteract`, for the collective
+ *    fund bar.
+ *  - `crisis.interactionDefinition` is the authored decision tree. Not secret
+ *    (the crisis page shows it to everyone) but it is the bulk of an ambient
+ *    card's payload, and this feed is polled by every player once a minute.
+ *
+ * An ambient card needs the name, the description and the effects, and that is
+ * what is left.
+ */
 export function sanitizeCrisisForActionsPage<T extends ActionsPageCrisisEntry>(entry: T): T {
-  if (!entry.canInteract) {
-    return { ...entry, currentNode: null };
-  }
-  return entry;
+  if (entry.canInteract) return entry;
+
+  const { interactionDefinition: _omitted, ...crisis } = entry.crisis;
+  return { ...entry, crisis, currentNode: null, interaction: null };
+}
+
+/**
+ * Ordering for the Actions page feed.
+ *
+ * A decision the character can actually take comes first. Ambient cards are
+ * shown so players know what is hitting them, but there can be several of them
+ * at once (six on the live world for a US player during the war scare), and
+ * without this a real prompt could render below a stack of crises the character
+ * can do nothing about. Ties break newest-first, then on id, so the order is
+ * total and stable — this response is ETagged, and a feed that reshuffles
+ * between polls would defeat the 304.
+ */
+export function compareActionsPageCrises(
+  a: ActionsPageCrisisEntry,
+  b: ActionsPageCrisisEntry
+): number {
+  const actionable = Number(b.canInteract) - Number(a.canInteract);
+  if (actionable !== 0) return actionable;
+  const recency = b.crisis.startTurn - a.crisis.startTurn;
+  if (recency !== 0) return recency;
+  return a.crisis._id.toString().localeCompare(b.crisis._id.toString());
 }

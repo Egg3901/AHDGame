@@ -10,6 +10,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import CrisisActionCard from "./CrisisActionCard";
+import { crisisSeverity } from "@/lib/crises/severity";
 
 vi.mock("@/contexts/ToastContext", () => ({ useToast: () => ({ showToast: vi.fn() }) }));
 
@@ -305,5 +306,156 @@ describe("CrisisActionCard — ambient crises the character cannot answer", () =
 
     fireEvent.click(await screen.findByRole("button", { name: "Dismiss crisis from Actions" }));
     expect(screen.queryByText("Recession")).toBeNull();
+  });
+});
+
+describe("CrisisActionCard — reading what a crisis is doing to you", () => {
+  function stubEffectsFeed(effects: Array<{ value: number; label: string }>) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          crises: [
+            {
+              crisis: {
+                _id: "65b0000000000000000000cc",
+                name: "Recession",
+                description: "Two consecutive quarters of negative GDP growth.",
+                scope: "country",
+                effects: effects.map((e) => ({
+                  effectType: "tick",
+                  targetType: "metric",
+                  metricCategory: "economic",
+                  metricField: "gdpGrowth",
+                  ...e,
+                })),
+              },
+              interaction: null,
+              currentNode: null,
+              canInteract: false,
+              timeRemainingMinutes: null,
+              hasContributed: false,
+              optionAvailability: null,
+            },
+          ],
+        }),
+      }))
+    );
+  }
+
+  it("rounds a float tail instead of printing it", async () => {
+    // The live recession stores -0.6599999999999999 and 0.44999999999999996.
+    stubEffectsFeed([
+      { value: -0.6599999999999999, label: "GDP contraction from recession" },
+      { value: 0.44999999999999996, label: "Unemployment from business contraction" },
+    ]);
+    render(<CrisisActionCard />);
+
+    expect(await screen.findByText(/-0\.66 GDP contraction from recession/)).toBeTruthy();
+    expect(screen.getByText(/\+0\.45 Unemployment from business contraction/)).toBeTruthy();
+    expect(screen.queryByText(/0\.6599999999999999/)).toBeNull();
+  });
+
+  it("says how many effects it did not have room for", async () => {
+    stubEffectsFeed(
+      ["margins", "gdp", "unemployment", "confidence", "investors", "approval"].map((label, i) => ({
+        value: -0.1 * (i + 1),
+        label,
+      }))
+    );
+    render(<CrisisActionCard />);
+
+    expect(await screen.findByText("+3 more")).toBeTruthy();
+  });
+
+  it("prints no overflow pill when every effect is shown", async () => {
+    stubEffectsFeed([{ value: -0.1, label: "margins" }]);
+    render(<CrisisActionCard />);
+
+    await screen.findByText(/margins/);
+    expect(screen.queryByText(/more$/)).toBeNull();
+  });
+
+  it("forgets dismissals for crises that have left the feed", async () => {
+    window.localStorage.setItem(
+      "ahd:dismissedCrisisIds",
+      JSON.stringify(["65b0000000000000000000cc", "65b000000000000000000099"])
+    );
+    stubEffectsFeed([{ value: -0.1, label: "margins" }]);
+    render(<CrisisActionCard />);
+
+    // One poll is enough: the resolved crisis is gone, the live one is kept.
+    await vi.waitFor(() => {
+      const stored = JSON.parse(
+        window.localStorage.getItem("ahd:dismissedCrisisIds") ?? "[]"
+      ) as string[];
+      expect(stored).toEqual(["65b0000000000000000000cc"]);
+    });
+  });
+});
+
+describe("CrisisActionCard — severity agrees with the crises page", () => {
+  /** The live CN/DD recession, effect for effect. */
+  const RECESSION_EFFECTS = [
+    { effectType: "decay", targetType: "profitMargin", value: -6, label: "margins" },
+    { effectType: "tick", targetType: "metric", value: -0.6599999999999999, label: "gdp" },
+    { effectType: "tick", targetType: "metric", value: 0.44999999999999996, label: "unemployment" },
+    { effectType: "tick", targetType: "metric", value: -0.8999999999999999, label: "confidence" },
+    { effectType: "tick", targetType: "metric", value: -0.75, label: "investors" },
+    { effectType: "tick", targetType: "approval", value: -0.8999999999999999, label: "approval" },
+  ];
+
+  function stubSeverityFeed(effects: unknown[]) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          crises: [
+            {
+              crisis: {
+                _id: "65b0000000000000000000dd",
+                name: "Recession",
+                description: "Two consecutive quarters of negative GDP growth.",
+                scope: "country",
+                effects,
+              },
+              interaction: null,
+              currentNode: null,
+              canInteract: false,
+              timeRemainingMinutes: null,
+              hasContributed: false,
+              optionAvailability: null,
+            },
+          ],
+        }),
+      }))
+    );
+  }
+
+  it("badges the live recession the way /world/crises does", async () => {
+    stubSeverityFeed(RECESSION_EFFECTS);
+    render(<CrisisActionCard />);
+
+    // shared crisisSeverity scores this 1.70 → medium. The card's old private
+    // copy summed ticks only (3.66) and called it high.
+    expect(await screen.findByText("Recession")).toBeTruthy();
+    expect(crisisSeverity({ effects: RECESSION_EFFECTS as never })).toBe("medium");
+    expect(document.querySelector('[class*="border-amber-500/40"]')).toBeTruthy();
+    expect(document.querySelector('[class*="border-rose-500/40"]')).toBeNull();
+  });
+
+  it("counts a one-off shock that carries no tick at all", async () => {
+    // A pure gdpLoss disaster scored zero under the old tick-only calculation.
+    const gdpLoss = [
+      { effectType: "flat", targetType: "gdpLoss", value: -0.05, label: "destruction" },
+    ];
+    stubSeverityFeed(gdpLoss);
+    render(<CrisisActionCard />);
+
+    await screen.findByText("Recession");
+    expect(crisisSeverity({ effects: gdpLoss as never })).toBe("high");
+    expect(document.querySelector('[class*="border-rose-500/40"]')).toBeTruthy();
   });
 });
