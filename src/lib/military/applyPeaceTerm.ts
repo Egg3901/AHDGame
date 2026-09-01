@@ -78,7 +78,7 @@ export async function applyPeaceTerm(
     return;
   }
 
-  // Exhaustive. If a fourth term is ever added, this line stops compiling rather
+  // Exhaustive. If another term is ever added, this line stops compiling rather
   // than letting a settlement report success and change nothing.
   const unreachable: never = term;
   throw new Error(`applyPeaceTerm: unsupported term ${JSON.stringify(unreachable)}`);

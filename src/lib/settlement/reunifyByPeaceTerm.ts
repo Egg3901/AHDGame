@@ -24,9 +24,19 @@ import { emitSettlementWire } from "@/lib/settlement/emitWire";
 
 export interface ReunifyByTermResult {
   actuated: boolean;
+  /**
+   * True when the crisis was CLAIMED and its consequences then did not complete.
+   *
+   * Distinct from "nothing to do". Actuation claims the reopen cooldown as its first
+   * act, so nothing retries a half-done settlement and no sweep will notice it: this
+   * flag and the log below are the only trace it leaves.
+   */
+  deferred: boolean;
+  error?: string;
 }
 
-const NOT_ACTUATED: ReunifyByTermResult = { actuated: false };
+/** Nothing was claimed, so nothing is half-done. */
+const NOT_ACTUATED: ReunifyByTermResult = { actuated: false, deferred: false };
 
 export async function reunifyByPeaceTerm(
   db: Db,
@@ -90,6 +100,15 @@ export async function reunifyByPeaceTerm(
   // could tell. The RESOLVED document, because the copy branches on the outcome.
   if (result.actuated) {
     await emitSettlementWire(db, resolved, currentTurn, { events: ["settled"] });
+    return { actuated: true, deferred: false };
   }
-  return { actuated: result.actuated };
+
+  // LOUD, because nothing else will say it. On the turn road a failed actuation at
+  // least shows up in the phase's result; this runs inside a request whose caller
+  // discards the outcome, and the cooldown claim means no later tick retries it.
+  console.error(
+    `[Settlement] reunification by peace term did not complete for ${conflictId}:`,
+    result.error ?? "no reason given"
+  );
+  return { actuated: false, deferred: true, error: result.error };
 }

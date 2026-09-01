@@ -135,6 +135,28 @@ describe("announcing it", () => {
     expect(emitSettlementWire).not.toHaveBeenCalled();
   });
 
+  it("reports WHY a claimed settlement did not complete", async () => {
+    // The cooldown is claimed by actuation itself, so nothing retries this and no
+    // sweep will notice. Reporting the reason is the only trace it leaves.
+    actuateSettlementOutcome.mockResolvedValueOnce({
+      actuated: false,
+      outcome: "challenger",
+      deferred: true,
+      error: "The party migration did not complete.",
+    });
+    const r = await reunifyByPeaceTerm(db as unknown as Db, "war_us_dd_415", 533);
+    expect(r.deferred).toBe(true);
+    expect(r.error).toMatch(/party migration/i);
+  });
+
+  it("is not deferred when there was simply no crisis to settle", async () => {
+    // A missing crisis is a race, not a half-done merge. Calling it deferred would
+    // report a settlement stuck halfway when nothing was ever started.
+    prime(db, "settlementCrises").findOne.mockResolvedValue(null);
+    const r = await reunifyByPeaceTerm(db as unknown as Db, "war_us_dd_415", 533);
+    expect(r.deferred).toBe(false);
+  });
+
   it("announces nothing when there was no crisis to settle", async () => {
     prime(db, "settlementCrises").findOne.mockResolvedValue(null);
     await reunifyByPeaceTerm(db as unknown as Db, "war_us_dd_415", 533);
