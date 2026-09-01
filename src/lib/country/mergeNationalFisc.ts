@@ -36,6 +36,25 @@ export interface MergeNationalFiscArgs {
   fromCountryId: CountryId;
   toCountryId: CountryId;
   currentTurn: number;
+  /**
+   * Whether the absorbed side's LEGISLATED levers govern the unified state.
+   *
+   * Defaults true, which is the winner's-law rule: a merge runs winner-into-shell,
+   * so the absorbed side is the one that won and its tax code, wage floor and union
+   * law outlive the state that wrote them.
+   *
+   * ⚠️ FALSE WHEN THE SHELL IS THE WINNER. A settlement can be run in either
+   * direction — the German Question can leave either Germany standing — and when
+   * the SURVIVOR is the victor, carrying the absorbed side's levers would impose
+   * the LOSER's law on the winner, which is the rule stood on its head.
+   *
+   * QUANTITIES ARE NOT LEVERS and cross either way: the treasury, the defence
+   * account, the sovereign bonds and the debt CEILING are how much the unified
+   * state holds and may borrow, not rules about how it behaves. A state that has
+   * absorbed another has not thereby lost the money or the borrowing capacity of
+   * the half it took on.
+   */
+  carryLegislatedLevers?: boolean;
 }
 
 export interface MergeNationalFiscResult {
@@ -53,7 +72,7 @@ export async function mergeNationalFisc(
   db: Db,
   args: MergeNationalFiscArgs
 ): Promise<MergeNationalFiscResult> {
-  const { fromCountryId, toCountryId, currentTurn } = args;
+  const { fromCountryId, toCountryId, currentTurn, carryLegislatedLevers = true } = args;
   const now = new Date();
   const scale = await resolveMergeFxScale(db, fromCountryId, toCountryId);
   const budgets = db.collection<FederalBudget>("federalBudget");
@@ -82,8 +101,10 @@ export async function mergeNationalFisc(
     // assessment of the issuer, not legislation, and the fiscal machinery
     // recomputes them from the combined balance sheet.
     const lawSet: Record<string, unknown> = {};
-    if (from.taxRates) lawSet.taxRates = from.taxRates;
-    if (from.taxRatePhaseIn) lawSet.taxRatePhaseIn = from.taxRatePhaseIn;
+    if (carryLegislatedLevers) {
+      if (from.taxRates) lawSet.taxRates = from.taxRates;
+      if (from.taxRatePhaseIn) lawSet.taxRatePhaseIn = from.taxRatePhaseIn;
+    }
     // THE DEBT CEILING IS THE ONE LEVER THAT SUMS RATHER THAN REPLACING.
     //
     // Every other carried lever is a RULE — a rate, a ratio, a prohibition — and
@@ -111,11 +132,13 @@ export async function mergeNationalFisc(
         lawSet["debt.ceilingLastRaisedYear"] = Math.max(...raisedYears);
       }
     }
-    if (typeof from.minimumWageKaitzRatio === "number") {
-      lawSet.minimumWageKaitzRatio = from.minimumWageKaitzRatio;
+    if (carryLegislatedLevers) {
+      if (typeof from.minimumWageKaitzRatio === "number") {
+        lawSet.minimumWageKaitzRatio = from.minimumWageKaitzRatio;
+      }
+      if (typeof from.unionLawBias === "number") lawSet.unionLawBias = from.unionLawBias;
+      if (typeof from.unionsBanned === "boolean") lawSet.unionsBanned = from.unionsBanned;
     }
-    if (typeof from.unionLawBias === "number") lawSet.unionLawBias = from.unionLawBias;
-    if (typeof from.unionsBanned === "boolean") lawSet.unionsBanned = from.unionsBanned;
 
     // The survivor's book: signed add of the SAME number the caller records in
     // its audit trail (`treasuryMoved` — one expression, so the recorded amount

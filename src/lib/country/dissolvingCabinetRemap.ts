@@ -55,6 +55,27 @@ const REMAPS: Record<string, CabinetRemap> = {
     // through to the unlisted-key rule.
     generalSecretary: null,
   },
+
+  // Germany into East Germany — the same settlement with the GDR as the shell.
+  // The inverse of the table above, minus the portfolios that only exist on one
+  // side: the Federal Republic runs no planning commission or trade ministries to
+  // hand over, and the GDR's Council of Ministers has no environment, justice or
+  // labour seat to receive.
+  "DE>DD": {
+    foreign_minister: "minister_of_foreign_affairs",
+    defense_minister: "minister_of_defence",
+    finance_minister: "minister_of_finance",
+    interior_minister: "minister_of_internal_affairs",
+    economy_minister: "chairman_of_gosplan",
+    transport_minister: "minister_of_railways",
+    health_minister: "minister_of_health",
+    education_minister: "minister_of_higher_education",
+
+    // No counterpart in the Council of Ministers.
+    justice_minister: null,
+    labour_minister: null,
+    environment_minister: null,
+  },
 };
 
 /** The table for a merging pair, or null when this pair has none. */

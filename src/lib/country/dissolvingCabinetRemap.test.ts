@@ -33,10 +33,32 @@ describe("dissolvingCabinetRemap", () => {
     expect(remapCabinetPosition("DD", "DE", "ministry_of_nothing")).toBeNull();
   });
 
-  it("has no table for a pair that does not merge, and is directional", () => {
+  it("has no table for a pair that does not merge", () => {
     expect(cabinetRemapFor("UK", "IE")).toBeNull();
     expect(remapCabinetPosition("UK", "IE", "defense_minister")).toBeNull();
-    expect(cabinetRemapFor("DE", "DD")).toBeNull();
+  });
+
+  it("maps the other direction too, for a settlement the GDR survives", () => {
+    expect(remapCabinetPosition("DE", "DD", "defense_minister")).toBe("minister_of_defence");
+    expect(remapCabinetPosition("DE", "DD", "finance_minister")).toBe("minister_of_finance");
+    expect(remapCabinetPosition("DE", "DD", "economy_minister")).toBe("chairman_of_gosplan");
+    // The Council of Ministers has no seat for these.
+    expect(remapCabinetPosition("DE", "DD", "justice_minister")).toBeNull();
+    expect(remapCabinetPosition("DE", "DD", "labour_minister")).toBeNull();
+  });
+
+  it("names only real portfolios in the reverse direction, and never twice", () => {
+    const known = new Set(DD_CABINET_POSITIONS.map((p) => p.id));
+    const deKnown = new Set(DE_CABINET_POSITIONS.map((p) => p.id));
+    const table = cabinetRemapFor("DE", "DD")!;
+    for (const key of Object.keys(table)) {
+      expect(deKnown, `DE has no portfolio "${key}"`).toContain(key);
+    }
+    const targets = Object.values(table).filter((v): v is string => v !== null);
+    for (const target of targets) {
+      expect(known, `DD has no portfolio "${target}"`).toContain(target);
+    }
+    expect(new Set(targets).size).toBe(targets.length);
   });
 
   /**
