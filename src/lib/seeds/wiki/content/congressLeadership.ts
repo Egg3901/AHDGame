@@ -48,10 +48,10 @@ Any eligible member of the relevant chamber can declare candidacy for a leadersh
 Leadership votes are cast by chamber members. The structure differs by position:
 
 - **Speaker** - any seated House member may declare candidacy and vote, regardless of party
-- **President Pro Tempore** - any seated Senator may declare candidacy and vote, regardless of party
 - **Bundestagspräsident (DE)** - any seated MdB may declare candidacy and vote, regardless of party
-- **Majority Leaders** - elected only by members of the chamber's single largest party
-- **Minority Leaders** - elected only by non-majority parties outside the majority bloc
+- **President Pro Tempore** - elected only by members of the Senate's single largest party
+- **Majority Leaders and Whips** - elected only by members of the chamber's single largest party
+- **Minority Leaders and Whips** - elected only by non-majority parties outside the majority bloc
 - **Committee chairs** - assigned or elected within the relevant committee
 
 U.S. congressional leadership races are player-only. NPPs do not run for or vote in Speaker, Majority Leader, Minority Leader, or Pro Tempore elections.
@@ -60,9 +60,11 @@ U.S. congressional leadership races are player-only. NPPs do not run for or vote
 
 In the US, coalitions aggregate party seats into blocs. The **majority bloc** is the largest coalition or single party controlling the most seats; the **minority bloc** is the second largest. This matters for leadership:
 
-- Speaker, President Pro Tempore, and Bundestagspräsident are open to **any seated chamber member**: bloc and party affiliation do not gate candidacy or voting.
-- House and Senate Majority Leader (and Whip) are party-gated: only the single national party with the most seats in that chamber may declare or vote.
+- Speaker and Bundestagspräsident are open to **any seated chamber member**: bloc and party affiliation do not gate candidacy or voting.
+- President Pro Tempore, and House and Senate Majority Leader (and Whip), are party-gated: only the single national party with the most seats in that chamber may declare or vote.
 - Minority-side leadership (Leader and Whip) remains open to non-majority parties outside the majority bloc.
+
+A party-gated office is also a party-gated **tenure**. A sitting President Pro Tempore, Majority Leader or Majority Whip who leaves the majority party is vacated on the spot and the seat goes to a fresh 24-turn election. Losing the majority is not the same thing: if your party is displaced as the chamber's largest, the seat reopens at the next chamber-changing vote rather than immediately.
 
 ## Vacancies and succession
 
@@ -110,7 +112,7 @@ The current leadership roster is visible on the Congress page. Each position sho
 To win a leadership race, you typically need:
 
 1. **Strong personal favorability** with fellow chamber members - player votes and political alliances still matter even without NPP ballots.
-2. **Party alignment** - Speaker, Pro Tempore, and Bundestagspräsident are open to any seated member; Majority Leader requires your party to be the chamber's single largest party.
+2. **Party alignment** - Speaker and Bundestagspräsident are open to any seated member; Pro Tempore and Majority Leader require your party to be the chamber's single largest party, both to win the seat and to keep it.
 3. **Active campaigning** - use influence actions to raise your profile before the declaration window opens.
 
 ## Related pages
