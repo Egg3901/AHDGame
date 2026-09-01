@@ -1,6 +1,7 @@
-import type { Db } from "mongodb";
+import type { Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import type { CentralBank } from "@/lib/db/types/centralBank";
+import type { CentralBank, RateChangeRecord } from "@/lib/db/types/centralBank";
+import { SYSTEM_RATE_ACTOR } from "@/lib/centralBank/rateHistory";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
@@ -17,6 +18,7 @@ import {
   MAX_RATE_CHANGE_DELTA,
   MAX_RATE_CUT_DELTA,
   RATE_CHANGE_COOLDOWN_TURNS,
+  RATE_HISTORY_MAX,
   snapToPrimeRateGrid,
 } from "@/lib/db/types/centralBank";
 import { chairAlignmentPolicy, type ChairAlignment } from "@/lib/centralBank/chairAlignment";
@@ -89,6 +91,7 @@ export async function processNppChairAutoRate(
     | "lastRateChangeTurn"
     | "chairAlignment"
     | "governmentControlled"
+    | "chairNppId"
   >,
   countryId: CountryId,
   currentTurn: number,
@@ -97,16 +100,22 @@ export async function processNppChairAutoRate(
    * anchors, graduating as the world's clock advances. Absent → modern
    * anchors (fail-safe).
    */
-  currentYear?: number | null,
+  currentYear: number | null | undefined,
   /** GameConfig.commandEconomyEnabled — default OFF / fail-safe when omitted. */
-  commandEconomyEnabled?: boolean,
+  commandEconomyEnabled: boolean | undefined,
   /**
    * Era START year (gameState.startingYear) — resolves whether the government,
    * not the bank, holds the rate. This is the START year, not `currentYear`:
    * see `isBankGovernmentControlled`, where a transfer of monetary power is a
    * statute the calendar must never pass on the players' behalf.
+   *
+   * REQUIRED, and deliberately not optional: omitting it resolves every bank to
+   * "not government-controlled", which silently restores the very bug the gate
+   * below exists to prevent. A caller that genuinely cannot resolve the world's
+   * start year should pass `getStartingYearForPreset(DEFAULT_SEED_PRESET)`
+   * explicitly rather than leaving it out.
    */
-  startingYear?: number
+  startingYear: number | undefined
 ): Promise<void> {
   if (bank.chairMode !== "npp") return;
   // A government-controlled bank (the pre-1997 Bank of England) has no rate of
@@ -167,14 +176,40 @@ export async function processNppChairAutoRate(
   // Snapping can land back on the current rate for a sub-quarter-point step;
   // writing that would burn the cooldown on a no-op move.
   if (newRate === bank.primeRate) return;
+
+  // Record the move in the published history. The autonomous chair used to set
+  // the rate and write nothing, so the bank's rate history showed only the last
+  // human change however long ago it was — the pre-1997 Bank of England had
+  // moved to 0.25% with a completely empty ledger, and there was no way to see
+  // who had moved the rate or when. The committee path already records its own
+  // automated moves this way (`resolveMeetingInto`); the single chair now does
+  // too. `$push` with `$slice` avoids having to read the array back.
+  const now = new Date();
+  const chairName = bank.chairNppId
+    ? ((
+        await db
+          .collection<{ _id: ObjectId; name?: string }>("npps")
+          .findOne({ _id: bank.chairNppId }, { projection: { name: 1 } })
+      )?.name ?? null)
+    : null;
+  const record: RateChangeRecord = {
+    previousRate: bank.primeRate,
+    newRate,
+    changedBy: bank.chairNppId ?? SYSTEM_RATE_ACTOR,
+    changedByName: chairName ? `${chairName} (autonomous chair)` : "Autonomous chair",
+    changedAt: now,
+    reason: `Taylor rule: inflation ${inflationRate.toFixed(1)}%, growth ${gdpGrowth.toFixed(1)}%, neutral ${neutralRate.toFixed(2)}%`,
+  };
+
   await db.collection<CentralBank>("centralBanks").updateOne(
     { _id: bank._id },
     {
       $set: {
         primeRate: newRate,
         lastRateChangeTurn: currentTurn,
-        updatedAt: new Date(),
+        updatedAt: now,
       },
+      $push: { rateHistory: { $each: [record], $slice: -RATE_HISTORY_MAX } },
     }
   );
 }

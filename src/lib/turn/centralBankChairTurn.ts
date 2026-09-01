@@ -128,6 +128,7 @@ export async function processCentralBankChairTurn(
         | "lastRateChangeTurn"
         | "fomcBoard"
         | "governmentControlled"
+        | "chairNppId"
       >
     >({
       _id: 1,
@@ -143,6 +144,10 @@ export async function processCentralBankChairTurn(
       // undefined, which `isBankGovernmentControlled` treats as "no explicit
       // statute", silently falling back to the historical default.
       governmentControlled: 1,
+      // Attributes the autonomous chair's own rate changes in the published
+      // history; unprojected it reads as undefined and every automated move
+      // would be recorded against the anonymous system actor instead.
+      chairNppId: 1,
     })
     .toArray();
   if (banks.length === 0) {

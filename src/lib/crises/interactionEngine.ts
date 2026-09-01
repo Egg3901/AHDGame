@@ -834,6 +834,20 @@ export function calculateCollectiveReduction(
  *
  * Separate from `calculateCollectiveReduction`, which measures funding of a
  * shared aid tally rather than a choice; a crisis carrying both gets both.
+ *
+ * MULTI-RESPONDER (global) crises earn nothing here, by construction: that
+ * branch of `submitCrisisDecision` records into `leaderResponses` and returns
+ * without touching `resolutionPath`, because each leader answers only for their
+ * own nation. Summing one shared duration across every responding government
+ * would be wrong, and no global template authors a reduction today. The
+ * `optionsByRole` scan below is therefore defensive rather than reachable: it
+ * keeps the count correct if a mixed tree ever puts a role menu on a
+ * single-responder node.
+ *
+ * Note the reduction is read from the interaction's OWN snapshot of the tree,
+ * not from the live template, so authoring a new reduction does not retroactively
+ * shorten crises already running. Backfilling one deliberately is what
+ * `scripts/debug/backfill-crisis-duration-reductions.mjs` is for.
  */
 export function calculateDecisionDurationReduction(
   interaction: Pick<CrisisInteraction, "decisionTree" | "resolutionPath">

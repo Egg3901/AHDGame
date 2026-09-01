@@ -7,6 +7,7 @@ import {
   AGGRESSIVE_CUT_SCRUTINY,
   RATE_CHANGE_COOLDOWN_TURNS,
   RATE_CHANGES_PER_TERM,
+  RATE_HISTORY_MAX,
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
@@ -227,7 +228,10 @@ export async function updatePrimeRate(params: {
               ...(reason ? { reason } : {}),
             },
           ],
-          $slice: -50,
+          // Was -50 while the committee path sliced at 96, so whichever writer
+          // moved the rate last silently truncated the other's records. One
+          // shared cap, so the published history means the same on every bank.
+          $slice: -RATE_HISTORY_MAX,
         },
       },
     }

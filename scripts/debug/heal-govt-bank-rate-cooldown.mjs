@@ -86,16 +86,20 @@ for (const bank of banks) {
     continue;
   }
 
-  // Whose move was the last one? rateHistory carries the actor; an NPP chair's
-  // entry is the one this heal is for. A missing history is treated as the
-  // NPP's, since a government move would have written an entry.
+  // Whose move stamped the cooldown? Not decidable by name: the autonomous
+  // chair writes primeRate and lastRateChangeTurn but appends NO rateHistory
+  // entry, so the newest entry is the last HUMAN change however long ago that
+  // was, and matching on changedByName would skip exactly the banks that need
+  // healing. What does discriminate is the rate itself: a human move leaves
+  // rateHistory's newest newRate equal to the bank's current primeRate, and an
+  // autonomous move since then breaks that equality. An empty history with a
+  // stamped cooldown can only be the autonomous chair's.
   const last = (bank.rateHistory ?? []).at(-1);
-  const lastWasGovernment =
-    last != null && last.changedByName != null && !/npp|technocrat/i.test(last.changedByName);
+  const lastWasGovernment = last != null && last.newRate === bank.primeRate;
 
   if (lastWasGovernment) {
     console.log(
-      `  ${bank._id} (${countryId}): last change by "${last.changedByName}" at turn ${last.turn ?? "?"} — legitimate cooldown, SKIPPED`
+      `  ${bank._id} (${countryId}): rate ${bank.primeRate} last set by "${last.changedByName ?? "unknown"}" — legitimate cooldown, SKIPPED`
     );
     skipped++;
     continue;

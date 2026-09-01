@@ -162,6 +162,15 @@ export interface CrisisDecisionOption {
    * Applied by `calculateDecisionDurationReduction`, which reads the options
    * named in the interaction's `resolutionPath`. Reduction is floored so a
    * crisis always lasts at least one turn.
+   *
+   * CAUTION when adding one to a node that carries a `timeLimitMinutes`:
+   * `autoResolveCrisisInteraction` falls back to the `"decline"` option, or to
+   * `options[0]` when there is none, and pushes it onto the resolution path. A
+   * reduction on that fallback is therefore granted to a government that never
+   * answered. The templates carrying a reduction today all have
+   * `timeLimitMinutes: null`, so they never auto-resolve and the question does
+   * not arise; order the options so the fallback is the do-nothing one if you
+   * ever give such a node a deadline.
    */
   durationReductionTurns?: number;
   effects: CrisisEffect[];

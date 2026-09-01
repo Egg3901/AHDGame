@@ -1,9 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
+import { ObjectId } from "mongodb";
 import {
   computeNppChairRateTarget,
   computeNppChairRateStep,
   processNppChairAutoRate,
 } from "../nppChairAutoRate";
+import { RATE_HISTORY_MAX } from "@/lib/db/types/centralBank";
+import { SYSTEM_RATE_ACTOR } from "@/lib/centralBank/rateHistory";
 
 describe("computeNppChairRateTarget", () => {
   it("hikes above neutral when inflation is hot", () => {
@@ -56,7 +59,7 @@ describe("computeNppChairRateStep", () => {
   });
 });
 
-function mockRateDb(budget: any, nationalMetrics: any) {
+function mockRateDb(budget: any, nationalMetrics: any, npp: any = null) {
   const updateOne = vi.fn(async () => ({ matchedCount: 1 }));
   const db = {
     collection: (name: string) => ({
@@ -64,11 +67,21 @@ function mockRateDb(budget: any, nationalMetrics: any) {
       findOne: async (_q: any) => {
         if (name === "federalBudget") return budget;
         if (name === "stateMetrics") return nationalMetrics;
+        if (name === "npps") return npp;
         return null;
       },
     }),
   } as any;
   return { db, updateOne };
+}
+
+/** The $push half of the single update the setter issues. */
+function pushedRecord(updateOne: ReturnType<typeof vi.fn>) {
+  const op = updateOne.mock.calls[0] as unknown as [
+    unknown,
+    { $push?: { rateHistory: { $each: any[]; $slice: number } } },
+  ];
+  return op[1].$push?.rateHistory;
 }
 
 describe("processNppChairAutoRate", () => {
@@ -84,7 +97,7 @@ describe("processNppChairAutoRate", () => {
       lastRateChangeTurn: null,
       chairMode: "npp",
     } as any;
-    await processNppChairAutoRate(db, bank, "US" as any, 50);
+    await processNppChairAutoRate(db, bank, "US" as any, 50, null, false, 2019);
     expect(updateOne).toHaveBeenCalled();
     const callArgs = updateOne.mock.calls[0] as unknown as [
       unknown,
@@ -106,7 +119,7 @@ describe("processNppChairAutoRate", () => {
       lastRateChangeTurn: 48, // 50-48 = 2 < 6
       chairMode: "npp",
     } as any;
-    await processNppChairAutoRate(db, bank, "US" as any, 50);
+    await processNppChairAutoRate(db, bank, "US" as any, 50, null, false, 2019);
     expect(updateOne).not.toHaveBeenCalled();
   });
 
@@ -122,7 +135,7 @@ describe("processNppChairAutoRate", () => {
       lastRateChangeTurn: null,
       chairMode: "npp",
     } as any;
-    await processNppChairAutoRate(db, bank, "US" as any, 50);
+    await processNppChairAutoRate(db, bank, "US" as any, 50, null, false, 2019);
     expect(updateOne).not.toHaveBeenCalled();
   });
 
@@ -137,7 +150,7 @@ describe("processNppChairAutoRate", () => {
       lastRateChangeTurn: null,
       chairMode: "character",
     } as any;
-    await processNppChairAutoRate(db, bank, "US" as any, 50);
+    await processNppChairAutoRate(db, bank, "US" as any, 50, null, false, 2019);
     expect(updateOne).not.toHaveBeenCalled();
   });
 
@@ -151,7 +164,7 @@ describe("processNppChairAutoRate", () => {
       primeRate: 4.0,
       lastRateChangeTurn: null,
     } as any;
-    await processNppChairAutoRate(db, bank, "US" as any, 50);
+    await processNppChairAutoRate(db, bank, "US" as any, 50, null, false, 2019);
     expect(updateOne).not.toHaveBeenCalled();
   });
   it("writes a rate on the quarter-point grid the rate API enforces", async () => {
@@ -170,7 +183,7 @@ describe("processNppChairAutoRate", () => {
       chairMode: "npp",
     } as any;
 
-    await processNppChairAutoRate(db, bank, "US" as any, 50);
+    await processNppChairAutoRate(db, bank, "US" as any, 50, null, false, 2019);
 
     expect(updateOne).toHaveBeenCalled();
     const op = (
@@ -178,6 +191,79 @@ describe("processNppChairAutoRate", () => {
     )[1];
     const written = op.$set.primeRate;
     expect(written * 4).toBe(Math.round(written * 4));
+  });
+
+  it("records the autonomous move in the published rate history", async () => {
+    // #1250: the setter moved the rate and wrote nothing, so the bank's history
+    // showed only the last HUMAN change however long ago that was. The UK had
+    // moved to 0.25% behind a completely empty ledger, leaving no way to see
+    // who moved the rate or when.
+    const nppId = new ObjectId();
+    const { db, updateOne } = mockRateDb(
+      { economicFactors: { inflationRate: 5.0 } },
+      { economic: { gdpGrowth: { value: 2.0 } } },
+      { _id: nppId, name: "Iris Marchetti" }
+    );
+    const bank = {
+      _id: "b" as any,
+      primeRate: 4.0,
+      lastRateChangeTurn: null,
+      chairMode: "npp",
+      chairNppId: nppId,
+    } as any;
+
+    await processNppChairAutoRate(db, bank, "US" as any, 50, null, false, 2019);
+
+    const pushed = pushedRecord(updateOne);
+    expect(pushed).toBeDefined();
+    expect(pushed!.$each).toHaveLength(1);
+    const record = pushed!.$each[0];
+    expect(record.previousRate).toBe(4.0);
+    expect(record.newRate).toBeGreaterThan(4.0);
+    expect(record.changedBy).toBe(nppId);
+    expect(record.changedByName).toContain("Iris Marchetti");
+    expect(record.reason).toMatch(/Taylor rule/i);
+    // Same cap as the committee and direct-set writers, so no path truncates
+    // another's records.
+    expect(pushed!.$slice).toBe(-RATE_HISTORY_MAX);
+  });
+
+  it("attributes an unidentifiable autonomous chair rather than dropping the record", async () => {
+    // changedBy is a required ObjectId. A bank whose NPP cannot be resolved must
+    // still have its move recorded, under the system actor.
+    const { db, updateOne } = mockRateDb(
+      { economicFactors: { inflationRate: 5.0 } },
+      { economic: { gdpGrowth: { value: 2.0 } } }
+    );
+    const bank = {
+      _id: "b" as any,
+      primeRate: 4.0,
+      lastRateChangeTurn: null,
+      chairMode: "npp",
+    } as any;
+
+    await processNppChairAutoRate(db, bank, "US" as any, 50, null, false, 2019);
+
+    const record = pushedRecord(updateOne)!.$each[0];
+    expect(record.changedBy).toEqual(SYSTEM_RATE_ACTOR);
+    expect(record.changedByName).toBe("Autonomous chair");
+  });
+
+  it("writes no history entry when the move is a no-op", async () => {
+    const { db, updateOne } = mockRateDb(
+      { economicFactors: { inflationRate: 2.02 } },
+      { economic: { gdpGrowth: { value: 2.0 } } }
+    );
+    const bank = {
+      _id: "b" as any,
+      primeRate: 3.0,
+      lastRateChangeTurn: null,
+      chairMode: "npp",
+    } as any;
+
+    await processNppChairAutoRate(db, bank, "US" as any, 50, null, false, 2019);
+
+    expect(updateOne).not.toHaveBeenCalled();
   });
 
   it("leaves a government-controlled bank alone (pre-1997 Bank of England)", async () => {
@@ -257,7 +343,7 @@ describe("processNppChairAutoRate", () => {
       chairMode: "npp",
     } as any;
 
-    await processNppChairAutoRate(db, bank, "US" as any, 50);
+    await processNppChairAutoRate(db, bank, "US" as any, 50, null, false, 2019);
 
     expect(updateOne).not.toHaveBeenCalled();
   });

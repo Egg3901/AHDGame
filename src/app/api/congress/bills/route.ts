@@ -563,6 +563,24 @@ export async function POST(request: Request) {
     );
 
     for (const rawP of rawProvisions) {
+      // Central-bank independence is carried by the country-legislature route,
+      // which runs `validateBillProvisions`; this route validates provisions
+      // inline and has no branch for it. The shared body schema is deliberately
+      // country-neutral, so it admits the provision here too, and without this
+      // refusal it would fall through to the policy branch and be rejected as
+      // "Each provision must have a legislation type" — a message that names
+      // the wrong problem entirely.
+      if ("type" in rawP && rawP.type === "central_bank_independence") {
+        logRequest("POST", path, 400, Date.now() - start);
+        return NextResponse.json(
+          {
+            error:
+              "Central-bank-independence provisions are proposed through the country legislature, not this chamber.",
+          },
+          { status: 400 }
+        );
+      }
+
       // Handle electoral-law provisions (franchise + registration access)
       if ("type" in rawP && rawP.type === "electoral_law") {
         const res = validateElectoralLawProvision(rawP, category);

@@ -22,6 +22,10 @@ import { TariffProvisionEditor } from "@/components/bills/TariffProvisionEditor"
 import { EmbargoProvisionEditor } from "@/components/bills/EmbargoProvisionEditor";
 import { SubsidySectorSelect } from "@/components/bills/SubsidySectorSelect";
 import {
+  CentralBankProvisionEditor,
+  type CentralBankIndependenceAction,
+} from "@/components/bills/CentralBankProvisionEditor";
+import {
   NationalizationProvisionEditor,
   toNatPayload,
   validateNatRows,
@@ -204,7 +208,8 @@ export function ProposeLegislationModal({
   // Central bank independence — opt-in, economy category. grant hands
   // rate-setting to the bank; revoke returns it to the government.
   const [includeCbIndependence, setIncludeCbIndependence] = useState(false);
-  const [cbIndependenceAction, setCbIndependenceAction] = useState<"grant" | "revoke">("grant");
+  const [cbIndependenceAction, setCbIndependenceAction] =
+    useState<CentralBankIndependenceAction>("grant");
   // Union ban (player suggestion #93): "bias" = the slider law; "ban"/"repeal_ban"
   // are standalone actions that leave the bias untouched at enactment.
   const [unionLawAction, setUnionLawAction] = useState<"bias" | "ban" | "repeal_ban">("bias");
@@ -221,6 +226,11 @@ export function ProposeLegislationModal({
     (isCentralBankCat && includeCbIndependence ? 1 : 0) +
     (isElectoralCat && (includeVotingAge || includeRegAccess) ? 1 : 0);
   const hasStandaloneProvision = standaloneProvisionCount > 0;
+  // A standalone provision occupies one of the bill's MAX_PROVISIONS slots, so
+  // the policy rows get what is left. Without this the form happily built a
+  // four-provision bill out of three rows plus a checkbox and the body schema
+  // refused it with "At most 3 provisions" (#1250).
+  const maxPolicyRows = Math.max(0, MAX_PROVISIONS - standaloneProvisionCount);
 
   const blockedProvisionKeys = new Set(
     (blockedProvisions ?? []).map((bp) => `${bp.legislationTypeId}:${bp.policyOptionId}`)
@@ -292,7 +302,7 @@ export function ProposeLegislationModal({
   }
 
   function addRow() {
-    if (rows.length >= MAX_PROVISIONS) return;
+    if (rows.length >= maxPolicyRows) return;
     setRows((prev) => [...prev, { ...EMPTY_PROVISION_ROW }]);
   }
 
@@ -366,6 +376,17 @@ export function ProposeLegislationModal({
       const policyRows = hasStandaloneProvision ? rows.filter((r) => r.legislationTypeId) : rows;
       if (policyRows.some((r) => !r.legislationTypeId)) {
         showToast("Every provision needs a policy type.", "error");
+        return;
+      }
+      // The row cap already accounts for the standalone provision, but a player
+      // can fill the rows first and tick the box afterwards, which the cap
+      // cannot retract. Say so here rather than letting the body schema refuse
+      // the bill with a bare count.
+      if (policyRows.length + standaloneProvisionCount > MAX_PROVISIONS) {
+        showToast(
+          `A bill carries at most ${MAX_PROVISIONS} provisions, and the option selected below is one of them. Remove a policy provision.`,
+          "error"
+        );
         return;
       }
       for (const r of policyRows) {
@@ -799,12 +820,12 @@ export function ProposeLegislationModal({
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium">
-                  Provisions ({rows.length}/{MAX_PROVISIONS})
+                  Provisions ({rows.length}/{maxPolicyRows})
                 </label>
                 <button
                   type="button"
                   onClick={addRow}
-                  disabled={rows.length >= MAX_PROVISIONS}
+                  disabled={rows.length >= maxPolicyRows}
                   className="rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
                 >
                   + Add Provision
@@ -1029,47 +1050,12 @@ export function ProposeLegislationModal({
           )}
           {/* Central bank independence — economy bills only. */}
           {isCentralBankCat && (
-            <div className="rounded-lg border border-dashed border-amber-500/35 bg-amber-500/5 p-3 space-y-3">
-              <p className="text-xs font-medium text-muted">Central bank (optional)</p>
-              <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
-                <input
-                  type="checkbox"
-                  checked={includeCbIndependence}
-                  onChange={(e) => setIncludeCbIndependence(e.target.checked)}
-                  className="rounded"
-                />
-                Change who sets the policy rate
-              </label>
-              <div className="flex items-center gap-3 text-xs text-muted">
-                <label className="flex cursor-pointer items-center gap-1.5">
-                  <input
-                    type="radio"
-                    name="cb-independence-action"
-                    checked={cbIndependenceAction === "grant"}
-                    disabled={!includeCbIndependence}
-                    onChange={() => setCbIndependenceAction("grant")}
-                  />
-                  Grant the bank independence
-                </label>
-                <label className="flex cursor-pointer items-center gap-1.5">
-                  <input
-                    type="radio"
-                    name="cb-independence-action"
-                    checked={cbIndependenceAction === "revoke"}
-                    disabled={!includeCbIndependence}
-                    onChange={() => setCbIndependenceAction("revoke")}
-                  />
-                  Return rate-setting to the government
-                </label>
-              </div>
-              <p className="text-[11px] italic text-muted/60">
-                {!includeCbIndependence
-                  ? "No central-bank provision will be included in this bill."
-                  : cbIndependenceAction === "grant"
-                    ? "On enactment the bank sets its own rate through its policy committee."
-                    : "On enactment the head of government and the finance minister set the rate."}
-              </p>
-            </div>
+            <CentralBankProvisionEditor
+              include={includeCbIndependence}
+              onIncludeChange={setIncludeCbIndependence}
+              action={cbIndependenceAction}
+              onActionChange={setCbIndependenceAction}
+            />
           )}
           {/* Electoral law — social bills only. Each axis is opt-in on its own:
               a bill touching the franchise must not silently reset the
