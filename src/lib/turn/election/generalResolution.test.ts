@@ -1022,6 +1022,57 @@ describe("resolveOneGeneralElection", () => {
     expect(spawnHouseElection).toHaveBeenCalledWith(db, election, NOW);
   });
 
+  it("uses ordinary vote shares for a DDR chamber after democratic regime change", async () => {
+    const election = makeElection({
+      countryId: "DD",
+      electionType: "volkskammerDeputy",
+      state: "BEO",
+      totalSeats: 100,
+    });
+    const minorityId = new ObjectId();
+    const majorityId = new ObjectId();
+    const tally = makeTally(election._id, {
+      [minorityId.toString()]: 10_000,
+      [majorityId.toString()]: 90_000,
+    });
+    const minority = makeCandidate(election._id, {
+      characterId: minorityId,
+      party: "1",
+      characterName: "Former Ruling Candidate",
+    });
+    minority._id = minorityId;
+    const majority = makeCandidate(election._id, {
+      characterId: majorityId,
+      party: "2",
+      characterName: "Majority Candidate",
+    });
+    majority._id = majorityId;
+    db.collectionMocks.electionCandidates!.find.mockReturnValue(makeCursor([minority, majority]));
+    db.collectionMocks.characters!.find.mockReturnValue(
+      makeCursor([
+        { _id: minorityId, userId: new ObjectId() },
+        { _id: majorityId, userId: new ObjectId() },
+      ])
+    );
+    db.collection("countryState");
+    db.collectionMocks.countryState!.findOne.mockResolvedValue({
+      _id: "DD",
+      governmentType: "parliamentaryRepublic",
+      rulingPartyId: null,
+      opsVoteMultipliers: null,
+      hasLeaderConfidenceModel: false,
+    });
+
+    const { resolveOneGeneralElection } = await import("./generalResolution");
+    await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
+
+    const officials = db.collectionMocks.electedOfficials!.insertOne.mock.calls.map(
+      (call) => call[0] as { party: string; seatsHeld: number }
+    );
+    expect(officials.find((official) => official.party === "1")?.seatsHeld).toBe(10);
+    expect(officials.find((official) => official.party === "2")?.seatsHeld).toBe(90);
+  });
+
   // ── President: delegates to resolvePresidentElection ────────────────────
 
   it("president election delegates to resolvePresidentElection and marks election resolved", async () => {

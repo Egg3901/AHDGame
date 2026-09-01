@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { allocateBlocListSeats } from "./blocListAllocation";
-import { BLOC_LIST_QUOTAS } from "@/lib/constants/blocList";
+import { BLOC_LIST_QUOTAS, blocListQuotaForGovernment } from "@/lib/constants/blocList";
 
 const DD = BLOC_LIST_QUOTAS.DD!.shares;
 
@@ -16,6 +16,12 @@ const LIVE_1953_BEO = [
 ];
 
 describe("allocateBlocListSeats", () => {
+  it("activates the historical quota only while the runtime government is one-party", () => {
+    expect(blocListQuotaForGovernment("DD", "onePartyState")?.shares).toEqual(DD);
+    expect(blocListQuotaForGovernment("DD", "parliamentaryRepublic")).toBeNull();
+    expect(blocListQuotaForGovernment("DD", "presidential")).toBeNull();
+  });
+
   it("gives the ruling party its quota even when it is beaten on votes", () => {
     // The whole point. On these votes the proportional path made the LDPD the
     // largest delegation and put the SED third.

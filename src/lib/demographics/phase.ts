@@ -156,6 +156,7 @@ export async function runDemographicFlows(
       db.collection("macroMetrics").find({}).project<MetricsDoc>(METRICS_PROJECTION).toArray(),
       db.collection("gameState").findOne<{
         votingAgeEligible?: number;
+        votingAgeEligibleByCountry?: Partial<Record<string, number>>;
         workingAgeEligible?: number;
         retirementAgeEligible?: number;
         currentYear?: number;
@@ -177,14 +178,12 @@ export async function runDemographicFlows(
   );
 
   // Configurable age thresholds (defaults 18 / 18 / 64; future laws write gameState).
-  // The voting age additionally falls back to the YEAR when no law has set it —
-  // 21 before the 26th Amendment. Uses `resolveGameYear` rather than the era
-  // flag: the franchise is a fact about the world's date, not an opt-in
-  // simulation feature, and a world with neither year nor turn keeps the flat 18.
-  const votingAge = resolveVotingAgeEligible(
-    gameState ?? undefined,
-    gameState ? resolveGameYear(gameState) : null
-  );
+  // Voting age is resolved per country because electoral-law enactment writes the
+  // country map. Countries without a law still use the year fallback: 21 before
+  // the 26th Amendment, 18 afterward.
+  const gameYear = gameState ? resolveGameYear(gameState) : null;
+  const votingAgeFor = (countryId: string) =>
+    resolveVotingAgeEligible(gameState ?? undefined, gameYear, countryId);
   const workLo = resolveWorkingAgeEligible(gameState ?? undefined);
   const workHi = resolveRetirementAgeEligible(gameState ?? undefined);
   const stateById = new Map(states.map((s) => [s._id, s]));
@@ -385,9 +384,9 @@ export async function runDemographicFlows(
   const stateOps: AnyBulkWriteOperation<State>[] = [];
   const metricOps: AnyBulkWriteOperation<StateMetrics>[] = [];
 
-  for (const { id: regionId, before, vector, flows, militaryServicePop } of works) {
+  for (const { id: regionId, countryId, before, vector, flows, militaryServicePop } of works) {
     const newPop = Math.max(1, totalPopulation(vector));
-    const eligible = Math.round(votingAgePopulation(vector, votingAge));
+    const eligible = Math.round(votingAgePopulation(vector, votingAgeFor(countryId)));
     const working = Math.round(workingAgePopulation(vector, workLo, workHi));
     // populationGrowth spans the FULL turn: pre-local `before` → post-internal `vector`.
     const pm = derivePopulationMetrics(before, vector, flows, TURNS_PER_YEAR);

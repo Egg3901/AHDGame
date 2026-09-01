@@ -1,5 +1,6 @@
 import type { Db, ObjectId as MongoObjectId } from "mongodb";
-import { blocListQuota } from "@/lib/constants/blocList";
+import { blocListQuota, blocListQuotaForGovernment } from "@/lib/constants/blocList";
+import { getCountryState } from "@/lib/countryState";
 import { allocateBlocListSeats } from "@/lib/turn/election/blocListAllocation";
 import { MULTI_SEAT_TYPES } from "@/lib/utils/electionLabels";
 import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
@@ -644,8 +645,15 @@ export async function _enrichElection(
   // to read a popular bloc party as a chamber-winning one when the quota means
   // it can never be. Overriding caller-side keeps the shared helper's signature
   // and its other two call sites untouched.
-  const blocQuota = MULTI_SEAT_TYPES.has(election.electionType)
-    ? blocListQuota(countryId ?? election.countryId)
+  const blocCountry = countryId ?? election.countryId;
+  const configuredBlocQuota = MULTI_SEAT_TYPES.has(election.electionType)
+    ? blocListQuota(blocCountry)
+    : null;
+  const blocQuota = configuredBlocQuota
+    ? blocListQuotaForGovernment(
+        blocCountry,
+        (await getCountryState(db, blocCountry)).governmentType
+      )
     : null;
   if (blocQuota && election.totalSeats) {
     const ranked = activeCandidates

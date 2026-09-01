@@ -28,6 +28,7 @@ export function CombatCommandClient({
   country,
   countryCode,
   positionId,
+  canWrite,
   currentTurn,
   natMods,
   conflictAssignments,
@@ -42,6 +43,7 @@ export function CombatCommandClient({
   country: string;
   countryCode: string;
   positionId: string;
+  canWrite: boolean;
   currentTurn: number;
   natMods: NatMods;
   conflictAssignments: ConflictAssignment[];
@@ -62,6 +64,7 @@ export function CombatCommandClient({
     country,
     countryCode,
     positionId,
+    canWrite,
     currentTurn,
     natMods,
     conflictAssignments,
@@ -117,6 +120,24 @@ export function CombatCommandClient({
               : `${cgHint.unpostedGenerals} of your generals are not posted to a conflict.`}{" "}
             Your generals are posted from your command page →
           </a>
+        )}
+
+        {!canWrite && (
+          <div
+            role="status"
+            style={{
+              margin: "12px 22px 0",
+              padding: "10px 12px",
+              border: `1px solid ${MIL_COLOR.amber}55`,
+              borderRadius: 8,
+              background: `${MIL_COLOR.amber}12`,
+              font: `600 11px ${mono}`,
+              color: MIL_COLOR.amber,
+            }}
+          >
+            Read-only view. Only the defence minister can change unit orders or declare an
+            offensive.
+          </div>
         )}
 
         <div style={{ padding: "18px 22px 6px" }}>
