@@ -8,6 +8,7 @@ import {
 } from "@/lib/congress/leadershipElections";
 import { computeCongressLeadershipTally } from "@/lib/congress/governmentVoteBreakdown";
 import { openSpeakerElection } from "./openSpeakerElection";
+import { autoVoteNppsForVacateMotion } from "./autoVoteNppsForVacate";
 
 /** Absolute majority of the chamber needed to carry a motion to vacate. */
 export function vacateThreshold(totalSeats: number): number {
@@ -39,9 +40,18 @@ export async function resolveSpeakerVacateMotion(
   const windowClosed =
     force || isLeadershipElectionClosed(motion, gameTime.currentTurn, gameTime.effectiveNow);
 
+  // Once the window has closed, give the silent NPP blocs a graded ballot
+  // before the final tally. The bar is an absolute majority of ALL seats, so
+  // with blocs abstaining by default the motion could never carry.
+  //
+  // Deliberately NOT done while the motion is still live: blocs voting the
+  // moment it was filed would carry it before anyone could whip them, and the
+  // early-pass branch below resolves as soon as the threshold is met.
+  const votes = windowClosed ? await autoVoteNppsForVacateMotion(db, motion) : motion.votes;
+
   // Seat-scoped, seat-weighted tally (drops votes from members who since
   // lost their seat), same as Speaker nominations.
-  const tally = await computeCongressLeadershipTally(db, "house", motion.votes);
+  const tally = await computeCongressLeadershipTally(db, "house", votes);
   const passed = tally.votesFor >= vacateThreshold(house.totalSeats);
 
   // Resolve early only once it has actually passed; otherwise wait for the window.

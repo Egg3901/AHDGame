@@ -18,9 +18,17 @@ import type {
   NPP,
   NPPVotePrediction,
   SpeakerNomination,
+  SpeakerVacateMotion,
   StateBill,
   StateDemographics,
 } from "@/lib/db/types";
+import {
+  loadVacateSpeakerContext,
+  nppStance,
+  nppVacateMotionVote,
+} from "@/lib/congress/speaker/nppVacateVote";
+import { loadImpeachmentFallbackContext, nppImpeachmentVote } from "@/lib/impeachment/autoVoteNpps";
+import type { Impeachment, ImpeachmentVoteValue } from "@/lib/db/types/impeachment";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 import { computeCrossPressureForces, verdictFromForces } from "@/lib/turn/npp/crossPressure";
 import {
@@ -745,6 +753,192 @@ export async function applyWhipVotesToGovernmentVote(
     } else {
       await getNoConfidenceVotesCollection(db).updateOne({ _id: voteId }, updateOp);
     }
+  }
+
+  return { fellInLine, ignored };
+}
+
+/**
+ * Cast votes for NPPs on an open motion to vacate the Speaker's chair.
+ *
+ * Whip direction "for" means vacate, "against" means keep the Speaker, which
+ * matches the ballot values stored on the motion, so no translation is needed.
+ *
+ * Unlike leadership elections this OVERWRITES an NPP's existing ballot: the
+ * motion may already carry auto-cast votes from a closing window, and a whip
+ * issued afterwards must be able to move them. The motion caches no tally
+ * fields (`computeCongressLeadershipTally` derives them from `votes` on read),
+ * so there is no counter bookkeeping to keep in step.
+ *
+ * Hard whips are binding, matching the other leadership-style targets. Soft
+ * whips keep the probabilistic compliance gate and fall back to the bloc's own
+ * vacate heuristic when an NPP resists.
+ */
+export async function applyWhipVotesToVacateMotion(
+  db: Db,
+  direction: "for" | "against",
+  nppOfficials: ElectedOfficial[],
+  nppMap: Map<string, NPP>,
+  mode: NppWhipMode = "hard",
+  statecraftBonus = 0
+): Promise<ApplyWhipResult> {
+  const motions = db.collection<SpeakerVacateMotion>("speakerVacateMotions");
+  const motion = await motions.findOne({ _id: "current" });
+  if (!motion || motion.status !== "voting") return { fellInLine: 0, ignored: 0 };
+
+  const votes = motion.votes ?? {};
+  // Only a soft whip can fall back to the bloc's own heuristic, and only the
+  // heuristic needs the Speaker's party/stance, so a hard whip skips the three
+  // reads entirely.
+  const speakerContext = mode === "hard" ? null : await loadVacateSpeakerContext(db, motion);
+
+  let fellInLine = 0;
+  let ignored = 0;
+  const setFields: Record<string, unknown> = { updatedAt: new Date() };
+
+  const seenNppIds = new Set<string>();
+  for (const official of nppOfficials) {
+    if (!official.nppId) continue;
+    const nppIdStr = official.nppId.toString();
+    if (seenNppIds.has(nppIdStr)) continue;
+    seenNppIds.add(nppIdStr);
+
+    const nppKey = `npp_${nppIdStr}`;
+    const previousVote = votes[nppKey];
+    const npp = nppMap.get(nppIdStr);
+
+    const resolvedVote =
+      speakerContext && npp && !resolveNppWhipSuccess(npp, mode, statecraftBonus).success
+        ? nppVacateMotionVote({
+            nppParty: npp.party,
+            nppStance: nppStance(npp),
+            speakerParty: speakerContext.speakerParty,
+            speakerStance: speakerContext.speakerStance,
+            majorPartyIds: speakerContext.majorPartyIds,
+            rng: Math.random,
+          })
+        : direction;
+
+    if (previousVote === resolvedVote) {
+      if (resolvedVote === direction) fellInLine++;
+      else ignored++;
+      continue;
+    }
+
+    setFields[`votes.${nppKey}`] = resolvedVote;
+    if (resolvedVote === direction) fellInLine++;
+    else ignored++;
+  }
+
+  if (Object.keys(setFields).length > 1) {
+    await motions.updateOne({ _id: "current", status: "voting" }, { $set: setFields });
+  }
+
+  return { fellInLine, ignored };
+}
+
+/**
+ * Cast votes for NPPs on an open impeachment, at whichever stage it is in.
+ *
+ * Whip "for" means remove ("aye"), "against" means acquit ("nay"). The third
+ * ballot value, "abstain", is only ever reached through an NPP's own fallback
+ * heuristic; a whip never directs one.
+ *
+ * This OVERWRITES an existing NPP ballot. `processImpeachmentLifecycle` gives
+ * every bloc a graded vote on the first turn tick after filing, so by the time
+ * a chair whips, votes already exist; skip-if-voted would make the whip a
+ * no-op on nearly every case. The cached `*VotesFor/Against/Abstain` counters
+ * are display-only (resolution recomputes from live seats via
+ * `tallyImpeachmentChamber`), but they are kept in step anyway.
+ *
+ * Hard whips are binding. Soft whips keep the probabilistic compliance gate and
+ * fall back to the bloc's own impeachment heuristic when an NPP resists.
+ */
+export async function applyWhipVotesToImpeachment(
+  db: Db,
+  impeachmentId: ObjectId,
+  direction: "for" | "against",
+  nppOfficials: ElectedOfficial[],
+  nppMap: Map<string, NPP>,
+  mode: NppWhipMode = "hard",
+  statecraftBonus = 0
+): Promise<ApplyWhipResult> {
+  const impeachments = db.collection<Impeachment>("impeachments");
+  const impeachment = await impeachments.findOne({ _id: impeachmentId });
+  if (!impeachment || (impeachment.stage !== "house" && impeachment.stage !== "senate")) {
+    return { fellInLine: 0, ignored: 0 };
+  }
+
+  const stage = impeachment.stage;
+  const voteField = stage === "house" ? "houseVotes" : "senateVotes";
+  const forField = stage === "house" ? "houseVotesFor" : "senateVotesFor";
+  const againstField = stage === "house" ? "houseVotesAgainst" : "senateVotesAgainst";
+  const abstainField = stage === "house" ? "houseVotesAbstain" : "senateVotesAbstain";
+
+  const voteChoice: ImpeachmentVoteValue = direction === "for" ? "aye" : "nay";
+  const votes = impeachment[voteField] ?? {};
+
+  // Only the soft-whip fallback needs the ideology signal, so a hard whip skips
+  // loading the target's party and stance entirely.
+  const fallbackContext =
+    mode === "hard" ? null : await loadImpeachmentFallbackContext(db, impeachment);
+
+  let fellInLine = 0;
+  let ignored = 0;
+  const setFields: Record<string, unknown> = { updatedAt: new Date() };
+  const deltas: Record<ImpeachmentVoteValue, number> = { aye: 0, nay: 0, abstain: 0 };
+
+  const seenNppIds = new Set<string>();
+  for (const official of nppOfficials) {
+    if (!official.nppId) continue;
+    const nppIdStr = official.nppId.toString();
+    if (seenNppIds.has(nppIdStr)) continue;
+    seenNppIds.add(nppIdStr);
+
+    const nppKey = `npp_${nppIdStr}`;
+    const previousVote = votes[nppKey];
+    const npp = nppMap.get(nppIdStr);
+
+    const resolvedVote: ImpeachmentVoteValue =
+      fallbackContext && npp && !resolveNppWhipSuccess(npp, mode, statecraftBonus).success
+        ? nppImpeachmentVote({
+            nppParty: npp.party,
+            nppStance: npp.policies,
+            targetParty: fallbackContext.targetParty,
+            targetStance: fallbackContext.targetStance,
+            majorPartyIds: fallbackContext.majorPartyIds,
+            rng: Math.random,
+          })
+        : voteChoice;
+
+    if (previousVote === resolvedVote) {
+      if (resolvedVote === voteChoice) fellInLine++;
+      else ignored++;
+      continue;
+    }
+
+    const weight = official.seatsHeld ?? 1;
+    setFields[`${voteField}.${nppKey}`] = resolvedVote;
+    if (previousVote) deltas[previousVote] -= weight;
+    deltas[resolvedVote] += weight;
+
+    if (resolvedVote === voteChoice) fellInLine++;
+    else ignored++;
+  }
+
+  if (Object.keys(setFields).length > 1) {
+    const incFields: Record<string, number> = {};
+    if (deltas.aye !== 0) incFields[forField] = deltas.aye;
+    if (deltas.nay !== 0) incFields[againstField] = deltas.nay;
+    if (deltas.abstain !== 0) incFields[abstainField] = deltas.abstain;
+
+    await impeachments.updateOne(
+      { _id: impeachmentId, stage },
+      {
+        $set: setFields,
+        ...(Object.keys(incFields).length > 0 ? { $inc: incFields } : {}),
+      }
+    );
   }
 
   return { fellInLine, ignored };

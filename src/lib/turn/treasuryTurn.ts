@@ -9,6 +9,7 @@ import { deriveFiscalState } from "@/lib/budget/treasuryBalance";
 import { ensureFederalBudget } from "@/lib/turn/ensureFederalBudget";
 import { getCentralBankScope } from "@/lib/centralBank/helpers";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { getRegisteredCountryIdSet } from "@/lib/country/registeredCountries";
 
 /**
  * Per-turn fiscal accrual (spec §4). For each country's federalBudget, move a
@@ -43,7 +44,11 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
     })
   );
 
-  const budgets = await db.collection<FederalBudget>("federalBudget").find({}).toArray();
+  const allBudgets = await db.collection<FederalBudget>("federalBudget").find({}).toArray();
+  // Dissolved countries keep their budget doc but must not be simulated against
+  // it; see `getRegisteredCountryIdSet`.
+  const liveCountries = await getRegisteredCountryIdSet(db);
+  const budgets = allBudgets.filter((b) => liveCountries.has(String(b.countryId ?? b._id)));
 
   let countriesProcessed = 0;
   for (const b of budgets) {

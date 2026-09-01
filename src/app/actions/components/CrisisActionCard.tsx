@@ -4,6 +4,15 @@ import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useToast } from "@/contexts/ToastContext";
 import type { Crisis, CrisisInteraction, CrisisDecisionNode } from "@/lib/db/types/crisis";
+// The one severity calculation, shared with the crises list and detail pages.
+// This card used to carry a private copy that summed only per-turn `tick`
+// magnitudes — precisely the calculation `severity.ts` was written to replace,
+// because it ignores one-off GDP and margin shocks entirely. The two surfaces
+// disagreed about 16 of the 32 crises running on the live world: both active
+// recessions read HIGH here and MEDIUM on /world/crises, and every Civil
+// Defense Fever read LOW here and MEDIUM there.
+import { crisisSeverity } from "@/lib/crises/severity";
+import { formatCrisisEffectValue } from "@/lib/crises/effectLabels";
 
 interface ActiveCrisisData {
   crisis: Crisis;
@@ -25,15 +34,6 @@ function formatTimeRemaining(minutes: number): string {
   const mins = minutes % 60;
   if (hours > 0) return `${hours}h ${mins}m`;
   return `${mins}m`;
-}
-
-function crisisSeverity(crisis: Crisis): "low" | "medium" | "high" {
-  const tickMagnitude = crisis.effects
-    .filter((e) => e.effectType === "tick")
-    .reduce((sum, e) => sum + Math.abs(e.value), 0);
-  if (tickMagnitude >= 1.0) return "high";
-  if (tickMagnitude >= 0.2) return "medium";
-  return "low";
 }
 
 const SEVERITY_STYLES: Record<string, { border: string; bg: string; badge: string }> = {
@@ -69,6 +69,13 @@ function readDismissedIds(): Set<string> {
   return new Set();
 }
 
+/** Drop stored dismissals for crises no longer on the feed, so the set stays bounded. */
+function pruneDismissedIds(liveIds: Set<string>): void {
+  const stored = readDismissedIds();
+  const kept = new Set([...stored].filter((id) => liveIds.has(id)));
+  if (kept.size !== stored.size) writeDismissedIds(kept);
+}
+
 function writeDismissedIds(ids: Set<string>): void {
   if (typeof window === "undefined") return;
   try {
@@ -100,7 +107,13 @@ export default function CrisisActionCard() {
       const res = await fetch("/api/crises/active-for-character");
       if (!res.ok) throw new Error("Failed to fetch");
       const data = await res.json();
-      setCrises(data.crises ?? []);
+      const next: ActiveCrisisData[] = data.crises ?? [];
+      setCrises(next);
+      // Forget dismissals for crises that have left the feed. Without this the
+      // stored set only ever grows: a player who dismisses the ambient cards
+      // each turn accumulates an id per crisis for the life of the browser
+      // profile, and the entries are dead the moment the crisis resolves.
+      pruneDismissedIds(new Set(next.map((c) => c.crisis._id.toString())));
     } catch {
       // Silent fail — crises are ambient, not critical
     } finally {
@@ -219,7 +232,11 @@ export default function CrisisActionCard() {
                       ? "National"
                       : "Regional"}
                 </span>
-                {timeRemainingMinutes !== null && (
+                {/* The countdown belongs to the decision, not to the crisis. On an
+                    ambient card there is no prompt to run out, so a bare
+                    "Expired" chip beside a crisis that is still very much
+                    running would read as the crisis itself having lapsed. */}
+                {canInteract && timeRemainingMinutes !== null && (
                   <span className="text-xs text-muted tabular-nums">
                     {formatTimeRemaining(timeRemainingMinutes)}
                   </span>
@@ -255,9 +272,14 @@ export default function CrisisActionCard() {
                       </svg>
                     )}
                     {effect.value > 0 ? "+" : ""}
-                    {effect.value} {effect.label}
+                    {formatCrisisEffectValue(effect.value)} {effect.label}
                   </span>
                 ))}
+                {crisis.effects.length > 3 && (
+                  <span className="inline-flex items-center text-xs px-2 py-0.5 rounded-full border border-card-border text-muted">
+                    +{crisis.effects.length - 3} more
+                  </span>
+                )}
               </div>
             )}
 

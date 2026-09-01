@@ -5,6 +5,7 @@ import {
   type CountryId,
 } from "@/lib/constants/countries";
 import type { ElectedOfficial } from "@/lib/db/types";
+import { officialsCountryScope } from "@/lib/db/electedOfficialScope";
 import type { ImpeachmentVoteValue } from "@/lib/db/types/impeachment";
 import {
   getLowerChamberOfficeType,
@@ -41,21 +42,14 @@ export function senateConvictionVotesNeeded(seats: number): number {
   return Math.ceil((seats * num) / den);
 }
 
-/**
- * Country-scoped filter for chamber officials. US executive/legislative rows
- * predate the explicit countryId, so keep matching legacy US docs that lack it
- * (mirrors getExecutiveOfficialFilter).
- */
+/** Country-scoped filter for the officials seated in one impeachment chamber. */
 export function impeachmentChamberOfficialFilter(
   countryId: CountryId,
   officeType: string,
   state?: string
 ): Record<string, unknown> {
   const stateScope = state ? { state } : {};
-  if (countryId === COUNTRY_CONFIGS.US.id) {
-    return { officeType, ...stateScope, $or: [{ countryId }, { countryId: { $exists: false } }] };
-  }
-  return { officeType, countryId, ...stateScope };
+  return { officeType, ...stateScope, ...officialsCountryScope(countryId) };
 }
 
 /**
@@ -135,6 +129,30 @@ export function impeachmentStageChamberOfficeType(
   return impeachment.stage === "house"
     ? getLowerChamberOfficeType(impeachment.countryId)
     : getUpperChamberOfficeType(impeachment.countryId);
+}
+
+/**
+ * The whippable chamber KEY for an open case's current stage, as opposed to
+ * {@link impeachmentStageChamberOfficeType}'s office type. Whip documents and
+ * the whip panels address chambers by key, and the two differ for some
+ * countries (CN's key "npc" vs office "npcDelegate"), so a whip must never be
+ * keyed off the office type. Null once the case is no longer open.
+ */
+export function impeachmentStageChamberKey(
+  impeachment: Pick<ImpeachmentLite, "targetOffice" | "stage" | "countryId">
+): string | null {
+  if (impeachment.stage !== "house" && impeachment.stage !== "senate") return null;
+  // A governor is tried in a single sitting of the state legislature, which the
+  // case models as its "senate" (conviction) stage; it has no House stage.
+  if (impeachment.targetOffice === "governor") {
+    return impeachment.stage === "senate"
+      ? getSubNationalLegislatureKey(impeachment.countryId)
+      : null;
+  }
+  const config = COUNTRY_CONFIGS[impeachment.countryId];
+  const lowerKey = config.legislature.lowerChamber.key;
+  if (impeachment.stage === "house") return lowerKey;
+  return config.legislature.upperChamber?.key ?? lowerKey;
 }
 
 /** Minimal shape of an impeachment doc the chamber helpers need. */
