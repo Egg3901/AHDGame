@@ -42,6 +42,7 @@ import {
 } from "@/lib/congress/leadership/rolePolicy";
 import { senateElectionRoleToLeader } from "@/lib/congress/leadership/electionRoleMap";
 import { openCongressLeadershipElection } from "@/lib/congress/leadership/openElection";
+import { reconcileLeadershipPartyEligibility } from "@/lib/congress/leadership/reconcilePartyEligibility";
 import type { SenateLeadershipResponse } from "@/lib/congress/types";
 
 // Re-export for any consumer that still imports types from the route file.
@@ -112,6 +113,12 @@ export async function GET() {
       { leaderRole: "majority_whip_senate", chamber: "senate" },
       { leaderRole: "minority_whip_senate", chamber: "senate" },
     ]);
+
+    // Sits beside the seat-loss sweep because it is the same kind of check —
+    // "does the holder still qualify?" — just keyed on party rather than seat.
+    // Running it here as well as in the turn phase means a defection shows up
+    // the moment the page is opened instead of up to an hour later.
+    await reconcileLeadershipPartyEligibility(db, "senate", chamberCtx, new Date());
 
     const roles: Array<{ role: SenateLeadershipElectionRole; partyLabel: string }> = [
       { role: "pro_tempore", partyLabel: "Majority Party" },
