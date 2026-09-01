@@ -12,6 +12,11 @@ const { actuateSettlementOutcome } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/settlement/actuate", () => ({ actuateSettlementOutcome }));
 
+const { emitSettlementWire } = vi.hoisted(() => ({
+  emitSettlementWire: vi.fn(async (..._a: unknown[]) => ({ posts: 1, kinds: ["settled"] })),
+}));
+vi.mock("@/lib/settlement/emitWire", () => ({ emitSettlementWire }));
+
 import { reunifyByPeaceTerm } from "./reunifyByPeaceTerm";
 
 function prime(db: MockDb, name: string): MockCollection {
@@ -85,5 +90,54 @@ describe("reunifyByPeaceTerm", () => {
     const r = await reunifyByPeaceTerm(db as unknown as Db, "war_us_dd_415", 533);
     expect(r.actuated).toBe(false);
     expect(actuateSettlementOutcome).not.toHaveBeenCalled();
+  });
+});
+
+describe("announcing it", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    prime(db, "settlementCrises").findOne.mockResolvedValue(crisis());
+    prime(db, "settlementCrises").updateOne.mockResolvedValue({ matchedCount: 1 });
+  });
+
+  it("files the settled dispatch, which no tick would file for it", async () => {
+    // The turn phase announces a settlement when IT actuates one, and its sweep is
+    // keyed on `cooldownUntilTurn: null`. Actuating here claims that cooldown, so the
+    // sweep never sees this crisis and Germany would reunify with no announcement.
+    await reunifyByPeaceTerm(db as unknown as Db, "war_us_dd_415", 533);
+    expect(emitSettlementWire).toHaveBeenCalledTimes(1);
+    const [, passed, turn, options] = emitSettlementWire.mock.calls[0] as [
+      unknown,
+      SettlementCrisisDoc,
+      number,
+      { events: string[] },
+    ];
+    expect(options.events).toEqual(["settled"]);
+    expect(turn).toBe(533);
+    // The copy branches on the outcome, so the frozen copy would announce the wrong
+    // settlement entirely.
+    expect(passed.outcome).toBe("challenger");
+  });
+
+  it("announces NOTHING when the merge did not complete", async () => {
+    // The one lie the wire could tell: a reunification that was claimed and then
+    // failed halfway. The phase makes the same check for the same reason.
+    actuateSettlementOutcome.mockResolvedValueOnce({
+      actuated: false,
+      outcome: "challenger",
+      deferred: true,
+    });
+    const r = await reunifyByPeaceTerm(db as unknown as Db, "war_us_dd_415", 533);
+    expect(r.actuated).toBe(false);
+    expect(emitSettlementWire).not.toHaveBeenCalled();
+  });
+
+  it("announces nothing when there was no crisis to settle", async () => {
+    prime(db, "settlementCrises").findOne.mockResolvedValue(null);
+    await reunifyByPeaceTerm(db as unknown as Db, "war_us_dd_415", 533);
+    expect(emitSettlementWire).not.toHaveBeenCalled();
   });
 });

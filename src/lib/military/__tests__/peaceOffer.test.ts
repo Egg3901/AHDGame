@@ -613,6 +613,32 @@ describe("the buy-out gate", () => {
     expect(res.ok).toBe(false);
   });
 
+  it("refuses a reunification the CHALLENGER is not party to", () => {
+    // `qualifyWar` only bars an anchor Germany that a treaty dragged in, so a DD that
+    // JOINED a war can be its challenger without founding a side. Two other founders
+    // could then settle Germany between themselves, deciding the question over the
+    // head of the country whose outcome it is.
+    const ddJoined = {
+      sideA: { label: "United States", countries: ["US"], kind: "state" },
+      sideB: { label: "Warsaw Pact", countries: ["RU", "DD"], kind: "coalition" },
+      treatyEntries: [],
+      joinTurns: [{ countryId: "DD", turn: 20, control: 100 }],
+    } as unknown as Partial<ConflictDoc>;
+    const res = validatePeaceOffer(
+      war(ddJoined),
+      "RU",
+      "US",
+      { kind: "reunification" as const },
+      "US",
+      null,
+      "presidential",
+      null,
+      { challenger: "DD" }
+    );
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/East Germany|challenger/i);
+  });
+
   it("allows a reunification the OTHER side withdraws under", () => {
     const res = validatePeaceOffer(
       war(),

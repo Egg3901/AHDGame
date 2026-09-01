@@ -110,7 +110,10 @@ function offerTermText(term: PeaceTerm, rulingPartyName?: string | null): string
   if (term.kind === "demilitarisation") {
     return ` in return for freezing new defence procurement for ${term.turns} turns`;
   }
-  return " in return for the reunification of Germany on East German terms";
+  // NOT "in return for": the same term runs both ways, and from the incumbent it is an
+  // offer to withdraw AND concede, where "in return for" reads as the price they are
+  // being paid for leaving. This phrasing is true from either end of the deal.
+  return " with Germany reunified on East German terms";
 }
 
 /**

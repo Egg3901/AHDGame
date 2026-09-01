@@ -622,6 +622,23 @@ describe("what accepting would actually do to the war", () => {
     expect([...terms.options].map((o) => o.value)).not.toContain("reunification");
   });
 
+  it("does not describe a capitulation as something got in return", async () => {
+    // The same term runs both ways: from the incumbent it is an offer to withdraw AND
+    // concede. "In return for" reads as the price they are being paid.
+    vi.stubGlobal(
+      "fetch",
+      mockGet({
+        currentTurn: 40,
+        wars: [war],
+        offers: [{ ...incoming, leaver: "CN", term: { kind: "reunification" as const } }],
+      })
+    );
+    render(<PeacePanel {...props} />);
+    const text = (await screen.findByText(/reunif/i)).textContent ?? "";
+    expect(text).toMatch(/offers to leave the war/i);
+    expect(text).not.toMatch(/in return for/i);
+  });
+
   it("describes an incoming reunification offer as reunification", async () => {
     vi.stubGlobal(
       "fetch",

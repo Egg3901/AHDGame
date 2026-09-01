@@ -235,7 +235,7 @@ export function DictateTermsPanel({ view }: { view: DictateTermsView }) {
             checked={kind === "reunification"}
             onSelect={() => setKind("reunification")}
             title="German reunification"
-            blurb={`The German question is settled on your terms: the two German states become one.`}
+            blurb={`The German question is settled on East German terms: the two German states become one.`}
           >
             <p className="mt-1 text-[11px] text-muted">
               This settles the question itself rather than landing on {view.targetName}. The unified

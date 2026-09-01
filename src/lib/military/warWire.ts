@@ -116,13 +116,17 @@ function settledBody(conflict: ConflictDoc, rulingPartyName?: string | null): st
     );
   }
   if (s.term.kind === "reunification") {
-    // The loser here is whoever signed, which is NOT necessarily a Germany: the term
-    // settles the question rather than landing on the country that accepted it. So the
-    // line talks about Germany and leaves the signatory out of the claim.
+    // NAMES NEITHER PARTY, deliberately. `imposedBy` and `target` record which end of
+    // the deal was written where, and for this term that says nothing about who
+    // prevailed: either founder may propose it, and from the incumbent it is an offer
+    // to withdraw AND concede, which stamps the WINNER as the target. Casting the
+    // target as the side that gave way then reports the war exactly backwards. The
+    // term settles the question rather than landing on a country, so the prose says
+    // so and leaves both signatories out of the claim.
     return (
-      `${conflict.name} is over, and ${loser} ${how}. The German question is answered ` +
-      `on the East's terms: the two states become one, and the settlement is carried ` +
-      `into a single German government.`
+      `${conflict.name} is over, and the German question is answered on the East's ` +
+      `terms: the two states become one, and the settlement is carried into a single ` +
+      `German government.`
     );
   }
   if (s.term.amount > 0) {

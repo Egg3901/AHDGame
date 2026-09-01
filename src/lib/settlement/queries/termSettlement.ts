@@ -28,6 +28,11 @@ export async function loadTermSettlement(
   const crisis = (await crises.findOne({
     conflictId,
     status: "frozen",
+    // NAMED, not left implied by there being one kind today. A `reunification` term
+    // means German reunification specifically; matching any frozen crisis riding the
+    // war would quietly point it at a second crisis kind the day one exists, and the
+    // type union widening would not flag this query.
+    kind: "settlement.germanQuestion",
   } as Parameters<typeof crises.findOne>[0])) as SettlementCrisisDoc | null;
   if (!crisis) return null;
   return { challenger: crisis.challengerEntityId as CountryId };

@@ -202,3 +202,29 @@ describe("the reunification term on the wire", () => {
     expect(termFieldValue(REUNIFY)).not.toMatch(/[\u2014\u2013]/);
   });
 });
+
+describe("who the reunification dispatch names", () => {
+  const REUNIFY2: PeaceTerm = { kind: "reunification" };
+
+  it("does not cast the settlement's target as the side that gave way", () => {
+    // The stamp records the term's RECIPIENT, which for a capitulation is the winner:
+    // the incumbent may offer to withdraw AND concede reunification, and then the
+    // recipient is East Germany. Calling them the side that agreed to the terms
+    // reports the war exactly backwards.
+    const body = buildSettledDispatch(war(REUNIFY2, "negotiated")).body;
+    expect(body).not.toMatch(/agreed to the terms/i);
+    expect(body).not.toMatch(/in no position to refuse/i);
+    expect(body).toMatch(/German/);
+  });
+
+  it("says the same thing whichever founder composed the deal", () => {
+    // The term settles the question, not a country, so the prose cannot depend on
+    // which end of the deal the stamp happens to record.
+    const asDemand = buildSettledDispatch(war(REUNIFY2, "negotiated")).body;
+    const asCapitulation = buildSettledDispatch({
+      ...war(REUNIFY2, "negotiated"),
+      settlement: { term: REUNIFY2, path: "negotiated", imposedBy: "TR", target: "UK", turn: 400 },
+    } as unknown as ConflictDoc).body;
+    expect(asCapitulation).toBe(asDemand);
+  });
+});

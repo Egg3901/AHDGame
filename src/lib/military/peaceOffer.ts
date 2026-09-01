@@ -446,6 +446,17 @@ export function validatePeaceOffer(
         error: "Only the two countries that started this war can settle Germany between them.",
       };
     }
+    // THE CHALLENGER MUST BE AT THE TABLE. `qualifyWar` only bars an anchor Germany
+    // that a TREATY dragged in, so a DD that merely joined a war can still be its
+    // challenger without founding a side. Without this, two other founders could
+    // settle Germany between themselves and decide the question over the head of the
+    // country whose outcome it is.
+    if (from !== settlement.challenger && to !== settlement.challenger) {
+      return {
+        ok: false,
+        error: "Germany cannot be reunified by a deal East Germany is not a party to.",
+      };
+    }
     // A REUNIFICATION THE CHALLENGER WITHDRAWS UNDER IS A CONTRADICTION. The
     // departure hands the war to the incumbent (the leaver's side is the losing one)
     // while the term settles the question for the challenger. Left open it is not

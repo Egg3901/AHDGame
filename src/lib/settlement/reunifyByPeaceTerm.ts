@@ -20,6 +20,7 @@ import type { Db } from "mongodb";
 import type { SettlementCrisisDoc } from "@/lib/db/types/settlementCrisis";
 import { getSettlementCrisesCollection } from "@/lib/db/collections";
 import { actuateSettlementOutcome } from "@/lib/settlement/actuate";
+import { emitSettlementWire } from "@/lib/settlement/emitWire";
 
 export interface ReunifyByTermResult {
   actuated: boolean;
@@ -36,6 +37,10 @@ export async function reunifyByPeaceTerm(
   const crisis = await crises.findOne({
     conflictId,
     status: "frozen",
+    // Scoped exactly as `loadTermSettlement` scopes the check that authorised this.
+    // A validator and an applier that disagree about which crisis they mean is how a
+    // term gets approved against one document and applied to another.
+    kind: "settlement.germanQuestion",
   } as Parameters<typeof crises.findOne>[0]);
   // No question on this war is not an error here. `validatePeaceTerm` already refused
   // the term for exactly this case; reaching it means the crisis moved between the
@@ -68,5 +73,23 @@ export async function reunifyByPeaceTerm(
     resolvedTurn: currentTurn,
   };
   const result = await actuateSettlementOutcome(db, resolved, currentTurn);
+
+  // FILE THE DISPATCH HERE, because no tick will file it for us. `settlementPhase`
+  // announces a settlement when IT actuates one, and its sweep is keyed on
+  // `cooldownUntilTurn: null` — which `actuateSettlementOutcome` claims as its first
+  // act. Actuating from a request therefore hides the crisis from the only code that
+  // would have announced it, and Germany reunifies in silence.
+  //
+  // Safe from a request path, unlike most posts: `emitSettlementWire` claims the
+  // `postedWireEvents` stamp with a `$ne` guard BEFORE sending, so a retried request
+  // finds the stamp and sends nothing. That is the property `acceptPeace` lacks and
+  // why it stamps the war instead of posting.
+  //
+  // Gated on `actuated`, for the reason the phase gives at its own call site: a
+  // reunification that was claimed and then failed halfway is the one lie the wire
+  // could tell. The RESOLVED document, because the copy branches on the outcome.
+  if (result.actuated) {
+    await emitSettlementWire(db, resolved, currentTurn, { events: ["settled"] });
+  }
   return { actuated: result.actuated };
 }

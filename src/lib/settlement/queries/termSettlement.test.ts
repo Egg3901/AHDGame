@@ -33,7 +33,13 @@ describe("loadTermSettlement", () => {
     // one this term can settle. createMockDb ignores filters: the filter is the assertion.
     await loadTermSettlement(db as unknown as Db, "war_us_dd_415");
     const [filter] = prime(db, "settlementCrises").findOne.mock.calls[0];
-    expect(filter).toMatchObject({ conflictId: "war_us_dd_415", status: "frozen" });
+    expect(filter).toMatchObject({
+      conflictId: "war_us_dd_415",
+      status: "frozen",
+      // Named, not implied by there being only one kind today. A reunification term
+      // must never actuate whatever other crisis happens to be riding a war.
+      kind: "settlement.germanQuestion",
+    });
   });
 
   it("returns null when no question is riding that war", async () => {
