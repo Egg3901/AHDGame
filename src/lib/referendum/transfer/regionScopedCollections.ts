@@ -161,6 +161,13 @@ export async function rescopeRegionToCountry(
         // row under the new key is absorbed, its payload replaced with the
         // old row's, which is the authoritative one, and the delete below
         // then frees the old key.
+        //
+        // A CRASHED RETRY IS NOT THE ONLY WAY THE NEW KEY IS TAKEN. A world can
+        // also carry an orphan under `${toCountryId}_${regionId}` from an
+        // earlier transfer or an old seed, with no failed attempt behind it --
+        // the live German world held four of them before any of this ran. Same
+        // collision, same answer: the moving region's document wins, because it
+        // is the one describing a region that actually exists.
         await coll.replaceOne(
           { _id: newId } as Record<string, unknown>,
           {

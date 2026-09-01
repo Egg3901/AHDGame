@@ -71,8 +71,13 @@ describe("rescopeRegionToCountry", () => {
   it("absorbs a row already living under the new key instead of colliding on it", async () => {
     // Ticket #1247: a merge that crashed mid-region left `DE_MV` re-keyed
     // beside the source row `DD_MV`. A retry must replace the survivor, not
-    // die on the unique `_id`: that E11000 failed the impose request and,
-    // the crisis being one-shot, left Germany half-merged for good.
+    // die on the unique `_id`: that E11000 failed the impose request and, the
+    // crisis being one-shot AT THE TIME, left Germany half-merged for good.
+    //
+    // Actuation is resumable now -- it holds a lease and stamps completion only
+    // once the consequences land -- so a collision here no longer strands the
+    // world. It still must not happen: the retry that resumes the merge is the
+    // very thing that meets the re-keyed row.
     db.collection("stateRegistrationPool").findOne.mockResolvedValue({
       _id: "DD_MV",
       stateId: "MV",

@@ -26,6 +26,8 @@ import type { BillStatus } from "@/lib/db/types/legislation";
 import type { CountryGameState } from "@/lib/db/types/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { transferRegion } from "@/lib/referendum/transfer/transferRegion";
+import { computeNationalMetrics } from "@/lib/nationalMetrics";
+import { reseedJoinedRegionElections } from "@/lib/referendum/transfer/reseedJoinedRegionElections";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
 import { LOWER_CHAMBER_FAIL_STATUSES } from "@/lib/turn/parliamentaryGovernment";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
@@ -44,6 +46,16 @@ export interface MergeCountryArgs {
   /** The country that survives and takes the regions. */
   toCountryId: CountryId;
   currentTurn: number;
+  /**
+   * On a colliding TARIFF scope, whether the ABSORBED side's record takes the
+   * slot. Defaults true, which is the winner-into-shell contract.
+   *
+   * ⚠️ FALSE WHEN THE SHELL IS THE WINNER. A tariff is legislated policy, not a
+   * quantity: with the victor as the surviving shell, letting the absorbed side
+   * win the collision would keep the LOSER's trade policy and delete the
+   * winner's on the scopes where both had legislated.
+   */
+  absorbedTariffsWin?: boolean;
 }
 
 export interface MergeCountryResult {
@@ -55,7 +67,7 @@ export interface MergeCountryResult {
 }
 
 export async function mergeCountry(db: Db, args: MergeCountryArgs): Promise<MergeCountryResult> {
-  const { fromCountryId, toCountryId, currentTurn } = args;
+  const { fromCountryId, toCountryId, currentTurn, absorbedTariffsWin = true } = args;
   const empty = { regionsTransferred: 0, regionsSkipped: 0, retired: false };
 
   if (fromCountryId === toCountryId) {
@@ -101,6 +113,12 @@ export async function mergeCountry(db: Db, args: MergeCountryArgs): Promise<Merg
       // reunifying country already run the same elections, and switching them is a
       // constitutional change nobody agreed to.
       votingSystem: region.votingSystem,
+      // The two COUNTRY-wide passes are deferred and run ONCE below. Per region
+      // they are the same whole-world metrics recompute and the same
+      // whole-country election re-seed, repeated for every Land — sixteen times
+      // over for a German reunification. That is what made this too slow to
+      // finish inside the request that started it.
+      deferCountryWidePasses: true,
       // NULL: the source is dissolving, so nobody retreats into it.
       relocateToRegionId: null,
       currentTurn,
@@ -121,12 +139,27 @@ export async function mergeCountry(db: Db, args: MergeCountryArgs): Promise<Merg
     else regionsTransferred++;
   }
 
+  // The country-wide passes each region transfer deferred, run ONCE now that the
+  // whole border has moved. Same end state, a fraction of the work: both read the
+  // world as it stands rather than as it stood mid-loop, so running them per
+  // region only ever produced intermediate answers that the next region replaced.
+  //
+  // Best-effort, matching how `transferRegion` treats the election re-seed: the
+  // regions have already moved, and the turn's own phases recompute both. A
+  // failure here must not fail a merge that has otherwise completed.
+  await computeNationalMetrics(db).catch((err) =>
+    console.error(`${fromCountryId}->${toCountryId} national metrics recompute failed:`, err)
+  );
+  await reseedJoinedRegionElections(db, toCountryId, new Date()).catch((err) =>
+    console.error(`${toCountryId} election re-seed failed (retries next turn):`, err)
+  );
+
   // National remnants the region loop cannot reach. Every step is filter-
   // idempotent (a re-run finds nothing still keyed to the source), and all run
   // BEFORE the shell retires so a failure leaves a recoverable, still-live
   // source rather than a retired country with dangling rows.
   await transferOrRetireOrgMemberships(db, fromCountryId, toCountryId, currentTurn);
-  await sweepNationalStrays(db, fromCountryId, toCountryId);
+  await sweepNationalStrays(db, fromCountryId, toCountryId, absorbedTariffsWin);
 
   // Retire the shell. Not deletion — the documents stay for history and the
   // wiki; the country simply stops being enumerated, simulated, or joinable.
@@ -220,7 +253,8 @@ async function transferOrRetireOrgMemberships(
  *  - NPPs in the national pool (`homeState: ""`) are invisible to the region
  *    sweep, which keys on `homeState`; they cross by countryId.
  *  - Tariff records are the dissolved state's trade policy; the unified state
- *    inherits it.
+ *    inherits the ones that do not collide with its own, and `absorbedTariffsWin`
+ *    decides which side yields on the ones that do.
  *  - Bills still in flight LAPSE first: the same shape the chamber-dissolution
  *    path writes (`failInProgressBills`), applied to every non-terminal status
  *    because here the whole country, not one chamber, stops existing.
@@ -235,7 +269,8 @@ async function transferOrRetireOrgMemberships(
 async function sweepNationalStrays(
   db: Db,
   fromCountryId: CountryId,
-  toCountryId: CountryId
+  toCountryId: CountryId,
+  absorbedTariffsWin: boolean
 ): Promise<void> {
   const now = new Date();
   await db
@@ -248,29 +283,43 @@ async function sweepNationalStrays(
   await db
     .collection("subsidies")
     .updateMany({ countryId: fromCountryId }, { $set: { countryId: toCountryId, updatedAt: now } });
-  // Tariffs are collision-aware in the winner's favour: where BOTH states
+  // Tariffs are collision-aware IN THE WINNER'S FAVOUR: where BOTH states
   // legislated a tariff on the same scope (same sector, same origin country,
-  // same corporation, or both economy-wide), the absorbed side's record takes
-  // the slot — the merge direction runs winner-into-shell, and two live
-  // records on one scope would double-apply. Later legislation by the unified
-  // government supersedes either through the normal reconcile (enactment
-  // order), which is the ordinary lex-posterior rule.
-  const absorbedTariffs = (await db
+  // same corporation, or both economy-wide), one record has to go, because two
+  // live records on one scope would double-apply.
+  //
+  // WHICH ONE depends on which side won, not on which side is the shell. A merge
+  // normally runs winner-into-shell, so the absorbed side's record takes the slot
+  // and that is the default. When the SURVIVOR is the victor the rule inverts:
+  // keeping the absorbed record would leave the defeated state's trade policy
+  // standing and delete the winner's. A tariff is legislated policy, so it
+  // follows the winner exactly as the tax code and the reserve law do.
+  //
+  // Later legislation by the unified government supersedes either through the
+  // normal reconcile (enactment order), which is the ordinary lex-posterior rule.
+  // BOTH SIDES OF THE COMPARISON MOVE TOGETHER. The scopes are read from the side
+  // that WINS and the delete lands on the side that loses; taking the scopes from
+  // one fixed side and only flipping the delete would match every one of the
+  // loser's own records against its own scope list and wipe its entire trade
+  // policy, colliding or not.
+  const tariffWinner = absorbedTariffsWin ? fromCountryId : toCountryId;
+  const tariffLoser = absorbedTariffsWin ? toCountryId : fromCountryId;
+  const winningTariffs = (await db
     .collection("tariffs")
-    .find({ countryId: fromCountryId })
+    .find({ countryId: tariffWinner })
     .toArray()) as unknown as Array<{
     scopeType: string;
     targetSectorType?: unknown;
     targetOriginCountryId?: unknown;
     targetCorporationId?: unknown;
   }>;
-  if (absorbedTariffs.length > 0) {
+  if (winningTariffs.length > 0) {
     // One $or delete for every colliding scope, not a round trip per tariff.
     // An explicit null in each key matches both a missing and a null field, so
     // "economy_wide vs economy_wide" collides exactly like a shared sector.
     await db.collection("tariffs").deleteMany({
-      countryId: toCountryId,
-      $or: absorbedTariffs.map((tariff) => ({
+      countryId: tariffLoser,
+      $or: winningTariffs.map((tariff) => ({
         scopeType: tariff.scopeType,
         targetSectorType: tariff.targetSectorType ?? null,
         targetOriginCountryId: tariff.targetOriginCountryId ?? null,
