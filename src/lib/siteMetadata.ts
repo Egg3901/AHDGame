@@ -92,7 +92,7 @@ export const SITE_SUBTITLE = "Political & Economic Sim Game";
 
 /** Default unfurl / search snippet (no em dash). */
 export const DEFAULT_SITE_DESCRIPTION =
-  "Real-time multiplayer political and economic simulation: run for office, pass legislation, build parties, run corporations, and trade markets in the US, UK, Germany, and Japan. The world advances every hour; progression never resets.";
+  "Real-time multiplayer political and economic simulation: run for office, pass legislation, build parties, run corporations, and trade markets in the US, UK, Soviet Union, and East Germany. The world advances every hour; progression never resets.";
 
 // Served from the CDN (R2) so crawler unfurl fetches don't hit Railway egress.
 const OG_IMAGE_PATH = CDN_LOGO_URL;
