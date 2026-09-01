@@ -83,21 +83,20 @@ describe("reunification pipeline, end to end", () => {
 
     db.collection("settlementCrises").updateOne.mockResolvedValue({ matchedCount: 1 });
 
-    // East Germany's five parties, SED first.
+    // The merge runs INCUMBENT into CHALLENGER: the Federal Republic's parties are
+    // the ones that move, and the GDR is the shell they arrive in.
     db.collection("politicalParties").find.mockImplementation((f: Record<string, unknown>) =>
-      f.countryId === "DD"
-        ? cursorOf([
+      f.countryId === "DE"
+        ? // Germany's own, before they move.
+          cursorOf([{ _id: SPD_DOC, countryId: "DE", sequentialId: 1, abbreviation: "SPD" }])
+        : // The GDR AFTER the migration: its own SED and CDU-Ost, plus the carried
+          // SPD under its new number. The SPD has to be here for the tolerate/ban
+          // split to mean anything — it is the party that must end up banned while
+          // the GDR's own bloc stays approved.
+          cursorOf([
             { _id: SED_DOC, countryId: "DD", sequentialId: 1, abbreviation: "SED" },
             { _id: CDU_DOC, countryId: "DD", sequentialId: 2, abbreviation: "CDU" },
-          ])
-        : // Germany AFTER the migration: its own SPD, plus the two eastern
-          // parties under their new numbers. The SPD has to be here for the
-          // tolerate/ban split to mean anything — it is the party that must end
-          // up banned while the carried bloc is merely approved.
-          cursorOf([
-            { _id: SPD_DOC, countryId: "DE", sequentialId: 1, abbreviation: "SPD" },
-            { _id: SED_DOC, countryId: "DE", sequentialId: 7, abbreviation: "SED" },
-            { _id: CDU_DOC, countryId: "DE", sequentialId: 8, abbreviation: "CDU" },
+            { _id: SPD_DOC, countryId: "DD", sequentialId: 7, abbreviation: "SPD" },
           ])
     );
     db.collection("politicalParties").updateOne.mockResolvedValue({ modifiedCount: 1 });
@@ -154,14 +153,17 @@ describe("reunification pipeline, end to end", () => {
     expect(res).toEqual({ actuated: true, outcome: "challenger", deferred: false });
   });
 
-  it("renumbers the eastern parties instead of colliding with the western ones", async () => {
+  it("renumbers the western parties instead of colliding with the eastern ones", async () => {
     const { actuateSettlementOutcome } = await import("./actuate");
     await actuateSettlementOutcome(db as unknown as Db, crisis(), 470);
     const moves = db.collectionMocks["politicalParties"].updateOne.mock.calls;
-    const sed = moves.find((c) => String(c[0]._id) === String(SED_DOC));
-    expect(sed?.[1].$set.countryId).toBe("DE");
-    expect(sed?.[1].$set.sequentialId).toBe(7);
-    expect(sed?.[1].$set.mergedFrom).toMatchObject({ countryId: "DD", sequentialId: 1 });
+    const spd = moves.find((c) => String(c[0]._id) === String(SPD_DOC));
+    // The SPD is sequentialId 1 in Germany, and so is the SED in the GDR. The
+    // loser's party is the one that moves, and it must not land on the winner's
+    // number.
+    expect(spd?.[1].$set.countryId).toBe("DD");
+    expect(spd?.[1].$set.sequentialId).toBe(7);
+    expect(spd?.[1].$set.mergedFrom).toMatchObject({ countryId: "DE", sequentialId: 1 });
   });
 
   it("rules with the eastern party, tolerates its bloc, and bans the western ones", async () => {
@@ -172,13 +174,14 @@ describe("reunification pipeline, end to end", () => {
     const approved = writes.find((c) => c[1].$set?.regimeStatus === "approved");
     const banned = writes.find((c) => c[1].$set?.regimeStatus === "banned");
 
-    // 7 is the SED's number after migration -- NOT 1, which is the SPD in Germany.
-    expect(ruling?.[0].sequentialId).toBe(7);
-    // The eastern bloc party crossed with the SED and is tolerated, not banned:
-    // the winning side does not dissolve its own National Front on arrival.
-    expect(approved?.[0].sequentialId.$in).toEqual([8]);
-    // Only Germany's own party is outlawed.
-    expect(banned?.[0].sequentialId.$in).toEqual([1]);
+    // The SED rules under its OWN number, 1, because the winner's parties never
+    // moved and so were never renumbered.
+    expect(ruling?.[0].sequentialId).toBe(1);
+    // The GDR's own bloc party stays tolerated: a winner does not dissolve its
+    // National Front at the moment it wins.
+    expect(approved?.[0].sequentialId.$in).toEqual([2]);
+    // Only the party that CROSSED — the loser's — is outlawed, under its new number.
+    expect(banned?.[0].sequentialId.$in).toEqual([7]);
   });
 
   it("vacates the seats of the parties it bans", async () => {
@@ -189,11 +192,12 @@ describe("reunification pipeline, end to end", () => {
     // party tokens the vacate builds -- id, name and abbreviation.
     const finds = db.collectionMocks["electedOfficials"].find.mock.calls;
     const vacateQuery = finds.find(
-      (c) => c[0]?.countryId === "DE" && c[0]?.party?.$in !== undefined
+      (c) => c[0]?.countryId === "DD" && c[0]?.party?.$in !== undefined
     );
     expect(vacateQuery).toBeDefined();
-    expect(vacateQuery![0].party.$in).toEqual(expect.arrayContaining(["1", "SPD"]));
-    expect(vacateQuery![0].party.$in).not.toContain("7");
+    expect(vacateQuery![0].party.$in).toEqual(expect.arrayContaining(["7", "SPD"]));
+    // The winner's own party is untouched.
+    expect(vacateQuery![0].party.$in).not.toContain("1");
   });
 
   it("retires the national office the region sweep cannot see", async () => {
@@ -221,8 +225,8 @@ describe("reunification pipeline, end to end", () => {
     const { actuateSettlementOutcome } = await import("./actuate");
     await actuateSettlementOutcome(db as unknown as Db, crisis(), 470);
     const call = db.collectionMocks["legislationTypes"].updateMany.mock.calls[0];
-    expect(call?.[0]).toEqual({ countryScope: "dd" });
-    expect(call?.[1].$set.countryScope).toBe("de");
+    expect(call?.[0]).toEqual({ countryScope: "de" });
+    expect(call?.[1].$set.countryScope).toBe("dd");
   });
 
   it("fuses East Berlin into Berlin and removes it from the map", async () => {
@@ -265,23 +269,23 @@ describe("reunification pipeline, end to end", () => {
 
     // Forex is off in this harness, so the scale is 1 and the signed sum is plain.
     const budgetWrites = db.collectionMocks["federalBudget"].updateOne.mock.calls;
-    const deWrite = budgetWrites.find(
-      (c) => c[0]._id === "DE" && c[1].$set?.treasuryBalance != null
+    const survivorWrite = budgetWrites.find(
+      (c) => c[0]._id === "DD" && c[1].$set?.treasuryBalance != null
     );
-    expect(deWrite?.[1].$set.treasuryBalance).toBe(4000);
-    const ddWrite = budgetWrites.find((c) => c[0]._id === "DD" && c[1].$set?.mergedInto);
-    expect(ddWrite?.[1].$set.treasuryBalance).toBe(0);
+    expect(survivorWrite?.[1].$set.treasuryBalance).toBe(4000);
+    const absorbedWrite = budgetWrites.find((c) => c[0]._id === "DE" && c[1].$set?.mergedInto);
+    expect(absorbedWrite?.[1].$set.treasuryBalance).toBe(0);
     const bondOps = db.collectionMocks["bonds"].bulkWrite.mock.calls[0][0];
     const bondWrite = bondOps.find(
       (op: { updateOne: { filter: { _id: unknown } } }) =>
         String(op.updateOne.filter._id) === String(bondId)
     );
-    expect(bondWrite?.updateOne.update.$set.countryId).toBe("DE");
+    expect(bondWrite?.updateOne.update.$set.countryId).toBe("DD");
     // Forex off in this harness → scale 1 → the law book moves in one updateMany.
     const lawWrite = db.collectionMocks["enactedLaws"].updateMany.mock.calls.find((c) =>
       c[0]._id?.$in?.some((id: unknown) => String(id) === String(lawId))
     );
-    expect(lawWrite?.[1].$set.countryId).toBe("DE");
+    expect(lawWrite?.[1].$set.countryId).toBe("DD");
   });
 
   it("carries the east's military into the unified state", async () => {
@@ -289,8 +293,8 @@ describe("reunification pipeline, end to end", () => {
     const { actuateSettlementOutcome } = await import("./actuate");
     await actuateSettlementOutcome(db as unknown as Db, crisis(), 470);
     const [filter, update] = db.collectionMocks["militaryUnits"].updateMany.mock.calls[0];
-    expect(filter).toEqual({ countryId: "DD" });
-    expect(update.$set.countryId).toBe("DE");
+    expect(filter).toEqual({ countryId: "DE" });
+    expect(update.$set.countryId).toBe("DD");
   });
 
   it("carries the command-economy dial onto the survivor", async () => {
@@ -298,25 +302,25 @@ describe("reunification pipeline, end to end", () => {
       await import("@/lib/constants/commandEconomy");
     clearStoredMarketizationLevels();
     db.collection("federalBudget").findOne.mockImplementation(async (f: { _id: string }) =>
-      f._id === "DD"
-        ? { _id: "DD", treasuryBalance: 0, economicFactors: { marketizationLevel: 0 } }
-        : { _id: "DE", treasuryBalance: 0, economicFactors: {} }
+      f._id === "DE"
+        ? { _id: "DE", treasuryBalance: 0, economicFactors: { marketizationLevel: 0 } }
+        : { _id: "DD", treasuryBalance: 0, economicFactors: {} }
     );
 
     const { actuateSettlementOutcome } = await import("./actuate");
     await actuateSettlementOutcome(db as unknown as Db, crisis(), 470);
 
     const regimeWrite = db.collectionMocks["federalBudget"].updateOne.mock.calls.find(
-      (c) => c[0]._id === "DE" && c[1].$set?.["economicFactors.marketizationLevel"] != null
+      (c) => c[0]._id === "DD" && c[1].$set?.["economicFactors.marketizationLevel"] != null
     );
     expect(regimeWrite?.[1].$set["economicFactors.marketizationLevel"]).toBe(0);
-    expect(getStoredMarketizationLevel("DE")).toBe(0);
+    expect(getStoredMarketizationLevel("DD")).toBe(0);
     clearStoredMarketizationLevels();
   });
 
   it("opens the unified state to players when the absorbed side was playable", async () => {
     db.collection("countryGameStates").findOne.mockResolvedValue({
-      _id: "DD",
+      _id: "DE",
       enabledForPlayers: true,
       status: "active",
     });
@@ -324,23 +328,23 @@ describe("reunification pipeline, end to end", () => {
     await actuateSettlementOutcome(db as unknown as Db, crisis(), 470);
 
     const writes = db.collectionMocks["countryGameStates"].updateOne.mock.calls;
-    const deWrite = writes.find((c) => c[0]._id === "DE");
-    expect(deWrite?.[1].$set).toMatchObject({ enabledForPlayers: true, status: "active" });
+    const survivorWrite = writes.find((c) => c[0]._id === "DD");
+    expect(survivorWrite?.[1].$set).toMatchObject({ enabledForPlayers: true, status: "active" });
     // The absorbed shell gets NO status write: `dissolvedTurn` (stamped by
     // mergeCountry) is the one dissolution marker, by design.
-    const ddWrite = writes.find((c) => c[0]._id === "DD");
-    expect(ddWrite).toBeUndefined();
+    const absorbedWrite = writes.find((c) => c[0]._id === "DE");
+    expect(absorbedWrite).toBeUndefined();
   });
 
   it("does not open an econ-only survivor when the absorbed side was not playable", async () => {
     db.collection("countryGameStates").findOne.mockResolvedValue({
-      _id: "DD",
+      _id: "DE",
       enabledForPlayers: false,
     });
     const { actuateSettlementOutcome } = await import("./actuate");
     await actuateSettlementOutcome(db as unknown as Db, crisis(), 470);
     const deWrite = db.collectionMocks["countryGameStates"].updateOne.mock.calls.find(
-      (c) => c[0]._id === "DE"
+      (c) => c[0]._id === "DD"
     );
     expect(deWrite).toBeUndefined();
   });
@@ -348,18 +352,18 @@ describe("reunification pipeline, end to end", () => {
   it("deletes the absorbed government formation row after carrying its head", async () => {
     const pm = new ObjectId();
     db.collection("governmentFormations").findOne.mockResolvedValue({
-      _id: "DD",
+      _id: "DE",
       pmCharacterId: pm,
     });
     const { actuateSettlementOutcome } = await import("./actuate");
     await actuateSettlementOutcome(db as unknown as Db, crisis(), 470);
 
     const carried = db.collectionMocks["governmentFormations"].updateOne.mock.calls.find(
-      (c) => c[0]._id === "DE"
+      (c) => c[0]._id === "DD"
     );
     expect(String(carried?.[1].$set.pmCharacterId)).toBe(String(pm));
     expect(db.collectionMocks["governmentFormations"].deleteOne).toHaveBeenCalledWith({
-      _id: "DD",
+      _id: "DE",
     });
   });
 
