@@ -87,9 +87,15 @@ export async function processSettlementTurn(
   // A resolved crisis that has not been actuated yet gets its consequences and
   // its cooldown. Swept before anything else so an outcome written by last
   // turn's threshold test or war never sits un-enacted.
+  //
+  // KEYED ON COMPLETION, not on the cooldown. The cooldown used to be written as
+  // the claim, so this sweep could not see a merge that had started and died —
+  // and a live reunification sat half-done behind exactly that. `actuationCompletedTurn`
+  // is written only when the consequences have fully landed, so an interrupted
+  // one is still visible here and the next tick resumes it.
   const unactuated = await crises.findOne({
     status: "resolved",
-    cooldownUntilTurn: null,
+    $or: [{ actuationCompletedTurn: null }, { actuationCompletedTurn: { $exists: false } }],
   } as Filter<SettlementCrisisDoc>);
   if (unactuated) {
     const actuated = await actuateSettlementOutcome(db, unactuated, currentTurn);

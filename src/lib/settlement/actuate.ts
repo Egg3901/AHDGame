@@ -34,6 +34,7 @@ import type { SettlementCrisisDoc, SettlementOutcome } from "@/lib/db/types/sett
 import type { CountryId } from "@/lib/constants/countries";
 import {
   SETTLEMENT_REOPEN_COOLDOWN_TURNS,
+  ACTUATION_LEASE_MS,
   GERMAN_QUESTION_BERLIN,
   GERMAN_QUESTION_EAST_BERLIN,
 } from "@/lib/constants/settlementCrisis";
@@ -82,22 +83,69 @@ export async function actuateSettlementOutcome(
   currentTurn: number
 ): Promise<ActuationResult> {
   if (crisis.status !== "resolved" || !crisis.outcome) return NONE;
-  // Idempotent: a crisis that already carries a cooldown has been actuated, and
-  // the history entries below must not be written twice.
-  if (crisis.cooldownUntilTurn !== null) return NONE;
+  // Idempotent on COMPLETION, not on the claim. A crisis whose consequences have
+  // fully landed must not have its history entries written twice; one that was
+  // claimed and then died halfway must be re-entered, not abandoned.
+  if (crisis.actuationCompletedTurn != null) return NONE;
 
   const crises = await getSettlementCrisesCollection(db);
-  // Guarded so two turn runners cannot both write the history entries.
+  const now = new Date();
+  // A LEASE, not a permanent stamp. Two turn runners must not enter the merge at
+  // once, but a lease that never expires is exactly how a killed attempt wedges
+  // the crisis for ever — which is what happened to a live reunification. An
+  // attempt older than the window is presumed dead and reclaimed.
+  const staleBefore = new Date(now.getTime() - ACTUATION_LEASE_MS);
   const claimed = await crises.updateOne(
-    { _id: crisis._id, cooldownUntilTurn: null },
     {
-      $set: {
-        cooldownUntilTurn: currentTurn + SETTLEMENT_REOPEN_COOLDOWN_TURNS,
-        updatedAt: new Date(),
-      },
-    }
+      _id: crisis._id,
+      actuationCompletedTurn: null,
+      $or: [
+        { actuationClaimedAt: null },
+        { actuationClaimedAt: { $exists: false } },
+        { actuationClaimedAt: { $lte: staleBefore } },
+      ],
+    } as Parameters<typeof crises.updateOne>[0],
+    { $set: { actuationClaimedAt: now, updatedAt: now } }
   );
   if (claimed.matchedCount !== 1) return NONE;
+
+  /**
+   * Mark the settlement enacted and open the reopen cooldown.
+   *
+   * BOTH at the END, together. The cooldown is a consequence of a settlement that
+   * happened, so writing it up front — as this once did — states an outcome the
+   * world has not been given yet, and hides a half-done merge from every sweep
+   * that would otherwise finish it.
+   */
+  const finish = async (): Promise<void> => {
+    await crises.updateOne(
+      { _id: crisis._id },
+      {
+        $set: {
+          actuationCompletedTurn: currentTurn,
+          actuationClaimedAt: null,
+          cooldownUntilTurn: currentTurn + SETTLEMENT_REOPEN_COOLDOWN_TURNS,
+          updatedAt: new Date(),
+        },
+      }
+    );
+  };
+
+  /**
+   * Give the claim back so the next tick resumes from where this attempt stopped.
+   *
+   * The steps below are individually idempotent — regions skip when already
+   * transferred, the party migration rebuilds its map from the `mergedFrom`
+   * stamps, the fisc block is gated on `mergedInto` — so re-entry continues the
+   * merge rather than repeating it.
+   */
+  const release = async (error: string): Promise<ActuationResult> => {
+    await crises.updateOne(
+      { _id: crisis._id },
+      { $set: { actuationClaimedAt: null, updatedAt: new Date() } }
+    );
+    return { actuated: false, outcome: crisis.outcome, deferred: true, error };
+  };
 
   const target = crisis.targetEntityId as CountryId;
   const challenger = crisis.challengerEntityId as CountryId;
@@ -113,6 +161,7 @@ export async function actuateSettlementOutcome(
         details: { crisis: crisis.kind, outcome: crisis.outcome },
       });
     }
+    await finish();
     return { actuated: true, outcome: "incumbent", deferred: false };
   }
 
@@ -152,12 +201,7 @@ export async function actuateSettlementOutcome(
     currentTurn,
   });
   if (!partiesMerged.ok) {
-    return {
-      actuated: false,
-      outcome: "challenger",
-      deferred: true,
-      error: partiesMerged.error ?? "The party migration did not complete.",
-    };
+    return release(partiesMerged.error ?? "The party migration did not complete.");
   }
 
   // 3. The regions and everyone seated in them.
@@ -167,14 +211,9 @@ export async function actuateSettlementOutcome(
     currentTurn,
   });
   if (!merged.ok) {
-    // The cooldown is already claimed, so this will not retry on the next tick.
-    // Report the failure rather than a success the map does not show.
-    return {
-      actuated: false,
-      outcome: "challenger",
-      deferred: true,
-      error: merged.error ?? "The merge did not complete.",
-    };
+    // The claim is GIVEN BACK, so the next tick resumes this merge from the
+    // region it stopped on rather than leaving the world half-absorbed.
+    return release(merged.error ?? "The merge did not complete.");
   }
 
   // 3b. National officeholders the region sweep cannot see.
@@ -239,12 +278,7 @@ export async function actuateSettlementOutcome(
     currentTurn,
   });
   if (!berlin.ok) {
-    return {
-      actuated: false,
-      outcome: "challenger",
-      deferred: true,
-      error: berlin.error ?? "East Berlin could not be merged into Berlin.",
-    };
+    return release(berlin.error ?? "East Berlin could not be merged into Berlin.");
   }
 
   // 5. The unified state takes the winner's constitutional settlement. Both of
@@ -290,6 +324,7 @@ export async function actuateSettlementOutcome(
       lawsCarried: fisc.lawsRescoped,
     },
   });
+  await finish();
   return { actuated: true, outcome: "challenger", deferred: false };
 }
 
@@ -492,11 +527,22 @@ async function retireNationalRemnants(
   // `cabinetMembers.party` needs no remap here: it is in
   // `PARTY_REF_COLLECTIONS`, so `mergePartiesIntoCountry` renumbered it in step
   // 2, before any of this ran.
+  //
+  // ⚠️ SCOPED OFF THE CARRIED ROWS. Actuation is resumable, so this can run a
+  // second time — and by then the absorbed ministers ARE the survivor's. Deleting
+  // every row under the survivor would throw the winning cabinet away on the
+  // resume that was meant to finish seating it. `mergedFrom` is the stamp that
+  // tells them apart; `$ne` also matches rows with no stamp at all, which is
+  // exactly the survivor's own.
+  const notCarried = {
+    countryId: survivor,
+    "mergedFrom.countryId": { $ne: absorbed },
+  };
   const survivorMinisters = (await db
     .collection("cabinetMembers")
-    .find({ countryId: survivor })
+    .find(notCarried)
     .toArray()) as unknown as Array<{ characterId?: ObjectId | null; nppId?: ObjectId | null }>;
-  await db.collection("cabinetMembers").deleteMany({ countryId: survivor });
+  await db.collection("cabinetMembers").deleteMany(notCarried);
   await clearCabinetPointers(db, survivorMinisters, now);
 
   // Read BEFORE anything moves, because the rows are how the holders are found.
@@ -520,12 +566,19 @@ async function retireNationalRemnants(
       retired.push(minister);
       continue;
     }
-    await db
-      .collection("cabinetMembers")
-      .updateOne(
-        { _id: minister._id },
-        { $set: { countryId: survivor, positionId: target, updatedAt: now } }
-      );
+    await db.collection("cabinetMembers").updateOne(
+      { _id: minister._id },
+      {
+        $set: {
+          countryId: survivor,
+          positionId: target,
+          // The stamp that keeps a resume from deleting this row as though it
+          // were the survivor's own.
+          mergedFrom: { countryId: absorbed, positionId: minister.positionId ?? null },
+          updatedAt: now,
+        },
+      }
+    );
     // The holder's denormalised pointer names the OLD portfolio. Re-point it
     // rather than clearing it: this minister keeps their seat at the table.
     if (minister.characterId) {
@@ -587,13 +640,28 @@ async function retireNationalRemnants(
     //
     // Scoped by country AND executive key so it cannot reach a leader of another
     // country, or a minister of this one.
+    //
+    // ⚠️ THE INCOMING LEADER IS EXCLUDED. Actuation is resumable, so this can run
+    // again after the carried leader has already taken the survivor's executive
+    // key — and an unqualified sweep would then stand down the very person it is
+    // seating.
     const standDown = { $set: { currentOffice: null, updatedAt: now } };
-    await db
-      .collection("characters")
-      .updateMany({ countryId: survivor, "currentOffice.type": execKey }, standDown);
-    await db
-      .collection("npps")
-      .updateMany({ countryId: survivor, "currentOffice.type": execKey }, standDown);
+    await db.collection("characters").updateMany(
+      {
+        countryId: survivor,
+        "currentOffice.type": execKey,
+        ...(absorbedGov.pmCharacterId ? { _id: { $ne: absorbedGov.pmCharacterId } } : {}),
+      },
+      standDown
+    );
+    await db.collection("npps").updateMany(
+      {
+        countryId: survivor,
+        "currentOffice.type": execKey,
+        ...(absorbedGov.pmNppId ? { _id: { $ne: absorbedGov.pmNppId } } : {}),
+      },
+      standDown
+    );
 
     await formations.updateOne(
       { _id: survivor },

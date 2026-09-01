@@ -115,23 +115,46 @@ describe("actuateSettlementOutcome", () => {
     expect(prime(db, "settlementCrises").updateOne).not.toHaveBeenCalled();
   });
 
-  it("ignores a crisis already actuated", async () => {
-    // A cooldown is the marker; without this check the history entries double.
+  it("ignores a crisis whose consequences have fully landed", async () => {
+    // COMPLETION is the marker; without this check the history entries double.
     const { actuateSettlementOutcome } = await import("./actuate");
     const res = await actuateSettlementOutcome(
       db as unknown as Db,
-      crisis({ cooldownUntilTurn: 500 }),
+      crisis({ actuationCompletedTurn: 500 }),
       412
     );
     expect(res.actuated).toBe(false);
   });
 
-  it("sets a cooldown so the question can be asked again, but not at once", async () => {
+  it("RE-ENTERS a crisis that was claimed and never finished", async () => {
+    // The regression that cost a live world: the cooldown was written as the
+    // claim, so a merge that died halfway looked done to every sweep and nothing
+    // ever finished it. A cooldown with no completion stamp must not stop this.
+    const { actuateSettlementOutcome } = await import("./actuate");
+    const res = await actuateSettlementOutcome(
+      db as unknown as Db,
+      crisis({ cooldownUntilTurn: 500, actuationCompletedTurn: null }),
+      412
+    );
+    expect(res.actuated).toBe(true);
+  });
+
+  it("claims a LEASE first and writes the cooldown only once it is done", async () => {
     const { actuateSettlementOutcome } = await import("./actuate");
     await actuateSettlementOutcome(db as unknown as Db, crisis(), 412);
-    const [filter, update] = prime(db, "settlementCrises").updateOne.mock.calls[0];
-    expect(filter).toMatchObject({ cooldownUntilTurn: null });
-    expect(update.$set.cooldownUntilTurn).toBe(412 + SETTLEMENT_REOPEN_COOLDOWN_TURNS);
+    const calls = prime(db, "settlementCrises").updateOne.mock.calls;
+
+    // The claim takes the lease and states no outcome.
+    const [claimFilter, claimUpdate] = calls[0];
+    expect(claimFilter).toMatchObject({ actuationCompletedTurn: null });
+    expect(claimUpdate.$set.actuationClaimedAt).toBeInstanceOf(Date);
+    expect(claimUpdate.$set.cooldownUntilTurn).toBeUndefined();
+
+    // The cooldown and the completion stamp land together, at the end.
+    const done = calls.find((c) => c[1]?.$set?.actuationCompletedTurn != null);
+    expect(done).toBeDefined();
+    expect(done[1].$set.cooldownUntilTurn).toBe(412 + SETTLEMENT_REOPEN_COOLDOWN_TURNS);
+    expect(done[1].$set.actuationClaimedAt).toBeNull();
   });
 
   it("records the close against both Germanies on a Western win", async () => {
@@ -594,7 +617,12 @@ describe("actuateSettlementOutcome", () => {
     // The merge runs winner-into-shell, so the shell's own ministers go. In the
     // live German case they are NPP ministers of parties this settlement is
     // about to ban, sitting in portfolios the carried ministers are given.
-    expect(prime(db, "cabinetMembers").deleteMany).toHaveBeenCalledWith({ countryId: "DE" });
+    // Scoped OFF the carried rows, so a resume cannot throw away the winning
+    // cabinet it is meant to be seating.
+    expect(prime(db, "cabinetMembers").deleteMany).toHaveBeenCalledWith({
+      countryId: "DE",
+      "mergedFrom.countryId": { $ne: "DD" },
+    });
   });
 
   it("carries a mapped portfolio to the surviving country's equivalent", async () => {

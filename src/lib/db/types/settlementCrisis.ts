@@ -180,6 +180,30 @@ export interface SettlementCrisisDoc {
   postedWireEvents?: string[];
   outcome: SettlementOutcome | null;
   cooldownUntilTurn: number | null;
+  /**
+   * The turn the outcome's consequences FINISHED landing on the world.
+   *
+   * ⚠️ This, not `cooldownUntilTurn`, is what says a settlement has been enacted.
+   * The two were one field, and conflating them cost a live world: the claim that
+   * STARTED the merge also marked it done, so when the process died partway
+   * through — a reunification runs a whole country merge, and the peace-term road
+   * runs it on a request — nothing retried it and no sweep noticed. The world sat
+   * half-merged with one Land's politics under the survivor and its territory
+   * under the dissolving state.
+   *
+   * Null means "not finished", which is the same answer for never started and for
+   * died halfway. Every step of the actuation is individually idempotent, so
+   * re-entering it resumes rather than repeats.
+   */
+  actuationCompletedTurn?: number | null;
+  /**
+   * When the in-flight actuation attempt claimed this crisis, or null.
+   *
+   * A LEASE rather than a permanent stamp. It stops two turn runners entering the
+   * merge at once, and it expires, so an attempt killed mid-way is reclaimable by
+   * a later tick instead of wedging the crisis for ever.
+   */
+  actuationClaimedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
