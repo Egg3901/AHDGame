@@ -785,7 +785,10 @@ export async function applyWhipVotesToVacateMotion(
   if (!motion || motion.status !== "voting") return { fellInLine: 0, ignored: 0 };
 
   const votes = motion.votes ?? {};
-  const speakerContext = await loadVacateSpeakerContext(db, motion);
+  // Only a soft whip can fall back to the bloc's own heuristic, and only the
+  // heuristic needs the Speaker's party/stance, so a hard whip skips the three
+  // reads entirely.
+  const speakerContext = mode === "hard" ? null : await loadVacateSpeakerContext(db, motion);
 
   let fellInLine = 0;
   let ignored = 0;
@@ -803,7 +806,7 @@ export async function applyWhipVotesToVacateMotion(
     const npp = nppMap.get(nppIdStr);
 
     const resolvedVote =
-      mode !== "hard" && npp && !resolveNppWhipSuccess(npp, mode, statecraftBonus).success
+      speakerContext && npp && !resolveNppWhipSuccess(npp, mode, statecraftBonus).success
         ? nppVacateMotionVote({
             nppParty: npp.party,
             nppStance: nppStance(npp),
