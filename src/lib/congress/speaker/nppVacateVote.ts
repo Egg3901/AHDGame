@@ -87,8 +87,13 @@ export function nppVacateMotionVote(input: NppVacateVoteInput): VacateVoteValue 
   return "against";
 }
 
-/** Stance accessor shared by the whip fallback and the auto-vote pass. */
-export function nppStance(npp: NPP | undefined): { economic: number; social: number } | undefined {
+/**
+ * Stance accessor shared by the whip fallback and the auto-vote pass. Takes the
+ * projected shape so callers that only fetched `policies` need no cast.
+ */
+export function nppStance(
+  npp: Pick<NPP, "policies"> | undefined
+): { economic: number; social: number } | undefined {
   return npp?.policies;
 }
 
