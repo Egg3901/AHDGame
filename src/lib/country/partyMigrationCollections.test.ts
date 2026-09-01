@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   PARTY_REF_COLLECTIONS,
   PARTY_OBJECTID_COLLECTIONS,
+  PARTY_KEYED_MAP_COLLECTIONS,
   NON_PARTY_SENTINELS,
   buildPartyIdMap,
 } from "./partyMigrationCollections";
@@ -24,7 +25,63 @@ describe("partyMigrationCollections", () => {
         "treasuryTransactions.partyId",
       ])
     );
-    expect(names).toHaveLength(28);
+    expect(names).toHaveLength(41);
+  });
+
+  it("covers the fields a live renumber found stale because they were missing", () => {
+    // Every one of these was pointing at the wrong party after a German
+    // reunification renumbered a country's own parties: the government named a
+    // party that had become banned opposition, and the Landeslisten pointed at
+    // the other side's bloc. Nothing threw, because a stale sequentialId is a
+    // valid number that simply names somebody else.
+    const names = PARTY_REF_COLLECTIONS.map((r) => `${r.collection}.${r.field}`);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "activityLog.details.party",
+        "countryLeaderStates.governingPartyId",
+        "countryState.rulingPartyId",
+        "executiveEndorsements.candidatePartyId",
+        "governmentFormations.governingPartyId",
+        "governorAddresses.agendaEffect.partyId",
+        "governorEndorsements.candidatePartyId",
+        "governorLegislationQueue.targetPartyId",
+        "landeslisten.partyId",
+        "partyHistory.partyId",
+        "partyMembershipEvents.newPartyId",
+        "partyMembershipEvents.oldPartyId",
+        "pmAppointmentVotes.nomineePartyId",
+      ])
+    );
+  });
+
+  it("scopes a one-doc-per-country collection by its own id, not by countryId", () => {
+    // `governmentFormations` has no `countryId` field at all, so a migration that
+    // assumed one matched nothing there and reported no error.
+    const gov = PARTY_REF_COLLECTIONS.find(
+      (r) => r.collection === "governmentFormations" && r.field === "governingPartyId"
+    );
+    expect(gov?.countryKey).toBe("_id");
+    // Everything else keeps the default.
+    expect(
+      PARTY_REF_COLLECTIONS.find((r) => r.collection === "characters")?.countryKey
+    ).toBeUndefined();
+  });
+
+  it("keeps a party-KEYED map out of the value-rewriting table", () => {
+    // `$set` on a path rewrites a value; it cannot rename a key. Listing
+    // `seatsByParty` beside the scalar fields would silently no-op.
+    const scalar = PARTY_REF_COLLECTIONS.map((r) => `${r.collection}.${r.field}`);
+    expect(scalar).not.toContain("governmentFormations.seatsByParty");
+    expect(PARTY_KEYED_MAP_COLLECTIONS).toEqual([
+      { collection: "governmentFormations", field: "seatsByParty", countryKey: "_id" },
+    ]);
+  });
+
+  it("registers every field exactly once", () => {
+    const all = [...PARTY_REF_COLLECTIONS, ...PARTY_KEYED_MAP_COLLECTIONS].map(
+      (r) => `${r.collection}.${r.field}`
+    );
+    expect(new Set(all).size).toBe(all.length);
   });
 
   it("keeps the ObjectId-keyed collection out of the sequentialId table", () => {

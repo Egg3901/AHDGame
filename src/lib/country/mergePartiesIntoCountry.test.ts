@@ -183,4 +183,84 @@ describe("mergePartiesIntoCountry", () => {
     expect(res.ok).toBe(false);
     expect(reserveSequentialIds).not.toHaveBeenCalled();
   });
+
+  it("scopes a one-doc-per-country collection by its own id", () => {
+    // `governmentFormations` carries no `countryId`, so filtering it on one
+    // matches nothing and reports no error -- which is how its `governingPartyId`
+    // survived a renumber still naming the pre-merge party.
+    return (async () => {
+      db.collection("governmentFormations").updateMany.mockResolvedValue({ modifiedCount: 1 });
+      db.collection("governmentFormations").find.mockReturnValue(cursorOf([]));
+      await mergePartiesIntoCountry(db as unknown as Db, {
+        fromCountryId: "DD",
+        toCountryId: "DE",
+        currentTurn: 470,
+      });
+      const call = db.collectionMocks["governmentFormations"].updateMany.mock.calls.find(
+        (c) => c[0]?.governingPartyId !== undefined
+      );
+      expect(call?.[0]._id).toBe("DD");
+      expect(call?.[0].countryId).toBeUndefined();
+    })();
+  });
+
+  it("rewrites the KEYS of a party-keyed map", async () => {
+    // `$set` on a path rewrites a value and cannot rename a key, so this map has
+    // to be read, rebuilt and written whole. Its keys are the party ids.
+    db.collection("governmentFormations").find.mockReturnValue(
+      cursorOf([{ _id: "DD", seatsByParty: { "1": 95, "2": 24 } }])
+    );
+    db.collection("governmentFormations").updateOne.mockResolvedValue({ modifiedCount: 1 });
+
+    await mergePartiesIntoCountry(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 470,
+    });
+
+    const call = db.collectionMocks["governmentFormations"].updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.seatsByParty !== undefined
+    );
+    // 1 -> 7 and 2 -> 8, the ids reserved for the moved parties.
+    expect(call?.[1].$set.seatsByParty).toEqual({ "7": 95, "8": 24 });
+  });
+
+  it("SUMS seats when two old keys land on one new one", async () => {
+    // Not hypothetical in a merge that dedupes: whichever party wins the key
+    // would otherwise silently take the other's benches with it.
+    reserveSequentialIds.mockResolvedValue([7, 7]);
+    db.collection("governmentFormations").find.mockReturnValue(
+      cursorOf([{ _id: "DD", seatsByParty: { "1": 95, "2": 24 } }])
+    );
+    db.collection("governmentFormations").updateOne.mockResolvedValue({ modifiedCount: 1 });
+
+    await mergePartiesIntoCountry(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 470,
+    });
+
+    const call = db.collectionMocks["governmentFormations"].updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.seatsByParty !== undefined
+    );
+    expect(call?.[1].$set.seatsByParty).toEqual({ "7": 119 });
+  });
+
+  it("leaves a map alone when no key moves", async () => {
+    db.collection("governmentFormations").find.mockReturnValue(
+      cursorOf([{ _id: "DD", seatsByParty: { "94": 3 } }])
+    );
+    db.collection("governmentFormations").updateOne.mockResolvedValue({ modifiedCount: 1 });
+
+    await mergePartiesIntoCountry(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 470,
+    });
+
+    const call = db.collectionMocks["governmentFormations"].updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.seatsByParty !== undefined
+    );
+    expect(call).toBeUndefined();
+  });
 });
