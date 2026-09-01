@@ -1,0 +1,120 @@
+/**
+ * What a country is CALLED and shown as, once runtime events are taken into
+ * account.
+ *
+ * THE PROBLEM THIS SOLVES. A country's name, flag and government-type label are
+ * compiled seed data, and `getCountryConfig` only ever layers era overrides onto
+ * them — it never reads `countryState`. That is fine for a world that stays as it
+ * was set up, and wrong the moment something converts a country at runtime. A
+ * reunified Germany rendered as "West Germany", a "Parliamentary Republic", after
+ * its government had genuinely become a one-party state and the other Germany had
+ * ceased to exist. Every one of those reads was of the compiled value.
+ *
+ * WHY A RESOLVER RATHER THAN A RENAME. `COUNTRY_CONFIGS.name` is the identity
+ * roughly ninety synchronous call sites depend on, many of them client
+ * components; rewriting it is not available. This is the display layer asking one
+ * question — "given what has happened, what should a reader be told?" — in one
+ * place, so the answer cannot drift between surfaces.
+ */
+import type { Db } from "mongodb";
+import {
+  COUNTRY_CONFIGS,
+  getCountryConfig,
+  getCountryDisplayName,
+  type CountryId,
+  type GovernmentType,
+} from "@/lib/constants/countries";
+import { getCountryState, primeCountryStates } from "@/lib/countryState";
+
+/** Everything a header, card or listing needs to name a country correctly. */
+export interface CountryIdentity {
+  name: string;
+  flagEmoji: string;
+  /** The live system of government, which may differ from the compiled one. */
+  governmentType: GovernmentType;
+  /** Its player-facing label, agreeing with `governmentType`. */
+  governmentTypeLabel: string;
+}
+
+/**
+ * Title-case names for the systems, for the `governmentTypeLabel` slot.
+ *
+ * Deliberately separate from `GOVERNMENT_SYSTEM_LABELS` in `peaceTerm`, which is
+ * lower-case prose for mid-sentence use ("becomes a one-party state"). These are
+ * labels; that is a clause. Merging them would force one register to read wrong.
+ */
+const GOVERNMENT_TYPE_TITLES: Record<GovernmentType, string> = {
+  presidential: "Presidential Republic",
+  parliamentaryRepublic: "Parliamentary Republic",
+  parliamentaryMonarchy: "Parliamentary Monarchy",
+  onePartyState: "One Party State",
+};
+
+/**
+ * The label for a country whose system may have changed under it.
+ *
+ * When runtime and compiled agree, the COMPILED label wins — it carries nuance a
+ * type cannot ("Semi-Presidential Republic" for France, whose `governmentType` is
+ * just `presidential`). When they disagree, the compiled label is describing a
+ * system the country no longer has, so the runtime type is named instead.
+ */
+export function governmentTypeLabelFor(
+  countryId: CountryId,
+  runtimeType: GovernmentType,
+  preset?: string
+): string {
+  const config = Object.hasOwn(COUNTRY_CONFIGS, countryId)
+    ? getCountryConfig(countryId, preset)
+    : undefined;
+  if (config && config.governmentType === runtimeType) return config.governmentTypeLabel;
+  return GOVERNMENT_TYPE_TITLES[runtimeType] ?? config?.governmentTypeLabel ?? runtimeType;
+}
+
+/**
+ * Resolve one country's presentation, runtime state included.
+ *
+ * Server-side, because it reads `countryState`. Client components take the result
+ * as props rather than calling this, which is also what keeps the database out of
+ * the browser bundle.
+ */
+export async function resolveCountryIdentity(
+  db: Db,
+  countryId: CountryId,
+  preset?: string
+): Promise<CountryIdentity> {
+  const config = Object.hasOwn(COUNTRY_CONFIGS, countryId)
+    ? getCountryConfig(countryId, preset)
+    : undefined;
+  const runtime = await getCountryState(db, countryId);
+  const governmentType =
+    runtime.governmentType ?? config?.governmentType ?? "parliamentaryRepublic";
+
+  return {
+    name: runtime.displayNameOverride ?? getCountryDisplayName(countryId, preset),
+    flagEmoji: runtime.flagEmojiOverride ?? config?.flagEmoji ?? "",
+    governmentType,
+    governmentTypeLabel: governmentTypeLabelFor(countryId, governmentType, preset),
+  };
+}
+
+/**
+ * The same for several countries at once, for listings.
+ *
+ * PRIMED FIRST, deliberately. `getCountryState` memoises per Db instance and
+ * `MongoClient.db()` hands back a new instance every call, so that memo is cold
+ * at the top of every request: resolving the whole world one at a time is eighty
+ * sequential round trips on a public endpoint. One `$in` read up front turns the
+ * loop below into cache hits.
+ */
+export async function resolveCountryIdentities(
+  db: Db,
+  countryIds: CountryId[],
+  preset?: string
+): Promise<Map<CountryId, CountryIdentity>> {
+  await primeCountryStates(db, countryIds);
+  const out = new Map<CountryId, CountryIdentity>();
+  for (const id of countryIds) {
+    out.set(id, await resolveCountryIdentity(db, id, preset));
+  }
+  return out;
+}

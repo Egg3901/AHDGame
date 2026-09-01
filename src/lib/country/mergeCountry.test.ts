@@ -4,6 +4,14 @@ import { createMockDb, type MockCollection, type MockDb } from "@/lib/test-utils
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/referendum/transfer/transferRegion", () => ({ transferRegion: vi.fn() }));
+// Both return promises: `mergeCountry` chains `.catch()` onto them, because a
+// failure in a country-wide recompute must not fail a merge that has completed.
+vi.mock("@/lib/nationalMetrics", () => ({
+  computeNationalMetrics: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/referendum/transfer/reseedJoinedRegionElections", () => ({
+  reseedJoinedRegionElections: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@/lib/turn/history/recordCountryEvent", () => ({ recordCountryEvent: vi.fn() }));
 vi.mock("@/lib/db/collections/gameState", () => ({
   getGameStatePresetOrDefault: vi.fn().mockResolvedValue("1953-default"),
@@ -99,6 +107,34 @@ describe("mergeCountry", () => {
       "SN",
       "TH",
     ]);
+  });
+
+  it("runs the country-wide passes ONCE, not once per region", async () => {
+    // `computeNationalMetrics` recomputes every country in the world and
+    // `reseedJoinedRegionElections` re-seeds a whole country's races. Neither is
+    // scoped to the region that moved, so doing them per region cost a live
+    // reunification about five seconds a Land, blew the request timeout it was
+    // started from, and left the country half-merged.
+    const { mergeCountry } = await import("./mergeCountry");
+    const { computeNationalMetrics } = await import("@/lib/nationalMetrics");
+    const { reseedJoinedRegionElections } =
+      await import("@/lib/referendum/transfer/reseedJoinedRegionElections");
+    const { transferRegion } = await import("@/lib/referendum/transfer/transferRegion");
+
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 470,
+    });
+
+    expect(vi.mocked(transferRegion).mock.calls.length).toBeGreaterThan(1);
+    // Every transfer defers them...
+    for (const call of vi.mocked(transferRegion).mock.calls) {
+      expect(call[1].deferCountryWidePasses).toBe(true);
+    }
+    // ...and the merge pays for them exactly once, after the whole border moved.
+    expect(vi.mocked(computeNationalMetrics)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(reseedJoinedRegionElections)).toHaveBeenCalledTimes(1);
   });
 
   it("passes a null relocation target, because the source is dissolving", async () => {
@@ -264,6 +300,45 @@ describe("mergeCountry", () => {
         {
           scopeType: "sector",
           targetSectorType: "manufacturing",
+          targetOriginCountryId: null,
+          targetCorporationId: null,
+        },
+      ],
+    });
+  });
+
+  it("leaves the SURVIVOR's tariff standing when the survivor is the winner", async () => {
+    // The same collision, decided the other way. A tariff is legislated policy,
+    // so it follows the side that WON -- and when the victor is the surviving
+    // shell, deleting its record would keep the defeated state's trade policy.
+    //
+    // The two sides carry DIFFERENT scopes on purpose: the delete must be built
+    // from the WINNER's list and land on the loser. Reading the scopes from the
+    // absorbed side and only flipping the target country would match each of its
+    // records against its own scope and delete the lot.
+    prime(db, "tariffs").find.mockImplementation((f: { countryId: string }) =>
+      cursor(
+        f.countryId === "DD"
+          ? [{ _id: "t-dd", scopeType: "sector", targetSectorType: "chemicals" }]
+          : [{ _id: "t-de", scopeType: "sector", targetSectorType: "manufacturing" }]
+      )
+    );
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 412,
+      absorbedTariffsWin: false,
+    });
+    const del = prime(db, "tariffs").deleteMany.mock.calls[0][0];
+    expect(del).toEqual({
+      // The ABSORBED side's record is the one that yields ...
+      countryId: "DE",
+      // ... and only where it meets a scope the SURVIVOR actually legislated.
+      $or: [
+        {
+          scopeType: "sector",
+          targetSectorType: "chemicals",
           targetOriginCountryId: null,
           targetCorporationId: null,
         },

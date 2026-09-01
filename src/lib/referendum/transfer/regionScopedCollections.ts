@@ -149,13 +149,36 @@ export async function rescopeRegionToCountry(
       const doc = await coll.findOne({ _id: oldId } as Record<string, unknown>);
       let matched = 0;
       if (doc) {
+        // SECURE THE NEW KEY BEFORE RELEASING THE OLD ONE, and never blindly
+        // insert. This re-key is not guarded by the region-doc idempotency
+        // check above: a merge that crashed between this write and
+        // `convertRegionDoc` leaves a region that straddles the two keys. The
+        // retry re-reads the old `DD_MV` and finds a `DE_MV` from the first
+        // attempt already seated under the new key, and a blind insert there
+        // died with E11000, aborting the whole transfer half-done (ticket
+        // #1247: a reunification dictated in the won-war panel stalled at its
+        // second Land and never resumed). Upsert-replace instead: an existing
+        // row under the new key is absorbed, its payload replaced with the
+        // old row's, which is the authoritative one, and the delete below
+        // then frees the old key.
+        //
+        // A CRASHED RETRY IS NOT THE ONLY WAY THE NEW KEY IS TAKEN. A world can
+        // also carry an orphan under `${toCountryId}_${regionId}` from an
+        // earlier transfer or an old seed, with no failed attempt behind it --
+        // the live German world held four of them before any of this ran. Same
+        // collision, same answer: the moving region's document wins, because it
+        // is the one describing a region that actually exists.
+        await coll.replaceOne(
+          { _id: newId } as Record<string, unknown>,
+          {
+            ...doc,
+            _id: newId,
+            countryId: toCountryId,
+            updatedAt: now,
+          } as Record<string, unknown>,
+          { upsert: true }
+        );
         await coll.deleteOne({ _id: oldId } as Record<string, unknown>);
-        await coll.insertOne({
-          ...doc,
-          _id: newId,
-          countryId: toCountryId,
-          updatedAt: now,
-        } as Record<string, unknown>);
         matched = 1;
       }
       report.push({ collection: scope.collection, matched });

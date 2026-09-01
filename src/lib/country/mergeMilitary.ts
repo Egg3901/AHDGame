@@ -10,10 +10,17 @@
  * (or let the absorbed doc replace it), and never leave two docs behind.
  *
  * WHOSE RULES SURVIVE. Quantities merge (stocks add, pools add, command lists
- * concatenate) but STANCE follows the absorbed side: its doctrine and its
- * reinforcement mode replace the survivor's. The merge direction runs
+ * concatenate) but STANCE follows the absorbed side by default: its doctrine and
+ * its reinforcement mode replace the survivor's. The usual merge direction runs
  * winner-into-shell, so survivor-stance would leave the losing side's military
  * rules governing the winner's army.
+ *
+ * ⚠️ `carryStance: false` WHEN THE SHELL IS THE WINNER. A settlement can be run in
+ * either direction — German reunification leaves the GDR standing and absorbs the
+ * Federal Republic — and there the absorbed side is the side that LOST. Carrying
+ * its doctrine and reinforcement mode would hand the victor the military rules of
+ * the army it just beat. Quantities still merge either way: the tanks, the stock
+ * and the manpower pool are things the unified state has, not rules it follows.
  *
  * No currency crosses here — stock lots, manpower and grades are all real
  * quantities, not money.
@@ -32,6 +39,14 @@ import { getMilitaryFormationsCollection } from "@/lib/db/collections/militaryFo
 export interface MergeMilitaryArgs {
   fromCountryId: CountryId;
   toCountryId: CountryId;
+  /**
+   * Whether the ABSORBED side's doctrine and reinforcement mode govern the
+   * unified army. Defaults true, which is the winner-into-shell contract.
+   *
+   * Pass false when the SURVIVOR is the victor — see the note at the top of this
+   * file. Quantities are unaffected either way.
+   */
+  carryStance?: boolean;
 }
 
 export interface MergeMilitaryResult {
@@ -86,7 +101,7 @@ async function mergeOneDocPerCountry<T extends Document>(
 }
 
 export async function mergeMilitary(db: Db, args: MergeMilitaryArgs): Promise<MergeMilitaryResult> {
-  const { fromCountryId, toCountryId } = args;
+  const { fromCountryId, toCountryId, carryStance = true } = args;
   const now = new Date();
 
   // ── Units: per-doc, a countryId flip is the whole move ─────────────────────
@@ -152,7 +167,8 @@ export async function mergeMilitary(db: Db, args: MergeMilitaryArgs): Promise<Me
     }
   );
 
-  // ── Manpower: pools add; the ABSORBED side's reinforcement mode governs. ──
+  // ── Manpower: pools ALWAYS add; the reinforcement mode is stance and only
+  //    crosses when the absorbed side is the winner. ────────────────────────
   const fromManpower = await mergeOneDocPerCountry(
     db.collection<NationalManpower>("nationalManpower"),
     fromCountryId,
@@ -160,17 +176,24 @@ export async function mergeMilitary(db: Db, args: MergeMilitaryArgs): Promise<Me
     now,
     (fromDoc) => ({
       $inc: { pool: fromDoc.pool ?? 0 },
-      ...(fromDoc.mode ? { $set: { mode: fromDoc.mode } } : {}),
+      ...(carryStance && fromDoc.mode ? { $set: { mode: fromDoc.mode } } : {}),
     })
   );
 
-  // ── Doctrine: the ABSORBED side's replaces the survivor's outright. ───────
+  // ── Doctrine: the ABSORBED side's replaces the survivor's outright, unless
+  //    the survivor is the winner — then the survivor's stands and the absorbed
+  //    doc is dropped. An EMPTY combiner is how that is said here: it takes the
+  //    merge path, which stamps the survivor's doc and deletes the absorbed one,
+  //    rather than the null path, which deletes the survivor's instead.
+  //
+  //    A survivor with no doctrine doc at all still falls through to rescoping
+  //    the absorbed one, which is right: the loser's doctrine beats none. ─────
   await mergeOneDocPerCountry(
     db.collection("nationalDoctrine"),
     fromCountryId,
     toCountryId,
     now,
-    () => null
+    () => (carryStance ? null : {})
   );
 
   return {

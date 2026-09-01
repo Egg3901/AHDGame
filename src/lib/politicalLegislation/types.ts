@@ -6,8 +6,28 @@
 
 import type { PoliticalMetricCategoryId, PoliticalMetricId } from "../politicalMetrics/types";
 
-export type LawCountryId = "US" | "UK" | "RU" | "DD" | "DE";
-export const LAW_COUNTRY_IDS: readonly LawCountryId[] = ["US", "UK", "RU", "DD"] as const;
+/**
+ * The roster and the union are ONE declaration on purpose. Annotating the list
+ * as `readonly LawCountryId[]` let the two drift: a widened union kept passing
+ * against a four-member list, and every `Record<LawCountryId, ...>` below broke
+ * instead. Deriving the union from the list means a new member is one edit, and
+ * the tables demand their row at the same moment.
+ */
+export const LAW_COUNTRY_IDS = ["US", "UK", "RU", "DD"] as const;
+export type LawCountryId = (typeof LAW_COUNTRY_IDS)[number];
+
+/**
+ * Countries that PRICE v2 laws without carrying a catalogue of their own.
+ *
+ * A reunified Germany holds a law book of rescoped `dd.*` laws but authors no
+ * legislation of its own, so it needs a cost anchor and nothing else. Widening
+ * `LawCountryId` to include it looked equivalent and is not: that type keys the
+ * exhaustive `Record<LawCountryId, ...>` tables for the catalogue, the budget
+ * keys, the seed tax rates and the calibration baselines, so adding a member
+ * silently demands a full law catalogue for a country that has none. Anchors are
+ * their own axis.
+ */
+export type CostAnchorCountryId = LawCountryId | "DE";
 
 export interface LawLevel {
   name: string;

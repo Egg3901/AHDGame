@@ -3,6 +3,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/countryAccess", () => ({
   getAllCountryAccess: vi.fn(),
 }));
+vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn().mockResolvedValue({}) }));
+vi.mock("@/lib/gameState", () => ({
+  getGameState: vi.fn().mockResolvedValue({ preset: undefined }),
+}));
+// The route now resolves runtime identity so a country converted or unified at
+// runtime is not listed under the name and system it no longer has. Stubbed to
+// pass through, which is what it does for every unchanged country.
+vi.mock("@/lib/country/countryIdentity", () => ({
+  resolveCountryIdentities: vi.fn().mockResolvedValue(new Map()),
+}));
 
 describe("GET /api/countries", () => {
   beforeEach(() => {
