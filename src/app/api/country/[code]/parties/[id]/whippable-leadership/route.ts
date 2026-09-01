@@ -470,8 +470,8 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     // Add upper chamber (Senate) leadership elections — same per-role policy
-    // filter (Pro Tempore is any-seated; Majority L/W is largest-single-party;
-    // Minority L/W is non-coalition).
+    // filter (Pro Tempore and Majority L/W are largest-single-party; Minority
+    // L/W is non-coalition).
     if (upperKey && hasUpperNPPs && senateCtx) {
       for (const election of senateLeadershipElections) {
         if (isLeadershipElectionClosed(election, currentTurnForLeadership, now)) continue;
