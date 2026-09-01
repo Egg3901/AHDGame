@@ -17,6 +17,7 @@ const BASES: Record<LawCountryId, FiscalBase> = {
   UK: { gdp: 19_800_000_000, population: 52_600_000 },
   RU: { gdp: 1_400_000_000_000, population: 189_500_000 },
   DD: { gdp: 50_000_000_000, population: 18_400_000 },
+  DE: { gdp: 50_000_000_000, population: 18_400_000 },
 };
 
 /** Seeded-outlays targets (§4.2) and the catalog docs' §5 computed deviations. */
@@ -27,6 +28,7 @@ const TARGETS: Record<LawCountryId, { outlays: number; docDeviation: number; rev
   // DD (RU-parity catalog on the DDM 50B basis): baseline rollup ≈ M 16.11B
   // against 17.3B seeded outlays (spending categories + state grants).
   DD: { outlays: 17_300_000_000, docDeviation: -0.069, revenue: 450_000_000 },
+  DE: { outlays: 17_300_000_000, docDeviation: -0.069, revenue: 450_000_000 },
 };
 
 function baselineTotals(countryId: LawCountryId) {
