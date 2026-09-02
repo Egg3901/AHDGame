@@ -44,11 +44,69 @@ describe("resolveTabs", () => {
       });
     });
 
-    it("resolves Demographics' Metrics sub-tab, not just the default Demographics", () => {
-      expect(resolveTabs("demographics", "metrics", false)).toEqual({
+    it("resolves Demographics' Statistics sub-tab, not just the default Demographics", () => {
+      expect(resolveTabs("demographics", "statistics", false)).toEqual({
         superTab: "demographics",
-        subTab: "metrics",
+        subTab: "statistics",
       });
+    });
+  });
+
+  describe("the political registry is its own super-tab", () => {
+    // The registry moved out of Demographics, and the legacy boards it used to
+    // sit beside stayed behind under the new "statistics" id. Both halves of
+    // that swap are pinned here: a regression in either one silently strands a
+    // bookmark on the wrong metrics system.
+    it("resolves the Metrics super-tab", () => {
+      expect(resolveTabs("metrics", null, false)).toEqual({ superTab: "metrics", subTab: "" });
+    });
+
+    it("ignores a stray sub param on the single-panel Metrics tab", () => {
+      expect(resolveTabs("metrics", "anything", false)).toEqual({
+        superTab: "metrics",
+        subTab: "",
+      });
+    });
+
+    it("resolves a bare ?tab=statistics onto Demographics", () => {
+      expect(resolveTabs("statistics", null, false)).toEqual({
+        superTab: "demographics",
+        subTab: "statistics",
+      });
+    });
+  });
+
+  describe("countries with no registry never reach the Metrics tab", () => {
+    // Only the four board countries have a registry. Every other country still
+    // gets a region page, so without this gate the promotion would hand ~22
+    // countries a prominent top-level tab whose endpoint 404s.
+    it("sends ?tab=metrics to the statistics boards instead", () => {
+      expect(resolveTabs("metrics", null, false, false)).toEqual({
+        superTab: "demographics",
+        subTab: "statistics",
+      });
+    });
+
+    it("sends ?tab=metrics&sub=anything there too", () => {
+      expect(resolveTabs("metrics", "whatever", false, false)).toEqual({
+        superTab: "demographics",
+        subTab: "statistics",
+      });
+    });
+
+    it("leaves every other tab untouched", () => {
+      expect(resolveTabs("economy", "budget", false, false)).toEqual({
+        superTab: "economy",
+        subTab: "budget",
+      });
+      expect(resolveTabs("demographics", "statistics", false, false)).toEqual({
+        superTab: "demographics",
+        subTab: "statistics",
+      });
+    });
+
+    it("defaults to the registry when the flag is omitted, matching board countries", () => {
+      expect(resolveTabs("metrics", null, false)).toEqual({ superTab: "metrics", subTab: "" });
     });
   });
 
@@ -86,10 +144,6 @@ describe("resolveTabs", () => {
       expect(resolveTabs("budget", null, false)).toEqual({
         superTab: "economy",
         subTab: "budget",
-      });
-      expect(resolveTabs("metrics", null, false)).toEqual({
-        superTab: "demographics",
-        subTab: "metrics",
       });
       expect(resolveTabs("laws", null, false)).toEqual({
         superTab: "governance",

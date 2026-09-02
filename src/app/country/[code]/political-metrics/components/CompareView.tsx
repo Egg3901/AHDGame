@@ -230,7 +230,7 @@ export function CompareView({
                           —
                         </span>
                       );
-                    const tone = scoreTone(cm.nationalValue);
+                    const tone = scoreTone(cm.value);
                     return (
                       <div key={id} className="min-w-0">
                         <div className="text-body-sm font-semibold leading-snug text-foreground">
@@ -240,11 +240,11 @@ export function CompareView({
                           <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-track">
                             <span
                               className={`block h-full rounded-full ${tone.bg}`}
-                              style={{ width: `${cm.nationalValue}%` }}
+                              style={{ width: `${cm.value}%` }}
                             />
                           </span>
                           <span className={`text-body-sm font-extrabold tabular-nums ${tone.text}`}>
-                            {Math.round(cm.nationalValue)}
+                            {Math.round(cm.value)}
                           </span>
                         </div>
                       </div>

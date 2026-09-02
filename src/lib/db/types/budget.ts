@@ -510,6 +510,27 @@ export interface FederalBudget {
    * share over time; only the passive, undirected drift is bounded.
    */
   taxBaseGdpShareBaseline?: Partial<Record<keyof FederalTaxBases, number>>;
+
+  /**
+   * `revenue.other` as a share of GDP, captured once at bootstrap — the same
+   * guardrail shape as `taxBaseGdpShareBaseline` above, for the one revenue line
+   * that is not a tax base.
+   *
+   * `other` is the non-tax receipts line: in a market economy fees and
+   * dividends, in a Soviet-type economy the enterprise-surplus remittance that
+   * was the bulk of the state budget. It was authored as a FROZEN ABSOLUTE
+   * (`NationalBudgetSeedConfig.otherRevenue`), which silently decays as a share
+   * of any economy that grows, and breaks outright when a country's GDP changes
+   * discontinuously: DD absorbed West Germany on turn 550, quadrupling its GDP,
+   * and its DDM 4.0B non-tax line did not move — 6.4% of the old economy, 1.5% of
+   * the new one, against 11.7-12.7% for every other Warsaw Pact budget (#1323).
+   *
+   * Holding the SHARE rather than the amount keeps the line proportionate to the
+   * economy through growth, reunification, secession and rescale alike. Absent ⇒
+   * self-healed from the current `other / gdp` on first sight, so every existing
+   * budget keeps exactly the ratio it already had.
+   */
+  otherRevenueGdpShareBaseline?: number;
   /**
    * Sovereign bond maturity profile: fractional split across maturities.
    * Keys are turn counts (48, 96, 240); values are fractions summing to 1.

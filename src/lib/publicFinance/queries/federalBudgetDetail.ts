@@ -10,6 +10,7 @@ import { assertTreasuryAuthority } from "@/lib/nationalization/authority";
 import type { StateBudget } from "@/lib/db/types/budget";
 import type { State } from "@/lib/db/types/state";
 import type { RegionalBudget } from "@/lib/db/types/regionalBudget";
+import { regionalGrantAmount } from "@/lib/budget/regionalGrantField";
 import type { CentralBank, GameConfig, GameState } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, isParliamentarySystem, type CountryId } from "@/lib/constants/countries";
 import { calculateFederalRevenue, loadLatestSourcedImportAggregates } from "@/lib/budget/revenue";
@@ -362,15 +363,16 @@ export async function loadFederalBudgetDetail(params: {
     .map((state) => {
       const regionalBudget = regionalBudgetMap.get(state._id);
       const stateBudget = stateBudgetMap.get(state._id);
-      const federalGrants = regionalBudget
-        ? budgetCountryId === COUNTRY_CONFIGS.JP.id
-          ? (regionalBudget.nationalGrant ?? 0)
-          : budgetCountryId === COUNTRY_CONFIGS.DE.id
-            ? (regionalBudget.federalEqualizationGrant ?? 0)
-            : budgetCountryId === COUNTRY_CONFIGS.CN.id
-              ? (regionalBudget.centralTransferGrant ?? 0)
-              : (regionalBudget.westminsterGrant ?? 0)
-        : (stateBudget?.revenue?.federalGrants ?? 0);
+      // Table lookup, not an if/else chain with a default: the chain this
+      // replaced ended in `westminsterGrant`, so any country it did not name
+      // read the UK's field and reported DDM 0 instead of failing. DD lost its
+      // Länder grants that way (#1323). `undefined` here means "no grant field
+      // mapped for this country", which falls back to the stateBudgets figure
+      // exactly as a missing regionalBudget does.
+      const federalGrants =
+        regionalGrantAmount(budgetCountryId, regionalBudget) ??
+        stateBudget?.revenue?.federalGrants ??
+        0;
       return {
         stateId: state._id,
         stateName: state.name,

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import type { CountryPoliticalMetricsResponse } from "@/lib/politicalMetrics/queries/countryPoliticalMetrics";
+import type { PMRegistryData } from "./registryTypes";
 import { CategoryIcon } from "./categoryIcons";
 import type { PMCategory } from "./CategoryCard";
 import { LeanChip } from "./LeanChip";
@@ -32,7 +32,7 @@ export function CategoryDetailView({
   onOpenMetric,
   onCompareCategory,
 }: {
-  data: CountryPoliticalMetricsResponse;
+  data: PMRegistryData;
   category: PMCategory;
   onBack: () => void;
   onOpenMetric: (metricId: string) => void;
@@ -42,7 +42,7 @@ export function CategoryDetailView({
   const tone = scoreTone(category.score);
   const rows = useMemo(() => {
     const r = [...category.metrics];
-    if (sort === "score") r.sort((a, b) => b.nationalValue - a.nationalValue);
+    if (sort === "score") r.sort((a, b) => b.value - a.value);
     else if (sort === "alpha") r.sort((a, b) => a.displayName.localeCompare(b.displayName));
     else r.sort((a, b) => a.lean - b.lean);
     return r;
@@ -105,7 +105,7 @@ export function CategoryDetailView({
             </label>
           </div>
           {rows.map((m) => {
-            const mTone = scoreTone(m.nationalValue);
+            const mTone = scoreTone(m.value);
             return (
               <div
                 key={m.id}
@@ -140,7 +140,7 @@ export function CategoryDetailView({
                   <div
                     className={`text-heading font-extrabold leading-none tabular-nums ${mTone.text}`}
                   >
-                    {Math.round(m.nationalValue)}
+                    {Math.round(m.value)}
                   </div>
                   <div className="mt-0.5 text-body-xs text-muted">{m.status}</div>
                 </div>
@@ -175,7 +175,7 @@ export function CategoryDetailView({
                 {category.metrics
                   .filter((m) => m.modifiers.direction !== "flat")
                   .map((m) => {
-                    const gap = Math.round((m.modifiers.target - m.nationalValue) * 10) / 10;
+                    const gap = Math.round((m.modifiers.target - m.value) * 10) / 10;
                     return (
                       <button
                         key={m.id}
