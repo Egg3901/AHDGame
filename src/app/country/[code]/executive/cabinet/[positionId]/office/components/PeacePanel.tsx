@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { SectionCard, Badge } from "./dossier";
-import { COUNTRY_CONFIGS, type CountryId, type GovernmentType } from "@/lib/constants/countries";
+import { type CountryId, type GovernmentType } from "@/lib/constants/countries";
 import { PEACE_OFFER_DURATION_TURNS, TRUCE_TURNS } from "@/lib/db/types/peaceOffer";
 import type { PeaceTerm } from "@/lib/military/peaceTerm";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 interface OfferView {
   id: string;
@@ -97,11 +98,15 @@ export interface PeaceWar {
  * An indemnity names whose currency the figure is in, because the amount is
  * quoted in the PAYER's currency, which is not always the reader's.
  */
-function offerTermText(term: PeaceTerm, rulingPartyName?: string | null): string {
+function offerTermText(
+  term: PeaceTerm,
+  rulingPartyName: string | null | undefined,
+  resolveCountryName: (id: CountryId) => string
+): string {
   if (term.kind === "white_peace") return " on white peace terms, with nothing changing hands";
   if (term.kind === "indemnity") {
     if (!(term.amount > 0)) return " with no indemnity, a white peace";
-    const payerName = COUNTRY_CONFIGS[term.payer]?.name ?? term.payer;
+    const payerName = resolveCountryName(term.payer);
     return ` for ${term.amount.toLocaleString("en-US")} from ${payerName} (in ${payerName} currency)`;
   }
   if (term.kind === "regime_change") {
@@ -133,12 +138,12 @@ function offerTermText(term: PeaceTerm, rulingPartyName?: string | null): string
  * `leaver` is optional because a row written before offers ran both ways carries
  * none; those all meant the sender, which is the fallback.
  */
-function offerDirectionText(o: OfferView): string {
+function offerDirectionText(o: OfferView, resolveCountryName: (id: CountryId) => string): string {
   const senderLeaves = (o.leaver ?? o.fromCountry) === o.fromCountry;
   if (senderLeaves) {
     return o.incoming ? " offers to leave the war" : ", our offer to leave the war";
   }
-  const leaverName = COUNTRY_CONFIGS[o.leaver ?? o.toCountry]?.name ?? o.leaver;
+  const leaverName = resolveCountryName(o.leaver ?? o.toCountry);
   return o.incoming
     ? ` asks us to leave the war, staying in it themselves`
     : `, our request that ${leaverName} leave the war`;
@@ -159,11 +164,12 @@ function departureConsequence(
   guests: CountryId[],
   // Absent on a response written before the field existed. Treated as the roster
   // road, which is what every such response meant when it was written.
-  reason: "roster" | "principals" | null = "roster"
+  reason: "roster" | "principals" | null,
+  resolveCountryName: (id: CountryId) => string
 ): string {
   const released =
     guests.length > 0
-      ? ` ${guests.map((g) => COUNTRY_CONFIGS[g]?.name ?? g).join(" and ")} ${
+      ? ` ${guests.map((g) => resolveCountryName(g)).join(" and ")} ${
           guests.length === 1 ? "leaves" : "leave"
         } at the same moment, released from the treaty that brought ${
           guests.length === 1 ? "it" : "them"
@@ -189,6 +195,7 @@ export function PeacePanel({
   countryId: CountryId;
   canAct: boolean;
 }) {
+  const resolveCountryName = useCountryDisplayName();
   const [wars, setWars] = useState<PeaceWar[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [warId, setWarId] = useState<string>("");
@@ -332,7 +339,7 @@ export function PeacePanel({
   // Anywhere reading the raw document, that comparison would be a bug.
   const live = forWar.filter((o) => o.status === "pending");
   const past = forWar.filter((o) => o.status !== "pending");
-  const payerName = COUNTRY_CONFIGS[payer]?.name ?? payer;
+  const payerName = resolveCountryName(payer);
 
   /** The one term this offer carries, matching the server's discriminated union. */
   function buildTerm(): PeaceTerm {
@@ -407,9 +414,9 @@ export function PeacePanel({
           {live.map((o) => (
             <div key={o.id} className="rounded-lg border border-card-border bg-card-elevated p-3">
               <p className="text-[12px]">
-                <strong>{COUNTRY_CONFIGS[o.fromCountry]?.name ?? o.fromCountry}</strong>
-                {offerDirectionText(o)}
-                {offerTermText(o.term, o.rulingPartyName)}.
+                <strong>{resolveCountryName(o.fromCountry)}</strong>
+                {offerDirectionText(o, resolveCountryName)}
+                {offerTermText(o.term, o.rulingPartyName, resolveCountryName)}.
               </p>
               {o.justification && (
                 <p className="mt-1 border-l-2 border-card-border pl-2 text-[11px] italic text-muted">
@@ -468,7 +475,7 @@ export function PeacePanel({
               <option value="">Select a country…</option>
               {(war?.enemies ?? []).map((e) => (
                 <option key={e.country} value={e.country}>
-                  {COUNTRY_CONFIGS[e.country]?.name ?? e.country}
+                  {resolveCountryName(e.country)}
                   {/* Named in the option itself, so the constraint is visible while
                       choosing rather than only after choosing. The option stays
                       selectable: a white peace with this country is always allowed. */}
@@ -573,16 +580,18 @@ export function PeacePanel({
             <p className="text-[11px] text-muted">
               {effectiveLeaver === "them"
                 ? departureConsequence(
-                    COUNTRY_CONFIGS[selectedEnemy.country]?.name ?? selectedEnemy.country,
+                    resolveCountryName(selectedEnemy.country),
                     selectedEnemy.endsWar,
                     selectedEnemy.guestsLeaving,
-                    selectedEnemy.endsWarReason ?? "roster"
+                    selectedEnemy.endsWarReason ?? "roster",
+                    resolveCountryName
                   )
                 : departureConsequence(
-                    COUNTRY_CONFIGS[countryId]?.name ?? countryId,
+                    resolveCountryName(countryId),
                     selectedEnemy.ourDeparture?.endsWar ?? false,
                     selectedEnemy.ourDeparture?.guestsLeaving ?? [],
-                    selectedEnemy.ourDeparture?.endsWarReason ?? "roster"
+                    selectedEnemy.ourDeparture?.endsWarReason ?? "roster",
+                    resolveCountryName
                   )}
             </p>
           )}
@@ -599,11 +608,11 @@ export function PeacePanel({
               role="alert"
               className="rounded-lg border border-warning/40 bg-warning/10 p-2 text-[11px] text-warning"
             >
-              {COUNTRY_CONFIGS[selectedEnemy.country]?.name ?? selectedEnemy.country} leaving would
-              end this war outright, so it cannot simply be bought. The front is{" "}
-              <strong>{selectedEnemy.progressPct}%</strong> of the way into their ground and must
-              reach <strong>{selectedEnemy.requiredPct}%</strong> before you can demand it. A white
-              peace is allowed at any point, and ends the war with no winner recorded.
+              {resolveCountryName(selectedEnemy.country)} leaving would end this war outright, so it
+              cannot simply be bought. The front is <strong>{selectedEnemy.progressPct}%</strong> of
+              the way into their ground and must reach <strong>{selectedEnemy.requiredPct}%</strong>{" "}
+              before you can demand it. A white peace is allowed at any point, and ends the war with
+              no winner recorded.
             </p>
           )}
 
@@ -668,9 +677,8 @@ export function PeacePanel({
           <ul className="mt-2 space-y-1">
             {past.map((o) => (
               <li key={o.id} className="text-[11px] text-muted">
-                {COUNTRY_CONFIGS[o.fromCountry]?.name ?? o.fromCountry} →{" "}
-                {COUNTRY_CONFIGS[o.toCountry]?.name ?? o.toCountry}: {o.status} (turn{" "}
-                {o.offeredTurn})
+                {resolveCountryName(o.fromCountry)} → {resolveCountryName(o.toCountry)}: {o.status}{" "}
+                (turn {o.offeredTurn})
               </li>
             ))}
           </ul>
