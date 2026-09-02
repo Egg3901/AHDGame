@@ -14,7 +14,7 @@ import {
   SUPPLY_AGREEMENT_PRICE_BAND,
 } from "@/lib/db/types/supplyAgreement";
 import { useToast } from "@/contexts/ToastContext";
-import { supportsCorporationWideSupplyAgreement } from "@/lib/market/commodityMarketScope";
+import { supplyAgreementRequiresState } from "@/lib/market/commodityMarketScope";
 
 interface SupplyAgreement {
   _id: string;
@@ -25,6 +25,8 @@ interface SupplyAgreement {
   buyerCorpName?: string;
   buyerCorpTicker?: string | null;
   commodity: CommodityType;
+  /** State a freight contract is fulfilled from; absent on corporation-wide contracts. */
+  stateId?: string;
   volumeCap: number;
   pricePremium: number;
   status: "pending" | "active" | "cancelling" | "cancelled";
@@ -47,6 +49,10 @@ interface CapacitySnapshot {
   achievableUnits: number | null;
 }
 
+interface StateCapacitySnapshot extends CapacitySnapshot {
+  stateName: string;
+}
+
 interface CorpSearchResult {
   id: string;
   name: string;
@@ -57,7 +63,7 @@ interface CorpSearchResult {
 
 const BAND_PCT = Math.round(SUPPLY_AGREEMENT_PRICE_BAND * 100);
 const SHORTFALL_PENALTY_PCT = Math.round(CONTRACT_SHORTFALL_PENALTY * 100);
-const AGREEMENT_COMMODITIES = COMMODITY_TYPES.filter(supportsCorporationWideSupplyAgreement);
+const AGREEMENT_COMMODITIES = COMMODITY_TYPES;
 
 /** Fraction premium to signed percent string, e.g. 0.2 to "+20%", -0.1 to "−10%". */
 function fmtPremium(fraction: number): string {
@@ -93,6 +99,10 @@ export default function SupplyAgreementsSection({
   const locale = useLocale();
   const t = useTranslations("corporations.supplyAgreements");
   const [agreements, setAgreements] = useState<SupplyAgreement[]>([]);
+  const [capacityByState, setCapacityByState] = useState<
+    Partial<Record<CommodityType, Record<string, StateCapacitySnapshot>>>
+  >({});
+  const [stateId, setStateId] = useState("");
   const [capacityByCommodity, setCapacityByCommodity] = useState<
     Partial<Record<CommodityType, CapacitySnapshot>>
   >({});
@@ -119,9 +129,11 @@ export default function SupplyAgreementsSection({
         const data = (await res.json()) as {
           agreements: SupplyAgreement[];
           capacityByCommodity?: Partial<Record<CommodityType, CapacitySnapshot>>;
+          capacityByState?: Partial<Record<CommodityType, Record<string, StateCapacitySnapshot>>>;
         };
         setAgreements(data.agreements ?? []);
         setCapacityByCommodity(data.capacityByCommodity ?? {});
+        setCapacityByState(data.capacityByState ?? {});
       }
     } catch {
       // ignore — render empty state
@@ -190,6 +202,10 @@ export default function SupplyAgreementsSection({
       showToast("Volume cap must be a positive number", "error");
       return;
     }
+    if (supplyAgreementRequiresState(commodity) && !stateId) {
+      showToast("Select the state this freight contract is fulfilled from", "error");
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch(`/api/corporations/${corpId}/supply-agreements`, {
@@ -198,6 +214,7 @@ export default function SupplyAgreementsSection({
         body: JSON.stringify({
           buyerCorpId: selectedBuyer.id,
           commodity,
+          ...(supplyAgreementRequiresState(commodity) ? { stateId } : {}),
           volumeCap: cap,
           pricePremium: premiumPct / 100,
         }),
@@ -210,6 +227,7 @@ export default function SupplyAgreementsSection({
         setSelectedBuyer(null);
         setVolumeCap("");
         setPremiumPct(0);
+        setStateId("");
         setShowForm(false);
         await load();
       } else {
@@ -229,7 +247,13 @@ export default function SupplyAgreementsSection({
   const visible = showCancelled ? agreements : agreements.filter((a) => a.status !== "cancelled");
   const asSupplier = visible.filter((a) => a.supplierCorpId === corpId);
   const asBuyer = visible.filter((a) => a.buyerCorpId === corpId);
-  const selectedCapacity = capacityByCommodity[commodity];
+  const requiresState = supplyAgreementRequiresState(commodity);
+  const stateOptions = requiresState ? Object.entries(capacityByState[commodity] ?? {}) : [];
+  const selectedCapacity = requiresState
+    ? stateId
+      ? capacityByState[commodity]?.[stateId]
+      : undefined
+    : capacityByCommodity[commodity];
 
   const formatUnits = (value: number) => Math.round(value).toLocaleString(locale);
   const formatAnchor = (value: number) => `₳${Math.round(value).toLocaleString(locale)}`;
@@ -258,7 +282,10 @@ export default function SupplyAgreementsSection({
       <div key={a._id} className="rounded-xl border border-card-border bg-card p-4 space-y-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground">{COMMODITY_LABELS[a.commodity]}</p>
+            <p className="text-sm font-semibold text-foreground">
+              {COMMODITY_LABELS[a.commodity]}
+              {a.stateId ? <span className="text-muted"> · {a.stateId}</span> : null}
+            </p>
             <p className="text-xs text-muted">
               {role === "supplier" ? "Supplying to " : "Buying from "}
               <Link
@@ -485,7 +512,10 @@ export default function SupplyAgreementsSection({
               <label className="text-xs font-semibold text-foreground">Commodity</label>
               <select
                 value={commodity}
-                onChange={(e) => setCommodity(e.target.value as CommodityType)}
+                onChange={(e) => {
+                  setCommodity(e.target.value as CommodityType);
+                  setStateId("");
+                }}
                 className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
               >
                 {AGREEMENT_COMMODITIES.map((c) => (
@@ -494,11 +524,32 @@ export default function SupplyAgreementsSection({
                   </option>
                 ))}
               </select>
-              <p className="text-[11px] text-muted">
-                Freight agreements are state-local and cannot be represented by a corporation-wide
-                contract. Freight capacity instead serves haul demand in the state where it
-                operates.
-              </p>
+              {requiresState && (
+                <>
+                  <label className="block pt-1 text-xs font-semibold text-foreground">
+                    Fulfilled from state
+                  </label>
+                  <select
+                    value={stateId}
+                    onChange={(e) => setStateId(e.target.value)}
+                    disabled={stateOptions.length === 0}
+                    className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none disabled:opacity-60"
+                  >
+                    <option value="">
+                      {stateOptions.length === 0 ? "No plants producing freight" : "Select a state"}
+                    </option>
+                    {stateOptions.map(([id, snapshot]) => (
+                      <option key={id} value={id}>
+                        {snapshot.stateName} ({id})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-muted">
+                    Freight is haulage capacity based in one state. The contract reserves your
+                    plants there for the buyer&apos;s plants in the same state.
+                  </p>
+                </>
+              )}
             </div>
 
             {/* Volume cap */}
