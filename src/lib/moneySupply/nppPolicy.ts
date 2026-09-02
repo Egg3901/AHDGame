@@ -4,12 +4,16 @@ import type {
   CentralBank,
   FederalBudget,
   GameConfig,
+  GameState,
   MonetaryPolicyDecision,
   MonetaryPolicyEvaluation,
   MoneySupplySnapshot,
 } from "@/lib/db/types";
 import { getInflationTarget } from "@/lib/budget/inflation";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
+import { isBankGovernmentControlled } from "@/lib/centralBank/governance";
+import { getStartingYearForPreset } from "@/lib/constants/turnTime";
+import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { executeMonetaryOperation, MONETARY_OPERATION_COOLDOWN_TURNS } from "./operations";
@@ -114,6 +118,14 @@ export async function processNppMonetaryOperations(
     .collection<CentralBank>("centralBanks")
     .find({ chairMode: "npp", chairControlsLocked: { $ne: true } })
     .toArray();
+  // Era START year for the government-control gate below, resolved once for the
+  // whole sweep — `isBankGovernmentControlledLive` costs an uncached gameState
+  // read per call.
+  const gameState = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { projection: { startingYear: 1, preset: 1 } });
+  const startingYear =
+    gameState?.startingYear ?? getStartingYearForPreset(gameState?.preset ?? DEFAULT_SEED_PRESET);
   let operationsExecuted = 0;
   let evaluationsRecorded = 0;
   for (const bank of banks) {
@@ -123,6 +135,10 @@ export async function processNppMonetaryOperations(
     )
       continue;
     const countryId = bank.countryId as CountryId;
+    // A government-controlled bank runs no autonomous open-market operations,
+    // for the same reason it sets no autonomous rate: monetary policy is the
+    // Treasury's, and the technocrat chair holds no authority to act on its own.
+    if (isBankGovernmentControlled(bank, countryId, startingYear)) continue;
     const currencyCode = COUNTRY_CURRENCY_MAP[bank.countryId] ?? "USD";
     const [budget, bond, moneySupply] = await Promise.all([
       db

@@ -22,6 +22,7 @@ import {
   applyWhipVotesToBill,
   applyWhipVotesToStateBill,
   applyWhipVotesToCabinet,
+  applyWhipVotesToImpeachment,
 } from "@/lib/congress/applyWhipVotes";
 import { statecraftWhipBonus } from "@/lib/partyWhips/whipSuccess";
 import { USE_GROWTH_INCREMENT } from "@/lib/stats/statsConstants";
@@ -44,13 +45,16 @@ import {
 } from "@/lib/partyWhips/constraints";
 import { getPartyNppControlStatus } from "@/lib/parties/antiAbuseGuards";
 import { inferWhipIssuerRole } from "@/lib/partyWhips/issuerRole";
+import { impeachmentStageChamberKey } from "@/lib/impeachment/impeachmentTally";
+import { getGameState } from "@/lib/gameState";
+import type { Impeachment } from "@/lib/db/types/impeachment";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string; partyId: string }>;
 }
 
 const whipSchema = z.object({
-  targetType: z.enum(["bill", "cabinetNomination"]),
+  targetType: z.enum(["bill", "cabinetNomination", "impeachmentVote"]),
   targetId: z.string().regex(/^[a-f\d]{24}$/i, "Invalid target ID"),
   chamber: z.string().min(1, "Chamber required"),
   direction: z.enum(["for", "against"]),
@@ -177,6 +181,42 @@ export async function POST(request: Request, { params }: RouteParams) {
         return NextResponse.json(
           { error: `Cabinet nominations can only be whipped in the ${cabinetChamber}` },
           { status: 400 }
+        );
+      }
+    } else if (targetType === "impeachmentVote") {
+      const impeachment = await db
+        .collection<Impeachment>("impeachments")
+        .findOne({ _id: targetOid, countryId, stage: { $in: ["house", "senate"] } });
+      if (!impeachment) {
+        return NextResponse.json(
+          { error: "Impeachment not found or no longer open for voting" },
+          { status: 404 }
+        );
+      }
+      // A state party may only whip the trial of its OWN state's governor.
+      // Presidential cases are the national party's surface.
+      if (impeachment.targetOffice !== "governor" || impeachment.state !== stateId) {
+        return NextResponse.json(
+          { error: "Only this state's governor impeachment can be whipped here" },
+          { status: 400 }
+        );
+      }
+      const stageChamber = impeachmentStageChamberKey(impeachment);
+      if (!stageChamber || chamber !== stageChamber) {
+        return NextResponse.json(
+          { error: `This impeachment is being voted in the ${stageChamber ?? "no open"} chamber` },
+          { status: 400 }
+        );
+      }
+      const stageEndsOnTurn =
+        impeachment.stage === "house"
+          ? impeachment.houseVotingEndsOnTurn
+          : impeachment.senateVotingEndsOnTurn;
+      const impeachTurn = (await getGameState(db))?.currentTurn ?? 0;
+      if (stageEndsOnTurn != null && impeachTurn > stageEndsOnTurn) {
+        return NextResponse.json(
+          { error: "Voting for this impeachment stage has closed" },
+          { status: 404 }
         );
       }
     }
@@ -368,6 +408,19 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
     } else if (targetType === "cabinetNomination") {
       const r = await applyWhipVotesToCabinet(
+        db,
+        targetOid,
+        direction,
+        nppOfficials,
+        nppMap,
+        mode,
+        whipStatecraftBonus
+      );
+      fellInLine = r.fellInLine;
+      ignored = r.ignored;
+      if (authData.character.stats) await grantStatecraftXp();
+    } else if (targetType === "impeachmentVote") {
+      const r = await applyWhipVotesToImpeachment(
         db,
         targetOid,
         direction,

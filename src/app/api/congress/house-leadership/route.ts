@@ -43,9 +43,10 @@ import {
   POLICY_BY_ROLE,
 } from "@/lib/congress/leadership/rolePolicy";
 import { houseElectionRoleToLeader } from "@/lib/congress/leadership/electionRoleMap";
+import { openCongressLeadershipElection } from "@/lib/congress/leadership/openElection";
+import { reconcileLeadershipPartyEligibility } from "@/lib/congress/leadership/reconcilePartyEligibility";
 import type { HouseLeadershipResponse } from "./lib/leadership";
 import type {
-  CongressLeader,
   HouseLeadershipElection,
   HouseLeadershipElectionRole,
   HouseLeadershipNomination,
@@ -54,8 +55,6 @@ import type {
   Character,
   ElectedOfficial,
 } from "@/lib/db/types";
-
-const ELECTION_DURATION_MS = 24 * 60 * 60 * 1000;
 
 const ROLE_TO_LABEL: Record<HouseLeadershipElectionRole, string> = {
   majority_leader: "Majority Leader",
@@ -109,6 +108,12 @@ export async function GET() {
       { leaderRole: "majority_whip_house", chamber: "house" },
       { leaderRole: "minority_whip_house", chamber: "house" },
     ]);
+
+    // Sits beside the seat-loss sweep because it is the same kind of check —
+    // "does the holder still qualify?" — just keyed on party rather than seat.
+    // Running it here as well as in the turn phase means a defection shows up
+    // the moment the page is opened instead of up to an hour later.
+    await reconcileLeadershipPartyEligibility(db, "house", chamberCtx, new Date());
 
     await clearIneligibleHouseLeadershipNominations(db, chamberCtx, new Date());
 
@@ -193,72 +198,17 @@ export async function POST(request: Request) {
 
     if (action === "start_election") {
       if (!authUser.isAdmin) return NextResponse.json({ error: "Admin only" }, { status: 403 });
-      const existing = await db
-        .collection<HouseLeadershipElection>("houseLeadershipElections")
-        .findOne({ _id: role });
-      const gameTimeForStart = await getGameTime();
-      if (
-        existing?.status === "voting" &&
-        !isLeadershipElectionClosed(
-          existing,
-          gameTimeForStart.currentTurn,
-          gameTimeForStart.effectiveNow
-        )
-      ) {
+      const opened = await openCongressLeadershipElection(db, {
+        role,
+        chamber: "house",
+        ctx: chamberCtx,
+        now: new Date(),
+      });
+      if (!opened) {
         return NextResponse.json(
           { error: `A ${roleLabel} election is already in progress.` },
           { status: 409 }
         );
-      }
-      const now = new Date();
-      await db
-        .collection<HouseLeadershipNomination>("houseLeadershipNominations")
-        .updateMany(
-          { role, status: { $in: ["open", "voting"] } },
-          { $set: { status: "failed", updatedAt: now } }
-        );
-      // Anchor endsAt to the game clock so readers using the same clock can
-      // correctly determine when the window closes regardless of real-time drift.
-      const endsAt = new Date(gameTimeForStart.effectiveNow.getTime() + ELECTION_DURATION_MS);
-      await db
-        .collection<HouseLeadershipElection>("houseLeadershipElections")
-        .updateOne(
-          { _id: role },
-          { $set: { _id: role, status: "voting", startedAt: now, endsAt, updatedAt: now } },
-          { upsert: true }
-        );
-      const incumbent = await db
-        .collection<CongressLeader>("congressLeaders")
-        .findOne({ role: leaderRole });
-      if (incumbent?.characterId) {
-        const hasSeat = await db.collection<ElectedOfficial>("electedOfficials").findOne({
-          officeType: "house",
-          characterId: incumbent.characterId,
-        });
-        if (hasSeat) {
-          const char = await db
-            .collection<Character>("characters")
-            .findOne({ _id: incumbent.characterId }, { projection: { party: 1, homeState: 1 } });
-          const party = char?.party ?? incumbent.party ?? null;
-          if (char && party && isPartyEligible(policy, party, chamberCtx)) {
-            await db.collection<HouseLeadershipNomination>("houseLeadershipNominations").insertOne({
-              _id: new ObjectId(),
-              role,
-              nomineeId: incumbent.characterId,
-              nomineeName: incumbent.characterName,
-              nomineeParty: party,
-              nomineeState: char.homeState ?? undefined,
-              nominatedById: incumbent.characterId,
-              nominatedByName: "Incumbent",
-              status: "voting",
-              votesFor: 0,
-              votesAgainst: 0,
-              votes: {},
-              createdAt: now,
-              updatedAt: now,
-            });
-          }
-        }
       }
       return NextResponse.json({
         message: `${roleLabel} election started. Voting ends in 24 hours. Only ${electorateLabel} may run and vote. Plurality wins.`,
@@ -274,9 +224,17 @@ export async function POST(request: Request) {
           { role, status: { $in: ["open", "voting"] } },
           { $set: { status: "failed", updatedAt: now } }
         );
-      await db
-        .collection<HouseLeadershipElection>("houseLeadershipElections")
-        .updateOne({ _id: role }, { $set: { status: "closed", updatedAt: now } }, { upsert: true });
+      // Drop both window anchors along with the status. A reset doc that kept a
+      // stale `endsOnTurn` would make the NEXT election look closed the instant
+      // it opened, which is the bug the shared opener exists to prevent.
+      await db.collection<HouseLeadershipElection>("houseLeadershipElections").updateOne(
+        { _id: role },
+        {
+          $set: { status: "closed", updatedAt: now },
+          $unset: { endsAt: "", endsOnTurn: "" },
+        },
+        { upsert: true }
+      );
       return NextResponse.json({
         message: `${roleLabel} election reset. You can start a new 24-hour election.`,
       });

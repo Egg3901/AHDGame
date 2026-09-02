@@ -172,6 +172,24 @@ export function SpeakerSection({
                 </button>
               </div>
             )}
+            {data?.isHouseMember && motion.myWhippedFromOriginal && (
+              <div className="pt-1">
+                <WhippedBadge
+                  originalVote={motion.myWhippedFromOriginal}
+                  originalLabel={
+                    motion.myWhippedFromOriginal === "for"
+                      ? "vacate"
+                      : motion.myWhippedFromOriginal === "against"
+                        ? "keep"
+                        : "no prior vote"
+                  }
+                  onRevert={async (v) => {
+                    if (v !== "for" && v !== "against") return;
+                    onVacateVote(v);
+                  }}
+                />
+              </div>
+            )}
           </div>
         ) : (
           motion?.canFile && (

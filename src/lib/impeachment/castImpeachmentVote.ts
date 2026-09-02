@@ -10,6 +10,7 @@ import { getSubNationalLegislatureKey } from "@/lib/constants/countries";
 import { buildEmbeddedVoteTallyUpdate } from "@/lib/votes/embeddedVoteTally";
 import { getGameState } from "@/lib/gameState";
 import { badRequest, forbidden, notFound } from "@/lib/api/errors";
+import { clearWhippedFromVote } from "@/lib/congress/clearWhippedVote";
 
 /**
  * Cast (or change) a vote on an active impeachment. Only sitting members of the
@@ -95,6 +96,10 @@ export async function castImpeachmentVote(
   await db
     .collection<Impeachment>("impeachments")
     .updateOne({ _id: impeachment._id, stage }, pipeline);
+
+  // Choosing a vote clears the Player Whip snapshot, so the "Whipped by Party"
+  // badge disappears once the member has voted for themselves.
+  await clearWhippedFromVote(db, "impeachments", impeachment._id, voter._id);
 
   return { success: true, stage };
 }

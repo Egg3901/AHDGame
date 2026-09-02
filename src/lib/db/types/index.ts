@@ -220,6 +220,7 @@ export {
   AGGRESSIVE_CUT_SCRUTINY,
   RATE_CHANGE_COOLDOWN_TURNS,
   RATE_CHANGES_PER_TERM,
+  RATE_HISTORY_MAX,
   getEffectiveRate,
   getRateScale,
 } from "./centralBank";

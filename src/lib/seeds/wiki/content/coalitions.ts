@@ -10,7 +10,8 @@ In the **US**, coalitions have a direct mechanical effect on chamber leadership:
 - The largest bloc is the **majority bloc**; the second-largest is the **minority bloc**
 - House and Senate Majority Leader (and Whip) are narrower: only the single national party with the most seats in that chamber may declare or vote
 - Minority-side leadership (Leader and Whip) remains open to non-majority parties outside the majority bloc
-- Speaker of the House, Senate President Pro Tempore, and the DE Bundestagspräsident are open to any seated chamber member: bloc and party affiliation do not gate candidacy or voting for these presiding-officer roles
+- Speaker of the House and the DE Bundestagspräsident are open to any seated chamber member: bloc and party affiliation do not gate candidacy or voting for these presiding-officer roles
+- Senate President Pro Tempore is a majority-party office: only the chamber's single largest party may declare, vote, or hold it
 
 Outside the US, coalitions are **organizational and signaling only**. Parliamentary countries (UK, DE, JP, IE) use their own government-formation systems and do not consult coalition membership when forming governments. There is no country CA in the live roster (CA is California).
 

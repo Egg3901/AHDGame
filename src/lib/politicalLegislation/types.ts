@@ -6,8 +6,15 @@
 
 import type { PoliticalMetricCategoryId, PoliticalMetricId } from "../politicalMetrics/types";
 
-export type LawCountryId = "US" | "UK" | "RU" | "DD";
-export const LAW_COUNTRY_IDS: readonly LawCountryId[] = ["US", "UK", "RU", "DD"] as const;
+/**
+ * The roster and the union are ONE declaration on purpose. Annotating the list
+ * as `readonly LawCountryId[]` let the two drift: a widened union kept passing
+ * against a four-member list, and every `Record<LawCountryId, ...>` below broke
+ * instead. Deriving the union from the list means a new member is one edit, and
+ * the tables demand their row at the same moment.
+ */
+export const LAW_COUNTRY_IDS = ["US", "UK", "RU", "DD"] as const;
+export type LawCountryId = (typeof LAW_COUNTRY_IDS)[number];
 
 /**
  * Countries that PRICE v2 laws without carrying a catalogue of their own.

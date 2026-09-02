@@ -12,6 +12,11 @@ vi.mock("@/lib/discordWebhooks", () => ({
   sendMultiCountryGameEvent: vi.fn().mockResolvedValue(undefined),
   DISCORD_COLORS: { primeRateCut: 0x57f287, primeRateHike: 0xed4245 },
 }));
+// Only consulted on the government-controlled branch, which the US bank every
+// other test in this file uses never reaches.
+vi.mock("@/lib/extraction/contractIssuerAuth", () => ({
+  isNationalIssuer: vi.fn().mockResolvedValue(true),
+}));
 
 let db: MockDb;
 
@@ -251,6 +256,38 @@ describe("POST /api/country/[code]/central-bank/rate", () => {
     );
     expect(db.collectionMocks.centralBanks.updateOne).not.toHaveBeenCalled();
     expect(sendMultiCountryGameEvent).not.toHaveBeenCalled();
+  });
+
+  it("lets the government set the rate on a government-controlled bank carrying a board", async () => {
+    // A government-controlled bank's committee is dormant — fomcMeetingTurn
+    // already skips it — so a leftover board doc must not send the Chancellor to
+    // a committee tab the UI hides for exactly these banks (#1250).
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValue({
+      currentTurn: 100,
+      startingYear: 1953,
+    } as never);
+    await setup({
+      bank: makeMockBank({
+        _id: "UK",
+        countryId: "UK",
+        chairCharacterId: null,
+        fomcBoard: [{ seatId: "seat-1", isChair: true }, { seatId: "seat-2" }],
+      }),
+    });
+    const { POST } = await import("./route");
+
+    const res = await POST(
+      new Request("http://localhost/api/country/UK/central-bank/rate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rate: 1.75 }),
+      }),
+      { params: Promise.resolve({ code: "UK" }) }
+    );
+
+    expect(res.status).toBe(200);
+    vi.mocked(getGameState).mockResolvedValue({ currentTurn: 100 } as never);
   });
 
   it("lets the chair set the rate directly when the board cannot carry a motion", async () => {

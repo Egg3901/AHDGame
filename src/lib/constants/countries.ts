@@ -5009,7 +5009,11 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
   DD: {
     id: "DD",
     name: "East Germany",
-    flagEmoji: "🇩🇪",
+    // Unicode has no GDR flag. 🇩🇪 is West Germany's, and using it made the GDR
+    // render as "DE" wherever an unassigned regional-indicator pair falls back
+    // to its letters. 🇩🇩 is unassigned too, so it renders as "DD" — the
+    // country's own code, the same way the USSR relies on 🇸🇺 above.
+    flagEmoji: "🇩🇩",
     code: "DD",
     socialAxisBaseline: 2,
 

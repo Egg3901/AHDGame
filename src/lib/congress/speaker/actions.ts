@@ -537,6 +537,10 @@ async function handleVoteVacateMotion(
       { $set: { [`votes.${character._id.toString()}`]: vacateVote, updatedAt: now } }
     );
 
+  // Choosing a vote clears the Player Whip snapshot, so the "Whipped by Party"
+  // badge disappears once the member has voted for themselves.
+  await clearWhippedFromVote(db, "speakerVacateMotions", "current", character._id);
+
   // A carrying vote resolves the motion immediately (vacate + new election).
   const resolved = await resolveSpeakerVacateMotion(db, house);
   return {
