@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui";
-import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+
 import type { OrgSummary, OrgViewerInfo } from "../orgTypes";
+import { useEntityName } from "../useEntityName";
 
 interface Props {
   org: OrgSummary;
@@ -18,6 +19,7 @@ interface Props {
  * Members only.
  */
 export function FundOrgPanel({ org, viewer, onChange }: Props) {
+  const entityName = useEntityName();
   const viewerFmCountry = viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
   const viewerIsMember =
     viewerFmCountry != null && org.members.some((m) => m.countryId === viewerFmCountry);
@@ -88,7 +90,7 @@ export function FundOrgPanel({ org, viewer, onChange }: Props) {
           <h4 className="text-sm font-semibold text-foreground">Appropriate funds</h4>
           <div className="mt-3 max-w-xs">
             <label className="text-xs font-medium text-muted" htmlFor="fund-amount">
-              Amount ({COUNTRY_CONFIGS[viewerFmCountry]?.name ?? viewerFmCountry} local currency)
+              Amount ({entityName(viewerFmCountry)} local currency)
             </label>
             <input
               id="fund-amount"

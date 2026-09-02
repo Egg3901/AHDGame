@@ -42,8 +42,21 @@ export interface OrgSummary {
     flagEmoji: string;
     status: "founding" | "active";
     joinedTurn: number;
-    /** Whether this member casts a ballot — vote rosters must filter on it. */
+    /**
+     * Whether this member casts a ballot on an ADMISSION or a BLOC WAR ENTRY —
+     * the two where a member consents to someone else's business and its silence
+     * blocks. Vote rosters must filter on it.
+     */
     hasVote: boolean;
+    /**
+     * Whether this member casts a ballot on EVERY OTHER instrument — a leadership
+     * election, sanctions, aid, dues, a directive, a posture, an agency fund, and
+     * a free-trade agreement, which is voted only by its own named parties.
+     * Wider than `hasVote` (see the field's doc on the server summary): render
+     * the one that matches the ballot, or the tally will disagree with the
+     * resolver, which is ticket #1257.
+     */
+    hasPolicyVote: boolean;
     /** Whether the game models it as a country with a treasury to pay into. */
     isCountry: boolean;
   }>;

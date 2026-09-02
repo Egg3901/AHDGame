@@ -9,7 +9,8 @@ import { PlatformSliders } from "@/components/charters/PlatformSliders";
 import { CharterActions } from "@/components/charters/CharterActions";
 import { FounderSlotReplace } from "@/components/charters/FounderSlotReplace";
 import type { Character, PartyCharter, PartyCharterStatus, PoliticalParty } from "@/lib/db/types";
-import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+
+import { resolveCountryIdentity } from "@/lib/country/countryIdentity";
 
 const STATUS_VARIANT: Record<PartyCharterStatus, "default" | "warning" | "success" | "error"> = {
   draft: "default",
@@ -88,7 +89,7 @@ export default async function CharterDetailPage({ params }: PageParams) {
           .findOne({ countryId: charter.countryId, sequentialId: Number(charter.partyId) })
       : null;
   const isBannedAtCreation = ratifiedParty?.regimeStatus === "banned";
-  const countryName = COUNTRY_CONFIGS[charter.countryId]?.name ?? charter.countryId;
+  const { name: countryName } = await resolveCountryIdentity(db, charter.countryId);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">

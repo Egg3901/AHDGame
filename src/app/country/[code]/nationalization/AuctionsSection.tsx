@@ -4,8 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui";
 import { natMoney } from "@/components/national/natMoney";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import type { AuctionListing } from "@/lib/nationalization/auctionListing";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 /** The enriched auction shape served by /api/country/[code]/nationalization-auctions. */
 export type Auction = AuctionListing;
@@ -313,8 +314,13 @@ function Figure({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Resolve a display country name from a country code (any case), falling back to the raw code. */
-export function countryDisplayName(countryCode: string): string {
-  const key = countryCode.toUpperCase() as CountryId;
-  return COUNTRY_CONFIGS[key]?.name ?? countryCode;
+/**
+ * Display name for a country code (any case).
+ *
+ * A hook rather than a plain function, because the name now depends on runtime
+ * state: a country renamed by an event is not called what it was compiled as.
+ */
+export function useCountryNameFromCode(): (countryCode: string) => string {
+  const resolveCountryName = useCountryDisplayName();
+  return (countryCode: string) => resolveCountryName(countryCode.toUpperCase() as CountryId);
 }

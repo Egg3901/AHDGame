@@ -130,7 +130,8 @@ function accessSilencing(...silent: string[]) {
   });
 }
 
-async function runPhase() {
+/** `voters` overrides who cast a "yes"; defaults to the whole roster. */
+async function runPhase(voters?: string[]) {
   const collections = await import("@/lib/db/collections");
   const empty = () => ({
     find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
@@ -168,7 +169,7 @@ async function runPhase() {
             status: "pending",
             closesOnTurn: 10,
             // Unanimous among the voting members, so the resolution passes.
-            votes: roster.map((countryId) => ({ countryId, vote: "yes" })),
+            votes: (voters ?? roster).map((countryId) => ({ countryId, vote: "yes" })),
           },
         ]),
       })
@@ -221,7 +222,7 @@ describe("join_conflict enactment", () => {
     expect(billedCountries()).toEqual(["US"]);
   });
 
-  it("lets a formed autonomous government vote and ratify war entry in active mode", async () => {
+  it("has a formed autonomous government ratify war entry in active mode", async () => {
     policyMode = "active";
     roster = ["US", "FR"];
     headlessCountries.add("FR");
@@ -242,6 +243,31 @@ describe("join_conflict enactment", () => {
       party: "1",
       isNpp: true,
     });
+  });
+
+  it("bills an autonomous member that held no ballot on the resolution", async () => {
+    // THE DISCRIMINATING CASE for ticket #1257, and the reason the voting roll
+    // and the legislating roll are two lists rather than one.
+    //
+    // `join_conflict` is decided unanimously, so an NPP government is off the
+    // BALLOT — it plans once every six turns and cannot be relied on to vote
+    // before a deadline, and one silence there is a permanent veto. That is no
+    // reason to spare it the war: once the bloc has decided, France's premier
+    // still sponsors her own ratification bill. Collapse the two rolls back into
+    // one and this test fails whichever way you collapse them — France either
+    // vetoes every entry resolution or is never asked to enter the war.
+    policyMode = "active";
+    roster = ["US", "FR"];
+    headlessCountries.add("FR");
+    const access = await import("@/lib/countryAccess");
+    vi.mocked(access.getAllCountryAccess).mockResolvedValue(accessSilencing("FR") as never);
+
+    // Only the US votes. Under the old shared roll France would have been on the
+    // ballot, its silence would have sunk a unanimous resolution, and nobody
+    // would have been billed at all.
+    await runPhase(["US"]);
+
+    expect(billedCountries().sort()).toEqual(["FR", "US"]);
   });
 
   it("spawns a bill for France now that its national lifecycle is available", async () => {

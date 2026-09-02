@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+
 import { CountryFlag } from "@/components/CountryFlag";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -11,6 +11,7 @@ import {
   formatCommodityPrice,
   getCommodityDisplayCurrency,
 } from "@/lib/commodity-map/commodityPriceDisplay";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 interface RegionalBreakdownProps {
   stateSupply: Record<string, number>;
@@ -33,6 +34,7 @@ export default function RegionalBreakdown({
   exchangeRates,
   unit,
 }: RegionalBreakdownProps) {
+  const resolveCountryName = useCountryDisplayName();
   const [isOpen, setIsOpen] = useState(true);
 
   const stateIds = Object.keys(stateCountryMap).sort((a, b) => {
@@ -97,7 +99,7 @@ export default function RegionalBreakdown({
                       <div className="flex items-center gap-2 mt-3 mb-1">
                         <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                           <CountryFlag country={country as CountryId} size="sm" />
-                          {COUNTRY_CONFIGS[country as CountryId]?.name ?? country}
+                          {resolveCountryName(country as CountryId)}
                         </span>
                         <div className="flex-1 h-px bg-card-border" />
                       </div>

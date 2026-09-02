@@ -16,6 +16,7 @@ import { buildCharacterHref, buildNppHref } from "@/lib/utils/profileUrls";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import { countryUrl } from "@/lib/urls";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 interface LeaderboardRow {
   unionId: string;
@@ -86,11 +87,12 @@ function eraYearForPreset(preset: string | null | undefined): string | null {
  * wage demand, and treasury.
  */
 export function UnionsClient() {
+  const displayNameFor = useCountryDisplayName();
   const { code } = useParams<{ code: string }>();
   const countryParam = (code ?? "us").toUpperCase();
   const countryId: CountryId =
     countryParam in COUNTRY_CONFIGS ? (countryParam as CountryId) : COUNTRY_CONFIGS.US.id;
-  const countryName = COUNTRY_CONFIGS[countryId]?.name ?? countryId;
+  const countryName = displayNameFor(countryId);
   const preset = useActivePreset();
   const eraYear = eraYearForPreset(preset);
 

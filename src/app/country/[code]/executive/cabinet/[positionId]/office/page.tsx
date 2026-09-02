@@ -60,8 +60,10 @@ import { TRADE_MINISTER_POSITION_BY_COUNTRY } from "@/lib/constants/internationa
 import { Skeleton } from "@/components/ui";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 export default function CabinetOfficePage() {
+  const resolveCountryName = useCountryDisplayName();
   const params = useParams();
   const positionId = params.positionId as string;
   const countryCode = (params.code as string).toLowerCase();
@@ -166,7 +168,7 @@ export default function CabinetOfficePage() {
             identityGlyph={identity.glyph}
             identitySerif={identity.serif}
             group={getCabinetPositionGroup(countryId, positionId)}
-            registry={COUNTRY_CONFIGS[countryId as CountryId]?.name}
+            registry={resolveCountryName(countryId as CountryId)}
             tabs={[]}
             activeTab={activeTab}
             onSelectTab={setActiveTab}
@@ -239,7 +241,7 @@ export default function CabinetOfficePage() {
             identityGlyph={identity.glyph}
             identitySerif={identity.serif}
             group={getCabinetPositionGroup(countryId, positionId)}
-            registry={COUNTRY_CONFIGS[countryId as CountryId]?.name}
+            registry={resolveCountryName(countryId as CountryId)}
             tabs={tabs}
             activeTab={activeTab}
             onSelectTab={setActiveTab}
