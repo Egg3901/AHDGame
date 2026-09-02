@@ -17,20 +17,36 @@ export type TreasuryHolderType = "party" | "caucus" | "state_party";
 
 export type TreasuryTransactionDirection = "credit" | "debit";
 
-export type TreasuryTransactionCategory =
-  | "donations"
-  | "caucus_tax"
-  | "transfers"
-  | "slate"
-  | "gotv"
-  | "suppression"
-  | "whip_ops"
-  | "recruitment"
-  | "operations"
-  | "fund_generation"
-  | "ps_investment"
-  | "org_building"
-  | "campaign_donation";
+/**
+ * Every treasury-transaction category, as a runtime value.
+ *
+ * The union below is DERIVED from this tuple rather than declared separately, so
+ * consumers that need the list at runtime (the API's accepted-filter list, the
+ * treasury log's category dropdown) read the same source the type comes from.
+ * They used to keep their own hand-maintained copies, which drifted:
+ * `ps_investment` was offered by the log's dropdown but missing from the route's
+ * accepted list, and because an unrecognised `category` is dropped rather than
+ * rejected, selecting it silently returned every category instead of filtering.
+ *
+ * Add a category here and nowhere else.
+ */
+export const TREASURY_TRANSACTION_CATEGORIES = [
+  "donations",
+  "caucus_tax",
+  "transfers",
+  "slate",
+  "gotv",
+  "suppression",
+  "whip_ops",
+  "recruitment",
+  "operations",
+  "fund_generation",
+  "ps_investment",
+  "org_building",
+  "campaign_donation",
+] as const;
+
+export type TreasuryTransactionCategory = (typeof TREASURY_TRANSACTION_CATEGORIES)[number];
 
 export interface TreasuryTransaction {
   _id: ObjectId;

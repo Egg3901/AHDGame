@@ -4,6 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
 import { LocalTime } from "@/components/time/LocalTime";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
+// Imported from the specific types file, not the `db/types` barrel: that module's
+// own imports are all `import type`, so pulling its runtime tuple into a client
+// component bundles no server code.
+import {
+  TREASURY_TRANSACTION_CATEGORIES,
+  type TreasuryTransactionCategory,
+} from "@/lib/db/types/treasuryTransaction";
 
 /**
  * Append-only audit log of treasury inflows and outflows for a party. Reads
@@ -15,7 +22,7 @@ interface TransactionRow {
   id: string;
   holderType: "party" | "caucus" | "state_party";
   holderId: string;
-  category: string;
+  category: TreasuryTransactionCategory;
   direction: "credit" | "debit";
   amount: number;
   currencyCode?: CurrencyCode;
@@ -31,7 +38,11 @@ interface TransactionsResponse {
   nextBefore: string | null;
 }
 
-const CATEGORY_LABEL: Record<string, string> = {
+/**
+ * Typed as a total record so a new `TreasuryTransactionCategory` cannot ship
+ * without a label here — the compiler catches it.
+ */
+const CATEGORY_LABEL: Record<TreasuryTransactionCategory, string> = {
   donations: "Donations",
   caucus_tax: "Caucus tax",
   transfers: "Transfers",
@@ -53,7 +64,11 @@ const HOLDER_LABEL: Record<string, string> = {
   caucus: "Caucus",
 };
 
-const ALL_CATEGORIES: string[] = Object.keys(CATEGORY_LABEL);
+/**
+ * Dropdown options come from the same tuple the API validates against, so the
+ * filter can never offer a value the route would silently ignore.
+ */
+const ALL_CATEGORIES: readonly TreasuryTransactionCategory[] = TREASURY_TRANSACTION_CATEGORIES;
 
 interface Props {
   countryCode: string;

@@ -184,7 +184,9 @@ async function main() {
   const client = new MongoClient(uri, { serverSelectionTimeoutMS: 20000 });
   await client.connect();
   const db = client.db();
-  const gs = await db.collection("gameState").findOne({ _id: "current" });
+  const gs = await db
+    .collection<{ _id: string; currentTurn: number }>("gameState")
+    .findOne({ _id: "current" });
   const turn = gs?.currentTurn ?? 0;
 
   const clicks = await loadClicks(db, turn);

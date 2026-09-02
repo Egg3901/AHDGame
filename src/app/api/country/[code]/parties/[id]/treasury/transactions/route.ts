@@ -6,21 +6,15 @@ import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { listHolderTreasuryTransactions } from "@/lib/db/treasuryTransactionLookup";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { TreasuryTransactionCategory } from "@/lib/db/types";
+import { TREASURY_TRANSACTION_CATEGORIES } from "@/lib/db/types/treasuryTransaction";
 
-const VALID_CATEGORIES: TreasuryTransactionCategory[] = [
-  "donations",
-  "caucus_tax",
-  "transfers",
-  "slate",
-  "gotv",
-  "suppression",
-  "whip_ops",
-  "recruitment",
-  "operations",
-  "fund_generation",
-  "org_building",
-  "campaign_donation",
-];
+/**
+ * Accepted `?category=` values. Read straight off the type's own tuple — a
+ * local copy silently fell behind it once already (`ps_investment` was missing,
+ * so filtering by it returned everything, since an unrecognised value is
+ * dropped rather than rejected below).
+ */
+const VALID_CATEGORIES: readonly TreasuryTransactionCategory[] = TREASURY_TRANSACTION_CATEGORIES;
 
 // GET /api/country/[code]/parties/[id]/treasury/transactions — Paginated treasury audit log
 // Auth: requireAuth
