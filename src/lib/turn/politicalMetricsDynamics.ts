@@ -5,7 +5,10 @@
  * national display remains the SP1 read-time population-weighted aggregate.
  *
  * Trend history (§5): every HISTORY_CADENCE_TURNS, the national aggregate is
- * appended to politicalMetricsHistory (capped at HISTORY_MAX_ENTRIES).
+ * appended to politicalMetricsHistory (capped at HISTORY_MAX_ENTRIES), and
+ * each region's own post-drift board is appended to
+ * politicalMetricsRegionHistory (capped at REGION_HISTORY_MAX_ENTRIES, #1322)
+ * so the region registry can show the same trends the national one does.
  */
 
 import type { AnyBulkWriteOperation, Db } from "mongodb";

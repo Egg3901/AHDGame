@@ -27,6 +27,13 @@ export interface EvidenceRow {
   trend: number | null;
   /** A "$" prefix is swapped for the country currency symbol at render time. */
   format: { prefix?: string; suffix?: string; decimals?: number };
+  /**
+   * Whose number this is. In a region view the macro rows are that region's
+   * own, but the prime rate, inflation and debt-to-GDP are set for the whole
+   * country; labelling those as the region's would be a fiction, so the UI
+   * marks them.
+   */
+  scope: "national" | "region";
 }
 
 /** v1 mapping (spec §D). Unlisted families render no evidence panel. */
@@ -80,10 +87,17 @@ const SCALAR_ROWS: Record<
   debtToGdpRatio: { label: "Debt to GDP", suffix: "%", decimals: 1 },
 };
 
+/**
+ * @param regionId When given, macro rows resolve to THAT region's own
+ * `macroMetrics` doc instead of the national rollup or the population-weighted
+ * mean. Bank and budget rows stay country-scope either way and are tagged
+ * `scope: "national"` so the panel can say so.
+ */
 export async function loadEvidence(
   db: Db,
   countryId: CountryId,
-  year: number | null = null
+  year: number | null = null,
+  regionId?: string
 ): Promise<Map<PoliticalMetricId, EvidenceRow[]>> {
   type MacroDoc = { _id: string } & Partial<
     Record<"economic" | "population", Record<string, StateMetricValue>>
@@ -109,6 +123,14 @@ export async function loadEvidence(
     category: "economic" | "population",
     metricId: string
   ): { value: number; trend: number | null } | null => {
+    // Region scope reads exactly one doc and does NOT fall back to the national
+    // figure: showing a country number under a region heading is worse than
+    // showing no row at all.
+    if (regionId) {
+      const own = regionDocs.find((d) => d._id === regionId)?.[category]?.[metricId];
+      if (typeof own?.value !== "number") return null;
+      return { value: own.value, trend: typeof own.trend === "number" ? own.trend : null };
+    }
     const rec = macro?.[category]?.[metricId];
     if (typeof rec?.value === "number") {
       return { value: rec.value, trend: typeof rec.trend === "number" ? rec.trend : null };
@@ -145,6 +167,7 @@ export async function loadEvidence(
           value: resolved.value,
           trend: resolved.trend,
           format: { prefix: def.formatPrefix, suffix: def.formatSuffix, decimals: def.decimals },
+          scope: regionId ? "region" : "national",
         });
       } else {
         const doc = (s.kind === "bank" ? bank : budget) as Record<string, unknown> | null;
@@ -159,6 +182,7 @@ export async function loadEvidence(
           label: meta.label,
           value,
           trend: null,
+          scope: "national",
           format: { prefix: meta.prefix, suffix: meta.suffix, decimals: meta.decimals },
         });
       }
