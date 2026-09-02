@@ -5,12 +5,14 @@ import type { State } from "@/lib/db/types/state";
 import type { CountryId } from "@/lib/constants/countries";
 import { getNationalDocId, NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import { getRegisteredCountryIdSet } from "@/lib/country/registeredCountries";
+import { logWarning } from "@/lib/utils/errorLog";
 import {
   applyPerTurnGrowthToFederalBases,
   applyPerTurnGrowthToStateBases,
   calculateFederalRevenue,
   computeTaxBaseGdpShareBaseline,
   normalizeFederalTaxRates,
+  sanitizeStateTaxBases,
   type TaxBaseGravityContext,
 } from "@/lib/budget/revenue";
 
@@ -131,6 +133,31 @@ export async function processFiscalBaseGrowth(
             : undefined;
         set.taxBases = applyPerTurnGrowthToFederalBases(budget.taxBases, factors, gravity);
       }
+      // Same one-time self-heal for the non-tax receipts line, so `other` tracks
+      // the economy's size instead of the frozen absolute it was seeded with.
+      // Snapshotting the CURRENT ratio means an untouched budget keeps exactly
+      // the share it already has — the heal is a no-op in value terms, and only
+      // future GDP moves change the amount (see FederalBudget field doc).
+      if (budget.otherRevenueGdpShareBaseline == null) {
+        const currentOther = budget.revenue?.other;
+        // Divided by `budget.gdp`, NOT the live regional roll-up used for the tax
+        // -base gravity above. `calculateFederalRevenue` multiplies this share by
+        // `budget.gdp`, and the two figures differ (the fiscal-close snapshot runs
+        // behind the live sum), so healing against the live figure would shift
+        // `other` by that ratio on the very first turn instead of preserving it.
+        // Same denominator in and out is what makes the heal value-neutral.
+        const budgetGdp = budget.gdp;
+        if (
+          typeof budgetGdp === "number" &&
+          Number.isFinite(budgetGdp) &&
+          budgetGdp > 0 &&
+          typeof currentOther === "number" &&
+          Number.isFinite(currentOther) &&
+          currentOther > 0
+        ) {
+          set.otherRevenueGdpShareBaseline = currentOther / budgetGdp;
+        }
+      }
       await db
         .collection<FederalBudget>("federalBudget")
         .updateOne({ _id: budget._id }, { $set: set });
@@ -169,10 +196,25 @@ export async function processFiscalBaseGrowth(
           tradeGrowth: metricRate(sm, "tradeGrowth", tradeGrowth),
           lastUpdated: factors.lastUpdated,
         };
+        // A NaN base is absorbing — every growth step multiplies it, so it
+        // survives forever and spreads into revenue, balance and surplus. Repair
+        // it from regional GDP before growing (see `sanitizeStateTaxBases`);
+        // `state.gdp` is in millions, hence the scale-up.
+        const { bases: cleanBases, repaired } = sanitizeStateTaxBases(
+          sb.taxBases,
+          (st.gdp ?? 0) * 1_000_000
+        );
+        if (repaired.length > 0) {
+          logWarning("Repaired non-finite state tax bases from regional GDP (#1323)", {
+            component: "FiscalBaseGrowth",
+            action: "sanitize state tax bases",
+            metadata: { stateId: String(sb._id), repaired },
+          });
+        }
         stateOps.push({
           updateOne: {
             filter: { _id: String(sb._id) },
-            update: { $set: { taxBases: applyPerTurnGrowthToStateBases(sb.taxBases, stFactors) } },
+            update: { $set: { taxBases: applyPerTurnGrowthToStateBases(cleanBases, stFactors) } },
           },
         });
         statesProcessed += 1;
