@@ -120,6 +120,54 @@ describe("legislation bill costs", () => {
       })
     ).toBe(3);
   });
+
+  it("#1250 regression: a central-bank-independence-only bill costs NPI like any single provision (was previously free)", () => {
+    const standaloneOnly = getProvisionCostTotal(
+      countProvisionsChargedNationalInfluence({
+        policyProvisionCount: 0,
+        subsidyProvisionCount: 0,
+        standaloneProvisionCount: 1,
+      })
+    );
+    const subsidyOnly = getProvisionCostTotal(
+      countProvisionsChargedNationalInfluence({
+        policyProvisionCount: 0,
+        subsidyProvisionCount: 1,
+      })
+    );
+    expect(standaloneOnly).toBe(subsidyOnly);
+    expect(standaloneOnly).toBeGreaterThan(0);
+  });
+
+  it("a statute proposed alone never costs more than the same statute with a policy row attached", () => {
+    const alone = getProvisionCostTotal(
+      countProvisionsChargedNationalInfluence({
+        policyProvisionCount: 0,
+        subsidyProvisionCount: 0,
+        standaloneProvisionCount: 1,
+      })
+    );
+    const withPolicy = getProvisionCostTotal(
+      countProvisionsChargedNationalInfluence({
+        policyProvisionCount: 1,
+        subsidyProvisionCount: 0,
+        standaloneProvisionCount: 1,
+      })
+    );
+    expect(alone).toBeLessThan(withPolicy);
+  });
+
+  it("omitting standaloneProvisionCount is equivalent to 0 (backward compatible)", () => {
+    expect(
+      countProvisionsChargedNationalInfluence({ policyProvisionCount: 1, subsidyProvisionCount: 0 })
+    ).toBe(
+      countProvisionsChargedNationalInfluence({
+        policyProvisionCount: 1,
+        subsidyProvisionCount: 0,
+        standaloneProvisionCount: 0,
+      })
+    );
+  });
 });
 
 describe("state ownership bill category", () => {

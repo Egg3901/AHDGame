@@ -1,6 +1,20 @@
 import type { CrisisEffect } from "@/lib/db/types/crisis";
 import { getMetricShortName } from "@/lib/constants/metricDefinitions";
 
+/**
+ * Round a crisis effect magnitude for display: at most two decimals, no
+ * trailing zeros.
+ *
+ * Effect values are floats and land with binary-rounding tails — authoring
+ * 0.15 three times over stores 0.44999999999999996, and the live recession
+ * carries -0.6599999999999999. Every surface that prints one needs this, and
+ * each used to keep its own copy; the sign is the caller's to add, since some
+ * surfaces colour it instead.
+ */
+export function formatCrisisEffectValue(value: number): string {
+  return Number(value.toFixed(2)).toString();
+}
+
 function camelToTitle(s: string): string {
   return s
     .replace(/([A-Z])/g, " $1")

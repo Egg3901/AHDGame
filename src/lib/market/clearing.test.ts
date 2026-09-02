@@ -725,6 +725,82 @@ describe("clearCommodityMarket — contracted pre-pass (supply agreements)", () 
   });
 });
 
+describe("computeClearingFactors — state-scoped supply agreements", () => {
+  const basePrices = { freight: 100 } as Record<CommodityType, number>;
+  // One haulier (C1) with 100 units of freight in NJ and 100 in AZ. Both state
+  // books are glutted (demand 10), so without a contract each sells 10%.
+  const twoStates = () => ({
+    sectors: [
+      { sectorId: "nj", revenue: 10_000, supplyRates: { freight: 1 }, posture: 0 },
+      { sectorId: "az", revenue: 10_000, supplyRates: { freight: 1 }, posture: 0 },
+    ],
+    balances: bals([["freight", { supply: 200, demand: 20 }]]),
+    stateMarkets: {
+      stateBySector: new Map([
+        ["nj", "NJ"],
+        ["az", "AZ"],
+      ]),
+      balances: new Map([
+        ["NJ", bals([["freight", { supply: 100, demand: 10 }]])],
+        ["AZ", bals([["freight", { supply: 100, demand: 10 }]])],
+      ]),
+      priceRatios: new Map<string, Map<CommodityType, number>>(),
+    },
+    priceRatioByCommodity: new Map<CommodityType, number>([["freight", 1]]),
+    basePrices,
+    sectorCorpId: new Map([
+      ["nj", "C1"],
+      ["az", "C1"],
+    ]),
+  });
+
+  it("lands a state-scoped reservation only in the named state's book", () => {
+    const settlementOut = new Map<string, Map<string, number>>();
+    const res = computeClearingFactors({
+      ...twoStates(),
+      contractedByCorpCommodity: new Map([["C1", new Map([["freight@AZ", 50]])]]),
+      contractSettlementOut: settlementOut,
+    });
+    // AZ: 50 contracted units guaranteed-sold on top of its own book.
+    expect(res.get("az")!.soldFraction).toBeGreaterThanOrEqual(0.5);
+    // NJ: untouched by a contract addressed to Arizona.
+    expect(res.get("nj")!.soldFraction).toBeCloseTo(0.1, 6);
+    expect(settlementOut.get("C1")?.get("freight@AZ")).toBeCloseTo(50, 6);
+    expect(settlementOut.get("C1")?.has("freight")).toBe(false);
+  });
+
+  it("credits a corporation-wide and a state reservation separately when both fill", () => {
+    const settlementOut = new Map<string, Map<string, number>>();
+    computeClearingFactors({
+      ...twoStates(),
+      contractedByCorpCommodity: new Map([
+        [
+          "C1",
+          new Map([
+            ["freight", 40],
+            ["freight@AZ", 30],
+          ]),
+        ],
+      ]),
+      contractSettlementOut: settlementOut,
+    });
+    // The wide 40 splits 20/20 by unit weight; AZ additionally carries its 30.
+    expect(settlementOut.get("C1")?.get("freight")).toBeCloseTo(40, 6);
+    expect(settlementOut.get("C1")?.get("freight@AZ")).toBeCloseTo(30, 6);
+  });
+
+  it("never reserves more state units than the state's plants offer", () => {
+    const settlementOut = new Map<string, Map<string, number>>();
+    const res = computeClearingFactors({
+      ...twoStates(),
+      contractedByCorpCommodity: new Map([["C1", new Map([["freight@AZ", 500]])]]),
+      contractSettlementOut: settlementOut,
+    });
+    expect(res.get("az")!.soldFraction).toBeCloseTo(1, 6);
+    expect(settlementOut.get("C1")?.get("freight@AZ")).toBeCloseTo(100, 6);
+  });
+});
+
 describe("computeClearingFactors — supply-agreement settlement + exclusivity", () => {
   const basePrices = { steel: 800 } as Record<CommodityType, number>;
   // revenue 80_000 / base 800 = 100 offered units for the single steel sector.

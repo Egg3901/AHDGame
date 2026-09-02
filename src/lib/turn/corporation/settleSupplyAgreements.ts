@@ -56,6 +56,10 @@ import {
   type SupplyAgreement,
 } from "@/lib/db/types/supplyAgreement";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import {
+  supplyAgreementRequiresState,
+  supplyAgreementScopeKey,
+} from "@/lib/market/commodityMarketScope";
 import type { CorporationLookups } from "./types";
 import type { TxThresholds, FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { emitTxBulk } from "@/lib/financialTxLog/emit";
@@ -76,6 +80,13 @@ export interface SettleableSupplyAgreement {
   supplierCorpId: string;
   buyerCorpId: string;
   commodity: CommodityType;
+  /**
+   * Host state of a state-scoped agreement (freight). Every map this module
+   * reads is keyed by {@link supplyAgreementScopeKey}, so a state contract is
+   * reserved, delivered and settled against the supplier's and buyer's plants
+   * in that one state, never the corporation's total.
+   */
+  stateId?: string;
   /** Contracted units on the DAILY basis, matching sector capacity (clamped ≥ 0). */
   volumeCap: number;
   /** Price offset vs market, already clamped to ±SUPPLY_AGREEMENT_PRICE_BAND. */
@@ -214,10 +225,7 @@ export interface SupplyAgreementDamages {
   unpaidAnchor: number;
 }
 
-export type AchievableByCorpCommodity = ReadonlyMap<
-  string,
-  ReadonlyMap<CommodityType, number | null>
->;
+export type AchievableByCorpCommodity = ReadonlyMap<string, ReadonlyMap<string, number | null>>;
 
 export interface SupplyAgreementSettlements {
   /** corpId → net liquidCapital delta (in that corp's currency). */
@@ -241,6 +249,13 @@ export interface SupplyAgreementSettlements {
 /** Below this ₳ magnitude a settlement is not worth a write. */
 const MIN_SETTLE_ANCHOR = 1;
 
+/** The key one agreement's volume is tracked under in every per-corp map here. */
+function scopeOf(a: Pick<SettleableSupplyAgreement, "commodity" | "stateId">): string {
+  return supplyAgreementScopeKey(a.commodity, a.stateId);
+}
+
+type ByCorpScope = ReadonlyMap<string, ReadonlyMap<string, number>>;
+
 type DeliveryFlowEdge = {
   to: number;
   reverseIndex: number;
@@ -250,11 +265,11 @@ type DeliveryFlowEdge = {
 
 function demandCappedAgreementWeights(args: {
   agreements: readonly SettleableSupplyAgreement[];
-  buyerDemandByCorpCommodity: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+  buyerDemandByCorpCommodity: ByCorpScope;
 }): Map<number, number> {
   const totalCapByBuyerCommodity = new Map<string, number>();
   for (const agreement of args.agreements) {
-    const key = `${agreement.buyerCorpId}:${agreement.commodity}`;
+    const key = `${agreement.buyerCorpId}:${scopeOf(agreement)}`;
     totalCapByBuyerCommodity.set(
       key,
       (totalCapByBuyerCommodity.get(key) ?? 0) + Math.max(0, agreement.volumeCap)
@@ -265,13 +280,11 @@ function demandCappedAgreementWeights(args: {
   for (let index = 0; index < args.agreements.length; index++) {
     const agreement = args.agreements[index]!;
     const cap = Math.max(0, agreement.volumeCap);
-    const totalCap = totalCapByBuyerCommodity.get(
-      `${agreement.buyerCorpId}:${agreement.commodity}`
-    );
+    const totalCap = totalCapByBuyerCommodity.get(`${agreement.buyerCorpId}:${scopeOf(agreement)}`);
     if (!(cap > 0) || !(totalCap && totalCap > 0)) continue;
     const demand = Math.max(
       0,
-      args.buyerDemandByCorpCommodity.get(agreement.buyerCorpId)?.get(agreement.commodity) ?? 0
+      args.buyerDemandByCorpCommodity.get(agreement.buyerCorpId)?.get(scopeOf(agreement)) ?? 0
     );
     const weight = cap * Math.min(1, demand / totalCap);
     if (weight > 0) weights.set(index, weight);
@@ -288,7 +301,7 @@ function demandCappedAgreementWeights(args: {
 function rebalanceDeliveriesProRata(args: {
   agreements: readonly SettleableSupplyAgreement[];
   deliveredByAgreement: Map<number, number>;
-  buyerDemandByCorpCommodity: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+  buyerDemandByCorpCommodity: ByCorpScope;
 }): void {
   const weights = demandCappedAgreementWeights(args);
   const deliveredByBuyerCommodity = new Map<string, number>();
@@ -297,12 +310,12 @@ function rebalanceDeliveriesProRata(args: {
   for (let index = 0; index < args.agreements.length; index++) {
     const agreement = args.agreements[index]!;
     const delivered = args.deliveredByAgreement.get(index) ?? 0;
-    const buyerKey = `${agreement.buyerCorpId}:${agreement.commodity}`;
+    const buyerKey = `${agreement.buyerCorpId}:${scopeOf(agreement)}`;
     deliveredByBuyerCommodity.set(
       buyerKey,
       (deliveredByBuyerCommodity.get(buyerKey) ?? 0) + delivered
     );
-    const supplierKey = `${agreement.supplierCorpId}:${agreement.commodity}`;
+    const supplierKey = `${agreement.supplierCorpId}:${scopeOf(agreement)}`;
     const indices = indicesBySupplierCommodity.get(supplierKey) ?? [];
     indices.push(index);
     indicesBySupplierCommodity.set(supplierKey, indices);
@@ -340,7 +353,7 @@ function rebalanceDeliveriesProRata(args: {
 
     for (const recipientIndex of recipients) {
       const recipient = args.agreements[recipientIndex]!;
-      const recipientBuyerKey = `${recipient.buyerCorpId}:${recipient.commodity}`;
+      const recipientBuyerKey = `${recipient.buyerCorpId}:${scopeOf(recipient)}`;
       let recipientNeed =
         (targets.get(recipientIndex) ?? 0) - (args.deliveredByAgreement.get(recipientIndex) ?? 0);
 
@@ -354,7 +367,7 @@ function rebalanceDeliveriesProRata(args: {
         const sameBuyer = donor.buyerCorpId === recipient.buyerCorpId;
         const buyerDemand = Math.max(
           0,
-          args.buyerDemandByCorpCommodity.get(recipient.buyerCorpId)?.get(recipient.commodity) ?? 0
+          args.buyerDemandByCorpCommodity.get(recipient.buyerCorpId)?.get(scopeOf(recipient)) ?? 0
         );
         const buyerRoom = sameBuyer
           ? Number.POSITIVE_INFINITY
@@ -376,7 +389,7 @@ function rebalanceDeliveriesProRata(args: {
         );
         recipientNeed -= shifted;
         if (!sameBuyer) {
-          const donorBuyerKey = `${donor.buyerCorpId}:${donor.commodity}`;
+          const donorBuyerKey = `${donor.buyerCorpId}:${scopeOf(donor)}`;
           deliveredByBuyerCommodity.set(
             donorBuyerKey,
             (deliveredByBuyerCommodity.get(donorBuyerKey) ?? 0) - shifted
@@ -398,16 +411,17 @@ function rebalanceDeliveriesProRata(args: {
  */
 function allocateDeliveriesToBuyers(args: {
   agreements: readonly SettleableSupplyAgreement[];
-  contractSettlementByCorp: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
-  buyerDemandByCorpCommodity: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+  contractSettlementByCorp: ByCorpScope;
+  buyerDemandByCorpCommodity: ByCorpScope;
 }): Map<number, number> {
   const deliveredByAgreement = new Map<number, number>();
-  const commodities = [...new Set(args.agreements.map((agreement) => agreement.commodity))];
+  // One flow graph per scope: a state freight book is its own physical market.
+  const scopes = [...new Set(args.agreements.map((agreement) => scopeOf(agreement)))];
 
-  for (const commodity of commodities) {
+  for (const scope of scopes) {
     const indexed = args.agreements
       .map((agreement, index) => ({ agreement, index }))
-      .filter(({ agreement }) => agreement.commodity === commodity && agreement.volumeCap > 0)
+      .filter(({ agreement }) => scopeOf(agreement) === scope && agreement.volumeCap > 0)
       .sort((left, right) =>
         (left.agreement.agreementId ?? String(left.index)).localeCompare(
           right.agreement.agreementId ?? String(right.index)
@@ -444,7 +458,7 @@ function allocateDeliveriesToBuyers(args: {
     };
 
     for (const supplier of suppliers) {
-      const available = args.contractSettlementByCorp.get(supplier)?.get(commodity) ?? 0;
+      const available = args.contractSettlementByCorp.get(supplier)?.get(scope) ?? 0;
       addEdge(source, supplierNode.get(supplier)!, Math.max(0, available));
     }
 
@@ -460,7 +474,7 @@ function allocateDeliveriesToBuyers(args: {
     }
 
     for (const buyer of buyers) {
-      const demand = args.buyerDemandByCorpCommodity.get(buyer)?.get(commodity) ?? 0;
+      const demand = args.buyerDemandByCorpCommodity.get(buyer)?.get(scope) ?? 0;
       addEdge(buyerNode.get(buyer)!, sink, Math.max(0, demand));
     }
 
@@ -526,18 +540,18 @@ function allocateDeliveriesToBuyers(args: {
  */
 export function computeDemandCappedContractReservations(args: {
   agreements: readonly SettleableSupplyAgreement[];
-  buyerDemandByCorpCommodity: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
-}): Map<string, Map<CommodityType, number>> {
+  buyerDemandByCorpCommodity: ByCorpScope;
+}): Map<string, Map<string, number>> {
   const weights = demandCappedAgreementWeights(args);
-  const reservations = new Map<string, Map<CommodityType, number>>();
+  const reservations = new Map<string, Map<string, number>>();
   for (let index = 0; index < args.agreements.length; index++) {
     const agreement = args.agreements[index]!;
     const reserved = weights.get(index) ?? 0;
     if (!(reserved > 0)) continue;
-    const byCommodity =
-      reservations.get(agreement.supplierCorpId) ?? new Map<CommodityType, number>();
-    byCommodity.set(agreement.commodity, (byCommodity.get(agreement.commodity) ?? 0) + reserved);
-    reservations.set(agreement.supplierCorpId, byCommodity);
+    const key = scopeOf(agreement);
+    const byKey = reservations.get(agreement.supplierCorpId) ?? new Map<string, number>();
+    byKey.set(key, (byKey.get(key) ?? 0) + reserved);
+    reservations.set(agreement.supplierCorpId, byKey);
   }
   return reservations;
 }
@@ -554,20 +568,27 @@ export interface SupplyAgreementDemandSector {
   capacityUnits?: number | null;
   mothballed?: boolean;
   isNatcorp?: boolean;
+  /** Host state, so state-scoped demand (freight) can be booked per state. */
+  stateId?: string;
 }
 
 /**
  * Measure corporation input consumption on the same unit basis as the world
  * commodity ledger. This is the buyer-side physical ceiling for private
  * agreement delivery and prevents a contract from creating phantom inventory.
+ *
+ * Keyed by {@link supplyAgreementScopeKey}. Every commodity is booked under
+ * its bare key; a state-scoped commodity consumed by a located plant is ALSO
+ * booked under `commodity@stateId`, which is the ceiling a state contract
+ * delivers against.
  */
 export function computeSupplyAgreementBuyerDemand(args: {
   sectors: readonly SupplyAgreementDemandSector[];
   currentTurn: number;
   unitScale: number;
   plantsEnabled: boolean;
-}): Map<string, Map<CommodityType, number>> {
-  const result = new Map<string, Map<CommodityType, number>>();
+}): Map<string, Map<string, number>> {
+  const result = new Map<string, Map<string, number>>();
   const unitScale = Number.isFinite(args.unitScale) && args.unitScale > 0 ? args.unitScale : 1;
 
   for (const sector of args.sectors) {
@@ -601,9 +622,13 @@ export function computeSupplyAgreementBuyerDemand(args: {
         natcorpMultiplier *
         utilization;
       if (!(units > 0)) continue;
-      const byCommodity = result.get(sector.corporationId) ?? new Map<CommodityType, number>();
-      byCommodity.set(commodity, (byCommodity.get(commodity) ?? 0) + units);
-      result.set(sector.corporationId, byCommodity);
+      const byKey = result.get(sector.corporationId) ?? new Map<string, number>();
+      byKey.set(commodity, (byKey.get(commodity) ?? 0) + units);
+      if (sector.stateId && supplyAgreementRequiresState(commodity)) {
+        const stateKey = supplyAgreementScopeKey(commodity, sector.stateId);
+        byKey.set(stateKey, (byKey.get(stateKey) ?? 0) + units);
+      }
+      result.set(sector.corporationId, byKey);
     }
   }
 
@@ -618,12 +643,13 @@ export function computeSupplyAgreementBuyerDemand(args: {
  */
 export function computeSupplyAgreementSettlements(args: {
   agreements: readonly SettleableSupplyAgreement[];
-  contractSettlementByCorp: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+  /** Supplier corpId → scope key → contracted units that cleared. */
+  contractSettlementByCorp: ByCorpScope;
   /**
    * Optional physical demand ceiling for each buyer. When present, agreements
    * cannot deliver or price more units than the buyer actually consumes.
    */
-  buyerDemandByCorpCommodity?: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+  buyerDemandByCorpCommodity?: ByCorpScope;
   priceRatioByCommodity: ReadonlyMap<CommodityType, number>;
   /**
    * The world's era unit-basis scale (`getEraUnitScale(preset)`). Contract
@@ -643,7 +669,7 @@ export function computeSupplyAgreementSettlements(args: {
    * A MISSING (supplier, commodity) entry means zero production, not "unknown":
    * see the mothball note at the read site below.
    */
-  producedByCorpCommodity?: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+  producedByCorpCommodity?: ByCorpScope;
   /**
    * Ticket #1147: what each supplier COULD have produced, given only the
    * constraints it does not control (input throughput, capital utilization, the
@@ -715,7 +741,7 @@ export function computeSupplyAgreementSettlements(args: {
   // cleared units divide across its agreements pro-rata by their caps.
   const capByGroup = new Map<string, number>();
   for (const a of agreements) {
-    const key = `${a.supplierCorpId}:${a.commodity}`;
+    const key = `${a.supplierCorpId}:${scopeOf(a)}`;
     capByGroup.set(key, (capByGroup.get(key) ?? 0) + a.volumeCap);
   }
 
@@ -733,16 +759,13 @@ export function computeSupplyAgreementSettlements(args: {
         buyerDemandByCorpCommodity: args.buyerDemandByCorpCommodity,
       })
     : null;
-  const obligationBySupplierCommodity = new Map<string, Map<CommodityType, number>>();
+  const obligationBySupplierCommodity = new Map<string, Map<string, number>>();
   for (const agreement of agreements) {
-    const byCommodity =
-      obligationBySupplierCommodity.get(agreement.supplierCorpId) ??
-      new Map<CommodityType, number>();
-    byCommodity.set(
-      agreement.commodity,
-      (byCommodity.get(agreement.commodity) ?? 0) + Math.max(0, agreement.volumeCap)
-    );
-    obligationBySupplierCommodity.set(agreement.supplierCorpId, byCommodity);
+    const byKey =
+      obligationBySupplierCommodity.get(agreement.supplierCorpId) ?? new Map<string, number>();
+    const key = scopeOf(agreement);
+    byKey.set(key, (byKey.get(key) ?? 0) + Math.max(0, agreement.volumeCap));
+    obligationBySupplierCommodity.set(agreement.supplierCorpId, byKey);
   }
   const obligationAllocations = args.buyerDemandByCorpCommodity
     ? allocateDeliveriesToBuyers({
@@ -762,7 +785,7 @@ export function computeSupplyAgreementSettlements(args: {
     for (let index = 0; index < agreements.length; index++) {
       const agreement = agreements[index]!;
       if (agreement.shortfallEligible === false || agreement.volumeCap <= 0) continue;
-      const key = `${agreement.supplierCorpId}:${agreement.commodity}`;
+      const key = `${agreement.supplierCorpId}:${scopeOf(agreement)}`;
       const indices = agreementIndicesByGroup.get(key) ?? [];
       indices.push(index);
       agreementIndicesByGroup.set(key, indices);
@@ -783,11 +806,11 @@ export function computeSupplyAgreementSettlements(args: {
 
       const produced = Math.max(
         0,
-        producedByCorpCommodity.get(first.supplierCorpId)?.get(first.commodity) ?? 0
+        producedByCorpCommodity.get(first.supplierCorpId)?.get(scopeOf(first)) ?? 0
       );
       const achievableRaw = achievableByCorpCommodity
         ?.get(first.supplierCorpId)
-        ?.get(first.commodity);
+        ?.get(scopeOf(first));
       const achievableKnown = typeof achievableRaw === "number" && Number.isFinite(achievableRaw);
       const effectiveObligation = achievableKnown
         ? Math.min(totalObligation, Math.max(0, achievableRaw))
@@ -813,8 +836,8 @@ export function computeSupplyAgreementSettlements(args: {
   for (let agreementIndex = 0; agreementIndex < agreements.length; agreementIndex++) {
     const a = agreements[agreementIndex]!;
     if (a.volumeCap <= 0) continue;
-    const filled = contractSettlementByCorp.get(a.supplierCorpId)?.get(a.commodity) ?? 0;
-    const totalCap = capByGroup.get(`${a.supplierCorpId}:${a.commodity}`) ?? 0;
+    const filled = contractSettlementByCorp.get(a.supplierCorpId)?.get(scopeOf(a)) ?? 0;
+    const totalCap = capByGroup.get(`${a.supplierCorpId}:${scopeOf(a)}`) ?? 0;
     if (totalCap <= 0) continue;
     const capShare = a.volumeCap / totalCap;
 
@@ -836,7 +859,7 @@ export function computeSupplyAgreementSettlements(args: {
           ? {
               buyerConsumptionUnits: Math.max(
                 0,
-                args.buyerDemandByCorpCommodity.get(a.buyerCorpId)?.get(a.commodity) ?? 0
+                args.buyerDemandByCorpCommodity.get(a.buyerCorpId)?.get(scopeOf(a)) ?? 0
               ),
             }
           : {}),
@@ -1073,12 +1096,12 @@ export async function settleSupplyAgreements(args: {
   db: Db;
   lookups: CorporationLookups;
   agreements: SettleableSupplyAgreement[];
-  contractSettlementByCorp: Map<string, Map<CommodityType, number>>;
+  contractSettlementByCorp: ByCorpScope;
   /** Buyer demand ceiling used to assign delivered units to counterparties. */
-  buyerDemandByCorpCommodity?: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+  buyerDemandByCorpCommodity?: ByCorpScope;
   priceRatioByCommodity: ReadonlyMap<CommodityType, number>;
-  /** Plants tier: supplier corpId -> commodity -> units actually produced. */
-  producedByCorpCommodity?: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+  /** Plants tier: supplier corpId -> scope key -> units actually produced. */
+  producedByCorpCommodity?: ByCorpScope;
   /** Plants tier: supplier corpId -> commodity -> involuntary-constraint ceiling (#1147). */
   achievableByCorpCommodity?: AchievableByCorpCommodity;
   /** Required alongside `producedByCorpCommodity` — see the guard in the pure fn. */

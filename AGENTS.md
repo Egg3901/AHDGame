@@ -21,6 +21,31 @@ Treat every change as production-bound.
   repository layer.
 - No em dashes or en dashes in player-facing copy, in any language.
 
+## Systems need a portable rules core
+
+Every system's rules (formulas, eligibility, resolution, state transitions) must
+be able to run outside this server process. The hourly turn loop is one host for
+them, the headless harness in `scripts/sim/` is another, and further hosts are
+planned. Running a system somewhere new has to be a copy of its rules module,
+not a rewrite of it, so architect for that from the start.
+
+New systems, and materially reworked formulas in existing ones, split in two:
+
+- **Rules**, in `rules.ts` or a `rules/` directory beside the system
+  (`src/lib/pensions/rules.ts` is the model). Plain data in, plain data out.
+  Randomness arrives as an injected rng, time arrives as the turn number or the
+  in-game date, ids are strings.
+- **Shell**, the turn phase or API route. It loads documents, calls the rules,
+  writes results, emits notifications, and owns everything ambient.
+
+The architecture audit blocks anything in the rules zone that reaches for the
+database, the wall clock, `Math.random()`, `process.env`, the network, Sentry,
+or `@/app`, and anything `async` there. Those are not style nits: each one is a
+line that has to be rewritten wherever the system runs next.
+
+Existing systems are not being retrofitted in bulk. The rule bites on what you
+touch: if your change adds or reworks a formula, that formula lands in `rules/`.
+
 ## Commands
 
 ```bash

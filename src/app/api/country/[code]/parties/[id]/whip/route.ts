@@ -17,8 +17,13 @@ import type {
   LegislationType,
   NPP,
   PlayerWhipMode,
+  SpeakerVacateMotion,
   StateDemographics,
 } from "@/lib/db/types";
+import { getGameTime } from "@/lib/time/gameTime";
+import { isLeadershipElectionClosed } from "@/lib/congress/leadershipElections";
+import { impeachmentStageChamberKey } from "@/lib/impeachment/impeachmentTally";
+import type { Impeachment } from "@/lib/db/types/impeachment";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import {
   getPMAppointmentVotesCollection,
@@ -29,6 +34,8 @@ import {
   applyWhipVotesToLeadership,
   applyWhipVotesToGovernmentVote,
   applyWhipVotesToCabinet,
+  applyWhipVotesToVacateMotion,
+  applyWhipVotesToImpeachment,
 } from "@/lib/congress/applyWhipVotes";
 import { statecraftWhipBonus } from "@/lib/partyWhips/whipSuccess";
 import { USE_GROWTH_INCREMENT } from "@/lib/stats/statsConstants";
@@ -37,6 +44,8 @@ import {
   applyPlayerWhipToLeadership,
   applyPlayerWhipToGovernmentVote,
   applyPlayerWhipToCabinet,
+  applyPlayerWhipToVacateMotion,
+  applyPlayerWhipToImpeachment,
 } from "@/lib/congress/applyPlayerWhip";
 import { getEligibleCharactersForWhip } from "@/lib/partyWhips/playerWhip";
 import { sendSystemMail } from "@/lib/mail/systemMail";
@@ -69,6 +78,8 @@ const whipSchema = z.object({
     "pmAppointmentVote",
     "noConfidenceVote",
     "cabinetNomination",
+    "speakerVacateMotion",
+    "impeachmentVote",
   ]),
   targetId: z.string().min(1, "Target ID required"),
   chamber: z.string().min(1, "Chamber required"),
@@ -162,12 +173,16 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     const confidenceChamber = getConfidenceWhipChamber(countryId);
     const cabinetChamber = getCabinetWhipChamber(countryId);
+    // The motion to vacate is a singleton keyed "current"; pin it server-side so
+    // a client cannot address some other document through this target type.
     const normalizedTargetId =
-      countryId === COUNTRY_CONFIGS.US.id &&
-      targetType === "speakerElection" &&
-      targetId === "speaker"
+      targetType === "speakerVacateMotion"
         ? "current"
-        : targetId;
+        : countryId === COUNTRY_CONFIGS.US.id &&
+            targetType === "speakerElection" &&
+            targetId === "speaker"
+          ? "current"
+          : targetId;
     // Speaker/leadership-election whips route to US-only collections
     // (speakerNominations / houseLeadershipNominations / senateLeadershipNominations)
     // in the apply phase. Reject for German chambers, which use PM
@@ -191,9 +206,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     const isUSCongressLeadershipTarget =
       countryId === COUNTRY_CONFIGS.US.id &&
       (targetType === "speakerElection" || targetType === "leadershipElection");
-    const storedTargetId: ObjectId | string = isUSCongressLeadershipTarget
-      ? normalizedTargetId
-      : (targetOid ?? normalizedTargetId);
+    // The vacate motion shares the leadership singleton shape ("current"), so it
+    // stores its target id as a string too rather than coercing to an ObjectId.
+    const storedTargetId: ObjectId | string =
+      isUSCongressLeadershipTarget || targetType === "speakerVacateMotion"
+        ? normalizedTargetId
+        : (targetOid ?? normalizedTargetId);
     const requireTargetObjectId = (): ObjectId => {
       if (!targetOid) {
         throw badRequest("Invalid target ID");
@@ -284,6 +302,39 @@ export async function POST(request: Request, { params }: RouteParams) {
           status: 400,
         });
       }
+    } else if (targetType === "speakerVacateMotion") {
+      // US-only: the motion to vacate the chair exists solely for the US House.
+      if (countryId !== COUNTRY_CONFIGS.US.id) {
+        return NextResponse.json(
+          badRequest("Motions to vacate are only held in the US House").toJson(),
+          { status: 400 }
+        );
+      }
+      if (chamber !== confidenceChamber) {
+        return NextResponse.json(
+          badRequest(`Motions to vacate can only be whipped in the ${confidenceChamber}`).toJson(),
+          { status: 400 }
+        );
+      }
+      const motion = await db
+        .collection<SpeakerVacateMotion>("speakerVacateMotions")
+        .findOne({ _id: "current", status: "voting" });
+      // Resolution is lazy (on read of the Speaker page), so a motion can sit in
+      // "voting" past its deadline. Gate on the clock as well as the status, or
+      // a chair could whip a motion that is already over.
+      const vacateGameTime = motion ? await getGameTime() : null;
+      if (
+        !motion ||
+        !vacateGameTime ||
+        isLeadershipElectionClosed(motion, vacateGameTime.currentTurn, vacateGameTime.effectiveNow)
+      ) {
+        return NextResponse.json(notFound("No motion to vacate is currently open").toJson(), {
+          status: 404,
+        });
+      }
+      // The motion reuses the stable "current" id, so whips from a previous
+      // motion would otherwise count against this one's attempt cap (#959).
+      whipWindowStart = motion.startedAt;
     } else if (targetType === "pmAppointmentVote") {
       if (!targetOid) {
         return NextResponse.json(badRequest("Invalid target ID").toJson(), { status: 400 });
@@ -320,6 +371,51 @@ export async function POST(request: Request, { params }: RouteParams) {
             `No-confidence votes can only be whipped in the ${confidenceChamber}`
           ).toJson(),
           { status: 400 }
+        );
+      }
+    } else if (targetType === "impeachmentVote") {
+      if (!targetOid) {
+        return NextResponse.json(badRequest("Invalid target ID").toJson(), { status: 400 });
+      }
+      const impeachment = await db
+        .collection<Impeachment>("impeachments")
+        .findOne({ _id: targetOid, countryId, stage: { $in: ["house", "senate"] } });
+      if (!impeachment) {
+        return NextResponse.json(
+          notFound("Impeachment not found or no longer open for voting").toJson(),
+          { status: 404 }
+        );
+      }
+      // A governor is tried by its own state legislature, which is the state
+      // party's surface, not the national one.
+      if (impeachment.targetOffice === "governor") {
+        return NextResponse.json(
+          badRequest(
+            "Governor impeachments are whipped from the state party, not the national party"
+          ).toJson(),
+          { status: 400 }
+        );
+      }
+      // Only the chamber sitting at the CURRENT stage may be whipped: the lower
+      // chamber while the case is impeaching, the upper chamber while it tries.
+      const stageChamber = impeachmentStageChamberKey(impeachment);
+      if (!stageChamber || chamber !== stageChamber) {
+        return NextResponse.json(
+          badRequest(
+            `This impeachment is being voted in the ${stageChamber ?? "no open"} chamber`
+          ).toJson(),
+          { status: 400 }
+        );
+      }
+      const stageEndsOnTurn =
+        impeachment.stage === "house"
+          ? impeachment.houseVotingEndsOnTurn
+          : impeachment.senateVotingEndsOnTurn;
+      const impeachGameTime = await getGameTime();
+      if (stageEndsOnTurn != null && impeachGameTime.currentTurn > stageEndsOnTurn) {
+        return NextResponse.json(
+          notFound("Voting for this impeachment stage has closed").toJson(),
+          { status: 404 }
         );
       }
     } else if (targetType === "cabinetNomination") {
@@ -483,6 +579,19 @@ export async function POST(request: Request, { params }: RouteParams) {
           alreadyAligned = r.alreadyAligned;
         } else if (targetType === "cabinetNomination") {
           const r = await applyPlayerWhipToCabinet(
+            db,
+            requireTargetObjectId(),
+            direction,
+            eligible
+          );
+          overridden = r.overridden;
+          alreadyAligned = r.alreadyAligned;
+        } else if (targetType === "speakerVacateMotion") {
+          const r = await applyPlayerWhipToVacateMotion(db, direction, eligible);
+          overridden = r.overridden;
+          alreadyAligned = r.alreadyAligned;
+        } else if (targetType === "impeachmentVote") {
+          const r = await applyPlayerWhipToImpeachment(
             db,
             requireTargetObjectId(),
             direction,
@@ -750,6 +859,31 @@ export async function POST(request: Request, { params }: RouteParams) {
       fellInLine = r.fellInLine;
       ignored = r.ignored;
       if (authData.character.stats) await grantStatecraftXp();
+    } else if (targetType === "speakerVacateMotion") {
+      const r = await applyWhipVotesToVacateMotion(
+        db,
+        direction,
+        nppOfficials,
+        nppMap,
+        mode,
+        whipStatecraftBonus
+      );
+      fellInLine = r.fellInLine;
+      ignored = r.ignored;
+      if (authData.character.stats) await grantStatecraftXp();
+    } else if (targetType === "impeachmentVote") {
+      const r = await applyWhipVotesToImpeachment(
+        db,
+        requireTargetObjectId(),
+        direction,
+        nppOfficials,
+        nppMap,
+        mode,
+        whipStatecraftBonus
+      );
+      fellInLine = r.fellInLine;
+      ignored = r.ignored;
+      if (authData.character.stats) await grantStatecraftXp();
     }
 
     const ignoredFlavor = ["defied the whip", "remained unconvinced", "stood their ground"][
@@ -834,6 +968,30 @@ async function buildPlayerWhipMessage(
       body: isSoft
         ? `Your national party suggests that you vote ${dir} on the no-confidence motion.`
         : `Your national party has whipped you to vote ${dir} on the no-confidence motion. You may change your vote at any time.`,
+      notificationTitle,
+    };
+  }
+  if (targetType === "speakerVacateMotion") {
+    // Name the action rather than the ballot value: "AYE" on a motion to vacate
+    // reads as ambiguous, whereas vacating or keeping the chair does not.
+    const action = direction === "for" ? "vacate the chair" : "keep the Speaker";
+    return {
+      subject: isSoft ? `Party suggestion: Vote to ${action}` : `Party Whip: Vote to ${action}`,
+      body: isSoft
+        ? `Your national party suggests that you vote to ${action} on the motion to vacate.`
+        : `Your national party has whipped you to vote to ${action} on the motion to vacate. You may change your vote at any time.`,
+      notificationTitle,
+    };
+  }
+  if (targetType === "impeachmentVote") {
+    // Name the outcome rather than the ballot value: AYE on an impeachment is
+    // a vote to remove, which is worth saying out loud.
+    const action = direction === "for" ? "remove" : "acquit";
+    return {
+      subject: isSoft ? `Party suggestion: Vote to ${action}` : `Party Whip: Vote to ${action}`,
+      body: isSoft
+        ? `Your national party suggests that you vote to ${action} on the impeachment.`
+        : `Your national party has whipped you to vote to ${action} on the impeachment. You may change your vote at any time.`,
       notificationTitle,
     };
   }

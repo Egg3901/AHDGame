@@ -46,6 +46,14 @@ export const AGGRESSIVE_CUT_SCRUTINY = 10;
 export const RATE_CHANGE_COOLDOWN_TURNS = 6;
 
 /**
+ * Rate-change records kept on a bank. Every writer must slice to this same
+ * number: the FOMC path capped at 96 while the direct-set path capped at 50, so
+ * whichever moved the rate last silently truncated the other's records. One
+ * constant, so the published history means the same thing on every bank.
+ */
+export const RATE_HISTORY_MAX = 96;
+
+/**
  * EMA window (turns) for `primeRateSmoothed`. ~6 turns puts the half-life
  * around 4 turns: a 3pp policy swing reaches the market over several hours of
  * real time instead of in one repricing pass.

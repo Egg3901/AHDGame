@@ -238,7 +238,7 @@ export function SenateLeadershipByPartyGrid({
     senateData.majorityBloc &&
     majorityParty &&
     senateData.majorityBloc.displayName !== majorityParty.partyName
-      ? `Majority coalition: ${senateData.majorityBloc.displayName}. Pro Tempore is open to any seated senator.`
+      ? `Majority coalition: ${senateData.majorityBloc.displayName}. Pro Tempore, Majority Leader and Majority Whip are held by ${majorityParty.partyName} alone.`
       : null;
   const minorityDetail = senateData.minorityBloc
     ? `Largest opposition bloc: ${senateData.minorityBloc.displayName}.`

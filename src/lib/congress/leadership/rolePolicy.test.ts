@@ -36,7 +36,7 @@ function makeCtx(overrides: Partial<ChamberLeadershipContext> = {}): ChamberLead
 describe("POLICY_BY_ROLE", () => {
   it("maps every LeadershipRole to a policy", () => {
     expect(POLICY_BY_ROLE.speaker_of_the_house).toEqual({ kind: "any-seated" });
-    expect(POLICY_BY_ROLE.president_pro_tempore).toEqual({ kind: "any-seated" });
+    expect(POLICY_BY_ROLE.president_pro_tempore).toEqual({ kind: "largest-single-party" });
     expect(POLICY_BY_ROLE.speaker_of_the_bundestag).toEqual({ kind: "any-seated" });
     expect(POLICY_BY_ROLE.majority_leader_house).toEqual({ kind: "largest-single-party" });
     expect(POLICY_BY_ROLE.majority_leader_senate).toEqual({ kind: "largest-single-party" });

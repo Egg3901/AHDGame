@@ -20,8 +20,9 @@ import { recordAudit } from "@/lib/audit/recordAudit";
 import { computeSupplierCommodityCapacityUnits } from "@/lib/corporations/supplyAgreementCapacity";
 import {
   isStateScopedCommodity,
-  supportsCorporationWideSupplyAgreement,
+  supplyAgreementRequiresState,
 } from "@/lib/market/commodityMarketScope";
+import type { State } from "@/lib/db/types/state";
 
 /**
  * Private supply agreement lifecycle (bilateral, both-consent). The supplier's
@@ -45,6 +46,8 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
     const body = (await request.json().catch(() => ({}))) as {
       buyerCorpId?: string;
       commodity?: string;
+      /** Required for a state-scoped commodity (freight): the state it is fulfilled from. */
+      stateId?: string;
       volumeCap?: number;
       pricePremium?: number;
       exclusive?: boolean;
@@ -62,14 +65,29 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
     if (!body.commodity || !(COMMODITY_TYPES as readonly string[]).includes(body.commodity)) {
       return NextResponse.json({ error: "Valid commodity required" }, { status: 400 });
     }
-    if (!supportsCorporationWideSupplyAgreement(body.commodity as CommodityType)) {
-      return NextResponse.json(
-        {
-          error:
-            "Freight capacity is sold in the state where it is based and cannot use a corporation-wide supply agreement.",
-        },
-        { status: 400 }
-      );
+    // A state-scoped commodity (freight) is haulage capacity based in one
+    // state and clears in that state's book, so its contract names the state
+    // it is fulfilled from. Everything else is corporation-wide and ignores
+    // any state the client sends.
+    const commodity = body.commodity as CommodityType;
+    let stateId: string | undefined;
+    if (supplyAgreementRequiresState(commodity)) {
+      if (typeof body.stateId !== "string" || body.stateId.trim() === "") {
+        return NextResponse.json(
+          {
+            error:
+              "Freight capacity is sold in the state where it is based. Name the state this contract is fulfilled from.",
+          },
+          { status: 400 }
+        );
+      }
+      stateId = body.stateId.trim();
+      const state = await db
+        .collection<State>("states")
+        .findOne({ _id: stateId }, { projection: { _id: 1 } });
+      if (!state) {
+        return NextResponse.json({ error: "Unknown state" }, { status: 400 });
+      }
     }
     const volumeCap = Number(body.volumeCap);
     if (!(volumeCap > 0)) {
@@ -131,6 +149,7 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
               embargoSuspended: 1,
               embargoExportExposure: 1,
               countryId: 1,
+              stateId: 1,
             },
           }
         )
@@ -150,16 +169,21 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
         )?.commandEconomyEnabled === true;
       const capacityUnits = computeSupplierCommodityCapacityUnits({
         sectors,
-        commodity: body.commodity as CommodityType,
+        commodity,
         isNatcorp: !!supplier.countryOwnerId,
         turn: turnNow,
         currentYear: world?.currentYear,
         commandEconomyEnabled,
+        stateId,
       });
       const maxCap = capacityUnits * CONTRACT_OVERCOMMIT_TOLERANCE;
       if (!(maxCap > 0)) {
         return NextResponse.json(
-          { error: `Your corporation has no plant capacity producing ${body.commodity}` },
+          {
+            error: stateId
+              ? `Your corporation has no plant capacity producing ${commodity} in ${stateId}`
+              : `Your corporation has no plant capacity producing ${commodity}`,
+          },
           { status: 400 }
         );
       }
@@ -201,7 +225,8 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
       ...(volumeCapValidated ? { volumeCapBasis: "scaledCapacity" as const } : {}),
       supplierCorpId: supplier._id,
       buyerCorpId: buyer._id,
-      commodity: body.commodity as CommodityType,
+      commodity,
+      ...(stateId ? { stateId } : {}),
       volumeCap,
       pricePremium,
       exclusive: body.exclusive === true,
@@ -222,6 +247,7 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
       delta: [
         { field: "status", before: null, after: "pending" },
         { field: "commodity", before: null, after: doc.commodity },
+        ...(stateId ? [{ field: "stateId", before: null, after: stateId }] : []),
         { field: "volumeCap", before: null, after: volumeCap },
         { field: "pricePremium", before: null, after: pricePremium },
       ],
@@ -274,11 +300,11 @@ export async function updateSupplyAgreement(request: Request, corpId: string, ag
       if (agreement.status !== "pending") {
         return NextResponse.json({ error: "Agreement is not pending" }, { status: 400 });
       }
-      if (isStateScopedCommodity(agreement.commodity)) {
+      if (isStateScopedCommodity(agreement.commodity) && !agreement.stateId) {
         return NextResponse.json(
           {
             error:
-              "This legacy freight proposal cannot be accepted because freight now sells in a state-local market.",
+              "This legacy freight proposal cannot be accepted because freight now sells in a state-local market. Ask the supplier to propose it again naming the state.",
           },
           { status: 409 }
         );

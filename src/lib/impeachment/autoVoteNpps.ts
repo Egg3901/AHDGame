@@ -1,9 +1,9 @@
 import type { Db } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
-import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type { Character, ElectedOfficial, NPP, PoliticalParty } from "@/lib/db/types";
 import type { Impeachment, ImpeachmentVoteValue } from "@/lib/db/types/impeachment";
 import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilters";
+import { governorOfficialFilter } from "@/lib/db/electedOfficialScope";
 import {
   impeachmentChamberOfficialFilter,
   impeachmentStageChamberOfficeType,
@@ -98,14 +98,57 @@ function targetOfficialFilter(impeachment: Impeachment): Record<string, unknown>
   if (impeachment.targetOffice !== "governor" || !impeachment.state) {
     return getExecutiveOfficialFilter(impeachment.countryId, "president");
   }
-  const stateFilter = { officeType: "governor", state: impeachment.state };
-  if (impeachment.countryId === COUNTRY_CONFIGS.US.id) {
-    return {
-      ...stateFilter,
-      $or: [{ countryId: impeachment.countryId }, { countryId: { $exists: false } }],
-    };
+  return governorOfficialFilter(impeachment.countryId, impeachment.state);
+}
+
+export interface ImpeachmentFallbackContext {
+  targetParty: string | undefined;
+  targetStance: { economic: number; social: number } | undefined;
+  majorPartyIds: ReadonlySet<string>;
+}
+
+/**
+ * Load the ideology signal an impeachment ballot is graded against: the
+ * target's party and stance, plus the country's Major-tier party ids.
+ *
+ * Shared with the soft-whip fallback in `applyWhipVotesToImpeachment`, so a
+ * bloc that resists a whip lands on exactly the same vote it would have cast
+ * on its own.
+ */
+export async function loadImpeachmentFallbackContext(
+  db: Db,
+  impeachment: Impeachment
+): Promise<ImpeachmentFallbackContext> {
+  const [target, targetChar, parties] = await Promise.all([
+    db
+      .collection<ElectedOfficial>("electedOfficials")
+      .findOne(targetOfficialFilter(impeachment), { projection: { party: 1 } }),
+    db
+      .collection<Character>("characters")
+      .findOne({ _id: impeachment.targetCharacterId }, { projection: { policies: 1 } }),
+    db
+      .collection<PoliticalParty>("politicalParties")
+      .find({ countryId: impeachment.countryId })
+      .project<Pick<PoliticalParty, "sequentialId" | "tier" | "isDefault">>({
+        sequentialId: 1,
+        tier: 1,
+        isDefault: 1,
+      })
+      .toArray(),
+  ]);
+
+  const majorPartyIds = new Set<string>();
+  for (const party of parties) {
+    if (resolvePartyTier(party) === "major" && party.sequentialId != null) {
+      majorPartyIds.add(String(party.sequentialId));
+    }
   }
-  return { ...stateFilter, countryId: impeachment.countryId };
+
+  return {
+    targetParty: target?.party,
+    targetStance: targetChar?.policies as { economic: number; social: number } | undefined,
+    majorPartyIds,
+  };
 }
 
 /**
