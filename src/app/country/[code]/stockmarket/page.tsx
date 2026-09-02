@@ -32,6 +32,7 @@ import type { AuctionListing } from "@/lib/nationalization/auctionListing";
 import Link from "next/link";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getFoundingFxRate } from "@/lib/corporations/foundingCosts";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 import { buildRuntimeExchangeMeta, getStockMarketBasePath } from "./stockMarketRouting";
 import { requestCharacterStatsRefetch } from "@/lib/characterStatsSync";
 import { Tooltip } from "@/components/Tooltip";
@@ -158,9 +159,10 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
   const [economyVisibleCountryIds, setEconomyVisibleCountryIds] = useState<Set<CountryId> | null>(
     null
   );
+  const countryName = useCountryDisplayName();
   const exchangeMeta = useMemo(
-    () => buildRuntimeExchangeMeta(economyVisibleCountryIds, countryKey),
-    [economyVisibleCountryIds, countryKey]
+    () => buildRuntimeExchangeMeta(economyVisibleCountryIds, countryKey, countryName),
+    [economyVisibleCountryIds, countryKey, countryName]
   );
   const exchangeFilter: ExchangeFilter = exchangeMeta[countryKey] ? countryKey : "global";
 

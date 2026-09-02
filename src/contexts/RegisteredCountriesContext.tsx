@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useCallback, useContext, type ReactNode } from "react";
 import { COUNTRY_ORDER, getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
 
 /**
@@ -95,5 +95,10 @@ export function useActivePreset(): string {
  */
 export function useCountryDisplayName(): (id: CountryId) => string {
   const { preset, nameOverrides } = useContext(RegisteredCountriesContext);
-  return (id: CountryId) => nameOverrides[id] ?? getCountryDisplayName(id, preset);
+  // Stable across renders: callers put this in `useMemo`/`useEffect` dependency
+  // lists, and a fresh closure every render would re-run that work forever.
+  return useCallback(
+    (id: CountryId) => nameOverrides[id] ?? getCountryDisplayName(id, preset),
+    [preset, nameOverrides]
+  );
 }

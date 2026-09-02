@@ -1,6 +1,6 @@
 "use client";
 
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { useEntityName } from "./useEntityName";
 import { CountryFlag } from "@/components/CountryFlag";
 import type { ProposalVoteRecord } from "@/lib/db/types/internationalOrganization";
 import { dedupeOrganizationVotes } from "@/lib/internationalOrganizations/resolutionRules";
@@ -39,6 +39,7 @@ const VOTE_LABEL: Record<ProposalVoteRecord["vote"], string> = {
  * provided, members who haven't cast a ballot yet are listed at the bottom.
  */
 export function VoteRoster({ votes: rawVotes, expectedVoters }: Props) {
+  const entityName = useEntityName();
   // Historical rows can list a country twice. Folding here keeps the roster
   // agreeing with the tally beside it, and stops two <li> sharing a React key.
   const votes = dedupeOrganizationVotes(rawVotes);
@@ -55,7 +56,6 @@ export function VoteRoster({ votes: rawVotes, expectedVoters }: Props) {
       ) : (
         <ul className="flex flex-wrap gap-1.5">
           {votes.map((v) => {
-            const cfg = COUNTRY_CONFIGS[v.countryId as CountryId];
             return (
               <li
                 key={v.countryId}
@@ -63,7 +63,7 @@ export function VoteRoster({ votes: rawVotes, expectedVoters }: Props) {
                 title={`${v.characterName} cast ${VOTE_LABEL[v.vote]} on turn ${v.castOnTurn}`}
               >
                 <CountryFlag country={v.countryId.toUpperCase()} size="sm" />
-                <span className="font-medium text-foreground">{cfg?.name ?? v.countryId}</span>
+                <span className="font-medium text-foreground">{entityName(v.countryId)}</span>
                 <span className="text-muted">·</span>
                 <span className="truncate max-w-[12ch] text-foreground">{v.characterName}</span>
                 <span className="text-muted">·</span>
@@ -76,15 +76,14 @@ export function VoteRoster({ votes: rawVotes, expectedVoters }: Props) {
       {pendingVoters.length > 0 && (
         <ul className="flex flex-wrap gap-1.5 pt-1">
           {pendingVoters.map((c) => {
-            const cfg = COUNTRY_CONFIGS[c as CountryId];
             return (
               <li
                 key={c}
                 className="flex items-center gap-1.5 rounded-md border border-dashed border-card-border bg-card px-2 py-1 text-xs text-muted"
-                title={`${cfg?.name ?? c} has not voted yet`}
+                title={`${entityName(c)} has not voted yet`}
               >
                 <CountryFlag country={c} size="sm" />
-                <span>{cfg?.name ?? c}</span>
+                <span>{entityName(c)}</span>
                 <span>·</span>
                 <span className="italic">no vote yet</span>
               </li>
