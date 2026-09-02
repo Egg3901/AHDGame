@@ -18,6 +18,7 @@ import { AuthDataProvider } from "@/contexts/AuthDataContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { RegisteredCountriesProvider } from "@/contexts/RegisteredCountriesContext";
 import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
+import { loadCountryNameOverrides } from "@/lib/country/countryIdentity";
 import { getGameState } from "@/lib/gameState";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
 import { getDb } from "@/lib/mongodb";
@@ -179,18 +180,25 @@ export default async function RootLayout({
   let registeredCountries: CountryId[] = COUNTRY_ORDER;
   let enabledCountries: CountryId[] = COUNTRY_ORDER;
   let activePreset = "2019-default";
+  // Runtime renames, so client surfaces stop naming a country by its compiled
+  // seed name after something has renamed it — a reunified Germany read as
+  // "East Germany" in every client-rendered navbar and card while the
+  // server-rendered pages called it Germany.
+  let countryNameOverrides: Partial<Record<CountryId, string>> = {};
   try {
     const db = await getDb();
-    const [registered, enabled, gameState] = await Promise.all([
+    const [registered, enabled, gameState, nameOverrides] = await Promise.all([
       getRegisteredCountryIds(db),
       getEnabledCountryIds(),
       getGameState(),
+      loadCountryNameOverrides(db),
     ]);
     registeredCountries = registered;
     enabledCountries = enabled;
     activePreset = gameState?.preset ?? DEFAULT_SEED_PRESET;
+    countryNameOverrides = nameOverrides;
   } catch {
-    // keep the COUNTRY_ORDER + 2019-default fallback
+    // keep the COUNTRY_ORDER + 2019-default + no-override fallback
   }
   if (!isMaintenanceBypassPath(pathname)) {
     // Fail-open if the maintenance lookup throws. The proxy is the primary
@@ -303,6 +311,7 @@ export default async function RootLayout({
               registered: registeredCountries,
               enabled: enabledCountries,
               preset: activePreset,
+              nameOverrides: countryNameOverrides,
             }}
           >
             <AuthDataProvider>

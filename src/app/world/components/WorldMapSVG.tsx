@@ -34,8 +34,8 @@ import {
   getMetricFilterHighlight,
   ISO_TO_COUNTRY_ID,
 } from "../worldMetricHighlight";
-import { getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
-import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
+import { type CountryId } from "@/lib/constants/countries";
+import { useActivePreset, useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 import type { WorldEntityMapSnapshot } from "@/lib/world/worldEntityMap";
 
 export default function WorldMapSVG({
@@ -49,6 +49,7 @@ export default function WorldMapSVG({
 }) {
   const router = useRouter();
   const preset = useActivePreset();
+  const countryName = useCountryDisplayName();
   const { metricFilter, setMetricFilter, worldMetrics, partyData, corpsData, countryIdToIso } =
     useWorldMetricFilter();
 
@@ -1047,7 +1048,7 @@ export default function WorldMapSVG({
   // country maps to a CountryId; otherwise fall back to the static registry label.
   const hoveredLabel =
     hoveredIsoCountryId && hoveredMapped
-      ? getCountryDisplayName(hoveredIsoCountryId, preset)
+      ? countryName(hoveredIsoCountryId)
       : (hoveredMapped?.label ?? "");
 
   const tooltipAccess = hovered

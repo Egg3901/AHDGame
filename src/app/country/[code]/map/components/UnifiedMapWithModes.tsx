@@ -4,8 +4,8 @@ import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import BackButton from "@/components/BackButton";
 import { SectionLabel } from "@/components/ui";
-import { getCountryConfig, getCountryDisplayName } from "@/lib/constants/countries";
-import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
+import { getCountryConfig } from "@/lib/constants/countries";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 import { EXTRACTABLE_RESOURCES, COMMODITY_LABELS } from "@/lib/constants/commodities";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import type { MapOverviewResponse } from "@/lib/map/overviewTypes";
@@ -32,9 +32,9 @@ export function UnifiedMapWithModes({
   countryConfig,
   onRegionClick,
 }: UnifiedMapWithModesProps) {
-  const preset = useActivePreset();
-  // Era-aware display name (e.g. "West Germany Map" in 1979).
-  const displayName = getCountryDisplayName(countryConfig.countryId, preset);
+  // Era-aware display name (e.g. "West Germany Map" in 1979), and runtime
+  // renames with it (a reunified Germany is not "East Germany Map").
+  const displayName = useCountryDisplayName()(countryConfig.countryId);
   const [mode, setMode] = useState<string>(countryConfig.defaultMode);
   const [leanAxis, setLeanAxis] = useState<LeanAxis>("display");
   // Region whose demographic breakdown is open (lean mode click; null = closed).

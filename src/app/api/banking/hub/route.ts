@@ -4,7 +4,7 @@ import { withNoStore } from "@/lib/api/withNoStore";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
 import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
 import {
   COUNTRY_CURRENCY_MAP,
   getCountryIdForCurrency,
@@ -23,7 +23,7 @@ import {
 } from "@/lib/banking/lending";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { getGameState } from "@/lib/gameState";
-import { getCountryDisplayName } from "@/lib/constants/countries";
+import { loadCountryNameOverrides } from "@/lib/country/countryIdentity";
 import { corporationPathIdFromDoc } from "@/lib/api/corporations/resolveQuery";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { Corporation, GameConfig } from "@/lib/db/types";
@@ -112,6 +112,12 @@ async function handleGET() {
         .toArray(),
     ]);
 
+    // Runtime renames, so the hub does not list a country under the name of a
+    // state that has since been absorbed.
+    const nameOverrides = await loadCountryNameOverrides(db);
+    const countryName = (id: CountryId) =>
+      nameOverrides[id] ?? getCountryDisplayName(id, gameState?.preset);
+
     const privateEnabled = await isPrivateBankingEnabled(config);
     const character = auth.user.character as Character | null | undefined;
     const primaryCountryId = (character?.countryId ?? "US") as CountryId;
@@ -148,7 +154,7 @@ async function handleGET() {
         currency,
         bankName: bank?.name ?? configRow.centralBank.name,
         countryId: anchor,
-        countryName: getCountryDisplayName(anchor, gameState?.preset),
+        countryName: countryName(anchor),
         href: currencyCentralBankUrl(currency),
         primeRate: prime,
         savingsApyPercent: savingsApyPercent(prime, inflation),
@@ -212,7 +218,7 @@ async function handleGET() {
             sequentialId: corp.sequentialId ?? null,
             name: corp.name,
             countryId,
-            countryName: getCountryDisplayName(countryId, gameState?.preset),
+            countryName: countryName(countryId),
             currency: charter.currency,
             operatorType: corp.ceoType === "npp" ? "npp" : "player",
             charterType: charter.type,
