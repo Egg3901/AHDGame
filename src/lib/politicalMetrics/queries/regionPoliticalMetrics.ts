@@ -57,6 +57,8 @@ const MODERN_INDICATORS_FROM_YEAR = 1990;
 const SERVED_HISTORY_ENTRIES = 180;
 
 export interface RegionPoliticalMetricsResponse {
+  /** Which registry this is; the views branch display on it. */
+  scope: "region";
   countryId: PoliticalMetricsCountryId;
   countryDisplayName: string;
   regionId: string;
@@ -294,6 +296,7 @@ export async function loadRegionPoliticalMetrics(
   const identity = await resolveCountryIdentity(db, countryId, gameState?.preset);
 
   return {
+    scope: "region" as const,
     countryId,
     countryDisplayName: identity.name,
     regionId,

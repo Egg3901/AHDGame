@@ -55,6 +55,7 @@ function payload(overrides: Record<string, unknown> = {}) {
   }));
 
   return {
+    scope: "region" as const,
     countryId: "US",
     countryDisplayName: "United States",
     regionId: "GA",
@@ -132,6 +133,40 @@ describe("RegionRegistryTab", () => {
     await screen.findByText(/situation registry/);
     const link = screen.getByRole("link", { name: /United States registry/ });
     expect(link.getAttribute("href")).toBe("/country/us/political-metrics");
+  });
+
+  it("marks a country-scope statistic as national inside a region view", async () => {
+    // Prime rate and inflation are set for the whole country. Listing them
+    // unmarked under a Georgia heading would read as Georgia's own numbers.
+    const withEvidence = payload();
+    withEvidence.categories[0].metrics[0].evidence = [
+      {
+        id: "unemploymentRate",
+        label: "Unemployment",
+        value: 9,
+        trend: null,
+        format: { suffix: "%" },
+        scope: "region",
+      },
+      {
+        id: "primeRate",
+        label: "Prime rate",
+        value: 4,
+        trend: null,
+        format: { suffix: "%" },
+        scope: "national",
+      },
+    ] as never;
+    mockFetch(withEvidence);
+    renderTab();
+    await screen.findByText(/situation registry/);
+
+    // Drill in: category card, then the metric.
+    fireEvent.click(screen.getByRole("button", { name: /Economy & Labor, score 68/ }));
+    fireEvent.click(await screen.findByText(withEvidence.categories[0].metrics[0].displayName));
+
+    expect(await screen.findByText("Prime rate")).toBeTruthy();
+    expect(screen.getByText("national")).toBeTruthy();
   });
 
   it("offers a retry rather than a blank tab when the registry cannot be reached", async () => {

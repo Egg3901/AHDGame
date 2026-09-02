@@ -46,6 +46,9 @@ const TOP_LEVEL_KEYS = [
   "historyCadenceTurns",
   "overall",
   "overallStatus",
+  // Which registry this is, so a shared view can tell a country figure from
+  // a region one without inferring it.
+  "scope",
   "turn",
   "year",
 ];

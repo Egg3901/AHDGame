@@ -177,7 +177,18 @@ export function MetricDetailView({
           <div className="flex flex-col gap-1.5">
             {metric.evidence.map((row) => (
               <div key={row.id} className="flex items-baseline justify-between gap-3 text-body-sm">
-                <span className="text-muted">{row.label}</span>
+                <span className="text-muted">
+                  {row.label}
+                  {/* In a region view the macro rows are that region's own, but
+                      the prime rate, inflation and debt to GDP are set for the
+                      whole country. Saying so beats letting a player read a
+                      national figure as their region's. */}
+                  {data.scope === "region" && row.scope === "national" && (
+                    <span className="ml-1.5 rounded border border-card-border px-1 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted/70">
+                      national
+                    </span>
+                  )}
+                </span>
                 <span className="font-semibold tabular-nums text-foreground">
                   {formatEvidenceValue(row, data.countryId)}
                   {row.trend != null && Math.abs(row.trend) >= 0.05 && (

@@ -39,6 +39,8 @@ import {
 } from "../types";
 
 export interface CountryPoliticalMetricsResponse {
+  /** Which registry this is; the views branch display on it. */
+  scope: "national";
   countryId: PoliticalMetricsCountryId;
   countryDisplayName: string;
   /** Current in-game year and turn, for the masthead series/date line. */
@@ -301,6 +303,7 @@ export async function loadCountryPoliticalMetrics(
 
   const overall = overallScore(national);
   return {
+    scope: "national" as const,
     countryId,
     // Resolved, not compiled: this name heads the registry masthead, the
     // comparison chips and every column of the comparison table, so a country

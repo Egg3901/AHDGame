@@ -55,6 +55,7 @@ function makeData(history: number[], overall: number): PMRegistryData {
   } as unknown as PMCategory;
 
   return {
+    scope: "national" as const,
     countryId: "US",
     countryDisplayName: "United States",
     year: 1963,

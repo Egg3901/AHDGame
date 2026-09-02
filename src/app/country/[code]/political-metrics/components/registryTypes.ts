@@ -34,6 +34,12 @@ export type PMCategory = Omit<NationalCategory, "metrics"> & {
 };
 
 export interface PMRegistryData {
+  /**
+   * Which registry this is. Explicit rather than inferred from the presence
+   * of a region-only field, because the views need it to decide whether a
+   * country-scope figure is worth labelling as such.
+   */
+  scope: "national" | "region";
   countryId: PoliticalMetricsCountryId;
   /** The name of whatever this registry is about: a country, or a region. */
   countryDisplayName: string;
