@@ -496,6 +496,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     upperRegionId,
     spenderParty: refreshedParty,
     authUser,
+    // Quote the NEXT click against the pool this one actually spent. Without it
+    // a dual-role officer who spent the national pool gets a next-click estimate
+    // priced at the state tier — half the cash, against the wrong treasury.
+    preferredScope: scope,
   });
 
   return NextResponse.json({

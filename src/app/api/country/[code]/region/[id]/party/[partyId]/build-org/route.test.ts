@@ -823,7 +823,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     const body = await response.json();
 
     // US state rate 37,500 × 0.075 × 1 PS.
-    const expectedPrice = 37_500 * 0.075 * BUILD_ORG_BASE_PS_COST;
+    const expectedPrice = Math.round(37_500 * 0.075 * BUILD_ORG_BASE_PS_COST);
     expect(chargeOrgBuildFunds).toHaveBeenCalledWith(
       expect.objectContaining({
         scope: "state",
@@ -873,7 +873,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     expect(chargeOrgBuildFunds).toHaveBeenCalledWith(
       expect.objectContaining({
         scope: "national-targeted",
-        amount: 75_000 * 0.075 * BUILD_ORG_BASE_PS_COST,
+        amount: Math.round(75_000 * 0.075 * BUILD_ORG_BASE_PS_COST),
       }),
       expect.anything()
     );
@@ -933,6 +933,54 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     expect(halfResponse.status).toBe(200);
     expect(halfBody.fundedFraction).toBeCloseTo(0.5, 6);
     expect(halfBody.orgGain).toBeCloseTo(fullBody.orgGain * 0.5, 6);
+  });
+
+  it("quotes the next click against the pool this one spent", async () => {
+    // Dual-role officer spending the national pool: the follow-up estimate the
+    // overview card renders must price the national tier, not the state one.
+    const officerId = new ObjectId();
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: {
+        userId: new ObjectId().toString(),
+        username: "dual",
+        isAdmin: false,
+        character: { _id: officerId, name: "Dual Officer" },
+      },
+    } as never);
+    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+    vi.mocked(findPartyBySequentialId).mockResolvedValue({
+      _id: new ObjectId(),
+      sequentialId: 1,
+      treasury: 50_000_000,
+      countryId: "US",
+      name: "Test Party",
+      chairId: officerId,
+      viceChairId: new ObjectId(),
+    } as never);
+    db.collectionMocks["statePartyOrg"]!.findOne.mockResolvedValue({
+      _id: spenderRowId,
+      stateId,
+      partyId,
+      countryId: "US",
+      organization: 20,
+      politicalStrength: 10,
+      treasury: 10_000_000,
+      hasPresence: true,
+      chairId: officerId,
+      viceChairId: new ObjectId(),
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequestWithBody({ psPool: "national" }), {
+      params: Promise.resolve({ code: "us", id: stateId, partyId }),
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.nextPreview.ok).toBe(true);
+    expect(body.nextPreview.scope).toBe("national-targeted");
   });
 
   it("floors a click whose treasury vanished after the PS was committed", async () => {

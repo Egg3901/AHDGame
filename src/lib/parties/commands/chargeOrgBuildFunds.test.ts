@@ -199,6 +199,49 @@ describe("chargeOrgBuildFunds", () => {
     expect(row?.treasury).toBe(500_000);
   });
 
+  // Party sequentialIds repeat across countries, so a filter keyed on the row id
+  // alone is only safe because of how its caller happens to build that id. Scope
+  // the debit itself so a mismatched country or party fails closed.
+  it("refuses to debit a row belonging to another country", async () => {
+    const result = await chargeOrgBuildFunds(
+      {
+        countryId: "UK",
+        partyId: "1",
+        scope: "state",
+        stateRowId: "US_CA_1",
+        amount: 20_000,
+        memo: "Build Org (CA)",
+        turn: 500,
+        now: NOW,
+      },
+      db as unknown as Db
+    );
+
+    expect(result.charged).toBe(0);
+    const row = await db.collection("statePartyOrg").findOne({ _id: "US_CA_1" });
+    expect(row?.treasury).toBe(500_000);
+  });
+
+  it("refuses to debit a row belonging to another party", async () => {
+    const result = await chargeOrgBuildFunds(
+      {
+        countryId: "US",
+        partyId: "7",
+        scope: "state",
+        stateRowId: "US_CA_1",
+        amount: 20_000,
+        memo: "Build Org (CA)",
+        turn: 500,
+        now: NOW,
+      },
+      db as unknown as Db
+    );
+
+    expect(result.charged).toBe(0);
+    const row = await db.collection("statePartyOrg").findOne({ _id: "US_CA_1" });
+    expect(row?.treasury).toBe(500_000);
+  });
+
   it("charges nothing when the target row is missing", async () => {
     const result = await chargeOrgBuildFunds(
       {

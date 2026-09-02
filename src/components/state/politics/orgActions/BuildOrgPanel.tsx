@@ -9,6 +9,8 @@ import {
   STATE_PS_CAP_DEFAULT,
 } from "@/lib/politicalStrength/strengthConstants";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
+import { orgBuildCashPrice } from "@/lib/politicalStrength/buildOrgFunding";
+import type { CountryId } from "@/lib/constants/countries";
 import {
   FactorsExplainer,
   type BuildOrgFactors,
@@ -170,6 +172,29 @@ export function BuildOrgPanel({
     ? "National Political Strength reserve. Build Org from a national officer role spends this pool (not the state party's PS)."
     : "Political Strength (PS) reserve for this state party. Build Org spends from the state pool (or national pool if you have that authority). Cap shown is the effective max.";
 
+  /**
+   * Per-pool cash price for the button tooltips.
+   *
+   * The estimate box can only show one tier's price — the one the preview
+   * resolved, which for an officer holding BOTH a national and a state seat is
+   * the state (half-rate) one. The national button would then charge twice what
+   * was quoted. The PS cost is tier-independent (the pressure ladder is per
+   * party+state), so both prices derive exactly from the same preview with no
+   * extra request.
+   */
+  const priceFor = (poolScope: "state" | "national-targeted") => {
+    const effectiveCost = preview?.ok ? preview.effectiveCost : null;
+    if (effectiveCost === null) return "";
+    const amount = orgBuildCashPrice(
+      countryCode.toUpperCase() as CountryId,
+      poolScope,
+      effectiveCost
+    );
+    if (amount <= 0) return "";
+    const symbol = CURRENCY_SYMBOLS[currencyCode as keyof typeof CURRENCY_SYMBOLS] ?? "$";
+    return ` and ${symbol}${amount.toLocaleString("en-US")}`;
+  };
+
   const buttonAnim = bumpKey > 0 ? "ps-bloom" : "";
   const counterAnim = bumpKey > 0 ? "ps-counter-pulse" : "";
   const tileAnim = bumpKey > 0 ? "ps-row-flash" : "";
@@ -193,8 +218,8 @@ export function BuildOrgPanel({
               ? `Need ${BUILD_ORG_BASE_PS_COST} PS minimum`
               : "Spend PS to grow Org in this state"
       }
-      stateTitle={`Spend from state pool${poolPS ? ` (${poolPS.statePoolPS.toFixed(0)} PS)` : ""}`}
-      nationalTitle={`Spend from national pool${poolPS ? ` (${poolPS.nationalPoolPS.toFixed(0)} PS)` : ""}`}
+      stateTitle={`Spend from state pool${poolPS ? ` (${poolPS.statePoolPS.toFixed(0)} PS)` : ""}${priceFor("state")}`}
+      nationalTitle={`Spend from national pool${poolPS ? ` (${poolPS.nationalPoolPS.toFixed(0)} PS)` : ""}${priceFor("national-targeted")}`}
       buttonAnim={buttonAnim}
       onSpend={handleClick}
     />

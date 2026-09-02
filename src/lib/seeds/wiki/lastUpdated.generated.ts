@@ -135,7 +135,7 @@ export const WIKI_LAST_UPDATED: Record<string, string> = {
   "party-leadership": "2026-08-30",
   "party-leadership-authority": "2026-08-25",
   "party-membership": "2026-08-11",
-  "party-organization": "2026-08-21",
+  "party-organization": "2026-09-02",
   "peace-and-truces": "2026-08-30",
   pensions: "2026-08-20",
   "planned-economies": "2026-08-30",

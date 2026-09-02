@@ -83,11 +83,19 @@ export async function chargeOrgBuildFunds(
   if (isState) {
     if (!input.stateRowId) return { charged: 0 };
     holderId = input.stateRowId;
-    before = await db
-      .collection<StatePartyOrg>("statePartyOrg")
-      .findOneAndUpdate({ _id: input.stateRowId }, debitPipeline(amount, input.now), {
-        returnDocument: "before",
-      });
+    // Scoped by country AND party, not by row id alone. The id is composite
+    // (`US_CA_1`) so today's caller could not address a foreign row, but party
+    // sequentialIds repeat across countries (Bug #0668) and a debit should fail
+    // closed on a mismatch rather than rely on how its caller built the id.
+    before = await db.collection<StatePartyOrg>("statePartyOrg").findOneAndUpdate(
+      {
+        _id: input.stateRowId,
+        countryId: input.countryId,
+        partyId: input.partyId,
+      },
+      debitPipeline(amount, input.now),
+      { returnDocument: "before" }
+    );
   } else {
     holderId = input.partyId;
     before = await db

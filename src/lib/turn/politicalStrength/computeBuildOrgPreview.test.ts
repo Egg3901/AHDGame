@@ -256,7 +256,7 @@ describe("computeBuildOrgPreview", () => {
 
     expect(result.ok).toBe(true);
     // US state rate 37,500 × ORG_BUILD_TREASURY_FRACTION × 1 PS.
-    if (result.ok) expect(result.cashPrice).toBeCloseTo(37_500 * 0.075, 6);
+    if (result.ok) expect(result.cashPrice).toBe(Math.round(37_500 * 0.075));
   });
 
   it("cash price rises with the pressure ladder alongside the PS cost", async () => {
@@ -271,7 +271,7 @@ describe("computeBuildOrgPreview", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.effectiveCost).toBe(3);
-      expect(result.cashPrice).toBeCloseTo(37_500 * 0.075 * 3, 6);
+      expect(result.cashPrice).toBe(Math.round(37_500 * 0.075 * 3));
     }
   });
 
@@ -323,6 +323,84 @@ describe("computeBuildOrgPreview", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("insufficient-funds");
+  });
+
+  // The bulk HQ tool always spends the national pool, so it has to be able to
+  // ask for a national quote. Without this the estimate prices at the state rate
+  // (half) and checks the state treasury, while the run charges the national
+  // rate against the national treasury.
+  it("prices against the national tier when the caller asks for that pool", async () => {
+    // A dual-role officer: national chair of the party AND state chair here.
+    // Default precedence picks "state"; the bulk tool must be able to ask for
+    // the national quote it is actually going to spend.
+    const officerId = new ObjectId();
+    const spenderRow = {
+      _id: `${upperRegionId}_${partySeq}`,
+      stateId: upperRegionId,
+      partyId: String(partySeq),
+      countryId,
+      organization: 20,
+      politicalStrength: 10,
+      hasPresence: true,
+      treasury: 10_000_000,
+      chairId: officerId,
+    };
+    db.collectionMocks["statePartyOrg"]!.findOne.mockResolvedValue(spenderRow);
+    db.collectionMocks["statePartyOrg"]!.find.mockReturnValue({
+      toArray: async () => [
+        spenderRow,
+        {
+          _id: `${upperRegionId}_2`,
+          stateId: upperRegionId,
+          partyId: "2",
+          countryId,
+          organization: 30,
+          politicalStrength: 8,
+        },
+      ],
+    } as never);
+    db.collectionMocks["partyStrengthPressure"]!.findOne.mockResolvedValue(null);
+
+    const party = {
+      _id: new ObjectId(),
+      sequentialId: partySeq,
+      countryId,
+      name: "Test Party",
+      chairId: officerId,
+      viceChairId: new ObjectId(),
+      politicalStrength: 0,
+      treasury: 9_000_000,
+    } as never;
+    const officer = {
+      userId: new ObjectId().toString(),
+      username: "dual",
+      isAdmin: false,
+      character: { _id: officerId, name: "Dual Officer" },
+    } as never;
+
+    const { computeBuildOrgPreview } = await import("./computeBuildOrgPreview");
+    const stateQuote = await computeBuildOrgPreview(db as unknown as Db, {
+      countryId,
+      upperRegionId,
+      spenderParty: party,
+      authUser: officer,
+    });
+    const nationalQuote = await computeBuildOrgPreview(db as unknown as Db, {
+      countryId,
+      upperRegionId,
+      spenderParty: party,
+      authUser: officer,
+      preferredScope: "national-targeted",
+    });
+
+    expect(stateQuote.ok && stateQuote.scope).toBe("state");
+    expect(nationalQuote.ok).toBe(true);
+    if (nationalQuote.ok) {
+      expect(nationalQuote.scope).toBe("national-targeted");
+      // US national rate 75,000, twice the state rate, against the national pot.
+      expect(nationalQuote.cashPrice).toBe(Math.round(75_000 * 0.075));
+      expect(nationalQuote.treasuryAvailable).toBe(9_000_000);
+    }
   });
 
   it("refuses an empty treasury rather than quoting a free click", async () => {

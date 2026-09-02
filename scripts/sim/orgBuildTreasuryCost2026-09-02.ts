@@ -241,9 +241,6 @@ async function main() {
   const partyKeys = [...new Set(clicks.map((c) => `${c.countryId}:${c.partyId}`))];
 
   for (const fraction of ARMS) {
-    // The helpers read the shipped constant, so scale their output to the arm's
-    // rate rather than mutating a frozen module binding.
-    const scale = fraction / 0.075;
     console.log(`\n===== ORG_BUILD_TREASURY_FRACTION = ${fraction} =====`);
     console.log(
       "party".padEnd(14) +
@@ -301,7 +298,14 @@ async function main() {
         lastTurn = click.turn;
 
         const tier = click.scope === "state" ? "state" : "national";
-        const price = orgBuildCashPrice(click.countryId, click.scope, click.psCost) * scale;
+        // Mirrors `orgBuildCashPrice` exactly, but at THIS arm's rate rather than
+        // the shipped constant — scaling the shipped price would round once at
+        // 0.075 and then multiply, which is not the price the arm would charge.
+        const rates =
+          TREASURY_PS_RATE_BY_COUNTRY[click.countryId] ?? TREASURY_PS_RATE_BY_COUNTRY.US;
+        const price = Math.round(
+          (tier === "state" ? rates.state : rates.national) * fraction * click.psCost
+        );
         const treasury = bal.get(tier) ?? 0;
         const funding = resolveOrgBuildFunding({ price, treasury });
 

@@ -267,7 +267,7 @@ describe("nppBuildPartyOrg", () => {
         countryId,
         partyId: String(partySeq),
         // US state rate 37,500 × 0.075 × 1 PS.
-        amount: 37_500 * 0.075 * BUILD_ORG_BASE_PS_COST,
+        amount: Math.round(37_500 * 0.075 * BUILD_ORG_BASE_PS_COST),
       }),
       expect.anything()
     );

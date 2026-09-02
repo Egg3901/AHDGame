@@ -235,6 +235,47 @@ describe("BuildOrgPanel", () => {
     expect(screen.queryByText(/Partly funded/i)).toBeNull();
   });
 
+  // A dual-role officer sees both buttons but the estimate box can only quote
+  // one tier. The national pool is billed at twice the state rate, so each
+  // button has to carry its own price or the National one charges double what
+  // was shown.
+  it("prices each pool button separately when the viewer may spend either", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string) => {
+        if (input.includes("/ps-spend-scope")) {
+          return {
+            json: async () => ({
+              ok: true,
+              eligibleScopes: { state: true, national: true },
+              statePoolPS: 20,
+              nationalPoolPS: 150,
+            }),
+          };
+        }
+        return {
+          json: async () => ({
+            ok: true,
+            effectiveCost: 1,
+            pressureValue: 0,
+            projectedGain: 1.25,
+            cashPrice: 2813,
+            fundedFraction: 1,
+            factors: { base: 2, headroom: 0.5, ownDiminishing: 0.5, psLeverage: 1, catchup: 1 },
+            scope: "state",
+          }),
+        };
+      })
+    );
+    renderPanel();
+
+    const stateButton = await screen.findByRole("button", { name: /State PS/ });
+    const nationalButton = screen.getByRole("button", { name: /Nat'l PS/ });
+    // US state 37,500 × 0.075 = 2,813; national 75,000 × 0.075 = 5,625.
+    expect(stateButton.getAttribute("title")).toMatch(/\$2,813/);
+    expect(nationalButton.getAttribute("title")).toMatch(/\$5,625/);
+  });
+
   it("surfaces the treasury refusal message from the preview", async () => {
     vi.stubGlobal(
       "fetch",

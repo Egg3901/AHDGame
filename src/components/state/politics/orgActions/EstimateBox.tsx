@@ -58,7 +58,7 @@ export function EstimateBox({ variant, tone, cost, funds, gain, factors }: Estim
             {costLabel}
             <Tooltip
               label="About Build Org cost"
-              content="Base Political Strength (PS) cost plus a per-state pressure ladder that rises after each spend in this state. Higher pressure = more PS per click."
+              content="Base Political Strength (PS) cost plus a per-state pressure ladder that rises after each spend in this state. Higher pressure = more PS per click, and more money: the cash price scales with the PS cost and is billed to the same treasury tier that pays the Strength."
             />
           </div>
           <div className="mt-1 text-lg font-bold tabular-nums leading-none">

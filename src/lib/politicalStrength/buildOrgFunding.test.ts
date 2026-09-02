@@ -8,10 +8,9 @@ import { clampFundedFraction, orgBuildCashPrice, resolveOrgBuildFunding } from "
 
 describe("orgBuildCashPrice", () => {
   it("prices a state-scope click off the country's state rate", () => {
-    // US state rate 37,500 × 0.075 = 2,812.50 per PS.
-    expect(orgBuildCashPrice("US", "state", 1)).toBeCloseTo(
-      37_500 * ORG_BUILD_TREASURY_FRACTION,
-      6
+    // US state rate 37,500 × 0.075, to whole currency units.
+    expect(orgBuildCashPrice("US", "state", 1)).toBe(
+      Math.round(37_500 * ORG_BUILD_TREASURY_FRACTION)
     );
   });
 
@@ -22,9 +21,15 @@ describe("orgBuildCashPrice", () => {
     );
   });
 
-  it("scales linearly with the effective PS cost so the pressure ladder bites in cash", () => {
-    const atOne = orgBuildCashPrice("US", "state", 1);
-    expect(orgBuildCashPrice("US", "state", 8)).toBeCloseTo(atOne * 8, 6);
+  it("scales with the effective PS cost so the pressure ladder bites in cash", () => {
+    // Rounded once from the exact product, so a ladder-capped click costs ~8× a
+    // fresh one (not exactly 8× the rounded single-PS price).
+    expect(orgBuildCashPrice("US", "state", 8)).toBe(
+      Math.round(37_500 * ORG_BUILD_TREASURY_FRACTION * 8)
+    );
+    expect(orgBuildCashPrice("US", "state", 8)).toBeGreaterThan(
+      orgBuildCashPrice("US", "state", 1) * 7
+    );
   });
 
   it("normalizes across currencies rather than using one flat number", () => {
@@ -49,6 +54,15 @@ describe("orgBuildCashPrice", () => {
   it("returns 0 for a non-positive PS cost", () => {
     expect(orgBuildCashPrice("US", "state", 0)).toBe(0);
     expect(orgBuildCashPrice("US", "state", -3)).toBe(0);
+  });
+
+  it("prices in whole currency units", () => {
+    // 37,500 × 0.075 = 2,812.5 — a half-unit charge would leave floating-point
+    // tails in every treasury it touches and make the quoted price and the
+    // charged amount compare inexactly.
+    expect(orgBuildCashPrice("US", "state", 1)).toBe(2813);
+    expect(Number.isInteger(orgBuildCashPrice("US", "state", 3))).toBe(true);
+    expect(Number.isInteger(orgBuildCashPrice("UK", "national-targeted", 7))).toBe(true);
   });
 });
 

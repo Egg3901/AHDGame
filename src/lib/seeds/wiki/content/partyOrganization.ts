@@ -18,7 +18,7 @@ Each party-state combination has its own tracked org score.
 
 Organization grows through the **Build Org** action on the state-party page. The state chair, state vice chair, the state campaigner, the national chair, the national vice chair, or any national campaigner can click Build Org. Each click grows your share by drawing from the state's Unaffiliated pool **and** poaching Org off rivals at the same time.
 
-Every click costs **both Political Strength and money**. The two are billed to the same tier: a state officer spends the state party's PS and the state party's treasury, while a national officer spends the national pool and the national treasury. The cash price scales with the PS cost, so a state where your pressure ladder has climbed costs more money as well as more PS, and it scales with your country's own currency so the burden is comparable everywhere.
+Every click costs **both Political Strength and money**. The two are billed to the same tier: a state officer spends the state party's PS and the state party's treasury, while a national officer spends the national pool and the national treasury. Building from the national pool costs **twice** the money of building from a state pool, so an officer who holds both a national and a state post is choosing between two different prices; each button shows its own. The cash price also scales with the PS cost, so a state where your pressure ladder has climbed costs more money as well as more PS, and it scales with your country's own currency so the burden is comparable everywhere.
 
 Per-click gain scales with four factors, shown in the click projection panel:
 

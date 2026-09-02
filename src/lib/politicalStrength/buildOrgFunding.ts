@@ -71,7 +71,14 @@ export function orgBuildCashPrice(
   if (!(effectivePsCost > 0)) return 0;
   const rates = TREASURY_PS_RATE_BY_COUNTRY[countryId] ?? TREASURY_PS_RATE_BY_COUNTRY.US;
   const rate = scope === "state" ? rates.state : rates.national;
-  return rate * ORG_BUILD_TREASURY_FRACTION * effectivePsCost;
+  // Whole currency units. The raw product is fractional for most countries (US
+  // state at 1 PS is 2,812.5), and a half-unit debit per click would accumulate
+  // floating-point tails across every treasury it touches — and make the price
+  // the preview quoted compare inexactly against the amount actually charged.
+  // Rounding HERE keeps the preview, the spend route, the NPP sweep and the
+  // balance sim on one number. The smallest rate in the table still yields
+  // 1,875 at one PS, so rounding never collapses a price to zero.
+  return Math.round(rate * ORG_BUILD_TREASURY_FRACTION * effectivePsCost);
 }
 
 /**

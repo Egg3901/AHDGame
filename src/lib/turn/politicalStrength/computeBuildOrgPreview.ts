@@ -90,11 +90,24 @@ export interface ComputeBuildOrgPreviewParams {
   /** Resolved spender party doc (national tier). */
   spenderParty: PoliticalParty;
   authUser: AuthUserWithCharacter;
+  /**
+   * Which PS pool the caller intends to spend, when it already knows.
+   *
+   * Load-bearing for the money side: the tier decides both the rate (national is
+   * twice state) and which treasury is checked. The national HQ's bulk tool
+   * always posts `psPool: "national"`, so without this a dual-role officer would
+   * be quoted the state price against the state treasury and then charged the
+   * national price against the national one.
+   *
+   * Honored only where the spender is actually eligible for that tier;
+   * `resolveSpenderScope` falls back otherwise.
+   */
+  preferredScope?: "state" | "national-targeted";
 }
 
 export async function computeBuildOrgPreview(
   db: Db,
-  { countryId, upperRegionId, spenderParty, authUser }: ComputeBuildOrgPreviewParams
+  { countryId, upperRegionId, spenderParty, authUser, preferredScope }: ComputeBuildOrgPreviewParams
 ): Promise<BuildOrgPreviewResult> {
   // The spender row MAY be absent (seed deliberately omits e.g. CDU in Bayern).
   // Project from a virtual 0% row so the preview matches the POST's bootstrap —
@@ -191,7 +204,7 @@ export async function computeBuildOrgPreview(
     };
   }
 
-  const scope = resolveSpenderScope(spenderParty, spenderRow, authUser);
+  const scope = resolveSpenderScope(spenderParty, spenderRow, authUser, preferredScope);
   const eligibleScopes = resolveSpenderScopeEligibility(spenderParty, spenderRow, authUser);
 
   const pressureRow = await db
