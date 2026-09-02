@@ -139,7 +139,7 @@ describe("a member seated only on majority ballots", () => {
    * the tab called one vote short of unanimous was five short, and two accepted
    * applications expired without anyone seeing the real bar.
    */
-  const withNppPoland = (extra: Partial<OrgSummary>) =>
+  const withNppPoland = (extra: Record<string, unknown>) =>
     orgWith({
       ...extra,
       members: MEMBERS.map((m) =>
@@ -161,7 +161,7 @@ describe("a member seated only on majority ballots", () => {
               votes: [{ countryId: "US", vote: "yes" }],
             },
           ],
-        } as Partial<OrgSummary>)}
+        })}
         {...props}
       />
     );
@@ -182,7 +182,7 @@ describe("a member seated only on majority ballots", () => {
               votes: [{ countryId: "US", vote: "yes" }],
             },
           ],
-        } as Partial<OrgSummary>)}
+        })}
         {...props}
       />
     );
@@ -271,7 +271,7 @@ describe("free trade agreement tally", () => {
               votes: [{ countryId: "US", vote: "yes" }],
             },
           ],
-        } as Partial<OrgSummary>)}
+        })}
         {...props}
       />
     );
