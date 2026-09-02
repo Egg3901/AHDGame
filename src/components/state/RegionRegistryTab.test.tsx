@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { RegionRegistryTab } from "./RegionRegistryTab";
 import { POLITICAL_METRIC_CATEGORIES, FAMILY_SLUGS } from "@/lib/politicalMetrics/types";
 
@@ -127,5 +127,33 @@ describe("RegionRegistryTab", () => {
     renderTab();
     await waitFor(() => expect(screen.getByText("Registry data unavailable")).toBeTruthy());
     expect(screen.getByRole("button", { name: /Retry retrieval/ })).toBeTruthy();
+  });
+});
+
+describe("RegionRegistryTab compare view", () => {
+  it("compares against a sibling region without issuing another fetch", async () => {
+    mockFetch(payload());
+    renderTab();
+    await screen.findByText(/situation registry/);
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const callsBefore = fetchMock.mock.calls.length;
+
+    fireEvent.click(screen.getByRole("button", { name: /Compare/ }));
+    expect(await screen.findByText("Compare against")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "New York" }));
+
+    // Every sibling's value already rides in each metric's `regions` array, so
+    // the comparison must not cost a round trip.
+    expect(fetchMock.mock.calls.length).toBe(callsBefore);
+    // New York now appears as a column header as well as a peer button.
+    expect(screen.getAllByText("New York").length).toBeGreaterThan(1);
+  });
+
+  it("names the region plural from the country config, not by appending an s", async () => {
+    mockFetch(payload({ regionLabel: "Republic", regionLabelPlural: "Republics" }));
+    renderTab();
+    await screen.findByText(/situation registry/);
+    fireEvent.click(screen.getByRole("button", { name: /Compare/ }));
+    expect(await screen.findByText(/up to 3 republics/)).toBeTruthy();
   });
 });

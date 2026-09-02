@@ -174,7 +174,9 @@ export function RegionCompareView({
             </tr>
           </thead>
           <tbody>
-            {home.categories.map((cat) => {
+            {/* flatMap, not map: returning an array per category would nest
+                arrays inside tbody and lean on React to key the outer ones. */}
+            {home.categories.flatMap((cat) => {
               const isOpen = openCategory === cat.id;
               return [
                 <tr

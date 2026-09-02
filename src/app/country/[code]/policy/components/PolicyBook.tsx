@@ -140,13 +140,21 @@ export function PolicyBook({
           {emptyText}
         </div>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[200px_minmax(0,1fr)]">
-          <TitlesRail
-            countryId={countryId}
-            domains={domains}
-            activeDomain={activeDomain}
-            onSelect={scrollToDomain}
-          />
+        <div
+          className={
+            domains.length > 0 ? "grid gap-5 lg:grid-cols-[200px_minmax(0,1fr)]" : "grid gap-5"
+          }
+        >
+          {/* A region with only the fallback tax panel has no titles to list,
+              and an empty rail beside it reads as a broken column. */}
+          {domains.length > 0 && (
+            <TitlesRail
+              countryId={countryId}
+              domains={domains}
+              activeDomain={activeDomain}
+              onSelect={scrollToDomain}
+            />
+          )}
           <div className="min-w-0 space-y-3.5">
             {showTaxFallback && taxRates && <TaxRateFallbackPanel taxRates={taxRates} />}
             <StatuteBook
