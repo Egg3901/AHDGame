@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
-import { getCountryDisplayName } from "@/lib/constants/countries";
+import { resolveCountryIdentities } from "@/lib/country/countryIdentity";
 import {
   resolveCentralBankCurrency,
   getCurrencyMemberCountries,
@@ -41,10 +41,12 @@ export default async function CurrencyCentralBankPage({ params }: PageProps) {
   // A currency no registered country uses (only CAD today) has no live bank page.
   if (memberIds.length === 0) notFound();
 
+  // One primed read for the whole member list rather than one per country.
+  const identities = await resolveCountryIdentities(db, memberIds, gameState?.preset);
   const members = memberIds
     .map((id) => ({
       countryId: id,
-      name: getCountryDisplayName(id, gameState?.preset),
+      name: identities.get(id)?.name ?? id,
       isIssuer: id === resolved.anchorCountryId,
     }))
     .sort((a, b) => Number(b.isIssuer) - Number(a.isIssuer));

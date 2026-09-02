@@ -98,6 +98,43 @@ export async function resolveCountryIdentity(
 }
 
 /**
+ * Every runtime display-name override in the world, for hydrating the client.
+ *
+ * The client cannot call `resolveCountryIdentity` — it reads the database, and
+ * the point of the resolver living server-side is to keep the driver out of the
+ * browser bundle. But roughly a dozen CLIENT surfaces name countries: the
+ * navbar, the nation switcher, the world cards, the maps. They all call
+ * `getCountryDisplayName`, which reads compiled seed data and so cannot know a
+ * country was renamed at runtime — a reunified Germany went on calling itself
+ * East Germany everywhere a player actually looks.
+ *
+ * So the overrides ride into the tree the same way `preset` already does, and
+ * `useCountryDisplayName` applies them. One read for the whole world, because
+ * the root layout runs on every request.
+ *
+ * Only non-empty strings are returned: a null or "" override means "no override"
+ * and must fall through to the compiled name rather than blanking the country.
+ */
+export async function loadCountryNameOverrides(
+  db: Db
+): Promise<Partial<Record<CountryId, string>>> {
+  const rows = await db
+    .collection<{ _id: CountryId; displayNameOverride?: string | null }>("countryState")
+    .find(
+      { displayNameOverride: { $type: "string", $ne: "" } },
+      { projection: { displayNameOverride: 1 } }
+    )
+    .toArray();
+  const out: Partial<Record<CountryId, string>> = {};
+  for (const row of rows) {
+    if (typeof row.displayNameOverride === "string" && row.displayNameOverride.length > 0) {
+      out[row._id] = row.displayNameOverride;
+    }
+  }
+  return out;
+}
+
+/**
  * The same for several countries at once, for listings.
  *
  * PRIMED FIRST, deliberately. `getCountryState` memoises per Db instance and

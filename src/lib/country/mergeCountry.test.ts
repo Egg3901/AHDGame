@@ -23,6 +23,15 @@ vi.mock("@/lib/internationalOrganizations/service", () => ({
 vi.mock("@/lib/internationalOrganizations/withdrawalBills", () => ({
   removeOrganizationMembership: vi.fn(),
 }));
+// Pinned rather than left to the ambient forex flag: whether a National
+// Corporation re-denominates on a merge is the behaviour under test, not a
+// side effect of how the suite happens to be configured.
+vi.mock("@/lib/country/mergeFxScale", () => ({
+  loadFxScalePair: vi.fn().mockResolvedValue({ kind: "no-conversion" }),
+}));
+vi.mock("@/lib/corporations/convertCorpCurrency", () => ({
+  convertCorpCurrency: vi.fn().mockResolvedValue({ ok: true, converted: true }),
+}));
 
 function prime(db: MockDb, name: string): MockCollection {
   return db.collection(name) as unknown as MockCollection;
@@ -51,6 +60,10 @@ describe("mergeCountry", () => {
     prime(db, "states").find.mockReturnValue(cursor([{ _id: "BR" }, { _id: "SN" }, { _id: "TH" }]));
     const { transferRegion } = await import("@/lib/referendum/transfer/transferRegion");
     vi.mocked(transferRegion).mockResolvedValue({ ok: true });
+    // `clearAllMocks` clears CALLS but keeps implementations, so a test that
+    // stubs a "convert" pair would otherwise leak it into every test after it.
+    const { loadFxScalePair } = await import("@/lib/country/mergeFxScale");
+    vi.mocked(loadFxScalePair).mockResolvedValue({ kind: "no-conversion" });
   });
 
   it("refuses a country absorbing itself", async () => {
@@ -279,6 +292,288 @@ describe("mergeCountry", () => {
     // National-scope subsidies (region-scoped ones crossed with their regions).
     expect(prime(db, "subsidies").updateMany.mock.calls[0][0]).toEqual({ countryId: "DD" });
     expect(prime(db, "subsidies").updateMany.mock.calls[0][1].$set.countryId).toBe("DE");
+  });
+
+  it("leaves ONE primary National Corporation, folding the absorbed shell in", async () => {
+    // Ticket #1254. Every resolver reads the primary with a single-document
+    // query, so a second flagged corporation is picked by natural order and
+    // silently takes every merge-back, nationalisation and bond tranche.
+    const corps = prime(db, "corporations");
+    corps.findOne.mockResolvedValue({
+      _id: "survivor",
+      name: "East Germany",
+      liquidCapital: 100,
+      liquidCurrencyCode: "DDM",
+    });
+    corps.find.mockReturnValue(
+      cursor([{ _id: "shell", name: "Germany", liquidCapital: 40, liquidCurrencyCode: "DDM" }])
+    );
+
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 412,
+    });
+
+    // The absorbed state's corporations become the survivor's.
+    expect(corps.updateMany).toHaveBeenCalledWith(
+      { countryOwnerId: "DE" },
+      expect.objectContaining({ $set: expect.objectContaining({ countryOwnerId: "DD" }) })
+    );
+    // Sectors and bonds follow the shell onto the survivor...
+    expect(prime(db, "corporateSectors").updateMany).toHaveBeenCalledWith(
+      { corporationId: "shell" },
+      expect.objectContaining({ $set: expect.objectContaining({ corporationId: "survivor" }) })
+    );
+    expect(prime(db, "bonds").updateMany).toHaveBeenCalledWith(
+      { corporationId: "shell" },
+      expect.objectContaining({ $set: expect.objectContaining({ corporationId: "survivor" }) })
+    );
+    // ...its cash moves at matching currency, and the empty shell is dissolved.
+    expect(corps.updateOne).toHaveBeenCalledWith(
+      { _id: "survivor" },
+      expect.objectContaining({ $inc: { liquidCapital: 40 } })
+    );
+    expect(corps.deleteOne).toHaveBeenCalledWith({ _id: "shell" });
+  });
+
+  it("keeps a shell whose cash is in another currency, but demotes it", async () => {
+    // Redenomination is the regime/FX merge's job. Adding across denominations
+    // would mis-state the unified treasury, so the balance stays visible on a
+    // named corporation rather than being silently absorbed or deleted.
+    const corps = prime(db, "corporations");
+    corps.findOne.mockResolvedValue({
+      _id: "survivor",
+      name: "East Germany",
+      liquidCapital: 100,
+      liquidCurrencyCode: "DDM",
+    });
+    corps.find.mockReturnValue(
+      cursor([{ _id: "shell", name: "Germany", liquidCapital: 40, liquidCurrencyCode: "EUR" }])
+    );
+
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 412,
+    });
+
+    expect(corps.deleteOne).not.toHaveBeenCalledWith({ _id: "shell" });
+    expect(corps.updateOne).toHaveBeenCalledWith(
+      { _id: "shell" },
+      expect.objectContaining({
+        $set: expect.objectContaining({ isPrimaryNationalCorporation: false }),
+      })
+    );
+  });
+
+  it("keeps the absorbed primary when the survivor has none of its own", async () => {
+    // Demoting it would leave the unified country with no primary at all.
+    const corps = prime(db, "corporations");
+    corps.findOne.mockResolvedValue(null);
+    corps.find.mockReturnValue(cursor([{ _id: "shell", name: "Germany", liquidCapital: 0 }]));
+
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 412,
+    });
+
+    expect(corps.deleteOne).not.toHaveBeenCalledWith({ _id: "shell" });
+  });
+
+  it("folds the REST in when the survivor has no primary of its own", async () => {
+    // Returning early on a missing incumbent would leave both absorbed primaries
+    // flagged -- the same two-primary state, on a country that had neither.
+    const corps = prime(db, "corporations");
+    // No incumbent, but the promoted survivor still has to read back.
+    corps.findOne.mockImplementation(async (filter: Record<string, unknown>) =>
+      filter && "_id" in filter ? { _id: filter._id, name: "Germany", liquidCapital: 0 } : null
+    );
+    corps.find.mockReturnValue(
+      cursor([
+        { _id: "first", name: "Germany", liquidCapital: 0 },
+        { _id: "second", name: "Germany (Bonn)", liquidCapital: 0 },
+      ])
+    );
+
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 412,
+    });
+
+    // The first becomes the survivor; only the second is dissolved.
+    expect(corps.deleteOne).toHaveBeenCalledWith({ _id: "second" });
+    expect(corps.deleteOne).not.toHaveBeenCalledWith({ _id: "first" });
+  });
+
+  it("redomiciles corporations left in the dissolved country", async () => {
+    // A National Corporation is built with `headquartersState: ""`, so the region
+    // sweep -- which moves corporations by HQ region -- can never reach one.
+    const corps = prime(db, "corporations");
+    corps.findOne.mockResolvedValue({ _id: "survivor", name: "East Germany" });
+    corps.find.mockReturnValue(cursor([]));
+
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 412,
+    });
+
+    expect(corps.updateMany).toHaveBeenCalledWith(
+      { countryId: "DE" },
+      expect.objectContaining({ $set: expect.objectContaining({ countryId: "DD" }) })
+    );
+    // Ownership and domicile are separate filters: a firm the dissolved state
+    // nationalised abroad keeps its own domicile.
+    expect(corps.updateMany).not.toHaveBeenCalledWith(
+      { countryOwnerId: "DE" },
+      expect.objectContaining({ $set: expect.objectContaining({ countryId: "DD" }) })
+    );
+  });
+
+  it("merges the shell's shareholdings into the survivor's, share-weighted", async () => {
+    // A holding lives on the ISSUER, keyed by the holder's corporationId, so
+    // deleting the shell would leave those shares belonging to nobody.
+    const corps = prime(db, "corporations");
+    corps.findOne.mockResolvedValue({
+      _id: "survivor",
+      name: "East Germany",
+      liquidCapital: 0,
+    });
+    corps.find.mockImplementation((filter: Record<string, unknown>) => {
+      if (filter && "shareholders.corporationId" in filter) {
+        return cursor([
+          {
+            _id: "issuer",
+            shareholders: [
+              { corporationId: "shell", shares: 100, avgCostPerShare: 10 },
+              { corporationId: "survivor", shares: 100, avgCostPerShare: 20 },
+              { characterId: "player", shares: 5 },
+            ],
+          },
+        ]);
+      }
+      return cursor([{ _id: "shell", name: "Germany", liquidCapital: 0 }]);
+    });
+
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 412,
+    });
+
+    const call = corps.updateOne.mock.calls.find(
+      (c: unknown[]) => (c[0] as { _id?: string })?._id === "issuer"
+    );
+    expect(call).toBeDefined();
+    const written = (call![1] as { $set: { shareholders: Array<Record<string, unknown>> } }).$set
+      .shareholders;
+    // One merged holder entry, and the player's untouched.
+    expect(written).toEqual([
+      { characterId: "player", shares: 5 },
+      { corporationId: "survivor", shares: 200, avgCostPerShare: 15 },
+    ]);
+  });
+
+  it("re-denominates the corporations the region sweep cannot reach", async () => {
+    // `convertTransferredResidentsCurrency` keys on `headquartersState`, and a
+    // National Corporation is built with "". Left undone, the unified state's own
+    // enterprises keep quoting the dissolved country's currency.
+    const { loadFxScalePair } = await import("@/lib/country/mergeFxScale");
+    const { convertCorpCurrency } = await import("@/lib/corporations/convertCorpCurrency");
+    vi.mocked(loadFxScalePair).mockResolvedValue({
+      kind: "convert",
+      scale: 2,
+      oldCurrency: "EUR",
+      newCurrency: "DDM",
+      fxByCurrency: new Map(),
+    } as never);
+
+    const corps = prime(db, "corporations");
+    corps.findOne.mockResolvedValue({ _id: "survivor", name: "East Germany" });
+    corps.find.mockReturnValue(cursor([{ _id: "natcorp", headquartersState: "" }]));
+
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 412,
+    });
+
+    // Captured by the no-HQ filter, and converted through the SHARED helper so it
+    // crosses at the same rate as every other pot of money in the merge.
+    const strandedQuery = corps.find.mock.calls.find(
+      (c: unknown[]) => (c[0] as Record<string, unknown>)?.countryId === "DE"
+    );
+    expect(strandedQuery).toBeDefined();
+    expect(vi.mocked(convertCorpCurrency)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ _id: "natcorp" }),
+      "DDM",
+      expect.anything(),
+      expect.any(Date),
+      true
+    );
+  });
+
+  it("leaves a balance alone when the merge rate is missing", async () => {
+    // Converting at 1 would persist an order-of-magnitude wrong balance. A
+    // corporation survives the merge, so a later pass can still re-denominate it.
+    const { loadFxScalePair } = await import("@/lib/country/mergeFxScale");
+    const { convertCorpCurrency } = await import("@/lib/corporations/convertCorpCurrency");
+    vi.mocked(loadFxScalePair).mockResolvedValue({ kind: "missing-rate" } as never);
+
+    const corps = prime(db, "corporations");
+    corps.findOne.mockResolvedValue({ _id: "survivor", name: "East Germany" });
+    corps.find.mockReturnValue(cursor([{ _id: "natcorp", headquartersState: "" }]));
+
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 412,
+    });
+
+    expect(vi.mocked(convertCorpCurrency)).not.toHaveBeenCalled();
+  });
+
+  it("demotes rather than dissolves a shell that has its own shareholders", async () => {
+    // Deleting it would take their shares with it.
+    const corps = prime(db, "corporations");
+    corps.findOne.mockResolvedValue({ _id: "survivor", name: "East Germany" });
+    corps.find.mockReturnValue(
+      cursor([
+        {
+          _id: "shell",
+          name: "Germany",
+          liquidCapital: 0,
+          shareholders: [{ characterId: "player", shares: 10 }],
+        },
+      ])
+    );
+
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 412,
+    });
+
+    expect(corps.deleteOne).not.toHaveBeenCalledWith({ _id: "shell" });
+    expect(corps.updateOne).toHaveBeenCalledWith(
+      { _id: "shell" },
+      expect.objectContaining({
+        $set: expect.objectContaining({ isPrimaryNationalCorporation: false }),
+      })
+    );
   });
 
   it("the winner's tariff takes a colliding scope from the survivor", async () => {
