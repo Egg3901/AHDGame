@@ -28,6 +28,7 @@ interface PlannerFixture {
   memberships?: Array<Record<string, unknown>>;
   conflicts?: Array<Record<string, unknown>>;
   pendingMemberships?: Array<Record<string, unknown>>;
+  pendingLegislation?: Array<Record<string, unknown>>;
   embargoes?: Array<Record<string, unknown>>;
   bills?: Array<Record<string, unknown>>;
   tradeSnapshot?: Record<string, unknown> | null;
@@ -94,7 +95,7 @@ function setup(fixture: PlannerFixture = {}): MockDb {
   setFindRows(db, "tradeEmbargoes", fixture.embargoes ?? []);
   setFindRows(db, "tariffs", []);
   setFindRows(db, "bills", fixture.bills ?? []);
-  setFindRows(db, "organizationLegislation", []);
+  setFindRows(db, "organizationLegislation", fixture.pendingLegislation ?? []);
   setFindRows(db, "organizationMembershipProposals", fixture.pendingMemberships ?? []);
   setFindRows(db, "organizationLeadershipElections", []);
   setFindRows(db, "nppForeignPolicyDecisions", fixture.recentDecisions ?? []);
@@ -156,11 +157,23 @@ function membership(countryId: "FR" | "IT" | "RU" | "US", organizationId = "NATO
   };
 }
 
-function pendingMembership(proposingCountryId: "IT" | "RU") {
+/**
+ * An aid package: a MAJORITY ballot, which is what an autonomous government
+ * actually votes on.
+ *
+ * These tests used a membership proposal until ticket #1257 established that an
+ * admission is decided by the player-enabled members alone — and the planner
+ * only ever runs for countries that are not player-enabled, so it no longer
+ * casts a ballot it could never have counted. Aid keeps what the tests are
+ * really about: the vote follows the country's opinion of the subject.
+ */
+function pendingAid(recipient: "IT" | "RU") {
   return {
     _id: new ObjectId(),
     organizationId: "NATO",
-    proposingCountryId,
+    type: "aid_package",
+    aidRecipientCountryId: recipient,
+    parties: [],
     status: "pending",
     votes: [],
   };
@@ -190,7 +203,7 @@ describe("processAutonomousForeignPolicy", () => {
         },
       ],
       memberships: [membership("FR"), membership("IT")],
-      pendingMemberships: [pendingMembership("IT")],
+      pendingLegislation: [pendingAid("IT")],
     });
 
     const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 10, now);
@@ -215,7 +228,7 @@ describe("processAutonomousForeignPolicy", () => {
     const db = setup({
       alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
       memberships: [membership("FR")],
-      pendingMemberships: [pendingMembership("RU")],
+      pendingLegislation: [pendingAid("RU")],
     });
 
     await processAutonomousForeignPolicy(db as unknown as Db, "FR", 11, now);
@@ -659,7 +672,7 @@ describe("processAutonomousForeignPolicy", () => {
       mode: "active",
       alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
       memberships: [membership("FR")],
-      pendingMemberships: [pendingMembership("RU")],
+      pendingLegislation: [pendingAid("RU")],
     });
 
     const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 16, now);
@@ -669,7 +682,7 @@ describe("processAutonomousForeignPolicy", () => {
     expect(result).toMatchObject({ mode: "active", decisionRecorded: true, ballotsCast: 1 });
     expect(firstRecordedDecision(db).ballots[0]).toMatchObject({
       type: "vote_org_no",
-      pendingKind: "membership",
+      pendingKind: "legislation",
     });
     expect(executionMock).toHaveBeenCalledWith(
       expect.anything(),
@@ -719,12 +732,16 @@ describe("processAutonomousForeignPolicy", () => {
     // Pact with not one "no" cast against either.
     //
     // Voting is not a strategic expenditure, so both must happen this turn.
+    //
+    // The aid names Italy, not Russia, deliberately: an aid package to Russia
+    // would soften France's opinion of it and disarm the very tariffs and
+    // embargoes this test needs the ballot to be competing against.
     const db = setup({
       mode: "active",
       stage: "war",
       alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
       memberships: [membership("FR")],
-      pendingMemberships: [pendingMembership("RU")],
+      pendingLegislation: [pendingAid("IT")],
     });
 
     const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 19, now);
@@ -738,7 +755,7 @@ describe("processAutonomousForeignPolicy", () => {
       expect.anything(),
       "FR",
       expect.anything(),
-      expect.objectContaining({ type: "vote_org_no" }),
+      expect.objectContaining({ type: "vote_org_yes", pendingKind: "legislation" }),
       19,
       now
     );
@@ -752,12 +769,46 @@ describe("processAutonomousForeignPolicy", () => {
     );
   });
 
+  it("does not cast a ballot on an admission, whose roll it can never be on", async () => {
+    // Ticket #1257. An admission is decided by the player-enabled members alone,
+    // and the planner only ever runs for a country that is NOT player-enabled
+    // (isNppAutonomyActive is defined that way). So this ballot could never have
+    // been counted; writing it only put consent on the proposal for the panels
+    // to show beside a tally that ignored it.
+    const db = setup({
+      mode: "active",
+      alignments: [alignment("FR", 100, 0), alignment("IT", 80, 0)],
+      memberships: [membership("FR"), membership("IT")],
+      pendingMemberships: [
+        {
+          _id: new ObjectId(),
+          organizationId: "NATO",
+          proposingCountryId: "IT",
+          status: "pending",
+          votes: [],
+        },
+      ],
+    });
+
+    const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 21, now);
+
+    expect(result.ballotsCast).toBe(0);
+    expect(executionMock).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "FR",
+      expect.anything(),
+      expect.objectContaining({ pendingKind: "membership" }),
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
   it("does not execute an active decision twice after a same-turn restart", async () => {
     const db = setup({
       mode: "active",
       alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
       memberships: [membership("FR")],
-      pendingMemberships: [pendingMembership("RU")],
+      pendingLegislation: [pendingAid("RU")],
     });
     db.collection("nppForeignPolicyDecisions")
       .updateOne.mockResolvedValueOnce({ matchedCount: 0, modifiedCount: 0, upsertedCount: 1 })

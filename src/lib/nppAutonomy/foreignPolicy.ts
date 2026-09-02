@@ -31,6 +31,10 @@ import { buildActiveNationalBillFilter } from "@/lib/legislature/nationalBillSco
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import type { PeaceOfferDoc } from "@/lib/db/types/peaceOffer";
 import type { PersistedSphereMembership } from "@/lib/world/spheres/membershipStore";
+import {
+  ballotIsPlayerOnly,
+  type OrgBallotKind,
+} from "@/lib/internationalOrganizations/resolutionRules";
 import { isNppAutonomyActive } from "./featureFlag";
 import { executeForeignPolicyChoice } from "./foreignPolicyActions";
 import {
@@ -463,6 +467,25 @@ function organizationThatCanTable(
   });
 }
 
+/**
+ * Ballots this planner must not cast, because the country can never be on their
+ * roll.
+ *
+ * An admission and a bloc war entry are decided by the player-enabled members
+ * alone (`ballotIsPlayerOnly`), and the planner only ever runs for a country
+ * that is NOT player-enabled — `isNppAutonomyActive` requires exactly that. So
+ * every such ballot it cast was guaranteed to be ignored by the resolver.
+ *
+ * Writing them was never free. The row still lands on the proposal, where it is
+ * read back by anything listing who has voted, so a bloc showed "yes" rows from
+ * members whose consent the tally beside them did not count (ticket #1257). And
+ * now that ballots no longer compete for the country's one strategic action,
+ * these would be cast reliably every cycle rather than occasionally.
+ */
+function planningCountryHoldsNoBallot(kind: OrgBallotKind): boolean {
+  return ballotIsPlayerOnly(kind);
+}
+
 function voteCandidates(
   context: ForeignPolicyContext,
   opinions: Map<CountryId, CountryOpinion>
@@ -471,6 +494,7 @@ function voteCandidates(
   const sourceOrganizations = memberOrganizations(context.memberships, context.countryId);
 
   for (const proposal of context.pendingMemberships) {
+    if (planningCountryHoldsNoBallot("membership_proposal")) continue;
     if (!sourceOrganizations.has(proposal.organizationId)) continue;
     if (proposal.proposingCountryId === context.countryId) continue;
     if (alreadyVoted(proposal.votes, context.countryId)) continue;
@@ -496,6 +520,7 @@ function voteCandidates(
   }
 
   for (const item of context.pendingLegislation) {
+    if (planningCountryHoldsNoBallot(item.type)) continue;
     if (!sourceOrganizations.has(item.organizationId)) continue;
     if (alreadyVoted(item.votes, context.countryId)) continue;
     if (item.type === "free_trade_agreement" && !item.parties.includes(context.countryId)) {

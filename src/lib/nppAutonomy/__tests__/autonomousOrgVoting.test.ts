@@ -86,7 +86,12 @@ describe("castAutonomousOrgVotes", () => {
     expect(upsertMock).not.toHaveBeenCalled();
   });
 
-  it("casts yes for an autonomy-active member that hasn't voted on a membership proposal", async () => {
+  it("does not vote on a membership proposal, whose ballot it can never be on", async () => {
+    // Ticket #1257. An admission is decided by the player-enabled members alone,
+    // and every country this speaks for is autonomy-active, which is defined as
+    // NOT player-enabled. A ballot cast here could never be counted — it only
+    // landed on the proposal for the panels to show consent the tally beside it
+    // was ignoring.
     collectionDocs.proposals = [
       {
         _id: new ObjectId(),
@@ -95,42 +100,37 @@ describe("castAutonomousOrgVotes", () => {
         votes: [],
       },
     ];
-    // Members: FR (autonomous), DE (applicant — skipped), UK (player-enabled).
     getMembersMock.mockResolvedValue(["FR", "DE", "UK"]);
     isActiveMock.mockImplementation(async (_db: unknown, cid: string) => cid === "FR");
 
     const count = await castAutonomousOrgVotes(makeDb("shadow"), 10);
 
-    expect(count).toBe(1);
-    expect(upsertMock).toHaveBeenCalledTimes(1);
-    const voteArg = upsertMock.mock.calls[0][2];
-    expect(voteArg.countryId).toBe("FR");
-    expect(voteArg.vote).toBe("yes");
-    expect(voteArg.castOnTurn).toBe(10);
-    expect(voteArg.characterName).toBe("Rep NPP");
+    expect(count).toBe(0);
+    expect(upsertMock).not.toHaveBeenCalled();
   });
 
-  it("does not vote for the applicant, for player-enabled members, or for those who already voted", async () => {
+  it("still votes in a leadership election, which is decided by the wider roll", async () => {
+    // The counterpart to the test above: a chair is carried by a majority, where
+    // an autonomy-active member does hold a vote, so silence there costs a yes
+    // rather than vetoing. It skips whoever has already voted.
     const fr = new ObjectId();
-    collectionDocs.proposals = [
+    collectionDocs.elections = [
       {
         _id: new ObjectId(),
         organizationId: "eu",
-        proposingCountryId: "DE",
-        // FR already has a vote on record → must be skipped.
         votes: [{ countryId: "FR", characterId: fr, characterName: "x", vote: "yes" }],
       },
     ];
-    getMembersMock.mockResolvedValue(["FR", "DE", "UK"]);
+    getMembersMock.mockResolvedValue(["FR", "UK"]);
     isActiveMock.mockImplementation(
       async (_db: unknown, cid: string) => cid === "FR" || cid === "UK"
     );
 
     const count = await castAutonomousOrgVotes(makeDb("shadow"), 5);
-    // FR already voted; UK is autonomy-active=true here but DE is applicant.
-    // Only UK is eligible+unvoted+active → exactly one vote.
+
     expect(count).toBe(1);
     expect(upsertMock.mock.calls[0][2].countryId).toBe("UK");
+    expect(upsertMock.mock.calls[0][2].vote).toBe("yes");
   });
 
   it("casts yes for autonomy-active named parties on FTA legislation", async () => {
@@ -150,9 +150,9 @@ describe("castAutonomousOrgVotes", () => {
   });
 
   it("does nothing when no member is autonomy-active", async () => {
-    collectionDocs.proposals = [
-      { _id: new ObjectId(), organizationId: "eu", proposingCountryId: "DE", votes: [] },
-    ];
+    // Uses a leadership election, not a membership proposal: membership is no
+    // longer voted here at all, so a proposal would make this pass vacuously.
+    collectionDocs.elections = [{ _id: new ObjectId(), organizationId: "eu", votes: [] }];
     getMembersMock.mockResolvedValue(["FR", "UK"]);
     isActiveMock.mockResolvedValue(false);
 
