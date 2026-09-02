@@ -24,10 +24,17 @@ function toY(value: number): number {
 export function RecordView({
   countryId,
   record,
+  scopeName,
 }: {
   countryId: string;
   /** undefined = still loading; null = fetch failed; payload = loaded. */
   record: RecordPayload | null | undefined;
+  /**
+   * Region name at state scope. Only 35 of 116 regions have enacted any law of
+   * their own, so the empty state here is the COMMON case and has to say
+   * something useful rather than read as a failure.
+   */
+  scopeName?: string;
 }) {
   const [pinnedIndex, setPinnedIndex] = useState<number | null>(null);
   const events = useMemo(() => record?.events ?? [], [record]);
@@ -66,9 +73,18 @@ export function RecordView({
 
   if (events.length === 0) {
     return (
-      <div className="rounded-xl border border-card-border bg-card p-10 text-center text-sm italic text-muted">
-        No recorded enactments yet — the Record view fills in as laws with axis positions are
-        enacted.
+      <div className="rounded-xl border border-card-border bg-card p-10 text-center text-sm text-muted">
+        <p className="font-medium text-foreground">No legislative record yet.</p>
+        {scopeName ? (
+          <p className="mt-1 italic">
+            {scopeName} has not enacted any laws of its own yet, so there is no timeline to plot.
+            Statutes in force here come from national law, listed under Code.
+          </p>
+        ) : (
+          <p className="mt-1 italic">
+            The Record view fills in as laws with axis positions are enacted.
+          </p>
+        )}
       </div>
     );
   }

@@ -1,303 +1,94 @@
 "use client";
 
-import { useState, useEffect } from "react";
+/**
+ * The region's Laws & Policy tab.
+ *
+ * A thin fetch-and-render shell around `PolicyBook`, the same component the
+ * national policy page uses. It previously carried its own renderer — its own
+ * eight-entry domain-label table against the national file's seventeen, no
+ * titles, no provenance, no axis summary — which is how GA's `tax` and
+ * `economy` sections ended up headed by their raw internal keys.
+ */
+
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { State } from "@/lib/db/types";
 import type { StateTaxRates } from "@/lib/db/types/budget";
-import { PositionBadges } from "@/components/PositionBadges";
-import { policyApiUrl, regionApiSubUrl } from "@/lib/urls";
-import type { PolicyRecordResponse } from "./StatePageTabsTypes";
-// One label table for both scopes. The tab used to carry its own eight-entry
-// copy against the national file's seventeen, so a `tax` or `economy` row
-// rendered with its raw internal key as the section heading.
-import { DOMAIN_ORDER, getDomainLabel } from "@/app/country/[code]/policy/components/policyView";
-
-interface StateTaxRateDisplay {
-  id: keyof StateTaxRates;
-  name: string;
-  description: string;
-}
-
-const STATE_TAX_RATES: StateTaxRateDisplay[] = [
-  { id: "incomeTax", name: "Income Tax", description: "State income tax rate" },
-  { id: "salesTax", name: "Sales Tax", description: "State sales tax rate" },
-  {
-    id: "domesticCorporateTax",
-    name: "Corporate Tax — Domestic",
-    description: "State tax rate on corps headquartered in this country",
-  },
-  {
-    id: "foreignCorporateTax",
-    name: "Corporate Tax — Foreign",
-    description: "State tax rate on corps headquartered outside this country",
-  },
-  { id: "propertyTax", name: "Property Tax", description: "State property tax rate" },
-];
-
-function groupByDomain(records: PolicyRecordResponse[]): Map<string, PolicyRecordResponse[]> {
-  const map = new Map<string, PolicyRecordResponse[]>();
-  for (const r of records) {
-    const domain = r.policyDomain || "governance";
-    const list = map.get(domain) ?? [];
-    list.push(r);
-    map.set(domain, list);
-  }
-  // Sort by domain order
-  const sorted = new Map<string, PolicyRecordResponse[]>();
-  for (const domain of DOMAIN_ORDER) {
-    const list = map.get(domain);
-    if (list?.length) {
-      // Sort policies within domain alphabetically
-      list.sort((a, b) => a.name.localeCompare(b.name));
-      sorted.set(domain, list);
-    }
-  }
-  // Add any remaining domains not in the order
-  for (const [domain, list] of map) {
-    if (!sorted.has(domain)) {
-      list.sort((a, b) => a.name.localeCompare(b.name));
-      sorted.set(domain, list);
-    }
-  }
-  return sorted;
-}
+import type { CountryId } from "@/lib/constants/countries";
+import { policyApiUrl, regionApiSubUrl, regionUrl } from "@/lib/urls";
+import { PolicyBook } from "@/app/country/[code]/policy/components/PolicyBook";
+import type { PolicyView } from "@/app/country/[code]/policy/components/PolicyMasthead";
+import type { RecordPayload } from "@/app/country/[code]/policy/components/policyView";
+// The canonical shape the /policy endpoint actually returns. StatePageTabsTypes
+// carries a narrower local copy that predates the statute book and lacks
+// metricEffects, which is the field the effect pills render from.
+import type { PolicyRecordResponse } from "@/lib/policy/types";
 
 export function LawsTab({ state }: { state: State }) {
+  const searchParams = useSearchParams();
   const [records, setRecords] = useState<PolicyRecordResponse[]>([]);
   const [taxRates, setTaxRates] = useState<StateTaxRates | null>(null);
+  // undefined = loading; null = unavailable.
+  const [recordPayload, setRecordPayload] = useState<RecordPayload | null | undefined>(undefined);
   const [loading, setLoading] = useState(true);
-  const [expandedDomains, setExpandedDomains] = useState<Set<string>>(new Set(DOMAIN_ORDER));
+  // Local rather than URL-persisted: the region page already owns `?tab`/`?sub`,
+  // and a third param competing for the same URL would fight the tab nav.
+  const [view, setView] = useState<PolicyView>(
+    searchParams?.get("view") === "record" ? "record" : "code"
+  );
+
+  const { _id: stateId, countryId } = state;
 
   useEffect(() => {
+    let cancelled = false;
     Promise.all([
-      fetch(
-        `${policyApiUrl(state.countryId)}?scope=state&stateId=${encodeURIComponent(state._id)}`
-      ).then((res) => (res.ok ? res.json() : [])),
-      fetch(regionApiSubUrl(state.countryId, state._id, "budget")).then((res) =>
+      fetch(`${policyApiUrl(countryId)}?scope=state&stateId=${encodeURIComponent(stateId)}`).then(
+        (res) => (res.ok ? res.json() : [])
+      ),
+      fetch(regionApiSubUrl(countryId, stateId, "budget")).then((res) =>
         res.ok ? res.json() : null
       ),
     ])
       .then(([policyData, budgetData]) => {
+        if (cancelled) return;
         setRecords(Array.isArray(policyData) ? policyData : []);
-        if (budgetData?.taxRates) {
-          setTaxRates(budgetData.taxRates);
-        }
+        if (budgetData?.taxRates) setTaxRates(budgetData.taxRates);
       })
-      .finally(() => setLoading(false));
-  }, [state._id, state.countryId]);
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
-  const byDomain = groupByDomain(records);
-  // The five us.tax.state* laws now arrive as ordinary `tax`-domain records, so
-  // rendering the hard-coded rate panel as well listed every state rate twice.
-  // It survives as a fallback for a country whose state taxes are not catalog
-  // laws, which would otherwise lose its tax display entirely.
-  const hasTaxRecords = records.some((r) => (r.policyDomain || "governance") === "tax");
-  const showTaxRatePanel = Boolean(taxRates) && !hasTaxRecords;
+    // The region's own enactment timeline. Separate from the two above so a
+    // Record failure cannot blank the statute book.
+    fetch(regionApiSubUrl(countryId, stateId, "policy/record"))
+      .then((res) => (res.ok ? res.json() : null))
+      .catch(() => null)
+      .then((payload) => {
+        if (!cancelled) setRecordPayload(payload ?? null);
+      });
 
-  const toggleDomain = (domain: string) => {
-    setExpandedDomains((prev) => {
-      const next = new Set(prev);
-      if (next.has(domain)) {
-        next.delete(domain);
-      } else {
-        next.add(domain);
-      }
-      return next;
-    });
-  };
-
-  const expandAll = () => setExpandedDomains(new Set(DOMAIN_ORDER));
-  const collapseAll = () => setExpandedDomains(new Set());
-
-  if (loading) {
-    return (
-      <div className="space-y-3">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="rounded-xl border border-card-border bg-card p-4 animate-pulse">
-            <div className="h-6 w-1/3 bg-card-border/50 rounded mb-2" />
-            <div className="h-4 w-1/4 bg-card-border/30 rounded" />
-          </div>
-        ))}
-      </div>
-    );
-  }
+    return () => {
+      cancelled = true;
+    };
+  }, [stateId, countryId]);
 
   return (
-    <div>
-      <div className="mb-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-xl font-bold">State Policy</h3>
-            <p className="mt-1 text-sm text-muted">
-              Current policy positions for {state.name}. Economic and social axes shown for each
-              policy.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={expandAll}
-              className="rounded-lg px-3 py-1.5 text-sm text-muted hover:bg-card hover:text-foreground transition-colors"
-            >
-              Expand All
-            </button>
-            <button
-              onClick={collapseAll}
-              className="rounded-lg px-3 py-1.5 text-sm text-muted hover:bg-card hover:text-foreground transition-colors"
-            >
-              Collapse All
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        {/* Taxes Accordion */}
-        {showTaxRatePanel && taxRates && (
-          <section className="rounded-xl border border-card-border bg-card overflow-hidden">
-            <button
-              onClick={() => toggleDomain("tax")}
-              className="flex w-full items-center justify-between px-6 py-4 text-left hover:bg-background/30 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <h2 className="text-lg font-semibold">Taxes</h2>
-                <span className="rounded-full bg-background px-2 py-0.5 text-xs text-muted">
-                  {STATE_TAX_RATES.length} rates
-                </span>
-              </div>
-              <svg
-                className={`h-5 w-5 text-muted transition-transform duration-200 ${expandedDomains.has("tax") ? "rotate-180" : ""}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </button>
-            {expandedDomains.has("tax") && (
-              <ul className="space-y-3 px-6 pb-6">
-                {STATE_TAX_RATES.map((tax) => (
-                  <li
-                    key={tax.id}
-                    className="flex items-center justify-between gap-4 rounded-lg bg-background px-3 py-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-foreground">{tax.name}</div>
-                      <div className="mt-0.5 text-xs text-muted">{tax.description}</div>
-                    </div>
-                    <div className="text-right">
-                      <span className="rounded border border-primary/40 bg-primary/10 px-3 py-1 text-lg font-bold text-primary">
-                        {taxRates[tax.id]}%
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        )}
-
-        {/* Policy Domain Accordions */}
-        {[...byDomain.entries()].map(([domain, list]) => {
-          const isExpanded = expandedDomains.has(domain);
-          return (
-            <section
-              key={domain}
-              className="rounded-xl border border-card-border bg-card overflow-hidden"
-            >
-              <button
-                onClick={() => toggleDomain(domain)}
-                className="flex w-full items-center justify-between px-6 py-4 text-left hover:bg-background/30 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <h2 className="text-lg font-semibold">{getDomainLabel(domain)}</h2>
-                  <span className="rounded-full bg-background px-2 py-0.5 text-xs text-muted">
-                    {list.length} {list.length === 1 ? "policy" : "policies"}
-                  </span>
-                </div>
-                <svg
-                  className={`h-5 w-5 text-muted transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </button>
-              {isExpanded && (
-                <ul className="space-y-3 px-6 pb-6">
-                  {list.map((r) => (
-                    <li
-                      key={r.legislationTypeId}
-                      className="flex items-center justify-between gap-4 rounded-lg bg-background px-3 py-3"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium text-foreground">{r.name}</span>
-                          {r.enactedByKind === "order" && (
-                            <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-warning">
-                              Executive Order
-                            </span>
-                          )}
-                        </div>
-                        {r.policyOptionName ? (
-                          <div className="mt-1 text-sm text-muted">
-                            {r.enactedByKind === "order" ? "Active by order: " : "Current base: "}
-                            <span className="text-foreground/90">{r.policyOptionName}</span>
-                          </div>
-                        ) : (
-                          <div className="mt-0.5 text-xs text-muted">Policy area</div>
-                        )}
-                        {r.activeOrder && (
-                          <div className="mt-0.5 text-xs text-muted/80">
-                            Issued by {r.activeOrder.issuedByName} · T{r.activeOrder.issuedAtTurn} →
-                            T{r.activeOrder.expiresAtTurn}
-                          </div>
-                        )}
-                      </div>
-                      <PositionBadges
-                        economic={r.hasEconomic ? r.economic : undefined}
-                        social={r.hasSocial ? r.social : undefined}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          );
-        })}
-
-        {/* Empty state */}
-        {byDomain.size === 0 && !showTaxRatePanel && (
-          <div className="rounded-xl border border-card-border bg-card p-12 text-center text-muted">
-            <svg
-              className="mx-auto h-12 w-12 mb-4 opacity-50"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-            <p className="font-medium">No state-level policy has been set yet.</p>
-            <p className="text-sm mt-1">
-              Policy records will appear here once they are configured.
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
+    <PolicyBook
+      countryId={countryId as CountryId}
+      scope="state"
+      region={{ id: stateId, name: state.name }}
+      records={records}
+      recordPayload={recordPayload}
+      // The drift-based social axis is a country-level series; a region has no
+      // equivalent, so the masthead falls back to its enacted-law average.
+      socialAxisPosition={null}
+      loading={loading}
+      view={view}
+      onViewChange={setView}
+      taxRates={taxRates}
+      homeStateMetricBase={regionUrl(countryId, stateId)}
+    />
   );
 }
+
+export default LawsTab;
