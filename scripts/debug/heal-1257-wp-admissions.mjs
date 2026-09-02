@@ -50,7 +50,10 @@ try {
   if (typeof turn !== "number") throw new Error("could not read currentTurn");
   console.log(`${APPLY ? "APPLY" : "DRY RUN"} | live turn ${turn}\n`);
 
-  const members = await db.collection("organizationMemberships").find({ organizationId: ORG }).toArray();
+  const members = await db
+    .collection("organizationMemberships")
+    .find({ organizationId: ORG })
+    .toArray();
   const seated = new Set(members.map((m) => m.countryId));
   const states = await db
     .collection("countryGameStates")
@@ -60,7 +63,11 @@ try {
   console.log(`Corrected Warsaw Pact ballot: ${[...enabled].sort().join(", ")}`);
   console.log(
     `Members off it (run by the game, or not modelled): ` +
-      `${members.map((m) => m.countryId).filter((c) => !enabled.has(c)).sort().join(", ")}\n`
+      `${members
+        .map((m) => m.countryId)
+        .filter((c) => !enabled.has(c))
+        .sort()
+        .join(", ")}\n`
   );
 
   const col = db.collection("organizationMembershipProposals");
@@ -78,9 +85,15 @@ try {
     const counted = voters.filter((c) => yes.has(c));
     const unanimous = voters.length > 0 && counted.length === voters.length;
 
-    console.log(`${applicant} (${NAMES[applicant]}): status=${p.status}, resolved t${p.resolvedOnTurn ?? "-"}`);
-    console.log(`  votes on file: ${(p.votes ?? []).map((v) => `${v.countryId}=${v.vote}`).join(" ")}`);
-    console.log(`  on the corrected ballot: ${counted.length}/${voters.length} yes, ${no.length} no`);
+    console.log(
+      `${applicant} (${NAMES[applicant]}): status=${p.status}, resolved t${p.resolvedOnTurn ?? "-"}`
+    );
+    console.log(
+      `  votes on file: ${(p.votes ?? []).map((v) => `${v.countryId}=${v.vote}`).join(" ")}`
+    );
+    console.log(
+      `  on the corrected ballot: ${counted.length}/${voters.length} yes, ${no.length} no`
+    );
 
     if (p.status !== "rejected") {
       console.log(`  NOT rejected, leaving alone\n`);
@@ -100,8 +113,12 @@ try {
       .findOne({ organizationId: ORG, countryId: applicant });
 
     console.log(`  WOULD ADMIT. Writes:`);
-    console.log(`    organizationMemberships upsert {organizationId:${ORG}, countryId:${applicant}, status:"active", joinedTurn:${turn}}`);
-    console.log(`    organizationWithdrawals delete ${tombstone ? "1 tombstone" : "(none present)"}`);
+    console.log(
+      `    organizationMemberships upsert {organizationId:${ORG}, countryId:${applicant}, status:"active", joinedTurn:${turn}}`
+    );
+    console.log(
+      `    organizationWithdrawals delete ${tombstone ? "1 tombstone" : "(none present)"}`
+    );
     console.log(`    proposal ${p._id} -> status:"approved", resolvedOnTurn:${turn}`);
     console.log(`    countryHistory insert "${NAMES[applicant]} admitted to ${ORG}."`);
 
