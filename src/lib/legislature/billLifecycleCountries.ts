@@ -13,9 +13,10 @@
  * files that partially mock `@/lib/budget/costs` stopped being able to load at
  * all once a query module imported it.
  *
- * `billLifecycleCountries.test.ts` asserts this set matches the table exactly, so
- * the two cannot drift: add a country there and the test fails until it is added
- * here.
+ * `__tests__/hasBillLifecycle.test.ts` asserts this set matches the table
+ * exactly, in BOTH directions, so the two cannot drift: add a country to the
+ * table and the test fails until it is added here, and an id here that no engine
+ * walks fails too, because a bill minted for it would never close.
  */
 import type { CountryId } from "@/lib/constants/countries";
 
