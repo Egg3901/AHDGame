@@ -120,10 +120,10 @@ async function ballotVotingMembers(
  * active mode — modelled members whose formed NPP government can sponsor a bill
  * through a real legislature.
  *
- * This is deliberately NOT the same list as the unanimity ballot roll. Being
+ * This is deliberately NOT the same list as the player-only ballot roll. Being
  * unable to reliably *vote within a deadline* is what disqualifies an NPP member
- * from a unanimity ballot; it says nothing about whether that country can be
- * handed a war-entry bill once the bloc has already decided. `join_conflict`
+ * from an admission or an entry resolution; it says nothing about whether that
+ * country can be handed a war-entry bill once the bloc has already decided. `join_conflict`
  * needs exactly this wider set (bloc war entry, #1067): France's NPP premier
  * sponsors her own ratification bill even though France holds no ballot on the
  * resolution that produced it.
@@ -564,11 +564,12 @@ async function resolveExpiredOrganizationLegislation(db: Db, currentTurn: number
 
   for (const item of expired) {
     const parties = (item.parties as OrgMemberId[] | undefined) ?? [];
-    // The roll is kind-aware. On an FTA or a join-conflict — the two unanimity
-    // resolutions — votes and vetoes belong to player-enabled members only: a
-    // party that cannot reliably vote would deadlock the agreement exactly as a
-    // silent member would deadlock an admission. Majority resolutions seat the
-    // modelled NPP bloc too, where a silence costs a yes rather than vetoing.
+    // The roll is kind-aware. A join-conflict is player-enabled members only:
+    // it asks a member to consent to a war it is not otherwise in, and a
+    // silence under unanimity would veto it. Everything else here seats the
+    // modelled NPP bloc too — majority resolutions, where a silence costs a yes
+    // rather than vetoing, and FTAs, which are unanimous but voted only by their
+    // own named parties, each ratifying an agreement it is itself signing.
     // Either way the agreement still *binds* every party once ratified, so only
     // the ballot is narrowed here, not the effect below.
     const members = await ballotVotingMembers(db, item.organizationId, item.type);

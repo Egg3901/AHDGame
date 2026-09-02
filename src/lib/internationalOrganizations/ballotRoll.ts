@@ -11,20 +11,26 @@
  *
  * The rule, in two parts:
  *
- * 1. A MAJORITY ballot seats player-enabled members plus, in active mode, every
+ * 1. MOST ballots seat player-enabled members plus, in active mode, every
  *    modelled member whose formed NPP government could actually resolve the
- *    consequences of its vote. A silence there costs a yes and nothing worse.
+ *    consequences of its vote. That covers every majority ballot, where a
+ *    silence costs a yes and nothing worse — and free-trade agreements, which
+ *    are unanimous but voted only by their own named parties, each deciding an
+ *    agreement it is itself signing.
  *
- * 2. A UNANIMITY ballot seats player-enabled members only. Under unanimity a
- *    silence is indistinguishable from a veto, and an NPP government plans once
- *    every six turns and executes a single ranked action — across a 24-turn
- *    ballot that is four contested chances to vote, which it will not always
- *    spend voting. Seating it there does not give the bloc a say, it gives one
- *    distracted member a permanent veto over the whole instrument.
+ * 2. AN ADMISSION AND A BLOC WAR ENTRY seat player-enabled members only. These
+ *    are the ballots that ask a member to consent to someone ELSE's business
+ *    while letting it block the whole thing, so a silence there is
+ *    indistinguishable from a veto. An NPP government plans once every six turns
+ *    and executes a single ranked action — across a 24-turn ballot that is four
+ *    contested chances to vote, which it will not always spend voting. Seating
+ *    it there does not give the bloc a say, it gives one distracted member a
+ *    permanent veto over the whole instrument.
  *
- * `requiresUnanimity` in `resolutionRules.ts` is the arbiter of which is which,
- * so a new ballot kind picks up the right roll by declaring its threshold there
- * and nowhere else.
+ * `ballotIsPlayerOnly` in `resolutionRules.ts` is the arbiter of which is which
+ * — NOT `requiresUnanimity`, and the FTA is exactly why the two are different
+ * questions. A new ballot kind picks up the right roll by declaring itself
+ * there and nowhere else.
  */
 import type { Db } from "mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";

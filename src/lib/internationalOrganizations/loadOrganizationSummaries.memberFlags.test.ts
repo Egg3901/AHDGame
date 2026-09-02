@@ -65,7 +65,7 @@ describe("loadOrganizationSummaries — member vote and country flags", () => {
     expect(members.get("UK")?.hasPolicyVote).toBe(true);
   });
 
-  it("seats an NPP-governed member on the majority roll but not the unanimity one", async () => {
+  it("seats an NPP-governed member on the wider roll but not on an admission", async () => {
     // Ticket #1257. TR is not player-enabled, so it never holds a ballot on an
     // admission — a silence there is a veto and an NPP government plans once
     // every six turns. It DOES hold one on ordinary majority business, where a

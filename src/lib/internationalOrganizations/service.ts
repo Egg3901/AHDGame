@@ -72,21 +72,24 @@ export interface OrganizationSummary {
     status: OrganizationMembership["status"];
     joinedTurn: number;
     /**
-     * Whether this member casts a ballot ON A UNANIMITY BALLOT — an admission, an
-     * FTA, a join-conflict. Any entity may be a member; only player-enabled
+     * Whether this member casts a ballot ON AN ADMISSION OR A BLOC WAR ENTRY —
+     * the two ballots that ask a member to consent to someone else's business
+     * and let its silence block. Any entity may be a member; only player-enabled
      * countries vote on these. Vote rosters MUST filter on this or they promise a
      * ballot that can never arrive.
      */
     hasVote: boolean;
     /**
-     * Whether this member casts a ballot ON A MAJORITY BALLOT — a leadership
-     * election, sanctions, aid, dues, a directive.
+     * Whether this member casts a ballot ON EVERY OTHER INSTRUMENT — a leadership
+     * election, sanctions, aid, dues, a directive, and a free-trade agreement,
+     * which is unanimous but voted only by its own named parties.
      *
      * Wider than `hasVote`: in active mode it also covers modelled members run by
-     * an NPP government. They are trusted with a majority ballot, where a silence
-     * merely costs a yes, and kept off a unanimity one, where a silence is a
-     * veto. Pick the field that matches the ballot you are rendering — showing a
-     * threshold the resolver will not apply is the whole of ticket #1257.
+     * an NPP government. They are trusted here, where a silence merely costs a
+     * yes or is a party declining its own deal, and kept off an admission or an
+     * entry resolution, where a silence is a veto. Pick the field that matches
+     * the ballot you are rendering — showing a threshold the resolver will not
+     * apply is the whole of ticket #1257.
      */
     hasPolicyVote: boolean;
     /**

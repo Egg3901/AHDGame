@@ -127,11 +127,11 @@ describe("membership application tally", () => {
   });
 });
 
-describe("a member seated only on majority ballots", () => {
+describe("a member seated on everything but an admission", () => {
   /**
    * Poland run by an NPP government: `hasPolicyVote` without `hasVote`. The
-   * resolver seats exactly this member on a majority ballot and keeps it off a
-   * unanimity one, so the two panels below must disagree about it — and each must
+   * resolver seats exactly this member on a chair election and keeps it off an
+   * admission, so the two panels below must disagree about it — and each must
    * agree with the resolver.
    *
    * Ticket #1257: they did not. Every panel read `hasVote` while the resolver had
