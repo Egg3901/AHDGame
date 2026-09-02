@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import type { CrisisDecisionNode, CrisisEffect } from "@/lib/db/types/crisis";
-import { formatCrisisEffectTarget } from "@/lib/crises/effectLabels";
+import { formatCrisisEffectTarget, formatCrisisEffectValue } from "@/lib/crises/effectLabels";
 import { buildDecisionHistory } from "@/lib/crises/decisionHistory";
 import { computeFiscalImpact } from "@/lib/budget/fiscalImpact";
 import { computeAidOutcome } from "@/lib/crises/aidScaling";
@@ -89,10 +89,6 @@ function campaignLabel(value: string): string {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function formatEffectValue(value: number): string {
-  return Number(value.toFixed(2)).toString();
-}
-
 function roleLabel(role?: string): string | null {
   if (!role) return null;
   return role.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -170,7 +166,7 @@ function EffectChips({ effects, max = 4 }: { effects: CrisisEffect[]; max?: numb
           </span>
           <span className="font-mono font-semibold">
             {e.value > 0 ? "+" : ""}
-            {formatEffectValue(e.value)}
+            {formatCrisisEffectValue(e.value)}
             {e.targetType === "profitMargin" ? "%" : ""}
           </span>
         </span>

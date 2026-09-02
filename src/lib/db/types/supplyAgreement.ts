@@ -21,6 +21,15 @@ export interface SupplyAgreement {
   supplierCorpId: ObjectId;
   buyerCorpId: ObjectId;
   commodity: CommodityType;
+  /**
+   * Host state for a state-scoped commodity (today: freight). Freight is
+   * haulage capacity based in one state and clears in that state's book, so a
+   * freight contract names the state it is fulfilled from: the supplier's
+   * plants there are the capacity, the buyer's plants there are the demand,
+   * and the reservation lands in that one state book. Absent on every
+   * reachable-commodity contract, which is corporation-wide.
+   */
+  stateId?: string;
   /** Max units per turn the supplier commits (its output is capped to this for the buyer). */
   volumeCap: number;
   /**

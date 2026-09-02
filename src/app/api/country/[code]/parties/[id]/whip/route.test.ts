@@ -17,12 +17,20 @@ vi.mock("@/lib/congress/applyPlayerWhip", () => ({
   applyPlayerWhipToLeadership: vi.fn().mockResolvedValue({ overridden: 0, alreadyAligned: 0 }),
   applyPlayerWhipToGovernmentVote: vi.fn().mockResolvedValue({ overridden: 0, alreadyAligned: 0 }),
   applyPlayerWhipToCabinet: vi.fn().mockResolvedValue({ overridden: 0, alreadyAligned: 0 }),
+  applyPlayerWhipToVacateMotion: vi.fn().mockResolvedValue({ overridden: 0, alreadyAligned: 0 }),
 }));
 vi.mock("@/lib/congress/applyWhipVotes", () => ({
   applyWhipVotesToBill: vi.fn().mockResolvedValue({ fellInLine: 0, ignored: 0 }),
   applyWhipVotesToLeadership: vi.fn().mockResolvedValue({ fellInLine: 0, ignored: 0 }),
   applyWhipVotesToGovernmentVote: vi.fn().mockResolvedValue({ fellInLine: 0, ignored: 0 }),
   applyWhipVotesToCabinet: vi.fn().mockResolvedValue({ fellInLine: 0, ignored: 0 }),
+  applyWhipVotesToVacateMotion: vi.fn().mockResolvedValue({ fellInLine: 0, ignored: 0 }),
+}));
+vi.mock("@/lib/time/gameTime", () => ({
+  getGameTime: vi.fn().mockResolvedValue({
+    currentTurn: 100,
+    effectiveNow: new Date("2026-09-01T00:00:00Z"),
+  }),
 }));
 vi.mock("@/lib/parties/antiAbuseGuards", () => ({
   getPartyNppControlStatus: vi.fn().mockResolvedValue({ ok: true }),
@@ -75,6 +83,7 @@ describe("POST /api/country/[code]/parties/[id]/whip", () => {
       "electedOfficials",
       "npps",
       "congressLeaders",
+      "speakerVacateMotions",
     ]) {
       db.collection(name);
     }
@@ -655,6 +664,162 @@ describe("POST /api/country/[code]/parties/[id]/whip", () => {
       expect.any(Map),
       "hard",
       expect.any(Number)
+    );
+  });
+});
+
+describe("POST /api/country/[code]/parties/[id]/whip — motion to vacate", () => {
+  let db: MockDb;
+  let chairId: ObjectId;
+
+  const openMotion = {
+    _id: "current",
+    status: "voting",
+    targetSpeakerId: new ObjectId(),
+    targetSpeakerName: "Sitting Speaker",
+    startedAt: new Date("2026-08-31T00:00:00Z"),
+    endsAt: new Date("2026-09-02T00:00:00Z"),
+    endsOnTurn: 124,
+    votes: {},
+  };
+
+  function vacateRequest(overrides: Record<string, unknown> = {}) {
+    return new Request("http://localhost/api/country/us/parties/1/whip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        targetType: "speakerVacateMotion",
+        targetId: "current",
+        chamber: "house",
+        direction: "for",
+        ...overrides,
+      }),
+    });
+  }
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    chairId = new ObjectId();
+
+    for (const name of [
+      "billWhips",
+      "speakerVacateMotions",
+      "electedOfficials",
+      "npps",
+      "characters",
+      "congressLeaders",
+    ]) {
+      db.collection(name);
+    }
+
+    db.collectionMocks["billWhips"]!.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks["billWhips"]!.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+    db.collectionMocks["congressLeaders"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["electedOfficials"]!.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks["npps"]!.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks["speakerVacateMotions"]!.findOne.mockResolvedValue(openMotion);
+
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+
+    const { getGameTime } = await import("@/lib/time/gameTime");
+    vi.mocked(getGameTime).mockResolvedValue({
+      currentTurn: 100,
+      effectiveNow: new Date("2026-09-01T00:00:00Z"),
+    } as never);
+
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: makeAuthUser(chairId),
+    } as never);
+
+    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+    vi.mocked(findPartyBySequentialId).mockResolvedValue({
+      sequentialId: 1,
+      countryId: "US",
+      isDefault: true,
+      chairId,
+      viceChairId: null,
+    } as never);
+  });
+
+  it("stores an NPP whip against the canonical current key and applies it", async () => {
+    const { POST } = await import("./route");
+    const res = await POST(vacateRequest(), {
+      params: Promise.resolve({ code: "us", id: "1" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(db.collectionMocks["billWhips"]!.insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({ targetType: "speakerVacateMotion", targetId: "current" })
+    );
+    const { applyWhipVotesToVacateMotion } = await import("@/lib/congress/applyWhipVotes");
+    expect(applyWhipVotesToVacateMotion).toHaveBeenCalled();
+  });
+
+  it("pins the target id to the singleton even when the client sends another id", async () => {
+    const { POST } = await import("./route");
+    const res = await POST(vacateRequest({ targetId: new ObjectId().toString() }), {
+      params: Promise.resolve({ code: "us", id: "1" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(db.collectionMocks["billWhips"]!.insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({ targetId: "current" })
+    );
+  });
+
+  it("rejects a motion whose voting window has already closed", async () => {
+    const { getGameTime } = await import("@/lib/time/gameTime");
+    vi.mocked(getGameTime).mockResolvedValue({
+      currentTurn: 130,
+      effectiveNow: new Date("2026-09-03T00:00:00Z"),
+    } as never);
+
+    const { POST } = await import("./route");
+    const res = await POST(vacateRequest(), {
+      params: Promise.resolve({ code: "us", id: "1" }),
+    });
+
+    expect(res.status).toBe(404);
+    expect(db.collectionMocks["billWhips"]!.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("404s when no motion is open", async () => {
+    db.collectionMocks["speakerVacateMotions"]!.findOne.mockResolvedValue(null);
+
+    const { POST } = await import("./route");
+    const res = await POST(vacateRequest(), {
+      params: Promise.resolve({ code: "us", id: "1" }),
+    });
+
+    expect(res.status).toBe(404);
+  });
+
+  it("rejects a chamber other than the House", async () => {
+    const { POST } = await import("./route");
+    const res = await POST(vacateRequest({ chamber: "senate" }), {
+      params: Promise.resolve({ code: "us", id: "1" }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(db.collectionMocks["billWhips"]!.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("scopes the attempt cap to whips issued during the current motion", async () => {
+    // Two whips exist, but both predate this motion, so the cap must not bite.
+    db.collectionMocks["billWhips"]!.find.mockReturnValue(makeCursor([]));
+
+    const { POST } = await import("./route");
+    const res = await POST(vacateRequest(), {
+      params: Promise.resolve({ code: "us", id: "1" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(db.collectionMocks["billWhips"]!.find).toHaveBeenCalledWith(
+      expect.objectContaining({ createdAt: { $gte: openMotion.startedAt } })
     );
   });
 });

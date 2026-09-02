@@ -8,11 +8,17 @@ import {
   getPartyIdString,
   getStatePartyOrgDocumentId,
 } from "@/lib/db/partyLookup";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import {
+  COUNTRY_CONFIGS,
+  getSubNationalLegislatureKey,
+  type CountryId,
+} from "@/lib/constants/countries";
 import { getCabinetWhipChamber } from "@/lib/partyWhips/constraints";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 import { getGameState } from "@/lib/gameState";
+import { impeachmentStageChamberKey } from "@/lib/impeachment/impeachmentTally";
+import type { Impeachment } from "@/lib/db/types/impeachment";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string; partyId: string }>;
@@ -21,6 +27,8 @@ interface RouteParams {
 interface LeadershipItem {
   id: string;
   type: string;
+  /** Chamber the item is voted in, so the panel whips the right one. */
+  chamber: string;
   candidacies: Array<{
     id: string;
     nomineeName: string;
@@ -75,81 +83,154 @@ export async function GET(_request: Request, { params }: RouteParams) {
     }
 
     const cabinetChamber = getCabinetWhipChamber(countryId);
-    const eligibleOfficials = await db
-      .collection<ElectedOfficial>("electedOfficials")
-      .find({
-        isNPP: true,
-        party: partyKey,
-        state: stateId,
-        // CN: chamber key "npc" → office type "npcDelegate" (no-op elsewhere).
-        officeType: getOfficeTypeForChamber(countryId, cabinetChamber),
-      })
-      .toArray();
-
-    if (eligibleOfficials.length === 0) {
-      return NextResponse.json({
-        speakerElections: [],
-        leadershipElections: [],
-      });
-    }
-
+    const subNationalChamber = getSubNationalLegislatureKey(countryId);
     const now = new Date();
     const gameStateForLeadership = await getGameState(db);
     const currentTurnForLeadership = gameStateForLeadership?.currentTurn ?? 0;
-    const nominations = await db
-      .collection<CabinetNomination>("cabinetNominations")
-      .find({ status: "active", countryId })
-      .toArray();
-    const activeNominations = nominations.filter(
-      (nomination) =>
-        !isVotingDeadlinePassed(
-          nomination.votingEndsAt,
-          now,
-          nomination.votingEndsOnTurn,
-          currentTurnForLeadership
-        )
-    );
 
-    if (activeNominations.length === 0) {
-      return NextResponse.json({
-        speakerElections: [],
-        leadershipElections: [],
-      });
-    }
+    // Two different chambers matter here, so they are counted separately: a
+    // cabinet nomination is voted by the national upper chamber, while a
+    // governor's trial is held by this state's own legislature. Gating both on
+    // one query would hide impeachments from a party with no senators.
+    const [cabinetOfficials, stateLegislatureOfficials] = await Promise.all([
+      db
+        .collection<ElectedOfficial>("electedOfficials")
+        .find({
+          isNPP: true,
+          party: partyKey,
+          state: stateId,
+          // CN: chamber key "npc" → office type "npcDelegate" (no-op elsewhere).
+          officeType: getOfficeTypeForChamber(countryId, cabinetChamber),
+        })
+        .toArray(),
+      db
+        .collection<ElectedOfficial>("electedOfficials")
+        .find({
+          isNPP: true,
+          party: partyKey,
+          state: stateId,
+          officeType: getOfficeTypeForChamber(countryId, subNationalChamber),
+        })
+        .toArray(),
+    ]);
 
-    const existingWhips = await db
-      .collection<BillWhip>("billWhips")
-      .find({
-        targetType: "cabinetNomination",
-        targetId: { $in: activeNominations.map((nomination) => nomination._id) },
-        chamber: cabinetChamber,
-        partyId: partyKey,
-        stateId,
-      })
-      .toArray();
+    const items: LeadershipItem[] = [];
 
-    const whipsByNomination = new Map<string, BillWhip[]>();
-    for (const whip of existingWhips) {
-      const key = whip.targetId.toString();
-      if (!whipsByNomination.has(key)) {
-        whipsByNomination.set(key, []);
+    // ── Governor impeachment tried by this state's legislature ──────────────
+    if (stateLegislatureOfficials.length > 0) {
+      const impeachments = await db
+        .collection<Impeachment>("impeachments")
+        .find({
+          countryId,
+          targetOffice: "governor",
+          state: stateId,
+          stage: { $in: ["house", "senate"] },
+        })
+        .toArray();
+
+      const impeachmentIds = impeachments.map((impeachment) => impeachment._id);
+      const impeachmentWhips =
+        impeachmentIds.length > 0
+          ? await db
+              .collection<BillWhip>("billWhips")
+              .find({
+                targetType: "impeachmentVote",
+                targetId: { $in: impeachmentIds },
+                partyId: partyKey,
+                stateId,
+              })
+              .toArray()
+          : [];
+      const whipsByImpeachment = new Map<string, BillWhip[]>();
+      for (const whip of impeachmentWhips) {
+        const key = whip.targetId.toString();
+        if (!whipsByImpeachment.has(key)) whipsByImpeachment.set(key, []);
+        whipsByImpeachment.get(key)!.push(whip);
       }
-      whipsByNomination.get(key)!.push(whip);
+
+      for (const impeachment of impeachments) {
+        const stageChamber = impeachmentStageChamberKey(impeachment);
+        if (!stageChamber) continue;
+        const stageEndsOnTurn =
+          impeachment.stage === "house"
+            ? impeachment.houseVotingEndsOnTurn
+            : impeachment.senateVotingEndsOnTurn;
+        if (stageEndsOnTurn != null && currentTurnForLeadership > stageEndsOnTurn) continue;
+
+        const whips = whipsByImpeachment.get(impeachment._id.toString()) ?? [];
+        items.push({
+          id: impeachment._id.toString(),
+          type: "impeachmentVote",
+          chamber: stageChamber,
+          candidacies: [
+            {
+              id: impeachment._id.toString(),
+              nomineeName: `Impeachment of ${impeachment.targetName}`,
+              votesFor: 0,
+            },
+          ],
+          existingWhips: whips.map((whip) => ({
+            candidacyId: whip.candidacyId?.toString(),
+            attemptNumber: whip.attemptNumber,
+          })),
+          canWhip: whips.length < 2,
+        });
+      }
     }
 
-    const items: LeadershipItem[] = activeNominations.map((nomination) => {
-      const whips = whipsByNomination.get(nomination._id.toString()) ?? [];
-      return {
-        id: nomination._id.toString(),
-        type: `Cabinet: ${nomination.nomineeCharacterName}`,
-        candidacies: [],
-        existingWhips: whips.map((whip) => ({
-          candidacyId: whip.candidacyId?.toString(),
-          attemptNumber: whip.attemptNumber,
-        })),
-        canWhip: whips.length < 2,
-      };
-    });
+    // ── Cabinet nominations voted by the national upper chamber ─────────────
+    if (cabinetOfficials.length > 0) {
+      const nominations = await db
+        .collection<CabinetNomination>("cabinetNominations")
+        .find({ status: "active", countryId })
+        .toArray();
+      const activeNominations = nominations.filter(
+        (nomination) =>
+          !isVotingDeadlinePassed(
+            nomination.votingEndsAt,
+            now,
+            nomination.votingEndsOnTurn,
+            currentTurnForLeadership
+          )
+      );
+
+      if (activeNominations.length > 0) {
+        const existingWhips = await db
+          .collection<BillWhip>("billWhips")
+          .find({
+            targetType: "cabinetNomination",
+            targetId: { $in: activeNominations.map((nomination) => nomination._id) },
+            chamber: cabinetChamber,
+            partyId: partyKey,
+            stateId,
+          })
+          .toArray();
+
+        const whipsByNomination = new Map<string, BillWhip[]>();
+        for (const whip of existingWhips) {
+          const key = whip.targetId.toString();
+          if (!whipsByNomination.has(key)) {
+            whipsByNomination.set(key, []);
+          }
+          whipsByNomination.get(key)!.push(whip);
+        }
+
+        for (const nomination of activeNominations) {
+          const whips = whipsByNomination.get(nomination._id.toString()) ?? [];
+          items.push({
+            id: nomination._id.toString(),
+            type: `Cabinet: ${nomination.nomineeCharacterName}`,
+            chamber: cabinetChamber,
+            candidacies: [],
+            existingWhips: whips.map((whip) => ({
+              candidacyId: whip.candidacyId?.toString(),
+              attemptNumber: whip.attemptNumber,
+            })),
+            canWhip: whips.length < 2,
+          });
+        }
+      }
+    }
 
     return NextResponse.json({
       speakerElections: [],

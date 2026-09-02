@@ -59,10 +59,18 @@ type ChamberKind = "senate" | "house";
 export async function vacateCongressLeadershipRole(
   db: Db,
   leaderRole: LeadershipRole,
-  now: Date
-): Promise<void> {
-  await db.collection<CongressLeader>("congressLeaders").updateOne(
-    { role: leaderRole },
+  now: Date,
+  /**
+   * When set, only vacate if this character is still the seated holder, and
+   * never upsert. Callers that follow a vacancy with a side effect (opening an
+   * election, posting to the feed) pass it so overlapping requests cannot both
+   * claim the same vacancy: the loser matches nothing and gets `false` back.
+   */
+  expectCharacterId?: ObjectId
+): Promise<boolean> {
+  const scoped = expectCharacterId !== undefined;
+  const result = await db.collection<CongressLeader>("congressLeaders").updateOne(
+    scoped ? { role: leaderRole, characterId: expectCharacterId } : { role: leaderRole },
     {
       $set: {
         role: leaderRole,
@@ -75,10 +83,11 @@ export async function vacateCongressLeadershipRole(
         nominatedBy: "",
         electedAt: "",
       },
-      $setOnInsert: { createdAt: now },
+      ...(scoped ? {} : { $setOnInsert: { createdAt: now } }),
     },
-    { upsert: true }
+    { upsert: !scoped }
   );
+  return !scoped || result.matchedCount > 0;
 }
 
 /**

@@ -1058,8 +1058,19 @@ export interface CorporateSector {
     labour: number;
     upkeep: number;
     compliance: number;
-    /** SIGNED: the calibration residual is negative on most prod sectors. */
+    /**
+     * SIGNED: the calibration residual is negative on most prod sectors. This
+     * is the figure actually charged: when the credit exceeded every named
+     * cost line it was clamped to them (`otherOpexCreditCapped`).
+     */
     otherOpex: number;
+    /**
+     * True when the residual credit was clamped to the named bills this turn.
+     * The raw anchor-times-units product is `otherOpexUncapped`; the gap
+     * between the two is profit the sector would otherwise have invented.
+     */
+    otherOpexCreditCapped?: boolean;
+    otherOpexUncapped?: number;
     financialLegs: number;
     /**
      * The policy/tech modifier stack as money. POSITIVE is a credit that

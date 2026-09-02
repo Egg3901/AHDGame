@@ -234,6 +234,8 @@ export async function buildSpeakerResponse(
     threshold: vacateThreshold(house.totalSeats),
     totalSeats: house.totalSeats,
     myVote: motionOpen && myCharacterId ? (motionDoc!.votes?.[myCharacterId] ?? null) : null,
+    myWhippedFromOriginal:
+      motionOpen && myCharacterId ? (motionDoc!.whippedFromVote?.[myCharacterId] ?? null) : null,
     // A member can file only when a Speaker is seated, no motion is running, and
     // no Speaker election is in progress.
     canFile: isHouseMember && !!currentSpeaker && !motionOpen && !isVoting,

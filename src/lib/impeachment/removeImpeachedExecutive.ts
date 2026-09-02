@@ -1,12 +1,13 @@
 import { ObjectId } from "mongodb";
 import type { Db } from "@/lib/mongodb";
 import type { Character, CareerEvent, ElectedOfficial, OfficeType } from "@/lib/db/types";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import {
   getExecutiveOfficialFilter,
   type ExecutiveOfficeType,
 } from "@/lib/elections/executiveOfficeFilters";
 import { getOfficeLabel } from "@/lib/utils/politics";
+import { governorOfficialFilter } from "@/lib/db/electedOfficialScope";
 
 /** Record the "removed" career event and clear the character's office. Shared by
  *  the executive and governor removal paths. */
@@ -59,18 +60,6 @@ export async function removeImpeachedExecutive(
     });
 
   await recordRemovalOnCharacter(db, countryId, { type: officeType }, targetCharacterId, now);
-}
-
-/** Country-scoped governor filter (US governor rows predate the explicit countryId). */
-function governorOfficialFilter(countryId: CountryId, state: string): Record<string, unknown> {
-  if (countryId === COUNTRY_CONFIGS.US.id) {
-    return {
-      officeType: "governor",
-      state,
-      $or: [{ countryId }, { countryId: { $exists: false } }],
-    };
-  }
-  return { officeType: "governor", countryId, state };
 }
 
 /**

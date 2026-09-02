@@ -3,9 +3,9 @@
  *
  * A bloc is a coalition (all member parties' seats summed) or a single
  * unaffiliated party. The largest bloc is the "majority bloc"; its dominant
- * party drives Majority Leader/Whip eligibility (single-largest-party
- * policy), while Minority Leader/Whip exclude every party in the bloc
- * (non-coalition policy). Speaker, President Pro Tempore, and the DE
+ * party drives President Pro Tempore and Majority Leader/Whip eligibility
+ * (single-largest-party policy), while Minority Leader/Whip exclude every
+ * party in the bloc (non-coalition policy). Speaker and the DE
  * Bundestagspräsident are open to any seated chamber member (any-seated
  * policy) and do not key off bloc membership.
  *

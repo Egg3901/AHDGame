@@ -171,6 +171,7 @@ const additivePnlFields = [
   "upkeep",
   "compliance",
   "otherOpex",
+  "otherOpexUncapped",
   "financialLegs",
   "policyCredit",
   "operatingCost",
@@ -195,7 +196,10 @@ function mergePlantsPnl(
   }
   merged.turn = Math.max(finite(survivor.plantsPnl?.turn), finite(source.plantsPnl?.turn));
   merged.policyPp = merged.revenue > 0 ? (merged.policyCredit / merged.revenue) * 100 : 0;
-  return merged as CorporateSector["plantsPnl"];
+  const otherOpexCreditCapped =
+    survivor.plantsPnl?.otherOpexCreditCapped === true ||
+    source.plantsPnl?.otherOpexCreditCapped === true;
+  return { ...merged, otherOpexCreditCapped } as unknown as CorporateSector["plantsPnl"];
 }
 
 export interface AdministrativeSectorMergeUpdate {

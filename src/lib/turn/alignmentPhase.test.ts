@@ -1104,6 +1104,71 @@ describe("processAlignmentTurn", () => {
     expect(r.joinRequests).toBe(0);
   });
 
+  /**
+   * A country absorbed into another still has an alignment row, and that row
+   * keeps a join-ready clock that was ticking before it was dissolved. Nothing
+   * in the access map stops it: `getAllCountryAccess` drops dissolved countries
+   * entirely, so `access[id]?.enabledForPlayers` reads undefined and the player
+   * guard falls open for a state that no longer exists. West Germany applied to
+   * NATO two turns after German reunification dissolved it.
+   *
+   * The gate has to be dissolution, NOT registry membership: most bloc members
+   * (Canada, the Benelux, Albania, the Soviet republics) are absent from the
+   * country registry too, and freezing them out would break the very feature.
+   */
+  const dissolvedCountries = (rows: object[]) =>
+    db.collection("countryGameStates").find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue(rows),
+    });
+
+  it("never asks on behalf of a country that has been dissolved", async () => {
+    alignments([joinReadyRow({ entityId: "DE" })]);
+    dissolvedCountries([{ _id: "DE", dissolvedTurn: 550 }]);
+    const { processAlignmentTurn } = await import("./alignmentPhase");
+    const r = await processAlignmentTurn(db as unknown as Db, 600);
+
+    expect(r.joinRequests).toBe(0);
+    expect(db.collection("organizationMembershipProposals").insertOne).not.toHaveBeenCalled();
+  });
+
+  it("still asks on behalf of an entity that is simply not a registered country", async () => {
+    // Canada is seated in NATO and has an alignment row, but is not in
+    // COUNTRY_ORDER and has no countryGameStates doc at all. Absent is not
+    // dissolved, and it must keep its accession.
+    alignments([joinReadyRow({ entityId: "CA" })]);
+    dissolvedCountries([]);
+    const { processAlignmentTurn } = await import("./alignmentPhase");
+    const r = await processAlignmentTurn(db as unknown as Db, 100);
+
+    expect(r.joinRequests).toBeGreaterThanOrEqual(1);
+  });
+
+  it("stops drifting a dissolved country's alignment altogether", async () => {
+    // The row is what re-arms the accession clock, so leaving it drifting means
+    // the application returns the moment the no-pestering window lapses.
+    alignments([joinReadyRow({ entityId: "DE" })]);
+    dissolvedCountries([{ _id: "DE", dissolvedTurn: 550 }]);
+    const { processAlignmentTurn } = await import("./alignmentPhase");
+    const r = await processAlignmentTurn(db as unknown as Db, 600);
+
+    expect(r.countriesDrifted).toBe(0);
+    expect(db.collection("countryAlignments").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("does not pull a dissolved country out of a bloc it still sits in", async () => {
+    // Defection is an act of foreign policy by a state that exists. A dissolved
+    // one is cleaned up by the merge, not shown the door by the drift engine.
+    alignments([collapsedRow]);
+    orgMemberships([wobbling()]);
+    dissolvedCountries([{ _id: "YU", dissolvedTurn: 90 }]);
+    const { processAlignmentTurn } = await import("./alignmentPhase");
+    const r = await processAlignmentTurn(db as unknown as Db, 100);
+
+    expect(r.defections).toBe(0);
+    expect(vi.mocked(removeOrganizationMembership)).not.toHaveBeenCalled();
+  });
+
   it("starts the accession clock the first turn a share reaches the join threshold", async () => {
     alignments([joinReadyRow({ joinReadySince: null })]);
     const { processAlignmentTurn } = await import("./alignmentPhase");
