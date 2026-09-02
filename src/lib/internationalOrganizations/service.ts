@@ -23,6 +23,9 @@ import {
   withdrawalKey,
 } from "@/lib/internationalOrganizations/withdrawalTombstone";
 import type { OrgMemberId } from "@/lib/db/types/internationalOrganization";
+import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
+import { hasBillLifecycle } from "@/lib/legislature/hasBillLifecycle";
+import { readForeignPolicyMode } from "@/lib/internationalOrganizations/policyVotingRoll";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { entityFlag, entityName } from "@/lib/constants/entityDisplay";
 import { resolveCountryIdentities } from "@/lib/country/countryIdentity";
@@ -330,6 +333,34 @@ export async function loadOrganizationSummaries(db: Db): Promise<OrganizationSum
   // the route will refuse.
   const categoryCtx = await loadCategoryContext(db);
 
+  // The vote predicate the RESOLVER applies, so the tally a player watches is
+  // the tally that decides. In active foreign-policy mode a modelled member
+  // with a formed NPP government holds a ballot even though it is not open to
+  // players — showing it as voteless while the resolver waits on its consent
+  // is how an admission reads "2 / 2 yes" for days and still fails.
+  const foreignPolicyMode = await readForeignPolicyMode(db);
+  const activeRolls = new Map<InternationalOrganizationId, Set<OrgMemberId>>();
+  if (foreignPolicyMode === "active") {
+    for (const id of orderedIds) {
+      const members = (membersByOrg.get(id) ?? [])
+        .map((m) => m.countryId)
+        .filter((c): c is CountryId => c in COUNTRY_CONFIGS && hasBillLifecycle(c as CountryId));
+      if (members.length === 0) continue;
+      const formations = await db
+        .collection<GovernmentFormation>("governmentFormations")
+        .find({
+          _id: { $in: members },
+          status: "formed",
+          $or: [{ pmNppId: { $ne: null } }, { presidentNppId: { $ne: null } }],
+        })
+        .project<{ countryId: string }>({ countryId: 1 })
+        .toArray();
+      if (formations.length > 0) {
+        activeRolls.set(id, new Set(formations.map((f) => f.countryId)) as Set<OrgMemberId>);
+      }
+    }
+  }
+
   // Names and flags come from the identity resolver, not the compiled config,
   // so the roster agrees with every other country surface about what a country
   // is called. Two things only it knows: a runtime rename or reflag left by an
@@ -377,7 +408,10 @@ export async function loadOrganizationSummaries(db: Db): Promise<OrganizationSum
         status: m.status,
         joinedTurn: m.joinedTurn,
         hasVote,
-        hasPolicyVote: hasVote || nppGoverned.has(m.countryId as CountryId),
+        hasPolicyVote:
+          hasVote ||
+          nppGoverned.has(m.countryId as CountryId) ||
+          activeRolls.get(id)?.has(m.countryId) === true,
         isCountry,
       };
     });
