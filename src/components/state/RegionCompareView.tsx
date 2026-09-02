@@ -55,10 +55,18 @@ export function RegionCompareView({
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [home]);
 
-  /** regionId -> categoryId -> mean score across that category's seven metrics. */
+  /**
+   * regionId -> categoryId -> mean score across that category's seven metrics.
+   *
+   * Includes the home region, computed exactly like the peers. Reading home's
+   * score off `category.score` instead would compare a figure derived from
+   * unrounded metric values against peer figures derived from the rounded ones
+   * in the `regions` arrays — two columns of the same table doing different
+   * arithmetic, and enough to flip a displayed integer at a .5 boundary.
+   */
   const scoresByRegion = useMemo(() => {
     const out = new Map<string, Map<string, number>>();
-    for (const id of peers) {
+    for (const id of [home.regionId, ...peers]) {
       const byCategory = new Map<string, number>();
       for (const cat of home.categories) {
         let sum = 0;
@@ -86,12 +94,8 @@ export function RegionCompareView({
     })),
   ];
 
-  const scoreFor = (regionId: string, categoryId: string): number | null => {
-    if (regionId === home.regionId) {
-      return home.categories.find((c) => c.id === categoryId)?.score ?? null;
-    }
-    return scoresByRegion.get(regionId)?.get(categoryId) ?? null;
-  };
+  const scoreFor = (regionId: string, categoryId: string): number | null =>
+    scoresByRegion.get(regionId)?.get(categoryId) ?? null;
 
   const valueFor = (regionId: string, categoryId: string, metricId: string): number | null => {
     const metric = home.categories

@@ -149,6 +149,22 @@ describe("RegionRegistryTab compare view", () => {
     expect(screen.getAllByText("New York").length).toBeGreaterThan(1);
   });
 
+  it("scores the home column the same way as the peer columns", async () => {
+    // Home used to read `category.score` (derived from unrounded metric values)
+    // while peers were averaged from the rounded values in `regions` — two
+    // columns of one table doing different arithmetic.
+    mockFetch(payload());
+    renderTab();
+    await screen.findByText(/situation registry/);
+    fireEvent.click(screen.getByRole("button", { name: /Compare/ }));
+    fireEvent.click(screen.getByRole("button", { name: "New York" }));
+
+    // Every metric is 68 for GA and 72 for NY, so every category row must read
+    // exactly that in both columns.
+    expect(screen.getAllByText("68").length).toBe(9);
+    expect(screen.getAllByText("72").length).toBe(9);
+  });
+
   it("names the region plural from the country config, not by appending an s", async () => {
     mockFetch(payload({ regionLabel: "Republic", regionLabelPlural: "Republics" }));
     renderTab();
