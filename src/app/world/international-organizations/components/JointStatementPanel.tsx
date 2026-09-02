@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui";
-import { COUNTRY_CONFIGS, COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
 import { canTableResolutionType } from "@/lib/constants/orgCategory";
 import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
 import type { OrgSummary, OrgViewerInfo } from "../orgTypes";
@@ -13,6 +13,7 @@ import {
   requiresUnanimity,
   votesNeeded,
 } from "@/lib/internationalOrganizations/resolutionRules";
+import { useEntityName } from "../useEntityName";
 
 interface Props {
   org: OrgSummary;
@@ -37,6 +38,7 @@ export function JointStatementPanel({
   votingWindowTurns,
   onChange,
 }: Props) {
+  const entityName = useEntityName();
   const viewerFmCountry = viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
   const viewerIsMember =
     viewerFmCountry != null && org.members.some((m) => m.countryId === viewerFmCountry);
@@ -105,7 +107,7 @@ export function JointStatementPanel({
     onChange();
   }
 
-  const name = (c?: CountryId) => (c ? (COUNTRY_CONFIGS[c]?.name ?? c) : "—");
+  const name = (c?: CountryId) => (c ? entityName(c) : "—");
   const stanceLabel = (s?: string) => (s === "condemn" ? "Condemnation" : "Endorsement");
 
   return (
@@ -147,7 +149,7 @@ export function JointStatementPanel({
                 <option value="">Select…</option>
                 {COUNTRY_ORDER.map((c) => (
                   <option key={c} value={c}>
-                    {COUNTRY_CONFIGS[c].name}
+                    {entityName(c)}
                   </option>
                 ))}
               </select>

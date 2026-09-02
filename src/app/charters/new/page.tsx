@@ -2,9 +2,10 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { DraftCharterForm } from "@/components/charters/DraftCharterForm";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { getDb } from "@/lib/mongodb";
 import type { State } from "@/lib/db/types";
+import { resolveCountryIdentity } from "@/lib/country/countryIdentity";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,6 @@ export default async function NewCharterPage() {
   if (!user.character) redirect("/create-character");
 
   const countryCode = user.character.countryId;
-  const countryName = COUNTRY_CONFIGS[countryCode as CountryId]?.name ?? countryCode;
   const proposer = {
     characterId: user.character._id.toString(),
     characterName: user.character.name,
@@ -27,6 +27,7 @@ export default async function NewCharterPage() {
   // F4 founding-cohort picker needs human-readable state names for the
   // dropdowns. Fetched server-side so no client-side round-trip is needed.
   const db = await getDb();
+  const { name: countryName } = await resolveCountryIdentity(db, countryCode as CountryId);
   const states = await db
     .collection<State>("states")
     .find({ countryId: countryCode }, { projection: { _id: 1, name: 1 } })

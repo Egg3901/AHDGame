@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Skeleton } from "@/components/ui";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { scotusUrl } from "@/lib/urls";
 import { formatDivergentDeathChance } from "@/lib/scotus/tenure";
 import { useJusticeOffice } from "./useJusticeOffice";
 import { JusticeActionPanel } from "./components/JusticeActionPanel";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 function leanLabel(value: number | null): string {
   return value != null ? value.toFixed(1) : "-";
@@ -20,10 +21,11 @@ function leanLabel(value: number | null): string {
  * daily judicial actions (#3598 justiceActions.ts).
  */
 export default function JusticeOfficePage() {
+  const resolveCountryName = useCountryDisplayName();
   const params = useParams();
   const countryCode = (params.code as string).toLowerCase();
   const countryId = countryCode.toUpperCase() as CountryId;
-  const countryName = COUNTRY_CONFIGS[countryId]?.name ?? countryId;
+  const countryName = resolveCountryName(countryId);
 
   const { data, loading, error, refetch } = useJusticeOffice(countryCode);
 

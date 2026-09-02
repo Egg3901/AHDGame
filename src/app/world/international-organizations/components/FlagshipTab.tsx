@@ -5,12 +5,13 @@ import { ORGANIZATION_CATEGORY_META } from "@/lib/constants/orgCategory";
 import { DEFENSE_PLEDGE_TARGET_PCT, POSTURE_META } from "@/lib/constants/orgPosture";
 import { getDirectiveDef } from "@/lib/constants/orgDirectives";
 import { getAgencyDef } from "@/lib/constants/orgAgencies";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import type { OrganizationResolutionType } from "@/lib/db/types/internationalOrganization";
 import type { OrgSummary } from "../orgTypes";
 import { MetricTile } from "./OrgPrimitives";
 import { formatFundAmount } from "./fundCurrency";
 import { useFundFormatter } from "./useFundFormatter";
+import { useEntityName } from "../useEntityName";
 
 /**
  * Per-org "flagship" tab, dispatched by the org's category (political →
@@ -243,6 +244,7 @@ function SecurityAlliance({ org }: { org: OrgSummary }) {
 }
 
 function EconomicMarket({ org, currentTurn }: { org: OrgSummary; currentTurn?: number }) {
+  const entityName = useEntityName();
   const activeFtas = org.activeLegislation.filter((l) => l.type === "free_trade_agreement");
   const directives = org.activeLegislation.filter((l) => l.type === "directive");
   return (
@@ -298,9 +300,7 @@ function EconomicMarket({ org, currentTurn }: { org: OrgSummary; currentTurn?: n
         ) : (
           <div className="space-y-2">
             {activeFtas.map((l) => {
-              const parties = (l.parties ?? [])
-                .map((p) => COUNTRY_CONFIGS[p as CountryId]?.name ?? p)
-                .join(", ");
+              const parties = (l.parties ?? []).map((p) => entityName(p as CountryId)).join(", ");
               return (
                 <div
                   key={l._id.toString()}
@@ -319,12 +319,13 @@ function EconomicMarket({ org, currentTurn }: { org: OrgSummary; currentTurn?: n
 }
 
 function DevelopmentFlagship({ org }: { org: OrgSummary }) {
+  const entityName = useEntityName();
   const disbursed = org.activeLegislation.filter((l) => l.type === "aid_package");
   const pending = org.pendingLegislation.filter((l) => l.type === "aid_package");
   // Balance native; the disbursement amounts below are a record and convert.
   const fundAmount = useFundFormatter(org.fund);
   const fundDisplay = formatFundAmount(org.fund.balanceLocal, org.fund.currencyCode);
-  const name = (c?: CountryId) => (c ? (COUNTRY_CONFIGS[c]?.name ?? c) : "—");
+  const name = (c?: CountryId) => (c ? entityName(c) : "—");
 
   return (
     <div className="space-y-4">

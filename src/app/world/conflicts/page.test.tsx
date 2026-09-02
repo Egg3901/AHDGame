@@ -55,6 +55,9 @@ vi.mock("@/lib/mongodb", () => ({
       countDocuments: vi.fn(async () => 2),
       find: () => ({
         sort: () => ({ toArray: vi.fn(async () => [internationalCrisis, domesticCrisis]) }),
+        // The page resolves runtime country renames, which reads `countryState`
+        // straight through `.find().toArray()` with no `.sort()` in between.
+        toArray: vi.fn(async () => []),
       }),
     }),
   })),

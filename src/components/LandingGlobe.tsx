@@ -55,6 +55,7 @@ import {
   TIER_LABELS,
   TIER_ORDER,
 } from "@/components/landing/countryTiers";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 type LandingCountryAccess = Partial<
   Record<string, { enabledForPlayers: boolean; economyPreview: boolean; status: CountryStatus }>
@@ -212,6 +213,7 @@ export function LandingGlobe({
    */
   showcasePaused?: boolean;
 }) {
+  const resolveCountryName = useCountryDisplayName();
   const isBroadsheet = theme === "broadsheet";
   const router = useRouter();
 
@@ -1174,7 +1176,7 @@ export function LandingGlobe({
     : undefined;
   const hoveredMapped = hoveredOverlayCountryId
     ? {
-        label: COUNTRY_CONFIGS[hoveredOverlayCountryId].name,
+        label: resolveCountryName(hoveredOverlayCountryId),
         status:
           COUNTRY_CONFIGS[hoveredOverlayCountryId].status === "coming-soon"
             ? ("planned" as const)

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import { CountryFlag } from "@/components/CountryFlag";
-import { COUNTRY_CONFIGS, COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
 import { COMMODITY_TYPES } from "@/lib/constants/commodities";
 import { canTableResolutionType } from "@/lib/constants/orgCategory";
 import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
@@ -15,6 +15,7 @@ import {
   requiresUnanimity,
   votesNeeded,
 } from "@/lib/internationalOrganizations/resolutionRules";
+import { useEntityName } from "../useEntityName";
 
 interface Props {
   org: OrgSummary;
@@ -30,6 +31,7 @@ interface Props {
  * FTAs. Only shown for categories whose powers include sanctions.
  */
 export function SanctionsPanel({ org, viewer, currentTurn, votingWindowTurns, onChange }: Props) {
+  const entityName = useEntityName();
   const viewerFmCountry = viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
   const viewerIsMember =
     viewerFmCountry != null && org.members.some((m) => m.countryId === viewerFmCountry);
@@ -100,9 +102,7 @@ export function SanctionsPanel({ org, viewer, currentTurn, votingWindowTurns, on
 
   const commodityLabel = (c?: string) => (c === "all" || !c ? "all commodities" : c);
   const targetLabel = (l: { sanctionsTargetCountryId?: CountryId }) =>
-    l.sanctionsTargetCountryId
-      ? (COUNTRY_CONFIGS[l.sanctionsTargetCountryId]?.name ?? l.sanctionsTargetCountryId)
-      : "—";
+    l.sanctionsTargetCountryId ? entityName(l.sanctionsTargetCountryId) : "—";
 
   return (
     <section className="space-y-4">
@@ -142,7 +142,7 @@ export function SanctionsPanel({ org, viewer, currentTurn, votingWindowTurns, on
                 <option value="">Select…</option>
                 {COUNTRY_ORDER.filter((c) => c !== viewerFmCountry).map((c) => (
                   <option key={c} value={c}>
-                    {COUNTRY_CONFIGS[c].name}
+                    {entityName(c)}
                   </option>
                 ))}
               </select>

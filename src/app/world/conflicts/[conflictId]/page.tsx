@@ -58,6 +58,7 @@ import { ConflictRecord, type ConflictRecordView } from "./ConflictRecord";
 import { conflictToFront } from "@/lib/military/createConflict";
 import { getTheaterState } from "@/lib/db/collections/theaterState";
 import { loadTermSettlement } from "@/lib/settlement/queries/termSettlement";
+import { loadCountryNameOverrides } from "@/lib/country/countryIdentity";
 
 /** How many engagements the record lists, newest first. */
 const BATTLE_LIMIT = 50;
@@ -86,6 +87,11 @@ export default async function ConflictRecordPage({
   if (!/^[1-9]\d*$/.test(conflictId)) notFound();
 
   const db = await getDb();
+  // One read for the whole page: these name many countries, and resolving each
+  // separately would be a round trip per belligerent.
+  const nameOverrides = await loadCountryNameOverrides(db);
+  const countryNameOf = (id: string) =>
+    nameOverrides[id as CountryId] ?? COUNTRY_CONFIGS[id as CountryId]?.name ?? id;
   const doc = await getConflictByNumber(db, Number(conflictId));
   if (!doc) notFound();
 
@@ -379,7 +385,7 @@ export default async function ConflictRecordPage({
           conflictId: doc._id,
           countryCode: viewerCountry.toLowerCase(),
           target: doc.termsWindow.target,
-          targetName: COUNTRY_CONFIGS[doc.termsWindow.target]?.name ?? doc.termsWindow.target,
+          targetName: countryNameOf(doc.termsWindow.target),
           turnsLeft: Math.max(0, doc.termsWindow.closesTurn - currentTurn),
           // The parties the victor may install, when they convert the loser to a
           // one-party state. Loaded from the same helper the route validates
@@ -700,11 +706,11 @@ export default async function ConflictRecordPage({
     treatyNotes: (doc.treatyEntries ?? [])
       .filter((e) => sideACountries.includes(e.countryId) || sideBCountries.includes(e.countryId))
       .map((e) => ({
-        country: COUNTRY_CONFIGS[e.countryId]?.name ?? e.countryId,
+        country: countryNameOf(e.countryId),
         organization:
           INTERNATIONAL_ORGANIZATIONS[e.organizationId as keyof typeof INTERNATIONAL_ORGANIZATIONS]
             ?.name ?? e.organizationId,
-        defending: COUNTRY_CONFIGS[e.defending]?.name ?? e.defending,
+        defending: countryNameOf(e.defending),
       })),
     control: doc.control,
     controlStart,

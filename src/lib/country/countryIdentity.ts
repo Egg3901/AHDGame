@@ -118,20 +118,31 @@ export async function resolveCountryIdentity(
 export async function loadCountryNameOverrides(
   db: Db
 ): Promise<Partial<Record<CountryId, string>>> {
-  const rows = await db
-    .collection<{ _id: CountryId; displayNameOverride?: string | null }>("countryState")
-    .find(
-      { displayNameOverride: { $type: "string", $ne: "" } },
-      { projection: { displayNameOverride: 1 } }
-    )
-    .toArray();
-  const out: Partial<Record<CountryId, string>> = {};
-  for (const row of rows) {
-    if (typeof row.displayNameOverride === "string" && row.displayNameOverride.length > 0) {
-      out[row._id] = row.displayNameOverride;
+  // FAILS SOFT, deliberately. Every caller is a page render, and the worst case
+  // of an empty map is a country shown under its compiled name — which is what
+  // every one of these surfaces did before this existed. A page that 500s
+  // because a cosmetic lookup threw would be the worse outcome, and the root
+  // layout already wraps its own call for the same reason. It also keeps this
+  // usable from the hand-built MockDbs several page tests supply, matching how
+  // `getCountryState` guards its own read.
+  try {
+    const rows = await db
+      .collection<{ _id: CountryId; displayNameOverride?: string | null }>("countryState")
+      .find(
+        { displayNameOverride: { $type: "string", $ne: "" } },
+        { projection: { displayNameOverride: 1 } }
+      )
+      .toArray();
+    const out: Partial<Record<CountryId, string>> = {};
+    for (const row of rows) {
+      if (typeof row.displayNameOverride === "string" && row.displayNameOverride.length > 0) {
+        out[row._id] = row.displayNameOverride;
+      }
     }
+    return out;
+  } catch {
+    return {};
   }
-  return out;
 }
 
 /**

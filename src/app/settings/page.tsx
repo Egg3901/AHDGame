@@ -8,7 +8,7 @@ import { useUserData } from "@/hooks/useUserData";
 import { useAuthMe } from "@/contexts/AuthDataContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { buildCharacterHref } from "@/lib/utils/profileUrls";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import {
   ChevronDown,
   Database,
@@ -65,8 +65,10 @@ import {
   GameQuickSettings,
   InterfaceQuickSettings,
 } from "./components/QuickSettingsPanels";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 export function SettingsPageContent() {
+  const resolveCountryName = useCountryDisplayName();
   const t = useTranslations("settings");
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -670,7 +672,7 @@ export function SettingsPageContent() {
     ),
   ].map((code) => ({
     code,
-    name: COUNTRY_CONFIGS[code as CountryId]?.name ?? code,
+    name: resolveCountryName(code as CountryId),
   }));
 
   const renderBucketQuickSettings = (bucketId: SettingsBucketId) => {
