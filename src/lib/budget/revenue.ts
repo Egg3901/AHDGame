@@ -951,6 +951,49 @@ function growStateBases(
   };
 }
 
+/**
+ * Replace any non-finite state tax base with the GDP-derived figure the revenue
+ * path already falls back to when bases are absent.
+ *
+ * A NaN base is ABSORBING: every growth step multiplies it, so once one appears
+ * it survives every turn and spreads — Berlin's live `stateBudgets` doc carries
+ * NaN in `taxBases.{taxableIncome,taxableSales,propertyValue}`, and from there
+ * in `revenue.{incomeTax,salesTax,propertyTax,total}`, `balance` and `surplus`
+ * (#1323). Nothing detected it, because NaN fails every comparison silently
+ * rather than throwing.
+ *
+ * Re-deriving from regional GDP is the same treatment an ABSENT base already
+ * gets, which is the honest reading: a base that is not a number is not a
+ * measurement. Zeroing instead would silently delete the region's revenue, and
+ * leaving it would keep the region permanently unbudgetable.
+ *
+ * `stateGdp` is the region's GDP in full units. A non-finite or non-positive
+ * GDP leaves the bases untouched — there is nothing to re-derive from, and
+ * inventing zeroes would be worse than the NaN.
+ */
+export function sanitizeStateTaxBases(
+  bases: StateTaxBases,
+  stateGdp: number
+): { bases: StateTaxBases; repaired: (keyof StateTaxBases)[] } {
+  const factors: Record<keyof StateTaxBases, number> = {
+    taxableIncome: GDP_INCOME_TAX_FACTOR,
+    taxableSales: GDP_SALES_FACTOR,
+    domesticCorporateProfits: GDP_DOMESTIC_CORPORATE_FACTOR,
+    foreignCorporateProfits: GDP_FOREIGN_CORPORATE_FACTOR,
+    propertyValue: GDP_PROPERTY_FACTOR,
+  };
+  const repaired: (keyof StateTaxBases)[] = [];
+  if (!Number.isFinite(stateGdp) || stateGdp <= 0) return { bases, repaired };
+  const next = { ...bases };
+  for (const key of Object.keys(factors) as (keyof StateTaxBases)[]) {
+    if (!Number.isFinite(next[key])) {
+      next[key] = stateGdp * factors[key];
+      repaired.push(key);
+    }
+  }
+  return { bases: repaired.length > 0 ? next : bases, repaired };
+}
+
 /** Full annual growth step (legacy fiscal-year form). */
 export function applyGrowthToStateBases(
   bases: StateTaxBases,

@@ -5,12 +5,14 @@ import type { State } from "@/lib/db/types/state";
 import type { CountryId } from "@/lib/constants/countries";
 import { getNationalDocId, NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import { getRegisteredCountryIdSet } from "@/lib/country/registeredCountries";
+import { logWarning } from "@/lib/utils/errorLog";
 import {
   applyPerTurnGrowthToFederalBases,
   applyPerTurnGrowthToStateBases,
   calculateFederalRevenue,
   computeTaxBaseGdpShareBaseline,
   normalizeFederalTaxRates,
+  sanitizeStateTaxBases,
   type TaxBaseGravityContext,
 } from "@/lib/budget/revenue";
 
@@ -185,10 +187,25 @@ export async function processFiscalBaseGrowth(
           tradeGrowth: metricRate(sm, "tradeGrowth", tradeGrowth),
           lastUpdated: factors.lastUpdated,
         };
+        // A NaN base is absorbing — every growth step multiplies it, so it
+        // survives forever and spreads into revenue, balance and surplus. Repair
+        // it from regional GDP before growing (see `sanitizeStateTaxBases`);
+        // `state.gdp` is in millions, hence the scale-up.
+        const { bases: cleanBases, repaired } = sanitizeStateTaxBases(
+          sb.taxBases,
+          (st.gdp ?? 0) * 1_000_000
+        );
+        if (repaired.length > 0) {
+          logWarning("Repaired non-finite state tax bases from regional GDP (#1323)", {
+            component: "FiscalBaseGrowth",
+            action: "sanitize state tax bases",
+            metadata: { stateId: String(sb._id), repaired },
+          });
+        }
         stateOps.push({
           updateOne: {
             filter: { _id: String(sb._id) },
-            update: { $set: { taxBases: applyPerTurnGrowthToStateBases(sb.taxBases, stFactors) } },
+            update: { $set: { taxBases: applyPerTurnGrowthToStateBases(cleanBases, stFactors) } },
           },
         });
         statesProcessed += 1;
