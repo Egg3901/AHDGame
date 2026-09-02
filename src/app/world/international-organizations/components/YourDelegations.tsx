@@ -1,9 +1,10 @@
 "use client";
 
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { CountryFlag } from "@/components/CountryFlag";
 import type { OrgSummary, OrgViewerInfo } from "../orgTypes";
 import { OrgCard } from "./OrgCard";
+import { useEntityName } from "../useEntityName";
 
 /**
  * The viewer's own delegations: the orgs their country is a member of (or has a
@@ -17,6 +18,7 @@ export function YourDelegations({
   orgs: OrgSummary[];
   viewer: OrgViewerInfo | null;
 }) {
+  const entityName = useEntityName();
   const focusCountry = viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
 
   if (!focusCountry) {
@@ -30,7 +32,7 @@ export function YourDelegations({
     );
   }
 
-  const countryName = COUNTRY_CONFIGS[focusCountry].name;
+  const countryName = entityName(focusCountry);
   const mine = orgs.filter((org) => {
     const isMember = org.members.some((m) => m.countryId === focusCountry);
     const hasPending = org.pendingMembershipProposals.some(
