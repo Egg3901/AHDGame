@@ -14,6 +14,7 @@ export type LegacyTabId =
   | "parties"
   | "demographics"
   | "metrics"
+  | "statistics"
   | "budget"
   | "laws"
   | "economy"
@@ -231,7 +232,7 @@ function resolveTabs(
   // three unconditionally and hardcode their legacy-mapped sub-tab, silently
   // ignoring whatever `sub=` the player actually clicked — locking Politics,
   // Economy, and Demographics onto their first sub-tab no matter what.
-  if (isValidSuperTab(tabParam, isAdmin) && (hasRegistry || tabParam !== "metrics")) {
+  if (isValidSuperTab(tabParam, isAdmin)) {
     const superTab = getSuperTab(tabParam as SuperTabId)!;
     const visibleSubs = getVisibleSubTabs(superTab, isAdmin);
 
