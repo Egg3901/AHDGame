@@ -43,6 +43,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   operations: "Operations",
   fund_generation: "Fund generation",
   ps_investment: "PS investment",
+  org_building: "Org building",
   campaign_donation: "Campaign donation",
 };
 

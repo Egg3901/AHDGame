@@ -16,7 +16,9 @@ Each party-state combination has its own tracked org score.
 
 ## Building org
 
-Organization grows through the **Build Org** action on the state-party page. The state chair, state vice chair, the state campaigner, the national chair, the national vice chair, or any national campaigner can click Build Org to spend Political Strength. Each click grows your share by drawing from the state's Unaffiliated pool **and** poaching Org off rivals at the same time.
+Organization grows through the **Build Org** action on the state-party page. The state chair, state vice chair, the state campaigner, the national chair, the national vice chair, or any national campaigner can click Build Org. Each click grows your share by drawing from the state's Unaffiliated pool **and** poaching Org off rivals at the same time.
+
+Every click costs **both Political Strength and money**. The two are billed to the same tier: a state officer spends the state party's PS and the state party's treasury, while a national officer spends the national pool and the national treasury. The cash price scales with the PS cost, so a state where your pressure ladder has climbed costs more money as well as more PS, and it scales with your country's own currency so the burden is comparable everywhere.
 
 Per-click gain scales with four factors, shown in the click projection panel:
 
@@ -26,6 +28,10 @@ Per-click gain scales with four factors, shown in the click projection panel:
 - **Catch-up**: 1.5× when at least one rival has higher Org than you, 1.0× otherwise. Anti-snowball.
 
 Build Org requires **presence**: the party must have at least one player character or elected official in this state (or be acted on by a national officer who can build org into vacant states).
+
+### When the treasury is short
+
+A thin treasury slows organizing rather than stopping it. If the paying treasury cannot cover the full price, the click still lands: it takes whatever money is there and grants a proportionally smaller share of the Org. Cover a quarter of the price and you get a quarter of the gain. Below a quarter the click is refused outright, and a refused click is free, costing you no Political Strength and adding nothing to the pressure ladder. The projection panel shows the price before you click and warns you when a click would only be partly funded.
 
 ## Org decay
 

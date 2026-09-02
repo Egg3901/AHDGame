@@ -8,6 +8,7 @@ import {
   BUILD_ORG_BASE_PS_COST,
   STATE_PS_CAP_DEFAULT,
 } from "@/lib/politicalStrength/strengthConstants";
+import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import {
   FactorsExplainer,
   type BuildOrgFactors,
@@ -47,6 +48,10 @@ interface PoachLine {
 
 interface BuildOrgResult {
   psCost: number;
+  /** Cash actually debited from the paying treasury. */
+  cashCost?: number;
+  /** Share of the full price the treasury covered; below 1 shrinks the gain. */
+  fundedFraction?: number;
   orgGain: number;
   factors: BuildOrgFactors;
   poaches?: PoachLine[];
@@ -57,6 +62,12 @@ type BuildOrgPreview =
       ok: true;
       effectiveCost: number;
       pressureValue: number;
+      /** Cash price of the next click, in the paying tier's local currency. */
+      cashPrice?: number;
+      /** Balance of the treasury that would pay. */
+      treasuryAvailable?: number;
+      /** Share of the price the treasury covers. `projectedGain` is already scaled by it. */
+      fundedFraction?: number;
       projectedGain: number;
       poaches?: PoachLine[];
       factors: BuildOrgFactors;
@@ -89,6 +100,10 @@ export function BuildOrgPanel({
   const [lastResult, setLastResult] = useState<BuildOrgResult | null>(null);
 
   const apiUrl = regionPartyApiUrl(countryCode, stateId, partyId);
+  // Build Org bills the paying tier's treasury, which is denominated in the
+  // country's own currency — never the anchor.
+  const currencyCode =
+    COUNTRY_CURRENCY_MAP[countryCode.toUpperCase() as keyof typeof COUNTRY_CURRENCY_MAP] ?? "USD";
   const { eligibleScopes, poolPS } = usePsSpendScope(
     countryCode,
     stateId,
@@ -116,8 +131,17 @@ export function BuildOrgPanel({
       }
       setLastResult(d as BuildOrgResult);
       setBumpKey((k) => k + 1);
+      const cashCost = d.cashCost as number | undefined;
+      const cash =
+        cashCost !== undefined
+          ? ` and ${CURRENCY_SYMBOLS[currencyCode as keyof typeof CURRENCY_SYMBOLS] ?? "$"}${Math.round(cashCost).toLocaleString("en-US")}`
+          : "";
+      const partly =
+        typeof d.fundedFraction === "number" && d.fundedFraction < 1
+          ? ` (partly funded: the treasury covered ${Math.round((d.fundedFraction as number) * 100)}% of the price)`
+          : "";
       showToast(
-        `+${(d.orgGain as number).toFixed(2)} Org for ${(d.psCost as number).toFixed(0)} PS`,
+        `+${(d.orgGain as number).toFixed(2)} Org for ${(d.psCost as number).toFixed(0)} PS${cash}${partly}`,
         "success"
       );
       onSuccess();
@@ -181,6 +205,15 @@ export function BuildOrgPanel({
       variant="last"
       tone="build"
       cost={{ effectivePS: lastResult.psCost, basePS: lastResult.psCost, ladderPS: 0 }}
+      funds={
+        lastResult.cashCost !== undefined
+          ? {
+              amount: lastResult.cashCost,
+              currencyCode,
+              fundedFraction: lastResult.fundedFraction,
+            }
+          : undefined
+      }
       gain={{ label: "Gain", value: lastResult.orgGain, sign: "+", unit: "Org" }}
       factors={lastResult.factors}
     />
@@ -193,6 +226,15 @@ export function BuildOrgPanel({
         basePS: BUILD_ORG_BASE_PS_COST,
         ladderPS: Math.max(0, preview.effectiveCost - BUILD_ORG_BASE_PS_COST),
       }}
+      funds={
+        preview.cashPrice !== undefined
+          ? {
+              amount: preview.cashPrice,
+              currencyCode,
+              fundedFraction: preview.fundedFraction,
+            }
+          : undefined
+      }
       gain={{ label: "Estimated Gain", value: preview.projectedGain, sign: "+", unit: "Org" }}
       factors={preview.factors}
     />

@@ -18,6 +18,7 @@ const VALID_CATEGORIES: TreasuryTransactionCategory[] = [
   "recruitment",
   "operations",
   "fund_generation",
+  "org_building",
   "campaign_donation",
 ];
 

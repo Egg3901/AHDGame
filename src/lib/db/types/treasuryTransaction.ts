@@ -29,6 +29,7 @@ export type TreasuryTransactionCategory =
   | "operations"
   | "fund_generation"
   | "ps_investment"
+  | "org_building"
   | "campaign_donation";
 
 export interface TreasuryTransaction {
