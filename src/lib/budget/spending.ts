@@ -21,38 +21,10 @@ import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
 import { getNationalDocId } from "@/lib/constants/nationalScope";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
-import { logWarning } from "@/lib/utils/errorLog";
+import { keepLatestActiveLawPerType } from "./keepLatestActiveLawPerType";
 
-/**
- * A country may hold only ONE active law per legislation type (and one per type
- * per state for state scope). Data races have left multiple concurrent
- * unrepealed rows of the same type, which the spending sums below then
- * multi-count (#3148 — IE had 3 live ie_healthcare_policy rows). Keep only the
- * most-recently-enacted law per (legislationTypeId, stateId) so each policy is
- * costed once. A healthy world (0-1 rows per key) is unaffected.
- */
-export function keepLatestActiveLawPerType(laws: EnactedLaw[]): EnactedLaw[] {
-  const byKey = new Map<string, EnactedLaw>();
-  let collapsed = 0;
-  for (const law of laws) {
-    const key = `${law.legislationTypeId}::${law.stateId ?? "national"}`;
-    const existing = byKey.get(key);
-    if (!existing) {
-      byKey.set(key, law);
-    } else {
-      collapsed++;
-      if (law.enactedAt > existing.enactedAt) byKey.set(key, law);
-    }
-  }
-  if (collapsed > 0) {
-    logWarning("Collapsed duplicate active enactedLaws in spending sum (#3148)", {
-      component: "BudgetSpending",
-      action: "dedupe active laws",
-      metadata: { collapsed, kept: byKey.size },
-    });
-  }
-  return [...byKey.values()];
-}
+// Re-exported so existing importers of `./spending` keep working.
+export { keepLatestActiveLawPerType } from "./keepLatestActiveLawPerType";
 
 export const SECTOR_SUBSIDIES_SPENDING_KEY = "sectorSubsidies";
 

@@ -29,7 +29,8 @@ import {
   loadPlantsBudgetContext,
   type PlantsBudgetContext,
 } from "./publicEnterpriseRevenue";
-import { calculateFederalSpending, keepLatestActiveLawPerType } from "./spending";
+import { calculateFederalSpending } from "./spending";
+import { keepLatestActiveLawPerType } from "./keepLatestActiveLawPerType";
 import { countryFiscalBase } from "@/lib/politicalLegislation/fiscalBase";
 import { COST_INCOME_ANCHORS } from "@/lib/politicalLegislation/costAnchors";
 import { getEraContext, type EraContext } from "@/lib/era/context";
@@ -686,6 +687,58 @@ const CAPITAL_RETURNS_PREMIUM = 1.0;
  */
 export const TAX_BASE_GDP_SHARE_GRAVITY_ANNUAL = 0.08;
 
+/**
+ * Ceiling on how far a tax base's growth rate may exceed the growth of the GDP
+ * it is anchored to, in percentage points per year.
+ *
+ * The gravity above is a SPRING, and a spring can be outpulled. Writing the
+ * per-year step out, with pull `p`, base growth `w` and GDP growth `g`, the
+ * base/target ratio has fixed point
+ *
+ *     x = p / ((1 + g) − (1 + w)(1 − p))
+ *
+ * which is finite only while `(1 + w)(1 − p) < (1 + g)`. Past that the
+ * denominator goes negative and there is NO equilibrium: the base diverges from
+ * GDP without bound, and no value of `p` short of 1 recovers it. That is not a
+ * hypothetical. Measured over turns 480-576, every country runs a large,
+ * permanent wedge between the rates that grow the bases and the rate that grows
+ * their target:
+ *
+ *     country   gdpGrowth   wageGrowth   tradeGrowth
+ *     DD          3.55        16.47         24.06
+ *     DE         −2.72         9.53          4.17
+ *     RU          1.16        13.67         30.00   (pinned at its +30 bound)
+ *     US         −2.91         4.46          2.65
+ *
+ * DD's denominator is negative, which is why its taxableIncome climbed 35% →
+ * 103% OF GDP across 1953-64 — a base larger than the economy that produced it —
+ * and why the Laffer cap was quietly discarding a quarter of its revenue every
+ * year to hide it (#1323).
+ *
+ * The wedge itself is upstream and is NOT fixed here: `wageGrowth` tracks
+ * `productivityGrowth`, which reads 9.9-12%/yr in DD's regions against ~3% in
+ * the UK's, and `tradeGrowth` sits pinned at its registry bound for RU and DD
+ * with `forexStrength` at 0, so the bound is not being reached through the
+ * formula's own terms. Both are separate defects with their own blast radius.
+ *
+ * What this constant does is make the budget system's arithmetic sound
+ * regardless: a base may still outgrow GDP — genuine wage or trade policy held
+ * up for years should move its share — but only by a bounded premium, which
+ * keeps the denominator positive and the equilibrium finite. At 2pp the fixed
+ * point sits near 1.25x baseline, which is where the countries with coherent
+ * inputs already sit (PL 1.23x, DE 1.33x) and which puts every ratio inside a
+ * defensible real-world band: wages ~50% of GDP, consumption ~56%, imports ~20%.
+ * It also returns the revenue cap to the rare backstop it was designed to be
+ * rather than a standing 27% haircut.
+ *
+ * The premium is measured against NOMINAL GDP growth — see
+ * `nominalGrowthCeiling`, which is where the inflation term is reasoned about.
+ *
+ * Deliberately a cap on the RATE, not on the level: a level clamp would snap
+ * bases discontinuously, and the gravity is what closes an existing gap.
+ */
+export const TAX_BASE_GROWTH_PREMIUM_CAP = 2.0;
+
 export interface TaxBaseGravityContext {
   /** Current national GDP, local currency, full units (not the states
    *  collection's millions unit) — e.g. `calculateNationalGDP`'s return, or a
@@ -716,6 +769,28 @@ function pullTowardGdpShare(
 }
 
 /**
+ * The fastest a tax base may grow: NOMINAL GDP growth plus the premium.
+ *
+ * Nominal, not real, because the two sides carry inflation differently.
+ * `wageGrowth` adds `WAGE_INFLATION_PASSTHROUGH x laggedInflation` on top of its
+ * real component, so the bases are nominal quantities, while `compoundGdpLevel`
+ * moves `state.gdp` by `gdpGrowth` alone. Capping a nominal rate against a real
+ * one would freeze the base exactly when it must move most: BR-1991 runs ~480%
+ * inflation and ~50%/yr nominal wage growth against ~2.5% real GDP growth, and
+ * a real-only ceiling would have pinned its income-tax base near zero growth
+ * through a hyperinflation (see fiscalGrowthFactors.test.ts, which pins that
+ * band).
+ *
+ * Deflation cannot tighten the ceiling below real growth — a negative inflation
+ * reading floors at 0 — so a deflationary year does not quietly turn this into a
+ * base cut.
+ */
+function nominalGrowthCeiling(factors: EconomicGrowthFactors): number {
+  const inflation = Number.isFinite(factors.inflationRate) ? Math.max(0, factors.inflationRate) : 0;
+  return factors.gdpGrowth + inflation + TAX_BASE_GROWTH_PREMIUM_CAP;
+}
+
+/**
  * Grow federal tax bases by an economic-factor set. `perYearDivisor` selects the
  * cadence: 1 = the full annual step (the legacy fiscal-year form), TURNS_PER_YEAR
  * = a single per-turn slice (the fiscalBaseGrowth phase). Corporate profits grow
@@ -732,10 +807,13 @@ function growFederalBases(
   perYearDivisor: number,
   gravity?: TaxBaseGravityContext
 ): FederalTaxBases {
+  // A base may outrun the GDP it is measured against, but only by this much.
+  // See TAX_BASE_GROWTH_PREMIUM_CAP.
+  const capped = (rate: number) => Math.min(rate, nominalGrowthCeiling(factors));
   const g = (rate: number) => 1 + rate / 100 / perYearDivisor;
   const gdpGrowthMultiplier = g(factors.gdpGrowth);
-  const wageGrowthMultiplier = g(factors.wageGrowth);
-  const tradeGrowthMultiplier = g(factors.tradeGrowth);
+  const wageGrowthMultiplier = g(capped(factors.wageGrowth));
+  const tradeGrowthMultiplier = g(capped(factors.tradeGrowth));
   // Corporate profits grow at GDP + capital premium (r > g).
   const corporateProfitMultiplier = g(factors.gdpGrowth + CAPITAL_RETURNS_PREMIUM);
 
@@ -836,9 +914,13 @@ function growStateBases(
   factors: EconomicGrowthFactors,
   perYearDivisor: number
 ): StateTaxBases {
+  // Same premium ceiling as the federal bases (see TAX_BASE_GROWTH_PREMIUM_CAP).
+  // State bases have no gravity pull at all — there is no per-state equivalent of
+  // `taxBaseGdpShareBaseline` — so an uncapped wage rate here diverges from
+  // regional GDP with nothing whatsoever pulling back.
   const g = (rate: number) => 1 + rate / 100 / perYearDivisor;
   const gdpGrowthMultiplier = g(factors.gdpGrowth);
-  const wageGrowthMultiplier = g(factors.wageGrowth);
+  const wageGrowthMultiplier = g(Math.min(factors.wageGrowth, nominalGrowthCeiling(factors)));
   const corporateProfitMultiplier = g(factors.gdpGrowth + CAPITAL_RETURNS_PREMIUM);
   const propertyGrowthMultiplier = g((factors.gdpGrowth + factors.inflationRate) / 2);
 
