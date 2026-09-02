@@ -133,7 +133,7 @@ async function legislatingMembers(
   players?: CountryId[]
 ): Promise<CountryId[]> {
   const enabled = players ?? (await votingMembers(db, organizationId));
-  const governed = await nppGovernedMembers(db, await getMembers(db, organizationId));
+  const governed = await nppGovernedMembers(db, () => getMembers(db, organizationId));
   return Array.from(new Set([...enabled, ...governed]));
 }
 

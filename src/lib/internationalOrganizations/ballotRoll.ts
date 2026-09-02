@@ -43,14 +43,20 @@ import { foreignPolicyModeFrom } from "@/lib/nppAutonomy/foreignPolicyRollout";
  */
 export async function nppGovernedMembers(
   db: Db,
-  memberIds: readonly string[]
+  /**
+   * Pass a thunk where fetching the roster costs a query: the rollout check
+   * below short-circuits every non-active world, and there is no reason to read
+   * a membership list only to throw it away.
+   */
+  memberIds: readonly string[] | (() => Promise<readonly string[]>)
 ): Promise<Set<CountryId>> {
   const rollout = await db
     .collection<{ _id: string; nppForeignPolicyMode?: NppForeignPolicyMode }>("gameState")
     .findOne({ _id: "current" }, { projection: { nppForeignPolicyMode: 1 } });
   if (foreignPolicyModeFrom(rollout?.nppForeignPolicyMode) !== "active") return new Set();
 
-  const modelled = memberIds.filter(
+  const ids = typeof memberIds === "function" ? await memberIds() : memberIds;
+  const modelled = ids.filter(
     (member): member is CountryId =>
       member in COUNTRY_CONFIGS && hasBillLifecycle(member as CountryId)
   );
