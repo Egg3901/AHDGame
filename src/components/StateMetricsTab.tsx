@@ -18,7 +18,6 @@ import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
 import { toRollupShape } from "@/components/metrics/toRollupShape";
 import { POLITICAL_METRIC_COUNTRY_IDS } from "@/lib/politicalMetrics/types";
 import { RegionalStatBoards } from "@/components/metrics/RegionalStatBoards";
-import { RegionalRegistryBoard } from "@/app/country/[code]/political-metrics/components/RegionalRegistryBoard";
 
 interface ApprovalHistoryPoint {
   turn: number;
@@ -433,12 +432,6 @@ export function StateMetricsTab({ stateId, countryId }: StateMetricsTabProps) {
           </p>
         )}
       </div>
-
-      {/* SP6: the region's own political registry — the nine category scores
-          from this region's politicalMetrics doc, in the national card grammar. */}
-      {isPlayablePipeline && (
-        <RegionalRegistryBoard countryId={countryId} regionId={stateId} regionName={stateName} />
-      )}
 
       {/* Budget Summary */}
       {budgetData && <USBudgetPanel budget={budgetData} countryId={countryId} />}

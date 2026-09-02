@@ -4,7 +4,8 @@ import { SuperTabNav, type NavSuperTabDef } from "@/components/nav/SuperTabNav";
 
 // ── Types ──
 
-export type SuperTabId = "overview" | "politics" | "economy" | "demographics" | "governance";
+export type SuperTabId =
+  "overview" | "politics" | "economy" | "metrics" | "demographics" | "governance";
 
 export type LegacyTabId =
   | "overview"
@@ -42,7 +43,13 @@ const LEGACY_MAP: Record<string, { super: SuperTabId; sub: string }> = {
   politics: { super: "politics", sub: "officials" },
   parties: { super: "politics", sub: "parties" },
   demographics: { super: "demographics", sub: "demographics" },
-  metrics: { super: "demographics", sub: "metrics" },
+  // The political registry moved out of Demographics into its own super-tab.
+  // `metrics` is now BOTH a legacy key and a current super-tab id, which is
+  // fine because resolveTabs checks super-tab ids first; the entry is kept so
+  // the intent of the move is legible here rather than implied by that ordering.
+  metrics: { super: "metrics", sub: "" },
+  // The legacy stateMetrics boards that used to sit under Demographics > Metrics.
+  statistics: { super: "demographics", sub: "statistics" },
   budget: { super: "economy", sub: "budget" },
   laws: { super: "governance", sub: "laws" },
   economy: { super: "economy", sub: "sectors" },
@@ -103,6 +110,16 @@ const ICONS = {
       />
     </svg>
   ),
+  metrics: (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 19v-6m4 6V5m4 14v-9M4 21h16"
+      />
+    </svg>
+  ),
 };
 
 // ── Super-tab definitions ──
@@ -135,12 +152,21 @@ const SUPER_TABS: SuperTabDef[] = [
     ],
   },
   {
+    id: "metrics",
+    label: "Metrics",
+    icon: ICONS.metrics,
+    // Single-panel: the political registry carries its own internal navigation
+    // (overview, category, metric, compare), so a sub-tab bar would duplicate it.
+  },
+  {
     id: "demographics",
     label: "Demographics",
     icon: ICONS.demographics,
     subTabs: [
       { id: "demographics", label: "Demographics & Turnout" },
-      { id: "metrics", label: "Metrics" },
+      // The legacy stateMetrics boards. Named "Statistics" so it reads as
+      // supporting data rather than as a rival to the registry above.
+      { id: "statistics", label: "Statistics" },
     ],
   },
   {

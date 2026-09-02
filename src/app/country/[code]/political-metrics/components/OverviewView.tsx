@@ -1,6 +1,6 @@
 "use client";
 
-import type { CountryPoliticalMetricsResponse } from "@/lib/politicalMetrics/queries/countryPoliticalMetrics";
+import type { PMRegistryData } from "./registryTypes";
 import { CategoryCard } from "./CategoryCard";
 import { GovernanceStyleCard } from "./GovernanceStyleCard";
 import { scoreTone } from "./tones";
@@ -36,7 +36,7 @@ export function OverviewView({
   onOpenMetric,
   showGovernanceStyle,
 }: {
-  data: CountryPoliticalMetricsResponse;
+  data: PMRegistryData;
   onOpenCategory: (categoryId: string) => void;
   onOpenMetric: (categoryId: string, metricId: string) => void;
   showGovernanceStyle: boolean;
@@ -47,7 +47,7 @@ export function OverviewView({
   const weakest = sorted[sorted.length - 1];
   const criticalCount = data.categories
     .flatMap((c) => c.metrics)
-    .filter((m) => m.nationalValue < 25).length;
+    .filter((m) => m.value < 25).length;
 
   // Condition ring geometry (raw SVG values are isolated here by necessity;
   // colors still come from tokens via currentColor).
@@ -118,7 +118,9 @@ export function OverviewView({
         </div>
       </div>
 
-      {showGovernanceStyle && <GovernanceStyleCard score={data.governanceStyle} />}
+      {showGovernanceStyle && data.governanceStyle && (
+        <GovernanceStyleCard score={data.governanceStyle} />
+      )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {data.categories.map((cat) => (

@@ -32,6 +32,10 @@ const StateMetricsTab = dynamic(
   () => import("@/components/StateMetricsTab").then((m) => ({ default: m.StateMetricsTab })),
   { loading: TabFallback }
 );
+const RegionRegistryTab = dynamic(
+  () => import("./state/RegionRegistryTab").then((m) => ({ default: m.RegionRegistryTab })),
+  { loading: TabFallback }
+);
 const PoliticsTab = dynamic(
   () => import("./state/StatePageTabsPolitics").then((m) => ({ default: m.PoliticsTab })),
   { loading: TabFallback }
@@ -207,6 +211,19 @@ export function StatePageTabs({
       }
     }
 
+    // ── Metrics ──
+    // The political registry. Its own super-tab since the region's board is
+    // what the national figure aggregates from, not a demographic footnote.
+    if (superTab === "metrics") {
+      return (
+        <RegionRegistryTab
+          countryId={state.countryId}
+          regionId={state._id}
+          regionName={state.name}
+        />
+      );
+    }
+
     // ── Demographics ──
     if (superTab === "demographics") {
       if (subTab === "demographics" || subTab === "") {
@@ -223,7 +240,9 @@ export function StatePageTabs({
           />
         );
       }
-      if (subTab === "metrics") {
+      // The legacy stateMetrics boards, renamed Statistics so they read as
+      // supporting data rather than as a rival to the registry above.
+      if (subTab === "statistics") {
         return <StateMetricsTab stateId={state._id} countryId={state.countryId} />;
       }
     }

@@ -6,6 +6,10 @@ import type { StateTaxRates } from "@/lib/db/types/budget";
 import { PositionBadges } from "@/components/PositionBadges";
 import { policyApiUrl, regionApiSubUrl } from "@/lib/urls";
 import type { PolicyRecordResponse } from "./StatePageTabsTypes";
+// One label table for both scopes. The tab used to carry its own eight-entry
+// copy against the national file's seventeen, so a `tax` or `economy` row
+// rendered with its raw internal key as the section heading.
+import { DOMAIN_ORDER, getDomainLabel } from "@/app/country/[code]/policy/components/policyView";
 
 interface StateTaxRateDisplay {
   id: keyof StateTaxRates;
@@ -27,29 +31,6 @@ const STATE_TAX_RATES: StateTaxRateDisplay[] = [
     description: "State tax rate on corps headquartered outside this country",
   },
   { id: "propertyTax", name: "Property Tax", description: "State property tax rate" },
-];
-
-const DOMAIN_LABELS: Record<string, string> = {
-  education: "Education",
-  healthcare: "Healthcare",
-  economic: "Economic",
-  infrastructure: "Infrastructure",
-  environment: "Environment",
-  publicSafety: "Public Safety",
-  social: "Social",
-  governance: "Governance",
-};
-
-const DOMAIN_ORDER = [
-  "taxes",
-  "economic",
-  "education",
-  "environment",
-  "governance",
-  "healthcare",
-  "infrastructure",
-  "publicSafety",
-  "social",
 ];
 
 function groupByDomain(records: PolicyRecordResponse[]): Map<string, PolicyRecordResponse[]> {
@@ -105,6 +86,12 @@ export function LawsTab({ state }: { state: State }) {
   }, [state._id, state.countryId]);
 
   const byDomain = groupByDomain(records);
+  // The five us.tax.state* laws now arrive as ordinary `tax`-domain records, so
+  // rendering the hard-coded rate panel as well listed every state rate twice.
+  // It survives as a fallback for a country whose state taxes are not catalog
+  // laws, which would otherwise lose its tax display entirely.
+  const hasTaxRecords = records.some((r) => (r.policyDomain || "governance") === "tax");
+  const showTaxRatePanel = Boolean(taxRates) && !hasTaxRecords;
 
   const toggleDomain = (domain: string) => {
     setExpandedDomains((prev) => {
@@ -164,10 +151,10 @@ export function LawsTab({ state }: { state: State }) {
 
       <div className="space-y-3">
         {/* Taxes Accordion */}
-        {taxRates && (
+        {showTaxRatePanel && taxRates && (
           <section className="rounded-xl border border-card-border bg-card overflow-hidden">
             <button
-              onClick={() => toggleDomain("taxes")}
+              onClick={() => toggleDomain("tax")}
               className="flex w-full items-center justify-between px-6 py-4 text-left hover:bg-background/30 transition-colors"
             >
               <div className="flex items-center gap-3">
@@ -177,7 +164,7 @@ export function LawsTab({ state }: { state: State }) {
                 </span>
               </div>
               <svg
-                className={`h-5 w-5 text-muted transition-transform duration-200 ${expandedDomains.has("taxes") ? "rotate-180" : ""}`}
+                className={`h-5 w-5 text-muted transition-transform duration-200 ${expandedDomains.has("tax") ? "rotate-180" : ""}`}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -190,7 +177,7 @@ export function LawsTab({ state }: { state: State }) {
                 />
               </svg>
             </button>
-            {expandedDomains.has("taxes") && (
+            {expandedDomains.has("tax") && (
               <ul className="space-y-3 px-6 pb-6">
                 {STATE_TAX_RATES.map((tax) => (
                   <li
@@ -226,7 +213,7 @@ export function LawsTab({ state }: { state: State }) {
                 className="flex w-full items-center justify-between px-6 py-4 text-left hover:bg-background/30 transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  <h2 className="text-lg font-semibold">{DOMAIN_LABELS[domain] ?? domain}</h2>
+                  <h2 className="text-lg font-semibold">{getDomainLabel(domain)}</h2>
                   <span className="rounded-full bg-background px-2 py-0.5 text-xs text-muted">
                     {list.length} {list.length === 1 ? "policy" : "policies"}
                   </span>
@@ -289,7 +276,7 @@ export function LawsTab({ state }: { state: State }) {
         })}
 
         {/* Empty state */}
-        {byDomain.size === 0 && !taxRates && (
+        {byDomain.size === 0 && !showTaxRatePanel && (
           <div className="rounded-xl border border-card-border bg-card p-12 text-center text-muted">
             <svg
               className="mx-auto h-12 w-12 mb-4 opacity-50"

@@ -18,6 +18,10 @@ export function Masthead({
   year,
   turn,
   onCompare,
+  registryLabel,
+  sealLabel,
+  glyph,
+  comparison,
 }: {
   countryId: PoliticalMetricsCountryId;
   countryDisplayName: string;
@@ -26,9 +30,23 @@ export function Masthead({
   year: number;
   turn: number;
   onCompare: () => void;
+  /** Region scope overrides the country's registry heading. */
+  registryLabel?: string;
+  /** Region scope overrides the statistics-office seal line. */
+  sealLabel?: string;
+  /** Region scope shows the region code in the badge instead of the country glyph. */
+  glyph?: string;
+  /** Region scope shows the country figure beside the region's own. */
+  comparison?: { label: string; value: number };
 }) {
-  const chrome = COUNTRY_CHROME[countryId];
+  const countryChrome = COUNTRY_CHROME[countryId];
+  const chrome = {
+    registry: registryLabel ?? countryChrome.registry,
+    seal: sealLabel ?? countryChrome.seal,
+    glyph: glyph ?? countryChrome.glyph,
+  };
   const tone = scoreTone(overall);
+  const delta = comparison ? Math.round((overall - comparison.value) * 10) / 10 : 0;
   return (
     <header className="overflow-hidden rounded-lg border border-card-border bg-card shadow-panel">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-card-border px-4 py-2 font-mono text-body-xs uppercase tracking-widest text-muted">
@@ -58,6 +76,18 @@ export function Masthead({
             <span className="font-mono text-body-xs text-muted">
               TURN {turn.toLocaleString("en-US")}
             </span>
+            {comparison && (
+              <span className="font-mono text-body-xs text-muted">
+                {comparison.label} {Math.round(comparison.value)}
+                {delta !== 0 && (
+                  <span className={delta > 0 ? "text-success" : "text-error"}>
+                    {" "}
+                    ({delta > 0 ? "+" : ""}
+                    {delta})
+                  </span>
+                )}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">

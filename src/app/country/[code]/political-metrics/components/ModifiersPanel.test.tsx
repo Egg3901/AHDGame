@@ -100,3 +100,66 @@ describe("ModifiersPanel cabinet attribution (ticket #1142)", () => {
     expect(screen.queryByText("Estates")).toBeNull();
   });
 });
+
+describe("ModifiersPanel — region-scope channels", () => {
+  const BASE = {
+    laws: [],
+    regionalLaws: [],
+    residual: 0,
+    cabinet: 0,
+    labour: 0,
+    cabinetBySource: [],
+    cabinetAtCap: false,
+    cabinetCap: 8,
+    driftHalfLifeTurns: 34,
+    target: 50,
+    direction: "flat" as const,
+  };
+
+  it("lists the region's own programmes under their own heading", () => {
+    render(
+      <ModifiersPanel
+        modifiers={{
+          ...BASE,
+          regionalLaws: [
+            {
+              lawId: "us.infrastructure.transit.primary",
+              title: "State Transit Authority Act",
+              levelName: "Regional Network",
+              level: 4,
+              points: 25,
+            },
+          ],
+        }}
+      />
+    );
+    expect(screen.getByText("Regional programmes")).toBeTruthy();
+    expect(screen.getByText("State Transit Authority Act")).toBeTruthy();
+    // Halved from the raw 50-point ladder, so the rows reconcile with the target.
+    expect(screen.getByText("+25")).toBeTruthy();
+  });
+
+  it("hides the regional heading at national scope", () => {
+    render(<ModifiersPanel modifiers={BASE} />);
+    expect(screen.queryByText("Regional programmes")).toBeNull();
+  });
+
+  it("surfaces the labour-relations channel when it is moving the target", () => {
+    render(<ModifiersPanel modifiers={{ ...BASE, labour: -1.5 }} />);
+    expect(screen.getByText("Labour relations")).toBeTruthy();
+    expect(screen.getByText("−1.5")).toBeTruthy();
+  });
+
+  it("omits the labour row when the channel contributes nothing", () => {
+    render(<ModifiersPanel modifiers={BASE} />);
+    expect(screen.queryByText("Labour relations")).toBeNull();
+  });
+
+  it("names the figure as the law-and-structure target, not the engine's full target", () => {
+    render(<ModifiersPanel modifiers={BASE} />);
+    // The engine also applies macro and service-delivery terms that are never
+    // persisted, so calling this "Target" would overclaim.
+    expect(screen.getByText(/Law and structure target/)).toBeTruthy();
+    expect(screen.getByText(/not included in the figure above/)).toBeTruthy();
+  });
+});

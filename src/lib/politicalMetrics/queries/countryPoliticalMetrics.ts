@@ -62,6 +62,12 @@ export interface CountryPoliticalMetricsResponse {
       pos: string[];
       neg: string[];
       indicators: string[];
+      /**
+       * The value at THIS payload's scope. A duplicate of `nationalValue`
+       * here, and the region payload's own figure there, so one card component
+       * renders both scopes without an adapter that reassigns fields.
+       */
+      value: number;
       nationalValue: number;
       status: string;
       legislation: MetricLegislationInfo | null;
@@ -270,6 +276,7 @@ export async function loadCountryPoliticalMetrics(
           pos: f.pos,
           neg: f.neg,
           indicators: f.indicators[indicatorEra],
+          value: round1(nationalValue),
           nationalValue: round1(nationalValue),
           status: statusFor(nationalValue),
           legislation: legislationByMetric.get(f.id) ?? null,

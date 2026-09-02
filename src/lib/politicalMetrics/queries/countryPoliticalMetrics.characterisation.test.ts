@@ -56,6 +56,9 @@ const METRIC_KEYS = [
   "pos",
   "neg",
   "indicators",
+  // `value` is the scope-neutral field the shared cards read; `nationalValue`
+  // stays alongside it so nothing that already reads the national payload breaks.
+  "value",
   "nationalValue",
   "status",
   "legislation",

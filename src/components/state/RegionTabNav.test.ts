@@ -44,10 +44,34 @@ describe("resolveTabs", () => {
       });
     });
 
-    it("resolves Demographics' Metrics sub-tab, not just the default Demographics", () => {
-      expect(resolveTabs("demographics", "metrics", false)).toEqual({
+    it("resolves Demographics' Statistics sub-tab, not just the default Demographics", () => {
+      expect(resolveTabs("demographics", "statistics", false)).toEqual({
         superTab: "demographics",
-        subTab: "metrics",
+        subTab: "statistics",
+      });
+    });
+  });
+
+  describe("the political registry is its own super-tab", () => {
+    // The registry moved out of Demographics, and the legacy boards it used to
+    // sit beside stayed behind under the new "statistics" id. Both halves of
+    // that swap are pinned here: a regression in either one silently strands a
+    // bookmark on the wrong metrics system.
+    it("resolves the Metrics super-tab", () => {
+      expect(resolveTabs("metrics", null, false)).toEqual({ superTab: "metrics", subTab: "" });
+    });
+
+    it("ignores a stray sub param on the single-panel Metrics tab", () => {
+      expect(resolveTabs("metrics", "anything", false)).toEqual({
+        superTab: "metrics",
+        subTab: "",
+      });
+    });
+
+    it("resolves a bare ?tab=statistics onto Demographics", () => {
+      expect(resolveTabs("statistics", null, false)).toEqual({
+        superTab: "demographics",
+        subTab: "statistics",
       });
     });
   });
@@ -86,10 +110,6 @@ describe("resolveTabs", () => {
       expect(resolveTabs("budget", null, false)).toEqual({
         superTab: "economy",
         subTab: "budget",
-      });
-      expect(resolveTabs("metrics", null, false)).toEqual({
-        superTab: "demographics",
-        subTab: "metrics",
       });
       expect(resolveTabs("laws", null, false)).toEqual({
         superTab: "governance",
