@@ -15,8 +15,8 @@ import { BILL_LIFECYCLE_COUNTRY_IDS } from "./billLifecycleCountries";
  *
  * Reads the id set rather than the operational table on purpose: the table binds a
  * runner per country, so importing it here would put the whole turn engine behind
- * every caller that merely wants to ask the question. `billLifecycleCountries.test.ts`
- * pins the set to the table so they cannot drift.
+ * every caller that merely wants to ask the question. The test beside
+ * this file pins the set to the table, both ways, so they cannot drift.
  */
 export function hasBillLifecycle(countryId: CountryId): boolean {
   return BILL_LIFECYCLE_COUNTRY_IDS.has(countryId);
