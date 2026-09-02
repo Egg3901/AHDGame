@@ -889,9 +889,9 @@ function buildNationalBudgetSeed(config: NationalBudgetSeedConfig): SupportedNat
     taxBaseGdpShareBaseline: computeTaxBaseGdpShareBaseline(taxBases, config.gdp),
     // The same treatment for the one revenue line that is not a tax base.
     // `otherRevenue` is authored as an ABSOLUTE, which fixes it forever against
-    // an economy that moves: DD authored ₸4.5B against a ₸50B GDP — a
+    // an economy that moves: DD authored DDM 4.5B against a DDM 50B GDP — a
     // deliberate 9% enterprise-remittance share, in line with the rest of the
-    // bloc — and by turn 575 that same ₸4.5B was 1.5% of a reunified ₸271B
+    // bloc — and by turn 575 that same DDM 4.5B was 1.5% of a reunified DDM 271B
     // economy (#1323). Capturing the authored SHARE at seed time is what keeps
     // the line proportionate. Guarded against a zero/absent GDP so a malformed
     // config leaves the field unset rather than seeding Infinity.

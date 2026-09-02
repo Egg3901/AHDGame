@@ -522,7 +522,7 @@ export interface FederalBudget {
    * (`NationalBudgetSeedConfig.otherRevenue`), which silently decays as a share
    * of any economy that grows, and breaks outright when a country's GDP changes
    * discontinuously: DD absorbed West Germany on turn 550, quadrupling its GDP,
-   * and its ₸4.0B non-tax line did not move — 6.4% of the old economy, 1.5% of
+   * and its DDM 4.0B non-tax line did not move — 6.4% of the old economy, 1.5% of
    * the new one, against 11.7-12.7% for every other Warsaw Pact budget (#1323).
    *
    * Holding the SHARE rather than the amount keeps the line proportionate to the

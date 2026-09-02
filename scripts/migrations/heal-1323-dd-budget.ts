@@ -6,7 +6,7 @@
  *
  *   1. DD's `otherRevenueGdpShareBaseline`. The self-heal in `fiscalBaseGrowth`
  *      snapshots the CURRENT ratio, which for DD is the DRIFTED 1.5% rather than
- *      the 9% its seed authored (₸4.5B against a ₸50B GDP). Left alone the
+ *      the 9% its seed authored (DDM 4.5B against a DDM 50B GDP). Left alone the
  *      self-heal would make the drift permanent. This writes the authored share.
  *
  *   2. DD's tax bases, moved to the FIXED POINT of the corrected dynamics. The

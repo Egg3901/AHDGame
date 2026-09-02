@@ -365,7 +365,7 @@ export async function loadFederalBudgetDetail(params: {
       const stateBudget = stateBudgetMap.get(state._id);
       // Table lookup, not an if/else chain with a default: the chain this
       // replaced ended in `westminsterGrant`, so any country it did not name
-      // read the UK's field and reported ₸0 instead of failing. DD lost its
+      // read the UK's field and reported DDM 0 instead of failing. DD lost its
       // Länder grants that way (#1323). `undefined` here means "no grant field
       // mapped for this country", which falls back to the stateBudgets figure
       // exactly as a missing regionalBudget does.

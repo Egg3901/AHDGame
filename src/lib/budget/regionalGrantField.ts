@@ -10,7 +10,7 @@ import type { RegionalBudget } from "@/lib/db/types/regionalBudget";
  * reader has to map country → field. Those mappings were written three separate
  * times as if/else chains, and each one ENDED IN A DEFAULT — `westminsterGrant`
  * in `federalBudgetDetail`. A country the chain did not name therefore read the
- * UK's field, silently, and reported ₸0 rather than failing: DD's Länder grants
+ * UK's field, silently, and reported DDM 0 rather than failing: DD's Länder grants
  * disappeared from the budget detail that way (#1323).
  *
  * A lookup that returns `undefined` for an unmapped country is the point. It

@@ -5211,7 +5211,7 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
      * stripped a policy tier from each of them every single turn (#1323).
      *
      * 100/capita matches both the pool already sitting in the live data
-     * (₸8.0B across 81M people) and DE's own 1953-era override, so unfreezing
+     * (DDM 8.0B across 81M people) and DE's own 1953-era override, so unfreezing
      * the Länder does not silently re-scale the transfer at the same time.
      */
     federalEqualizationGrantPerCapita: 100,

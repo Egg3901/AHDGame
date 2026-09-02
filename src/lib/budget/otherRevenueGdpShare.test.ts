@@ -6,9 +6,9 @@
  * the enterprise-surplus remittance that was the bulk of the state budget in a
  * Soviet-type one. It was authored as an ABSOLUTE, so it decays as a share of
  * any growing economy and breaks outright on a discontinuous GDP change. DD
- * authored ₸4.5B against a ₸50B GDP — a deliberate 9% share, in line with the
+ * authored DDM 4.5B against a DDM 50B GDP — a deliberate 9% share, in line with the
  * rest of the Warsaw Pact — then absorbed West Germany on turn 550 and carried
- * the same ₸4.5B into a ₸271B economy, where it was 1.5% (#1323).
+ * the same DDM 4.5B into a DDM 271B economy, where it was 1.5% (#1323).
  */
 import type { Db } from "mongodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";

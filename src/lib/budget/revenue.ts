@@ -79,8 +79,8 @@ const REVENUE_CAP_COMPRESS = 0.4;
 // 1990, its live `economicFactors.marketizationLevel` is 0, and its
 // `stateOwnershipConcentration` is 100 across 52 state-owned enterprises. It was
 // therefore compressed against the 40% MARKET knee for its whole life —
-// ₸22.7B clawed back in fy1963 and ₸27.6B in fy1964 while East Germany, then
-// ₸51.8B/yr once it became the unified Germany (#1323). Reunification does not
+// DDM 22.7B clawed back in fy1963 and DDM 27.6B in fy1964 while East Germany, then
+// DDM 51.8B/yr once it became the unified Germany (#1323). Reunification does not
 // change the classification: the surviving state is still centrally planned, so
 // it belongs on the same knee as the bloc it never left.
 const COMMAND_ECONOMY_REVENUE_CAP_COUNTRIES = new Set([
@@ -403,7 +403,7 @@ export async function calculateFederalRevenue(
   // self-heals from the persisted amount so an untouched budget is byte-identical
   // (see the field doc on FederalBudget). Without this the line decays as a share
   // of any growing economy, and breaks outright on a discontinuous GDP change:
-  // DD's ₸4.0B survived reunification unchanged and went from 6.4% of the old
+  // DD's DDM 4.0B survived reunification unchanged and went from 6.4% of the old
   // economy to 1.5% of the new one (#1323).
   const otherShare = federalBudget?.otherRevenueGdpShareBaseline;
   const budgetGdp = federalBudget?.gdp;
@@ -431,9 +431,9 @@ export async function calculateFederalRevenue(
   // summed the persisted `annualRevenueV2` field — a stored number, frozen at
   // whatever base it was last written against, while the cost half of the very
   // same `costModelV2` was being re-derived from live GDP every turn. The two
-  // halves of one law drifted apart: DD's national book reported ₸0.725B of law
-  // revenue against ₸3.07B of `gdpRevenueFraction`, because the stored figures
-  // were computed when DD was East Germany on a ₸70.27B GDP and reunification
+  // halves of one law drifted apart: DD's national book reported DDM 0.725B of law
+  // revenue against DDM 3.07B of `gdpRevenueFraction`, because the stored figures
+  // were computed when DD was East Germany on a DDM 70.27B GDP and reunification
   // nearly quadrupled the base without rewriting them (#1323).
   //
   // Recompute through the same engine the cost side uses, on the same

@@ -50,7 +50,7 @@ const CONFIG_DERIVED_TRANSFER_FIELD: Partial<
   // DD funds its Länder from the same config-derived equalization pool DE does
   // (see `federalEqualizationGrantPerCapita` on the DD config), and had the same
   // hole: the 16 Länder were each credited a transfer that `spending.stateGrants`
-  // recorded as ₸0, so ₸8.0B/yr showed up as regional income with no national
+  // recorded as DDM 0, so DDM 8.0B/yr showed up as regional income with no national
   // expense (#1323). Booked under the plan-economy lapse rule below — DD is
   // marketization level 0, so an allocation a Land never draws down lapses
   // rather than being charged to the centre.
