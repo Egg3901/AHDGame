@@ -1213,3 +1213,150 @@ describe("ticket #1147 — shortfall damage visibility", () => {
     expect(createNotifications).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("computeSupplyAgreementSettlements — state-scoped agreements", () => {
+  const TX = "TX";
+  const stateKey = "freight@TX";
+
+  it("books a located plant's freight demand under the state key as well as the bare one", () => {
+    const demand = computeSupplyAgreementBuyerDemand({
+      sectors: [
+        {
+          corporationId: B,
+          sectorType: "extraction",
+          revenueAnchor: 30_000,
+          strategyId: "standard",
+          productionPolicyLevel: 0,
+          producedUnits: 100,
+          capacityUnits: 100,
+          mothballed: false,
+          isNatcorp: false,
+          stateId: TX,
+        },
+        {
+          corporationId: B,
+          sectorType: "extraction",
+          revenueAnchor: 30_000,
+          strategyId: "standard",
+          productionPolicyLevel: 0,
+          producedUnits: 100,
+          capacityUnits: 100,
+          mothballed: false,
+          isNatcorp: false,
+          stateId: "NY",
+        },
+      ],
+      currentTurn: 5,
+      unitScale: 1,
+      plantsEnabled: true,
+    });
+    const byKey = demand.get(B)!;
+    expect(byKey.get("freight")).toBeGreaterThan(0);
+    expect(byKey.get(stateKey)).toBeCloseTo(byKey.get("freight")! / 2, 6);
+    expect(byKey.get("freight@NY")).toBeCloseTo(byKey.get("freight")! / 2, 6);
+    // Reachable inputs are never state-keyed.
+    for (const key of byKey.keys()) {
+      if (key.includes("@")) expect(key.startsWith("freight@")).toBe(true);
+    }
+  });
+
+  it("reserves a state contract under its state key, capped by the buyer's demand in that state", () => {
+    const reservations = computeDemandCappedContractReservations({
+      agreements: [
+        {
+          supplierCorpId: S,
+          buyerCorpId: B,
+          commodity: "freight",
+          stateId: TX,
+          volumeCap: 100,
+          pricePremium: 0,
+        },
+      ],
+      buyerDemandByCorpCommodity: new Map([
+        [
+          B,
+          new Map([
+            ["freight", 1_000],
+            [stateKey, 40],
+          ]),
+        ],
+      ]),
+    });
+    expect(reservations.get(S)?.get(stateKey)).toBe(40);
+    expect(reservations.get(S)?.has("freight")).toBe(false);
+  });
+
+  it("settles a state contract only off units cleared in that state", () => {
+    const freightRatio: ReadonlyMap<CommodityType, number> = new Map([["freight", 1]]);
+    const agreement = {
+      agreementId: new ObjectId().toString(),
+      supplierCorpId: S,
+      buyerCorpId: B,
+      commodity: "freight" as CommodityType,
+      stateId: TX,
+      volumeCap: 100,
+      pricePremium: 0.2,
+    };
+    const offState = computeSupplyAgreementSettlements({
+      agreements: [agreement],
+      // Cleared under the bare key (some other book), nothing in Texas.
+      contractSettlementByCorp: new Map([[S, new Map([["freight", 100]])]]),
+      eraUnitScale: 1,
+      priceRatioByCommodity: freightRatio,
+      corpInfo: makeInfo(),
+      turn: 5,
+      now,
+    });
+    expect(offState.settledCount).toBe(0);
+
+    const inState = computeSupplyAgreementSettlements({
+      agreements: [agreement],
+      contractSettlementByCorp: new Map([[S, new Map([[stateKey, 100]])]]),
+      buyerDemandByCorpCommodity: new Map([[B, new Map([[stateKey, 100]])]]),
+      eraUnitScale: 1,
+      priceRatioByCommodity: freightRatio,
+      corpInfo: makeInfo(),
+      turn: 5,
+      now,
+    });
+    const expected = Math.round(100 * COMMODITY_BASE_PRICES.freight * 0.2);
+    expect(inState.settledCount).toBe(1);
+    expect(inState.deltaByCorp.get(S)).toBe(expected);
+    expect(inState.deliveries[0]?.deliveredUnits).toBeCloseTo(100, 6);
+  });
+
+  it("charges shortfall damages against the state's own production, not the corporation's", () => {
+    const freightRatio: ReadonlyMap<CommodityType, number> = new Map([["freight", 1]]);
+    const r = computeSupplyAgreementSettlements({
+      agreements: [
+        {
+          supplierCorpId: S,
+          buyerCorpId: B,
+          commodity: "freight",
+          stateId: TX,
+          volumeCap: 100,
+          pricePremium: 0,
+        },
+      ],
+      contractSettlementByCorp: new Map([[S, new Map([[stateKey, 40]])]]),
+      // Corporation made plenty overall, but only 40 in Texas.
+      producedByCorpCommodity: new Map([
+        [
+          S,
+          new Map([
+            ["freight", 1_000],
+            [stateKey, 40],
+          ]),
+        ],
+      ]),
+      plantsEnabled: true,
+      eraUnitScale: 1,
+      priceRatioByCommodity: freightRatio,
+      corpInfo: makeInfo(),
+      turn: 5,
+      now,
+    });
+    expect(r.damages).toHaveLength(1);
+    expect(r.damages[0]?.shortfallUnits).toBeCloseTo(60, 6);
+  });
+});
