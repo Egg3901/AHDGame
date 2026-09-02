@@ -519,10 +519,70 @@ export interface PhysicalPnl {
   totalCost: number;
   profit: number;
   /**
+   * True when the calibrated residual was a CREDIT larger than every named
+   * cost line put together and was clamped to them. See
+   * `clampOtherOpexCredit`: a sector can never be paid to run, so the credit
+   * may cancel the inputs, labour, upkeep, compliance, financial and growth
+   * bills, and not one anchor more. The stored `otherOpex` is the clamped
+   * figure; the raw anchor-times-units product is on `otherOpexUncapped`.
+   */
+  otherOpexCreditCapped: boolean;
+  otherOpexUncapped: number;
+  /**
    * The DERIVED margin. Under plants `effectiveProfitMargin` is an OUTPUT of
    * the cost model, not an input to it — see `assemblePhysicalPnl`.
    */
   derivedMarginPct: number;
+}
+
+/**
+ * Bound the calibration residual when it is a CREDIT.
+ *
+ * `solveOtherOpexPerUnit` keeps a negative residual on purpose: on the
+ * calibration turn the named physical bills already exceed the margin
+ * formula's total, and the negative residual is what makes the flip identity
+ * hold. That residual is then stored PER UNIT and re-multiplied by
+ * `producedUnits` every turn after. Nothing tied it to the bills it was solved
+ * against, so once the unit count or the unit economics moved (a capacity
+ * build, an auto-retool rebase, a nameplate restatement) the credit kept
+ * scaling on its own and the sector booked profit far above its revenue.
+ *
+ * Measured live (2026-09-02, prod turn 571): one NPC rare-earth sector with
+ * anchor -1201 anchor/unit and 161K units/turn carried an otherOpex line of
+ * -1.74T JPY/day against 287M JPY/day of revenue. The corp booked income 500x
+ * revenue, priced at 14x the next-largest corporation on the exchange, and the
+ * Global Top 50 index fund bought 57% of its NAV into it.
+ *
+ * The invariant this enforces: a plant can never be paid to run. The residual
+ * credit may cancel the inputs, labour, upkeep, compliance, financial and
+ * growth bills it was calibrated against, and not one anchor more. Profit is
+ * therefore bounded by revenue (plus the bounded policy stack) for every
+ * sector, by construction, whatever the stored anchor says. A positive
+ * residual (a charge) is never touched, and a credit smaller than the bills
+ * is never touched either, so the calibration identity still holds on every
+ * sector where it held honestly.
+ */
+export function clampOtherOpexCredit(args: {
+  otherOpex: number;
+  inputsCost: number;
+  laborCost: number;
+  financialLegs: number;
+  upkeep: number;
+  complianceCost: number;
+  growthCost: number;
+}): number {
+  const { otherOpex, inputsCost, laborCost, financialLegs, upkeep, complianceCost, growthCost } =
+    args;
+  if (!Number.isFinite(otherOpex) || otherOpex >= 0) return otherOpex;
+  const namedBills =
+    Math.max(0, inputsCost) +
+    Math.max(0, laborCost) +
+    Math.max(0, financialLegs) +
+    Math.max(0, upkeep) +
+    Math.max(0, complianceCost) +
+    Math.max(0, growthCost);
+  const floor = Number.isFinite(namedBills) && namedBills > 0 ? -namedBills : 0;
+  return otherOpex < floor ? floor : otherOpex;
 }
 
 /**
@@ -551,17 +611,21 @@ export function assemblePhysicalPnl(args: {
   growthCost: number;
   policyCredit: number;
 }): PhysicalPnl {
-  const {
-    hourlyRevenue,
+  const { hourlyRevenue, inputsCost, laborCost, upkeep, complianceCost, financialLegs } = args;
+  const { growthCost, policyCredit } = args;
+  let { otherOpex } = args;
+  const otherOpexUncapped = otherOpex;
+  const clampedOtherOpex = clampOtherOpexCredit({
+    otherOpex,
     inputsCost,
     laborCost,
+    financialLegs,
     upkeep,
     complianceCost,
-    otherOpex,
-    financialLegs,
     growthCost,
-    policyCredit,
-  } = args;
+  });
+  const otherOpexCreditCapped = clampedOtherOpex !== otherOpex;
+  otherOpex = clampedOtherOpex;
   // `policyCredit` sits inside operatingCost (as a credit) so the derived
   // margin keeps the same scope the old `effectiveMargin` had — the modifier
   // stack was part of that number, and margin readers expect it there.
@@ -585,5 +649,7 @@ export function assemblePhysicalPnl(args: {
     totalCost,
     profit,
     derivedMarginPct,
+    otherOpexCreditCapped,
+    otherOpexUncapped,
   };
 }
