@@ -39,9 +39,13 @@ export default function MetricDetailPage({
   // and back link must point there. National-scope doc IDs are lowercase
   // (e.g. "cn_national"); the route param arrives upper-cased.
   const isNationalScope = NATIONAL_SCOPE_IDS.has(stateId.toLowerCase());
+  // This page belongs to the LEGACY stateMetrics system, which now lives under
+  // Demographics > Statistics. `?tab=metrics` resolves to the political
+  // registry — a different system that does not contain this metric — so the
+  // crumb must name the statistics tab explicitly.
   const metricsHomeHref = isNationalScope
     ? `/country/${code.toLowerCase()}/metrics`
-    : `${regionBase}?tab=metrics`;
+    : `${regionBase}?tab=demographics&sub=statistics`;
   const rootHref = isNationalScope ? `/country/${code.toLowerCase()}` : regionBase;
 
   const [data, setData] = useState<MetricDetailData | null>(null);

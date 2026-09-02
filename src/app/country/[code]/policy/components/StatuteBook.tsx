@@ -155,7 +155,9 @@ export function StatuteBook({
             </button>
             {!isCollapsed &&
               records.map((row) => {
-                const provenance = record?.provenance[row.legislationTypeId] ?? null;
+                // Optional on `provenance` too: a malformed or partial payload must degrade
+                // to the "standing law" subline, not take the whole statute book down.
+                const provenance = record?.provenance?.[row.legislationTypeId] ?? null;
                 return (
                   <div
                     key={row.legislationTypeId}

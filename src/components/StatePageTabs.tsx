@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { RegionTabNav, type SuperTabId } from "./state/RegionTabNav";
 import type { StatePageTabsProps } from "./state/StatePageTabsTypes";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { POLITICAL_METRIC_COUNTRY_IDS } from "@/lib/politicalMetrics/types";
 import { partiesUrl } from "@/lib/urls";
 import { makeUSPartyFlavor, compareUSParties } from "@/components/region/regionPartiesUSFlavor";
 import { CardSkeleton, Skeleton, StatGridSkeleton } from "@/components/ui";
@@ -30,6 +31,10 @@ const OverviewTab = dynamic(
 );
 const StateMetricsTab = dynamic(
   () => import("@/components/StateMetricsTab").then((m) => ({ default: m.StateMetricsTab })),
+  { loading: TabFallback }
+);
+const RegionRegistryTab = dynamic(
+  () => import("./state/RegionRegistryTab").then((m) => ({ default: m.RegionRegistryTab })),
   { loading: TabFallback }
 );
 const PoliticsTab = dynamic(
@@ -95,6 +100,10 @@ export function StatePageTabs({
   regionParties = [],
   bucketProfile = null,
 }: StatePageTabsProps) {
+  // Only the four board countries have a registry to render. Everywhere else
+  // the Metrics tab is hidden rather than shown erroring.
+  const hasRegistry = (POLITICAL_METRIC_COUNTRY_IDS as readonly string[]).includes(state.countryId);
+
   const renderContent = (superTab: SuperTabId, subTab: string) => {
     // ── Overview ──
     if (superTab === "overview") {
@@ -207,6 +216,20 @@ export function StatePageTabs({
       }
     }
 
+    // ── Metrics ──
+    // The political registry. Its own super-tab since the region's board is
+    // what the national figure aggregates from, not a demographic footnote.
+    if (superTab === "metrics") {
+      if (!hasRegistry) return null;
+      return (
+        <RegionRegistryTab
+          countryId={state.countryId}
+          regionId={state._id}
+          regionName={state.name}
+        />
+      );
+    }
+
     // ── Demographics ──
     if (superTab === "demographics") {
       if (subTab === "demographics" || subTab === "") {
@@ -223,7 +246,9 @@ export function StatePageTabs({
           />
         );
       }
-      if (subTab === "metrics") {
+      // The legacy stateMetrics boards, renamed Statistics so they read as
+      // supporting data rather than as a rival to the registry above.
+      if (subTab === "statistics") {
         return <StateMetricsTab stateId={state._id} countryId={state.countryId} />;
       }
     }
@@ -241,5 +266,5 @@ export function StatePageTabs({
     return null;
   };
 
-  return <RegionTabNav isAdmin={isAdmin} renderContent={renderContent} />;
+  return <RegionTabNav isAdmin={isAdmin} hasRegistry={hasRegistry} renderContent={renderContent} />;
 }
