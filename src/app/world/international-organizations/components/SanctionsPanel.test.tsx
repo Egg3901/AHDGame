@@ -57,10 +57,38 @@ const viewer = {
 const orgWithPendingSanctions = {
   ...(org as unknown as Record<string, unknown>),
   members: [
-    { countryId: "DE", countryName: "Germany", status: "founding", joinedTurn: 0, hasVote: true },
-    { countryId: "IE", countryName: "Ireland", status: "founding", joinedTurn: 0, hasVote: true },
-    { countryId: "FR", countryName: "France", status: "member", joinedTurn: 0, hasVote: true },
-    { countryId: "PL", countryName: "Poland", status: "member", joinedTurn: 0, hasVote: false },
+    {
+      countryId: "DE",
+      countryName: "Germany",
+      status: "founding",
+      joinedTurn: 0,
+      hasVote: true,
+      hasPolicyVote: true,
+    },
+    {
+      countryId: "IE",
+      countryName: "Ireland",
+      status: "founding",
+      joinedTurn: 0,
+      hasVote: true,
+      hasPolicyVote: true,
+    },
+    {
+      countryId: "FR",
+      countryName: "France",
+      status: "member",
+      joinedTurn: 0,
+      hasVote: true,
+      hasPolicyVote: true,
+    },
+    {
+      countryId: "PL",
+      countryName: "Poland",
+      status: "member",
+      joinedTurn: 0,
+      hasVote: false,
+      hasPolicyVote: false,
+    },
   ],
   pendingLegislation: [
     {
@@ -107,6 +135,7 @@ describe("SanctionsPanel", () => {
                 status: "founding",
                 joinedTurn: 0,
                 hasVote: false,
+                hasPolicyVote: false,
               },
               {
                 countryId: "IE",
@@ -114,6 +143,7 @@ describe("SanctionsPanel", () => {
                 status: "founding",
                 joinedTurn: 0,
                 hasVote: true,
+                hasPolicyVote: true,
               },
             ],
           } as unknown as OrgSummary
@@ -179,6 +209,7 @@ describe("SanctionsPanel", () => {
                 status: "member",
                 joinedTurn: 0,
                 hasVote: false,
+                hasPolicyVote: false,
               },
             ],
           } as unknown as OrgSummary

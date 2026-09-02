@@ -16,6 +16,7 @@ import {
 } from "@/lib/db/collections";
 import { NATIONAL_TERMINAL_STATUSES } from "@/lib/congress/billProposalLimits";
 import { getAllCountryAccess } from "@/lib/countryAccess";
+import { nppGovernedMembers } from "@/lib/internationalOrganizations/ballotRoll";
 import {
   loadWithdrawnMemberKeys,
   recordOrganizationWithdrawal,
@@ -71,11 +72,26 @@ export interface OrganizationSummary {
     status: OrganizationMembership["status"];
     joinedTurn: number;
     /**
-     * Whether this member casts a ballot. Any entity may be a member; only
-     * player-enabled countries vote. Vote rosters MUST filter on this or they
-     * promise a ballot that can never arrive.
+     * Whether this member casts a ballot ON AN ADMISSION OR A BLOC WAR ENTRY —
+     * the two ballots that ask a member to consent to someone else's business
+     * and let its silence block. Any entity may be a member; only player-enabled
+     * countries vote on these. Vote rosters MUST filter on this or they promise a
+     * ballot that can never arrive.
      */
     hasVote: boolean;
+    /**
+     * Whether this member casts a ballot ON EVERY OTHER INSTRUMENT — a leadership
+     * election, sanctions, aid, dues, a directive, and a free-trade agreement,
+     * which is unanimous but voted only by its own named parties.
+     *
+     * Wider than `hasVote`: in active mode it also covers modelled members run by
+     * an NPP government. They are trusted here, where a silence merely costs a
+     * yes or is a party declining its own deal, and kept off an admission or an
+     * entry resolution, where a silence is a veto. Pick the field that matches
+     * the ballot you are rendering — showing a threshold the resolver will not
+     * apply is the whole of ticket #1257.
+     */
+    hasPolicyVote: boolean;
     /**
      * Whether the game models this member as a country with its own economy and
      * treasury. False for macro-tier entities, which have no `federalBudget` —
@@ -333,6 +349,10 @@ export async function loadOrganizationSummaries(db: Db): Promise<OrganizationSum
   ];
   const identities = await resolveCountryIdentities(db, memberCountryIds, categoryCtx.preset);
 
+  // The majority-ballot widening, resolved ONCE for every organisation rather
+  // than per org: it is two queries and the roster is the same table each time.
+  const nppGoverned = await nppGovernedMembers(db, memberCountryIds);
+
   return orderedIds.map((id) => {
     const def = withEffectiveCategory(
       isBuiltInInternationalOrganizationId(id)
@@ -345,6 +365,7 @@ export async function loadOrganizationSummaries(db: Db): Promise<OrganizationSum
       // alignment roster and ISO regional-indicator emoji so seated-but-unplayable
       // allies (Canada, the Benelux, …) do not render as a white-flag blank.
       const isCountry = m.countryId in COUNTRY_CONFIGS;
+      const hasVote = countryAccess[m.countryId as CountryId]?.enabledForPlayers === true;
       const identity = identities.get(m.countryId as CountryId);
       return {
         countryId: m.countryId,
@@ -355,7 +376,8 @@ export async function loadOrganizationSummaries(db: Db): Promise<OrganizationSum
         flagEmoji: identity?.flagEmoji || entityFlag(m.countryId),
         status: m.status,
         joinedTurn: m.joinedTurn,
-        hasVote: countryAccess[m.countryId as CountryId]?.enabledForPlayers === true,
+        hasVote,
+        hasPolicyVote: hasVote || nppGoverned.has(m.countryId as CountryId),
         isCountry,
       };
     });

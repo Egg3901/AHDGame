@@ -36,13 +36,23 @@ const VOTE_LABEL: Record<ProposalVoteRecord["vote"], string> = {
 /**
  * Compact roster of who has voted on a pending proposal. Shows each voter's
  * flag, country, character name, and vote choice. When `expectedVoters` is
- * provided, members who haven't cast a ballot yet are listed at the bottom.
+ * provided, it is the BALLOT: members who have not voted yet are listed at the
+ * bottom, and rows from anyone not on it are dropped.
+ *
+ * Dropping them matters. A ballot can carry votes that do not count — an
+ * autonomous government's ballot on an admission it holds no vote in, or a row
+ * from a member that has since lost its vote — and every tally beside this
+ * roster already ignores exactly those. Showing them made the roster contradict
+ * the number under it, which is how a Warsaw Pact admission displayed three
+ * "yes" rows above a "1 / 2 yes" tally (ticket #1257).
  */
 export function VoteRoster({ votes: rawVotes, expectedVoters }: Props) {
   const entityName = useEntityName();
   // Historical rows can list a country twice. Folding here keeps the roster
   // agreeing with the tally beside it, and stops two <li> sharing a React key.
-  const votes = dedupeOrganizationVotes(rawVotes);
+  const deduped = dedupeOrganizationVotes(rawVotes);
+  const ballot = expectedVoters ? new Set<string>(expectedVoters) : null;
+  const votes = ballot ? deduped.filter((v) => ballot.has(v.countryId)) : deduped;
   const votedCountries = new Set<string>(votes.map((v) => v.countryId));
   const pendingVoters = (expectedVoters ?? []).filter((c) => !votedCountries.has(c));
 
