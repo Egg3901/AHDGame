@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import type { OrgSummary } from "../orgTypes";
 import { orgHref } from "../orgRouting";
 import { Seal } from "./OrgPrimitives";
+import { useEntityName } from "../useEntityName";
 
 /** Overlay card listing the organizations a clicked country belongs to. */
 export function OrgCountryCard({
@@ -18,7 +19,8 @@ export function OrgCountryCard({
   position: { x: number; y: number };
   onClose: () => void;
 }) {
-  const countryName = COUNTRY_CONFIGS[countryId].name;
+  const entityName = useEntityName();
+  const countryName = entityName(countryId);
   return (
     <div
       className="absolute z-20 w-60 rounded-xl border border-card-border bg-card p-3 shadow-lg"

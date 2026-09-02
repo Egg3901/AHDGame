@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui";
-import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+
 import { CountryFlag } from "@/components/CountryFlag";
 import type { CountryId } from "@/lib/constants/countries";
 import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
@@ -13,6 +13,7 @@ import {
   dedupeOrganizationVotes,
   votesNeeded,
 } from "@/lib/internationalOrganizations/resolutionRules";
+import { useEntityName } from "./useEntityName";
 
 interface Props {
   org: OrgSummary;
@@ -35,6 +36,7 @@ interface CandidatesResponse {
 }
 
 export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, onChange }: Props) {
+  const entityName = useEntityName();
   const viewerFmCountry = viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
   const viewerIsMember =
     viewerFmCountry != null && org.members.some((m) => m.countryId === viewerFmCountry);
@@ -149,13 +151,13 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
               </p>
               {leader.holderCountryId && (
                 <p className="text-xs text-muted">
-                  {COUNTRY_CONFIGS[leader.holderCountryId as CountryId]?.name}
+                  {entityName(leader.holderCountryId as CountryId)}
                 </p>
               )}
               {isPermanent ? (
                 <p className="mt-1 text-xs text-muted">
                   Permanent office — held ex officio by the head of government of{" "}
-                  {COUNTRY_CONFIGS[permanentLeaderCountry].name}.
+                  {entityName(permanentLeaderCountry)}.
                 </p>
               ) : (
                 seatHeldUntilTurn != null && (
@@ -177,7 +179,7 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
             {isPermanent && (
               <p className="mt-1 text-xs text-muted">
                 Permanent office — held ex officio by the head of government of{" "}
-                {COUNTRY_CONFIGS[permanentLeaderCountry].name}.
+                {entityName(permanentLeaderCountry)}.
               </p>
             )}
           </div>
@@ -220,7 +222,7 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
                   <div className="flex-1">
                     <p className="text-sm font-medium text-foreground">{c.characterName}</p>
                     <p className="text-xs text-muted">
-                      {c.roleLabel} · {COUNTRY_CONFIGS[c.countryId]?.name}
+                      {c.roleLabel} · {entityName(c.countryId)}
                     </p>
                   </div>
                 </label>
@@ -251,7 +253,7 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
                 Nominee: {election.candidateCharacterName}
               </h5>
               <p className="mt-0.5 text-xs text-muted">
-                {COUNTRY_CONFIGS[election.candidateCountryId as CountryId]?.name} · Nominated by{" "}
+                {entityName(election.candidateCountryId as CountryId)} · Nominated by{" "}
                 {election.nominatedByCharacterName}
               </p>
               <p className="mt-0.5 text-xs text-muted">

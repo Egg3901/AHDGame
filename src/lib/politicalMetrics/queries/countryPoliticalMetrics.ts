@@ -7,7 +7,7 @@ import type {
   PoliticalMetricsDoc,
   PoliticalMetricsHistoryDoc,
 } from "@/lib/db/types/politicalMetrics";
-import { getCountryDisplayName } from "@/lib/constants/countries";
+import { resolveCountryIdentity } from "@/lib/country/countryIdentity";
 import { loadDemocraticCompetition } from "@/lib/governanceStyle/loadCompetition";
 import { scoreGovernanceStyle, type GovernanceStyleScore } from "@/lib/governanceStyle/score";
 import { getCatalog } from "@/lib/politicalLegislation/catalog";
@@ -371,7 +371,10 @@ export async function loadCountryPoliticalMetrics(
   const overall = overallScore(national);
   return {
     countryId,
-    countryDisplayName: getCountryDisplayName(countryId, gameState?.preset),
+    // Resolved, not compiled: this name heads the registry masthead, the
+    // comparison chips and every column of the comparison table, so a country
+    // renamed at runtime must not be listed under the name it no longer uses.
+    countryDisplayName: (await resolveCountryIdentity(db, countryId, gameState?.preset)).name,
     year,
     turn: gameState?.currentTurn ?? 1,
     overall: round1(overall),

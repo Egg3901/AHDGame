@@ -5,9 +5,10 @@ import {
   CORPORATION_TYPE_LABELS,
   type CorporationType,
 } from "@/lib/constants/corporations";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { MAX_PROVISIONS } from "@shared/constants/legislation";
 import type { TariffProvisionInput } from "./tariffProvisionTypes";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 interface Props {
   value: TariffProvisionInput[];
@@ -21,6 +22,7 @@ function emptyRow(): TariffProvisionInput {
 }
 
 export function TariffProvisionEditor({ value, onChange, countryId, enabledCountryIds }: Props) {
+  const resolveCountryName = useCountryDisplayName();
   const rows = value.length > 0 ? value : [emptyRow()];
   const originOptions = enabledCountryIds.filter((id) => id !== countryId);
 
@@ -137,7 +139,7 @@ export function TariffProvisionEditor({ value, onChange, countryId, enabledCount
                 <option value="">Select…</option>
                 {originOptions.map((id) => (
                   <option key={id} value={id}>
-                    {id} — {COUNTRY_CONFIGS[id]?.name ?? id}
+                    {id} — {resolveCountryName(id)}
                   </option>
                 ))}
               </select>

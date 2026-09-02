@@ -18,9 +18,10 @@ import {
 import { getColdWarDials } from "@/lib/coldwar/dials";
 import { listNuclearPrograms } from "@/lib/db/collections/nuclearPrograms";
 import { NUCLEAR_NODES } from "@/lib/military/nuclearProgram";
-import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Crisis } from "@/lib/db/types/crisis";
 import { GlobalResponseCrisisStrip } from "./_coldwar/GlobalResponseCrisisStrip";
+import { loadCountryNameOverrides } from "@/lib/country/countryIdentity";
 
 /** How many concluded wars the hub lists, newest first. Older ones keep their record page. */
 const HISTORY_LIMIT = 24;
@@ -37,6 +38,11 @@ export default async function ConflictsPage() {
   const { currentTurn, currentYear, startingYear, preIterationTurns } = await getGameTime();
 
   const db = await getDb();
+  // One read for the whole page: these name many countries, and resolving each
+  // separately would be a round trip per belligerent.
+  const nameOverrides = await loadCountryNameOverrides(db);
+  const countryNameOf = (id: string) =>
+    nameOverrides[id as CountryId] ?? COUNTRY_CONFIGS[id as CountryId]?.name ?? id;
   const [docs, resolvedDocs] = await Promise.all([
     listActiveConflicts(db),
     listResolvedConflicts(db, HISTORY_LIMIT),
@@ -96,7 +102,7 @@ export default async function ConflictsPage() {
       return {
         countryId: p._id,
         flag: COUNTRY_CONFIGS[p._id]?.flagEmoji ?? "",
-        name: COUNTRY_CONFIGS[p._id]?.name ?? p._id,
+        name: countryNameOf(p._id),
         warheads: p.warheads,
         bestDevice: bestDevice?.name ?? null,
       };

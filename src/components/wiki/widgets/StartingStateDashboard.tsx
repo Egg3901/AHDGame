@@ -55,6 +55,7 @@ import {
   getResourceSummary,
   getPartyPositionStyle,
 } from "@/components/wiki/widgets/StartingStateDashboardData";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 function MetricCard({
   icon: Icon,
@@ -92,6 +93,7 @@ function MiniMetric({ label, value, detail }: { label: string; value: string; de
 }
 
 function StartingMetricsMatrix({ countries }: { countries: CountryStartingStateCopy[] }) {
+  const resolveCountryName = useCountryDisplayName();
   return (
     <section id="starting-metrics" className="scroll-mt-24 space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -130,7 +132,7 @@ function StartingMetricsMatrix({ countries }: { countries: CountryStartingStateC
                     {country.shortName}
                   </span>
                   <span className="text-sm font-semibold text-foreground">
-                    {COUNTRY_CONFIGS[country.id].name}
+                    {resolveCountryName(country.id)}
                   </span>
                 </div>
                 <span className="text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">

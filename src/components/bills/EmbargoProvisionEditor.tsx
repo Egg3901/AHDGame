@@ -1,9 +1,10 @@
 "use client";
 
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { COMMODITY_TYPES, COMMODITY_LABELS } from "@/lib/constants/commodities";
 import { MAX_PROVISIONS } from "@shared/constants/legislation";
 import type { EmbargoProvisionInput } from "./embargoProvisionTypes";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 interface Props {
   value: EmbargoProvisionInput[];
@@ -23,6 +24,7 @@ function emptyRow(): EmbargoProvisionInput {
 }
 
 export function EmbargoProvisionEditor({ value, onChange, countryId, enabledCountryIds }: Props) {
+  const resolveCountryName = useCountryDisplayName();
   const rows = value.length > 0 ? value : [emptyRow()];
   const targetOptions = enabledCountryIds.filter((id) => id !== countryId);
 
@@ -107,7 +109,7 @@ export function EmbargoProvisionEditor({ value, onChange, countryId, enabledCoun
               <option value="">Select…</option>
               {targetOptions.map((id) => (
                 <option key={id} value={id}>
-                  {id} — {COUNTRY_CONFIGS[id]?.name ?? id}
+                  {id} — {resolveCountryName(id)}
                 </option>
               ))}
             </select>

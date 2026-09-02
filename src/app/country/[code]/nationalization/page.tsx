@@ -6,7 +6,7 @@ import { Button, Skeleton } from "@/components/ui";
 import BackButton from "@/components/BackButton";
 import {
   AuctionsSection,
-  countryDisplayName,
+  useCountryNameFromCode,
   type Auction,
   type ViewerCorp,
 } from "./AuctionsSection";
@@ -29,6 +29,7 @@ interface PendingResponse {
 }
 
 export default function NationalizationSurfacePage() {
+  const countryNameFromCode = useCountryNameFromCode();
   const params = useParams();
   const code = (params.code as string).toLowerCase();
   const [auctionsData, setAuctionsData] = useState<AuctionsResponse | null>(null);
@@ -113,7 +114,7 @@ export default function NationalizationSurfacePage() {
             viewerIsResident={auctionsData?.viewerIsResident ?? false}
             viewerPersonalBalance={auctionsData?.viewerPersonalBalance ?? null}
             viewerCharacterId={auctionsData?.viewerCharacterId ?? null}
-            countryName={countryDisplayName(code)}
+            countryName={countryNameFromCode(code)}
             onChanged={load}
           />
           <PendingTakingsSection

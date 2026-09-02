@@ -6,6 +6,7 @@ import { canonicalRegionId, COUNTRY_CONFIGS, type CountryId } from "@/lib/consta
 import type { State } from "@/lib/db/types";
 import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
 import { getSiteUrl } from "@/lib/siteMetadata";
+import { resolveCountryIdentity } from "@/lib/country/countryIdentity";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -47,7 +48,8 @@ export async function generateMetadata({
   const regionName = state?.name ?? regionId;
 
   const title = `${party.name} in ${regionName} | A House Divided`;
-  const description = `${party.abbreviation ? `${party.abbreviation} · ` : ""}${party.name} in ${regionName}, ${COUNTRY_CONFIGS[countryId].name}. Regional support, candidates, and turnout.`;
+  const { name: countryName } = await resolveCountryIdentity(db, countryId);
+  const description = `${party.abbreviation ? `${party.abbreviation} · ` : ""}${party.name} in ${regionName}, ${countryName}. Regional support, candidates, and turnout.`;
   const url = `${getSiteUrl()}/country/${code}/region/${regionId}/party/${partyId}`;
   const image = party.logoUrl || party.heroImageUrl || CDN_LOGO_URL;
 

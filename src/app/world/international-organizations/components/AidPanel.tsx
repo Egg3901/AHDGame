@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { canTableResolutionType } from "@/lib/constants/orgCategory";
 import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
 import type { OrgSummary, OrgViewerInfo } from "../orgTypes";
@@ -14,6 +14,7 @@ import {
   requiresUnanimity,
   votesNeeded,
 } from "@/lib/internationalOrganizations/resolutionRules";
+import { useEntityName } from "../useEntityName";
 
 interface Props {
   org: OrgSummary;
@@ -30,6 +31,7 @@ interface Props {
  * aid (political / economic / development).
  */
 export function AidPanel({ org, viewer, currentTurn, votingWindowTurns, onChange }: Props) {
+  const entityName = useEntityName();
   const viewerFmCountry = viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
   const viewerIsMember =
     viewerFmCountry != null && org.members.some((m) => m.countryId === viewerFmCountry);
@@ -107,7 +109,7 @@ export function AidPanel({ org, viewer, currentTurn, votingWindowTurns, onChange
     onChange();
   }
 
-  const name = (c?: CountryId) => (c ? (COUNTRY_CONFIGS[c]?.name ?? c) : "—");
+  const name = (c?: CountryId) => (c ? entityName(c) : "—");
   // Agreed and proposed package sizes are a record, so they read in the viewer's
   // currency. The Amount field below stays in the fund's, and says so in its
   // label — the route banks what is typed there straight into the fund.

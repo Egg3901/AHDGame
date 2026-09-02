@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button, Skeleton } from "@/components/ui";
 import { COMMODITY_TYPES, COMMODITY_LABELS, type CommodityType } from "@/lib/constants/commodities";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { useEnabledCountryIds } from "@/lib/hooks/useEnabledCountryIds";
 import { formatEmbargoProvisionLabel } from "@/lib/legislature/embargoProvisionLabel";
 import {
@@ -11,6 +11,7 @@ import {
   TRADE_EMBARGO_MAX_DURATION_TURNS,
   TRADE_EMBARGO_MAX_ACTIVE_PER_MEMBER,
 } from "@/lib/trade/constants";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 interface EmbargoItem {
   id: string;
@@ -43,6 +44,7 @@ const inputClass =
  * enforced server-side by `requireTradeMinister`; `canAct` only gates the form.
  */
 export function TradeEmbargoPanel({ countryId, canAct, actionsRemaining }: Props) {
+  const resolveCountryName = useCountryDisplayName();
   const enabledCountryIds = useEnabledCountryIds();
   const targetOptions = enabledCountryIds.filter((id) => id !== countryId);
 
@@ -176,7 +178,7 @@ export function TradeEmbargoPanel({ countryId, canAct, actionsRemaining }: Props
       <div className="mb-5 space-y-4">
         <div>
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
-            Imposed by {COUNTRY_CONFIGS[countryId]?.name ?? countryId}
+            Imposed by {resolveCountryName(countryId)}
           </h3>
           {loading ? (
             <ul className="min-h-[88px] space-y-2">
@@ -233,7 +235,7 @@ export function TradeEmbargoPanel({ countryId, canAct, actionsRemaining }: Props
         {imposedOnUs.length > 0 && (
           <div>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
-              Imposed on {COUNTRY_CONFIGS[countryId]?.name ?? countryId}
+              Imposed on {resolveCountryName(countryId)}
             </h3>
             <ul className="space-y-2">
               {imposedOnUs.map((e) => (
@@ -242,7 +244,7 @@ export function TradeEmbargoPanel({ countryId, canAct, actionsRemaining }: Props
                   className="rounded-lg border border-card-border bg-card-elevated px-3 py-2"
                 >
                   <p className="truncate text-sm text-foreground">
-                    {COUNTRY_CONFIGS[e.sourceCountry]?.name ?? e.sourceCountry}: {summaryOf(e)}
+                    {resolveCountryName(e.sourceCountry)}: {summaryOf(e)}
                   </p>
                   <p className="text-[11px] text-muted">
                     {e.origin === "legislation" ? "By law" : "Ministerial"}
@@ -273,7 +275,7 @@ export function TradeEmbargoPanel({ countryId, canAct, actionsRemaining }: Props
               <option value="">Select…</option>
               {targetOptions.map((id) => (
                 <option key={id} value={id}>
-                  {id} — {COUNTRY_CONFIGS[id]?.name ?? id}
+                  {id} — {resolveCountryName(id)}
                 </option>
               ))}
             </select>

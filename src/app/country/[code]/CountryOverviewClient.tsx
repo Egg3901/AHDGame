@@ -11,7 +11,6 @@ import type { CountryAvailability } from "@/lib/countryAvailability";
 import {
   COUNTRY_CONFIGS,
   getCountryConfig,
-  getCountryDisplayName,
   getHeadOfStateOfficeType,
   type CountryId,
   type GovernmentType,
@@ -40,6 +39,7 @@ import { fetchJson } from "@/lib/observability/fetchJson";
 import { NationalIdeologyBand, type NationalAxesData } from "./components/NationalIdeologyBand";
 import { ExploreDirectory, type DirectoryGroup } from "./components/ExploreDirectory";
 import { buildCountryDirectory } from "./components/countryDirectory";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 function BetaBanner({ countryName }: { countryName: string }) {
   return (
@@ -342,9 +342,10 @@ export default function CountryOverviewClient({
     governmentType?: GovernmentType;
   } | null;
 }) {
+  const countryName = useCountryDisplayName();
   const config = COUNTRY_CONFIGS[countryId];
   const activePreset = useActivePreset();
-  const name = identity?.name ?? getCountryDisplayName(countryId, activePreset);
+  const name = identity?.name ?? countryName(countryId);
   const governmentTypeLabel = identity?.governmentTypeLabel ?? config.governmentTypeLabel;
   // RUNTIME, to agree with `useCountryLeadershipData`, which has always resolved
   // the system at runtime. While this read the compiled config the two could

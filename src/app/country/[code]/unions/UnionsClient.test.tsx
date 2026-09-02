@@ -10,9 +10,18 @@ vi.mock("next/navigation", () => ({
   useParams: () => ({ code: "us" }),
 }));
 
-vi.mock("@/contexts/RegisteredCountriesContext", () => ({
-  useActivePreset: () => "1953-default",
-}));
+// The component names its country through the override-aware hook now, so the
+// stub has to answer as well — otherwise the mock hides the whole module. It
+// delegates to the real compiled lookup, which is what the hook falls back to
+// when no country has been renamed, so the test still asserts a real name.
+vi.mock("@/contexts/RegisteredCountriesContext", async () => {
+  const { getCountryDisplayName } = await import("@/lib/constants/countries");
+  return {
+    useActivePreset: () => "1953-default",
+    useCountryDisplayName: () => (id: string) =>
+      getCountryDisplayName(id as Parameters<typeof getCountryDisplayName>[0], "1953-default"),
+  };
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
