@@ -25,6 +25,7 @@ import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
 import { REGION_SCOPED_COLLECTIONS } from "@/lib/referendum/transfer/regionScopedCollections";
 import { REGION_PARTY_COLLECTIONS } from "@/lib/referendum/transfer/evacuateRegionPolitics";
 import { rescaleRegionDelegations } from "./apportionChamber";
+import { statePartyOrgIdFor } from "@/lib/db/partyLookup";
 
 /** A unique index that constrains `field`, as the fuse needs to see it. */
 interface UniqueIndexOverField {
@@ -287,10 +288,28 @@ export async function mergeRegion(db: Db, args: MergeRegionArgs): Promise<MergeR
       );
       await partyOrgs.deleteOne({ _id: org._id });
     } else {
-      await partyOrgs.updateOne(
-        { _id: org._id },
-        { $set: { stateId: toRegionId, updatedAt: now } }
-      );
+      // RE-KEYED, not `$set`. `statePartyOrg._id` is `${stateId}_${partyId}`, so
+      // a row that keeps its old key while its `stateId` field moves disagrees
+      // with itself — and the two readers are split, the region list going by
+      // field and the state-party page by `_id`. That renders one party's
+      // organisation on another's page (ticket #1256). A `_id` is immutable, so
+      // this is delete + insert.
+      //
+      // The target key is free by construction: this branch runs only when the
+      // surviving region has NO row for this party.
+      const { _id: oldId, ...rest } = org;
+      const newId = statePartyOrgIdFor(toRegionId, String(org.partyId));
+      if (String(oldId) === newId) {
+        await partyOrgs.updateOne({ _id: oldId }, { $set: { updatedAt: now } });
+      } else {
+        await partyOrgs.insertOne({
+          ...rest,
+          _id: newId,
+          stateId: toRegionId,
+          updatedAt: now,
+        } as RegionPartyOrg);
+        await partyOrgs.deleteOne({ _id: oldId });
+      }
     }
     documentsMoved++;
   }

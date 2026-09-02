@@ -26,6 +26,7 @@ import { resolveMergeFxScale } from "./mergeFxScale";
 import {
   PARTY_REF_COLLECTIONS,
   PARTY_KEYED_MAP_COLLECTIONS,
+  PARTY_KEYED_DOCUMENT_ID_COLLECTIONS,
   PARTY_OBJECTID_COLLECTIONS,
   NON_PARTY_SENTINELS,
   buildPartyIdMap,
@@ -180,6 +181,57 @@ export async function mergePartiesIntoCountry(
       await db.collection(ref.collection).updateOne({ _id: doc._id } as Record<string, unknown>, {
         $set: { [ref.field]: rebuilt, updatedAt: now },
       });
+      documentsRemapped += 1;
+    }
+  }
+
+  // Collections whose DOCUMENT `_id` embeds the sequentialId. The field updates
+  // above already ran, so these rows now disagree with their own key, and a
+  // `_id` cannot be updated — they must be re-keyed.
+  //
+  // TWO PHASES, because the remap is a PERMUTATION: on a reunification the row
+  // keyed `NW_1` becomes `NW_6` while `NW_7` becomes `NW_1`, so a direct pass
+  // collides on a key the same run is about to vacate. Everything is parked
+  // under a temporary id first, then landed.
+  //
+  // A row is only moved when its target is free or is itself being vacated. A
+  // target held by a row that is staying put is a real collision and is left
+  // alone rather than overwritten: losing one party's organisation silently is
+  // worse than a key that still disagrees, which `verify` can find later.
+  for (const ref of PARTY_KEYED_DOCUMENT_ID_COLLECTIONS) {
+    const coll = db.collection(ref.collection);
+    const rows = (await coll
+      .find({ countryId: toCountryId } as Record<string, unknown>)
+      .toArray()) as Array<Record<string, unknown>>;
+
+    const keyFor = (row: Record<string, unknown>) =>
+      ref.idParts.map((part) => String(row[part])).join("_");
+
+    const misKeyed = rows.filter((row) => String(row._id) !== keyFor(row));
+    if (misKeyed.length === 0) continue;
+
+    const present = new Set(rows.map((row) => String(row._id)));
+    const vacating = new Set(misKeyed.map((row) => String(row._id)));
+    const claimed = new Set<string>();
+    const movable = misKeyed.filter((row) => {
+      const target = keyFor(row);
+      if (claimed.has(target)) return false;
+      if (present.has(target) && !vacating.has(target)) return false;
+      claimed.add(target);
+      return true;
+    });
+
+    const parked: Array<{ tempId: string; finalId: string; doc: Record<string, unknown> }> = [];
+    for (const row of movable) {
+      const { _id, ...rest } = row;
+      const tempId = `__rekey__${String(_id)}`;
+      await coll.insertOne({ _id: tempId, ...rest } as Record<string, unknown>);
+      await coll.deleteOne({ _id } as Record<string, unknown>);
+      parked.push({ tempId, finalId: keyFor(row), doc: rest });
+    }
+    for (const entry of parked) {
+      await coll.insertOne({ _id: entry.finalId, ...entry.doc } as Record<string, unknown>);
+      await coll.deleteOne({ _id: entry.tempId } as Record<string, unknown>);
       documentsRemapped += 1;
     }
   }
