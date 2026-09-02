@@ -54,11 +54,19 @@ const TAX_SLIDER_ID_PREFIX = "rate:";
  * The per-Land trade tax stays `de_trade_tax` for both — it is the id DD's own
  * regions actually carry.
  */
-const TAX_TYPE_IDS: Partial<Record<CountryId, { incomeTax: string; vat: string }>> = {
+export const TAX_TYPE_IDS = {
   DE: { incomeTax: "de_income_tax_rate", vat: "de_vat_rate" },
   DD: { incomeTax: "dd.tax.incomeTax", vat: "dd.tax.salesTax" },
-};
-const DEFAULT_TAX_TYPE_IDS = { incomeTax: "de_income_tax_rate", vat: "de_vat_rate" };
+} as const satisfies Partial<Record<CountryId, { incomeTax: string; vat: string }>>;
+
+/**
+ * The roster is DERIVED from the table above rather than kept beside it. Two
+ * parallel lists would let a country be added to the model without declaring
+ * which tax laws fund it, and the fallback would then read DE's ids against a
+ * catalogue that does not contain them — which is exactly how DD's income and
+ * VAT shares both computed to zero (#1323). Here that is unrepresentable.
+ */
+export const LAENDER_MODEL_COUNTRIES = Object.keys(TAX_TYPE_IDS) as CountryId[];
 // Per-Land trade tax (Gewerbesteuer-Hebesatz) — set at Land level via `de_trade_tax`
 const TRADE_TAX_TYPE_ID = "de_trade_tax";
 
@@ -204,6 +212,22 @@ export function calculateDERegionalBudget(input: DEBudgetInput): DEBudgetResult 
   };
 }
 
+/**
+ * Optional `RegionalBudget` fields belonging to the OTHER country shapes (JP's
+ * prefectural taxes, CN's central-transfer set, RU's union grant). This model
+ * owns the Länder set, so it clears these on every write.
+ */
+const FOREIGN_SHAPE_FIELDS = {
+  residentTaxRevenue: "",
+  fixedAssetTaxRevenue: "",
+  nationalGrant: "",
+  eitShare: "",
+  centralTransferGrant: "",
+  resourceTaxRevenue: "",
+  businessTaxRevenue: "",
+  unionGrant: "",
+} as const;
+
 // ── Turn processing ──────────────────────────────────────────────────────────
 
 /**
@@ -290,7 +314,12 @@ export async function processLaenderRegionalBudgets(
   const legTypeMap = new Map(legTypes.map((lt) => [lt._id, lt]));
 
   // Read national income tax and VAT rates from enacted legislation
-  const taxTypeIds = TAX_TYPE_IDS[countryId] ?? DEFAULT_TAX_TYPE_IDS;
+  const taxTypeIds = TAX_TYPE_IDS[countryId as keyof typeof TAX_TYPE_IDS];
+  // A country on this model without a tax-id entry is unrepresentable by
+  // construction (the roster is derived from the table), so this is a guard
+  // against a direct caller, not a fallback: returning early is far better than
+  // silently computing every Land's shares as zero.
+  if (!taxTypeIds) return { regionsProcessed: 0 };
   const incomeTaxPolicy = nationalPolicies.find(
     (p) => p.legislationTypeId === taxTypeIds.incomeTax
   );
@@ -326,7 +355,13 @@ export async function processLaenderRegionalBudgets(
   // Read Finance Minister allocation (controls federal equalization distribution)
   const ministerSetting = await db
     .collection<CabinetSetting>("cabinetSettings")
-    .findOne({ _id: "DE_finance_minister" });
+    // Keyed off the country's OWN finance-minister cabinet id, not DE's. The
+    // suffix differs per country (DE `finance_minister`, DD `minister_of_finance`),
+    // so a hardcoded DE key silently returned nothing for DD and dropped its
+    // Finance Minister's allocation back to the even per-capita split (#1323).
+    .findOne({
+      _id: `${countryId}_${getCountryConfig(countryId, preset).financeMinisterCabinetId}`,
+    });
   const allocationPercents = ministerSetting?.allocationPercents ?? null;
 
   let regionsProcessed = 0;
@@ -455,7 +490,17 @@ export async function processLaenderRegionalBudgets(
     };
 
     regionalBudgetOps.push({
-      updateOne: { filter: { _id: region._id }, update: { $set: budgetDoc }, upsert: true },
+      updateOne: {
+        filter: { _id: region._id },
+        // Clear the shapes this model does not own — the mirror of the same
+        // `$unset` in the one-party processor. `RegionalBudget` is a union of
+        // per-country field sets and `buildRegionalRevenueShape` dispatches on
+        // which fields are PRESENT, so a region that changed model would carry
+        // two shapes at once and readers would resolve whichever branch is
+        // tested first (#1323).
+        update: { $set: budgetDoc, $unset: FOREIGN_SHAPE_FIELDS },
+        upsert: true,
+      },
     });
 
     regionsProcessed++;

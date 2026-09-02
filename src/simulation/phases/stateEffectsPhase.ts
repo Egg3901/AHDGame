@@ -14,8 +14,10 @@ import { processMetricDecay } from "@/lib/turn/metricDecay";
 import { processSubsidyBudget } from "@/lib/turn/subsidyBudgetTurn";
 import { processRegionalBudgets } from "@/lib/turn/regionalBudget";
 import { processJPRegionalBudgets } from "@/lib/turn/jpRegionalBudget";
-import { processLaenderRegionalBudgets } from "@/lib/turn/deRegionalBudget";
-import { LAENDER_MODEL_COUNTRIES } from "@/lib/constants/regionalBudgetModels";
+import {
+  LAENDER_MODEL_COUNTRIES,
+  processLaenderRegionalBudgets,
+} from "@/lib/turn/deRegionalBudget";
 import { processAllOnePartyRegionalBudgets } from "@/lib/turn/cnRegionalBudget";
 import { processRURegionalBudgets } from "@/lib/turn/ruRegionalBudget";
 import { processPoliticalMetricsDynamics } from "@/lib/turn/politicalMetricsDynamics";
