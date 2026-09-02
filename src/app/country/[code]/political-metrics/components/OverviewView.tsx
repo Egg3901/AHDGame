@@ -78,11 +78,14 @@ export function OverviewView({
   onOpenCategory,
   onOpenMetric,
   showGovernanceStyle,
+  governanceScopeNote,
 }: {
   data: PMRegistryData;
   onOpenCategory: (categoryId: string) => void;
   onOpenMetric: (categoryId: string, metricId: string) => void;
   showGovernanceStyle: boolean;
+  /** Passed through to the governance card; a region view explains the national half. */
+  governanceScopeNote?: string;
 }) {
   const tone = scoreTone(data.overall);
   const sorted = [...data.categories].sort((a, b) => b.score - a.score);
@@ -168,7 +171,7 @@ export function OverviewView({
       </div>
 
       {showGovernanceStyle && data.governanceStyle && (
-        <GovernanceStyleCard score={data.governanceStyle} />
+        <GovernanceStyleCard score={data.governanceStyle} scopeNote={governanceScopeNote} />
       )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">

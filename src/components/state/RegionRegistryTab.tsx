@@ -151,9 +151,10 @@ export function RegionRegistryTab({
           data={viewData}
           onOpenCategory={onOpenCategory}
           onOpenMetric={onOpenMetric}
-          // Governance style scores a country's party competition. A per-region
-          // copy would be a fabricated number wearing a real label.
-          showGovernanceStyle={false}
+          // Present unless the country is a one-party state, where the score
+          // has no meaning. Scored from this region's own board.
+          showGovernanceStyle={Boolean(data.governanceStyle)}
+          governanceScopeNote={`Political direction and democratic health are scored from ${data.regionName}'s own board. The balance of power below describes ${data.countryDisplayName}'s legislature and executive, which bear on every ${data.regionLabel.toLowerCase()} alike.`}
         />
       )}
       {view.kind === "category" &&

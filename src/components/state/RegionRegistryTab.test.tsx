@@ -120,11 +120,31 @@ describe("RegionRegistryTab", () => {
     expect(screen.queryByText(/· United States$/)).toBeNull();
   });
 
-  it("omits the governance-style card, which has no regional analogue", async () => {
-    mockFetch(payload());
+  it("shows the governance-style card scored from the region's own board", async () => {
+    mockFetch(
+      payload({
+        governanceStyle: {
+          name: "Governance Style",
+          variant: "liberal-democracy",
+          leftRight: { value: 66, label: "Centre-right" },
+          democraticHealth: { value: 64, label: "Functioning democracy" },
+          competition: null,
+        },
+      })
+    );
     renderTab();
     await screen.findByText(/situation registry/);
-    expect(screen.queryByText("Governance Style")).toBeNull();
+    // The label appears twice by design: the card heading and the gauge.
+    expect(screen.getAllByText("Centre-right").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Functioning democracy").length).toBeGreaterThan(0);
+  });
+
+  it("omits the card for a country where the score has no meaning", async () => {
+    // A one-party state: the loader sends no governanceStyle at all.
+    mockFetch(payload({ governanceStyle: undefined }));
+    renderTab();
+    await screen.findByText(/situation registry/);
+    expect(screen.queryByText("Centre-right")).toBeNull();
   });
 
   it("links onward to the national registry the region aggregates into", async () => {

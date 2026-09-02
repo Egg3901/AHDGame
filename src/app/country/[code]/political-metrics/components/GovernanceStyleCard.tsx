@@ -148,7 +148,18 @@ function PowerBalance({ competition }: { competition: DemocraticCompetition }) {
 }
 
 /** A game-facing national-spirit dossier, not a generic metrics chart. */
-export function GovernanceStyleCard({ score }: { score: GovernanceStyleScore }) {
+export function GovernanceStyleCard({
+  score,
+  scopeNote,
+}: {
+  score: GovernanceStyleScore;
+  /**
+   * Shown under the Balance of Power band. A region view passes one, because
+   * those figures describe the country's legislature and executive, not the
+   * region's, even though they bear on the region's democratic health.
+   */
+  scopeNote?: string;
+}) {
   const flavor = governanceStyleFlavor(score);
   const healthTone = scoreTone(score.democraticHealth.value);
 
@@ -209,6 +220,11 @@ export function GovernanceStyleCard({ score }: { score: GovernanceStyleScore }) 
       </div>
 
       {score.competition && <PowerBalance competition={score.competition} />}
+      {score.competition && scopeNote && (
+        <p className="border-t border-card-border px-4 py-2.5 text-body-xs text-muted sm:px-5">
+          {scopeNote}
+        </p>
+      )}
 
       <div className="grid gap-4 px-4 py-4 sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.72fr)]">
         <div>

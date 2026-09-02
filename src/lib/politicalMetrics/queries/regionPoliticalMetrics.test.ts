@@ -131,6 +131,21 @@ describe("loadRegionPoliticalMetrics", () => {
     expect(res.overall).toBeCloseTo(Math.round(exact * 10) / 10, 5);
   });
 
+  it("scores governance style from THIS region's board", async () => {
+    // Both halves of the card derive from the metric values, which are per
+    // region — only the competition penalty inside democratic health is a
+    // country figure. Omitting the card at region scope would have dropped a
+    // panel the national registry shows for no good reason.
+    const ga = (await load())!;
+    const ny = (await load("NY"))!;
+    expect(ga.governanceStyle?.name).toBe("Governance Style");
+    expect(ga.governanceStyle?.leftRight.value).toBeGreaterThanOrEqual(0);
+    expect(ga.governanceStyle?.democraticHealth.value).toBeGreaterThanOrEqual(0);
+    // GA and NY differ on worker security, so their scores must not be identical
+    // the way they would be if this were the national aggregate.
+    expect(ga.governanceStyle?.leftRight.value).not.toBe(ny.governanceStyle?.leftRight.value);
+  });
+
   it("keeps nine categories of seven lean-ordered metrics", async () => {
     const res = (await load())!;
     expect(res.categories).toHaveLength(9);

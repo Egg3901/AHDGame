@@ -22,6 +22,12 @@ import type {
 } from "@/lib/db/types/politicalMetrics";
 import { resolveGameYear } from "@/lib/era/era";
 import { resolveCountryIdentity } from "@/lib/country/countryIdentity";
+import { loadDemocraticCompetition } from "@/lib/governanceStyle/loadCompetition";
+import {
+  scoreGovernanceStyle,
+  supportsGovernanceStyle,
+  type GovernanceStyleScore,
+} from "@/lib/governanceStyle/score";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getCatalog } from "@/lib/politicalLegislation/catalog";
 import { lawTargets } from "@/lib/politicalLegislation/dynamics";
@@ -76,6 +82,14 @@ export interface RegionPoliticalMetricsResponse {
   overallStatus: string;
   /** The country figure, for the comparison line. */
   nationalOverall: number;
+  /**
+   * Political direction and democratic health, scored from THIS region's
+   * board. Both halves derive from the metric values, which are per region;
+   * only the party-competition penalty inside democratic health is a country
+   * figure, and it applies to every region of that country equally. Absent
+   * for a one-party state, where the score has no meaning.
+   */
+  governanceStyle?: GovernanceStyleScore;
   categories: Array<{
     id: string;
     displayName: string;
@@ -295,6 +309,23 @@ export async function loadRegionPoliticalMetrics(
     exactCategoryScores.reduce((sum, s) => sum + s, 0) / (exactCategoryScores.length || 1);
   const identity = await resolveCountryIdentity(db, countryId, gameState?.preset);
 
+  /**
+   * The same card the national registry shows, scored from this region's own
+   * values rather than the country aggregate — a region really does have its
+   * own political direction and its own democratic health.
+   *
+   * The competition penalty folded into democratic health is national (it
+   * measures the country's party competition), which is correct: one lopsided
+   * national legislature bears on every region alike, exactly as the turn phase
+   * applies national approval to every region.
+   */
+  const governanceStyle = supportsGovernanceStyle(identity.governmentType)
+    ? scoreGovernanceStyle(
+        regionDoc.values,
+        await loadDemocraticCompetition(db, countryId, gameState?.preset, gameState)
+      )
+    : undefined;
+
   return {
     scope: "region" as const,
     countryId,
@@ -309,6 +340,7 @@ export async function loadRegionPoliticalMetrics(
     overall: round1(regionOverall),
     overallStatus: statusFor(regionOverall),
     nationalOverall: round1(overallScore(national)),
+    governanceStyle,
     categories,
   };
 }
