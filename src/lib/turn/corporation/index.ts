@@ -31,7 +31,6 @@ import {
   embargoSupplyFactorFor,
   plantsSupplyScaledUnits,
 } from "@/lib/constants/commodities";
-import { clampAgreementPremium } from "@/lib/db/types/supplyAgreement";
 import {
   computeDemandCappedContractReservations,
   computeSupplyAgreementBuyerDemand,
@@ -39,11 +38,12 @@ import {
   type SettleableSupplyAgreement,
   type SupplyAgreementDemandSector,
 } from "./settleSupplyAgreements";
-import type { SupplyAgreement } from "@/lib/db/types/supplyAgreement";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { FREIGHT_CLASS_BY_COMMODITY, type FreightClass } from "@/lib/logistics/freightClass";
-import { isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
-import { migrateStateScopedSupplyAgreements } from "./migrateStateScopedSupplyAgreements";
+import {
+  contractScopeKeysFor,
+  loadSettleableSupplyAgreements,
+} from "./loadSettleableSupplyAgreements";
 import {
   buildMinWageRatioByCountry,
   buildUnionLawBiasByCountry,
@@ -112,6 +112,7 @@ const CORP_TURN_RNG_SALT = process.env.SIM_RNG_SALT ? `:${process.env.SIM_RNG_SA
 /**
  * Run the corporation economy, settlement, ownership, and reporting phases for one turn.
  */
+
 export async function processCorporationTurn(turn?: number): Promise<CorporationTurnResult> {
   const db = await getDb();
   const now = new Date();
@@ -260,117 +261,39 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // Private supply agreements: contracted output per supplier corp per commodity.
   // A supply agreement reserves the contracted volume for the buyer (additive);
   // the supplier's surplus above it still clears on the open market.
-  let contractedByCorpCommodity: Map<string, Map<CommodityType, number>> | undefined;
+  // Every per-corp contract map below is keyed by `supplyAgreementScopeKey`:
+  // the bare commodity for a corporation-wide agreement, `commodity@stateId`
+  // for a state-scoped one (freight), so a state contract is reserved,
+  // produced and settled against that one state's plants.
+  let contractedByCorpCommodity: Map<string, Map<string, number>> | undefined;
   let settleableAgreements: SettleableSupplyAgreement[] | undefined;
-  let buyerDemandByCorpCommodity: Map<string, Map<CommodityType, number>> | undefined;
-  // Corporation-wide agreements have no state identity. A live agreement for
-  // a state-local commodity must finish under the legacy national book rather
-  // than being silently reinterpreted or broken mid-contract. New agreements
-  // for these commodities are rejected at proposal time.
+  let buyerDemandByCorpCommodity: Map<string, Map<string, number>> | undefined;
+  // Corporation-wide agreements have no state identity. A live LEGACY agreement
+  // for a state-local commodity (one signed before contracts named their
+  // state) must finish under the legacy national book rather than being
+  // silently reinterpreted or broken mid-contract. New agreements for these
+  // commodities must name a state at proposal time.
   let stateLocalClearingBlockedByLegacyAgreement = false;
-  // Populated during clearing: supplier corpId → commodity → contracted units that
-  // actually cleared this turn. Drives the post-clearing premium settlement.
-  const contractSettlementByCorp = new Map<string, Map<CommodityType, number>>();
-  // Plants tier: supplier corpId → commodity → units actually produced this
+  // Populated during clearing: supplier corpId → scope key → contracted units
+  // that actually cleared this turn. Drives the post-clearing premium settlement.
+  const contractSettlementByCorp = new Map<string, Map<string, number>>();
+  // Plants tier: supplier corpId → scope key → units actually produced this
   // turn (the offered book under plants IS real production). Drives the
   // supply-agreement shortfall penalty, a contract is a promise about goods,
   // so under-PRODUCING against it is the breach, not under-selling it.
-  const producedByCorpCommodity = new Map<string, Map<CommodityType, number>>();
+  const producedByCorpCommodity = new Map<string, Map<string, number>>();
   // Ticket #1147: the involuntary-constraint ceiling, accumulated on exactly
   // the same corp/commodity keys as `producedByCorpCommodity` so the damages
   // leg can compare like with like. A supplier whose plants were starved of
   // inputs, throttled by a glutted market or struck is billed against what it
   // could have made, not against a nameplate it could never reach.
-  const achievableByCorpCommodity = new Map<string, Map<CommodityType, number | null>>();
+  const achievableByCorpCommodity = new Map<string, Map<string, number | null>>();
   if (supplyAgreementsEnabled) {
     contractedByCorpCommodity = new Map();
     settleableAgreements = [];
-    // C6: a contract under NOTICE keeps delivering and settling until its
-    // effective turn. Retire the ones whose notice has run out first, then load
-    // everything still live. Ordering matters, a contract that expires this
-    // turn must not settle again.
-    const agreementMigration = await migrateStateScopedSupplyAgreements({
-      agreements: db.collection<SupplyAgreement>("supplyAgreements"),
-      turn: turn ?? 0,
-      now,
-    });
-    if (agreementMigration.noticeServed > 0 || agreementMigration.pendingCancelled > 0) {
-      console.info(
-        `[corporationTurn] retiring corporation-wide state-local agreements: ` +
-          `${agreementMigration.noticeServed} given notice, ` +
-          `${agreementMigration.pendingCancelled} pending withdrawn`
-      );
-    }
-    const agreements = await db
-      .collection("supplyAgreements")
-      .find(
-        { status: { $in: ["active", "cancelling"] } },
-        {
-          projection: {
-            supplierCorpId: 1,
-            buyerCorpId: 1,
-            commodity: 1,
-            volumeCap: 1,
-            pricePremium: 1,
-            volumeCapBasis: 1,
-            lastDeliveryTurn: 1,
-            lastDeliveredUnits: 1,
-            lastBuyerConsumptionUnits: 1,
-            previousDeliveryTurn: 1,
-            previousDeliveredUnits: 1,
-            previousBuyerConsumptionUnits: 1,
-            lastDamagesNoticeTurn: 1,
-          },
-        }
-      )
-      .toArray();
-    for (const a of agreements as unknown as {
-      _id: ObjectId;
-      supplierCorpId: ObjectId;
-      buyerCorpId: ObjectId;
-      commodity: CommodityType;
-      volumeCap: number;
-      pricePremium?: number;
-      volumeCapBasis?: SupplyAgreement["volumeCapBasis"];
-      lastDeliveryTurn?: number;
-      lastDeliveredUnits?: number;
-      lastBuyerConsumptionUnits?: number;
-      previousDeliveryTurn?: number;
-      previousDeliveredUnits?: number;
-      previousBuyerConsumptionUnits?: number;
-      lastDamagesNoticeTurn?: number;
-    }[]) {
-      if (isStateScopedCommodity(a.commodity)) {
-        stateLocalClearingBlockedByLegacyAgreement = true;
-      }
-      const cap = Math.max(0, a.volumeCap ?? 0);
-      settleableAgreements.push({
-        agreementId: a._id?.toString(),
-        supplierCorpId: a.supplierCorpId.toString(),
-        buyerCorpId: a.buyerCorpId.toString(),
-        commodity: a.commodity,
-        volumeCap: cap,
-        pricePremium: clampAgreementPremium(a.pricePremium ?? 0),
-        // Shortfall damages only apply to contracts whose `volumeCap` was
-        // checked against scaled plant capacity when it was signed. Contracts
-        // predating that check carry no basis, so they settle their price
-        // premium as usual and are grandfathered out of the damages leg, see
-        // the stamp in corporations/commands/supplyAgreements.
-        shortfallEligible: a.volumeCapBasis === "scaledCapacity",
-        lastDeliveryTurn: a.lastDeliveryTurn,
-        lastDeliveredUnits: a.lastDeliveredUnits,
-        lastBuyerConsumptionUnits: a.lastBuyerConsumptionUnits,
-        previousDeliveryTurn: a.previousDeliveryTurn,
-        previousDeliveredUnits: a.previousDeliveredUnits,
-        previousBuyerConsumptionUnits: a.previousBuyerConsumptionUnits,
-        lastDamagesNoticeTurn: a.lastDamagesNoticeTurn,
-      });
-    }
-    if (stateLocalClearingBlockedByLegacyAgreement) {
-      console.warn(
-        "[corporationTurn] state-local clearing deferred: a legacy state-local supply agreement is still live"
-      );
-    }
+    const loaded = await loadSettleableSupplyAgreements({ db, turn: turn ?? 0, now });
+    settleableAgreements = loaded.agreements;
+    stateLocalClearingBlockedByLegacyAgreement = loaded.legacyStateLocalAgreementLive;
   }
   // The slice (A2b) only bites when BOTH the master flag and the slice gate are
   // on, accrual can run shadow (A1/A2) with the slice still off.
@@ -553,6 +476,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
             capacityUnits: sector.capitalStock,
             mothballed: sector.mothballed,
             isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
+            ...(sector.stateId ? { stateId: sector.stateId } : {}),
           });
         }
         // PRODUCTION SINK for the supply-agreement shortfall leg, filled HERE
@@ -610,18 +534,19 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
               commodity
             );
             if (!(weight > 0)) continue;
-            const byCommodity =
-              achievableByCorpCommodity.get(corpId) ?? new Map<CommodityType, number | null>();
-            const accumulated = byCommodity.get(commodity);
-            if (achievableScaled === null || accumulated === null) {
-              // One unknown contributing sector makes the group total unknown.
-              // A measured zero remains numeric zero and must not fall through
-              // to the settlement's intentionally-unclamped rollout behavior.
-              byCommodity.set(commodity, null);
-            } else {
-              byCommodity.set(commodity, (accumulated ?? 0) + achievableScaled * weight);
+            const byKey = achievableByCorpCommodity.get(corpId) ?? new Map<string, number | null>();
+            for (const key of contractScopeKeysFor(commodity, sector.stateId)) {
+              const accumulated = byKey.get(key);
+              if (achievableScaled === null || accumulated === null) {
+                // One unknown contributing sector makes the group total unknown.
+                // A measured zero remains numeric zero and must not fall through
+                // to the settlement's intentionally-unclamped rollout behavior.
+                byKey.set(key, null);
+              } else {
+                byKey.set(key, (accumulated ?? 0) + achievableScaled * weight);
+              }
             }
-            achievableByCorpCommodity.set(corpId, byCommodity);
+            achievableByCorpCommodity.set(corpId, byKey);
           }
         }
         if (supplyAgreementsEnabled && market.plantsEnabled && sector.mothballed !== true) {
@@ -652,10 +577,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
                   commodity
                 );
               if (!(units > 0)) continue;
-              const byCommodity =
-                producedByCorpCommodity.get(corpId) ?? new Map<CommodityType, number>();
-              byCommodity.set(commodity, (byCommodity.get(commodity) ?? 0) + units);
-              producedByCorpCommodity.set(corpId, byCommodity);
+              const byKey = producedByCorpCommodity.get(corpId) ?? new Map<string, number>();
+              for (const key of contractScopeKeysFor(commodity, sector.stateId)) {
+                byKey.set(key, (byKey.get(key) ?? 0) + units);
+              }
+              producedByCorpCommodity.set(corpId, byKey);
             }
           }
         }
