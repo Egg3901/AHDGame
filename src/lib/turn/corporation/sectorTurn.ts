@@ -1831,6 +1831,8 @@ export function processSector(
       upkeep: daily(physicalPnl.upkeep),
       compliance: daily(physicalPnl.complianceCost),
       otherOpex: daily(physicalPnl.otherOpex),
+      otherOpexCreditCapped: physicalPnl.otherOpexCreditCapped,
+      otherOpexUncapped: daily(physicalPnl.otherOpexUncapped),
       financialLegs: daily(physicalPnl.financialLegs),
       policyCredit: daily(physicalPnl.policyCredit),
       policyPp: Math.round(plantsPolicyPp * 100) / 100,
