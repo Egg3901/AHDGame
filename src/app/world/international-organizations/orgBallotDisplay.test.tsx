@@ -31,6 +31,7 @@ const MEMBERS = [
     status: "founding",
     joinedTurn: 0,
     hasVote: true,
+    hasPolicyVote: true,
   },
   {
     countryId: "UK",
@@ -38,9 +39,24 @@ const MEMBERS = [
     status: "member",
     joinedTurn: 0,
     hasVote: true,
+    hasPolicyVote: true,
   },
-  { countryId: "FR", countryName: "France", status: "member", joinedTurn: 0, hasVote: true },
-  { countryId: "PL", countryName: "Poland", status: "member", joinedTurn: 0, hasVote: false },
+  {
+    countryId: "FR",
+    countryName: "France",
+    status: "member",
+    joinedTurn: 0,
+    hasVote: true,
+    hasPolicyVote: true,
+  },
+  {
+    countryId: "PL",
+    countryName: "Poland",
+    status: "member",
+    joinedTurn: 0,
+    hasVote: false,
+    hasPolicyVote: false,
+  },
 ];
 
 const base = {
@@ -106,6 +122,74 @@ describe("membership application tally", () => {
       />
     );
 
+    expect(screen.getByText(/1 \/ 3 yes/)).toBeTruthy();
+    expect(screen.queryByText(/\/ 4 yes/)).toBeNull();
+  });
+});
+
+describe("a member seated only on majority ballots", () => {
+  /**
+   * Poland run by an NPP government: `hasPolicyVote` without `hasVote`. The
+   * resolver seats exactly this member on a majority ballot and keeps it off a
+   * unanimity one, so the two panels below must disagree about it — and each must
+   * agree with the resolver.
+   *
+   * Ticket #1257: they did not. Every panel read `hasVote` while the resolver had
+   * started seating NPP governments on every ballot, so a Warsaw Pact admission
+   * the tab called one vote short of unanimous was five short, and two accepted
+   * applications expired without anyone seeing the real bar.
+   */
+  const withNppPoland = (extra: Partial<OrgSummary>) =>
+    orgWith({
+      ...extra,
+      members: MEMBERS.map((m) =>
+        m.countryId === "PL" ? { ...m, hasPolicyVote: true } : m
+      ) as OrgSummary["members"],
+    });
+
+  it("counts toward a chair election, which carries on a majority", () => {
+    render(
+      <LeadershipPanel
+        org={withNppPoland({
+          pendingLeadershipElections: [
+            {
+              _id: "e1",
+              candidateCharacterName: "A Candidate",
+              candidateCountryId: "US",
+              nominatedByCharacterName: "A Nominator",
+              closesOnTurn: 213,
+              votes: [{ countryId: "US", vote: "yes" }],
+            },
+          ],
+        } as Partial<OrgSummary>)}
+        {...props}
+      />
+    );
+
+    // Four on the roll now, so the bar is three rather than two.
+    expect(screen.getByText(/3 of 4 needed/)).toBeTruthy();
+  });
+
+  it("does NOT count toward an admission, which needs every voter", () => {
+    render(
+      <MembershipPanel
+        org={withNppPoland({
+          pendingMembershipProposals: [
+            {
+              _id: "p1",
+              proposingCountryId: "DE",
+              closesOnTurn: 213,
+              votes: [{ countryId: "US", vote: "yes" }],
+            },
+          ],
+        } as Partial<OrgSummary>)}
+        {...props}
+      />
+    );
+
+    // Still three. Adding a member that may not vote in time to a ballot where
+    // silence is a veto does not give the bloc a say, it hands one distracted
+    // member a permanent block.
     expect(screen.getByText(/1 \/ 3 yes/)).toBeTruthy();
     expect(screen.queryByText(/\/ 4 yes/)).toBeNull();
   });
@@ -252,7 +336,14 @@ describe("an organization where nobody holds a vote", () => {
   const silentOrg = (extra: Record<string, unknown>) =>
     orgWith({
       members: [
-        { countryId: "PL", countryName: "Poland", status: "member", joinedTurn: 0, hasVote: false },
+        {
+          countryId: "PL",
+          countryName: "Poland",
+          status: "member",
+          joinedTurn: 0,
+          hasVote: false,
+          hasPolicyVote: false,
+        },
       ],
       ...extra,
     });

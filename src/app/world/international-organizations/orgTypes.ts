@@ -42,8 +42,19 @@ export interface OrgSummary {
     flagEmoji: string;
     status: "founding" | "active";
     joinedTurn: number;
-    /** Whether this member casts a ballot — vote rosters must filter on it. */
+    /**
+     * Whether this member casts a ballot on a UNANIMITY ballot — an admission, an
+     * FTA, a join-conflict. Vote rosters must filter on it.
+     */
     hasVote: boolean;
+    /**
+     * Whether this member casts a ballot on a MAJORITY ballot — a leadership
+     * election, sanctions, aid, dues, a directive, a posture, an agency fund.
+     * Wider than `hasVote` (see the field's doc on the server summary): render
+     * the one that matches the ballot, or the tally will disagree with the
+     * resolver, which is ticket #1257.
+     */
+    hasPolicyVote: boolean;
     /** Whether the game models it as a country with a treasury to pay into. */
     isCountry: boolean;
   }>;

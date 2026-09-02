@@ -57,6 +57,36 @@ describe("loadOrganizationSummaries — member vote and country flags", () => {
     expect(members.get("JO")?.hasVote).toBe(false);
   });
 
+  it("keeps a member with no NPP government off the majority roll too", async () => {
+    // Nothing has said TR is NPP-run, and the rollout is not active, so the two
+    // rolls coincide: a plain unenabled member is silent on every ballot.
+    const members = await nato();
+    expect(members.get("TR")?.hasPolicyVote).toBe(false);
+    expect(members.get("UK")?.hasPolicyVote).toBe(true);
+  });
+
+  it("seats an NPP-governed member on the majority roll but not the unanimity one", async () => {
+    // Ticket #1257. TR is not player-enabled, so it never holds a ballot on an
+    // admission — a silence there is a veto and an NPP government plans once
+    // every six turns. It DOES hold one on ordinary majority business, where a
+    // silence merely costs a yes. The panels render whichever flag matches the
+    // ballot, which is how they stay in step with the resolver.
+    db.collection("gameState").findOne.mockResolvedValue({
+      currentYear: 1980,
+      preset: "1979-default",
+      nppForeignPolicyMode: "active",
+    });
+    db.collection("governmentFormations").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "TR", countryId: "TR" }]),
+    });
+
+    const members = await nato();
+    expect(members.get("TR")?.hasVote).toBe(false);
+    expect(members.get("TR")?.hasPolicyVote).toBe(true);
+    // JO is macro-tier: no config, no legislature, no ballot of either kind.
+    expect(members.get("JO")?.hasPolicyVote).toBe(false);
+  });
+
   it("marks modelled countries apart from macro-tier entities", async () => {
     // TR cannot vote but does have a treasury, so it can still receive aid —
     // the two flags are genuinely independent and neither implies the other.

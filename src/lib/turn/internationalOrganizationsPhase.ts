@@ -63,8 +63,8 @@ import {
   admitMember,
   resolveJoinApplication,
 } from "@/lib/internationalOrganizations/joinApplication";
+import { nppGovernedMembers } from "@/lib/internationalOrganizations/ballotRoll";
 import { castAutonomousOrgVotes } from "@/lib/nppAutonomy/autonomousOrgVoting";
-import { foreignPolicyModeFrom } from "@/lib/nppAutonomy/foreignPolicyRollout";
 import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
 import { reconcileAutonomousWarEntryBills } from "@/lib/internationalOrganizations/reconcileAutonomousWarEntry";
 import {
@@ -78,7 +78,7 @@ import type {
   ProposalVoteRecord,
 } from "@/lib/db/types/internationalOrganization";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
-import type { NPP, NppForeignPolicyMode } from "@/lib/db/types";
+import type { NPP } from "@/lib/db/types";
 
 function countryName(countryId: string): string {
   return COUNTRY_CONFIGS[countryId as CountryId]?.name ?? countryId;
@@ -133,25 +133,8 @@ async function legislatingMembers(
   players?: CountryId[]
 ): Promise<CountryId[]> {
   const enabled = players ?? (await votingMembers(db, organizationId));
-  const rollout = await db
-    .collection<{ _id: string; nppForeignPolicyMode?: NppForeignPolicyMode }>("gameState")
-    .findOne({ _id: "current" }, { projection: { nppForeignPolicyMode: 1 } });
-  if (foreignPolicyModeFrom(rollout?.nppForeignPolicyMode) !== "active") return enabled;
-
-  const modelledMembers = (await getMembers(db, organizationId)).filter(
-    (member): member is CountryId =>
-      member in COUNTRY_CONFIGS && hasBillLifecycle(member as CountryId)
-  );
-  if (modelledMembers.length === 0) return enabled;
-  const formations = await db
-    .collection<GovernmentFormation>("governmentFormations")
-    .find({
-      _id: { $in: modelledMembers },
-      status: "formed",
-      $or: [{ pmNppId: { $ne: null } }, { presidentNppId: { $ne: null } }],
-    })
-    .toArray();
-  return Array.from(new Set([...enabled, ...formations.map((formation) => formation.countryId)]));
+  const governed = await nppGovernedMembers(db, await getMembers(db, organizationId));
+  return Array.from(new Set([...enabled, ...governed]));
 }
 
 async function getPolicyHeadSponsor(
@@ -642,9 +625,7 @@ async function resolveExpiredOrganizationLegislation(db: Db, currentTurn: number
       // vote before the deadline, which is no reason to spare it the war it is
       // now in.
       const legislating =
-        item.type === "join_conflict"
-          ? await legislatingMembers(db, item.organizationId)
-          : members;
+        item.type === "join_conflict" ? await legislatingMembers(db, item.organizationId) : members;
       await applyResolutionEffect(
         db,
         item,
@@ -714,11 +695,7 @@ async function resolveExpiredLeadershipElections(db: Db, currentTurn: number): P
     // Electing a chair is a vote like any other, so the roll is the voting one.
     // This also keeps the quorum honest: a silent client state would otherwise
     // count toward turnout it can never supply.
-    const members = await ballotVotingMembers(
-      db,
-      election.organizationId,
-      "leadership_election"
-    );
+    const members = await ballotVotingMembers(db, election.organizationId, "leadership_election");
     const uniqueVotes = dedupeOrganizationVotes(election.votes as ProposalVoteRecord[]);
     // Only an active "yes" counts. A member who abstains or never votes withholds
     // consent exactly as a "no" does, so the denominator is the roll rather than
