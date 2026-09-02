@@ -131,6 +131,22 @@ export async function processFiscalBaseGrowth(
             : undefined;
         set.taxBases = applyPerTurnGrowthToFederalBases(budget.taxBases, factors, gravity);
       }
+      // Same one-time self-heal for the non-tax receipts line, so `other` tracks
+      // the economy's size instead of the frozen absolute it was seeded with.
+      // Snapshotting the CURRENT ratio means an untouched budget keeps exactly
+      // the share it already has — the heal is a no-op in value terms, and only
+      // future GDP moves change the amount (see FederalBudget field doc).
+      if (budget.otherRevenueGdpShareBaseline == null) {
+        const currentOther = budget.revenue?.other;
+        if (
+          currentGdp > 0 &&
+          typeof currentOther === "number" &&
+          Number.isFinite(currentOther) &&
+          currentOther > 0
+        ) {
+          set.otherRevenueGdpShareBaseline = currentOther / currentGdp;
+        }
+      }
       await db
         .collection<FederalBudget>("federalBudget")
         .updateOne({ _id: budget._id }, { $set: set });

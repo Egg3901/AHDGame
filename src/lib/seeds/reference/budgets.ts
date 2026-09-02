@@ -887,6 +887,15 @@ function buildNationalBudgetSeed(config: NationalBudgetSeedConfig): SupportedNat
     // corp-turn phase has already overwritten taxBases for the turn - stops the
     // baseline from ever being captured off an already-corrupted value).
     taxBaseGdpShareBaseline: computeTaxBaseGdpShareBaseline(taxBases, config.gdp),
+    // The same treatment for the one revenue line that is not a tax base.
+    // `otherRevenue` is authored as an ABSOLUTE, which fixes it forever against
+    // an economy that moves: DD authored ₸4.5B against a ₸50B GDP — a
+    // deliberate 9% enterprise-remittance share, in line with the rest of the
+    // bloc — and by turn 575 that same ₸4.5B was 1.5% of a reunified ₸271B
+    // economy (#1323). Capturing the authored SHARE at seed time is what keeps
+    // the line proportionate. Guarded against a zero/absent GDP so a malformed
+    // config leaves the field unset rather than seeding Infinity.
+    otherRevenueGdpShareBaseline: config.gdp > 0 ? config.otherRevenue / config.gdp : undefined,
     // Every reset begins at one common household price level. The turn loop
     // subsequently advances this from CPI; it never rewrites seed nominal units.
     economicFactors: {

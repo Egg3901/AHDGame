@@ -397,7 +397,25 @@ export async function calculateFederalRevenue(
   // modern-US 200B constant — on a 1953-era budget that would be ~14× GDP
   // (spec §5.1 fallback guard). The constant remains only for legacy budgets
   // whose revenue.other was never persisted at all.
-  const other = federalBudget?.revenue?.other ?? 200000000000;
+  const persistedOther = federalBudget?.revenue?.other ?? 200000000000;
+  // Non-tax receipts track the SIZE OF THE ECONOMY, not a frozen figure authored
+  // once at seed time. `otherRevenueGdpShareBaseline` holds the share; absent, it
+  // self-heals from the persisted amount so an untouched budget is byte-identical
+  // (see the field doc on FederalBudget). Without this the line decays as a share
+  // of any growing economy, and breaks outright on a discontinuous GDP change:
+  // DD's ₸4.0B survived reunification unchanged and went from 6.4% of the old
+  // economy to 1.5% of the new one (#1323).
+  const otherShare = federalBudget?.otherRevenueGdpShareBaseline;
+  const budgetGdp = federalBudget?.gdp;
+  const other =
+    typeof otherShare === "number" &&
+    Number.isFinite(otherShare) &&
+    otherShare > 0 &&
+    typeof budgetGdp === "number" &&
+    Number.isFinite(budgetGdp) &&
+    budgetGdp > 0
+      ? otherShare * budgetGdp
+      : persistedOther;
   const otherWithPublicEnterprise = other + (publicEnterpriseRevenue.other ?? 0);
 
   // Political-legislation v2 (spec §5.1): Σ revenue over unrepealed national
