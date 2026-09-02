@@ -15,7 +15,7 @@ function result(modifiedCount: number): UpdateResult {
 }
 
 describe("migrateStateScopedSupplyAgreements", () => {
-  it("withdraws pending freight and gives live freight the normal cancellation notice", async () => {
+  it("withdraws legacy pending freight and gives legacy live freight the normal cancellation notice", async () => {
     const updateMany = vi
       .fn()
       .mockResolvedValueOnce(result(2))
@@ -28,12 +28,14 @@ describe("migrateStateScopedSupplyAgreements", () => {
 
     expect(updateMany).toHaveBeenNthCalledWith(
       1,
-      { status: "pending", commodity: { $in: ["freight"] } },
+      // Only contracts with no state identity are legacy; a state-scoped
+      // freight contract names its state and is left alone.
+      { status: "pending", commodity: { $in: ["freight"] }, stateId: { $exists: false } },
       { $set: { status: "cancelled", updatedAt: now } }
     );
     expect(updateMany).toHaveBeenNthCalledWith(
       2,
-      { status: "active", commodity: { $in: ["freight"] } },
+      { status: "active", commodity: { $in: ["freight"] }, stateId: { $exists: false } },
       {
         $set: {
           status: "cancelling",

@@ -17,8 +17,10 @@ import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFla
 import {
   computeSupplierCommodityAchievableUnits,
   computeSupplierCommodityCapacityUnits,
+  supplyAgreementSectorStates,
 } from "@/lib/corporations/supplyAgreementCapacity";
 import { supportsCorporationWideSupplyAgreement } from "@/lib/market/commodityMarketScope";
+import type { State } from "@/lib/db/types/state";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -69,11 +71,16 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const counterpartyById = new Map(
       counterparties.map((counterparty) => [counterparty._id.toString(), counterparty])
     );
-    const capacityByCommodity: Partial<
-      Record<
-        CommodityType,
-        { currentCapacityUnits: number; maxContractUnits: number; achievableUnits: number | null }
-      >
+    type CapacitySnapshot = {
+      currentCapacityUnits: number;
+      maxContractUnits: number;
+      achievableUnits: number | null;
+    };
+    const capacityByCommodity: Partial<Record<CommodityType, CapacitySnapshot>> = {};
+    // State-scoped commodities (freight) are contracted per state, so their
+    // capacity is reported per host state the supplier has plants in.
+    const capacityByState: Partial<
+      Record<CommodityType, Record<string, CapacitySnapshot & { stateName: string }>>
     > = {};
     if (marketAtLeast(await getMarketSystemModeForDb(db), "plants")) {
       const [sectors, world, config] = await Promise.all([
@@ -93,6 +100,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
                 embargoSuspended: 1,
                 embargoExportExposure: 1,
                 countryId: 1,
+                stateId: 1,
                 contractAchievableUnits: 1,
               },
             }
@@ -112,21 +120,44 @@ export async function GET(_request: Request, { params }: RouteParams) {
         currentYear: world?.currentYear,
         commandEconomyEnabled: config?.commandEconomyEnabled === true,
       };
-      for (const commodity of COMMODITY_TYPES) {
-        if (!supportsCorporationWideSupplyAgreement(commodity)) continue;
+      const snapshot = (commodity: CommodityType, stateId?: string): CapacitySnapshot => {
         const currentCapacityUnits = computeSupplierCommodityCapacityUnits({
           ...context,
           commodity,
+          stateId,
         });
         const achievableUnits = computeSupplierCommodityAchievableUnits({
           ...context,
           commodity,
+          stateId,
         });
-        capacityByCommodity[commodity] = {
+        return {
           currentCapacityUnits,
           maxContractUnits: currentCapacityUnits * CONTRACT_OVERCOMMIT_TOLERANCE,
           achievableUnits,
         };
+      };
+      const stateIds = supplyAgreementSectorStates(sectors);
+      const stateNameById = new Map<string, string>();
+      if (stateIds.length > 0) {
+        const states = await db
+          .collection<State>("states")
+          .find({ _id: { $in: stateIds } }, { projection: { name: 1 } })
+          .toArray();
+        for (const state of states) stateNameById.set(state._id, state.name);
+      }
+      for (const commodity of COMMODITY_TYPES) {
+        if (supportsCorporationWideSupplyAgreement(commodity)) {
+          capacityByCommodity[commodity] = snapshot(commodity);
+          continue;
+        }
+        const byState: Record<string, CapacitySnapshot & { stateName: string }> = {};
+        for (const stateId of stateIds) {
+          const entry = snapshot(commodity, stateId);
+          if (!(entry.currentCapacityUnits > 0)) continue;
+          byState[stateId] = { ...entry, stateName: stateNameById.get(stateId) ?? stateId };
+        }
+        capacityByState[commodity] = byState;
       }
     }
     return NextResponse.json({
@@ -144,6 +175,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         proposedByCorpId: a.proposedByCorpId.toString(),
       })),
       capacityByCommodity,
+      capacityByState,
     });
   } catch (error) {
     return handleRouteError(error);

@@ -30,9 +30,30 @@ export type SupplyAgreementCapacitySector = {
   embargoExportExposure?: number | null;
   /** Host country, for the planned-economy output remap and media derate. */
   countryId?: string | null;
+  /** Host state, so a state-scoped contract can be sized against one state's plants. */
+  stateId?: string | null;
   /** Latest full-policy output after external constraints. */
   contractAchievableUnits?: number | null;
 };
+
+/**
+ * The plants a contract is fulfilled from. A corporation-wide agreement draws
+ * on every plant; a state-scoped one only on the plants in its named state.
+ */
+export function supplyAgreementSectorsInScope<T extends { stateId?: string | null }>(
+  sectors: readonly T[],
+  stateId?: string | null
+): T[] {
+  if (!stateId) return [...sectors];
+  return sectors.filter((s) => s.stateId === stateId);
+}
+
+/** Distinct host states across a supplier's plants, for the state picker. */
+export function supplyAgreementSectorStates(
+  sectors: readonly { stateId?: string | null }[]
+): string[] {
+  return [...new Set(sectors.map((s) => s.stateId).filter((id): id is string => !!id))].sort();
+}
 
 /**
  * Usable daily output of `commodity` across a supplier's plants, in the same
@@ -55,9 +76,11 @@ export function computeSupplierCommodityCapacityUnits(args: {
   currentYear?: number | null;
   /** `gameConfig.commandEconomyEnabled`. */
   commandEconomyEnabled?: boolean | null;
+  /** State-scoped contract: count only the plants in this state. */
+  stateId?: string | null;
 }): number {
   let capacityUnits = 0;
-  for (const s of args.sectors) {
+  for (const s of supplyAgreementSectorsInScope(args.sectors, args.stateId)) {
     if (s.mothballed === true) continue;
     const capacity = typeof s.capitalStock === "number" ? s.capitalStock : 0;
     if (!(capacity > 0)) continue;
@@ -108,9 +131,11 @@ export function computeSupplierCommodityAchievableUnits(args: {
   turn: number;
   currentYear?: number | null;
   commandEconomyEnabled?: boolean | null;
+  /** State-scoped contract: count only the plants in this state. */
+  stateId?: string | null;
 }): number | null {
   let units = 0;
-  for (const sector of args.sectors) {
+  for (const sector of supplyAgreementSectorsInScope(args.sectors, args.stateId)) {
     const rates = getEffectiveStrategyRates(
       sector.sectorType,
       sector.strategyId ?? "standard",

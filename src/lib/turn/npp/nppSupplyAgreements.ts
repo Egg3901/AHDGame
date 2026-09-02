@@ -32,7 +32,11 @@ import { computeSupplierCommodityCapacityUnits } from "@/lib/corporations/supply
 import { glutStaggerEligible } from "@/lib/turn/npp/cohort";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
-import { supportsCorporationWideSupplyAgreement } from "@/lib/market/commodityMarketScope";
+import {
+  supplyAgreementRequiresState,
+  supportsCorporationWideSupplyAgreement,
+} from "@/lib/market/commodityMarketScope";
+import { supplyAgreementSectorsInScope } from "@/lib/corporations/supplyAgreementCapacity";
 
 /** Fill below this: the seller cannot move output and will discount to lock a buyer. */
 export const NPP_CONTRACT_GLUT_FILL = 0.5;
@@ -67,6 +71,8 @@ export type NppAgreementParty = {
     embargoSuspended?: boolean | null;
     embargoExportExposure?: number | null;
     countryId?: string | null;
+    /** Host state, so freight (state-scoped) can be matched within one state. */
+    stateId?: string | null;
   }>;
 };
 
@@ -75,6 +81,8 @@ export type ExistingNppAgreement = {
   supplierCorpId: string;
   buyerCorpId: string;
   commodity: CommodityType;
+  /** Present on a state-scoped agreement; absent on corporation-wide ones. */
+  stateId?: string;
   volumeCap: number;
   pricePremium: number;
   status: SupplyAgreement["status"];
@@ -88,9 +96,20 @@ export type NppAgreementDecision =
       supplierCorpId: string;
       buyerCorpId: string;
       commodity: CommodityType;
+      /** Set when the commodity is state-scoped: the state the contract is fulfilled from. */
+      stateId?: string;
       volumeCap: number;
       pricePremium: number;
     };
+
+/**
+ * A corporation-wide agreement for a state-scoped commodity is a legacy
+ * contract with no state identity; the NPP matcher leaves those to the
+ * migration and neither activates nor extends them.
+ */
+function agreementHasScope(a: Pick<ExistingNppAgreement, "commodity" | "stateId">): boolean {
+  return supportsCorporationWideSupplyAgreement(a.commodity) || !!a.stateId;
+}
 
 function liveStatuses(status: SupplyAgreement["status"]): boolean {
   return status === "pending" || status === "active" || status === "cancelling";
@@ -148,11 +167,13 @@ function buyerStarved(
   party: NppAgreementParty,
   commodity: CommodityType,
   turn: number,
-  priceRatio: number | null
+  priceRatio: number | null,
+  /** State-scoped commodity: only the buyer's plants in this state count. */
+  stateId?: string
 ): boolean {
   let uses = false;
   let worstThroughput = 1;
-  for (const s of party.sectors) {
+  for (const s of supplyAgreementSectorsInScope(party.sectors, stateId)) {
     if (s.mothballed === true) continue;
     const inputs = commoditiesOf(
       s.sectorType,
@@ -176,11 +197,13 @@ function buyerStarved(
 function committedVolume(
   agreements: readonly ExistingNppAgreement[],
   supplierCorpId: string,
-  commodity: CommodityType
+  commodity: CommodityType,
+  stateId?: string
 ): number {
   let sum = 0;
   for (const a of agreements) {
     if (a.supplierCorpId !== supplierCorpId || a.commodity !== commodity) continue;
+    if ((a.stateId ?? undefined) !== stateId) continue;
     if (!liveStatuses(a.status)) continue;
     sum += a.volumeCap;
   }
@@ -191,13 +214,15 @@ function pairExists(
   agreements: readonly ExistingNppAgreement[],
   supplierCorpId: string,
   buyerCorpId: string,
-  commodity: CommodityType
+  commodity: CommodityType,
+  stateId?: string
 ): boolean {
   return agreements.some(
     (a) =>
       a.supplierCorpId === supplierCorpId &&
       a.buyerCorpId === buyerCorpId &&
       a.commodity === commodity &&
+      (a.stateId ?? undefined) === stateId &&
       liveStatuses(a.status)
   );
 }
@@ -243,14 +268,15 @@ export function decideNppSupplyAgreements(args: {
   // 1. Auto-accept inbound pending proposals the NPP buyer actually needs.
   for (const a of agreements) {
     if (a.status !== "pending") continue;
-    if (!supportsCorporationWideSupplyAgreement(a.commodity)) continue;
+    if (!agreementHasScope(a)) continue;
     const buyer = byId.get(a.buyerCorpId);
     if (!buyer || buyer.isNatcorp) continue;
     if (!staggerEligible(buyer.corpId)) continue;
     if (acceptedBuyer.has(buyer.corpId)) continue;
     if (a.pricePremium > NPP_CONTRACT_MAX_ACCEPT_PREMIUM) continue;
     if (a.pricePremium < -SUPPLY_AGREEMENT_PRICE_BAND) continue;
-    const uses = buyer.sectors.some((s) => {
+    // A state contract is only useful to plants in that state.
+    const uses = supplyAgreementSectorsInScope(buyer.sectors, a.stateId).some((s) => {
       if (s.mothballed === true) return false;
       return commoditiesOf(
         s.sectorType,
@@ -269,7 +295,7 @@ export function decideNppSupplyAgreements(args: {
   // 2. Serve cancel notice when the supplier has gone cold on that commodity.
   for (const a of agreements) {
     if (a.status !== "active") continue;
-    if (!supportsCorporationWideSupplyAgreement(a.commodity)) continue;
+    if (!agreementHasScope(a)) continue;
     const supplier = byId.get(a.supplierCorpId);
     if (!supplier) continue;
     if (!staggerEligible(supplier.corpId)) continue;
@@ -280,8 +306,9 @@ export function decideNppSupplyAgreements(args: {
           isNatcorp: supplier.isNatcorp,
           turn,
           ...economy,
+          stateId: a.stateId,
         })
-      : supplier.sectors.some(
+      : supplyAgreementSectorsInScope(supplier.sectors, a.stateId).some(
             (s) =>
               s.mothballed !== true &&
               commoditiesOf(
@@ -310,13 +337,17 @@ export function decideNppSupplyAgreements(args: {
     type Candidate = {
       buyer: NppAgreementParty;
       commodity: CommodityType;
+      stateId?: string;
       volumeCap: number;
       pricePremium: number;
       score: number;
     };
     let best: Candidate | null = null;
 
-    const outputSet = new Set<CommodityType>();
+    // What the supplier can contract: each reachable output commodity once,
+    // and each state-scoped output (freight) once PER host state, since a
+    // freight contract is fulfilled from one state's plants.
+    const outputScopes = new Map<string, { commodity: CommodityType; stateId?: string }>();
     for (const s of supplier.sectors) {
       if (s.mothballed === true) continue;
       for (const c of commoditiesOf(
@@ -327,23 +358,28 @@ export function decideNppSupplyAgreements(args: {
         s.transitionStartTurn,
         turn
       )) {
-        if (!supportsCorporationWideSupplyAgreement(c)) continue;
-        outputSet.add(c);
+        if (supplyAgreementRequiresState(c)) {
+          if (!s.stateId) continue;
+          outputScopes.set(`${c}@${s.stateId}`, { commodity: c, stateId: s.stateId });
+        } else {
+          outputScopes.set(c, { commodity: c });
+        }
       }
     }
 
-    for (const commodity of outputSet) {
+    for (const { commodity, stateId } of outputScopes.values()) {
       const capacity = computeSupplierCommodityCapacityUnits({
         sectors: supplier.sectors,
         commodity,
         isNatcorp: supplier.isNatcorp,
         turn,
         ...economy,
+        stateId,
       });
       const uncommitted = Math.max(
         0,
         capacity * CONTRACT_OVERCOMMIT_TOLERANCE -
-          committedVolume(agreements, supplier.corpId, commodity)
+          committedVolume(agreements, supplier.corpId, commodity, stateId)
       );
       const volumeCap = uncommitted * NPP_CONTRACT_CAPACITY_SHARE;
       if (!(volumeCap > 0)) continue;
@@ -357,12 +393,12 @@ export function decideNppSupplyAgreements(args: {
         if (buyer.isNatcorp) continue;
         if (buyer.countryId !== supplier.countryId) continue;
         if (proposedBuyer.has(buyer.corpId) || acceptedBuyer.has(buyer.corpId)) continue;
-        if (pairExists(agreements, supplier.corpId, buyer.corpId, commodity)) continue;
+        if (pairExists(agreements, supplier.corpId, buyer.corpId, commodity, stateId)) continue;
         const buyerRatio = priceRatioOf(commodity, buyer.countryId);
-        if (!buyerStarved(buyer, commodity, turn, buyerRatio)) continue;
+        if (!buyerStarved(buyer, commodity, turn, buyerRatio, stateId)) continue;
         const score = (fill == null ? 0.5 : 1 - fill) + Math.max(0, (buyerRatio ?? 1) - 1);
         if (!best || score > best.score) {
-          best = { buyer, commodity, volumeCap, pricePremium: premium, score };
+          best = { buyer, commodity, stateId, volumeCap, pricePremium: premium, score };
         }
       }
     }
@@ -373,6 +409,7 @@ export function decideNppSupplyAgreements(args: {
       supplierCorpId: supplier.corpId,
       buyerCorpId: best.buyer.corpId,
       commodity: best.commodity,
+      ...(best.stateId ? { stateId: best.stateId } : {}),
       volumeCap: best.volumeCap,
       pricePremium: best.pricePremium,
     });
@@ -402,6 +439,7 @@ function toParty(corp: Corporation, sectors: CorporateSector[]): NppAgreementPar
       embargoSuspended: s.embargoSuspended,
       embargoExportExposure: s.embargoExportExposure,
       countryId: s.countryId,
+      stateId: s.stateId,
     })),
   };
 }
@@ -462,6 +500,7 @@ export async function processNppSupplyAgreements(
     supplierCorpId: a.supplierCorpId.toString(),
     buyerCorpId: a.buyerCorpId.toString(),
     commodity: a.commodity,
+    ...(a.stateId ? { stateId: a.stateId } : {}),
     volumeCap: a.volumeCap,
     pricePremium: a.pricePremium,
     status: a.status,
@@ -551,6 +590,7 @@ export async function processNppSupplyAgreements(
         supplierCorpId: new ObjectId(d.supplierCorpId),
         buyerCorpId: new ObjectId(d.buyerCorpId),
         commodity: d.commodity,
+        ...(d.stateId ? { stateId: d.stateId } : {}),
         volumeCap: d.volumeCap,
         pricePremium: d.pricePremium,
         exclusive: false,

@@ -5,6 +5,9 @@ import {
   commodityDemandGap,
   commodityMarketScope,
   supportsCorporationWideSupplyAgreement,
+  parseSupplyAgreementScopeKey,
+  supplyAgreementRequiresState,
+  supplyAgreementScopeKey,
 } from "./commodityMarketScope";
 
 describe("commodityMarketScope", () => {
@@ -80,5 +83,23 @@ describe("commodityMarketScope", () => {
         commodity
       ).toBe(50);
     }
+  });
+});
+
+describe("supply agreement scope keys", () => {
+  it("keys corporation-wide agreements on the bare commodity", () => {
+    expect(supplyAgreementScopeKey("steel")).toBe("steel");
+    expect(supplyAgreementScopeKey("steel", undefined)).toBe("steel");
+    expect(parseSupplyAgreementScopeKey("steel")).toEqual({ commodity: "steel" });
+  });
+
+  it("keys a state-scoped agreement on commodity@state and parses it back", () => {
+    expect(supplyAgreementRequiresState("freight")).toBe(true);
+    expect(supplyAgreementRequiresState("steel")).toBe(false);
+    expect(supplyAgreementScopeKey("freight", "IT_LAZ")).toBe("freight@IT_LAZ");
+    expect(parseSupplyAgreementScopeKey("freight@IT_LAZ")).toEqual({
+      commodity: "freight",
+      stateId: "IT_LAZ",
+    });
   });
 });
