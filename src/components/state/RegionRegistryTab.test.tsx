@@ -97,6 +97,18 @@ describe("RegionRegistryTab", () => {
     expect(screen.getByText("(-2)")).toBeTruthy();
   });
 
+  it("keeps the masthead's three figures reconcilable", async () => {
+    // 67.6 renders as 68 and 70.0 as 70, so the delta beside them must read -2.
+    // Differencing the exact values would print -2.4 next to "68" and "70".
+    mockFetch(payload({ overall: 67.6, nationalOverall: 70 }));
+    renderTab();
+    await screen.findByText(/situation registry/);
+    expect(screen.getByText(/STABLE · 68\/100/)).toBeTruthy();
+    expect(screen.getByText(/national 70/)).toBeTruthy();
+    expect(screen.getByText("(-2)")).toBeTruthy();
+    expect(screen.queryByText("(-2.4)")).toBeNull();
+  });
+
   it("captions the category subtitle with the REGION name", async () => {
     // `countryDisplayName` on the region payload is the country, and the shared
     // views print it as their subtitle — passing it straight through captioned

@@ -46,7 +46,10 @@ export function Masthead({
     glyph: glyph ?? countryChrome.glyph,
   };
   const tone = scoreTone(overall);
-  const delta = comparison ? Math.round((overall - comparison.value) * 10) / 10 : 0;
+  // Differenced from the ROUNDED figures either side of it, not the exact ones.
+  // The badge shows 68 and the comparison shows 70, so a delta of -2.4 taken
+  // from 67.6 and 70.0 would be three numbers on one line that do not add up.
+  const delta = comparison ? Math.round(overall) - Math.round(comparison.value) : 0;
   return (
     <header className="overflow-hidden rounded-lg border border-card-border bg-card shadow-panel">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-card-border px-4 py-2 font-mono text-body-xs uppercase tracking-widest text-muted">
