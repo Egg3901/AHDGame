@@ -21,7 +21,7 @@
  * in a state nothing enumerates.
  */
 import type { Db } from "mongodb";
-import type { State } from "@/lib/db/types";
+import type { Corporation, State } from "@/lib/db/types";
 import type { BillStatus } from "@/lib/db/types/legislation";
 import type { CountryGameState } from "@/lib/db/types/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -33,6 +33,8 @@ import { LOWER_CHAMBER_FAIL_STATUSES } from "@/lib/turn/parliamentaryGovernment"
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { blocOrgFor } from "@/lib/world/blocMembership";
 import { admitMember } from "@/lib/internationalOrganizations/joinApplication";
+import { loadFxScalePair } from "@/lib/country/mergeFxScale";
+import { convertCorpCurrency } from "@/lib/corporations/convertCorpCurrency";
 import { isMember } from "@/lib/internationalOrganizations/service";
 import { removeOrganizationMembership } from "@/lib/internationalOrganizations/withdrawalBills";
 import {
@@ -339,4 +341,241 @@ async function sweepNationalStrays(
   await db
     .collection("bills")
     .updateMany({ countryId: fromCountryId }, { $set: { countryId: toCountryId, updatedAt: now } });
+  await mergeNationalCorporations(db, fromCountryId, toCountryId, now);
+}
+
+/**
+ * Carry the absorbed state's corporations onto the survivor, leaving exactly ONE
+ * `isPrimaryNationalCorporation`.
+ *
+ * A National Corporation is national by definition: `buildNationalCorporationDoc`
+ * gives it `headquartersState: ""`. Every other corporation crosses a merge by
+ * riding its HQ region — `evacuateRegionPolitics` re-scopes domicile that way and
+ * `convertTransferredResidentsCurrency` re-denominates the same way — so a
+ * corporation in no region was reached by neither pass, and there was no third
+ * one. This is that third pass: ownership, domicile, denomination, then the fold.
+ *
+ * THE FOLD IS THE POINT. Two corporations for one country both flagged primary
+ * is not cosmetic, because every resolver reads the primary with a SINGLE
+ * document query — `ensurePrimaryNationalCorporation`, the sovereign bond issuer
+ * lookup, the state-ownership page, the State Enterprises panel. A single read
+ * over two matches returns whichever the natural order yields, on live data the
+ * ABSORBED shell, so every merge-back, nationalisation and bond tranche routed
+ * into a corporation whose state no longer existed while the survivor's own
+ * corporation kept the coupon liability and earned nothing against it
+ * (ticket #1254). No tiebreak in the resolver can recover this — nothing on the
+ * document says which of the two the country means — so it is fixed here.
+ *
+ * Money-neutral, matching `mergeBackSectorType`: a National Corporation has no
+ * private shareholders, so its sectors, its bonds, its shareholdings and its cash
+ * follow it onto the survivor and the empty shell is dissolved.
+ *
+ * Cash still moves only at a MATCHING currency. The conversion above normally
+ * makes that true, so the mismatch branch is the missing-rate case rather than an
+ * ordinary one: there the shell keeps its balance and is demoted instead of
+ * dissolved, leaving the money visible on a named corporation rather than
+ * swallowed into a wrong-denomination total.
+ */
+async function mergeNationalCorporations(
+  db: Db,
+  fromCountryId: CountryId,
+  toCountryId: CountryId,
+  now: Date
+): Promise<void> {
+  const corps = db.collection("corporations");
+
+  const incumbentId = (
+    await corps.findOne(
+      { countryOwnerId: toCountryId, isPrimaryNationalCorporation: true },
+      { projection: { _id: 1 } }
+    )
+  )?._id;
+  const absorbedIds = (
+    await corps
+      .find(
+        { countryOwnerId: fromCountryId, isPrimaryNationalCorporation: true },
+        { projection: { _id: 1 } }
+      )
+      .toArray()
+  ).map((c) => c._id);
+
+  // Corporations the REGION sweep cannot reach, captured before the re-scope
+  // below makes them indistinguishable from the survivor's own. Both
+  // `evacuateRegionPolitics` (domicile) and `convertTransferredResidentsCurrency`
+  // (denomination) key on `headquartersState`, and
+  // `buildNationalCorporationDoc` sets it to "" — a National Corporation sits in
+  // no region — so neither pass has ever touched one.
+  const strandedIds = (
+    await corps
+      .find(
+        {
+          countryId: fromCountryId,
+          $or: [
+            { headquartersState: "" },
+            { headquartersState: null },
+            { headquartersState: { $exists: false } },
+          ],
+        },
+        { projection: { _id: 1 } }
+      )
+      .toArray()
+  ).map((c) => c._id);
+
+  // Everything the dissolved state owned is now owned by the survivor.
+  await corps.updateMany(
+    { countryOwnerId: fromCountryId },
+    { $set: { countryOwnerId: toCountryId, updatedAt: now } }
+  );
+
+  // Domicile follows the state. Keyed on `countryId`, NOT on ownership: a firm
+  // the dissolved state had nationalised ABROAD keeps its own domicile. Owning a
+  // company is not the same as housing it, and conflating the two is how a merge
+  // quietly annexes a foreign multinational.
+  await corps.updateMany(
+    { countryId: fromCountryId },
+    { $set: { countryId: toCountryId, updatedAt: now } }
+  );
+
+  // Denomination follows the domicile, through the SHARED converter so a
+  // National Corporation's capital, its sectors and its open orders all cross at
+  // the one merge rate every other pot of money crosses at. Left undone, the
+  // unified state's own enterprises keep quoting the currency of the country
+  // that stopped existing.
+  //
+  // A missing rate leaves the balance alone rather than converting at 1. That is
+  // the resident converter's policy, not the national treasury's, and it applies
+  // here for the reason the treasury's does not: a corporation SURVIVES the
+  // merge, so a later pass can still re-denominate it, whereas a dissolved
+  // country's ledger has no later pass.
+  if (strandedIds.length > 0) {
+    const pair = await loadFxScalePair(db, fromCountryId, toCountryId);
+    if (pair.kind === "convert") {
+      const stranded = (await corps
+        .find({ _id: { $in: strandedIds } })
+        .toArray()) as unknown as Corporation[];
+      for (const corp of stranded) {
+        await convertCorpCurrency(db, corp, pair.newCurrency, pair.fxByCurrency, now, true);
+      }
+    }
+  }
+
+  // With no incumbent the first absorbed primary simply becomes the survivor's —
+  // returning here instead would leave the unified country with every absorbed
+  // primary still flagged, which is the same two-primary state on a country that
+  // had one of its own. The rest fold into it exactly as they would into an
+  // incumbent.
+  const survivorId = incumbentId ?? absorbedIds[0];
+  if (!survivorId) return;
+
+  // Re-read AFTER the re-scope and the conversion: the balances and currency
+  // codes the fold below reasons about are the converted ones, not the values
+  // these documents held when the merge started.
+  const survivor = await corps.findOne({ _id: survivorId });
+  if (!survivor) return;
+  const absorbed = await corps.find({ _id: { $in: absorbedIds } }).toArray();
+
+  for (const shell of absorbed) {
+    if (String(shell._id) === String(survivor._id)) continue;
+
+    await db
+      .collection("corporateSectors")
+      .updateMany(
+        { corporationId: shell._id },
+        { $set: { corporationId: survivor._id, updatedAt: now } }
+      );
+    await db
+      .collection("bonds")
+      .updateMany(
+        { corporationId: shell._id },
+        { $set: { corporationId: survivor._id, issuerName: survivor.name, updatedAt: now } }
+      );
+    await repointShareholderEntries(db, shell._id, survivor._id, now);
+
+    const cash = Number(shell.liquidCapital ?? 0);
+    const sameCurrency =
+      (shell.liquidCurrencyCode ?? null) === (survivor.liquidCurrencyCode ?? null);
+    if (cash !== 0 && sameCurrency) {
+      await corps.updateOne(
+        { _id: survivor._id },
+        { $inc: { liquidCapital: cash }, $set: { updatedAt: now } }
+      );
+      await corps.updateOne({ _id: shell._id }, { $set: { liquidCapital: 0, updatedAt: now } });
+    }
+
+    // Anyone holding shares IN the shell would lose them with the document, so a
+    // shell that was ever floated is demoted rather than dissolved. A National
+    // Corporation is built with `totalShares: 0`, so this is a guard against the
+    // unexpected, not an ordinary path.
+    const hasOwnHolders = Array.isArray(shell.shareholders) && shell.shareholders.length > 0;
+    if ((cash === 0 || sameCurrency) && !hasOwnHolders) {
+      await corps.deleteOne({ _id: shell._id });
+    } else {
+      // Demote but keep: the invariant that matters is one PRIMARY, and a
+      // stranded balance is easier to find on a named corporation than in a
+      // deleted one.
+      await corps.updateOne(
+        { _id: shell._id },
+        { $set: { isPrimaryNationalCorporation: false, updatedAt: now } }
+      );
+    }
+  }
+}
+
+/**
+ * Move a dissolving corporation's SHAREHOLDINGS onto the survivor.
+ *
+ * A holding is stored on the ISSUER, as an entry in its `shareholders` array
+ * keyed by the holder's `corporationId` — so a National Corporation's portfolio
+ * lives scattered across every company it part-owns, not on its own document.
+ * Deleting the shell without this leaves those entries naming a corporation that
+ * no longer exists, and the shares belong to nobody.
+ *
+ * Entries MERGE rather than accumulate. Two rows for one holder is the same
+ * duplicate the nationalisation heal exists to prevent, and every reader takes
+ * the first match. Cost basis is combined share-weighted, so the merged position
+ * reports the price the state actually paid across both parcels.
+ */
+async function repointShareholderEntries(
+  db: Db,
+  fromCorpId: unknown,
+  toCorpId: unknown,
+  now: Date
+): Promise<void> {
+  const corps = db.collection("corporations");
+  const issuers = await corps.find({ "shareholders.corporationId": fromCorpId }).toArray();
+
+  for (const issuer of issuers) {
+    const entries = (issuer.shareholders ?? []) as Array<{
+      corporationId?: unknown;
+      shares?: number;
+      avgCostPerShare?: number;
+    }>;
+    const isFrom = (e: { corporationId?: unknown }) =>
+      e.corporationId != null && String(e.corporationId) === String(fromCorpId);
+    const isTo = (e: { corporationId?: unknown }) =>
+      e.corporationId != null && String(e.corporationId) === String(toCorpId);
+
+    const moving = entries.filter(isFrom);
+    if (moving.length === 0) continue;
+    const standing = entries.filter(isTo);
+
+    const shares =
+      moving.reduce((a, e) => a + Number(e.shares ?? 0), 0) +
+      standing.reduce((a, e) => a + Number(e.shares ?? 0), 0);
+    const cost =
+      moving.reduce((a, e) => a + Number(e.shares ?? 0) * Number(e.avgCostPerShare ?? 0), 0) +
+      standing.reduce((a, e) => a + Number(e.shares ?? 0) * Number(e.avgCostPerShare ?? 0), 0);
+
+    const merged = {
+      corporationId: toCorpId,
+      shares,
+      avgCostPerShare: shares > 0 ? cost / shares : 0,
+    };
+    const kept = entries.filter((e) => !isFrom(e) && !isTo(e));
+
+    await corps.updateOne(
+      { _id: issuer._id },
+      { $set: { shareholders: [...kept, merged], updatedAt: now } }
+    );
+  }
 }

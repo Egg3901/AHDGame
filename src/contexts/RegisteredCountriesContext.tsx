@@ -1,6 +1,6 @@
 "use client";
 import { createContext, useContext, type ReactNode } from "react";
-import { COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_ORDER, getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
 
 /**
  * The two runtime country sets, resolved server-side and hydrated into the client
@@ -24,12 +24,18 @@ export interface CountrySets {
   registered: CountryId[];
   enabled: CountryId[];
   preset: string;
+  /**
+   * Runtime renames, by country. Empty for every country that still goes by its
+   * compiled name — see `useCountryDisplayName`.
+   */
+  nameOverrides: Partial<Record<CountryId, string>>;
 }
 
 const RegisteredCountriesContext = createContext<CountrySets>({
   registered: COUNTRY_ORDER,
   enabled: COUNTRY_ORDER,
   preset: "2019-default",
+  nameOverrides: {},
 });
 
 export function RegisteredCountriesProvider({
@@ -70,4 +76,24 @@ export function useEnabledCountries(): CountryId[] {
  */
 export function useActivePreset(): string {
   return useContext(RegisteredCountriesContext).preset;
+}
+
+/**
+ * Client hook for what a country should be CALLED right now.
+ *
+ * `getCountryDisplayName` reads compiled seed data plus era aliases, so it
+ * cannot know a country was renamed at runtime — after a reunification the
+ * surviving shell went on calling itself "East Germany" in the navbar, the
+ * nation switcher and the world cards, while the server-rendered country pages
+ * (which can reach `resolveCountryIdentity`) called it Germany. Two names for one
+ * country, decided by which surface a player happened to be looking at.
+ *
+ * Use this ANYWHERE a client component names a country. The era alias still
+ * applies underneath: an override answers "what is this country now", the preset
+ * answers "what was it called in this year", and only the first can contradict
+ * the compiled data.
+ */
+export function useCountryDisplayName(): (id: CountryId) => string {
+  const { preset, nameOverrides } = useContext(RegisteredCountriesContext);
+  return (id: CountryId) => nameOverrides[id] ?? getCountryDisplayName(id, preset);
 }

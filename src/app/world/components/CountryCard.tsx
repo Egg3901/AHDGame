@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
 import { PartyLogo } from "@/components/PartyLogo";
-import { COUNTRY_CONFIGS, getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
-import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 import type { CountryAvailability } from "@/lib/countryAvailability";
 import type { NationWorldSnapshot } from "@/lib/world/nationWorldSnapshots";
 import StatusBadge from "./StatusBadge";
@@ -41,7 +41,7 @@ export default function CountryCard({
 }: CountryCardProps) {
   const nationSnapshot = rawSnapshot ?? VACANT_SNAPSHOT;
   const country = COUNTRY_CONFIGS[id];
-  const name = getCountryDisplayName(id, useActivePreset());
+  const name = useCountryDisplayName()(id);
   const flagUrl = country.heroImage;
   const isPlayable = availability.accessMode === "full";
   const isEconOnly = availability.accessMode === "econ-only";
