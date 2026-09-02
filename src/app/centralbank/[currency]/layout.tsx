@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { getCountryDisplayName } from "@/lib/constants/countries";
+import { getDb } from "@/lib/mongodb";
+import { resolveCountryIdentity } from "@/lib/country/countryIdentity";
 import { CountryFlag } from "@/components/CountryFlag";
 import { getCountryAccess } from "@/lib/countryAccess";
 import { getAuthUserWithCharacter } from "@/lib/auth";
@@ -28,7 +29,7 @@ export default async function CurrencyCentralBankLayout({ params, children }: Pr
     getGameState(),
   ]);
   const isAdmin = user?.isAdmin === true;
-  const name = getCountryDisplayName(anchor, gameState?.preset);
+  const { name } = await resolveCountryIdentity(await getDb(), anchor, gameState?.preset);
 
   if (isAdmin) {
     return (
