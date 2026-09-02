@@ -22,7 +22,9 @@ describe("ModifiersPanel", () => {
               points: 50,
             },
           ],
+          regionalLaws: [],
           cabinet: 0,
+          labour: 0,
           cabinetBySource: [],
           cabinetAtCap: false,
           cabinetCap: 8,
@@ -70,6 +72,8 @@ describe("ModifiersPanel cabinet attribution (ticket #1142)", () => {
   // is now fixed. The panel has to be able to say that.
   const MODIFIERS = {
     laws: [],
+    regionalLaws: [],
+    labour: 0,
     residual: 0,
     cabinet: -1.5,
     cabinetBySource: [{ source: "energy" as const, value: -1.5, atCap: true }],
