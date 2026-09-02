@@ -129,7 +129,7 @@ export function RegionRegistryTab({
   const viewData = { ...data, countryDisplayName: data.regionName };
 
   return (
-    <div className="flex flex-col gap-0">
+    <div className="flex min-w-0 flex-col gap-0">
       <Masthead
         countryId={data.countryId}
         countryDisplayName={data.regionName}

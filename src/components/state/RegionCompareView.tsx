@@ -110,7 +110,9 @@ export function RegionCompareView({
     );
 
   return (
-    <section className="mt-4 flex flex-col gap-4">
+    // min-w-0: globals.css clips the body horizontally, so a wide table inside a
+    // flex item without it becomes unreachable rather than merely scrolling.
+    <section className="mt-4 flex min-w-0 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button variant="ghost" size="sm" onClick={onBack}>
           ← {home.regionName} overview
@@ -133,6 +135,7 @@ export function RegionCompareView({
                 key={s.id}
                 type="button"
                 disabled={full}
+                aria-pressed={on}
                 onClick={() => togglePeer(s.id)}
                 className={`rounded border px-2 py-1 font-mono text-body-xs transition-colors ${
                   on
