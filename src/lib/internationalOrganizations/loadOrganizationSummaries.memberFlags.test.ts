@@ -87,6 +87,27 @@ describe("loadOrganizationSummaries — member vote and country flags", () => {
     expect(members.get("JO")?.hasPolicyVote).toBe(false);
   });
 
+  it("keeps the majority roll narrow while the rollout is not active", async () => {
+    // Shadow and off preserve the player-only baseline for every ballot. TR has
+    // a formed NPP government here and still holds no vote of either kind,
+    // because the widening is a property of the ACTIVE rollout, not of the
+    // government — get this wrong and a shadow world silently resolves ballots
+    // against a roll the panels never show.
+    db.collection("gameState").findOne.mockResolvedValue({
+      currentYear: 1980,
+      preset: "1979-default",
+      nppForeignPolicyMode: "shadow",
+    });
+    db.collection("governmentFormations").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "TR", countryId: "TR" }]),
+    });
+
+    const members = await nato();
+    expect(members.get("TR")?.hasVote).toBe(false);
+    expect(members.get("TR")?.hasPolicyVote).toBe(false);
+    expect(members.get("UK")?.hasPolicyVote).toBe(true);
+  });
+
   it("marks modelled countries apart from macro-tier entities", async () => {
     // TR cannot vote but does have a treasury, so it can still receive aid —
     // the two flags are genuinely independent and neither implies the other.

@@ -786,11 +786,18 @@ async function applyResolutionEffect(
   currentTurn: number,
   expiresTurn?: number,
   /**
-   * The VOTING roster — player-enabled members only.
+   * The roster that can be ASKED TO LEGISLATE about this resolution: for
+   * `join_conflict`, the legislating roll (player-enabled members plus, in
+   * active mode, modelled members with a formed NPP government).
    *
    * Separate from `members`, which is every modelled member: an effect that binds
    * a country (sanctions, aid) is not the same set as one that asks a country to
    * legislate. Only `join_conflict` needs this.
+   *
+   * It is also NOT the ballot. An NPP-governed member holds no vote on an entry
+   * resolution — a silence under unanimity is a veto — and is still handed the
+   * war the bloc voted for. Callers for other resolution types pass the ballot,
+   * which for those coincides with this roll.
    */
   votingMemberIds: CountryId[] = []
 ): Promise<void> {
@@ -925,8 +932,13 @@ async function applyResolutionEffect(
           continue;
         }
 
-        // Offensive coalition entry remains a national political choice. A
-        // non-voting client does not acquire a fictional chamber for it.
+        // Offensive coalition entry remains a national political choice, so it
+        // needs a government that can actually take it. `votingMemberIds` is the
+        // LEGISLATING roll here, not the ballot: an NPP-governed member holds no
+        // vote on an entry resolution (silence there would veto it) and is still
+        // billed for the war the bloc has now decided on. A client state with no
+        // government of its own is on neither list and acquires no fictional
+        // chamber.
         if (!votingMemberIds.includes(countryId)) continue;
         // A bill minted for a country no engine walks never closes — it sits at
         // active_both forever, with nothing to resolve it and nothing reporting it.
