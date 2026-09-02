@@ -1047,4 +1047,57 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     expect(body.fundedFraction).toBe(0.25);
     expect(body.orgGain).toBeGreaterThan(0);
   });
+
+  it("resolves the spender row by compound _id when its fields drifted (ticket #1256)", async () => {
+    // A party renumber (country merge) rewrote statePartyOrg.partyId but not
+    // the compound _id. Before the fix the field-triple read missed SED's row
+    // entirely and the poach pass treated the miskeyed rows as rivals —
+    // clicking Build Org for SED drained the number the party page displayed.
+    // The read must fall back to the compound _id so the spender's own row
+    // resolves.
+    const drifted = {
+      _id: "CA_7", // stale suffix; party 1's canonical key is CA_1
+      stateId,
+      partyId: "1",
+      countryId: "US",
+      organization: 36,
+      politicalStrength: 29,
+      treasury: 10_000_000, // post-pricing routes fund-floor on treasury
+      hasPresence: true,
+      chairId: stateChairId,
+    };
+    // findStatePartyOrgRow probes the field triple first, then the compound
+    // _id. This fixture is the post-drift live shape: NEITHER probe can match
+    // the triple (partyId "1" lives on a row whose _id says CA_7), so the _id
+    // probe is what resolves it. Return the drifted row for both probes —
+    // auth + eligibility re-read the same row through the same helper.
+    db.collectionMocks["statePartyOrg"]!.findOne.mockImplementation(
+      async (filter: Record<string, unknown>) =>
+        filter._id === "CA_7" || filter.partyId === "1" ? drifted : null
+    );
+    db.collectionMocks["statePartyOrg"]!.find.mockReturnValue({
+      toArray: async () => [
+        drifted,
+        {
+          _id: `${stateId}_2`,
+          stateId,
+          partyId: "2",
+          countryId: "US",
+          organization: 20,
+          politicalStrength: 6,
+        },
+      ],
+    } as never);
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest(), {
+      params: Promise.resolve({ code: "us", id: stateId, partyId }),
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    // The spender's own row resolved: the build proceeds from org 36.
+    expect(body.ok).toBe(true);
+    expect(body.newOrg).toBeGreaterThanOrEqual(36);
+  });
 });

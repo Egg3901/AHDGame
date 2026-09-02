@@ -80,6 +80,18 @@ export async function seedCoreIndexes(db: Db, log: (msg: string) => void) {
 
   await ensureIndex(db, "statePartyOrg", { stateId: 1 }, { name: "statePartyOrg_stateId" }, log);
 
+  // One row per (country, state, party). The compound `_id` (`${stateId}_${partyId}`)
+  // is derived from these fields, and a drifted `_id` is how one party's org
+  // ended up readable as another's (ticket #1256). Unique at the field level so
+  // a future writer can never double-claim a (state, party) chapter row.
+  await ensureIndex(
+    db,
+    "statePartyOrg",
+    { countryId: 1, stateId: 1, partyId: 1 },
+    { unique: true, name: "statePartyOrg_country_state_party_unique" },
+    log
+  );
+
   // characterStateOrg: presidential-primary regional bases. Unique compound
   // key guarantees the atomic findOneAndUpdate in
   // /api/political-operations/state-org/build cannot create duplicate rows

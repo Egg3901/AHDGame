@@ -67,6 +67,7 @@ import { migration as bondMarketPoolWorkingBalance } from "./entries/2026-09-03-
 import { migration as bondFundSeed } from "./entries/2026-09-03-bond-fund-seed";
 import { migration as repairOrphanIndexFundState } from "./entries/2026-09-03-repair-orphan-index-fund-state";
 import { migration as equityMarketPools } from "./entries/2026-09-03-equity-market-pools";
+import { migration as statePartyOrgRekey } from "./entries/2026-09-02-state-party-org-rekey";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -211,6 +212,11 @@ export const MIGRATIONS: Migration[] = [
   // indexFunds survived resets while corporations and fund positions were
   // wiped. Remove those old-world references and reconcile live claims.
   repairOrphanIndexFundState,
+  // Ticket #1256: a party renumber / region fuse leaves statePartyOrg rows
+  // whose compound _id names a different party or region than their fields;
+  // field-triple readers and _id readers then disagree about who owns the org.
+  // Re-derive _id from the authoritative fields and index the triple unique.
+  statePartyOrgRekey,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
