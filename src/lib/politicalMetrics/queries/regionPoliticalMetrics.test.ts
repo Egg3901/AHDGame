@@ -118,6 +118,19 @@ describe("loadRegionPoliticalMetrics", () => {
     expect(economy.score).toBeLessThan(economy.nationalScore);
   });
 
+  it("builds `overall` the same way `nationalOverall` is built, from unrounded means", async () => {
+    // The two sit beside each other in the masthead with a delta between them.
+    // Averaging rounded category scores here and unrounded ones there would let
+    // that delta disagree with the figures on either side of it.
+    const res = (await load())!;
+    const exact =
+      res.categories.reduce((sum, c) => {
+        const metricMean = c.metrics.reduce((s, m) => s + m.value, 0) / (c.metrics.length || 1);
+        return sum + metricMean;
+      }, 0) / res.categories.length;
+    expect(res.overall).toBeCloseTo(Math.round(exact * 10) / 10, 5);
+  });
+
   it("keeps nine categories of seven lean-ordered metrics", async () => {
     const res = (await load())!;
     expect(res.categories).toHaveLength(9);

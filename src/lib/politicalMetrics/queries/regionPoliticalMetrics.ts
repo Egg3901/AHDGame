@@ -235,9 +235,21 @@ export async function loadRegionPoliticalMetrics(
     });
   };
 
+  /**
+   * Unrounded category means, kept beside the rounded display scores.
+   *
+   * `overall` is compared against `nationalOverall` right next to it in the
+   * masthead, and `overallScore` builds the national figure from UNROUNDED
+   * category means. Averaging the rounded ones here would give the two
+   * neighbouring numbers different arithmetic and let the delta chip disagree
+   * with the figures it sits between.
+   */
+  const exactCategoryScores: number[] = [];
+
   const categories = POLITICAL_METRIC_CATEGORIES.map((cat) => {
     const regionValues = FAMILIES_BY_CATEGORY[cat.id].map((f) => regionDoc.values[f.id] ?? 0);
     const score = regionValues.reduce((sum, v) => sum + v, 0) / regionValues.length;
+    exactCategoryScores.push(score);
     return {
       id: cat.id,
       displayName: getCategoryDisplayName(countryId, cat.id),
@@ -277,7 +289,8 @@ export async function loadRegionPoliticalMetrics(
     };
   });
 
-  const regionOverall = categories.reduce((sum, c) => sum + c.score, 0) / (categories.length || 1);
+  const regionOverall =
+    exactCategoryScores.reduce((sum, s) => sum + s, 0) / (exactCategoryScores.length || 1);
   const identity = await resolveCountryIdentity(db, countryId, gameState?.preset);
 
   return {
