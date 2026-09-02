@@ -33,6 +33,7 @@ import { getNationalArsenal } from "@/lib/db/collections/nationalArsenal";
 import { REPAIR, type BasingKey } from "@/lib/navair/config";
 import type { NavairUnit } from "@/lib/navair/types";
 import type { FormationWarning, ForceSummary, RepairNote } from "./NavairCommandClient";
+import { resolveCountryIdentity } from "@/lib/country/countryIdentity";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +72,7 @@ export default async function NavairCommandPage({ params }: { params: Promise<{ 
   const holderId = holder?.characterId ? String(holder.characterId) : null;
   const commands = isAdmin || (!!characterId && characterId === holderId);
 
-  const countryName = COUNTRY_CONFIGS[countryId].name;
+  const { name: countryName } = await resolveCountryIdentity(db, countryId);
 
   if (!commands) {
     return (

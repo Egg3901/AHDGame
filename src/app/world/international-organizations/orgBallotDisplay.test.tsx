@@ -31,6 +31,7 @@ const MEMBERS = [
     status: "founding",
     joinedTurn: 0,
     hasVote: true,
+    hasPolicyVote: true,
   },
   {
     countryId: "UK",
@@ -38,9 +39,24 @@ const MEMBERS = [
     status: "member",
     joinedTurn: 0,
     hasVote: true,
+    hasPolicyVote: true,
   },
-  { countryId: "FR", countryName: "France", status: "member", joinedTurn: 0, hasVote: true },
-  { countryId: "PL", countryName: "Poland", status: "member", joinedTurn: 0, hasVote: false },
+  {
+    countryId: "FR",
+    countryName: "France",
+    status: "member",
+    joinedTurn: 0,
+    hasVote: true,
+    hasPolicyVote: true,
+  },
+  {
+    countryId: "PL",
+    countryName: "Poland",
+    status: "member",
+    joinedTurn: 0,
+    hasVote: false,
+    hasPolicyVote: false,
+  },
 ];
 
 const base = {
@@ -111,6 +127,74 @@ describe("membership application tally", () => {
   });
 });
 
+describe("a member seated on everything but an admission", () => {
+  /**
+   * Poland run by an NPP government: `hasPolicyVote` without `hasVote`. The
+   * resolver seats exactly this member on a chair election and keeps it off an
+   * admission, so the two panels below must disagree about it — and each must
+   * agree with the resolver.
+   *
+   * Ticket #1257: they did not. Every panel read `hasVote` while the resolver had
+   * started seating NPP governments on every ballot, so a Warsaw Pact admission
+   * the tab called one vote short of unanimous was five short, and two accepted
+   * applications expired without anyone seeing the real bar.
+   */
+  const withNppPoland = (extra: Record<string, unknown>) =>
+    orgWith({
+      ...extra,
+      members: MEMBERS.map((m) =>
+        m.countryId === "PL" ? { ...m, hasPolicyVote: true } : m
+      ) as OrgSummary["members"],
+    });
+
+  it("counts toward a chair election, which carries on a majority", () => {
+    render(
+      <LeadershipPanel
+        org={withNppPoland({
+          pendingLeadershipElections: [
+            {
+              _id: "e1",
+              candidateCharacterName: "A Candidate",
+              candidateCountryId: "US",
+              nominatedByCharacterName: "A Nominator",
+              closesOnTurn: 213,
+              votes: [{ countryId: "US", vote: "yes" }],
+            },
+          ],
+        })}
+        {...props}
+      />
+    );
+
+    // Four on the roll now, so the bar is three rather than two.
+    expect(screen.getByText(/3 of 4 needed/)).toBeTruthy();
+  });
+
+  it("does NOT count toward an admission, which needs every voter", () => {
+    render(
+      <MembershipPanel
+        org={withNppPoland({
+          pendingMembershipProposals: [
+            {
+              _id: "p1",
+              proposingCountryId: "DE",
+              closesOnTurn: 213,
+              votes: [{ countryId: "US", vote: "yes" }],
+            },
+          ],
+        })}
+        {...props}
+      />
+    );
+
+    // Still three. Adding a member that may not vote in time to a ballot where
+    // silence is a veto does not give the bloc a say, it hands one distracted
+    // member a permanent block.
+    expect(screen.getByText(/1 \/ 3 yes/)).toBeTruthy();
+    expect(screen.queryByText(/\/ 4 yes/)).toBeNull();
+  });
+});
+
 describe("leadership election tally", () => {
   it("shows the majority of the voting roll a nominee must reach", () => {
     render(
@@ -160,6 +244,39 @@ describe("free trade agreement tally", () => {
 
     expect(screen.getByText(/1 \/ 2 parties yes/)).toBeTruthy();
     expect(screen.queryByText(/\/ 3 parties yes/)).toBeNull();
+  });
+
+  it("counts a party its own government runs, unlike an admission", () => {
+    // An FTA is voted only by its named parties, each deciding its OWN
+    // agreement rather than passing judgement on someone else's. So the roll
+    // here is the wider one, and Poland counts.
+    //
+    // Narrowing this the way an admission is narrowed would leave an agreement
+    // between two modelled neighbours with no voters at all, unratifiable
+    // however much both sides wanted it — Comecon was carrying two of those.
+    render(
+      <LegislationPanel
+        org={orgWith({
+          members: MEMBERS.map((m) =>
+            m.countryId === "PL" ? { ...m, hasPolicyVote: true } : m
+          ) as OrgSummary["members"],
+          pendingLegislation: [
+            {
+              _id: "f1",
+              type: "free_trade_agreement",
+              title: "Warsaw Trade Pact",
+              proposedByCharacterName: "A Minister",
+              closesOnTurn: 213,
+              parties: ["US", "PL"],
+              votes: [{ countryId: "US", vote: "yes" }],
+            },
+          ],
+        })}
+        {...props}
+      />
+    );
+
+    expect(screen.getByText(/1 \/ 2 parties yes/)).toBeTruthy();
   });
 });
 
@@ -252,7 +369,14 @@ describe("an organization where nobody holds a vote", () => {
   const silentOrg = (extra: Record<string, unknown>) =>
     orgWith({
       members: [
-        { countryId: "PL", countryName: "Poland", status: "member", joinedTurn: 0, hasVote: false },
+        {
+          countryId: "PL",
+          countryName: "Poland",
+          status: "member",
+          joinedTurn: 0,
+          hasVote: false,
+          hasPolicyVote: false,
+        },
       ],
       ...extra,
     });

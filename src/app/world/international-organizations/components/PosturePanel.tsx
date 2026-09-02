@@ -36,7 +36,7 @@ export function PosturePanel({ org, viewer, currentTurn, votingWindowTurns, onCh
   // server will refuse.
   const viewerHoldsVote =
     viewerFmCountry != null &&
-    org.members.some((m) => m.countryId === viewerFmCountry && m.hasVote);
+    org.members.some((m) => m.countryId === viewerFmCountry && m.hasPolicyVote);
 
   const pending = org.pendingLegislation.filter((l) => l.type === "set_posture");
   const current = org.posture;
@@ -156,14 +156,14 @@ export function PosturePanel({ org, viewer, currentTurn, votingWindowTurns, onCh
         ) : (
           pending.map((l) => {
             const turnsLeft = Math.max(0, l.closesOnTurn - currentTurn);
-            const ballotSize = org.members.filter((m) => m.hasVote).length;
+            const ballotSize = org.members.filter((m) => m.hasPolicyVote).length;
             // Fold duplicate rows first: the resolver tallies the folded ballot,
             // so anything counted here must be counted the same way.
             const votes = dedupeOrganizationVotes(l.votes);
             const yesCount = votes.filter(
               (v) =>
                 v.vote === "yes" &&
-                org.members.some((m) => m.countryId === v.countryId && m.hasVote)
+                org.members.some((m) => m.countryId === v.countryId && m.hasPolicyVote)
             ).length;
             const myVote =
               viewerFmCountry != null
@@ -227,7 +227,9 @@ export function PosturePanel({ org, viewer, currentTurn, votingWindowTurns, onCh
                 />
                 <VoteRoster
                   votes={l.votes}
-                  expectedVoters={org.members.filter((m) => m.hasVote).map((m) => m.countryId)}
+                  expectedVoters={org.members
+                    .filter((m) => m.hasPolicyVote)
+                    .map((m) => m.countryId)}
                 />
               </article>
             );

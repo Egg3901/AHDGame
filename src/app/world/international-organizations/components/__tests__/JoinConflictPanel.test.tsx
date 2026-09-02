@@ -58,6 +58,7 @@ const org = (category: string) =>
         status: "founding",
         joinedTurn: 0,
         hasVote: true,
+        hasPolicyVote: true,
       },
     ],
     pendingMembershipProposals: [],
@@ -90,6 +91,7 @@ const orgWithPendingEntry = () => {
         status: "founding",
         joinedTurn: 0,
         hasVote: true,
+        hasPolicyVote: true,
       },
       {
         countryId: "UK",
@@ -97,8 +99,16 @@ const orgWithPendingEntry = () => {
         status: "member",
         joinedTurn: 0,
         hasVote: true,
+        hasPolicyVote: true,
       },
-      { countryId: "DE", countryName: "Germany", status: "member", joinedTurn: 0, hasVote: false },
+      {
+        countryId: "DE",
+        countryName: "Germany",
+        status: "member",
+        joinedTurn: 0,
+        hasVote: false,
+        hasPolicyVote: false,
+      },
     ],
     pendingLegislation: [
       {

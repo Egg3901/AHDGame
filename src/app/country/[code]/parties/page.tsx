@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { Button, EmptyState, Skeleton } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
@@ -15,6 +15,7 @@ import { PartyCard } from "./components/PartyCard";
 import { CoalitionsTab } from "./components/CoalitionsTab";
 import { CreateCoalitionModal } from "./components/CreateCoalitionModal";
 import { useAuthMe } from "@/contexts/AuthDataContext";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 /**
  * Parties list redesign plan:
@@ -25,6 +26,7 @@ import { useAuthMe } from "@/contexts/AuthDataContext";
  */
 
 export default function PartiesPage() {
+  const countryName = useCountryDisplayName();
   const { showToast } = useToast();
   const { code } = useParams<{ code: string }>();
   const searchParams = useSearchParams();
@@ -98,12 +100,13 @@ export default function PartiesPage() {
             .filter((entry: { enabledForPlayers?: boolean }) => entry.enabledForPlayers)
             .map((entry: { id: string; name?: string }) => ({
               id: entry.id.toLowerCase(),
-              name: entry.name ?? COUNTRY_CONFIGS[entry.id as CountryId]?.name ?? entry.id,
+              name: entry.name ?? countryName(entry.id as CountryId),
             }))
         );
       })
       .catch(() => {});
-  }, []);
+    // `countryName` is a stable callback, so this still runs once per mount.
+  }, [countryName]);
 
   const fetchParties = useCallback(async () => {
     setLoading(true);

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type Dispatch } from "react";
 import { RESERVE_THEATER_ID } from "@/lib/military/theaters";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import type { NatMods } from "@/lib/military/doctrineTree";
 import { MIL_COLOR, MIL_FONT } from "../../military/theme";
 import type { CombatState, CombatAction } from "../useCombatState";
@@ -11,6 +11,7 @@ import { BLOCKADE, wornPenalty } from "@/lib/navair/blockade";
 import { integrityMult } from "@/lib/navair/engineCore";
 import { FrontMap } from "./FrontMap";
 import { BattleOddsBar } from "./BattleOddsBar";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 const mono = MIL_FONT.mono;
 
@@ -48,6 +49,7 @@ export function TheaterWarRoom({
   natMods: NatMods;
   dispatch: Dispatch<CombatAction>;
 }) {
+  const countryName = useCountryDisplayName();
   // The fronts in play are the live conflicts this country has forces deployed to —
   // derived from the units themselves (their reconciled theaterId), since conflicts
   // are dynamic. Reserve is homeland garrison, not a front.
@@ -433,7 +435,7 @@ export function TheaterWarRoom({
                     <option key={c} value={c}>
                       {/* Named from the country roster, not the situation board's flavour
                           table — that covered 9 nations and would blow up on the rest. */}
-                      {COUNTRY_CONFIGS[c as CountryId]?.name ?? c}
+                      {countryName(c as CountryId)}
                     </option>
                   ))}
                 </select>

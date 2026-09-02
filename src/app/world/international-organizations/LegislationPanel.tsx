@@ -300,9 +300,12 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
             const parties = l.parties as CountryId[];
             // A ratified agreement binds every party, but only parties that can
             // vote decide it — the resolver narrows the ballot the same way, so
-            // the roster must not await a vote that will never be cast.
+            // the roster must not await a vote that will never be cast. The roll
+            // here is the wider one: a party decides its OWN agreement, so a
+            // modelled neighbour votes on it even though it holds no ballot on
+            // an admission.
             const votingParties = parties.filter((p) =>
-              org.members.some((m) => m.countryId === p && m.hasVote)
+              org.members.some((m) => m.countryId === p && m.hasPolicyVote)
             );
             const votes = dedupeOrganizationVotes(l.votes);
             const partyVotes = votes.filter((v) =>

@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import { SectionCard, Badge } from "../dossier";
 import { WAR_GOALS, WAR_DECLARATION_COOLDOWN_TURNS } from "@/lib/military/warGoals";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { useEnabledCountryIds } from "@/lib/hooks/useEnabledCountryIds";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { BILL_PROPOSE_ACTION_COST } from "@shared/constants/legislation";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 /**
  * The executive's declaration of war.
@@ -30,6 +31,7 @@ export function DeclareWarPanel({
   /** False for a viewer who does not hold the seat — the panel reads as a record. */
   canAct: boolean;
 }) {
+  const resolveCountryName = useCountryDisplayName();
   const [target, setTarget] = useState<string>("");
   const [goal, setGoal] = useState<string>("");
   const [busy, setBusy] = useState(false);
@@ -140,7 +142,7 @@ export function DeclareWarPanel({
               </option>
               {targets.map((c) => (
                 <option key={c} value={c} disabled={truces[c] !== undefined || allies.has(c)}>
-                  {COUNTRY_CONFIGS[c].name}
+                  {resolveCountryName(c)}
                   {allies.has(c)
                     ? ` (ally${alliance ? `, ${alliance}` : ""})`
                     : truces[c] !== undefined

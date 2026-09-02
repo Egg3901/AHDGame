@@ -24,10 +24,11 @@ import { FactorLedgerCard } from "@/components/elections/general/FactorLedgerCar
 import { states as referenceStates } from "@/lib/seeds/reference/states";
 import { getSubdivisionMode } from "@/lib/maps/subdivisionConfig";
 import { UK_REGION_NAMES, RU_REGION_NAMES } from "@/lib/constants/states";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { useGameClock } from "@/contexts/useGameClock";
 import { buildBlendClock } from "@/lib/elections/blendDetailViewModel";
 import type { ElectionDetail } from "./ElectionDetailTypes";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 /** Static US state-id → display-name map sourced from the reference seed.
  *  Built once at module load — pure data, no runtime cost per render. */
@@ -91,6 +92,7 @@ export function GeneralPhaseView({
   amInRace,
   onSuccess,
 }: GeneralPhaseViewProps) {
+  const resolveCountryName = useCountryDisplayName();
   // Derive country-specific UI gates from the election itself rather than
   // accept them as props. `isUS` drives presidential-only UI (running mate,
   // EC map, etc.); `isProjectedGeneral` drives the "Live Projection" vs
@@ -110,7 +112,7 @@ export function GeneralPhaseView({
     UK_REGION_NAMES[election.state] ??
     RU_REGION_NAMES[election.state] ??
     election.state;
-  const countryName = COUNTRY_CONFIGS[election.countryId as CountryId]?.name ?? election.countryId;
+  const countryName = resolveCountryName(election.countryId as CountryId);
   const primaryTimer =
     election.primaryEndTurn != null
       ? clock.formatRemainingTurns(election.primaryEndTurn)
