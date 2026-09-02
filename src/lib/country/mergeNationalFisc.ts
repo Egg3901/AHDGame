@@ -235,6 +235,14 @@ export async function mergeNationalFisc(
 
   // One bulkWrite, not a per-doc await loop: the whole series re-scopes inside
   // a single turn phase.
+  //
+  // The corporationId is NOT touched here. The issuer corp is the absorbed
+  // country's primary National Corporation, and swapping it here would point
+  // the bonds at a primary the merge pipeline has not consolidated yet —
+  // `mergeNationalCorporations` owns that side of the assumption, re-stamping
+  // corporationId + issuerName onto the survivor primary along with the sectors
+  // and shells. Two writers for one field in one pipeline is how the halves
+  // drift; each owns what its name says.
   if (absorbedBonds.length > 0) {
     await bonds.bulkWrite(
       absorbedBonds.map((bond) => ({
