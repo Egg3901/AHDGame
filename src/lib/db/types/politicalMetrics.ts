@@ -70,3 +70,25 @@ export interface PoliticalMetricsHistoryDoc {
   entries: Array<{ turn: number; values: Record<PoliticalMetricId, number> }>;
   updatedAt: Date;
 }
+
+/**
+ * Per-region trend history: one doc per REGION, a snapshot appended on the same
+ * HISTORY_CADENCE_TURNS as the national series and capped at
+ * REGION_HISTORY_MAX_ENTRIES. Issue #1322.
+ *
+ * One doc per region rather than per country: a country doc holding all 51 US
+ * regions at the cap reaches roughly 9.6MB, uncomfortably close to the 16MB
+ * BSON ceiling. Per-region docs have no such cliff.
+ *
+ * There is NO backfill and there cannot be one — the series has never been
+ * recorded, and synthesising it from current values would invent history. The
+ * region trend tiles therefore read "series begins this campaign" until a
+ * region has two entries, exactly as the national tiles do today.
+ */
+export interface PoliticalMetricsRegionHistoryDoc {
+  /** Region id as seeded in `states` (e.g. US "GA", UK "LON", RU "CEN"). */
+  _id: string;
+  countryId: CountryId;
+  entries: Array<{ turn: number; values: Record<PoliticalMetricId, number> }>;
+  updatedAt: Date;
+}

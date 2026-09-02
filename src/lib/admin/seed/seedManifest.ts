@@ -110,6 +110,12 @@ const REFERENCE: CollectionEntry[] = [
       "SP2 trend history: one doc per country, national aggregate appended every 24 turns by processPoliticalMetricsDynamics, capped at 365 entries. Runtime — wiped on reset, rebuilt by play.",
   },
   {
+    name: "politicalMetricsRegionHistory",
+    category: "runtime",
+    notes:
+      "Per-region trend history (issue #1322): one doc per REGION, that region's own post-drift board appended every 24 turns by processPoliticalMetricsDynamics, capped at 90 entries. One doc per region rather than per country because a country doc holding all 51 US regions at the cap approaches the 16MB BSON ceiling. Runtime — wiped on reset, rebuilt by play; there is no backfill, so the region trend tiles read 'series begins this campaign' until two entries exist.",
+  },
+  {
     name: "politicalCabinetContribution",
     category: "runtime",
     notes:

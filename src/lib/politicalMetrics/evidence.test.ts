@@ -72,6 +72,78 @@ describe("loadEvidence", () => {
     });
   });
 
+  it("reads the region's own macro doc when a regionId is given", async () => {
+    const db = createMockDb();
+    db.collection("macroMetrics").findOne.mockResolvedValue({
+      _id: "federal",
+      economic: { unemploymentRate: { value: 5, trend: 0 } },
+    });
+    db.collection("macroMetrics")
+      .find()
+      .toArray.mockResolvedValue([
+        { _id: "GA", countryId: "US", economic: { unemploymentRate: { value: 9, trend: 1 } } },
+        { _id: "NY", countryId: "US", economic: { unemploymentRate: { value: 3, trend: 0 } } },
+      ]);
+    db.collection("states")
+      .find()
+      .toArray.mockResolvedValue([
+        { _id: "GA", population: 1_000_000 },
+        { _id: "NY", population: 1_000_000 },
+      ]);
+    db.collection("centralBanks").findOne.mockResolvedValue(null);
+    db.collection("federalBudget").findOne.mockResolvedValue(null);
+
+    const map = await loadEvidence(db as unknown as Db, "US", null, "GA");
+    // The national rollup says 5 and the two-region mean says 6. Neither is
+    // Georgia's number, and Georgia's number is the whole point of a region view.
+    const row = map.get("economy.workerSecurity")!.find((r) => r.id === "unemploymentRate")!;
+    expect(row).toMatchObject({ value: 9, trend: 1, scope: "region" });
+  });
+
+  it("keeps bank and budget rows national in a region view", async () => {
+    const db = createMockDb();
+    db.collection("macroMetrics").findOne.mockResolvedValue(null);
+    db.collection("macroMetrics").find().toArray.mockResolvedValue([]);
+    db.collection("states").find().toArray.mockResolvedValue([]);
+    db.collection("centralBanks").findOne.mockResolvedValue({ primeRate: 4 });
+    db.collection("federalBudget").findOne.mockResolvedValue(null);
+
+    const map = await loadEvidence(db as unknown as Db, "US", null, "GA");
+    const row = map.get("economy.stability")!.find((r) => r.id === "primeRate")!;
+    // The prime rate is set by the central bank for the whole country; labelling
+    // it as Georgia's would be a fiction.
+    expect(row).toMatchObject({ value: 4, scope: "national" });
+  });
+
+  it("emits no region row when that region has no macro doc", async () => {
+    const db = createMockDb();
+    db.collection("macroMetrics").findOne.mockResolvedValue({
+      _id: "federal",
+      economic: { unemploymentRate: { value: 5 } },
+    });
+    db.collection("macroMetrics").find().toArray.mockResolvedValue([]);
+    db.collection("states").find().toArray.mockResolvedValue([]);
+    db.collection("centralBanks").findOne.mockResolvedValue(null);
+    db.collection("federalBudget").findOne.mockResolvedValue(null);
+
+    const map = await loadEvidence(db as unknown as Db, "US", null, "GA");
+    // Falling back to the national figure here would silently label a country
+    // number as the region's own.
+    expect(map.get("economy.workerSecurity")).toBeUndefined();
+  });
+
+  it("marks every row national when no regionId is given", async () => {
+    const db = createMockDb();
+    db.collection("macroMetrics").findOne.mockResolvedValue({
+      _id: "federal",
+      economic: { medianIncome: { value: 3714 } },
+    });
+    db.collection("centralBanks").findOne.mockResolvedValue(null);
+    db.collection("federalBudget").findOne.mockResolvedValue(null);
+    const map = await loadEvidence(db as unknown as Db, "US");
+    expect(map.get("economy.householdIncome")!.every((r) => r.scope === "national")).toBe(true);
+  });
+
   it("returns an empty map when no source docs exist", async () => {
     const db = createMockDb();
     db.collection("macroMetrics").findOne.mockResolvedValue(null);

@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/Button";
-import type { CountryPoliticalMetricsResponse } from "@/lib/politicalMetrics/queries/countryPoliticalMetrics";
+import type { PMRegistryData } from "./registryTypes";
 import type { PMCategory } from "./CategoryCard";
 import { HistorySparkline } from "./HistorySparkline";
 import { LeanChip } from "./LeanChip";
@@ -35,13 +35,13 @@ export function MetricDetailView({
   onBackToCategory,
   onOpenMetric,
 }: {
-  data: CountryPoliticalMetricsResponse;
+  data: PMRegistryData;
   category: PMCategory;
   metric: PMMetric;
   onBackToCategory: () => void;
   onOpenMetric: (metricId: string) => void;
 }) {
-  const tone = scoreTone(metric.nationalValue);
+  const tone = scoreTone(metric.value);
   const related = category.metrics.filter((m) => m.id !== metric.id);
   return (
     <section className="mt-4 flex flex-col gap-4">
@@ -71,10 +71,10 @@ export function MetricDetailView({
           <div className="flex items-center gap-5">
             <div className="text-center">
               <div className={`text-display font-extrabold leading-none tabular-nums ${tone.text}`}>
-                {Math.round(metric.nationalValue)}
+                {Math.round(metric.value)}
               </div>
               <div className="mt-1.5">
-                <StatusBadge score={metric.nationalValue} label={metric.status} />
+                <StatusBadge score={metric.value} label={metric.status} />
               </div>
             </div>
             <div className="flex flex-col gap-1 text-body-sm text-muted">
@@ -165,7 +165,7 @@ export function MetricDetailView({
         </div>
       </div>
 
-      <RegionBreakdown nationalValue={metric.nationalValue} regions={metric.regions} />
+      <RegionBreakdown nationalValue={metric.national ?? metric.value} regions={metric.regions} />
 
       <ModifiersPanel modifiers={metric.modifiers} />
 
@@ -177,7 +177,18 @@ export function MetricDetailView({
           <div className="flex flex-col gap-1.5">
             {metric.evidence.map((row) => (
               <div key={row.id} className="flex items-baseline justify-between gap-3 text-body-sm">
-                <span className="text-muted">{row.label}</span>
+                <span className="text-muted">
+                  {row.label}
+                  {/* In a region view the macro rows are that region's own, but
+                      the prime rate, inflation and debt to GDP are set for the
+                      whole country. Saying so beats letting a player read a
+                      national figure as their region's. */}
+                  {data.scope === "region" && row.scope === "national" && (
+                    <span className="ml-1.5 rounded border border-card-border px-1 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted/70">
+                      national
+                    </span>
+                  )}
+                </span>
                 <span className="font-semibold tabular-nums text-foreground">
                   {formatEvidenceValue(row, data.countryId)}
                   {row.trend != null && Math.abs(row.trend) >= 0.05 && (
@@ -204,7 +215,7 @@ export function MetricDetailView({
           Related metrics
         </span>
         {related.map((m) => {
-          const rTone = scoreTone(m.nationalValue);
+          const rTone = scoreTone(m.value);
           return (
             <button
               key={m.id}
@@ -213,9 +224,7 @@ export function MetricDetailView({
               className="cursor-pointer rounded-full border border-card-border bg-card-muted px-3 py-1 text-body-xs text-foreground transition-colors hover:border-muted"
             >
               {m.displayName} ·{" "}
-              <strong className={`tabular-nums ${rTone.text}`}>
-                {Math.round(m.nationalValue)}
-              </strong>
+              <strong className={`tabular-nums ${rTone.text}`}>{Math.round(m.value)}</strong>
             </button>
           );
         })}

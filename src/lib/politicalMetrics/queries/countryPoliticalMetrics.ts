@@ -10,24 +10,24 @@ import type {
 import { resolveCountryIdentity } from "@/lib/country/countryIdentity";
 import { loadDemocraticCompetition } from "@/lib/governanceStyle/loadCompetition";
 import { scoreGovernanceStyle, type GovernanceStyleScore } from "@/lib/governanceStyle/score";
-import { getCatalog } from "@/lib/politicalLegislation/catalog";
-import { computeLawCost } from "@/lib/politicalLegislation/costEngine";
 import { getEnactedLevels } from "@/lib/politicalLegislation/enactedLevels";
-import {
-  composeTarget,
-  DRIFT_RATE_PER_TURN,
-  lawTargets,
-  metricModifierRows,
-  type ModifierRow,
-} from "@/lib/politicalLegislation/dynamics";
+import { lawTargets } from "@/lib/politicalLegislation/dynamics";
 import {
   CABINET_RESIDUAL_CAP_PER_SOURCE,
+  CABINET_RESIDUAL_TOTAL_CEILING,
   CABINET_SOURCE_IDS,
   cappedSourceCount,
-  CABINET_RESIDUAL_TOTAL_CEILING,
   type CabinetSourceId,
 } from "../cabinetResidual";
+import {
+  buildModifiers,
+  buildRelevantLegislation,
+  type CabinetSourceContribution,
+  type MetricLegislationInfo,
+  type MetricModifiersInfo,
+} from "./metricsAssembly";
 import { aggregateNationalPoliticalMetrics, categoryScore, overallScore } from "../aggregate";
+import { HISTORY_CADENCE_TURNS } from "../historyCadence";
 import { loadEvidence, type EvidenceRow } from "../evidence";
 import { FAMILIES_BY_CATEGORY } from "../families";
 import { leanLabelFor, statusFor } from "../display";
@@ -39,11 +39,15 @@ import {
 } from "../types";
 
 export interface CountryPoliticalMetricsResponse {
+  /** Which registry this is; the views branch display on it. */
+  scope: "national";
   countryId: PoliticalMetricsCountryId;
   countryDisplayName: string;
   /** Current in-game year and turn, for the masthead series/date line. */
   year: number;
   turn: number;
+  /** Turns between trend snapshots, so the UI can label a delta honestly. */
+  historyCadenceTurns: number;
   overall: number;
   overallStatus: string;
   governanceStyle: GovernanceStyleScore;
@@ -61,6 +65,12 @@ export interface CountryPoliticalMetricsResponse {
       pos: string[];
       neg: string[];
       indicators: string[];
+      /**
+       * The value at THIS payload's scope. A duplicate of `nationalValue`
+       * here, and the region payload's own figure there, so one card component
+       * renders both scopes without an adapter that reassigns fields.
+       */
+      value: number;
       nationalValue: number;
       status: string;
       legislation: MetricLegislationInfo | null;
@@ -78,111 +88,28 @@ export interface CountryPoliticalMetricsResponse {
 /** First calendar year of the information era for indicator-list selection (display flavor only). */
 const MODERN_INDICATORS_FROM_YEAR = 1990;
 
-/** One cabinet channel's population-weighted contribution to a metric. */
-export interface CabinetSourceContribution {
-  source: CabinetSourceId;
-  value: number;
-  /** True when this channel sits at its own ceiling across most of the country. */
-  atCap: boolean;
-}
+// The modifiers decomposition lives in ./metricsAssembly so the region loader
+// shares this exact arithmetic. Re-exported here because the dashboard
+// components import these types from this module.
+export type { CabinetSourceContribution, MetricModifiersInfo } from "./metricsAssembly";
+export { driftHalfLifeTurns } from "./metricsAssembly";
 
-export interface MetricModifiersInfo {
-  /** Contributing laws (sorted by points desc; L0 rows omitted). */
-  laws: ModifierRow[];
-  /** Population-weighted mean structural residual (rounded 0.1). */
-  residual: number;
-  /**
-   * Population-weighted mean cabinet residual (rounded 0.1) — the standing
-   * contribution of tier settings, ministerial orders and sited estates.
-   * Ticket #1129: this term moves the target the engine drifts toward, so
-   * omitting it made the served target disagree with the engine and left a
-   * player's built estates with no visible effect anywhere.
-   */
-  cabinet: number;
-  /**
-   * True when most of the population lives in regions where EVERY cabinet
-   * channel for this metric is pinned at ±CABINET_RESIDUAL_CAP_PER_SOURCE. Only
-   * then does a further order or estate contribute exactly nothing.
-   */
-  /**
-   * Which cabinet channels actually contribute, largest first, so a player can
-   * see WHICH one is moving the metric rather than one aggregate label
-   * (ticket #1142). Zero-contribution channels are omitted.
-   */
-  cabinetBySource: CabinetSourceContribution[];
-  cabinetAtCap: boolean;
-  /** The per-channel cap, so the UI can name the ceiling rather than hard-code it. */
-  cabinetCap: number;
-  /**
-   * Turns for the value to close half the remaining gap at the engine's drift
-   * rate. Derived, so it stays true if the rate is retuned.
-   */
-  driftHalfLifeTurns: number;
-  /** National-view target: composeTarget(nationalPoints, 0, residual + cabinet). */
-  target: number;
-  /** Drift direction vs the current national value (|gap| ≤ 0.1 = flat). */
-  direction: "up" | "down" | "flat";
-}
+// The legislation join lives in ./metricsAssembly so the region loader can run
+// the same join against its OWN enacted levels.
+export type { MetricLegislationInfo } from "./metricsAssembly";
 
-/** Turns to close half a gap at `rate` per turn (exponential half-life). */
-export function driftHalfLifeTurns(rate: number): number {
-  if (rate <= 0 || rate >= 1) return 0;
-  return Math.round(Math.log(0.5) / Math.log(1 - rate));
-}
-
-export interface MetricLegislationInfo {
-  primary: {
-    lawId: string;
-    title: string;
-    level: number;
-    levelName: string;
-    /** Annual net (revenue − cost) at the enacted level, local currency. */
-    annualNet: number;
-  } | null;
-  secondaries: Array<{ lawId: string; title: string; level: number; levelName: string }>;
-}
-
-/**
- * Relevant Legislation panel data (political-legislation spec §8): each
- * metric's primary law at its enacted level with its annual net, plus the
- * secondaries that touch the metric. Empty map for countries without a
- * new-generation catalog.
- */
+/** National Relevant-Legislation map: the national law book at authored baselines. */
 async function loadRelevantLegislation(
   db: Db,
   countryId: PoliticalMetricsCountryId,
   states: Pick<State, "_id" | "population" | "gdp">[]
 ): Promise<{ map: Map<string, MetricLegislationInfo>; levels: Map<string, number> }> {
-  const map = new Map<string, MetricLegislationInfo>();
   const levels = await getEnactedLevels(db, countryId);
   const base = {
     gdp: states.reduce((sum, s) => sum + (s.gdp ?? 0), 0) * 1_000_000,
     population: states.reduce((sum, s) => sum + (s.population ?? 0), 0),
   };
-  for (const law of getCatalog(countryId)) {
-    if (law.kind === "tax" || !law.levels) continue;
-    const level = levels.get(law.id) ?? law.baselineLevel ?? 0;
-    const levelName = law.levels[level]?.name ?? "";
-    if (law.kind === "primary") {
-      const metricId = law.targets[0].metricId;
-      const { net } = computeLawCost(law.levels[level], base, countryId, null);
-      const existing = map.get(metricId) ?? { primary: null, secondaries: [] };
-      existing.primary = {
-        lawId: law.id,
-        title: law.title,
-        level,
-        levelName,
-        annualNet: net,
-      };
-      map.set(metricId, existing);
-    } else {
-      for (const target of law.targets) {
-        const existing = map.get(target.metricId) ?? { primary: null, secondaries: [] };
-        existing.secondaries.push({ lawId: law.id, title: law.title, level, levelName });
-        map.set(target.metricId, existing);
-      }
-    }
-  }
+  const map = buildRelevantLegislation(countryId, levels, base, (law) => law.baselineLevel ?? 0);
   return { map, levels };
 }
 
@@ -301,24 +228,29 @@ export async function loadCountryPoliticalMetrics(
       bySource,
     };
   };
-  const halfLife = driftHalfLifeTurns(DRIFT_RATE_PER_TURN);
+  /**
+   * The national view has no regional supplement and no single region's labour
+   * term to show: both are per-region quantities, and a population-weighted
+   * mean of them would double-count what `residuals` already carries. So the
+   * supplement is 0 and `regionalLevels` is empty here; the region loader is
+   * the scope that fills them in.
+   */
   const buildMetricModifiers = (metricId: PoliticalMetricId): MetricModifiersInfo => {
-    const laws = metricModifierRows(countryId, metricId, enactedLevels);
-    const residual = meanResidual(metricId);
     const { mean: cabinet, cappedShare, bySource: cabinetBySource } = meanCabinet(metricId);
-    const target = composeTarget(nationalLawPoints[metricId], 0, residual + cabinet);
-    const gap = target - national[metricId];
-    return {
-      laws,
-      residual: Math.round(residual * 10) / 10,
-      cabinet: Math.round(cabinet * 10) / 10,
+    return buildModifiers({
+      countryId,
+      metricId,
+      nationalLevels: enactedLevels,
+      regionalLevels: new Map(),
+      nationalPoints: nationalLawPoints[metricId],
+      regionalSupplementPoints: 0,
+      residual: meanResidual(metricId),
+      cabinet,
+      labour: 0,
       cabinetBySource,
       cabinetAtCap: cappedShare >= 0.5,
-      cabinetCap: CABINET_RESIDUAL_CAP_PER_SOURCE,
-      driftHalfLifeTurns: halfLife,
-      target: Math.round(target * 10) / 10,
-      direction: Math.abs(gap) <= 0.1 ? "flat" : gap > 0 ? "up" : "down",
-    };
+      currentValue: national[metricId],
+    });
   };
   // Via resolveGameYear, not `currentYear ?? 1953`: legacy rows carry only
   // turn + startingYear, and defaulting those to 1953 would mis-date the
@@ -347,6 +279,7 @@ export async function loadCountryPoliticalMetrics(
           pos: f.pos,
           neg: f.neg,
           indicators: f.indicators[indicatorEra],
+          value: round1(nationalValue),
           nationalValue: round1(nationalValue),
           status: statusFor(nationalValue),
           legislation: legislationByMetric.get(f.id) ?? null,
@@ -370,6 +303,7 @@ export async function loadCountryPoliticalMetrics(
 
   const overall = overallScore(national);
   return {
+    scope: "national" as const,
     countryId,
     // Resolved, not compiled: this name heads the registry masthead, the
     // comparison chips and every column of the comparison table, so a country
@@ -377,6 +311,7 @@ export async function loadCountryPoliticalMetrics(
     countryDisplayName: (await resolveCountryIdentity(db, countryId, gameState?.preset)).name,
     year,
     turn: gameState?.currentTurn ?? 1,
+    historyCadenceTurns: HISTORY_CADENCE_TURNS,
     overall: round1(overall),
     overallStatus: statusFor(overall),
     governanceStyle,
