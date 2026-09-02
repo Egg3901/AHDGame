@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render as rtlRender, screen, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { NationDropdown } from "./NationDropdown";
+import { RegisteredCountriesProvider } from "@/contexts/RegisteredCountriesContext";
 import enNav from "../../messages/en/nav.json";
 
 function render(ui: React.ReactElement) {
@@ -97,5 +98,34 @@ describe("NationDropdown — National Details sub-sections", () => {
     fireEvent.click(screen.getByRole("button", { name: /Economy/i }));
     const unions = screen.getByRole("link", { name: /^Unions$/i });
     expect(unions.getAttribute("href")).toBe("/country/uk/unions");
+  });
+});
+
+describe("NationDropdown — runtime display overrides (ticket #1255)", () => {
+  it("names a reunified Germany 'Germany' in the button and the National Details header", () => {
+    // The live world's shape: DD survived the German Question, DE was absorbed,
+    // and `countryState` carries displayNameOverride "Germany". The dropdown
+    // must read that, not the compiled "East Germany".
+    rtlRender(
+      <NextIntlClientProvider locale="en" messages={enNav}>
+        <RegisteredCountriesProvider
+          value={{
+            registered: ["US", "DD"],
+            enabled: ["US", "DD"],
+            preset: "1953-default",
+            displayOverrides: { DD: { name: "Germany", flagEmoji: "🇩🇪" } },
+          }}
+        >
+          <NationDropdown countryId="DD" userCountry="DD" />
+        </RegisteredCountriesProvider>
+      </NextIntlClientProvider>
+    );
+    // The collapsed button label.
+    expect(screen.getByRole("button", { name: /germany/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /germany/i }));
+    // The National Details header interpolates the override too.
+    expect(screen.getByText(/National Details: Germany/i)).toBeTruthy();
+    // And the compiled half-name is gone from the surface entirely.
+    expect(screen.queryByText(/East Germany/i)).toBeNull();
   });
 });

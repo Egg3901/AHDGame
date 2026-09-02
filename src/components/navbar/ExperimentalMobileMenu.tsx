@@ -7,14 +7,18 @@
  * presentation: all open/close state lives in the navbar and is passed down.
  */
 
-import React from "react";
+import React, { useContext } from "react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import Image from "next/image";
 import { UniversalSearch } from "@/components/UniversalSearch";
 import { Avatar } from "@/components/Avatar";
 import { CountryFlag } from "@/components/CountryFlag";
-import { getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
+import {
+  RegisteredCountriesContext,
+  getCountryDisplayNameWithOverrides,
+} from "@/contexts/RegisteredCountriesContext";
 import {
   countryUrl,
   partyUrl,
@@ -118,6 +122,11 @@ export function ExperimentalMobileMenu({
   handleSignOut,
 }: ExperimentalMobileMenuProps) {
   const t = useTranslations("nav");
+  // Runtime identity layer (ticket #1255): the mobile switcher rows read the
+  // same override-aware names the desktop nav does.
+  const { preset: ctxPreset, displayOverrides } = useContext(RegisteredCountriesContext);
+  const countryName = (id: CountryId): string =>
+    getCountryDisplayNameWithOverrides(id, ctxPreset ?? preset, displayOverrides);
   return (
     <div
       id="experimental-mobile-menu"
@@ -467,7 +476,7 @@ export function ExperimentalMobileMenu({
         className="flex w-full items-center gap-3 rounded-[10px] px-3.5 py-3 text-[15px] font-medium text-fg-2 transition-colors hover:bg-white/5"
       >
         <CountryFlag country={pageCountry} size="md" />
-        <span>{getCountryDisplayName(pageCountry as CountryId, preset)}</span>
+        <span>{countryName(pageCountry as CountryId)}</span>
         <Chevron open={!!mobileSubOpen.country} className="ml-auto h-4 w-4 text-muted" />
       </button>
       {mobileSubOpen.country && (
@@ -486,7 +495,7 @@ export function ExperimentalMobileMenu({
                 }`}
               >
                 <CountryFlag country={c} size="sm" />
-                <span>{getCountryDisplayName(c, preset)}</span>
+                <span>{countryName(c)}</span>
                 <span className="ml-auto flex items-center gap-1.5">
                   {isHome && (
                     <span className="text-[10px] font-medium text-muted">

@@ -21,7 +21,8 @@ import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { getGameState } from "@/lib/gameState";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
 import { getDb } from "@/lib/mongodb";
-import { COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_ORDER, getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
+import { resolveCountryIdentities } from "@/lib/country/countryIdentity";
 import { LiveRefreshBanner } from "@/components/LiveRefreshBanner";
 import { MassCrashAlertBanner } from "@/components/MassCrashAlertBanner";
 import { MaintenancePartialBanner } from "@/components/MaintenancePartialBanner";
@@ -175,10 +176,16 @@ export default async function RootLayout({
   //    admin tooling, which manages every country that exists.
   //  - `enabled` (the player-live subset) for the player-facing nation switcher, so a
   //    registered-but-not-yet-enabled country stays hidden until activation flips it on.
+  //  - `displayOverrides` (the runtime identity layer from `countryState`): a country
+  //    renamed or reflagged by a runtime event — reunification writes
+  //    `displayNameOverride: "Germany"` on the surviving shell — must not keep rendering
+  //    its compiled name in the client nav and world cards, which cannot call the
+  //    server-side resolver themselves (ticket #1255).
   // The root layout must never crash on a DB hiccup — fall back to the static base.
   let registeredCountries: CountryId[] = COUNTRY_ORDER;
   let enabledCountries: CountryId[] = COUNTRY_ORDER;
   let activePreset = "2019-default";
+  const displayOverrides: Record<string, { name?: string | null; flagEmoji?: string | null }> = {};
   try {
     const db = await getDb();
     const [registered, enabled, gameState] = await Promise.all([
@@ -189,6 +196,16 @@ export default async function RootLayout({
     registeredCountries = registered;
     enabledCountries = enabled;
     activePreset = gameState?.preset ?? DEFAULT_SEED_PRESET;
+    // One primed batch read for every registered country (the resolver's own
+    // batching), then keep only the countries whose runtime identity disagrees
+    // with the compiled/era answer — the map the client tree receives stays
+    // empty for the overwhelmingly common case of an unrenamed world.
+    const identities = await resolveCountryIdentities(db, registeredCountries, activePreset);
+    for (const [id, identity] of identities) {
+      if (identity.name !== getCountryDisplayName(id, activePreset)) {
+        displayOverrides[id] = { name: identity.name, flagEmoji: identity.flagEmoji };
+      }
+    }
   } catch {
     // keep the COUNTRY_ORDER + 2019-default fallback
   }
@@ -303,6 +320,7 @@ export default async function RootLayout({
               registered: registeredCountries,
               enabled: enabledCountries,
               preset: activePreset,
+              displayOverrides,
             }}
           >
             <AuthDataProvider>

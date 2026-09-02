@@ -8,7 +8,10 @@ import {
   useRegisteredCountries,
   useEnabledCountries,
   useActivePreset,
+  useCountryDisplayName,
+  getCountryDisplayNameWithOverrides,
 } from "./RegisteredCountriesContext";
+import type { CountryId } from "@/lib/constants/countries";
 
 function RegisteredProbe() {
   return <span>registered:{useRegisteredCountries().join(",")}</span>;
@@ -20,6 +23,10 @@ function EnabledProbe() {
 
 function PresetProbe() {
   return <span>preset:{useActivePreset()}</span>;
+}
+
+function NameProbe({ id }: { id: CountryId }) {
+  return <span>name:{useCountryDisplayName(id)}</span>;
 }
 
 describe("RegisteredCountriesContext", () => {
@@ -71,5 +78,55 @@ describe("RegisteredCountriesContext", () => {
   it("preset falls back to 2019-default with no provider", () => {
     render(<PresetProbe />);
     expect(screen.getByText("preset:2019-default")).toBeTruthy();
+  });
+
+  describe("runtime display overrides (ticket #1255)", () => {
+    it("a hydrated override renames the country in client surfaces", () => {
+      // The reunification write: DD survives the merge and is called Germany.
+      render(
+        <RegisteredCountriesProvider
+          value={{
+            registered: ["US", "DD"],
+            enabled: ["US", "DD"],
+            preset: "1953-default",
+            displayOverrides: { DD: { name: "Germany", flagEmoji: "🇩🇪" } },
+          }}
+        >
+          <NameProbe id="DD" />
+        </RegisteredCountriesProvider>
+      );
+      expect(screen.getByText("name:Germany")).toBeTruthy();
+    });
+
+    it("an unrenamed country keeps its era alias", () => {
+      // DE in 1953 renders as "West Germany" — the alias must survive the
+      // override layer for every country no runtime event has touched.
+      render(
+        <RegisteredCountriesProvider
+          value={{
+            registered: ["US", "DE"],
+            enabled: ["US", "DE"],
+            preset: "1953-default",
+            displayOverrides: {},
+          }}
+        >
+          <NameProbe id="DE" />
+        </RegisteredCountriesProvider>
+      );
+      expect(screen.getByText("name:West Germany")).toBeTruthy();
+    });
+
+    it("an empty override map (hydration missing) falls back to the compiled name", () => {
+      render(<NameProbe id="DD" />);
+      expect(screen.getByText("name:East Germany")).toBeTruthy();
+    });
+
+    it("the pure layering prefers the override over the era alias", () => {
+      expect(
+        getCountryDisplayNameWithOverrides("DD", "1953-default", { DD: { name: "Germany" } })
+      ).toBe("Germany");
+      // And without one, the era alias stands.
+      expect(getCountryDisplayNameWithOverrides("DE", "1953-default", {})).toBe("West Germany");
+    });
   });
 });

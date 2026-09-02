@@ -27,8 +27,8 @@ import {
   HELP_STATUS_URL,
 } from "./HelpDropdown";
 import { UniversalSearch } from "./UniversalSearch";
-import { getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
-import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
+import { type CountryId } from "@/lib/constants/countries";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 import { useCountryContext } from "@/hooks/useCountryContext";
 import { useActiveCharters } from "@/hooks/useActiveCharters";
 import { useActiveReferendumCampaign } from "@/hooks/useActiveReferendumCampaign";
@@ -187,7 +187,11 @@ export const Navbar = React.memo(function Navbar({
     homeState?.countryId,
     initialPageCountry
   );
-  const preset = useActivePreset();
+  // Runtime identity layer (ticket #1255): a reunified Germany must not read
+  // "East Germany" in the classic nav's Nation rows or National Details header.
+  // The hook reads the preset itself; nothing else here needs it.
+  const pageCountryName = useCountryDisplayName(pageCountry as CountryId);
+  const userCountryName = useCountryDisplayName(userCountry as CountryId);
   // Mobile Referendums link gate — fetched only while the hamburger is open.
   const hasActiveReferendumCampaign = useActiveReferendumCampaign(
     pageCountry as CountryId,
@@ -1130,7 +1134,7 @@ export const Navbar = React.memo(function Navbar({
                 >
                   <div className="flex items-center gap-2">
                     <CountryFlag country={pageCountry} size="md" className="shrink-0" />
-                    <span>{getCountryDisplayName(pageCountry, preset)}</span>
+                    <span>{pageCountryName}</span>
                   </div>
                   <ChevronIcon open={nationOpen} />
                 </button>
@@ -1143,7 +1147,7 @@ export const Navbar = React.memo(function Navbar({
                       className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5"
                     >
                       <CountryFlag country={userCountry} size="sm" />
-                      <span>{getCountryDisplayName(userCountry, preset)}</span>
+                      <span>{userCountryName}</span>
                       <span className="text-xs text-muted/60">{t("menus.nation.homeSuffix")}</span>
                     </Link>
 
@@ -1187,7 +1191,7 @@ export const Navbar = React.memo(function Navbar({
 
                     <div className="px-3 py-1 text-xs font-medium uppercase tracking-wider text-muted/60">
                       {t("menus.nation.nationalDetailsFor", {
-                        country: getCountryDisplayName(pageCountry, preset),
+                        country: pageCountryName,
                       })}
                     </div>
 

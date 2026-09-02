@@ -16,7 +16,7 @@
  * mobile collapsed bar + slide-down menu.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import Image from "next/image";
@@ -29,8 +29,13 @@ import { CDN_LOGO_URL } from "@/lib/images/staticCdnAssets";
 import { UniversalSearch } from "./UniversalSearch";
 import { Avatar } from "./Avatar";
 import { CountryFlag } from "@/components/CountryFlag";
-import { getCountryConfig, getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
-import { useEnabledCountries, useActivePreset } from "@/contexts/RegisteredCountriesContext";
+import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
+import {
+  RegisteredCountriesContext,
+  getCountryDisplayNameWithOverrides,
+  useCountryDisplayName,
+  useEnabledCountries,
+} from "@/contexts/RegisteredCountriesContext";
 import {
   countryUrl,
   partyUrl,
@@ -248,8 +253,14 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   // Country-context awareness (matches the classic nav): the switcher lists the
   // nations actually registered in the current game, named per the active
   // preset/era — not every non-coming-soon country with its default name.
-  const preset = useActivePreset();
+  const { preset, displayOverrides } = useContext(RegisteredCountriesContext);
   const switchableCountries = useEnabledCountries();
+  // Runtime identity layer (ticket #1255): a reunified Germany must not read
+  // "East Germany" in the Nation tab, the Home Nation row or the switcher grid.
+  const pageCountryName = useCountryDisplayName(pageCountry as CountryId);
+  const userCountryName = useCountryDisplayName(userCountry as CountryId);
+  const switcherCountryName = (id: CountryId): string =>
+    getCountryDisplayNameWithOverrides(id, preset, displayOverrides);
 
   // State legislature label (UK devolution-aware).
   const stateLegislatureLabel = (() => {
@@ -288,7 +299,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   if (showProfile) {
     navItems.push(
       {
-        label: getCountryDisplayName(pageCountry as CountryId, preset),
+        label: pageCountryName,
         href: countryUrl(pageCountry as CountryId),
         key: "nation",
         icon: "Nation",
@@ -407,7 +418,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
       <div className="p-1.5">
         <MenuLabel>{t("menus.nation.homeNation")}</MenuLabel>
         <MenuRow href={countryUrl(userCountry as CountryId)} onNavigate={closeAll} strong>
-          {getCountryDisplayName(userCountry as CountryId, preset)}
+          {userCountryName}
         </MenuRow>
         {cabinetOffice && (
           <MenuRow
@@ -825,7 +836,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                     onClick={() => toggle("country")}
                     aria-expanded={open === "country"}
                     aria-label={t("countrySwitcher.switchNationViewCurrent", {
-                      country: getCountryDisplayName(pageCountry as CountryId, preset),
+                      country: pageCountryName,
                     })}
                     title={t("countrySwitcher.switchNationView")}
                     className="flex h-9 items-center gap-2 rounded-lg border border-card-border bg-card px-2.5 text-xs font-medium text-fg-2 transition-colors hover:border-muted/50 hover:text-foreground"
@@ -857,7 +868,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                             <span
                               className={`text-[13px] ${isCurrent ? "font-semibold text-foreground" : "text-fg-2"}`}
                             >
-                              {getCountryDisplayName(c, preset)}
+                              {switcherCountryName(c)}
                             </span>
                             <span className="ml-auto flex items-center gap-1.5">
                               {isHome && (

@@ -1,6 +1,6 @@
 "use client";
 import { createContext, useContext, type ReactNode } from "react";
-import { COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_ORDER, getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
 
 /**
  * The two runtime country sets, resolved server-side and hydrated into the client
@@ -19,17 +19,36 @@ import { COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
  * `preset` is the active reset preset (e.g. "1979-default"), so client surfaces can render
  * era-aware country names — the FRG shows as "West Germany" in 1979 — via
  * `getCountryDisplayName(id, preset)`. Defaults to "2019-default".
+ *
+ * `displayOverrides` is the RUNTIME identity layer, hydrated from `countryState` next to
+ * the sets above. A country renamed or reflagged by a runtime event (a reunification
+ * writes `displayNameOverride: "Germany"` on the surviving shell) must not keep
+ * introducing itself under its compiled name: the nav dropdowns, the nation switcher and
+ * the /world cards are client components and read their names HERE, not from the resolver
+ * the server surfaces use. Keyed by country id; absent key (the overwhelmingly common
+ * case) means "no runtime event has touched this country" and the compiled/era name
+ * stands. `getCountryDisplayNameWithOverrides` applies them.
  */
+export interface CountryDisplayOverrides {
+  /** displayNameOverride from `countryState`, when a runtime event renamed the country. */
+  name?: string | null;
+  /** flagEmojiOverride from `countryState`, on the same terms. */
+  flagEmoji?: string | null;
+}
+
 export interface CountrySets {
   registered: CountryId[];
   enabled: CountryId[];
   preset: string;
+  /** Runtime name/flag overrides, resolved server-side. Empty until hydrated. */
+  displayOverrides?: Record<string, CountryDisplayOverrides>;
 }
 
-const RegisteredCountriesContext = createContext<CountrySets>({
+export const RegisteredCountriesContext = createContext<CountrySets>({
   registered: COUNTRY_ORDER,
   enabled: COUNTRY_ORDER,
   preset: "2019-default",
+  displayOverrides: {},
 });
 
 export function RegisteredCountriesProvider({
@@ -70,4 +89,30 @@ export function useEnabledCountries(): CountryId[] {
  */
 export function useActivePreset(): string {
   return useContext(RegisteredCountriesContext).preset;
+}
+
+/**
+ * The runtime display layer for CLIENT country names: era alias first, then the
+ * runtime override a rename/reunification event wrote.
+ *
+ * Server surfaces answer this through `resolveCountryIdentity`; client components
+ * cannot call it (it reads the database), so the root layout hydrates the same
+ * overrides into the context and this hook layers them over
+ * `getCountryDisplayName` in the same order the resolver uses. Without the
+ * override layer a reunified Germany went on being announced as "East Germany"
+ * in the nav dropdown and on the /world cards, on every page, for ever
+ * (ticket #1255).
+ */
+export function getCountryDisplayNameWithOverrides(
+  id: CountryId,
+  preset: string,
+  displayOverrides: Record<string, CountryDisplayOverrides> | undefined
+): string {
+  return displayOverrides?.[id]?.name ?? getCountryDisplayName(id, preset);
+}
+
+/** The same layering as a hook, for components already inside the provider. */
+export function useCountryDisplayName(id: CountryId): string {
+  const { preset, displayOverrides } = useContext(RegisteredCountriesContext);
+  return getCountryDisplayNameWithOverrides(id, preset, displayOverrides);
 }

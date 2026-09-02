@@ -1,11 +1,16 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useContext } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
-import { useEnabledCountries, useActivePreset } from "@/contexts/RegisteredCountriesContext";
+import { type CountryId } from "@/lib/constants/countries";
+import {
+  RegisteredCountriesContext,
+  getCountryDisplayNameWithOverrides,
+  useCountryDisplayName,
+  useEnabledCountries,
+} from "@/contexts/RegisteredCountriesContext";
 import { CountryFlag } from "@/components/CountryFlag";
 import { useActiveCharters } from "@/hooks/useActiveCharters";
 import { useActiveReferendumCampaign } from "@/hooks/useActiveReferendumCampaign";
@@ -45,7 +50,17 @@ export function NationDropdown({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const enabledCountries = useEnabledCountries();
-  const preset = useActivePreset();
+  // Runtime identity for the VIEWED country: a reunified Germany must not be
+  // announced as "East Germany" in the dropdown button or the National Details
+  // header (ticket #1255).
+  const countryName = useCountryDisplayName(countryId);
+  const userCountryName = useCountryDisplayName(userCountry);
+  // The switcher grid re-renders per enabled country, so read the context's
+  // override map once and resolve through the same pure layering the hook uses
+  // rather than calling a hook inside the loop.
+  const { preset, displayOverrides: switcherOverrides } = useContext(RegisteredCountriesContext);
+  const switcherCountryName = (id: CountryId): string =>
+    getCountryDisplayNameWithOverrides(id, preset, switcherOverrides);
   // Charter entry visibility: the dropdown link to /charters is gated on
   // whether the viewer has an active founder slot. The hook returns
   // `null` until fetched, `[]` if none active, and a non-empty list
@@ -112,8 +127,7 @@ export function NationDropdown({
         aria-expanded={isOpen}
         aria-haspopup="menu"
       >
-        <CountryFlag country={countryId} size="md" className="mr-1" />{" "}
-        {getCountryDisplayName(countryId, preset)}
+        <CountryFlag country={countryId} size="md" className="mr-1" /> {countryName}
         <svg
           className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
           fill="none"
@@ -172,7 +186,7 @@ export function NationDropdown({
                     >
                       <CountryFlag country={id} size="lg" />
                       <span className="text-xs leading-tight text-foreground truncate w-full">
-                        {getCountryDisplayName(id, preset)}
+                        {switcherCountryName(id)}
                       </span>
                       {isHome && (
                         <span className="text-[10px] text-muted leading-none">
@@ -197,7 +211,7 @@ export function NationDropdown({
                   className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-background/60"
                 >
                   <CountryFlag country={userCountry} size="sm" />
-                  <span>{getCountryDisplayName(userCountry, preset)}</span>
+                  <span>{userCountryName}</span>
                   <span className="ml-1 text-xs text-muted">{t("menus.nation.homeSuffix")}</span>
                 </Link>
                 {cabinetOffice && (
@@ -273,7 +287,7 @@ export function NationDropdown({
               {/* National Details — grouped sub-sections (Government / Politics / Economy / Other). */}
               <p className="px-4 pt-2 pb-1 text-xs font-medium uppercase tracking-wider text-muted">
                 {t("menus.nation.nationalDetailsFor", {
-                  country: getCountryDisplayName(countryId, preset),
+                  country: countryName,
                 })}
               </p>
               {sections.map((section) => (
