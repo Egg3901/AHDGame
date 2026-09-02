@@ -12,6 +12,7 @@ import type { AnyBulkWriteOperation, Db } from "mongodb";
 import type {
   PoliticalMetricsDoc,
   PoliticalMetricsHistoryDoc,
+  PoliticalMetricsRegionHistoryDoc,
 } from "@/lib/db/types/politicalMetrics";
 import type { State } from "@/lib/db/types/state";
 import type { StatePolicy } from "@/lib/db/types/statePolicy";
@@ -48,6 +49,12 @@ import { loadLabourRelationsPoliticalNudgesByCountry } from "@/lib/unions/labour
 
 export const HISTORY_CADENCE_TURNS = 24;
 export const HISTORY_MAX_ENTRIES = 365;
+/**
+ * Region series cap (issue #1322). Lower than the national 365 because there
+ * are ~197 region docs against 26 national ones; 90 entries at the 24-turn
+ * cadence is 2,160 turns of coverage, against a world currently near turn 575.
+ */
+export const REGION_HISTORY_MAX_ENTRIES = 90;
 
 /** Shallow numeric-map equality — whether a cabinetResiduals fold produced a change. */
 function sameNums(a: Record<string, number>, b: Record<string, number>): boolean {
@@ -401,16 +408,50 @@ export async function processPoliticalMetricsDynamics(
           .toArray();
         const populationByRegion = new Map(states.map((s) => [s._id, s.population ?? 0]));
         const values = aggregateNationalPoliticalMetrics(docs, populationByRegion);
+        const now = new Date();
         await db.collection<PoliticalMetricsHistoryDoc>("politicalMetricsHistory").updateOne(
           { _id: countryId },
           {
             $push: {
               entries: { $each: [{ turn: turnNumber, values }], $slice: -HISTORY_MAX_ENTRIES },
             },
-            $set: { updatedAt: new Date() },
+            $set: { updatedAt: now },
           },
           { upsert: true }
         );
+
+        // Per-region series (#1322). `doc.values` is already the POST-drift map
+        // — the loop above assigns `doc.values = nextValues` before this point,
+        // which is the same reason the national aggregate just computed is
+        // correct. Snapshotting the pre-drift read would make every region
+        // series lag reality by a full cadence.
+        //
+        // Rotation is $slice, never a read-modify-write: a concurrent turn must
+        // not be able to truncate the series.
+        const regionHistoryOps: AnyBulkWriteOperation<PoliticalMetricsRegionHistoryDoc>[] =
+          docs.map((doc) => ({
+            updateOne: {
+              filter: { _id: String(doc._id) },
+              update: {
+                $push: {
+                  entries: {
+                    $each: [{ turn: turnNumber, values: doc.values }],
+                    $slice: -REGION_HISTORY_MAX_ENTRIES,
+                  },
+                },
+                $set: {
+                  countryId: countryId as PoliticalMetricsRegionHistoryDoc["countryId"],
+                  updatedAt: now,
+                },
+              },
+              upsert: true,
+            },
+          }));
+        if (regionHistoryOps.length > 0) {
+          await db
+            .collection<PoliticalMetricsRegionHistoryDoc>("politicalMetricsRegionHistory")
+            .bulkWrite(regionHistoryOps);
+        }
       }
     })
   );
