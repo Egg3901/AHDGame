@@ -7,7 +7,7 @@ import { AdSenseUnit } from "@/components/AdSenseUnit";
 export const metadata: Metadata = publicPageMetadata({
   title: "About | A House Divided",
   description:
-    "Learn about A House Divided, a real-time multiplayer political and economic simulation set in the US, UK, Germany, and Japan: elections, legislation, parties, corporations, and markets on an hourly clock with no seasonal resets.",
+    "Learn about A House Divided, a real-time multiplayer political and economic simulation set in the US, UK, Soviet Union, and East Germany: elections, legislation, parties, corporations, and markets on an hourly clock with no seasonal resets.",
   pathname: "/about",
 });
 

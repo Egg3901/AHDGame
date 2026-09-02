@@ -11,11 +11,13 @@ import type { Db, ObjectId } from "mongodb";
 export async function clearWhippedFromVote(
   db: Db,
   collectionName: string,
-  targetId: ObjectId,
+  // Singleton voting documents (the Speaker election, the motion to vacate) key
+  // on the literal string "current" rather than an ObjectId.
+  targetId: ObjectId | string,
   characterId: ObjectId,
   fieldName: string = "whippedFromVote"
 ): Promise<void> {
   await db
-    .collection(collectionName)
+    .collection<{ _id: ObjectId | string }>(collectionName)
     .updateOne({ _id: targetId }, { $unset: { [`${fieldName}.${characterId.toString()}`]: "" } });
 }

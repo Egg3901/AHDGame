@@ -37,6 +37,34 @@ function mockBudgets(docs: Record<string, unknown>[]) {
 }
 
 describe("processTreasuryTurn", () => {
+  it("does NOT accrue for a country that has been dissolved", async () => {
+    // A dissolved country keeps its budget doc — for history, and so a merge has
+    // somewhere to stamp `mergedInto` — and this phase scans every one of them.
+    // Without the registry gate an absorbed country goes on earning: a reunified
+    // Germany left its predecessor shell with a treasury the merge had zeroed
+    // climbing back into the billions, against an economy it no longer had a
+    // single region or citizen to earn.
+    db.collection("countryGameStates").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { _id: "CN", status: "active", dissolvedTurn: null },
+        { _id: "DD", status: "active", dissolvedTurn: 545 },
+      ]),
+    });
+    mockBudgets([
+      budgetDoc({ _id: "CN", countryId: "CN" }),
+      budgetDoc({ _id: "DD", countryId: "DD" }),
+    ]);
+
+    const { processTreasuryTurn } = await import("./treasuryTurn");
+    await processTreasuryTurn(10);
+
+    const touched = db.collectionMocks.federalBudget.updateOne.mock.calls.map((c) =>
+      String((c[0] as { _id?: unknown })._id)
+    );
+    expect(touched).toContain("CN");
+    expect(touched).not.toContain("DD");
+  });
+
   it("credits one turn's primary surplus and resyncs derived fields", async () => {
     mockBudgets([budgetDoc({})]);
     const { processTreasuryTurn } = await import("./treasuryTurn");

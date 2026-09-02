@@ -149,23 +149,25 @@ export async function rescopeRegionToCountry(
       const doc = await coll.findOne({ _id: oldId } as Record<string, unknown>);
       let matched = 0;
       if (doc) {
-        // UPSERT, NOT INSERT. The destination may ALREADY hold a row under the new
-        // key: a country merge moves a region into a country that was seeded with
-        // its own row for that same region, and this collection is keyed by the
-        // pair. A bare insert throws E11000 there — with the source row already
-        // deleted, so the region's data is gone and the whole transfer aborts
-        // part-way. That is how the live German reunification died on its second
-        // Land, and every remaining Land would have died the same way.
+        // SECURE THE NEW KEY BEFORE RELEASING THE OLD ONE, and never blindly
+        // insert. This re-key is not guarded by the region-doc idempotency
+        // check above: a merge that crashed between this write and
+        // `convertRegionDoc` leaves a region that straddles the two keys. The
+        // retry re-reads the old `DD_MV` and finds a `DE_MV` from the first
+        // attempt already seated under the new key, and a blind insert there
+        // died with E11000, aborting the whole transfer half-done (ticket
+        // #1247: a reunification dictated in the won-war panel stalled at its
+        // second Land and never resumed). Upsert-replace instead: an existing
+        // row under the new key is absorbed, its payload replaced with the
+        // old row's, which is the authoritative one, and the delete below
+        // then frees the old key.
         //
-        // THE MOVING REGION'S ROW WINS, because the region is the thing that moves
-        // and its row is the live one; the destination's is for a region it never
-        // actually held. A region FUSE resolves the same collision the other way
-        // and keeps the target's row — see `mergeRegion`, where both regions stay
-        // inside one country and it is the SURVIVOR's row that is real.
-        //
-        // WRITE FIRST, DELETE SECOND, reversing the original order. That is the
-        // difference between a failure that can simply be re-run and one that has
-        // already destroyed the row it was moving.
+        // A CRASHED RETRY IS NOT THE ONLY WAY THE NEW KEY IS TAKEN. A world can
+        // also carry an orphan under `${toCountryId}_${regionId}` from an
+        // earlier transfer or an old seed, with no failed attempt behind it --
+        // the live German world held four of them before any of this ran. Same
+        // collision, same answer: the moving region's document wins, because it
+        // is the one describing a region that actually exists.
         await coll.replaceOne(
           { _id: newId } as Record<string, unknown>,
           {

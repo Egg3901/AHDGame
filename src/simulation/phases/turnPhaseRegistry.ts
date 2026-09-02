@@ -45,6 +45,7 @@ import {
   resolveExpiredLeadershipElections,
   vacateLeadershipAfterElections,
 } from "@/lib/congress/leadershipElections";
+import { reconcileAllLeadershipPartyEligibility } from "@/lib/congress/leadership/reconcilePartyEligibility";
 import { processAlignmentTurn } from "@/lib/turn/alignmentPhase";
 import { processSettlementTurn } from "@/lib/turn/settlementPhase";
 import { processInternationalOrganizationsTurn } from "@/lib/turn/internationalOrganizationsPhase";
@@ -1172,6 +1173,14 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
               entries.map(({ name, fn }) => runtime.runPhase(name, () => fn(gameNow)))
             );
         }
+
+        // Vacate any majority-gated leadership office whose holder has left the
+        // majority party, opening a 24-turn election for the seat. Sequenced
+        // ahead of the batch below so the races it opens exist before
+        // `resolveExpiredLeadershipElections` walks the same collections.
+        await runtime.runPhase("leadershipPartyEligibility", () =>
+          reconcileAllLeadershipPartyEligibility(db, gameNow)
+        );
 
         await Promise.all([
           ...(foundingActive

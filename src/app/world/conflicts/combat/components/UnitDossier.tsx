@@ -214,11 +214,18 @@ export function UnitDossier({
 
         <Field label="POSTURE">
           <select
+            aria-label="Posture"
             value={u.posture}
+            disabled={!state.canWrite}
+            title={state.canWrite ? undefined : "Only the defence minister may change posture."}
             onChange={(e) =>
               dispatch({ type: "SET_POSTURE", id: String(u._id), posture: e.target.value })
             }
-            style={selectStyle}
+            style={{
+              ...selectStyle,
+              cursor: state.canWrite ? "pointer" : "not-allowed",
+              opacity: state.canWrite ? 1 : 0.65,
+            }}
           >
             {POSTURES.map((p) => (
               <option
@@ -235,11 +242,18 @@ export function UnitDossier({
 
         <Field label={`BATTLE ROLE${state.positions[String(u._id)] ? "" : " · recommended"}`}>
           <select
+            aria-label="Battle role"
             value={role}
+            disabled={!state.canWrite}
+            title={state.canWrite ? undefined : "Only the defence minister may change battle role."}
             onChange={(e) =>
               dispatch({ type: "SET_ROLE", id: String(u._id), role: e.target.value })
             }
-            style={selectStyle}
+            style={{
+              ...selectStyle,
+              cursor: state.canWrite ? "pointer" : "not-allowed",
+              opacity: state.canWrite ? 1 : 0.65,
+            }}
           >
             {ROLES.map((r) => (
               <option key={r.id} value={r.id}>

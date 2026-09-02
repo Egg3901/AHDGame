@@ -29,8 +29,8 @@ import { CDN_LOGO_URL } from "@/lib/images/staticCdnAssets";
 import { UniversalSearch } from "./UniversalSearch";
 import { Avatar } from "./Avatar";
 import { CountryFlag } from "@/components/CountryFlag";
-import { getCountryConfig, getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
-import { useEnabledCountries, useActivePreset } from "@/contexts/RegisteredCountriesContext";
+import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
+import { useEnabledCountries, useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 import {
   countryUrl,
   partyUrl,
@@ -247,8 +247,9 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   const countryConf = getCountryConfig(pageCountry as CountryId);
   // Country-context awareness (matches the classic nav): the switcher lists the
   // nations actually registered in the current game, named per the active
-  // preset/era — not every non-coming-soon country with its default name.
-  const preset = useActivePreset();
+  // preset/era AND any runtime rename — not every non-coming-soon country with
+  // its default name.
+  const countryName = useCountryDisplayName();
   const switchableCountries = useEnabledCountries();
 
   // State legislature label (UK devolution-aware).
@@ -288,7 +289,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   if (showProfile) {
     navItems.push(
       {
-        label: getCountryDisplayName(pageCountry as CountryId, preset),
+        label: countryName(pageCountry as CountryId),
         href: countryUrl(pageCountry as CountryId),
         key: "nation",
         icon: "Nation",
@@ -407,7 +408,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
       <div className="p-1.5">
         <MenuLabel>{t("menus.nation.homeNation")}</MenuLabel>
         <MenuRow href={countryUrl(userCountry as CountryId)} onNavigate={closeAll} strong>
-          {getCountryDisplayName(userCountry as CountryId, preset)}
+          {countryName(userCountry as CountryId)}
         </MenuRow>
         {cabinetOffice && (
           <MenuRow
@@ -825,7 +826,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                     onClick={() => toggle("country")}
                     aria-expanded={open === "country"}
                     aria-label={t("countrySwitcher.switchNationViewCurrent", {
-                      country: getCountryDisplayName(pageCountry as CountryId, preset),
+                      country: countryName(pageCountry as CountryId),
                     })}
                     title={t("countrySwitcher.switchNationView")}
                     className="flex h-9 items-center gap-2 rounded-lg border border-card-border bg-card px-2.5 text-xs font-medium text-fg-2 transition-colors hover:border-muted/50 hover:text-foreground"
@@ -857,7 +858,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                             <span
                               className={`text-[13px] ${isCurrent ? "font-semibold text-foreground" : "text-fg-2"}`}
                             >
-                              {getCountryDisplayName(c, preset)}
+                              {countryName(c)}
                             </span>
                             <span className="ml-auto flex items-center gap-1.5">
                               {isHome && (
@@ -1068,7 +1069,6 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               stateLegislatureLabel={stateLegislatureLabel}
               pageCountry={pageCountry}
               userCountry={userCountry}
-              preset={preset}
               switchableCountries={switchableCountries}
               worldSubItems={worldSubItems}
               profileOrgItems={profileOrgItems}

@@ -50,7 +50,7 @@
  * could.
  */
 
-import type { CountryId } from "./countries";
+import type { CountryId, GovernmentType } from "./countries";
 
 export interface BlocListQuota {
   /** Display name of the alliance, for UI copy. */
@@ -91,4 +91,16 @@ export function blocListQuota(countryId: string | null | undefined): BlocListQuo
 /** True when the country allocates legislative seats by bloc-list quota. */
 export function isBlocListCountry(countryId: string | null | undefined): boolean {
   return blocListQuota(countryId) !== null;
+}
+
+/**
+ * Runtime quota for an election. A country keeps its historical quota config,
+ * but a democratic regime conversion must immediately switch its elections to
+ * ordinary allocation.
+ */
+export function blocListQuotaForGovernment(
+  countryId: string | null | undefined,
+  governmentType: GovernmentType | null | undefined
+): BlocListQuota | null {
+  return governmentType === "onePartyState" ? blocListQuota(countryId) : null;
 }

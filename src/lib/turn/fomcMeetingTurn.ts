@@ -29,6 +29,7 @@ import {
   FOMC_VACANCY_REMINDER_INTERVAL_TURNS,
   FOMC_COMMITTEE_COUNTRY_IDS,
   RATE_CHANGE_COOLDOWN_TURNS,
+  RATE_HISTORY_MAX,
   NPP_CHAIR_TARGET_GROWTH,
   COC_SMOOTHING_TURNS,
 } from "@/lib/db/types/centralBank";
@@ -44,7 +45,9 @@ import {
 import { logger } from "../observability/logger";
 
 const FOMC_MEETING_HISTORY_MAX = 24;
-const RATE_HISTORY_MAX = 96;
+// Shared with the direct-set and autonomous-chair writers so no path truncates
+// another's records; see RATE_HISTORY_MAX in db/types/centralBank.
+
 /** System actor stamped on committee-driven rate changes. */
 const FOMC_SYSTEM_ACTOR = new ObjectId("000000000000000000000000");
 

@@ -24,6 +24,7 @@ import {
 import type { OrgMemberId } from "@/lib/db/types/internationalOrganization";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { entityFlag, entityName } from "@/lib/constants/entityDisplay";
+import { resolveCountryIdentities } from "@/lib/country/countryIdentity";
 import { resolveOrgCategory } from "@/lib/constants/orgCategory";
 import type { GameState } from "@/lib/db/types";
 import type {
@@ -313,6 +314,25 @@ export async function loadOrganizationSummaries(db: Db): Promise<OrganizationSum
   // the route will refuse.
   const categoryCtx = await loadCategoryContext(db);
 
+  // Names and flags come from the identity resolver, not the compiled config,
+  // so the roster agrees with every other country surface about what a country
+  // is called. Two things only it knows: a runtime rename or reflag left by an
+  // event (a reunified Germany is not "East Germany" any more), and the era
+  // alias (the USSR is "Soviet Union" in a Cold War world, not "Russia").
+  //
+  // Countries only. Membership is open to entities the game does not model as
+  // countries at all — Canada, the Benelux, Jordan — which have no config and no
+  // runtime row for the resolver to read; `entityName`/`entityFlag` answer for
+  // those from the alignment roster, as before.
+  const memberCountryIds = [
+    ...new Set(
+      memberships
+        .map((m) => m.countryId)
+        .filter((id): id is CountryId => Object.hasOwn(COUNTRY_CONFIGS, id))
+    ),
+  ];
+  const identities = await resolveCountryIdentities(db, memberCountryIds, categoryCtx.preset);
+
   return orderedIds.map((id) => {
     const def = withEffectiveCategory(
       isBuiltInInternationalOrganizationId(id)
@@ -325,10 +345,14 @@ export async function loadOrganizationSummaries(db: Db): Promise<OrganizationSum
       // alignment roster and ISO regional-indicator emoji so seated-but-unplayable
       // allies (Canada, the Benelux, …) do not render as a white-flag blank.
       const isCountry = m.countryId in COUNTRY_CONFIGS;
+      const identity = identities.get(m.countryId as CountryId);
       return {
         countryId: m.countryId,
-        countryName: entityName(m.countryId),
-        flagEmoji: entityFlag(m.countryId),
+        countryName: identity?.name ?? entityName(m.countryId),
+        // `||`, not `??`: the resolver answers "" for a country carrying no
+        // flag at all, and an empty string must fall through to the roster the
+        // same way a missing identity does.
+        flagEmoji: identity?.flagEmoji || entityFlag(m.countryId),
         status: m.status,
         joinedTurn: m.joinedTurn,
         hasVote: countryAccess[m.countryId as CountryId]?.enabledForPlayers === true,

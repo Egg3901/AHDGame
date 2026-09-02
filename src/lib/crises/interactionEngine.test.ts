@@ -8,6 +8,7 @@ import {
   submitCrisisDecision,
   canCharacterInteract,
   calculateCollectiveReduction,
+  calculateDecisionDurationReduction,
   autoResolveCrisisInteraction,
   deriveCharacterRoles,
   resolveCharacterRoles,
@@ -434,6 +435,96 @@ describe("calculateCollectiveReduction", () => {
     const interaction = makeInteraction({ collectiveTarget: 100, collectiveCurrent: 50 });
     // 6 * 0.5 * 0.5 = 1.5 → floor 1
     expect(calculateCollectiveReduction(interaction, 6)).toBe(1);
+  });
+});
+
+describe("calculateDecisionDurationReduction", () => {
+  // #1250: several templates advertised "reduces duration by N turns" for a
+  // mechanic that did not exist, so a government spent GDP on stimulus and
+  // watched the recession run its full term anyway.
+  const REDUCING_TREE: CrisisDecisionNode[] = [
+    {
+      nodeId: "stimulus",
+      type: "choice",
+      title: "Recession response",
+      description: "Choose",
+      requiredRoles: ["headOfState"],
+      timeLimitMinutes: null,
+      options: [
+        {
+          optionId: "austerity",
+          label: "Austerity",
+          description: "",
+          nextNodeId: null,
+          effects: [],
+        },
+        {
+          optionId: "moderate",
+          label: "Moderate Stimulus",
+          description: "",
+          nextNodeId: null,
+          durationReductionTurns: 2,
+          effects: [],
+        },
+        {
+          optionId: "large",
+          label: "Large Stimulus",
+          description: "",
+          nextNodeId: null,
+          durationReductionTurns: 4,
+          effects: [],
+        },
+      ],
+    },
+  ];
+
+  it("returns 0 before anyone has responded", () => {
+    expect(
+      calculateDecisionDurationReduction(
+        makeInteraction({ decisionTree: REDUCING_TREE, resolutionPath: [] })
+      )
+    ).toBe(0);
+  });
+
+  it("credits the reduction the chosen option declares", () => {
+    expect(
+      calculateDecisionDurationReduction(
+        makeInteraction({ decisionTree: REDUCING_TREE, resolutionPath: ["moderate"] })
+      )
+    ).toBe(2);
+  });
+
+  it("credits nothing for an option that declares no reduction", () => {
+    expect(
+      calculateDecisionDurationReduction(
+        makeInteraction({ decisionTree: REDUCING_TREE, resolutionPath: ["austerity"] })
+      )
+    ).toBe(0);
+  });
+
+  it("ignores node ids travelled through, which are not options", () => {
+    expect(
+      calculateDecisionDurationReduction(
+        makeInteraction({
+          decisionTree: REDUCING_TREE,
+          resolutionPath: ["stimulus", "large", "terminal"],
+        })
+      )
+    ).toBe(4);
+  });
+
+  it("counts a chosen option once even when a role menu repeats it", () => {
+    const dualMenu: CrisisDecisionNode[] = [
+      {
+        ...REDUCING_TREE[0]!,
+        optionsByRole: { belligerent: REDUCING_TREE[0]!.options },
+      },
+    ];
+    expect(
+      calculateDecisionDurationReduction(
+        makeInteraction({ decisionTree: dualMenu, resolutionPath: ["large"] })
+      )
+    ).toBe(4);
   });
 });
 

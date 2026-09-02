@@ -58,17 +58,21 @@ describe("rescopeRegionToCountry", () => {
       { collection: "stateRegistrationPool", key: "compositeCountryState" },
     ]);
     const mocks = db.collectionMocks["stateRegistrationPool"];
+    const inserted = mocks.replaceOne.mock.calls[0][1];
+    expect(inserted._id).toBe("IE_NIR");
+    expect(inserted.countryId).toBe("IE");
+    expect(inserted.independent).toBe(500); // payload preserved
+    // The old key is released only after the new one is secured, so a crash
+    // between the two leaves a re-keyed row the next attempt can absorb.
     expect(mocks.deleteOne).toHaveBeenCalledWith({ _id: "UK_NIR" });
-    const [filter, moved] = mocks.replaceOne.mock.calls[0];
-    expect(filter).toEqual({ _id: "IE_NIR" });
-    expect(moved.countryId).toBe("IE");
-    expect(moved.independent).toBe(500); // payload preserved
+    expect(mocks.insertOne).not.toHaveBeenCalled();
   });
 
   it("writes the new key BEFORE dropping the old one", async () => {
-    // Order is the difference between a failure that can be re-run and one that has
-    // already destroyed the row it was moving. Delete-first is what turned a
-    // duplicate-key error into permanent data loss on the live merge.
+    // Order is the difference between a failure that can simply be re-run and one
+    // that has already destroyed the row it was moving. The comment above says the
+    // old key is released second; pin it, because nothing else would catch a
+    // reordering that only bites on a crash between the two writes.
     db.collection("stateRegistrationPool").findOne.mockResolvedValue({
       _id: "UK_NIR",
       countryId: "UK",
@@ -89,49 +93,36 @@ describe("rescopeRegionToCountry", () => {
     expect(order).toEqual(["write", "delete"]);
   });
 
-  it("survives the destination already holding a row for that region", async () => {
-    // A COUNTRY MERGE moves a region into a country that was seeded with its own
-    // row for the same Land, so the destination key is already taken. Insert-only
-    // re-keying throws E11000 with the source row ALREADY DELETED, which is how the
-    // live German reunification died part-way through its second Land, taking that
-    // Land's registration pool with it.
+  it("absorbs a row already living under the new key instead of colliding on it", async () => {
+    // Ticket #1247: a merge that crashed mid-region left `DE_MV` re-keyed
+    // beside the source row `DD_MV`. A retry must replace the survivor, not
+    // die on the unique `_id`: that E11000 failed the impose request and, the
+    // crisis being one-shot AT THE TIME, left Germany half-merged for good.
+    //
+    // Actuation is resumable now -- it holds a lease and stamps completion only
+    // once the consequences land -- so a collision here no longer strands the
+    // world. It still must not happen: the retry that resumes the merge is the
+    // very thing that meets the re-keyed row.
     db.collection("stateRegistrationPool").findOne.mockResolvedValue({
       _id: "DD_MV",
       stateId: "MV",
       countryId: "DD",
-      independent: 500,
+      independent: 900,
     });
-    db.collection("stateRegistrationPool").insertOne.mockRejectedValue(
-      Object.assign(new Error("E11000 duplicate key error"), { code: 11000 })
-    );
-    await expect(
-      rescopeRegionToCountry(db as unknown as Db, "MV", "DD", "DE", [
-        { collection: "stateRegistrationPool", key: "compositeCountryState" },
-      ])
-    ).resolves.toBeDefined();
-  });
-
-  it("lets the MOVING region's own row win over the destination's seeded one", async () => {
-    // The region is the thing that moves, so its live row goes with it. The
-    // destination's row is for a Land it never actually held. (A region FUSE is the
-    // other way round and keeps the target's row, which `mergeRegion` argues at its
-    // own call site: there both regions stay in one country.)
-    db.collection("stateRegistrationPool").findOne.mockResolvedValue({
-      _id: "DD_MV",
-      stateId: "MV",
-      countryId: "DD",
-      independent: 500,
+    db.collection("stateRegistrationPool").replaceOne.mockResolvedValue({
+      matchedCount: 1,
+      upsertedCount: 0,
     });
     await rescopeRegionToCountry(db as unknown as Db, "MV", "DD", "DE", [
       { collection: "stateRegistrationPool", key: "compositeCountryState" },
     ]);
     const mocks = db.collectionMocks["stateRegistrationPool"];
-    expect(mocks.deleteOne).toHaveBeenCalledWith({ _id: "DD_MV" });
-    const [filter, doc, options] = mocks.replaceOne.mock.calls[0];
-    expect(filter).toEqual({ _id: "DE_MV" });
-    expect(doc.countryId).toBe("DE");
-    expect(doc.independent).toBe(500);
-    expect(options).toEqual({ upsert: true });
+    // Replace targeted the existing row, upsert guarantees it exists.
+    expect(mocks.replaceOne.mock.calls[0][0]).toEqual({ _id: "DE_MV" });
+    expect(mocks.replaceOne.mock.calls[0][2]).toMatchObject({ upsert: true });
+    expect(mocks.replaceOne.mock.calls[0][1]._id).toBe("DE_MV");
+    expect(mocks.replaceOne.mock.calls[0][1].countryId).toBe("DE");
+    expect(mocks.insertOne).not.toHaveBeenCalled();
   });
 
   it("returns a matched-count report per collection", async () => {

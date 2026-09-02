@@ -11,6 +11,7 @@ import type {
   ElectedOfficial,
   SpeakerElection,
   SpeakerNomination,
+  SpeakerVacateMotion,
   HouseLeadershipElection,
   HouseLeadershipNomination,
   SenateLeadershipElection,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/db/collections/governmentFormation";
 import type { CountryId } from "@/lib/constants/countries";
 import { getCabinetWhipChamber, getConfidenceWhipChamber } from "@/lib/partyWhips/constraints";
+import { officialsCountryScope } from "@/lib/db/electedOfficialScope";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import {
   summarizePlayerWhips,
@@ -30,6 +32,8 @@ import {
 import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 import { isVoteClosed } from "@/lib/turn/parliamentaryGovernment";
 import { isLeadershipElectionClosed } from "@/lib/congress/leadershipElections";
+import { impeachmentStageChamberKey } from "@/lib/impeachment/impeachmentTally";
+import type { Impeachment } from "@/lib/db/types/impeachment";
 import { getGameTime } from "@/lib/time/gameTime";
 import { getPartyMap } from "@/lib/db/partyMap";
 import { getHouseComposition } from "@/lib/congress/houseComposition";
@@ -147,6 +151,11 @@ export async function GET(request: Request, { params }: RouteParams) {
       .find({
         party: partyIdStr,
         officeType: { $in: officeTypes },
+        // Country-scope the officials: party sequentialIds collide across
+        // countries and "house"/"senate" are shared office types, so without
+        // this a chair saw whippable items on the strength of a foreign party's
+        // members (bug #0699). The sibling whippable-bills route already does.
+        ...officialsCountryScope(countryId),
       })
       .toArray();
 
@@ -199,6 +208,19 @@ export async function GET(request: Request, { params }: RouteParams) {
           .collection<SpeakerElection>("speakerElections")
           .findOne({ _id: "current", status: "voting" })
       : null;
+
+    // Get the open motion to vacate the chair (US only). Resolution is lazy, so
+    // filter on the game clock as well as the status: a motion left in "voting"
+    // past its deadline is over and must not appear as whippable.
+    const vacateMotionDoc = isUS
+      ? await db
+          .collection<SpeakerVacateMotion>("speakerVacateMotions")
+          .findOne({ _id: "current", status: "voting" })
+      : null;
+    const vacateMotion =
+      vacateMotionDoc && !isLeadershipElectionClosed(vacateMotionDoc, currentTurnForLeadership, now)
+        ? vacateMotionDoc
+        : null;
 
     // Get Speaker nominations if election is active
     let speakerNominations: SpeakerNomination[] = [];
@@ -263,6 +285,8 @@ export async function GET(request: Request, { params }: RouteParams) {
             "pmAppointmentVote",
             "noConfidenceVote",
             "cabinetNomination",
+            "speakerVacateMotion",
+            "impeachmentVote",
           ],
         },
         partyId: partyIdStr,
@@ -335,6 +359,83 @@ export async function GET(request: Request, { params }: RouteParams) {
       });
     }
 
+    // Add the open motion to vacate the chair. Unlike a leadership election
+    // this is not gated on a role policy: every party seated in the House votes
+    // on it, and its absolute-majority-of-all-seats bar means a party's blocs
+    // matter even when it holds no leadership office.
+    if (hasLowerNPPs && vacateMotion) {
+      const whipKey = `speakerVacateMotion_current_${lowerKey}`;
+      const { nppSummary, playerSummary } = buildSummaries(whipKey, vacateMotion.startedAt);
+      result[lowerKey].push({
+        id: "current",
+        type: "speakerVacateMotion",
+        chamber: lowerKey,
+        endsAt: vacateMotion.endsAt,
+        candidacies: [
+          {
+            id: "current",
+            nomineeName: `Motion to vacate ${vacateMotion.targetSpeakerName}`,
+            votesFor: 0,
+          },
+        ],
+        nppWhip: nppSummary,
+        playerWhip: playerSummary,
+        existingWhips: nppSummary.existingWhips,
+        canWhip: nppSummary.canWhip,
+      });
+    }
+
+    // Add open presidential impeachments, on whichever chamber is sitting at the
+    // case's current stage. Governor cases are tried by a state legislature and
+    // belong to the state party's panel, so they are excluded here.
+    const openImpeachments = await db
+      .collection<Impeachment>("impeachments")
+      .find({ countryId, stage: { $in: ["house", "senate"] }, targetOffice: { $ne: "governor" } })
+      .toArray();
+
+    for (const impeachment of openImpeachments) {
+      const stageChamber = impeachmentStageChamberKey(impeachment);
+      if (!stageChamber || !result[stageChamber]) continue;
+
+      const stageEndsOnTurn =
+        impeachment.stage === "house"
+          ? impeachment.houseVotingEndsOnTurn
+          : impeachment.senateVotingEndsOnTurn;
+      if (stageEndsOnTurn != null && currentTurnForLeadership > stageEndsOnTurn) continue;
+
+      // Only offer it to a chair whose members actually sit in that chamber.
+      const seated = stageChamber === lowerKey ? hasLowerNPPs : hasUpperNPPs;
+      if (!seated) continue;
+
+      const whipKey = `impeachmentVote_${impeachment._id}_${stageChamber}`;
+      const { nppSummary, playerSummary } = buildSummaries(whipKey);
+      result[stageChamber].push({
+        id: impeachment._id.toString(),
+        type: "impeachmentVote",
+        chamber: stageChamber,
+        // The case stores only a closing TURN, and turns are hourly, so project
+        // it forward from the game clock rather than reporting "now".
+        endsAt:
+          stageEndsOnTurn != null
+            ? new Date(now.getTime() + (stageEndsOnTurn - currentTurnForLeadership) * 3_600_000)
+            : now,
+        candidacies: [
+          {
+            id: impeachment._id.toString(),
+            nomineeName:
+              impeachment.stage === "house"
+                ? `Impeachment of ${impeachment.targetName}`
+                : `Trial of ${impeachment.targetName}`,
+            votesFor: 0,
+          },
+        ],
+        nppWhip: nppSummary,
+        playerWhip: playerSummary,
+        existingWhips: nppSummary.existingWhips,
+        canWhip: nppSummary.canWhip,
+      });
+    }
+
     // Add lower chamber (House) leadership elections — filter each role by its
     // policy so e.g. a non-majority party doesn't see Majority Leader as
     // whippable when its members can't vote there.
@@ -369,8 +470,8 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     // Add upper chamber (Senate) leadership elections — same per-role policy
-    // filter (Pro Tempore is any-seated; Majority L/W is largest-single-party;
-    // Minority L/W is non-coalition).
+    // filter (Pro Tempore and Majority L/W are largest-single-party; Minority
+    // L/W is non-coalition).
     if (upperKey && hasUpperNPPs && senateCtx) {
       for (const election of senateLeadershipElections) {
         if (isLeadershipElectionClosed(election, currentTurnForLeadership, now)) continue;

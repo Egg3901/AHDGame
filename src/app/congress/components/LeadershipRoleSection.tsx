@@ -275,8 +275,7 @@ export function SenateLeadershipRoleSection({
           No {title}.{" "}
           {isVoting
             ? "Election in progress — plurality wins."
-            : "Admin can start a 24-hour election." +
-              (title === "President Pro Tempore" ? " Any seated senator may run and vote." : "")}
+            : "Admin can start a 24-hour election."}
         </div>
       )}
       {isVoting && electionState.myWhippedFromOriginal && (
@@ -312,9 +311,7 @@ export function SenateLeadershipRoleSection({
               : !isInParty
                 ? title.includes("Minority")
                   ? "non-majority parties only"
-                  : title === "President Pro Tempore"
-                    ? null
-                    : "majority party only"
+                  : "majority party only"
                 : null
           }
         />

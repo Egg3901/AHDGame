@@ -8,7 +8,9 @@ import {
   useRegisteredCountries,
   useEnabledCountries,
   useActivePreset,
+  useCountryDisplayName,
 } from "./RegisteredCountriesContext";
+import type { CountryId } from "@/lib/constants/countries";
 
 function RegisteredProbe() {
   return <span>registered:{useRegisteredCountries().join(",")}</span>;
@@ -22,11 +24,20 @@ function PresetProbe() {
   return <span>preset:{useActivePreset()}</span>;
 }
 
+function NameProbe({ id }: { id: CountryId }) {
+  return <span>name:{useCountryDisplayName()(id)}</span>;
+}
+
 describe("RegisteredCountriesContext", () => {
   it("provides the SSR-resolved registered set to client consumers", () => {
     render(
       <RegisteredCountriesProvider
-        value={{ registered: ["US", "UK", "SCO"], enabled: ["US", "UK"], preset: "2019-default" }}
+        value={{
+          registered: ["US", "UK", "SCO"],
+          enabled: ["US", "UK"],
+          preset: "2019-default",
+          nameOverrides: {},
+        }}
       >
         <RegisteredProbe />
       </RegisteredCountriesProvider>
@@ -37,7 +48,12 @@ describe("RegisteredCountriesContext", () => {
   it("exposes the narrower enabled set separately (player pickers gate on enablement)", () => {
     render(
       <RegisteredCountriesProvider
-        value={{ registered: ["US", "UK", "SCO"], enabled: ["US", "UK"], preset: "2019-default" }}
+        value={{
+          registered: ["US", "UK", "SCO"],
+          enabled: ["US", "UK"],
+          preset: "2019-default",
+          nameOverrides: {},
+        }}
       >
         <EnabledProbe />
       </RegisteredCountriesProvider>
@@ -60,7 +76,12 @@ describe("RegisteredCountriesContext", () => {
   it("exposes the SSR-resolved active preset (drives era-aware country names)", () => {
     render(
       <RegisteredCountriesProvider
-        value={{ registered: ["US", "UK"], enabled: ["US", "UK"], preset: "1979-default" }}
+        value={{
+          registered: ["US", "UK"],
+          enabled: ["US", "UK"],
+          preset: "1979-default",
+          nameOverrides: {},
+        }}
       >
         <PresetProbe />
       </RegisteredCountriesProvider>
@@ -71,5 +92,56 @@ describe("RegisteredCountriesContext", () => {
   it("preset falls back to 2019-default with no provider", () => {
     render(<PresetProbe />);
     expect(screen.getByText("preset:2019-default")).toBeTruthy();
+  });
+
+  it("a runtime rename wins over the compiled name", () => {
+    // Ticket: a reunified Germany kept reading as "East Germany" in the navbar,
+    // the nation switcher and the world cards, because every client surface
+    // called `getCountryDisplayName`, which only knows compiled seed data.
+    render(
+      <RegisteredCountriesProvider
+        value={{
+          registered: ["DD"],
+          enabled: ["DD"],
+          preset: "1953-default",
+          nameOverrides: { DD: "Germany" },
+        }}
+      >
+        <NameProbe id="DD" />
+      </RegisteredCountriesProvider>
+    );
+    expect(screen.getByText("name:Germany")).toBeTruthy();
+  });
+
+  it("falls back to the era-aware compiled name where there is no override", () => {
+    render(
+      <RegisteredCountriesProvider
+        value={{
+          registered: ["DD"],
+          enabled: ["DD"],
+          preset: "1953-default",
+          nameOverrides: {},
+        }}
+      >
+        <NameProbe id="DD" />
+      </RegisteredCountriesProvider>
+    );
+    expect(screen.getByText("name:East Germany")).toBeTruthy();
+  });
+
+  it("an override for one country does not rename another", () => {
+    render(
+      <RegisteredCountriesProvider
+        value={{
+          registered: ["DD", "US"],
+          enabled: ["DD", "US"],
+          preset: "1953-default",
+          nameOverrides: { DD: "Germany" },
+        }}
+      >
+        <NameProbe id="US" />
+      </RegisteredCountriesProvider>
+    );
+    expect(screen.getByText("name:United States")).toBeTruthy();
   });
 });

@@ -11,6 +11,7 @@ import {
 import {
   shouldShowCrisisOnActionsPage,
   sanitizeCrisisForActionsPage,
+  compareActionsPageCrises,
 } from "@/lib/crises/actionsPageCrises";
 import type { Crisis, CrisisInteraction } from "@/lib/db/types/crisis";
 import { isCrisisAidBillsEnabled, isCrisisInteractionEnabled } from "@/lib/crises/featureFlag";
@@ -20,6 +21,7 @@ import {
   loadCampaignCapability,
   optionAvailabilityForGlobalResponder,
   optionsForGlobalResponder,
+  visibleGlobalResponses,
 } from "@/lib/livingConflict/globalResponse";
 import type { CampaignRequirementResult } from "@/lib/livingConflict/campaign";
 import type { CampaignCapabilitySnapshot } from "@/lib/db/types/livingConflictCampaign";
@@ -157,9 +159,27 @@ export async function GET(request: Request) {
               )
             : null;
 
+        // Covert campaign choices are redacted from every government but their
+        // author until they are exposed. The crisis page does this on its own
+        // interaction read; this feed carries the same document and has to
+        // agree, or the Actions poll becomes the cheaper way to read the ledger
+        // the crisis page hides.
+        // Fail closed on a character with no country: there is no viewer nation
+        // to compare against, so nothing can be judged theirs to read. The
+        // crisis page resolves that case to an empty list too.
+        const visibleInteraction =
+          interaction && interaction.leaderResponses?.length
+            ? {
+                ...interaction,
+                leaderResponses: countryId
+                  ? visibleGlobalResponses(interaction.leaderResponses, countryId)
+                  : [],
+              }
+            : interaction;
+
         return {
           crisis,
-          interaction,
+          interaction: visibleInteraction,
           currentNode,
           canInteract,
           timeRemainingMinutes,
@@ -171,6 +191,7 @@ export async function GET(request: Request) {
 
     const affecting = enriched
       .filter((e) => shouldShowCrisisOnActionsPage(e, isLocalCrisis(e.crisis)))
+      .sort(compareActionsPageCrises)
       .map(sanitizeCrisisForActionsPage);
 
     // Per-character (filtered by country/home state) — ETag/304 keeps crisis

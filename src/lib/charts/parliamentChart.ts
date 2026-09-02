@@ -10,6 +10,7 @@ import { westminsterParliamentSvgString } from "@/lib/charts/westminsterParliame
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { computeRowRadii, getParliamentSizing } from "@/lib/charts/parliamentSizing";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
+import { officialsCountryScope } from "@/lib/db/electedOfficialScope";
 
 export interface PartySeatsData {
   party: string;
@@ -231,13 +232,9 @@ export async function getChamberComposition(
     officeType: getOfficeTypeForChamber(countryId as CountryId, chamber),
     $or: [{ characterId: { $ne: null } }, { isNPP: true }],
   };
-  // eslint-disable-next-line local/no-country-literals -- backward compat for legacy US officials without countryId
-  if (countryId === "US") {
-    // Backward compatibility: legacy US officials may not have countryId populated.
-    officialFilter.$and = [{ $or: [{ countryId: "US" }, { countryId: { $exists: false } }] }];
-  } else {
-    officialFilter.countryId = countryId;
-  }
+  // Joined under $and: the filter already carries a top-level $or for the
+  // seated/NPP disjunction, and the country scope is a second one.
+  officialFilter.$and = [officialsCountryScope(countryId as CountryId)];
 
   const [officials, parties] = await Promise.all([
     db.collection<ElectedOfficial>("electedOfficials").find(officialFilter).toArray(),

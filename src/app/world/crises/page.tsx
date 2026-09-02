@@ -15,16 +15,10 @@ import type { Crisis } from "@/lib/db/types/crisis";
 import { ALL_COUNTRY_IDS, COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
 import { crisisSeverity } from "@/lib/crises/severity";
-import { formatCrisisEffectTarget } from "@/lib/crises/effectLabels";
+import { formatCrisisEffectTarget, formatCrisisEffectValue } from "@/lib/crises/effectLabels";
 import { SovereignDebtWatchPanel } from "@/components/world/SovereignDebtWatchPanel";
 import { CountryFlag } from "@/components/CountryFlag";
 import type { Conflict } from "@/app/world/conflicts/_coldwar/conflicts";
-
-// Crisis effect magnitudes are floats and land with binary-rounding tails
-// (0.15 * 3 = 0.44999999999999996). Show at most two decimals, no trailing zeros.
-function formatEffectValue(v: number): string {
-  return Number(v.toFixed(2)).toString();
-}
 
 const SEVERITY_BADGE: Record<"low" | "medium" | "high", string> = {
   high: "border-rose-500/30 bg-rose-500/10 text-rose-500 dark:text-rose-400",
@@ -87,7 +81,7 @@ function EffectPills({ effects }: { effects: Crisis["effects"] }) {
             </svg>
           )}
           {e.value > 0 ? "+" : ""}
-          {formatEffectValue(e.value)} {formatCrisisEffectTarget(e)}
+          {formatCrisisEffectValue(e.value)} {formatCrisisEffectTarget(e)}
         </span>
       ))}
       {overflow > 0 && (
