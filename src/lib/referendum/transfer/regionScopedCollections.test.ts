@@ -68,6 +68,31 @@ describe("rescopeRegionToCountry", () => {
     expect(mocks.insertOne).not.toHaveBeenCalled();
   });
 
+  it("writes the new key BEFORE dropping the old one", async () => {
+    // Order is the difference between a failure that can simply be re-run and one
+    // that has already destroyed the row it was moving. The comment above says the
+    // old key is released second; pin it, because nothing else would catch a
+    // reordering that only bites on a crash between the two writes.
+    db.collection("stateRegistrationPool").findOne.mockResolvedValue({
+      _id: "UK_NIR",
+      countryId: "UK",
+      independent: 500,
+    });
+    const order: string[] = [];
+    db.collection("stateRegistrationPool").replaceOne.mockImplementation(async () => {
+      order.push("write");
+      return { acknowledged: true };
+    });
+    db.collection("stateRegistrationPool").deleteOne.mockImplementation(async () => {
+      order.push("delete");
+      return { deletedCount: 1 };
+    });
+    await rescopeRegionToCountry(db as unknown as Db, "NIR", "UK", "IE", [
+      { collection: "stateRegistrationPool", key: "compositeCountryState" },
+    ]);
+    expect(order).toEqual(["write", "delete"]);
+  });
+
   it("absorbs a row already living under the new key instead of colliding on it", async () => {
     // Ticket #1247: a merge that crashed mid-region left `DE_MV` re-keyed
     // beside the source row `DD_MV`. A retry must replace the survivor, not

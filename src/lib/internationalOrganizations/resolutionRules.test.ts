@@ -3,12 +3,14 @@ import { ObjectId } from "mongodb";
 import {
   ballotPasses,
   dedupeOrganizationVotes,
+  ballotIsPlayerOnly,
   requiresUnanimity,
   resolutionPasses,
   votesNeeded,
 } from "./resolutionRules";
 import type { ProposalVoteRecord } from "@/lib/db/types/internationalOrganization";
 import type { CountryId } from "@/lib/constants/countries";
+import type { OrgBallotKind } from "./resolutionRules";
 
 function vote(countryId: CountryId, v: "yes" | "no" | "abstain"): ProposalVoteRecord {
   return {
@@ -20,6 +22,21 @@ function vote(countryId: CountryId, v: "yes" | "no" | "abstain"): ProposalVoteRe
     castOnTurn: 1,
   };
 }
+
+/** Every ballot kind the game runs. Keep in step with `OrgBallotKind`. */
+const ORG_BALLOT_KINDS: OrgBallotKind[] = [
+  "free_trade_agreement",
+  "sanctions",
+  "directive",
+  "joint_statement",
+  "aid_package",
+  "set_dues",
+  "set_posture",
+  "fund_agency",
+  "join_conflict",
+  "membership_proposal",
+  "leadership_election",
+];
 
 describe("votesNeeded", () => {
   it("requires the whole ballot for the unanimous kinds", () => {
@@ -47,6 +64,42 @@ describe("requiresUnanimity", () => {
     expect(requiresUnanimity("sanctions")).toBe(false);
     expect(requiresUnanimity("aid_package")).toBe(false);
     expect(requiresUnanimity("leadership_election")).toBe(false);
+  });
+});
+
+describe("ballotIsPlayerOnly", () => {
+  it("covers the admission and the bloc war entry", () => {
+    expect(ballotIsPlayerOnly("membership_proposal")).toBe(true);
+    expect(ballotIsPlayerOnly("join_conflict")).toBe(true);
+  });
+
+  it("leaves the free trade agreement on the wider roll, unanimous though it is", () => {
+    // The two questions are NOT the same, and the FTA is the whole reason. It
+    // is voted only by its named parties, each ratifying an agreement it is
+    // itself signing, so narrowing it would leave a deal between two modelled
+    // neighbours with nobody entitled to vote at all.
+    expect(requiresUnanimity("free_trade_agreement")).toBe(true);
+    expect(ballotIsPlayerOnly("free_trade_agreement")).toBe(false);
+  });
+
+  it("leaves majority business on the wider roll", () => {
+    expect(ballotIsPlayerOnly("sanctions")).toBe(false);
+    expect(ballotIsPlayerOnly("leadership_election")).toBe(false);
+  });
+
+  it("forces a decision about any NEW unanimous ballot kind", () => {
+    // THE TRAP THIS GUARDS. A ballot decided by unanimity where a member is
+    // judging someone ELSE's business must be player-only, or an autonomous
+    // member's silence vetoes it forever — that is ticket #1257 exactly. A new
+    // unanimous kind added to UNANIMOUS_KINDS would otherwise default to the
+    // wider roll and recreate the deadlock silently.
+    //
+    // If you are adding one, decide which side it is on and update this list.
+    // The FTA is the only unanimous kind that legitimately stays wide.
+    const unanimousButWide = ORG_BALLOT_KINDS.filter(
+      (kind) => requiresUnanimity(kind) && !ballotIsPlayerOnly(kind)
+    );
+    expect(unanimousButWide).toEqual(["free_trade_agreement"]);
   });
 });
 

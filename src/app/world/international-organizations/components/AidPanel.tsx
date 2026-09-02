@@ -40,7 +40,7 @@ export function AidPanel({ org, viewer, currentTurn, votingWindowTurns, onChange
   // server will refuse.
   const viewerHoldsVote =
     viewerFmCountry != null &&
-    org.members.some((m) => m.countryId === viewerFmCountry && m.hasVote);
+    org.members.some((m) => m.countryId === viewerFmCountry && m.hasPolicyVote);
   const canTable = canTableResolutionType(org.def.category, "aid_package");
 
   const pending = org.pendingLegislation.filter((l) => l.type === "aid_package");
@@ -229,14 +229,14 @@ export function AidPanel({ org, viewer, currentTurn, votingWindowTurns, onChange
         ) : (
           pending.map((l) => {
             const turnsLeft = Math.max(0, l.closesOnTurn - currentTurn);
-            const ballotSize = org.members.filter((m) => m.hasVote).length;
+            const ballotSize = org.members.filter((m) => m.hasPolicyVote).length;
             // Fold duplicate rows first: the resolver tallies the folded ballot,
             // so anything counted here must be counted the same way.
             const votes = dedupeOrganizationVotes(l.votes);
             const yesCount = votes.filter(
               (v) =>
                 v.vote === "yes" &&
-                org.members.some((m) => m.countryId === v.countryId && m.hasVote)
+                org.members.some((m) => m.countryId === v.countryId && m.hasPolicyVote)
             ).length;
             const myVote =
               viewerFmCountry != null
@@ -302,7 +302,9 @@ export function AidPanel({ org, viewer, currentTurn, votingWindowTurns, onChange
                 />
                 <VoteRoster
                   votes={l.votes}
-                  expectedVoters={org.members.filter((m) => m.hasVote).map((m) => m.countryId)}
+                  expectedVoters={org.members
+                    .filter((m) => m.hasPolicyVote)
+                    .map((m) => m.countryId)}
                 />
               </article>
             );

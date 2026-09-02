@@ -44,7 +44,7 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
   // member without a ballot must not be offered either.
   const viewerHoldsVote =
     viewerFmCountry != null &&
-    org.members.some((m) => m.countryId === viewerFmCountry && m.hasVote);
+    org.members.some((m) => m.countryId === viewerFmCountry && m.hasPolicyVote);
 
   const leader = org.leadership;
   // Permanent-leadership orgs: the office is held ex officio by the leader
@@ -270,10 +270,10 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
           {(() => {
             // Only members holding a ballot are counted, and the bar is a
             // majority of that roll rather than of whoever turned out.
-            const ballotSize = org.members.filter((m) => m.hasVote).length;
+            const ballotSize = org.members.filter((m) => m.hasPolicyVote).length;
             const votes = dedupeOrganizationVotes(election.votes);
             const countedVotes = votes.filter((v) =>
-              org.members.some((m) => m.countryId === v.countryId && m.hasVote)
+              org.members.some((m) => m.countryId === v.countryId && m.hasPolicyVote)
             );
             const yesCount = countedVotes.filter((v) => v.vote === "yes").length;
             const noCount = countedVotes.filter((v) => v.vote === "no").length;
@@ -307,7 +307,9 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
 
                 <VoteRoster
                   votes={election.votes}
-                  expectedVoters={org.members.filter((m) => m.hasVote).map((m) => m.countryId)}
+                  expectedVoters={org.members
+                    .filter((m) => m.hasPolicyVote)
+                    .map((m) => m.countryId)}
                 />
               </>
             );

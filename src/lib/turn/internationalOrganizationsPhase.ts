@@ -20,7 +20,12 @@ import {
 import { getAllCountryAccess } from "@/lib/countryAccess";
 import type { OrgMemberId } from "@/lib/db/types/internationalOrganization";
 import { dedupeOrganizationVotes } from "@/lib/internationalOrganizations/voteWrite";
-import { ballotPasses, resolutionPasses } from "@/lib/internationalOrganizations/resolutionRules";
+import {
+  ballotIsPlayerOnly,
+  ballotPasses,
+  resolutionPasses,
+  type OrgBallotKind,
+} from "@/lib/internationalOrganizations/resolutionRules";
 import {
   applyOrganizationSanctions,
   liftOrganizationSanctions,
@@ -58,8 +63,8 @@ import {
   admitMember,
   resolveJoinApplication,
 } from "@/lib/internationalOrganizations/joinApplication";
+import { nppGovernedMembers } from "@/lib/internationalOrganizations/ballotRoll";
 import { castAutonomousOrgVotes } from "@/lib/nppAutonomy/autonomousOrgVoting";
-import { foreignPolicyModeFrom } from "@/lib/nppAutonomy/foreignPolicyRollout";
 import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
 import { reconcileAutonomousWarEntryBills } from "@/lib/internationalOrganizations/reconcileAutonomousWarEntry";
 import {
@@ -73,38 +78,64 @@ import type {
   ProposalVoteRecord,
 } from "@/lib/db/types/internationalOrganization";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
-import type { NPP, NppForeignPolicyMode } from "@/lib/db/types";
+import type { NPP } from "@/lib/db/types";
 
 function countryName(countryId: string): string {
   return COUNTRY_CONFIGS[countryId as CountryId]?.name ?? countryId;
 }
 
 /**
- * Voting roster for policy decisions. Shadow/off preserve the player-only
- * baseline. Active mode adds modelled members that have a formed NPP government
- * and a legislature capable of resolving the consequences of their vote.
+ * Voting roster for one ballot. Shadow/off preserve the player-only baseline.
+ * Active mode adds modelled members that have a formed NPP government and a
+ * legislature capable of resolving the consequences of their vote — except on
+ * the two ballots `ballotIsPlayerOnly` names.
+ *
+ * ADMISSION AND WAR ENTRY KEEP THE PLAYER-ONLY ROLL, whatever the rollout mode.
+ * That is the rule `orgMembership.ts` already states for client states, and it
+ * is here for the same reason: on those two a member is asked to consent to
+ * someone else's business, and its silence is indistinguishable from a veto. An
+ * NPP government plans once every six turns and executes a single ranked action,
+ * so across a 24-turn ballot it has four contested chances to vote. Seating it
+ * there made every Warsaw Pact admission unwinnable: China closed 5-of-7 and
+ * North Korea 2-of-7 with no "no" votes cast at all, purely because Poland and
+ * Czechoslovakia never got round to it (ticket #1257).
+ *
+ * Everything else keeps the wider roll and the modelled bloc keeps its say. On a
+ * majority ballot a silence costs a yes and nothing worse; on an FTA the voters
+ * ARE the parties, each deciding its own agreement, and narrowing that would
+ * leave a deal between two modelled neighbours with no voters at all.
  */
-async function policyVotingMembers(db: Db, organizationId: string): Promise<CountryId[]> {
+async function ballotVotingMembers(
+  db: Db,
+  organizationId: string,
+  kind: OrgBallotKind
+): Promise<CountryId[]> {
   const players = await votingMembers(db, organizationId);
-  const rollout = await db
-    .collection<{ _id: string; nppForeignPolicyMode?: NppForeignPolicyMode }>("gameState")
-    .findOne({ _id: "current" }, { projection: { nppForeignPolicyMode: 1 } });
-  if (foreignPolicyModeFrom(rollout?.nppForeignPolicyMode) !== "active") return players;
+  if (ballotIsPlayerOnly(kind)) return players;
+  return legislatingMembers(db, organizationId, players);
+}
 
-  const modelledMembers = (await getMembers(db, organizationId)).filter(
-    (member): member is CountryId =>
-      member in COUNTRY_CONFIGS && hasBillLifecycle(member as CountryId)
-  );
-  if (modelledMembers.length === 0) return players;
-  const formations = await db
-    .collection<GovernmentFormation>("governmentFormations")
-    .find({
-      _id: { $in: modelledMembers },
-      status: "formed",
-      $or: [{ pmNppId: { $ne: null } }, { presidentNppId: { $ne: null } }],
-    })
-    .toArray();
-  return Array.from(new Set([...players, ...formations.map((formation) => formation.countryId)]));
+/**
+ * Members that can be ASKED TO LEGISLATE: player-enabled members, plus — in
+ * active mode — modelled members whose formed NPP government can sponsor a bill
+ * through a real legislature.
+ *
+ * This is deliberately NOT the same list as the player-only ballot roll. Being
+ * unable to reliably *vote within a deadline* is what disqualifies an NPP member
+ * from an admission or an entry resolution; it says nothing about whether that
+ * country can be handed a war-entry bill once the bloc has already decided. `join_conflict`
+ * needs exactly this wider set (bloc war entry, #1067): France's NPP premier
+ * sponsors her own ratification bill even though France holds no ballot on the
+ * resolution that produced it.
+ */
+async function legislatingMembers(
+  db: Db,
+  organizationId: string,
+  players?: CountryId[]
+): Promise<CountryId[]> {
+  const enabled = players ?? (await votingMembers(db, organizationId));
+  const governed = await nppGovernedMembers(db, () => getMembers(db, organizationId));
+  return Array.from(new Set([...enabled, ...governed]));
 }
 
 async function getPolicyHeadSponsor(
@@ -427,10 +458,12 @@ async function resolveExpiredMembershipProposals(db: Db, currentTurn: number): P
     const members = await getMembers(db, proposal.organizationId);
     // Only player-enabled members have a vote: a client state cannot withhold a
     // unanimous "yes" it was never entitled to cast, which is what keeps
-    // unanimity workable once an alliance takes on clients.
-    const voters = (await policyVotingMembers(db, proposal.organizationId)).filter(
-      (m: string) => m !== proposingCountryId
-    );
+    // unanimity workable once an alliance takes on clients. An NPP-governed
+    // member is silent for the same practical reason and is excluded on the same
+    // grounds — see `ballotVotingMembers`.
+    const voters = (
+      await ballotVotingMembers(db, proposal.organizationId, "membership_proposal")
+    ).filter((m: string) => m !== proposingCountryId);
     const uniqueVotes = dedupeOrganizationVotes(proposal.votes as ProposalVoteRecord[]);
 
     // Unanimous current members must vote "yes". Abstain or no-vote counts as
@@ -531,11 +564,15 @@ async function resolveExpiredOrganizationLegislation(db: Db, currentTurn: number
 
   for (const item of expired) {
     const parties = (item.parties as OrgMemberId[] | undefined) ?? [];
-    // Votes — and vetoes — belong to player-enabled members only. An FTA party
-    // that cannot vote would deadlock the agreement exactly as a silent member
-    // would deadlock an admission. The agreement still *binds* every party once
-    // ratified, so only the ballot is narrowed here, not the effect below.
-    const members = await policyVotingMembers(db, item.organizationId);
+    // The roll is kind-aware. A join-conflict is player-enabled members only:
+    // it asks a member to consent to a war it is not otherwise in, and a
+    // silence under unanimity would veto it. Everything else here seats the
+    // modelled NPP bloc too — majority resolutions, where a silence costs a yes
+    // rather than vetoing, and FTAs, which are unanimous but voted only by their
+    // own named parties, each ratifying an agreement it is itself signing.
+    // Either way the agreement still *binds* every party once ratified, so only
+    // the ballot is narrowed here, not the effect below.
+    const members = await ballotVotingMembers(db, item.organizationId, item.type);
     const voterSet = new Set<string>(members);
     const votingParties = parties.filter((p): p is CountryId => voterSet.has(p));
     const uniqueVotes = dedupeOrganizationVotes(item.votes as ProposalVoteRecord[]);
@@ -581,18 +618,23 @@ async function resolveExpiredOrganizationLegislation(db: Db, currentTurn: number
       const effectMembers = (await getMembers(db, item.organizationId)).filter(
         (m): m is CountryId => m in COUNTRY_CONFIGS
       );
-      // `members` (the voting roster, computed above) travels ALONGSIDE
-      // effectMembers rather than replacing it. Sanctions and aid bind every
-      // modelled member, voting or not — a client state is still bound by its
-      // bloc's embargo — but only a member with a legislature can be ASKED to
-      // legislate, which is what join_conflict does.
+      // THREE different rolls, and they are three because they answer three
+      // different questions. `effectMembers` is bound by the result (sanctions
+      // and aid reach a client state too). `members`, computed above, is who
+      // VOTED. `legislating` is who can be asked to pass a bill about it — the
+      // one join_conflict needs, and the reason it is not `members`: an NPP
+      // government is off the unanimity ballot because it cannot be relied on to
+      // vote before the deadline, which is no reason to spare it the war it is
+      // now in.
+      const legislating =
+        item.type === "join_conflict" ? await legislatingMembers(db, item.organizationId) : members;
       await applyResolutionEffect(
         db,
         item,
         effectMembers,
         currentTurn,
         sanctionsExpiresOnTurn,
-        members
+        legislating
       );
       if (item.type === "free_trade_agreement") {
         const partyNames = parties
@@ -655,7 +697,7 @@ async function resolveExpiredLeadershipElections(db: Db, currentTurn: number): P
     // Electing a chair is a vote like any other, so the roll is the voting one.
     // This also keeps the quorum honest: a silent client state would otherwise
     // count toward turnout it can never supply.
-    const members = await policyVotingMembers(db, election.organizationId);
+    const members = await ballotVotingMembers(db, election.organizationId, "leadership_election");
     const uniqueVotes = dedupeOrganizationVotes(election.votes as ProposalVoteRecord[]);
     // Only an active "yes" counts. A member who abstains or never votes withholds
     // consent exactly as a "no" does, so the denominator is the roll rather than
@@ -745,11 +787,18 @@ async function applyResolutionEffect(
   currentTurn: number,
   expiresTurn?: number,
   /**
-   * The VOTING roster — player-enabled members only.
+   * The roster that can be ASKED TO LEGISLATE about this resolution: for
+   * `join_conflict`, the legislating roll (player-enabled members plus, in
+   * active mode, modelled members with a formed NPP government).
    *
    * Separate from `members`, which is every modelled member: an effect that binds
    * a country (sanctions, aid) is not the same set as one that asks a country to
    * legislate. Only `join_conflict` needs this.
+   *
+   * It is also NOT the ballot. An NPP-governed member holds no vote on an entry
+   * resolution — a silence under unanimity is a veto — and is still handed the
+   * war the bloc voted for. Callers for other resolution types pass the ballot,
+   * which for those coincides with this roll.
    */
   votingMemberIds: CountryId[] = []
 ): Promise<void> {
@@ -884,8 +933,13 @@ async function applyResolutionEffect(
           continue;
         }
 
-        // Offensive coalition entry remains a national political choice. A
-        // non-voting client does not acquire a fictional chamber for it.
+        // Offensive coalition entry remains a national political choice, so it
+        // needs a government that can actually take it. `votingMemberIds` is the
+        // LEGISLATING roll here, not the ballot: an NPP-governed member holds no
+        // vote on an entry resolution (silence there would veto it) and is still
+        // billed for the war the bloc has now decided on. A client state with no
+        // government of its own is on neither list and acquires no fictional
+        // chamber.
         if (!votingMemberIds.includes(countryId)) continue;
         // A bill minted for a country no engine walks never closes — it sits at
         // active_both forever, with nothing to resolve it and nothing reporting it.

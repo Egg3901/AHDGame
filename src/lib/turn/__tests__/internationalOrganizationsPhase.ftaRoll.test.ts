@@ -58,9 +58,8 @@ vi.mock("@/lib/internationalOrganizations/queries/worldOrganizations", async (im
 vi.mock("@/lib/internationalOrganizations/tribute", () => ({
   chargeOrganizationTribute: vi.fn().mockResolvedValue({ collectedLocal: 0, payers: 0, minted: 0 }),
 }));
-const admitMember = vi.fn();
 vi.mock("@/lib/internationalOrganizations/joinApplication", () => ({
-  admitMember: (...args: unknown[]) => admitMember(...args),
+  admitMember: vi.fn(),
   resolveJoinApplication: vi.fn(),
 }));
 vi.mock("@/lib/db/collections/conflicts", () => ({ getConflict: vi.fn(async () => null) }));
@@ -78,12 +77,13 @@ function accessSilencing(...silent: string[]) {
   });
 }
 
-const PROPOSAL_ID = new ObjectId("507f1f77bcf86cd7994390b1");
+const FTA_ID = new ObjectId("507f1f77bcf86cd7994390c1");
 
-/** Runs the phase with one pending admission for FR carrying `votes`. */
-async function runProposal(
+/** Runs the phase with one expired FTA between `parties` carrying `votes`. */
+async function runFta(
+  parties: string[],
   votes: { countryId: string; vote: "yes" | "no" | "abstain" }[],
-  db: Db = stubDb()
+  db: Db
 ) {
   const collections = await import("@/lib/db/collections");
   const empty = () => ({
@@ -91,9 +91,8 @@ async function runProposal(
     updateOne: vi.fn(),
     updateMany: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
   });
-
+  vi.mocked(collections.getOrganizationProposalsCollection).mockResolvedValue(empty() as never);
   vi.mocked(collections.getOrganizationMembershipsCollection).mockResolvedValue(empty() as never);
-  vi.mocked(collections.getOrganizationLegislationCollection).mockResolvedValue(empty() as never);
   vi.mocked(collections.getOrganizationLeadershipElectionsCollection).mockResolvedValue(
     empty() as never
   );
@@ -101,16 +100,18 @@ async function runProposal(
     updateOne: vi.fn(),
   } as never);
 
-  const proposalUpdate = vi.fn();
-  vi.mocked(collections.getOrganizationProposalsCollection).mockResolvedValue({
+  const legislationUpdate = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+  vi.mocked(collections.getOrganizationLegislationCollection).mockResolvedValue({
     find: vi
       .fn()
       .mockReturnValueOnce({
         toArray: vi.fn().mockResolvedValue([
           {
-            _id: PROPOSAL_ID,
-            organizationId: "NATO",
-            proposingCountryId: "FR",
+            _id: FTA_ID,
+            organizationId: "COMECON",
+            type: "free_trade_agreement",
+            parties,
+            proposingCountryId: parties[0],
             status: "pending",
             closesOnTurn: 10,
             votes,
@@ -118,73 +119,71 @@ async function runProposal(
         ]),
       })
       .mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
-    updateOne: proposalUpdate,
+    updateOne: legislationUpdate,
+    updateMany: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
   } as never);
 
   await processInternationalOrganizationsTurn(db, 10);
-
-  const status = proposalUpdate.mock.calls[0]?.[1]?.$set?.status as string | undefined;
-  return { admitted: admitMember.mock.calls.length > 0, status };
+  return legislationUpdate.mock.calls[0]?.[1]?.$set?.status as string | undefined;
 }
 
-describe("membership proposal resolution", () => {
+/**
+ * An FTA is the one unanimous ballot whose voters are its own PARTIES, each
+ * deciding its own agreement rather than consenting to someone else's. So it
+ * keeps the wider roll that admissions and war entry are narrowed away from
+ * (ticket #1257) — narrow it the same way and an agreement between two modelled
+ * neighbours has no voters at all and can never ratify, which is what Comecon
+ * was carrying two of.
+ */
+describe("free trade agreement roll", () => {
   beforeEach(async () => {
-    admitMember.mockClear();
-    roster = ["US", "UK"];
+    roster = ["RU", "HU", "CS"];
     const access = await import("@/lib/countryAccess");
     vi.mocked(access.getAllCountryAccess).mockResolvedValue(accessSilencing() as never);
   });
 
-  it("admits the applicant when every voting member votes yes", async () => {
-    const { admitted, status } = await runProposal([
-      { countryId: "US", vote: "yes" },
-      { countryId: "UK", vote: "yes" },
-    ]);
-    expect(admitted).toBe(true);
-    expect(status).toBe("approved");
-  });
-
-  it("rejects the applicant when a voting member never votes", async () => {
-    const { admitted, status } = await runProposal([{ countryId: "US", vote: "yes" }]);
-    expect(admitted).toBe(false);
-    expect(status).toBe("rejected");
-  });
-
-  it("rejects the applicant when a voting member abstains", async () => {
-    const { admitted, status } = await runProposal([
-      { countryId: "US", vote: "yes" },
-      { countryId: "UK", vote: "abstain" },
-    ]);
-    expect(admitted).toBe(false);
-    expect(status).toBe("rejected");
-  });
-
-  it("does not count a silenced member against the applicant", async () => {
+  it("ratifies an agreement between two members their own governments run", async () => {
     const access = await import("@/lib/countryAccess");
-    vi.mocked(access.getAllCountryAccess).mockResolvedValue(accessSilencing("UK") as never);
-    const { admitted, status } = await runProposal([{ countryId: "US", vote: "yes" }]);
-    expect(admitted).toBe(true);
-    expect(status).toBe("approved");
-  });
+    vi.mocked(access.getAllCountryAccess).mockResolvedValue(accessSilencing("HU", "CS") as never);
 
-  it("does not seat an NPP-governed member on an admission ballot in active mode", async () => {
-    // Ticket #1257. An NPP government plans once every six turns and casts one
-    // ranked action, so over a 24-turn ballot it has four contested chances to
-    // vote and routinely spends all four elsewhere. On a MAJORITY ballot that
-    // silence merely costs a yes; under unanimity it is a permanent veto, and it
-    // made every Warsaw Pact admission unwinnable — China closed 5-of-7 and
-    // North Korea 2-of-7 with not one "no" cast against either.
-    roster = ["US", "UK", "PL"];
-    const access = await import("@/lib/countryAccess");
-    vi.mocked(access.getAllCountryAccess).mockResolvedValue(accessSilencing("PL") as never);
-    const { admitted, status } = await runProposal(
+    const status = await runFta(
+      ["HU", "CS"],
       [
-        { countryId: "US", vote: "yes" },
-        { countryId: "UK", vote: "yes" },
+        { countryId: "HU", vote: "yes" },
+        { countryId: "CS", vote: "yes" },
       ],
-      stubDb("active", ["PL"])
+      stubDb("active", ["HU", "CS"])
     );
-    expect(admitted).toBe(true);
-    expect(status).toBe("approved");
+
+    expect(status).toBe("active");
+  });
+
+  it("still refuses one when a party its government runs has not voted", async () => {
+    const access = await import("@/lib/countryAccess");
+    vi.mocked(access.getAllCountryAccess).mockResolvedValue(accessSilencing("HU", "CS") as never);
+
+    const status = await runFta(
+      ["HU", "CS"],
+      [{ countryId: "HU", vote: "yes" }],
+      stubDb("active", ["HU", "CS"])
+    );
+
+    expect(status).toBe("rejected");
+  });
+
+  it("drops a party that holds no ballot of any kind rather than waiting on it", async () => {
+    // A macro-tier party is bound by the agreement but has no government to cast
+    // a ballot, so it must not be able to deadlock the ratification.
+    roster = ["RU", "HU", "JO"];
+    const access = await import("@/lib/countryAccess");
+    vi.mocked(access.getAllCountryAccess).mockResolvedValue(accessSilencing("HU", "JO") as never);
+
+    const status = await runFta(
+      ["HU", "JO"],
+      [{ countryId: "HU", vote: "yes" }],
+      stubDb("active", ["HU"])
+    );
+
+    expect(status).toBe("active");
   });
 });

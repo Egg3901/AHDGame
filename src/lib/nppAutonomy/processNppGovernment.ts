@@ -186,8 +186,11 @@ export async function processNppGovernment(
   const caretaker = await runCaretakerMinisters(db, countryId, currentTurn, now);
 
   // 6. Foreign policy. This stays inside the claimed Tier-1 slot so each
-  //    autonomous government considers at most one diplomatic intent per
-  //    six-hour cycle. Shadow mode only writes its audit decision.
+  //    autonomous government takes at most one diplomatic ACTION per six-hour
+  //    cycle. Ballots are not rationed by that slot — a bloc vote has a deadline
+  //    and a tariff does not, and making them compete let a member sit out every
+  //    ballot it was eligible for (#1257). Shadow mode only writes its audit
+  //    decision.
   const foreignPolicy = await processAutonomousForeignPolicy(db, countryId, currentTurn, now);
 
   return {

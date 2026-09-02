@@ -20,6 +20,31 @@ const vote = (countryId: CountryId, v: "yes" | "no" | "abstain"): ProposalVoteRe
 });
 
 describe("VoteRoster", () => {
+  it("drops a vote from a country that is not on the ballot", () => {
+    // Ticket #1257. An autonomous government casts ballots on instruments it
+    // holds no vote in, and old rows survive a member losing its vote. Every
+    // tally beside this roster ignores them, so the roster must too — showing
+    // them is what put three "yes" rows above a "1 / 2 yes" tally.
+    render(
+      <VoteRoster
+        votes={[vote("US" as CountryId, "yes"), vote("PL" as CountryId, "yes")]}
+        expectedVoters={["US"]}
+      />
+    );
+
+    expect(screen.getAllByText("United States")).toHaveLength(1);
+    expect(screen.queryByText("Poland")).toBeNull();
+  });
+
+  it("still shows every vote when no ballot is supplied", () => {
+    // No `expectedVoters` means the caller is not telling us who may vote, so
+    // filtering to an empty ballot would blank the roster entirely.
+    render(<VoteRoster votes={[vote("US" as CountryId, "yes"), vote("PL" as CountryId, "yes")]} />);
+
+    expect(screen.getAllByText("United States")).toHaveLength(1);
+    expect(screen.getAllByText("Poland")).toHaveLength(1);
+  });
+
   it("shows a country that voted twice once, on its latest vote", () => {
     // Historical duplicate rows would otherwise render the same country twice
     // with contradictory votes, and collide on the React key.
