@@ -23,12 +23,12 @@ const ROWS: Row[] = [
   { id: "salesTax", name: "Sales Tax", description: "State sales tax rate" },
   {
     id: "domesticCorporateTax",
-    name: "Corporate Tax — Domestic",
+    name: "Domestic Corporate Tax",
     description: "State tax rate on corps headquartered in this country",
   },
   {
     id: "foreignCorporateTax",
-    name: "Corporate Tax — Foreign",
+    name: "Foreign Corporate Tax",
     description: "State tax rate on corps headquartered outside this country",
   },
   { id: "propertyTax", name: "Property Tax", description: "State property tax rate" },
