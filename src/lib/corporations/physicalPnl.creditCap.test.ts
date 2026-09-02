@@ -52,6 +52,18 @@ describe("clampOtherOpexCredit", () => {
     ).toBe(0);
   });
 
+  it("nets a positive policy credit out of the bills before flooring", () => {
+    expect(clampOtherOpexCredit({ otherOpex: -1e9, ...bills, policyCredit: 100 })).toBe(
+      -(billsTotal - 100)
+    );
+    // A policy CHARGE (negative) does not widen the floor.
+    expect(clampOtherOpexCredit({ otherOpex: -1e9, ...bills, policyCredit: -100 })).toBe(
+      -billsTotal
+    );
+    // A policy credit larger than the bills leaves no room for any residual credit.
+    expect(clampOtherOpexCredit({ otherOpex: -1, ...bills, policyCredit: 10_000 })).toBe(0);
+  });
+
   it("passes non-finite input through untouched", () => {
     expect(clampOtherOpexCredit({ otherOpex: Number.NaN, ...bills })).toBeNaN();
   });
@@ -90,6 +102,25 @@ describe("assemblePhysicalPnl residual credit cap", () => {
     expect(pnl.profit).toBeLessThanOrEqual(11_948_309);
     expect(pnl.profit).toBeCloseTo(11_948_309 - 84_836, 6);
     expect(pnl.derivedMarginPct).toBe(100);
+  });
+
+  it("policy credit on top of an honest residual credit cannot push profit above revenue (prod retail shape)", () => {
+    // FR_IDF retail, turn 571: residual credit inside the bills, but a 19.6pp
+    // policy credit on top took total cost to -3.4M/day and profit 0.7% above revenue.
+    const pnl = assemblePhysicalPnl({
+      hourlyRevenue: 20_519_654,
+      inputsCost: 13_076_272,
+      laborCost: 7_085_795,
+      financialLegs: 0,
+      upkeep: 0,
+      complianceCost: 0,
+      growthCost: 0,
+      otherOpex: -17_323_754,
+      policyCredit: 4_021_852,
+    });
+    expect(pnl.otherOpexCreditCapped).toBe(true);
+    expect(pnl.totalCost).toBeCloseTo(0, 6);
+    expect(pnl.profit).toBeCloseTo(20_519_654, 6);
   });
 
   it("a positive residual is charged in full", () => {
