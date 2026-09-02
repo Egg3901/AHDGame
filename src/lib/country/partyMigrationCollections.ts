@@ -103,6 +103,36 @@ export const PARTY_KEYED_MAP_COLLECTIONS: PartyRef[] = [
 ];
 
 /**
+ * Collections whose DOCUMENT `_id` embeds the party's sequentialId.
+ *
+ * A third shape again, and the most dangerous of the three, because renumbering
+ * the field alone leaves a document that disagrees with its own key. A Mongo
+ * `_id` is immutable, so these have to be re-keyed — read, re-inserted under the
+ * new id, and the old row deleted.
+ *
+ * `statePartyOrg._id` is `${stateId}_${sequentialId}`
+ * (`getStatePartyOrgDocumentId`). Its readers are split: the region's party list
+ * queries the `partyId` FIELD while the state-party page does
+ * `findOne({ _id })`. Leaving the two disagreeing does not fail loudly — it
+ * shows one party's organisation on another party's page, and sends a Build Org
+ * spend to whichever row happens to hold that key (ticket #1256).
+ *
+ * `idTemplate` names the fields the key is built from, in order, so the rebuild
+ * cannot drift from `getStatePartyOrgDocumentId`.
+ */
+export interface PartyKeyedDocumentRef {
+  collection: string;
+  /** The party-id field on the document, which the new key is built from. */
+  field: string;
+  /** Fields joined by `_` to form `_id`; `field` is one of them. */
+  idParts: string[];
+}
+
+export const PARTY_KEYED_DOCUMENT_ID_COLLECTIONS: PartyKeyedDocumentRef[] = [
+  { collection: "statePartyOrg", field: "partyId", idParts: ["stateId", "partyId"] },
+];
+
+/**
  * The ONE collection that stores a party's ObjectId rather than its
  * sequentialId. Kept separate because it is remapped by a different key, and
  * folding it into the table above would silently no-op.

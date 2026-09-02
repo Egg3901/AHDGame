@@ -6,6 +6,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { Tooltip } from "@/components/ui";
 import { CorporationLogo } from "@/components/corporation/CorporationLogo";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 import type { StockListing, SortField, SortDir } from "../types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
@@ -62,7 +63,15 @@ function weightedAverage(members: StockListing[], pick: (l: StockListing) => num
   return sum / totalWeight;
 }
 
-function buildRows(listings: StockListing[]): Row[] {
+function buildRows(
+  listings: StockListing[],
+  /**
+   * How to name the owning country of a state-enterprise group. Passed in
+   * rather than read from `COUNTRY_CONFIGS` here, so a country renamed at
+   * runtime does not head its own group with the name it no longer uses.
+   */
+  countryName: (id: CountryId) => string
+): Row[] {
   const byCountry = new Map<string, StockListing[]>();
   const ungrouped: StockListing[] = [];
 
@@ -83,11 +92,10 @@ function buildRows(listings: StockListing[]): Row[] {
       rows.push({ kind: "listing", listing: members[0] });
       continue;
     }
-    const countryName = COUNTRY_CONFIGS[countryId as CountryId]?.name ?? countryId;
     rows.push({
       kind: "soeGroup",
       countryId,
-      countryName,
+      countryName: countryName(countryId as CountryId),
       logoUrl: members[0].logoUrl,
       members,
       marketCap: members.reduce((s, m) => s + m.marketCap, 0),
@@ -177,6 +185,7 @@ export function StockList({
   timeframe?: PriceChangeTimeframe;
 }) {
   const { formatAmount, formatPrice } = useCurrency();
+  const countryName = useCountryDisplayName();
   const [sortField, setSortField] = useState<SortField>("marketCap");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [filter, setFilter] = useState("");
@@ -206,7 +215,7 @@ export function StockList({
       );
     }
 
-    const rows = buildRows(filtered);
+    const rows = buildRows(filtered, countryName);
 
     rows.sort((a, b) => {
       let cmp = 0;
@@ -255,7 +264,7 @@ export function StockList({
     });
 
     return rows;
-  }, [listings, sortField, sortDir, filter, timeframe]);
+  }, [listings, sortField, sortDir, filter, timeframe, countryName]);
 
   const totalCount = sortedRows.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
