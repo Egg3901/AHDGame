@@ -44,6 +44,8 @@ interface PlannerFixture {
 interface RecordedDecision {
   selected: ForeignPolicyChoice | null;
   alternatives: ForeignPolicyChoice[];
+  /** Ballots are cast alongside `selected`, not instead of it (#1257). */
+  ballots: ForeignPolicyChoice[];
   acted: boolean;
   mode: "shadow" | "active";
   stage: "votes" | "proposals" | "trade" | "support" | "war";
@@ -199,8 +201,13 @@ describe("processAutonomousForeignPolicy", () => {
       acted: false,
       decisionRecorded: true,
     });
-    expect(result.choice).toMatchObject({ type: "vote_org_yes", targetCountryId: "IT" });
-    expect(recordedDecision(db).alternatives[0].reasons.join(" ")).toContain("share the US sphere");
+    // The vote is a BALLOT, not the country's one strategic action — it no
+    // longer has to out-rank a tariff to be cast (#1257).
+    expect(recordedDecision(db).ballots[0]).toMatchObject({
+      type: "vote_org_yes",
+      targetCountryId: "IT",
+    });
+    expect(recordedDecision(db).ballots[0].reasons.join(" ")).toContain("share the US sphere");
     expectNoGameplayWrites(db);
   });
 
@@ -211,9 +218,12 @@ describe("processAutonomousForeignPolicy", () => {
       pendingMemberships: [pendingMembership("RU")],
     });
 
-    const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 11, now);
+    await processAutonomousForeignPolicy(db as unknown as Db, "FR", 11, now);
 
-    expect(result.choice).toMatchObject({ type: "vote_org_no", targetCountryId: "RU" });
+    expect(recordedDecision(db).ballots[0]).toMatchObject({
+      type: "vote_org_no",
+      targetCountryId: "RU",
+    });
   });
 
   it("uses trade dependence as a brake on escalating from tariffs to embargo", async () => {
@@ -654,8 +664,13 @@ describe("processAutonomousForeignPolicy", () => {
 
     const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 16, now);
 
-    expect(result).toMatchObject({ mode: "active", acted: true, decisionRecorded: true });
-    expect(result.choice).toMatchObject({ type: "vote_org_no", pendingKind: "membership" });
+    // Nothing here but the ballot, so there is no strategic action to select —
+    // and the ballot is cast anyway, which is the point of #1257.
+    expect(result).toMatchObject({ mode: "active", decisionRecorded: true, ballotsCast: 1 });
+    expect(firstRecordedDecision(db).ballots[0]).toMatchObject({
+      type: "vote_org_no",
+      pendingKind: "membership",
+    });
     expect(executionMock).toHaveBeenCalledWith(
       expect.anything(),
       "FR",
@@ -665,15 +680,9 @@ describe("processAutonomousForeignPolicy", () => {
       now
     );
     const auditWrites = db.collection("nppForeignPolicyDecisions").updateOne.mock.calls;
-    expect(auditWrites[0][1].$setOnInsert).toMatchObject({
-      executionStatus: "claimed",
-      acted: false,
-    });
-    expect(auditWrites[1][1].$set).toMatchObject({
-      executionStatus: "executed",
-      acted: true,
-      executionNote: "Executed test choice.",
-    });
+    // Still claim-before-act: the row is written before any ballot is cast.
+    expect(auditWrites[0][1].$setOnInsert).toMatchObject({ acted: false });
+    expect(auditWrites.at(-1)?.[1].$set).toMatchObject({ ballotsCast: 1 });
   });
 
   it("keeps active trade actions behind the trade rollout stage", async () => {
@@ -698,6 +707,51 @@ describe("processAutonomousForeignPolicy", () => {
     expect(firstRecordedDecision(tradeDb)).toMatchObject({ stage: "trade" });
   });
 
+  it("casts a ballot in the same turn as a higher-scoring strategic action", async () => {
+    // THE DISCRIMINATING CASE for ticket #1257.
+    //
+    // A hostile Russia makes tariffs and embargoes available, and those outscore
+    // an organisation vote. A country plans once every six turns and executes one
+    // ranked choice, so while ballots competed for that slot the vote simply lost
+    // — four contested chances across a 24-turn ballot, and Poland and
+    // Czechoslovakia spent every one of theirs elsewhere. Under unanimity that is
+    // a permanent veto: China closed 5-of-7 and North Korea 2-of-7 in the Warsaw
+    // Pact with not one "no" cast against either.
+    //
+    // Voting is not a strategic expenditure, so both must happen this turn.
+    const db = setup({
+      mode: "active",
+      stage: "war",
+      alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
+      memberships: [membership("FR")],
+      pendingMemberships: [pendingMembership("RU")],
+    });
+
+    const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 19, now);
+
+    expect(result.ballotsCast).toBe(1);
+    expect(result.choice).not.toBeNull();
+    expect(result.choice?.type).not.toBe("vote_org_no");
+    expect(result.choice?.type).not.toBe("vote_org_yes");
+    // The ballot was cast even though it never won the action slot.
+    expect(executionMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "FR",
+      expect.anything(),
+      expect.objectContaining({ type: "vote_org_no" }),
+      19,
+      now
+    );
+    expect(executionMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "FR",
+      expect.anything(),
+      expect.objectContaining({ type: result.choice!.type }),
+      19,
+      now
+    );
+  });
+
   it("does not execute an active decision twice after a same-turn restart", async () => {
     const db = setup({
       mode: "active",
@@ -713,8 +767,11 @@ describe("processAutonomousForeignPolicy", () => {
     const first = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 17, now);
     const replay = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 17, now);
 
-    expect(first.acted).toBe(true);
-    expect(replay).toMatchObject({ acted: false, decisionRecorded: false });
+    // Ballots are cast off the action budget now, so the restart guard has to
+    // hold for them too: `decisionRecorded` gates the ballot loop exactly as it
+    // gates the strategic action, or a replayed turn would vote twice.
+    expect(first).toMatchObject({ ballotsCast: 1 });
+    expect(replay).toMatchObject({ acted: false, decisionRecorded: false, ballotsCast: 0 });
     expect(executionMock).toHaveBeenCalledTimes(1);
   });
 });

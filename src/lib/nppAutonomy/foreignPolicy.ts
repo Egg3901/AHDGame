@@ -78,6 +78,8 @@ export interface ForeignPolicyResult {
   acted: boolean;
   decisionRecorded: boolean;
   choice: ForeignPolicyChoice | null;
+  /** Ballots cast this turn, which do not compete for the action slot. */
+  ballotsCast: number;
   skipReason?: "inactive" | "off" | "no-government" | "no-choice";
 }
 
@@ -139,6 +141,13 @@ interface PersistedForeignPolicyDecision {
   headNppName: string;
   selected: ForeignPolicyChoice | null;
   alternatives: ForeignPolicyChoice[];
+  /**
+   * Ballots cast this turn. Separate from `selected` because voting is not the
+   * country's one strategic action — see `processAutonomousForeignPolicy`.
+   */
+  ballots?: ForeignPolicyChoice[];
+  /** How many of `ballots` the write path actually landed. */
+  ballotsCast?: number;
   acted: boolean;
   executionStatus: "planned" | "claimed" | "executed" | "rejected" | "no_action";
   executionNote: string;
@@ -1200,6 +1209,7 @@ export async function processAutonomousForeignPolicy(
       acted: false,
       decisionRecorded: false,
       choice: null,
+      ballotsCast: 0,
       skipReason: "inactive",
     };
   }
@@ -1212,6 +1222,7 @@ export async function processAutonomousForeignPolicy(
       acted: false,
       decisionRecorded: false,
       choice: null,
+      ballotsCast: 0,
       skipReason: "no-government",
     };
   }
@@ -1222,12 +1233,32 @@ export async function processAutonomousForeignPolicy(
       acted: false,
       decisionRecorded: false,
       choice: null,
+      ballotsCast: 0,
       skipReason: "off",
     };
   }
 
+  // BALLOTS ARE NOT THE COUNTRY'S ONE ACTION, and separating them here is the
+  // whole of ticket #1257.
+  //
+  // A country plans once every six turns and executes a single top-ranked
+  // choice. Casting a ballot used to compete for that slot against embargoes,
+  // tariffs and war conduct, so a 24-turn ballot gave each member four contested
+  // chances to vote and it lost most of them — the more so after #1233 raised
+  // war conduct above the routine band precisely to stop votes crowding IT out.
+  // Under unanimity one member losing all four is a permanent veto, which is how
+  // China closed 5-of-7 and North Korea 2-of-7 in the Warsaw Pact with not one
+  // "no" cast against either.
+  //
+  // A foreign ministry can vote in its bloc AND raise a tariff in the same week;
+  // the two were never really rivals. So every eligible ballot is cast, and the
+  // ranked action is chosen from what is left.
   const ranked = rankChoices(context);
-  const topChoice = ranked[0];
+  const isBallot = (c: ForeignPolicyChoice) =>
+    c.type === "vote_org_yes" || c.type === "vote_org_no";
+  const ballots = ranked.filter(isBallot);
+  const strategic = ranked.filter((c) => !isBallot(c));
+  const topChoice = strategic[0];
   const choice = topChoice && topChoice.score >= MINIMUM_ACTION_SCORE ? topChoice : null;
   const decision: PersistedForeignPolicyDecision = {
     _id: new ObjectId(),
@@ -1238,7 +1269,10 @@ export async function processAutonomousForeignPolicy(
     headNppId: context.head._id,
     headNppName: context.head.name,
     selected: choice,
-    alternatives: ranked.slice(0, MAX_ALTERNATIVES),
+    // Alternatives are the strategic field only: a ballot is not a road not
+    // taken any more, it is cast, and `ballots` below is where it is recorded.
+    alternatives: strategic.slice(0, MAX_ALTERNATIVES),
+    ballots,
     acted: false,
     executionStatus: context.mode === "shadow" ? "planned" : choice ? "claimed" : "no_action",
     executionNote:
@@ -1258,6 +1292,23 @@ export async function processAutonomousForeignPolicy(
   const decisionRecorded = write.upsertedCount > 0;
 
   let acted = false;
+  let ballotsCast = 0;
+  if (context.mode === "active" && decisionRecorded) {
+    // Ballots first, and every one of them. `decisionRecorded` still gates the
+    // write so a restarted worker replaying the turn cannot vote twice; the
+    // per-item `alreadyVoted` filter in `voteCandidates` is the second guard.
+    for (const ballot of ballots) {
+      const cast = await executeForeignPolicyChoice(
+        db,
+        countryId,
+        context.head,
+        ballot,
+        currentTurn,
+        now
+      );
+      if (cast.acted) ballotsCast++;
+    }
+  }
   if (context.mode === "active" && choice && decisionRecorded) {
     const execution = await executeForeignPolicyChoice(
       db,
@@ -1279,6 +1330,12 @@ export async function processAutonomousForeignPolicy(
       }
     );
   }
+  if (ballotsCast > 0) {
+    await decisions.updateOne(
+      { _id: decision._id, countryId, turn: currentTurn },
+      { $set: { ballotsCast } }
+    );
+  }
 
   return {
     ran: true,
@@ -1286,6 +1343,7 @@ export async function processAutonomousForeignPolicy(
     acted,
     decisionRecorded,
     choice,
+    ballotsCast,
     ...(choice ? {} : { skipReason: "no-choice" as const }),
   };
 }
