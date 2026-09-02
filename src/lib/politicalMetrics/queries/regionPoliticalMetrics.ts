@@ -162,12 +162,21 @@ export async function loadRegionPoliticalMetrics(
       .collection<State>("states")
       .find({ countryId }, { projection: { name: 1, population: 1, gdp: 1 } })
       .toArray(),
-    db
-      .collection<GameState>("gameState")
-      .findOne(
-        { _id: "current" },
-        { projection: { currentYear: 1, currentTurn: 1, startingYear: 1, preset: 1 } }
-      ),
+    db.collection<GameState>("gameState").findOne(
+      { _id: "current" },
+      {
+        projection: {
+          currentYear: 1,
+          currentTurn: 1,
+          startingYear: 1,
+          preset: 1,
+          // Read by loadDemocraticCompetition for the executive-continuity
+          // line. Projecting it away would silently score every region's
+          // governance card as if no executive had ever been re-elected.
+          presidentialTenureByCountry: 1,
+        },
+      }
+    ),
     db
       .collection<PoliticalMetricsRegionHistoryDoc>("politicalMetricsRegionHistory")
       .findOne({ _id: regionId }, { projection: { entries: { $slice: -SERVED_HISTORY_ENTRIES } } }),

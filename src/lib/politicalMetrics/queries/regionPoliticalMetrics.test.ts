@@ -131,6 +131,17 @@ describe("loadRegionPoliticalMetrics", () => {
     expect(res.overall).toBeCloseTo(Math.round(exact * 10) / 10, 5);
   });
 
+  it("projects the executive tenure the governance card needs", async () => {
+    // loadDemocraticCompetition reads gameState.presidentialTenureByCountry for
+    // the continuity line. Projecting it away would score every region as if no
+    // executive had ever been re-elected, silently disagreeing with the
+    // national page.
+    await load();
+    const findOne = db.collectionMocks.gameState.findOne as ReturnType<typeof vi.fn>;
+    const projection = findOne.mock.calls[0][1]?.projection;
+    expect(projection).toHaveProperty("presidentialTenureByCountry");
+  });
+
   it("scores governance style from THIS region's board", async () => {
     // Both halves of the card derive from the metric values, which are per
     // region — only the competition penalty inside democratic health is a
