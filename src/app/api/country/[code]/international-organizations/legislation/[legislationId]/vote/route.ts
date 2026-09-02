@@ -80,8 +80,11 @@ export async function POST(
       }
       // Parties are checked against membership when the agreement is tabled, but
       // a country can withdraw, or lose player-enablement, before the vote
-      // closes. The resolver narrows the ballot to voting members either way, so
-      // refuse here rather than accept a vote that will be discarded.
+      // closes. This gate is the player-enabled roll, which is the right one for
+      // an HTTP ballot whatever the instrument: it is a subset of every roll the
+      // resolver uses, so a vote accepted here is never one the resolver will
+      // discard. An autonomous member's ballot is cast by the turn engine, not
+      // through this route.
       if (!(await isVotingMember(db, legislation.organizationId, countryId))) {
         return NextResponse.json(
           badRequest(`${countryId} has no vote in ${legislation.organizationId}.`).toJson(),
