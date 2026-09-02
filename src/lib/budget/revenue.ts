@@ -449,7 +449,19 @@ export async function calculateFederalRevenue(
         repealedAt: { $exists: false },
         $or: [{ annualRevenueV2: { $gt: 0 } }, { "costModelV2.gdpRevenueFraction": { $gt: 0 } }],
       },
-      { projection: { annualRevenueV2: 1, costModelV2: 1, legislationTypeId: 1 } }
+      // `enactedAt` and `stateId` are projected because
+      // `keepLatestActiveLawPerType` keys on the id pair and breaks ties on the
+      // date. Without them every row compares `undefined > undefined` (false) and
+      // the dedupe keeps whichever row Mongo happened to return first.
+      {
+        projection: {
+          annualRevenueV2: 1,
+          costModelV2: 1,
+          legislationTypeId: 1,
+          stateId: 1,
+          enactedAt: 1,
+        },
+      }
     )
     .toArray();
   // Same gate the spending side applies before building its v2 base: a country
@@ -805,7 +817,14 @@ function pullTowardGdpShare(
  */
 function nominalGrowthCeiling(factors: EconomicGrowthFactors): number {
   const inflation = Number.isFinite(factors.inflationRate) ? Math.max(0, factors.inflationRate) : 0;
-  return factors.gdpGrowth + inflation + TAX_BASE_GROWTH_PREMIUM_CAP;
+  // `gdpGrowth` is finiteness-checked for the same reason `inflationRate` is:
+  // `Math.min(rate, NaN)` is NaN, so a single bad reading here would NaN every
+  // base that passes through the ceiling — exactly the failure `sanitizeStateTaxBases`
+  // exists to clean up, and the one `fiscalBaseGrowth`'s inflation guard already
+  // documents. Production callers pre-check via `metricRate`, but these growth
+  // helpers are exported and must not depend on every caller doing so.
+  const gdpGrowth = Number.isFinite(factors.gdpGrowth) ? factors.gdpGrowth : 0;
+  return gdpGrowth + inflation + TAX_BASE_GROWTH_PREMIUM_CAP;
 }
 
 /**

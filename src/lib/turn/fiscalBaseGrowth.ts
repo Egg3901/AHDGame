@@ -140,13 +140,22 @@ export async function processFiscalBaseGrowth(
       // future GDP moves change the amount (see FederalBudget field doc).
       if (budget.otherRevenueGdpShareBaseline == null) {
         const currentOther = budget.revenue?.other;
+        // Divided by `budget.gdp`, NOT the live regional roll-up used for the tax
+        // -base gravity above. `calculateFederalRevenue` multiplies this share by
+        // `budget.gdp`, and the two figures differ (the fiscal-close snapshot runs
+        // behind the live sum), so healing against the live figure would shift
+        // `other` by that ratio on the very first turn instead of preserving it.
+        // Same denominator in and out is what makes the heal value-neutral.
+        const budgetGdp = budget.gdp;
         if (
-          currentGdp > 0 &&
+          typeof budgetGdp === "number" &&
+          Number.isFinite(budgetGdp) &&
+          budgetGdp > 0 &&
           typeof currentOther === "number" &&
           Number.isFinite(currentOther) &&
           currentOther > 0
         ) {
-          set.otherRevenueGdpShareBaseline = currentOther / currentGdp;
+          set.otherRevenueGdpShareBaseline = currentOther / budgetGdp;
         }
       }
       await db

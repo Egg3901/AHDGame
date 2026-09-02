@@ -47,14 +47,14 @@ const CONFIG_DERIVED_TRANSFER_FIELD: Partial<
 > = {
   CN: "centralTransferGrant",
   DE: "federalEqualizationGrant",
-  // DD funds its Länder from the same config-derived central pool CN uses (see
-  // `onePartyRegionalBudget` on the DD config), and had the same hole: the 16
-  // Länder were each credited a transfer that `spending.stateGrants` recorded
-  // as ₸0, so ₸8.0B/yr showed up as regional income with no national expense
-  // (#1323). Booked under the plan-economy lapse rule below — DD is
+  // DD funds its Länder from the same config-derived equalization pool DE does
+  // (see `federalEqualizationGrantPerCapita` on the DD config), and had the same
+  // hole: the 16 Länder were each credited a transfer that `spending.stateGrants`
+  // recorded as ₸0, so ₸8.0B/yr showed up as regional income with no national
+  // expense (#1323). Booked under the plan-economy lapse rule below — DD is
   // marketization level 0, so an allocation a Land never draws down lapses
   // rather than being charged to the centre.
-  DD: "centralTransferGrant",
+  DD: "federalEqualizationGrant",
   // UK joined this set when the political-legislation v2 catalog retired
   // `uk_local_government_funding`: with no isGrant law left to book it, the
   // Westminster grant is a config-derived pool like CN's and DE's, and the

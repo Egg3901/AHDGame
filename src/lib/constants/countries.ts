@@ -5195,36 +5195,26 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
     popularMoodProfile: CN_POPULAR_MOOD_PROFILE, // one-party legitimacy drift (mirrors USSR/China)
 
     /**
-     * DD's Länder are funded by CENTRAL ALLOCATION, not by retaining a local
-     * slice of a national tax — hence `localTaxRetentionShare: 0`, which is
-     * what distinguishes this from CN's entry and makes the config the RU
-     * `unionGrant` shape expressed through the processor that already exists.
+     * DD funds its Länder the way the German model does — a share of the
+     * national income tax and VAT collected in-territory, the per-Land trade
+     * tax, and this equalization pool on top — NOT by the one-party central
+     * transfer CN uses.
      *
-     * Two reasons it is zero rather than CN's 0.40. Historically, GDR Bezirke
-     * and Länder ran on plan allocations from the centre; there was no
-     * revenue-sharing claim on enterprise profit. Mechanically, retention here
-     * would DOUBLE COUNT: `calculateFederalRevenue` already books the whole of
-     * `domesticCorporateProfits × domesticCorporateTax` at the national level
-     * with no offsetting haircut, so any positive share would be spent twice.
-     * `corporateProfitRatio` therefore only documents the base's shape — it is
-     * multiplied by a zero retention and cannot move the budget.
+     * That is a structural constraint, not a preference. The one-party model's
+     * only regional revenue term is
+     * `localTaxRetentionShare x corporateProfitRatio x regionGdp x <primary tax
+     * rate>`, and DD's primary tax is `dd.tax.domesticCorporateTax`, authored at
+     * 0% because DD collects enterprise surplus through `otherRevenue` and the
+     * product levy instead. Zero times anything funds nothing: DD's Länder carry
+     * ~1390/capita of enacted programmes, so all eleven western Länder would
+     * have sat ~10x over budget permanently and the austerity path would have
+     * stripped a policy tier from each of them every single turn (#1323).
      *
-     * `centralTransferPerCapita: 100` matches the pool already sitting in the
-     * live data (₸8.0B across 80.98M people ≈ 98.8/capita) and DE's own
-     * 1953-era `federalEqualizationGrantPerCapita` override, so unfreezing the
-     * Länder does not silently re-scale the transfer at the same time.
-     *
-     * `defaultTaxRate: 0` mirrors DD's authored `domesticCorporateTax` rate.
-     * With retention at 0 it is inert; it is set so the fallback cannot invent
-     * a rate DD never legislated.
+     * 100/capita matches both the pool already sitting in the live data
+     * (₸8.0B across 81M people) and DE's own 1953-era override, so unfreezing
+     * the Länder does not silently re-scale the transfer at the same time.
      */
-    onePartyRegionalBudget: {
-      localTaxRetentionShare: 0,
-      corporateProfitRatio: 0.0525, // = taxBaseGdpShareBaseline.domesticCorporateProfits
-      centralTransferPerCapita: 100,
-      defaultTaxRate: 0,
-      primaryTaxLegislationKey: "dd.tax.domesticCorporateTax",
-    },
+    federalEqualizationGrantPerCapita: 100,
 
     status: "coming-soon",
     tagline:

@@ -100,7 +100,9 @@ async function main() {
       `    live other            ${B(currentOther)}  (${((currentOther / liveGdp) * 100).toFixed(2)}% of GDP)`
     );
     console.log(`    authored share        ${(DD_AUTHORED_OTHER_SHARE * 100).toFixed(2)}%`);
-    console.log(`    other after heal      ${B(DD_AUTHORED_OTHER_SHARE * liveGdp)}`);
+    console.log(
+      `    other after heal      ${B(DD_AUTHORED_OTHER_SHARE * (budget.gdp ?? liveGdp))}`
+    );
 
     // ── 2. tax bases ────────────────────────────────────────────────────────
     const shareBaseline = budget.taxBaseGdpShareBaseline ?? {};
@@ -206,7 +208,10 @@ async function main() {
     const KNEE = 0.55; // DD is on the command-economy knee
     const share = rawTake / capGdp;
     const capped = share <= KNEE ? rawTake : (KNEE + (share - KNEE) * 0.4) * capGdp;
-    const healedOther = DD_AUTHORED_OTHER_SHARE * liveGdp;
+    // `calculateFederalRevenue` multiplies the share by `budget.gdp`, not the
+    // live regional roll-up, so the projection must use the same denominator or
+    // it reports a figure the engine will not produce.
+    const healedOther = DD_AUTHORED_OTHER_SHARE * capGdp;
     const revenue = capped + healedOther;
     // Spending as stored does NOT yet include the central transfer this branch
     // starts booking, so show both: the stored figure and what it becomes once

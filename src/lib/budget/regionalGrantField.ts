@@ -30,7 +30,7 @@ export const REGIONAL_GRANT_FIELD: Partial<
   JP: "nationalGrant",
   DE: "federalEqualizationGrant",
   CN: "centralTransferGrant",
-  DD: "centralTransferGrant",
+  DD: "federalEqualizationGrant",
   UK: "westminsterGrant",
   RU: "unionGrant",
 };

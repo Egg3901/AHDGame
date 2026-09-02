@@ -160,6 +160,23 @@ function getOptionCostPerCapita(
   return option?.annualCostPerCapita ?? 0;
 }
 
+/**
+ * Optional `RegionalBudget` fields belonging to the OTHER country shapes (JP's
+ * prefectural taxes, DE's Laender shares, RU's union grant). This processor owns
+ * the CN-style set, so it clears these on every write — see the `$unset` at the
+ * upsert for why a document must never carry two shapes at once.
+ */
+const FOREIGN_SHAPE_FIELDS = {
+  residentTaxRevenue: "",
+  fixedAssetTaxRevenue: "",
+  nationalGrant: "",
+  incomeTaxShare: "",
+  vatShare: "",
+  federalEqualizationGrant: "",
+  tradeTaxRevenue: "",
+  unionGrant: "",
+} as const;
+
 // ── Turn processing ──────────────────────────────────────────────────────────
 
 /**
@@ -179,7 +196,12 @@ export async function processCNRegionalBudgets(
  * Every country whose config carries `onePartyRegionalBudget`, in one pass —
  * what the turn phase calls. Driving off the config rather than a hardcoded
  * list is the point: a one-party country that populates the field is processed
- * without further wiring, which is how DD picks this up.
+ * without further wiring.
+ *
+ * CN is currently the only one. DD was evaluated and deliberately left on the
+ * Länder revenue-sharing model instead — this model's only regional revenue term
+ * multiplies by the country's primary tax rate, and DD authors that at 0%, so it
+ * would have funded nothing. See `processLaenderRegionalBudgets` (#1323).
  *
  * Countries are independent (each touches only its own regions' docs), so the
  * per-country passes run concurrently.
@@ -208,11 +230,8 @@ export async function processAllOnePartyRegionalBudgets(
  * `onePartyRegionalBudget` — the "local retention + central transfer" shape
  * that field was always documented to serve ("a future second one-party
  * country with the same shape can populate this and pick up the processor
- * without code changes"). CN was the only caller until DD, the unified
- * Germany, needed it: `processDERegionalBudgets` is scoped to `countryId:
- * "DE"`, which has held zero states since the shell dissolved on turn 550, so
- * DD's 16 Länder had no processor at all and their budgets froze at that turn
- * (refs #1323).
+ * without code changes"). Generalised while fixing #1323; CN remains the only
+ * country on this model.
  *
  * A country wires itself in by populating the config plus the two id
  * conventions this reads: `<lowercase id>_national` for national policy rows
@@ -411,7 +430,25 @@ export async function processOnePartyRegionalBudgets(
     };
 
     regionalBudgetOps.push({
-      updateOne: { filter: { _id: region._id }, update: { $set: budgetDoc }, upsert: true },
+      updateOne: {
+        filter: { _id: region._id },
+        // `$unset` the shapes this processor does NOT own. `RegionalBudget` is a
+        // union of per-country field sets, and `buildRegionalRevenueShape`
+        // dispatches on WHICH FIELDS ARE PRESENT, checking the DE branch
+        // (`incomeTaxShare`/`vatShare`) before the CN one. A region that changes
+        // model keeps its old fields under a plain `$set`, so it would carry two
+        // shapes at once and readers would resolve the stale one: DD's Länder
+        // still hold the DE fields their budgets froze with on turn 550, and
+        // would have reported the old `federalEqualizationGrant` as income while
+        // the national budget booked `centralTransferGrant` as the expense —
+        // reopening the very mismatch this processor was wired up to close
+        // (#1323). Clearing them leaves exactly one shape on the document.
+        update: {
+          $set: budgetDoc,
+          $unset: FOREIGN_SHAPE_FIELDS,
+        },
+        upsert: true,
+      },
     });
 
     regionsProcessed++;
