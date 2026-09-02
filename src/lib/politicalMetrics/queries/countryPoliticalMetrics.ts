@@ -23,7 +23,9 @@ import {
 } from "../cabinetResidual";
 import {
   buildModifiers,
+  buildRelevantLegislation,
   type CabinetSourceContribution,
+  type MetricLegislationInfo,
   type MetricModifiersInfo,
 } from "./metricsAssembly";
 import { aggregateNationalPoliticalMetrics, categoryScore, overallScore } from "../aggregate";
@@ -83,59 +85,22 @@ const MODERN_INDICATORS_FROM_YEAR = 1990;
 export type { CabinetSourceContribution, MetricModifiersInfo } from "./metricsAssembly";
 export { driftHalfLifeTurns } from "./metricsAssembly";
 
-export interface MetricLegislationInfo {
-  primary: {
-    lawId: string;
-    title: string;
-    level: number;
-    levelName: string;
-    /** Annual net (revenue − cost) at the enacted level, local currency. */
-    annualNet: number;
-  } | null;
-  secondaries: Array<{ lawId: string; title: string; level: number; levelName: string }>;
-}
+// The legislation join lives in ./metricsAssembly so the region loader can run
+// the same join against its OWN enacted levels.
+export type { MetricLegislationInfo } from "./metricsAssembly";
 
-/**
- * Relevant Legislation panel data (political-legislation spec §8): each
- * metric's primary law at its enacted level with its annual net, plus the
- * secondaries that touch the metric. Empty map for countries without a
- * new-generation catalog.
- */
+/** National Relevant-Legislation map: the national law book at authored baselines. */
 async function loadRelevantLegislation(
   db: Db,
   countryId: PoliticalMetricsCountryId,
   states: Pick<State, "_id" | "population" | "gdp">[]
 ): Promise<{ map: Map<string, MetricLegislationInfo>; levels: Map<string, number> }> {
-  const map = new Map<string, MetricLegislationInfo>();
   const levels = await getEnactedLevels(db, countryId);
   const base = {
     gdp: states.reduce((sum, s) => sum + (s.gdp ?? 0), 0) * 1_000_000,
     population: states.reduce((sum, s) => sum + (s.population ?? 0), 0),
   };
-  for (const law of getCatalog(countryId)) {
-    if (law.kind === "tax" || !law.levels) continue;
-    const level = levels.get(law.id) ?? law.baselineLevel ?? 0;
-    const levelName = law.levels[level]?.name ?? "";
-    if (law.kind === "primary") {
-      const metricId = law.targets[0].metricId;
-      const { net } = computeLawCost(law.levels[level], base, countryId, null);
-      const existing = map.get(metricId) ?? { primary: null, secondaries: [] };
-      existing.primary = {
-        lawId: law.id,
-        title: law.title,
-        level,
-        levelName,
-        annualNet: net,
-      };
-      map.set(metricId, existing);
-    } else {
-      for (const target of law.targets) {
-        const existing = map.get(target.metricId) ?? { primary: null, secondaries: [] };
-        existing.secondaries.push({ lawId: law.id, title: law.title, level, levelName });
-        map.set(target.metricId, existing);
-      }
-    }
-  }
+  const map = buildRelevantLegislation(countryId, levels, base, (law) => law.baselineLevel ?? 0);
   return { map, levels };
 }
 

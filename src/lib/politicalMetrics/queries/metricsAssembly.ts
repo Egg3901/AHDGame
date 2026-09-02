@@ -15,7 +15,13 @@ import {
   REGIONAL_SUPPLEMENT_FACTOR,
   type ModifierRow,
 } from "@/lib/politicalLegislation/dynamics";
-import type { LawCountryId } from "@/lib/politicalLegislation/types";
+import { getCatalog } from "@/lib/politicalLegislation/catalog";
+import { computeLawCost } from "@/lib/politicalLegislation/costEngine";
+import type {
+  CostAnchorCountryId,
+  LawCountryId,
+  PoliticalLaw,
+} from "@/lib/politicalLegislation/types";
 import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
 import {
   CABINET_RESIDUAL_CAP_PER_SOURCE,
@@ -133,6 +139,61 @@ export function cabinetContributionsFor(
     .filter((row) => row.value !== 0)
     .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
   return { total, saturated, bySource };
+}
+
+export interface MetricLegislationInfo {
+  primary: {
+    lawId: string;
+    title: string;
+    level: number;
+    levelName: string;
+    /** Annual net (revenue − cost) at the enacted level, local currency. */
+    annualNet: number;
+  } | null;
+  secondaries: Array<{ lawId: string; title: string; level: number; levelName: string }>;
+}
+
+/**
+ * Relevant Legislation panel data (political-legislation spec §8): each
+ * metric's primary law at the GIVEN levels with its annual net, plus the
+ * secondaries that touch the metric. Empty map for countries without a
+ * new-generation catalog.
+ *
+ * Pure, and takes `levels` rather than reading them, so the national view can
+ * pass the national law book and a region view can pass its own. `fallback`
+ * supplies the level for a law the level map does not mention: the national
+ * view uses the law's authored baseline, a region uses
+ * `regionalDefaultLevel`, which is 0 for a `both` law the region has never
+ * legislated on.
+ */
+export function buildRelevantLegislation(
+  // The ANCHOR axis, matching computeLawCost: a unified Germany prices rescoped
+  // laws through an anchor without owning a catalogue.
+  countryId: CostAnchorCountryId,
+  levels: ReadonlyMap<string, number>,
+  base: { gdp: number; population: number },
+  fallback: (law: PoliticalLaw) => number
+): Map<string, MetricLegislationInfo> {
+  const map = new Map<string, MetricLegislationInfo>();
+  for (const law of getCatalog(countryId)) {
+    if (law.kind === "tax" || !law.levels) continue;
+    const level = levels.get(law.id) ?? fallback(law);
+    const levelName = law.levels[level]?.name ?? "";
+    if (law.kind === "primary") {
+      const metricId = law.targets[0].metricId;
+      const { net } = computeLawCost(law.levels[level], base, countryId, null);
+      const existing = map.get(metricId) ?? { primary: null, secondaries: [] };
+      existing.primary = { lawId: law.id, title: law.title, level, levelName, annualNet: net };
+      map.set(metricId, existing);
+    } else {
+      for (const target of law.targets) {
+        const existing = map.get(target.metricId) ?? { primary: null, secondaries: [] };
+        existing.secondaries.push({ lawId: law.id, title: law.title, level, levelName });
+        map.set(target.metricId, existing);
+      }
+    }
+  }
+  return map;
 }
 
 export interface ModifiersInput {
