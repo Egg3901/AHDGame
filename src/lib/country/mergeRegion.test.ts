@@ -112,21 +112,36 @@ describe("mergeRegion", () => {
     expect(call?.[1].$unset).toHaveProperty("taxBases");
   });
 
-  it("re-homes the absorbed half's party organisations onto the survivor", async () => {
-    // Reunification fuse: the eastern orgs' parties do not exist in the western
-    // half, so every row re-points without collision.
+  it("RE-KEYS the absorbed half's party organisations onto the survivor", async () => {
+    // Ticket #1256. `statePartyOrg._id` is `${stateId}_${partyId}`, so moving
+    // the field with `$set` leaves the row disagreeing with its own key. The
+    // region list reads by field and the state-party page reads by `_id`, so the
+    // page then renders a DIFFERENT party's organisation.
     db.collection("statePartyOrg").find.mockImplementation((f: { stateId: string }) =>
       f.stateId === "BEO"
-        ? cursorOf([{ _id: "org-sed-beo", partyId: "7", stateId: "BEO", treasury: 500 }])
+        ? cursorOf([{ _id: "BEO_7", partyId: "7", stateId: "BEO", treasury: 500 }])
         : cursorOf([])
     );
 
     await run();
 
-    const call = db.collectionMocks["statePartyOrg"].updateOne.mock.calls.find(
-      (c) => c[0]._id === "org-sed-beo"
+    const inserted = db.collectionMocks["statePartyOrg"].insertOne.mock.calls[0]?.[0];
+    expect(inserted).toMatchObject({ _id: "BE_7", stateId: "BE", partyId: "7", treasury: 500 });
+    expect(db.collectionMocks["statePartyOrg"].deleteOne).toHaveBeenCalledWith({ _id: "BEO_7" });
+  });
+
+  it("leaves an already-correct key alone rather than churning it", async () => {
+    // A row whose key already matches needs no re-key, and deleting/reinserting
+    // one would be a needless write on every fuse.
+    db.collection("statePartyOrg").find.mockImplementation((f: { stateId: string }) =>
+      f.stateId === "BEO"
+        ? cursorOf([{ _id: "BE_7", partyId: "7", stateId: "BEO", treasury: 500 }])
+        : cursorOf([])
     );
-    expect(call?.[1].$set.stateId).toBe("BE");
+
+    await run();
+
+    expect(db.collectionMocks["statePartyOrg"].insertOne).not.toHaveBeenCalled();
     expect(db.collectionMocks["statePartyOrg"].deleteOne).not.toHaveBeenCalled();
   });
 

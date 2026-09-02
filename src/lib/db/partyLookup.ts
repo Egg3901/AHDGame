@@ -32,7 +32,20 @@ export function getPartyIdString(party: PoliticalParty): string {
  * Always use this after resolving the party — raw URL segments may differ (e.g. "01" vs "1").
  */
 export function getStatePartyOrgDocumentId(stateId: string, party: PoliticalParty): string {
-  return `${stateId}_${getPartyIdString(party)}`;
+  return statePartyOrgIdFor(stateId, getPartyIdString(party));
+}
+
+/**
+ * The same key from raw parts, for callers that hold a party's sequentialId but
+ * not its document — the merge paths, which RE-KEY these rows.
+ *
+ * Both components are remapped by a reunification (parties are renumbered, and a
+ * fused region takes the survivor's id) and a Mongo `_id` is immutable, so those
+ * paths must delete and re-insert rather than `$set`. Sharing one builder is
+ * what stops the rebuilt key drifting from the one every reader looks up by.
+ */
+export function statePartyOrgIdFor(stateId: string, partySequentialId: string | number): string {
+  return `${stateId}_${partySequentialId}`;
 }
 
 /**

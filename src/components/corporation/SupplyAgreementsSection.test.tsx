@@ -48,12 +48,37 @@ beforeEach(() => {
             lastSupplierCashDelta: -250,
             lastSupplierCashCurrency: "USD",
           },
+          {
+            _id: "agreement-2",
+            supplierCorpId: "supplier",
+            supplierCorpName: "Gridworks",
+            supplierCorpTicker: "GRID",
+            buyerCorpId: "buyer2",
+            buyerCorpName: "Lone Star Mining",
+            buyerCorpTicker: "LSM",
+            commodity: "freight",
+            stateId: "TX",
+            volumeCap: 120,
+            pricePremium: 0.05,
+            status: "pending",
+            proposedByCorpId: "supplier",
+          },
         ],
         capacityByCommodity: {
           energy: {
             currentCapacityUnits: 75,
             achievableUnits: 70,
             maxContractUnits: 90,
+          },
+        },
+        capacityByState: {
+          freight: {
+            TX: {
+              stateName: "Texas",
+              currentCapacityUnits: 400,
+              achievableUnits: 380,
+              maxContractUnits: 480,
+            },
           },
         },
       }),
@@ -94,13 +119,24 @@ describe("SupplyAgreementsSection delivery outcome", () => {
     expect(screen.getByText(/50% of the market value/)).toBeTruthy();
   });
 
-  it("explains why freight is not a corporation-wide agreement option", async () => {
+  it("asks for the fulfilling state when freight is selected", async () => {
     render(<SupplyAgreementsSection corpId="supplier" />);
 
     await waitFor(() => expect(screen.getByText("As supplier")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Propose agreement" }));
+    fireEvent.change(screen.getAllByRole("combobox")[0]!, { target: { value: "freight" } });
 
-    expect(screen.getByText(/Freight agreements are state-local/i)).toBeTruthy();
-    expect(screen.getByText(/cannot be represented by a corporation-wide contract/i)).toBeTruthy();
+    expect(screen.getByText("Fulfilled from state")).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Texas (TX)" })).toBeTruthy();
+    fireEvent.change(screen.getAllByRole("combobox")[1]!, { target: { value: "TX" } });
+    expect(screen.getByText("Current contract capacity")).toBeTruthy();
+    expect(screen.getByText(/Freight is haulage capacity based in one state/)).toBeTruthy();
+  });
+
+  it("shows the state on a freight agreement card", async () => {
+    render(<SupplyAgreementsSection corpId="supplier" />);
+
+    await waitFor(() => expect(screen.getByText("As supplier")).toBeTruthy());
+    expect(screen.getByText(/· TX/)).toBeTruthy();
   });
 });
