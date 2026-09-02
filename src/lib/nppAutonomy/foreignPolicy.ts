@@ -1275,12 +1275,17 @@ export async function processAutonomousForeignPolicy(
     ballots,
     acted: false,
     executionStatus: context.mode === "shadow" ? "planned" : choice ? "claimed" : "no_action",
+    // The audit row is the only account of why a country did what it did, and a
+    // flat "no action" on a turn that cast four ballots is how #1257 stayed
+    // invisible for as long as it did. Say which of the two happened.
     executionNote:
       context.mode === "shadow"
         ? "Shadow mode records intent without changing world state."
         : choice
           ? "Active decision claimed before command execution."
-          : "No permitted choice cleared the action threshold.",
+          : ballots.length > 0
+            ? `No choice cleared the action threshold; ${ballots.length} ballot(s) to cast.`
+            : "No permitted choice cleared the action threshold.",
     createdAt: now,
   };
   const decisions = db.collection<PersistedForeignPolicyDecision>(DECISION_COLLECTION);

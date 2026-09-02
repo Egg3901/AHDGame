@@ -245,6 +245,39 @@ describe("free trade agreement tally", () => {
     expect(screen.getByText(/1 \/ 2 parties yes/)).toBeTruthy();
     expect(screen.queryByText(/\/ 3 parties yes/)).toBeNull();
   });
+
+  it("counts a party its own government runs, unlike an admission", () => {
+    // An FTA is voted only by its named parties, each deciding its OWN
+    // agreement rather than passing judgement on someone else's. So the roll
+    // here is the wider one, and Poland counts.
+    //
+    // Narrowing this the way an admission is narrowed would leave an agreement
+    // between two modelled neighbours with no voters at all, unratifiable
+    // however much both sides wanted it — Comecon was carrying two of those.
+    render(
+      <LegislationPanel
+        org={orgWith({
+          members: MEMBERS.map((m) =>
+            m.countryId === "PL" ? { ...m, hasPolicyVote: true } : m
+          ) as OrgSummary["members"],
+          pendingLegislation: [
+            {
+              _id: "f1",
+              type: "free_trade_agreement",
+              title: "Warsaw Trade Pact",
+              proposedByCharacterName: "A Minister",
+              closesOnTurn: 213,
+              parties: ["US", "PL"],
+              votes: [{ countryId: "US", vote: "yes" }],
+            },
+          ],
+        } as Partial<OrgSummary>)}
+        {...props}
+      />
+    );
+
+    expect(screen.getByText(/1 \/ 2 parties yes/)).toBeTruthy();
+  });
 });
 
 describe("duplicate vote rows", () => {

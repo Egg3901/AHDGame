@@ -32,6 +32,26 @@ export function requiresUnanimity(kind: OrgBallotKind): boolean {
 }
 
 /**
+ * Ballots that ask a member to consent to business it is NOT itself a party to,
+ * and where withholding consent blocks the whole thing.
+ *
+ * These are the two that must be decided by the player-enabled roll alone. A
+ * member that cannot reliably vote before a deadline is indistinguishable from
+ * one that is refusing, so seating it here hands it a veto it never meant to
+ * cast — which is how every Warsaw Pact admission became unwinnable (#1257).
+ *
+ * NOT the same question as `requiresUnanimity`, and the free-trade agreement is
+ * why. An FTA is unanimous too, but it is voted ONLY by its named parties, each
+ * deciding its own agreement rather than passing judgement on someone else's.
+ * Narrowing that ballot to player-enabled parties would leave an agreement
+ * between two modelled neighbours with no voters at all, so it could never
+ * ratify however much both sides wanted it.
+ */
+export function ballotIsPlayerOnly(kind: OrgBallotKind): boolean {
+  return kind === "membership_proposal" || kind === "join_conflict";
+}
+
+/**
  * Yes votes needed to carry `kind` across a ballot of `ballotSize` eligible
  * voters.
  *

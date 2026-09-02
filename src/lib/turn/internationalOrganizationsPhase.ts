@@ -21,8 +21,8 @@ import { getAllCountryAccess } from "@/lib/countryAccess";
 import type { OrgMemberId } from "@/lib/db/types/internationalOrganization";
 import { dedupeOrganizationVotes } from "@/lib/internationalOrganizations/voteWrite";
 import {
+  ballotIsPlayerOnly,
   ballotPasses,
-  requiresUnanimity,
   resolutionPasses,
   type OrgBallotKind,
 } from "@/lib/internationalOrganizations/resolutionRules";
@@ -87,22 +87,23 @@ function countryName(countryId: string): string {
 /**
  * Voting roster for one ballot. Shadow/off preserve the player-only baseline.
  * Active mode adds modelled members that have a formed NPP government and a
- * legislature capable of resolving the consequences of their vote — but only on
- * ballots decided by a majority.
+ * legislature capable of resolving the consequences of their vote — except on
+ * the two ballots `ballotIsPlayerOnly` names.
  *
- * A UNANIMITY BALLOT KEEPS THE PLAYER-ONLY ROLL, whatever the rollout mode. That
- * is the same rule `orgMembership.ts` states for client states, and it is here
- * for the same reason: under unanimity a silence is indistinguishable from a
- * veto, so a member that cannot reliably cast a ballot must not hold one. An NPP
- * government plans once every six turns and executes a single ranked action, so
- * across a 24-turn ballot it has four contested chances to vote and routinely
- * spends all four elsewhere. Seating it on a unanimity roll made every Warsaw
- * Pact admission unwinnable: China closed 5-of-7 and North Korea 2-of-7 with no
- * "no" votes cast at all, purely because Poland and Czechoslovakia never got
- * round to it (ticket #1257).
+ * ADMISSION AND WAR ENTRY KEEP THE PLAYER-ONLY ROLL, whatever the rollout mode.
+ * That is the rule `orgMembership.ts` already states for client states, and it
+ * is here for the same reason: on those two a member is asked to consent to
+ * someone else's business, and its silence is indistinguishable from a veto. An
+ * NPP government plans once every six turns and executes a single ranked action,
+ * so across a 24-turn ballot it has four contested chances to vote. Seating it
+ * there made every Warsaw Pact admission unwinnable: China closed 5-of-7 and
+ * North Korea 2-of-7 with no "no" votes cast at all, purely because Poland and
+ * Czechoslovakia never got round to it (ticket #1257).
  *
- * Majority ballots are unharmed by the same silence — it costs a yes, it does
- * not veto — so those keep the wider roll and the modelled bloc keeps its say.
+ * Everything else keeps the wider roll and the modelled bloc keeps its say. On a
+ * majority ballot a silence costs a yes and nothing worse; on an FTA the voters
+ * ARE the parties, each deciding its own agreement, and narrowing that would
+ * leave a deal between two modelled neighbours with no voters at all.
  */
 async function ballotVotingMembers(
   db: Db,
@@ -110,7 +111,7 @@ async function ballotVotingMembers(
   kind: OrgBallotKind
 ): Promise<CountryId[]> {
   const players = await votingMembers(db, organizationId);
-  if (requiresUnanimity(kind)) return players;
+  if (ballotIsPlayerOnly(kind)) return players;
   return legislatingMembers(db, organizationId, players);
 }
 
