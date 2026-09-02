@@ -39,7 +39,6 @@ export default function PolicyClient({ initialRecords, initialRecordPayload }: P
   // different route segment → a fresh server render). The social-axis fetch
   // below always runs client-side (it is auth-gated and per-session).
   const skipInitialRecordsFetch = useRef(initialRecords !== undefined);
-  const [activeDomain, setActiveDomain] = useState<string | null>(null);
   const { homeState } = useUserData();
 
   // Code is the default; the Record state lives in the URL (shareable).

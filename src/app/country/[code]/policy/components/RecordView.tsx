@@ -30,7 +30,7 @@ export function RecordView({
   /** undefined = still loading; null = fetch failed; payload = loaded. */
   record: RecordPayload | null | undefined;
   /**
-   * Region name at state scope. Only 35 of 116 regions have enacted any law of
+   * Region name at state scope. Only 35 of 237 regions have enacted any law of
    * their own, so the empty state here is the COMMON case and has to say
    * something useful rather than read as a failure.
    */

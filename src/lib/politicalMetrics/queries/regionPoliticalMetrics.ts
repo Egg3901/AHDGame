@@ -28,6 +28,7 @@ import { lawTargets } from "@/lib/politicalLegislation/dynamics";
 import { getEnactedLevels } from "@/lib/politicalLegislation/enactedLevels";
 import { regionalDefaultLevel } from "@/lib/politicalLegislation/regionalDefaults";
 import { aggregateNationalPoliticalMetrics, categoryScore, overallScore } from "../aggregate";
+import { HISTORY_CADENCE_TURNS } from "../historyCadence";
 import { loadEvidence, type EvidenceRow } from "../evidence";
 import { FAMILIES_BY_CATEGORY } from "../families";
 import { leanLabelFor, statusFor } from "../display";
@@ -48,7 +49,11 @@ import {
 /** First calendar year of the information era for indicator-list selection. */
 const MODERN_INDICATORS_FROM_YEAR = 1990;
 
-/** Cap on served trend entries, matching the national loader's bound. */
+/**
+ * Cap on served trend entries. The stored series is already capped at
+ * REGION_HISTORY_MAX_ENTRIES, so this only bounds the payload if that cap is
+ * ever raised past it.
+ */
 const SERVED_HISTORY_ENTRIES = 180;
 
 export interface RegionPoliticalMetricsResponse {
@@ -58,8 +63,12 @@ export interface RegionPoliticalMetricsResponse {
   regionName: string;
   /** "State", "Region", "Republic" — this country's word for a region. */
   regionLabel: string;
+  /** Its plural, taken from the country config rather than pluralised by hand. */
+  regionLabelPlural: string;
   year: number;
   turn: number;
+  /** Turns between trend snapshots, so the UI can label a delta honestly. */
+  historyCadenceTurns: number;
   /** This region's mean of nine category scores. */
   overall: number;
   overallStatus: string;
@@ -167,17 +176,33 @@ export async function loadRegionPoliticalMetrics(
   const nationalPoints = lawTargets(countryId, nationalLevels);
   const regionalPoints = lawTargets(countryId, regionalLevels);
 
-  // Relevant Legislation at REGION scope: the same join the national view runs,
-  // against this region's own levels rather than the national law book.
-  const regionState = states.find((s) => s._id === regionId);
+  /**
+   * Relevant Legislation shows the law IN FORCE here, which for anything but a
+   * regional sidecar is the NATIONAL one.
+   *
+   * Reading this panel off `regionalLevels` instead would break it twice over:
+   * a nationally enacted programme the region has never legislated on has no
+   * regional row, so it would render at level 0 and claim the country has no
+   * such law at all; and its annual net would be priced against one region's
+   * GDP, understating a national programme by orders of magnitude. The region's
+   * own supplement is not lost — it is the `regionalLaws` rows in Active
+   * Modifiers, at the half weight the engine actually applies.
+   */
+  const effectiveLevels = new Map(nationalLevels);
+  for (const law of getCatalog(countryId)) {
+    if (law.allowedScope === "regional") {
+      effectiveLevels.set(law.id, regionalLevels.get(law.id) ?? 0);
+    }
+  }
+  const nationalBase = {
+    gdp: states.reduce((sum, s) => sum + (s.gdp ?? 0), 0) * 1_000_000,
+    population: states.reduce((sum, s) => sum + (s.population ?? 0), 0),
+  };
   const legislationByMetric = buildRelevantLegislation(
     countryId,
-    regionalLevels,
-    {
-      gdp: (regionState?.gdp ?? 0) * 1_000_000,
-      population: regionState?.population ?? 0,
-    },
-    (law) => regionalDefaultLevel(law.id) ?? 0
+    effectiveLevels,
+    nationalBase,
+    (law) => law.baselineLevel ?? 0
   );
 
   const year = (gameState ? resolveGameYear(gameState) : null) ?? 1953;
@@ -261,8 +286,10 @@ export async function loadRegionPoliticalMetrics(
     regionId,
     regionName: nameByRegion.get(regionId) ?? regionId,
     regionLabel: COUNTRY_CONFIGS[countryId]?.regionLabel ?? "Region",
+    regionLabelPlural: COUNTRY_CONFIGS[countryId]?.regionLabelPlural ?? "Regions",
     year,
     turn: gameState?.currentTurn ?? 1,
+    historyCadenceTurns: HISTORY_CADENCE_TURNS,
     overall: round1(regionOverall),
     overallStatus: statusFor(regionOverall),
     nationalOverall: round1(overallScore(national)),

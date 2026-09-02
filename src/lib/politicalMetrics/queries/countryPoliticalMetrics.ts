@@ -10,8 +10,6 @@ import type {
 import { resolveCountryIdentity } from "@/lib/country/countryIdentity";
 import { loadDemocraticCompetition } from "@/lib/governanceStyle/loadCompetition";
 import { scoreGovernanceStyle, type GovernanceStyleScore } from "@/lib/governanceStyle/score";
-import { getCatalog } from "@/lib/politicalLegislation/catalog";
-import { computeLawCost } from "@/lib/politicalLegislation/costEngine";
 import { getEnactedLevels } from "@/lib/politicalLegislation/enactedLevels";
 import { lawTargets } from "@/lib/politicalLegislation/dynamics";
 import {
@@ -29,6 +27,7 @@ import {
   type MetricModifiersInfo,
 } from "./metricsAssembly";
 import { aggregateNationalPoliticalMetrics, categoryScore, overallScore } from "../aggregate";
+import { HISTORY_CADENCE_TURNS } from "../historyCadence";
 import { loadEvidence, type EvidenceRow } from "../evidence";
 import { FAMILIES_BY_CATEGORY } from "../families";
 import { leanLabelFor, statusFor } from "../display";
@@ -45,6 +44,8 @@ export interface CountryPoliticalMetricsResponse {
   /** Current in-game year and turn, for the masthead series/date line. */
   year: number;
   turn: number;
+  /** Turns between trend snapshots, so the UI can label a delta honestly. */
+  historyCadenceTurns: number;
   overall: number;
   overallStatus: string;
   governanceStyle: GovernanceStyleScore;
@@ -307,6 +308,7 @@ export async function loadCountryPoliticalMetrics(
     countryDisplayName: (await resolveCountryIdentity(db, countryId, gameState?.preset)).name,
     year,
     turn: gameState?.currentTurn ?? 1,
+    historyCadenceTurns: HISTORY_CADENCE_TURNS,
     overall: round1(overall),
     overallStatus: statusFor(overall),
     governanceStyle,

@@ -20,6 +20,11 @@ import type {
 import type { State } from "@/lib/db/types/state";
 import type { StatePolicy } from "@/lib/db/types/statePolicy";
 import { aggregateNationalPoliticalMetrics } from "@/lib/politicalMetrics/aggregate";
+import {
+  HISTORY_CADENCE_TURNS,
+  HISTORY_MAX_ENTRIES,
+  REGION_HISTORY_MAX_ENTRIES,
+} from "@/lib/politicalMetrics/historyCadence";
 import type { PoliticalMetricId } from "@/lib/politicalMetrics/types";
 import { getCatalog } from "@/lib/politicalLegislation/catalog";
 import {
@@ -50,14 +55,15 @@ import { politicalNodeTargets } from "@/lib/politicalMetrics/engineNodes";
 import { engineTermFor } from "@/lib/politicalMetrics/engineTerm";
 import { loadLabourRelationsPoliticalNudgesByCountry } from "@/lib/unions/labourRelationsPoliticalProvider";
 
-export const HISTORY_CADENCE_TURNS = 24;
-export const HISTORY_MAX_ENTRIES = 365;
-/**
- * Region series cap (issue #1322). Lower than the national 365 because there
- * are ~197 region docs against 26 national ones; 90 entries at the 24-turn
- * cadence is 2,160 turns of coverage, against a world currently near turn 575.
- */
-export const REGION_HISTORY_MAX_ENTRIES = 90;
+// Defined in politicalMetrics/historyCadence so a client component can read the
+// cadence without importing this module (and with it the whole turn engine).
+// Re-exported here because the existing tests and callers import them from the
+// phase that writes the series.
+export {
+  HISTORY_CADENCE_TURNS,
+  HISTORY_MAX_ENTRIES,
+  REGION_HISTORY_MAX_ENTRIES,
+} from "@/lib/politicalMetrics/historyCadence";
 
 /** Shallow numeric-map equality — whether a cabinetResiduals fold produced a change. */
 function sameNums(a: Record<string, number>, b: Record<string, number>): boolean {

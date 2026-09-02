@@ -243,6 +243,8 @@ export function UKRegionPageTabs({
   return (
     <RegionTabNav
       isAdmin={isAdmin}
+      // UK is one of the four board countries.
+      hasRegistry
       renderContent={renderContent}
       preTabContent={
         <RegionReferendumCampaign countryId="UK" regionId={stateForTabs?._id ?? region.id} />

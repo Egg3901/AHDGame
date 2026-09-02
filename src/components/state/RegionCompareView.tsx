@@ -116,7 +116,7 @@ export function RegionCompareView({
           ← {home.regionName} overview
         </Button>
         <span className="font-mono text-body-xs uppercase tracking-widest text-muted">
-          Comparison · up to {MAX_PEERS} {home.regionLabel.toLowerCase()}s
+          Comparison · up to {MAX_PEERS} {home.regionLabelPlural.toLowerCase()}
         </span>
       </div>
 

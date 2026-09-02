@@ -16,6 +16,7 @@ import type { State } from "@/lib/db/types";
 import type { StateTaxRates } from "@/lib/db/types/budget";
 import type { CountryId } from "@/lib/constants/countries";
 import { policyApiUrl, regionApiSubUrl, regionUrl } from "@/lib/urls";
+import { fetchJson } from "@/lib/observability/fetchJson";
 import { PolicyBook } from "@/app/country/[code]/policy/components/PolicyBook";
 import type { PolicyView } from "@/app/country/[code]/policy/components/PolicyMasthead";
 import type { RecordPayload } from "@/app/country/[code]/policy/components/policyView";
@@ -41,13 +42,17 @@ export function LawsTab({ state }: { state: State }) {
 
   useEffect(() => {
     let cancelled = false;
+    // fetchJson rather than bare fetch: it reports failures to GlitchTip
+    // instead of letting them vanish into a silent catch.
     Promise.all([
-      fetch(`${policyApiUrl(countryId)}?scope=state&stateId=${encodeURIComponent(stateId)}`).then(
-        (res) => (res.ok ? res.json() : [])
-      ),
-      fetch(regionApiSubUrl(countryId, stateId, "budget")).then((res) =>
-        res.ok ? res.json() : null
-      ),
+      fetchJson<PolicyRecordResponse[]>(
+        `${policyApiUrl(countryId)}?scope=state&stateId=${encodeURIComponent(stateId)}`,
+        { feature: "region-policy-records" }
+      ).catch(() => [] as PolicyRecordResponse[]),
+      fetchJson<{ taxRates?: StateTaxRates } | null>(
+        regionApiSubUrl(countryId, stateId, "budget"),
+        { feature: "region-policy-budget" }
+      ).catch(() => null),
     ])
       .then(([policyData, budgetData]) => {
         if (cancelled) return;
@@ -58,10 +63,11 @@ export function LawsTab({ state }: { state: State }) {
         if (!cancelled) setLoading(false);
       });
 
-    // The region's own enactment timeline. Separate from the two above so a
-    // Record failure cannot blank the statute book.
-    fetch(regionApiSubUrl(countryId, stateId, "policy/record"))
-      .then((res) => (res.ok ? res.json() : null))
+    // The region's own enactment timeline, fetched separately so a Record
+    // failure cannot blank the statute book beside it.
+    fetchJson<RecordPayload | null>(regionApiSubUrl(countryId, stateId, "policy/record"), {
+      feature: "region-policy-record",
+    })
       .catch(() => null)
       .then((payload) => {
         if (!cancelled) setRecordPayload(payload ?? null);

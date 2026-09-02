@@ -76,6 +76,40 @@ describe("resolveTabs", () => {
     });
   });
 
+  describe("countries with no registry never reach the Metrics tab", () => {
+    // Only the four board countries have a registry. Every other country still
+    // gets a region page, so without this gate the promotion would hand ~22
+    // countries a prominent top-level tab whose endpoint 404s.
+    it("sends ?tab=metrics to the statistics boards instead", () => {
+      expect(resolveTabs("metrics", null, false, false)).toEqual({
+        superTab: "demographics",
+        subTab: "statistics",
+      });
+    });
+
+    it("sends ?tab=metrics&sub=anything there too", () => {
+      expect(resolveTabs("metrics", "whatever", false, false)).toEqual({
+        superTab: "demographics",
+        subTab: "statistics",
+      });
+    });
+
+    it("leaves every other tab untouched", () => {
+      expect(resolveTabs("economy", "budget", false, false)).toEqual({
+        superTab: "economy",
+        subTab: "budget",
+      });
+      expect(resolveTabs("demographics", "statistics", false, false)).toEqual({
+        superTab: "demographics",
+        subTab: "statistics",
+      });
+    });
+
+    it("defaults to the registry when the flag is omitted, matching board countries", () => {
+      expect(resolveTabs("metrics", null, false)).toEqual({ superTab: "metrics", subTab: "" });
+    });
+  });
+
   describe("old single-param bookmarks still resolve the same as before", () => {
     it("?tab=politics with no sub defaults to officials", () => {
       expect(resolveTabs("politics", null, false)).toEqual({

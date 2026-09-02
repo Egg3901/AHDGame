@@ -106,7 +106,7 @@ describe("loadRegionPolicyRecordPayload", () => {
   it("returns an empty record for a region that has enacted nothing", async () => {
     db.collection("enactedLaws").find = vi.fn(() => cursorOf([]));
     const out = await load("WY");
-    // 81 of 116 regions are in exactly this state, so it is the common case.
+    // 202 of 237 regions are in exactly this state, so it is the common case.
     expect(out.points).toEqual([]);
     expect(out.events).toEqual([]);
     expect(out.provenance).toEqual({});

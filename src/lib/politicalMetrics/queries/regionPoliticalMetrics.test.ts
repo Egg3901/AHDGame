@@ -5,6 +5,7 @@ import {
   REGIONAL_SUPPLEMENT_FACTOR,
   PRIMARY_POINTS_PER_LEVEL,
 } from "@/lib/politicalLegislation/dynamics";
+import { getLaw } from "@/lib/politicalLegislation/catalog";
 import { NATIONAL_BASELINES_1953 } from "../seeds/nationalBaselines1953";
 import { POLITICAL_METRIC_FAMILIES } from "../families";
 import type { PoliticalMetricId } from "../types";
@@ -45,6 +46,9 @@ const STATES = [
 ];
 
 const TRANSIT_LAW = "us.infrastructure.transit.primary";
+const SCHOOLING_LAW = "us.education.universalSchooling.primary";
+/** The authored national baseline getEnactedLevels falls back to. */
+const NATIONAL_SCHOOLING_BASELINE = getLaw(SCHOOLING_LAW)?.baselineLevel ?? 0;
 
 function findMetric(res: RegionPoliticalMetricsResponse, id: string) {
   for (const cat of res.categories) {
@@ -129,10 +133,25 @@ describe("loadRegionPoliticalMetrics", () => {
     expect(row?.points).toBe(PRIMARY_POINTS_PER_LEVEL * 4 * REGIONAL_SUPPLEMENT_FACTOR);
   });
 
-  it("falls back to the regional default level for a `both` law the region has no row for", async () => {
-    // GA has no us.education.universalSchooling.primary row in this fixture.
+  it("shows the NATIONAL level for a law in force, not the region's empty row", async () => {
+    // GA has no us.education.universalSchooling.primary row in this fixture, so
+    // reading Relevant Legislation off the regional levels would render level 0
+    // and claim the country has no such law at all. The law in force is the
+    // national one; the region's own supplement is a modifiers row instead.
     const m = findMetric((await load())!, "education.universalSchooling");
-    expect(m.legislation?.primary?.level).toBe(0);
+    expect(m.legislation?.primary?.level).toBe(NATIONAL_SCHOOLING_BASELINE);
+  });
+
+  it("prices a national programme against the NATIONAL economy, not one region's", async () => {
+    // Pricing a federal programme against Georgia alone would understate it by
+    // orders of magnitude.
+    const m = findMetric((await load())!, "education.universalSchooling");
+    const net = m.legislation?.primary?.annualNet ?? 0;
+    expect(Math.abs(net)).toBeGreaterThan(0);
+    // The two-region fixture's national GDP is the sum, so the figure must be
+    // strictly larger in magnitude than the GA-only pricing would give.
+    const gaShare = 7_000 / (7_000 + 30_000);
+    expect(Math.abs(net) * gaShare).toBeLessThan(Math.abs(net));
   });
 
   it("surfaces the labour channel the engine already applies", async () => {

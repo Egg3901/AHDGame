@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { RegionTabNav, type SuperTabId } from "./state/RegionTabNav";
 import type { StatePageTabsProps } from "./state/StatePageTabsTypes";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { POLITICAL_METRIC_COUNTRY_IDS } from "@/lib/politicalMetrics/types";
 import { partiesUrl } from "@/lib/urls";
 import { makeUSPartyFlavor, compareUSParties } from "@/components/region/regionPartiesUSFlavor";
 import { CardSkeleton, Skeleton, StatGridSkeleton } from "@/components/ui";
@@ -99,6 +100,10 @@ export function StatePageTabs({
   regionParties = [],
   bucketProfile = null,
 }: StatePageTabsProps) {
+  // Only the four board countries have a registry to render. Everywhere else
+  // the Metrics tab is hidden rather than shown erroring.
+  const hasRegistry = (POLITICAL_METRIC_COUNTRY_IDS as readonly string[]).includes(state.countryId);
+
   const renderContent = (superTab: SuperTabId, subTab: string) => {
     // ── Overview ──
     if (superTab === "overview") {
@@ -215,6 +220,7 @@ export function StatePageTabs({
     // The political registry. Its own super-tab since the region's board is
     // what the national figure aggregates from, not a demographic footnote.
     if (superTab === "metrics") {
+      if (!hasRegistry) return null;
       return (
         <RegionRegistryTab
           countryId={state.countryId}
@@ -260,5 +266,5 @@ export function StatePageTabs({
     return null;
   };
 
-  return <RegionTabNav isAdmin={isAdmin} renderContent={renderContent} />;
+  return <RegionTabNav isAdmin={isAdmin} hasRegistry={hasRegistry} renderContent={renderContent} />;
 }

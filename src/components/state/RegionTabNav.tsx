@@ -207,12 +207,22 @@ function isValidSuperTab(id: string, isAdmin: boolean): id is SuperTabId {
 function resolveTabs(
   tabParam: string | null,
   subParam: string | null,
-  isAdmin: boolean
+  isAdmin: boolean,
+  hasRegistry: boolean = true
 ): { superTab: SuperTabId; subTab: string } {
   // Default
   const DEFAULT = { superTab: "overview" as SuperTabId, subTab: "" };
 
   if (!tabParam) return DEFAULT;
+
+  // Only the countries with an authored political-metrics board have a
+  // registry to show. For the rest the Metrics tab does not exist, and an old
+  // `?tab=metrics` link belongs where their metrics actually live: the legacy
+  // statistics boards. Landing them on an empty registry that 404s would be
+  // strictly worse than the tab they had before.
+  if (!hasRegistry && tabParam === "metrics") {
+    return { superTab: "demographics", subTab: "statistics" };
+  }
 
   // Try new format first: ?tab=politics&sub=officials. This must run before
   // the legacy check below — "politics", "economy", and "demographics" are
@@ -221,7 +231,7 @@ function resolveTabs(
   // three unconditionally and hardcode their legacy-mapped sub-tab, silently
   // ignoring whatever `sub=` the player actually clicked — locking Politics,
   // Economy, and Demographics onto their first sub-tab no matter what.
-  if (isValidSuperTab(tabParam, isAdmin)) {
+  if (isValidSuperTab(tabParam, isAdmin) && (hasRegistry || tabParam !== "metrics")) {
     const superTab = getSuperTab(tabParam as SuperTabId)!;
     const visibleSubs = getVisibleSubTabs(superTab, isAdmin);
 
@@ -253,6 +263,11 @@ function resolveTabs(
 export interface RegionTabNavProps {
   isAdmin: boolean;
   /**
+   * Whether this country has a political-metrics registry. False hides the
+   * Metrics super-tab entirely rather than showing one that cannot load.
+   */
+  hasRegistry?: boolean;
+  /**
    * Render the content for a given (superTabId, subTabId) pair.
    * For super-tabs with no sub-tabs (Overview), subTabId is "".
    */
@@ -261,10 +276,17 @@ export interface RegionTabNavProps {
   preTabContent?: React.ReactNode;
 }
 
-export function RegionTabNav({ isAdmin, renderContent, preTabContent }: RegionTabNavProps) {
+export function RegionTabNav({
+  isAdmin,
+  hasRegistry = true,
+  renderContent,
+  preTabContent,
+}: RegionTabNavProps) {
   // Hide admin-only sub-tabs before handing the definitions to the shared nav —
   // the shared component renders exactly what it is given.
-  const tabs: NavSuperTabDef[] = SUPER_TABS.map((tab) => ({
+  const tabs: NavSuperTabDef[] = SUPER_TABS.filter(
+    (tab) => hasRegistry || tab.id !== "metrics"
+  ).map((tab) => ({
     id: tab.id,
     label: tab.label,
     icon: tab.icon,
@@ -282,7 +304,7 @@ export function RegionTabNav({ isAdmin, renderContent, preTabContent }: RegionTa
       tabs={tabs}
       defaultSuperId="overview"
       preTabContent={preTabContent}
-      resolve={(tabParam, subParam) => resolveTabs(tabParam, subParam, isAdmin)}
+      resolve={(tabParam, subParam) => resolveTabs(tabParam, subParam, isAdmin, hasRegistry)}
       renderContent={(superId, subId) => renderContent(superId as SuperTabId, subId)}
     />
   );

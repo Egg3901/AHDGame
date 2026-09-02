@@ -15,7 +15,7 @@
 
 import type { Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import type { CountryId } from "@/lib/constants/countries";
 import type { Character, ElectedOfficial, State } from "@/lib/db/types";
 import type { EnactedLaw, StateBudget } from "@/lib/db/types/budget";
 import {
@@ -120,9 +120,4 @@ export async function loadRegionPolicyRecordPayload(
   }
 
   return { points, events, era, provenance };
-}
-
-/** Whether this country has regions whose law book is worth a record view. */
-export function regionRecordSupported(countryId: string): boolean {
-  return Boolean(COUNTRY_CONFIGS[countryId as CountryId]);
 }

@@ -39,6 +39,8 @@ export interface PMRegistryData {
   countryDisplayName: string;
   year: number;
   turn: number;
+  /** Turns between trend snapshots. Drives the movement tiles' labels. */
+  historyCadenceTurns: number;
   overall: number;
   overallStatus: string;
   /** Country-scope only: party competition has no regional analogue. */

@@ -44,7 +44,7 @@ describe("GET /api/country/[code]/region/[id]/policy/record", () => {
   });
 
   it("returns 200 with an empty record for a region that has enacted nothing", async () => {
-    // The common case: 81 of 116 regions have no law of their own. An empty
+    // The common case: 202 of 237 regions have no law of their own. An empty
     // record is a valid answer, not an error.
     const res = await GET(req(), params("us", "wy"));
     expect(res.status).toBe(200);

@@ -10,10 +10,11 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { CardSkeleton } from "@/components/ui/loading-skeletons";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { regionPoliticalMetricsApiUrl } from "@/lib/urls";
+import { politicalMetricsUrl, regionPoliticalMetricsApiUrl } from "@/lib/urls";
 import type { RegionPoliticalMetricsResponse } from "@/lib/politicalMetrics/queries/regionPoliticalMetrics";
 import { CategoryDetailView } from "@/app/country/[code]/political-metrics/components/CategoryDetailView";
 import { Masthead } from "@/app/country/[code]/political-metrics/components/Masthead";
@@ -118,6 +119,15 @@ export function RegionRegistryTab({
     );
   }
 
+  /**
+   * `PMRegistryData.countryDisplayName` means "what this registry is about",
+   * and the shared views print it as the subtitle: "Economy & Labor · X",
+   * "X · seven metrics spanning the ideological range". The region payload's
+   * own `countryDisplayName` is the COUNTRY, so passing it straight through
+   * would caption every Georgia page "United States".
+   */
+  const viewData = { ...data, countryDisplayName: data.regionName };
+
   return (
     <div className="flex flex-col gap-0">
       <Masthead
@@ -138,7 +148,7 @@ export function RegionRegistryTab({
       />
       {view.kind === "overview" && (
         <OverviewView
-          data={data}
+          data={viewData}
           onOpenCategory={onOpenCategory}
           onOpenMetric={onOpenMetric}
           // Governance style scores a country's party competition. A per-region
@@ -152,7 +162,7 @@ export function RegionRegistryTab({
           if (!category) return null;
           return (
             <CategoryDetailView
-              data={data}
+              data={viewData}
               category={category}
               onBack={() => setView({ kind: "overview" })}
               onOpenMetric={(metricId) => onOpenMetric(category.id, metricId)}
@@ -167,7 +177,7 @@ export function RegionRegistryTab({
           if (!category || !metric) return null;
           return (
             <MetricDetailView
-              data={data}
+              data={viewData}
               category={category}
               metric={metric}
               onBackToCategory={() => setView({ kind: "category", categoryId: category.id })}
@@ -184,6 +194,19 @@ export function RegionRegistryTab({
           onBack={() => setView({ kind: "overview" })}
         />
       )}
+      {/* The retired regional board carried this link, and it is the natural
+          next step from a region's numbers: the country they add up to. */}
+      <p className="mt-4 text-body-xs text-muted">
+        These are {data.regionName}&apos;s own registry values. The national figures they aggregate
+        into are on the{" "}
+        <Link
+          href={politicalMetricsUrl(countryId)}
+          className="text-primary underline-offset-2 hover:underline"
+        >
+          {data.countryDisplayName} registry
+        </Link>
+        .
+      </p>
     </div>
   );
 }

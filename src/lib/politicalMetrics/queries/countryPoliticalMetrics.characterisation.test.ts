@@ -41,6 +41,9 @@ const TOP_LEVEL_KEYS = [
   "countryDisplayName",
   "countryId",
   "governanceStyle",
+  // Served so the movement tiles can label a delta by the real snapshot
+  // cadence rather than claiming to be per turn.
+  "historyCadenceTurns",
   "overall",
   "overallStatus",
   "turn",
