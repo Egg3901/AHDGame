@@ -1,24 +1,34 @@
 /**
- * Ticket #1257 heal DRAFT: the Warsaw Pact applications refused by a threshold
- * nobody could see.
+ * Ticket #1257 heal: the Warsaw Pact applications refused by a threshold nobody
+ * could see.
  *
- * China and North Korea applied on turn 538 and were rejected on turn 562. The
- * resolver demanded unanimity from a 7-country roll (players plus five members
- * run by the game) while the panel showed the 2-country player roll. On the
- * corrected roll both applications are 2/2 yes: Russia and East Germany each
- * voted to admit both, and nobody voted against either.
+ * The resolver demanded unanimity from a 7-country roll (players plus five
+ * members run by the game) while the panel showed the 2-country player roll.
+ * The fix narrows an admission to the player roll; this repairs the applications
+ * that closed under the broken one.
  *
- * So this is not a judgement call about what the bloc wanted. Both applications
- * PASSED on the roll the fixed code uses, and were refused only by the bug. This
- * replays the admission the resolver would have performed on turn 562, using the
- * same writes `admitMember` makes:
+ * TWO DIFFERENT ACTS, kept apart on purpose:
+ *
+ *   REPLAY (China, North Korea) — 2/2 yes on the corrected roll. Russia and East
+ *     Germany each voted to admit both and nobody voted against either, so these
+ *     PASSED and were refused only by the bug. This replays the admission the
+ *     resolver would itself have performed on turn 562.
+ *
+ *   OVERRIDE (North Vietnam) — 1/2 on the corrected roll. Russia voted yes; East
+ *     Germany, a player, never voted at all, so this application would have been
+ *     refused by the FIXED resolver too. Admitting it is an administrative
+ *     decision, not a correction, and it is recorded as one: the world history
+ *     event says so, and the proposal is stamped with `healOverride` so nobody
+ *     later reads it as a vote that carried.
+ *
+ * Iran (closes t587) and Yugoslavia (t598) are untouched: still open, and the
+ * fixed resolver judges them on the corrected roll when they close.
+ *
+ * Writes, per admitted country, mirroring `admitMember`:
  *   - upsert the organizationMemberships row (status "active", joinedTurn)
  *   - delete any organizationWithdrawals tombstone
  *   - flip the proposal to "approved" with its resolution stamps
- *   - record the countryHistory event the resolver records
- *
- * Iran's application is untouched: it is still pending and closes on turn 587,
- * by which time the fixed resolver judges it on the corrected roll by itself.
+ *   - record the countryHistory event
  *
  * DRY RUN BY DEFAULT. Pass --apply to write.
  */
@@ -32,8 +42,12 @@ dotenv.config({ path: path.resolve(__d, "../../.env.local") });
 
 const APPLY = process.argv.includes("--apply");
 const ORG = "WARSAW_PACT";
-const APPLICANTS = ["CN", "KP"];
-const NAMES = { CN: "China", KP: "North Korea" };
+/** Carried on the corrected roll: replaying what the resolver would have done. */
+const REPLAY = ["CN", "KP"];
+/** Did NOT carry on the corrected roll: admitted by administrative decision. */
+const OVERRIDE = ["NVN"];
+const APPLICANTS = [...REPLAY, ...OVERRIDE];
+const NAMES = { CN: "China", KP: "North Korea", NVN: "North Vietnam" };
 
 const raw = process.env.MONGODB_URI_LIVE;
 if (!raw) throw new Error("MONGODB_URI_LIVE is not set");
@@ -99,10 +113,14 @@ try {
       console.log(`  NOT rejected, leaving alone\n`);
       continue;
     }
-    if (!unanimous) {
+    const isOverride = OVERRIDE.includes(applicant);
+    if (!unanimous && !isOverride) {
       console.log(`  NOT unanimous on the corrected ballot either, leaving rejected\n`);
       continue;
     }
+    // If the votes DO carry it after all, this is a replay and must not be
+    // filed as an override.
+    const override = isOverride && !unanimous;
     if (seated.has(applicant)) {
       console.log(`  already seated in ${ORG}, nothing to admit\n`);
       continue;
@@ -112,7 +130,9 @@ try {
       .collection("organizationWithdrawals")
       .findOne({ organizationId: ORG, countryId: applicant });
 
-    console.log(`  WOULD ADMIT. Writes:`);
+    console.log(
+      `  WOULD ADMIT${override ? " (ADMIN OVERRIDE, did not carry)" : " (replay of the corrected tally)"}. Writes:`
+    );
     console.log(
       `    organizationMemberships upsert {organizationId:${ORG}, countryId:${applicant}, status:"active", joinedTurn:${turn}}`
     );
@@ -120,7 +140,10 @@ try {
       `    organizationWithdrawals delete ${tombstone ? "1 tombstone" : "(none present)"}`
     );
     console.log(`    proposal ${p._id} -> status:"approved", resolvedOnTurn:${turn}`);
-    console.log(`    countryHistory insert "${NAMES[applicant]} admitted to ${ORG}."`);
+    const historyTitle = override
+      ? `${NAMES[applicant]} was admitted to ${ORG} by administrative decision.`
+      : `${NAMES[applicant]} admitted to ${ORG}.`;
+    console.log(`    countryHistory insert "${historyTitle}"`);
 
     if (APPLY) {
       const m = await db.collection("organizationMemberships").updateOne(
@@ -142,7 +165,17 @@ try {
         .deleteOne({ organizationId: ORG, countryId: applicant });
       const r = await col.updateOne(
         { _id: p._id },
-        { $set: { status: "approved", resolvedAt: now, resolvedOnTurn: turn } }
+        {
+          $set: {
+            status: "approved",
+            resolvedAt: now,
+            resolvedOnTurn: turn,
+            healedTicket: 1257,
+            // Marks an admission that did NOT carry its own ballot, so this row
+            // is never mistaken later for a vote that passed.
+            ...(override ? { healOverride: true } : {}),
+          },
+        }
       );
       await db.collection("countryHistory").insertOne({
         _id: new ObjectId(),
@@ -150,8 +183,12 @@ try {
         turn,
         timestamp: now,
         eventType: "international_relations",
-        title: `${NAMES[applicant]} admitted to ${ORG}.`,
-        details: { organizationId: ORG, healedTicket: 1257 },
+        title: historyTitle,
+        details: {
+          organizationId: ORG,
+          healedTicket: 1257,
+          ...(override ? { override: true } : {}),
+        },
       });
       console.log(
         `    applied: membership upserted=${m.upsertedCount} matched=${m.matchedCount}, ` +
