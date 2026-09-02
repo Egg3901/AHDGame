@@ -5194,6 +5194,38 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
     disallowPrivateCorporationFounding: true, // command economy: no private corp founding (mirrors USSR)
     popularMoodProfile: CN_POPULAR_MOOD_PROFILE, // one-party legitimacy drift (mirrors USSR/China)
 
+    /**
+     * DD's Länder are funded by CENTRAL ALLOCATION, not by retaining a local
+     * slice of a national tax — hence `localTaxRetentionShare: 0`, which is
+     * what distinguishes this from CN's entry and makes the config the RU
+     * `unionGrant` shape expressed through the processor that already exists.
+     *
+     * Two reasons it is zero rather than CN's 0.40. Historically, GDR Bezirke
+     * and Länder ran on plan allocations from the centre; there was no
+     * revenue-sharing claim on enterprise profit. Mechanically, retention here
+     * would DOUBLE COUNT: `calculateFederalRevenue` already books the whole of
+     * `domesticCorporateProfits × domesticCorporateTax` at the national level
+     * with no offsetting haircut, so any positive share would be spent twice.
+     * `corporateProfitRatio` therefore only documents the base's shape — it is
+     * multiplied by a zero retention and cannot move the budget.
+     *
+     * `centralTransferPerCapita: 100` matches the pool already sitting in the
+     * live data (₸8.0B across 80.98M people ≈ 98.8/capita) and DE's own
+     * 1953-era `federalEqualizationGrantPerCapita` override, so unfreezing the
+     * Länder does not silently re-scale the transfer at the same time.
+     *
+     * `defaultTaxRate: 0` mirrors DD's authored `domesticCorporateTax` rate.
+     * With retention at 0 it is inert; it is set so the fallback cannot invent
+     * a rate DD never legislated.
+     */
+    onePartyRegionalBudget: {
+      localTaxRetentionShare: 0,
+      corporateProfitRatio: 0.0525, // = taxBaseGdpShareBaseline.domesticCorporateProfits
+      centralTransferPerCapita: 100,
+      defaultTaxRate: 0,
+      primaryTaxLegislationKey: "dd.tax.domesticCorporateTax",
+    },
+
     status: "coming-soon",
     tagline:
       "The other Germany - a hard-line SED state and Warsaw-Pact linchpin, its planned economy and Wall holding back the pull of the West.",

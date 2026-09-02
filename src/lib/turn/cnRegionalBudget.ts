@@ -27,7 +27,7 @@ import type { LegislationType, LegislationPolicyOption } from "@/lib/db/types/le
 import type { RegionalBudget } from "@/lib/db/types/regionalBudget";
 import type { CabinetSetting } from "@/lib/db/types/cabinetSetting";
 import { loadAnnualSubsidyCostMaps } from "@/lib/subsidies/subsidyBudgetCosts";
-import { getCountryConfig } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, getCountryConfig, type CountryId } from "@/lib/constants/countries";
 
 // ── Pure calculation ─────────────────────────────────────────────────────────
 
@@ -162,30 +162,87 @@ function getOptionCostPerCapita(
 
 // ── Turn processing ──────────────────────────────────────────────────────────
 
+/**
+ * CN's own entry point. Kept as a named export because the tests and the admin
+ * tools call it by this name; it now delegates to the country-agnostic
+ * processor below.
+ */
 export async function processCNRegionalBudgets(
   db: Db,
   turnNumber: number,
   preset?: string
 ): Promise<{ regionsProcessed: number }> {
-  // Read CN's budget knobs from CountryConfig. If the field is absent
-  // (misconfigured), bail rather than fall back to magic numbers. `preset` is
-  // threaded through so era-specific knobs (e.g. the 1953-scaled
-  // centralTransferPerCapita in ERA_COUNTRY_CONFIG_OVERRIDES) apply — without
-  // it every era shares the modern/1991 CNY-calibrated constant, which is
-  // ~35x too large against the USD-anchored 1953 CN budget (fiscal-scale
-  // audit, 2026-07-28).
-  const countryConfig = getCountryConfig("CN", preset);
+  return processOnePartyRegionalBudgets(db, "CN", turnNumber, preset);
+}
+
+/**
+ * Every country whose config carries `onePartyRegionalBudget`, in one pass —
+ * what the turn phase calls. Driving off the config rather than a hardcoded
+ * list is the point: a one-party country that populates the field is processed
+ * without further wiring, which is how DD picks this up.
+ *
+ * Countries are independent (each touches only its own regions' docs), so the
+ * per-country passes run concurrently.
+ */
+export async function processAllOnePartyRegionalBudgets(
+  db: Db,
+  turnNumber: number,
+  preset?: string
+): Promise<{ regionsProcessed: number; countriesProcessed: number }> {
+  const countryIds = (Object.keys(COUNTRY_CONFIGS) as CountryId[]).filter(
+    (id) => getCountryConfig(id, preset).onePartyRegionalBudget != null
+  );
+  const results = await Promise.all(
+    countryIds.map((id) => processOnePartyRegionalBudgets(db, id, turnNumber, preset))
+  );
+  return {
+    regionsProcessed: results.reduce((sum, r) => sum + r.regionsProcessed, 0),
+    // Only countries that actually had regions to process count as processed,
+    // so a config-carrying country with no seeded regions is not reported.
+    countriesProcessed: results.filter((r) => r.regionsProcessed > 0).length,
+  };
+}
+
+/**
+ * Regional budgets for any one-party country whose `CountryConfig` carries
+ * `onePartyRegionalBudget` — the "local retention + central transfer" shape
+ * that field was always documented to serve ("a future second one-party
+ * country with the same shape can populate this and pick up the processor
+ * without code changes"). CN was the only caller until DD, the unified
+ * Germany, needed it: `processDERegionalBudgets` is scoped to `countryId:
+ * "DE"`, which has held zero states since the shell dissolved on turn 550, so
+ * DD's 16 Länder had no processor at all and their budgets froze at that turn
+ * (refs #1323).
+ *
+ * A country wires itself in by populating the config plus the two id
+ * conventions this reads: `<lowercase id>_national` for national policy rows
+ * and `<ID>_minister_of_finance` for the allocation cabinet setting.
+ */
+export async function processOnePartyRegionalBudgets(
+  db: Db,
+  countryId: CountryId,
+  turnNumber: number,
+  preset?: string
+): Promise<{ regionsProcessed: number }> {
+  // Read the country's budget knobs from CountryConfig. If the field is absent
+  // (not a one-party country, or misconfigured), bail rather than fall back to
+  // magic numbers. `preset` is threaded through so era-specific knobs (e.g. the
+  // 1953-scaled centralTransferPerCapita in ERA_COUNTRY_CONFIG_OVERRIDES)
+  // apply — without it every era shares the modern/1991 CNY-calibrated
+  // constant, which is ~35x too large against the USD-anchored 1953 CN budget
+  // (fiscal-scale audit, 2026-07-28).
+  const countryConfig = getCountryConfig(countryId, preset);
   const budgetKnobs = countryConfig.onePartyRegionalBudget;
   if (!budgetKnobs) return { regionsProcessed: 0 };
 
-  const cnRegions = await db.collection<State>("states").find({ countryId: "CN" }).toArray();
-  if (cnRegions.length === 0) return { regionsProcessed: 0 };
+  const regions = await db.collection<State>("states").find({ countryId }).toArray();
+  if (regions.length === 0) return { regionsProcessed: 0 };
 
   const budgetConfig: OnePartyBudgetConfig = {
     localTaxRetentionShare: budgetKnobs.localTaxRetentionShare,
     corporateProfitRatio: budgetKnobs.corporateProfitRatio,
     centralTransferPerCapita: budgetKnobs.centralTransferPerCapita,
-    regionCount: cnRegions.length,
+    regionCount: regions.length,
     resourceExtractionRatio: budgetKnobs.resourceExtractionRatio,
     businessTaxConsumptionRatio: budgetKnobs.businessTaxConsumptionRatio,
     businessTaxRate: budgetKnobs.businessTaxRate,
@@ -193,7 +250,7 @@ export async function processCNRegionalBudgets(
 
   const { stateCostByStateId } = await loadAnnualSubsidyCostMaps(db);
 
-  const regionIds = cnRegions.map((r) => r._id as string);
+  const regionIds = regions.map((r) => r._id as string);
 
   const allRegionalPolicies = await db
     .collection<StatePolicy>("statePolicies")
@@ -202,7 +259,7 @@ export async function processCNRegionalBudgets(
 
   const nationalPolicies = await db
     .collection<StatePolicy>("statePolicies")
-    .find({ stateId: "cn_national" })
+    .find({ stateId: `${countryId.toLowerCase()}_national` })
     .toArray();
 
   const allLegTypeIds = [
@@ -223,7 +280,7 @@ export async function processCNRegionalBudgets(
   );
   const eitRate = getTaxRateFromPolicy(eitPolicy, legTypeMap) || budgetKnobs.defaultTaxRate;
 
-  const nationalPopulation = cnRegions.reduce((sum, r) => sum + r.population, 0);
+  const nationalPopulation = regions.reduce((sum, r) => sum + r.population, 0);
 
   const policiesByRegion = new Map<string, StatePolicy[]>();
   for (const policy of allRegionalPolicies) {
@@ -241,7 +298,7 @@ export async function processCNRegionalBudgets(
   // Finance Minister cabinet setting controls central transfer distribution
   const ministerSetting = await db
     .collection<CabinetSetting>("cabinetSettings")
-    .findOne({ _id: "CN_minister_of_finance" });
+    .findOne({ _id: `${countryId}_minister_of_finance` });
   const allocationPercents = ministerSetting?.allocationPercents ?? null;
 
   let regionsProcessed = 0;
@@ -249,7 +306,7 @@ export async function processCNRegionalBudgets(
   const statePolicyOps: AnyBulkWriteOperation<StatePolicy>[] = [];
   const regionalBudgetOps: AnyBulkWriteOperation<RegionalBudget>[] = [];
 
-  for (const region of cnRegions) {
+  for (const region of regions) {
     const regionPolicies = policiesByRegion.get(region._id) ?? [];
     const existingBudget = budgetMap.get(region._id);
 
@@ -330,7 +387,7 @@ export async function processCNRegionalBudgets(
 
     const budgetDoc: RegionalBudget = {
       _id: region._id,
-      countryId: "CN",
+      countryId,
       turn: turnNumber,
       councilTaxRevenue: 0,
       businessRatesRevenue: 0,

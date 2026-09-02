@@ -15,7 +15,7 @@ import { processSubsidyBudget } from "@/lib/turn/subsidyBudgetTurn";
 import { processRegionalBudgets } from "@/lib/turn/regionalBudget";
 import { processJPRegionalBudgets } from "@/lib/turn/jpRegionalBudget";
 import { processDERegionalBudgets } from "@/lib/turn/deRegionalBudget";
-import { processCNRegionalBudgets } from "@/lib/turn/cnRegionalBudget";
+import { processAllOnePartyRegionalBudgets } from "@/lib/turn/cnRegionalBudget";
 import { processRURegionalBudgets } from "@/lib/turn/ruRegionalBudget";
 import { processPoliticalMetricsDynamics } from "@/lib/turn/politicalMetricsDynamics";
 import { syncAllPartyChairHeadsOfState } from "@/lib/turn/partyChairHeadOfState";
@@ -172,8 +172,15 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       runtime.runPhase("deRegionalBudgetProcessing", () =>
         processDERegionalBudgets(db, newTurn, gameState.preset)
       ),
+      // Covers every country carrying `onePartyRegionalBudget`, not just CN —
+      // DD joined when the unified Germany was left with no regional processor
+      // at all (#1323). The phase key deliberately keeps its original CN-only
+      // name, for the same reason `cnPresidentSync` below does: it is the
+      // identifier turn logs and phase-history diagnostics are keyed by, and
+      // renaming it would read as the phase disappearing and a new one
+      // appearing.
       runtime.runPhase("cnRegionalBudgetProcessing", () =>
-        processCNRegionalBudgets(db, newTurn, gameState.preset)
+        processAllOnePartyRegionalBudgets(db, newTurn, gameState.preset)
       ),
       runtime.runPhase("ruRegionalBudgetProcessing", () => processRURegionalBudgets(db, newTurn)),
       runtime.runPhase("politicalMetricsDynamics", () =>

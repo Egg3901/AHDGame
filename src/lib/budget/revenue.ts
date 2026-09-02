@@ -29,7 +29,9 @@ import {
   loadPlantsBudgetContext,
   type PlantsBudgetContext,
 } from "./publicEnterpriseRevenue";
-import { calculateFederalSpending } from "./spending";
+import { calculateFederalSpending, keepLatestActiveLawPerType } from "./spending";
+import { countryFiscalBase } from "@/lib/politicalLegislation/fiscalBase";
+import { COST_INCOME_ANCHORS } from "@/lib/politicalLegislation/costAnchors";
 import { getEraContext, type EraContext } from "@/lib/era/context";
 import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -71,9 +73,19 @@ const REVENUE_CAP_COMPRESS = 0.4;
 // a republican budget in the USSR ran turnover tax and enterprise profit
 // deductions at all-Union rates, with revenue shares set by Moscow, so its
 // revenue-to-GDP ratio sat at the top of the bloc's range by construction.
+// DD was the one Warsaw Pact economy missing from this list, and nothing about
+// it justified the omission: `MARKETIZATION_SCHEDULE.DD` is level 10 through
+// 1990, its live `economicFactors.marketizationLevel` is 0, and its
+// `stateOwnershipConcentration` is 100 across 52 state-owned enterprises. It was
+// therefore compressed against the 40% MARKET knee for its whole life —
+// ₸22.7B clawed back in fy1963 and ₸27.6B in fy1964 while East Germany, then
+// ₸51.8B/yr once it became the unified Germany (#1323). Reunification does not
+// change the classification: the surviving state is still centrally planned, so
+// it belongs on the same knee as the bloc it never left.
 const COMMAND_ECONOMY_REVENUE_CAP_COUNTRIES = new Set([
   "BG",
   "CS",
+  "DD",
   "HU",
   "PL",
   "RO",
@@ -387,14 +399,28 @@ export async function calculateFederalRevenue(
   const other = federalBudget?.revenue?.other ?? 200000000000;
   const otherWithPublicEnterprise = other + (publicEnterpriseRevenue.other ?? 0);
 
-  // Political-legislation v2 (spec §5.1): Σ annualRevenueV2 over unrepealed
-  // national enacted laws, recomputed FROM SCRATCH on every call — mirrors the
-  // spending side's full byCategory recompute, so syncs/heals never compound.
-  // Never folded into `other`. These are legislated fiscal extractions, not
+  // Political-legislation v2 (spec §5.1): Σ revenue over unrepealed national
+  // enacted laws, recomputed FROM SCRATCH on every call — mirrors the spending
+  // side's full byCategory recompute, so syncs/heals never compound. Never
+  // folded into `other`. These are legislated fiscal extractions, not
   // enterprise income, so they are tax-like and face the same base-erosion cap
   // as ordinary tax receipts. Persisted `other` and public-enterprise income
   // remain outside that cap: a Laffer curve must not erase hospital fees,
   // dividends, or unrelated non-tax receipts.
+  //
+  // "Recomputed from scratch" is what this comment always CLAIMED, but the code
+  // summed the persisted `annualRevenueV2` field — a stored number, frozen at
+  // whatever base it was last written against, while the cost half of the very
+  // same `costModelV2` was being re-derived from live GDP every turn. The two
+  // halves of one law drifted apart: DD's national book reported ₸0.725B of law
+  // revenue against ₸3.07B of `gdpRevenueFraction`, because the stored figures
+  // were computed when DD was East Germany on a ₸70.27B GDP and reunification
+  // nearly quadrupled the base without rewriting them (#1323).
+  //
+  // Recompute through the same engine the cost side uses, on the same
+  // regional-rollup base, so a law's revenue and its cost can no longer be
+  // priced off different economies. Laws with no `costModelV2` are legacy and
+  // keep their persisted value — there is nothing to recompute them from.
   const lawRevenueDocs = await db
     .collection<EnactedLaw>("enactedLaws")
     .find(
@@ -402,12 +428,23 @@ export async function calculateFederalRevenue(
         scope: "national",
         countryId: budgetCountryId,
         repealedAt: { $exists: false },
-        annualRevenueV2: { $gt: 0 },
+        $or: [{ annualRevenueV2: { $gt: 0 } }, { "costModelV2.gdpRevenueFraction": { $gt: 0 } }],
       },
-      { projection: { annualRevenueV2: 1 } }
+      { projection: { annualRevenueV2: 1, costModelV2: 1, legislationTypeId: 1 } }
     )
     .toArray();
-  const lawRevenue = lawRevenueDocs.reduce((sum, law) => sum + (law.annualRevenueV2 ?? 0), 0);
+  // Same gate the spending side applies before building its v2 base: a country
+  // outside COST_INCOME_ANCHORS has no v2 catalogue, so there is no live base to
+  // reprice against and the persisted figures stand.
+  const lawRevenueBase =
+    budgetCountryId in COST_INCOME_ANCHORS && lawRevenueDocs.some((law) => law.costModelV2)
+      ? await countryFiscalBase(db, budgetCountryId)
+      : undefined;
+  const lawRevenue = keepLatestActiveLawPerType(lawRevenueDocs).reduce((sum, law) => {
+    const fraction = law.costModelV2?.gdpRevenueFraction;
+    if (lawRevenueBase && fraction != null) return sum + fraction * lawRevenueBase.gdp;
+    return sum + (law.annualRevenueV2 ?? 0);
+  }, 0);
 
   const taxLikeRevenue =
     incomeTax +
