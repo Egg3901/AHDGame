@@ -6,8 +6,11 @@ import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { isBlockedDepositor } from "@/lib/banking/blacklist";
 import { getBankDepositCeiling } from "@/lib/banking/capacityAllocation";
 import { charterMay } from "@/lib/banking/rules/capabilities";
+import { lifecycleRefusal } from "@/lib/banking/rules/lifecycle";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 import { getCurrentTurn } from "@/lib/currentTurn";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { runSavingsCommand } from "@/lib/savings/accountsShell";
 
 export type MoveCharacterSavingsResult =
   { ok: true; holder: SavingsHolder } | { ok: false; error: string };
@@ -37,6 +40,26 @@ export async function moveCharacterSavings(
   currency: CurrencyCode,
   holder: SavingsHolder
 ): Promise<MoveCharacterSavingsResult> {
+  // Once accounts are authoritative the holder change is a real transfer of
+  // backing cash and liability, decided and settled by the account command;
+  // the pointer on the character becomes a projection of it.
+  const policy = await loadBankingPolicy(db);
+  if (policy.savingsAccounts === "authoritative") {
+    if (!policy.privateBanking) return { ok: false, error: "Private banking is not enabled" };
+    if (holder !== "centralBank" && (!ObjectId.isValid(holder) || holder.length !== 24)) {
+      return { ok: false, error: "Invalid bank corporation id" };
+    }
+    const moved = await runSavingsCommand(db, characterId, currency, {
+      type: "transfer_holder",
+      to: holder,
+    });
+    if (!moved.ok) {
+      // Moving to where the savings already are is a no-op for the player.
+      if (moved.refusal?.code === "same_holder") return { ok: true, holder };
+      return { ok: false, error: moved.error };
+    }
+    return { ok: true, holder: moved.account.holder };
+  }
   const result = await moveCharacterSavingsInner(db, characterId, currency, holder);
   emitBankingAuditEvent(
     {
@@ -87,6 +110,8 @@ async function moveCharacterSavingsInner(
         error: "Target bank must have an active retail or universal charter",
       };
     }
+    const staged = lifecycleRefusal(targetCharter, "takeDeposits");
+    if (staged) return { ok: false, error: staged.message };
     if (targetCharter.currency !== currency) {
       return {
         ok: false,

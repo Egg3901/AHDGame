@@ -182,6 +182,20 @@ export interface GameConfig {
   bankPropTradingEnabled?: boolean;
   /** Kill switch: bank-failure contagion cascade. Default on when banking is on. */
   bankContagionEnabled?: boolean;
+  /**
+   * Savings account rollout. `off`: legacy character fields only. `shadow`:
+   * accounts are materialized from the legacy fields every turn and compared,
+   * nothing reads them. `authoritative`: commands write the accounts and the
+   * legacy fields are projections; reads follow `savingsAccountsReadCurrencies`.
+   * Absent means off.
+   */
+  savingsAccountsMode?: "off" | "shadow" | "authoritative";
+  /**
+   * Currencies whose balance-sheet and API reads come from the accounts (real
+   * player-deposit liabilities) rather than the legacy pointer model. Rolled
+   * out one cohort at a time; absent means none.
+   */
+  savingsAccountsReadCurrencies?: string[];
   /** Per-currency M1/M2 snapshots, monetary transmission, and central-bank operations. */
   moneySupplyEnabled?: boolean;
   /**

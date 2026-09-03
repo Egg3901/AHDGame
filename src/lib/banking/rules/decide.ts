@@ -34,6 +34,15 @@ import {
   namedLoanPrincipalCap,
 } from "@/lib/banking/rules/lendingMath";
 import { namedLoanHeadroom } from "@/lib/banking/rules/loans";
+import { lifecycleRefusal, type LifecycleAction } from "@/lib/banking/rules/lifecycle";
+import type { BalanceSheetOptions } from "@/lib/banking/rules/balanceSheet";
+
+/** The balance-sheet reading the snapshot's policy calls for. */
+function sheetOptions(
+  snapshot: Pick<BankingSnapshot, "playerDepositsAreLiabilities">
+): BalanceSheetOptions {
+  return { playerDepositsAreLiabilities: snapshot.playerDepositsAreLiabilities === true };
+}
 import { getLendableHeadroom } from "@/lib/banking/rules/reserves";
 import {
   oid,
@@ -80,6 +89,26 @@ function requireCapability(
   return refuse(
     { code: "capability", capability: key, denial: result.reason! },
     capabilityMessage(key, result.reason!, charter?.type as BankCharterType | undefined)
+  );
+}
+
+/**
+ * The lifecycle gate. Capability says what a charter of this type may do;
+ * the stage says what this charter may do right now. Both refuse with a
+ * message the player sees.
+ */
+function requireStage(
+  charter: BankCharterSnapshot | null,
+  action: LifecycleAction
+): BankingDecision | null {
+  const refused = lifecycleRefusal(charter, action);
+  if (!refused) return null;
+  if (refused.refusal.code === "no_charter") {
+    return refuse({ code: "state", detail: "no_charter" }, refused.message);
+  }
+  return refuse(
+    { code: "lifecycle", stage: refused.refusal.stage, action: refused.refusal.action },
+    refused.message
   );
 }
 
@@ -214,6 +243,7 @@ export function decideBankCommand(
         charter: active!,
         reserveRatio: snapshot.reserveRatio,
         capacityCeiling: snapshot.capacityCeiling,
+        playerDepositsAreLiabilities: snapshot.playerDepositsAreLiabilities,
       });
       if (active!.capitalStanding === "undercapitalized") {
         return refuse(
@@ -227,7 +257,12 @@ export function decideBankCommand(
           "The bank failed its stress test, so it may not pay out until it clears."
         );
       }
-      const move = Math.round(Math.min(amount, sheet.distributable));
+      const staged = requireStage(charter, "distribute");
+      if (staged) return staged;
+      // Floor, never round: distributable is bounded by the cash in the vault,
+      // and rounding up past it by a few cents asks the guarded debit for more
+      // than there is, which fails at the write instead of here.
+      const move = Math.floor(Math.min(amount, sheet.distributable));
       if (move <= 0) {
         return refuse(
           { code: "cap", cap: "distributable", max: Math.max(0, sheet.distributable) },
@@ -235,7 +270,7 @@ export function decideBankCommand(
         );
       }
       const postedDown = Math.min(move, Math.max(0, active!.postedCapital ?? 0));
-      const required = requiredReserves(active!, snapshot.reserveRatio);
+      const required = requiredReserves(active!, snapshot.reserveRatio, sheetOptions(snapshot));
       return {
         allowed: true,
         derived: { distributable: sheet.distributable, moved: move },
@@ -281,9 +316,11 @@ export function decideBankCommand(
     case "draw_discount_window": {
       const denied = requireCapability(snapshot, charter, "discountWindow");
       if (denied) return denied;
+      const staged = requireStage(charter, "borrowFromCentralBank");
+      if (staged) return staged;
       const amount = positiveAmount(command.amount);
       if (amount === null) return refuse({ code: "invalid_amount" }, INVALID_AMOUNT);
-      const allowed = canDraw(active!, amount, snapshot.primeRate);
+      const allowed = canDraw(active!, amount, snapshot.primeRate, sheetOptions(snapshot));
       if (!allowed.ok) {
         if (allowed.reason === "no_deposits") {
           return refuse(
@@ -291,7 +328,7 @@ export function decideBankCommand(
             "The window is sized against the deposit base, and this bank has none."
           );
         }
-        const quote = quoteDiscountWindow(active!, snapshot.primeRate);
+        const quote = quoteDiscountWindow(active!, snapshot.primeRate, sheetOptions(snapshot));
         return refuse(
           { code: "cap", cap: "discountWindow", max: quote.headroomAnchor },
           "This draw would take the bank past its window limit. A bank needing more than that is not illiquid, it is insolvent."
@@ -409,6 +446,8 @@ export function decideBankCommand(
     case "draw_cb_margin": {
       const denied = requireCapability(snapshot, charter, "centralBankMargin");
       if (denied) return denied;
+      const staged = requireStage(charter, "borrowFromCentralBank");
+      if (staged) return staged;
       const amount = positiveAmount(command.amount);
       if (amount === null) return refuse({ code: "invalid_amount" }, INVALID_AMOUNT);
       const mark = Math.max(0, active!.propBookMarkValue ?? 0);
@@ -517,6 +556,8 @@ export function decideBankCommand(
         command.borrower.type === "character" ? "namedCharacterLending" : "namedCorporationLending";
       const denied = requireCapability(snapshot, charter, capability);
       if (denied) return denied;
+      const staged = requireStage(charter, "originate");
+      if (staged) return staged;
       const principal = positiveAmount(command.principal);
       if (principal === null) {
         return refuse({ code: "invalid_amount" }, "Principal must be a positive number");
@@ -552,7 +593,7 @@ export function decideBankCommand(
           ? rates.lendingRatePercent + CHARACTER_LOAN_SPREAD_PP
           : rates.lendingRatePercent;
       const cashReserves = getCashReserves(active!);
-      const headroom = namedLoanHeadroom(active!, snapshot.reserveRatio);
+      const headroom = namedLoanHeadroom(active!, snapshot.reserveRatio, sheetOptions(snapshot));
       const incomeCap = maxPrincipalFromIncome({
         incomePerTurn: command.borrower.incomePerTurn,
         ratePercent,
@@ -665,7 +706,7 @@ export function decideBankCommand(
           "Borrower is on the bank's blacklist"
         );
       }
-      const headroom = namedLoanHeadroom(active!, snapshot.reserveRatio);
+      const headroom = namedLoanHeadroom(active!, snapshot.reserveRatio, sheetOptions(snapshot));
       if (principal > headroom) {
         return refuse(
           { code: "cap", cap: "headroom", max: headroom },
@@ -775,6 +816,8 @@ export function decideBankCommand(
     case "lend_interbank": {
       const denied = requireCapability(snapshot, charter, "interbankLending");
       if (denied) return denied;
+      const staged = requireStage(charter, "originate");
+      if (staged) return staged;
       const amount = positiveAmount(command.amount);
       if (amount === null) return refuse({ code: "invalid_amount" }, INVALID_AMOUNT);
       if (!Number.isFinite(command.ratePercent) || command.ratePercent < 0) {
@@ -803,7 +846,7 @@ export function decideBankCommand(
           "Lender and borrower charter currencies must match"
         );
       }
-      const headroom = getLendableHeadroom(active!, snapshot.reserveRatio);
+      const headroom = getLendableHeadroom(active!, snapshot.reserveRatio, sheetOptions(snapshot));
       const maxByShare = INTERBANK_MAX_SHARE_OF_LENDABLE * headroom;
       if (amount > maxByShare + 1e-9 || command.lenderOutstanding + amount > maxByShare + 1e-9) {
         return refuse(

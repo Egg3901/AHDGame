@@ -42,6 +42,7 @@ function snapshot(overrides: Partial<BankingSnapshot> = {}): BankingSnapshot {
     charter: retail(),
     corporationLiquidCapital: 500_000,
     reserveRatio: 0.1,
+    playerDepositsAreLiabilities: false,
     primeRate: 4,
     centralBankId: "US",
     ...overrides,
@@ -511,5 +512,56 @@ describe("every allowed transition", () => {
         }
       }
     }
+  });
+});
+
+describe("lifecycle stage gate", () => {
+  it("refuses new exposure and payouts from an impaired bank, with the stage in the reason", () => {
+    const impaired = snapshot({
+      charter: retail({ warningBand: "red", cashReserves: 1_000_000, npcDeposits: 100_000 }),
+    });
+    expect(
+      decide(
+        {
+          type: "originate_named_loan",
+          borrower: { type: "character", id: "b1", income: 1_000, existingDebtService: 0 },
+          principal: 1_000,
+          termTurns: 12,
+        } as never,
+        impaired
+      )
+    ).toMatchObject({
+      allowed: false,
+      refusal: { code: "lifecycle", stage: "impaired", action: "originate" },
+    });
+    const payout = decide({ type: "upstream_cash", amount: 1 }, impaired);
+    expect(payout).toMatchObject({
+      allowed: false,
+      refusal: { code: "lifecycle", stage: "impaired", action: "distribute" },
+    });
+    expect((payout as { message: string }).message).toMatch(/impaired retail bank/);
+  });
+
+  it("still lets an impaired deposit taker draw on the window", () => {
+    const impaired = snapshot({
+      charter: retail({ warningBand: "red", cashReserves: 1_000, npcDeposits: 100_000 }),
+    });
+    const draw = decide({ type: "draw_discount_window", amount: 1_000 }, impaired);
+    expect(draw.allowed).toBe(true);
+  });
+
+  it("keeps an amber bank lending but not distributing", () => {
+    const watch = snapshot({
+      charter: retail({ warningBand: "amber", cashReserves: 1_000_000, npcDeposits: 100_000 }),
+    });
+    expect(decide({ type: "upstream_cash", amount: 1 }, watch)).toMatchObject({
+      allowed: false,
+      refusal: { code: "lifecycle", stage: "watch", action: "distribute" },
+    });
+    expect(
+      decide({ type: "lend_interbank", borrowerBankId: "b2", amount: 1 } as never, watch)
+    ).not.toMatchObject({
+      refusal: { code: "lifecycle" },
+    });
   });
 });

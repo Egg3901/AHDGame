@@ -13,12 +13,16 @@
  * down. Nothing below the shell asks the database what is enabled.
  */
 
+export type SavingsAccountsMode = "off" | "shadow" | "authoritative";
+
 export interface BankingPolicyConfig {
   privateBankingEnabled?: boolean;
   bankPropTradingEnabled?: boolean;
   bankContagionEnabled?: boolean;
   lineOfCreditEnabled?: boolean;
   playerAdvancedBankChartersEnabled?: boolean;
+  savingsAccountsMode?: SavingsAccountsMode;
+  savingsAccountsReadCurrencies?: string[];
 }
 
 /** Projection for the one config read the shell performs. */
@@ -28,6 +32,8 @@ export const BANKING_POLICY_PROJECTION = Object.freeze({
   bankContagionEnabled: 1,
   lineOfCreditEnabled: 1,
   playerAdvancedBankChartersEnabled: 1,
+  savingsAccountsMode: 1,
+  savingsAccountsReadCurrencies: 1,
 } as const);
 
 export interface BankingPolicySnapshot {
@@ -41,6 +47,10 @@ export interface BankingPolicySnapshot {
   lineOfCredit: boolean;
   /** Investment and universal charters offered to players. Requires private banking. */
   advancedCharters: boolean;
+  /** Savings account rollout stage. */
+  savingsAccounts: SavingsAccountsMode;
+  /** Currencies whose reads come from the accounts. Empty unless authoritative. */
+  savingsReadCurrencies: readonly string[];
 }
 
 /**
@@ -56,12 +66,21 @@ export function resolveBankingPolicy(
   config: BankingPolicyConfig | null | undefined
 ): BankingPolicySnapshot {
   const privateBanking = config?.privateBankingEnabled === true;
+  const mode = config?.savingsAccountsMode;
+  const savingsAccounts: SavingsAccountsMode =
+    mode === "shadow" || mode === "authoritative" ? mode : "off";
+  const readCurrencies =
+    savingsAccounts === "authoritative" && Array.isArray(config?.savingsAccountsReadCurrencies)
+      ? Object.freeze([...config.savingsAccountsReadCurrencies])
+      : Object.freeze([]);
   return Object.freeze({
     privateBanking,
     propTrading: privateBanking && config?.bankPropTradingEnabled !== false,
     contagion: privateBanking && config?.bankContagionEnabled !== false,
     lineOfCredit: config?.lineOfCreditEnabled !== false,
     advancedCharters: privateBanking && config?.playerAdvancedBankChartersEnabled === true,
+    savingsAccounts,
+    savingsReadCurrencies: readCurrencies,
   });
 }
 
@@ -76,3 +95,13 @@ export const BANKING_POLICY_ALL_ON: BankingPolicySnapshot = resolveBankingPolicy
   lineOfCreditEnabled: true,
   playerAdvancedBankChartersEnabled: true,
 });
+
+/** Whether balance-sheet and API reads for `currency` come from the accounts. */
+export function savingsReadsAuthoritative(
+  policy: BankingPolicySnapshot,
+  currency: string
+): boolean {
+  return (
+    policy.savingsAccounts === "authoritative" && policy.savingsReadCurrencies.includes(currency)
+  );
+}

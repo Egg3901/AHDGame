@@ -6,7 +6,9 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getBankId } from "@/lib/centralBank/helpers";
-import { loadBankingPolicy } from "@/lib/banking/policy";
+import { loadBankingPolicy, type BankingPolicySnapshot } from "@/lib/banking/policy";
+import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
+import { recoverBankingSettlements } from "@/lib/banking/recovery";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 import { recordBankingStage, timedBankingStage } from "@/lib/banking/telemetry";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
@@ -91,6 +93,13 @@ export type BankingTurnSummary = {
   deadBankRecoveredToInsurer: number;
   /** Settlements that started and never finished, as of the end of this pass. */
   unfinishedSettlements: number;
+  /** What the recovery worker finished, and did not, before this pass began. */
+  recovery: {
+    resumedSettlements: number;
+    stillPartial: number;
+    estatesRecovered: number;
+    estatesStillResolving: number;
+  };
 };
 
 const ZERO_SUMMARY: BankingTurnSummary = {
@@ -111,6 +120,12 @@ const ZERO_SUMMARY: BankingTurnSummary = {
   deadBankRecoveredToEstate: 0,
   deadBankRecoveredToInsurer: 0,
   unfinishedSettlements: 0,
+  recovery: {
+    resumedSettlements: 0,
+    stillPartial: 0,
+    estatesRecovered: 0,
+    estatesStillResolving: 0,
+  },
 };
 
 type DepositTaker = {
@@ -134,6 +149,17 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   if (!policy.privateBanking) {
     return { ...ZERO_SUMMARY };
   }
+
+  // Finish last turn's unfinished business before any new flow: a settlement
+  // that crashed between two legs, an estate claimed and never settled. Doing
+  // it first means nothing below builds on money still in flight.
+  const recovered = await recoverBankingSettlements(db, turn);
+  const recovery = {
+    resumedSettlements: recovered.resumedSettlements.length,
+    stillPartial: recovered.stillPartial.length,
+    estatesRecovered: recovered.estatesRecovered.length,
+    estatesStillResolving: recovered.estatesStillResolving.length,
+  };
 
   // CB docs load once up front — bank rates and the savings APY both key off
   // them, so the per-corp getEffectiveBankRates findOne is unnecessary.
@@ -214,13 +240,19 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
     }
   }
 
-  const summary: BankingTurnSummary = { ...ZERO_SUMMARY };
+  const summary: BankingTurnSummary = { ...ZERO_SUMMARY, recovery };
 
   for (const row of depositTakers) {
-    const bankResult = await processOneBank(db, turn, row, {
-      npcShareByBankId,
-      cbById,
-    });
+    const bankResult = await processOneBank(
+      db,
+      turn,
+      row,
+      {
+        npcShareByBankId,
+        cbById,
+      },
+      policy
+    );
     summary.banksProcessed += 1;
     summary.depositInterestPaid += bankResult.depositInterestPaid;
     summary.depositInterestShortfall += bankResult.depositInterestShortfall;
@@ -307,7 +339,8 @@ async function processOneBank(
   db: Db,
   turn: number,
   row: DepositTaker,
-  caches: BankPassCaches
+  caches: BankPassCaches,
+  policy: BankingPolicySnapshot
 ): Promise<BankPassResult> {
   const { corp, charter, rates } = row;
   const currency = charter.currency as CurrencyCode;
@@ -337,6 +370,12 @@ async function processOneBank(
   let cashReserves = getCashReserves(live.bankCharter);
   let npcDeposits = Math.max(0, live.bankCharter.npcDeposits ?? 0);
   let totalLoans = Math.max(0, live.bankCharter.totalLoans ?? 0);
+  // Once the currency's savings accounts are the book of record, the player
+  // balances held here arrived as cash (the holder change moved the backing)
+  // and the bank owes them exactly as it owes the household book: reserves,
+  // equity, the ceiling and the loan capacity all count them from this turn.
+  const playerDepositsAreLiabilities = savingsReadsAuthoritative(policy, currency);
+  const sheetOptions = { playerDepositsAreLiabilities };
 
   // (a) Player depositors, loaded once — the total here and the interest pass
   // in (c) below use the same rows (NPC flow in (b) does not touch player
@@ -369,7 +408,10 @@ async function processOneBank(
   // equity so an undercapitalized bank (little/negative equity) cannot grow — or
   // keep — a base far larger than its capital. Negative equity drives this to 0,
   // and the normal per-turn NPC outflow then unwinds the excess gradually.
-  const depositCeiling = equityCappedDepositCeiling(capacityCeiling, bankEquity(live.bankCharter));
+  const depositCeiling = equityCappedDepositCeiling(
+    capacityCeiling,
+    bankEquity(live.bankCharter, sheetOptions)
+  );
   const npcRoom = Math.max(0, depositCeiling - playerDeposits);
 
   // (b) NPC deposit flow - CB update first, then corp npcDeposits
@@ -389,7 +431,14 @@ async function processOneBank(
   const share = caches.npcShareByBankId.get(bankIdHex) ?? 0;
   const uncappedTargetNpc = share * externalBroadMoney;
   const targetNpc = Math.min(uncappedTargetNpc, npcRoom);
-  const delta = npcFlowDelta(npcDeposits, targetNpc);
+  // An outflow is capped at the cash in the vault: households cannot take out
+  // what is not there. What they could not take stays on the book as deposits
+  // the bank cannot pay, which is what the solvency pass fails a bank for.
+  // Asking the guarded debit for more only refuses the whole flow.
+  const delta = Math.max(
+    npcFlowDelta(npcDeposits, targetNpc),
+    -Math.floor(cashReserves * 100) / 100
+  );
   if (delta !== 0) {
     // The money MOVES. It leaves the central bank's household pool and lands in
     // the bank's cash, which is what a deposit is.
@@ -515,7 +564,87 @@ async function processOneBank(
   const interestMoveKey = turnMoveKey("deposit-interest", bankIdHex, turn);
   let playerInterestSettled = 0;
 
-  if (playerInterestPaid > 0 && creditOps.length > 0) {
+  if (
+    playerInterestPaid > 0 &&
+    creditOps.length > 0 &&
+    policy.savingsAccounts === "authoritative"
+  ) {
+    // Under the account model the interest does not leave the vault: the
+    // depositor's claim grows, the bank's liability grows by the same amount,
+    // and the cash stays where it is as that claim's backing. Paying it out of
+    // the vault as well would charge the bank twice (once in cash, once in
+    // liability) and leave the account's backing short by exactly the
+    // interest. So this is a settlement with no legs and a projection per
+    // account, each stamped, so a crash part-way finishes on the next attempt
+    // and a replay credits nothing twice.
+    const credits = playerCredits
+      .map((pc) => ({ pc, paid: roundSavingsAmount(pc.interest * interestScale, currency) }))
+      .filter(({ paid }) => paid > 0);
+    const settled = await settleTransition(db, {
+      key: interestMoveKey,
+      kind: "deposit_interest",
+      turn,
+      currency,
+      legs: [],
+      projections: [
+        ...credits.map(({ pc, paid }) => ({
+          collection: "savingsAccounts",
+          filter: { ownerType: "character", ownerId: oid(pc.characterId.toString()), currency },
+          update: {
+            $inc: { balance: paid, interestEarned: paid, version: 1 },
+            $set: { lastSettlementKey: interestMoveKey, lastSettledTurn: turn },
+          },
+          note: "deposit interest credited to the account",
+        })),
+        ...credits.map(({ pc, paid }) => ({
+          collection: "characters",
+          filter: { _id: oid(pc.characterId.toString()) },
+          update: {
+            $inc: {
+              [`currencyBalances.savings.${currency}`]: paid,
+              [`currencyBalances.interestEarned.${currency}`]: paid,
+            },
+          },
+          note: "legacy savings projection follows the account",
+        })),
+        {
+          collection: "corporations",
+          filter: { _id: oid(bankIdHex) },
+          update: { $inc: { "bankCharter.playerDeposits": playerInterestPaid } },
+          note: "the bank's player-deposit liability grows by the interest",
+        },
+      ],
+      event: {
+        kind: "account.interest_paid",
+        command: "bank.turn.depositInterest",
+        amount: playerInterestPaid,
+      },
+    });
+    if (settled.status === "applied" || settled.status === "replayed") {
+      playerInterestSettled = playerInterestPaid;
+      const thresholds = await loadTxThresholds(db);
+      await emitTxBulk(
+        db,
+        credits.map(({ pc, paid }) => ({
+          type: "bank_deposit_interest" as const,
+          turn,
+          createdAt: new Date(),
+          subjectType: "character" as const,
+          subjectId: pc.characterId,
+          subjectName: depositorNameById.get(pc.characterId.toString()) ?? "Depositor",
+          amount: paid,
+          currencyCode: currency,
+          counterpartyType: "corporation" as const,
+          counterpartyId: corp._id,
+          counterpartyName: corp.name,
+          meta: { ratePercent: rates.depositRatePercent, retainedAsBacking: true },
+        })),
+        thresholds
+      );
+    } else {
+      result.depositInterestShortfall += playerInterestPaid;
+    }
+  } else if (playerInterestPaid > 0 && creditOps.length > 0) {
     const claim = await claimMoneyMove(db, {
       key: interestMoveKey,
       kind: "deposit_interest",
@@ -600,8 +729,12 @@ async function processOneBank(
     // exactly where it is.
     //
     // The player half already moved in the database above; this keeps the
-    // in-memory figure the rest of the pass decides on in step with it.
-    cashReserves = Math.max(0, cashReserves - playerInterestSettled);
+    // in-memory figure the rest of the pass decides on in step with it. Under
+    // the account model nothing left: the interest stayed in the vault as the
+    // account's backing and the liability grew instead.
+    if (policy.savingsAccounts !== "authoritative") {
+      cashReserves = Math.max(0, cashReserves - playerInterestSettled);
+    }
     npcDeposits = Math.max(0, npcDeposits + npcInterestPaid);
     result.depositInterestPaid += totalInterestPaid;
   }
@@ -627,12 +760,17 @@ async function processOneBank(
   }
   const insuredCap = await getInsuredCap(db, currency);
   const insuredDeposits = sumInsuredPlayerDeposits(postInterestBalances, insuredCap) + npcDeposits;
-  // Reserves are held against deposits the bank actually RECEIVED in cash, which
-  // is the NPC household book. Player deposits are a pointer: the money never
-  // leaves `currencyBalances.savings`, so requiring the bank to hold reserves
-  // against it would demand cash for a balance it does not have and cannot get.
-  // Insurance still covers both, because a depositor's claim is a claim either way.
-  const depositBaseForRatio = npcDeposits;
+  // Reserves are held against deposits the bank actually RECEIVED in cash.
+  // Under the pointer model that is the NPC household book alone: player
+  // savings never left `currencyBalances.savings`, so requiring reserves
+  // against them would demand cash for a balance the bank does not hold. Once
+  // the currency's accounts are authoritative the player balances are cash in
+  // the vault and a liability on the book, and the base includes them.
+  // Insurance covers both either way, because a depositor's claim is a claim.
+  const playerCashDeposits = playerDepositsAreLiabilities
+    ? playerDeposits + playerInterestSettled
+    : 0;
+  const depositBaseForRatio = npcDeposits + playerCashDeposits;
   const reserveRatioActual = computeReserveRatioActual(cashReserves, depositBaseForRatio);
   const reserveRatioRequired = await getReserveRequirement(db, currency);
   const premiumDue = computeInsurancePremium(
@@ -706,7 +844,7 @@ async function processOneBank(
   // by this bank after its reserve requirement. Rates set utilization, while
   // named loans consume the same capacity inside serviceNpcBulkBook.
   // Only cash-backed deposits can fund a loan; you cannot lend a pointer.
-  const loanFundingCapacity = npcDeposits * (1 - reserveRatioRequired);
+  const loanFundingCapacity = (npcDeposits + playerCashDeposits) * (1 - reserveRatioRequired);
   const bulkResult = await serviceNpcBulkBook(
     db,
     turn,
@@ -720,7 +858,7 @@ async function processOneBank(
       cbDocId,
       cb,
       bankName: corp.name,
-      requiredReserves: npcDeposits * reserveRatioRequired,
+      requiredReserves: (npcDeposits + playerCashDeposits) * reserveRatioRequired,
       lendingProfile: live.bankCharter.lendingProfile,
     }
   );

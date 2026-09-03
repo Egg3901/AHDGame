@@ -48,6 +48,7 @@ import {
   bankBalanceSheet,
   getCashReserves as readCashReserves,
   type BalanceSheetCharter,
+  type BalanceSheetOptions,
 } from "@/lib/banking/balanceSheet";
 
 export type BankCashResult =
@@ -78,9 +79,10 @@ export {
  */
 export function upstreamCapacity(
   charter: BalanceSheetCharter & Pick<BankCharter, "capitalStanding" | "totalDeposits">,
-  reserveRatio: number
+  reserveRatio: number,
+  options: BalanceSheetOptions = {}
 ): number {
-  return bankBalanceSheet({ charter, reserveRatio }).distributable;
+  return bankBalanceSheet({ charter, reserveRatio, ...options }).distributable;
 }
 
 async function readBankCash(

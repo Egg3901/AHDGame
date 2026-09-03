@@ -15,6 +15,7 @@ import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { getReserveRequirement } from "@/lib/banking/reserves";
 import { loadBankingPolicy } from "@/lib/banking/policy";
+import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
 import { getBankDepositCeiling } from "@/lib/banking/capacityAllocation";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { getCurrentTurn } from "@/lib/currentTurn";
@@ -40,6 +41,7 @@ export function charterSnapshotFrom(
     postedCapital: charter.postedCapital,
     cashReserves: charter.cashReserves,
     npcDeposits: charter.npcDeposits,
+    playerDeposits: charter.playerDeposits,
     totalDeposits: charter.totalDeposits,
     totalLoans: charter.totalLoans,
     depositOffset: charter.depositOffset,
@@ -51,6 +53,12 @@ export function charterSnapshotFrom(
     interbankDebt: charter.interbankDebt,
     propBookMarkValue: charter.propBookMarkValue,
     capitalStanding: charter.capitalStanding,
+    warningBand: charter.warningBand,
+    undercapitalizedSinceTurn: charter.undercapitalizedSinceTurn,
+    failedTurn: charter.failedTurn,
+    revokedTurn: charter.revokedTurn,
+    resolutionClaimedTurn: charter.resolutionClaimedTurn,
+    depositorsResolvedTurn: charter.depositorsResolvedTurn,
     requireApproval: charter.requireApproval,
     lendingProfile: charter.lendingProfile,
     charterSwitchCooldownUntilTurn: charter.charterSwitchCooldownUntilTurn,
@@ -100,6 +108,7 @@ export async function loadBankingSnapshot(
       charter: charterSnapshotFrom(charter),
       corporationLiquidCapital: Math.max(0, corporation.liquidCapital ?? 0),
       reserveRatio,
+      playerDepositsAreLiabilities: savingsReadsAuthoritative(policy, currency),
       primeRate,
       centralBankId,
       ...(capacityCeiling !== undefined ? { capacityCeiling } : {}),

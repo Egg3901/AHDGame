@@ -3,6 +3,7 @@ import {
   BANKING_POLICY_ALL_ON,
   BANKING_POLICY_OFF,
   resolveBankingPolicy,
+  savingsReadsAuthoritative,
   type BankingPolicyConfig,
 } from "./policy";
 
@@ -14,6 +15,8 @@ describe("resolveBankingPolicy", () => {
       contagion: false,
       lineOfCredit: true,
       advancedCharters: false,
+      savingsAccounts: "off",
+      savingsReadCurrencies: [],
     });
     expect(resolveBankingPolicy(undefined)).toEqual(BANKING_POLICY_OFF);
   });
@@ -25,6 +28,8 @@ describe("resolveBankingPolicy", () => {
       contagion: true,
       lineOfCredit: true,
       advancedCharters: false,
+      savingsAccounts: "off",
+      savingsReadCurrencies: [],
     });
     expect(
       resolveBankingPolicy({
@@ -67,7 +72,29 @@ describe("resolveBankingPolicy", () => {
       contagion: true,
       lineOfCredit: true,
       advancedCharters: true,
+      savingsAccounts: "off",
+      savingsReadCurrencies: [],
     });
+  });
+
+  it("carries the savings rollout stage and read cohort", () => {
+    expect(resolveBankingPolicy({ savingsAccountsMode: "shadow" }).savingsAccounts).toBe("shadow");
+    expect(resolveBankingPolicy({ savingsAccountsMode: "bogus" as never }).savingsAccounts).toBe(
+      "off"
+    );
+    const live = resolveBankingPolicy({
+      savingsAccountsMode: "authoritative",
+      savingsAccountsReadCurrencies: ["USD"],
+    });
+    expect(savingsReadsAuthoritative(live, "USD")).toBe(true);
+    expect(savingsReadsAuthoritative(live, "GBP")).toBe(false);
+    // Read cohorts mean nothing before writes are authoritative.
+    const shadow = resolveBankingPolicy({
+      savingsAccountsMode: "shadow",
+      savingsAccountsReadCurrencies: ["USD"],
+    });
+    expect(shadow.savingsReadCurrencies).toEqual([]);
+    expect(savingsReadsAuthoritative(shadow, "USD")).toBe(false);
   });
 
   it("is a pure function of the config: same input, same snapshot, every time", () => {

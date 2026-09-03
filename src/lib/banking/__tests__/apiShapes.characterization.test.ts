@@ -267,6 +267,7 @@ describe("GET /api/banking/corporation/[id]", () => {
       "isCeo",
       "isChair",
       "legalCharterTypes",
+      "lifecycle",
       "loans",
       "privateBankingEnabled",
       "rates",

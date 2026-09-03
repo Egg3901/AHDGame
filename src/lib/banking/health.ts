@@ -17,6 +17,11 @@ import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import { bankBalanceSheet } from "@/lib/banking/rules/balanceSheet";
 import { getReserveRequirement } from "@/lib/banking/reserves";
 import { loadBankingTelemetry, type BankingTelemetryDoc } from "@/lib/banking/telemetry";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
+import { lifecycleStage, type BankLifecycleStage } from "@/lib/banking/rules/lifecycle";
+import { buildSavingsComparison, readCohort, type SavingsComparison } from "@/lib/savings/shadow";
+import { getCurrentTurn } from "@/lib/currentTurn";
 
 export interface CurrencyBankingHealth {
   currency: CurrencyCode;
@@ -29,6 +34,10 @@ export interface CurrencyBankingHealth {
   pointerDrift: number;
   /** Cash-backed (household) deposits across the currency's banks. */
   cashBackedDeposits: number;
+  /** Player savings counted as cash-backed liabilities (currency in the read cohort). */
+  playerCashDeposits: number;
+  /** Active charters by lifecycle stage. */
+  stages: Partial<Record<BankLifecycleStage, number>>;
   cashReserves: number;
   totalLoans: number;
   requiredReserves: number;
@@ -51,6 +60,21 @@ export interface BankingHealthReport {
   unfinishedSettlements: UnfinishedSettlementsHealth;
   /** Newest first. */
   telemetry: BankingTelemetryDoc[];
+  /** Savings account rollout stage and the projection comparison, when on. */
+  savingsAccounts: {
+    mode: "off" | "shadow" | "authoritative";
+    readCurrencies: string[];
+    comparison: SavingsComparison | null;
+  };
+  /** Estates claimed for resolution or revocation and not yet settled. */
+  resolvingEstates: Array<{ bankId: string; status: string; claimedTurn: number }>;
+  /**
+   * The activation gate. Widening the savings rollout (next currency into the
+   * read cohort, shadow to authoritative) is refused while this is false, and
+   * the reasons say what must be clean first: nothing unfinished from an
+   * earlier turn, no estate stuck in resolution, no projection drift.
+   */
+  gate: { ok: boolean; reasons: string[] };
 }
 
 function finite(value: unknown): number {
@@ -59,23 +83,25 @@ function finite(value: unknown): number {
 
 /** Player savings pointed at each bank, keyed by bank hex, for one currency. */
 async function playerHeldByBank(db: Db, currency: CurrencyCode): Promise<Map<string, number>> {
+  const holderPath = `currencyBalances.savingsHolder.${currency}`;
   const rows = await db
     .collection<Character>("characters")
-    .aggregate<{ _id: string; total: number }>([
-      {
-        $match: {
-          [`currencyBalances.savingsHolder.${currency}`]: { $exists: true, $ne: "centralBank" },
-        },
-      },
-      {
-        $group: {
-          _id: `$currencyBalances.savingsHolder.${currency}`,
-          total: { $sum: `$currencyBalances.savings.${currency}` },
-        },
-      },
-    ])
+    .find({ [holderPath]: { $exists: true, $ne: "centralBank" } })
+    .project<Pick<Character, "currencyBalances">>({
+      [holderPath]: 1,
+      [`currencyBalances.savings.${currency}`]: 1,
+    })
     .toArray();
-  return new Map(rows.map((row) => [String(row._id), finite(row.total)]));
+  const totals = new Map<string, number>();
+  for (const row of rows) {
+    const holder = String(row.currencyBalances?.savingsHolder?.[currency] ?? "");
+    if (!holder) continue;
+    totals.set(
+      holder,
+      (totals.get(holder) ?? 0) + finite(row.currencyBalances?.savings?.[currency])
+    );
+  }
+  return totals;
 }
 
 export async function buildBankingHealth(db: Db, now = new Date()): Promise<BankingHealthReport> {
@@ -92,6 +118,7 @@ export async function buildBankingHealth(db: Db, now = new Date()): Promise<Bank
     byCurrency.set(currency, [...(byCurrency.get(currency) ?? []), bank]);
   }
 
+  const policy = await loadBankingPolicy(db);
   const currencies: CurrencyBankingHealth[] = [];
   for (const [currency, rows] of [...byCurrency.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     const [held, reserveRatio] = await Promise.all([
@@ -105,6 +132,8 @@ export async function buildBankingHealth(db: Db, now = new Date()): Promise<Bank
       charterPointerDeposits: 0,
       pointerDrift: 0,
       cashBackedDeposits: 0,
+      playerCashDeposits: 0,
+      stages: {},
       cashReserves: 0,
       totalLoans: 0,
       requiredReserves: 0,
@@ -113,7 +142,14 @@ export async function buildBankingHealth(db: Db, now = new Date()): Promise<Bank
     };
     for (const bank of rows) {
       const charter = bank.bankCharter!;
-      const sheet = bankBalanceSheet({ charter, reserveRatio });
+      const sheet = bankBalanceSheet({
+        charter,
+        reserveRatio,
+        playerDepositsAreLiabilities: savingsReadsAuthoritative(policy, currency),
+      });
+      health.playerCashDeposits += sheet.playerDeposits;
+      const stage = lifecycleStage(charter);
+      health.stages[stage] = (health.stages[stage] ?? 0) + 1;
       health.playerHeldAtBanks += held.get(bank._id.toString()) ?? 0;
       health.charterPointerDeposits += sheet.pointerDeposits;
       health.cashBackedDeposits += sheet.cashBackedDeposits;
@@ -128,7 +164,7 @@ export async function buildBankingHealth(db: Db, now = new Date()): Promise<Bank
   }
 
   const unfinished = await db
-    .collection<{ _id: string; kind: string; createdAt: Date; status: string }>(
+    .collection<{ _id: string; kind: string; turn?: number; createdAt: Date; status: string }>(
       MONEY_MOVE_COLLECTION
     )
     .find({ status: "partial" })
@@ -138,6 +174,49 @@ export async function buildBankingHealth(db: Db, now = new Date()): Promise<Bank
   const byKind: Record<string, number> = {};
   for (const row of unfinished) byKind[row.kind] = (byKind[row.kind] ?? 0) + 1;
   const oldest = unfinished[0];
+
+  const currentTurn = await getCurrentTurn(db);
+  const comparison =
+    policy.savingsAccounts === "off"
+      ? null
+      : await buildSavingsComparison(db, currentTurn, {
+          authoritativeCurrencies: readCohort(policy),
+        });
+
+  const resolvingRows = await db
+    .collection<Corporation>("corporations")
+    .find({
+      "bankCharter.resolutionClaimedTurn": { $exists: true },
+      "bankCharter.depositorsResolvedTurn": { $exists: false },
+    })
+    .project<Pick<Corporation, "_id" | "bankCharter">>({ bankCharter: 1 })
+    .toArray();
+  const resolvingEstates = resolvingRows
+    .filter((row) => lifecycleStage(row.bankCharter) === "resolving")
+    .map((row) => ({
+      bankId: row._id.toString(),
+      status: row.bankCharter!.status,
+      claimedTurn: row.bankCharter!.resolutionClaimedTurn ?? 0,
+    }));
+
+  const reasons: string[] = [];
+  const staleUnfinished = unfinished.filter(
+    (row) => typeof row.turn === "number" && row.turn < currentTurn
+  );
+  if (staleUnfinished.length > 0) {
+    reasons.push(
+      `${staleUnfinished.length} settlement(s) from earlier turns are unfinished (oldest ${staleUnfinished[0]._id})`
+    );
+  }
+  const stuck = resolvingEstates.filter((estate) => estate.claimedTurn < currentTurn);
+  if (stuck.length > 0) {
+    reasons.push(`${stuck.length} estate(s) claimed on earlier turns are still in resolution`);
+  }
+  if (comparison && comparison.totalDiscrepancies > 0) {
+    reasons.push(
+      `${comparison.totalDiscrepancies} savings projection discrepancy(ies) in the last comparison`
+    );
+  }
 
   return {
     generatedAt: now,
@@ -149,5 +228,12 @@ export async function buildBankingHealth(db: Db, now = new Date()): Promise<Bank
       byKind,
     },
     telemetry: await loadBankingTelemetry(db),
+    savingsAccounts: {
+      mode: policy.savingsAccounts,
+      readCurrencies: [...policy.savingsReadCurrencies],
+      comparison,
+    },
+    resolvingEstates,
+    gate: { ok: reasons.length === 0, reasons },
   };
 }

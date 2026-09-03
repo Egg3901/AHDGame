@@ -4,7 +4,7 @@
  */
 
 import type { BankCharter } from "@/lib/db/types/bank";
-import { cashBackedDeposits } from "@/lib/banking/rules/balanceSheet";
+import { cashBackedDeposits, type BalanceSheetOptions } from "@/lib/banking/rules/balanceSheet";
 
 export {
   RESERVE_REQUIREMENT_HISTORICAL_DEFAULT,
@@ -21,10 +21,11 @@ export {
  * so lending against them was lending money the bank does not hold.
  */
 export function getLendableHeadroom(
-  charter: Pick<BankCharter, "npcDeposits" | "totalLoans">,
-  reserveRatio: number
+  charter: Pick<BankCharter, "npcDeposits" | "playerDeposits" | "totalLoans">,
+  reserveRatio: number,
+  options: BalanceSheetOptions = {}
 ): number {
-  const deposits = cashBackedDeposits(charter);
+  const deposits = cashBackedDeposits(charter, options);
   const loans = charter.totalLoans ?? 0;
   const ratio = Number.isFinite(reserveRatio) ? reserveRatio : 0;
   return Math.max(0, deposits * (1 - ratio) - loans);

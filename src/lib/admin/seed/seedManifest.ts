@@ -470,6 +470,12 @@ const RUNTIME: CollectionEntry[] = [
 
   // Private banking (1.1)
   { name: "bankLoans", category: "runtime" },
+  {
+    name: "savingsAccounts",
+    category: "runtime",
+    notes:
+      "Authoritative savings accounts, one per owner and currency; legacy character savings fields are projections of these.",
+  },
   { name: "bankCharterHistory", category: "runtime" },
   { name: "depositInsuranceFunds", category: "runtime" },
   {

@@ -21,6 +21,8 @@ import { normalizeSavingsMutationAmount } from "@/lib/api/savings/savingsAmount"
 import { ZOD_ACTIVE_CURRENCY_ENUM } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { runSavingsCommand } from "@/lib/savings/accountsShell";
 
 const withdrawSchema = z.object({
   currency: z.enum(ZOD_ACTIVE_CURRENCY_ENUM),
@@ -77,8 +79,18 @@ export async function POST(request: Request) {
 
     const now = new Date();
     const inc = buildTransferFromSavingsInc(normalized, c, forexEnabled);
+    const policy = await loadBankingPolicy(db);
+    const accountsAuthoritative = policy.savingsAccounts === "authoritative" && forexEnabled;
 
-    if (forexEnabled) {
+    if (accountsAuthoritative) {
+      const withdrawn = await runSavingsCommand(db, character._id, c, {
+        type: "withdraw",
+        amount: normalized,
+      });
+      if (!withdrawn.ok) {
+        return NextResponse.json(badRequest(withdrawn.error).toJson(), { status: 400 });
+      }
+    } else if (forexEnabled) {
       const res = await db.collection<Character>("characters").updateOne(
         {
           _id: character._id,

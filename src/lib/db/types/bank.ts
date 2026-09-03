@@ -71,6 +71,14 @@ export interface BankCharter {
    */
   npcDeposits?: number;
   /**
+   * Player savings the bank owes as a REAL, cash-backed liability: the sum
+   * of the savings accounts whose holder is this bank, maintained as a
+   * projection by the savings commands once accounts are authoritative for
+   * the currency. Absent (or ignored) before then, when player balances are
+   * still pointers the bank never received cash for.
+   */
+  playerDeposits?: number;
+  /**
    * 0..1 solvency/liquidity confidence, recomputed each bankSolvencyTurn.
    * Drives NPC deposit flight and the published warning band.
    */
@@ -113,6 +121,18 @@ export interface BankCharter {
    * resolveFailedBankDepositors finishes (insurance payouts / haircuts / holder flips).
    */
   depositorsResolvedTurn?: number;
+  /**
+   * Turn on which resolution of a failed estate was claimed. Set before the
+   * waterfall moves any money, so a crashed resolution reads as `resolving`
+   * and is finished by recovery rather than re-run from the start.
+   */
+  resolutionClaimedTurn?: number;
+  /**
+   * Reason given when a revocation claimed the estate, kept until the status
+   * flips so a revocation that crashed after claiming can be finished by the
+   * recovery worker with the reason it was started with.
+   */
+  pendingRevocationReason?: string;
   revokedTurn?: number;
   revokedReason?: string;
   failedTurn?: number;
