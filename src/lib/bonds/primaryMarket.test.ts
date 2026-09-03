@@ -16,6 +16,7 @@ import {
   planCorporateUnderwriting,
   planSovereignMonetization,
   planSovereignUnderwriting,
+  unsoldPlacementBudget,
   unsoldPlacementCap,
 } from "./primaryMarket";
 
@@ -75,6 +76,14 @@ describe("planSovereignUnderwriting", () => {
   });
 });
 
+describe("unsoldPlacementBudget", () => {
+  it("only spends cash above half the target, a tenth per turn", () => {
+    expect(unsoldPlacementBudget(150_000, 100_000)).toBe(10_000);
+    expect(unsoldPlacementBudget(40_000, 100_000)).toBe(0);
+    expect(unsoldPlacementBudget(150_000, 0)).toBe(15_000);
+  });
+});
+
 describe("unsoldPlacementCap", () => {
   it("places two percent of the requested size per turn, at least one unit", () => {
     expect(unsoldPlacementCap(1_000, 500)).toBe(20);
@@ -122,8 +131,11 @@ describe("placeUnsoldBondUnits", () => {
     db.collectionMocks.bonds.find.mockReturnValue({
       sort: () => ({ toArray: async () => [bond] }),
     });
-    // Pool has 150k: 10% placement budget = 15k -> 14 units at the 1,020 ask.
-    db.collectionMocks.bondMarketPools.findOne.mockResolvedValue({ cashLocal: 150_000 });
+    // Pool has 150k against no target: 10% placement budget = 15k -> 14 units at the 1,020 ask.
+    db.collectionMocks.bondMarketPools.findOne.mockResolvedValue({
+      cashLocal: 150_000,
+      targetCashLocal: 0,
+    });
     db.collectionMocks.bondMarketPools.findOneAndUpdate.mockResolvedValue({ cashLocal: 100_000 });
     vi.mocked(loadBondQuote).mockResolvedValue({ askPerUnit: 1_020 } as never);
     db.collectionMocks.bonds.updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });

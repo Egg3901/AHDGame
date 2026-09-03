@@ -43,8 +43,25 @@ export const SOVEREIGN_PRIMARY_COMMIT_SHARE = 0.9;
 export const SOVEREIGN_PRIMARY_MIN_APPETITE_FACTOR = 0.1;
 /** Per-turn placement cap for unsold units, as a share of the requested size. */
 export const UNSOLD_PLACEMENT_SHARE_PER_TURN = 0.02;
-/** Share of pool cash one turn of placement may spend, across all bonds in the currency. */
+/** Share of the pool's spendable cash one turn of placement may use, across all bonds in the currency. */
 export const UNSOLD_PLACEMENT_CASH_SHARE_PER_TURN = 0.1;
+/**
+ * Share of the pool's target kept back from placement. The target carries the
+ * next quarter's sovereign rollover, and placing old unsold units out of that
+ * reserve left Austria's t612 auction facing an empty pool (0.02% fill) in the
+ * clone sim. Placement only spends cash above this floor.
+ */
+export const UNSOLD_PLACEMENT_RESERVE_SHARE = 0.5;
+
+/** Cash a pool may spend on placing unsold units this turn. */
+export function unsoldPlacementBudget(cashLocal: number, targetCashLocal: number): number {
+  const cash = Number.isFinite(cashLocal) && cashLocal > 0 ? cashLocal : 0;
+  const target = Number.isFinite(targetCashLocal) && targetCashLocal > 0 ? targetCashLocal : 0;
+  return (
+    Math.max(0, cash - target * UNSOLD_PLACEMENT_RESERVE_SHARE) *
+    UNSOLD_PLACEMENT_CASH_SHARE_PER_TURN
+  );
+}
 /** Autonomous central bank monetization of a sovereign shortfall, cap per auction as a share of GDP. */
 export const SOVEREIGN_MONETIZATION_GDP_CAP = 0.02;
 
@@ -146,10 +163,16 @@ export function unsoldPlacementCap(requestedUnits: number, unsoldUnits: number):
 export async function readPoolForPrimary(
   db: Db,
   currency: CurrencyCode
-): Promise<Pick<BondMarketPool, "cashLocal" | "m2Local" | "appetiteByCountry"> | null> {
+): Promise<Pick<
+  BondMarketPool,
+  "cashLocal" | "targetCashLocal" | "m2Local" | "appetiteByCountry"
+> | null> {
   const pool = await db
     .collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION)
-    .findOne({ _id: currency }, { projection: { cashLocal: 1, m2Local: 1, appetiteByCountry: 1 } });
+    .findOne(
+      { _id: currency },
+      { projection: { cashLocal: 1, targetCashLocal: 1, m2Local: 1, appetiteByCountry: 1 } }
+    );
   return pool ?? null;
 }
 
@@ -211,7 +234,7 @@ export async function placeUnsoldBondUnits(
       const pool = await readPoolForPrimary(db, currency);
       budgetByCurrency.set(
         currency,
-        Math.max(0, pool?.cashLocal ?? 0) * UNSOLD_PLACEMENT_CASH_SHARE_PER_TURN
+        unsoldPlacementBudget(pool?.cashLocal ?? 0, pool?.targetCashLocal ?? 0)
       );
     }
     let budget = budgetByCurrency.get(currency) ?? 0;
