@@ -21,7 +21,16 @@ import {
   getInsuredCap,
   sumInsuredPlayerDeposits,
 } from "@/lib/banking/insurance";
-import { applyLoanPayment, computeNpcLoanBook, markLoanDefaulted } from "@/lib/banking/lending";
+import {
+  ARREARS_DEFAULT_TURNS,
+  MAX_NPC_FLOW_PER_TURN_FRACTION,
+  applyLoanPayment,
+  computeNpcLoanBook,
+  markLoanDefaulted,
+  namedLoanInstalment,
+  npcFlowDelta,
+  perTurnInterest,
+} from "@/lib/banking/rules/loans";
 import { cbMarginRatePercent } from "@/lib/banking/interbank";
 import { effectiveBankRatesFromPrime } from "@/lib/banking/rates";
 import { getReserveRequirement } from "@/lib/banking/reserves";
@@ -50,11 +59,8 @@ import {
   type LendingProfileId,
 } from "@/lib/banking/creditBands";
 
-/** Max fraction of the household target that can migrate or be lent each turn. */
-export const MAX_NPC_FLOW_PER_TURN_FRACTION = 0.025;
-
-/** Provisional - consecutive shortfall turns before a player loan defaults. */
-export const ARREARS_DEFAULT_TURNS = 8;
+// Re-exported for the turn's tests and dashboards; defined in the rules zone.
+export { ARREARS_DEFAULT_TURNS, MAX_NPC_FLOW_PER_TURN_FRACTION };
 
 /** Rolling term for the synthetic NPC bulk book (re-sized each bankingTurn). */
 const NPC_BULK_TERM_TURNS = TURNS_PER_YEAR;
@@ -104,25 +110,6 @@ const ZERO_SUMMARY: BankingTurnSummary = {
   deadBankRecoveredToEstate: 0,
   deadBankRecoveredToInsurer: 0,
 };
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-/** Per-turn interest on a balance at an annual percent rate (matches savingsInterestTurn). */
-function perTurnInterest(balance: number, annualPercent: number, currency: CurrencyCode): number {
-  if (!(balance > 0) || !(annualPercent > 0)) return 0;
-  const raw = (balance * (annualPercent / 100)) / TURNS_PER_YEAR;
-  return roundSavingsAmount(raw, currency);
-}
-
-function npcFlowDelta(current: number, target: number): number {
-  const cur = Math.max(0, current);
-  const desired = target - cur;
-  const maxOutflow = MAX_NPC_FLOW_PER_TURN_FRACTION * cur;
-  const maxInflow = MAX_NPC_FLOW_PER_TURN_FRACTION * Math.max(target, cur);
-  return clamp(desired, -maxOutflow, maxInflow);
-}
 
 type DepositTaker = {
   corp: Corporation;
@@ -892,10 +879,7 @@ async function servicePlayerLoan(
     return empty;
   }
 
-  const remainingTurns = Math.max(1, loan.originatedTurn + loan.termTurns - turn);
-  const interestDue = (outstanding * (loan.ratePercent / 100)) / TURNS_PER_YEAR;
-  const principalDue = outstanding / remainingTurns;
-  const paymentDue = interestDue + principalDue;
+  const { interestDue, principalDue, paymentDue } = namedLoanInstalment(loan, turn);
 
   const borrowerName = await readBorrowerName(db, loan);
   const ledger = { bankName, borrowerName };

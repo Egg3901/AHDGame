@@ -8,11 +8,12 @@ import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { getRateCorridors, isOffsetInCorridor } from "@/lib/banking/regulationQ";
 import { charterMay } from "@/lib/banking/rules/capabilities";
 
-/** Floor on effective deposit rate (percent). Provisional - flagged for user review. */
-export const MIN_DEPOSIT_RATE_PERCENT = 0.05;
-
-/** Floor on effective lending rate (percent). Provisional - flagged for user review. */
-export const MIN_LENDING_RATE_PERCENT = 0.1;
+export {
+  MIN_DEPOSIT_RATE_PERCENT,
+  MIN_LENDING_RATE_PERCENT,
+  effectiveBankRatesFromPrime,
+} from "@/lib/banking/rules/rates";
+import { effectiveBankRatesFromPrime } from "@/lib/banking/rules/rates";
 
 export type SetBankRatesResult =
   { ok: true; depositOffset: number; lendingOffset: number } | { ok: false; error: string };
@@ -109,20 +110,4 @@ export async function getEffectiveBankRates(
     .collection<CentralBank>("centralBanks")
     .findOne({ _id: bankId }, { projection: { primeRate: 1 } });
   return effectiveBankRatesFromPrime(charter, bank?.primeRate);
-}
-
-/**
- * Pure counterpart for callers that already hold the CB doc (the banking turn
- * bulk-loads every central bank anyway) — no per-charter findOne.
- */
-export function effectiveBankRatesFromPrime(
-  charter: BankCharter,
-  primeRateRaw: number | undefined | null
-): { depositRatePercent: number; lendingRatePercent: number } {
-  const primeRate =
-    typeof primeRateRaw === "number" && Number.isFinite(primeRateRaw) ? primeRateRaw : 0;
-  return {
-    depositRatePercent: Math.max(MIN_DEPOSIT_RATE_PERCENT, primeRate + charter.depositOffset),
-    lendingRatePercent: Math.max(MIN_LENDING_RATE_PERCENT, primeRate + charter.lendingOffset),
-  };
 }

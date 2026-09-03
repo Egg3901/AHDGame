@@ -1,7 +1,6 @@
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { BankCharter, BankLoan, InterbankLoan } from "@/lib/db/types/bank";
-import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
@@ -20,24 +19,17 @@ import { getReserveRequirement } from "@/lib/banking/reserves";
 import { discountWindowStigma } from "@/lib/banking/discountWindow";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
 import { charterMay } from "@/lib/banking/rules/capabilities";
+import { RUN_FAILURE_COVER_FRACTION } from "@/lib/banking/rules/balanceSheet";
+import {
+  CONTAGION_PANIC_TURNS,
+  FLIGHT_RATE_BY_BAND,
+  depositFlight,
+  depositTakerFails,
+  propBankFails,
+} from "@/lib/banking/rules/solvency";
 
-/**
- * Provisional - fraction of npcDeposits that flee per solvency turn by band.
- * Independent of bankingTurn's normal NPC flow cap.
- */
-export const FLIGHT_RATE_BY_BAND: Readonly<Record<"amber" | "red", number>> = {
-  amber: 0.1,
-  red: 0.3,
-};
-
-/**
- * Provisional - fail when liquid+posted < this fraction of required reserves,
- * but only while the warning band is already red.
- */
-export const RUN_FAILURE_COVER_FRACTION = 0.5;
-
-/** Provisional - panicTurns stamped onto same-currency peers on a failure. */
-export const CONTAGION_PANIC_TURNS = 4;
+// Defined in the rules zone; re-exported for the turn's tests and dashboards.
+export { CONTAGION_PANIC_TURNS, FLIGHT_RATE_BY_BAND, RUN_FAILURE_COVER_FRACTION };
 
 export type BankSolvencyTurnSummary = {
   banksEvaluated: number;
@@ -347,8 +339,7 @@ async function evaluateOneBank(
   if (depositTaking) {
     const priorBand = charter.warningBand;
     if (priorBand === "amber" || priorBand === "red") {
-      const rate = FLIGHT_RATE_BY_BAND[priorBand];
-      const outflow = Math.min(npcDeposits * rate, Math.max(0, cashReserves));
+      const outflow = depositFlight({ priorBand, npcDeposits, cashReserves });
       if (outflow > 0) {
         const cbDocId = getBankId(getCountryIdForCurrency(currency));
         // Fleeing depositors take their money with them. Capped at what the
@@ -415,15 +406,17 @@ async function evaluateOneBank(
 
   let fails = false;
   if (depositTaking) {
-    // Cash-backed base only, matching bankingTurn's reserve requirement.
-    const requiredLiquidity = reserveRatioRequired * npcDeposits;
-    // Not `+ postedCapital`: posted capital is a memo of cash already inside the
+    // Cash-backed base only, matching bankingTurn's reserve requirement. Not
+    // `+ postedCapital`: posted capital is a memo of cash already inside the
     // reserve balance, so adding it counted the same money twice.
-    const cover = cashReserves;
-    fails = priorBand === "red" && cover < RUN_FAILURE_COVER_FRACTION * requiredLiquidity;
+    fails = depositTakerFails({
+      priorBand,
+      cashReserves,
+      requiredLiquidity: reserveRatioRequired * npcDeposits,
+    });
   } else if (propRunning) {
     // Investment banks: red band + insolvent equity base.
-    fails = band === "red" && equityBase <= 0;
+    fails = propBankFails({ band, equityBase });
   }
 
   if (fails) {
