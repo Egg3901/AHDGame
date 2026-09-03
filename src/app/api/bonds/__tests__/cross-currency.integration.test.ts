@@ -109,9 +109,13 @@ describe("Bond transactional routes — cross-currency regression (A19-A21, A25)
       "gameState",
       "exchangeRates",
       "imperialCharacters",
+      "bondMarketPools",
     ]) {
       db.collection(name);
     }
+    // A flush bond market pool so sells are never refused for depth here.
+    db.collectionMocks["bondMarketPools"]!.findOne.mockResolvedValue({ cashLocal: 1e12 });
+    db.collectionMocks["bondMarketPools"]!.findOneAndUpdate.mockResolvedValue({ cashLocal: 1e12 });
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
 
