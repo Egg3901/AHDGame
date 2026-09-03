@@ -7,7 +7,12 @@ import { crossCountryActionGuard } from "@/lib/api/crossCountryGuard";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { isNonElectoralUsRegion } from "@/lib/constants/states";
-import type { OrgRegLedger, StatePartyOrg, PoliticalParty } from "@/lib/db/types";
+import type {
+  OrgRegLedger,
+  StatePartyOrg,
+  PoliticalParty,
+  PartyStrengthPressure,
+} from "@/lib/db/types";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { checkPartyPresence } from "@/lib/turn/partyOrg/presence";
 import { ensureStatePartyOrgRow } from "@/lib/turn/partyOrg/ensureStatePartyOrgRow";
@@ -24,7 +29,14 @@ import {
   NATIONAL_PS_ACTIVITY_RECOVERY_FRACTION,
   PRIORITY_REGION_EFFECT_BONUS,
   blendedComparisonPs,
+  effectivePsCost,
 } from "@/lib/turn/politicalStrength/strengthConstants";
+import {
+  clampFundedFraction,
+  orgBuildCashPrice,
+  resolveOrgBuildFunding,
+} from "@/lib/politicalStrength/buildOrgFunding";
+import { chargeOrgBuildFunds } from "@/lib/parties/commands/chargeOrgBuildFunds";
 import { calcUnifiedBuildOrg } from "@/lib/turn/politicalStrength/buildOrgGain";
 import { isStateInPriorityRegion } from "@/lib/parties/priorityRegion";
 import { resolveUnmannedDefaultCaptureMultiplier } from "@/lib/parties/unmannedDefenseShield";
@@ -252,30 +264,6 @@ export async function POST(request: Request, { params }: RouteParams) {
     );
   }
 
-  // No per-party Org cap — the state-wide Org pool sum constraint
-  // (`Σ party Org + Unaffiliated Org = 100`) is the only ceiling, enforced by
-  // the conservation in `calcUnifiedBuildOrg` (each poach clamps at the rival's
-  // current Org; the pool slice clamps at the unaffiliated remainder).
-  //
-  // Priority Region bonus: when the targeted state is in the spender's
-  // priorityRegion cluster, multiply the EFFECT by `1 + PRIORITY_REGION_EFFECT_BONUS`
-  // (+25%) — not the PS cost (2026-05-23 spec for #13). Scale the pool slice and
-  // each rival's loss, then re-clamp so the bonus can't overdraw the pool or a
-  // rival's current Org.
-  const priorityBonus = isStateInPriorityRegion(spenderParty, upperRegionId)
-    ? 1 + PRIORITY_REGION_EFFECT_BONUS
-    : 1;
-  const poolAvailablePct = Math.max(0, 100 - totalPartyOrgPct);
-  const appliedPoolGain = Math.min(breakdown.poolGain * priorityBonus, poolAvailablePct);
-  const rivalOrgById = new Map(rivalRows.map((r) => [r.partyId, r.organization ?? 0]));
-  const appliedPoaches = breakdown.rivalPoaches
-    .map((p) => ({
-      partyId: p.partyId,
-      loss: Math.min(p.loss * priorityBonus, rivalOrgById.get(p.partyId) ?? 0),
-    }))
-    .filter((p) => p.loss > 0);
-  const actualGain = appliedPoolGain + appliedPoaches.reduce((s, p) => s + p.loss, 0);
-
   const gameState = await getGameState(db);
   const currentTurn = gameState?.currentTurn ?? 0;
   const now = new Date();
@@ -307,6 +295,33 @@ export async function POST(request: Request, { params }: RouteParams) {
   const preferred =
     psPool === "national" ? "national-targeted" : psPool === "state" ? "state" : undefined;
   const scope = resolveSpenderScope(spenderParty, spenderRow, authUser, preferred);
+
+  // ── Cash gate (2026-09-02) ────────────────────────────────────────────────
+  // Build Org costs money as well as PS, charged from the SAME tier that pays
+  // the PS. Price it BEFORE the PS is spent so a click the treasury cannot fund
+  // is refused for free — no PS debit and no pressure escalation. That means
+  // reading the pressure ladder here rather than relying on the value
+  // `spendPoliticalStrength` computes internally; the preview GET does the same
+  // read, so the quote the player saw and the charge they get agree.
+  const pressureRow = await db
+    .collection<PartyStrengthPressure>("partyStrengthPressure")
+    .findOne({ _id: `${countryId}_${spenderParty.sequentialId}_${upperRegionId}` });
+  const quotedPsCost = effectivePsCost(BUILD_ORG_BASE_PS_COST, pressureRow?.value ?? 0);
+  const quotedPrice = orgBuildCashPrice(countryId, scope, quotedPsCost);
+  const payingTreasury =
+    scope === "state" ? (spenderRow.treasury ?? 0) : (spenderParty.treasury ?? 0);
+  const funding = resolveOrgBuildFunding({ price: quotedPrice, treasury: payingTreasury });
+  if (!funding.ok) {
+    return NextResponse.json(
+      {
+        error:
+          scope === "state"
+            ? "This state party cannot afford to organize here. Build Org costs money as well as Political Strength; top up the state treasury or ask the national party for a transfer."
+            : "The national party cannot afford to organize here. Build Org costs money as well as Political Strength; raise funds before building again.",
+      },
+      { status: 400 }
+    );
+  }
 
   // Spend PS via the shared command (debits PS, escalates pressure, writes ledger).
   const spendResult = await spendPoliticalStrength(
@@ -354,6 +369,60 @@ export async function POST(request: Request, { params }: RouteParams) {
         },
       ]);
   }
+
+  // Charge the cash. Priced off the PS cost the spend ACTUALLY paid, so the two
+  // halves of the bill always agree even if a concurrent click nudged the ladder
+  // between the quote above and the debit. `chargeOrgBuildFunds` never
+  // overdraws: it takes what is there and reports it.
+  const chargePrice = orgBuildCashPrice(countryId, scope, spendResult.effectiveCost);
+  const { charged } = await chargeOrgBuildFunds(
+    {
+      countryId,
+      partyId: String(spenderParty.sequentialId),
+      scope,
+      stateRowId: String(spenderRow._id),
+      amount: chargePrice,
+      memo: `Build Org (${upperRegionId})`,
+      initiatedBy: {
+        type: "character",
+        id: String(authUser.character._id),
+        label: authUser.character.name,
+      },
+      turn: currentTurn,
+      now,
+    },
+    db
+  );
+
+  // Realized funded share. Floored at `ORG_BUILD_MIN_FUNDED_FRACTION` because the
+  // PS is already spent by this point — a treasury drained by a concurrent debit
+  // must still leave the click worth something rather than turning committed PS
+  // into zero Org.
+  const fundedFraction = chargePrice > 0 ? clampFundedFraction(charged / chargePrice) : 1;
+
+  // No per-party Org cap — the state-wide Org pool sum constraint
+  // (`Σ party Org + Unaffiliated Org = 100`) is the only ceiling, enforced by
+  // the conservation in `calcUnifiedBuildOrg` (each poach clamps at the rival's
+  // current Org; the pool slice clamps at the unaffiliated remainder).
+  //
+  // Two multipliers scale the EFFECT (never the cost): the Priority Region bonus
+  // (+25% when the target is in the spender's cluster, 2026-05-23 spec for #13)
+  // and the funded fraction. Scale the pool slice and each rival's loss by both,
+  // then re-clamp so neither can overdraw the pool or a rival's current Org.
+  const priorityBonus = isStateInPriorityRegion(spenderParty, upperRegionId)
+    ? 1 + PRIORITY_REGION_EFFECT_BONUS
+    : 1;
+  const effectMultiplier = priorityBonus * fundedFraction;
+  const poolAvailablePct = Math.max(0, 100 - totalPartyOrgPct);
+  const appliedPoolGain = Math.min(breakdown.poolGain * effectMultiplier, poolAvailablePct);
+  const rivalOrgById = new Map(rivalRows.map((r) => [r.partyId, r.organization ?? 0]));
+  const appliedPoaches = breakdown.rivalPoaches
+    .map((p) => ({
+      partyId: p.partyId,
+      loss: Math.min(p.loss * effectMultiplier, rivalOrgById.get(p.partyId) ?? 0),
+    }))
+    .filter((p) => p.loss > 0);
+  const actualGain = appliedPoolGain + appliedPoaches.reduce((s, p) => s + p.loss, 0);
 
   // Apply Org gain to spender (round to 2 decimals to match prior precision).
   const newOwnOrg = Math.round(((spenderRow.organization ?? 0) + actualGain) * 100) / 100;
@@ -427,6 +496,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     upperRegionId,
     spenderParty: refreshedParty,
     authUser,
+    // Quote the NEXT click against the pool this one actually spent. Without it
+    // a dual-role officer who spent the national pool gets a next-click estimate
+    // priced at the state tier — half the cash, against the wrong treasury.
+    preferredScope: scope,
   });
 
   return NextResponse.json({
@@ -434,6 +507,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     psCost: spendResult.effectiveCost,
     newPS: spendResult.newPoliticalStrength,
     newPressure: spendResult.newPressure,
+    cashPrice: chargePrice,
+    cashCost: charged,
+    fundedFraction,
     orgGain: actualGain,
     newOrg: newOwnOrg,
     poaches: poachOutcomes,
