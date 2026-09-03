@@ -46,9 +46,12 @@ export function isLendingCharter(charter: BankCharter | undefined): charter is B
  *
  * Every active charter, investment included. Underwriting and lending to firms
  * is what an investment bank is FOR, and excluding them was the single largest
- * reason the charter had no viable business: `processOneBank` skips
- * non-deposit-takers, so an investment bank earned nothing per turn while still
- * paying margin interest. It could only ever lose money.
+ * reason the charter had no viable business.
+ *
+ * The banking turn services the named loan book of EVERY charter this admits.
+ * It used to iterate deposit takers only, so a loan an investment bank was
+ * allowed to originate was never advanced: no interest, no principal, no
+ * arrears, and the bank still paid margin interest on the cash it had lent.
  *
  * Household lending stays closed to them (see {@link isLendingCharter}); a firm
  * loan is funded from the bank's own capital, which they do have.

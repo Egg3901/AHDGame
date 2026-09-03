@@ -29,7 +29,7 @@ import { getBankDepositCeiling } from "@/lib/banking/capacityAllocation";
 import { roundSavingsAmount, savingsApyPercent } from "@/lib/currency/savingsInterest";
 import { discountWindowRatePercent } from "@/lib/banking/discountWindow";
 import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
-import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
+import { isDepositTakingCharter, isNamedLendingCharter } from "@/lib/banking/charterKinds";
 import { getCashReserves, bankEquity } from "@/lib/banking/bankCash";
 import { processDeadBankLoans } from "@/lib/banking/deadBankLoans";
 import {
@@ -148,14 +148,14 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
     CentralBank,
     "_id" | "primeRate" | "inflationHistory" | "externalBroadMoney" | "chairInfamy"
   >;
+  // EVERY active charter, not only the deposit takers. The old query filtered
+  // on retail/universal, so an investment bank's named loans were originated
+  // (lending.ts allows it) and then never serviced: no interest, no principal,
+  // no arrears, forever. Deposit and household-funding stages still run only
+  // for deposit-taking charters; loan servicing runs for any charter with a
+  // loan book.
   const [corps, banks] = await Promise.all([
-    db
-      .collection<Corporation>("corporations")
-      .find({
-        "bankCharter.status": "active",
-        "bankCharter.type": { $in: ["retail", "universal"] },
-      })
-      .toArray(),
+    db.collection<Corporation>("corporations").find({ "bankCharter.status": "active" }).toArray(),
     db
       .collection<CentralBank>("centralBanks")
       .find({})
@@ -168,20 +168,18 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   }
 
   const depositTakers: DepositTaker[] = [];
+  const loanBookOnly: LoanBookOnlyBank[] = [];
   for (const corp of corps) {
-    if (!isDepositTakingCharter(corp.bankCharter)) continue;
-    if (corp.bankCharter.lastBankingTurn === turn) continue;
-    const cb = cbById.get(getBankId(getCountryIdForCurrency(corp.bankCharter.currency)));
-    const rates = effectiveBankRatesFromPrime(corp.bankCharter, cb?.primeRate);
-    depositTakers.push({ corp, charter: corp.bankCharter, rates });
-  }
-
-  if (depositTakers.length === 0) {
-    const summary: BankingTurnSummary = { ...ZERO_SUMMARY };
-    if (await isBankPropTradingEnabled()) {
-      await serviceInterbankAndCbMargin(db, turn, summary);
+    const charter = corp.bankCharter;
+    if (!isNamedLendingCharter(charter)) continue;
+    if (charter.lastBankingTurn === turn) continue;
+    if (isDepositTakingCharter(charter)) {
+      const cb = cbById.get(getBankId(getCountryIdForCurrency(charter.currency)));
+      const rates = effectiveBankRatesFromPrime(charter, cb?.primeRate);
+      depositTakers.push({ corp, charter, rates });
+    } else {
+      loanBookOnly.push({ corp, charter });
     }
-    return summary;
   }
 
   const resolveCbApy = (currency: CurrencyCode): number => {
@@ -193,7 +191,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
     return savingsApyPercent(prime, inflation);
   };
 
-  // Competing deposit shares once per currency.
+  // Competing deposit shares once per currency, among the deposit takers.
   const byCurrency = new Map<CurrencyCode, DepositTaker[]>();
   for (const row of depositTakers) {
     const c = row.charter.currency as CurrencyCode;
@@ -239,6 +237,17 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
     summary.npcDepositDelta += bankResult.npcDepositDelta;
     summary.npcBulkShortfall += bankResult.npcBulkShortfall;
     summary.premiumShortfall += bankResult.premiumShortfall;
+  }
+
+  // Charters with a loan book but no deposit base: the named loans still have
+  // to advance every turn, exactly as they do for a deposit taker.
+  for (const row of loanBookOnly) {
+    const loanResult = await processLoanBookOnlyBank(db, turn, row);
+    if (!loanResult) continue;
+    summary.banksProcessed += 1;
+    summary.loanInterestCollected += loanResult.interestCollected;
+    summary.loanPrincipalRepaid += loanResult.principalRepaid;
+    summary.defaultsWrittenOff += loanResult.writtenOff;
   }
 
   // Loans owed to banks that have already been wound up. They are not part of
@@ -657,39 +666,13 @@ async function processOneBank(
     }
   }
 
-  // (d) Player loan servicing
-  const loans = await db
-    .collection<BankLoan>("bankLoans")
-    .find({
-      bankCorporationId: corp._id,
-      borrowerType: { $in: ["character", "corporation"] },
-      status: { $in: ["current", "arrears"] },
-      lastProcessedTurn: { $ne: turn },
-    })
-    .toArray();
-
-  // Fan out across borrowers, stay serial per borrower: a borrower with two
-  // loans must have them serviced in order so the affordability pre-check in
-  // servicePlayerLoan sees the first loan's debit.
-  const loansByBorrower = new Map<string, typeof loans>();
-  for (const loan of loans) {
-    const key = `${loan.borrowerType}:${String(loan.borrowerId)}`;
-    const list = loansByBorrower.get(key) ?? [];
-    list.push(loan);
-    loansByBorrower.set(key, list);
-  }
-  await Promise.all(
-    [...loansByBorrower.values()].map(async (borrowerLoans) => {
-      for (const loan of borrowerLoans) {
-        const loanResult = await servicePlayerLoan(db, turn, corp._id, loan, currency, corp.name);
-        result.loanInterestCollected += loanResult.interestCollected;
-        result.loanPrincipalRepaid += loanResult.principalRepaid;
-        result.defaultsWrittenOff += loanResult.writtenOff;
-        cashReserves += loanResult.bankCredit;
-        totalLoans = Math.max(0, totalLoans + loanResult.totalLoansDelta);
-      }
-    })
-  );
+  // (d) Named loan servicing. Shared with the loan-book-only pass below.
+  const namedBook = await serviceNamedLoanBook(db, turn, corp, currency);
+  result.loanInterestCollected += namedBook.interestCollected;
+  result.loanPrincipalRepaid += namedBook.principalRepaid;
+  result.defaultsWrittenOff += namedBook.writtenOff;
+  cashReserves += namedBook.bankCredit;
+  totalLoans = Math.max(0, totalLoans + namedBook.totalLoansDelta);
 
   // (e) NPC household loans. The book grows only from deposits actually held
   // by this bank after its reserve requirement. Rates set utilization, while
@@ -760,6 +743,105 @@ type LoanServiceResult = {
   bankCredit: number;
   totalLoansDelta: number;
 };
+
+type LoanBookOnlyBank = { corp: Corporation; charter: BankCharter };
+
+/**
+ * Service every named loan a bank holds, whatever kind of charter it has.
+ *
+ * Fans out across borrowers and stays serial per borrower: a borrower with two
+ * loans must have them serviced in order so the affordability pre-check in
+ * `servicePlayerLoan` sees the first loan's debit.
+ */
+async function serviceNamedLoanBook(
+  db: Db,
+  turn: number,
+  corp: Pick<Corporation, "_id" | "name">,
+  currency: CurrencyCode
+): Promise<LoanServiceResult> {
+  const total: LoanServiceResult = {
+    interestCollected: 0,
+    principalRepaid: 0,
+    writtenOff: 0,
+    bankCredit: 0,
+    totalLoansDelta: 0,
+  };
+  const loans = await db
+    .collection<BankLoan>("bankLoans")
+    .find({
+      bankCorporationId: corp._id,
+      borrowerType: { $in: ["character", "corporation"] },
+      status: { $in: ["current", "arrears"] },
+      lastProcessedTurn: { $ne: turn },
+    })
+    .toArray();
+
+  const loansByBorrower = new Map<string, typeof loans>();
+  for (const loan of loans) {
+    const key = `${loan.borrowerType}:${String(loan.borrowerId)}`;
+    const list = loansByBorrower.get(key) ?? [];
+    list.push(loan);
+    loansByBorrower.set(key, list);
+  }
+  await Promise.all(
+    [...loansByBorrower.values()].map(async (borrowerLoans) => {
+      for (const loan of borrowerLoans) {
+        const loanResult = await servicePlayerLoan(db, turn, corp._id, loan, currency, corp.name);
+        total.interestCollected += loanResult.interestCollected;
+        total.principalRepaid += loanResult.principalRepaid;
+        total.writtenOff += loanResult.writtenOff;
+        total.bankCredit += loanResult.bankCredit;
+        total.totalLoansDelta += loanResult.totalLoansDelta;
+      }
+    })
+  );
+  return total;
+}
+
+/**
+ * The banking pass for a charter that lends but takes no deposits (today: an
+ * investment bank). No household funding, no deposit interest, no insurance
+ * premium, no NPC book; just the named loans it has originated, serviced on
+ * the same terms as any other lender's, and the same end-of-pass stamp.
+ */
+async function processLoanBookOnlyBank(
+  db: Db,
+  turn: number,
+  row: LoanBookOnlyBank
+): Promise<LoanServiceResult | null> {
+  const { corp } = row;
+  const live = await db
+    .collection<Corporation>("corporations")
+    .findOne({ _id: corp._id }, { projection: { bankCharter: 1 } });
+  const charter = live?.bankCharter;
+  if (!isNamedLendingCharter(charter) || charter.lastBankingTurn === turn) return null;
+  if (isDepositTakingCharter(charter)) return null;
+
+  const currency = charter.currency as CurrencyCode;
+  const serviced = await serviceNamedLoanBook(db, turn, corp, currency);
+  const totalLoans = Math.max(0, Math.max(0, charter.totalLoans ?? 0) + serviced.totalLoansDelta);
+
+  await db.collection<Corporation>("corporations").updateOne(
+    {
+      _id: corp._id,
+      "bankCharter.status": "active",
+      $or: [
+        { "bankCharter.lastBankingTurn": { $ne: turn } },
+        { "bankCharter.lastBankingTurn": { $exists: false } },
+      ],
+    },
+    {
+      $set: {
+        // Cash moved through the money primitive inside servicing; only the
+        // derived aggregate and the idempotency stamp are written here.
+        "bankCharter.totalLoans": totalLoans,
+        "bankCharter.lastBankingTurn": turn,
+        updatedAt: new Date(),
+      },
+    }
+  );
+  return serviced;
+}
 
 async function servicePlayerLoan(
   db: Db,
