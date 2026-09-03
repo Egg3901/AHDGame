@@ -39,33 +39,71 @@ function safePathParts(path: string): string[] {
   return parts;
 }
 
+/** A container a dotted path can descend into: a plain object, or an array by index. */
+type Container = Doc | unknown[];
+
+function isContainer(value: unknown): value is Container {
+  return isPlainObject(value) || Array.isArray(value);
+}
+
+function readPart(cur: Container, part: string): unknown {
+  if (Array.isArray(cur)) {
+    return /^\d+$/.test(part) ? cur[Number(part)] : undefined;
+  }
+  return cur[part];
+}
+
+function writePart(cur: Container, part: string, value: unknown): void {
+  if (Array.isArray(cur)) {
+    if (!/^\d+$/.test(part)) {
+      throw new Error(`inMemoryDb: cannot set non-numeric key "${part}" on an array`);
+    }
+    cur[Number(part)] = value;
+    return;
+  }
+  cur[part] = value;
+}
+
 function getPath(doc: Doc, path: string): unknown {
   let cur: unknown = doc;
   for (const part of safePathParts(path)) {
-    if (!isPlainObject(cur)) return undefined;
-    cur = cur[part];
+    if (!isContainer(cur)) return undefined;
+    cur = readPart(cur, part);
   }
   return cur;
 }
 
+/**
+ * Mongo semantics for dotted paths: `a.0.b` descends into an array element,
+ * as it does on the server. The first version replaced any array on the path
+ * with an empty object, which silently corrupted a journal record's
+ * projection list and made "projection 1 applied" vanish.
+ */
 function setPath(doc: Doc, path: string, value: unknown): void {
   const parts = safePathParts(path);
-  let cur: Doc = doc;
+  let cur: Container = doc;
   for (let i = 0; i < parts.length - 1; i += 1) {
-    const next = cur[parts[i]];
-    if (!isPlainObject(next)) cur[parts[i]] = {};
-    cur = cur[parts[i]] as Doc;
+    let next = readPart(cur, parts[i]);
+    if (!isContainer(next)) {
+      next = /^\d+$/.test(parts[i + 1]) ? [] : {};
+      writePart(cur, parts[i], next);
+    }
+    cur = next as Container;
   }
-  cur[parts[parts.length - 1]] = value;
+  writePart(cur, parts[parts.length - 1], value);
 }
 
 function unsetPath(doc: Doc, path: string): void {
   const parts = safePathParts(path);
-  let cur: Doc = doc;
+  let cur: Container = doc;
   for (let i = 0; i < parts.length - 1; i += 1) {
-    const next = cur[parts[i]];
-    if (!isPlainObject(next)) return;
+    const next = readPart(cur, parts[i]);
+    if (!isContainer(next)) return;
     cur = next;
+  }
+  if (Array.isArray(cur)) {
+    if (/^\d+$/.test(parts[parts.length - 1])) cur[Number(parts[parts.length - 1])] = null;
+    return;
   }
   delete cur[parts[parts.length - 1]];
 }
@@ -190,7 +228,17 @@ function applyUpdate(doc: Doc, update: Update): void {
     } else if (op === "$push") {
       for (const [path, value] of Object.entries(fields as Doc)) {
         const current = getPath(doc, path);
-        setPath(doc, path, Array.isArray(current) ? [...current, value] : [value]);
+        const base = Array.isArray(current) ? [...current] : [];
+        if (isPlainObject(value) && "$each" in value) {
+          const spec = value as { $each: unknown[]; $slice?: number };
+          let next = [...base, ...spec.$each];
+          if (typeof spec.$slice === "number") {
+            next = spec.$slice < 0 ? next.slice(spec.$slice) : next.slice(0, spec.$slice);
+          }
+          setPath(doc, path, next);
+        } else {
+          setPath(doc, path, [...base, value]);
+        }
       }
     } else {
       throw new Error(`inMemoryDb: unsupported update operator ${op}`);

@@ -93,6 +93,12 @@ export interface MoneyMove {
   kind: string;
   turn?: number;
   legs: MoneyMoveLeg[];
+  /**
+   * Extra fields stored on the claim record in the same insert as the claim.
+   * The settlement journal keeps its projections here, so a crash anywhere
+   * after the claim leaves a record that already says what remains to do.
+   */
+  record?: Record<string, unknown>;
 }
 
 export type MoneyMoveStatus = "applied" | "partial" | "replayed" | "rejected";
@@ -156,6 +162,7 @@ export async function claimMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
   }
 
   const record: MoneyMoveRecord = {
+    ...(move.record ?? {}),
     _id: move.key,
     kind: move.kind,
     turn: move.turn,
@@ -279,6 +286,13 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
       break;
     }
     applied.push(i);
+    // Stamp the leg the moment it lands. Recording applied legs only at
+    // completion meant a crash between two legs left a record saying nothing
+    // had moved when the debit already had, and the repair queue is only worth
+    // having if it says exactly which half landed.
+    await db
+      .collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION)
+      .updateOne({ _id: move.key }, { $set: { [`legs.${i}.applied`]: true } });
   }
 
   const status: MoneyMoveStatus = failure ? "partial" : "applied";
