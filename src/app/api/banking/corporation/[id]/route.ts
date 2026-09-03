@@ -6,6 +6,8 @@ import { requireAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { loadBankingPolicy } from "@/lib/banking/policy";
+import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
+import { lifecycleStage, stageActions } from "@/lib/banking/rules/lifecycle";
 import {
   checkCharterEligibility,
   getCharterCapitalRequirement,
@@ -23,7 +25,12 @@ import {
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { getAllFundDefinitions } from "@/lib/indexFunds/fundDefinitions";
-import { getCashReserves, requiredReserves, upstreamCapacity } from "@/lib/banking/bankCash";
+import {
+  cashBackedDeposits,
+  getCashReserves,
+  requiredReserves,
+  upstreamCapacity,
+} from "@/lib/banking/bankCash";
 import { buildRiskReadout } from "@/lib/banking/riskReadout";
 import { bankBalanceSheet, explainBankCaps } from "@/lib/banking/balanceSheet";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
@@ -186,6 +193,12 @@ async function handleGET(_request: Request, { params }: RouteParams) {
     const capitalRequirement = retailRequirement;
     const corridors = await getRateCorridors(db, countryId);
     const reserveRatio = await getReserveRequirement(db, currency);
+    // Once the currency's savings accounts are the book of record, player
+    // deposits held here are cash-backed liabilities and every line below
+    // (reserves, headroom, ceiling, the run line) counts them.
+    const sheetOptions = {
+      playerDepositsAreLiabilities: savingsReadsAuthoritative(policy, currency),
+    };
 
     const isCeo = requireCeo(corporation, auth.user.userId) === null;
     const isAdmin = auth.user.isAdmin === true;
@@ -250,6 +263,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
             charter,
             reserveRatio: reserveRatio ?? 0,
             capacityCeiling: await getBankDepositCeiling(db, corporation),
+            ...sheetOptions,
           })
         : null;
     const depositCeiling = sheet ? sheet.depositCeiling : null;
@@ -389,12 +403,17 @@ async function handleGET(_request: Request, { params }: RouteParams) {
               postedCapital: charter.postedCapital,
               depositOffset: charter.depositOffset,
               lendingOffset: charter.lendingOffset,
-              totalDeposits: charter.totalDeposits ?? 0,
+              // Inside the read cohort the deposit total is the live sum of the
+              // two cash-backed books rather than the per-turn aggregate, which
+              // lags every holder change until the next banking pass.
+              totalDeposits: sheetOptions.playerDepositsAreLiabilities
+                ? cashBackedDeposits(charter, sheetOptions)
+                : (charter.totalDeposits ?? 0),
               totalLoans: charter.totalLoans ?? 0,
               npcDeposits: charter.npcDeposits ?? 0,
               cashReserves: getCashReserves(charter),
-              requiredReserves: requiredReserves(charter, reserveRatio ?? 0),
-              upstreamCapacity: upstreamCapacity(charter, reserveRatio ?? 0),
+              requiredReserves: requiredReserves(charter, reserveRatio ?? 0, sheetOptions),
+              upstreamCapacity: upstreamCapacity(charter, reserveRatio ?? 0, sheetOptions),
               lendingProfile: charter.lendingProfile ?? DEFAULT_LENDING_PROFILE,
               discountWindowDebt: charter.discountWindowDebt ?? 0,
               discountWindowArrears: charter.discountWindowArrears ?? 0,
@@ -448,6 +467,13 @@ async function handleGET(_request: Request, { params }: RouteParams) {
       // console used to be unable to show: the book was one lump with one rate,
       // so "NPC bulk outstanding (implied)" was genuinely all there was to say.
       householdBook: buildHouseholdBook(loans, charter),
+      // Where the charter is in its life and what that admits. The console
+      // shows the stage and disables what the stage refuses, so a player is
+      // told "impaired: no new exposure" rather than finding out from an error.
+      lifecycle: {
+        stage: lifecycleStage(charter),
+        actions: stageActions(lifecycleStage(charter)),
+      },
       // What is about to kill this bank, and which lever moves it. Only
       // meaningful for a charter that actually takes deposits.
       risk:

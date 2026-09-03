@@ -83,7 +83,8 @@ export async function ensureSavingsAccount(
     .collection<Character>("characters")
     .findOne({ _id: ownerId }, { projection: { currencyBalances: 1, savingsAccountsOpened: 1 } });
   if (!character) return null;
-  const balances = character.currencyBalances ?? {};
+  const balances: Partial<NonNullable<Character["currencyBalances"]>> =
+    character.currencyBalances ?? {};
   const holder = balances.savingsHolder?.[currency] ?? null;
   let effectiveHolder: SavingsHolder = holder ?? CENTRAL_BANK_HOLDER;
   if (isBankHolder(effectiveHolder)) {

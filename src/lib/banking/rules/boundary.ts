@@ -19,6 +19,7 @@ import type { BankingPolicySnapshot } from "@/lib/banking/rules/policy";
 import type { CapabilityDenial, CapabilityKey } from "@/lib/banking/rules/capabilities";
 import type { ValueLegKind } from "@/lib/banking/rules/invariants";
 import type { BankingAuditEventKind, BankingAuditMeta } from "@/lib/banking/rules/auditEvents";
+import type { BankLifecycleStage, LifecycleAction } from "@/lib/banking/rules/lifecycle";
 
 /** The charter fields the rules read. A projection of the stored sub-document. */
 export type BankCharterSnapshot = Pick<
@@ -29,6 +30,7 @@ export type BankCharterSnapshot = Pick<
   | "postedCapital"
   | "cashReserves"
   | "npcDeposits"
+  | "playerDeposits"
   | "totalDeposits"
   | "totalLoans"
   | "depositOffset"
@@ -40,6 +42,12 @@ export type BankCharterSnapshot = Pick<
   | "interbankDebt"
   | "propBookMarkValue"
   | "capitalStanding"
+  | "warningBand"
+  | "undercapitalizedSinceTurn"
+  | "failedTurn"
+  | "revokedTurn"
+  | "resolutionClaimedTurn"
+  | "depositorsResolvedTurn"
   | "requireApproval"
   | "lendingProfile"
   | "charterSwitchCooldownUntilTurn"
@@ -57,6 +65,12 @@ export interface BankingSnapshot {
   corporationLiquidCapital: number;
   /** Reserve requirement for the currency, 0..1. */
   reserveRatio: number;
+  /**
+   * Whether player savings held at the bank are real liabilities in this
+   * currency (savings accounts authoritative AND the currency in the read
+   * cohort). Sizes reserves, equity, the window and headroom.
+   */
+  playerDepositsAreLiabilities: boolean;
   primeRate: number;
   /** Central bank document id for the currency. */
   centralBankId: string;
@@ -195,6 +209,7 @@ export interface BankingTransition {
 
 export type DecisionRefusal =
   | { code: "capability"; capability: CapabilityKey; denial: CapabilityDenial }
+  | { code: "lifecycle"; stage: BankLifecycleStage; action: LifecycleAction }
   | { code: "invalid_amount" }
   | { code: "cap"; cap: string; max: number }
   | { code: "insufficient_funds"; available: number }

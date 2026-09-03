@@ -30,6 +30,7 @@
  */
 
 import type { Db } from "mongodb";
+import { lifecycleStage, stageAllows } from "@/lib/banking/rules/lifecycle";
 import type { Corporation } from "@/lib/db/types";
 import type { BankLoan } from "@/lib/db/types/bank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -79,9 +80,7 @@ export async function findDeadBanksWithLoans(db: Db): Promise<DeadBank[]> {
       // A revoked charter has already run the waterfall on the way out, so its
       // estate is closed the moment it is revoked. A failed one is closed only
       // once the resolution sweep has stamped it.
-      resolved:
-        corp.bankCharter!.status === "revoked" ||
-        typeof corp.bankCharter!.depositorsResolvedTurn === "number",
+      resolved: stageAllows(lifecycleStage(corp.bankCharter), "windDownEstate"),
     }));
 }
 

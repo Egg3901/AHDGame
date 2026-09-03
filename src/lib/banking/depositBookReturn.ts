@@ -84,6 +84,10 @@ import { oid, type TransitionLeg, type TransitionProjection } from "@/lib/bankin
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import type { FederalBudget } from "@/lib/db/types";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
+import type { SavingsAccount } from "@/lib/db/types/savingsAccount";
+import { CENTRAL_BANK_HOLDER } from "@/lib/savings/rules/accounts";
 
 /** Budget spending line a deposit insurance backstop is booked against. */
 export const DEPOSIT_INSURANCE_SPENDING_KEY = "depositInsurance";
@@ -189,11 +193,30 @@ export async function returnDepositBook(
       { [holderPath]: bankIdHex },
       { $set: { [holderPath]: "centralBank", updatedAt: now } }
     );
-  const depositorsFlipped = flip.modifiedCount ?? 0;
+  let depositorsFlipped = flip.modifiedCount ?? 0;
 
-  const npc = cashBackedDeposits(charter);
+  // Under the account model the same flip runs on the accounts, and the
+  // player balances the bank held are part of the book it must return: their
+  // backing cash came into the vault with the holder change, so it leaves with
+  // the household deposits, through the same waterfall, insured the same way.
+  const policy = await loadBankingPolicy(db);
+  const playerDepositsAreLiabilities = savingsReadsAuthoritative(policy, currency);
+  const sheetOptions = { playerDepositsAreLiabilities };
+  let playerBookReturned = 0;
+  if (playerDepositsAreLiabilities) {
+    const accountFlip = await db
+      .collection<SavingsAccount>("savingsAccounts")
+      .updateMany(
+        { currency, holder: bankIdHex },
+        { $set: { holder: CENTRAL_BANK_HOLDER, updatedAt: now } }
+      );
+    depositorsFlipped = Math.max(depositorsFlipped, accountFlip.modifiedCount ?? 0);
+    playerBookReturned = Math.max(0, charter.playerDeposits ?? 0);
+  }
+
+  const npc = cashBackedDeposits(charter, sheetOptions);
   const cash = getCashReserves(charter);
-  const equity = bankEquity(charter);
+  const equity = bankEquity(charter, sheetOptions);
 
   // (1) Secured central bank facilities, senior to everything else.
   const windowOwed =
@@ -391,6 +414,16 @@ export async function returnDepositBook(
   // holding no cash pays nobody, and "pays nobody" is still a resolution: the
   // claims are settled and the book cleared through the same projections.
   const projections: TransitionProjection[] = [];
+  if (playerBookReturned > 0) {
+    // The player balances now sit with the central bank again: the pool just
+    // received their backing in the credit above, so the liability follows.
+    projections.push({
+      collection: "centralBanks",
+      filter: { _id: cbDocId },
+      update: { $inc: { householdSavingsLiability: playerBookReturned }, $set: { updatedAt: now } },
+      note: "player savings liability returns to the central bank",
+    });
+  }
   if (fromTreasury > 0) {
     projections.push({
       collection: "federalBudget",
@@ -626,6 +659,7 @@ function depositAggregateClearProjection(
     update: {
       $set: {
         "bankCharter.npcDeposits": 0,
+        "bankCharter.playerDeposits": 0,
         "bankCharter.totalDeposits": 0,
         // The floor follows the deposits out, otherwise the corp stays locked
         // out of its own cash until the next banking turn recomputes it.

@@ -22,7 +22,12 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { FOREX_ACTIVE_CURRENCIES, getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { loadBankingPolicy } from "@/lib/banking/policy";
-import type { SavingsAccountsMode } from "@/lib/banking/rules/policy";
+import type { BankingPolicySnapshot, SavingsAccountsMode } from "@/lib/banking/rules/policy";
+
+/** Currencies whose accounts are the book of record under this policy. */
+export function readCohort(policy: BankingPolicySnapshot): string[] {
+  return policy.savingsAccounts === "authoritative" ? [...policy.savingsReadCurrencies] : [];
+}
 import { pointerDeposits } from "@/lib/banking/rules/balanceSheet";
 import {
   RECONCILE_TOLERANCE,
@@ -48,9 +53,14 @@ export interface CurrencyComparison {
   banks: Array<{
     bankId: string;
     charterPointerDeposits: number;
+    /** The cash-backed player liability the charter carries (`playerDeposits`). */
+    charterPlayerDeposits: number;
     accountLiability: number;
     accounts: number;
+    /** Accounts held here minus the pointer aggregate. */
     drift: number;
+    /** Accounts held here minus the charter's recorded liability. */
+    liabilityDrift: number;
   }>;
   /** Central bank: the stored national savings stock vs the accounts it holds. */
   centralBankStock: number;
@@ -94,7 +104,8 @@ export async function loadLegacySavingsRows(db: Db): Promise<LegacySavingsRow[]>
     .toArray();
   const rows: LegacySavingsRow[] = [];
   for (const character of characters) {
-    const balances = character.currencyBalances ?? {};
+    const balances: Partial<NonNullable<Character["currencyBalances"]>> =
+      character.currencyBalances ?? {};
     for (const currency of FOREX_ACTIVE_CURRENCIES) {
       const savings = balances.savings?.[currency];
       const opened = character.savingsAccountsOpened?.[currency] === true;
@@ -188,9 +199,23 @@ export function compareSavingsProjections(input: {
   turn: number;
   rows: LegacySavingsRow[];
   accounts: SavingsAccountSnapshot[];
-  charters: Array<{ bankId: string; currency: string; totalDeposits: number; npcDeposits: number }>;
+  charters: Array<{
+    bankId: string;
+    currency: string;
+    totalDeposits: number;
+    npcDeposits: number;
+    playerDeposits?: number;
+  }>;
   centralBankStock: Map<string, number>;
+  /**
+   * Currencies whose accounts are the book of record. For these the charter's
+   * recorded liability must match the accounts held there, and a drift is a
+   * discrepancy; for the rest the liability is not yet maintained and only the
+   * pointer aggregate is compared.
+   */
+  authoritativeCurrencies?: Iterable<string>;
 }): SavingsComparison {
+  const authoritative = new Set(input.authoritativeCurrencies ?? []);
   const currencies = new Set<string>([
     ...input.rows.map((r) => r.currency),
     ...input.accounts.map((a) => a.currency),
@@ -212,20 +237,28 @@ export function compareSavingsProjections(input: {
           totalDeposits: c.totalDeposits,
           npcDeposits: c.npcDeposits,
         });
+        const recorded = Math.max(0, finite(c.playerDeposits));
         return {
           bankId: c.bankId,
           charterPointerDeposits: pointer,
+          charterPlayerDeposits: recorded,
           accountLiability: held.balance,
           accounts: held.accounts,
           drift: held.balance - pointer,
+          liabilityDrift: held.balance - recorded,
         };
       });
     const pool = centralBankPoolProjection(accounts).get(currency) ?? 0;
     const stock = input.centralBankStock.get(currency) ?? 0;
     let discrepancies = rowDiscrepancies;
     if (Math.abs(legacyOwnerTotal - accountOwnerTotal) > RECONCILE_TOLERANCE) discrepancies += 1;
+    // Inside the cohort the charter's recorded liability is the line that must
+    // agree with the accounts; the pointer aggregate is a per-turn derived
+    // figure there and lags every holder change until the next banking pass.
+    // Outside it the pointer aggregate is all the charter carries.
     for (const bank of banks) {
-      if (Math.abs(bank.drift) > RECONCILE_TOLERANCE) discrepancies += 1;
+      const drift = authoritative.has(currency) ? bank.liabilityDrift : bank.drift;
+      if (Math.abs(drift) > RECONCILE_TOLERANCE) discrepancies += 1;
     }
     // The stored national savings stock is written once per turn by the
     // interest pass and lags one turn; a mismatch here is reported but
@@ -247,7 +280,11 @@ export function compareSavingsProjections(input: {
 }
 
 /** Load everything the comparison needs and run it. */
-export async function buildSavingsComparison(db: Db, turn: number): Promise<SavingsComparison> {
+export async function buildSavingsComparison(
+  db: Db,
+  turn: number,
+  options: { authoritativeCurrencies?: Iterable<string> } = {}
+): Promise<SavingsComparison> {
   const [rows, accountDocs, charters, banks] = await Promise.all([
     loadLegacySavingsRows(db),
     db
@@ -284,8 +321,10 @@ export async function buildSavingsComparison(db: Db, turn: number): Promise<Savi
         currency: c.bankCharter!.currency,
         totalDeposits: finite(c.bankCharter!.totalDeposits),
         npcDeposits: finite(c.bankCharter!.npcDeposits),
+        playerDeposits: finite(c.bankCharter!.playerDeposits),
       })),
     centralBankStock,
+    authoritativeCurrencies: options.authoritativeCurrencies,
   });
 }
 
@@ -308,7 +347,9 @@ export async function processSavingsShadowTurn(db: Db, turn: number): Promise<Sa
       const rows = await loadLegacySavingsRows(db);
       accountsRefreshed = await refreshShadowAccounts(db, turn, rows, new Set());
     }
-    const comparison = await buildSavingsComparison(db, turn);
+    const comparison = await buildSavingsComparison(db, turn, {
+      authoritativeCurrencies: readCohort(policy),
+    });
     if (comparison.totalDiscrepancies > 0) {
       countBankingEvent(db, turn, "unreconciledProjections", comparison.totalDiscrepancies);
     }

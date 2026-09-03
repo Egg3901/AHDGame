@@ -18,7 +18,9 @@ import { bankBalanceSheet } from "@/lib/banking/rules/balanceSheet";
 import { getReserveRequirement } from "@/lib/banking/reserves";
 import { loadBankingTelemetry, type BankingTelemetryDoc } from "@/lib/banking/telemetry";
 import { loadBankingPolicy } from "@/lib/banking/policy";
-import { buildSavingsComparison, type SavingsComparison } from "@/lib/savings/shadow";
+import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
+import { lifecycleStage, type BankLifecycleStage } from "@/lib/banking/rules/lifecycle";
+import { buildSavingsComparison, readCohort, type SavingsComparison } from "@/lib/savings/shadow";
 import { getCurrentTurn } from "@/lib/currentTurn";
 
 export interface CurrencyBankingHealth {
@@ -32,6 +34,10 @@ export interface CurrencyBankingHealth {
   pointerDrift: number;
   /** Cash-backed (household) deposits across the currency's banks. */
   cashBackedDeposits: number;
+  /** Player savings counted as cash-backed liabilities (currency in the read cohort). */
+  playerCashDeposits: number;
+  /** Active charters by lifecycle stage. */
+  stages: Partial<Record<BankLifecycleStage, number>>;
   cashReserves: number;
   totalLoans: number;
   requiredReserves: number;
@@ -68,23 +74,25 @@ function finite(value: unknown): number {
 
 /** Player savings pointed at each bank, keyed by bank hex, for one currency. */
 async function playerHeldByBank(db: Db, currency: CurrencyCode): Promise<Map<string, number>> {
+  const holderPath = `currencyBalances.savingsHolder.${currency}`;
   const rows = await db
     .collection<Character>("characters")
-    .aggregate<{ _id: string; total: number }>([
-      {
-        $match: {
-          [`currencyBalances.savingsHolder.${currency}`]: { $exists: true, $ne: "centralBank" },
-        },
-      },
-      {
-        $group: {
-          _id: `$currencyBalances.savingsHolder.${currency}`,
-          total: { $sum: `$currencyBalances.savings.${currency}` },
-        },
-      },
-    ])
+    .find({ [holderPath]: { $exists: true, $ne: "centralBank" } })
+    .project<Pick<Character, "currencyBalances">>({
+      [holderPath]: 1,
+      [`currencyBalances.savings.${currency}`]: 1,
+    })
     .toArray();
-  return new Map(rows.map((row) => [String(row._id), finite(row.total)]));
+  const totals = new Map<string, number>();
+  for (const row of rows) {
+    const holder = String(row.currencyBalances?.savingsHolder?.[currency] ?? "");
+    if (!holder) continue;
+    totals.set(
+      holder,
+      (totals.get(holder) ?? 0) + finite(row.currencyBalances?.savings?.[currency])
+    );
+  }
+  return totals;
 }
 
 export async function buildBankingHealth(db: Db, now = new Date()): Promise<BankingHealthReport> {
@@ -101,6 +109,7 @@ export async function buildBankingHealth(db: Db, now = new Date()): Promise<Bank
     byCurrency.set(currency, [...(byCurrency.get(currency) ?? []), bank]);
   }
 
+  const policy = await loadBankingPolicy(db);
   const currencies: CurrencyBankingHealth[] = [];
   for (const [currency, rows] of [...byCurrency.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     const [held, reserveRatio] = await Promise.all([
@@ -114,6 +123,8 @@ export async function buildBankingHealth(db: Db, now = new Date()): Promise<Bank
       charterPointerDeposits: 0,
       pointerDrift: 0,
       cashBackedDeposits: 0,
+      playerCashDeposits: 0,
+      stages: {},
       cashReserves: 0,
       totalLoans: 0,
       requiredReserves: 0,
@@ -122,7 +133,14 @@ export async function buildBankingHealth(db: Db, now = new Date()): Promise<Bank
     };
     for (const bank of rows) {
       const charter = bank.bankCharter!;
-      const sheet = bankBalanceSheet({ charter, reserveRatio });
+      const sheet = bankBalanceSheet({
+        charter,
+        reserveRatio,
+        playerDepositsAreLiabilities: savingsReadsAuthoritative(policy, currency),
+      });
+      health.playerCashDeposits += sheet.playerDeposits;
+      const stage = lifecycleStage(charter);
+      health.stages[stage] = (health.stages[stage] ?? 0) + 1;
       health.playerHeldAtBanks += held.get(bank._id.toString()) ?? 0;
       health.charterPointerDeposits += sheet.pointerDeposits;
       health.cashBackedDeposits += sheet.cashBackedDeposits;
@@ -148,11 +166,12 @@ export async function buildBankingHealth(db: Db, now = new Date()): Promise<Bank
   for (const row of unfinished) byKind[row.kind] = (byKind[row.kind] ?? 0) + 1;
   const oldest = unfinished[0];
 
-  const policy = await loadBankingPolicy(db);
   const comparison =
     policy.savingsAccounts === "off"
       ? null
-      : await buildSavingsComparison(db, await getCurrentTurn(db));
+      : await buildSavingsComparison(db, await getCurrentTurn(db), {
+          authoritativeCurrencies: readCohort(policy),
+        });
 
   return {
     generatedAt: now,

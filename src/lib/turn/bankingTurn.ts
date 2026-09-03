@@ -7,6 +7,7 @@ import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { loadBankingPolicy, type BankingPolicySnapshot } from "@/lib/banking/policy";
+import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 import { recordBankingStage, timedBankingStage } from "@/lib/banking/telemetry";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
@@ -344,6 +345,12 @@ async function processOneBank(
   let cashReserves = getCashReserves(live.bankCharter);
   let npcDeposits = Math.max(0, live.bankCharter.npcDeposits ?? 0);
   let totalLoans = Math.max(0, live.bankCharter.totalLoans ?? 0);
+  // Once the currency's savings accounts are the book of record, the player
+  // balances held here arrived as cash (the holder change moved the backing)
+  // and the bank owes them exactly as it owes the household book: reserves,
+  // equity, the ceiling and the loan capacity all count them from this turn.
+  const playerDepositsAreLiabilities = savingsReadsAuthoritative(policy, currency);
+  const sheetOptions = { playerDepositsAreLiabilities };
 
   // (a) Player depositors, loaded once — the total here and the interest pass
   // in (c) below use the same rows (NPC flow in (b) does not touch player
@@ -376,7 +383,10 @@ async function processOneBank(
   // equity so an undercapitalized bank (little/negative equity) cannot grow — or
   // keep — a base far larger than its capital. Negative equity drives this to 0,
   // and the normal per-turn NPC outflow then unwinds the excess gradually.
-  const depositCeiling = equityCappedDepositCeiling(capacityCeiling, bankEquity(live.bankCharter));
+  const depositCeiling = equityCappedDepositCeiling(
+    capacityCeiling,
+    bankEquity(live.bankCharter, sheetOptions)
+  );
   const npcRoom = Math.max(0, depositCeiling - playerDeposits);
 
   // (b) NPC deposit flow - CB update first, then corp npcDeposits
@@ -667,12 +677,17 @@ async function processOneBank(
   }
   const insuredCap = await getInsuredCap(db, currency);
   const insuredDeposits = sumInsuredPlayerDeposits(postInterestBalances, insuredCap) + npcDeposits;
-  // Reserves are held against deposits the bank actually RECEIVED in cash, which
-  // is the NPC household book. Player deposits are a pointer: the money never
-  // leaves `currencyBalances.savings`, so requiring the bank to hold reserves
-  // against it would demand cash for a balance it does not have and cannot get.
-  // Insurance still covers both, because a depositor's claim is a claim either way.
-  const depositBaseForRatio = npcDeposits;
+  // Reserves are held against deposits the bank actually RECEIVED in cash.
+  // Under the pointer model that is the NPC household book alone: player
+  // savings never left `currencyBalances.savings`, so requiring reserves
+  // against them would demand cash for a balance the bank does not hold. Once
+  // the currency's accounts are authoritative the player balances are cash in
+  // the vault and a liability on the book, and the base includes them.
+  // Insurance covers both either way, because a depositor's claim is a claim.
+  const playerCashDeposits = playerDepositsAreLiabilities
+    ? playerDeposits + playerInterestSettled
+    : 0;
+  const depositBaseForRatio = npcDeposits + playerCashDeposits;
   const reserveRatioActual = computeReserveRatioActual(cashReserves, depositBaseForRatio);
   const reserveRatioRequired = await getReserveRequirement(db, currency);
   const premiumDue = computeInsurancePremium(
@@ -746,7 +761,7 @@ async function processOneBank(
   // by this bank after its reserve requirement. Rates set utilization, while
   // named loans consume the same capacity inside serviceNpcBulkBook.
   // Only cash-backed deposits can fund a loan; you cannot lend a pointer.
-  const loanFundingCapacity = npcDeposits * (1 - reserveRatioRequired);
+  const loanFundingCapacity = (npcDeposits + playerCashDeposits) * (1 - reserveRatioRequired);
   const bulkResult = await serviceNpcBulkBook(
     db,
     turn,
@@ -760,7 +775,7 @@ async function processOneBank(
       cbDocId,
       cb,
       bankName: corp.name,
-      requiredReserves: npcDeposits * reserveRatioRequired,
+      requiredReserves: (npcDeposits + playerCashDeposits) * reserveRatioRequired,
       lendingProfile: live.bankCharter.lendingProfile,
     }
   );

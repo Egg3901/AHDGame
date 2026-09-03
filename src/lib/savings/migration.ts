@@ -257,9 +257,11 @@ export async function applySavingsMigrationForCurrency(
       !charter.acceptsDeposits
         ? CENTRAL_BANK_HOLDER
         : holder;
-    const existing = await db
-      .collection<SavingsAccount>(SAVINGS_ACCOUNTS_COLLECTION)
-      .findOne({ ownerType: "character", ownerId: new ObjectId(row.ownerId), currency });
+    const existing = await db.collection<SavingsAccount>(SAVINGS_ACCOUNTS_COLLECTION).findOne({
+      ownerType: "character",
+      ownerId: new ObjectId(row.ownerId),
+      currency: currency as SavingsAccount["currency"],
+    });
     const accountId = existing?._id.toHexString() ?? new ObjectId().toHexString();
     const transition = migrationTransition(row, effectiveHolder, accountId, centralBankId, turn);
     // The account insert carries a marker date the journal cannot revive;
@@ -288,7 +290,7 @@ export async function applySavingsMigrationForCurrency(
   // Reconcile the batch before anyone may read it.
   const accounts = await db
     .collection<SavingsAccount>(SAVINGS_ACCOUNTS_COLLECTION)
-    .find({ ownerType: "character", currency })
+    .find({ ownerType: "character", currency: currency as SavingsAccount["currency"] })
     .toArray();
   const rows = (await loadLegacySavingsRows(db)).filter((r) => r.currency === currency);
   const discrepancies = reconcileAccounts(

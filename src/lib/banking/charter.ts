@@ -15,6 +15,7 @@ import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { archiveCharter } from "@/lib/banking/charterHistory";
 import { getLegalCharterTypes } from "@/lib/banking/separationLaw";
 import { returnDepositBook } from "@/lib/banking/depositBookReturn";
+import { lifecycleRefusal } from "@/lib/banking/rules/lifecycle";
 import { clampOffsets, getRateCorridors } from "@/lib/banking/regulationQ";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { getCurrentTurn } from "@/lib/currentTurn";
@@ -470,7 +471,9 @@ export type CharterSwitchBlocker =
   | "illegal_type"
   | "cooldown"
   | "discount_window_outstanding"
-  | "cb_margin_outstanding";
+  | "cb_margin_outstanding"
+  /** The charter's lifecycle stage does not admit a switch (impaired, or not active). */
+  | "lifecycle_stage";
 
 export type CharterSwitchPreview = {
   allowed: boolean;
@@ -504,6 +507,7 @@ const SWITCH_BLOCKER_MESSAGE: Record<CharterSwitchBlocker, string> = {
     "Repay the discount window first. The window is open to deposit-taking charters only, and an investment bank cannot carry one.",
   cb_margin_outstanding:
     "Repay the CB margin line first. Only investment and universal charters may carry margin debt.",
+  lifecycle_stage: "An impaired bank may not change charter type. Restore its capital first.",
 };
 
 function takesDeposits(type: BankCharterType): boolean {
@@ -549,6 +553,10 @@ export async function previewCharterSwitch(
   if (typeof cooldownUntilTurn === "number" && currentTurn < cooldownUntilTurn) {
     blockers.push("cooldown");
   }
+
+  // The stage table, not a band check here: an impaired bank restructuring
+  // its way out of supervision is the case the rule exists for.
+  if (lifecycleRefusal(charter, "switchType")) blockers.push("lifecycle_stage");
 
   // Facilities that do not survive the target charter must be settled first.
   // Carrying them across would leave the bank holding a line it is no longer
