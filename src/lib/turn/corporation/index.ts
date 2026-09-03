@@ -103,6 +103,9 @@ import { recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 import { advertisingDeliveredValueByCorp } from "./advertisingDeliveredValue";
 import { createCorporationTurnTimer, type CorporationTurnResult } from "./corporationTurnRuntime";
+import { processEquityMarketPoolTurn } from "@/lib/equities/marketPoolTurn";
+import { placePendingShareIssuances } from "@/lib/equities/primaryMarket";
+import { creditEquityPool, readEquityPool } from "@/lib/equities/marketPool";
 
 export type { CorporationTurnResult } from "./corporationTurnRuntime";
 
@@ -171,6 +174,13 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     getLabourSystemMode(),
   ]);
   mark("preamble");
+  const equityPoolTurn = await processEquityMarketPoolTurn(
+    db,
+    turn ?? gameState?.currentTurn ?? 0,
+    now
+  );
+  await placePendingShareIssuances(db, turn ?? gameState?.currentTurn ?? 0, now);
+  mark("equityMarketPool");
   // SINGLE SOURCE OF TRUTH for this turn's market mode, both the market-share
   // basis just below and `buildMarketContext` further down consume it. Do not
   // re-resolve it; a second `getMarketSystemMode()` call is how the two drifted.
@@ -1020,6 +1030,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     corpDividendPaymentsAnchorByCorpCurrency,
     sectorFxSpreadFees,
     fundDividendAccruals,
+    equityPoolDividendAccruals,
     domesticIncomeByCountry,
     foreignIncomeByCountry,
     domesticIncomeByOperatingState,
@@ -1045,7 +1056,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     market,
     subsidiaryCorporationsEnabled,
     commandEconomyEnabled,
-    privateBankingEnabled
+    privateBankingEnabled,
+    new Set(equityPoolTurn.activeCurrencies)
   );
   mark("processSectors(CPU)");
 
@@ -1141,6 +1153,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // bulkWrite op array type doesn't satisfy AnyBulkWriteOperation narrowing, runtime shape is valid
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await db.collection("corporations").bulkWrite(corpOps as any[]);
+  }
+  for (const accrual of equityPoolDividendAccruals) {
+    // Missing pool means a pre-migration/seed world: preserve the legacy sink
+    // rather than creating a zero-target pool halfway through a turn.
+    if (!(await readEquityPool(db, accrual.currency))) continue;
+    await creditEquityPool(db, accrual.currency, accrual.amountLocal, "dividendsIn", now);
   }
   mark("sector+corp bulkWrites");
 

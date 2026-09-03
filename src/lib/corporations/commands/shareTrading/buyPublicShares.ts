@@ -39,10 +39,8 @@ import {
 import { autoConvertForPurchase, convertForExplicitPay } from "@/lib/currency/autoConvert";
 import { distributeConversionSpread } from "@/lib/currency/marketMaker";
 import { notifyHostileTakeoverThresholdIfEligible } from "@/lib/corporations/hostileTakeoverNotifications";
-import {
-  isOrderFlowPriceEligible,
-  resolveShareExecutionPrice,
-} from "@/lib/corporations/marketExecution";
+import { isOrderFlowPriceEligible } from "@/lib/corporations/marketExecution";
+import { loadEquityQuote } from "@/lib/equities/marketPool";
 import {
   buildOrderFlowWindowInc,
   buildOrderFlowWindowIncReversal,
@@ -102,7 +100,8 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
       const resolved = await resolveCorporation(db, id);
       if (!resolved.ok) return resolved.response;
       const { corporation } = resolved;
-      const executionPrice = resolveShareExecutionPrice(corporation);
+      const marketQuote = await loadEquityQuote(db, corporation);
+      const executionPrice = marketQuote.askPriceLocal;
       const orderFlowEligible = isOrderFlowPriceEligible(
         corporation.publicFloat,
         corporation.totalShares
@@ -412,7 +411,8 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
     const resolved = await resolveCorporation(db, id);
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
-    const executionPrice = resolveShareExecutionPrice(corporation);
+    const marketQuote = await loadEquityQuote(db, corporation);
+    const executionPrice = marketQuote.askPriceLocal;
     const orderFlowEligible = isOrderFlowPriceEligible(
       corporation.publicFloat,
       corporation.totalShares

@@ -11,6 +11,9 @@ vi.mock("@/lib/corporations/shareEscrowSettlement", () => ({
   reverseFloatSellDebit: vi.fn(),
   onFloatSellCommitted: vi.fn(),
 }));
+vi.mock("@/lib/equities/marketPool", () => ({
+  loadEquityQuote: vi.fn(),
+}));
 import { creditSharesToNpp, debitSharesFromNpp } from "@/lib/corporations/shareholderOps";
 import {
   applyFloatBuyCredit,
@@ -18,6 +21,7 @@ import {
   reverseFloatSellDebit,
   onFloatSellCommitted,
 } from "@/lib/corporations/shareEscrowSettlement";
+import { loadEquityQuote } from "@/lib/equities/marketPool";
 import { nppBuyShares, nppSellShares } from "./nppShares";
 
 describe("nppBuyShares", () => {
@@ -35,6 +39,21 @@ describe("nppBuyShares", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(loadEquityQuote).mockResolvedValue({
+      active: false,
+      currency: "USD",
+      mid: SHARE_PRICE,
+      bid: SHARE_PRICE,
+      ask: SHARE_PRICE,
+      halfSpread: 0,
+      cashSkew: 0,
+      bidPriceLocal: SHARE_PRICE,
+      askPriceLocal: SHARE_PRICE,
+      bidDepthShares: Number.MAX_SAFE_INTEGER,
+      askDepthShares: 5_000,
+      poolCashLocal: 0,
+      targetCashLocal: 0,
+    });
     corpFindOne = vi.fn().mockResolvedValue({
       _id: corpId,
       sharePrice: SHARE_PRICE,
@@ -203,6 +222,21 @@ describe("nppSellShares", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(loadEquityQuote).mockResolvedValue({
+      active: false,
+      currency: "USD",
+      mid: SHARE_PRICE,
+      bid: SHARE_PRICE,
+      ask: SHARE_PRICE,
+      halfSpread: 0,
+      cashSkew: 0,
+      bidPriceLocal: SHARE_PRICE,
+      askPriceLocal: SHARE_PRICE,
+      bidDepthShares: Number.MAX_SAFE_INTEGER,
+      askDepthShares: 5_000,
+      poolCashLocal: 0,
+      targetCashLocal: 0,
+    });
     corpFindOne = vi.fn().mockResolvedValue(baseCorp());
     nppFindOneAndUpdate = vi
       .fn()
@@ -289,11 +323,14 @@ describe("nppSellShares", () => {
     expect(nppFindOneAndUpdate).not.toHaveBeenCalled();
   });
 
-  it("rejects when the issuer treasury can't cover the buyback, no debit attempted", async () => {
+  it("rejects when the equity market can't cover the sale, no debit attempted", async () => {
     vi.mocked(settleFloatSellDebit).mockResolvedValue({ ok: false });
     const res = await nppSellShares(db, npp, corpId, SHARES, CURRENT_TURN, 1);
 
-    expect(res).toEqual({ ok: false, reason: "Issuer treasury can't cover this sale." });
+    expect(res).toEqual({
+      ok: false,
+      reason: "The equity market does not have enough cash for this sale.",
+    });
     expect(debitSharesFromNpp).not.toHaveBeenCalled();
   });
 

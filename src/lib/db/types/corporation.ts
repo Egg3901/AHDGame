@@ -263,6 +263,18 @@ export interface Corporation {
   shareholders: Shareholder[];
   /** Shares available in the public float (universal market maker pool) */
   publicFloat?: number;
+  /**
+   * Approved primary shares not yet bought by the currency market pool. These
+   * are authorized, not outstanding: they earn no dividends and dilute only
+   * as the pool places them into publicFloat with real cash.
+   */
+  pendingShareIssuance?: {
+    remainingShares: number;
+    requestedShares: number;
+    source: "direct" | "vote" | "ipo" | "founding_ipo";
+    createdAtTurn: number;
+    initialPriceLocal: number;
+  };
   /** Dividend payout rate (0, 100%). Income × this % is distributed to shareholders each turn. */
   dividendRate?: number;
   /** When the dividend rate was last changed (enforces 24h cooldown) */

@@ -17,6 +17,7 @@ import {
   reverseFloatSellDebit,
   settleFloatSellDebit,
 } from "@/lib/corporations/shareEscrowSettlement";
+import { loadEquityQuote } from "@/lib/equities/marketPool";
 import {
   fxRateForCorpFromMap,
   loadFxRatesByCurrency,
@@ -29,6 +30,8 @@ export type HoldingSaleInput = {
   corporationId: ObjectId;
   shares: number;
   pricePerShareAnchor: number;
+  /** Finite currency-pool bid depth available for this holding right now. */
+  maxShares?: number;
 };
 
 export type HoldingSalePlan = HoldingSaleInput & {
@@ -48,14 +51,19 @@ export function planProportionalHoldingsSale(
   );
   if (eligible.length === 0) return [];
 
-  const totalValue = eligible.reduce((sum, h) => sum + h.shares * h.pricePerShareAnchor, 0);
+  const sellableShares = (h: HoldingSaleInput) =>
+    Math.max(0, Math.min(Math.floor(h.shares), h.maxShares ?? Number.MAX_SAFE_INTEGER));
+  const totalValue = eligible.reduce(
+    (sum, h) => sum + sellableShares(h) * h.pricePerShareAnchor,
+    0
+  );
   if (totalValue <= 0) return [];
 
   if (cashNeededAnchor >= totalValue) {
     return eligible.map((h) => ({
       ...h,
-      sharesToSell: Math.floor(h.shares),
-      proceedsAnchor: Math.floor(h.shares) * h.pricePerShareAnchor,
+      sharesToSell: sellableShares(h),
+      proceedsAnchor: sellableShares(h) * h.pricePerShareAnchor,
     }));
   }
 
@@ -64,15 +72,15 @@ export function planProportionalHoldingsSale(
 
   const targets = eligible.map((h) => ({
     ...h,
-    holdingValue: h.shares * h.pricePerShareAnchor,
-    targetProceeds: (cashNeededAnchor * h.shares * h.pricePerShareAnchor) / totalValue,
+    holdingValue: sellableShares(h) * h.pricePerShareAnchor,
+    targetProceeds: (cashNeededAnchor * sellableShares(h) * h.pricePerShareAnchor) / totalValue,
   }));
 
   const soldByCorp = new Map<string, number>();
 
   for (const target of targets) {
     const sharesToSell = Math.min(
-      Math.floor(target.shares),
+      sellableShares(target),
       Math.floor(target.targetProceeds / target.pricePerShareAnchor)
     );
     if (sharesToSell <= 0) continue;
@@ -90,7 +98,7 @@ export function planProportionalHoldingsSale(
 
   // Assign remainder one share at a time (largest holdings first).
   const byValue = [...eligible].sort(
-    (a, b) => b.shares * b.pricePerShareAnchor - a.shares * a.pricePerShareAnchor
+    (a, b) => sellableShares(b) * b.pricePerShareAnchor - sellableShares(a) * a.pricePerShareAnchor
   );
 
   while (remainingCash > 0) {
@@ -98,7 +106,7 @@ export function planProportionalHoldingsSale(
     for (const holding of byValue) {
       const key = holding.corporationId.toString();
       const alreadySold = soldByCorp.get(key) ?? 0;
-      const remainingShares = Math.floor(holding.shares) - alreadySold;
+      const remainingShares = sellableShares(holding) - alreadySold;
       if (remainingShares <= 0) continue;
       if (holding.pricePerShareAnchor > remainingCash + 1e-9) continue;
 
@@ -217,7 +225,8 @@ export async function sellFundHoldingsForRedemptionCash(
   for (const holding of holdingsToSell) {
     const corp = corpMap.get(holding.corporationId.toString());
     if (!corp) continue;
-    const executionPrice = resolveShareExecutionPrice(corp);
+    const quote = await loadEquityQuote(db, corp);
+    const executionPrice = quote.bidPriceLocal;
     if (!Number.isFinite(executionPrice) || executionPrice <= 0) continue;
     const fxRate = fxRateForCorpFromMap(corp, fxByCurrency);
     const pricePerShareAnchor = shareTradeAnchorValue(
@@ -230,14 +239,17 @@ export async function sellFundHoldingsForRedemptionCash(
       corporationId: holding.corporationId,
       shares: holding.shares,
       pricePerShareAnchor,
+      maxShares: quote.active ? quote.bidDepthShares : undefined,
     });
   }
 
   const plan = filterSet
     ? pricedHoldings.map((h) => ({
         ...h,
-        sharesToSell: Math.floor(h.shares),
-        proceedsAnchor: Math.floor(h.shares) * h.pricePerShareAnchor,
+        sharesToSell: Math.min(Math.floor(h.shares), h.maxShares ?? Number.MAX_SAFE_INTEGER),
+        proceedsAnchor:
+          Math.min(Math.floor(h.shares), h.maxShares ?? Number.MAX_SAFE_INTEGER) *
+          h.pricePerShareAnchor,
       }))
     : planProportionalHoldingsSale(pricedHoldings, cashNeededAnchor);
   if (plan.length === 0) {
@@ -277,6 +289,7 @@ export async function sellFundHoldingsForRedemptionCash(
 type OneHoldingSaleOptions = {
   session?: ClientSession;
   note?: string;
+  settlementCounterparty?: "market" | "issuer";
 };
 
 type OneHoldingSaleResult = {
@@ -300,12 +313,16 @@ async function executeOneHoldingSale(
   now: Date,
   options?: OneHoldingSaleOptions
 ): Promise<OneHoldingSaleResult | null> {
-  const executionPrice = resolveShareExecutionPrice(corp);
+  const quote = await loadEquityQuote(db, corp);
+  const issuerFunded = options?.settlementCounterparty === "issuer";
+  if (!issuerFunded && quote.active && sale.sharesToSell > quote.bidDepthShares) return null;
+  const executionPrice = issuerFunded ? resolveShareExecutionPrice(corp) : quote.bidPriceLocal;
   const orderFlowEligible = isOrderFlowPriceEligible(corp.publicFloat, corp.totalShares);
   const issuerBuyback = sale.sharesToSell * executionPrice;
 
   const issuerDebit = await settleFloatSellDebit(db, corp, issuerBuyback, {
     session: options?.session,
+    counterparty: options?.settlementCounterparty,
   });
   if (!issuerDebit.ok) return null;
 
@@ -330,6 +347,7 @@ async function executeOneHoldingSale(
     await reverseFloatSellDebit(db, corp, issuerBuyback, {
       session: options?.session,
       split: issuerDebit.split,
+      counterparty: options?.settlementCounterparty,
     });
     return null;
   }
@@ -385,7 +403,10 @@ async function executeOneHoldingSale(
     note: options?.note ?? "Index fund redemption liquidity",
   });
 
-  await onFloatSellCommitted(db, corp, issuerBuyback, { session: options?.session });
+  await onFloatSellCommitted(db, corp, issuerBuyback, {
+    session: options?.session,
+    counterparty: options?.settlementCounterparty,
+  });
 
   return { proceedsAnchor, updatedHoldings };
 }
@@ -403,17 +424,16 @@ export async function sellFundHoldingShares(
   fund: IndexFund,
   corporationId: ObjectId,
   maxShares: number,
-  options?: { session?: ClientSession; note?: string }
+  options?: {
+    session?: ClientSession;
+    note?: string;
+    settlementCounterparty?: "market" | "issuer";
+  }
 ): Promise<SellHoldingsForRedemptionResult> {
   const holding = fund.holdings.find(
     (h) => h.corporationId.toString() === corporationId.toString()
   );
   if (!holding || holding.shares <= 0) {
-    return { cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0 };
-  }
-
-  const sharesToSell = Math.min(maxShares, Math.floor(holding.shares));
-  if (sharesToSell <= 0) {
     return { cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0 };
   }
 
@@ -438,7 +458,18 @@ export async function sellFundHoldingShares(
     return { cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0 };
   }
 
-  const executionPrice = resolveShareExecutionPrice(corp);
+  const quote = await loadEquityQuote(db, corp);
+  const issuerFunded = options?.settlementCounterparty === "issuer";
+  const sharesToSell = Math.min(
+    maxShares,
+    Math.floor(holding.shares),
+    issuerFunded || !quote.active ? Number.MAX_SAFE_INTEGER : quote.bidDepthShares
+  );
+  if (sharesToSell <= 0) {
+    return { cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0 };
+  }
+
+  const executionPrice = issuerFunded ? resolveShareExecutionPrice(corp) : quote.bidPriceLocal;
   if (!Number.isFinite(executionPrice) || executionPrice <= 0) {
     return { cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0 };
   }

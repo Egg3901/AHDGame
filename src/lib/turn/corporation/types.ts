@@ -408,6 +408,12 @@ export interface SectorCalculationsResult {
   sectorFxSpreadFees: Array<{ fromCurrency: CurrencyCode; toCurrency: CurrencyCode; fee: number }>;
   /** Dividends owed to index-fund holders (fundId on cap table), in ₳. */
   fundDividendAccruals: FundDividendAccrual[];
+  /** Dividends on shares held in public float, paid to the equity pool in issuer-local currency. */
+  equityPoolDividendAccruals: Array<{
+    corporationId: ObjectId;
+    currency: CurrencyCode;
+    amountLocal: number;
+  }>;
   /** Annualized operating income per country, split by corp-vs-sector country match. */
   domesticIncomeByCountry: Map<string, number>;
   foreignIncomeByCountry: Map<string, number>;
