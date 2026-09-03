@@ -205,6 +205,27 @@ export function GeneralPhaseView({
 
   return (
     <div className="space-y-4">
+      {/* The electoral map leads the presidential page, directly under the
+          year + race title. It is the one view that answers "who is winning"
+          at a glance, and it used to sit below the mood gauge, the factor
+          ledger and the battleground shell: three analysis cards that only
+          make sense once you have seen the map they decompose. */}
+      {isUS && election.electionType === "president" && !localInPrimary && (
+        <PresidentialMapWithStateDetail
+          electionId={electionId}
+          electoralMapData={election.generalVotes?.electoralMapData ?? {}}
+          electoralVotesByCandidate={election.generalVotes?.electoralVotesByCandidate}
+          candidateNames={election.generalVotes?.candidateNames ?? {}}
+          candidateParties={election.generalVotes?.candidateParties ?? {}}
+          candidateColors={election.generalVotes?.candidateColors ?? {}}
+          stateVoteData={election.generalVotes?.stateVoteData}
+          stateVotesOverTime={election.generalVotes?.stateVotesOverTime}
+          candidateTravelStates={Object.fromEntries(
+            election.allCandidates.filter((c) => c.travelState).map((c) => [c.id, c.travelState!])
+          )}
+        />
+      )}
+
       {showRunningMateSelector &&
         election.electionType === "president" &&
         amInRace &&
@@ -324,22 +345,6 @@ export function GeneralPhaseView({
               partyDisplayById: election.partyDisplayById,
               stateNameById: US_STATE_NAME_BY_ID,
             })}
-          />
-        )}
-
-        {isUS && election.electionType === "president" && !localInPrimary && (
-          <PresidentialMapWithStateDetail
-            electionId={electionId}
-            electoralMapData={election.generalVotes?.electoralMapData ?? {}}
-            electoralVotesByCandidate={election.generalVotes?.electoralVotesByCandidate}
-            candidateNames={election.generalVotes?.candidateNames ?? {}}
-            candidateParties={election.generalVotes?.candidateParties ?? {}}
-            candidateColors={election.generalVotes?.candidateColors ?? {}}
-            stateVoteData={election.generalVotes?.stateVoteData}
-            stateVotesOverTime={election.generalVotes?.stateVotesOverTime}
-            candidateTravelStates={Object.fromEntries(
-              election.allCandidates.filter((c) => c.travelState).map((c) => [c.id, c.travelState!])
-            )}
           />
         )}
 
