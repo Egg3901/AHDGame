@@ -43,6 +43,8 @@ import {
   type FomcMacroContext,
 } from "@/lib/centralBank/fomc";
 import { logger } from "../observability/logger";
+import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 
 const FOMC_MEETING_HISTORY_MAX = 24;
 // Shared with the direct-set and autonomous-chair writers so no path truncates
@@ -323,7 +325,10 @@ interface ResolveOutcome {
  */
 export function resolveMeetingInto(
   set: Record<string, unknown>,
-  bank: Pick<CentralBank, "primeRate" | "rateHistory" | "fomcMeetingHistory">,
+  bank: Pick<CentralBank, "primeRate" | "rateHistory" | "fomcMeetingHistory"> & {
+    /** The bank's own id, for the audit trail. Optional for legacy callers. */
+    bankId?: string;
+  },
   board: FomcSeat[],
   meeting: FomcMeeting,
   currentTurn: number,
@@ -367,12 +372,44 @@ export function resolveMeetingInto(
     changesThisTerm += 1;
     set.rateChangesThisTerm = changesThisTerm;
     set.rateHistory = [...(bank.rateHistory ?? []), record].slice(-RATE_HISTORY_MAX);
+    emitBankingAuditEvent({
+      kind: "policy.rate_changed",
+      command: "monetary.meeting.resolve",
+      turn: currentTurn,
+      outcome: "ok",
+      ...(bank.bankId ? { bankId: bank.bankId } : {}),
+      subjectType: "meeting",
+      subjectId: meeting.meetingId,
+      statusBefore: String(previousRate),
+      statusAfter: String(newRate),
+      meta: { previousRate, newRate, motion: meeting.motion, changesThisTerm },
+    });
   }
 
   set.activeFomcMeeting = null;
   set.fomcMeetingHistory = [...(bank.fomcMeetingHistory ?? []), resolved].slice(
     -FOMC_MEETING_HISTORY_MAX
   );
+  emitBankingAuditEvent({
+    kind: "meeting.transitioned",
+    command: "monetary.meeting.resolve",
+    turn: currentTurn,
+    outcome: "ok",
+    ...(bank.bankId ? { bankId: bank.bankId } : {}),
+    subjectType: "meeting",
+    subjectId: meeting.meetingId,
+    statusBefore: "voting",
+    statusAfter: "resolved",
+    meta: {
+      motion: meeting.motion,
+      result: passed ? "passed" : "failed",
+      agree: tally.agree,
+      disagree: tally.disagree,
+      abstain: tally.abstain,
+      forcedDeadline: opts.forceDeadline,
+      moved,
+    },
+  });
   return { resolved: true, moved, changesThisTerm };
 }
 
@@ -397,12 +434,29 @@ export async function castFomcBallot(
   const bank = await db.collection<CentralBank>("centralBanks").findOne({ _id: bankId });
   const meeting = bank?.activeFomcMeeting;
   const board = bank?.fomcBoard ?? [];
-  if (!bank || !meeting || meeting.status !== "voting") return { ok: false, reason: "no-meeting" };
+  const refuse = (reason: "no-meeting" | "not-seated" | "already-voted"): CastBallotResult => {
+    emitBankingAuditEvent(
+      {
+        kind: "meeting.voted",
+        command: "monetary.meeting.vote",
+        turn: currentTurn,
+        outcome: "rejected",
+        reason,
+        bankId,
+        subjectType: "meeting",
+        ...(meeting ? { subjectId: meeting.meetingId } : {}),
+        meta: { vote },
+      },
+      db
+    );
+    return { ok: false, reason };
+  };
+  if (!bank || !meeting || meeting.status !== "voting") return refuse("no-meeting");
 
   const seat = board.find((s) => s.occupantType === "player" && s.characterId?.equals(characterId));
-  if (!seat) return { ok: false, reason: "not-seated" };
+  if (!seat) return refuse("not-seated");
   if (meeting.ballots.some((b) => b.seatId === seat.seatId)) {
-    return { ok: false, reason: "already-voted" };
+    return refuse("already-voted");
   }
 
   const updatedMeeting: FomcMeeting = {
@@ -411,13 +465,36 @@ export async function castFomcBallot(
   };
 
   const set: Record<string, unknown> = { updatedAt: now };
-  const outcome = resolveMeetingInto(set, bank, board, updatedMeeting, currentTurn, now, {
-    changesThisTerm: bank.rateChangesThisTerm ?? 0,
-    forceDeadline: false,
-  });
+  const outcome = resolveMeetingInto(
+    set,
+    { ...bank, bankId },
+    board,
+    updatedMeeting,
+    currentTurn,
+    now,
+    {
+      changesThisTerm: bank.rateChangesThisTerm ?? 0,
+      forceDeadline: false,
+    }
+  );
   if (!outcome.resolved) set.activeFomcMeeting = updatedMeeting;
 
   await db.collection<CentralBank>("centralBanks").updateOne({ _id: bankId }, { $set: set });
+  emitBankingAuditEvent(
+    {
+      kind: "meeting.voted",
+      command: "monetary.meeting.vote",
+      turn: currentTurn,
+      outcome: "ok",
+      bankId,
+      subjectType: "meeting",
+      subjectId: meeting.meetingId,
+      statusBefore: "voting",
+      statusAfter: outcome.resolved ? "resolved" : "voting",
+      meta: { seatId: seat.seatId, vote, resolved: outcome.resolved, moved: outcome.moved },
+    },
+    db
+  );
   return { ok: true, resolved: outcome.resolved, motion: meeting.motion, moved: outcome.moved };
 }
 
@@ -603,6 +680,27 @@ export async function processFomcMeetings(
         set.activeFomcMeeting = meeting;
         result.meetingsOpened++;
         justOpened = true;
+        emitBankingAuditEvent(
+          {
+            kind: "meeting.transitioned",
+            command: "monetary.meeting.open",
+            turn: currentTurn,
+            outcome: "ok",
+            currency: COUNTRY_CURRENCY_MAP[countryId],
+            bankId: bank._id,
+            subjectType: "meeting",
+            subjectId: meeting.meetingId,
+            statusBefore: "none",
+            statusAfter: "voting",
+            meta: {
+              motion: meeting.motion,
+              proposedDelta: meeting.proposedDelta,
+              resolvesOnTurn: meeting.resolvesOnTurn,
+              canChangeRate: allowChange,
+            },
+          },
+          db
+        );
       }
     }
 
@@ -620,10 +718,18 @@ export async function processFomcMeetings(
       const deadlineHit =
         currentTurn >= meeting.resolvesOnTurn ||
         now.getTime() >= meeting.playerVoteDeadline.getTime();
-      const outcome = resolveMeetingInto(set, bank, board, meeting, currentTurn, now, {
-        changesThisTerm,
-        forceDeadline: deadlineHit,
-      });
+      const outcome = resolveMeetingInto(
+        set,
+        { ...bank, bankId: bank._id },
+        board,
+        meeting,
+        currentTurn,
+        now,
+        {
+          changesThisTerm,
+          forceDeadline: deadlineHit,
+        }
+      );
       if (outcome.resolved) {
         result.meetingsResolved++;
         if (outcome.moved) result.ratesChanged++;

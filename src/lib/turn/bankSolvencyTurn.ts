@@ -5,6 +5,8 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { loadBankingPolicy } from "@/lib/banking/policy";
+import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
+import { recordBankingStage } from "@/lib/banking/telemetry";
 import { archiveCharter } from "@/lib/banking/charterHistory";
 import { getCashReserves } from "@/lib/banking/bankCash";
 import { applyMoneyMove, turnMoveKey } from "@/lib/banking/moneyMove";
@@ -127,6 +129,7 @@ export async function processBankSolvencyTurn(
     const reserveByCurrency = new Map<CurrencyCode, number>();
     const evals: EvalResult[] = [];
 
+    const solvencyStarted = Date.now();
     for (const corp of candidates) {
       const result = await evaluateOneBank(db, turn, corp, reserveByCurrency, propEnabled);
       if (!result) continue;
@@ -136,6 +139,7 @@ export async function processBankSolvencyTurn(
       if (result.row.failed) summary.failures += 1;
       if (result.forcedLiquidation) summary.forcedLiquidations += 1;
     }
+    recordBankingStage(db, turn, "solvency", Date.now() - solvencyStarted);
 
     // Contagion: every OTHER active deposit-taking charter in the same currency.
     const newlyPanicked = new Map<string, number>();
@@ -234,12 +238,16 @@ export async function processBankSolvencyTurn(
     .project({ _id: 1 })
     .toArray();
 
+  const resolutionStarted = Date.now();
   for (const failed of unresolved) {
     const resolution = await resolveFailedBankDepositors(db, failed._id, turn);
     if (!resolution.resolved) continue;
     summary.depositorsResolved += 1;
     summary.insurancePaid += resolution.insurancePaid;
     summary.haircutsApplied += resolution.haircutsApplied;
+  }
+  if (unresolved.length > 0) {
+    recordBankingStage(db, turn, "resolution", Date.now() - resolutionStarted);
   }
 
   return summary;
@@ -432,6 +440,28 @@ async function evaluateOneBank(
     };
     await archiveCharter(db, corp._id, failedCharter, turn, "failed");
     await writeOffLenderSideInterbankOnFailure(db, corp._id, turn);
+    emitBankingAuditEvent(
+      {
+        kind: "bank.failed",
+        command: depositTaking ? "bank.solvency.run" : "bank.solvency.insolvency",
+        turn,
+        outcome: "ok",
+        currency,
+        bankId: corp._id.toString(),
+        statusBefore: "active",
+        statusAfter: "failed",
+        amount: npcDeposits,
+        meta: {
+          charterType: charter.type,
+          confidence,
+          band,
+          cashReserves,
+          totalLoans,
+          equityBase,
+        },
+      },
+      db
+    );
     await db.collection<Corporation>("corporations").updateOne(
       {
         _id: corp._id,

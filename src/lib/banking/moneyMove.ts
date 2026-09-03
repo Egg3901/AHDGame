@@ -35,6 +35,7 @@
 
 import type { Db, Filter, UpdateFilter, Document } from "mongodb";
 import { NET_TOLERANCE, legsNet, type ValueLegKind } from "@/lib/banking/rules/invariants";
+import { countBankingEvent } from "@/lib/banking/telemetry";
 
 /** Collection holding the claim records. Also the repair queue. */
 export const MONEY_MOVE_COLLECTION = "bankMoneyMoves";
@@ -223,8 +224,12 @@ export async function completeMoneyMove(
  */
 export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMoveResult> {
   const claim = await claimMoneyMove(db, move);
-  if (claim.status === "replayed") return { status: "replayed", applied: [] };
+  if (claim.status === "replayed") {
+    if (move.turn !== undefined) countBankingEvent(db, move.turn, "replayedSettlements");
+    return { status: "replayed", applied: [] };
+  }
   if (claim.status === "rejected") {
+    if (move.turn !== undefined) countBankingEvent(db, move.turn, "rejectedSettlements");
     return { status: "rejected", applied: [], error: claim.error };
   }
   const legs = claim.legs;
@@ -278,6 +283,9 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
 
   const status: MoneyMoveStatus = failure ? "partial" : "applied";
   await completeMoneyMove(db, move.key, applied, failure);
+  if (failure && move.turn !== undefined) {
+    countBankingEvent(db, move.turn, "partialSettlements");
+  }
 
   return { status, applied, error: failure };
 }

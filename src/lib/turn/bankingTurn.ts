@@ -12,6 +12,9 @@ import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { loadBankingPolicy } from "@/lib/banking/policy";
+import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
+import { recordBankingStage, timedBankingStage } from "@/lib/banking/telemetry";
+import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import { computeNpcDepositShare, equityCappedDepositCeiling } from "@/lib/banking/deposits";
 import { domesticDepositRetention } from "@/lib/centralBank/marketEffects";
 import {
@@ -90,6 +93,8 @@ export type BankingTurnSummary = {
   deadBankRecoveredToEstate: number;
   /** Recovered to the insurance fund after the estate was closed. */
   deadBankRecoveredToInsurer: number;
+  /** Settlements that started and never finished, as of the end of this pass. */
+  unfinishedSettlements: number;
 };
 
 const ZERO_SUMMARY: BankingTurnSummary = {
@@ -109,6 +114,7 @@ const ZERO_SUMMARY: BankingTurnSummary = {
   deadBankLoansServiced: 0,
   deadBankRecoveredToEstate: 0,
   deadBankRecoveredToInsurer: 0,
+  unfinishedSettlements: 0,
 };
 
 type DepositTaker = {
@@ -245,6 +251,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   // any live bank's pass, and before this they were serviced by nobody: the
   // borrower simply stopped paying and the value never reached the people who
   // lost out when the bank failed.
+  const deadBankStarted = Date.now();
   const deadBankResult = await processDeadBankLoans(db, turn, async (loan, bank, target) => {
     const serviced = await servicePlayerLoan(
       db,
@@ -263,10 +270,20 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   summary.deadBankLoansServiced = deadBankResult.loansServiced;
   summary.deadBankRecoveredToEstate = deadBankResult.recoveredToEstate;
   summary.deadBankRecoveredToInsurer = deadBankResult.recoveredToInsurer;
+  recordBankingStage(db, turn, "deadBankLoans", Date.now() - deadBankStarted);
 
   if (policy.propTrading) {
-    await serviceInterbankAndCbMargin(db, turn, summary);
+    await timedBankingStage(db, turn, "interbank", () =>
+      serviceInterbankAndCbMargin(db, turn, summary)
+    );
   }
+
+  // What this pass leaves behind for the repair queue. Reported on the turn
+  // summary so a half-applied move shows up in phase results the same turn,
+  // not when somebody thinks to open the admin page.
+  summary.unfinishedSettlements = await db
+    .collection(MONEY_MOVE_COLLECTION)
+    .countDocuments({ status: "partial" });
 
   return summary;
 }
@@ -360,6 +377,13 @@ async function processOneBank(
   const npcRoom = Math.max(0, depositCeiling - playerDeposits);
 
   // (b) NPC deposit flow - CB update first, then corp npcDeposits
+  let stageStarted = Date.now();
+  const stageDone = (
+    stage: "funding" | "depositInterest" | "insurancePremium" | "loanServicing" | "householdBook"
+  ) => {
+    recordBankingStage(db, turn, stage, Date.now() - stageStarted);
+    stageStarted = Date.now();
+  };
   const cbDocId = getBankId(getCountryIdForCurrency(currency));
   const cb = caches.cbById.get(cbDocId);
   const externalBroadMoney =
@@ -443,6 +467,8 @@ async function processOneBank(
       }
     }
   }
+
+  stageDone("funding");
 
   // (c) Deposit interest - player balances + npcDeposits, paid from cashReserves
   type PlayerCredit = { characterId: ObjectId; interest: number };
@@ -586,6 +612,8 @@ async function processOneBank(
     result.depositInterestPaid += totalInterestPaid;
   }
 
+  stageDone("depositInterest");
+
   // (c2) Deposit insurance premium - after interest, before loan servicing.
   // insuredDeposits ≈ Σ min(playerBal, cap) + npcDeposits (NPC fully insured).
   const paidByCharId = new Map<string, number>();
@@ -657,6 +685,8 @@ async function processOneBank(
     }
   }
 
+  stageDone("insurancePremium");
+
   // (d) Named loan servicing. Shared with the loan-book-only pass below.
   const namedBook = await serviceNamedLoanBook(db, turn, corp, currency);
   result.loanInterestCollected += namedBook.interestCollected;
@@ -664,6 +694,8 @@ async function processOneBank(
   result.defaultsWrittenOff += namedBook.writtenOff;
   cashReserves += namedBook.bankCredit;
   totalLoans = Math.max(0, totalLoans + namedBook.totalLoansDelta);
+
+  stageDone("loanServicing");
 
   // (e) NPC household loans. The book grows only from deposits actually held
   // by this bank after its reserve requirement. Rates set utilization, while
@@ -692,6 +724,8 @@ async function processOneBank(
   result.loanInterestCollected += bulkResult.interestCollected;
   result.defaultsWrittenOff += bulkResult.writtenOff;
   result.npcBulkShortfall += bulkResult.shortfall;
+
+  stageDone("householdBook");
 
   // (f) Recompute aggregates + stamp lastBankingTurn (END of bank pass)
   const finalPlayerDeposits = playerDeposits + playerInterestSettled;
@@ -809,7 +843,9 @@ async function processLoanBookOnlyBank(
   if (isDepositTakingCharter(charter)) return null;
 
   const currency = charter.currency as CurrencyCode;
-  const serviced = await serviceNamedLoanBook(db, turn, corp, currency);
+  const serviced = await timedBankingStage(db, turn, "loanServicing", () =>
+    serviceNamedLoanBook(db, turn, corp, currency)
+  );
   const totalLoans = Math.max(0, Math.max(0, charter.totalLoans ?? 0) + serviced.totalLoansDelta);
 
   await db.collection<Corporation>("corporations").updateOne(
@@ -916,6 +952,13 @@ async function servicePlayerLoan(
           },
         }
       );
+      emitLoanServiced(db, turn, loan, currency, bankCorporationId, {
+        kind: "loan.defaulted",
+        statusAfter: marked.status,
+        collected,
+        writtenOff: marked.outstanding,
+        arrearsTurns,
+      });
       return {
         interestCollected: interestPaid,
         principalRepaid: principalPaid,
@@ -945,6 +988,13 @@ async function servicePlayerLoan(
         },
       }
     );
+    emitLoanServiced(db, turn, loan, currency, bankCorporationId, {
+      kind: "loan.delinquent",
+      statusAfter: "arrears",
+      collected: collectedPartial,
+      writtenOff: 0,
+      arrearsTurns,
+    });
     return {
       interestCollected: interestPaid,
       principalRepaid: principalPaid,
@@ -979,6 +1029,13 @@ async function servicePlayerLoan(
       },
     }
   );
+  emitLoanServiced(db, turn, loan, currency, bankCorporationId, {
+    kind: "loan.paid",
+    statusAfter: afterPay.status,
+    collected: collectedFull,
+    writtenOff: 0,
+    arrearsTurns: 0,
+  });
 
   return {
     interestCollected: interestPaid,
@@ -987,6 +1044,45 @@ async function servicePlayerLoan(
     bankCredit: collectedFull,
     totalLoansDelta: -principalPaid,
   };
+}
+
+/** One audit event per serviced loan per turn, whichever way it went. */
+function emitLoanServiced(
+  db: Db,
+  turn: number,
+  loan: BankLoan,
+  currency: CurrencyCode,
+  bankCorporationId: ObjectId,
+  outcome: {
+    kind: "loan.paid" | "loan.delinquent" | "loan.defaulted";
+    statusAfter: BankLoan["status"];
+    collected: number;
+    writtenOff: number;
+    arrearsTurns: number;
+  }
+): void {
+  emitBankingAuditEvent(
+    {
+      kind: outcome.kind,
+      command: "bank.loan.service",
+      turn,
+      outcome: "ok",
+      currency,
+      bankId: bankCorporationId.toString(),
+      subjectType: "loan",
+      subjectId: loan._id.toString(),
+      statusBefore: loan.status,
+      statusAfter: outcome.statusAfter,
+      settlementId: `loan-service:${loan._id.toString()}:${turn}`,
+      amount: outcome.collected,
+      meta: {
+        borrowerType: loan.borrowerType,
+        writtenOff: outcome.writtenOff,
+        arrearsTurns: outcome.arrearsTurns,
+      },
+    },
+    db
+  );
 }
 
 /** Borrower display name for the ledger leg. One read per serviced loan. */

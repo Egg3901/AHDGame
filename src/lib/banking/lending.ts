@@ -30,6 +30,7 @@ import { getCurrentTurn } from "@/lib/currentTurn";
 import { isNamedLendingCharter } from "./charterKinds";
 import { charterMay } from "@/lib/banking/rules/capabilities";
 import { namedLoanHeadroom } from "@/lib/banking/rules/loans";
+import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 
 export { CHARACTER_LOAN_SPREAD_PP };
 
@@ -206,6 +207,48 @@ export async function characterIncomeInLoanCurrency(
  * not cash already on hand.
  */
 export async function originateLoan(
+  db: Db,
+  bankCorporationId: ObjectId,
+  borrower: LoanBorrower,
+  principal: number,
+  termTurns: number
+): Promise<OriginateLoanResult> {
+  const result = await originateLoanInner(db, bankCorporationId, borrower, principal, termTurns);
+  emitBankingAuditEvent(
+    result.ok
+      ? {
+          kind: "loan.originated",
+          command: "bank.loan.originate",
+          turn: result.loan.originatedTurn,
+          outcome: "ok",
+          currency: result.loan.currency,
+          bankId: bankCorporationId.toString(),
+          subjectType: "loan",
+          subjectId: result.loan._id.toString(),
+          statusAfter: result.loan.status,
+          amount: result.loan.principal,
+          meta: {
+            borrowerType: borrower.type,
+            termTurns: result.loan.termTurns,
+            ratePercent: result.loan.ratePercent,
+          },
+        }
+      : {
+          kind: "loan.originated",
+          command: "bank.loan.originate",
+          turn: await getCurrentTurn(db),
+          outcome: "rejected",
+          reason: result.error,
+          bankId: bankCorporationId.toString(),
+          amount: principal,
+          meta: { borrowerType: borrower.type, termTurns },
+        },
+    db
+  );
+  return result;
+}
+
+async function originateLoanInner(
   db: Db,
   bankCorporationId: ObjectId,
   borrower: LoanBorrower,
@@ -466,6 +509,22 @@ export async function disburseNamedLoan(
   }
 
   const originatedTurn = await getCurrentTurn(db);
+  emitBankingAuditEvent(
+    {
+      kind: "loan.disbursed",
+      command: "bank.loan.disburse",
+      turn: originatedTurn,
+      outcome: "ok",
+      currency,
+      bankId: bankCorporationId.toString(),
+      subjectType: "loan",
+      subjectId: loan._id.toString(),
+      statusAfter: "current",
+      amount: principal,
+      meta: { borrowerType: loan.borrowerType },
+    },
+    db
+  );
   // The release review's P1: origination moved money with zero ledger legs. On
   // transactionless Mongo the log IS the journal, so the compensating-write
   // strategy the rollback above implements had nothing to compensate against.

@@ -6,6 +6,8 @@ import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { isBlockedDepositor } from "@/lib/banking/blacklist";
 import { getBankDepositCeiling } from "@/lib/banking/capacityAllocation";
 import { charterMay } from "@/lib/banking/rules/capabilities";
+import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
+import { getCurrentTurn } from "@/lib/currentTurn";
 
 export type MoveCharacterSavingsResult =
   { ok: true; holder: SavingsHolder } | { ok: false; error: string };
@@ -35,6 +37,33 @@ export async function moveCharacterSavings(
   currency: CurrencyCode,
   holder: SavingsHolder
 ): Promise<MoveCharacterSavingsResult> {
+  const result = await moveCharacterSavingsInner(db, characterId, currency, holder);
+  emitBankingAuditEvent(
+    {
+      kind: "account.holder_changed",
+      command: "savings.holder.change",
+      turn: await getCurrentTurn(db),
+      outcome: result.ok ? "ok" : "rejected",
+      ...(result.ok ? {} : { reason: result.error }),
+      currency,
+      ...(holder !== "centralBank" ? { bankId: holder } : {}),
+      subjectType: "character",
+      subjectId: characterId.toString(),
+      ...(result.ok ? { statusBefore: result.previousHolder, statusAfter: holder } : {}),
+    },
+    db
+  );
+  return result.ok ? { ok: true, holder: result.holder } : result;
+}
+
+async function moveCharacterSavingsInner(
+  db: Db,
+  characterId: ObjectId,
+  currency: CurrencyCode,
+  holder: SavingsHolder
+): Promise<
+  MoveCharacterSavingsResult | { ok: true; holder: SavingsHolder; previousHolder: string }
+> {
   if (!(await isPrivateBankingEnabled())) {
     return { ok: false, error: "Private banking is not enabled" };
   }
@@ -123,6 +152,7 @@ export async function moveCharacterSavings(
 
   // Pointer-only: never touch currencyBalances.savings.<CODE>.
   const holderPath = `currencyBalances.savingsHolder.${currency}`;
+  const previousHolder = character.currencyBalances?.savingsHolder?.[currency] ?? "centralBank";
   await db.collection<Character>("characters").updateOne(
     { _id: characterId },
     {
@@ -133,5 +163,5 @@ export async function moveCharacterSavings(
     }
   );
 
-  return { ok: true, holder };
+  return { ok: true, holder, previousHolder };
 }

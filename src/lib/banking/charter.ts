@@ -19,6 +19,8 @@ import { clampOffsets, getRateCorridors } from "@/lib/banking/regulationQ";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { charterTypeMay } from "@/lib/banking/rules/capabilities";
+import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
+import { depositBookReturnKey } from "@/lib/banking/depositBookReturn";
 
 /**
  * Charter capital as a multiple of the corporation founding cost.
@@ -209,6 +211,42 @@ export async function issueCharter(
   currency: CurrencyCode,
   options?: { skipFlagCheck?: boolean }
 ): Promise<IssueCharterResult> {
+  const result = await issueCharterInner(db, corporationId, requestedType, currency, options);
+  emitBankingAuditEvent(
+    result.ok
+      ? {
+          kind: "charter.issued",
+          command: "bank.charter.issue",
+          turn: result.charter.charteredTurn,
+          outcome: "ok",
+          currency,
+          bankId: corporationId.toString(),
+          statusAfter: "active",
+          amount: result.postedCapital,
+          meta: { charterType: requestedType },
+        }
+      : {
+          kind: "charter.issued",
+          command: "bank.charter.issue",
+          turn: await getCurrentTurn(db),
+          outcome: "rejected",
+          reason: result.reasons[0] ?? "ineligible",
+          currency,
+          bankId: corporationId.toString(),
+          meta: { charterType: requestedType },
+        },
+    db
+  );
+  return result;
+}
+
+async function issueCharterInner(
+  db: Db,
+  corporationId: ObjectId,
+  requestedType: BankCharterType,
+  currency: CurrencyCode,
+  options?: { skipFlagCheck?: boolean }
+): Promise<IssueCharterResult> {
   const corporation = await db.collection<Corporation>("corporations").findOne({
     _id: corporationId,
   });
@@ -307,6 +345,52 @@ export async function issueCharter(
  * capped at book equity, reaches the shareholder.
  */
 export async function revokeCharter(
+  db: Db,
+  corporationId: ObjectId,
+  reason: string
+): Promise<RevokeCharterResult> {
+  const result = await revokeCharterInner(db, corporationId, reason);
+  if (result.ok) {
+    emitBankingAuditEvent(
+      {
+        kind: "charter.revoked",
+        command: "bank.charter.revoke",
+        turn: result.charter.revokedTurn ?? 0,
+        outcome: "ok",
+        currency: result.charter.currency,
+        bankId: corporationId.toString(),
+        statusBefore: "active",
+        statusAfter: "revoked",
+        settlementId: depositBookReturnKey(
+          corporationId,
+          "revocation",
+          result.charter.revokedTurn ?? 0
+        ),
+        amount: result.refundedCapital,
+        meta: {
+          depositorsFlipped: result.depositorsFlipped,
+          npcDepositsReturned: result.npcDepositsReturned,
+        },
+      },
+      db
+    );
+  } else {
+    emitBankingAuditEvent(
+      {
+        kind: "charter.revoked",
+        command: "bank.charter.revoke",
+        turn: await getCurrentTurn(db),
+        outcome: "rejected",
+        reason: result.error,
+        bankId: corporationId.toString(),
+      },
+      db
+    );
+  }
+  return result;
+}
+
+async function revokeCharterInner(
   db: Db,
   corporationId: ObjectId,
   reason: string
@@ -518,6 +602,46 @@ export async function previewCharterSwitch(
  * They are assets the bank owns; a charter change is not a jubilee.
  */
 export async function switchCharterType(
+  db: Db,
+  corporationId: ObjectId,
+  targetType: BankCharterType
+): Promise<SwitchCharterResult> {
+  const result = await switchCharterTypeInner(db, corporationId, targetType);
+  const turn = result.ok ? (result.charter.charterSwitchTurn ?? 0) : await getCurrentTurn(db);
+  emitBankingAuditEvent(
+    result.ok
+      ? {
+          kind: "charter.switched",
+          command: "bank.charter.switch",
+          turn,
+          outcome: "ok",
+          currency: result.charter.currency,
+          bankId: corporationId.toString(),
+          statusAfter: result.charter.type,
+          ...(result.npcDepositsReturned > 0 || result.depositorsFlipped > 0
+            ? { settlementId: depositBookReturnKey(corporationId, "charter_switch", turn) }
+            : {}),
+          meta: {
+            depositorsFlipped: result.depositorsFlipped,
+            npcDepositsReturned: result.npcDepositsReturned,
+            cooldownUntilTurn: result.cooldownUntilTurn,
+          },
+        }
+      : {
+          kind: "charter.switched",
+          command: "bank.charter.switch",
+          turn,
+          outcome: "rejected",
+          reason: result.reasons[0] ?? result.blockers[0] ?? "blocked",
+          bankId: corporationId.toString(),
+          statusAfter: targetType,
+        },
+    db
+  );
+  return result;
+}
+
+async function switchCharterTypeInner(
   db: Db,
   corporationId: ObjectId,
   targetType: BankCharterType

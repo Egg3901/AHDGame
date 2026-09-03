@@ -372,6 +372,7 @@ describe("processBankingTurn", () => {
       deadBankLoansServiced: 0,
       deadBankRecoveredToEstate: 0,
       deadBankRecoveredToInsurer: 0,
+      unfinishedSettlements: 0,
     });
     expect(db.collectionMocks.corporations!.find).not.toHaveBeenCalled();
   });
