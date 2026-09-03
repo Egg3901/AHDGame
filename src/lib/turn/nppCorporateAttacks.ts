@@ -146,6 +146,34 @@ export interface NppAttackResult {
 }
 
 /**
+ * Defender-facing message for an autonomous sector attack (suggestion #324).
+ * Names the attacking corp, the sector, and the state, and says what the $
+ * figure is: revenue moved below plants, plant capacity at book value under
+ * plants. Pure, so notification copy can be pinned by unit test.
+ */
+export function formatNppSectorAttackDefenderMessage(args: {
+  attackerName: string;
+  capturedAnchor: number;
+  sectorLabel: string;
+  stateLabel: string;
+  plantsEnabled: boolean;
+  capacityUnitsTaken: number;
+}): string {
+  const { attackerName, capturedAnchor, sectorLabel, stateLabel } = args;
+  if (args.plantsEnabled) {
+    return (
+      `${attackerName} seized ${args.capacityUnitsTaken.toLocaleString("en-US", { maximumFractionDigits: 2 })}` +
+      ` capacity units (~$${capturedAnchor.toLocaleString()} book value) from your ${sectorLabel} sector in ${stateLabel}.` +
+      ` This is plant capacity moved to the attacker, not cash or profit.`
+    );
+  }
+  return (
+    `${attackerName} captured $${capturedAnchor.toLocaleString()} of revenue from your ${sectorLabel} sector in ${stateLabel}.` +
+    ` This is revenue moved to the attacker's sector, not profit or your sector's total value.`
+  );
+}
+
+/**
  * Execute one autonomous sector attack, applying the identical cost/capture math
  * as the player route. Returns the captured amount (₳) or null when the attack
  * could not meaningfully proceed (too little capture). Assumes the caller has
@@ -475,17 +503,33 @@ export async function executeNppSectorAttack(
       )
     : 0;
   if (defender.userId && !defender.ceoVacant && canNotifyPlayer(notificationsSent)) {
+    // Suggestion #324: name the sector AND the state, and say what the $ is.
+    // Below plants the capture moves revenue; under plants it moves plant
+    // capacity priced at book value (no cash or profit changes hands).
+    const captureMessage = formatNppSectorAttackDefenderMessage({
+      attackerName: attacker.name,
+      capturedAnchor: actualCapture,
+      sectorLabel,
+      stateLabel: stateName?.name ?? stateId,
+      plantsEnabled,
+      capacityUnitsTaken: unitsTaken,
+    });
     await createNotification({
       userId: defender.userId,
       type: "corp_sector_attacked",
       title: "Sector Attacked",
-      message: `${attacker.name} captured $${actualCapture.toLocaleString()} from your ${sectorLabel} sector.`,
+      message: captureMessage,
       metadata: {
         attackerCorporationName: attacker.name,
         attackerCorporationId: attacker._id.toString(),
         sectorType: targetSector.sectorType,
+        sectorLabel,
         stateId,
+        stateName: stateName?.name ?? null,
+        countryId: targetSector.countryId,
         revenueLost: actualCapture,
+        captureKind: plantsEnabled ? "capacity" : "revenue",
+        ...(plantsEnabled ? { capacityUnitsTaken: unitsTaken } : {}),
       },
     });
   }
