@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { ORG_BUILD_MIN_FUNDED_FRACTION, ORG_BUILD_TREASURY_FRACTION } from "./strengthConstants";
-import { clampFundedFraction, orgBuildCashPrice, resolveOrgBuildFunding } from "./buildOrgFunding";
+import {
+  ORG_BUILD_MIN_FUNDED_FRACTION,
+  ORG_BUILD_SIZE_MULTIPLIER_MAX,
+  ORG_BUILD_SIZE_MULTIPLIER_MIN,
+  ORG_BUILD_TREASURY_FRACTION,
+} from "./strengthConstants";
+import {
+  clampFundedFraction,
+  orgBuildCashPrice,
+  orgBuildSizeMultiplier,
+  resolveOrgBuildFunding,
+} from "./buildOrgFunding";
 
 // Treasury cost for the Build Org action. Price is country-normalized off
 // TREASURY_PS_RATE_BY_COUNTRY and scales with the EFFECTIVE PS cost, so the
@@ -63,6 +73,63 @@ describe("orgBuildCashPrice", () => {
     expect(orgBuildCashPrice("US", "state", 1)).toBe(2813);
     expect(Number.isInteger(orgBuildCashPrice("US", "state", 3))).toBe(true);
     expect(Number.isInteger(orgBuildCashPrice("UK", "national-targeted", 7))).toBe(true);
+  });
+});
+
+// Org is consumed as a normalized SHARE within its state, so a point of Org in
+// a 20.8M state carries ~64x the electoral weight of a point in a 326k one. A
+// flat price underwrites exactly the states worth winning, so the price scales
+// with the square root of population, normalized so the country average is 1.
+describe("orgBuildSizeMultiplier", () => {
+  it("is 1 for a state of exactly the country's normalizing size", () => {
+    expect(orgBuildSizeMultiplier(4_000_000, 2000)).toBeCloseTo(1, 6);
+  });
+
+  it("charges more in a larger state and less in a smaller one", () => {
+    // Normalizer 2000 = sqrt(4,000,000): a 16M state is 2x, a 1M state 0.5x.
+    expect(orgBuildSizeMultiplier(16_000_000, 2000)).toBeCloseTo(2, 6);
+    expect(orgBuildSizeMultiplier(1_000_000, 2000)).toBeCloseTo(0.5, 6);
+  });
+
+  it("compresses the spread with a square root rather than scaling linearly", () => {
+    // Four times the population is TWICE the price, not four times. Linear
+    // pricing on the live US spread would put Alaska near free.
+    const base = orgBuildSizeMultiplier(4_000_000, 2000);
+    const fourFold = orgBuildSizeMultiplier(16_000_000, 2000);
+    expect(fourFold / base).toBeCloseTo(2, 6);
+  });
+
+  it("clamps to the agreed band so no state is free or ruinous", () => {
+    expect(orgBuildSizeMultiplier(1_000_000_000, 2000)).toBe(ORG_BUILD_SIZE_MULTIPLIER_MAX);
+    expect(orgBuildSizeMultiplier(1, 2000)).toBe(ORG_BUILD_SIZE_MULTIPLIER_MIN);
+  });
+
+  it("falls back to a neutral 1 when the size inputs are unusable", () => {
+    // A world with no demographics seeded must price exactly as it does today.
+    expect(orgBuildSizeMultiplier(0, 2000)).toBe(1);
+    expect(orgBuildSizeMultiplier(4_000_000, 0)).toBe(1);
+    expect(orgBuildSizeMultiplier(Number.NaN, 2000)).toBe(1);
+    expect(orgBuildSizeMultiplier(undefined, 2000)).toBe(1);
+  });
+});
+
+describe("orgBuildCashPrice with a size multiplier", () => {
+  it("defaults to the unscaled price when no multiplier is given", () => {
+    expect(orgBuildCashPrice("US", "state", 1)).toBe(Math.round(37_500 * 0.075));
+  });
+
+  it("scales the price by the multiplier, still in whole units", () => {
+    // Rounded once from the exact product, so these are round(2812.5 x m) and
+    // not the rounded flat price multiplied again.
+    expect(orgBuildCashPrice("US", "state", 1, 2)).toBe(Math.round(37_500 * 0.075 * 2));
+    expect(orgBuildCashPrice("US", "state", 1, 0.5)).toBe(Math.round(37_500 * 0.075 * 0.5));
+  });
+
+  it("ignores an unusable multiplier rather than zeroing the price", () => {
+    const flat = orgBuildCashPrice("US", "state", 1);
+    expect(orgBuildCashPrice("US", "state", 1, 0)).toBe(flat);
+    expect(orgBuildCashPrice("US", "state", 1, Number.NaN)).toBe(flat);
+    expect(orgBuildCashPrice("US", "state", 1, -3)).toBe(flat);
   });
 });
 

@@ -21,6 +21,10 @@ vi.mock("@/lib/turn/partyOrg/presence", () => ({ checkPartyPresence: vi.fn() }))
 vi.mock("@/lib/parties/commands/chargeOrgBuildFunds", () => ({
   chargeOrgBuildFunds: vi.fn(),
 }));
+vi.mock("@/lib/politicalStrength/orgBuildStateSize", () => ({
+  resolveOrgBuildSizeMultiplier: vi.fn().mockResolvedValue(1),
+  clearOrgBuildSizeCache: vi.fn(),
+}));
 
 function makeRequest() {
   return new Request("http://localhost/api/country/us/region/CA/party/1/build-org", {
@@ -138,6 +142,11 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     vi.mocked(chargeOrgBuildFunds).mockImplementation(async (input) => ({
       charged: input.amount,
     }));
+
+    // Default: an average-sized state, so prices read as the flat rate.
+    const { resolveOrgBuildSizeMultiplier } =
+      await import("@/lib/politicalStrength/orgBuildStateSize");
+    vi.mocked(resolveOrgBuildSizeMultiplier).mockResolvedValue(1);
   });
 
   it("rejects invalid country code", async () => {
@@ -933,6 +942,44 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     expect(halfResponse.status).toBe(200);
     expect(halfBody.fundedFraction).toBeCloseTo(0.5, 6);
     expect(halfBody.orgGain).toBeCloseTo(fullBody.orgGain * 0.5, 6);
+  });
+
+  // Organizing a big state costs more than a small one. Both halves of the bill
+  // — the affordability gate and the debit — must use the same multiplier, or a
+  // click could pass the gate at one price and be charged another.
+  it("charges the size-scaled price in a larger-than-average state", async () => {
+    const { resolveOrgBuildSizeMultiplier } =
+      await import("@/lib/politicalStrength/orgBuildStateSize");
+    vi.mocked(resolveOrgBuildSizeMultiplier).mockResolvedValue(1.6);
+    const { chargeOrgBuildFunds } = await import("@/lib/parties/commands/chargeOrgBuildFunds");
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest(), {
+      params: Promise.resolve({ code: "us", id: stateId, partyId }),
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    const expected = Math.round(37_500 * 0.075 * BUILD_ORG_BASE_PS_COST * 1.6);
+    expect(body.cashPrice).toBe(expected);
+    expect(chargeOrgBuildFunds).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: expected }),
+      expect.anything()
+    );
+  });
+
+  it("charges less in a smaller-than-average state", async () => {
+    const { resolveOrgBuildSizeMultiplier } =
+      await import("@/lib/politicalStrength/orgBuildStateSize");
+    vi.mocked(resolveOrgBuildSizeMultiplier).mockResolvedValue(0.5);
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest(), {
+      params: Promise.resolve({ code: "us", id: stateId, partyId }),
+    });
+    const body = await response.json();
+
+    expect(body.cashPrice).toBe(Math.round(37_500 * 0.075 * BUILD_ORG_BASE_PS_COST * 0.5));
   });
 
   it("quotes the next click against the pool this one spent", async () => {

@@ -37,6 +37,7 @@ import {
   resolveOrgBuildFunding,
 } from "@/lib/politicalStrength/buildOrgFunding";
 import { chargeOrgBuildFunds } from "@/lib/parties/commands/chargeOrgBuildFunds";
+import { resolveOrgBuildSizeMultiplier } from "@/lib/politicalStrength/orgBuildStateSize";
 import { calcUnifiedBuildOrg } from "@/lib/turn/politicalStrength/buildOrgGain";
 import { isStateInPriorityRegion } from "@/lib/parties/priorityRegion";
 import { resolveUnmannedDefaultCaptureMultiplier } from "@/lib/parties/unmannedDefenseShield";
@@ -307,7 +308,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     .collection<PartyStrengthPressure>("partyStrengthPressure")
     .findOne({ _id: `${countryId}_${spenderParty.sequentialId}_${upperRegionId}` });
   const quotedPsCost = effectivePsCost(BUILD_ORG_BASE_PS_COST, pressureRow?.value ?? 0);
-  const quotedPrice = orgBuildCashPrice(countryId, scope, quotedPsCost);
+  // Organizing a large state costs more than a small one — see
+  // `ORG_BUILD_SIZE_MULTIPLIER_MIN`. Resolved once and reused for the charge
+  // below so the gate and the debit price the click identically.
+  const sizeMultiplier = await resolveOrgBuildSizeMultiplier(db, countryId, upperRegionId);
+  const quotedPrice = orgBuildCashPrice(countryId, scope, quotedPsCost, sizeMultiplier);
   const payingTreasury =
     scope === "state" ? (spenderRow.treasury ?? 0) : (spenderParty.treasury ?? 0);
   const funding = resolveOrgBuildFunding({ price: quotedPrice, treasury: payingTreasury });
@@ -374,7 +379,12 @@ export async function POST(request: Request, { params }: RouteParams) {
   // halves of the bill always agree even if a concurrent click nudged the ladder
   // between the quote above and the debit. `chargeOrgBuildFunds` never
   // overdraws: it takes what is there and reports it.
-  const chargePrice = orgBuildCashPrice(countryId, scope, spendResult.effectiveCost);
+  const chargePrice = orgBuildCashPrice(
+    countryId,
+    scope,
+    spendResult.effectiveCost,
+    sizeMultiplier
+  );
   const { charged } = await chargeOrgBuildFunds(
     {
       countryId,

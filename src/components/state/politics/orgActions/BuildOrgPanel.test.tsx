@@ -276,6 +276,47 @@ describe("BuildOrgPanel", () => {
     expect(nationalButton.getAttribute("title")).toMatch(/\$5,625/);
   });
 
+  // Price scales with the state's size, so the per-pool button tooltips must
+  // carry the multiplier too — they are computed client-side from the preview.
+  it("scales both pool button prices by the state's size multiplier", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string) => {
+        if (input.includes("/ps-spend-scope")) {
+          return {
+            json: async () => ({
+              ok: true,
+              eligibleScopes: { state: true, national: true },
+              statePoolPS: 20,
+              nationalPoolPS: 150,
+            }),
+          };
+        }
+        return {
+          json: async () => ({
+            ok: true,
+            effectiveCost: 1,
+            pressureValue: 0,
+            projectedGain: 1.25,
+            cashPrice: 5625,
+            sizeMultiplier: 2,
+            fundedFraction: 1,
+            factors: { base: 2, headroom: 0.5, ownDiminishing: 0.5, psLeverage: 1, catchup: 1 },
+            scope: "state",
+          }),
+        };
+      })
+    );
+    renderPanel();
+
+    const stateButton = await screen.findByRole("button", { name: /State PS/ });
+    const nationalButton = screen.getByRole("button", { name: /Nat'l PS/ });
+    // 2x the flat rates: state 2,813 -> 5,625 ; national 5,625 -> 11,250.
+    expect(stateButton.getAttribute("title")).toMatch(/\$5,625/);
+    expect(nationalButton.getAttribute("title")).toMatch(/\$11,250/);
+    expect(screen.getByText(/Larger state: 2\.00× the national average/)).toBeTruthy();
+  });
+
   it("surfaces the treasury refusal message from the preview", async () => {
     vi.stubGlobal(
       "fetch",

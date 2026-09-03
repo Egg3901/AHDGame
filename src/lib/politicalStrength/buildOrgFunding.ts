@@ -1,6 +1,8 @@
 import type { CountryId } from "@/lib/constants/countries";
 import {
   ORG_BUILD_MIN_FUNDED_FRACTION,
+  ORG_BUILD_SIZE_MULTIPLIER_MAX,
+  ORG_BUILD_SIZE_MULTIPLIER_MIN,
   ORG_BUILD_TREASURY_FRACTION,
   TREASURY_PS_RATE_BY_COUNTRY,
 } from "./strengthConstants";
@@ -63,14 +65,44 @@ export type OrgBuildFunding =
  * @param effectivePsCost - PS cost AFTER pressure escalation, so a ladder-capped
  *   click costs 8× the cash of a fresh one
  */
+/**
+ * Per-state price multiplier from population, on a square-root curve normalized
+ * so a country's average state sits at `1`.
+ *
+ * `normalizer` is the country's mean of `sqrt(population)` across its regions.
+ * Dividing by that (rather than by `sqrt(mean population)`) is what makes the
+ * average multiplier exactly 1 — the concave curve would otherwise pull the
+ * country's average below 1 and quietly cut the overall cost level that
+ * `ORG_BUILD_TREASURY_FRACTION` was calibrated against.
+ *
+ * Returns a neutral `1` whenever the inputs cannot support a ratio (no
+ * demographics seeded, a single-region country mid-migration, bad data), so a
+ * world without population data prices exactly as it did before this existed.
+ *
+ * @param population - The state's population
+ * @param normalizer - Country mean of `sqrt(population)` over its regions
+ */
+export function orgBuildSizeMultiplier(
+  population: number | null | undefined,
+  normalizer: number
+): number {
+  if (!Number.isFinite(population ?? NaN) || !((population ?? 0) > 0)) return 1;
+  if (!Number.isFinite(normalizer) || !(normalizer > 0)) return 1;
+  const raw = Math.sqrt(population as number) / normalizer;
+  if (!Number.isFinite(raw) || raw <= 0) return 1;
+  return Math.min(ORG_BUILD_SIZE_MULTIPLIER_MAX, Math.max(ORG_BUILD_SIZE_MULTIPLIER_MIN, raw));
+}
+
 export function orgBuildCashPrice(
   countryId: CountryId,
   scope: OrgBuildFundingScope,
-  effectivePsCost: number
+  effectivePsCost: number,
+  sizeMultiplier: number = 1
 ): number {
   if (!(effectivePsCost > 0)) return 0;
   const rates = TREASURY_PS_RATE_BY_COUNTRY[countryId] ?? TREASURY_PS_RATE_BY_COUNTRY.US;
   const rate = scope === "state" ? rates.state : rates.national;
+  const size = Number.isFinite(sizeMultiplier) && sizeMultiplier > 0 ? sizeMultiplier : 1;
   // Whole currency units. The raw product is fractional for most countries (US
   // state at 1 PS is 2,812.5), and a half-unit debit per click would accumulate
   // floating-point tails across every treasury it touches — and make the price
@@ -78,7 +110,7 @@ export function orgBuildCashPrice(
   // Rounding HERE keeps the preview, the spend route, the NPP sweep and the
   // balance sim on one number. The smallest rate in the table still yields
   // 1,875 at one PS, so rounding never collapses a price to zero.
-  return Math.round(rate * ORG_BUILD_TREASURY_FRACTION * effectivePsCost);
+  return Math.round(rate * ORG_BUILD_TREASURY_FRACTION * effectivePsCost * size);
 }
 
 /**

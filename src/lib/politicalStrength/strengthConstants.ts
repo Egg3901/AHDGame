@@ -393,6 +393,42 @@ export const ORG_BUILD_TREASURY_FRACTION = 0.075 as const;
 export const ORG_BUILD_MIN_FUNDED_FRACTION = 0.25 as const;
 
 /**
+ * Band the per-state size multiplier is clamped into (see `orgBuildSizeMultiplier`).
+ *
+ * Build Org's price scales with the size of the state being organized, because
+ * Org is consumed as a normalized SHARE of its state: a point of Org in New York
+ * (20.8M) carries about 64× the absolute electoral weight of a point in Alaska
+ * (326k), and charging both the same systematically underprices exactly the
+ * states worth winning.
+ *
+ * Two deliberate limits on how far that goes:
+ *
+ *  - The curve is a SQUARE ROOT, not linear. Linear on the live US spread puts
+ *    Alaska at 0.07× the country mean — roughly $200 a click, which is close
+ *    enough to free that farming cheap Org in tiny states (they still count
+ *    toward party tier, and cheap Org is cheap to defend against decay) becomes
+ *    the dominant strategy.
+ *  - The result is clamped into this band, so the widest real spread (US, 63.7×
+ *    population) resolves to a 4× price range rather than 8× raw.
+ *
+ * The multiplier is normalized against a per-country figure so its average is 1
+ * ACROSS REGIONS. That is not the same as an average of 1 across CLICKS, and the
+ * difference is the interesting part: players organize where it matters, so 74%
+ * of live US clicks land in above-average states and the click-weighted mean
+ * comes out at 1.349. Replaying a real week (`scripts/sim/orgBuildStateScaling2026-09-02.ts`)
+ * puts the true effect at **+13.5% total spend**, not the neutral reshuffle the
+ * per-region arithmetic suggests — up to +44% for the heaviest US builders,
+ * while UK and Soviet parties barely move (1.048 / 1.038).
+ *
+ * That rise was reviewed and accepted rather than compensated for: paying more
+ * IS the mechanic, since the clicks that got dearer are exactly the ones buying
+ * the most valuable Org. Anyone re-tuning `ORG_BUILD_TREASURY_FRACTION` should
+ * know its effective level is ~13.5% above where it was calibrated.
+ */
+export const ORG_BUILD_SIZE_MULTIPLIER_MIN = 0.5 as const;
+export const ORG_BUILD_SIZE_MULTIPLIER_MAX = 2.0 as const;
+
+/**
  * Base Org% gain at ideal conditions (full headroom, fresh own Org, full
  * PS reserve relative to rivals, behind in this state). The actual gain
  * scales by the four factors in `calcUnifiedBuildOrg`.
