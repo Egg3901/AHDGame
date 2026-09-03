@@ -244,8 +244,14 @@ export async function settleTransition(
     // `replayed` (this caller owns nothing), with `error` saying the key is
     // not settled; the claim record itself is what the repair queue lists.
     const owned = await journal.findOne({ _id: transition.key });
+    // Judged on the legs themselves, not the record's status: a record can be
+    // `partial` because a PROJECTION failed after every leg landed, and that
+    // is exactly the case a replay must go on to finish.
+    const ownedLegs = owned?.legs ?? [];
     const legsOutstanding =
-      !owned || owned.status !== "applied" || (owned.legs ?? []).some((leg) => !leg.applied);
+      !owned ||
+      ownedLegs.length !== transition.legs.length ||
+      ownedLegs.some((leg) => !leg.applied);
     if (legsOutstanding) {
       return {
         ...result,

@@ -94,6 +94,23 @@ export type BankCommand =
       termTurns: number;
     }
   | {
+      /**
+       * Fund a loan that was parked as pending for CEO approval. Re-checks
+       * headroom and the blacklist against the snapshot, because the queue
+       * may be stale by the time the CEO decides.
+       */
+      type: "disburse_pending_loan";
+      loanId: string;
+      borrower: Pick<BorrowerSnapshot, "type" | "id" | "blocked">;
+      principal: number;
+    }
+  | {
+      /** CEO declines a pending loan. No money moves. */
+      type: "reject_pending_loan";
+      loanId: string;
+      reason?: string;
+    }
+  | {
       type: "lend_interbank";
       loanId: string;
       borrowerBankId: string;

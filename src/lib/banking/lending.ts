@@ -4,19 +4,12 @@ import type { Character, Corporation } from "@/lib/db/types";
 import type { CorporationHistory } from "@/lib/db/types/corporationHistory";
 import type { IndexFund } from "@/lib/db/types/indexFund";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { isBlockedBorrower, type ResolveFundConstituents } from "@/lib/banking/blacklist";
-import { getEffectiveBankRates } from "@/lib/banking/rates";
-import { getReserveRequirement } from "@/lib/banking/reserves";
-import { getCashReserves } from "@/lib/banking/bankCash";
 import {
   CHARACTER_LOAN_SPREAD_PP,
   CORP_INCOME_AVERAGING_TURNS,
-  bindingNamedLoanCap,
   convertFaceBetweenCurrencies,
-  maxPrincipalFromIncome,
   namedLoanPaymentDue,
-  namedLoanPrincipalCap,
   remainingLoanTurns,
 } from "@/lib/banking/lendingMath";
 import {
@@ -26,11 +19,13 @@ import {
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import { estimatePerTurnCurrencyIncomeHomeFace } from "@/lib/lineOfCredit/currencyIncomeEstimate";
 import { emitTx } from "@/lib/financialTxLog/emit";
-import { getCurrentTurn } from "@/lib/currentTurn";
 import { isNamedLendingCharter } from "./charterKinds";
 import { charterMay } from "@/lib/banking/rules/capabilities";
-import { namedLoanHeadroom } from "@/lib/banking/rules/loans";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
+import { loadBankingSnapshot } from "@/lib/banking/snapshot";
+import { decideBankCommand } from "@/lib/banking/rules/decide";
+import type { BorrowerSnapshot } from "@/lib/banking/rules/boundary";
+import { reviveObjectIds, settleTransition } from "@/lib/banking/settlementJournal";
 
 export { CHARACTER_LOAN_SPREAD_PP };
 
@@ -112,21 +107,6 @@ export async function buildFundConstituentResolver(
   return (fundId: string) => bySlug.get(fundId) ?? [];
 }
 
-function formatCap(n: number): string {
-  return String(Math.floor(Math.max(0, n)));
-}
-
-function capExceededError(bind: ReturnType<typeof bindingNamedLoanCap>, cap: number): string {
-  const max = formatCap(cap);
-  if (bind === "cashReserves") {
-    return `Principal exceeds the bank's cash reserves (max ${max})`;
-  }
-  if (bind === "headroom") {
-    return `Principal exceeds lendable headroom (max ${max})`;
-  }
-  return `Principal exceeds borrower income limit (max ${max})`;
-}
-
 export async function averageCorpIncomePerTurn(
   db: Db,
   corporationId: ObjectId,
@@ -196,15 +176,65 @@ export async function characterIncomeInLoanCurrency(
 }
 
 /**
- * Originate a named player loan. Objective auto-approval (no seat).
+ * The borrower as the rules see one: income in the loan currency, instalments
+ * already committed, blacklist standing, currency match. Loaded once here so
+ * the decision is a pure function of the snapshot and this record.
+ */
+async function loadBorrowerSnapshot(
+  db: Db,
+  charter: NonNullable<Corporation["bankCharter"]>,
+  currency: CurrencyCode,
+  borrower: LoanBorrower,
+  currentTurn: number
+): Promise<{ snapshot: BorrowerSnapshot; name: string } | { error: string }> {
+  const resolveFunds = await buildFundConstituentResolver(db, charter.blacklist?.indexFundIds);
+  if (borrower.type === "character") {
+    const character = await db.collection<Character>("characters").findOne({ _id: borrower.id });
+    if (!character) return { error: "Borrower character not found" };
+    return {
+      name: character.name ?? "Borrower",
+      snapshot: {
+        type: "character",
+        id: borrower.id.toString(),
+        incomePerTurn: await characterIncomeInLoanCurrency(db, character, currency),
+        committedPaymentPerTurn: await committedNamedLoanPaymentPerTurn(db, borrower, currentTurn),
+        blocked: isBlockedBorrower(charter, { characterId: borrower.id.toString() }, resolveFunds),
+        currencyMatches: true,
+      },
+    };
+  }
+  const corp = await db.collection<Corporation>("corporations").findOne({ _id: borrower.id });
+  if (!corp) return { error: "Borrower corporation not found" };
+  return {
+    name: corp.name ?? "Borrower",
+    snapshot: {
+      type: "corporation",
+      id: borrower.id.toString(),
+      incomePerTurn: await averageCorpIncomePerTurn(db, borrower.id, currentTurn),
+      committedPaymentPerTurn: await committedNamedLoanPaymentPerTurn(db, borrower, currentTurn),
+      blocked: isBlockedBorrower(charter, { corporationId: borrower.id.toString() }, resolveFunds),
+      currencyMatches: resolveCorpLiquidCurrencyCode(corp) === currency,
+    },
+  };
+}
+
+/**
+ * Originate a named loan. Objective auto-approval unless the bank has opted
+ * into CEO approval, in which case the loan is parked as `pending` with no
+ * money moved.
  *
- * Writes the BankLoan doc first, then $inc's charter.totalLoans and credits
- * the borrower. On any failure after insert, deletes the loan (and reverses
- * a successful totalLoans $inc) as compensation. Standalone Mongo - no txn.
+ * The rules boundary decides (capability, term, self-lending, blacklist,
+ * currency, the binding cap) and returns one transition: the loan record,
+ * the bank's vault debit, the borrower's proceeds and the cached loan total.
+ * The journal lands it exactly once. There is no compensating delete any
+ * more: a crash leaves a visible half-applied record, never a booked loan
+ * with no cash behind it.
  *
- * Bank-side cap is the ring-fenced vault (`cashReserves`), not the holding
- * company's `liquidCapital`. Borrower-side cap is demonstrated income DTI,
- * not cash already on hand.
+ * The vault IS debited. Origination used to credit the borrower and touch
+ * nothing on the bank but a counter, so lending created money and repayment
+ * later credited the bank with cash it had never paid out. The caps
+ * (cash reserves, lendable headroom) always assumed the bank funds the loan;
+ * now it does.
  */
 export async function originateLoan(
   db: Db,
@@ -213,355 +243,142 @@ export async function originateLoan(
   principal: number,
   termTurns: number
 ): Promise<OriginateLoanResult> {
-  const result = await originateLoanInner(db, bankCorporationId, borrower, principal, termTurns);
-  emitBankingAuditEvent(
-    result.ok
-      ? {
-          kind: "loan.originated",
-          command: "bank.loan.originate",
-          turn: result.loan.originatedTurn,
-          outcome: "ok",
-          currency: result.loan.currency,
-          bankId: bankCorporationId.toString(),
-          subjectType: "loan",
-          subjectId: result.loan._id.toString(),
-          statusAfter: result.loan.status,
-          amount: result.loan.principal,
-          meta: {
-            borrowerType: borrower.type,
-            termTurns: result.loan.termTurns,
-            ratePercent: result.loan.ratePercent,
-          },
-        }
-      : {
-          kind: "loan.originated",
-          command: "bank.loan.originate",
-          turn: await getCurrentTurn(db),
-          outcome: "rejected",
-          reason: result.error,
-          bankId: bankCorporationId.toString(),
-          amount: principal,
-          meta: { borrowerType: borrower.type, termTurns },
-        },
-    db
-  );
-  return result;
-}
+  const loaded = await loadBankingSnapshot(db, bankCorporationId);
+  if (!loaded) return { ok: false, error: "Bank corporation not found" };
+  const { snapshot, corporation: bankCorp } = loaded;
+  const turn = snapshot.turn;
 
-async function originateLoanInner(
-  db: Db,
-  bankCorporationId: ObjectId,
-  borrower: LoanBorrower,
-  principal: number,
-  termTurns: number
-): Promise<OriginateLoanResult> {
-  if (!(await isPrivateBankingEnabled())) {
-    return { ok: false, error: "Private banking is not enabled" };
-  }
-
-  if (!Number.isFinite(principal) || principal <= 0) {
-    return { ok: false, error: "Principal must be a positive number" };
-  }
-  if (!Number.isFinite(termTurns) || termTurns < 4 || termTurns > 120) {
-    return { ok: false, error: "termTurns must be an integer from 4 to 120" };
-  }
-  if (!Number.isInteger(termTurns)) {
-    return { ok: false, error: "termTurns must be an integer from 4 to 120" };
-  }
-
-  if (borrower.type === "corporation" && borrower.id.equals(bankCorporationId)) {
-    return { ok: false, error: "A bank cannot lend to itself" };
-  }
-
-  const bankCorp = await db.collection<Corporation>("corporations").findOne({
-    _id: bankCorporationId,
-  });
-  if (!bankCorp) {
-    return { ok: false, error: "Bank corporation not found" };
-  }
-
-  const charter = bankCorp.bankCharter;
-  // Named loans are open to every active charter. Investment banks lend to
-  // firms; only the household book is closed to them.
-  if (!isNamedLendingCharter(charter)) {
-    return { ok: false, error: "Corporation has no active bank charter" };
-  }
-  if (borrower.type === "character" && !charterMay(charter, "namedCharacterLending")) {
-    return {
-      ok: false,
-      error: "An investment charter lends to corporations, not to individuals",
-    };
-  }
-
-  const currency = charter.currency as CurrencyCode;
-  const originatedTurn = await getCurrentTurn(db);
-  const resolveFunds = await buildFundConstituentResolver(db, charter.blacklist?.indexFundIds);
-
-  // Captured for the ledger leg below: a tx row with no subject name is
-  // unreadable in the surfaces that consume it.
-  let borrowerName = "Borrower";
-  let incomePerTurn = 0;
-
-  if (borrower.type === "character") {
-    const character = await db.collection<Character>("characters").findOne({ _id: borrower.id });
-    if (!character) {
-      return { ok: false, error: "Borrower character not found" };
-    }
-    borrowerName = character.name ?? "Borrower";
-    if (isBlockedBorrower(charter, { characterId: borrower.id.toString() }, resolveFunds)) {
-      return { ok: false, error: "Borrower is on the bank's blacklist" };
-    }
-    incomePerTurn = await characterIncomeInLoanCurrency(db, character, currency);
-  } else {
-    const corp = await db.collection<Corporation>("corporations").findOne({ _id: borrower.id });
-    if (!corp) {
-      return { ok: false, error: "Borrower corporation not found" };
-    }
-    borrowerName = corp.name ?? "Borrower";
-    if (isBlockedBorrower(charter, { corporationId: borrower.id.toString() }, resolveFunds)) {
-      return { ok: false, error: "Borrower is on the bank's blacklist" };
-    }
-    const corpCurrency = resolveCorpLiquidCurrencyCode(corp);
-    if (corpCurrency !== currency) {
-      return {
-        ok: false,
-        error: `Loan currency ${currency} does not match corporation treasury currency ${corpCurrency ?? "unknown"}`,
-      };
-    }
-    incomePerTurn = await averageCorpIncomePerTurn(db, borrower.id, originatedTurn);
-  }
-
-  const rates = await getEffectiveBankRates(db, charter);
-  const ratePercent =
-    borrower.type === "character"
-      ? rates.lendingRatePercent + CHARACTER_LOAN_SPREAD_PP
-      : rates.lendingRatePercent;
-
-  const reserveRatio = await getReserveRequirement(db, currency);
-  const cashReserves = getCashReserves(charter);
-  const headroom = namedLoanHeadroom(charter, reserveRatio);
-  const committedPaymentPerTurn = await committedNamedLoanPaymentPerTurn(
-    db,
-    borrower,
-    originatedTurn
-  );
-  const incomeCap = maxPrincipalFromIncome({
-    incomePerTurn,
-    ratePercent,
-    termTurns,
-    committedPaymentPerTurn,
-  });
-  const capInput = {
-    bankCashReserves: cashReserves,
-    lendableHeadroom: headroom,
-    incomeCap,
+  const reject = (error: string): OriginateLoanResult => {
+    emitBankingAuditEvent(
+      {
+        kind: "loan.originated",
+        command: "bank.loan.originate",
+        turn,
+        outcome: "rejected",
+        reason: error,
+        currency: snapshot.currency,
+        bankId: bankCorporationId.toString(),
+        amount: principal,
+        meta: { borrowerType: borrower.type, termTurns },
+      },
+      db
+    );
+    return { ok: false, error };
   };
-  const maxPrincipal = namedLoanPrincipalCap(capInput);
-  if (principal > maxPrincipal) {
-    return {
-      ok: false,
-      error: capExceededError(bindingNamedLoanCap(capInput), maxPrincipal),
-    };
+
+  // The old order of checks, preserved for the messages a player sees.
+  if (!snapshot.policy.privateBanking) return reject("Private banking is not enabled");
+  if (!Number.isFinite(principal) || principal <= 0) {
+    return reject("Principal must be a positive number");
+  }
+  if (
+    !Number.isFinite(termTurns) ||
+    termTurns < 4 ||
+    termTurns > 120 ||
+    !Number.isInteger(termTurns)
+  ) {
+    return reject("termTurns must be an integer from 4 to 120");
+  }
+  if (borrower.type === "corporation" && borrower.id.equals(bankCorporationId)) {
+    return reject("A bank cannot lend to itself");
+  }
+  const charter = bankCorp.bankCharter;
+  if (!isNamedLendingCharter(charter)) return reject("Corporation has no active bank charter");
+  if (borrower.type === "character" && !charterMay(charter, "namedCharacterLending")) {
+    return reject("An investment charter lends to corporations, not to individuals");
+  }
+
+  const currency = snapshot.currency as CurrencyCode;
+  const loadedBorrower = await loadBorrowerSnapshot(db, charter, currency, borrower, turn);
+  if ("error" in loadedBorrower) return reject(loadedBorrower.error);
+  if (loadedBorrower.snapshot.blocked) return reject("Borrower is on the bank's blacklist");
+  if (!loadedBorrower.snapshot.currencyMatches) {
+    const corp = await db
+      .collection<Corporation>("corporations")
+      .findOne({ _id: borrower.id }, { projection: { liquidCurrencyCode: 1, countryId: 1 } });
+    const corpCurrency = corp ? resolveCorpLiquidCurrencyCode(corp) : undefined;
+    return reject(
+      `Loan currency ${currency} does not match corporation treasury currency ${corpCurrency ?? "unknown"}`
+    );
   }
 
   const loanId = new ObjectId();
-
-  // Opt-in approval: park the loan as `pending` with no money movement. The CEO
-  // accepts or rejects it from the console; acceptance runs the same disbursement
-  // path below via `disburseNamedLoan`. See `banking/loanApproval.ts`.
-  if (charter.requireApproval === true) {
-    const pendingLoan: BankLoan = {
-      _id: loanId,
-      bankCorporationId,
-      currency,
-      borrowerType: borrower.type,
-      borrowerId: borrower.id,
+  const decision = decideBankCommand(
+    snapshot,
+    {
+      type: "originate_named_loan",
+      loanId: loanId.toHexString(),
+      borrower: loadedBorrower.snapshot,
       principal,
-      outstanding: principal,
-      ratePercent,
-      originatedTurn,
       termTurns,
-      status: "pending",
-      requestedTurn: originatedTurn,
-    };
-    try {
-      await db.collection<BankLoan>("bankLoans").insertOne(pendingLoan);
-    } catch {
-      return { ok: false, error: "Failed to write loan document" };
-    }
-    return {
-      ok: true,
-      loan: pendingLoan,
-      pending: true,
-      creditedTo: { kind: borrower.type, name: borrowerName },
-    };
-  }
-
-  const loan: BankLoan = {
-    _id: loanId,
-    bankCorporationId,
-    currency,
-    borrowerType: borrower.type,
-    borrowerId: borrower.id,
-    principal,
-    outstanding: principal,
-    ratePercent,
-    originatedTurn,
-    termTurns,
-    status: "current",
-  };
-
-  try {
-    await db.collection<BankLoan>("bankLoans").insertOne(loan);
-  } catch {
-    return { ok: false, error: "Failed to write loan document" };
-  }
-
-  const disbursed = await disburseNamedLoan(db, {
-    loan,
-    bankCorporationId,
-    bankName: bankCorp.name,
-    borrowerName,
-  });
-  if (!disbursed.ok) {
-    await db.collection<BankLoan>("bankLoans").deleteOne({ _id: loanId });
-    return disbursed;
-  }
-
-  return { ok: true, loan, creditedTo: { kind: borrower.type, name: borrowerName } };
-}
-
-/**
- * Move the money for a named loan whose doc is already inserted: $inc the bank's
- * loan book, credit the borrower, and emit the origination ledger leg. On any
- * failure it reverses whatever it did (bank $inc) and returns an error WITHOUT
- * deleting the loan doc — the caller owns the doc lifecycle (auto-origination
- * deletes it; approval reverts it to `pending`). Standalone Mongo, no txn.
- */
-export async function disburseNamedLoan(
-  db: Db,
-  args: {
-    loan: Pick<
-      BankLoan,
-      "_id" | "currency" | "borrowerType" | "borrowerId" | "principal" | "ratePercent" | "termTurns"
-    >;
-    bankCorporationId: ObjectId;
-    bankName: string;
-    borrowerName: string;
-  }
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { loan, bankCorporationId, bankName, borrowerName } = args;
-  const { currency, principal } = loan;
-  const borrowerId = loan.borrowerId;
-  if (!borrowerId) return { ok: false, error: "Loan has no borrower" };
-
-  const bankInc = await db.collection<Corporation>("corporations").updateOne(
-    {
-      _id: bankCorporationId,
-      "bankCharter.status": "active",
-      "bankCharter.type": {
-        $in:
-          loan.borrowerType === "corporation"
-            ? ["retail", "investment", "universal"]
-            : ["retail", "universal"],
-      },
     },
-    {
-      $inc: { "bankCharter.totalLoans": principal },
-      $set: { updatedAt: new Date() },
-    }
+    { commandId: loanId.toHexString() }
   );
+  if (!decision.allowed) return reject(decision.message);
 
-  if (bankInc.matchedCount !== 1) {
-    return { ok: false, error: "Failed to update bank loan book" };
+  const settled = await settleTransition(db, decision.transition);
+  if (settled.status === "rejected" || settled.status === "partial" || settled.error) {
+    return reject(
+      settled.status === "partial" && settled.appliedLegs.length === 0
+        ? "Failed to update bank loan book"
+        : (settled.error ?? "Failed to write loan document")
+    );
   }
 
-  let creditOk = false;
-  if (loan.borrowerType === "character") {
-    const credit = await db.collection<Character>("characters").updateOne(
-      { _id: borrowerId },
-      {
-        $inc: { [`currencyBalances.personal.${currency}`]: principal },
-        $set: { updatedAt: new Date() },
-      }
-    );
-    creditOk = credit.matchedCount === 1;
-  } else {
-    const credit = await db.collection<Corporation>("corporations").updateOne(
-      { _id: borrowerId },
-      {
-        $inc: { liquidCapital: principal },
-        $set: { updatedAt: new Date() },
-      }
-    );
-    creditOk = credit.matchedCount === 1;
+  const loan = reviveObjectIds(decision.transition.projections[0].insert) as BankLoan;
+  const pending = loan.status === "pending";
+
+  if (!pending) {
+    // The ledger row for the proceeds. The bank is the counterparty: this is
+    // a transfer from its vault, which is what the guarded debit just did.
+    await emitTx(db, {
+      type: "bank_loan_origination",
+      turn,
+      createdAt: new Date(),
+      ...(borrower.type === "character"
+        ? {
+            subjectType: "character" as const,
+            subjectId: borrower.id,
+            subjectName: loadedBorrower.name,
+          }
+        : {
+            subjectType: "corporation" as const,
+            subjectId: borrower.id,
+            subjectName: loadedBorrower.name,
+          }),
+      amount: principal,
+      currencyCode: currency,
+      counterpartyType: "corporation",
+      counterpartyId: bankCorporationId,
+      counterpartyName: bankCorp.name,
+      meta: {
+        loanId: loanId.toString(),
+        bankCorporationId: bankCorporationId.toString(),
+        ratePercent: loan.ratePercent,
+        termTurns: loan.termTurns,
+        settlementId: decision.transition.key,
+      },
+    });
   }
 
-  if (!creditOk) {
-    await db.collection<Corporation>("corporations").updateOne(
-      { _id: bankCorporationId },
-      {
-        $inc: { "bankCharter.totalLoans": -principal },
-        $set: { updatedAt: new Date() },
-      }
-    );
-    return { ok: false, error: "Failed to credit borrower" };
-  }
-
-  const originatedTurn = await getCurrentTurn(db);
   emitBankingAuditEvent(
     {
-      kind: "loan.disbursed",
-      command: "bank.loan.disburse",
-      turn: originatedTurn,
+      ...decision.transition.event,
+      turn,
       outcome: "ok",
       currency,
       bankId: bankCorporationId.toString(),
-      subjectType: "loan",
-      subjectId: loan._id.toString(),
-      statusAfter: "current",
-      amount: principal,
-      meta: { borrowerType: loan.borrowerType },
+      settlementId: decision.transition.key,
     },
     db
   );
-  // The release review's P1: origination moved money with zero ledger legs. On
-  // transactionless Mongo the log IS the journal, so the compensating-write
-  // strategy the rollback above implements had nothing to compensate against.
-  //
-  // Counterparty is `system`, deliberately, so the row derives a MINT contra
-  // rather than a debit on the bank. Lending creates deposit money: the bank's
-  // own `liquidCapital` is untouched here, only `bankCharter.totalLoans` moves.
-  // Naming the bank as counterparty would book a cash outflow that never
-  // happened and read as the bank losing the money it just lent.
-  await emitTx(db, {
-    type: "bank_loan_origination",
-    turn: originatedTurn,
-    createdAt: new Date(),
-    ...(loan.borrowerType === "character"
-      ? {
-          subjectType: "character" as const,
-          subjectId: borrowerId,
-          subjectName: borrowerName,
-        }
-      : {
-          subjectType: "corporation" as const,
-          subjectId: borrowerId,
-          subjectName: borrowerName,
-        }),
-    amount: principal,
-    currencyCode: currency,
-    counterpartyType: "system",
-    counterpartyName: bankName,
-    meta: {
-      loanId: loan._id.toString(),
-      bankCorporationId: bankCorporationId.toString(),
-      ratePercent: loan.ratePercent,
-      termTurns: loan.termTurns,
-    },
-  });
 
-  return { ok: true };
+  return {
+    ok: true,
+    loan,
+    ...(pending ? { pending: true } : {}),
+    creditedTo: { kind: borrower.type, name: loadedBorrower.name },
+  };
 }
 
 /**

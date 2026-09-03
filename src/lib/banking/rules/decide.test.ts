@@ -328,6 +328,60 @@ describe("named loan origination", () => {
   });
 });
 
+describe("pending loan decisions", () => {
+  it("funds a pending loan from the vault and flips it to current, guarded on pending", () => {
+    const decision = balanced(
+      decide({
+        type: "disburse_pending_loan",
+        loanId: LOAN,
+        borrower: { type: "corporation", id: OTHER, blocked: false },
+        principal: 50_000,
+      })
+    );
+    expect(decision.transition.key).toBe(`named_loan_disbursement:${BANK}:${LOAN}`);
+    expect(decision.transition.legs.map((l) => [l.kind, l.path])).toEqual([
+      ["debit", "bankCharter.cashReserves"],
+      ["credit", "liquidCapital"],
+    ]);
+    expect(decision.transition.projections[0]).toMatchObject({
+      collection: "bankLoans",
+      filter: { status: "pending" },
+      update: { $set: { status: "current", decisionTurn: 200 } },
+    });
+    expect(decision.transition.event.kind).toBe("loan.approved");
+  });
+
+  it("re-checks headroom and the blacklist at decision time", () => {
+    expect(
+      decide({
+        type: "disburse_pending_loan",
+        loanId: LOAN,
+        borrower: { type: "corporation", id: OTHER, blocked: false },
+        principal: 1_700_000,
+      })
+    ).toMatchObject({ allowed: false, refusal: { code: "cap", cap: "headroom" } });
+    expect(
+      decide({
+        type: "disburse_pending_loan",
+        loanId: LOAN,
+        borrower: { type: "corporation", id: OTHER, blocked: true },
+        principal: 1,
+      })
+    ).toMatchObject({ allowed: false, refusal: { code: "state", detail: "blacklisted" } });
+  });
+
+  it("rejects a pending loan with no legs and an optional trimmed reason", () => {
+    const decision = balanced(
+      decide({ type: "reject_pending_loan", loanId: LOAN, reason: "  too risky  " })
+    );
+    expect(decision.transition.legs).toEqual([]);
+    expect(decision.transition.projections[0].update).toEqual({
+      $set: { status: "rejected", decisionTurn: 200, rejectedReason: "too risky" },
+    });
+    expect(decision.transition.event.kind).toBe("loan.rejected");
+  });
+});
+
 describe("interbank market", () => {
   const investment: BankCharterSnapshot = retail({
     type: "investment",

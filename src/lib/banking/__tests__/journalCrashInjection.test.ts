@@ -303,3 +303,148 @@ describe("capital and window commands through the journal", () => {
     expect(bank(memory).bankCharter.discountWindowDebt ?? 0).toBe(0);
   });
 });
+
+describe("named loan origination under injected crashes, per charter type", () => {
+  const BORROWER = new ObjectId();
+  const LOAN = new ObjectId();
+
+  function loanWorld(type: "retail" | "universal" | "investment"): InMemoryDb {
+    const memory = world();
+    const b = bank(memory) as unknown as { bankCharter: Record<string, unknown> };
+    b.bankCharter.type = type;
+    if (type === "investment") {
+      b.bankCharter.npcDeposits = 0;
+      b.bankCharter.totalDeposits = 0;
+    }
+    memory.seed("corporations", [{ _id: BORROWER, name: "Borrower", liquidCapital: 50_000 }]);
+    return memory;
+  }
+
+  function origination(): BankingTransition {
+    return {
+      key: `named_loan_origination:${BANK}:${LOAN}`,
+      kind: "named_loan_origination",
+      turn: TURN,
+      currency: "USD",
+      legs: [
+        {
+          kind: "debit",
+          amount: 40_000,
+          collection: "corporations",
+          filter: { _id: oid(BANK.toHexString()), "bankCharter.status": "active" },
+          path: "bankCharter.cashReserves",
+          note: "vault",
+        },
+        {
+          kind: "credit",
+          amount: 40_000,
+          collection: "corporations",
+          filter: { _id: oid(BORROWER.toHexString()) },
+          path: "liquidCapital",
+          note: "proceeds",
+        },
+      ],
+      projections: [
+        {
+          collection: "bankLoans",
+          insert: {
+            _id: oid(LOAN.toHexString()),
+            bankCorporationId: oid(BANK.toHexString()),
+            borrowerType: "corporation",
+            borrowerId: oid(BORROWER.toHexString()),
+            principal: 40_000,
+            outstanding: 40_000,
+            status: "current",
+          },
+          note: "loan record",
+        },
+        {
+          collection: "corporations",
+          filter: { _id: oid(BANK.toHexString()) },
+          update: { $inc: { "bankCharter.totalLoans": 40_000 } },
+          note: "loan book total",
+        },
+      ],
+      event: { kind: "loan.originated", command: "bank.loan.originate" },
+    };
+  }
+
+  function borrowerCash(memory: InMemoryDb): number {
+    return (
+      memory.collection("corporations").docs.find((d) => (d._id as ObjectId).equals(BORROWER)) as {
+        liquidCapital: number;
+      }
+    ).liquidCapital;
+  }
+
+  function loanMoney(memory: InMemoryDb): number {
+    return totalMoney(memory) + borrowerCash(memory);
+  }
+
+  const points: Array<[string, Parameters<typeof withInjectedCrash>[1]]> = [
+    ["before the claim", { collection: MONEY_MOVE_COLLECTION, op: "insertOne", onCall: 1 }],
+    [
+      "after the claim",
+      { collection: MONEY_MOVE_COLLECTION, op: "insertOne", onCall: 1, afterWrite: true },
+    ],
+    [
+      "after the vault debit",
+      { collection: "corporations", op: "updateOne", onCall: 1, afterWrite: true },
+    ],
+    ["before the loan record", { collection: "bankLoans", op: "insertOne", onCall: 1 }],
+    ["before the loan book total", { collection: "corporations", op: "updateOne", onCall: 3 }],
+  ];
+
+  describe.each(["retail", "universal", "investment"] as const)("%s charter", (type) => {
+    it.each(points)(
+      "crash %s: the retry never moves money twice or books a loan over a hole",
+      async (_label, plan) => {
+        const memory = loanWorld(type);
+        const before = loanMoney(memory);
+        const faulty = withInjectedCrash(memory, plan);
+        // A crash inside an insert is caught by the journal and recorded as a
+        // partial settlement with the claim released; everywhere else the
+        // process dies mid-flight. Both must be safe to retry.
+        const first = await settleTransition(faulty.db, origination()).then(
+          (r) => r,
+          (err: unknown) => {
+            expect(err).toBeInstanceOf(InjectedCrash);
+            return null;
+          }
+        );
+        if (first) expect(first.status).toBe("partial");
+        faulty.disarm();
+
+        const retry = await settleTransition(memory as unknown as Db, origination());
+        const bankDoc = bank(memory) as unknown as {
+          bankCharter: { cashReserves: number; totalLoans: number };
+        };
+        const loans = memory.collection("bankLoans").docs;
+
+        // Whatever happened, the borrower was never paid twice and the vault
+        // was never debited twice.
+        expect(borrowerCash(memory)).toBeLessThanOrEqual(90_000);
+        expect(bankDoc.bankCharter.cashReserves).toBeGreaterThanOrEqual(460_000);
+        expect(loans.length).toBeLessThanOrEqual(1);
+
+        if (retry.error) {
+          // A hole the primitive left: no loan may sit on top of it, and the
+          // repair queue must show it.
+          expect(retry.status).toBe("replayed");
+          expect(loans).toHaveLength(0);
+          expect(bankDoc.bankCharter.totalLoans).toBe(800_000);
+          expect(await listUnfinishedMoneyMoves(memory as unknown as Db)).toHaveLength(1);
+        } else {
+          // Fully settled by the retry: every projection present exactly once.
+          expect(["applied", "replayed"]).toContain(retry.status);
+          expect(loans).toHaveLength(1);
+          expect(bankDoc.bankCharter.totalLoans).toBe(840_000);
+          expect(bankDoc.bankCharter.cashReserves).toBe(460_000);
+          expect(borrowerCash(memory)).toBe(90_000);
+          expect(loanMoney(memory)).toBe(before);
+          expect(await listUnfinishedProjections(memory as unknown as Db)).toHaveLength(0);
+        }
+      }
+    );
+  });
+});

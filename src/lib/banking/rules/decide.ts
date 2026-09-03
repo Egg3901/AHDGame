@@ -650,6 +650,128 @@ export function decideBankCommand(
       };
     }
 
+    case "disburse_pending_loan": {
+      const capability: CapabilityKey =
+        command.borrower.type === "character" ? "namedCharacterLending" : "namedCorporationLending";
+      const denied = requireCapability(snapshot, charter, capability);
+      if (denied) return denied;
+      const principal = positiveAmount(command.principal);
+      if (principal === null) {
+        return refuse({ code: "invalid_amount" }, "Principal must be a positive number");
+      }
+      if (command.borrower.blocked) {
+        return refuse(
+          { code: "state", detail: "blacklisted" },
+          "Borrower is on the bank's blacklist"
+        );
+      }
+      const headroom = namedLoanHeadroom(active!, snapshot.reserveRatio);
+      if (principal > headroom) {
+        return refuse(
+          { code: "cap", cap: "headroom", max: headroom },
+          "Insufficient lendable headroom to fund this loan now"
+        );
+      }
+      if (principal > getCashReserves(active!)) {
+        return refuse(
+          { code: "cap", cap: "cashReserves", max: getCashReserves(active!) },
+          "Insufficient cash reserves to fund this loan now"
+        );
+      }
+      const proceeds: TransitionLeg =
+        command.borrower.type === "character"
+          ? {
+              kind: "credit",
+              amount: principal,
+              collection: "characters",
+              filter: { _id: oid(command.borrower.id) },
+              path: `currencyBalances.personal.${snapshot.currency}`,
+              note: "loan proceeds reach the borrower",
+            }
+          : {
+              kind: "credit",
+              amount: principal,
+              collection: "corporations",
+              filter: { _id: oid(command.borrower.id) },
+              path: "liquidCapital",
+              note: "loan proceeds reach the borrower",
+            };
+      return {
+        allowed: true,
+        transition: transition(
+          snapshot,
+          "named_loan_disbursement",
+          command.loanId,
+          [
+            vaultLeg(snapshot, "debit", principal, "the bank funds the loan from its vault"),
+            proceeds,
+          ],
+          [
+            {
+              collection: "bankLoans",
+              filter: { _id: oid(command.loanId), status: "pending" },
+              update: { $set: { status: "current", decisionTurn: snapshot.turn } },
+              note: "pending loan becomes current",
+            },
+            {
+              collection: "corporations",
+              filter: corpFilter(snapshot.bankId),
+              update: { $inc: { "bankCharter.totalLoans": principal } },
+              note: "cached loan book total",
+            },
+          ],
+          {
+            kind: "loan.approved",
+            command: "bank.loan.approve",
+            subjectType: "loan",
+            subjectId: command.loanId,
+            statusBefore: "pending",
+            statusAfter: "current",
+            amount: principal,
+            meta: { borrowerType: command.borrower.type },
+          }
+        ),
+      };
+    }
+
+    case "reject_pending_loan": {
+      const denied = requireCapability(snapshot, charter, "serviceLoanBook");
+      if (denied) return denied;
+      const trimmed = (command.reason ?? "").trim().slice(0, 280);
+      return {
+        allowed: true,
+        transition: transition(
+          snapshot,
+          "named_loan_rejection",
+          command.loanId,
+          [],
+          [
+            {
+              collection: "bankLoans",
+              filter: { _id: oid(command.loanId), status: "pending" },
+              update: {
+                $set: {
+                  status: "rejected",
+                  decisionTurn: snapshot.turn,
+                  ...(trimmed ? { rejectedReason: trimmed } : {}),
+                },
+              },
+              note: "pending loan declined",
+            },
+          ],
+          {
+            kind: "loan.rejected",
+            command: "bank.loan.reject",
+            subjectType: "loan",
+            subjectId: command.loanId,
+            statusBefore: "pending",
+            statusAfter: "rejected",
+            meta: { hasReason: trimmed.length > 0 },
+          }
+        ),
+      };
+    }
+
     case "lend_interbank": {
       const denied = requireCapability(snapshot, charter, "interbankLending");
       if (denied) return denied;
