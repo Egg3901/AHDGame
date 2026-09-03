@@ -32,6 +32,15 @@ import {
 } from "@/lib/budget/debt";
 import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
 import { sovereignCredibilitySpread } from "@/lib/centralBank/marketEffects";
+import {
+  debitPoolForPrimary,
+  monetizeUnsoldSovereignUnits,
+  planSovereignMonetization,
+  planSovereignUnderwriting,
+  readPoolForPrimary,
+  recordSovereignPrimaryFill,
+} from "@/lib/bonds/primaryMarket";
+import { createNotifications } from "@/lib/notifications";
 
 export const SOVEREIGN_ISSUANCE_INTERVAL_TURNS = 12;
 export const SOVEREIGN_BOND_MATURITY_TURNS: BondMaturityTurns = 48;
@@ -482,6 +491,16 @@ export async function issueScheduledSovereignBondSeries(
     let totalAnnualCouponCost = 0;
     const bondDocs: Omit<Bond, "_id">[] = [];
 
+    // Primary market: the currency's pool underwrites each tranche at par with
+    // the cash it has and the appetite the demand model gives this issuer.
+    // No pool for the currency (seeds, pre-migration) keeps full placement.
+    const poolCurrency = resolveCountryCurrencyCode({ countryId });
+    const pool = await readPoolForPrimary(db, poolCurrency);
+    let poolCashRemaining = pool ? Math.max(0, pool.cashLocal) : Number.POSITIVE_INFINITY;
+    const appetite = pool?.appetiteByCountry?.[countryId];
+    let requestedUnitsTotal = 0;
+    let placedUnitsTotal = 0;
+
     for (const [maturityStr, fraction] of Object.entries(distribution)) {
       if (!fraction || fraction <= 0) continue;
       const maturityTurns = Number(maturityStr) as BondMaturityTurns;
@@ -489,7 +508,7 @@ export async function issueScheduledSovereignBondSeries(
         Math.floor((issueAmount * fraction) / BOND_UNIT_FACE_VALUE) * BOND_UNIT_FACE_VALUE;
       if (trancheAmount < BOND_UNIT_FACE_VALUE) continue;
 
-      const { bondDoc, annualCouponCost } = buildSovereignBondDoc({
+      const { bondDoc } = buildSovereignBondDoc({
         countryId,
         turn,
         now,
@@ -498,15 +517,64 @@ export async function issueScheduledSovereignBondSeries(
         primeRate,
         countryCorporation,
       });
+      const requestedUnits = Math.floor(bondDoc.totalIssued / BOND_UNIT_FACE_VALUE);
+      let placedUnits = requestedUnits;
+      if (pool) {
+        const plan = planSovereignUnderwriting({
+          requestedUnits,
+          poolCashLocal: poolCashRemaining,
+          appetite,
+          pricePerUnitLocal: BOND_UNIT_FACE_VALUE,
+        });
+        placedUnits = plan.placedUnits;
+        if (placedUnits > 0) {
+          const paid = await debitPoolForPrimary(
+            db,
+            poolCurrency,
+            placedUnits,
+            BOND_UNIT_FACE_VALUE,
+            now
+          );
+          if (paid <= 0) placedUnits = 0;
+          poolCashRemaining = Math.max(0, poolCashRemaining - paid);
+        }
+      }
+      bondDoc.totalIssued = placedUnits * BOND_UNIT_FACE_VALUE;
+      bondDoc.publicFloat = placedUnits;
+      bondDoc.requestedUnits = requestedUnits;
+      bondDoc.unsoldUnits = requestedUnits - placedUnits;
+      bondDoc.primaryFillRatio = requestedUnits > 0 ? placedUnits / requestedUnits : 1;
+      requestedUnitsTotal += requestedUnits;
+      placedUnitsTotal += placedUnits;
 
       bondDocs.push(bondDoc);
       totalIssued += bondDoc.totalIssued;
-      totalAnnualCouponCost += annualCouponCost;
+      totalAnnualCouponCost += (bondDoc.couponRate / 100) * bondDoc.totalIssued;
       issuancesCreated++;
     }
 
     if (bondDocs.length > 0) {
-      await db.collection<Omit<Bond, "_id">>("bonds").insertMany(bondDocs);
+      const inserted = await db.collection<Omit<Bond, "_id">>("bonds").insertMany(bondDocs);
+      if (pool) {
+        const fillRatio = requestedUnitsTotal > 0 ? placedUnitsTotal / requestedUnitsTotal : 1;
+        await recordSovereignPrimaryFill(db, budgetId, fillRatio, turn, now);
+        const unsoldTotal = requestedUnitsTotal - placedUnitsTotal;
+        if (unsoldTotal > 0) {
+          const monetized = await handleSovereignShortfall(db, {
+            countryId,
+            centralBank,
+            budget: budgetDoc,
+            bondDocs,
+            insertedIds: Object.values(inserted.insertedIds),
+            unsoldTotal,
+            requestedTotal: requestedUnitsTotal,
+            turn,
+            now,
+          });
+          totalIssued += monetized.face;
+          totalAnnualCouponCost += monetized.annualCoupon;
+        }
+      }
 
       const budgetUpdate = applySovereignDebtAdjustment(
         budgetDoc,
@@ -737,4 +805,85 @@ export async function settleSovereignBondMaturity(
       },
     }
   );
+}
+
+/**
+ * What happens to the part of a quarterly auction the pool would not take.
+ * An autonomous chair (`chairMode: "npp"`) monetizes up to a share of GDP at
+ * par: the bank books the units, deposits are created as under QE, and the
+ * paper becomes real debt. A player-run bank is told and left to decide; the
+ * units keep placing turn by turn as the pool's cash allows either way.
+ * Returns the face and annual coupon the monetization added to the debt.
+ */
+async function handleSovereignShortfall(
+  db: Db,
+  args: {
+    countryId: CountryId;
+    centralBank: CentralBank | null;
+    budget: FederalBudget;
+    bondDocs: Omit<Bond, "_id">[];
+    insertedIds: ObjectId[];
+    unsoldTotal: number;
+    requestedTotal: number;
+    turn: number;
+    now: Date;
+  }
+): Promise<{ face: number; annualCoupon: number }> {
+  const bank = args.centralBank;
+  let face = 0;
+  let annualCoupon = 0;
+  if (bank?.chairMode === "npp" && bank.chairControlsLocked !== true) {
+    let gdpBudget = planSovereignMonetization({
+      unsoldUnits: args.unsoldTotal,
+      gdpLocal:
+        args.budget.gdpSmoothed && args.budget.gdpSmoothed > 0
+          ? args.budget.gdpSmoothed
+          : (args.budget.gdp ?? 0),
+      pricePerUnitLocal: BOND_UNIT_FACE_VALUE,
+    }).units;
+    for (let index = 0; index < args.bondDocs.length && gdpBudget > 0; index++) {
+      const doc = args.bondDocs[index]!;
+      const bondId = args.insertedIds[index];
+      const unsold = doc.unsoldUnits ?? 0;
+      if (!bondId || unsold <= 0) continue;
+      const units = Math.min(unsold, gdpBudget);
+      const ok = await monetizeUnsoldSovereignUnits(db, {
+        bondId,
+        bank,
+        units,
+        considerationLocal: units * BOND_UNIT_FACE_VALUE,
+        turn: args.turn,
+        now: args.now,
+      });
+      if (!ok) continue;
+      gdpBudget -= units;
+      face += units * BOND_UNIT_FACE_VALUE;
+      annualCoupon += (doc.couponRate / 100) * units * BOND_UNIT_FACE_VALUE;
+    }
+    return { face, annualCoupon };
+  }
+
+  if (bank?.chairCharacterId) {
+    const chair = await db
+      .collection<{ _id: ObjectId; userId?: ObjectId }>("characters")
+      .findOne({ _id: bank.chairCharacterId }, { projection: { userId: 1 } });
+    if (chair?.userId) {
+      const pct = Math.round((1 - args.unsoldTotal / Math.max(1, args.requestedTotal)) * 100);
+      await createNotifications([
+        {
+          userId: chair.userId,
+          type: "cb_auction_shortfall",
+          title: "Bond auction undersubscribed",
+          message: `${getSovereignIssuerName(args.countryId)}: the market took ${pct}% of this quarter's issue. ${args.unsoldTotal.toLocaleString("en-US")} units are unplaced. They will place as the market finds cash; the bank can buy the float to support demand.`,
+          metadata: {
+            countryId: args.countryId,
+            turn: args.turn,
+            unsoldUnits: args.unsoldTotal,
+            requestedUnits: args.requestedTotal,
+          },
+        },
+      ]);
+    }
+  }
+  return { face, annualCoupon };
 }

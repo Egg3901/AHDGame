@@ -31,6 +31,10 @@ export interface BondDetail {
   askPricePerUnit?: number;
   /** Units the market pool can buy right now at its bid. */
   marketDepthUnits?: number;
+  /** Primary market: units the issuer asked for, and how many are still placing. */
+  requestedUnits?: number | null;
+  unsoldUnits?: number;
+  primaryFillRatio?: number | null;
   defaulted: boolean;
   defaultedAtTurn: number | null;
   defaultCure?: {

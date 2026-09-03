@@ -194,6 +194,14 @@ export default function BondDetailPage({ params }: { params: Promise<{ id: strin
                         },
                       ]
                     : []),
+                  ...((bond.unsoldUnits ?? 0) > 0
+                    ? [
+                        {
+                          label: "Still Placing",
+                          value: `${(bond.unsoldUnits ?? 0).toLocaleString("en-US")} units unsold`,
+                        },
+                      ]
+                    : []),
                   { label: "Issued At Turn", value: `T${bond.issuedAtTurn}` },
                   { label: "Matures At Turn", value: `T${bond.maturityTurn}` },
                   { label: "Coupon / Turn", value: fmtBond(bond.perTurnCoupon) },

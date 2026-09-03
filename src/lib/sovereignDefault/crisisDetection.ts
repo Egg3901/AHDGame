@@ -93,7 +93,16 @@ export async function evaluateSovereignAuctionForCountry(
   if (!snapshot) return null;
 
   const demand = computeMarketDemand(snapshot);
-  const classified = classifyAuctionOutcome(demand.demandRatio);
+  // The pool's real fill on the latest quarterly auction caps the synthetic
+  // ratio: a market that could only absorb 40% of the paper is a 0.4, however
+  // the model feels about the fundamentals. A full fill leaves the model in
+  // charge, since it can still be oversubscribed.
+  const fill = budget.lastPrimaryFillRatio;
+  const effectiveRatio =
+    typeof fill === "number" && Number.isFinite(fill) && fill < 1
+      ? Math.min(demand.demandRatio, fill)
+      : demand.demandRatio;
+  const classified = classifyAuctionOutcome(effectiveRatio);
 
   // Player-enabled gate: countries flagged "Coming Soon" (or with the
   // Players Enabled toggle off) in the admin panel must never tip into a
