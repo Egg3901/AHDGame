@@ -5,38 +5,47 @@ import type {
   FomcSeat,
   FomcMeeting,
   FomcBallot,
+  FomcNomination,
   RateChangeRecord,
 } from "@/lib/db/types/centralBank";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
+import type { Character } from "@/lib/db/types";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { isCommandEconomy } from "@/lib/constants/commandEconomy";
 import { getEraMonetaryBaseline } from "@/lib/constants/monetaryEra";
 import { getInflationTarget } from "@/lib/budget/inflation";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { isBankGovernmentControlledLive } from "@/lib/centralBank/governance";
+import { createNotifications, type NotificationInput } from "@/lib/notifications";
+import { createSystemNewsPost } from "@/lib/news";
 import { getNationalDocId } from "@/lib/constants/nationalScope";
 import {
-  RATE_CHANGES_PER_TERM,
-  FOMC_TERM_TURNS,
-  FOMC_MEETING_INTERVAL_TURNS,
-  FOMC_PLAYER_VOTE_WINDOW_MS,
-  FOMC_VOTE_WINDOW_TURNS,
-  RATE_CHANGE_COOLDOWN_TURNS,
+  RATE_HISTORY_MAX,
   NPP_CHAIR_TARGET_GROWTH,
   COC_SMOOTHING_TURNS,
+  snapToPrimeRateGrid,
 } from "@/lib/db/types/centralBank";
 import {
-  proposeChairMotion,
-  seatPreferredVote,
   tallyMeeting,
-  isAutoSeat,
   playerSeats,
+  boardCanCarryMotions,
   type FomcMacroContext,
 } from "@/lib/centralBank/fomc";
+import { logger } from "../observability/logger";
+import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
+import { resolveJurisdiction } from "@/lib/monetaryGovernance/jurisdiction";
+import {
+  bankToJurisdictionState,
+  materializeTransitionSet,
+  stateToSeat,
+} from "@/lib/monetaryGovernance/governanceShell";
+import { decideGovernance } from "@/lib/monetaryGovernance/rules/machine";
 
 const FOMC_MEETING_HISTORY_MAX = 24;
-const RATE_HISTORY_MAX = 96;
+// Shared with the direct-set and autonomous-chair writers so no path truncates
+// another's records; see RATE_HISTORY_MAX in db/types/centralBank.
+
 /** System actor stamped on committee-driven rate changes. */
 const FOMC_SYSTEM_ACTOR = new ObjectId("000000000000000000000000");
 
@@ -77,138 +86,76 @@ function chairSeat(board: FomcSeat[]): FomcSeat | undefined {
 }
 
 /**
- * Mirror the board's chair seat onto the bank's legacy single-chair fields.
- *
- * The mode must follow the SEAT, not be assumed. Stamping `chairMode: "npp"`
- * unconditionally demoted a player chair the moment any unrelated seat rolled
- * over, and left the outgoing player's `chairCharacterId` behind as a ghost —
- * prod carried US as `chairCharacterId: <player>` with `chairMode: "npp"` and
- * an NPP `chairNppId` at the same time, so the page showed a technocrat while
- * the player still resolved as chair everywhere that reads the mirror.
+ * Player characters who currently hold a member country's nominating executive
+ * office (the same office the FOMC nominate route authorizes, e.g. the US
+ * President). These are the only players who can fill vacant committee seats.
  */
-function mirrorChairOntoBank(set: Record<string, unknown>, chair: FomcSeat): void {
-  set.chairAlignment = chair.alignment;
-  set.chairTermExpiresAtTurn = chair.termExpiresAtTurn;
-  if (chair.occupantType === "player" && chair.characterId) {
-    set.chairMode = "character";
-    set.chairCharacterId = chair.characterId;
-    set.chairCharacterName = chair.characterName;
-    set.chairNppId = null;
-  } else if (chair.occupantType === "vacant") {
-    // A vacant chair mirrors as no one: clear the person fields but leave
-    // chairMode alone. The vacancy itself is signalled by chairCharacterId=null
-    // plus `vacancyAwaitingAutomaticSelection` (set by the caller), which the
-    // chair-selection phase reads to open nominations. Fabricating an NPP here
-    // is exactly the auto-stock we're removing.
-    set.chairCharacterId = null;
-    set.chairNppId = null;
-    set.chairCharacterName = null;
-  } else {
-    set.chairMode = "npp";
-    set.chairNppId = chair.nppId;
-    set.chairCharacterId = null;
-    set.chairCharacterName = null;
-  }
+async function findNominationExecutives(
+  db: Db,
+  countryId: CountryId
+): Promise<Array<{ userId: ObjectId; characterName: string }>> {
+  // Committee banks are single-country institutions (FOMC_COMMITTEE_COUNTRY_IDS
+  // gates the whole vacancy path on bank.countryId), so one exec key suffices.
+  const execKey = COUNTRY_CONFIGS[countryId]?.officeTypes.find((o) => o.isExecutive)?.key;
+  if (!execKey) return [];
+
+  const chars = await db
+    .collection<Character>("characters")
+    .find({ countryId, userId: { $exists: true }, "currentOffice.type": execKey })
+    .project<Pick<Character, "name" | "userId">>({ name: 1, userId: 1 })
+    .toArray();
+  return chars.map((char) => ({ userId: char.userId, characterName: char.name }));
 }
 
 /**
- * VACATE any seat whose staggered term has expired. The seat is left empty
- * (occupantType "vacant"), NOT auto-filled with a technocrat NPP: the committee
- * is staffed by presidential nomination + Senate confirmation, never stocked by
- * the engine. A vacant seat abstains on rate motions, so an unstaffed board
- * simply cannot move the rate until the President fills it — which is the point.
- * Returns a new board when anything changed, else null.
+ * Tell the world a committee board has gone understaffed (ticket #1238).
  *
- * `chairRefreshed` reports whether the CHAIR seat was one of the vacancies, so
- * the caller can hand it to the chair selection / nomination pipeline.
+ * Vacant seats are by design (#1195: the engine never seats a machine
+ * candidate; the President nominates and the Senate confirms), but before this
+ * notice the vacancy was silent: motions just started failing 1-0-6 with no
+ * signal to the one player who can fix it, and the board stayed dead for good.
+ * Notifies every nominating executive in-app and posts a system news item so
+ * the chair and community can see why the board cannot move the rate.
  */
-async function refreshExpiredSeats(
-  _db: Db,
-  _bank: Pick<CentralBank, "_id" | "countryId">,
+async function notifyFomcVacancy(
+  db: Db,
+  bank: Pick<CentralBank, "_id" | "countryId">,
   board: FomcSeat[],
-  currentTurn: number
-): Promise<{ board: FomcSeat[]; replaced: number; chairRefreshed: boolean } | null> {
-  let replaced = 0;
-  let chairRefreshed = false;
-  const next: FomcSeat[] = [];
-  for (const seat of board) {
-    if (seat.termExpiresAtTurn != null && seat.termExpiresAtTurn <= currentTurn) {
-      next.push({
-        ...seat,
-        occupantType: "vacant",
-        characterId: null,
-        characterName: null,
-        nppId: null,
-        appointedByPresidentId: null,
-        appointedAtTurn: currentTurn,
-        // No term on a vacant seat — it stays open until a nominee is confirmed.
-        termExpiresAtTurn: null,
-      });
-      replaced++;
-      if (seat.isChair) chairRefreshed = true;
-    } else {
-      next.push(seat);
-    }
+  now: Date
+): Promise<void> {
+  const countryId = bank.countryId as CountryId;
+  const config = COUNTRY_CONFIGS[countryId];
+  const bankLabel = config?.centralBank.name ?? "the central bank";
+  const execTitle =
+    config?.officeTypes.find((o) => o.isExecutive)?.label.toLowerCase() ?? "the executive";
+  const vacantCount = board.filter((s) => s.occupantType === "vacant").length;
+  // A board that still has enough seated members to carry a motion only needs a
+  // nudge to fill the gaps; a board below the threshold is dead and the chair
+  // holds the rate until it is filled.
+  const chairHoldsRate = !boardCanCarryMotions(board);
+  const message = chairHoldsRate
+    ? `${vacantCount} of ${board.length} committee seats are vacant, so the board cannot carry a rate motion. The chair holds the rate directly until enough governors are confirmed. Nominate replacements from the central bank's committee page; the Senate confirms them.`
+    : `${vacantCount} of ${board.length} committee seats are vacant. Nominate governors from the central bank's committee page; the Senate confirms them.`;
+
+  const notifications: NotificationInput[] = [];
+  const executives = await findNominationExecutives(db, countryId);
+  for (const exec of executives) {
+    notifications.push({
+      userId: exec.userId,
+      type: "system",
+      title: `${bankLabel}: board seats vacant`,
+      message,
+      metadata: { type: "central_bank_fomc_vacancy", countryId, bankId: bank._id, at: now },
+    });
   }
-  return replaced > 0 ? { board: next, replaced, chairRefreshed } : null;
-}
+  await createNotifications(notifications);
 
-/** Whether the committee is allowed to move the rate at all right now. */
-function canChangeRate(
-  bank: Pick<CentralBank, "rateChangesThisTerm" | "lastRateChangeTurn">,
-  currentTurn: number,
-  commandEconomy: boolean
-): boolean {
-  if (commandEconomy) return false;
-  if ((bank.rateChangesThisTerm ?? 0) >= RATE_CHANGES_PER_TERM) return false;
-  const last = bank.lastRateChangeTurn;
-  if (typeof last === "number" && currentTurn - last < RATE_CHANGE_COOLDOWN_TURNS) return false;
-  return true;
-}
-
-/**
- * Open a new meeting: the chair tables a motion, and every auto (NPP / vacant)
- * seat casts immediately. Player seats are left unvoted — they vote live or
- * abstain at resolution. Returns the meeting with initial ballots.
- */
-function openMeeting(
-  board: FomcSeat[],
-  ctx: FomcMacroContext,
-  currentTurn: number,
-  now: Date,
-  allowChange: boolean
-): FomcMeeting {
-  const chair = chairSeat(board);
-  const chairAlignment = chair?.alignment ?? "hawk";
-  const { motion, proposedDelta } = proposeChairMotion(chairAlignment, ctx, {
-    canChangeRate: allowChange,
-  });
-
-  const ballots: FomcBallot[] = [];
-  for (const seat of board) {
-    // Vacant seats abstain (no ballot). NPP seats vote their own preference now.
-    if (seat.occupantType === "npp" && isAutoSeat(seat)) {
-      ballots.push({
-        seatId: seat.seatId,
-        vote: seatPreferredVote(seat.alignment, ctx),
-        auto: true,
-        castAt: now,
-      });
-    }
-  }
-
-  return {
-    meetingId: new ObjectId().toHexString(),
-    openedAtTurn: currentTurn,
-    openedAt: now,
-    motion,
-    proposedDelta,
-    status: "voting",
-    ballots,
-    playerVoteDeadline: new Date(now.getTime() + FOMC_PLAYER_VOTE_WINDOW_MS),
-    // Hard game-clock deadline mirroring the 24h player window (~1 turn/hour).
-    resolvesOnTurn: currentTurn + FOMC_VOTE_WINDOW_TURNS,
-  };
+  createSystemNewsPost(
+    chairHoldsRate
+      ? `${vacantCount} of ${board.length} seats on the ${bankLabel}'s rate-setting board are vacant, so the board cannot carry a rate motion. The chair is setting the rate directly until the ${execTitle} nominates governors and the Senate confirms them.`
+      : `${vacantCount} of ${board.length} seats on the ${bankLabel}'s rate-setting board are vacant. The board can still carry motions; the ${execTitle} should nominate governors and the Senate confirm them.`,
+    "executive"
+  ).catch((err) => logger.error("FomcMeetingTurn", "vacancy news post failed", err));
 }
 
 interface ResolveOptions {
@@ -239,7 +186,10 @@ interface ResolveOutcome {
  */
 export function resolveMeetingInto(
   set: Record<string, unknown>,
-  bank: Pick<CentralBank, "primeRate" | "rateHistory" | "fomcMeetingHistory">,
+  bank: Pick<CentralBank, "primeRate" | "rateHistory" | "fomcMeetingHistory"> & {
+    /** The bank's own id, for the audit trail. Optional for legacy callers. */
+    bankId?: string;
+  },
   board: FomcSeat[],
   meeting: FomcMeeting,
   currentTurn: number,
@@ -268,7 +218,9 @@ export function resolveMeetingInto(
 
   if (moved) {
     const previousRate = bank.primeRate;
-    const newRate = previousRate + meeting.proposedDelta;
+    // Snap onto the quarter-point grid: a stored off-grid rate plus a motion
+    // delta stays off-grid, and the next on-grid action would never validate.
+    const newRate = snapToPrimeRateGrid(snapToPrimeRateGrid(previousRate) + meeting.proposedDelta);
     const chair = chairSeat(board);
     const record: RateChangeRecord = {
       previousRate,
@@ -283,12 +235,44 @@ export function resolveMeetingInto(
     changesThisTerm += 1;
     set.rateChangesThisTerm = changesThisTerm;
     set.rateHistory = [...(bank.rateHistory ?? []), record].slice(-RATE_HISTORY_MAX);
+    emitBankingAuditEvent({
+      kind: "policy.rate_changed",
+      command: "monetary.meeting.resolve",
+      turn: currentTurn,
+      outcome: "ok",
+      ...(bank.bankId ? { bankId: bank.bankId } : {}),
+      subjectType: "meeting",
+      subjectId: meeting.meetingId,
+      statusBefore: String(previousRate),
+      statusAfter: String(newRate),
+      meta: { previousRate, newRate, motion: meeting.motion, changesThisTerm },
+    });
   }
 
   set.activeFomcMeeting = null;
   set.fomcMeetingHistory = [...(bank.fomcMeetingHistory ?? []), resolved].slice(
     -FOMC_MEETING_HISTORY_MAX
   );
+  emitBankingAuditEvent({
+    kind: "meeting.transitioned",
+    command: "monetary.meeting.resolve",
+    turn: currentTurn,
+    outcome: "ok",
+    ...(bank.bankId ? { bankId: bank.bankId } : {}),
+    subjectType: "meeting",
+    subjectId: meeting.meetingId,
+    statusBefore: "voting",
+    statusAfter: "resolved",
+    meta: {
+      motion: meeting.motion,
+      result: passed ? "passed" : "failed",
+      agree: tally.agree,
+      disagree: tally.disagree,
+      abstain: tally.abstain,
+      forcedDeadline: opts.forceDeadline,
+      moved,
+    },
+  });
   return { resolved: true, moved, changesThisTerm };
 }
 
@@ -313,28 +297,64 @@ export async function castFomcBallot(
   const bank = await db.collection<CentralBank>("centralBanks").findOne({ _id: bankId });
   const meeting = bank?.activeFomcMeeting;
   const board = bank?.fomcBoard ?? [];
-  if (!bank || !meeting || meeting.status !== "voting") return { ok: false, reason: "no-meeting" };
+  const refuse = (reason: "no-meeting" | "not-seated" | "already-voted"): CastBallotResult => {
+    emitBankingAuditEvent(
+      {
+        kind: "meeting.voted",
+        command: "monetary.meeting.vote",
+        turn: currentTurn,
+        outcome: "rejected",
+        reason,
+        bankId,
+        subjectType: "meeting",
+        ...(meeting ? { subjectId: meeting.meetingId } : {}),
+        meta: { vote },
+      },
+      db
+    );
+    return { ok: false, reason };
+  };
+  if (!bank || !meeting || meeting.status !== "voting") return refuse("no-meeting");
 
   const seat = board.find((s) => s.occupantType === "player" && s.characterId?.equals(characterId));
-  if (!seat) return { ok: false, reason: "not-seated" };
-  if (meeting.ballots.some((b) => b.seatId === seat.seatId)) {
-    return { ok: false, reason: "already-voted" };
+  const clockMs = now.getTime();
+  const jurisdiction = await resolveJurisdiction(db, bank.countryId);
+  const state = bankToJurisdictionState(bank, {
+    jurisdiction,
+    governmentControlled: await isBankGovernmentControlledLive(bank, bank.countryId),
+    fxCommitment: null,
+    commandEconomy: false,
+  });
+  const decision = decideGovernance(
+    state,
+    { type: "cast_ballot", seatId: seat?.seatId ?? "", vote, countryId: bank.countryId },
+    {
+      kind: "governor",
+      ...(seat ? { seatId: seat.seatId } : {}),
+      characterId: characterId.toString(),
+      countryId: bank.countryId,
+    },
+    { turn: currentTurn, now: clockMs, currentYear: null }
+  );
+  if (!decision.allowed) {
+    // A closed window reads as no meeting; a foreign or committee-less
+    // viewpoint reads as not seated. Both keep the route's status mapping.
+    if (decision.reason === "no-meeting" || decision.reason === "deadline-passed") {
+      return refuse("no-meeting");
+    }
+    if (decision.reason === "already-voted") return refuse("already-voted");
+    return refuse("not-seated");
   }
 
-  const updatedMeeting: FomcMeeting = {
-    ...meeting,
-    ballots: [...meeting.ballots, { seatId: seat.seatId, vote, auto: false, castAt: now }],
-  };
-
-  const set: Record<string, unknown> = { updatedAt: now };
-  const outcome = resolveMeetingInto(set, bank, board, updatedMeeting, currentTurn, now, {
-    changesThisTerm: bank.rateChangesThisTerm ?? 0,
-    forceDeadline: false,
-  });
-  if (!outcome.resolved) set.activeFomcMeeting = updatedMeeting;
-
+  const set = materializeTransitionSet(bank, decision.transition, now);
+  set.updatedAt = now;
   await db.collection<CentralBank>("centralBanks").updateOne({ _id: bankId }, { $set: set });
-  return { ok: true, resolved: outcome.resolved, motion: meeting.motion, moved: outcome.moved };
+  for (const event of decision.transition.events) emitBankingAuditEvent(event, db);
+  const resolved = decision.next.activeMeeting == null;
+  const moved = decision.transition.events.some(
+    (e) => e.kind === "policy.rate_changed" && e.outcome === "ok"
+  );
+  return { ok: true, resolved, motion: meeting.motion, moved };
 }
 
 export interface FomcMeetingTurnResult {
@@ -346,11 +366,11 @@ export interface FomcMeetingTurnResult {
 }
 
 /**
- * Per-turn FOMC committee phase. For every bank carrying a committee board:
- *   1. roll the 4-year term (resets the 16-change budget),
- *   2. resolve the active meeting if it is decided with no player ballot
- *      pending, or has hit its deadline,
- *   3. open a fresh meeting on cadence when none is active.
+ * Per-turn FOMC committee phase. For every bank carrying a committee board,
+ * this is a thin shell: it loads the bank into a JurisdictionState, feeds one
+ * turn_start deadline event through the governance machine (seat expiry, term
+ * rollover, deadline resolution, cadence opening), and persists the returned
+ * transition. The machine owns every branch; see the rules for the order.
  *
  * No-op for banks without a `fomcBoard` (legacy single-chair banks are untouched).
  * Turns are never paused: an unresolved meeting is force-resolved at its deadline
@@ -410,7 +430,7 @@ export async function processFomcMeetings(
     .toArray();
 
   for (const bank of banks) {
-    let board = bank.fomcBoard ?? [];
+    const board = bank.fomcBoard ?? [];
     if (board.length === 0) continue;
     // A government-controlled bank holds no rate meetings even if a board doc
     // survives from before independence was revoked — the Treasury sets the
@@ -420,102 +440,69 @@ export async function processFomcMeetings(
     const countryId = bank.countryId;
     const commandEconomy = isCommandEconomy(countryId, currentYear, commandEconomyEnabled);
 
-    const set: Record<string, unknown> = { updatedAt: now };
-
-    // 0. Vacate expired seats and appoint autonomous replacements so the board
-    //    stays full. Persist immediately so the meeting below votes on the new
-    //    roster and the single-chair mirror stays coherent when the chair lapses.
-    const refreshed = await refreshExpiredSeats(db, bank, board, currentTurn);
-    if (refreshed) {
-      board = refreshed.board;
-      set.fomcBoard = refreshed.board;
-      result.seatsReplaced += refreshed.replaced;
-      const chair = chairSeat(refreshed.board);
-      if (chair) {
-        mirrorChairOntoBank(set, chair);
-        // A technocrat keeps the committee quorate, but it must NOT silently
-        // become the appointment. `centralBankChairSelection` runs LATER in the
-        // same phase list and only fires on an expired/absent term — writing a
-        // fresh 4-year `chairTermExpiresAtTurn` here pre-empted it every single
-        // time, so an executive's nominations sat unread for the whole term and
-        // no player has held a chair anywhere in the world. Flag the vacancy
-        // instead and let the selection phase draw from the nomination pool.
-        if (refreshed.chairRefreshed) {
-          // A player offer already in flight must not be treated as a fresh
-          // vacancy: that re-entered selection every turn and re-appointed
-          // over the pending nominee. The caretaker keeps the committee
-          // quorate; accept/decline still owns the seat.
-          if (!bank.chairSelectionPending) {
-            set.vacancyAwaitingAutomaticSelection = true;
-            set.chairTermExpiresAtTurn = null;
-          }
-        }
-      }
+    // Thin shell over the governance machine: load the bank into a
+    // JurisdictionState, feed one turn_start deadline event, persist the
+    // returned mutations with one updateOne, and emit its events.
+    const jurisdiction = await resolveJurisdiction(db, countryId);
+    const state = bankToJurisdictionState(bank, {
+      jurisdiction,
+      governmentControlled: false,
+      fxCommitment: null,
+      commandEconomy,
+    });
+    const macro = await loadMacroContext(db, bank, countryId, currentYear);
+    let hasActiveNomination = false;
+    if (board.some((s) => s.occupantType === "vacant")) {
+      const activeNominations = await db
+        .collection<FomcNomination>("fomcNominations")
+        .find({ bankId: bank._id, status: "active" })
+        .project<{ _id: ObjectId }>({ _id: 1 })
+        .toArray();
+      hasActiveNomination = activeNominations.length > 0;
     }
+    const clockMs = now.getTime();
+    const decision = decideGovernance(
+      state,
+      {
+        type: "turn_start",
+        turn: currentTurn,
+        now: clockMs,
+        macro,
+        countryId,
+        hasActiveNomination,
+      },
+      { kind: "system" },
+      { turn: currentTurn, now: clockMs, currentYear: currentYear ?? null }
+    );
+    if (!decision.allowed) continue;
 
-    // 1. Term rollover — resets the per-term rate-change budget.
-    let termStart = bank.fomcTermStartedAtTurn;
-    let changesThisTerm = bank.rateChangesThisTerm ?? 0;
-    if (typeof termStart !== "number") {
-      termStart = currentTurn;
-      set.fomcTermStartedAtTurn = termStart;
-    } else if (currentTurn - termStart >= FOMC_TERM_TURNS) {
-      termStart = currentTurn;
-      changesThisTerm = 0;
-      set.fomcTermStartedAtTurn = termStart;
-      set.rateChangesThisTerm = 0;
-    }
-
-    let meeting = bank.activeFomcMeeting ?? null;
-
-    // 2. Open a meeting when none is active and cadence is due.
-    let justOpened = false;
-    if (!meeting) {
-      const dueForMeeting =
-        typeof bank.lastFomcMeetingTurn !== "number" ||
-        currentTurn - bank.lastFomcMeetingTurn >= FOMC_MEETING_INTERVAL_TURNS;
-      if (dueForMeeting) {
-        const ctx = await loadMacroContext(db, bank, countryId, currentYear);
-        const allowChange = canChangeRate(
-          { rateChangesThisTerm: changesThisTerm, lastRateChangeTurn: bank.lastRateChangeTurn },
-          currentTurn,
-          commandEconomy
-        );
-        meeting = openMeeting(board, ctx, currentTurn, now, allowChange);
-        set.lastFomcMeetingTurn = currentTurn;
-        set.activeFomcMeeting = meeting;
-        result.meetingsOpened++;
-        justOpened = true;
-      }
-    }
-
-    // 3. Resolve the active meeting if decided, past its wall-clock window, or
-    //    at the game-clock deadline. Turns never pause: no-shows abstain.
-    //
-    // A meeting OPENED this very phase is never resolved in the same phase, even
-    // if the NPP/auto seats alone already decide the tally. Otherwise a board with
-    // no seated player — or one where the auto block holds the majority — opens and
-    // resolves a rate motion inside one turn, so the chair and members never see it
-    // ("bills insta-pass without the fed chair even seeing them", #1211). It stays
-    // open for its window; the deadline (which cannot fall on the opening turn,
-    // resolvesOnTurn = openedAtTurn + FOMC_VOTE_WINDOW_TURNS) still force-resolves.
-    if (meeting && meeting.status === "voting" && !justOpened) {
-      const deadlineHit =
-        currentTurn >= meeting.resolvesOnTurn ||
-        now.getTime() >= meeting.playerVoteDeadline.getTime();
-      const outcome = resolveMeetingInto(set, bank, board, meeting, currentTurn, now, {
-        changesThisTerm,
-        forceDeadline: deadlineHit,
-      });
-      if (outcome.resolved) {
+    const set = materializeTransitionSet(bank, decision.transition, now);
+    // Vacancy exposure stays gated on the jurisdiction: a legacy board doc on
+    // a non-committee bank still processes mechanically, but the notice that
+    // names the nominating executive only goes out for committee institutions.
+    const exposed = jurisdiction.committeeBank;
+    if (!exposed) delete set.lastFomcVacancyNoticeAtTurn;
+    const wasVacant = new Set(
+      board.filter((s) => s.occupantType === "vacant").map((s) => s.seatId)
+    );
+    result.seatsReplaced += decision.next.board.filter(
+      (s) => s.occupantType === "vacant" && !wasVacant.has(s.seatId)
+    ).length;
+    for (const event of decision.transition.events) {
+      if (event.command === "monetary.meeting.open") result.meetingsOpened++;
+      if (event.kind === "meeting.transitioned" && event.command === "monetary.meeting.resolve") {
         result.meetingsResolved++;
-        if (outcome.moved) result.ratesChanged++;
-        changesThisTerm = outcome.changesThisTerm;
-      } else {
-        // Still taking votes — persist any ballots cast this cycle.
-        set.activeFomcMeeting = meeting;
+      }
+      if (event.kind === "policy.rate_changed" && event.outcome === "ok") result.ratesChanged++;
+      emitBankingAuditEvent(event, db);
+    }
+    for (const notification of decision.transition.notifications) {
+      if (notification.kind === "vacancy_notice" && exposed) {
+        set.lastFomcVacancyNoticeAtTurn = notification.stampNoticeTurn;
+        await notifyFomcVacancy(db, bank, decision.next.board.map(stateToSeat), now);
       }
     }
+    set.updatedAt = now;
 
     await db.collection<CentralBank>("centralBanks").updateOne({ _id: bank._id }, { $set: set });
   }

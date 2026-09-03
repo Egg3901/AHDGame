@@ -6,14 +6,21 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, badRequest, forbidden, notFound } from "@/lib/api/errors";
+import {
+  handleRouteError,
+  badRequest,
+  conflict,
+  forbidden,
+  isDuplicateKeyError,
+  notFound,
+} from "@/lib/api/errors";
 import { assertSameCountry } from "@/lib/api/sameCountry";
 import { checkRateLimit, CONGRESS_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { isSeatActive } from "@/lib/cabinet/rosterEra";
 import { getLiveGameYear } from "@/lib/cabinet/liveGameYear";
 import { getOfficeLabel } from "@/lib/utils/politics";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import type { Character, ElectedOfficial, CareerEvent, PoliticalParty } from "@/lib/db/types";
 import { isBannedParty } from "@/lib/turn/onePartyConstraints";
 import { getCountryState } from "@/lib/countryState";
@@ -142,9 +149,8 @@ export async function appointCabinetMemberHandler(request: Request, countryId: C
 
     // Government type drives the eligibility rule. Read runtime governmentType
     // (not the seed config) so a post-Stage-4 conversion takes effect
-    // immediately. (`config` is still needed for `isBannedParty`, which carries
-    // the seed-time per-country banned-list config.)
-    const config = COUNTRY_CONFIGS[countryId];
+    // immediately — and pass that same runtime shape to `isBannedParty` below,
+    // which re-tests `isOnePartyState` for itself.
     const runtime = await getCountryState(db, countryId);
     const isOps = runtime.governmentType === "onePartyState";
 
@@ -170,7 +176,11 @@ export async function appointCabinetMemberHandler(request: Request, countryId: C
       const appointeeParty = await db
         .collection<PoliticalParty>("politicalParties")
         .findOne({ sequentialId: appointeePartySeqId, countryId });
-      if (isBannedParty(config, appointeeParty)) {
+      // RUNTIME shape, not `config`. `isOps` above is already read from runtime;
+      // passing the static config here re-tested `isOnePartyState` against a
+      // value that never learns about a conversion, so the ban never bit for a
+      // runtime-converted country.
+      if (isBannedParty({ governmentType: runtime.governmentType }, appointeeParty)) {
         throw forbidden("Members of banned parties cannot be appointed to cabinet.");
       }
     }
@@ -228,21 +238,33 @@ export async function appointCabinetMemberHandler(request: Request, countryId: C
     const now = new Date();
     // Single source of truth: the unified cabinetMembers collection (office
     // pages, ministerial orders, action regen, foreign/trade-minister detection
-    // all read this). The seat is guaranteed empty here (the existingMember
-    // 409-guard above), so a direct insert is safe and yields the new _id.
-    const member = await getCabinetMembersCollection(db).insertOne({
-      countryId,
-      positionId,
-      characterId: targetChar._id,
-      characterName: targetChar.name,
-      party: lowerOfficial?.party ?? targetChar.party,
-      appointedByCharacterId: pmCharacter._id,
-      appointedAt: now,
-      confirmedAt: now,
-      ...initialMinisterialActionFields(now),
-      createdAt: now,
-      updatedAt: now,
-    } as never);
+    // all read this). The seat and character were both verified free above,
+    // but those checks can be raced by a concurrent appointment. The
+    // collection's unique indexes are the real lock, so a duplicate-key
+    // insert here is a lost race, not a fault.
+    let member;
+    try {
+      member = await getCabinetMembersCollection(db).insertOne({
+        countryId,
+        positionId,
+        characterId: targetChar._id,
+        characterName: targetChar.name,
+        party: lowerOfficial?.party ?? targetChar.party,
+        appointedByCharacterId: pmCharacter._id,
+        appointedAt: now,
+        confirmedAt: now,
+        ...initialMinisterialActionFields(now),
+        createdAt: now,
+        updatedAt: now,
+      } as never);
+    } catch (error) {
+      if (isDuplicateKeyError(error)) {
+        throw conflict(
+          "A conflicting appointment was just made. Refresh the cabinet and try again."
+        );
+      }
+      throw error;
+    }
 
     // Add career history entry — UK uses legacy "ukCabinet" type, others use "parliamentaryCabinet"
     const cabinetType = countryId === ("UK" as CountryId) ? "ukCabinet" : "parliamentaryCabinet";

@@ -7,6 +7,11 @@ import { withCorporationSettlementLock } from "@/lib/corporations/settlementLock
 import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import { isValidSuperShareMultiplier } from "@/lib/corporations/superShares";
 import { issuanceDilutionFactorExpr } from "@/lib/corporations/shareConsolidation";
+import {
+  prepareEquityPrimaryPlacement,
+  refundPreparedEquityPlacement,
+} from "@/lib/equities/primaryMarket";
+import { emitTx } from "@/lib/financialTxLog/emit";
 
 export async function applyPassedVoteEffects(opts: {
   db: Db;
@@ -64,62 +69,117 @@ export async function applyPassedVoteEffects(opts: {
     case "share_issuance": {
       const { newShareCount, issuancePrice, issuanceCurrencyCode } = vote.payload;
       if (!newShareCount || !issuancePrice) return;
-      // Vote-approved issuance (the >10%-dilution path the issue route redirects
-      // here) creates float inventory only — no cash at issuance (Bug #0624). The
-      // corp realizes proceeds as the float is actually bought (treasury-backed
-      // market maker in the share-buy paths). Pre-fix this $inc'd liquidCapital at
-      // share creation while the buy path credited again, double-paying the issuer.
-      //
-      // Prices are scaled DOWN by the dilution factor oldTotal / (oldTotal + new)
-      // in the same atomic write. No cash enters at issuance, so market cap must
-      // be preserved exactly like a forward split; leaving the price untouched
-      // let a reverse-split-then-issue round trip fabricate market cap out of
-      // thin air (2026-08-20 incident: reverse split multiplied the price ~250x
-      // cap-preservingly, then an uncapped issuance vote restored the share
-      // count at the pumped price, inflating market cap ~127x in one turn).
-      // Aggregation pipeline so every $ references the pre-image atomically.
-      await db.collection("corporations").updateOne({ _id: corporation._id }, [
-        {
-          $set: {
-            totalShares: { $add: [{ $ifNull: ["$totalShares", 0] }, newShareCount] },
-            publicFloat: { $add: [{ $ifNull: ["$publicFloat", 0] }, newShareCount] },
-            sharePrice: {
-              $round: [
-                {
-                  $multiply: [
-                    { $ifNull: ["$sharePrice", 0] },
-                    issuanceDilutionFactorExpr(newShareCount),
-                  ],
-                },
-                4,
-              ],
-            },
-            fundamentalSharePrice: {
-              $round: [
-                {
-                  $multiply: [
-                    { $ifNull: ["$fundamentalSharePrice", { $ifNull: ["$sharePrice", 0] }] },
-                    issuanceDilutionFactorExpr(newShareCount),
-                  ],
-                },
-                4,
-              ],
-            },
-            updatedAt: now,
+      if ((corporation.pendingShareIssuance?.remainingShares ?? 0) > 0) return;
+      const placement = await prepareEquityPrimaryPlacement(
+        db,
+        corporation,
+        newShareCount,
+        issuancePrice,
+        now
+      );
+      const placedShares = placement.placedShares;
+      // The pool pays for the first tranche now. Approved shares it cannot
+      // underwrite remain authorized but non-outstanding and place over time.
+      let update;
+      try {
+        update = await db.collection<Corporation>("corporations").updateOne(
+          {
+            _id: corporation._id,
+            "pendingShareIssuance.remainingShares": { $not: { $gt: 0 } },
           },
-        },
-      ]);
-      void recordShareTrade(db, {
-        corporationId: corporation._id,
-        kind: "issuance",
-        turn: currentTurn,
-        shares: newShareCount,
-        pricePerShareAnchor: issuancePrice,
-        from: null,
-        to: null,
-        corpCurrencyCode: issuanceCurrencyCode ?? corporation.liquidCurrencyCode,
-        note: `Shareholder vote approved ${newShareCount.toLocaleString()} new shares at ${issuancePrice} per share`,
-      });
+          [
+            {
+              $set: {
+                totalShares: { $add: [{ $ifNull: ["$totalShares", 0] }, placedShares] },
+                publicFloat: { $add: [{ $ifNull: ["$publicFloat", 0] }, placedShares] },
+                ...(placement.poolActive
+                  ? {
+                      liquidCapital: {
+                        $add: [{ $ifNull: ["$liquidCapital", 0] }, placement.paidLocal],
+                      },
+                      shareIssuanceProceeds: {
+                        $add: [{ $ifNull: ["$shareIssuanceProceeds", 0] }, placement.paidLocal],
+                      },
+                    }
+                  : {}),
+                sharePrice: {
+                  $round: [
+                    {
+                      $multiply: [
+                        { $ifNull: ["$sharePrice", 0] },
+                        issuanceDilutionFactorExpr(placedShares),
+                      ],
+                    },
+                    4,
+                  ],
+                },
+                fundamentalSharePrice: {
+                  $round: [
+                    {
+                      $multiply: [
+                        { $ifNull: ["$fundamentalSharePrice", { $ifNull: ["$sharePrice", 0] }] },
+                        issuanceDilutionFactorExpr(placedShares),
+                      ],
+                    },
+                    4,
+                  ],
+                },
+                ...(placement.unsoldShares > 0
+                  ? {
+                      pendingShareIssuance: {
+                        remainingShares: placement.unsoldShares,
+                        requestedShares: newShareCount,
+                        source: "vote",
+                        createdAtTurn: currentTurn,
+                        initialPriceLocal: issuancePrice,
+                      },
+                    }
+                  : {}),
+                updatedAt: now,
+              },
+            },
+          ]
+        );
+      } catch (error) {
+        await refundPreparedEquityPlacement(db, placement, now);
+        throw error;
+      }
+      if (update.modifiedCount === 0) {
+        await refundPreparedEquityPlacement(db, placement, now);
+        return;
+      }
+      if (placedShares > 0) {
+        void recordShareTrade(db, {
+          corporationId: corporation._id,
+          kind: "issuance",
+          turn: currentTurn,
+          shares: placedShares,
+          pricePerShareAnchor: issuancePrice,
+          from: null,
+          to: null,
+          corpCurrencyCode: issuanceCurrencyCode ?? corporation.liquidCurrencyCode,
+          note: `Equity market pool placed ${placedShares.toLocaleString()} of ${newShareCount.toLocaleString()} vote-approved shares`,
+        });
+      }
+      if (placement.poolActive && placement.paidLocal > 0) {
+        void emitTx(db, {
+          type: "ipo_proceeds",
+          turn: currentTurn,
+          createdAt: now,
+          subjectType: "corporation",
+          subjectId: corporation._id,
+          subjectName: corporation.name,
+          amount: placement.paidLocal,
+          currencyCode: placement.currency,
+          meta: {
+            sharesPlaced: placedShares,
+            sharesRequested: newShareCount,
+            sharesPending: placement.unsoldShares,
+            counterparty: "equity_market_pool",
+            approvedByVote: vote._id.toString(),
+          },
+        });
+      }
       break;
     }
 

@@ -12,19 +12,14 @@ import { rawTurnToLarpDate } from "@/lib/utils/formatters";
 import type { CalendarClock } from "@/lib/utils/gameDate";
 import { STARTING_YEAR } from "@/lib/constants/turnTime";
 import type { Crisis } from "@/lib/db/types/crisis";
-import { ALL_COUNTRY_IDS, COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
 import { crisisSeverity } from "@/lib/crises/severity";
-import { formatCrisisEffectTarget } from "@/lib/crises/effectLabels";
+import { formatCrisisEffectTarget, formatCrisisEffectValue } from "@/lib/crises/effectLabels";
 import { SovereignDebtWatchPanel } from "@/components/world/SovereignDebtWatchPanel";
 import { CountryFlag } from "@/components/CountryFlag";
 import type { Conflict } from "@/app/world/conflicts/_coldwar/conflicts";
-
-// Crisis effect magnitudes are floats and land with binary-rounding tails
-// (0.15 * 3 = 0.44999999999999996). Show at most two decimals, no trailing zeros.
-function formatEffectValue(v: number): string {
-  return Number(v.toFixed(2)).toString();
-}
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 const SEVERITY_BADGE: Record<"low" | "medium" | "high", string> = {
   high: "border-rose-500/30 bg-rose-500/10 text-rose-500 dark:text-rose-400",
@@ -42,12 +37,6 @@ const CONFLICT_SEVERITY_BADGE: Record<Conflict["sev"], string> = {
 };
 
 type ScopeTab = "global" | "country" | "region" | "debt";
-
-// Pure id→name lookup over the full union (every config has a name); static is fine
-// here — display labels, not a "which countries exist" gate.
-const COUNTRY_NAMES: Record<string, string> = Object.fromEntries(
-  ALL_COUNTRY_IDS.map((id) => [id, COUNTRY_CONFIGS[id].name])
-);
 
 function getTurnLabel(crisis: Crisis, currentTurn: number): string {
   if (crisis.status === "resolved") return "Resolved";
@@ -87,7 +76,7 @@ function EffectPills({ effects }: { effects: Crisis["effects"] }) {
             </svg>
           )}
           {e.value > 0 ? "+" : ""}
-          {formatEffectValue(e.value)} {formatCrisisEffectTarget(e)}
+          {formatCrisisEffectValue(e.value)} {formatCrisisEffectTarget(e)}
         </span>
       ))}
       {overflow > 0 && (
@@ -282,12 +271,15 @@ function CountryGroup({
   regionNames: Record<string, string>;
   clock: CalendarClock;
 }) {
+  // Resolved per render rather than a module-level map: a compiled map is built
+  // once at import and can never see a country renamed at runtime.
+  const countryName = useCountryDisplayName();
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <CountryFlag country={countryId} size="md" />
         <h3 className="text-sm font-semibold text-foreground">
-          {COUNTRY_NAMES[countryId] ?? countryId}
+          {countryName(countryId as CountryId)}
         </h3>
         <div className="flex-1 h-px bg-card-border" />
       </div>

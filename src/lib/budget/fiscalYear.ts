@@ -30,6 +30,7 @@ import {
   getTurnInYear,
 } from "@/lib/countrySystems/fiscalCalendar";
 import { evaluateSovereignAuctionForCountry } from "@/lib/sovereignDefault/crisisDetection";
+import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { applyAusterityCap } from "@/lib/sovereignDefault/austerity";
 import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 import { ensureBudgetDraftForFiscalYear } from "@/lib/db/collections/ukBudgets";
@@ -122,9 +123,16 @@ export async function processFiscalYear(
     ? await loadLatestSourcedImportAggregates(db, currentTurn)
     : new Map<string, { tariffPaid: number; importValue: number }>();
 
+  // A dissolved country's budget doc survives for history but must not run
+  // fiscal years: with its bases and treasury merged into its successor, a
+  // ghost rollover would recompute revenue over nothing, evaluate sovereign
+  // auctions for a state that no longer exists, and write snapshots for it.
+  const registeredCountries = new Set<string>(await getRegisteredCountryIds(db));
+
   for (const federalBudget of federalBudgets) {
     const budgetId = String(federalBudget._id);
     const countryId = resolveBudgetCountryId(federalBudget);
+    if (!registeredCountries.has(countryId)) continue;
     const normalizedTaxRates = normalizeFederalTaxRates(federalBudget.taxRates);
     // The fiscal-year phase iterates every country's budget in one shared turn
     // step, so one malformed document must not abort rollover for the

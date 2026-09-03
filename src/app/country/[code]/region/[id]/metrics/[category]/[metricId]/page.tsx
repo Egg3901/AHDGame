@@ -14,6 +14,7 @@ import { isMetricActive, getEraMetricName } from "@/lib/era/metricCatalog";
 import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { scoreColor } from "@/components/metrics/scoreColor";
 import { ScoreBadge } from "@/components/metrics/ScoreBadge";
+import { formatMetricValue } from "@/components/metrics/formatMetricValue";
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -38,9 +39,13 @@ export default function MetricDetailPage({
   // and back link must point there. National-scope doc IDs are lowercase
   // (e.g. "cn_national"); the route param arrives upper-cased.
   const isNationalScope = NATIONAL_SCOPE_IDS.has(stateId.toLowerCase());
+  // This page belongs to the LEGACY stateMetrics system, which now lives under
+  // Demographics > Statistics. `?tab=metrics` resolves to the political
+  // registry — a different system that does not contain this metric — so the
+  // crumb must name the statistics tab explicitly.
   const metricsHomeHref = isNationalScope
     ? `/country/${code.toLowerCase()}/metrics`
-    : `${regionBase}?tab=metrics`;
+    : `${regionBase}?tab=demographics&sub=statistics`;
   const rootHref = isNationalScope ? `/country/${code.toLowerCase()}` : regionBase;
 
   const [data, setData] = useState<MetricDetailData | null>(null);
@@ -74,11 +79,7 @@ export default function MetricDetailPage({
 
   const fmt = (val: number) => {
     if (!def) return String(val);
-    const formatted = val.toLocaleString("en-US", {
-      minimumFractionDigits: def.decimals ?? 1,
-      maximumFractionDigits: def.decimals ?? 1,
-    });
-    return `${def.formatPrefix ?? ""}${formatted}${def.formatSuffix ?? ""}`;
+    return formatMetricValue(def, val, countryId);
   };
 
   if (loading) {

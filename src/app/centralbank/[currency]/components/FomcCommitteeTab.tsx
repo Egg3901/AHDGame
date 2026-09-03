@@ -50,14 +50,36 @@ interface NominationState {
   viewerHasVoted: boolean;
 }
 
+interface GovernanceAction {
+  action: string;
+  allowed: boolean;
+  reason?: string;
+  deadlineTurn?: number;
+  nextDeadline?: number;
+}
+
+interface GovernanceState {
+  institutionId: string;
+  currency: string;
+  memberCountryIds: string[];
+  viewerRole: string;
+  allowedActions: GovernanceAction[];
+  nextDeadline: { turn: number; kind: string } | null;
+  normalizedRateChoices: number[];
+  primeRateOnGrid: number;
+}
+
 interface CommitteeState {
   hasCommittee: boolean;
+  governance?: GovernanceState | null;
   primeRate: number;
   rateChangesThisTerm: number;
   rateChangesPerTerm: number;
   currentTurn?: number;
   nextMeetingAtTurn?: number | null;
   termEndsAtTurn?: number | null;
+  /** Votes needed to carry a motion: strict majority of the full board. */
+  majorityNeeded?: number;
   meetingHistory?: ResolvedMeeting[];
   canNominate: boolean;
   viewerIsSenator?: boolean;
@@ -208,6 +230,9 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
   const { board, meeting } = state;
   const budgetLeft = state.rateChangesPerTerm - state.rateChangesThisTerm;
   const currentTurn = state.currentTurn ?? null;
+  const vacantSeats = board.filter((s) => s.occupantType === "vacant").length;
+  const majorityNeeded = state.majorityNeeded ?? Math.floor(board.length / 2) + 1;
+  const seatedCount = board.length - vacantSeats;
   const turnsToNextSession =
     meeting === null && state.nextMeetingAtTurn != null && currentTurn != null
       ? Math.max(0, state.nextMeetingAtTurn - currentTurn)
@@ -224,9 +249,36 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
         ? "The next session is due any turn now."
         : `The next session opens in ${turnsToNextSession} turn${turnsToNextSession === 1 ? "" : "s"} (one every 8 turns).`;
   const wallClockDeadline = meeting ? formatUtcDeadline(meeting.playerVoteDeadline) : null;
+  // Eligibility comes from the server's governance contract, not from
+  // re-deriving it client-side. Older payloads without governance fall back
+  // to the meeting's viewer flags.
+  const voteAction = state.governance?.allowedActions.find((a) => a.action === "cast_ballot");
+  const canVote = voteAction ? voteAction.allowed : (meeting?.viewerCanVote ?? false);
+  const voteReason = voteAction && !voteAction.allowed ? voteAction.reason : null;
+  const governanceDeadline = state.governance?.nextDeadline ?? null;
 
   return (
     <div className="space-y-6">
+      {/* Understaffed board (ticket #1238): vacant seats make every motion fail
+          on the full-board majority; surface why and who can fix it. When the
+          board cannot carry a motion at all the chair holds the rate directly
+          until nominations restore a working board. */}
+      {vacantSeats > 0 && (
+        <div className="rounded-xl border border-danger/30 bg-danger/10 px-5 py-4">
+          <h2 className="text-sm font-semibold text-danger">Board understaffed</h2>
+          <p className="mt-1 text-xs text-foreground">
+            {vacantSeats} of {board.length} board seats are vacant. A motion needs {majorityNeeded}{" "}
+            of the full board to pass
+            {seatedCount < majorityNeeded
+              ? `, so with only ${seatedCount} seat${seatedCount === 1 ? "" : "s"} seated no motion can carry`
+              : ""}
+            . While the board cannot carry a motion, the chair sets the rate directly. Seats are
+            filled by presidential nomination and Senate confirmation.
+            {state.canNominate && " Use the nominate panel below to fill them."}
+          </p>
+        </div>
+      )}
+
       {/* Per-term budget + active meeting */}
       <div className="rounded-xl border border-card-border bg-card shadow-sm">
         <div className="border-b border-card-border px-5 py-4">
@@ -266,26 +318,43 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
                 {meeting.viewerHasVoted ? (
                   <p className="text-xs text-muted">Your ballot is recorded.</p>
                 ) : (
-                  <div className="flex gap-2">
-                    {(["hike", "cut", "hold"] as const).map((v) => (
-                      <button
-                        key={v}
-                        disabled={voting || !meeting.viewerCanVote}
-                        onClick={() => castVote(v)}
-                        className="rounded-lg border border-card-border px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-card-elevated/60 disabled:opacity-50"
-                      >
-                        {MOTION_LABEL[v]}
-                      </button>
-                    ))}
-                  </div>
+                  <>
+                    <div className="flex gap-2">
+                      {(["hike", "cut", "hold"] as const).map((v) => (
+                        <button
+                          key={v}
+                          disabled={voting || !canVote}
+                          onClick={() => castVote(v)}
+                          className="rounded-lg border border-card-border px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-card-elevated/60 disabled:opacity-50"
+                        >
+                          {MOTION_LABEL[v]}
+                        </button>
+                      ))}
+                    </div>
+                    {voteReason && <p className="mt-2 text-xs text-muted">{voteReason}</p>}
+                  </>
                 )}
               </div>
+            )}
+            {governanceDeadline && (
+              <p className="mt-2 text-xs text-muted">
+                Next deadline: turn {governanceDeadline.turn} (
+                {governanceDeadline.kind === "meeting_deadline"
+                  ? "this vote closes"
+                  : "next session opens"}
+                ).
+              </p>
             )}
           </div>
         ) : (
           <div className="px-5 py-4">
             <p className="text-sm text-muted">No meeting is currently in session.</p>
             {sessionLine && <p className="mt-1 text-xs text-muted">{sessionLine}</p>}
+            {governanceDeadline && (
+              <p className="mt-1 text-xs text-muted">
+                Next deadline: turn {governanceDeadline.turn} (next session opens).
+              </p>
+            )}
           </div>
         )}
       </div>

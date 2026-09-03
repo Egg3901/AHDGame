@@ -11,7 +11,7 @@ describe("2026-07-04-ngx-index-fund-seed migration", () => {
 
   it("the definition inventory now includes the two NGX broad funds", () => {
     const definitions = getAllFundDefinitions();
-    const ng = definitions.filter((d) => d.countryId === "NG");
+    const ng = definitions.filter((d) => d.countryId === "NG" && d.kind === "broad");
     expect(ng.map((d) => d.slug).sort()).toEqual(["ng_top_25", "ng_top_50"]);
     expect(ng.map((d) => d.ticker).sort()).toEqual(["NG25", "NG50"]);
     for (const def of ng) {

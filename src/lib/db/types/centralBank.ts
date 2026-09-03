@@ -9,6 +9,25 @@ import type { IterationStampFields } from "./gameState";
 /** Maximum rate hike (percentage points) per chair action. Also the threshold above which a cut becomes "aggressive". */
 export const MAX_RATE_CHANGE_DELTA = 0.75;
 
+/**
+ * Policy rates move on a quarter-point grid. The rate API rejects anything off
+ * it, so EVERY writer has to honour it: the autonomous NPP chair computes a
+ * continuous Taylor-rule rate, and storing that raw permanently locks out the
+ * next human chair. Stepping by 0.25 from an off-grid base is still off-grid,
+ * so the rate card can never produce an acceptable value (ticket #1238).
+ */
+export const PRIME_RATE_STEP = 0.25;
+
+/**
+ * Snap a policy rate onto the quarter-point grid. 0.25 is exact in binary
+ * floating point, so a snapped value stepped by 0.25 stays exact and the API's
+ * multiple-of check holds without needing a tolerance.
+ */
+export function snapToPrimeRateGrid(rate: number): number {
+  if (!Number.isFinite(rate)) return rate;
+  return Math.round(rate / PRIME_RATE_STEP) * PRIME_RATE_STEP;
+}
+
 /** Dual-mandate Taylor-rule coefficients for the autonomous NPP chair. */
 export const NPP_CHAIR_INFLATION_COEF = 1.0;
 export const NPP_CHAIR_GROWTH_COEF = 0.5;
@@ -25,6 +44,14 @@ export const AGGRESSIVE_CUT_SCRUTINY = 10;
 
 /** Number of turns a chair must wait between rate changes. */
 export const RATE_CHANGE_COOLDOWN_TURNS = 6;
+
+/**
+ * Rate-change records kept on a bank. Every writer must slice to this same
+ * number: the FOMC path capped at 96 while the direct-set path capped at 50, so
+ * whichever moved the rate last silently truncated the other's records. One
+ * constant, so the published history means the same thing on every bank.
+ */
+export const RATE_HISTORY_MAX = 96;
 
 /**
  * EMA window (turns) for `primeRateSmoothed`. ~6 turns puts the half-life
@@ -80,6 +107,14 @@ export const FOMC_PLAYER_VOTE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /** Game-clock window (turns) matching the 24h wall clock (~1 turn/hour), for meetings and confirmations. */
 export const FOMC_VOTE_WINDOW_TURNS = 24;
+
+/**
+ * Turns between repeats of the "board seats are vacant" notice to the
+ * executive. Vacant seats can only be filled by presidential nomination, so an
+ * unstaffed board silently deadlocks every rate motion (ticket #1238); the
+ * reminder keeps the one player who can act aware without nagging every turn.
+ */
+export const FOMC_VACANCY_REMINDER_INTERVAL_TURNS = 48;
 
 /** A motion / ballot direction. */
 export type FomcVote = "hike" | "cut" | "hold";
@@ -293,6 +328,12 @@ export interface CentralBank {
   fomcTermStartedAtTurn?: number;
   /** Turn of the most recently opened FOMC meeting (paces the meeting cadence). */
   lastFomcMeetingTurn?: number;
+  /**
+   * Turn the executives were last notified that committee seats sit vacant
+   * (throttles the vacancy reminder to one notice per
+   * FOMC_VACANCY_REMINDER_INTERVAL_TURNS). Stamped by processFomcMeetings.
+   */
+  lastFomcVacancyNoticeAtTurn?: number | null;
   /** Recent resolved meetings (ring buffer) for dissent history / charting. */
   fomcMeetingHistory?: FomcMeeting[];
   /** When set, the next chair must accept before the appointment is finalized */

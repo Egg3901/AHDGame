@@ -116,14 +116,8 @@ async function castNPPCabinetVotes(
   const isVpNomination = nomination.positionId === "vicePresident";
   const existingVotes = nomination.votes ?? {};
   const existingHouseVotes = nomination.houseVotes ?? {};
-  let incFor = 0,
-    incAgainst = 0,
-    incAbstain = 0;
-  let incHouseFor = 0,
-    incHouseAgainst = 0,
-    incHouseAbstain = 0;
-  const voteUpdates: Record<string, "for" | "against" | "abstain"> = {};
-  const houseVoteUpdates: Record<string, "for" | "against" | "abstain"> = {};
+  const now = new Date();
+  const voteOps: Array<{ updateOne: { filter: object; update: object } }> = [];
 
   const seenNppIds = new Set<string>();
   for (const official of nppOfficials) {
@@ -140,46 +134,41 @@ async function castNPPCabinetVotes(
 
     // Senate votes on all nominations; House votes only on VP nominations
     if (official.officeType === "senate" && !existingVotes[nppKey]) {
-      voteUpdates[nppKey] = vote;
-      if (vote === "for") incFor += weight;
-      else if (vote === "against") incAgainst += weight;
-      else incAbstain += weight;
+      const tallyField =
+        vote === "for" ? "votesFor" : vote === "against" ? "votesAgainst" : "votesAbstain";
+      voteOps.push({
+        updateOne: {
+          filter: { _id: nomination._id, [`votes.${nppKey}`]: { $exists: false } },
+          update: {
+            $set: { [`votes.${nppKey}`]: vote, updatedAt: now },
+            $inc: { [tallyField]: weight },
+          },
+        },
+      });
     }
 
     if (isVpNomination && official.officeType === "house" && !existingHouseVotes[nppKey]) {
-      houseVoteUpdates[nppKey] = vote;
-      if (vote === "for") incHouseFor += weight;
-      else if (vote === "against") incHouseAgainst += weight;
-      else incHouseAbstain += weight;
+      const tallyField =
+        vote === "for"
+          ? "houseVotesFor"
+          : vote === "against"
+            ? "houseVotesAgainst"
+            : "houseVotesAbstain";
+      voteOps.push({
+        updateOne: {
+          filter: { _id: nomination._id, [`houseVotes.${nppKey}`]: { $exists: false } },
+          update: {
+            $set: { [`houseVotes.${nppKey}`]: vote, updatedAt: now },
+            $inc: { [tallyField]: weight },
+          },
+        },
+      });
     }
   }
 
-  if (Object.keys(voteUpdates).length === 0 && Object.keys(houseVoteUpdates).length === 0) return;
-
-  const setFields: Record<string, unknown> = { updatedAt: new Date() };
-  for (const [k, v] of Object.entries(voteUpdates)) {
-    setFields[`votes.${k}`] = v;
+  if (voteOps.length > 0) {
+    await db.collection<CabinetNomination>("cabinetNominations").bulkWrite(voteOps);
   }
-  for (const [k, v] of Object.entries(houseVoteUpdates)) {
-    setFields[`houseVotes.${k}`] = v;
-  }
-
-  await db.collection<CabinetNomination>("cabinetNominations").updateOne(
-    { _id: nomination._id },
-    {
-      $set: setFields,
-      $inc: {
-        votesFor: incFor,
-        votesAgainst: incAgainst,
-        votesAbstain: incAbstain,
-        ...(isVpNomination && {
-          houseVotesFor: incHouseFor,
-          houseVotesAgainst: incHouseAgainst,
-          houseVotesAbstain: incHouseAbstain,
-        }),
-      },
-    }
-  );
 }
 
 async function seatConfirmedVicePresident(
@@ -360,6 +349,18 @@ export async function processCabinetNominationLifecycle(
           // Country-scoped: position ids are not unique across countries, so an
           // unscoped delete here could evict another country's seat holder.
           .deleteOne({ countryId: nom.countryId, positionId: nom.positionId });
+
+        // Vacate any seat the nominee already holds in this cabinet. The
+        // cabinetMembers_countryId_characterId unique index allows one seat
+        // per character, so without this a sitting secretary confirmed to a
+        // new position makes the insert below throw E11000 every turn and the
+        // nomination stays active forever, failing the whole phase. A
+        // Senate-confirmed move vacates the old office.
+        if (nom.nomineeCharacterId) {
+          await db
+            .collection<CabinetMember>("cabinetMembers")
+            .deleteMany({ countryId: nom.countryId, characterId: nom.nomineeCharacterId });
+        }
 
         const member: Omit<CabinetMember, "_id"> & {
           ministerialActions: number;

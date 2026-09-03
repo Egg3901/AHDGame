@@ -21,7 +21,7 @@ export default function ApiAutomationGuidePage() {
       </nav>
 
       <h1 className="text-3xl font-bold">API Automation Guide</h1>
-      <p className="mt-2 text-sm text-muted">Last updated: May 2, 2026 (UTC)</p>
+      <p className="mt-2 text-sm text-muted">Last updated: September 3, 2026 (UTC)</p>
 
       <section className="mt-8 space-y-3 rounded-2xl border border-card-border bg-card/70 p-6">
         <h2 className="text-xl font-semibold">What this covers</h2>
@@ -40,6 +40,22 @@ export default function ApiAutomationGuidePage() {
             complete API documentation
           </a>
           .
+        </p>
+      </section>
+
+      <section className="mt-6 space-y-3 rounded-2xl border border-card-border bg-card/70 p-6">
+        <h2 className="text-xl font-semibold">What you can read</h2>
+        <p className="text-sm text-muted">
+          Public-scope keys can read the live game clock, countries and regions, national metrics
+          and budgets, governments, elections, legislation, referendums, international
+          organizations, trade restrictions and flows, sovereign risk, historical economic and
+          fiscal series, conflicts, corporations, stocks, bonds, commodities, funds, and forex.
+        </p>
+        <p className="text-sm text-muted">
+          Start with <code>/api/public/v1/meta</code> for the machine-readable route catalog. The
+          catalog is tested against the route tree, so it cannot silently omit an implemented v1
+          endpoint. OpenAPI clients can load the complete contract from{" "}
+          <code>/api/public/v1/openapi.json</code>.
         </p>
       </section>
 
@@ -67,6 +83,23 @@ export default function ApiAutomationGuidePage() {
             <li>Any endpoint that changes game-state beyond fund transfers</li>
           </ul>
         </div>
+      </section>
+
+      <section className="mt-6 space-y-3 rounded-2xl border border-card-border bg-card/70 p-6">
+        <h2 className="text-xl font-semibold">Rate limits</h2>
+        <p className="text-sm text-muted">
+          Read endpoints are limited per key, per endpoint, in a one-minute window. The base
+          allowance is 60 requests per minute. Supporter+ keys get 1.5x that (90/min) and
+          Supporter++ keys 3x (180/min), applied automatically to every key the account owns for as
+          long as the pledge is active. Write endpoints keep their own limits: 20/min for transfers
+          and 30/min for forex.
+        </p>
+        <p className="text-sm text-muted">
+          Every response carries <code>X-RateLimit-Limit</code>, <code>X-RateLimit-Remaining</code>,
+          and <code>X-RateLimit-Reset</code>, so read your live allowance from the headers rather
+          than hardcoding it. Over the limit you get HTTP 429 with a <code>Retry-After</code>{" "}
+          header. <code>/api/public/v1/meta</code> lists the current allowance for each tier.
+        </p>
       </section>
 
       <section className="mt-6 space-y-3 rounded-2xl border border-card-border bg-card/70 p-6">

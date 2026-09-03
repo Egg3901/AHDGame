@@ -6,7 +6,13 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/currency/govBudgetFields", () => ({
   // Identity at rate 1 — tests pass an empty FX map (rate defaults to 1).
-  writeGovBudgetLocal: vi.fn((v: number) => v),
+  // The anchor-aware credit passes a real rate, so honour it when present.
+  writeGovBudgetLocal: vi.fn((v: number, _code: string, rate?: number) =>
+    typeof rate === "number" && rate > 0 ? v * rate : v
+  ),
+}));
+vi.mock("@/lib/currency/corporationCapital", () => ({
+  getCurrencyFxRate: vi.fn(),
 }));
 
 let db: MockDb;
@@ -155,5 +161,50 @@ describe("remitToTreasury", () => {
 
     expect(amt).toBe(0);
     expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+  });
+});
+
+describe("creditTreasuryProceedsFromAnchor", () => {
+  it("converts the anchor amount into the RECEIVING country's currency (#808)", async () => {
+    // A fine debited from a GBP corporation must not be banked by the US
+    // treasury as the same raw number: it is an ₳ amount, converted for the
+    // country that is actually receiving it.
+    const { getCurrencyFxRate } = await import("@/lib/currency/corporationCapital");
+    vi.mocked(getCurrencyFxRate).mockResolvedValue(0.75);
+
+    const { creditTreasuryProceedsFromAnchor } = await import("./treasury");
+    const credited = await creditTreasuryProceedsFromAnchor(db as unknown as Db, "UK", 1000, now);
+
+    expect(credited).toBe(750);
+    const update = db.collectionMocks.federalBudget.updateOne.mock.calls[0];
+    expect(update[0]).toEqual({ countryId: "UK" });
+    expect(update[1].$inc.treasuryBalance).toBe(750);
+  });
+
+  it("credits the anchor amount unchanged at parity", async () => {
+    const { getCurrencyFxRate } = await import("@/lib/currency/corporationCapital");
+    vi.mocked(getCurrencyFxRate).mockResolvedValue(1);
+
+    const { creditTreasuryProceedsFromAnchor } = await import("./treasury");
+    expect(await creditTreasuryProceedsFromAnchor(db as unknown as Db, "US", 500, now)).toBe(500);
+  });
+
+  it("is a no-op for a non-positive amount and never touches the ledger", async () => {
+    const { getCurrencyFxRate } = await import("@/lib/currency/corporationCapital");
+    vi.mocked(getCurrencyFxRate).mockResolvedValue(1);
+
+    const { creditTreasuryProceedsFromAnchor } = await import("./treasury");
+    expect(await creditTreasuryProceedsFromAnchor(db as unknown as Db, "US", 0, now)).toBe(0);
+    expect(await creditTreasuryProceedsFromAnchor(db as unknown as Db, "US", -5, now)).toBe(0);
+    expect(db.collectionMocks.federalBudget.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("does not credit a sub-unit amount that rounds to zero", async () => {
+    const { getCurrencyFxRate } = await import("@/lib/currency/corporationCapital");
+    vi.mocked(getCurrencyFxRate).mockResolvedValue(0.0001);
+
+    const { creditTreasuryProceedsFromAnchor } = await import("./treasury");
+    expect(await creditTreasuryProceedsFromAnchor(db as unknown as Db, "UK", 1, now)).toBe(0);
+    expect(db.collectionMocks.federalBudget.updateOne).not.toHaveBeenCalled();
   });
 });

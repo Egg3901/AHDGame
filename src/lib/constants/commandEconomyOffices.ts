@@ -39,6 +39,12 @@ export const COMMAND_ECONOMY_OFFICES: Partial<Record<CountryId, CommandEconomyOf
   RU: { plannerCabinetId: "chairman_of_gosplan", bankCabinetId: "gosbank_liaison" },
   CN: { plannerCabinetId: "vice_premier", bankCabinetId: "pboc_governor" },
   DD: { plannerCabinetId: "chairman_of_gosplan", bankCabinetId: "gosbank_liaison" },
+  // Post-reunification Germany (the GDR's regime carried onto the DE shell by
+  // `mergeEconomicRegime`). DE's cabinet has no Plankommission seat, so the
+  // planning panel is operated by the economy portfolio and the state-credit
+  // panel by the finance portfolio — the existing seats a socialist government
+  // fills with its own people. Inert while DE reads as a market economy.
+  DE: { plannerCabinetId: "economy_minister", bankCabinetId: "finance_minister" },
 };
 
 /** The office map for a country, or null when it is not a multi-SOE command country. */

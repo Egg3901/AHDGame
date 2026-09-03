@@ -6,6 +6,7 @@ const {
   ensureFederalBudget,
   loadWorldPreset,
   recordProcurementRestriction,
+  reunifyByPeaceTerm,
   installOnePartyState,
   triggerSystemConversion,
   updateCountryState,
@@ -19,6 +20,7 @@ const {
   convertLocal: vi.fn((_from: string, _to: string, amount: number) => amount * 2),
   ensureFederalBudget: vi.fn(async () => {}),
   loadWorldPreset: vi.fn(async () => "1953-default"),
+  reunifyByPeaceTerm: vi.fn(async (..._a: unknown[]) => ({ actuated: true })),
 }));
 
 vi.mock("@/lib/internationalOrganizations/organizationFund", () => ({ convertLocal }));
@@ -26,6 +28,7 @@ vi.mock("@/lib/currency/gdpAnchorRate", () => ({ loadWorldPreset }));
 vi.mock("@/lib/turn/ensureFederalBudget", () => ({ ensureFederalBudget }));
 vi.mock("@/lib/db/collections/procurementRestrictions", () => ({ recordProcurementRestriction }));
 vi.mock("@/lib/countryState", () => ({ updateCountryState }));
+vi.mock("@/lib/settlement/reunifyByPeaceTerm", () => ({ reunifyByPeaceTerm }));
 vi.mock("@/lib/onePartyState/installOnePartyState", () => ({ installOnePartyState }));
 vi.mock("@/lib/onePartyState/systemConversion", () => ({
   triggerSystemConversion,
@@ -143,8 +146,25 @@ describe("applyPeaceTerm: regime change", () => {
   it("installs a one-party state when that is the target system", async () => {
     const { db } = mockDb();
     await applyPeaceTerm(db, { kind: "regime_change", targetSystem: "onePartyState" }, ctx);
-    expect(installOnePartyState).toHaveBeenCalledWith(expect.anything(), "TR", 100);
+    expect(installOnePartyState).toHaveBeenCalledWith(expect.anything(), "TR", 100, {});
     expect(triggerSystemConversion).not.toHaveBeenCalled();
+  });
+
+  it("installs the party the settlement named", async () => {
+    const { db } = mockDb();
+    await applyPeaceTerm(
+      db,
+      { kind: "regime_change", targetSystem: "onePartyState", rulingPartyId: 3 },
+      ctx
+    );
+    // Left to resolve, the install reads the target's own largest bench — which
+    // can hand the monopoly to the government the victor just fought.
+    expect(installOnePartyState).toHaveBeenCalledWith(
+      expect.anything(),
+      "TR",
+      100,
+      expect.objectContaining({ rulingPartyId: 3 })
+    );
   });
 
   it("uses the shipped conversion when the target system is a democracy", async () => {
@@ -157,7 +177,12 @@ describe("applyPeaceTerm: regime change", () => {
   it("converts the TARGET, never the imposer", async () => {
     const { db } = mockDb();
     await applyPeaceTerm(db, { kind: "regime_change", targetSystem: "onePartyState" }, ctx);
-    expect(installOnePartyState).toHaveBeenCalledWith(expect.anything(), "TR", expect.anything());
+    expect(installOnePartyState).toHaveBeenCalledWith(
+      expect.anything(),
+      "TR",
+      expect.anything(),
+      expect.anything()
+    );
   });
 
   it("queues the election marker when installing a one-party state", async () => {
@@ -211,5 +236,24 @@ describe("applyPeaceTerm: white peace", () => {
     expect(installOnePartyState).not.toHaveBeenCalled();
     expect(triggerSystemConversion).not.toHaveBeenCalled();
     expect(ensureFederalBudget).not.toHaveBeenCalled();
+  });
+});
+
+describe("the reunification term", () => {
+  it("actuates the German Question for the challenger, on the war it names", async () => {
+    const { db } = mockDb();
+    await applyPeaceTerm(db, { kind: "reunification" }, ctx);
+    expect(reunifyByPeaceTerm).toHaveBeenCalledWith(db, "t1", 100);
+  });
+
+  it("moves no money and converts no government by itself", async () => {
+    // Everything it does is the settlement pipeline's. A term that also poked the
+    // treasury or the target's system would double up on what actuation already does.
+    const { db, updates } = mockDb();
+    await applyPeaceTerm(db, { kind: "reunification" }, ctx);
+    expect(updates).toEqual([]);
+    expect(installOnePartyState).not.toHaveBeenCalled();
+    expect(triggerSystemConversion).not.toHaveBeenCalled();
+    expect(convertLocal).not.toHaveBeenCalled();
   });
 });

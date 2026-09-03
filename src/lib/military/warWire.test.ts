@@ -104,6 +104,47 @@ describe("buildSettledDispatch: what each ending says", () => {
   });
 });
 
+describe("a settlement that installs a one-party state", () => {
+  const OPS: PeaceTerm = { kind: "regime_change", targetSystem: "onePartyState" };
+  const OPS_NAMED: PeaceTerm = {
+    kind: "regime_change",
+    targetSystem: "onePartyState",
+    rulingPartyId: 7,
+  };
+
+  it("never prints the raw system key at a player", () => {
+    // The enum reached the wire verbatim as "Regime change: onePartyState".
+    expect(termFieldValue(OPS)).not.toContain("onePartyState");
+    expect(termFieldValue(OPS)).toContain("one-party state");
+    expect(termFieldValue(REGIME)).not.toContain("parliamentaryRepublic");
+  });
+
+  it("names the installed party in the field and the prose", () => {
+    expect(termFieldValue(OPS_NAMED, "SED")).toContain("SED");
+    const d = buildSettledDispatch(war(OPS_NAMED), "SED");
+    expect(d.body).toContain("SED");
+    expect(d.body).toMatch(/every other party banned/);
+  });
+
+  it("says the strongest party took power when the settlement named none", () => {
+    // Implying a choice the victor did not make would be a different settlement.
+    const d = buildSettledDispatch(war(OPS));
+    expect(d.body).toMatch(/strongest party/);
+    expect(d.body).not.toMatch(/\$\{/);
+  });
+
+  it("does not describe a one-party conversion as going to the polls", () => {
+    const d = buildSettledDispatch(war(OPS_NAMED), "SED");
+    expect(d.body).not.toMatch(/go to the polls/);
+  });
+
+  it("keeps the no-digits house style", () => {
+    for (const d of [buildSettledDispatch(war(OPS)), buildSettledDispatch(war(OPS_NAMED), "SED")]) {
+      expect(d.body).not.toMatch(/\d/);
+    }
+  });
+});
+
 describe("termFieldValue", () => {
   it("names the payer of an indemnity, since it is quoted in their currency", () => {
     expect(termFieldValue(INDEMNITY)).toContain("Turkey");
@@ -141,5 +182,49 @@ describe("buildSettledDispatch: a white peace", () => {
 
   it("labels the term as a status quo", () => {
     expect(termFieldValue(WHITE_PEACE)).toMatch(/status quo/i);
+  });
+});
+
+describe("the reunification term on the wire", () => {
+  const REUNIFY: PeaceTerm = { kind: "reunification" };
+
+  it("names the field value for what it is", () => {
+    expect(termFieldValue(REUNIFY)).toBe("German reunification");
+  });
+
+  it("does not report it as a demilitarisation", () => {
+    // Every one of these readers used to fall through to the last variant, so a term
+    // it did not know about was announced as whatever the final branch happened to be.
+    expect(termFieldValue(REUNIFY)).not.toMatch(/demilitarisation/i);
+  });
+
+  it("uses no dash characters, like the rest of the player-facing copy", () => {
+    expect(termFieldValue(REUNIFY)).not.toMatch(/[\u2014\u2013]/);
+  });
+});
+
+describe("who the reunification dispatch names", () => {
+  const REUNIFY2: PeaceTerm = { kind: "reunification" };
+
+  it("does not cast the settlement's target as the side that gave way", () => {
+    // The stamp records the term's RECIPIENT, which for a capitulation is the winner:
+    // the incumbent may offer to withdraw AND concede reunification, and then the
+    // recipient is East Germany. Calling them the side that agreed to the terms
+    // reports the war exactly backwards.
+    const body = buildSettledDispatch(war(REUNIFY2, "negotiated")).body;
+    expect(body).not.toMatch(/agreed to the terms/i);
+    expect(body).not.toMatch(/in no position to refuse/i);
+    expect(body).toMatch(/German/);
+  });
+
+  it("says the same thing whichever founder composed the deal", () => {
+    // The term settles the question, not a country, so the prose cannot depend on
+    // which end of the deal the stamp happens to record.
+    const asDemand = buildSettledDispatch(war(REUNIFY2, "negotiated")).body;
+    const asCapitulation = buildSettledDispatch({
+      ...war(REUNIFY2, "negotiated"),
+      settlement: { term: REUNIFY2, path: "negotiated", imposedBy: "TR", target: "UK", turn: 400 },
+    } as unknown as ConflictDoc).body;
+    expect(asCapitulation).toBe(asDemand);
   });
 });

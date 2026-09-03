@@ -65,6 +65,8 @@ export function emptyComponents(): MutableComponents {
     creditOutstanding: 0,
     sovereignBondsOutstanding: 0,
     centralBankBondHoldings: 0,
+    bondPoolCash: 0,
+    equityPoolCash: 0,
   };
 }
 

@@ -148,6 +148,91 @@ describe("processBondTurn", () => {
     expect(db.collectionMocks["characters"]!.bulkWrite).toHaveBeenCalled();
   });
 
+  it("pays the coupon on pool-held units into the currency's bond market pool", async () => {
+    const charId = new ObjectId();
+    const bond = {
+      _id: new ObjectId(),
+      couponRate: 5,
+      maturityTurn: 100,
+      matured: false,
+      defaulted: false,
+      holders: [{ characterId: charId, units: 5 }],
+      publicFloat: 20,
+      corporationId: new ObjectId(),
+      currencyCode: "USD" as const,
+    };
+
+    let bondFindCount = 0;
+    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
+      bondFindCount++;
+      if (bondFindCount === 1) return makeCursor([bond]);
+      const cursor = makeCursor([{ _id: bond._id, marketPrice: 1.02 }]);
+      cursor.project = vi.fn().mockReturnValue(cursor);
+      return cursor;
+    });
+    db.collectionMocks["centralBanks"]!.find.mockReturnValue(
+      makeCursor([{ countryId: "US", primeRate: 2.75 }])
+    );
+    db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collection("bondMarketPools");
+
+    const { processBondTurn } = await import("./bondTurn");
+    await processBondTurn(10);
+
+    // perTurnCouponPayment is mocked to 10 per unit: 20 pool units -> 200.
+    expect(db.collectionMocks["bondMarketPools"]!.updateOne).toHaveBeenCalledWith(
+      { _id: "USD" },
+      expect.objectContaining({
+        $inc: expect.objectContaining({ cashLocal: 200, "lifetime.couponsIn": 200 }),
+      }),
+      expect.objectContaining({ upsert: true })
+    );
+  });
+
+  it("redeems pool-held units at face into the pool when a bond matures", async () => {
+    const bond = {
+      _id: new ObjectId(),
+      couponRate: 5,
+      maturityTurn: 10,
+      matured: false,
+      defaulted: false,
+      holders: [],
+      publicFloat: 3,
+      corporationId: new ObjectId(),
+      currencyCode: "USD" as const,
+    };
+
+    let bondFindCount = 0;
+    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
+      bondFindCount++;
+      if (bondFindCount === 1) return makeCursor([bond]);
+      const cursor = makeCursor([{ _id: bond._id, marketPrice: 1 }]);
+      cursor.project = vi.fn().mockReturnValue(cursor);
+      return cursor;
+    });
+    db.collectionMocks["centralBanks"]!.find.mockReturnValue(
+      makeCursor([{ countryId: "US", primeRate: 2.75 }])
+    );
+    db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collection("bondMarketPools");
+
+    const { processBondTurn } = await import("./bondTurn");
+    const result = await processBondTurn(10);
+
+    expect(result.bondsMatured).toBe(1);
+    expect(db.collectionMocks["bondMarketPools"]!.updateOne).toHaveBeenCalledWith(
+      { _id: "USD" },
+      expect.objectContaining({
+        $inc: expect.objectContaining({ cashLocal: 3000, "lifetime.maturitiesIn": 3000 }),
+      }),
+      expect.objectContaining({ upsert: true })
+    );
+  });
+
   it("processes coupon payments to NPP holders (v3)", async () => {
     const nppId = new ObjectId();
     const bond = {

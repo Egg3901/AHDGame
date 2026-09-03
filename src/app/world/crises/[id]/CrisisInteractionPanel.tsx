@@ -3,15 +3,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import type { CrisisDecisionNode, CrisisEffect } from "@/lib/db/types/crisis";
-import { formatCrisisEffectTarget } from "@/lib/crises/effectLabels";
+import { formatCrisisEffectTarget, formatCrisisEffectValue } from "@/lib/crises/effectLabels";
 import { buildDecisionHistory } from "@/lib/crises/decisionHistory";
 import { computeFiscalImpact } from "@/lib/budget/fiscalImpact";
 import { computeAidOutcome } from "@/lib/crises/aidScaling";
 import { AID_MAX_PCT_GDP, AID_DEFAULT_PCT_GDP } from "@/lib/constants/crises";
-import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { getCountryFlagUrlForEra } from "@/lib/constants/flags";
 import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 /** One leader's response to a multi-responder (global) crisis. */
 interface LeaderResponse {
@@ -88,17 +89,9 @@ function campaignLabel(value: string): string {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function formatEffectValue(value: number): string {
-  return Number(value.toFixed(2)).toString();
-}
-
 function roleLabel(role?: string): string | null {
   if (!role) return null;
   return role.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function countryName(countryId: string): string {
-  return COUNTRY_CONFIGS[countryId as keyof typeof COUNTRY_CONFIGS]?.name ?? countryId;
 }
 
 function formatTimeRemaining(deadlineIso: string): string | null {
@@ -173,7 +166,7 @@ function EffectChips({ effects, max = 4 }: { effects: CrisisEffect[]; max?: numb
           </span>
           <span className="font-mono font-semibold">
             {e.value > 0 ? "+" : ""}
-            {formatEffectValue(e.value)}
+            {formatCrisisEffectValue(e.value)}
             {e.targetType === "profitMargin" ? "%" : ""}
           </span>
         </span>
@@ -193,6 +186,7 @@ function EffectChips({ effects, max = 4 }: { effects: CrisisEffect[]; max?: numb
  * tooltip-on-hover chip count so a roomful of responders stays readable.
  */
 function LeaderResponseRow({ r, effects }: { r: LeaderResponse; effects: CrisisEffect[] }) {
+  const countryName = useCountryDisplayName();
   const preset = useActivePreset();
   return (
     <li className="flex items-center gap-2 text-xs">
@@ -202,7 +196,9 @@ function LeaderResponseRow({ r, effects }: { r: LeaderResponse; effects: CrisisE
         alt=""
         className="h-3.5 w-5 shrink-0 rounded-[2px] object-cover ring-1 ring-card-border"
       />
-      <span className="font-medium text-foreground shrink-0">{countryName(r.countryId)}</span>
+      <span className="font-medium text-foreground shrink-0">
+        {countryName(r.countryId as CountryId)}
+      </span>
       {r.responseRole ? (
         <span className="rounded-full border border-card-border px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-muted">
           {roleLabel(r.responseRole)}

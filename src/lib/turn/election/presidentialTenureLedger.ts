@@ -7,7 +7,7 @@
  * O(1) counter on `gameState.presidentialTenureByCountry`, updated each time a
  * presidential election resolves. Read by the economic referendum channel
  * (`economicReferendum.ts`), whose term-fatigue multiplier scales the
- * penalty side, and by `appealWeight`'s `personalStatTenureFatigue`.
+ * penalty side, and by `appealWeight`'s `personalStatTenureRetention`.
  */
 
 import type { Db } from "mongodb";

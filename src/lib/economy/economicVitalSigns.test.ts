@@ -329,6 +329,7 @@ describe("computeEconomicVitalSigns", () => {
           creditOutstanding: 25,
           sovereignBondsOutstanding: 0,
           centralBankBondHoldings: 0,
+          bondPoolCash: 0,
           annualizedM2GrowthPct: 5,
           netMoneyCreatedLifetime: 0,
           createdAt: new Date(),

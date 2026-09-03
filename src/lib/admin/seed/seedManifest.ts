@@ -110,6 +110,12 @@ const REFERENCE: CollectionEntry[] = [
       "SP2 trend history: one doc per country, national aggregate appended every 24 turns by processPoliticalMetricsDynamics, capped at 365 entries. Runtime — wiped on reset, rebuilt by play.",
   },
   {
+    name: "politicalMetricsRegionHistory",
+    category: "runtime",
+    notes:
+      "Per-region trend history (issue #1322): one doc per REGION, that region's own post-drift board appended every 24 turns by processPoliticalMetricsDynamics, capped at 90 entries. One doc per region rather than per country because a country doc holding all 51 US regions at the cap approaches the 16MB BSON ceiling. Runtime — wiped on reset, rebuilt by play; there is no backfill, so the region trend tiles read 'series begins this campaign' until two entries exist.",
+  },
+  {
     name: "politicalCabinetContribution",
     category: "runtime",
     notes:
@@ -249,12 +255,6 @@ const REFERENCE: CollectionEntry[] = [
     notes:
       "Idempotent upsert from bootstrap's seedRegistrationLanes; per-turn registration drift mutates it like stateMetrics.",
   },
-  {
-    name: "indexFunds",
-    category: "reference",
-    notes:
-      "Index-fund definitions re-seeded on every fresh start via idempotent bootstrap migrations (index-fund-foundation/seed). Holder state lives in the runtime indexFund* collections.",
-  },
 ];
 
 // ─── Runtime collections ─────────────────────────────────────────────────────
@@ -266,6 +266,18 @@ const RUNTIME: CollectionEntry[] = [
     category: "runtime",
     notes:
       "Short-lived Discord news delivery claims. Wiped with the game world and rebuilt on demand.",
+  },
+  {
+    name: "bondMarketPools",
+    category: "runtime",
+    notes:
+      "One bond market pool per currency: the cash side of every bond's publicFloat, with lifetime flow counters. Seeded by migration from a share of M2; wiped with the world.",
+  },
+  {
+    name: "equityMarketPools",
+    category: "runtime",
+    notes:
+      "One equity market pool per currency: finite cash backing every corporation's publicFloat, with lifetime flow counters. Seeded from a share of M2; wiped with the world.",
   },
   {
     name: "moneySupplySnapshots",
@@ -331,6 +343,7 @@ const RUNTIME: CollectionEntry[] = [
       "One auditable autonomous foreign-policy intent per country and turn. Shadow-mode rows are wiped on reset and never mutate gameplay state.",
   },
   { name: "playerEndorsements", category: "runtime" },
+  { name: "playerEndorsementLocks", category: "runtime" },
 
   // Bills + legislation runtime
   { name: "bills", category: "runtime" },
@@ -463,6 +476,12 @@ const RUNTIME: CollectionEntry[] = [
 
   // Private banking (1.1)
   { name: "bankLoans", category: "runtime" },
+  {
+    name: "savingsAccounts",
+    category: "runtime",
+    notes:
+      "Authoritative savings accounts, one per owner and currency; legacy character savings fields are projections of these.",
+  },
   { name: "bankCharterHistory", category: "runtime" },
   { name: "depositInsuranceFunds", category: "runtime" },
   {
@@ -774,7 +793,15 @@ const RUNTIME: CollectionEntry[] = [
       "Per-character general profile (spec, level, xp, trained traits). Runtime rather than preserved: the level/xp is earned fighting this world's battles, and a soft reset retires every character while wiping militaryUnits/formations — so a surviving profile would be orphaned progression keyed to a retired character.",
   },
 
-  // Index-fund holder/runtime state (definitions are reference; see indexFunds).
+  // An indexFunds document mixes the seeded definition with world-bound cash,
+  // units, holdings, baskets, and rebalance state. It must be rebuilt with its
+  // position/transaction collections or old corporation ids survive a reset.
+  {
+    name: "indexFunds",
+    category: "runtime",
+    notes:
+      "Dropped with the world and recreated by the forced idempotent fund bootstrap migrations; definitions and runtime accounting cannot safely survive independently.",
+  },
   { name: "indexFundPositions", category: "runtime" },
   { name: "indexFundRedemptionQueue", category: "runtime" },
   { name: "indexFundSnapshots", category: "runtime" },

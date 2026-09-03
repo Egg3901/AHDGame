@@ -158,16 +158,24 @@ export default function SharePurchaseModal({
 
   // ─── Derived prices ───────────────────────────────────────────────────────────
   const floatAvailable = corporation.publicFloat ?? 0;
+  const marketAskPriceLocal = corporation.marketAskPrice ?? corporation.sharePrice;
+  const marketBidPriceLocal = corporation.marketBidPrice ?? corporation.sharePrice;
+  const marketDepthShares = corporation.marketDepthShares ?? Number.MAX_SAFE_INTEGER;
 
-  const sharePriceAnchor = corpCurrencyCode
+  const midPriceAnchor = corpCurrencyCode
     ? toInternalFrom(corporation.sharePrice, corpCurrencyCode)
     : corporation.sharePrice;
+  const askPriceAnchor = corpCurrencyCode
+    ? toInternalFrom(marketAskPriceLocal, corpCurrencyCode)
+    : marketAskPriceLocal;
   const limitPriceInternal = toInternal(limitPrice);
   const limitPriceLocal = corpCurrencyCode
     ? toLocalOf(limitPrice, corpCurrencyCode)
     : limitPriceInternal;
 
-  const buyCost = quantity * (mode === "limit" ? limitPriceInternal : sharePriceAnchor);
+  const buyCost =
+    quantity *
+    (mode === "limit" ? limitPriceInternal : buyAsInvestmentBank ? midPriceAnchor : askPriceAnchor);
 
   // ─── Budget / affordability ───────────────────────────────────────────────────
   const activeBudget =
@@ -190,7 +198,7 @@ export default function SharePurchaseModal({
   const corpAtMarketBuyEstimate =
     buyAsCorp && atMarketSide === "buy"
       ? estimateCorpWalletSpend({
-          requiredAmount: quantity * corporation.sharePrice,
+          requiredAmount: quantity * marketAskPriceLocal,
           availableBalance: myCorporation?.liquidCapital ?? 0,
           fromCurrency: myCorpLiquidCurrency,
           toCurrency: targetTradeCurrency,
@@ -301,17 +309,18 @@ export default function SharePurchaseModal({
       buyAsInvestmentBank ? Number.MAX_SAFE_INTEGER : floatAvailable,
       refineMaxAffordableInteger({
         initialGuess: buyAsInvestmentBank
-          ? Math.floor(myCorpLiquidInternal / sharePriceAnchor)
-          : maxAffordableShares(buyAsCorp, sharePriceAnchor, corporation.sharePrice),
+          ? Math.floor(myCorpLiquidInternal / midPriceAnchor)
+          : maxAffordableShares(buyAsCorp, askPriceAnchor, marketAskPriceLocal),
         upperBound: buyAsInvestmentBank ? Number.MAX_SAFE_INTEGER : floatAvailable,
         canAfford: (candidateShares) => {
           if (candidateShares <= 0) return true;
-          const candidateCost = candidateShares * sharePriceAnchor;
+          const candidateCost =
+            candidateShares * (buyAsInvestmentBank ? midPriceAnchor : askPriceAnchor);
           const candidateCostInHome = homeRate ? candidateCost * homeRate : candidateCost;
           if (buyAsInvestmentBank) return candidateCost <= myCorpLiquidInternal;
           if (buyAsCorp) {
             const estimate = estimateCorpWalletSpend({
-              requiredAmount: candidateShares * corporation.sharePrice,
+              requiredAmount: candidateShares * marketAskPriceLocal,
               availableBalance: myCorporation?.liquidCapital ?? 0,
               fromCurrency: myCorpLiquidCurrency,
               toCurrency: targetTradeCurrency,
@@ -413,15 +422,22 @@ export default function SharePurchaseModal({
   const limitBuyFillsNow =
     mode === "limit" &&
     orderSide === "buy" &&
-    toInternal(limitPrice) >= sharePriceAnchor &&
+    toInternal(limitPrice) >= askPriceAnchor &&
     floatAvailable > 0;
   const limitSellFillsNow =
-    mode === "limit" && orderSide === "sell" && toInternal(limitPrice) <= sharePriceAnchor;
+    mode === "limit" &&
+    orderSide === "sell" &&
+    toInternal(limitPrice) <=
+      (corpCurrencyCode
+        ? toInternalFrom(marketBidPriceLocal, corpCurrencyCode)
+        : marketBidPriceLocal);
 
   const sellAtMarketInsufficient =
     atMarketSide === "sell" &&
     !sellAsInvestmentBank &&
     quantity > (sellAsCorp ? myCorporationShares : myShares);
+  const marketDepthInsufficient =
+    atMarketSide === "sell" && !sellAsInvestmentBank && quantity > marketDepthShares;
 
   const ratesNeededButMissing =
     !exchangeRates &&
@@ -481,7 +497,7 @@ export default function SharePurchaseModal({
     ? `Short by ${formatAmount(
         Math.round(
           toInternalFrom(
-            corpAtMarketBuyEstimate?.requiredFromAmount ?? quantity * corporation.sharePrice,
+            corpAtMarketBuyEstimate?.requiredFromAmount ?? quantity * marketAskPriceLocal,
             myCorpLiquidCurrency
           ) - activeBudget
         )
@@ -535,7 +551,9 @@ export default function SharePurchaseModal({
     mode === "float" &&
     quantity > 0 &&
     !(atMarketSide === "buy" && ratesNeededButMissing) &&
-    (atMarketSide === "buy" ? !floatInsufficient && !floatFundsShort : !sellAtMarketInsufficient);
+    (atMarketSide === "buy"
+      ? !floatInsufficient && !floatFundsShort
+      : !sellAtMarketInsufficient && !marketDepthInsufficient);
 
   const canSubmitLimit =
     mode === "limit" &&
@@ -871,7 +889,11 @@ export default function SharePurchaseModal({
                 myCurrencyBalances={myCurrencyBalances}
                 autoConvertEnabled={autoConvertEnabled}
                 onAutoConvertChange={onAutoConvertChange}
-                corporationSharePrice={corporation.sharePrice}
+                marketBidPrice={marketBidPriceLocal}
+                marketAskPrice={marketAskPriceLocal}
+                referencePrice={corporation.sharePrice}
+                marketDepthShares={marketDepthShares}
+                equityMarketPoolActive={corporation.equityMarketPoolActive === true}
                 personalCashAnchor={personalCashAnchor}
                 myCorpLiquidInternal={myCorpLiquidInternal}
                 myCorpLiquidCurrency={myCorpLiquidCurrency}
@@ -887,6 +909,7 @@ export default function SharePurchaseModal({
                 floatInsufficient={floatInsufficient}
                 floatFundsShort={floatFundsShort}
                 sellAtMarketInsufficient={sellAtMarketInsufficient}
+                marketDepthInsufficient={marketDepthInsufficient}
                 ratesNeededButMissing={ratesNeededButMissing}
                 homeCurrencyCode={homeCurrencyCode}
                 corpCurrency={corpCurrency}

@@ -4,7 +4,7 @@ import { withNoStore } from "@/lib/api/withNoStore";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
 import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
 import {
   COUNTRY_CURRENCY_MAP,
   getCountryIdForCurrency,
@@ -12,9 +12,11 @@ import {
 } from "@/lib/constants/currencies";
 import { currencyCentralBankUrl } from "@/lib/urls";
 import { getBankId } from "@/lib/centralBank/helpers";
-import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
+import { lifecycleStage } from "@/lib/banking/rules/lifecycle";
 import { getEffectiveBankRates } from "@/lib/banking/rates";
-import { getCashReserves } from "@/lib/banking/bankCash";
+import { cashBackedDeposits, getCashReserves } from "@/lib/banking/bankCash";
 import { getLendableHeadroom, getReserveRequirement } from "@/lib/banking/reserves";
 import {
   averageCorpIncomePerTurn,
@@ -23,10 +25,10 @@ import {
 } from "@/lib/banking/lending";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { getGameState } from "@/lib/gameState";
-import { getCountryDisplayName } from "@/lib/constants/countries";
+import { loadCountryNameOverrides } from "@/lib/country/countryIdentity";
 import { corporationPathIdFromDoc } from "@/lib/api/corporations/resolveQuery";
 import type { CentralBank } from "@/lib/db/types/centralBank";
-import type { Corporation, GameConfig } from "@/lib/db/types";
+import type { Corporation } from "@/lib/db/types";
 import type { Character } from "@/lib/db/types";
 import type { BankCharterType } from "@/lib/db/types/bank";
 import { savingsApyPercent } from "@/lib/currency/savingsInterest";
@@ -85,17 +87,8 @@ async function handleGET() {
     if (!auth.ok) return auth.response;
 
     const db = await getDb();
-    const [config, registered, gameState, banks] = await Promise.all([
-      db.collection<GameConfig>("gameConfig").findOne(
-        { _id: "default" },
-        {
-          projection: {
-            privateBankingEnabled: 1,
-            bankPropTradingEnabled: 1,
-            bankContagionEnabled: 1,
-          },
-        }
-      ),
+    const [policy, registered, gameState, banks] = await Promise.all([
+      loadBankingPolicy(db),
       getRegisteredCountryIds(db),
       getGameState(db),
       db
@@ -112,7 +105,13 @@ async function handleGET() {
         .toArray(),
     ]);
 
-    const privateEnabled = await isPrivateBankingEnabled(config);
+    // Runtime renames, so the hub does not list a country under the name of a
+    // state that has since been absorbed.
+    const nameOverrides = await loadCountryNameOverrides(db);
+    const countryName = (id: CountryId) =>
+      nameOverrides[id] ?? getCountryDisplayName(id, gameState?.preset);
+
+    const privateEnabled = policy.privateBanking;
     const character = auth.user.character as Character | null | undefined;
     const primaryCountryId = (character?.countryId ?? "US") as CountryId;
     const primaryCurrency = COUNTRY_CURRENCY_MAP[primaryCountryId] ?? "USD";
@@ -148,7 +147,7 @@ async function handleGET() {
         currency,
         bankName: bank?.name ?? configRow.centralBank.name,
         countryId: anchor,
-        countryName: getCountryDisplayName(anchor, gameState?.preset),
+        countryName: countryName(anchor),
         href: currencyCentralBankUrl(currency),
         primeRate: prime,
         savingsApyPercent: savingsApyPercent(prime, inflation),
@@ -212,17 +211,22 @@ async function handleGET() {
             sequentialId: corp.sequentialId ?? null,
             name: corp.name,
             countryId,
-            countryName: getCountryDisplayName(countryId, gameState?.preset),
+            countryName: countryName(countryId),
             currency: charter.currency,
             operatorType: corp.ceoType === "npp" ? "npp" : "player",
             charterType: charter.type,
+            stage: lifecycleStage(charter),
             depositRatePercent: rates.depositRatePercent,
             lendingRatePercent: rates.lendingRatePercent,
             warningBand: charter.warningBand ?? null,
             confidence: typeof charter.confidence === "number" ? charter.confidence : null,
-            totalDeposits: charter.totalDeposits ?? 0,
+            totalDeposits: savingsReadsAuthoritative(policy, charter.currency)
+              ? cashBackedDeposits(charter, { playerDepositsAreLiabilities: true })
+              : (charter.totalDeposits ?? 0),
             cashReserves: getCashReserves(charter),
-            lendableHeadroom: getLendableHeadroom(charter, reserveRatio),
+            lendableHeadroom: getLendableHeadroom(charter, reserveRatio, {
+              playerDepositsAreLiabilities: savingsReadsAuthoritative(policy, charter.currency),
+            }),
             href: `/corporation/${corporationPathIdFromDoc({
               _id: corp._id as ObjectId,
               sequentialId: corp.sequentialId,

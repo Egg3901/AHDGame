@@ -197,11 +197,6 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
       sectorHostCurrency,
       sectorHostFxRate
     );
-    const growthCostAnchor = readCorpEconomicAnchor(
-      sector.currentGrowthCost ?? 0,
-      sectorHostCurrency,
-      sectorHostFxRate
-    );
     const newRevenueLocal = Math.round(sector.revenue ?? 0);
     const newGrowthCostLocal = Math.round(sector.currentGrowthCost ?? 0);
 

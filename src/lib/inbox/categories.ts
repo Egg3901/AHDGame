@@ -15,6 +15,10 @@ export const PLAYER_FACING_CATEGORIES: InboxCategory[] = [
 // Total map — the Record<NotificationType, …> type forces every type to be present;
 // adding a new NotificationType without a category here is a compile error.
 export const CATEGORY_OF: Record<NotificationType, InboxCategory> = {
+  // Ask service (quality credits and watch alerts)
+  ask_refund: "system",
+  ask_correction: "system",
+  ask_watch: "system",
   // crisis
   crisis: "crisis",
   player_attack: "crisis",
@@ -95,6 +99,7 @@ export const CATEGORY_OF: Record<NotificationType, InboxCategory> = {
   wire_received: "treasury",
   corp_credit_rating_change: "treasury",
   corp_bond_due_soon: "treasury",
+  cb_auction_shortfall: "treasury",
   corp_bond_repaid: "treasury",
   corp_bond_auto_refinanced: "treasury",
   corp_bond_auto_restructured: "treasury",
@@ -151,6 +156,7 @@ export const CATEGORY_OF: Record<NotificationType, InboxCategory> = {
   player_event: "system",
   player_event_resolved: "system",
   extraction_capacity_bound: "treasury",
+  corp_supply_agreement_damages: "treasury",
   world_event_offered: "system",
   world_event_resolved: "system",
 };

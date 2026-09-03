@@ -14,7 +14,8 @@ import { getGameStateCollection } from "@/lib/db/collections/gameState";
 import { getConflict, getConflictsCollection } from "@/lib/db/collections/conflicts";
 import type { FederalBudget } from "@/lib/db/types";
 import { getCountryState } from "@/lib/countryState";
-import { maxIndemnityForGdp } from "@/lib/military/peaceOffer";
+import { maxIndemnityForGdp, loadPartySequentialIds } from "@/lib/military/peaceOffer";
+import { loadTermSettlement } from "@/lib/settlement/queries/termSettlement";
 import { validatePeaceTerm, type PeaceTerm } from "@/lib/military/peaceTerm";
 import { applyPeaceTerm } from "@/lib/military/applyPeaceTerm";
 import { resolveConflict } from "@/lib/military/resolveConflict";
@@ -35,11 +36,17 @@ const bodySchema = z.object({
     z.object({
       kind: z.literal("regime_change"),
       targetSystem: z.enum(["presidential", "parliamentaryRepublic", "onePartyState"]),
+      // Which party takes power. Only meaningful for `onePartyState`, which
+      // `validatePeaceTerm` enforces — the schema accepts it either way so the
+      // contradiction is refused with a reason rather than a shape error.
+      rulingPartyId: z.number().int().positive().optional(),
     }),
     z.object({
       kind: z.literal("demilitarisation"),
       turns: z.number().int().positive(),
     }),
+    // Carries no fields: the crisis names the two Germanies.
+    z.object({ kind: z.literal("reunification") }),
   ]),
 });
 
@@ -122,12 +129,25 @@ export async function POST(
     }
 
     const targetState = await getCountryState(db, target);
+    // Loaded only for the term that can name a party, so an indemnity or a
+    // demilitarisation does not pay for a query it never reads.
+    const targetPartyIds =
+      term.kind === "regime_change" && term.rulingPartyId != null
+        ? await loadPartySequentialIds(db, target)
+        : null;
+    // Loaded only for the term that settles a crisis. Null REFUSES a reunification
+    // rather than skipping the check, unlike the two above it.
+    const settlement =
+      term.kind === "reunification" ? await loadTermSettlement(db, conflict._id) : null;
+
     const check = validatePeaceTerm(term, {
       from: countryId,
       to: target,
       target,
       targetSystem: targetState.governmentType,
       maxIndemnity,
+      targetPartyIds,
+      settlement,
     });
     if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
 

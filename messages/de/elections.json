@@ -94,6 +94,7 @@
       "driversGroup": "Überzeugungsfaktoren (Punkte des umstimmbaren Anteils)",
       "coattailsGroup": "Coattail-Effekte (direkte % des Stimmenanteils)",
       "pts": "Pkt.",
+      "moneyHint": "Vergleicht die jüngsten Kampagnenausgaben: Diese Runde zählt voll, frühere Ausgaben verblassen über einige untätige Runden. Gesparte Kassen zählen nicht.",
       "ceiling": "Grenze in diesem Zyklus: Höchstens {opponentSlice}% der Stimmen von {opponent} können zu {focus} wechseln, und {focusSlice}% der Stimmen von {focus} können abwandern. Die Registrierungsneigung bestimmt die Ausgangsverteilung und wie schwer eine Partei zu bewegen ist, nicht den Endanteil. Diese Faktoren ergeben zusammen {net} Pkt. dieses beweglichen Anteils."
     },
     "nationalMood": {

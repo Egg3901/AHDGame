@@ -23,20 +23,22 @@ import type {
   GameConfig,
   IndexFund,
   IndexFundHolding,
+  IndexFundRedemptionQueueEntry,
   IndexFundTargetConstituent,
 } from "@/lib/db/types";
 import { isIndexFundsEnabled, INDEX_FUNDS_DISABLED_MESSAGE } from "@/lib/indexFunds/featureFlag";
 import {
   getFundById,
   listActiveFunds,
+  listServiceableFunds,
   updateFundNav,
   updateFundConstituents,
   updateFundHoldings,
   listPendingRedemptions,
-  updateRedemptionEntry,
   insertFundTransaction,
   insertFundSnapshot,
   setFundStatus,
+  FUND_REDEMPTION_QUEUE_COLLECTION,
 } from "@/lib/indexFunds/fundQueries";
 import {
   INDEX_FUND_INITIAL_NAV,
@@ -63,6 +65,7 @@ import {
 import { computeHoldingsValueAnchor } from "@/lib/indexFunds/fundAllocation";
 import { deployBondReserveFromCash } from "@/lib/indexFunds/fundBondReserve";
 import { sumFundBondHoldingsValueAnchor } from "@/lib/bonds/fundBondHoldings";
+import { sellFundBondHoldingsForCash } from "@/lib/bonds/sellFundBondUnits";
 import { getAllFundDefinitions } from "@/lib/indexFunds/fundDefinitions";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { buildPersonalBalanceInc, loadCharacterFxRate } from "@/lib/currency/characterFunds";
@@ -102,6 +105,7 @@ import {
   loadQueuedRedemptionLiabilityByFundId,
 } from "@/lib/indexFunds/fundValuation";
 import { refreshEquityLiquidityFacility } from "@/lib/indexFunds/equityLiquidityFacility";
+import { loadEquityQuote } from "@/lib/equities/marketPool";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -321,11 +325,16 @@ export async function executeFundShareBuy(
   fund: IndexFund,
   corp: EligibleCorpRow,
   shares: number,
-  sharePriceAnchor: number,
+  referencePriceAnchor: number,
   currentTurn: number
 ): Promise<{ ok: boolean; sharesBought: number; anchorSpent: number }> {
-  const executionPrice = resolveShareExecutionPrice(corp);
-  const actualCost = shares * sharePriceAnchor;
+  const quote = await loadEquityQuote(db, corp);
+  const executionPrice = quote.askPriceLocal;
+  // The caller already loaded the fund's anchor-currency reference price in a
+  // batch. Preserve that FX conversion and apply only the market-maker spread.
+  const executionPriceAnchor =
+    quote.mid > 0 ? referencePriceAnchor * (executionPrice / quote.mid) : referencePriceAnchor;
+  const actualCost = shares * executionPriceAnchor;
   const actualIssuerCreditLocal = shares * executionPrice;
   const orderFlowEligible = isOrderFlowPriceEligible(corp.publicFloat ?? 0, corp.totalShares);
 
@@ -367,7 +376,7 @@ export async function executeFundShareBuy(
       debitedFund.holdings ?? [],
       corp._id,
       shares,
-      sharePriceAnchor
+      executionPriceAnchor
     );
     await updateFundHoldings(db, fund._id, updatedHoldings, sessionOpts);
 
@@ -378,7 +387,7 @@ export async function executeFundShareBuy(
         kind: "public_float_buy",
         corporationId: corp._id,
         shares,
-        navAnchor: sharePriceAnchor,
+        navAnchor: executionPriceAnchor,
         amountAnchor: actualCost,
         createdAt: new Date(),
       },
@@ -402,7 +411,7 @@ export async function executeFundShareBuy(
     kind: "market_buy",
     turn: currentTurn,
     shares,
-    pricePerShareAnchor: sharePriceAnchor,
+    pricePerShareAnchor: executionPriceAnchor,
     from: null,
     to: { name: `${fund.name} (index fund)` },
     corpCurrencyCode: resolveCorpLiquidCurrencyCode(corp) ?? undefined,
@@ -700,7 +709,7 @@ export async function rebalanceConstituents(
 
 // ── Pass 3c: Process queued redemptions ───────────────────────────────
 
-async function processQueuedRedemptions(
+export async function processQueuedRedemptions(
   db: Db,
   fund: IndexFund,
   forexEnabled: boolean,
@@ -729,10 +738,47 @@ async function processQueuedRedemptions(
   let fundState = fund;
   let availableCash = fund.cashAnchor;
 
-  for (const entry of pending) {
+  for (const pendingEntry of pending) {
+    // Claim before any fund debit or holder credit. If a later write fails, a
+    // processing row is quarantined for manual reconciliation instead of being
+    // paid a second time on the next turn. Automatic replay is unsafe because a
+    // crash can occur on either side of the holder credit.
+    const entry = await db
+      .collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION)
+      .findOneAndUpdate(
+        {
+          _id: pendingEntry._id,
+          status: pendingEntry.status,
+          units: pendingEntry.units,
+          paidAmountAnchor: pendingEntry.paidAmountAnchor,
+        },
+        { $set: { status: "processing", processingStartedAt: new Date(), updatedAt: new Date() } },
+        { returnDocument: "before" }
+      );
+    if (!entry) continue;
+    const restoreQueueClaim = async () => {
+      await db
+        .collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION)
+        .updateOne(
+          { _id: entry._id, status: "processing" },
+          {
+            $set: { status: entry.status, updatedAt: new Date() },
+            $unset: { processingStartedAt: "" },
+          }
+        );
+    };
+
     const unitsRemaining = remainingRedemptionUnits(entry);
     if (unitsRemaining <= 0) {
-      await updateRedemptionEntry(db, entry._id, { status: "paid" });
+      await db
+        .collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION)
+        .updateOne(
+          { _id: entry._id, status: "processing" },
+          {
+            $set: { status: "paid", updatedAt: new Date() },
+            $unset: { processingStartedAt: "" },
+          }
+        );
       continue;
     }
 
@@ -748,8 +794,25 @@ async function processQueuedRedemptions(
       fundState = (await getFundById(db, fund._id)) ?? fundState;
       availableCash = fundState.cashAnchor;
     }
+    // Bonds are the next line of liquidity: sold to the market pool at its
+    // bid, as far as the pool can pay. The only line for a bond fund.
+    if (availableCash < entryObligation) {
+      const bondSale = await sellFundBondHoldingsForCash(
+        db,
+        fundState,
+        entryObligation - availableCash,
+        new Date()
+      );
+      if (bondSale.proceedsAnchor > 0) {
+        fundState = (await getFundById(db, fund._id)) ?? fundState;
+        availableCash = fundState.cashAnchor;
+      }
+    }
 
-    if (availableCash <= 0) break;
+    if (availableCash <= 0) {
+      await restoreQueueClaim();
+      break;
+    }
 
     const quote = quoteCashOnlyRedemption({
       quotedNav: redemptionNav,
@@ -757,7 +820,10 @@ async function processQueuedRedemptions(
       cashAnchor: availableCash,
     });
 
-    if (quote.redeemableUnits <= 0) break;
+    if (quote.redeemableUnits <= 0) {
+      await restoreQueueClaim();
+      break;
+    }
 
     const paidAmount = quote.paidAmountAnchor;
     // Native-currency equivalent for personal wallet credits (₳ × blended rate).
@@ -784,7 +850,10 @@ async function processQueuedRedemptions(
       $inc: debitInc,
       $set: { updatedAt: new Date() },
     });
-    if (debitResult.matchedCount === 0) break;
+    if (debitResult.matchedCount === 0) {
+      await restoreQueueClaim();
+      break;
+    }
     availableCash -= paidAmount;
 
     if (entry.characterId) {
@@ -794,9 +863,16 @@ async function processQueuedRedemptions(
         .updateOne({ _id: entry.characterId }, { $inc: inc, $set: { updatedAt: new Date() } });
       if (creditResult.matchedCount === 0) {
         // Character gone — refund the fund cash and skip this entry
-        await db
-          .collection<IndexFund>("indexFunds")
-          .updateOne({ _id: fund._id }, { $inc: { cashAnchor: paidAmount } });
+        await db.collection<IndexFund>("indexFunds").updateOne(
+          { _id: fund._id },
+          {
+            $inc: {
+              cashAnchor: paidAmount,
+              ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
+            },
+          }
+        );
+        await restoreQueueClaim();
         continue;
       }
     } else if (entry.imperialCharacterId) {
@@ -808,9 +884,16 @@ async function processQueuedRedemptions(
           { $inc: inc, $set: { updatedAt: new Date() } }
         );
       if (creditResult.matchedCount === 0) {
-        await db
-          .collection<IndexFund>("indexFunds")
-          .updateOne({ _id: fund._id }, { $inc: { cashAnchor: paidAmount } });
+        await db.collection<IndexFund>("indexFunds").updateOne(
+          { _id: fund._id },
+          {
+            $inc: {
+              cashAnchor: paidAmount,
+              ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
+            },
+          }
+        );
+        await restoreQueueClaim();
         continue;
       }
     } else if (entry.nppId) {
@@ -822,20 +905,46 @@ async function processQueuedRedemptions(
         }
       );
       if (creditResult.matchedCount === 0) {
-        await db
-          .collection<IndexFund>("indexFunds")
-          .updateOne({ _id: fund._id }, { $inc: { cashAnchor: paidAmount } });
+        await db.collection<IndexFund>("indexFunds").updateOne(
+          { _id: fund._id },
+          {
+            $inc: {
+              cashAnchor: paidAmount,
+              ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
+            },
+          }
+        );
+        await restoreQueueClaim();
         continue;
       }
+    } else {
+      await db.collection<IndexFund>("indexFunds").updateOne(
+        { _id: fund._id },
+        {
+          $inc: {
+            cashAnchor: paidAmount,
+            ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
+          },
+        }
+      );
+      await restoreQueueClaim();
+      continue;
     }
 
     const remainingAfterPay = quote.queuedUnits;
-    await updateRedemptionEntry(db, entry._id, {
-      status: redemptionEntryStatusAfterPayout(remainingAfterPay),
-      paidAmountAnchor: (entry.paidAmountAnchor ?? 0) + paidAmount,
-      units: remainingAfterPay,
-      requestedAmountAnchor: remainingAfterPay * redemptionNav,
-    });
+    await db.collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION).updateOne(
+      { _id: entry._id, status: "processing" },
+      {
+        $set: {
+          status: redemptionEntryStatusAfterPayout(remainingAfterPay),
+          paidAmountAnchor: (entry.paidAmountAnchor ?? 0) + paidAmount,
+          units: remainingAfterPay,
+          requestedAmountAnchor: remainingAfterPay * redemptionNav,
+          updatedAt: new Date(),
+        },
+        $unset: { processingStartedAt: "" },
+      }
+    );
 
     await insertFundTransaction(db, {
       fundId: fund._id,
@@ -963,7 +1072,8 @@ export async function runIndexFundCron(
       }),
     ])
   );
-  let funds = await listActiveFunds(db);
+  let funds = await listServiceableFunds(db);
+  const redemptionServiceFundIds = funds.map((fund) => fund._id);
   // Load valuation side ledgers once before Pass 1 so NAV includes committed
   // bid escrow and subtracts queued redemption payables.
   const fundIds = funds.map((fund) => fund._id);
@@ -1038,6 +1148,8 @@ export async function runIndexFundCron(
         result.errors.push(
           `Fund ${workingFund.slug} auto-paused: backing ratio ${backing.backingRatio.toFixed(4)}`
         );
+      } else if (workingFund.status === "paused" && workingFund.pauseReason === "backing_ratio") {
+        await setFundStatus(db, workingFund._id, "active");
       }
 
       result.navUpdates++;
@@ -1050,11 +1162,18 @@ export async function runIndexFundCron(
         refreshedFund,
         exchangeRates
       );
-      const bondDeploy = await deployBondReserveFromCash(db, refreshedFund, bondPrincipalAfterNav, {
-        liquidityTargetEnabled: bondLiquidityEnabled,
-      });
-      if (bondDeploy.deployedAnchor > 0) {
-        result.bondDeployments++;
+      if (queuedRedemptionLiabilityAnchor <= 0) {
+        const bondDeploy = await deployBondReserveFromCash(
+          db,
+          refreshedFund,
+          bondPrincipalAfterNav,
+          {
+            liquidityTargetEnabled: bondLiquidityEnabled,
+          }
+        );
+        if (bondDeploy.deployedAnchor > 0) {
+          result.bondDeployments++;
+        }
       }
 
       navReadyFundIds.push(workingFund._id);
@@ -1068,8 +1187,10 @@ export async function runIndexFundCron(
   mark("pass1-nav");
   // Pass 2: recompute target weights before float absorption so buys use the
   // current basket. Runs every financial day (24 turns) or on first init.
-  funds = (await listActiveFunds(db)).filter((fund) =>
-    navReadyFundIds.some((id) => id.toString() === fund._id.toString())
+  funds = (await listActiveFunds(db)).filter(
+    (fund) =>
+      navReadyFundIds.some((id) => id.toString() === fund._id.toString()) &&
+      !queuedLiabilityByFundId.has(fund._id.toString())
   );
   const rebalancedFundIds = new Set<string>();
 
@@ -1085,6 +1206,8 @@ export async function runIndexFundCron(
   const waivedIds = await loadActiveWaiverIds(db, currentTurn);
 
   for (const fund of funds) {
+    // Bond funds hold no equities: nothing to select or rebalance here.
+    if (fund.kind === "bond") continue;
     if (!shouldRebalanceIndexFundConstituents(currentTurn, fund.targetConstituents.length)) {
       continue;
     }
@@ -1112,8 +1235,10 @@ export async function runIndexFundCron(
   // Pass 3: two-sided rebalance toward target weights (sell overweight, buy underweight).
   // This only runs after target weights are recomputed; otherwise funds can churn
   // the same holdings every turn and repeatedly hit short-window order flow.
-  funds = (await listActiveFunds(db)).filter((fund) =>
-    navReadyFundIds.some((id) => id.toString() === fund._id.toString())
+  funds = (await listActiveFunds(db)).filter(
+    (fund) =>
+      navReadyFundIds.some((id) => id.toString() === fund._id.toString()) &&
+      !queuedLiabilityByFundId.has(fund._id.toString())
   );
   const capRemainingByCorpId = new Map(absorptionRemainingByCorpId); // fresh per-pass copy
   if (rebalancedFundIds.size > 0) {
@@ -1142,8 +1267,11 @@ export async function runIndexFundCron(
   // funds can sell directly to underweight fund buyers.
   if (shouldRunCrossFundRebalancing(currentTurn)) {
     try {
-      const rebalFunds = (await listActiveFunds(db)).filter((fund) =>
-        navReadyFundIds.some((id) => id.toString() === fund._id.toString())
+      const rebalFunds = (await listActiveFunds(db)).filter(
+        (fund) =>
+          fund.kind !== "bond" &&
+          navReadyFundIds.some((id) => id.toString() === fund._id.toString()) &&
+          !queuedLiabilityByFundId.has(fund._id.toString())
       );
       const bondPrincipalByFundId = new Map<string, number>();
       for (const fund of rebalFunds) {
@@ -1177,9 +1305,9 @@ export async function runIndexFundCron(
 
   mark("pass3b-crossFund");
   // Pass 3c: pay redemptions and snapshot after cross-fund market settles.
-  funds = (await listActiveFunds(db)).filter((fund) =>
-    navReadyFundIds.some((id) => id.toString() === fund._id.toString())
-  );
+  funds = (
+    await Promise.all(redemptionServiceFundIds.map((fundId) => getFundById(db, fundId)))
+  ).filter((fund): fund is IndexFund => fund !== null);
   for (const fund of funds) {
     try {
       const refreshedFund = (await getFundById(db, fund._id)) ?? fund;
@@ -1271,7 +1399,9 @@ export async function runIndexFundCron(
   // mutation has settled. Disabling the gate cancels and refunds prior bids in
   // the same pass, providing an immediate rollback path.
   try {
-    const quoteFunds = await listActiveFunds(db);
+    const quoteFunds = (await listActiveFunds(db)).filter(
+      (fund) => !queuedLiabilityByFundId.has(fund._id.toString())
+    );
     const fxByCurrency = new Map<CurrencyCode, number>(
       Object.entries(exchangeRates)
         .filter(([, rate]) => typeof rate === "number" && rate > 0)
@@ -1290,6 +1420,8 @@ export async function runIndexFundCron(
           referencePriceAnchor,
           totalShares: corp.totalShares,
           fxRate,
+          type: corp.type,
+          secondaryType: corp.secondaryType,
           corporation: corp,
         },
       ];

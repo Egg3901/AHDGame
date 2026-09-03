@@ -64,6 +64,7 @@ export const NOTIFICATION_TYPES = [
   "corp_bond_repaid",
   "corp_bond_auto_refinanced",
   "corp_bond_auto_restructured",
+  "cb_auction_shortfall",
   "corp_inactive_ceo_share_release_warning",
   "wire_received",
   "coalition_invite_received",
@@ -136,11 +137,18 @@ export const NOTIFICATION_TYPES = [
   "merger_review_decided",
   "merger_remedy_overdue",
   "transfer_pricing_assessed",
+  /** A supply agreement charged its supplier shortfall damages this turn. */
+  "corp_supply_agreement_damages",
   "bank_supervision_breach",
   "bank_supervision_cleared",
   // Defence procurement: a government offering one of this corp's plants an order.
   "defence_contract_offered",
   "defence_contract_cancelled",
+  // Ask (ask.lakesidegames.net): quality credits and watch alerts pushed by
+  // the Ask service through /api/webhooks/ask-notification.
+  "ask_refund",
+  "ask_correction",
+  "ask_watch",
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

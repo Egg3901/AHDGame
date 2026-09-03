@@ -58,11 +58,71 @@ describe("rescopeRegionToCountry", () => {
       { collection: "stateRegistrationPool", key: "compositeCountryState" },
     ]);
     const mocks = db.collectionMocks["stateRegistrationPool"];
-    expect(mocks.deleteOne).toHaveBeenCalledWith({ _id: "UK_NIR" });
-    const inserted = mocks.insertOne.mock.calls[0][0];
+    const inserted = mocks.replaceOne.mock.calls[0][1];
     expect(inserted._id).toBe("IE_NIR");
     expect(inserted.countryId).toBe("IE");
     expect(inserted.independent).toBe(500); // payload preserved
+    // The old key is released only after the new one is secured, so a crash
+    // between the two leaves a re-keyed row the next attempt can absorb.
+    expect(mocks.deleteOne).toHaveBeenCalledWith({ _id: "UK_NIR" });
+    expect(mocks.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("writes the new key BEFORE dropping the old one", async () => {
+    // Order is the difference between a failure that can simply be re-run and one
+    // that has already destroyed the row it was moving. The comment above says the
+    // old key is released second; pin it, because nothing else would catch a
+    // reordering that only bites on a crash between the two writes.
+    db.collection("stateRegistrationPool").findOne.mockResolvedValue({
+      _id: "UK_NIR",
+      countryId: "UK",
+      independent: 500,
+    });
+    const order: string[] = [];
+    db.collection("stateRegistrationPool").replaceOne.mockImplementation(async () => {
+      order.push("write");
+      return { acknowledged: true };
+    });
+    db.collection("stateRegistrationPool").deleteOne.mockImplementation(async () => {
+      order.push("delete");
+      return { deletedCount: 1 };
+    });
+    await rescopeRegionToCountry(db as unknown as Db, "NIR", "UK", "IE", [
+      { collection: "stateRegistrationPool", key: "compositeCountryState" },
+    ]);
+    expect(order).toEqual(["write", "delete"]);
+  });
+
+  it("absorbs a row already living under the new key instead of colliding on it", async () => {
+    // Ticket #1247: a merge that crashed mid-region left `DE_MV` re-keyed
+    // beside the source row `DD_MV`. A retry must replace the survivor, not
+    // die on the unique `_id`: that E11000 failed the impose request and, the
+    // crisis being one-shot AT THE TIME, left Germany half-merged for good.
+    //
+    // Actuation is resumable now -- it holds a lease and stamps completion only
+    // once the consequences land -- so a collision here no longer strands the
+    // world. It still must not happen: the retry that resumes the merge is the
+    // very thing that meets the re-keyed row.
+    db.collection("stateRegistrationPool").findOne.mockResolvedValue({
+      _id: "DD_MV",
+      stateId: "MV",
+      countryId: "DD",
+      independent: 900,
+    });
+    db.collection("stateRegistrationPool").replaceOne.mockResolvedValue({
+      matchedCount: 1,
+      upsertedCount: 0,
+    });
+    await rescopeRegionToCountry(db as unknown as Db, "MV", "DD", "DE", [
+      { collection: "stateRegistrationPool", key: "compositeCountryState" },
+    ]);
+    const mocks = db.collectionMocks["stateRegistrationPool"];
+    // Replace targeted the existing row, upsert guarantees it exists.
+    expect(mocks.replaceOne.mock.calls[0][0]).toEqual({ _id: "DE_MV" });
+    expect(mocks.replaceOne.mock.calls[0][2]).toMatchObject({ upsert: true });
+    expect(mocks.replaceOne.mock.calls[0][1]._id).toBe("DE_MV");
+    expect(mocks.replaceOne.mock.calls[0][1].countryId).toBe("DE");
+    expect(mocks.insertOne).not.toHaveBeenCalled();
   });
 
   it("returns a matched-count report per collection", async () => {
@@ -137,5 +197,37 @@ describe("rescopeRegionToCountry", () => {
     // Slate candidates are keyed by residency, not by the slate's region.
     expect(by("slateCandidates")).toBe("homeStateField");
     expect(by("prospectingSurveys")).toBe("stateIdField");
+  });
+  it("drops the political board's structural residuals when a region changes country", async () => {
+    // `residuals` is the gap between a region's scores and what its country's
+    // law book explains, fixed once at reset. It is therefore calibrated to the
+    // OLD country's catalogue, and the dynamics phase only re-derives it when
+    // the field is absent -- so carrying it across the border credits the region
+    // with the new country's law points AND the old country's leftover, both at
+    // once. Dropping it here hands the next turn's lazy self-heal the job of
+    // re-deriving it against the catalogue the region now lives under.
+    await rescopeRegionToCountry(db as unknown as Db, "BY", "DE", "DD", [
+      { collection: "politicalMetrics", key: "idIsState", unsetOnRescope: ["residuals"] },
+    ]);
+    const call = db.collectionMocks["politicalMetrics"].updateMany.mock.calls[0];
+    expect(call[0]).toEqual({ _id: "BY" });
+    expect(call[1].$set.countryId).toBe("DD");
+    expect(call[1].$unset).toEqual({ residuals: "" });
+  });
+
+  it("leaves $unset off a collection that declares no dropped fields", async () => {
+    await rescopeRegionToCountry(db as unknown as Db, "NIR", "UK", "IE", [
+      { collection: "macroMetrics", key: "idIsState" },
+    ]);
+    const call = db.collectionMocks["macroMetrics"].updateMany.mock.calls[0];
+    expect(call[1].$unset).toBeUndefined();
+  });
+
+  it("the shipped table drops residuals on politicalMetrics and on nothing else", () => {
+    // A second entry here would silently discard live state on every transfer,
+    // so the list is pinned rather than merely spot-checked.
+    const dropping = REGION_SCOPED_COLLECTIONS.filter((s) => s.unsetOnRescope?.length);
+    expect(dropping.map((s) => s.collection)).toEqual(["politicalMetrics"]);
+    expect(dropping[0].unsetOnRescope).toEqual(["residuals"]);
   });
 });

@@ -82,6 +82,32 @@ export interface GameConfig {
   maintenanceEnabledBy?: string;
   /** When maintenance mode was last toggled on. */
   maintenanceEnabledAt?: string;
+
+  /**
+   * Site-wide poll/survey banner, shown under the navbar to every visitor
+   * (signed in or not) while enabled, on every page that renders site chrome.
+   * Purely an announcement surface: it reads nothing from game state and
+   * drives nothing. Absent means off, so existing worlds render exactly as
+   * before.
+   *
+   * Never read `pollBannerUrl` straight out of this document — resolve the
+   * whole group through `resolvePollBannerSnapshot` (`@/lib/pollBanner`),
+   * which withholds the link while the toggle is off and refuses any scheme
+   * other than http/https.
+   */
+  pollBannerEnabled?: boolean;
+  /** Admin-authored sentence that precedes the link. */
+  pollBannerMessage?: string;
+  /** Admin-authored anchor text, e.g. "Click Here". */
+  pollBannerLinkLabel?: string;
+  /** Absolute http(s) destination for the link. */
+  pollBannerUrl?: string;
+  /** Colour treatment: "info" for routine, "warning" for urgent. */
+  pollBannerTone?: "info" | "warning";
+  /** Username of the admin who last saved the banner. */
+  pollBannerUpdatedBy?: string;
+  /** ISO 8601 timestamp of the last save. */
+  pollBannerUpdatedAt?: string;
   /** Enable/disable NPP economic system (fund generation + action processing) */
   nppEconomyEnabled?: boolean;
   /**
@@ -156,6 +182,20 @@ export interface GameConfig {
   bankPropTradingEnabled?: boolean;
   /** Kill switch: bank-failure contagion cascade. Default on when banking is on. */
   bankContagionEnabled?: boolean;
+  /**
+   * Savings account rollout. `off`: legacy character fields only. `shadow`:
+   * accounts are materialized from the legacy fields every turn and compared,
+   * nothing reads them. `authoritative`: commands write the accounts and the
+   * legacy fields are projections; reads follow `savingsAccountsReadCurrencies`.
+   * Absent means off.
+   */
+  savingsAccountsMode?: "off" | "shadow" | "authoritative";
+  /**
+   * Currencies whose balance-sheet and API reads come from the accounts (real
+   * player-deposit liabilities) rather than the legacy pointer model. Rolled
+   * out one cohort at a time; absent means none.
+   */
+  savingsAccountsReadCurrencies?: string[];
   /** Per-currency M1/M2 snapshots, monetary transmission, and central-bank operations. */
   moneySupplyEnabled?: boolean;
   /**
@@ -400,11 +440,9 @@ export interface GameConfig {
    * budget derived from GDP and modulated by household signals (medianIncome,
    * unemploymentRate, consumerConfidence) buys a consumer basket with a bounded
    * price-elasticity response, and SUPERSEDES retail's SECTOR_DEMAND input proxy
-   * (those legs are suppressed in `computeRawSupplyDemand`). The retail-commodity
-   * output self-loop is kept — household population demand cannot replace
-   * plants-scale physical retail supply (ticket #1026). DEFAULT OFF and
-   * UNCALIBRATED — same rollout posture as `demographicsDemandEnabled`; tune
-   * HOUSEHOLD_CONSUMPTION_PER_CAPITA on the sandbox before enabling. Supersedes
+   * (those legs are suppressed in `computeRawSupplyDemand`). Retail's legacy
+   * supply-derived output demand is removed through the bounded transition
+   * below. DEFAULT OFF and UNCALIBRATED. Supersedes
    * `demographicsDemandEnabled` (do not enable both).
    */
   householdConsumptionEnabled?: boolean;
@@ -415,6 +453,14 @@ export interface GameConfig {
    * `householdConsumptionEnabled` is true.
    */
   householdConsumptionPerCapita?: number;
+  /**
+   * Turn when this world began removing Retail's legacy supply-derived demand.
+   * Absent preserves legacy behavior. Once started, the remaining self-loop
+   * share declines linearly and stays at zero after the configured duration.
+   */
+  retailDemandTransitionStartTurn?: number;
+  /** Duration of the Retail demand unwind. Defaults to 192 turns. */
+  retailDemandTransitionTurns?: number;
   /**
    * Whether NPP-run corporations are individually attackable in the state
    * economy view. DEFAULT ON (only an explicit `false` disables). When on, NPP

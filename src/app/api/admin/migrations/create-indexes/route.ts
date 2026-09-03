@@ -7,6 +7,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";
 import type { CreateIndexesOptions, IndexSpecification } from "mongodb";
+import { ALL_WRITE_GUARD_INDEXES } from "@/lib/admin/seed/indexes/writeGuardSpecs";
 
 const MIGRATION_ID = "create-indexes-v3";
 
@@ -39,127 +40,9 @@ export const INDEX_DEFINITIONS: [string, IndexSpecification, CreateIndexesOption
   ["nationalPartyElections", { status: 1, partyId: 1 }],
   ["wealthListHistory", { exchange: 1, turn: 1 }],
   ["imperialCharacters", { userId: 1 }],
-  [
-    "electionCandidates",
-    { characterId: 1 },
-    {
-      unique: true,
-      partialFilterExpression: { status: "active" },
-      name: "unique_active_election_candidate_per_character",
-    },
-  ],
-  [
-    "statePartyCandidates",
-    { stateId: 1, partyId: 1, characterId: 1 },
-    {
-      unique: true,
-      partialFilterExpression: {
-        status: "active",
-        stateId: { $exists: true },
-        partyId: { $exists: true },
-      },
-      name: "unique_active_state_party_candidate_per_member",
-    },
-  ],
-  [
-    "nationalPartyCandidates",
-    { partyId: 1, characterId: 1 },
-    {
-      unique: true,
-      partialFilterExpression: {
-        status: "active",
-        partyId: { $exists: true },
-      },
-      name: "unique_active_national_party_candidate_per_member",
-    },
-  ],
-  [
-    "nationalCommitteeCandidates",
-    { partyId: 1, characterId: 1 },
-    {
-      unique: true,
-      partialFilterExpression: {
-        status: "active",
-        partyId: { $exists: true },
-      },
-      name: "unique_active_national_committee_candidate_per_member",
-    },
-  ],
-  [
-    "playerEndorsements",
-    { characterId: 1, electionId: 1 },
-    {
-      unique: true,
-      partialFilterExpression: { isActive: true },
-      name: "unique_active_player_endorsement_per_election",
-    },
-  ],
-  [
-    "nationalPartyVotes",
-    { electionId: 1, voterId: 1 },
-    {
-      unique: true,
-      name: "unique_national_party_vote_per_voter",
-    },
-  ],
-  [
-    "statePartyVotes",
-    { electionId: 1, voterId: 1 },
-    {
-      unique: true,
-      name: "unique_state_party_vote_per_voter",
-    },
-  ],
-  [
-    "nationalCommitteeVotes",
-    { electionId: 1, voterId: 1 },
-    {
-      unique: true,
-      name: "unique_national_committee_vote_per_voter",
-    },
-  ],
-  [
-    "shareOffers",
-    { listingId: 1, buyerCharacterId: 1 },
-    {
-      unique: true,
-      partialFilterExpression: { status: "pending" },
-      name: "unique_pending_share_offer_per_buyer_listing",
-    },
-  ],
-  [
-    "cabinetNominations",
-    { countryId: 1, positionId: 1 },
-    {
-      unique: true,
-      partialFilterExpression: { status: "active" },
-      name: "unique_active_cabinet_nomination_per_position",
-    },
-  ],
-  [
-    "speakerLeadershipBallots",
-    { voterCharacterId: 1 },
-    {
-      unique: true,
-      name: "unique_speaker_ballot_per_voter",
-    },
-  ],
-  [
-    "houseLeadershipBallots",
-    { role: 1, voterCharacterId: 1 },
-    {
-      unique: true,
-      name: "unique_house_leadership_ballot_per_voter",
-    },
-  ],
-  [
-    "senateLeadershipBallots",
-    { role: 1, voterCharacterId: 1 },
-    {
-      unique: true,
-      name: "unique_senate_leadership_ballot_per_voter",
-    },
-  ],
+  // Write guards — single source of truth in writeGuardSpecs.ts, shared with
+  // the bootstrap seeder so the two paths cannot drift apart (#591).
+  ...ALL_WRITE_GUARD_INDEXES,
   // At most one ACTIVE nomination per (role, nominee) — backstops the idempotent
   // incumbent auto-nomination against the non-transactional multi-call-site race
   // that produced duplicate nominations (ticket #959). Partial so the many
@@ -180,14 +63,6 @@ export const INDEX_DEFINITIONS: [string, IndexSpecification, CreateIndexesOption
       unique: true,
       partialFilterExpression: { status: { $in: ["open", "voting"] } },
       name: "unique_active_senate_leadership_nomination_per_nominee",
-    },
-  ],
-  [
-    "corporationCeoVotes",
-    { corporationId: 1, voterCharacterId: 1 },
-    {
-      unique: true,
-      name: "unique_corporation_ceo_vote_per_shareholder",
     },
   ],
   [

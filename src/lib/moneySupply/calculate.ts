@@ -26,6 +26,14 @@ export interface MoneySupplyComponents {
   creditOutstanding: number;
   sovereignBondsOutstanding: number;
   centralBankBondHoldings: number;
+  /**
+   * Cash held by the currency's bond market pool: the banks, insurers and
+   * funds that stand behind `Bond.publicFloat`. Institutional money, so it
+   * counts toward M2 but not M1.
+   */
+  bondPoolCash: number;
+  /** Cash held by the finite public-equity market pool. Institutional M2, not M1. */
+  equityPoolCash?: number;
 }
 
 export interface MoneyAggregates extends MoneySupplyComponents {
@@ -53,7 +61,13 @@ export function calculateMoneyAggregates(input: MoneySupplyComponents): MoneyAgg
   return {
     ...normalized,
     m1,
-    m2: m1 + normalized.householdSavings + normalized.externalBroadMoney + normalized.bankDeposits,
+    m2:
+      m1 +
+      normalized.householdSavings +
+      normalized.externalBroadMoney +
+      normalized.bankDeposits +
+      normalized.bondPoolCash +
+      (normalized.equityPoolCash ?? 0),
   };
 }
 

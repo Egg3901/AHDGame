@@ -9,7 +9,7 @@ import {
   type ShortageScope,
   type ShortageTone,
 } from "../lib/shortageRows";
-import { getCountryDisplayName } from "@/lib/constants/countries";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 import { logger } from "@/lib/observability/logger";
 import type { CountryId } from "@/lib/constants/countries";
 import { getStateDisplayName } from "@/lib/commodity-map/commodityRegionMappings";
@@ -246,9 +246,8 @@ export function ShortageHeatMap({ commodities }: { commodities: CommodityData[] 
 
   const rows = useMemo(() => buildShortageRows(data, scope), [data, scope]);
 
-  const countryName = effectiveCountryId
-    ? getCountryDisplayName(effectiveCountryId as CountryId)
-    : "";
+  const displayNameFor = useCountryDisplayName();
+  const countryName = effectiveCountryId ? displayNameFor(effectiveCountryId as CountryId) : "";
   const heading =
     scope.level === "reachable"
       ? `What ${countryName} can sell into`
@@ -327,7 +326,7 @@ export function ShortageHeatMap({ commodities }: { commodities: CommodityData[] 
           >
             {scopeMeta.countryIds.map((c) => (
               <option key={c} value={c}>
-                {getCountryDisplayName(c as CountryId)}
+                {displayNameFor(c as CountryId)}
               </option>
             ))}
           </select>

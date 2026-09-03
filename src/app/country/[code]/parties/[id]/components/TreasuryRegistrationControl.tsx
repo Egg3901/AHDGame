@@ -1,5 +1,6 @@
 import { Slider } from "@/components/ui";
 import { contrastTextColor } from "@/lib/utils/colorContrast";
+import { DEFAULT_LEGACY_COUNTRY_ID } from "@/lib/constants/countries";
 import { DOLLARS_PER_TURNOUT_POINT } from "@/lib/utils/demographicAlignment";
 import {
   REG_DRIVE_MAX_BOOST_PER_STATE,
@@ -28,9 +29,12 @@ export function TreasuryRegistrationControl({
   const registrationSpend = Math.floor(
     party.expectedHourlyIncome * (registrationForm.percent / 100)
   );
-  // Estimate divides spend across all 51 state parties (matching the GOTV
+  // Estimate divides spend across this country's regions (matching the GOTV
   // readout) and applies the same $/point curve, capped per state.
-  const rawPerState = registrationSpend / 51;
+  // Falls back to 51 for cached responses predating regionCount (ticket #1265).
+  const regionCount = party.regionCount || 51;
+  const isUS = party.countryId === DEFAULT_LEGACY_COUNTRY_ID;
+  const rawPerState = registrationSpend / regionCount;
   const estBoost = calculateRegistrationDriveBoost(rawPerState, DOLLARS_PER_TURNOUT_POINT);
   const dirty = registrationForm.percent !== party.registrationBudgetPercent;
 
@@ -56,7 +60,8 @@ export function TreasuryRegistrationControl({
       </div>
       <p className="text-[11px] text-muted/60 mb-3 ml-6">
         Fund voter registration to grow your party&apos;s registered base. Spending is divided
-        equally across all 51 state parties and converts unregistered voters each turn.
+        equally across all {regionCount} {isUS ? "state parties" : "regions"} and converts
+        unregistered voters each turn.
       </p>
 
       <div className="flex items-center gap-4">
@@ -98,7 +103,9 @@ export function TreasuryRegistrationControl({
             </span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-muted">Per state (51)</span>
+            <span className="text-muted">
+              Per {isUS ? "state" : "region"} ({regionCount})
+            </span>
             <span className="font-medium tabular-nums text-muted">
               {fmt(rawPerState, party.countryId)} / hr
             </span>

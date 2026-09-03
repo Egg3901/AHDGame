@@ -22,10 +22,19 @@
  * bonus and the national-scope PS activity-recovery credit — both are
  * player-choice/tier features that don't apply to a deterministic sweep.
  * Presence, poaching, and ledger bookkeeping all match the player route.
+ *
+ * The 2026-09-02 treasury cost DOES apply here, from the state treasury at the
+ * state rate. Exempting the sweep would let an NPP-run party organise for free
+ * the moment it wakes up, which is the whole reason this file exists.
  */
 
 import { ObjectId, type Db } from "mongodb";
-import type { OrgRegLedger, PoliticalParty, StatePartyOrg } from "@/lib/db/types";
+import type {
+  OrgRegLedger,
+  PoliticalParty,
+  StatePartyOrg,
+  PartyStrengthPressure,
+} from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { isNonElectoralUsRegion } from "@/lib/constants/states";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
@@ -35,7 +44,15 @@ import { spendPoliticalStrength } from "@/lib/parties/commands/spendPoliticalStr
 import {
   BUILD_ORG_BASE_PS_COST,
   blendedComparisonPs,
+  effectivePsCost,
 } from "@/lib/turn/politicalStrength/strengthConstants";
+import {
+  clampFundedFraction,
+  orgBuildCashPrice,
+  resolveOrgBuildFunding,
+} from "@/lib/politicalStrength/buildOrgFunding";
+import { chargeOrgBuildFunds } from "@/lib/parties/commands/chargeOrgBuildFunds";
+import { resolveOrgBuildSizeMultiplier } from "@/lib/politicalStrength/orgBuildStateSize";
 import { calcUnifiedBuildOrg } from "@/lib/turn/politicalStrength/buildOrgGain";
 import { resolveUnmannedDefaultCaptureMultiplier } from "@/lib/parties/unmannedDefenseShield";
 
@@ -128,15 +145,30 @@ export async function nppBuildPartyOrg(
     return { ok: false, reason: "Nothing to build — pool empty and no rival Org to poach." };
   }
 
-  const poolAvailablePct = Math.max(0, 100 - totalPartyOrgPct);
-  const appliedPoolGain = Math.min(breakdown.poolGain, poolAvailablePct);
-  const rivalOrgById = new Map(rivalRows.map((r) => [r.partyId, r.organization ?? 0]));
-  const appliedPoaches = breakdown.rivalPoaches
-    .map((p) => ({ partyId: p.partyId, loss: Math.min(p.loss, rivalOrgById.get(p.partyId) ?? 0) }))
-    .filter((p) => p.loss > 0);
-  const actualGain = appliedPoolGain + appliedPoaches.reduce((s, p) => s + p.loss, 0);
-
   const now = new Date();
+
+  // Cash gate — the same one the player route applies. An NPP-run party pays
+  // the state rate from its state treasury; without this the sweep would
+  // organise for free while players pay. Priced before the PS spend so a
+  // refusal costs the party nothing.
+  const pressureRow = await db
+    .collection<PartyStrengthPressure>("partyStrengthPressure")
+    .findOne({ _id: `${countryId}_${partySequentialId}_${stateId}` });
+  const sizeMultiplier = await resolveOrgBuildSizeMultiplier(db, countryId, stateId);
+  const quotedPrice = orgBuildCashPrice(
+    countryId,
+    "state",
+    effectivePsCost(BUILD_ORG_BASE_PS_COST, pressureRow?.value ?? 0),
+    sizeMultiplier
+  );
+  const funding = resolveOrgBuildFunding({
+    price: quotedPrice,
+    treasury: spenderRow.treasury ?? 0,
+  });
+  if (!funding.ok) {
+    return { ok: false, reason: "Insufficient state treasury to fund org building." };
+  }
+
   const spendResult = await spendPoliticalStrength(
     {
       countryId,
@@ -156,6 +188,42 @@ export async function nppBuildPartyOrg(
       reason: spendResult.reason === "insufficient-ps" ? "Insufficient PS." : spendResult.reason,
     };
   }
+
+  // Charge the cash, priced off the PS the spend actually paid. Never
+  // overdraws; the realized share scales the gain, floored so committed PS
+  // cannot buy nothing.
+  const chargePrice = orgBuildCashPrice(
+    countryId,
+    "state",
+    spendResult.effectiveCost,
+    sizeMultiplier
+  );
+  const { charged } = await chargeOrgBuildFunds(
+    {
+      countryId,
+      partyId: partyIdStr,
+      scope: "state",
+      stateRowId: String(spenderRow._id),
+      amount: chargePrice,
+      memo: `Build Org (${stateId})`,
+      initiatedBy: { type: "system", id: String(actorNppId) },
+      turn: currentTurn,
+      now,
+    },
+    db
+  );
+  const fundedFraction = chargePrice > 0 ? clampFundedFraction(charged / chargePrice) : 1;
+
+  const poolAvailablePct = Math.max(0, 100 - totalPartyOrgPct);
+  const appliedPoolGain = Math.min(breakdown.poolGain * fundedFraction, poolAvailablePct);
+  const rivalOrgById = new Map(rivalRows.map((r) => [r.partyId, r.organization ?? 0]));
+  const appliedPoaches = breakdown.rivalPoaches
+    .map((p) => ({
+      partyId: p.partyId,
+      loss: Math.min(p.loss * fundedFraction, rivalOrgById.get(p.partyId) ?? 0),
+    }))
+    .filter((p) => p.loss > 0);
+  const actualGain = appliedPoolGain + appliedPoaches.reduce((s, p) => s + p.loss, 0);
 
   const newOwnOrg = Math.round(((spenderRow.organization ?? 0) + actualGain) * 100) / 100;
   await db

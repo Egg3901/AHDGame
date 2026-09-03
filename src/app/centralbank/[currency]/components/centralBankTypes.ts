@@ -115,6 +115,7 @@ export interface MoneySupplyView {
   creditOutstanding: number;
   sovereignBondsOutstanding: number;
   centralBankBondHoldings: number;
+  bondPoolCash?: number;
   netMoneyCreatedLifetime: number;
   lastOperationTurn: number | null;
   lastPolicyEvaluation: {
@@ -185,6 +186,8 @@ export interface BankData {
   chairControlsLocked?: boolean;
   /** True when a committee is seated, so the rate moves by vote and not by decree. */
   committeeSeated?: boolean;
+  /** True when a committee exists but cannot carry a motion; the chairman holds the rate directly. */
+  committeeDead?: boolean;
   /** True when the government, not the bank, sets the policy rate (pre-1997 BoE). */
   governmentControlled?: boolean;
   /** True when the signed-in viewer may set the rate under government control. */

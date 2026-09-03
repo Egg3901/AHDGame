@@ -163,6 +163,19 @@ export async function settleExtractionContracts(
       continue;
     }
 
+    // Claim this contract before any debit. Two phase invocations that read the
+    // same active snapshot cannot both charge it for the same turn.
+    const settlementClaim = await contractsCol.updateOne(
+      {
+        _id: contract._id,
+        status: "active",
+        revokedTurn: { $exists: false },
+        $or: [{ lastRoyaltyTurn: { $lt: turn } }, { lastRoyaltyTurn: { $exists: false } }],
+      },
+      { $set: { lastRoyaltyTurn: turn, updatedAt: now } }
+    );
+    if (settlementClaim.matchedCount === 0) continue;
+
     const rate = contract.royaltyRatePerTurn ?? 0;
     if (rate <= 0) {
       result.contractsSettled += 1;
@@ -236,13 +249,12 @@ export async function settleExtractionContracts(
       continue;
     }
 
-    // Stamp the idempotency marker in the same update that records the paid
-    // outcome, and reset the missed-payment counter after a successful payment.
+    // The marker was claimed before the debit. Reset the missed-payment counter
+    // after a successful payment.
     await contractsCol.updateOne(
-      { _id: contract._id },
+      { _id: contract._id, lastRoyaltyTurn: turn },
       {
         $set: {
-          lastRoyaltyTurn: turn,
           updatedAt: now,
           ...((contract.missedPayments ?? 0) > 0 ? { missedPayments: 0 } : {}),
         },

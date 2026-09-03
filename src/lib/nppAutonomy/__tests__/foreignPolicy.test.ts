@@ -28,17 +28,25 @@ interface PlannerFixture {
   memberships?: Array<Record<string, unknown>>;
   conflicts?: Array<Record<string, unknown>>;
   pendingMemberships?: Array<Record<string, unknown>>;
+  pendingLegislation?: Array<Record<string, unknown>>;
   embargoes?: Array<Record<string, unknown>>;
   bills?: Array<Record<string, unknown>>;
   tradeSnapshot?: Record<string, unknown> | null;
   recentDecisions?: Array<Record<string, unknown>>;
   militaryUnits?: Array<Record<string, unknown>>;
   approvalRating?: number;
+  /**
+   * `nppOffensiveInitiationEnabled`. Off by default, mirroring an unconfigured world:
+   * a belligerent is offered `conduct_war` only once an admin has switched it on.
+   */
+  offensiveInitiation?: boolean;
 }
 
 interface RecordedDecision {
   selected: ForeignPolicyChoice | null;
   alternatives: ForeignPolicyChoice[];
+  /** Ballots are cast alongside `selected`, not instead of it (#1257). */
+  ballots: ForeignPolicyChoice[];
   acted: boolean;
   mode: "shadow" | "active";
   stage: "votes" | "proposals" | "trade" | "support" | "war";
@@ -55,6 +63,7 @@ function setup(fixture: PlannerFixture = {}): MockDb {
     _id: "current",
     nppForeignPolicyMode: fixture.mode ?? "shadow",
     nppForeignPolicyStage: fixture.stage,
+    nppOffensiveInitiationEnabled: fixture.offensiveInitiation ?? false,
   });
   db.collection("governmentFormations").findOne.mockResolvedValue({
     _id: "FR",
@@ -86,7 +95,7 @@ function setup(fixture: PlannerFixture = {}): MockDb {
   setFindRows(db, "tradeEmbargoes", fixture.embargoes ?? []);
   setFindRows(db, "tariffs", []);
   setFindRows(db, "bills", fixture.bills ?? []);
-  setFindRows(db, "organizationLegislation", []);
+  setFindRows(db, "organizationLegislation", fixture.pendingLegislation ?? []);
   setFindRows(db, "organizationMembershipProposals", fixture.pendingMemberships ?? []);
   setFindRows(db, "organizationLeadershipElections", []);
   setFindRows(db, "nppForeignPolicyDecisions", fixture.recentDecisions ?? []);
@@ -148,11 +157,23 @@ function membership(countryId: "FR" | "IT" | "RU" | "US", organizationId = "NATO
   };
 }
 
-function pendingMembership(proposingCountryId: "IT" | "RU") {
+/**
+ * An aid package: a MAJORITY ballot, which is what an autonomous government
+ * actually votes on.
+ *
+ * These tests used a membership proposal until ticket #1257 established that an
+ * admission is decided by the player-enabled members alone — and the planner
+ * only ever runs for countries that are not player-enabled, so it no longer
+ * casts a ballot it could never have counted. Aid keeps what the tests are
+ * really about: the vote follows the country's opinion of the subject.
+ */
+function pendingAid(recipient: "IT" | "RU") {
   return {
     _id: new ObjectId(),
     organizationId: "NATO",
-    proposingCountryId,
+    type: "aid_package",
+    aidRecipientCountryId: recipient,
+    parties: [],
     status: "pending",
     votes: [],
   };
@@ -182,7 +203,7 @@ describe("processAutonomousForeignPolicy", () => {
         },
       ],
       memberships: [membership("FR"), membership("IT")],
-      pendingMemberships: [pendingMembership("IT")],
+      pendingLegislation: [pendingAid("IT")],
     });
 
     const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 10, now);
@@ -193,8 +214,13 @@ describe("processAutonomousForeignPolicy", () => {
       acted: false,
       decisionRecorded: true,
     });
-    expect(result.choice).toMatchObject({ type: "vote_org_yes", targetCountryId: "IT" });
-    expect(recordedDecision(db).alternatives[0].reasons.join(" ")).toContain("share the US sphere");
+    // The vote is a BALLOT, not the country's one strategic action — it no
+    // longer has to out-rank a tariff to be cast (#1257).
+    expect(recordedDecision(db).ballots[0]).toMatchObject({
+      type: "vote_org_yes",
+      targetCountryId: "IT",
+    });
+    expect(recordedDecision(db).ballots[0].reasons.join(" ")).toContain("share the US sphere");
     expectNoGameplayWrites(db);
   });
 
@@ -202,12 +228,15 @@ describe("processAutonomousForeignPolicy", () => {
     const db = setup({
       alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
       memberships: [membership("FR")],
-      pendingMemberships: [pendingMembership("RU")],
+      pendingLegislation: [pendingAid("RU")],
     });
 
-    const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 11, now);
+    await processAutonomousForeignPolicy(db as unknown as Db, "FR", 11, now);
 
-    expect(result.choice).toMatchObject({ type: "vote_org_no", targetCountryId: "RU" });
+    expect(recordedDecision(db).ballots[0]).toMatchObject({
+      type: "vote_org_no",
+      targetCountryId: "RU",
+    });
   });
 
   it("uses trade dependence as a brake on escalating from tariffs to embargo", async () => {
@@ -426,7 +455,10 @@ describe("processAutonomousForeignPolicy", () => {
       conflicts: [conflict],
       militaryUnits: [deployedUnit],
       approvalRating: 60,
+      offensiveInitiation: true,
     });
+    // `seek_peace` is not behind the switch: leaving a war it cannot sustain is not
+    // an offensive, so the exhausted case is deliberately left with it off.
     const exhaustedDb = setup({
       conflicts: [conflict],
       militaryUnits: [{ ...deployedUnit, readiness: 25 }],
@@ -460,6 +492,139 @@ describe("processAutonomousForeignPolicy", () => {
         }),
       ])
     );
+  });
+
+  it("conducts the war instead of routine diplomacy once it is the belligerent (ticket #1233)", async () => {
+    // The live failure shape: an autonomous belligerent with ready deployed
+    // forces spent every strategic slot on tariffs and embargoes against the
+    // enemy because `conduct_war`'s old base (25) sat below the routine
+    // 46-73 band, and only the top-ranked choice acts. Production recorded
+    // zero conduct_war selections while six NATO members sat deployed in an
+    // active war, so allies never appeared among a battle's attackers.
+    const db = setup({
+      alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
+      conflicts: [
+        {
+          _id: "war-for-germany",
+          name: "The War for Germany",
+          status: "active",
+          sideA: { label: "West", countries: ["FR", "US"] },
+          sideB: { label: "East", countries: ["RU"] },
+        },
+      ],
+      militaryUnits: [
+        {
+          _id: new ObjectId(),
+          countryId: "FR",
+          readiness: 72,
+          personnel: 10_000,
+          theaterId: "war-for-germany",
+          basePower: 100,
+        },
+      ],
+      approvalRating: 60,
+      offensiveInitiation: true,
+    });
+
+    const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 43, now);
+
+    expect(result.choice).toMatchObject({ type: "conduct_war", conflictId: "war-for-germany" });
+    const conductWar = recordedDecision(db).alternatives.find(
+      (choice) => choice.type === "conduct_war"
+    );
+    const routine = recordedDecision(db)
+      .alternatives.filter(
+        (choice) => choice.type !== "conduct_war" && choice.type !== "seek_peace"
+      )
+      .map((choice) => choice.score);
+    expect(conductWar?.score).toBeGreaterThan(Math.max(...routine));
+    expectNoGameplayWrites(db);
+  });
+
+  it("withholds conduct_war entirely while the admin switch is off", async () => {
+    // The switch's whole contract, and the default an unconfigured world gets. It is
+    // suppressed at candidate generation rather than refused at execution: NPP
+    // countries have no Generals or military technology behind an attack yet, and a
+    // refusal would still burn the government's one action for the slot. Same fixture
+    // as the #1233 case above with the switch left off, so the switch is the only
+    // difference between offering the attack and never mentioning it.
+    const db = setup({
+      alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
+      conflicts: [
+        {
+          _id: "war-for-germany",
+          name: "The War for Germany",
+          status: "active",
+          sideA: { label: "West", countries: ["FR", "US"] },
+          sideB: { label: "East", countries: ["RU"] },
+        },
+      ],
+      militaryUnits: [
+        {
+          _id: new ObjectId(),
+          countryId: "FR",
+          readiness: 72,
+          personnel: 10_000,
+          theaterId: "war-for-germany",
+          basePower: 100,
+        },
+      ],
+      approvalRating: 60,
+    });
+
+    const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 43, now);
+
+    expect(result.choice?.type).not.toBe("conduct_war");
+    expect(recordedDecision(db).alternatives.map((choice) => choice.type)).not.toContain(
+      "conduct_war"
+    );
+    expectNoGameplayWrites(db);
+  });
+
+  it("seeks peace instead of routine diplomacy once the war exhausts the government", async () => {
+    // seek_peace carried the same starvation: its old base (38) lost the slot
+    // to hostile tariffs and embargoes, so an exhausted autonomous belligerent
+    // kept filing trade actions while its army burned.
+    const db = setup({
+      alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
+      conflicts: [
+        {
+          _id: "war-for-germany",
+          name: "The War for Germany",
+          status: "active",
+          sideA: { label: "West", countries: ["FR", "US"] },
+          sideB: { label: "East", countries: ["RU"] },
+        },
+      ],
+      militaryUnits: [
+        {
+          _id: new ObjectId(),
+          countryId: "FR",
+          readiness: 25,
+          personnel: 10_000,
+          theaterId: "war-for-germany",
+          basePower: 100,
+        },
+      ],
+      approvalRating: 15,
+    });
+
+    const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 44, now);
+
+    expect(result.choice).toMatchObject({
+      type: "seek_peace",
+      conflictId: "war-for-germany",
+      targetCountryId: "RU",
+    });
+    const seekPeace = recordedDecision(db).alternatives.find(
+      (choice) => choice.type === "seek_peace"
+    );
+    const routine = recordedDecision(db)
+      .alternatives.filter(
+        (choice) => choice.type !== "conduct_war" && choice.type !== "seek_peace"
+      )
+      .map((choice) => choice.score);
+    expect(seekPeace?.score).toBeGreaterThan(Math.max(...routine));
   });
 
   it("is idempotent for the same country and turn", async () => {
@@ -507,13 +672,18 @@ describe("processAutonomousForeignPolicy", () => {
       mode: "active",
       alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
       memberships: [membership("FR")],
-      pendingMemberships: [pendingMembership("RU")],
+      pendingLegislation: [pendingAid("RU")],
     });
 
     const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 16, now);
 
-    expect(result).toMatchObject({ mode: "active", acted: true, decisionRecorded: true });
-    expect(result.choice).toMatchObject({ type: "vote_org_no", pendingKind: "membership" });
+    // Nothing here but the ballot, so there is no strategic action to select —
+    // and the ballot is cast anyway, which is the point of #1257.
+    expect(result).toMatchObject({ mode: "active", decisionRecorded: true, ballotsCast: 1 });
+    expect(firstRecordedDecision(db).ballots[0]).toMatchObject({
+      type: "vote_org_no",
+      pendingKind: "legislation",
+    });
     expect(executionMock).toHaveBeenCalledWith(
       expect.anything(),
       "FR",
@@ -523,15 +693,9 @@ describe("processAutonomousForeignPolicy", () => {
       now
     );
     const auditWrites = db.collection("nppForeignPolicyDecisions").updateOne.mock.calls;
-    expect(auditWrites[0][1].$setOnInsert).toMatchObject({
-      executionStatus: "claimed",
-      acted: false,
-    });
-    expect(auditWrites[1][1].$set).toMatchObject({
-      executionStatus: "executed",
-      acted: true,
-      executionNote: "Executed test choice.",
-    });
+    // Still claim-before-act: the row is written before any ballot is cast.
+    expect(auditWrites[0][1].$setOnInsert).toMatchObject({ acted: false });
+    expect(auditWrites.at(-1)?.[1].$set).toMatchObject({ ballotsCast: 1 });
   });
 
   it("keeps active trade actions behind the trade rollout stage", async () => {
@@ -556,12 +720,95 @@ describe("processAutonomousForeignPolicy", () => {
     expect(firstRecordedDecision(tradeDb)).toMatchObject({ stage: "trade" });
   });
 
+  it("casts a ballot in the same turn as a higher-scoring strategic action", async () => {
+    // THE DISCRIMINATING CASE for ticket #1257.
+    //
+    // A hostile Russia makes tariffs and embargoes available, and those outscore
+    // an organisation vote. A country plans once every six turns and executes one
+    // ranked choice, so while ballots competed for that slot the vote simply lost
+    // — four contested chances across a 24-turn ballot, and Poland and
+    // Czechoslovakia spent every one of theirs elsewhere. Under unanimity that is
+    // a permanent veto: China closed 5-of-7 and North Korea 2-of-7 in the Warsaw
+    // Pact with not one "no" cast against either.
+    //
+    // Voting is not a strategic expenditure, so both must happen this turn.
+    //
+    // The aid names Italy, not Russia, deliberately: an aid package to Russia
+    // would soften France's opinion of it and disarm the very tariffs and
+    // embargoes this test needs the ballot to be competing against.
+    const db = setup({
+      mode: "active",
+      stage: "war",
+      alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
+      memberships: [membership("FR")],
+      pendingLegislation: [pendingAid("IT")],
+    });
+
+    const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 19, now);
+
+    expect(result.ballotsCast).toBe(1);
+    expect(result.choice).not.toBeNull();
+    expect(result.choice?.type).not.toBe("vote_org_no");
+    expect(result.choice?.type).not.toBe("vote_org_yes");
+    // The ballot was cast even though it never won the action slot.
+    expect(executionMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "FR",
+      expect.anything(),
+      expect.objectContaining({ type: "vote_org_yes", pendingKind: "legislation" }),
+      19,
+      now
+    );
+    expect(executionMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "FR",
+      expect.anything(),
+      expect.objectContaining({ type: result.choice!.type }),
+      19,
+      now
+    );
+  });
+
+  it("does not cast a ballot on an admission, whose roll it can never be on", async () => {
+    // Ticket #1257. An admission is decided by the player-enabled members alone,
+    // and the planner only ever runs for a country that is NOT player-enabled
+    // (isNppAutonomyActive is defined that way). So this ballot could never have
+    // been counted; writing it only put consent on the proposal for the panels
+    // to show beside a tally that ignored it.
+    const db = setup({
+      mode: "active",
+      alignments: [alignment("FR", 100, 0), alignment("IT", 80, 0)],
+      memberships: [membership("FR"), membership("IT")],
+      pendingMemberships: [
+        {
+          _id: new ObjectId(),
+          organizationId: "NATO",
+          proposingCountryId: "IT",
+          status: "pending",
+          votes: [],
+        },
+      ],
+    });
+
+    const result = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 21, now);
+
+    expect(result.ballotsCast).toBe(0);
+    expect(executionMock).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "FR",
+      expect.anything(),
+      expect.objectContaining({ pendingKind: "membership" }),
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
   it("does not execute an active decision twice after a same-turn restart", async () => {
     const db = setup({
       mode: "active",
       alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
       memberships: [membership("FR")],
-      pendingMemberships: [pendingMembership("RU")],
+      pendingLegislation: [pendingAid("RU")],
     });
     db.collection("nppForeignPolicyDecisions")
       .updateOne.mockResolvedValueOnce({ matchedCount: 0, modifiedCount: 0, upsertedCount: 1 })
@@ -571,8 +818,11 @@ describe("processAutonomousForeignPolicy", () => {
     const first = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 17, now);
     const replay = await processAutonomousForeignPolicy(db as unknown as Db, "FR", 17, now);
 
-    expect(first.acted).toBe(true);
-    expect(replay).toMatchObject({ acted: false, decisionRecorded: false });
+    // Ballots are cast off the action budget now, so the restart guard has to
+    // hold for them too: `decisionRecorded` gates the ballot loop exactly as it
+    // gates the strategic action, or a replayed turn would vote twice.
+    expect(first).toMatchObject({ ballotsCast: 1 });
+    expect(replay).toMatchObject({ acted: false, decisionRecorded: false, ballotsCast: 0 });
     expect(executionMock).toHaveBeenCalledTimes(1);
   });
 });

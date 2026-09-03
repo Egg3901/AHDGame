@@ -19,7 +19,7 @@ interface RouteParams {
  * SAME helper the POST route uses to return the next-click estimate — so the
  * pre-click preview can never drift from the post-click charge/gain.
  */
-export async function GET(_request: Request, { params }: RouteParams) {
+export async function GET(request: Request, { params }: RouteParams) {
   const { code, id: regionId, partyId } = await params;
   const countryId = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[countryId]) {
@@ -48,11 +48,21 @@ export async function GET(_request: Request, { params }: RouteParams) {
     return NextResponse.json({ ok: false, reason: "missing-row", message: "Party not found" });
   }
 
+  // `?psPool=` lets a caller that already knows which pool it will spend get a
+  // quote for THAT tier. The national HQ's bulk tool always posts
+  // `psPool: "national"`, and the tier sets both the cash rate and which
+  // treasury is checked, so a quote for the wrong tier misprices the click.
+  // Ignored where the spender is not eligible for the requested pool.
+  const psPool = new URL(request.url).searchParams.get("psPool");
+  const preferredScope =
+    psPool === "national" ? "national-targeted" : psPool === "state" ? "state" : undefined;
+
   const result = await computeBuildOrgPreview(db, {
     countryId,
     upperRegionId,
     spenderParty,
     authUser,
+    preferredScope,
   });
   return NextResponse.json(result);
 }

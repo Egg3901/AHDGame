@@ -4,7 +4,12 @@ import type { CurrencyCode } from "../../constants/currencies";
 import type { CorporationType } from "../../constants/corporations";
 
 export type IndexFundScope = "country" | "global";
-export type IndexFundKind = "broad" | "sector";
+/**
+ * `broad` and `sector` are equity index funds with a bond reserve; `bond` is a
+ * bond fund: no equities, a cash buffer, and the rest in the bonds its
+ * definition's universe allows (see `BOND_FUND_DEFINITIONS`).
+ */
+export type IndexFundKind = "broad" | "sector" | "bond";
 export type IndexFundStatus = "active" | "paused" | "winding_down" | "delisted";
 export type IndexFundPauseReason = "manual" | "backing_ratio" | "constituent_delisted";
 
@@ -68,6 +73,8 @@ export interface IndexFund {
   bondAllocations?: IndexFundBondAllocation[];
   backingRatio?: number;
   lastRebalancedAt?: Date;
+  /** Serializes non-transactional redemption fallback on standalone Mongo. */
+  redemptionLock?: { token: ObjectId; expiresAt: Date };
   /** A7: failing-corporation streaks, for the incumbent grace period. */
   listingFailureStreaks?: IndexFundListingFailureStreak[];
 
@@ -136,6 +143,7 @@ export type IndexFundTransactionKind =
   | "dividend_reinvest"
   | "dividend_pass_through"
   | "bond_allocation"
+  | "bond_sale"
   | "rebalance"
   | "cross_fund_buy"
   | "cross_fund_sell"
@@ -167,7 +175,7 @@ export interface IndexFundTransaction {
   createdAt: Date;
 }
 
-export type IndexFundRedemptionStatus = "queued" | "partial" | "paid" | "cancelled";
+export type IndexFundRedemptionStatus = "queued" | "partial" | "processing" | "paid" | "cancelled";
 
 export interface IndexFundRedemptionQueueEntry {
   _id: ObjectId;
@@ -197,6 +205,8 @@ export interface IndexFundRedemptionQueueEntry {
    */
   redeemFxRate?: number;
   status: IndexFundRedemptionStatus;
+  /** Set while the cron owns this payout. Processing rows require reconciliation after a crash. */
+  processingStartedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }

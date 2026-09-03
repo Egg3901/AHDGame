@@ -6,11 +6,13 @@ import type { GameState } from "@/lib/db/types/gameState";
  * be considered core, so new seeds start with them instead of a bare world an
  * admin has to hand-toggle after every reset.
  *
- * The full feature set ships ON for fresh worlds. The deliberate exceptions:
- *   - `autoSectorSeedEnabled` — the only feature toggle shipped OFF by owner
- *     decision (see below): the 48-turn automatic sector reseed favours the
- *     state corp over private/spun-out corps (#2926) and re-seeds a world an
- *     admin may have deliberately shaped.
+ * Nearly the full feature set ships ON for fresh worlds. The deliberate exceptions:
+ *   - `autoSectorSeedEnabled` — shipped OFF by owner decision (see below): the
+ *     48-turn automatic sector reseed favours the state corp over private/spun-out
+ *     corps (#2926) and re-seeds a world an admin may have deliberately shaped.
+ *   - `nppOffensiveInitiationEnabled` / `nppOffensiveJoinEnabled` — shipped OFF:
+ *     NPP armies attack without a Generals or military-technology system behind
+ *     them, so both are an explicit admin opt-in (Admin → World → Conflicts).
  *   - `eurozoneEnabled` — NOT force-defaulted here: era-derived, seedForex sets
  *     it per preset (the euro didn't exist pre-1999).
  *   - `demographicsDemandEnabled` (gameConfig) — stays OFF: mutually exclusive
@@ -88,6 +90,9 @@ export const DEFAULT_GAME_STATE_FLAGS = {
   embargoTradeExposureEnabled: true,
   liveElectionResultsEnabled: true,
   extractionAutoStrategyEnabled: true,
+  // Existing and fresh worlds start by recording decisions only. Promotion to
+  // enforce is an explicit admin action after the observation gate passes.
+  nppEntryViabilityMode: "observe",
   seasonRecapEnabled: true,
   // Corporate M&A / deal-making subsystem (agreed corp-to-corp acquisitions).
   // Runtime helper is fail-closed (absent = off); default on for fresh worlds.
@@ -99,6 +104,15 @@ export const DEFAULT_GAME_STATE_FLAGS = {
   // Release 1.3 living-conflict campaigns. The engine is in the turn loop and
   // fresh worlds start on the persistent global-response system.
   livingConflictsEnabled: true,
+  // The other two toggles held OFF for fresh worlds, alongside
+  // `autoSectorSeedEnabled`. NPP-run belligerents have no Generals and no military
+  // technology behind an attack, so an offensive they launch or join goes in without
+  // the command bonuses and research a player-run army brings and loses more often
+  // than it should. Listed rather than left absent so the posture is a recorded
+  // decision: the runtime readers are fail-closed either way, and a reset preserves
+  // an admin's explicit `true`.
+  nppOffensiveInitiationEnabled: false,
+  nppOffensiveJoinEnabled: false,
 } as const satisfies Partial<GameState>;
 
 export type DefaultGameStateFlagKey = keyof typeof DEFAULT_GAME_STATE_FLAGS;

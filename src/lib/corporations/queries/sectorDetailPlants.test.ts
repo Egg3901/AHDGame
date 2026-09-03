@@ -59,13 +59,23 @@ const BASE_ARGS = {
 
 describe("buildSectorPlantsSection", () => {
   it("splits capacity into produced, sold, unsold and idle without losing units", () => {
-    const s = buildSectorPlantsSection({ eraUnitScale: 1, ...BASE_ARGS, sector: sectorFixture() });
+    const s = buildSectorPlantsSection({
+      eraUnitScale: 1,
+      ...BASE_ARGS,
+      sector: sectorFixture({ plantCount: 7 }),
+    });
+    expect(s.plantCount).toBe(7);
     expect(s.capacityUnits).toBe(200);
     expect(s.producedUnits).toBe(150);
     expect(s.soldUnits).toBe(120);
     expect(s.unsoldUnits).toBe(30);
     expect(s.idleUnits).toBe(50);
     expect(s.fillRate).toBeCloseTo(0.8, 6);
+  });
+
+  it("falls back to the pre-migration visible facility count", () => {
+    const s = buildSectorPlantsSection({ eraUnitScale: 1, ...BASE_ARGS, sector: sectorFixture() });
+    expect(s.plantCount).toBe(8);
   });
 
   it("surfaces actual staffing beside desired staffing", () => {

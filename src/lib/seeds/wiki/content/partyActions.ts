@@ -23,6 +23,8 @@ Political Strength (PS) is the renamed-from-action-pool reserve a party spends o
 
 Repeated PS spends in the same state or region escalate in cost (per-geography pressure ladder, decaying \`-3\` per turn). Acting in one state does not raise the cost of acting in another.
 
+Some actions cost money on top of the Strength. **Build Org** bills the treasury of whichever tier pays the PS, at a price that rises with the pressure ladder, so grinding one state costs more money as well as more Strength. See [Party Organization](/wiki/party-organization) for how a short treasury shrinks a click rather than blocking it.
+
 State chairs and vice chairs spend the state party's PS on state-scope actions; national chairs and vice chairs spend the national party's PS on national-scope actions.
 
 ### Party tier and PS cap (Major / Minor)

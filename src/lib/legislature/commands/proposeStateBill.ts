@@ -83,7 +83,8 @@ export async function proposeStateBill(
     const sponsorParty = await db
       .collection<PoliticalParty>("politicalParties")
       .findOne({ sequentialId: parseInt(character.party, 10), countryId });
-    if (isBannedParty(postCountryConfig, sponsorParty)) {
+    // RUNTIME shape, not `postCountryConfig` — see the note in `nationalBillActions`.
+    if (isBannedParty({ governmentType: runtimeState.governmentType }, sponsorParty)) {
       return {
         status: 403,
         body: { error: "Banned parties cannot propose legislation." },
@@ -371,10 +372,12 @@ export async function proposeStateBill(
       },
       {
         $set: {
-          ...(npiCost > 0 ? { nationalInfluence: Math.max(0, currentNational - npiCost) } : {}),
           updatedAt: now,
         },
-        $inc: { actions: -actionCost },
+        $inc: {
+          actions: -actionCost,
+          ...(npiCost > 0 ? { nationalInfluence: -npiCost } : {}),
+        },
       }
     );
     if (spendResult.modifiedCount === 0) {
@@ -421,11 +424,11 @@ export async function proposeStateBill(
       await db.collection<Character>("characters").updateOne(
         { _id: character._id },
         {
-          $inc: { actions: actionCost },
-          $set: {
-            ...(npiCost > 0 ? { nationalInfluence: currentNational } : {}),
-            updatedAt: new Date(),
+          $inc: {
+            actions: actionCost,
+            ...(npiCost > 0 ? { nationalInfluence: npiCost } : {}),
           },
+          $set: { updatedAt: new Date() },
         }
       );
     }

@@ -1047,6 +1047,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       attackInfo: viewerCorporation
         ? buildSectorAttackInfo({
             viewerCorporation,
+            defenderMarketingStrength: corporation.marketingStrength ?? 0,
             viewerCorpFxRate,
             sectorHostFxRate,
             sectorHostLiquidCode,

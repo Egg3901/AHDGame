@@ -5,24 +5,33 @@
  * national display remains the SP1 read-time population-weighted aggregate.
  *
  * Trend history (§5): every HISTORY_CADENCE_TURNS, the national aggregate is
- * appended to politicalMetricsHistory (capped at HISTORY_MAX_ENTRIES).
+ * appended to politicalMetricsHistory (capped at HISTORY_MAX_ENTRIES), and
+ * each region's own post-drift board is appended to
+ * politicalMetricsRegionHistory (capped at REGION_HISTORY_MAX_ENTRIES, #1322)
+ * so the region registry can show the same trends the national one does.
  */
 
 import type { AnyBulkWriteOperation, Db } from "mongodb";
 import type {
   PoliticalMetricsDoc,
   PoliticalMetricsHistoryDoc,
+  PoliticalMetricsRegionHistoryDoc,
 } from "@/lib/db/types/politicalMetrics";
 import type { State } from "@/lib/db/types/state";
 import type { StatePolicy } from "@/lib/db/types/statePolicy";
 import { aggregateNationalPoliticalMetrics } from "@/lib/politicalMetrics/aggregate";
+import {
+  HISTORY_CADENCE_TURNS,
+  HISTORY_MAX_ENTRIES,
+  REGION_HISTORY_MAX_ENTRIES,
+} from "@/lib/politicalMetrics/historyCadence";
 import type { PoliticalMetricId } from "@/lib/politicalMetrics/types";
 import { getCatalog } from "@/lib/politicalLegislation/catalog";
 import {
   composeTarget,
   driftStep,
   lawTargets,
-  REGIONAL_SUPPLEMENT_FACTOR,
+  structuralResidual,
 } from "@/lib/politicalLegislation/dynamics";
 import { getEnactedLevels } from "@/lib/politicalLegislation/enactedLevels";
 import { getPoliticalCabinetContribution } from "@/lib/db/collections/politicalCabinetContribution";
@@ -46,8 +55,15 @@ import { politicalNodeTargets } from "@/lib/politicalMetrics/engineNodes";
 import { engineTermFor } from "@/lib/politicalMetrics/engineTerm";
 import { loadLabourRelationsPoliticalNudgesByCountry } from "@/lib/unions/labourRelationsPoliticalProvider";
 
-export const HISTORY_CADENCE_TURNS = 24;
-export const HISTORY_MAX_ENTRIES = 365;
+// Defined in politicalMetrics/historyCadence so a client component can read the
+// cadence without importing this module (and with it the whole turn engine).
+// Re-exported here because the existing tests and callers import them from the
+// phase that writes the series.
+export {
+  HISTORY_CADENCE_TURNS,
+  HISTORY_MAX_ENTRIES,
+  REGION_HISTORY_MAX_ENTRIES,
+} from "@/lib/politicalMetrics/historyCadence";
 
 /** Shallow numeric-map equality — whether a cabinetResiduals fold produced a change. */
 function sameNums(a: Record<string, number>, b: Record<string, number>): boolean {
@@ -322,17 +338,20 @@ export async function processPoliticalMetricsDynamics(
         if (!residuals) {
           residuals = {} as Record<PoliticalMetricId, number>;
           for (const [metricId, points] of Object.entries(national)) {
-            const supplementPoints = supplement?.[metricId as PoliticalMetricId] ?? 0;
-            residuals[metricId as PoliticalMetricId] =
-              (doc.values[metricId as PoliticalMetricId] ?? 0) -
-              (points + REGIONAL_SUPPLEMENT_FACTOR * supplementPoints);
+            const id = metricId as PoliticalMetricId;
+            residuals[id] = structuralResidual(doc.values[id] ?? 0, points, supplement?.[id] ?? 0);
           }
           healed = true;
         } else {
           for (const [metricId, points] of Object.entries(national)) {
             const id = metricId as PoliticalMetricId;
             const value = doc.values[id] ?? 0;
-            const structural = residuals[id] ?? value - points;
+            // A map that predates a family (or any partial map) falls back to the
+            // SAME derivation the heal above uses. It used to drop the supplement
+            // here, which composed to `value + 0.5 x supplement` and walked the
+            // board up a little every turn for any region holding regional law.
+            const structural =
+              residuals[id] ?? structuralResidual(value, points, supplement?.[id] ?? 0);
             // Bridge B: macro reality bends the equilibrium, bounded so the law
             // ladder still dominates. NOT persisted — `residuals` stays structural.
             const lawTarget = composeTarget(points, supplement?.[id] ?? 0, structural);
@@ -401,16 +420,50 @@ export async function processPoliticalMetricsDynamics(
           .toArray();
         const populationByRegion = new Map(states.map((s) => [s._id, s.population ?? 0]));
         const values = aggregateNationalPoliticalMetrics(docs, populationByRegion);
+        const now = new Date();
         await db.collection<PoliticalMetricsHistoryDoc>("politicalMetricsHistory").updateOne(
           { _id: countryId },
           {
             $push: {
               entries: { $each: [{ turn: turnNumber, values }], $slice: -HISTORY_MAX_ENTRIES },
             },
-            $set: { updatedAt: new Date() },
+            $set: { updatedAt: now },
           },
           { upsert: true }
         );
+
+        // Per-region series (#1322). `doc.values` is already the POST-drift map
+        // — the loop above assigns `doc.values = nextValues` before this point,
+        // which is the same reason the national aggregate just computed is
+        // correct. Snapshotting the pre-drift read would make every region
+        // series lag reality by a full cadence.
+        //
+        // Rotation is $slice, never a read-modify-write: a concurrent turn must
+        // not be able to truncate the series.
+        const regionHistoryOps: AnyBulkWriteOperation<PoliticalMetricsRegionHistoryDoc>[] =
+          docs.map((doc) => ({
+            updateOne: {
+              filter: { _id: String(doc._id) },
+              update: {
+                $push: {
+                  entries: {
+                    $each: [{ turn: turnNumber, values: doc.values }],
+                    $slice: -REGION_HISTORY_MAX_ENTRIES,
+                  },
+                },
+                $set: {
+                  countryId: countryId as PoliticalMetricsRegionHistoryDoc["countryId"],
+                  updatedAt: now,
+                },
+              },
+              upsert: true,
+            },
+          }));
+        if (regionHistoryOps.length > 0) {
+          await db
+            .collection<PoliticalMetricsRegionHistoryDoc>("politicalMetricsRegionHistory")
+            .bulkWrite(regionHistoryOps);
+        }
       }
     })
   );

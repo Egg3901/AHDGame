@@ -21,6 +21,9 @@ import { emitTx } from "@/lib/financialTxLog/emit";
 import { normalizeSavingsMutationAmount } from "@/lib/api/savings/savingsAmount";
 import { ZOD_ACTIVE_CURRENCY_ENUM } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { runSavingsCommand } from "@/lib/savings/accountsShell";
 
 const depositSchema = z.object({
   currency: z.enum(ZOD_ACTIVE_CURRENCY_ENUM),
@@ -84,8 +87,20 @@ export async function POST(request: Request) {
 
     const now = new Date();
     const inc = buildTransferToSavingsInc(normalized, c, forexEnabled);
+    const policy = await loadBankingPolicy(db);
+    const accountsAuthoritative = policy.savingsAccounts === "authoritative" && forexEnabled;
 
-    if (forexEnabled) {
+    if (accountsAuthoritative) {
+      // The account command moves the cash into the holder and keeps the
+      // character's legacy fields in step as projections.
+      const deposited = await runSavingsCommand(db, character._id, c, {
+        type: "deposit",
+        amount: normalized,
+      });
+      if (!deposited.ok) {
+        return NextResponse.json(badRequest(deposited.error).toJson(), { status: 400 });
+      }
+    } else if (forexEnabled) {
       const res = await db.collection<Character>("characters").updateOne(
         {
           _id: character._id,
@@ -136,6 +151,23 @@ export async function POST(request: Request) {
         turn,
       });
     }
+
+    emitBankingAuditEvent(
+      {
+        kind: "account.deposited",
+        command: "savings.deposit",
+        turn,
+        outcome: "ok",
+        currency: c,
+        subjectType: "character",
+        subjectId: character._id.toString(),
+        statusAfter:
+          (after?.currencyBalances?.savingsHolder?.[c] as string | undefined) ?? "centralBank",
+        amount: normalized,
+        meta: { holderRequested: holder?.trim() ? true : false },
+      },
+      db
+    );
 
     void emitTx(db, {
       type: "savings_deposit",

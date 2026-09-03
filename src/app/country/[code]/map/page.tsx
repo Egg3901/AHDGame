@@ -1,5 +1,7 @@
-import { getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { getGameState } from "@/lib/gameState";
+import { getDb } from "@/lib/mongodb";
+import { resolveCountryIdentity } from "@/lib/country/countryIdentity";
 import CountryMapClient from "./CountryMapClient";
 
 interface Props {
@@ -10,7 +12,7 @@ export async function generateMetadata({ params }: Props) {
   const { code } = await params;
   const countryId = code.toUpperCase() as CountryId;
   const gameState = await getGameState();
-  const name = getCountryDisplayName(countryId, gameState?.preset);
+  const { name } = await resolveCountryIdentity(await getDb(), countryId, gameState?.preset);
 
   return {
     title: `${name} Map | A House Divided`,

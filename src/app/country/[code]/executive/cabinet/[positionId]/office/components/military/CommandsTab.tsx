@@ -5,12 +5,17 @@ import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import type { ConflictAssignment } from "@/lib/military/assignments";
 import { CommandsBuilder } from "./commands/CommandsBuilder";
 import { GeneralCorps } from "./GeneralCorps";
+import { NavairCommandLink } from "./NavairCommandLink";
 import type { CorpsMember } from "@/lib/db/collections/characterGenerals";
 
 /**
  * Commands tab for the Secretary of Defense Office — the national command builder
  * (create commands, assign regions/commanders/forces), inline. Persistence and pure
  * logic live in the shared military state; this tab is the cabinet-styled home for it.
+ *
+ * The tab opens with the Naval and air command door (ticket #1243): support's own
+ * navigation names this tab as where fleet orders live, so the way in has to be
+ * here, not only on the country lander's directory.
  */
 export function CommandsTab({
   commands,
@@ -48,6 +53,7 @@ export function CommandsTab({
 }) {
   return (
     <div className="space-y-4">
+      <NavairCommandLink countryCode={countryCode} />
       <GeneralCorps
         corps={corps}
         candidates={commissionCandidates}

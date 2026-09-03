@@ -49,6 +49,7 @@ function renderClient(extra: Record<string, unknown> = {}) {
       country="US"
       countryCode="us"
       positionId="secretary_of_defense"
+      canWrite={extra.canWrite !== false}
       currentTurn={1284}
       natMods={natMods({})}
       conflictAssignments={[]}
@@ -99,6 +100,14 @@ describe("CombatCommandClient (smoke render)", () => {
     renderClient();
     fireEvent.click(screen.getByText("Doctrine & Command"));
     expect(screen.getByText("NATIONAL DOCTRINE · FORCE-WIDE")).toBeTruthy();
+  });
+
+  it("makes order controls read-only for a viewer who does not hold defence", () => {
+    renderClient({ canWrite: false });
+    expect(screen.getByText(/read-only view/i)).toBeTruthy();
+    fireEvent.click(screen.getByText("Unit Dossier"));
+    expect(screen.getByLabelText("Posture")).toHaveProperty("disabled", true);
+    expect(screen.getByLabelText("Battle role")).toHaveProperty("disabled", true);
   });
 });
 

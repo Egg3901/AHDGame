@@ -338,8 +338,14 @@ export async function updateParliamentaryGovernmentSeats(
       : 0;
   }
 
+  // RUNTIME governmentType, not the static config. A country converted at
+  // runtime — reunified Germany, or any `regime_change` peace term — is a
+  // one-party state that `getCountryConfig` will never describe as one, so the
+  // static read left the generic collapse path live in exactly the states it
+  // exists to protect.
+  const collapseRuntime = await getCountryState(db, countryId);
   const lostMajority =
-    canCollapseGovernment(getCountryConfig(countryId, preset)) &&
+    canCollapseGovernment({ governmentType: collapseRuntime.governmentType }) &&
     existing.status === "formed" &&
     (existing.formationType === "majority" || existing.formationType === "coalition") &&
     totalSeatsSupporting < majorityThreshold;
@@ -422,8 +428,13 @@ export async function resetParliamentaryGovernmentAfterElection(
         : 0;
     }
 
+    // RUNTIME governmentType — same argument as in
+    // `updateParliamentaryGovernmentSeats`: the static config never learns about
+    // a runtime conversion, so the one-party collapse lock did not apply to the
+    // states it exists to protect.
+    const collapseRuntime = await getCountryState(db, countryId);
     const lostMajority =
-      canCollapseGovernment(getCountryConfig(countryId)) &&
+      canCollapseGovernment({ governmentType: collapseRuntime.governmentType }) &&
       (existing.formationType === "majority" || existing.formationType === "coalition") &&
       totalSeatsSupporting < majorityThreshold;
 
@@ -535,7 +546,15 @@ export async function appointPrimeMinister(
     // ── Leader confidence: install or renew on PM appointment ─────────────
     // Driven by config flag so any future country with an internal-party
     // confidence model opts in without a new country literal here.
-    if (getCountryConfig(countryId, activePreset).hasLeaderConfidenceModel) {
+    // RUNTIME flag, not the static config. `installOnePartyState` switches
+    // `hasLeaderConfidenceModel` on in `countryState` when it converts a
+    // country, and the compiled config carries it only for CN/RU/DD — so a
+    // converted country (reunified Germany) had the model turned on and then
+    // never consulted, leaving its leader with no confidence record at all.
+    // `getCountryState` self-heals from the same config when no row exists, so
+    // this strictly supersedes the old read rather than narrowing it.
+    const leaderConfidenceRuntime = await getCountryState(db, countryId);
+    if (leaderConfidenceRuntime.hasLeaderConfidenceModel) {
       const gs = await db
         .collection<{ _id: string; currentTurn: number }>("gameState")
         .findOne({ _id: "current" });
@@ -1716,8 +1735,12 @@ export async function cancelActiveNoConfidenceVotes(
  * Non-terminal bill statuses that are cleared when the lower chamber
  * dissolves. Explicitly excludes `enrolled` and `cabinet_review` — those
  * are "past the lower chamber" and survive dissolution.
+ *
+ * Exported because `mergeCountry` composes its whole-country lapse list from
+ * this one (plus the past-the-chamber statuses a COUNTRY dissolution also
+ * overtakes) — one taxonomy, not two hand-maintained copies.
  */
-const LOWER_CHAMBER_FAIL_STATUSES: BillStatus[] = [
+export const LOWER_CHAMBER_FAIL_STATUSES: BillStatus[] = [
   "proposed",
   "active",
   "passed_origin",

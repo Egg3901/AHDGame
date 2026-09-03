@@ -156,6 +156,7 @@ export async function runDemographicFlows(
       db.collection("macroMetrics").find({}).project<MetricsDoc>(METRICS_PROJECTION).toArray(),
       db.collection("gameState").findOne<{
         votingAgeEligible?: number;
+        votingAgeEligibleByCountry?: Partial<Record<string, number>>;
         workingAgeEligible?: number;
         retirementAgeEligible?: number;
         currentYear?: number;
@@ -177,14 +178,12 @@ export async function runDemographicFlows(
   );
 
   // Configurable age thresholds (defaults 18 / 18 / 64; future laws write gameState).
-  // The voting age additionally falls back to the YEAR when no law has set it —
-  // 21 before the 26th Amendment. Uses `resolveGameYear` rather than the era
-  // flag: the franchise is a fact about the world's date, not an opt-in
-  // simulation feature, and a world with neither year nor turn keeps the flat 18.
-  const votingAge = resolveVotingAgeEligible(
-    gameState ?? undefined,
-    gameState ? resolveGameYear(gameState) : null
-  );
+  // Voting age is resolved per country because electoral-law enactment writes the
+  // country map. Countries without a law still use the year fallback: 21 before
+  // the 26th Amendment, 18 afterward.
+  const gameYear = gameState ? resolveGameYear(gameState) : null;
+  const votingAgeFor = (countryId: string) =>
+    resolveVotingAgeEligible(gameState ?? undefined, gameYear, countryId);
   const workLo = resolveWorkingAgeEligible(gameState ?? undefined);
   const workHi = resolveRetirementAgeEligible(gameState ?? undefined);
   const stateById = new Map(states.map((s) => [s._id, s]));
@@ -351,7 +350,7 @@ export async function runDemographicFlows(
             gdpGrowth: val(w.m?.economic?.gdpGrowth, 2.5),
             unemployment: val(w.m?.economic?.unemploymentRate, 5),
             medianIncome: val(w.m?.economic?.medianIncome, 50000),
-            costOfLiving: val(w.m?.economic?.costOfLiving, 50),
+            costOfLiving: val(w.m?.economic?.costOfLiving, 100),
             labourTightness: labourMacroEnabled ? val(w.m?.economic?.labourTightness, 0) : 0,
             labourWageIndex: labourMacroEnabled ? val(w.m?.economic?.labourWageIndex, 1) : 1,
           },
@@ -362,6 +361,9 @@ export async function runDemographicFlows(
     const pop = new Map(countryWorks.map((w) => [w.id, totalPopulation(w.vector)]));
     const targets = computeInternalNetTargets(attract, pop, TURNS_PER_YEAR);
     const vectorsMap = new Map(countryWorks.map((w) => [w.id, w.vector]));
+    const preInternalPopulation = new Map(
+      countryWorks.map((w) => [w.id, totalPopulation(w.vector)])
+    );
     const { vectors: finalVectors, circuitBreakerTrips: trips } = applyInternalMigration(
       vectorsMap,
       targets,
@@ -369,7 +371,11 @@ export async function runDemographicFlows(
       MAX_INTERNAL_CHANGE_FRACTION
     );
     circuitBreakerTrips += trips;
-    for (const w of countryWorks) w.vector = finalVectors.get(w.id) ?? w.vector;
+    for (const w of countryWorks) {
+      const finalVector = finalVectors.get(w.id) ?? w.vector;
+      w.flows.netMigration += totalPopulation(finalVector) - (preInternalPopulation.get(w.id) ?? 0);
+      w.vector = finalVector;
+    }
   }
 
   // ── Stage 3: derive readouts from the FINAL vectors and persist ──
@@ -378,9 +384,9 @@ export async function runDemographicFlows(
   const stateOps: AnyBulkWriteOperation<State>[] = [];
   const metricOps: AnyBulkWriteOperation<StateMetrics>[] = [];
 
-  for (const { id: regionId, before, vector, flows, militaryServicePop } of works) {
+  for (const { id: regionId, countryId, before, vector, flows, militaryServicePop } of works) {
     const newPop = Math.max(1, totalPopulation(vector));
-    const eligible = Math.round(votingAgePopulation(vector, votingAge));
+    const eligible = Math.round(votingAgePopulation(vector, votingAgeFor(countryId)));
     const working = Math.round(workingAgePopulation(vector, workLo, workHi));
     // populationGrowth spans the FULL turn: pre-local `before` → post-internal `vector`.
     const pm = derivePopulationMetrics(before, vector, flows, TURNS_PER_YEAR);

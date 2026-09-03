@@ -106,6 +106,7 @@ function decide(
     stateControlled?: Set<string>;
     placementSignals?: PlacementSignals;
     prices?: CommodityPriceRatioFn;
+    retailExpansionPaused?: boolean;
   } = {}
 ) {
   return makeNppCorpDecision(
@@ -116,6 +117,7 @@ function decide(
       now: new Date(),
       fxRate: extra.fxRate,
       modifiers: ceoArchetypeModifiers("cautious"),
+      retailExpansionPaused: extra.retailExpansionPaused,
     },
     new Map<string, UnownedSector[]>([["US", pools]]),
     extra.stateControlled ?? noState,
@@ -146,6 +148,21 @@ function pushedOrder(write: ReturnType<typeof queueWrites>[number]) {
 }
 
 describe("NPP capacity reinvestment — a selling-out, fully-utilized plant grows", () => {
+  it("maintains but does not grow Retail capacity during the demand unwind", () => {
+    const s = sector({ sectorType: "retail" });
+    const decision = decide(
+      corp({ type: "retail" }),
+      [s],
+      [pool({ sectorType: "retail" })],
+      plantsCtx,
+      { retailExpansionPaused: true }
+    );
+    const order = pushedOrder(queueWrites(decision)[0]);
+    const replacement = (s.producedUnits ?? 0) * CAPITAL_DEPRECIATION_PER_TURN;
+
+    expect(order.unitsOrdered).toBeCloseTo(replacement, 6);
+  });
+
   it("grows a maxed-out plant by a chunk of its throughput, built from nothing", () => {
     const s = sector();
     const decision = decide(corp(), [s], [pool()]);
@@ -182,8 +199,9 @@ describe("NPP capacity reinvestment — a selling-out, fully-utilized plant grow
       Math.round(order.costPaidAnchor)
     );
 
-    // Charged, and above the cash floor.
-    expect(decision.updates.liquidCapital as number).toBeLessThan(500_000_000);
+    // Charged, and above the cash floor. The charge is a delta now, not an
+    // absolute balance write (ticket #1260).
+    expect(decision.liquidCapitalDelta).toBeLessThan(0);
     expect(decision.reinvestments).toHaveLength(1);
     expect(decision.reinvestments![0].sectorId).toEqual(s._id);
   });
@@ -348,7 +366,7 @@ describe("NPP capacity reinvestment — does not fire", () => {
     expect(queueWrites(decision)).toHaveLength(0);
     // And it spends nothing: no state enterprise pays for plant out of its own
     // operating cash on this path.
-    expect(decision.updates.liquidCapital).toBeUndefined();
+    expect(decision.liquidCapitalDelta).toBe(0);
   });
 });
 
@@ -391,14 +409,38 @@ describe("NPP capacity reinvestment — conservation and pricing", () => {
 
     expect(order.costPaidAnchor).toBeCloseTo(expectedAnchor, 4);
     // The CHARGE is fx-converted; the stored order cost stays in ₳.
-    const charged = OPENING - (decision.updates.liquidCapital as number);
+    const charged = -decision.liquidCapitalDelta;
     expect(charged / (expectedAnchor * fxRate)).toBeCloseTo(1, 9);
   });
 
   it("an anchor-currency corp is charged the anchor amount unchanged", () => {
     const decision = decide(corp(), [sector()], [pool()]);
-    const charged = 500_000_000 - (decision.updates.liquidCapital as number);
+    const charged = -decision.liquidCapitalDelta;
     expect(charged).toBeCloseTo(decision.reinvestments![0].costAnchor, 6);
+  });
+
+  it("never puts liquidCapital in `updates`, on any path (ticket #1260 regression)", () => {
+    // The whole bug: these ops are appended to the corporation bulkWrite AFTER
+    // the turn's income `$inc`, so ANY absolute write of the balance from here
+    // overwrites the income. `updates` becomes `$set`, so a `liquidCapital` key
+    // reaching it silently reinstates the bug. The cash leg must travel only as
+    // `liquidCapitalDelta`. Covers spending, founding and no-op paths.
+    const spends = decide(corp(), [sector()], [pool()], plantsCtx);
+    const noop = decide(
+      corp({ liquidCapital: 0 }),
+      [sector()],
+      [pool({ headroomUnits: 0, revenue: 0 })]
+    );
+
+    for (const d of [spends, noop]) {
+      expect(d.updates).not.toHaveProperty("liquidCapital");
+      expect(typeof d.liquidCapitalDelta).toBe("number");
+      expect(Number.isFinite(d.liquidCapitalDelta)).toBe(true);
+    }
+    // And the spending path really did charge something, so this is not passing
+    // simply because nothing happened.
+    expect(spends.liquidCapitalDelta).toBeLessThan(0);
+    expect(noop.liquidCapitalDelta).toBe(0);
   });
 });
 
@@ -460,7 +502,7 @@ describe("NPP capacity reinvestment — the two cash rails", () => {
     const c = corp({ liquidCapital: cost * 10 }); // way under CASH_FLOOR
     const decision = decide(c, [maintOnly()], [pool({ headroomUnits: 0, revenue: 0 })]);
     expect(queueWrites(decision)).toHaveLength(1);
-    expect(decision.updates.liquidCapital as number).toBeGreaterThan(0);
+    expect((c.liquidCapital ?? 0) + decision.liquidCapitalDelta).toBeGreaterThan(0);
   });
 
   it("but never more than a quarter of what it holds", () => {
@@ -482,7 +524,7 @@ describe("NPP capacity reinvestment — the two cash rails", () => {
     const c = corp({ liquidCapital: cost * 10 }); // below CASH_FLOOR
     const decision = decide(c, [sector()], [pool({ headroomUnits: 0, revenue: 0 })]);
     expect(queueWrites(decision)).toHaveLength(1);
-    expect(decision.updates.liquidCapital as number).toBeGreaterThan(0);
+    expect((c.liquidCapital ?? 0) + decision.liquidCapitalDelta).toBeGreaterThan(0);
   });
 });
 
@@ -560,7 +602,7 @@ describe("NPP capacity reinvestment — a multi-turn world keeps building", () =
           onlineTurn: order.onlineTurn,
           startTurn: order.startTurn,
         });
-        capital = decision.updates.liquidCapital as number;
+        capital += decision.liquidCapitalDelta;
         longestSilence = Math.max(longestSilence, turn - lastOrderTurn);
         lastOrderTurn = turn;
       }

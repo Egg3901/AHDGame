@@ -10,9 +10,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  # These checks are independent. Running them as separate jobs makes the CI
+  # critical path track the slowest check instead of the sum of all three.
+  lint:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,17 +24,39 @@ jobs:
       - run: npm ci
       - name: Lint
         run: npm run lint
+      - name: Architecture audit
+        run: npm run architecture:audit
+
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
       - name: Format check
         run: npm run format:check
+
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
       - name: Typecheck
         run: npx tsc --noEmit -p tsconfig.json
         env:
-          NODE_OPTIONS: --max-old-space-size=6144
-      - name: Architecture audit
-        # Advisory for now: 3 known pre-existing blockers. Flip to a gating step
-        # (remove continue-on-error) once those are cleared.
-        run: npm run architecture:audit
-        continue-on-error: true
+          # The full program now peaks just above 6 GiB on the two-core hosted
+          # runner. Leave a little heap headroom without consuming the runner's
+          # entire 7 GiB allocation.
+          NODE_OPTIONS: --max-old-space-size=6656
 
   # Split out of `verify` and sharded: the suite is ~3,500 files and its cost is
   # dominated by per-file module loading, so wall time tracks file count almost
@@ -76,3 +100,32 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=6144
           CI: "true"
+
+  # Branch protection requires the stable `verify` context. Keep that single
+  # public gate, but do not report it successful until every correctness gate
+  # above has completed successfully.
+  verify:
+    if: always()
+    needs: [lint, format, typecheck, test, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every CI gate
+        env:
+          LINT_RESULT: ${{ needs.lint.result }}
+          FORMAT_RESULT: ${{ needs.format.result }}
+          TYPECHECK_RESULT: ${{ needs.typecheck.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          printf 'lint=%s format=%s typecheck=%s test=%s build=%s\n' \
+            "$LINT_RESULT" "$FORMAT_RESULT" "$TYPECHECK_RESULT" \
+            "$TEST_RESULT" "$BUILD_RESULT"
+
+          if [[ "$LINT_RESULT" != "success" || \
+                "$FORMAT_RESULT" != "success" || \
+                "$TYPECHECK_RESULT" != "success" || \
+                "$TEST_RESULT" != "success" || \
+                "$BUILD_RESULT" != "success" ]]; then
+            exit 1
+          fi

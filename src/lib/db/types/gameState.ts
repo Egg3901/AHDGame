@@ -2,6 +2,8 @@ import type { ObjectId } from "mongodb";
 import type { CountryId, CountryStatus } from "../../constants/countries";
 import type { TurnPhaseTelemetryMap } from "./turnPhaseTelemetry";
 
+export type NppEntryViabilityMode = "off" | "observe" | "enforce";
+
 export type IterationType = "Alpha" | "Beta" | "Iteration";
 
 /**
@@ -221,6 +223,32 @@ export interface GameState {
   nppForeignPolicyStage?: NppForeignPolicyStage;
   nppForeignPolicyStageBy?: string;
   nppForeignPolicyStageAt?: string;
+  /**
+   * May an NPP belligerent declare an offensive of its own? When false the
+   * `conduct_war` choice is never offered, so the country spends its foreign-policy
+   * slot elsewhere instead of queueing a battle declaration. Default false.
+   * Toggled from Admin → World → Conflicts. Player governments are unaffected:
+   * they declare through the cabinet battle route either way.
+   *
+   * Governs the DECISION, not the queue. A declaration already filed still resolves
+   * on the following turn after this is switched off, because an offensive always
+   * resolves a turn after it is declared — that gap is the defender's window, and
+   * cancelling a filed order here would be a hole in it. Expect at most one more tick
+   * of NPP offensives after turning this off.
+   */
+  nppOffensiveInitiationEnabled?: boolean;
+  nppOffensiveInitiationEnabledBy?: string;
+  nppOffensiveInitiationEnabledAt?: string;
+  /**
+   * May an NPP belligerent join an ally's offensive at a front where it already has
+   * troops posted? When true it is treated as having a standing auto-join order on
+   * every front it is deployed to, without one being written to `theaterState`.
+   * Default false, which leaves NPP allies fighting defensively only. Player
+   * governments keep their own explicit `theaterState.autoJoin` orders either way.
+   */
+  nppOffensiveJoinEnabled?: boolean;
+  nppOffensiveJoinEnabledBy?: string;
+  nppOffensiveJoinEnabledAt?: string;
   /** When true, crisis international-aid nodes use the slider + legislature-bill flow. */
   crisisAidBillsEnabled?: boolean;
   crisisAidBillsEnabledBy?: string;
@@ -302,6 +330,14 @@ export interface GameState {
   extractionAutoStrategyEnabled?: boolean;
   extractionAutoStrategyEnabledBy?: string;
   extractionAutoStrategyEnabledAt?: string;
+  /**
+   * Safety rollout for the realized-viability check on autonomous NPP mine
+   * founding. Absent resolves to observe so existing worlds collect evidence
+   * without changing placement. Only enforce can reject a candidate.
+   */
+  nppEntryViabilityMode?: NppEntryViabilityMode;
+  nppEntryViabilityModeBy?: string;
+  nppEntryViabilityModeAt?: string;
   /** Turn the extraction auto-strategy phase last acted. Guards its cadence. */
   lastExtractionAutoStrategyTurn?: number;
   /** Master gate for the US House districted-redistricting system. Default off. */

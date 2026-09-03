@@ -17,7 +17,6 @@ import type {
 import { POOL_SENTINEL_PARTY_ID } from "@/lib/db/types";
 import { applyDecay } from "@/lib/utils/turnoutDecay";
 import {
-  LAYER1_DEMOGRAPHICS,
   calculateAlignmentMultiplier,
   DOLLARS_PER_TURNOUT_POINT,
 } from "@/lib/utils/demographicAlignment";
@@ -36,8 +35,8 @@ import {
   calculateNationalGOTVBoost,
   calculateStateGOTVBoost,
   calculateCanvassingBoost,
-  getDemographicLean,
 } from "./demographicTurnoutCalculations";
+import { resolveCanvassGroup } from "@/lib/demographics/countryDemographics";
 import {
   calculateRegistrationDriveBoost,
   planRegistrationDriveDraw,
@@ -582,28 +581,35 @@ export async function processPartyGOTV(
       const targetGroup = budget.gotvTargetGroup;
 
       if (targetCategory && targetGroup) {
-        // Find the demographic to compute alignment distance
-        const demo = LAYER1_DEMOGRAPHICS.find(
-          (d) => d.category === targetCategory && d.group === targetGroup
-        );
-        const alignMult = demo
+        // Country-aware lean lookup: non-US parties target voter-group
+        // categories (e.g. UK uk_voterGroups) absent from the US-only
+        // LAYER1 table, which used to collapse their alignment to the 0.1
+        // fallback (ticket #1265).
+        const lean = resolveCanvassGroup(budgetCountryId, targetCategory, targetGroup);
+        const alignMult = lean
           ? calculateAlignmentMultiplier(
               position.economic,
               position.social,
-              demo.economicLean,
-              demo.socialLean
+              lean.economicLean,
+              lean.socialLean
             )
           : 0.1;
 
         if (budget.scope === "national") {
-          // National: divide spend across all states
+          // National: divide spend across this country's regions only. The
+          // collection holds every country's docs, so the unfiltered length
+          // diluted non-US parties (UK: 12 regions split ~127 ways) and
+          // leaked boosts into foreign countries (ticket #1265).
+          const inScopeTurnout = stateTurnout.filter((s) =>
+            isTurnoutDocInCountry(s, budgetCountryId)
+          );
           const boost = calculateNationalGOTVBoost(
             gotvSpend,
-            stateTurnout.length,
+            inScopeTurnout.length,
             DOLLARS_PER_TURNOUT_POINT,
             alignMult
           );
-          for (const state of stateTurnout) {
+          for (const state of inScopeTurnout) {
             applyBoost(state, { category: targetCategory, group: targetGroup }, boost);
             state.lastUpdated = new Date();
           }
@@ -644,26 +650,27 @@ export async function processPartyGOTV(
       ) {
         // Suppression targets a specific demographic with a negative boost
         // Alignment multiplier is inverted: further groups are EASIER to suppress
-        const demo = LAYER1_DEMOGRAPHICS.find(
-          (d) => d.category === supCategory && d.group === supGroup
-        );
-        const alignMult = demo
+        const supLean = resolveCanvassGroup(budgetCountryId, supCategory, supGroup);
+        const alignMult = supLean
           ? calculateAlignmentMultiplier(
               position.economic,
               position.social,
-              demo.economicLean,
-              demo.socialLean
+              supLean.economicLean,
+              supLean.socialLean
             )
           : 0.5;
 
         if (budget.scope === "national") {
+          const inScopeTurnout = stateTurnout.filter((s) =>
+            isTurnoutDocInCountry(s, budgetCountryId)
+          );
           const negBoost = calculateNationalGOTVBoost(
             suppressionSpend,
-            stateTurnout.length,
+            inScopeTurnout.length,
             DOLLARS_PER_TURNOUT_POINT,
             alignMult
           );
-          for (const state of stateTurnout) {
+          for (const state of inScopeTurnout) {
             applyBoost(state, { category: supCategory, group: supGroup }, -negBoost);
             state.lastUpdated = new Date();
           }
@@ -1049,6 +1056,14 @@ export async function processPartyGOTV(
   return { turnout: stateTurnout, budgets: partyBudgets as PartyBudget[] };
 }
 
+/**
+ * Whether a turnout doc belongs to a budget's country. Legacy docs predate
+ * country scoping (e.g. DC carries no countryId) and belong to the US.
+ */
+function isTurnoutDocInCountry(doc: StateDemographicTurnout, countryId: CountryId): boolean {
+  return (doc.countryId ?? DEFAULT_LEGACY_COUNTRY_ID) === countryId;
+}
+
 function resolveBudgetCountry(
   budget: StoredPartyBudget,
   statePartyOrgMap: Map<string, StatePartyOrg>,
@@ -1150,8 +1165,16 @@ export async function processPlayerCanvassing(
     const state = stateTurnout.find((s) => s._id === action.stateId);
     if (!state) continue;
 
-    // Get demographic lean
-    const demoLean = getDemographicLean(action.demographic.category, action.demographic.group);
+    // Country-aware lean lookup off the canvassed region's own country
+    // (US-only lookup collapsed non-US targets to a (0,0) lean).
+    const canvassLean = resolveCanvassGroup(
+      state.countryId,
+      action.demographic.category,
+      action.demographic.group
+    );
+    const demoLean = canvassLean
+      ? { economic: canvassLean.economicLean, social: canvassLean.socialLean }
+      : { economic: 0, social: 0 };
 
     // Calculate effectiveness
     const boost = calculateCanvassingBoost(

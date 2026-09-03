@@ -164,13 +164,20 @@ export function BondTradeModal({
         ? (userContext.myCorporation?.bondUnits ?? 0)
         : (investmentBank?.bondUnits ?? 0);
 
-  const costPerUnit = bond.pricePerUnit;
+  // Buys settle at the pool's ask, sells at its bid. Older responses carry
+  // only the mid; fall back to it so the modal never shows a blank price.
+  const costPerUnit =
+    side === "sell"
+      ? (bond.bidPricePerUnit ?? bond.pricePerUnit)
+      : (bond.askPricePerUnit ?? bond.pricePerUnit);
+  const marketDepthUnits = bond.marketDepthUnits;
   const costPerUnitAnchor = toInternalFrom(costPerUnit, bondCurrency);
   const totalCost = units * costPerUnit;
   // Convert bond-currency cost to anchor (₳) so it can be compared to budget,
   // which is always in ₳ (personalCashAnchor / corp liquidCapital are anchor values).
   const totalCostAnchor = toInternalFrom(totalCost, bondCurrency);
   const notEnoughToSell = side === "sell" && units > heldUnits;
+  const depthShort = side === "sell" && marketDepthUnits != null && units > marketDepthUnits;
   const floatShort = side === "buy" && account !== "investmentBank" && units > bond.publicFloat;
   const selectedPayBalance =
     account === "character" && personalBalances ? (personalBalances[selectedPayCurrency] ?? 0) : 0;
@@ -341,7 +348,7 @@ export function BondTradeModal({
             ? maxAffordableBuyUnits
             : Math.min(bond.publicFloat, maxAffordableBuyUnits)
         )
-      : heldUnits;
+      : Math.min(heldUnits, marketDepthUnits ?? heldUnits);
 
   const budgetLabel =
     account === "corporation"
@@ -503,6 +510,7 @@ export function BondTradeModal({
     units > 0 &&
     !fundsShort &&
     !notEnoughToSell &&
+    !depthShort &&
     !floatShort &&
     !(account === "corporation" && !hasCorp) &&
     !(account === "investmentBank" && !hasInvestmentBank);
@@ -519,7 +527,7 @@ export function BondTradeModal({
               <span className="mx-2 text-card-border">·</span>
               Series {bond.maturityLabel}
               <span className="mx-2 text-card-border">·</span>
-              <span className="tabular-nums">{fmtBondPrice(bond.pricePerUnit)}/unit</span>
+              <span className="tabular-nums">{fmtBondPrice(costPerUnit)}/unit</span>
               {/* Native price for foreign-issuer bonds — surfaces the issuer-currency
                   price alongside the player's display currency. */}
               {(() => {
@@ -527,7 +535,7 @@ export function BondTradeModal({
                   return null;
                 const nativeRate = forexRates?.[bondCurrency];
                 if (!nativeRate) return null;
-                const native = bond.pricePerUnit * nativeRate;
+                const native = costPerUnit * nativeRate;
                 return (
                   <span className="ml-1 text-xs tabular-nums text-muted/70">
                     ({formatCurrencyFaceAmount(native, bondCurrency)} native)
@@ -873,6 +881,12 @@ export function BondTradeModal({
             {notEnoughToSell && (
               <p className="text-xs text-error border-t border-card-border pt-2">
                 You only hold {heldUnits.toLocaleString("en-US")} units.
+              </p>
+            )}
+            {depthShort && !notEnoughToSell && (
+              <p className="text-xs text-error border-t border-card-border pt-2">
+                The market can only buy {(marketDepthUnits ?? 0).toLocaleString("en-US")} units
+                right now. Sell fewer, or wait a turn for coupon income to refill it.
               </p>
             )}
           </div>

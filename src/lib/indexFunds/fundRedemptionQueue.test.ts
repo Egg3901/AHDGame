@@ -43,6 +43,17 @@ describe("fundRedemptionQueue", () => {
     ).toBe(false);
   });
 
+  it("quarantines processing entries from automatic retry", () => {
+    expect(
+      isRetryableRedemptionEntry({
+        status: "processing",
+        units: 4,
+        paidAmountAnchor: 600,
+        requestedNavAnchor: 100,
+      })
+    ).toBe(false);
+  });
+
   it("returns partial status when units remain after a payout (ticket #857)", () => {
     // This is only called after a successful nonzero payout, so a nonzero
     // remainder means "partially paid," not "untouched" — "queued" would be

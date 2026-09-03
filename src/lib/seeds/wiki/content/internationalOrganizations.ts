@@ -103,6 +103,15 @@ This page displays the org's membership, current leadership, active legislation,
 - **FTAs are the most impactful org legislation.** A free trade agreement between two members eliminates bilateral tariffs and boosts trade affinity, a major economic lever.
 - **Custom orgs are flexible.** You can create a bloc tailored to your diplomatic strategy, inviting only aligned countries.
 
+## Public API
+
+Bots and public dashboards can read the live organization layer with any scoped API key:
+
+- \`GET /api/public/v1/organizations\` lists every active built-in and custom organization with membership, leadership, and activity counts.
+- \`GET /api/public/v1/organizations/[id]\` adds the charter, membership proposals, resolutions, country-level vote records, leadership elections, and pending withdrawals.
+
+The detail route reports how each country voted, but deliberately omits the internal character IDs attached to proposals and ballots. The complete request and response reference lives in the [public API documentation](https://docs.lakesidegames.net/api/public-v1.html).
+
 ## Related systems
 
 - **[International Trade](/wiki/trade-system)**: how org membership and FTAs affect trade affinity

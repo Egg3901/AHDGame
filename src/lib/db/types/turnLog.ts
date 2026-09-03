@@ -292,6 +292,13 @@ export interface TurnLog {
       charactersProcessed: number;
       totalInterest: number;
     } | null;
+    /** Shadow savings accounts materialized and compared this turn. */
+    savingsShadowTurn?: {
+      mode: "off" | "shadow" | "authoritative";
+      accountsRefreshed: number;
+      currenciesCompared: number;
+      discrepancies: number;
+    } | null;
 
     npcBankPolicyTurn: {
       banksChecked: number;
@@ -305,6 +312,14 @@ export interface TurnLog {
       loanPrincipalRepaid: number;
       defaultsWrittenOff: number;
       npcDepositDelta: number;
+      /** Settlements that started and never finished, as of the end of the pass. */
+      unfinishedSettlements?: number;
+      recovery?: {
+        resumedSettlements: number;
+        stillPartial: number;
+        estatesRecovered: number;
+        estatesStillResolving: number;
+      };
     } | null;
 
     /** A8: employer pension contributions into union schemes. */

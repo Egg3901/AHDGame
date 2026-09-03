@@ -1,69 +1,107 @@
 // @vitest-environment happy-dom
+import { describe, it, expect, afterEach } from "vitest";
+import { render, screen, cleanup } from "@testing-library/react";
+import { NavairCommandClient, type CommandFormation } from "./NavairCommandClient";
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { NavairCommandClient } from "./NavairCommandClient";
+afterEach(cleanup);
 
-const fetchMock = vi.fn().mockResolvedValue({
-  ok: true,
-  json: async () => ({ ok: true }),
+/**
+ * What the command page says about repair.
+ *
+ * A formation's condition has always been shown as a bare percentage, which tells a
+ * commander what is wrong and nothing about what to do. These lines exist to name the
+ * rate, the limit and the reason, because "not mending" on its own sends a player to the
+ * wiki while "your supply is below what a yard needs" sends them to move the fleet.
+ */
+
+const formation = (over: Partial<CommandFormation> = {}): CommandFormation => ({
+  id: "f1",
+  name: "1st Test Squadron",
+  type: "Guided-Missile Destroyer",
+  domain: "naval",
+  station: "weu",
+  stationName: "Western Europe",
+  mission: "PORT",
+  missionTarget: null,
+  integrity: 40,
+  readiness: 70,
+  supply: 100,
+  auto: false,
+  warnings: [],
+  repair: { mending: true, text: "Mending 12% a turn in port, up to 100%." },
+  ...over,
 });
 
-beforeEach(() => {
-  fetchMock.mockClear();
-  vi.stubGlobal("fetch", fetchMock);
-});
+const props = {
+  countryCode: "uk",
+  positionId: "defence_secretary",
+  summary: {
+    holding: [],
+    frontsWithoutAir: [],
+    starving: 0,
+    atWar: true,
+    navalLots: 0,
+    airLots: 0,
+  },
+  navalMissions: [{ key: "PORT", label: "In port", desc: "Resting." }],
+  airMissions: [],
+  stations: [{ id: "weu", name: "Western Europe", allowed: true }],
+};
 
-describe("NavairCommandClient", () => {
-  it("collects a target before sending a strike order", async () => {
+describe("NavairCommandClient repair", () => {
+  it("says what a mending formation is recovering and how far", () => {
+    render(<NavairCommandClient {...props} formations={[formation()]} />);
+    expect(screen.getByText("Mending 12% a turn in port, up to 100%.")).toBeDefined();
+  });
+
+  it("says why a formation is not mending", () => {
     render(
       <NavairCommandClient
-        countryCode="DD"
-        positionId="defence"
+        {...props}
         formations={[
-          {
-            id: "wing-1",
-            name: "1st Bomber Squadron",
-            type: "Bomber Squadron",
-            domain: "air",
-            station: "eeu",
-            stationName: "Eastern Europe",
-            mission: "CAS",
-            missionTarget: null,
-            integrity: 100,
-            readiness: 100,
-            supply: 100,
-            auto: false,
-            warnings: [],
-          },
+          formation({ repair: { mending: false, text: "Not mending: fought this turn." } }),
         ]}
-        navalMissions={[]}
-        airMissions={[
-          { key: "CAS", label: "Close Air Support", desc: "Support the front." },
-          { key: "STRIKE_AIRBASE", label: "Airfield Strike", desc: "Hit enemy airfields." },
-        ]}
-        stations={[
-          { id: "eeu", name: "Eastern Europe", allowed: true },
-          { id: "weu", name: "Western Europe", allowed: true },
-        ]}
-        summary={{ holding: [], frontsWithoutAir: [], starving: 0, atWar: true }}
       />
     );
+    expect(screen.getByText("Not mending: fought this turn.")).toBeDefined();
+  });
 
-    fireEvent.change(screen.getByLabelText("Orders"), {
-      target: { value: "STRIKE_AIRBASE" },
-    });
+  // A commander cannot act on paid repair without knowing whether there is anything in
+  // the store to pay with.
+  it("names the materiel available for paid repair", () => {
+    render(
+      <NavairCommandClient
+        {...props}
+        summary={{ ...props.summary, navalLots: 12, airLots: 3 }}
+        formations={[formation()]}
+      />
+    );
+    expect(screen.getByText(/12 naval/)).toBeDefined();
+  });
 
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("Target")).toBeTruthy();
+  // A wing is not in a yard and does not put into port. Same rates, different words.
+  it("uses air wording for a wing and naval wording for a hull", () => {
+    render(
+      <NavairCommandClient
+        {...props}
+        formations={[
+          formation({
+            id: "a",
+            repair: { mending: true, text: "Mending 12% a turn at a home base, up to 100%." },
+          }),
+          formation({
+            id: "b",
+            repair: { mending: true, text: "Mending 12% a turn in a home yard, up to 100%." },
+          }),
+        ]}
+      />
+    );
+    expect(screen.getByText(/at a home base/)).toBeDefined();
+    expect(screen.getByText(/in a home yard/)).toBeDefined();
+  });
 
-    fireEvent.change(screen.getByLabelText("Target"), { target: { value: "eeu" } });
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
-      unitId: "wing-1",
-      mission: "STRIKE_AIRBASE",
-      missionTarget: "eeu",
-    });
+  it("says plainly when there is no materiel for paid repair", () => {
+    render(<NavairCommandClient {...props} formations={[formation()]} />);
+    expect(screen.getByText(/no naval or air materiel in store/i)).toBeDefined();
   });
 });

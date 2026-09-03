@@ -426,7 +426,9 @@ export default function BondsTab({
                             const data = await res.json();
                             if (res.ok) {
                               setBondActionSuccess(
-                                `Bond issued: ${fmtMoney(data.faceValue)} at ${data.couponRate}% coupon`
+                                typeof data.unitsUnsold === "number" && data.unitsUnsold > 0
+                                  ? `Bond issued: ${fmtMoney(data.faceValue)} at ${data.couponRate}% coupon. The market took ${Math.round((data.fillRatio ?? 0) * 100)}% up front; ${data.unitsUnsold.toLocaleString("en-US")} units are still placing and will fund as they sell.`
+                                  : `Bond issued: ${fmtMoney(data.faceValue)} at ${data.couponRate}% coupon`
                               );
                               setBondIssueFaceValue(0);
                               onRefresh();

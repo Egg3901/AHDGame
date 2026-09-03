@@ -18,14 +18,17 @@ import { buildCoalitionSide } from "@/lib/military/battleSides";
 import { resolveDefendingSides } from "@/lib/military/defendingSides";
 import { buildFactionSide } from "@/lib/military/factionSide";
 import { listPendingDeclarations } from "@/lib/db/collections/battleDeclarations";
-import { listTheaterStates } from "@/lib/db/collections/theaterState";
 import { autoJoinersAtFront } from "@/lib/military/coalition";
+import { loadOffensiveOptInSources, offensiveOptInsAtFront } from "@/lib/military/offensiveOptIns";
 import { battleForecast } from "@/lib/military/battle";
 import { enemyBand } from "@/lib/military/forecastFog";
 import { sideOf } from "@/lib/military/occupation";
 import { loadMilitaryBlocs } from "@/lib/military/blocLookup";
 import { belligerentSideOf } from "@/lib/military/conflictVisibility";
 import { isFactionEntity } from "@/lib/military/factionEntity";
+import { frontSupportFor } from "@/lib/navair/frontSupport";
+import { loadNavairChannels } from "@/lib/db/collections/navairChannels";
+import type { NavairUnit } from "@/lib/navair/types";
 import type { Front } from "@/lib/military/combat";
 
 interface RouteParams {
@@ -96,6 +99,16 @@ export async function GET(request: Request, { params }: RouteParams) {
     const atFront = (await unitsCol.find({ theaterId }).toArray()).filter(
       (u) => u.readyAtTurn == null || u.readyAtTurn <= currentTurn
     );
+    // The turn resolver reads these same world-level dispositions before every battle.
+    // A forecast that omits them can claim that assigning CAS changed nothing even
+    // though the real engagement will count it, which makes the projection actively
+    // misleading rather than merely approximate.
+    const [navairChannels, navairUnits] = await Promise.all([
+      loadNavairChannels(db),
+      unitsCol.find({ domain: { $in: ["naval", "air"] } }).toArray() as unknown as Promise<
+        NavairUnit[]
+      >,
+    ]);
     const unitsByCountry = new Map<string, typeof atFront>();
     for (const u of atFront) {
       const list = unitsByCountry.get(u.countryId) ?? [];
@@ -123,17 +136,20 @@ export async function GET(request: Request, { params }: RouteParams) {
           .map((d) => d.declarerCountry)
       ),
     ];
-    // ...and every ally standing here under a standing order to join offensives.
+    // ...and every ally standing here who joins offensives without declaring one:
+    // a player standing order, or the admin switch that opts NPP belligerents in.
     //
     // `battleResolution` folds these into `off.attackers` before it builds the sides,
     // so leaving them out here understated an offensive by exactly the allies who were
     // going to fight in it. The route's own contract is that a forecast can never
     // disagree with the outcome it predicts, so it has to ask the same question with
-    // the same helper the resolver uses.
-    const optedIn = new Set(
-      (await listTheaterStates(db))
-        .filter((st) => st.autoJoin?.[theaterId])
-        .map((st) => String(st.countryId))
+    // the same loader the resolver uses — including when a new source of consent is
+    // added, which is why both sides read `offensiveOptInsAtFront` rather than
+    // re-deriving the set from `theaterState`.
+    const optedIn = offensiveOptInsAtFront(
+      await loadOffensiveOptInSources(db),
+      conflict,
+      theaterId
     );
     const autoJoiners = optedIn.size
       ? autoJoinersAtFront(conflict, atFront, theaterId, ownSide, blocs, optedIn)
@@ -216,7 +232,25 @@ export async function GET(request: Request, { params }: RouteParams) {
       ownDefenderSides.push(ownFactionSide);
     }
 
-    const fc = battleForecast(attackerSides, defenderSides, theaterId);
+    const frontRegion = conflict.region;
+    const supportFor = (sides: typeof attackerSides) =>
+      frontSupportFor(
+        navairUnits,
+        navairChannels,
+        sides.map((side) => side.country),
+        frontRegion
+      );
+    const attackerSupport = supportFor(attackerSides);
+    const defenderSupport = supportFor(defenderSides);
+    const ownDefenceSupport = supportFor(ownDefenderSides);
+
+    const fc = battleForecast(
+      attackerSides,
+      defenderSides,
+      theaterId,
+      attackerSupport,
+      defenderSupport
+    );
     // The same front from the other end. Derived from the sides already built here,
     // so it discloses nothing new — and it is NOT 100 − oddsPct, because the
     // defender holds terrain in whichever direction the attack runs.
@@ -226,7 +260,13 @@ export async function GET(request: Request, { params }: RouteParams) {
     // what they could bring — and the viewer meets it with `ownDefenderSides`, the
     // allies who are already standing on this ground, not the ones who happened to
     // file an offensive alongside them.
-    const counter = battleForecast(defenderSides, ownDefenderSides, theaterId);
+    const counter = battleForecast(
+      defenderSides,
+      ownDefenderSides,
+      theaterId,
+      defenderSupport,
+      ownDefenceSupport
+    );
     // An undefended front fizzles at resolution rather than fighting — say so up front.
     const unopposed = defending.unopposed;
     const sup = fc.attackerProfile.sup;
@@ -238,6 +278,14 @@ export async function GET(request: Request, { params }: RouteParams) {
       supply: { level: sup.level, state: sup.state },
       enemyBand: enemyBand(fc.attStr, fc.defStr, { unopposed }),
       unopposed,
+      // Own-side support is safe to expose and makes the eligibility rules observable.
+      // Keep opponent support private, just like its roster and exact strength.
+      navalAirSupport: {
+        closeAirSupportActive: attackerSupport.casWeight > 0,
+        casWeight: Math.round(attackerSupport.casWeight * 10) / 10,
+        airSuperiority: Math.round(attackerSupport.airSuperiority),
+        interdictionPct: Math.round(attackerSupport.interdiction * 100),
+      },
       /** How many nations the projection pooled on each side, for the war room. */
       alliedContingents: attackerSides.length,
       enemyContingents: defenderSides.length,

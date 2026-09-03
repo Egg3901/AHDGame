@@ -38,24 +38,18 @@ import {
  */
 async function applySupportDelta(db: Db, characterId: ObjectId, delta: number): Promise<number> {
   if (delta === 0) return 0;
-  const candidates = await db
+  const result = await db
     .collection<ElectionCandidate>("electionCandidates")
-    .find({ characterId, status: "active" })
-    .project<{ _id: ObjectId; support?: number }>({ _id: 1, support: 1 })
-    .toArray();
-  if (candidates.length === 0) return 0;
-
-  let updated = 0;
-  for (const c of candidates) {
-    const currentSupport = typeof c.support === "number" ? c.support : 50;
-    const nextSupport = Math.max(0, Math.min(100, currentSupport + delta));
-    if (nextSupport === currentSupport) continue;
-    await db
-      .collection<ElectionCandidate>("electionCandidates")
-      .updateOne({ _id: c._id }, { $set: { support: nextSupport } });
-    updated += 1;
-  }
-  return updated;
+    .updateMany({ characterId, status: "active" }, [
+      {
+        $set: {
+          support: {
+            $min: [100, { $max: [0, { $add: [{ $ifNull: ["$support", 50] }, delta] }] }],
+          },
+        },
+      },
+    ]);
+  return result.modifiedCount;
 }
 
 /**

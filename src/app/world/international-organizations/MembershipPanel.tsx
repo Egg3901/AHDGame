@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import { postBillProposalWithElectionConfirmation } from "@/components/bills/BillAutoFailWarning";
-import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+
 import type { OrgSummary, OrgViewerInfo } from "./orgTypes";
 import { VoteButtons } from "./VoteButtons";
 import { VoteRoster } from "./VoteRoster";
@@ -13,6 +13,7 @@ import {
   requiresUnanimity,
   votesNeeded,
 } from "@/lib/internationalOrganizations/resolutionRules";
+import { useEntityName } from "./useEntityName";
 
 interface Props {
   org: OrgSummary;
@@ -27,6 +28,7 @@ interface Props {
  * viewer's foreign minister when their country is not yet a member.
  */
 export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, onChange }: Props) {
+  const entityName = useEntityName();
   const viewerFmCountry = viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
   const viewerIsMember =
     viewerFmCountry != null && org.members.some((m) => m.countryId === viewerFmCountry);
@@ -112,7 +114,7 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
         );
       }
       setLeaveSuccess(
-        `${COUNTRY_CONFIGS[viewerFmCountry].name}'s withdrawal measure was sent to the legislature.`
+        `${entityName(viewerFmCountry)}'s withdrawal measure was sent to the legislature.`
       );
       setLeavePendingLocal(true);
       onChange();
@@ -139,7 +141,7 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
                 disabled={!canPropose}
                 onClick={proposeJoin}
               >
-                Apply for {COUNTRY_CONFIGS[viewerFmCountry].name} to join
+                Apply for {entityName(viewerFmCountry)} to join
               </Button>
               {viewerHasOpenProposal && (
                 <p className="text-xs text-muted">Application already pending.</p>
@@ -182,8 +184,7 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
       ) : (
         <div className="space-y-3">
           {org.pendingMembershipProposals.map((p) => {
-            const proposingName =
-              COUNTRY_CONFIGS[p.proposingCountryId]?.name ?? p.proposingCountryId;
+            const proposingName = entityName(p.proposingCountryId);
             // Empty-org accession: the org vote was waived at application time,
             // so there is no member tally to show — only the domestic bill.
             const isFoundingApplication = p.orgVoteExempt === true;
@@ -220,7 +221,7 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
             const reason = !viewerFmCountry
               ? "Sign in as a foreign minister to vote."
               : !viewerIsMember
-                ? `${COUNTRY_CONFIGS[viewerFmCountry].name} must be a member to vote.`
+                ? `${entityName(viewerFmCountry)} must be a member to vote.`
                 : !viewerHoldsVote
                   ? "Your country holds no vote in this organization."
                   : viewerFmCountry === p.proposingCountryId

@@ -18,6 +18,8 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
+import fs from "fs";
+import path from "path";
 import { resetAndBootstrapGameWorld } from "@/lib/admin/resetAndBootstrapGameWorld";
 
 // ── Helper: fields the sovereign-default migration used to stamp. ──────────
@@ -173,11 +175,23 @@ describe("bootstrap contract: seed manifest", () => {
     expect(getCollectionCategory("elections")).toBe("runtime");
     expect(getCollectionCategory("bills")).toBe("runtime");
     expect(getCollectionCategory("corporations")).toBe("runtime");
+    expect(getCollectionCategory("indexFunds")).toBe("runtime");
     expect(getCollectionCategory("countryState")).toBe("runtime");
     expect(getCollectionCategory("regimeEscalation")).toBe("runtime");
     expect(getCollectionCategory("users")).toBe("preserved");
     expect(getCollectionCategory("characters")).toBe("preserved");
     expect(getCollectionCategory("migrations")).toBe("preserved");
+  });
+
+  it("forces the idempotent fund bootstrap after reset drops fund documents", () => {
+    const source = fs.readFileSync(
+      path.resolve(process.cwd(), "src/lib/admin/bootstrapGameWorld.ts"),
+      "utf8"
+    );
+    const start = source.indexOf("const indexFundBootstrap = await runMigrations");
+    const end = source.indexOf("Bootstrap migrations: ran", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(source.slice(start, end)).toContain("force: forceIndexFundBootstrap");
   });
 
   it("findUnclassifiedCollections flags unknown collections", async () => {

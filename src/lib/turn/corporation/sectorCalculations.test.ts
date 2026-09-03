@@ -941,6 +941,28 @@ describe("corporate tax deduction", () => {
 // ── Dividend payouts ──────────────────────────────────────────────────────────
 
 describe("dividend payments to shareholders", () => {
+  it("pays the public-float slice into the equity market pool accrual", () => {
+    const charId = new ObjectId();
+    const corp = makeCorp({
+      dividendRate: 25,
+      totalShares: 10_000_000,
+      publicFloat: 5_000_000,
+      shareholders: [{ characterId: charId, shares: 5_000_000 }],
+    });
+    const sector = makeSector(corp._id, {
+      revenue: 24_000,
+      profitMargin: 100,
+      targetGrowthRate: 0,
+      currentGrowthRate: 0,
+    });
+
+    const result = processSectors(baseLookups([corp], [sector]), 1, new Date());
+    const holderPayment = getTotalPayment(result.dividendPayments, charId.toString());
+    expect(result.equityPoolDividendAccruals).toHaveLength(1);
+    expect(result.equityPoolDividendAccruals[0]?.currency).toBe("USD");
+    expect(result.equityPoolDividendAccruals[0]?.amountLocal).toBeCloseTo(holderPayment, 2);
+  });
+
   it("distributes dividends proportionally to shareholders based on share count", () => {
     const charId1 = new ObjectId();
     const charId2 = new ObjectId();
@@ -1267,6 +1289,109 @@ describe("CEO salary payments", () => {
     const result = processSectors(lookups, 1, new Date());
 
     expect(getTotalPayment(result.ceoSalaryPayments, ceoId.toString())).toBe(0);
+  });
+});
+
+// ── Pay-time overhead ceiling (ticket #1237) ─────────────────────────────────
+
+describe("logistics/R&D pay-time overhead ceiling (ticket #1237)", () => {
+  /**
+   * `totalCosts` bundles the sector's own operating costs with the corp-level
+   * overhead legs, and the sector cost is a fixed function of the fixture, not
+   * of the budgets. Difference it against an otherwise identical zero-budget
+   * corp so the assertions measure the overhead charge alone.
+   */
+  function overheadCharged(corpOverrides: Record<string, unknown>, sectorRevenue: number): number {
+    const run = (overrides: Record<string, unknown>) => {
+      const corp = makeCorp({ liquidCapital: 1_000_000, ...overrides });
+      const sector = makeSector(corp._id, { revenue: sectorRevenue, profitMargin: 100 });
+      return processSectors(baseLookups([corp], [sector]), 1, new Date()).corpSnapshots[0]
+        .totalCosts;
+    };
+    return run(corpOverrides) - run({ marketingBudget: 0, logisticsBudget: 0, rdBudget: 0 });
+  }
+
+  it("charges nothing for logistics or R&D when gross revenue is zero", () => {
+    // The #1237 repro: a 15-minute-old corp with no revenue carrying the exact
+    // logistics budget that was stored on Tinky 3.0 (TRTW) at t513. Before the
+    // pay-time clamp this charged budget/24 in full and wrote liquidCapital
+    // -1.33e+277 in a single turn.
+    const corp = makeCorp({
+      logisticsBudget: 2.9971329020839937e278,
+      rdBudget: 1.873208063802496e277,
+      liquidCapital: 502.14,
+    });
+    const sector = makeSector(corp._id, { revenue: 0, profitMargin: 0 });
+    const lookups = baseLookups([corp], [sector]);
+
+    const snapshot = processSectors(lookups, 1, new Date()).corpSnapshots[0];
+
+    expect(Number.isFinite(snapshot.liquidCapital)).toBe(true);
+    expect(snapshot.liquidCapital).toBeCloseTo(502.14, 2);
+    expect(
+      overheadCharged(
+        { logisticsBudget: 2.9971329020839937e278, rdBudget: 1.873208063802496e277 },
+        0
+      )
+    ).toBe(0);
+  });
+
+  it("does not bank logistics strength or R&D score for spend it never charged", () => {
+    // The derived-stat half of #1237: strength growth read the raw budget, so an
+    // unpayable budget bought competitive stats for free. Tinky 3.0 banked
+    // logisticsStrength 1256 and rdScore 408 in the turn it "spent" 1e278.
+    const corp = makeCorp({
+      logisticsBudget: 2.9971329020839937e278,
+      rdBudget: 1.873208063802496e277,
+      logisticsStrength: 0,
+      rdScore: 0,
+    });
+    const sector = makeSector(corp._id, { revenue: 0, profitMargin: 0 });
+    const lookups = baseLookups([corp], [sector]);
+
+    const snapshot = processSectors(lookups, 1, new Date()).corpSnapshots[0];
+
+    expect(snapshot.logisticsStrength).toBe(0);
+    expect(snapshot.rdScore).toBe(0);
+  });
+
+  it("charges logistics and R&D in full when combined overhead is inside the 150% ceiling", () => {
+    // Revenue 24_000/day = 1_000/turn ⇒ ceiling 1_500/turn. Logistics 12_000/day
+    // (500/turn) + R&D 12_000/day (500/turn) = 1_000/turn, comfortably inside it.
+    // A compliant corp must be charged exactly as it was before this clamp.
+    expect(overheadCharged({ logisticsBudget: 12_000, rdBudget: 12_000 }, 24_000)).toBeCloseTo(
+      1_000,
+      4
+    );
+  });
+
+  it("scales logistics and R&D down proportionally once revenue falls below the budgets", () => {
+    // Legitimately-set budgets whose revenue later collapsed: 24_000/day each
+    // (500/turn each, 1_000/turn combined) against revenue 240/day = 10/turn,
+    // so the ceiling is 15/turn. Both legs keep their 50/50 split of it.
+    expect(overheadCharged({ logisticsBudget: 24_000, rdBudget: 24_000 }, 240)).toBeCloseTo(15, 4);
+  });
+
+  it("leaves logistics and R&D no headroom when CEO salary alone fills the ceiling", () => {
+    // Salary 36_000/day = 1_500/turn is the whole 150% ceiling at revenue
+    // 24_000/day (1_000/turn), so both budget legs clamp to zero.
+    const corp = makeCorp({
+      ceoSalary: 36_000,
+      logisticsBudget: 24_000,
+      rdBudget: 24_000,
+      liquidCapital: 1_000_000,
+    });
+    const sector = makeSector(corp._id, { revenue: 24_000, profitMargin: 100 });
+    const lookups = baseLookups([corp], [sector]);
+
+    const snapshot = processSectors(lookups, 1, new Date()).corpSnapshots[0];
+
+    // Only the salary leg is charged, and Bug #0728 caps that at 1.25x revenue.
+    expect(
+      overheadCharged({ ceoSalary: 36_000, logisticsBudget: 24_000, rdBudget: 24_000 }, 24_000)
+    ).toBeCloseTo(1.25 * 1_000, 4);
+    expect(snapshot.logisticsStrength).toBe(0);
+    expect(snapshot.rdScore).toBe(0);
   });
 });
 

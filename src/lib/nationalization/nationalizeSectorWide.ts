@@ -42,6 +42,7 @@ import type { TransitionConsequenceInput } from "./ownershipTransition";
 // while client components import directly from `./sectorScope` (no mongodb).
 import { SECTOR_SCOPE_LABELS, type SectorScope } from "./sectorScope";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { seedPlantLedger, splitWholePlantCount } from "@/lib/corporations/plantLedger";
 export { SECTOR_SCOPE_LABELS, type SectorScope };
 
 export interface NationalizeSectorWideParams {
@@ -135,6 +136,8 @@ export async function nationalizeSectorWide(
   // row grown from unowned headroom starts running.
   const emptyPlant = (survivor: CorporateSector | null): SectorPlantFieldsUpdate => ({
     capitalStock: 0,
+    plantCount: 0,
+    plantUnitRemainder: 0,
     capacityBookAnchor: 0,
     buildQueue: [],
     constructionInProgressAnchor: 0,
@@ -395,6 +398,10 @@ export async function nationalizeSectorWide(
         resolveSectorHostCurrencyCode(sec, donor),
         fxRateForSectorHostFromMap(sec, donor, fxByCurrency)
       );
+      const openingPlantCount = Number.isInteger(sec.plantCount)
+        ? (sec.plantCount as number)
+        : seedPlantLedger(sec.sectorType, sec.capitalStock).plantCount;
+      const plantCountSplit = splitWholePlantCount(openingPlantCount, f);
       // PLANTS — the capacity leg of the carve. Below plants this is null and
       // both writes below are byte identical to the pre-P3b behaviour.
       //
@@ -422,7 +429,11 @@ export async function nationalizeSectorWide(
       // a donor row that is DELETED at f = 1, burning the ₳ outright.
       const carvedPlant: SectorPlantFieldsUpdate | null = plantsEnabled
         ? (() => {
-            const sliced = carveSectorPlantFields(readSectorPlantFields(sec), f);
+            const sliced = carveSectorPlantFields(
+              readSectorPlantFields(sec),
+              f,
+              plantCountSplit.carved
+            );
             return {
               ...sliced,
               capitalStock: sliced.capitalStock * (1 - NATIONALIZATION_REVENUE_HAIRCUT),
@@ -456,7 +467,9 @@ export async function nationalizeSectorWide(
               // sink applied above. Without this the donor's `capitalStock` would
               // be untouched and the next tick would restate its revenue back to
               // the full pre-taking figure: the state would have minted units.
-              ...(plantsEnabled ? carveSectorPlantFields(readSectorPlantFields(sec), 1 - f) : {}),
+              ...(plantsEnabled
+                ? carveSectorPlantFields(readSectorPlantFields(sec), 1 - f, plantCountSplit.kept)
+                : {}),
               revenue: Math.round((sec.revenue ?? 0) * (1 - f)),
               workers: Math.round((sec.workers ?? 0) * (1 - f)),
               currentGrowthCost: Math.round((sec.currentGrowthCost ?? 0) * (1 - f)),

@@ -30,38 +30,55 @@ import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 export async function expireShareListings(db: Db, now: Date, currentTurn: number): Promise<void> {
   // Turn-first expiry (freezes on pause) with a wall-clock fallback for legacy
   // listings created before `expiresAtTurn` existed.
+  const expiryFilter = {
+    status: "open" as const,
+    $or: [
+      { expiresAtTurn: { $lte: currentTurn } },
+      { expiresAtTurn: { $exists: false }, expiresAt: { $lte: now } },
+    ],
+  };
   const expiredListings = await db
     .collection<ShareListing>("shareListings")
-    .find({
-      status: "open",
-      $or: [
-        { expiresAtTurn: { $lte: currentTurn } },
-        { expiresAtTurn: { $exists: false }, expiresAt: { $lte: now } },
-      ],
-    })
+    .find(expiryFilter)
     .toArray();
 
   if (expiredListings.length === 0) return;
 
-  const listingIds = expiredListings.map((l) => l._id);
+  // Claim each listing from open to cancelled before authorizing any refund.
+  // Seller cancellation and offer acceptance use the same status transition,
+  // so only one lifecycle path can own the escrow and reserved shares.
+  const claimedListings: ShareListing[] = [];
+  for (const listing of expiredListings) {
+    const claimed = await db
+      .collection<ShareListing>("shareListings")
+      .findOneAndUpdate(
+        { _id: listing._id, ...expiryFilter },
+        { $set: { status: "cancelled" } },
+        { returnDocument: "before" }
+      );
+    if (claimed) claimedListings.push(claimed);
+  }
 
-  // Fetch all pending offers for expired listings
-  const pendingOffers = await db
+  if (claimedListings.length === 0) return;
+
+  const listingIds = claimedListings.map((listing) => listing._id);
+
+  // Snapshot candidates, then claim each pending offer individually. An offer
+  // accepted or cancelled after the read cannot be overwritten or refunded.
+  const pendingOfferCandidates = await db
     .collection<ShareOffer>("shareOffers")
     .find({ listingId: { $in: listingIds }, status: "pending" })
     .toArray();
-
-  // Mark all expired listings cancelled
-  await db
-    .collection<ShareListing>("shareListings")
-    .updateMany({ _id: { $in: listingIds } }, { $set: { status: "cancelled" } });
-
-  // Mark all pending offers expired
-  if (pendingOffers.length > 0) {
-    const offerIds = pendingOffers.map((o) => o._id);
-    await db
+  const pendingOffers: ShareOffer[] = [];
+  for (const offer of pendingOfferCandidates) {
+    const claimed = await db
       .collection<ShareOffer>("shareOffers")
-      .updateMany({ _id: { $in: offerIds } }, { $set: { status: "expired" } });
+      .findOneAndUpdate(
+        { _id: offer._id, listingId: offer.listingId, status: "pending" },
+        { $set: { status: "expired" } },
+        { returnDocument: "before" }
+      );
+    if (claimed) pendingOffers.push(claimed);
   }
 
   // Build escrow refund maps — each offer.escrowAmount is in its LISTING
@@ -160,7 +177,7 @@ export async function expireShareListings(db: Db, now: Date, currentTurn: number
       // outflow on the offer-creation path.
       refundTxEntries.push({
         type: "share_listing_refund",
-        turn: 0,
+        turn: currentTurn,
         createdAt: now,
         subjectType: "character",
         subjectId: new ObjectId(charIdStr),
@@ -220,7 +237,7 @@ export async function expireShareListings(db: Db, now: Date, currentTurn: number
 
       refundTxEntries.push({
         type: "share_listing_refund",
-        turn: 0,
+        turn: currentTurn,
         createdAt: now,
         subjectType: "corporation",
         subjectId: new ObjectId(corpIdStr),
@@ -251,7 +268,7 @@ export async function expireShareListings(db: Db, now: Date, currentTurn: number
   }
 
   // Return reserved shares to sellers
-  for (const listing of expiredListings) {
+  for (const listing of claimedListings) {
     if (listing.sharesRemaining <= 0) continue;
     if (listing.sellerCorporationId) {
       const targetCorp = await db

@@ -1,4 +1,4 @@
-import type { Db } from "mongodb";
+import type { Db, ObjectId } from "mongodb";
 import type { Character, CentralBank, Corporation } from "@/lib/db/types";
 import type { LocPaymentMode } from "@/lib/db/types/character";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -31,11 +31,22 @@ import {
   getPersonalBalance,
   getSavingsBalance,
 } from "@/lib/currency/characterFunds";
+import { runSavingsCommand } from "@/lib/savings/accountsShell";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
 import { roundSavingsAmount } from "@/lib/currency/savingsInterest";
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 
 const DEFAULT_PRIME = 2.5;
+
+export function resolvePrimeForCurrency(
+  primeByBankId: ReadonlyMap<string, number>,
+  currency: CurrencyCode
+): number {
+  const bankId = getBankId(getCountryIdForCurrency(currency));
+  return primeByBankId.get(bankId) ?? DEFAULT_PRIME;
+}
 
 function hasLocActivity(loc: NonNullable<Character["lineOfCredit"]>): boolean {
   const b = loc.balances ?? {};
@@ -61,6 +72,44 @@ function mergeIncFragments(fragments: Record<string, number>[]): Record<string, 
  * freeze draws when interest due exceeds that income. Gated by lineOfCreditEnabled.
  * Runs after corporation turn (same tick as fund generation) so personal balances include payouts.
  */
+/**
+ * Take the savings half of a line-of-credit payment.
+ *
+ * Under the legacy pointer model a savings balance was a number on the
+ * character and nothing stood behind it, so the payment simply decremented it.
+ * Once a currency's savings accounts are the book of record that is no longer
+ * true: the balance is the account, and the cash behind it sits in the central
+ * bank's household pool or in a bank's vault. Decrementing the projection there
+ * would leave the account still holding money whose backing never moved, which
+ * is the hole this whole subsystem exists to close.
+ *
+ * So for a cohort currency the shortfall is WITHDRAWN from the account first,
+ * through the journal: backing leaves the holder, lands in the wallet, and the
+ * payment below then takes it out of the wallet like any other cash. The
+ * command id is derived from the character, currency and turn, so a retried
+ * turn replays the same settlement instead of withdrawing twice.
+ *
+ * Returns the amount that reached the wallet, which the caller deducts from
+ * personal rather than from savings.
+ */
+async function drawSavingsForPayment(
+  db: Db,
+  characterId: ObjectId,
+  currency: CurrencyCode,
+  amount: number,
+  turn: number
+): Promise<{ movedToWallet: number; error?: string }> {
+  const withdrawn = await runSavingsCommand(
+    db,
+    characterId,
+    currency,
+    { type: "withdraw", amount },
+    `loc-service:${characterId.toString()}:${currency}:${turn}`
+  );
+  if (!withdrawn.ok) return { movedToWallet: 0, error: withdrawn.error };
+  return { movedToWallet: amount };
+}
+
 export async function processLineOfCreditTurn(
   db: Db,
   turn: number,
@@ -76,6 +125,9 @@ export async function processLineOfCreditTurn(
     return { charactersProcessed: 0, paymentsInternal: 0 };
   }
 
+  // One policy read per turn, like every other banking-aware pass: a flag
+  // flipped mid-turn must not split this pass between two models.
+  const bankingPolicy = await loadBankingPolicy(db);
   const rates = await loadExchangeRatesMap(db);
   const banks = await db
     .collection<CentralBank>("centralBanks")
@@ -92,8 +144,7 @@ export async function processLineOfCreditTurn(
   // DE but its bank doc is the shared "ECB" — a raw countryId lookup would
   // silently fall back to DEFAULT_PRIME for every EUR line of credit.
   const resolvePrime = (currency: CurrencyCode): number => {
-    const bankId = getBankId(getCountryIdForCurrency(currency));
-    return primeByCountryId.get(bankId) ?? DEFAULT_PRIME;
+    return resolvePrimeForCurrency(primeByCountryId, currency);
   };
 
   const chars = await db
@@ -140,8 +191,7 @@ export async function processLineOfCreditTurn(
         { projection: { creditCompositeSnapshot: 1 } }
       );
 
-    const homeCid = getCountryIdForCurrency(home);
-    const primeHome = primeByCountryId.get(homeCid) ?? DEFAULT_PRIME;
+    const primeHome = resolvePrime(home);
 
     const composite = computeLocBorrowerComposite({
       corpComposite: corp?.creditCompositeSnapshot ?? null,
@@ -154,6 +204,7 @@ export async function processLineOfCreditTurn(
 
     const balances: Partial<Record<CurrencyCode, number>> = { ...(loc.balances ?? {}) };
     const arrears: Partial<Record<CurrencyCode, number>> = { ...(loc.arrears ?? {}) };
+    let characterInterestAccruedInternal = 0;
 
     // Capture pre-turn obligation snapshot for logging.
     const preObligationByCurrency: Partial<Record<CurrencyCode, number>> = {};
@@ -180,7 +231,7 @@ export async function processLineOfCreditTurn(
       interestAccruals[c] = int;
       arrears[c] = roundSavingsAmount((arrears[c] ?? 0) + int, c);
       const rate = rates[c];
-      if (rate && rate > 0) totalInterestAccruedInternal += toInternalUnits(int, rate);
+      if (rate && rate > 0) characterInterestAccruedInternal += toInternalUnits(int, rate);
     }
 
     // 2. Scheduled auto-payment = LOC_PER_TURN_PAYMENT_RATE × (P+A) post-accrual.
@@ -297,10 +348,6 @@ export async function processLineOfCreditTurn(
     const distress = shortfallAny && !incomeCoversScheduled;
     const drawFrozen = distress;
 
-    if (distress) distressedAfterTurn += 1;
-    if (distress && !loc.drawFrozen) newlyFrozen += 1;
-    if (!distress && loc.drawFrozen) newlyUnfrozen += 1;
-
     // Clear empty currency keys so the LOC document stays tidy.
     const newP: Partial<Record<CurrencyCode, number>> = {};
     const newA: Partial<Record<CurrencyCode, number>> = {};
@@ -311,19 +358,7 @@ export async function processLineOfCreditTurn(
       if (a > 0) newA[c] = a;
     }
 
-    // 3. Only the interest portion credits the lending bank's reserves — that's
-    //    bank revenue. Principal is destroyed symmetrically to how `draw` created
-    //    it: origination doesn't debit any bank pool, so repayment of principal
-    //    doesn't credit one either. Crediting principal here would mint free
-    //    money for the bank on every hourly auto-payment.
-    for (const c of FOREX_ACTIVE_CURRENCIES) {
-      const interest = interestPortions[c] ?? 0;
-      if (interest <= 0) continue;
-      const cid = getCountryIdForCurrency(c) as string;
-      bankReserveInc.set(cid, (bankReserveInc.get(cid) ?? 0) + interest);
-    }
-
-    // 4. Deduct payments: tally total consumed per currency, then drain personal
+    // 3. Deduct payments: tally total consumed per currency, then drain personal
     //    wallet first and savings as overflow. Campaign funds are never touched.
     const totalDeductByCurrency: Partial<Record<CurrencyCode, number>> = {};
     for (const c of FOREX_ACTIVE_CURRENCIES) {
@@ -346,7 +381,25 @@ export async function processLineOfCreditTurn(
       const fromSavings = roundSavingsAmount(Math.max(0, totalDeduct - fromPersonal), c);
       if (fromPersonal > 0)
         deductIncs.push(buildPersonalBalanceInc(-fromPersonal, c, forexEnabled));
-      if (fromSavings > 0) deductIncs.push(buildSavingsBalanceInc(-fromSavings, c, forexEnabled));
+      if (fromSavings > 0) {
+        if (savingsReadsAuthoritative(bankingPolicy, c)) {
+          // Move the backing out of the account and into the wallet first, then
+          // take the whole amount from the wallet below.
+          const drawn = await drawSavingsForPayment(db, char._id, c, fromSavings, turn);
+          if (drawn.movedToWallet > 0) {
+            deductIncs.push(buildPersonalBalanceInc(-drawn.movedToWallet, c, forexEnabled));
+          } else {
+            // The account could not cover it (frozen holder, a bank that cannot
+            // pay). The payment simply goes short this turn and the arrears the
+            // block above already recorded stand.
+            console.warn(
+              `[line-of-credit] savings draw refused for character ${char._id.toString()} ${c} on turn ${turn}: ${drawn.error ?? "unknown"}`
+            );
+          }
+        } else {
+          deductIncs.push(buildSavingsBalanceInc(-fromSavings, c, forexEnabled));
+        }
+      }
     }
     const personalDeduct = mergeIncFragments(deductIncs);
 
@@ -360,16 +413,47 @@ export async function processLineOfCreditTurn(
       },
       updatedAt: now,
     };
-    await db
+    const locWriteFilter: Record<string, unknown> = {
+      _id: char._id,
+      lineOfCredit: loc,
+    };
+    for (const [path, delta] of Object.entries(personalDeduct)) {
+      if (delta < 0) locWriteFilter[path] = { $gte: -delta };
+    }
+    // Compare-and-swap the exact LOC snapshot used for these calculations. A
+    // draw or repayment that commits after the turn read changes this embedded
+    // document, so the stale turn write is skipped instead of erasing debt or a
+    // repayment while still moving wallet cash.
+    const locUpdate = await db
       .collection<Character>("characters")
       .updateOne(
-        { _id: char._id },
+        locWriteFilter,
         Object.keys(personalDeduct).length > 0
           ? { $set: baseSet, $inc: personalDeduct }
           : { $set: baseSet }
       );
+    if (locUpdate.matchedCount === 0) {
+      console.warn(
+        `[line-of-credit] skipped stale turn write for character ${char._id.toString()} on turn ${turn}`
+      );
+      continue;
+    }
 
-    // 5. Ledger: one interest-accrual row per currency (as today), plus one
+    totalInterestAccruedInternal += characterInterestAccruedInternal;
+    if (distress) distressedAfterTurn += 1;
+    if (distress && !loc.drawFrozen) newlyFrozen += 1;
+    if (!distress && loc.drawFrozen) newlyUnfrozen += 1;
+
+    // Only committed interest payments credit the lending bank's reserves.
+    // Principal is destroyed symmetrically to how `draw` created it.
+    for (const c of FOREX_ACTIVE_CURRENCIES) {
+      const interest = interestPortions[c] ?? 0;
+      if (interest <= 0) continue;
+      const cid = getCountryIdForCurrency(c) as string;
+      bankReserveInc.set(cid, (bankReserveInc.get(cid) ?? 0) + interest);
+    }
+
+    // 4. Ledger: one interest-accrual row per currency (as today), plus one
     //    auto_payment row per currency that actually paid, carrying the
     //    principal/interest split.
     for (const c of FOREX_ACTIVE_CURRENCIES) {

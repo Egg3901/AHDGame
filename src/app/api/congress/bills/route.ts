@@ -442,10 +442,12 @@ export async function POST(request: Request) {
           },
           {
             $set: {
-              ...(npiCost > 0 ? { nationalInfluence: Math.max(0, currentNational - npiCost) } : {}),
               updatedAt: new Date(),
             },
-            $inc: { actions: -actionCost },
+            $inc: {
+              actions: -actionCost,
+              ...(npiCost > 0 ? { nationalInfluence: -npiCost } : {}),
+            },
           }
         );
         if (spendResult.modifiedCount === 0) {
@@ -498,11 +500,11 @@ export async function POST(request: Request) {
           await db.collection<Character>("characters").updateOne(
             { _id: character._id },
             {
-              $inc: { actions: actionCost },
-              $set: {
-                ...(npiCost > 0 ? { nationalInfluence: currentNational } : {}),
-                updatedAt: new Date(),
+              $inc: {
+                actions: actionCost,
+                ...(npiCost > 0 ? { nationalInfluence: npiCost } : {}),
               },
+              $set: { updatedAt: new Date() },
             }
           );
         }
@@ -561,6 +563,24 @@ export async function POST(request: Request) {
     );
 
     for (const rawP of rawProvisions) {
+      // Central-bank independence is carried by the country-legislature route,
+      // which runs `validateBillProvisions`; this route validates provisions
+      // inline and has no branch for it. The shared body schema is deliberately
+      // country-neutral, so it admits the provision here too, and without this
+      // refusal it would fall through to the policy branch and be rejected as
+      // "Each provision must have a legislation type" — a message that names
+      // the wrong problem entirely.
+      if ("type" in rawP && rawP.type === "central_bank_independence") {
+        logRequest("POST", path, 400, Date.now() - start);
+        return NextResponse.json(
+          {
+            error:
+              "Central-bank-independence provisions are proposed through the country legislature, not this chamber.",
+          },
+          { status: 400 }
+        );
+      }
+
       // Handle electoral-law provisions (franchise + registration access)
       if ("type" in rawP && rawP.type === "electoral_law") {
         const res = validateElectoralLawProvision(rawP, category);
@@ -968,11 +988,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // NPI cost: policy + subsidy + union-law rows share one ladder; tariffs do not cost NPI
+    // NPI cost: policy, subsidy, union-law and standalone rows share one ladder;
+    // tariffs do not cost NPI
     const influenceProvisionCount = countProvisionsChargedNationalInfluence({
       policyProvisionCount: validatedPolicyProvisions.length,
       subsidyProvisionCount: validatedSubsidyProvisions.length,
       unionLawProvisionCount: validatedUnionLawProvisions.length,
+      standaloneProvisionCount: validatedElectoralLawProvisions.length,
     });
     const npiCost = getProvisionCostTotal(influenceProvisionCount);
     const actionCost = BILL_PROPOSE_ACTION_COST;
@@ -1005,10 +1027,12 @@ export async function POST(request: Request) {
         },
         {
           $set: {
-            ...(npiCost > 0 ? { nationalInfluence: Math.max(0, currentNational - npiCost) } : {}),
             updatedAt: new Date(),
           },
-          $inc: { actions: -actionCost },
+          $inc: {
+            actions: -actionCost,
+            ...(npiCost > 0 ? { nationalInfluence: -npiCost } : {}),
+          },
         }
       );
       if (spendResult.modifiedCount === 0) {
@@ -1089,11 +1113,11 @@ export async function POST(request: Request) {
         await db.collection<Character>("characters").updateOne(
           { _id: character._id },
           {
-            $inc: { actions: actionCost },
-            $set: {
-              ...(npiCost > 0 ? { nationalInfluence: currentNational } : {}),
-              updatedAt: new Date(),
+            $inc: {
+              actions: actionCost,
+              ...(npiCost > 0 ? { nationalInfluence: npiCost } : {}),
             },
+            $set: { updatedAt: new Date() },
           }
         );
       }

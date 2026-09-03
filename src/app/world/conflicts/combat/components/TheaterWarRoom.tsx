@@ -2,13 +2,16 @@
 
 import { useEffect, useState, type Dispatch } from "react";
 import { RESERVE_THEATER_ID } from "@/lib/military/theaters";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import type { NatMods } from "@/lib/military/doctrineTree";
 import { MIL_COLOR, MIL_FONT } from "../../military/theme";
 import type { CombatState, CombatAction } from "../useCombatState";
 import { unitCV } from "./combatUi";
+import { BLOCKADE, wornPenalty } from "@/lib/navair/blockade";
+import { integrityMult } from "@/lib/navair/engineCore";
 import { FrontMap } from "./FrontMap";
 import { BattleOddsBar } from "./BattleOddsBar";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 const mono = MIL_FONT.mono;
 
@@ -29,6 +32,12 @@ interface ForecastView {
   /** Nations pooled on each side by the projection; 1 means fighting alone. */
   alliedContingents?: number;
   enemyContingents?: number;
+  navalAirSupport?: {
+    closeAirSupportActive: boolean;
+    casWeight: number;
+    airSuperiority: number;
+    interdictionPct: number;
+  };
 }
 
 export function TheaterWarRoom({
@@ -40,6 +49,7 @@ export function TheaterWarRoom({
   natMods: NatMods;
   dispatch: Dispatch<CombatAction>;
 }) {
+  const countryName = useCountryDisplayName();
   // The fronts in play are the live conflicts this country has forces deployed to —
   // derived from the units themselves (their reconciled theaterId), since conflicts
   // are dynamic. Reserve is homeland garrison, not a front.
@@ -48,6 +58,24 @@ export function TheaterWarRoom({
   );
   const [frontId, setFrontId] = useState<string>(engagedIds[0] ?? "");
   const deployed = frontId ? state.units.filter((u) => u.theaterId === frontId) : [];
+
+  // Blockade pressure already falls with hull condition, and below the knee it falls
+  // faster than proportionally. Nothing has ever told a commander that, so a blockade
+  // that will not bite reads as a broken mechanic rather than as a worn fleet.
+  const wornHulls = deployed.filter(
+    (u) => u.domain === "naval" && (u.integrity ?? 100) < BLOCKADE.wornKnee
+  );
+  // Both terms, because both are real. `integrityMult` scales lane pressure linearly and
+  // `wornPenalty` adds the knee on top, so quoting the knee alone would badly understate
+  // the loss: a hull at 15% applies about 1% of its nominal pressure, not 9%.
+  const wornPressureLostPct = wornHulls.length
+    ? Math.round(
+        (1 -
+          wornHulls.reduce((t, u) => t + integrityMult(u.integrity) * wornPenalty(u.integrity), 0) /
+            wornHulls.length) *
+          100
+      )
+    : 0;
 
   const pending = state.pendingDeclarations.find((d) => d.theaterId === frontId);
   const frontReports = state.reports.filter((r) => r.theaterId === frontId);
@@ -235,6 +263,17 @@ export function TheaterWarRoom({
                   c: proj ? proj.supply.state.c : MIL_COLOR.textFaint,
                 },
                 { l: "ENEMY", v: proj ? proj.enemyBand : "—", c: MIL_COLOR.text },
+                {
+                  l: "CLOSE AIR SUPPORT",
+                  v: proj
+                    ? proj.navalAirSupport?.closeAirSupportActive
+                      ? `ACTIVE (+${proj.navalAirSupport.casWeight})`
+                      : "NO ELIGIBLE CAS"
+                    : "PENDING",
+                  c: proj?.navalAirSupport?.closeAirSupportActive
+                    ? MIL_COLOR.blue
+                    : MIL_COLOR.textFaint,
+                },
                 { l: "FORCES", v: String(deployed.length), c: MIL_COLOR.text },
               ].map((s) => (
                 <div
@@ -295,6 +334,14 @@ export function TheaterWarRoom({
                 Projection unavailable.
               </div>
             )}
+            {wornHulls.length > 0 && (
+              <div style={{ font: `500 11px ${mono}`, color: MIL_COLOR.amber, marginBottom: 12 }}>
+                {wornHulls.length} of your ships at this front are too badly damaged to blockade
+                effectively, costing about {wornPressureLostPct}% of the pressure they would
+                otherwise apply. Send them to a home port to repair, or award a defence contract to
+                a shipyard so the arsenal can repair them where they are.
+              </div>
+            )}
             {proj?.unopposed && (
               <div style={{ font: `500 11px ${mono}`, color: MIL_COLOR.amber, marginBottom: 12 }}>
                 No enemy forces at this front — an offensive here would meet no resistance.
@@ -342,6 +389,7 @@ export function TheaterWarRoom({
                   {pending.declaredTurn + 1}).
                 </div>
                 <button
+                  disabled={!state.canWrite}
                   onClick={() => dispatch({ type: "WITHDRAW_DECLARATION", theaterId: frontId })}
                   style={{
                     fontFamily: MIL_FONT.sans,
@@ -352,7 +400,8 @@ export function TheaterWarRoom({
                     border: `1px solid ${MIL_COLOR.border}`,
                     borderRadius: 8,
                     padding: "7px 13px",
-                    cursor: "pointer",
+                    cursor: state.canWrite ? "pointer" : "not-allowed",
+                    opacity: state.canWrite ? 1 : 0.5,
                   }}
                 >
                   WITHDRAW
@@ -386,12 +435,12 @@ export function TheaterWarRoom({
                     <option key={c} value={c}>
                       {/* Named from the country roster, not the situation board's flavour
                           table — that covered 9 nations and would blow up on the rest. */}
-                      {COUNTRY_CONFIGS[c as CountryId]?.name ?? c}
+                      {countryName(c as CountryId)}
                     </option>
                   ))}
                 </select>
                 <button
-                  disabled={!activeTarget}
+                  disabled={!activeTarget || !state.canWrite}
                   onClick={() =>
                     dispatch({ type: "DECLARE", theaterId: frontId, targetCountry: activeTarget })
                   }
@@ -405,8 +454,8 @@ export function TheaterWarRoom({
                     border: "none",
                     borderRadius: 9,
                     padding: 12,
-                    cursor: activeTarget ? "pointer" : "not-allowed",
-                    opacity: activeTarget ? 1 : 0.5,
+                    cursor: activeTarget && state.canWrite ? "pointer" : "not-allowed",
+                    opacity: activeTarget && state.canWrite ? 1 : 0.5,
                   }}
                 >
                   ⚔ DECLARE OFFENSIVE

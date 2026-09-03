@@ -26,6 +26,14 @@ vi.mock("@/lib/npp/generator", () => ({
 }));
 vi.mock("@/lib/corporations/tickerSymbol", () => ({
   generateTickerSymbol: vi.fn().mockResolvedValue("SPWN"),
+  insertCorporationWithTickerRetry: vi.fn(
+    async (
+      db: { collection: (name: string) => { insertOne: (doc: unknown) => Promise<unknown> } },
+      corpDoc: unknown
+    ) => {
+      await db.collection("corporations").insertOne(corpDoc);
+    }
+  ),
 }));
 vi.mock("@/lib/db/sequentialId", () => ({
   getNextSequentialId: vi.fn().mockResolvedValue(42),
@@ -119,6 +127,15 @@ describe("spawnNppCorporation — plants", () => {
       ).$set,
     };
   }
+
+  it("stamps no growth target under plants — births grow via build orders", async () => {
+    await spawn(true);
+    await spawn(false);
+    // One shared mock DB per test, so the two spawns are calls 0 and 1.
+    const inserts = db.collectionMocks.corporateSectors!.insertOne.mock.calls;
+    expect((inserts[0]![0] as Record<string, unknown>).targetGrowthRate).toBe(0);
+    expect((inserts[1]![0] as Record<string, unknown>).targetGrowthRate).toBe(3);
+  });
 
   it("grants capacity directly into capitalStock, in UNITS", async () => {
     const { sector } = await spawn(true);

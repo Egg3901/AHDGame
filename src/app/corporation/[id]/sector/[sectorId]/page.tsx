@@ -12,6 +12,7 @@ import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currenc
 import { regionApiSubUrl, regionUrl } from "@/lib/urls";
 import type { StateResources, ExtractionCapacityRow, ResourceOpportunity } from "./types";
 import { MAX_GROWTH_RATE, MIN_GROWTH_RATE } from "@/lib/constants/corporations";
+import { useToast } from "@/contexts/ToastContext";
 import { useSectorPageState } from "./useSectorPageState";
 import HeroCard from "./components/HeroCard";
 import FinancialVisibilityNotice from "./components/FinancialVisibilityNotice";
@@ -70,6 +71,7 @@ export default function SectorDetailPage() {
   const [capacityMessage, setCapacityMessage] = useState("");
 
   const [state, dispatch] = useSectorPageState();
+  const { showToast } = useToast();
   const {
     sector,
     corporation,
@@ -455,7 +457,7 @@ export default function SectorDetailPage() {
   };
 
   const handleAttackSector = async () => {
-    if (!attackInfo || !sector) return;
+    if (!attackInfo || !sector) return false;
     dispatch({ type: "SET_ATTACKING", value: true });
     dispatch({ type: "SET_ATTACK_ERROR", value: "" });
     dispatch({ type: "SET_ATTACK_MSG", value: "" });
@@ -473,12 +475,22 @@ export default function SectorDetailPage() {
       const result = await res.json();
       if (res.ok) {
         dispatch({ type: "SET_ATTACK_MSG", value: result.message });
+        // Toast as well as the inline banner. A successful split can drop the
+        // defender below the two-plant minimum, which makes the target no longer
+        // splittable, so AttackPanel unmounts on the refresh below and takes the
+        // inline banner with it. The player was left with no confirmation of what
+        // happened at all (ticket #1239 follow-up). A failed roll still costs the
+        // committed cash and MS, so say which outcome it was.
+        showToast(result.message, result.splitSucceeded === false ? "error" : "success");
         fetchData();
+        return true;
       } else {
         dispatch({ type: "SET_ATTACK_ERROR", value: result.error || "Attack failed" });
+        return false;
       }
     } catch {
       dispatch({ type: "SET_ATTACK_ERROR", value: "Network error" });
+      return false;
     } finally {
       dispatch({ type: "SET_ATTACKING", value: false });
     }
@@ -798,6 +810,8 @@ export default function SectorDetailPage() {
               {attackInfo && (!isCeo || (!plantsEnabled && attackInfo.splitCost > 0)) && (
                 <AttackPanel
                   attackInfo={attackInfo}
+                  plantsMode={plantsEnabled}
+                  targetName={sector.displayName ?? corporation.name}
                   showAttack={!isCeo && !corporation.isStateOwned}
                   showSplit={!plantsEnabled}
                   attacking={attacking}

@@ -53,6 +53,22 @@ export interface TransferRegionArgs {
    */
   relocateToRegionId: string | null;
   currentTurn: number;
+  /**
+   * Skip the two COUNTRY-wide passes at the end, leaving them to the caller.
+   *
+   * `computeNationalMetrics` recomputes every country in the world from every
+   * state, and `reseedJoinedRegionElections` re-seeds a whole country's races.
+   * Neither is scoped to the region that just moved, so a merge transferring
+   * sixteen regions one at a time did each of them sixteen times — and that is
+   * not a tidiness point. It is why a live reunification ran at roughly five
+   * seconds a region, blew the request timeout it was started from, and left a
+   * country half-merged.
+   *
+   * A single transfer leaves this false and pays for both, which is right: there
+   * is no later pass coming. A merge sets it and runs them ONCE when the loop is
+   * done, which produces the same end state for a fraction of the work.
+   */
+  deferCountryWidePasses?: boolean;
 }
 
 export interface TransferRegionResult {
@@ -77,6 +93,7 @@ export async function transferRegion(
     votingSystem,
     relocateToRegionId,
     currentTurn,
+    deferCountryWidePasses = false,
   } = args;
 
   // Idempotency: bail if the region doesn't exist or already belongs to target.
@@ -106,11 +123,17 @@ export async function transferRegion(
 
   // Shift the region's GDP-weighted share of national tax bases + spending
   // baselines from the source country to the target (the budget docs stay
-  // country-level; only their economy-sized magnitudes move). Best-effort: a
-  // failure here must not abort the otherwise-complete transfer.
-  await reapportionNationalBudget(db, regionId, fromCountryId, toCountryId).catch((err) =>
-    console.error(`${regionId} national-budget reapportion failed:`, err)
-  );
+  // country-level; only their economy-sized magnitudes move). The dissolving
+  // signal lets the LAST region of a merge carry the whole residual base
+  // (weight 1), which a surviving source's transfer must never do. Best-effort:
+  // a failure here must not abort the otherwise-complete transfer.
+  await reapportionNationalBudget(
+    db,
+    regionId,
+    fromCountryId,
+    toCountryId,
+    relocateToRegionId === null
+  ).catch((err) => console.error(`${regionId} national-budget reapportion failed:`, err));
 
   // Re-denominate the region's corps + resident players into the new country's
   // currency (NI pounds → euro). Best-effort: a forex hiccup must not abort the
@@ -119,16 +142,22 @@ export async function transferRegion(
     console.error(`${regionId} currency conversion failed:`, err)
   );
 
-  // Recompute every country's national figures (drops NI from the old country,
-  // adds it to the new) before recording history.
-  await computeNationalMetrics(db);
+  // Both of the following are COUNTRY-wide, not region-scoped, so a merge moving
+  // many regions runs them once at the end instead of once per region. See
+  // `deferCountryWidePasses` — doing them per region is what made a live
+  // reunification too slow to finish inside the request that started it.
+  if (!deferCountryWidePasses) {
+    // Recompute every country's national figures (drops NI from the old country,
+    // adds it to the new) before recording history.
+    await computeNationalMetrics(db);
 
-  // Seed the joined region's races + grow its new chamber NOW, so the transfer's
-  // full effects are visible immediately rather than next turn. Best-effort: the
-  // turn's election phase re-runs the same idempotent spawners as a safety net.
-  await reseedJoinedRegionElections(db, toCountryId, new Date()).catch((err) =>
-    console.error(`${regionId} election re-seed failed (retries next turn):`, err)
-  );
+    // Seed the joined region's races + grow its new chamber NOW, so the transfer's
+    // full effects are visible immediately rather than next turn. Best-effort: the
+    // turn's election phase re-runs the same idempotent spawners as a safety net.
+    await reseedJoinedRegionElections(db, toCountryId, new Date()).catch((err) =>
+      console.error(`${regionId} election re-seed failed (retries next turn):`, err)
+    );
+  }
 
   const details = { regionId, fromCountryId, toCountryId };
   await recordCountryEvent(db, {

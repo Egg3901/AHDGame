@@ -14,7 +14,8 @@ import Image from "next/image";
 import { UniversalSearch } from "@/components/UniversalSearch";
 import { Avatar } from "@/components/Avatar";
 import { CountryFlag } from "@/components/CountryFlag";
-import { getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 import {
   countryUrl,
   partyUrl,
@@ -70,7 +71,6 @@ export interface ExperimentalMobileMenuProps {
   stateLegislatureLabel: string;
   pageCountry: string;
   userCountry: string;
-  preset: string;
   switchableCountries: CountryId[];
   worldSubItems: WorldNavItem[];
   profileOrgItems: ProfileNavItem[];
@@ -104,7 +104,6 @@ export function ExperimentalMobileMenu({
   stateLegislatureLabel,
   pageCountry,
   userCountry,
-  preset,
   switchableCountries,
   worldSubItems,
   profileOrgItems,
@@ -118,6 +117,7 @@ export function ExperimentalMobileMenu({
   handleSignOut,
 }: ExperimentalMobileMenuProps) {
   const t = useTranslations("nav");
+  const countryName = useCountryDisplayName();
   return (
     <div
       id="experimental-mobile-menu"
@@ -467,7 +467,7 @@ export function ExperimentalMobileMenu({
         className="flex w-full items-center gap-3 rounded-[10px] px-3.5 py-3 text-[15px] font-medium text-fg-2 transition-colors hover:bg-white/5"
       >
         <CountryFlag country={pageCountry} size="md" />
-        <span>{getCountryDisplayName(pageCountry as CountryId, preset)}</span>
+        <span>{countryName(pageCountry as CountryId)}</span>
         <Chevron open={!!mobileSubOpen.country} className="ml-auto h-4 w-4 text-muted" />
       </button>
       {mobileSubOpen.country && (
@@ -486,7 +486,7 @@ export function ExperimentalMobileMenu({
                 }`}
               >
                 <CountryFlag country={c} size="sm" />
-                <span>{getCountryDisplayName(c, preset)}</span>
+                <span>{countryName(c)}</span>
                 <span className="ml-auto flex items-center gap-1.5">
                   {isHome && (
                     <span className="text-[10px] font-medium text-muted">

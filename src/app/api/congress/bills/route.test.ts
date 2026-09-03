@@ -96,6 +96,46 @@ describe("POST /api/congress/bills", () => {
     expect(res.status).toBe(400);
   });
 
+  it("refuses a central-bank-independence provision by name, not as a missing legislation type", async () => {
+    // #1250: the shared body schema is country-neutral, so it admits the
+    // provision on this route too, but this route validates provisions inline
+    // and has no branch for it. Without an explicit refusal it fell through to
+    // the policy branch and came back as "Each provision must have a
+    // legislation type", which names the wrong problem.
+    await wireDb();
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: new ObjectId().toString(), isAdmin: true },
+    } as never);
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      name: "Admin",
+      party: "1",
+      nationalInfluence: 999,
+    });
+    db.collectionMocks["electedOfficials"]!.findOne.mockResolvedValue(null);
+
+    const { POST } = await import("./route");
+    const req = new Request("http://localhost/api/congress/bills", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Federal Reserve Accountability Act",
+        summary: "Return rate-setting to the Treasury",
+        chamber: "house",
+        category: "economy",
+        provisions: [{ type: "central_bank_independence", action: "revoke" }],
+      }),
+    });
+    const res = await POST(req);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(
+      expect.objectContaining({ error: expect.stringMatching(/country legislature/i) })
+    );
+  });
+
   it("returns 201 when admin proposes a valid tax bill", async () => {
     await wireDb();
     const userId = new ObjectId().toString();
@@ -215,10 +255,10 @@ describe("POST /api/congress/bills", () => {
     const charUpdates = db.collectionMocks["characters"]!.updateOne.mock.calls;
     expect(charUpdates.length).toBeGreaterThan(0);
     const lastCharUpdate = charUpdates[charUpdates.length - 1]?.[1] as {
-      $set?: { nationalInfluence?: number; politicalInfluence?: number };
+      $inc?: { nationalInfluence?: number; politicalInfluence?: number };
     };
-    expect(lastCharUpdate?.$set?.nationalInfluence).toBe(35); // 40 - 5 (1 provision costs 5 NPI)
-    expect(lastCharUpdate?.$set?.politicalInfluence).toBeUndefined();
+    expect(lastCharUpdate?.$inc?.nationalInfluence).toBe(-5);
+    expect(lastCharUpdate?.$inc?.politicalInfluence).toBeUndefined();
   });
 
   it("rejects a duplicate tariff scope across active US congress bills", async () => {

@@ -208,6 +208,116 @@ describe("decideNppSupplyAgreements", () => {
     expect(d.filter((x) => x.action === "propose")).toHaveLength(0);
   });
 
+  it("proposes freight per host state to a buyer starved in that same state", () => {
+    const haulier: NppAgreementParty = {
+      corpId: "haulier",
+      countryId: "US",
+      isNatcorp: false,
+      sectors: [
+        {
+          sectorType: "logistics",
+          capitalStock: 10_000,
+          strategyId: "standard",
+          soldFraction: 0.2,
+          productionPolicyLevel: 0,
+          stateId: "TX",
+        },
+      ],
+    };
+    const texasMine = mill({
+      corpId: "tx-mine",
+      sectors: [
+        {
+          sectorType: "extraction",
+          capitalStock: 10_000,
+          strategyId: "standard",
+          throughputFactor: 0.5,
+          productionPolicyLevel: 0,
+          stateId: "TX",
+        },
+      ],
+    });
+    const newYorkMine = mill({
+      corpId: "ny-mine",
+      sectors: [
+        {
+          sectorType: "extraction",
+          capitalStock: 10_000,
+          strategyId: "standard",
+          throughputFactor: 0.5,
+          productionPolicyLevel: 0,
+          stateId: "NY",
+        },
+      ],
+    });
+
+    const acrossStates = decideNppSupplyAgreements({
+      turn: TURN,
+      plantsEnabled: true,
+      parties: [newYorkMine, haulier],
+      agreements: [],
+      priceRatioOf: prices({ freight: 1.4 }),
+      staggerEligible: always,
+    });
+    expect(acrossStates.filter((x) => x.action === "propose")).toHaveLength(0);
+
+    const sameState = decideNppSupplyAgreements({
+      turn: TURN,
+      plantsEnabled: true,
+      parties: [texasMine, haulier],
+      agreements: [],
+      priceRatioOf: prices({ freight: 1.4 }),
+      staggerEligible: always,
+    });
+    expect(sameState).toContainEqual(
+      expect.objectContaining({
+        action: "propose",
+        supplierCorpId: "haulier",
+        buyerCorpId: "tx-mine",
+        commodity: "freight",
+        stateId: "TX",
+      })
+    );
+  });
+
+  it("activates a state-scoped freight proposal the buyer uses in that state", () => {
+    const texasMine = mill({
+      corpId: "tx-mine",
+      sectors: [
+        {
+          sectorType: "extraction",
+          capitalStock: 10_000,
+          strategyId: "standard",
+          throughputFactor: 0.5,
+          productionPolicyLevel: 0,
+          stateId: "TX",
+        },
+      ],
+    });
+    const pending: ExistingNppAgreement = {
+      id: "freight-tx",
+      supplierCorpId: "player-haulier",
+      buyerCorpId: "tx-mine",
+      commodity: "freight",
+      stateId: "TX",
+      volumeCap: 100,
+      pricePremium: 0,
+      status: "pending",
+    };
+    const wrongState: ExistingNppAgreement = { ...pending, id: "freight-ny", stateId: "NY" };
+
+    const d = decideNppSupplyAgreements({
+      turn: TURN,
+      plantsEnabled: true,
+      parties: [texasMine],
+      agreements: [pending, wrongState],
+      priceRatioOf: prices({ freight: 1.4 }),
+      staggerEligible: always,
+    });
+    expect(d).toContainEqual({ action: "activate", agreementId: "freight-tx" });
+    expect(d).not.toContainEqual({ action: "activate", agreementId: "freight-ny" });
+  });
+
   it("does not activate or propose corporation-wide freight agreements", () => {
     const freightSupplier: NppAgreementParty = {
       corpId: "haulier",

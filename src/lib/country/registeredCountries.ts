@@ -9,6 +9,33 @@ import type { CountryGameState } from "@/lib/db/types/gameState";
  * in deterministic order. This is the iteration/processing source — use it instead
  * of raw COUNTRY_ORDER at any server site that must reflect live countries.
  */
+/**
+ * The dissolved ids out of a batch of `countryGameStates` rows. Shared so the
+ * registry and the dissolved-set loader below cannot drift apart on what
+ * "dissolved" means.
+ */
+function dissolvedIdsFrom(docs: CountryGameState[]): Set<string> {
+  return new Set(docs.filter((d) => d.dissolvedTurn != null).map((d) => String(d._id)));
+}
+
+/**
+ * Countries that have been absorbed into another and no longer exist.
+ *
+ * Distinct from "not registered": most entities the world models — Canada, the
+ * Benelux, Albania, the Soviet republics — have no `countryGameStates` row at
+ * all and are perfectly alive. Only a row carrying `dissolvedTurn` says a state
+ * has ceased to be, so per-turn processing that must not act on behalf of a
+ * dead state tests THIS, never registry membership.
+ */
+export async function getDissolvedCountryIds(db: Db): Promise<Set<string>> {
+  const docs = await db
+    .collection<CountryGameState>("countryGameStates")
+    .find({ dissolvedTurn: { $ne: null } })
+    .project<CountryGameState>({ _id: 1, dissolvedTurn: 1 })
+    .toArray();
+  return dissolvedIdsFrom(docs);
+}
+
 export async function getRegisteredCountryIds(db: Db): Promise<CountryId[]> {
   // Two queries' worth of rows in one read: the actives that widen the base,
   // and the dissolved that narrow it.
@@ -22,9 +49,25 @@ export async function getRegisteredCountryIds(db: Db): Promise<CountryId[]> {
     .filter((id) => !COUNTRY_ORDER.includes(id));
   // A country absorbed into another leaves the registry. Without this the base
   // list is add-only and a merged country stays enumerated forever.
-  const dissolved = new Set(docs.filter((d) => d.dissolvedTurn != null).map((d) => String(d._id)));
+  const dissolved = dissolvedIdsFrom(docs);
   // Stable order: COUNTRY_ORDER base, then activated extras (sorted for determinism).
   return [...COUNTRY_ORDER, ...activeExtra.sort()].filter((id) => !dissolved.has(id));
+}
+
+/**
+ * The live countries, as a set, for filtering a collection scan.
+ *
+ * A DISSOLVED COUNTRY KEEPS ITS BUDGET DOC — for history, for the wiki, and so a
+ * merge has somewhere to stamp `mergedInto`. Every fiscal phase that scans
+ * `federalBudget.find({})` therefore has to exclude it explicitly, or an absorbed
+ * country goes on running a full simulation for ever: tax bases growing, treasury
+ * accruing, reporting a national economy it has neither the regions nor the
+ * population to earn. A reunified Germany left its predecessor shell computing
+ * the same GDP and tax bases as the live unified state, and a treasury the merge
+ * had zeroed climbed back into the billions.
+ */
+export async function getRegisteredCountryIdSet(db: Db): Promise<Set<string>> {
+  return new Set<string>(await getRegisteredCountryIds(db));
 }
 
 /**

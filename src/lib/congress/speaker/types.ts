@@ -69,6 +69,12 @@ export interface VacateMotionDisplay {
   totalSeats: number;
   /** The viewer's ballot on the open motion, if any. */
   myVote: "for" | "against" | null;
+  /**
+   * Pre-whip ballot when a hard Player Whip force-set the viewer's vote on the
+   * open motion ("for" | "against" | "unvoted"), else null. Drives the
+   * "Whipped by Party" badge and its revert affordance.
+   */
+  myWhippedFromOriginal: string | null;
   /** True when the viewer (a House member) may file a fresh motion right now. */
   canFile: boolean;
 }

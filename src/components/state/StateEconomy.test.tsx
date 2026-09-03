@@ -158,35 +158,50 @@ describe("StateEconomy", () => {
     );
   });
 
-  it("shows the attack MS cost even when unowned splits are retired under plants", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
+  it("previews a plant split and requires confirmation before posting", async () => {
+    const plantsAttackPayload = {
+      ...payload,
+      plantsMode: true,
+      userCorporationId: "corp-me",
+      userMarketingStrength: 36,
+      userLiquidCapitalAnchor: 500_000,
+      splitMsCost: 0,
+      sectors: payload.sectors.map((sector) => ({
+        ...sector,
+        owners: sector.owners.map((owner) => ({
+          ...owner,
+          plantCount: 100,
+          plantSplitQuote: {
+            seizureFraction: 0.13,
+            plantsAtRisk: 13,
+            trancheBookValueAnchor: 294_000,
+            cashCostAnchor: 147_000,
+            marketingStrengthCost: 20,
+            successProbability: 0.6,
+          },
+        })),
+      })),
+    };
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
+      Promise.resolve({
         ok: true,
-        json: async () => ({
-          ...payload,
-          plantsMode: true,
-          userCorporationId: "corp-me",
-          userMarketingStrength: 36,
-          splitMsCost: 0,
-          attackMsCost: 128,
-          sectors: payload.sectors.map((sector) => ({
-            ...sector,
-            owners: sector.owners.map((owner) => ({
-              ...owner,
-              attackCost: 147_000,
-              attackEstimatedCapture: 155_000,
-            })),
-          })),
-        }),
+        json: async () =>
+          init?.method === "POST" ? { message: "Split resolved" } : plantsAttackPayload,
       })
     );
+    vi.stubGlobal("fetch", fetchMock);
 
     render(<StateEconomy stateId="TX" countryId="US" />);
 
-    const attack = await screen.findByRole("button", { name: "Attack" });
-    expect(screen.getByText("128 MS")).toBeTruthy();
-    expect(attack.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(await screen.findByRole("button", { name: "Plan split" }));
+    expect(screen.getByText("Confirm sector split")).toBeTruthy();
+    expect(screen.getByText(/not selectable/i)).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm sector split" }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(true)
+    );
   });
 });
 

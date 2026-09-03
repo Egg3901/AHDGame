@@ -31,6 +31,9 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { getInflationTarget } from "@/lib/budget/inflation";
 import { processNppChairAutoRate } from "@/lib/nppAutonomy/nppChairAutoRate";
+import { getStartingYearForPreset } from "@/lib/constants/turnTime";
+import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { boardCanCarryMotions } from "@/lib/centralBank/fomc";
 import {
   capScrutinyGain,
   resolveRecoveryDelta,
@@ -124,6 +127,8 @@ export async function processCentralBankChairTurn(
         | "primeRate"
         | "lastRateChangeTurn"
         | "fomcBoard"
+        | "governmentControlled"
+        | "chairNppId"
       >
     >({
       _id: 1,
@@ -135,6 +140,14 @@ export async function processCentralBankChairTurn(
       primeRate: 1,
       lastRateChangeTurn: 1,
       fomcBoard: 1,
+      // Needed by the auto-rate gate below: an unprojected field reads as
+      // undefined, which `isBankGovernmentControlled` treats as "no explicit
+      // statute", silently falling back to the historical default.
+      governmentControlled: 1,
+      // Attributes the autonomous chair's own rate changes in the published
+      // history; unprojected it reads as undefined and every automated move
+      // would be recorded against the anonymous system actor instead.
+      chairNppId: 1,
     })
     .toArray();
   if (banks.length === 0) {
@@ -192,8 +205,13 @@ export async function processCentralBankChairTurn(
   // absent → modern anchors (fail-safe).
   const gameState = await db
     .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { currentYear: 1 } });
+    .findOne({ _id: "current" }, { projection: { currentYear: 1, startingYear: 1, preset: 1 } });
   const currentYear = gameState?.currentYear;
+  // Era START year, resolved once for the whole sweep rather than per bank:
+  // `isBankGovernmentControlledLive` would cost one uncached gameState read per
+  // bank, and this loop runs over every central bank in the world each turn.
+  const startingYear =
+    gameState?.startingYear ?? getStartingYearForPreset(gameState?.preset ?? DEFAULT_SEED_PRESET);
   const chairGameConfig = await db
     .collection<GameConfig>("gameConfig")
     .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } });
@@ -290,17 +308,23 @@ export async function processCentralBankChairTurn(
     // credit or penalize). chairInfamy is still decayed/written above for
     // display transparency.
     if (bank.chairMode === "npp") {
-      // When a bank has an FOMC committee, the committee (processFomcMeetings)
-      // owns the rate. Skip the single-chair autonomous setter to avoid two
-      // systems moving primeRate on the same turn.
-      if (bank.fomcBoard && bank.fomcBoard.length > 0) continue;
+      // A functional FOMC committee (one that can still carry a motion) owns
+      // the rate. Skip the single-chair autonomous setter to avoid two systems
+      // moving primeRate on the same turn. When the board has decayed below the
+      // carry-a-motion threshold no motion can ever pass, so the autonomous
+      // chair holds the rate directly until nominations restore the board
+      // (ticket #1238 follow-up).
+      if (bank.fomcBoard && bank.fomcBoard.length > 0 && boardCanCarryMotions(bank.fomcBoard)) {
+        continue;
+      }
       await processNppChairAutoRate(
         db,
         bank,
         countryId,
         currentTurn,
         currentYear,
-        commandEconomyEnabled
+        commandEconomyEnabled,
+        startingYear
       );
       continue;
     }

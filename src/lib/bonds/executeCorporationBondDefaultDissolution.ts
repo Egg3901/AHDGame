@@ -13,6 +13,7 @@ import {
 } from "@/lib/currency/corporationCapital";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
+import { bondPoolCurrency, creditBondPool, debitBondPoolUpTo } from "@/lib/bonds/marketPool";
 import {
   allocateShareholderPool,
   buildPrimeRateMap,
@@ -97,7 +98,9 @@ export async function executeCorporationBondDefaultDissolution(
   const corpFxRateEarly = fxRateForCorpFromMap(corporation, fxByCurrency);
   let assetLiquidationInc = 0;
 
-  // Cash out non-matured bonds held as a creditor at face value.
+  // Sell non-matured bonds held as a creditor to the market pool at the
+  // current price, for whatever the pool can pay. Pre-pool this credited face
+  // value from nowhere.
   if (heldCreditorBonds.length > 0) {
     for (const bond of heldCreditorBonds) {
       const h = bond.holders.find(
@@ -106,8 +109,15 @@ export async function executeCorporationBondDefaultDissolution(
       if (!h || h.units <= 0) continue;
       const bondCcy = (bond.currencyCode ?? undefined) as CurrencyCode | undefined;
       const bondRate = bondCcy ? (fxByCurrency.get(bondCcy) ?? 1) : 1;
-      const faceAnchor = corpCapitalToAnchor(h.units * BOND_UNIT_FACE_VALUE, bondCcy, bondRate);
-      assetLiquidationInc += anchorToCorpLiquidCapital(faceAnchor, corporation, corpFxRateEarly);
+      const paidLocal = await debitBondPoolUpTo(
+        db,
+        bondPoolCurrency(bond),
+        h.units * BOND_UNIT_FACE_VALUE * (bond.marketPrice ?? 1),
+        "estateOut",
+        now
+      );
+      const paidAnchor = corpCapitalToAnchor(paidLocal, bondCcy, bondRate);
+      assetLiquidationInc += anchorToCorpLiquidCapital(paidAnchor, corporation, corpFxRateEarly);
 
       // Return the liquidated units to the issuer's public float so the
       // issuer's debt stays consistent (publicFloat + holderUnits ==
@@ -265,6 +275,26 @@ export async function executeCorporationBondDefaultDissolution(
       ) {
         const k = h.corporationId.toString();
         corpBondPay.set(k, (corpBondPay.get(k) ?? 0) + pay);
+      }
+    }
+    // The market pool is a creditor like any other for the units it holds.
+    // `totalBondClaims` already counts them (it sums `totalIssued`), so this
+    // share of the recovery pool was being burned before.
+    if (bond.publicFloat > 0) {
+      const floatFaceAnchor = corpCapitalToAnchor(
+        bond.publicFloat * BOND_UNIT_FACE_VALUE,
+        bondCcy,
+        bondRate
+      );
+      const poolPayAnchor = Math.round(ratio * floatFaceAnchor * 100) / 100;
+      if (poolPayAnchor > 0) {
+        await creditBondPool(
+          db,
+          bondPoolCurrency(bond),
+          poolPayAnchor * (bondRate > 0 ? bondRate : 1),
+          "recoveriesIn",
+          now
+        );
       }
     }
   }

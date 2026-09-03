@@ -83,6 +83,12 @@ interface LegislationTypeOption {
   effectTargetsWeighted?: EffectTargetWeighted[];
   /** Set by the era-gated legislation-types API for types unlocked this era. */
   eraNew?: boolean;
+  /**
+   * Which country's book this type belongs to (lower-case). A merge re-scopes
+   * the absorbed state's catalogue onto the survivor, so this — not the
+   * compiled per-country tables — is what says a carried law is now ours.
+   */
+  countryScope?: string;
   /** Political-legislation v2 (spec §8): live per-level fiscal estimates. */
   estimates?: Array<{ level: number; cost: number; revenue: number; net: number }>;
   /** GDP at the priced scope — annotates cost deltas as %GDP. */
@@ -360,6 +366,13 @@ export function ProposeBillModal({
     loadCurrentPolicies();
   }, [loadCurrentPolicies]);
 
+  // An electoral-law provision occupies one of the bill's MAX_PROVISIONS slots,
+  // so the policy provisions get what is left. Without this the form built a
+  // four-provision bill out of three rows plus the franchise checkbox and the
+  // body schema refused it with "At most 3 provisions" (#1250).
+  const standaloneProvisionCount = isElectoralCat && (includeVotingAge || includeRegAccess) ? 1 : 0;
+  const maxPolicyProvisions = Math.max(0, MAX_PROVISIONS - standaloneProvisionCount);
+
   const provisionCountForInfluenceCost = isCustomCat
     ? 0 // Custom bills have no provisions
     : isTradeCat
@@ -368,7 +381,11 @@ export function ProposeBillModal({
         ? natRows.length
         : isSubsidyCat
           ? subsidyProvisions.length
-          : provisions.length;
+          : // An electoral-law provision rides the NPI ladder like any other, so
+            // it has to be counted here or the modal quotes a cost lower than
+            // the route then charges, and `canAffordNpi` clears a bill the
+            // server refuses for insufficient influence (#1250).
+            provisions.length + standaloneProvisionCount;
   const totalCost = getProvisionCostTotal(provisionCountForInfluenceCost);
   const canAffordNpi =
     adminOverride || nationalInfluence === null || nationalInfluence >= totalCost;
@@ -462,7 +479,7 @@ export function ProposeBillModal({
   }
 
   function addProvision() {
-    if (provisions.length >= MAX_PROVISIONS) return;
+    if (provisions.length >= maxPolicyProvisions) return;
     setProvisions((prev) => [
       ...prev,
       {
@@ -564,6 +581,16 @@ export function ProposeBillModal({
       if (!canAffordNpi && totalCost > 0) {
         setError(
           `This bill costs ${totalCost} national political influence (you have ${nationalInfluence?.toFixed(0) ?? 0}).`
+        );
+        return;
+      }
+      // The add-provision cap already accounts for the franchise provision, but
+      // a player can fill the rows first and tick the box afterwards, which the
+      // cap cannot retract. Say so rather than letting the body schema refuse
+      // the bill with a bare count.
+      if (provisions.length + standaloneProvisionCount > MAX_PROVISIONS) {
+        setError(
+          `A bill carries at most ${MAX_PROVISIONS} provisions, and the electoral-law change is one of them. Remove a policy provision.`
         );
         return;
       }
@@ -990,7 +1017,7 @@ export function ProposeBillModal({
               <>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-xs text-muted">Provisions (type + policy)</label>
-                  {provisions.length < MAX_PROVISIONS && (
+                  {provisions.length < maxPolicyProvisions && (
                     <button
                       type="button"
                       onClick={addProvision}
@@ -1109,7 +1136,8 @@ export function ProposeBillModal({
                                   const manpowerLabel = reserveManpowerLabel(
                                     countryId,
                                     p.legislationTypeId,
-                                    optIdx
+                                    optIdx,
+                                    type?.countryScope
                                   );
                                   const suffix =
                                     (posLabel ? ` — ${posLabel}` : "") + netLabel + manpowerLabel;

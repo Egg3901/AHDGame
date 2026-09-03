@@ -188,6 +188,13 @@ export interface CorporationDetail {
   headerImageUrl?: string;
   /** Share price (single source of truth for all contexts). */
   sharePrice: number;
+  /** True when at-market float trades settle against the finite currency pool. */
+  equityMarketPoolActive?: boolean;
+  /** Executable per-share bid and ask, in this corporation's local currency. */
+  marketBidPrice?: number;
+  marketAskPrice?: number;
+  /** Shares the currency pool can buy immediately at marketBidPrice. */
+  marketDepthShares?: number;
   totalShares: number;
   publicFloat: number;
   shareholders: ShareholderInfo[];
@@ -519,7 +526,15 @@ export interface Financials {
   dividendDistribution: number;
   /** Daily dominance regulatory burden in local currency. Already included in operatingCosts. */
   regulatoryBurden: number;
+  /**
+   * Annualized growth. Under plants this is MEASURED realized revenue growth
+   * over a trailing window; below plants (or with too little history) it is the
+   * legacy average of the sectors' `currentGrowthRate` field. See
+   * `growthRateIsRealized` before labelling it (#922).
+   */
   currentGrowthRate: number;
+  /** True when `currentGrowthRate` is measured realized revenue, not the legacy field. */
+  growthRateIsRealized?: boolean;
   subsidyBenefit: number;
 }
 
@@ -651,6 +666,8 @@ export interface SectorDetail {
 
   /** Nameplate productive capacity, units/day. */
   capacityUnits?: number | null;
+  /** Persisted whole facilities owned by this sector. */
+  plantCount?: number | null;
   /** Units produced last turn. */
   producedUnits?: number | null;
   /** Units sold last turn. */

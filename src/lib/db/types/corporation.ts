@@ -263,6 +263,18 @@ export interface Corporation {
   shareholders: Shareholder[];
   /** Shares available in the public float (universal market maker pool) */
   publicFloat?: number;
+  /**
+   * Approved primary shares not yet bought by the currency market pool. These
+   * are authorized, not outstanding: they earn no dividends and dilute only
+   * as the pool places them into publicFloat with real cash.
+   */
+  pendingShareIssuance?: {
+    remainingShares: number;
+    requestedShares: number;
+    source: "direct" | "vote" | "ipo" | "founding_ipo";
+    createdAtTurn: number;
+    initialPriceLocal: number;
+  };
   /** Dividend payout rate (0, 100%). Income × this % is distributed to shareholders each turn. */
   dividendRate?: number;
   /** When the dividend rate was last changed (enforces 24h cooldown) */
@@ -918,6 +930,18 @@ export interface CorporateSector {
   capitalStock?: number;
   capitalUtilization?: number;
   /**
+   * First-class whole facilities owned by this sector. Unlike capitalStock,
+   * this count does not become fractional through depreciation. PvP transfers
+   * this ownership unit; productive capacity and paid basis follow the plants
+   * pro-rata. Optional until the value-conserving plants migration runs.
+   */
+  plantCount?: number;
+  /**
+   * Delivered capacity fragments accumulated toward the next whole facility.
+   * Always less than the sector's facility quantum after normalization.
+   */
+  plantUnitRemainder?: number;
+  /**
    * Plants tier (marketSystemMode >= "plants"): anchors the launch-safety
    * governor's fade-in from the sector's first plants turn, exactly like
    * `clearingStartTurn` does for the clearing leg. Stamped once, on the turn
@@ -1046,8 +1070,19 @@ export interface CorporateSector {
     labour: number;
     upkeep: number;
     compliance: number;
-    /** SIGNED: the calibration residual is negative on most prod sectors. */
+    /**
+     * SIGNED: the calibration residual is negative on most prod sectors. This
+     * is the figure actually charged: when the credit exceeded every named
+     * cost line it was clamped to them (`otherOpexCreditCapped`).
+     */
     otherOpex: number;
+    /**
+     * True when the residual credit was clamped to the named bills this turn.
+     * The raw anchor-times-units product is `otherOpexUncapped`; the gap
+     * between the two is profit the sector would otherwise have invented.
+     */
+    otherOpexCreditCapped?: boolean;
+    otherOpexUncapped?: number;
     financialLegs: number;
     /**
      * The policy/tech modifier stack as money. POSITIVE is a credit that

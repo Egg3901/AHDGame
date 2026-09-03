@@ -401,16 +401,18 @@ export const RECESSION_TEMPLATE: CrisisTemplate = {
             optionId: "stimulus_moderate",
             label: "Moderate Stimulus",
             description:
-              "Increase spending on infrastructure and unemployment benefits. Costs 1.5% of GDP, reduces duration by 2 turns.",
+              "Increase spending on infrastructure and unemployment benefits. Costs 1.5% of GDP, ends the recession 2 turns sooner.",
             nextNodeId: "terminal",
+            durationReductionTurns: 2,
             effects: [fx("flat", "metric", "economy", "gdp", -0.015, "Stimulus fiscal cost")],
           },
           {
             optionId: "stimulus_large",
             label: "Large Stimulus",
             description:
-              "Massive public works and direct cash transfers. Costs 3% of GDP, reduces duration by 4 turns, but risks inflation.",
+              "Massive public works and direct cash transfers. Costs 3% of GDP and drives up inflation, but ends the recession 4 turns sooner.",
             nextNodeId: "terminal",
+            durationReductionTurns: 4,
             effects: [
               fx("flat", "metric", "economy", "gdp", -0.03, "Large stimulus fiscal cost"),
               fx("flat", "metric", "economy", "inflation", 0.02, "Stimulus inflation pressure"),
@@ -587,15 +589,16 @@ export const HURRICANE_TEMPLATE: CrisisTemplate = {
             optionId: "response_federal",
             label: "Federal Emergency Declaration",
             description:
-              "Mobilize federal disaster relief. Costs 0.5% of GDP, reduces duration by 1 turn.",
+              "Mobilize federal disaster relief. Costs 0.5% of GDP, ends the emergency 1 turn sooner.",
             nextNodeId: "rebuild",
+            durationReductionTurns: 1,
             effects: [fx("flat", "metric", "economy", "gdp", -0.005, "Federal relief cost")],
           },
           {
             optionId: "response_state",
             label: "State-Led Response",
             description:
-              "Let state governors handle relief. No federal cost, but slower recovery. Full duration.",
+              "Let state governors handle relief. No federal cost, but slower recovery and the emergency runs its full length.",
             nextNodeId: "rebuild",
             effects: [],
           },
@@ -1511,8 +1514,9 @@ export const PANDEMIC_TEMPLATE: CrisisTemplate = {
             optionId: "response_lockdown",
             label: "Full Lockdown",
             description:
-              "Close non-essential businesses and restrict movement. Deep economic cost but saves lives and reduces duration by 3 turns.",
+              "Close non-essential businesses and restrict movement. Deep economic cost in output and jobs, but it saves lives and ends the pandemic 3 turns sooner.",
             nextNodeId: "terminal",
+            durationReductionTurns: 3,
             effects: [
               fx("flat", "metric", "economy", "gdp", -0.03, "Lockdown GDP collapse"),
               fx("flat", "metric", "economy", "unemployment", 0.02, "Lockdown unemployment"),
@@ -1522,8 +1526,9 @@ export const PANDEMIC_TEMPLATE: CrisisTemplate = {
             optionId: "response_targeted",
             label: "Targeted Restrictions",
             description:
-              "Limit large gatherings and mask mandates. Moderate economic impact, reduces duration by 1 turn.",
+              "Limit large gatherings and mask mandates. Moderate economic impact, ends the pandemic 1 turn sooner.",
             nextNodeId: "terminal",
+            durationReductionTurns: 1,
             effects: [
               fx("flat", "metric", "economy", "gdp", -0.01, "Targeted restrictions GDP hit"),
             ],
@@ -1532,7 +1537,7 @@ export const PANDEMIC_TEMPLATE: CrisisTemplate = {
             optionId: "response_herd",
             label: "Herd Immunity",
             description:
-              "No restrictions. Let the virus run its course. Minimal economic disruption but maximum health toll and duration.",
+              "No restrictions. Let the virus run its course. Minimal economic disruption but the maximum health toll, and the pandemic runs its full length.",
             nextNodeId: "terminal",
             effects: [
               fx(

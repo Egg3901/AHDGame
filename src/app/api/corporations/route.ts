@@ -51,6 +51,11 @@ import {
 import { CURRENCY_SYMBOLS, COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import {
+  prepareEquityPrimaryPlacement,
+  refundPreparedEquityPlacement,
+  type PreparedEquityPlacement,
+} from "@/lib/equities/primaryMarket";
 
 const INACTIVE_CEO_THRESHOLD_MS = INACTIVE_CEO_TURN_THRESHOLD * 60 * 60 * 1000;
 
@@ -466,17 +471,30 @@ export async function POST(request: Request) {
           withSuperShares: ipo.superShareMultiplier !== undefined,
         })
       : null;
+    const foundingPlacement: PreparedEquityPlacement | null = ipoResult
+      ? await prepareEquityPrimaryPlacement(
+          db,
+          {
+            countryId: character.countryId,
+            liquidCurrencyCode: corpHomeCurrency,
+          },
+          ipoResult.newShares,
+          initialSharePrice,
+          now
+        )
+      : null;
     // Dual-class founding IPO: the founder's initial stake is designated
     // supershares (S#33) — see lib/corporations/superShares.
     const superShareMultiplier = ipo?.superShareMultiplier;
-    const totalSharesAtFounding = ipoResult ? ipoResult.totalSharesAfter : founderShares;
-    const publicFloatAtFounding = ipoResult ? ipoResult.newShares : 0;
-    // Founding via IPO creates float inventory but credits NO cash at founding —
-    // the corp realizes IPO proceeds as that float is actually bought (treasury-
-    // backed market maker). Pre-fix this added ipoProceeds to the treasury at
-    // founding while the buy path credited again, double-paying the issuer
-    // (Bug #0624). Treasury starts at the founder's committed capital only.
-    const liquidCapitalAtFounding = corpStartingCapital;
+    const placedIpoShares = foundingPlacement?.placedShares ?? 0;
+    const totalSharesAtFounding = founderShares + placedIpoShares;
+    const publicFloatAtFounding = placedIpoShares;
+    const liquidCapitalAtFounding =
+      corpStartingCapital + (foundingPlacement?.poolActive ? foundingPlacement.paidLocal : 0);
+    const publicSharePriceAtFounding =
+      foundingPlacement?.poolActive && totalSharesAtFounding > 0
+        ? (initialSharePrice * founderShares) / totalSharesAtFounding
+        : initialSharePrice;
 
     // Auto-grant past-decade tech (both Corporate and Sector lanes) so late-founded
     // corps start with all the knowledge of bygone decades — including sector-specific
@@ -517,7 +535,7 @@ export async function POST(request: Request) {
       logisticsStrength: 0,
       ceoSalary: 0,
       totalShares: totalSharesAtFounding,
-      sharePrice: initialSharePrice,
+      sharePrice: publicSharePriceAtFounding,
       shareholders: [
         {
           characterId: character._id,
@@ -526,6 +544,20 @@ export async function POST(request: Request) {
         },
       ],
       publicFloat: publicFloatAtFounding,
+      ...(foundingPlacement?.poolActive && foundingPlacement.paidLocal > 0
+        ? { shareIssuanceProceeds: foundingPlacement.paidLocal }
+        : {}),
+      ...(foundingPlacement && foundingPlacement.unsoldShares > 0
+        ? {
+            pendingShareIssuance: {
+              remainingShares: foundingPlacement.unsoldShares,
+              requestedShares: ipoResult!.newShares,
+              source: "founding_ipo" as const,
+              createdAtTurn: foundedAtTurn,
+              initialPriceLocal: initialSharePrice,
+            },
+          }
+        : {}),
       // Every corp gets a colour at founding. It drives the cap-table charts and
       // every place the corp appears next to rivals, and a random pick beats a
       // shared default: two corps side by side are told apart on sight.
@@ -561,6 +593,9 @@ export async function POST(request: Request) {
       forexEnabled
     );
     if (!debitResult.ok) {
+      if (foundingPlacement) {
+        await refundPreparedEquityPlacement(db, foundingPlacement, now);
+      }
       const sym = CURRENCY_SYMBOLS[homeCurrency] ?? "$";
       return NextResponse.json(
         {
@@ -672,8 +707,24 @@ export async function POST(request: Request) {
         });
       }
 
-      // No founding-IPO proceeds leg: founding via IPO moves no cash (Bug #0624).
-      // The float's cash is realized — and ledgered — when the float is bought.
+      if (foundingPlacement?.poolActive && foundingPlacement.paidLocal > 0) {
+        void emitTx(db, {
+          type: "ipo_proceeds",
+          turn: foundedAtTurn,
+          createdAt: now,
+          subjectType: "corporation",
+          subjectId: result.insertedId,
+          subjectName: name,
+          amount: foundingPlacement.paidLocal,
+          currencyCode: (corpHomeCurrency as CurrencyCode | undefined) ?? homeCurrency,
+          meta: {
+            sharesPlaced: foundingPlacement.placedShares,
+            sharesRequested: foundingPlacement.requestedShares,
+            sharesPending: foundingPlacement.unsoldShares,
+            counterparty: "equity_market_pool",
+          },
+        });
+      }
 
       const typeLabel = CORPORATION_TYPE_LABELS[type] ?? type;
       const hqStateDoc = await db
@@ -734,6 +785,9 @@ export async function POST(request: Request) {
         await db.collection<Corporation>("corporations").deleteOne({ _id: createdCorporationId });
       }
       await refundCharacterCash(db, character._id, homeCurrency, totalPlayerCost, forexEnabled);
+      if (foundingPlacement) {
+        await refundPreparedEquityPlacement(db, foundingPlacement, now);
+      }
       // Race-loser path: the pre-check above said the ticker was free, but a
       // concurrent founder won the unique-index insert. Translate to the same
       // 400 the pre-check returns instead of bubbling up a 500.

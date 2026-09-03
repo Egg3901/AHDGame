@@ -9,10 +9,21 @@ import { usePsSpendScope } from "@/components/state/politics/orgActions/usePsSpe
 import { useActionPreview } from "@/components/state/politics/orgActions/useActionPreview";
 import { EstimateLine } from "@/components/state/politics/orgActions/EstimateLine";
 import { PoolLegend, type PoolLegendRow } from "@/components/state/overview/PoolLegend";
+import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 
 const UNAFFILIATED_COLOR = "var(--card-border)";
 
-type BuildOrgPreview = { ok: true; effectiveCost: number; projectedGain: number } | { ok: false };
+type BuildOrgPreview =
+  | {
+      ok: true;
+      effectiveCost: number;
+      projectedGain: number;
+      /** Cash price of the next click. Absent on a pre-2026-09-02 response. */
+      cashPrice?: number;
+      /** Below 1 when the treasury can only part-fund; `projectedGain` is already scaled. */
+      fundedFraction?: number;
+    }
+  | { ok: false };
 
 /**
  * Narrative card that pairs with the all-party Org pie. Mirrors the
@@ -119,6 +130,9 @@ export function PoliticalSummaryCard({
   // each spend so the next-click estimate refreshes (alongside router.refresh()
   // for the pie).
   const apiBase = viewerPartyId ? regionPartyApiUrl(vm.countryId, vm.stateId, viewerPartyId) : null;
+  // Build Org bills a treasury denominated in the country's own currency.
+  const buildOrgCurrency =
+    COUNTRY_CURRENCY_MAP[vm.countryId.toUpperCase() as keyof typeof COUNTRY_CURRENCY_MAP] ?? "USD";
   const { preview: buildPreview } = useActionPreview<BuildOrgPreview>(
     apiBase ? `${apiBase}/build-org/preview` : null,
     { enabled: !!apiBase, refetchKey: bumpKey }
@@ -148,8 +162,13 @@ export function PoliticalSummaryCard({
         showToast(d.error ?? "Build Org failed", "error");
         return;
       }
+      const cashCost = d.cashCost as number | undefined;
+      const cash =
+        cashCost !== undefined
+          ? ` and ${CURRENCY_SYMBOLS[buildOrgCurrency as keyof typeof CURRENCY_SYMBOLS] ?? "$"}${Math.round(cashCost).toLocaleString("en-US")}`
+          : "";
       showToast(
-        `+${(d.orgGain as number).toFixed(2)} Org for ${(d.psCost as number).toFixed(0)} PS`,
+        `+${(d.orgGain as number).toFixed(2)} Org for ${(d.psCost as number).toFixed(0)} PS${cash}`,
         "success"
       );
       // Apply the server's next-click estimate immediately so the line reflects
@@ -233,8 +252,19 @@ export function PoliticalSummaryCard({
           <EstimateLine
             label="Build"
             costPS={estimate.effectiveCost}
+            costCash={
+              estimate.cashPrice !== undefined
+                ? { amount: estimate.cashPrice, currencyCode: buildOrgCurrency }
+                : undefined
+            }
             gain={{ sign: "+", value: estimate.projectedGain, unit: "Org" }}
           />
+          {estimate.fundedFraction !== undefined && estimate.fundedFraction < 1 ? (
+            <span className="block text-[10px] text-warning">
+              Partly funded: the treasury covers {Math.round(estimate.fundedFraction * 100)}% of
+              this click.
+            </span>
+          ) : null}
         </div>
       ) : null}
     </div>

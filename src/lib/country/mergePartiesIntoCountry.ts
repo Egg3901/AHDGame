@@ -22,8 +22,11 @@ import type { Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { PoliticalParty } from "@/lib/db/types";
 import { reserveSequentialIds, realignPartyCountersToExisting } from "@/lib/db/sequentialId";
+import { resolveMergeFxScale } from "./mergeFxScale";
 import {
   PARTY_REF_COLLECTIONS,
+  PARTY_KEYED_MAP_COLLECTIONS,
+  PARTY_KEYED_DOCUMENT_ID_COLLECTIONS,
   PARTY_OBJECTID_COLLECTIONS,
   NON_PARTY_SENTINELS,
   buildPartyIdMap,
@@ -81,6 +84,10 @@ export async function mergePartiesIntoCountry(
       .find({ countryId: toCountryId, "mergedFrom.countryId": fromCountryId })
       .toArray()) as unknown as PartyDoc[];
     if (alreadyMoved.length === 0) return empty;
+    // A re-run after a partial failure may have moved the docs but died before
+    // the money converted — the stamp filter inside makes this a no-op when it
+    // already did.
+    await convertMovedPartyTreasuries(db, fromCountryId, toCountryId);
     return {
       ok: true,
       partyIdMap: buildPartyIdMap(
@@ -134,15 +141,98 @@ export async function mergePartiesIntoCountry(
   // the old numeric value is never touched. That filter is the whole safety
   // property of this function.
   for (const ref of PARTY_REF_COLLECTIONS) {
+    // `countryKey` because not every collection carries a `countryId`: a
+    // one-doc-per-country row is keyed by the country id itself, and filtering
+    // such a collection on `countryId` matches nothing and reports no error.
+    const countryKey = ref.countryKey ?? "countryId";
     for (const [oldId, newId] of Object.entries(partyIdMap)) {
       if (NON_PARTY_SENTINELS.has(oldId)) continue;
       const res = await db
         .collection(ref.collection)
         .updateMany(
-          { countryId: fromCountryId, [ref.field]: oldId },
+          { [countryKey]: fromCountryId, [ref.field]: oldId },
           { $set: { [ref.field]: newId, updatedAt: now } }
         );
       documentsRemapped += res?.modifiedCount ?? 0;
+    }
+  }
+
+  // Maps whose KEYS are party ids. `$set` on a path rewrites a value and cannot
+  // rename a key, so these are read, rebuilt and written back whole — and two old
+  // keys landing on one new key SUM rather than one of them quietly winning.
+  for (const ref of PARTY_KEYED_MAP_COLLECTIONS) {
+    const countryKey = ref.countryKey ?? "countryId";
+    const docs = await db
+      .collection(ref.collection)
+      .find({ [countryKey]: fromCountryId } as Record<string, unknown>)
+      .toArray();
+    for (const doc of docs) {
+      const current = (doc as Record<string, unknown>)[ref.field] as
+        Record<string, number> | undefined;
+      if (!current) continue;
+      const rebuilt: Record<string, number> = {};
+      let changed = false;
+      for (const [key, value] of Object.entries(current)) {
+        const mapped = NON_PARTY_SENTINELS.has(key) ? key : (partyIdMap[key] ?? key);
+        if (mapped !== key) changed = true;
+        rebuilt[mapped] = (rebuilt[mapped] ?? 0) + value;
+      }
+      if (!changed) continue;
+      await db.collection(ref.collection).updateOne({ _id: doc._id } as Record<string, unknown>, {
+        $set: { [ref.field]: rebuilt, updatedAt: now },
+      });
+      documentsRemapped += 1;
+    }
+  }
+
+  // Collections whose DOCUMENT `_id` embeds the sequentialId. The field updates
+  // above already ran, so these rows now disagree with their own key, and a
+  // `_id` cannot be updated — they must be re-keyed.
+  //
+  // TWO PHASES, because the remap is a PERMUTATION: on a reunification the row
+  // keyed `NW_1` becomes `NW_6` while `NW_7` becomes `NW_1`, so a direct pass
+  // collides on a key the same run is about to vacate. Everything is parked
+  // under a temporary id first, then landed.
+  //
+  // A row is only moved when its target is free or is itself being vacated. A
+  // target held by a row that is staying put is a real collision and is left
+  // alone rather than overwritten: losing one party's organisation silently is
+  // worse than a key that still disagrees, which `verify` can find later.
+  for (const ref of PARTY_KEYED_DOCUMENT_ID_COLLECTIONS) {
+    const coll = db.collection(ref.collection);
+    const rows = (await coll
+      .find({ countryId: toCountryId } as Record<string, unknown>)
+      .toArray()) as Array<Record<string, unknown>>;
+
+    const keyFor = (row: Record<string, unknown>) =>
+      ref.idParts.map((part) => String(row[part])).join("_");
+
+    const misKeyed = rows.filter((row) => String(row._id) !== keyFor(row));
+    if (misKeyed.length === 0) continue;
+
+    const present = new Set(rows.map((row) => String(row._id)));
+    const vacating = new Set(misKeyed.map((row) => String(row._id)));
+    const claimed = new Set<string>();
+    const movable = misKeyed.filter((row) => {
+      const target = keyFor(row);
+      if (claimed.has(target)) return false;
+      if (present.has(target) && !vacating.has(target)) return false;
+      claimed.add(target);
+      return true;
+    });
+
+    const parked: Array<{ tempId: string; finalId: string; doc: Record<string, unknown> }> = [];
+    for (const row of movable) {
+      const { _id, ...rest } = row;
+      const tempId = `__rekey__${String(_id)}`;
+      await coll.insertOne({ _id: tempId, ...rest } as Record<string, unknown>);
+      await coll.deleteOne({ _id } as Record<string, unknown>);
+      parked.push({ tempId, finalId: keyFor(row), doc: rest });
+    }
+    for (const entry of parked) {
+      await coll.insertOne({ _id: entry.finalId, ...entry.doc } as Record<string, unknown>);
+      await coll.deleteOne({ _id: entry.tempId } as Record<string, unknown>);
+      documentsRemapped += 1;
     }
   }
 
@@ -163,10 +253,46 @@ export async function mergePartiesIntoCountry(
   // there reuses an id behind the unique index.
   await realignPartyCountersToExisting(db);
 
+  // The moved parties' money is still denominated in the DISSOLVED country's
+  // currency. Characters and corporations convert with their regions
+  // (`convertTransferredResidentsCurrency`); the national party treasuries live
+  // on `politicalParties.treasury` and cross here, at the same merge FX scale.
+  await convertMovedPartyTreasuries(db, fromCountryId, toCountryId);
+
   return {
     ok: true,
     partyIdMap,
     partiesMoved: moved.length,
     documentsRemapped,
   };
+}
+
+/**
+ * FX-convert the treasuries of parties this merge moved, exactly once.
+ *
+ * The `mergedFrom.treasuryConverted` stamp travels inside the same atomic
+ * update as the `$mul`, and the `$ne: true` filter makes a concurrent or
+ * repeated pass match nothing — a treasury can be scaled once or zero times,
+ * never twice. Stamped even at scale 1 (same currency / forex off) so a later
+ * re-run cannot re-convert after a rate appears.
+ */
+async function convertMovedPartyTreasuries(
+  db: Db,
+  fromCountryId: CountryId,
+  toCountryId: CountryId
+): Promise<void> {
+  const scale = await resolveMergeFxScale(db, fromCountryId, toCountryId);
+  const filter = {
+    countryId: toCountryId,
+    "mergedFrom.countryId": fromCountryId,
+    "mergedFrom.treasuryConverted": { $ne: true },
+  };
+  const stamp = { "mergedFrom.treasuryConverted": true, updatedAt: new Date() };
+  if (scale === 1) {
+    await db.collection("politicalParties").updateMany(filter, { $set: stamp });
+    return;
+  }
+  await db
+    .collection("politicalParties")
+    .updateMany(filter, { $mul: { treasury: scale }, $set: stamp });
 }

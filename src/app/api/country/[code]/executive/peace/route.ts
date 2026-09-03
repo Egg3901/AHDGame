@@ -6,6 +6,9 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { requirePeaceNegotiator } from "@/lib/api/requirePeaceNegotiator";
+import { loadTermSettlement } from "@/lib/settlement/queries/termSettlement";
+import { principalOf } from "@/lib/military/principal";
+import { getSettlementCrisesCollection } from "@/lib/db/collections";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
 import { z } from "zod";
@@ -23,6 +26,9 @@ import {
   isOfferLive,
   maxIndemnityForGdp,
   withdrawalGate,
+  loadPartySequentialIds,
+  loadPartyChoicesFor,
+  partyDisplayName,
 } from "@/lib/military/peaceOffer";
 import type { PeaceTerm } from "@/lib/military/peaceTerm";
 import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
@@ -56,11 +62,18 @@ const bodySchema = z.object({
     z.object({
       kind: z.literal("regime_change"),
       targetSystem: z.enum(["presidential", "parliamentaryRepublic", "onePartyState"]),
+      // Which party takes power. Only meaningful for `onePartyState`, which
+      // `validatePeaceTerm` enforces — the schema accepts it either way so the
+      // contradiction is refused with a reason rather than a shape error.
+      rulingPartyId: z.number().int().positive().optional(),
     }),
     z.object({
       kind: z.literal("demilitarisation"),
       turns: z.number().int().positive(),
     }),
+    // Carries no fields: the crisis names the two Germanies, and the validator
+    // checks that this war is the one carrying it.
+    z.object({ kind: z.literal("reunification") }),
   ]),
   // Player-authored text another player reads, so it takes the body-copy policy —
   // not the stricter name filter reserved for public page titles.
@@ -124,6 +137,49 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     // `isOfferLive` is — just bookkeeping that saves a scheduled sweeper.
     await reapExpiredOffers(db, offers, currentTurn);
 
+    // Party lists for every country that could be offered terms, so the form can
+    // name a ruling party on a conversion to a one-party state. Loaded ONCE for
+    // the whole payload rather than per war: a country on two fronts is one
+    // lookup, not two, and the enemy map below stays synchronous.
+    const enemyCountries = new Set<CountryId>();
+    for (const w of wars) {
+      const onA = (w.sideA.countries as string[]).includes(countryId);
+      for (const e of onA ? w.sideB.countries : w.sideA.countries) {
+        if (opposedBelligerents(w, countryId, e)) enemyCountries.add(e);
+      }
+    }
+    // A regime change that NAMES a ruling party is a materially different deal
+    // from one that leaves it to resolve, and the country being asked to accept
+    // has to be able to see which party it would be handing power to. The term
+    // stores an id; the reader needs a name. An offer's target is added to the
+    // same load, because an incoming offer converts US and the enemy set covers
+    // only the countries we could offer terms to.
+    for (const offer of offers) {
+      if (offer.term.kind !== "regime_change" || offer.term.rulingPartyId == null) continue;
+      enemyCountries.add(offer.toCountry);
+    }
+
+    // ONE query for every country involved, not one per country: a nation on
+    // several fronts would otherwise turn a single page load into ten round trips.
+    const partiesByCountry = await loadPartyChoicesFor(db, [...enemyCountries]);
+
+    // Which of these wars is carrying a settlement crisis, and who its challenger is.
+    // ONE query for every war on the page. The challenger's identity is what decides
+    // the DIRECTION of a reunification rather than who may propose one: either
+    // founding belligerent may, and the incumbent is the side that withdraws.
+    const crises = await getSettlementCrisesCollection(db);
+    const frozen = await crises
+      .find({
+        status: "frozen",
+        conflictId: { $in: wars.map((w) => w._id) },
+      } as Parameters<typeof crises.find>[0])
+      .toArray();
+    const challengerByWar = new Map(
+      frozen.map((c) => [c.conflictId as string, c.challengerEntityId as string])
+    );
+    const nameOf = (country: CountryId, partyId: number): string | null =>
+      partyDisplayName(partiesByCountry.get(country), partyId);
+
     return NextResponse.json({
       currentTurn,
       wars: wars.map((w) => {
@@ -142,23 +198,59 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
           // What OUR own departure would do, for the same reason: the panel must say
           // whether leaving ends the war rather than claiming the fighting always
           // carries on without us.
-          ourDeparture: (() => {
-            const g = withdrawalGate(w, countryId, countryId);
-            return { endsWar: g.endsWar, guestsLeaving: g.guests };
-          })(),
+          // Which way a reunification runs, when this war is carrying the question.
+          // The incumbent is always the side that withdraws, so the challenger asks
+          // THEM to leave and the incumbent offers to leave itself. Null when the
+          // term is not available on this war at all.
+          //
+          // Server-decided: the form would otherwise have to know which war carries
+          // the crisis and who its challenger is, both settlement facts rather than
+          // war ones.
+          reunificationLeaver: !challengerByWar.has(w._id)
+            ? null
+            : challengerByWar.get(w._id) === countryId
+              ? ("them" as const)
+              : ("us" as const),
           enemies: (onA ? w.sideB.countries : w.sideA.countries)
             .filter((e) => opposedBelligerents(w, countryId, e))
             .map((e) => {
               const gate = withdrawalGate(w, countryId, e);
               return {
                 country: e,
+                // Reunification is settled BETWEEN THE TWO FOUNDERS, so it is offered
+                // only against the opposing principal, and only by ours. The route
+                // enforces the same rule; this keeps the option off a picker where it
+                // would always be refused.
+                canReunify:
+                  challengerByWar.has(w._id) &&
+                  principalOf(w, onA ? "A" : "B") === countryId &&
+                  principalOf(w, onA ? "B" : "A") === e,
                 endsWar: gate.endsWar,
+                endsWarReason: gate.endsWarReason,
                 guestsLeaving: gate.guests,
                 withdrawalBlocked: gate.blocked,
+                // WHAT OUR OWN DEPARTURE WOULD DO, and it has to be asked once PER
+                // ENEMY rather than once per war. Our leaving ends the war outright
+                // when we and the country we settle with both founded it, so the
+                // answer depends on who is across the table and a single war-level
+                // reading has no counterparty to be right about. Asked with the roles
+                // swapped, which is what the gate's own arguments mean: they are the
+                // ones staying, we are the ones leaving.
+                ourDeparture: (() => {
+                  const ours = withdrawalGate(w, e, countryId);
+                  return {
+                    endsWar: ours.endsWar,
+                    endsWarReason: ours.endsWarReason,
+                    guestsLeaving: ours.guests,
+                  };
+                })(),
                 // Whole percents, for copy. The form shows the reader how far off
                 // they are rather than only that they are.
                 progressPct: Math.round(gate.progress * 100),
                 requiredPct: Math.round(gate.required * 100),
+                // The parties a conversion could install here. Same helper the
+                // POST validates against, so anything offerable is acceptable.
+                parties: partiesByCountry.get(e) ?? [],
               };
             }),
         };
@@ -169,6 +261,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
         fromCountry: o.fromCountry,
         toCountry: o.toCountry,
         term: o.term,
+        /**
+         * The named ruling party's display name, when the term names one. Null
+         * otherwise, which is also what a term that leaves the choice to the
+         * conversion reads as.
+         */
+        rulingPartyName:
+          o.term.kind === "regime_change" && o.term.rulingPartyId != null
+            ? nameOf(o.toCountry, o.term.rulingPartyId)
+            : null,
         leaver: o.leaver,
         justification: o.justification ?? null,
         // Derived, not the stored field: a row can say "pending" and be expired.
@@ -246,6 +347,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     // keeps the original shape, where the sender is the one leaving.
     const leaver = parsed.data.leaver === "them" ? toCountry : countryId;
 
+    // Loaded only for the term that can name a party, so an indemnity or a
+    // demilitarisation does not pay for a query it never reads.
+    const targetPartyIds =
+      term.kind === "regime_change" && term.rulingPartyId != null
+        ? await loadPartySequentialIds(db, toCountry)
+        : null;
+
+    // Loaded only for the term that can settle a crisis, so an indemnity does not pay
+    // for a query it never reads. Null is a REFUSAL for a reunification term, not a
+    // skipped check: see `PeaceTermContext.settlement`.
+    const settlement =
+      term.kind === "reunification" ? await loadTermSettlement(db, parsed.data.conflictId) : null;
+
     const check = validatePeaceOffer(
       conflict,
       countryId,
@@ -253,7 +367,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       term,
       leaver,
       maxAmount,
-      targetState.governmentType
+      targetState.governmentType,
+      targetPartyIds,
+      settlement
     );
     if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
 

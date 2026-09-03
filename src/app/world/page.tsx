@@ -13,7 +13,7 @@ import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 export const metadata: Metadata = publicPageMetadata({
   title: "World | A House Divided",
   description:
-    "Choose a country to play in the US, UK, Germany, or Japan. Each country has its own political system, elections, legislature, and economic layer tied to the shared hourly simulation.",
+    "Choose a country to play in the US, UK, Soviet Union, or East Germany. Each country has its own political system, elections, legislature, and economic layer tied to the shared hourly simulation.",
   pathname: "/world",
 });
 

@@ -21,6 +21,7 @@ import {
   MAX_DIVIDEND_RATE,
   SECTOR_RISK_PREMIUM,
   CEO_SALARY_MAX_REVENUE_MULTIPLE,
+  CORP_OVERHEAD_MAX_REVENUE_MULTIPLE,
 } from "@/lib/constants/corporations";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import {
@@ -124,7 +125,9 @@ export function processSectors(
   /** gameConfig.commandEconomyEnabled — gates the soft-budget exemptions. */
   commandEconomyEnabled: boolean = false,
   /** gameConfig.privateBankingEnabled — branch/commodity capacity split. */
-  privateBankingEnabled: boolean = false
+  privateBankingEnabled: boolean = false,
+  /** Currency pools that supersede issuer-funded share-buyback escrow. */
+  equityMarketPoolCurrencies: ReadonlySet<CurrencyCode> = new Set()
 ): SectorCalculationsResult {
   const currentTurn = typeof turn === "number" ? turn : 1;
 
@@ -204,6 +207,7 @@ export function processSectors(
     fee: number;
   }> = [];
   const fundDividendAccruals: FundDividendAccrual[] = [];
+  const equityPoolDividendAccruals: SectorCalculationsResult["equityPoolDividendAccruals"] = [];
   const marketingSpendAnchorByBuyerId = new Map<string, number>();
   const advertisingSellerDeliveredValues = [
     ...(market.advertisingSellerDeliveredValueAnchorByCorpId ?? new Map()),
@@ -431,11 +435,40 @@ export function processSectors(
     );
 
     const requestedHourlyMarketing = marketingBudgetAnchor / TURNS_PER_DAY;
-    const hourlyLogistics = logisticsBudgetAnchor / TURNS_PER_DAY;
+    const requestedHourlyLogistics = logisticsBudgetAnchor / TURNS_PER_DAY;
     // R&D spend lives in the same daily-budget cadence as marketing/logistics
     // and counts against the 150% overhead cap. Feeds rdScore growth below.
-    const hourlyRd = rdBudgetAnchor / TURNS_PER_DAY;
+    const requestedHourlyRd = rdBudgetAnchor / TURNS_PER_DAY;
     const requestedCeoSalary = imfBailoutActive ? 0 : ceoSalaryAnchor / TURNS_PER_DAY;
+
+    // Ticket #1237: pay-time ceiling on the 150% combined-overhead rule. The
+    // set-time check in updateCorporationSettings only binds at the moment
+    // budgets are saved, so a corp whose revenue later collapses keeps charging
+    // its stored budgets against revenue it no longer earns. Marketing is
+    // clamped below (cash + delivered value) and CEO salary is clamped twice
+    // (affordability, then 1.25x revenue per Bug #0728) — logistics and R&D had
+    // no pay-time ceiling at all, which is why a 2.997e278 logistics budget
+    // wrote liquidCapital -1.33e+277 in a single turn on a corp with no sectors.
+    //
+    // The overage lands on logistics/R&D precisely because they are the two legs
+    // with no other clamp. Marketing and CEO salary are subtracted at their
+    // *requested* size, mirroring the set-time check, which also tests stored
+    // budgets rather than realized spend. Same per-turn gross-revenue basis as
+    // the salary cap below, so this ceiling is never tighter than the set-time
+    // one: a corp inside the 150% rule is charged exactly as it was before.
+    // Zero (or negative) revenue ⇒ both legs pay $0.
+    const overheadCeiling = CORP_OVERHEAD_MAX_REVENUE_MULTIPLE * Math.max(0, corpRevenue);
+    const opsOverheadCeiling = Math.max(
+      0,
+      overheadCeiling - Math.max(0, requestedHourlyMarketing) - Math.max(0, requestedCeoSalary)
+    );
+    const requestedOpsOverhead = requestedHourlyLogistics + requestedHourlyRd;
+    const opsOverheadScale =
+      requestedOpsOverhead > opsOverheadCeiling && requestedOpsOverhead > 0
+        ? opsOverheadCeiling / requestedOpsOverhead
+        : 1;
+    const hourlyLogistics = requestedHourlyLogistics * opsOverheadScale;
+    const hourlyRd = requestedHourlyRd * opsOverheadScale;
 
     // liquidCapital normalized to ₳ using the per-corp FX resolved at loop entry.
     // Every downstream comparison against liquidCapital must normalize to a common
@@ -713,8 +746,7 @@ export function processSectors(
       !imfBailoutActive &&
       payoutDividendRate > 0 &&
       netIncomeBeforeDividends > 0 &&
-      corp.shareholders &&
-      corp.shareholders.length > 0
+      ((corp.shareholders?.length ?? 0) > 0 || (corp.publicFloat ?? 0) > 0)
     ) {
       const rawDividendPool = netIncomeBeforeDividends * (payoutDividendRate / 100);
       hourlyDividendPayout = Math.min(rawDividendPool, Math.max(0, netIncomeBeforeDividends));
@@ -761,6 +793,19 @@ export function processSectors(
             corpDividendPaymentsAnchorByCorpCurrency.set(hid, byCcy);
           }
         }
+      }
+      const floatShares = Math.max(0, Math.min(totalShares, corp.publicFloat ?? 0));
+      const floatDividendAnchor = hourlyDividendPayout * (floatShares / totalShares);
+      if (floatDividendAnchor > 0) {
+        equityPoolDividendAccruals.push({
+          corporationId: corp._id,
+          currency: (resolvedHomeCurrency ?? "USD") as CurrencyCode,
+          amountLocal: writeCorpEconomicLocal(
+            floatDividendAnchor,
+            resolvedHomeCurrency,
+            localFxRate
+          ),
+        });
       }
     }
 
@@ -835,17 +880,21 @@ export function processSectors(
 
     // Logistics strength: decays 5%/turn, grows with spending. No diminishing returns —
     // the decay naturally caps accumulation. Same anchor-threshold convention.
+    // Ticket #1237: grow on what was actually charged, not what was requested —
+    // marketing above already passes its settled spend. Feeding the raw budget
+    // here let an unpayable budget buy strength for free: Tinky 3.0 banked
+    // logisticsStrength 1256 and rdScore 408 in the same turn it "spent" 1e278.
     const currentLogisticsStrength = corp.logisticsStrength ?? 0;
     const newLogisticsStrength = calcLogisticsStrengthAfterTurn(
       currentLogisticsStrength,
-      logisticsBudgetAnchor
+      hourlyLogistics * TURNS_PER_DAY
     );
     const logisticsDelta = newLogisticsStrength - currentLogisticsStrength;
 
     // R&D score: decays 3%/turn, grows with spending. Diminishing returns on stored
     // score above 100 (mirrors marketing). Drives innovation probability and boost magnitude.
-    // rdBudgetAnchor was resolved at the top of the per-corp loop so it also
-    // flows through the operating-cost deduction (hourlyRd).
+    // Grows on the overhead-clamped spend (hourlyRd), the same figure deducted as
+    // an operating cost above, so R&D score cannot outrun what the corp paid.
     const currentRdScore = corp.rdScore ?? 0;
     // rdDemandFactor (±15%) ties R&D output to technology + consulting demand.
     // moraleFactor (#84, ±15%) rewards paying workers above baseline: happier
@@ -854,7 +903,7 @@ export function processSectors(
     const moraleFactor = rdMoraleFactor(avgWageLevel);
     const newRdScore = calcRdScoreAfterTurn(
       currentRdScore,
-      rdBudgetAnchor * rdDemandFactor * moraleFactor
+      hourlyRd * TURNS_PER_DAY * rdDemandFactor * moraleFactor
     );
     const rdScoreDelta = newRdScore - currentRdScore;
 
@@ -918,6 +967,7 @@ export function processSectors(
     // by both this bulk op and the initial snapshot. The settlement pass later
     // applies its delta to both representations before pricing and persistence.
     const escrowFundingMove =
+      !equityMarketPoolCurrencies.has((resolvedHomeCurrency ?? "USD") as CurrencyCode) &&
       getShareBuybackMode(corp) === "escrow"
         ? computeEscrowFundingTransfer({
             fundingPerTurn: corp.escrowFundingPerTurn,
@@ -1251,6 +1301,7 @@ export function processSectors(
     corpDividendPaymentsAnchorByCorpCurrency,
     sectorFxSpreadFees,
     fundDividendAccruals,
+    equityPoolDividendAccruals,
     domesticIncomeByCountry,
     foreignIncomeByCountry,
     domesticIncomeByOperatingState,

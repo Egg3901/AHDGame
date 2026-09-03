@@ -87,4 +87,30 @@ describe("admin feature gates foreign policy mode", () => {
     });
     expect(update.$set.nppForeignPolicyStageAt).toBeTruthy();
   });
+
+  it("defaults NPP entry viability to observe and allows explicit enforcement", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ _id: "current" });
+    const { GET, POST } = await import("./route");
+
+    const getResponse = await GET();
+    await expect(getResponse.json()).resolves.toMatchObject({
+      nppEntryViabilityMode: "observe",
+    });
+
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      nppEntryViabilityMode: "enforce",
+    });
+    const postResponse = await POST(
+      request({ kind: "npp-entry-viability-mode", value: "enforce" })
+    );
+
+    expect(postResponse.status).toBe(200);
+    const [, update] = db.collection("gameState").updateOne.mock.calls[0];
+    expect(update.$set).toMatchObject({
+      nppEntryViabilityMode: "enforce",
+      nppEntryViabilityModeBy: "tester",
+    });
+    expect(update.$set.nppEntryViabilityModeAt).toBeTruthy();
+  });
 });

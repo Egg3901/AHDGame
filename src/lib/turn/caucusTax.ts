@@ -8,13 +8,13 @@
  */
 
 import { getDb } from "@/lib/mongodb";
-import type { Caucus, CaucusMembership, Character, NPP, State } from "@/lib/db/types";
+import type { Caucus, CaucusMembership, Character, GameConfig, NPP, State } from "@/lib/db/types";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
-import { projectCharacterGeneration } from "@/lib/utils/fundGeneration";
-import { campaignAnchorToLocal } from "@/lib/campaigns/campaignCurrency";
+import { projectCharacterGeneration, projectNppGeneration } from "@/lib/utils/fundGeneration";
+import { campaignAnchorToLocal, campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
 import type { ObjectId } from "mongodb";
 
 interface CaucusTaxResult {
@@ -79,18 +79,21 @@ export async function processCaucusTax(
             .toArray()
         : Promise.resolve([] as NPP[]),
     ]);
+    const homeStateIds = [
+      ...new Set([...characters.map((c) => c.homeState), ...npps.map((n) => n.homeState)]),
+    ];
+    const stateDocs = homeStateIds.length
+      ? await db
+          .collection<State>("states")
+          .find({ _id: { $in: homeStateIds } })
+          .toArray()
+      : [];
+    const stateMap = new Map(stateDocs.map((s) => [s._id, s]));
 
     let caucusInflow = 0;
 
     // Player members — tax a percentage of per-turn income, not total balance.
     if (characters.length > 0) {
-      const homeStateIds = [...new Set(characters.map((c) => c.homeState))];
-      const stateDocs = await db
-        .collection<State>("states")
-        .find({ _id: { $in: homeStateIds } })
-        .toArray();
-      const stateMap = new Map(stateDocs.map((s) => [s._id, s]));
-
       const pendingDebits: { character: Character; tax: number; field: string }[] = [];
       for (const c of characters) {
         const state = stateMap.get(c.homeState);
@@ -164,15 +167,25 @@ export async function processCaucusTax(
       }
     }
 
-    // NPP members — funds is a single scalar, no currency conversion needed.
-    // Same actual-debit accounting as characters: guard on balance and credit
-    // the caucus only for debits that landed.
+    // NPP members use the same income-tax basis as player members. Taxing the
+    // accumulated funds balance each turn compounds into a rapid wealth drain.
     if (npps.length > 0) {
+      const config = await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" });
       const nppDebits: { npp: NPP; tax: number }[] = [];
       for (const n of npps) {
         const funds = n.funds ?? 0;
-        if (funds <= 0) continue;
-        const tax = Math.floor((funds * caucus.taxRate) / 100);
+        const state = stateMap.get(n.homeState);
+        if (!state || funds <= 0) continue;
+        const localRate = campaignLocalRate(n.countryId ?? "US");
+        const currentFundsAnchor = localRate > 0 ? funds / localRate : funds;
+        const incomeAnchor = projectNppGeneration({
+          population: state.population,
+          donorBaseLevel: n.donorBaseLevel ?? 0,
+          currentFundsLocal: currentFundsAnchor,
+          nppEconomyEnabled: config?.nppEconomyEnabled !== false,
+        });
+        const incomeLocal = campaignAnchorToLocal(incomeAnchor, n.countryId ?? "US");
+        const tax = Math.floor((incomeLocal * caucus.taxRate) / 100);
         if (tax <= 0) continue;
         nppDebits.push({ npp: n, tax });
       }

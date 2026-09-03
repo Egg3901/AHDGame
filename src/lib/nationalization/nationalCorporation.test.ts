@@ -8,6 +8,16 @@ import {
   resolveNationalCorporationForSector,
 } from "./nationalCorporation";
 
+function cursorOf<T>(docs: T[]) {
+  const c = {
+    toArray: vi.fn().mockResolvedValue(docs),
+    sort: vi.fn(() => c),
+    limit: vi.fn(() => c),
+    next: vi.fn(async () => docs[0] ?? null),
+  };
+  return c;
+}
+
 describe("isStateOwned", () => {
   it("is true when countryOwnerId is set", () => {
     expect(isStateOwned({ countryOwnerId: "CN" })).toBe(true);
@@ -32,19 +42,23 @@ describe("ensurePrimaryNationalCorporation", () => {
 
   it("returns the flagged primary when one exists, without creating another", async () => {
     const existingId = new ObjectId();
-    db.collectionMocks.corporations.findOne.mockResolvedValue({
-      _id: existingId,
-      name: "China National Corporation",
-      countryId: "CN",
-      countryOwnerId: "CN",
-      isPrimaryNationalCorporation: true,
-      ownershipState: "stateOwned",
-    });
+    db.collectionMocks.corporations.find.mockReturnValue(
+      cursorOf([
+        {
+          _id: existingId,
+          name: "China National Corporation",
+          countryId: "CN",
+          countryOwnerId: "CN",
+          isPrimaryNationalCorporation: true,
+          ownershipState: "stateOwned",
+        },
+      ])
+    );
 
     const corp = await ensurePrimaryNationalCorporation(db as unknown as Db, "CN");
 
     expect(corp._id.toString()).toBe(existingId.toString());
-    expect(db.collectionMocks.corporations.findOne).toHaveBeenCalledWith({
+    expect(db.collectionMocks.corporations.find).toHaveBeenCalledWith({
       countryOwnerId: "CN",
       isPrimaryNationalCorporation: true,
     });
@@ -53,10 +67,10 @@ describe("ensurePrimaryNationalCorporation", () => {
 
   it("falls back to a pre-backfill seeded NatCorp (no primary flag yet)", async () => {
     const legacyId = new ObjectId();
-    // First findOne (flagged primary) → null; second (any countryOwnerId) → legacy.
-    db.collectionMocks.corporations.findOne
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ _id: legacyId, countryId: "CN", countryOwnerId: "CN" });
+    // First find (flagged primary) → []; second (any countryOwnerId) → legacy.
+    db.collectionMocks.corporations.find
+      .mockReturnValueOnce(cursorOf([]))
+      .mockReturnValueOnce(cursorOf([{ _id: legacyId, countryId: "CN", countryOwnerId: "CN" }]));
 
     const corp = await ensurePrimaryNationalCorporation(db as unknown as Db, "CN");
 
@@ -66,7 +80,7 @@ describe("ensurePrimaryNationalCorporation", () => {
 
   it("creates a flagged primary when none exists", async () => {
     const insertedId = new ObjectId();
-    db.collectionMocks.corporations.findOne.mockResolvedValue(null);
+    db.collectionMocks.corporations.find.mockReturnValue(cursorOf([]));
     db.collectionMocks.corporations.insertOne.mockResolvedValue({ insertedId });
 
     const corp = await ensurePrimaryNationalCorporation(db as unknown as Db, "CN");
@@ -116,13 +130,17 @@ describe("resolveNationalCorporationForSector", () => {
 
   it("falls back to the primary when no split-off claims the type", async () => {
     const primaryId = new ObjectId();
-    // 1st findOne (split-off lookup) → null; 2nd (primary lookup) → primary.
-    db.collectionMocks.corporations.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({
-      _id: primaryId,
-      countryId: "CN",
-      countryOwnerId: "CN",
-      isPrimaryNationalCorporation: true,
-    });
+    // 1st find (split-off lookup) → []; 2nd (primary lookup) → primary.
+    db.collectionMocks.corporations.find.mockReturnValueOnce(cursorOf([])).mockReturnValueOnce(
+      cursorOf([
+        {
+          _id: primaryId,
+          countryId: "CN",
+          countryOwnerId: "CN",
+          isPrimaryNationalCorporation: true,
+        },
+      ])
+    );
 
     const corp = await resolveNationalCorporationForSector(db as unknown as Db, "CN", "technology");
 

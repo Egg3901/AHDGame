@@ -44,6 +44,7 @@ import type { NPP } from "@/lib/db/types";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { GameState } from "@/lib/db/types/gameState";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
+import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { isPlannedEconomy, plannedShare } from "@/lib/constants/commandEconomy";
 import { loadConditionsSignal } from "@/lib/turn/npp/billSponsorship";
 import { nppAutonomyAtLeast } from "./featureFlag";
@@ -185,8 +186,11 @@ export async function processNppGovernment(
   const caretaker = await runCaretakerMinisters(db, countryId, currentTurn, now);
 
   // 6. Foreign policy. This stays inside the claimed Tier-1 slot so each
-  //    autonomous government considers at most one diplomatic intent per
-  //    six-hour cycle. Shadow mode only writes its audit decision.
+  //    autonomous government takes at most one diplomatic ACTION per six-hour
+  //    cycle. Ballots are not rationed by that slot — a bloc vote has a deadline
+  //    and a tariff does not, and making them compete let a member sit out every
+  //    ballot it was eligible for (#1257). Shadow mode only writes its audit
+  //    decision.
   const foreignPolicy = await processAutonomousForeignPolicy(db, countryId, currentTurn, now);
 
   return {
@@ -371,7 +375,16 @@ export async function runNppGovernmentPhases(gameNow: Date, currentTurn: number)
     .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } });
   const commandEconomyEnabled = gameConfig?.commandEconomyEnabled === true;
 
+  // REGISTERED countries only — and this loop is the one where the gate is not
+  // merely hygiene. A country dissolved by a merge reads `enabledForPlayers:
+  // false`, which to the per-country autonomy gate looks like a NON-PLAYER
+  // country and would hand the dissolved state to the FULL governing brain:
+  // agenda, cabinet formation, ministerial orders, autonomous foreign policy —
+  // a ghost government legislating and declaring for a country that no longer
+  // exists.
+  const registered = new Set(await getRegisteredCountryIds(db));
   for (const countryId of Object.keys(COUNTRY_CONFIGS) as CountryId[]) {
+    if (!registered.has(countryId)) continue;
     await processNppGovernment(
       db,
       countryId,

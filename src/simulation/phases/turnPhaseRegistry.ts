@@ -45,6 +45,7 @@ import {
   resolveExpiredLeadershipElections,
   vacateLeadershipAfterElections,
 } from "@/lib/congress/leadershipElections";
+import { reconcileAllLeadershipPartyEligibility } from "@/lib/congress/leadership/reconcilePartyEligibility";
 import { processAlignmentTurn } from "@/lib/turn/alignmentPhase";
 import { processSettlementTurn } from "@/lib/turn/settlementPhase";
 import { processInternationalOrganizationsTurn } from "@/lib/turn/internationalOrganizationsPhase";
@@ -72,6 +73,8 @@ import {
   runParliamentaryGovernmentPhases,
   runParliamentaryVacancyWatcher,
 } from "@/lib/turn/countryPhases";
+import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
+import type { CountryId } from "@/lib/constants/countries";
 import { runNppGovernmentPhases } from "@/lib/nppAutonomy/processNppGovernment";
 import { TURNS_PER_YEAR, STARTING_YEAR } from "@/lib/constants/turnTime";
 import { isFiscalYearEnd, calculateFiscalYear, processFiscalYear } from "@/lib/budget/fiscalYear";
@@ -100,6 +103,7 @@ import { recomputeSharePricesAfterBondTurn } from "@/lib/turn/corporation/recomp
 import { processSavingsInterestTurn } from "@/lib/turn/savingsInterestTurn";
 import { processNpcBankPolicyTurn } from "@/lib/banking/npcBanks";
 import { processBankingTurn } from "@/lib/turn/bankingTurn";
+import { processSavingsShadowTurn } from "@/lib/savings/shadow";
 import { runPensionTurn } from "@/lib/pensions/pensionTurn";
 import { processBankSolvencyTurn } from "@/lib/turn/bankSolvencyTurn";
 import { processBankSupervision } from "@/lib/banking/supervision";
@@ -235,9 +239,11 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         // is computed. Reads the prior turn's commodity S/D (one-turn lag, same
         // as auto-seed); writes only sector strategy fields. Inert unless
         // gameState.extractionAutoStrategyEnabled.
-        await runtime.runPhase("extractionAutoStrategy", () =>
+        const extractionAutoStrategyResult = await runtime.runPhase("extractionAutoStrategy", () =>
           processExtractionAutoStrategy(context.db, newTurn, gameState)
         );
+        (phaseResults as Record<string, unknown>).extractionAutoStrategy =
+          extractionAutoStrategyResult;
         const [, fundGenResults, corpTurnResults] = await Promise.all([
           runtime.runPhase("actionRefresh", () =>
             processActionRefresh(characters, config, gameNow)
@@ -388,6 +394,23 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
             loanPrincipalRepaid: Math.round(bankingResult.loanPrincipalRepaid * 100) / 100,
             defaultsWrittenOff: Math.round(bankingResult.defaultsWrittenOff * 100) / 100,
             npcDepositDelta: Math.round(bankingResult.npcDepositDelta * 100) / 100,
+            unfinishedSettlements: bankingResult.unfinishedSettlements,
+          };
+        }
+
+        // Shadow savings accounts: materialize the account representation from
+        // the legacy character fields and compare every projection, AFTER the
+        // banking turn so the comparison sees this turn's interest and flows.
+        // No live behaviour changes while the mode is shadow.
+        const savingsShadowResult = await runtime.runPhase("savingsShadowTurn", () =>
+          processSavingsShadowTurn(context.db, newTurn)
+        );
+        if (savingsShadowResult) {
+          phaseResults.savingsShadowTurn = {
+            mode: savingsShadowResult.mode,
+            accountsRefreshed: savingsShadowResult.accountsRefreshed,
+            currenciesCompared: savingsShadowResult.comparison.currencies.length,
+            discrepancies: savingsShadowResult.comparison.totalDiscrepancies,
           };
         }
 
@@ -789,7 +812,14 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
       key: "billsCampaignsAndActivity",
       async execute(context, runtime) {
         const { realNow, phaseResults, newTurn, db, config, gameState } = context;
-        const countryBillPhaseEntries = Object.entries(COUNTRY_BILL_PHASES);
+        // Registered countries only: the registry is keyed on the static country
+        // list, and a country dissolved by a merge would otherwise keep running
+        // its bill lifecycle (and, for one-party entries, its legitimacy and
+        // escalation drift) for ever.
+        const registeredForBills = new Set(await getRegisteredCountryIds(db));
+        const countryBillPhaseEntries = Object.entries(COUNTRY_BILL_PHASES).filter(([id]) =>
+          registeredForBills.has(id as CountryId)
+        );
         const billPhaseResults = await Promise.all([
           runtime.runPhase("billLifecycle", () => processBillLifecycle(realNow)),
           ...countryBillPhaseEntries.map(([, entry]) =>
@@ -1022,6 +1052,10 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         const { db, gameNow, newTurn, phaseResults } = context;
         // Group 7 is strictly sequential. Reordering any of these steps corrupts
         // elections by dropping final-turn votes or resolving offices from stale tallies.
+        await runtime.runPhase("withdrawInactiveCandidates", () =>
+          withdrawInactiveCandidates(db, gameNow)
+        );
+
         await runtime.runPhase("candidatePartySweep", async () => {
           const { sweepPartyMismatchedCandidates } = await import("@/lib/utils/electionCandidacy");
           await sweepPartyMismatchedCandidates();
@@ -1144,19 +1178,27 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         // the turn that completes the phase still suppresses (resume next turn).
         const foundingActive = context.gameState.preIteration?.active === true;
 
-        // Withdraw inactive players' candidacies BEFORE election resolution and
-        // auto-reentry below, so a withdrawn inactive player is neither counted
-        // in a resolving race nor re-added the same turn (one-way; manual re-entry
-        // on return). Runs sequentially first for that ordering guarantee.
-        await runtime.runPhase("withdrawInactiveCandidates", () =>
-          withdrawInactiveCandidates(db, gameNow)
-        );
-
-        const countryElectionPhasePromises = foundingActive
-          ? []
-          : Object.entries(COUNTRY_ELECTION_PHASES).flatMap(([, entries]) =>
+        // Registered countries only — a dissolved country's spawners are
+        // harmless today (they iterate regions it no longer has) but every one
+        // of them still runs queries every turn, and any spawner that ever
+        // grows a config-driven fallback would resurrect ghost races.
+        let countryElectionPhasePromises: Promise<unknown>[] = [];
+        if (!foundingActive) {
+          const registeredForElections = new Set(await getRegisteredCountryIds(db));
+          countryElectionPhasePromises = Object.entries(COUNTRY_ELECTION_PHASES)
+            .filter(([id]) => registeredForElections.has(id as CountryId))
+            .flatMap(([, entries]) =>
               entries.map(({ name, fn }) => runtime.runPhase(name, () => fn(gameNow)))
             );
+        }
+
+        // Vacate any majority-gated leadership office whose holder has left the
+        // majority party, opening a 24-turn election for the seat. Sequenced
+        // ahead of the batch below so the races it opens exist before
+        // `resolveExpiredLeadershipElections` walks the same collections.
+        await runtime.runPhase("leadershipPartyEligibility", () =>
+          reconcileAllLeadershipPartyEligibility(db, gameNow)
+        );
 
         await Promise.all([
           ...(foundingActive

@@ -14,6 +14,7 @@ import {
   FORCED_VOTE_SHARE_PENALTY,
 } from "@/lib/onePartyState/systemConversion";
 import type { PeaceTerm } from "./peaceTerm";
+import { reunifyByPeaceTerm } from "@/lib/settlement/reunifyByPeaceTerm";
 
 export interface ApplyTermContext {
   /** The country imposing or offering. Receives an indemnity it is not paying. */
@@ -64,11 +65,20 @@ export async function applyPeaceTerm(
   }
 
   if (term.kind === "regime_change") {
-    await convertRegime(db, term.targetSystem, ctx);
+    await convertRegime(db, term.targetSystem, ctx, term.rulingPartyId);
     return;
   }
 
-  // Exhaustive. If a fourth term is ever added, this line stops compiling rather
+  if (term.kind === "reunification") {
+    // Everything this term does belongs to the settlement pipeline, so nothing is
+    // done here: no money moves, and the TARGET's own system is untouched. The two
+    // Germanies are named by the crisis, not by the pair who signed the treaty, and
+    // converting the signatory as well would convert the wrong country.
+    await reunifyByPeaceTerm(db, ctx.conflictId, ctx.currentTurn);
+    return;
+  }
+
+  // Exhaustive. If another term is ever added, this line stops compiling rather
   // than letting a settlement report success and change nothing.
   const unreachable: never = term;
   throw new Error(`applyPeaceTerm: unsupported term ${JSON.stringify(unreachable)}`);
@@ -91,14 +101,23 @@ export async function applyPeaceTerm(
 async function convertRegime(
   db: Db,
   targetSystem: Extract<PeaceTerm, { kind: "regime_change" }>["targetSystem"],
-  ctx: ApplyTermContext
+  ctx: ApplyTermContext,
+  rulingPartyId?: number
 ): Promise<void> {
   // A visible interregnum rather than an instant handover: the country spends the
   // delay under a fallen government before the campaign opens.
   const electionAtTurn = ctx.currentTurn + FORCED_ELECTION_DELAY_TURNS;
 
   if (targetSystem === "onePartyState") {
-    await installOnePartyState(db, ctx.target, ctx.currentTurn);
+    // The victor's choice of party, when they named one. Left out, the install
+    // resolves it from the target's own formed government or largest bench —
+    // which is how this shipped, and which can hand a monopoly to the very party
+    // the victor just fought. `installOnePartyState` ignores an id that names no
+    // party of this country, so a stale value degrades to that same resolution
+    // rather than banning everyone.
+    await installOnePartyState(db, ctx.target, ctx.currentTurn, {
+      ...(rulingPartyId != null ? { rulingPartyId } : {}),
+    });
     // `installOnePartyState` mirrors the FIELDS `triggerSystemConversion` clears and
     // deliberately schedules nothing, so the marker is written here to bring the two
     // directions back to the same end state.

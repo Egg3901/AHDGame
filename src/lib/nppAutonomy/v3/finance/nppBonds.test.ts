@@ -16,6 +16,7 @@ describe("nppBuyBond", () => {
 
   let bondsFindOne: ReturnType<typeof vi.fn>;
   let nppFindOneAndUpdate: ReturnType<typeof vi.fn>;
+  let poolUpdateOne: ReturnType<typeof vi.fn>;
   let nppUpdateOne: ReturnType<typeof vi.fn>;
   let db: Db;
 
@@ -32,11 +33,14 @@ describe("nppBuyBond", () => {
       .fn()
       .mockResolvedValue({ _id: nppId, nppInvestmentCashAnchor: 500_000 });
     nppUpdateOne = vi.fn().mockResolvedValue({});
+    poolUpdateOne = vi.fn().mockResolvedValue({});
     db = {
       collection: (name: string) =>
         name === "bonds"
           ? { findOne: bondsFindOne }
-          : { findOneAndUpdate: nppFindOneAndUpdate, updateOne: nppUpdateOne },
+          : name === "bondMarketPools"
+            ? { updateOne: poolUpdateOne }
+            : { findOneAndUpdate: nppFindOneAndUpdate, updateOne: nppUpdateOne },
     } as unknown as Db;
   });
 
@@ -61,6 +65,14 @@ describe("nppBuyBond", () => {
     expect(reserveArgs[2]).toEqual({ field: "nppId", id: nppId });
     expect(reserveArgs[3]).toBe(UNITS);
     expect(nppUpdateOne).not.toHaveBeenCalled(); // no refund on success
+    // The cash went to the bond market pool, in the bond's currency.
+    expect(poolUpdateOne).toHaveBeenCalledWith(
+      { _id: "USD" },
+      expect.objectContaining({
+        $inc: expect.objectContaining({ cashLocal: UNITS * 1000 * MARKET }),
+      }),
+      expect.objectContaining({ upsert: true })
+    );
   });
 
   it("refunds funds if the float was taken before the reserve", async () => {

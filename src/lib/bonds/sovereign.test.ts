@@ -235,6 +235,41 @@ describe("calculateSovereignRolloverAmount", () => {
     expect(total).toBe(0);
   });
 
+  it("caps the rollover so bonds outstanding never exceed the budget principal", async () => {
+    const db = setBondsForQuery([
+      makeBond({ maturityTurn: ISSUANCE_TURN, totalIssued: 10_000_000_000 }),
+      makeBond({ maturityTurn: WINDOW_END + 48, totalIssued: 4_000_000_000 }),
+    ]);
+    // Principal 7B: after the 10B series matures, 4B stays outstanding, so
+    // only 3B may be rolled.
+    db.collection("federalBudget").findOne.mockResolvedValue({
+      _id: "federal",
+      debt: { principal: 7_000_000_000 },
+    });
+    const total = await calculateSovereignRolloverAmount(
+      db as unknown as Db,
+      COUNTRY_CONFIGS.US.id,
+      ISSUANCE_TURN
+    );
+    expect(total).toBe(3_000_000_000);
+  });
+
+  it("rolls nothing for a country with no debt left", async () => {
+    const db = setBondsForQuery([
+      makeBond({ maturityTurn: ISSUANCE_TURN, totalIssued: 10_000_000_000 }),
+    ]);
+    db.collection("federalBudget").findOne.mockResolvedValue({
+      _id: "federal",
+      debt: { principal: 0 },
+    });
+    const total = await calculateSovereignRolloverAmount(
+      db as unknown as Db,
+      COUNTRY_CONFIGS.US.id,
+      ISSUANCE_TURN
+    );
+    expect(total).toBe(0);
+  });
+
   it("rounds the rollover total down to whole bond units ($1,000 each)", async () => {
     const db = setBondsForQuery([
       makeBond({ maturityTurn: ISSUANCE_TURN, totalIssued: 1_234_567 }),
@@ -803,5 +838,27 @@ describe("issueScheduledSovereignBondSeries", () => {
     expect(bondDocs).toHaveLength(2);
     const maturities = bondDocs.map((b) => b.maturityTurns).sort((a, b) => a - b);
     expect(maturities).toEqual([48, 96]);
+  });
+
+  it("never issues for a dissolved country, even with its budget doc present", async () => {
+    // A merged country keeps its budget as a stamped husk; the scheduler must
+    // not keep rolling a dead state's debt over into fresh paper.
+    const dd = makeBudget({ _id: "DD" as never, countryId: "DD" });
+    const { db } = setupScheduledMocks({ budgets: [makeBudget(), dd] });
+    db.collectionMocks["countryGameStates"] = db.collection("countryGameStates") as ReturnType<
+      typeof db.collection
+    >;
+    db.collectionMocks["countryGameStates"]!.find.mockReturnValue({
+      toArray: async () => [{ _id: "DD", dissolvedTurn: 500 }],
+    });
+
+    await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
+
+    const insertCalls = db.collectionMocks["bonds"]!.insertMany.mock.calls;
+    const issuedCountries = insertCalls.flatMap((c) =>
+      (c[0] as Array<{ countryId?: string }>).map((b) => b.countryId)
+    );
+    expect(issuedCountries).toContain("US");
+    expect(issuedCountries).not.toContain("DD");
   });
 });

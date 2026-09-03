@@ -10,6 +10,16 @@ function vec(pop: number) {
   return { male, female };
 }
 
+function youngVec() {
+  const male = Array<number>(101).fill(0);
+  const female = Array<number>(101).fill(0);
+  for (const age of [16, 17, 30]) {
+    male[age] = 100_000;
+    female[age] = 100_000;
+  }
+  return { male, female };
+}
+
 describe("runDemographicFlows", () => {
   let db: MockDb;
 
@@ -187,6 +197,48 @@ describe("runDemographicFlows", () => {
     expect(set.votingEligiblePopulation).toBeLessThanOrEqual(set.population);
   });
 
+  it("applies each country's enacted voting age without changing another country", async () => {
+    setDemos([
+      { _id: "BEO", countryId: "DD", ages: youngVec() },
+      { _id: "CA", countryId: "US", ages: youngVec() },
+    ]);
+    db.collectionMocks.states!.find = vi.fn().mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { _id: "BEO", countryId: "DD", population: 600_000 },
+        { _id: "CA", countryId: "US", population: 600_000 },
+      ]),
+    });
+    db.collectionMocks.stateMetrics!.find = vi.fn().mockReturnValue({
+      project: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          { _id: "BEO", population: { birthRate: { value: 50 }, migrationRate: { value: 0 } } },
+          { _id: "CA", population: { birthRate: { value: 50 }, migrationRate: { value: 0 } } },
+        ]),
+      }),
+    });
+    db.collection("gameState");
+    db.collectionMocks.gameState!.findOne.mockResolvedValue({
+      currentYear: 1953,
+      startingYear: 1953,
+      currentTurn: 1,
+      votingAgeEligibleByCountry: { DD: 16 },
+    });
+
+    const { runDemographicFlows } = await import("./phase");
+    await runDemographicFlows(db as unknown as Db, 1);
+    const writes = db.collectionMocks.states!.bulkWrite.mock.calls[0][0] as Array<{
+      updateOne: {
+        filter: { _id: string };
+        update: { $set: { votingEligiblePopulation: number } };
+      };
+    }>;
+    const eligible = (id: string) =>
+      writes.find((write) => write.updateOne.filter._id === id)!.updateOne.update.$set
+        .votingEligiblePopulation;
+
+    expect(eligible("BEO")).toBeGreaterThan(eligible("CA"));
+  });
+
   it("writes state.workingAgePopulation (Σ ages [18,64)) ≤ votingEligiblePopulation", async () => {
     const { runDemographicFlows } = await import("./phase");
     await runDemographicFlows(db as unknown as Db, 1);
@@ -256,6 +308,18 @@ describe("runDemographicFlows", () => {
     const txPop = writes.find((w) => w.updateOne.filter._id === "TX")!.updateOne.update.$set
       .population;
     expect(caPop).toBeGreaterThan(txPop); // internal migration favored the attractive region
+    const metricWrites = db.collectionMocks.macroMetrics!.bulkWrite.mock.calls[0][0] as Array<{
+      updateOne: {
+        filter: { _id: string };
+        update: { $set: Record<string, number> };
+      };
+    }>;
+    const caMigration = metricWrites.find((w) => w.updateOne.filter._id === "CA")!.updateOne.update
+      .$set["population.realizedMigrationRate.value"];
+    const txMigration = metricWrites.find((w) => w.updateOne.filter._id === "TX")!.updateOne.update
+      .$set["population.realizedMigrationRate.value"];
+    expect(caMigration).toBeGreaterThan(0);
+    expect(txMigration).toBeLessThan(0);
   });
 
   it("moves working-age population toward a state with persistent unfilled jobs", async () => {

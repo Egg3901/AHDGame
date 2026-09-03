@@ -42,8 +42,9 @@ import { getGameTime } from "@/lib/time/gameTime";
 import { isCampaignUpgradeGeneralPhase } from "@/lib/elections/phases";
 import {
   CAMPAIGN_STRENGTH_CONTRIBUTION_NPI_MULTIPLIER,
-  campaignStrengthContributionActions,
-  campaignStrengthContributionCost,
+  CAMPAIGN_STRENGTH_MAX_BATCH_CLICKS,
+  campaignStrengthBatchQuote,
+  maxAffordableCampaignStrengthClicks,
 } from "@/lib/campaigns/campaignStrength";
 
 export async function upgradeCampaign(params: {
@@ -183,7 +184,10 @@ export async function upgradeCampaign(params: {
     funds: -adjustedFundsLocal + lumpFundsLocal,
     actions: -adjustedActions,
     totalFundsSpent: adjustedFundsLocal,
-    // A2 — money driver reads per-turn spend, not lifetime balance.
+    // Money driver reads decaying recent spend (spendStock + this turn's
+    // accumulator), not lifetime balance and not the treasury. This turn's
+    // spend accrues here; the reset sweep folds it into the stock after
+    // voteAccumulation, so it must NOT $inc spendStock directly here.
     spendThisTurn: adjustedFundsLocal,
     totalActionsSpent: adjustedActions,
   };
@@ -692,8 +696,15 @@ export async function contributeCampaignStrength(params: {
   db: Db;
   campaignId: ObjectId;
   user: AuthUserWithCharacter & { hasCharacter: true; character: Character };
+  /**
+   * How many single-click contributions to bundle into this one call. `"max"`
+   * resolves server-side to the largest count the contributor can pay for right
+   * now. Defaults to 1, so callers that predate the batched Support control are
+   * unchanged.
+   */
+  clicks?: number | "max";
 }) {
-  const { db, campaignId, user } = params;
+  const { db, campaignId, user, clicks: requestedClicks = 1 } = params;
   const now = new Date();
   const campaign = await getCampaignOrThrow(db, campaignId);
   const election = await db.collection<Election>("elections").findOne({ _id: campaign.electionId });
@@ -725,8 +736,8 @@ export async function contributeCampaignStrength(params: {
     message: "You cannot contribute campaign strength to a campaign in another country",
   });
   const npi = actorCharacter.nationalInfluence ?? 0;
-  const strengthAdded = npi * CAMPAIGN_STRENGTH_CONTRIBUTION_NPI_MULTIPLIER;
-  if (strengthAdded <= 0) {
+  const strengthPerClick = npi * CAMPAIGN_STRENGTH_CONTRIBUTION_NPI_MULTIPLIER;
+  if (strengthPerClick <= 0) {
     throw badRequest("You have no national influence to contribute");
   }
 
@@ -748,13 +759,47 @@ export async function contributeCampaignStrength(params: {
   const campaignRate = forexEnabled ? campaignLocalRate(character.countryId ?? "US") : 1;
 
   const currentCS = campaign.campaignStrength ?? 0;
-  const costFunds = campaignStrengthContributionCost(currentCS, strengthAdded);
-  const costFundsLocal = forexEnabled ? costFunds * campaignRate : costFunds;
-  const costActions = campaignStrengthContributionActions(strengthAdded);
+  const availableLocal = character.currencyBalances?.campaign ?? character.funds ?? 0;
+  const fundsRate = forexEnabled ? campaignRate : 1;
+
+  // "Max" is resolved HERE, not from the count the client previewed: the funds
+  // cost climbs with the campaign's live strength, so any rival contribution
+  // between page load and confirm would otherwise turn the player's Max click
+  // into a hard "insufficient resources" failure instead of a slightly smaller
+  // batch. A numeric count is honoured as asked and simply gated below.
+  const clicks =
+    requestedClicks === "max"
+      ? maxAffordableCampaignStrengthClicks({
+          currentStrength: currentCS,
+          strengthPerClick,
+          availableFunds: availableLocal,
+          availableActions: character.actions,
+          fundsRate,
+        })
+      : Number.isFinite(requestedClicks)
+        ? Math.min(Math.max(1, Math.floor(requestedClicks)), CAMPAIGN_STRENGTH_MAX_BATCH_CLICKS)
+        : 1;
+
+  if (clicks < 1) {
+    // Only reachable via "max". Quote a single click so the message says what
+    // the player is actually short of rather than just refusing.
+    const one = campaignStrengthBatchQuote(currentCS, strengthPerClick, 1);
+    const oneCostLocal = one.costFunds * fundsRate;
+    throw badRequest(
+      character.actions < one.costActions
+        ? `Insufficient actions. Need ${one.costActions}, have ${character.actions}`
+        : `Insufficient funds. Need ${Math.ceil(oneCostLocal).toLocaleString()}, have ${Math.floor(availableLocal).toLocaleString()}`
+    );
+  }
+
+  const quote = campaignStrengthBatchQuote(currentCS, strengthPerClick, clicks);
+  const strengthAdded = quote.strengthAdded;
+  const costFunds = quote.costFunds;
+  const costFundsLocal = costFunds * fundsRate;
+  const costActions = quote.costActions;
   if (character.actions < costActions) {
     throw badRequest(`Insufficient actions. Need ${costActions}, have ${character.actions}`);
   }
-  const availableLocal = character.currencyBalances?.campaign ?? character.funds ?? 0;
   if (availableLocal < costFundsLocal) {
     throw badRequest(
       `Insufficient funds. Need ${Math.ceil(costFundsLocal).toLocaleString()}, have ${Math.floor(availableLocal).toLocaleString()}`
@@ -817,6 +862,10 @@ export async function contributeCampaignStrength(params: {
 
   const actorName = character.name ?? user.character.name ?? "Unknown";
   const nextCampaignStrength = currentCS + strengthAdded;
+  // Batched contributions are one debit and one audit row, so the row has to
+  // say how many clicks it stood in for or the ledger reads as a single
+  // implausibly large donation.
+  const batchSuffix = clicks > 1 ? ` (x${clicks})` : "";
   void db.collection("activityLog").insertOne({
     type: "game_action",
     timestamp: now,
@@ -834,9 +883,9 @@ export async function contributeCampaignStrength(params: {
     result: {
       success: true,
       fundsChange: -costFundsLocal,
-      message: `Added ${strengthAdded.toFixed(1)} campaign strength to ${targetName}`,
+      message: `Added ${strengthAdded.toFixed(1)} campaign strength to ${targetName}${batchSuffix}`,
     },
-    summary: `campaign_strength - ${actorName} added ${strengthAdded.toFixed(1)} CS to ${targetName}`,
+    summary: `campaign_strength - ${actorName} added ${strengthAdded.toFixed(1)} CS to ${targetName}${batchSuffix}`,
     details: {
       campaignId: campaignId.toString(),
       electionId: campaign.electionId.toString(),
@@ -845,6 +894,8 @@ export async function contributeCampaignStrength(params: {
       candidateId: targetCandidateId,
       candidateName: targetName,
       candidateParty: targetCandidate?.party ?? campaign.party,
+      clicks,
+      strengthPerClick,
       strengthAdded,
       campaignStrengthBefore: currentCS,
       campaignStrengthAfter: nextCampaignStrength,
@@ -858,6 +909,8 @@ export async function contributeCampaignStrength(params: {
 
   return {
     campaignStrength: nextCampaignStrength,
+    /** Click count actually executed: may be below a "max" request's preview. */
+    clicks,
     strengthAdded,
     // Local-currency cost (anchor formula × home rate). Unrounded to preserve
     // the existing response precision; UI rounds for display.

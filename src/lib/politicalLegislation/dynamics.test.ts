@@ -6,6 +6,7 @@ import {
   DRIFT_RATE_PER_TURN,
   lawTargets,
   metricModifierRows,
+  structuralResidual,
 } from "./dynamics";
 
 function levelsFromBaselines(countryId: "US" | "UK" | "RU") {
@@ -100,5 +101,32 @@ describe("metricModifierRows (§6)", () => {
     for (let i = 1; i < rows.length; i++) {
       expect(rows[i - 1].points).toBeGreaterThanOrEqual(rows[i].points);
     }
+  });
+});
+
+describe("structuralResidual (§4)", () => {
+  it("is the exact inverse of composeTarget below the clamp", () => {
+    // The property that matters: a board handed this residual composes straight
+    // back to the value it was measured from, so a lazy heal moves nothing.
+    for (const [value, national, supplement] of [
+      [77.2, 57.1, 0],
+      [78.9, 57.1, 6.8],
+      [40, 10, 100],
+    ] as Array<[number, number, number]>) {
+      const residual = structuralResidual(value, national, supplement);
+      expect(composeTarget(national, supplement, residual)).toBeCloseTo(value, 10);
+    }
+  });
+
+  it("charges the regional supplement at the same half weight composeTarget pays it", () => {
+    // Dropping the supplement here was the old bug: the residual came out
+    // 0.5 x supplement too high, so the composed target sat above the value and
+    // the board crept upward every turn it was recomputed.
+    expect(structuralResidual(80, 57, 6)).toBe(20);
+    expect(structuralResidual(80, 57, 0)).toBe(23);
+  });
+
+  it("goes negative when the law book already over-explains the score", () => {
+    expect(structuralResidual(30, 57, 0)).toBe(-27);
   });
 });

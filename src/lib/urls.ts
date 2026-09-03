@@ -143,6 +143,14 @@ export function regionApiSubUrl(
   return `${regionApiUrl(countryId, regionCode)}/${subPath}`;
 }
 
+/** One region's political-metrics registry payload. */
+export function regionPoliticalMetricsApiUrl(
+  countryId: CountryId | string,
+  regionCode: string
+): string {
+  return regionApiSubUrl(countryId, regionCode, "political-metrics");
+}
+
 export function legislatureApiUrl(countryId: CountryId | string): string {
   return `/api/country/${lowerCountry(countryId)}/legislature`;
 }

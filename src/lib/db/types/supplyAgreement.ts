@@ -21,6 +21,15 @@ export interface SupplyAgreement {
   supplierCorpId: ObjectId;
   buyerCorpId: ObjectId;
   commodity: CommodityType;
+  /**
+   * Host state for a state-scoped commodity (today: freight). Freight is
+   * haulage capacity based in one state and clears in that state's book, so a
+   * freight contract names the state it is fulfilled from: the supplier's
+   * plants there are the capacity, the buyer's plants there are the demand,
+   * and the reservation lands in that one state book. Absent on every
+   * reachable-commodity contract, which is corporation-wide.
+   */
+  stateId?: string;
   /** Max units per turn the supplier commits (its output is capped to this for the buyer). */
   volumeCap: number;
   /**
@@ -107,6 +116,13 @@ export interface SupplyAgreement {
   lastSupplierCashCurrency?: CurrencyCode;
   /** Net settlement amount left unpaid by the solvency floor, in anchor currency. */
   lastUnpaidSettlementAnchor?: number;
+  /**
+   * Turn the supplier's owner was last told this agreement charged shortfall
+   * damages. Damages are a LEVEL condition — an oversized contract charges
+   * every turn until it is resized — so the notice is on a cooldown and this
+   * is what the cooldown reads. Absent means never notified.
+   */
+  lastDamagesNoticeTurn?: number;
   createdAt: Date;
   updatedAt: Date;
 }

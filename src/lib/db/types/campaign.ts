@@ -137,15 +137,24 @@ export interface Campaign {
   totalActionsSpent: number;
 
   /**
-   * Per-turn spend total — resets to 0 at the start of each turn-phase
-   * sweep, then $inc'd by every spend write path (upgrade purchases via
-   * `campaignCommands.ts`, maintenance ticks via `campaignTurn.ts`). Read
-   * by the swing-flow engine's money driver to detect "active pacing" vs
-   * "balance sitting idle" — see
-   * `2026-05-22-swing-flow-driver-activation.md` §A2. Undefined / missing
-   * on pre-Phase-A2 rows; degrades to 0 in the money-driver aggregation.
+   * Per-turn spend total — $inc'd by every spend write path (upgrade
+   * purchases via `campaignCommands.ts`, maintenance ticks via
+   * `campaignTurn.ts`), then folded into `spendStock` and cleared by the
+   * `campaignSpendReset` turn-phase after each turn's vote accumulation.
+   * Undefined / missing on old rows; degrades to 0 in the aggregation.
    */
   spendThisTurn?: number;
+
+  /**
+   * Decaying stock of recent campaign spend — fed only by actual spend
+   * (the reset sweep folds `spendThisTurn` in each turn; hoarded `funds`
+   * never enter). The money driver reads stock plus the live
+   * `spendThisTurn` accumulator. Fades by `SPEND_STOCK_RETENTION` per
+   * turn, dies with the campaign row on election resolution. Undefined
+   * / missing degrades to 0, same absent-means-zero invariant as
+   * `spendThisTurn`.
+   */
+  spendStock?: number;
 
   /**
    * Optional candidate-set campaign color (hex like "#3B82F6"). Used to shade

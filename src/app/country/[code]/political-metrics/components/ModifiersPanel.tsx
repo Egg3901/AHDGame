@@ -54,6 +54,29 @@ export function ModifiersPanel({ modifiers }: { modifiers: MetricModifiersInfo }
             </span>
           </div>
         ))}
+        {/* Region scope only: the region's own enacted laws, already halved so
+            these rows add up to the target below rather than to the raw ladder. */}
+        {modifiers.regionalLaws.length > 0 && (
+          <>
+            <div className="border-t border-dashed border-card-border pt-1.5 font-mono text-body-xs uppercase tracking-wider text-muted">
+              Regional programmes
+            </div>
+            {modifiers.regionalLaws.map((row) => (
+              <div
+                key={`regional-${row.lawId}`}
+                className="flex items-baseline justify-between gap-3 text-body-sm"
+              >
+                <span className="text-foreground">
+                  {row.title}
+                  <span className="text-body-xs text-muted"> · {row.levelName}</span>
+                </span>
+                <span className="shrink-0 tabular-nums text-success">
+                  +{row.points.toLocaleString("en-US")}
+                </span>
+              </div>
+            ))}
+          </>
+        )}
         <div className="flex items-baseline justify-between gap-3 border-t border-dashed border-card-border pt-1.5 text-body-sm">
           <span className="text-muted">Structural conditions</span>
           <span
@@ -106,10 +129,27 @@ export function ModifiersPanel({ modifiers }: { modifiers: MetricModifiersInfo }
             )}
           </>
         )}
+        {/* The strike and settlement channel. It moves every region's target,
+            and until now showed on no surface at all, so a strike wave shifted
+            politics with no traceable cause. */}
+        {modifiers.labour !== 0 && (
+          <div className="flex items-baseline justify-between gap-3 text-body-sm">
+            <span className="text-muted">Labour relations</span>
+            <span
+              className={`shrink-0 tabular-nums ${
+                modifiers.labour >= 0 ? "text-success" : "text-error"
+              }`}
+            >
+              {modifiers.labour >= 0 ? "+" : "−"}
+              {Math.abs(modifiers.labour).toLocaleString("en-US")}
+            </span>
+          </div>
+        )}
       </div>
       <div className="mt-2.5 flex items-baseline justify-between border-t border-card-border pt-2 text-body-xs text-muted">
         <span>
-          Target <strong className="tabular-nums text-foreground">{modifiers.target}</strong>
+          Law and structure target{" "}
+          <strong className="tabular-nums text-foreground">{modifiers.target}</strong>
         </span>
         <span>{DIRECTION_GLYPH[modifiers.direction]}</span>
       </div>
@@ -127,6 +167,14 @@ export function ModifiersPanel({ modifiers }: { modifiers: MetricModifiersInfo }
           close half the remaining gap.
         </p>
       )}
+      {/* Said plainly rather than left for a player to discover by arithmetic:
+          the engine also bends this target by how the economy and the funded
+          services are actually doing, and those two terms are recomputed every
+          turn instead of being stored, so a read path cannot show them. */}
+      <p className="mt-2 text-body-xs text-muted">
+        Laws and standing conditions set this target. Economic performance and service delivery bend
+        it further each turn, and those are not included in the figure above.
+      </p>
     </div>
   );
 }

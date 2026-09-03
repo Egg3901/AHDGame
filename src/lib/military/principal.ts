@@ -47,7 +47,12 @@ export const DICTATE_WINDOW_TURNS = 24;
  *     taken a separate peace. Handing its claim to a late joiner would award the
  *     war to a country that did not start it.
  */
-export function principalOf(conflict: ConflictDoc, side: Side): CountryId | null {
+export function principalOf(
+  // A Pick rather than the whole document, so the offer validator and the offer form
+  // can ask the same question without holding a fully loaded conflict.
+  conflict: Pick<ConflictDoc, "sideA" | "sideB" | "joinTurns" | "treatyEntries">,
+  side: Side
+): CountryId | null {
   const roster = side === "A" ? conflict.sideA.countries : conflict.sideB.countries;
   if (roster.length === 0) return null;
   const guests = new Set<string>([

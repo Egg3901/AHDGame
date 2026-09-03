@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { handleRouteError, notFound } from "@/lib/api/errors";
+import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
 import { parseJsonBody } from "@/lib/api/validate";
 import {
   isIndexFundsFullMode,
@@ -191,18 +192,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
     // Try transactional path first; fall back to sequential writes if the
     // MongoDB instance doesn't support transactions (non-replica-set).
-    const session = db.client.startSession();
-    try {
+    {
       let subscriptionResult:
         { units: number; costAnchor: number; nav: number; balanceAfter: number } | undefined;
       let debitError: string | null = null;
 
       try {
-        await session.withTransaction(async () => {
-          const outcome = await applySubscription(session);
-          if (outcome.error) debitError = outcome.error;
-          else subscriptionResult = outcome.result;
-        });
+        await runTransactionWithSessionRetry(
+          async () => db.client,
+          async (session) => {
+            const outcome = await applySubscription(session);
+            if (outcome.error) debitError = outcome.error;
+            else subscriptionResult = outcome.result;
+          }
+        );
       } catch (err) {
         const code = (err as { code?: number } | undefined)?.code;
         if (code === 20 || code === 263) {
@@ -267,8 +270,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         ...subscriptionResult!,
         spreadPaid: Math.round(subscribeSpreadCharged * 100) / 100,
       });
-    } finally {
-      await session.endSession();
     }
   } catch (error) {
     return handleRouteError(error);

@@ -374,6 +374,27 @@ describe("the settlement stamp", () => {
     expect(stamp).toBeTruthy();
     expect(JSON.stringify(conflictUpdateSpy.mock.calls)).not.toContain("postedWireEvents");
   });
+
+  // Ticket #1246: the record surfaced the SENDER as the departing country on a
+  // "you get out" deal. The stamp is where the settlement text comes from.
+  it("stamps the recipient as target when the RECIPIENT is the leaver", async () => {
+    // UK asks CN to leave on a white peace and stays in the war itself. The
+    // term still lands on CN — it is the country the deal is asked of.
+    await acceptPeace(
+      db,
+      offer({ leaver: "CN", term: { kind: "white_peace" as const } }),
+      makeConflict(),
+      40,
+      "c1"
+    );
+    const stamp = conflictUpdateSpy.mock.calls.find((c) => c[1]?.$set?.settlement);
+    expect(stamp?.[1].$set.settlement).toMatchObject({
+      path: "negotiated",
+      imposedBy: "UK",
+      target: "CN",
+      turn: 40,
+    });
+  });
 });
 
 describe("a withdrawal asked of the recipient", () => {
@@ -406,5 +427,136 @@ describe("a withdrawal asked of the recipient", () => {
     c.sideB.countries = ["CN", "RU"] as never;
     await acceptPeace(db, offer({ leaver: "CN" }), c, 40, "c1");
     expect(standDownSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "RU");
+  });
+});
+
+/**
+ * A war between two founding belligerents is THEIR war. When both principals
+ * settle it, it ends for everyone on both rosters rather than leaving the guests
+ * to fight on over a question their principals have already answered.
+ *
+ * THE LEAVER LOSES, whichever direction the offer ran. "I withdraw" and "you
+ * withdraw" are the same deal written from the two ends, so reading the victor off
+ * the SENDER hands the war to whoever happened to type it — which awards a
+ * principal that offered to quit the war it just quit.
+ */
+describe("a principal-to-principal peace", () => {
+  /** Side A = US (principal) + UK (joined), side B = CN (principal) + KP (joined). */
+  function makeGuestedConflict(): ConflictDoc {
+    const c = makeConflict();
+    c.sideB.countries = ["CN", "RU"] as never;
+    c.joinTurns = [
+      { countryId: "UK", turn: 5, control: 50 },
+      { countryId: "RU", turn: 5, control: 50 },
+    ] as never;
+    return c;
+  }
+
+  it("ends the war when the principal that LEAVES sent the offer", async () => {
+    // The US offers to withdraw and pay. It is quitting, so CN's side wins.
+    const r = await acceptPeace(
+      db,
+      offer({
+        fromCountry: "US",
+        toCountry: "CN",
+        leaver: "US",
+        term: { kind: "indemnity" as const, payer: "US", amount: 100 },
+      }),
+      makeGuestedConflict(),
+      40,
+      "c1"
+    );
+    expect(r.resolved).toBe(true);
+    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "B", 40);
+  });
+
+  it("names the same victor when the offer ran the other way", async () => {
+    // CN demands the US withdraw. Same deal, same loser: the one who leaves.
+    const r = await acceptPeace(
+      db,
+      offer({
+        fromCountry: "CN",
+        toCountry: "US",
+        leaver: "US",
+        term: { kind: "indemnity" as const, payer: "US", amount: 100 },
+      }),
+      makeGuestedConflict(),
+      40,
+      "c1"
+    );
+    expect(r.resolved).toBe(true);
+    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "B", 40);
+  });
+
+  it("hands the war to side A when the side B principal is the one leaving", async () => {
+    const r = await acceptPeace(
+      db,
+      offer({
+        fromCountry: "US",
+        toCountry: "CN",
+        leaver: "CN",
+        term: { kind: "indemnity" as const, payer: "CN", amount: 100 },
+      }),
+      makeGuestedConflict(),
+      40,
+      "c1"
+    );
+    expect(r.resolved).toBe(true);
+    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "A", 40);
+  });
+
+  it("ends the war with NO victor on a white peace", async () => {
+    // The war still ends for everyone, but neither government prevailed. A crisis
+    // frozen on this war reads the stalemate and goes back on the board.
+    const r = await acceptPeace(
+      db,
+      offer({
+        fromCountry: "US",
+        toCountry: "CN",
+        leaver: "US",
+        term: { kind: "white_peace" as const },
+      }),
+      makeGuestedConflict(),
+      40,
+      "c1"
+    );
+    expect(r.resolved).toBe(true);
+    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "stalemate", 40);
+  });
+
+  it("leaves the war running when the other party is only a guest", async () => {
+    // RU joined CN's war. A principal cannot lose its side's war to a country that
+    // did not start it, and CN is not party to the deal at all.
+    const r = await acceptPeace(
+      db,
+      offer({
+        fromCountry: "US",
+        toCountry: "RU",
+        leaver: "US",
+        term: { kind: "indemnity" as const, payer: "US", amount: 100 },
+      }),
+      makeGuestedConflict(),
+      40,
+      "c1"
+    );
+    expect(r.resolved).toBe(false);
+    expect(resolveSpy).not.toHaveBeenCalled();
+  });
+
+  it("leaves the war running when the LEAVER is only a guest", async () => {
+    const r = await acceptPeace(
+      db,
+      offer({
+        fromCountry: "UK",
+        toCountry: "CN",
+        leaver: "UK",
+        term: { kind: "indemnity" as const, payer: "UK", amount: 100 },
+      }),
+      makeGuestedConflict(),
+      40,
+      "c1"
+    );
+    expect(r.resolved).toBe(false);
+    expect(resolveSpy).not.toHaveBeenCalled();
   });
 });

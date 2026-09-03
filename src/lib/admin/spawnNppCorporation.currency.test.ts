@@ -25,6 +25,14 @@ vi.mock("@/lib/npp/generator", () => ({
 }));
 vi.mock("@/lib/corporations/tickerSymbol", () => ({
   generateTickerSymbol: vi.fn().mockResolvedValue("SPWN"),
+  insertCorporationWithTickerRetry: vi.fn(
+    async (
+      db: { collection: (name: string) => { insertOne: (doc: unknown) => Promise<unknown> } },
+      corpDoc: unknown
+    ) => {
+      await db.collection("corporations").insertOne(corpDoc);
+    }
+  ),
 }));
 vi.mock("@/lib/db/sequentialId", () => ({
   getNextSequentialId: vi.fn().mockResolvedValue(42),

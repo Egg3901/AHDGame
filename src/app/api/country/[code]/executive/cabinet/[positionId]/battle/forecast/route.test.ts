@@ -74,6 +74,10 @@ describe("battle forecast route", () => {
     db.collection("militaryFormations");
     db.collection("nationalDoctrine");
     db.collection("conflicts");
+    db.collection("navairChannels");
+    db.collectionMocks.navairChannels.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
     // Standing orders. Empty by default: the projection pools auto-joining allies the
     // same way the resolver does, so the route reads this on every request.
     db.collection("theaterState");
@@ -116,6 +120,64 @@ describe("battle forecast route", () => {
     expect(body.ownStrength).toBeGreaterThan(0);
     expect(typeof body.enemyBand).toBe("string");
     expect(body.unopposed).toBe(false);
+  });
+
+  it("uses eligible close air support in the projection and reports it to the commander", async () => {
+    let casEnabled = false;
+    db.collectionMocks.conflicts.findOne.mockResolvedValue({ ...CONFLICT, region: "cas" });
+    db.collectionMocks.militaryUnits.find.mockImplementation(
+      (q: { theaterId?: string; domain?: unknown } = {}) => {
+        if (q.domain) {
+          const wings = casEnabled
+            ? Array.from({ length: 40 }, (_, i) =>
+                unit({
+                  _id: `cas${i}`,
+                  countryId: "US",
+                  domain: "air",
+                  type: "Fighter Wing",
+                  personnel: 1800,
+                  readiness: 100,
+                  basePower: 88,
+                  equipment: { firepower: 50, protection: 50, support: 50 },
+                  station: "cas",
+                  mission: "CAS",
+                  integrity: 100,
+                  supply: 100,
+                  theaterId: "reserve",
+                })
+              )
+            : [];
+          return { toArray: vi.fn().mockResolvedValue(wings) };
+        }
+        return {
+          toArray: vi
+            .fn()
+            .mockResolvedValue([
+              unit({ countryId: "US", theaterId: q.theaterId ?? "afghan" }),
+              unit({ countryId: "CN", theaterId: q.theaterId ?? "afghan" }),
+            ]),
+        };
+      }
+    );
+
+    const { GET } = await import(ROUTE);
+    const without = await GET(req("theaterId=afghan&targetCountry=CN"), call);
+    casEnabled = true;
+    const withCas = await GET(req("theaterId=afghan&targetCountry=CN"), call);
+    const plain = await without.json();
+    const supported = await withCas.json();
+
+    // Odds are intentionally whole percentages, so a real contribution can be smaller
+    // than one displayed point. The explicit CAS readout below is what makes that
+    // contribution observable instead of forcing the commander to infer it from rounding.
+    expect(supported.navalAirSupport).toMatchObject({
+      closeAirSupportActive: true,
+    });
+    expect(supported.navalAirSupport.casWeight).toBeGreaterThan(0);
+    expect(supported.oddsPct).toBeGreaterThanOrEqual(plain.oddsPct);
+    expect(supported.ownStrength, JSON.stringify({ plain, supported })).toBeGreaterThan(
+      plain.ownStrength
+    );
   });
 
   // Fog: the payload must never carry the opponent's roster or strength.
@@ -214,6 +276,65 @@ describe("battle forecast route", () => {
     expect(without.contingents).toBe(1);
     expect(withJoin.contingents).toBe(2);
     expect(withJoin.odds).toBeGreaterThan(without.odds);
+  });
+
+  /**
+   * The same regression, reached the other way. An NPP ally never writes a
+   * `theaterState.autoJoin` order — it has no player to write one — so the admin
+   * `nppOffensiveJoinEnabled` switch opts it in instead. The resolver enrols it; if
+   * the forecast kept deriving its own set from `theaterState` it would silently go
+   * back to understating the attack, on a route whose contract is that it cannot
+   * disagree with the outcome it predicts.
+   */
+  it("pools an NPP ally opted in by the admin switch, which writes no standing order", async () => {
+    const alliedConflict = {
+      ...CONFLICT,
+      sideA: { label: "A", countries: ["US", "UK"], kind: "coalition" },
+    };
+    const oddsWith = async (switchOn: boolean) => {
+      vi.resetModules();
+      db.collectionMocks.conflicts.findOne.mockResolvedValue(alliedConflict);
+      db.collectionMocks.gameState.findOne.mockResolvedValue({
+        conflictsEnabled: true,
+        currentTurn: 40,
+        nppOffensiveJoinEnabled: switchOn,
+      });
+      db.collection("countryGameStates");
+      db.collectionMocks.countryGameStates.find.mockReturnValue({
+        toArray: vi
+          .fn()
+          .mockResolvedValue([{ _id: "UK", status: "active", enabledForPlayers: false }]),
+      });
+      // Deliberately empty: the switch is the ONLY thing that can enrol UK here.
+      db.collectionMocks.theaterState.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      });
+      db.collectionMocks.militaryUnits.find.mockImplementation(
+        (q: { countryId?: string; theaterId?: string } = {}) => {
+          const atFront = [
+            unit({ countryId: "US", theaterId: "afghan" }),
+            unit({ countryId: "UK", theaterId: "afghan" }),
+            unit({ countryId: "CN", theaterId: "afghan" }),
+            unit({ countryId: "CN", theaterId: "afghan" }),
+          ];
+          const docs = q.theaterId
+            ? atFront.filter((u) => u.theaterId === q.theaterId)
+            : atFront.filter((u) => u.countryId === (q.countryId ?? "US"));
+          return { toArray: vi.fn().mockResolvedValue(docs) };
+        }
+      );
+      const { GET } = await import(ROUTE);
+      const res = await GET(req("theaterId=afghan&targetCountry=CN"), call);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      return { odds: body.oddsPct as number, contingents: body.alliedContingents as number };
+    };
+
+    const off = await oddsWith(false);
+    const on = await oddsWith(true);
+    expect(off.contingents).toBe(1);
+    expect(on.contingents).toBe(2);
+    expect(on.odds).toBeGreaterThan(off.odds);
   });
 
   /**

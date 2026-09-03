@@ -10,9 +10,13 @@ vi.mock("@/lib/mongodb", () => ({ getDb: () => mockGetDb() }));
 vi.mock("@/lib/api/requireAuth", () => ({
   requireAuthWithCharacter: () => mockRequireAuth(),
 }));
-vi.mock("@/lib/centralBank/helpers", () => ({
-  getCentralBankScope: () => mockGetCentralBankScope(),
-}));
+vi.mock("@/lib/centralBank/helpers", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/centralBank/helpers")>();
+  return {
+    ...actual,
+    getCentralBankScope: () => mockGetCentralBankScope(),
+  };
+});
 vi.mock("@/lib/turn/currentTurn", () => ({
   getCurrentTurn: (...args: unknown[]) => mockGetCurrentTurn(...args),
 }));
@@ -128,6 +132,9 @@ describe("GET /api/country/[code]/fomc", () => {
     expect(body.nextMeetingAtTurn).toBe(388);
     // Term started at turn 192 and runs 192 turns.
     expect(body.termEndsAtTurn).toBe(384);
+    // Majority of the full 7-seat board (ticket #1238: the understaffed-board
+    // banner reads this instead of re-deriving the threshold client-side).
+    expect(body.majorityNeeded).toBe(4);
 
     expect(body.meetingHistory).toHaveLength(3);
     // Newest-last storage order preserved; client renders newest first.

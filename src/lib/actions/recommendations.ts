@@ -2,6 +2,8 @@
 import type { Character, PartyBudget, PoliticalParty, StatePartyOrg } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
+import { orgBuildCashPrice } from "@/lib/politicalStrength/buildOrgFunding";
+import { BUILD_ORG_BASE_PS_COST } from "@/lib/politicalStrength/strengthConstants";
 import { getTotalPersonalLiquidWealth } from "@/lib/currency/characterFunds";
 import {
   getCampaignActionCost,
@@ -597,11 +599,17 @@ export function checkPartyActions(
       priority: "high",
       category: "party",
       title: "Grow Party Organization",
-      why: `${partyLabel} has ${orgValue}% org in this state. Spend Political Strength on Build Org to grow it from the unaffiliated pool and by poaching rivals.`,
+      why: `${partyLabel} has ${orgValue}% org in this state. Build Org grows it from the unaffiliated pool and by poaching rivals, and costs both Political Strength and money from the paying tier's treasury.`,
       action: {
         type: "build-org",
-        estimatedCost: { ap: 0, funds: 0 },
-        estimatedBenefit: "+0.1–1 Org% per click (varies with state context)",
+        // Price of one click at base pressure. The real cost rises with the
+        // per-state ladder, so this is the floor, not a promise — but quoting 0
+        // told the player the action was free.
+        estimatedCost: {
+          ap: 0,
+          funds: orgBuildCashPrice(character.countryId, "state", BUILD_ORG_BASE_PS_COST),
+        },
+        estimatedBenefit: "+0.1 to 1 Org% per click (varies with state context)",
         targetPartyName: partyName,
       },
       link: `/country/${countryPath}/region/${statePartyOrg.stateId}/party/${statePartyOrg.partyId}`,

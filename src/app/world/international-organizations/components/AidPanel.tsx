@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { canTableResolutionType } from "@/lib/constants/orgCategory";
 import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
 import type { OrgSummary, OrgViewerInfo } from "../orgTypes";
@@ -14,6 +14,7 @@ import {
   requiresUnanimity,
   votesNeeded,
 } from "@/lib/internationalOrganizations/resolutionRules";
+import { useEntityName } from "../useEntityName";
 
 interface Props {
   org: OrgSummary;
@@ -30,6 +31,7 @@ interface Props {
  * aid (political / economic / development).
  */
 export function AidPanel({ org, viewer, currentTurn, votingWindowTurns, onChange }: Props) {
+  const entityName = useEntityName();
   const viewerFmCountry = viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
   const viewerIsMember =
     viewerFmCountry != null && org.members.some((m) => m.countryId === viewerFmCountry);
@@ -38,7 +40,7 @@ export function AidPanel({ org, viewer, currentTurn, votingWindowTurns, onChange
   // server will refuse.
   const viewerHoldsVote =
     viewerFmCountry != null &&
-    org.members.some((m) => m.countryId === viewerFmCountry && m.hasVote);
+    org.members.some((m) => m.countryId === viewerFmCountry && m.hasPolicyVote);
   const canTable = canTableResolutionType(org.def.category, "aid_package");
 
   const pending = org.pendingLegislation.filter((l) => l.type === "aid_package");
@@ -107,7 +109,7 @@ export function AidPanel({ org, viewer, currentTurn, votingWindowTurns, onChange
     onChange();
   }
 
-  const name = (c?: CountryId) => (c ? (COUNTRY_CONFIGS[c]?.name ?? c) : "—");
+  const name = (c?: CountryId) => (c ? entityName(c) : "—");
   // Agreed and proposed package sizes are a record, so they read in the viewer's
   // currency. The Amount field below stays in the fund's, and says so in its
   // label — the route banks what is typed there straight into the fund.
@@ -227,14 +229,14 @@ export function AidPanel({ org, viewer, currentTurn, votingWindowTurns, onChange
         ) : (
           pending.map((l) => {
             const turnsLeft = Math.max(0, l.closesOnTurn - currentTurn);
-            const ballotSize = org.members.filter((m) => m.hasVote).length;
+            const ballotSize = org.members.filter((m) => m.hasPolicyVote).length;
             // Fold duplicate rows first: the resolver tallies the folded ballot,
             // so anything counted here must be counted the same way.
             const votes = dedupeOrganizationVotes(l.votes);
             const yesCount = votes.filter(
               (v) =>
                 v.vote === "yes" &&
-                org.members.some((m) => m.countryId === v.countryId && m.hasVote)
+                org.members.some((m) => m.countryId === v.countryId && m.hasPolicyVote)
             ).length;
             const myVote =
               viewerFmCountry != null
@@ -300,7 +302,9 @@ export function AidPanel({ org, viewer, currentTurn, votingWindowTurns, onChange
                 />
                 <VoteRoster
                   votes={l.votes}
-                  expectedVoters={org.members.filter((m) => m.hasVote).map((m) => m.countryId)}
+                  expectedVoters={org.members
+                    .filter((m) => m.hasPolicyVote)
+                    .map((m) => m.countryId)}
                 />
               </article>
             );

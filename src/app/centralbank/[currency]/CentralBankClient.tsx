@@ -672,11 +672,17 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
                 governmentControlled={data.governmentControlled ?? false}
                 viewerSetsRate={data.viewerSetsRate ?? false}
                 committeeSeated={data.committeeSeated ?? false}
+                committeeDead={data.committeeDead ?? false}
                 onOpenCommittee={() => setActiveTab("committee")}
                 lastRateChangeTurn={data.lastRateChangeTurn}
                 currentTurn={data.currentTurn}
                 bankApiBasePath={bankApiBasePath}
                 onChanged={fetchData}
+                governanceEndpoint={
+                  data.committeeSeated || data.committeeDead
+                    ? `/api/country/${countryId.toLowerCase()}/fomc`
+                    : undefined
+                }
               />
               <NominationsPanel
                 nominations={data.nominations}

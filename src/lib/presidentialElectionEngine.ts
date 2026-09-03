@@ -213,7 +213,10 @@ export async function initPresidentVoteTally(
     .findOne({ electionId });
 
   const doc: ElectionVoteTally = {
-    _id: electionId,
+    // Preserve the matched doc's _id: legacy tallies carry an auto-generated
+    // ObjectId, and replaceOne rejects a replacement whose _id differs from
+    // the matched document's (immutable-field MongoServerError).
+    _id: existing?._id ?? electionId,
     electionId,
     state: "US",
     totalVotes,
@@ -618,7 +621,7 @@ export async function accumulatePresidentVoteTurn(
 
   // Consecutive terms the incumbent PARTY has already held. Term fatigue is
   // priced by the economic referendum below (penalty-side multiplier); this
-  // count also feeds `appealWeight`'s nominal-share `personalStatTenureFatigue`.
+  // count also feeds `appealWeight`'s nominal-share `personalStatTenureRetention`.
   const incumbentConsecutiveTerms = getPresidentialConsecutiveTerms(
     gsDoc,
     electionCountryId,
