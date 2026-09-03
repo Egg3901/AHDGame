@@ -8,6 +8,9 @@ vi.mock("@/lib/sovereignDefault/snapshotLoader", () => ({
 vi.mock("@/lib/sovereignDefault/marketDemand", () => ({
   computeMarketDemand: vi.fn(),
 }));
+vi.mock("@/lib/bonds/sovereign", () => ({
+  SOVEREIGN_ISSUANCE_INTERVAL_TURNS: 12,
+}));
 
 import { loadCountrySovereignSnapshot } from "@/lib/sovereignDefault/snapshotLoader";
 import { computeMarketDemand } from "@/lib/sovereignDefault/marketDemand";
@@ -24,6 +27,7 @@ beforeEach(() => {
   db = createMockDb();
   db.collection("bondMarketPools");
   db.collection("moneySupplySnapshots");
+  db.collection("bonds");
 });
 
 describe("planPoolCashMoves", () => {
@@ -91,6 +95,28 @@ describe("processBondMarketPoolTurn", () => {
       })
     );
     expect(result.appetitesRefreshed).toBeGreaterThan(0);
+  });
+
+  it("holds a quarter of maturing sovereign face as a working balance when that exceeds the M2 share", async () => {
+    db.collectionMocks.bondMarketPools.find.mockReturnValue({
+      toArray: async () => [{ _id: "GBP", cashLocal: 100, targetCashLocal: 5 }],
+    });
+    db.collectionMocks.moneySupplySnapshots.find.mockReturnValue({
+      toArray: async () => [{ currencyCode: "GBP", m2: 10_000, turn: 583 }],
+    });
+    db.collectionMocks.bonds.find.mockReturnValue({
+      toArray: async () => [{ totalIssued: 4_000 }, { totalIssued: 2_000 }],
+    });
+    vi.mocked(loadCountrySovereignSnapshot).mockResolvedValue(null);
+
+    await processBondMarketPoolTurn(db as unknown as Db, 584, new Date());
+
+    expect(db.collectionMocks.bondMarketPools.updateOne).toHaveBeenLastCalledWith(
+      { _id: "GBP" },
+      expect.objectContaining({
+        $set: expect.objectContaining({ targetCashLocal: 6_000, m2Local: 10_000 }),
+      })
+    );
   });
 
   it("sweeps hoarded cash back out", async () => {
