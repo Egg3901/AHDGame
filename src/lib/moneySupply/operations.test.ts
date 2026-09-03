@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/banking/featureFlag", () => ({
@@ -34,6 +34,62 @@ beforeEach(() => {
     countryId: "US",
     reserveBalance: 100,
     externalBroadMoney: 1_000,
+  });
+});
+
+describe("open market operations against the bond market pool", () => {
+  const bondId = new ObjectId();
+  function seatBond() {
+    db.collection("bonds");
+    db.collection("bondMarketPools");
+    db.collectionMocks.bonds.findOne.mockResolvedValue({
+      _id: bondId,
+      issuerType: "sovereign",
+      countryId: "US",
+      currencyCode: "USD",
+      matured: false,
+      defaulted: false,
+      publicFloat: 100,
+      centralBankHoldings: 10,
+      totalIssued: 110_000,
+      marketPrice: 1,
+    });
+  }
+
+  it("QE buys float from the pool and leaves the deposits in the pool", async () => {
+    seatBond();
+    const result = await executeMonetaryOperation(db as unknown as Db, {
+      countryId: "US",
+      type: "qe",
+      turn: 12,
+      actorName: "Chair",
+      bondId: bondId.toString(),
+      units: 5,
+    });
+    expect(result.units).toBe(5);
+    expect(db.collectionMocks.bondMarketPools.updateOne).toHaveBeenCalledWith(
+      { _id: "USD" },
+      expect.objectContaining({
+        $inc: expect.objectContaining({ cashLocal: 5000, "lifetime.qeIn": 5000 }),
+      }),
+      expect.objectContaining({ upsert: true })
+    );
+  });
+
+  it("QT is refused when the pool cannot pay for the units", async () => {
+    seatBond();
+    db.collectionMocks.bondMarketPools.findOneAndUpdate.mockResolvedValue(null);
+    await expect(
+      executeMonetaryOperation(db as unknown as Db, {
+        countryId: "US",
+        type: "qt",
+        turn: 12,
+        actorName: "Chair",
+        bondId: bondId.toString(),
+        units: 1,
+      })
+    ).rejects.toThrow(/cannot absorb/);
+    expect(db.collectionMocks.bonds.updateOne).not.toHaveBeenCalled();
   });
 });
 

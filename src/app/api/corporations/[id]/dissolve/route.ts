@@ -21,6 +21,7 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
+import { bondPoolCurrency, debitBondPoolUpTo } from "@/lib/bonds/marketPool";
 import { previewQuickDissolve } from "@/lib/corporation/previewQuickDissolve";
 import {
   cleanupShareMarketActivityForCorporations,
@@ -185,9 +186,18 @@ export async function POST(_request: Request, { params }: RouteParams) {
           if (!h || h.units <= 0) continue;
           const bondCcy = (bond.currencyCode ?? undefined) as CurrencyCode | undefined;
           const bondRate = bondCcy ? (fxByCurrency.get(bondCcy) ?? 1) : 1;
-          const faceAnchor = corpCapitalToAnchor(h.units * BOND_UNIT_FACE_VALUE, bondCcy, bondRate);
+          // Sold to the market pool at the current price, for what the pool
+          // can pay. Pre-pool this credited face value from nowhere.
+          const paidLocal = await debitBondPoolUpTo(
+            db,
+            bondPoolCurrency(bond),
+            h.units * BOND_UNIT_FACE_VALUE * (bond.marketPrice ?? 1),
+            "estateOut",
+            now
+          );
+          const paidAnchor = corpCapitalToAnchor(paidLocal, bondCcy, bondRate);
           assetLiquidationInc += anchorToCorpLiquidCapital(
-            faceAnchor,
+            paidAnchor,
             corporation,
             corpFxRateEarly
           );

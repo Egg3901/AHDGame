@@ -48,6 +48,8 @@ import {
 import { emitBondTurnLedger, snapshotBondHistory, type PartialTxEntry } from "./bondTurnLedger";
 import { autoResolveLingeringDefaults } from "./bondTurnAutoResolve";
 import { applyQePriceSupport } from "@/lib/moneySupply/quantitativeEasing";
+import { bondPoolCurrency, creditBondPool } from "@/lib/bonds/marketPool";
+import { processBondMarketPoolTurn } from "@/lib/bonds/marketPoolTurn";
 
 export interface BondTurnResult {
   bondsProcessed: number;
@@ -86,6 +88,9 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
     );
 
   await issueScheduledSovereignBondSeries(db, turn, now);
+  // Size each currency's bond market pool, let savings flow toward its target,
+  // and refresh its appetite for each sovereign issuer before anyone trades.
+  await processBondMarketPoolTurn(db, turn, now);
   await processSovereignImfFacilityPayments(db, turn);
   await processSovereignRecoveryTurn(db, turn);
   // Auto-repudiate countries whose executive decision window has expired
@@ -215,6 +220,21 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   // see PartialTxEntry in ./bondTurnLedger for the charId/isImperial shape).
   const txBondEntries: PartialTxEntry[] = [];
   const govCouponByCountry = new Map<string, { total: number; currency: CurrencyCode }>();
+  // Cash owed to each currency's bond market pool for the units it holds
+  // (`publicFloat`). Issuers already pay for those units: corporate coupon and
+  // maturity cost below count float units, and the sovereign budget carries
+  // them in debtInterest. Before the pool existed that money vanished.
+  const poolCreditsLocal = new Map<CurrencyCode, { couponsIn: number; maturitiesIn: number }>();
+  function addPoolCredit(
+    currency: CurrencyCode,
+    kind: "couponsIn" | "maturitiesIn",
+    local: number
+  ) {
+    if (!(local > 0)) return;
+    const row = poolCreditsLocal.get(currency) ?? { couponsIn: 0, maturitiesIn: 0 };
+    row[kind] += local;
+    poolCreditsLocal.set(currency, row);
+  }
 
   let couponsPaid = 0;
   let totalCouponsPaid = 0;
@@ -368,8 +388,13 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
       couponsPaid++;
     }
 
+    if (bond.publicFloat > 0) {
+      addPoolCredit(bondPoolCurrency(bond), "couponsIn", couponPerUnitLocal * bond.publicFloat);
+    }
+
     if (isCorporateBond(bond)) {
-      // Also pay coupon to "public float" holders implicitly (AI market maker absorbs)
+      // The coupon on pool-held units is real cost to the issuer and real income
+      // to the pool (credited in Phase 6).
       // Track total coupon cost for issuing corp (₳; Phase 2 converts to issuer-local).
       const corpIdStr = bond.corporationId.toString();
       const totalUnits = bond.holders.reduce((sum, h) => sum + h.units, 0) + bond.publicFloat;
@@ -822,6 +847,17 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
     const bondFxRate = fxByCurrency.get(bondCcy) ?? 1;
     const faceValueUnitAnchor = corpCapitalToAnchor(BOND_UNIT_FACE_VALUE, bondCcy, bondFxRate);
 
+    // Pool-held units are redeemed at face like every other holding. The
+    // corporate issuer was debited for them in Phase 2; the sovereign budget
+    // retires them in settleSovereignBondMaturity below.
+    if (bond.publicFloat > 0) {
+      addPoolCredit(
+        bondPoolCurrency(bond),
+        "maturitiesIn",
+        bond.publicFloat * BOND_UNIT_FACE_VALUE
+      );
+    }
+
     // Return face value to each holder
     for (const holder of bond.holders) {
       const faceValueReturnAnchor = holder.units * faceValueUnitAnchor;
@@ -1007,6 +1043,11 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   // ── Phase 6: Apply all bulk writes ────────────────────────────────────────
   if (bondOps.length > 0) {
     await db.collection("bonds").bulkWrite(bondOps);
+  }
+
+  for (const [currency, credit] of poolCreditsLocal) {
+    await creditBondPool(db, currency, credit.couponsIn, "couponsIn", now);
+    await creditBondPool(db, currency, credit.maturitiesIn, "maturitiesIn", now);
   }
 
   if (fundPaymentsAnchor.size > 0) {

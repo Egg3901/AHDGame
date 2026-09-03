@@ -15,6 +15,9 @@ vi.mock("@/lib/corporations/shareholderOps", () => ({
   debitSharesFromImperial: vi.fn().mockResolvedValue(0),
 }));
 vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn() }));
+vi.mock("@/lib/corporations/commands/shareTrading/fillBestBuyOrder", () => ({
+  fillBestBuyOrderForMarketSell: vi.fn().mockResolvedValue({ filled: false }),
+}));
 // Treasury-backed market maker: by default the issuer treasury covers the
 // buyback so existing sell behavior is preserved. The cap (ok:false) is
 // exercised by a dedicated test below.
@@ -149,7 +152,6 @@ describe("POST /api/corporations/[id]/shares/sell — character seller", () => {
       ok: false,
       error: "Insufficient corporate funds",
     });
-
     const { POST } = await import("./route");
     const req = new Request("http://localhost/api/corporations/abc/shares/sell", {
       method: "POST",
@@ -164,6 +166,83 @@ describe("POST /api/corporations/[id]/shares/sell — character seller", () => {
     // No shares were moved — the gate rejected before the share debit.
     const { debitShares } = await import("@/lib/corporations/shareholderOps");
     expect(debitShares).not.toHaveBeenCalled();
+  });
+
+  it("fills a market sell from an escrowed fund bid before touching the issuer treasury", async () => {
+    const userId = new ObjectId();
+    const charId = new ObjectId();
+    const targetCorpId = new ObjectId();
+    const orderId = new ObjectId();
+
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: userId.toString() },
+    } as any);
+    db.collection("users");
+    db.collectionMocks.users.findOne.mockResolvedValue({
+      _id: userId,
+      activeCharacterId: charId,
+      activeCharacterType: "character",
+    });
+    db.collection("characters");
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: charId,
+      userId,
+      countryId: "US",
+      name: "Seller",
+    });
+
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: {
+        _id: targetCorpId,
+        name: "Acme",
+        countryId: "US",
+        liquidCurrencyCode: "USD",
+        sharePrice: 10,
+        publicFloat: 1_000,
+        totalShares: 10_000,
+        liquidCapital: 0,
+        shareholders: [{ characterId: charId, shares: 100 }],
+        ceoId: new ObjectId(),
+      },
+    } as any);
+    db.collection("shareOrders");
+    db.collectionMocks.shareOrders.find.mockReturnValue({ toArray: async () => [] });
+
+    const { fillBestBuyOrderForMarketSell } =
+      await import("@/lib/corporations/commands/shareTrading/fillBestBuyOrder");
+    vi.mocked(fillBestBuyOrderForMarketSell).mockResolvedValueOnce({
+      filled: true,
+      orderId,
+      shares: 100,
+      proceedsAnchor: 980,
+      proceedsInHomeCurrency: 980,
+      pricePerShareLocal: 9.8,
+    });
+    const { atomicallyDebitCorpLiquidCapital } =
+      await import("@/lib/financialTxLog/atomicCashGuard");
+
+    const { POST } = await import("./route");
+    const req = new Request("http://localhost/api/corporations/abc/shares/sell", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shares: 100, sellAsCorporation: false }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ id: "abc" }) });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      success: true,
+      sharesSold: 100,
+      proceeds: 980,
+      pricePerShare: 9.8,
+      execution: "order_book",
+    });
+    expect(fillBestBuyOrderForMarketSell).toHaveBeenCalled();
+    expect(atomicallyDebitCorpLiquidCapital).not.toHaveBeenCalled();
   });
 
   it("ignores sell orders that already debited the holder balance", async () => {

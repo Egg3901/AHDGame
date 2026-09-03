@@ -186,6 +186,14 @@ export default function BondDetailPage({ params }: { params: Promise<{ id: strin
                     label: "Public Float",
                     value: `${bond.publicFloat.toLocaleString("en-US")} (${bond.publicFloatPercentage.toFixed(1)}%)`,
                   },
+                  ...(bond.marketDepthUnits != null
+                    ? [
+                        {
+                          label: "Market Depth",
+                          value: `${bond.marketDepthUnits.toLocaleString("en-US")} units at bid`,
+                        },
+                      ]
+                    : []),
                   { label: "Issued At Turn", value: `T${bond.issuedAtTurn}` },
                   { label: "Matures At Turn", value: `T${bond.maturityTurn}` },
                   { label: "Coupon / Turn", value: fmtBond(bond.perTurnCoupon) },

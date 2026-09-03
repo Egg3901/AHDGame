@@ -173,9 +173,9 @@ describe("POST /api/bonds/[bondId]/buyback", () => {
     expect(response.status).toBe(200);
     expect(db.collectionMocks.corporations.updateOne).toHaveBeenNthCalledWith(
       1,
-      { _id: corpId, liquidCapital: { $gte: 3000 / ((1 - MARKET_MAKER_SPREAD) * 0.75) } },
+      { _id: corpId, liquidCapital: { $gte: 3060 / ((1 - MARKET_MAKER_SPREAD) * 0.75) } },
       {
-        $inc: { liquidCapital: -(3000 / ((1 - MARKET_MAKER_SPREAD) * 0.75)) },
+        $inc: { liquidCapital: -(3060 / ((1 - MARKET_MAKER_SPREAD) * 0.75)) },
         $set: { updatedAt: expect.any(Date) },
       }
     );

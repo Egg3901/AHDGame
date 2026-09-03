@@ -165,3 +165,124 @@ export function calculateCampaignStrengthLeaderPullbacks(
 
   return pullbacks;
 }
+
+/**
+ * Hard ceiling on the number of single-click steps one batched Support
+ * contribution may bundle. Affordability already bounds a batch, but "Max" on a
+ * whale with a deep action pool would otherwise build an arbitrarily large
+ * request, one arbitrarily large audit row, and an arbitrarily large single
+ * jump in a live race's campaign strength.
+ */
+export const CAMPAIGN_STRENGTH_MAX_BATCH_CLICKS = 100;
+
+/** Click counts the Support control offers besides ×1 and Max. */
+export const CAMPAIGN_STRENGTH_BATCH_STEPS: readonly number[] = [5];
+
+export interface CampaignStrengthBatchQuote {
+  clicks: number;
+  strengthAdded: number;
+  /** Anchor currency, as with campaignStrengthContributionCost. */
+  costFunds: number;
+  costActions: number;
+}
+
+/**
+ * Quote `clicks` identical `strengthPerClick` contributions stacked on top of
+ * `currentStrength`.
+ *
+ * A batch is priced as EXACTLY the run of single clicks it replaces, on both
+ * axes. That equivalence is the whole reason this helper exists rather than the
+ * caller just scaling `strengthAdded`:
+ *
+ * - FUNDS are already additive for free. `campaignStrengthContributionCost` is
+ *   the exact integral of the marginal price curve, and integrals over adjacent
+ *   intervals sum, so one call spanning [current, current + clicks * step]
+ *   equals the sum of the `clicks` separate calls. Nothing to compensate for.
+ * - ACTIONS are not. `campaignStrengthContributionActions` is
+ *   `ceil(added / POINTS_PER_ACTION)`, and ceilings do not add: at 100 national
+ *   influence one click is `ceil(75 / 300) = 1` action, but the merged ×5 form
+ *   is `ceil(375 / 300) = 2` rather than 5. Charging the merged form would sell
+ *   low-influence players a 2.5x action discount for pressing ×5 instead of ×1
+ *   five times, while a player whose single click already exceeds 300 points
+ *   gets no discount at all: reinstating precisely the influence-scaled price
+ *   asymmetry the funds formula above was rewritten to remove. So the action
+ *   cost is `clicks * singleClickActions`.
+ */
+export function campaignStrengthBatchQuote(
+  currentStrength: number | null | undefined,
+  strengthPerClick: number,
+  clicks: number
+): CampaignStrengthBatchQuote {
+  const safeClicks = Math.max(0, Math.floor(clicks));
+  const perClick = Math.max(0, strengthPerClick);
+  const strengthAdded = perClick * safeClicks;
+  return {
+    clicks: safeClicks,
+    strengthAdded,
+    costFunds: campaignStrengthContributionCost(currentStrength, strengthAdded),
+    costActions: campaignStrengthContributionActions(perClick) * safeClicks,
+  };
+}
+
+/**
+ * Largest click count the contributor can actually pay for, for the "Max"
+ * option on the Support control.
+ *
+ * Both cost axes are non-decreasing in `clicks`, so a binary search over the
+ * quote is exact. Client and server call this same function against the same
+ * inputs, so the preview a player confirms is the batch the server runs: but
+ * the server still re-quotes and re-gates the resolved count, because the
+ * campaign's strength (and therefore the funds cost) moves whenever any other
+ * player contributes.
+ *
+ * `availableFunds` is the LOCAL campaign-fund balance and `fundsRate` the
+ * anchor→local rate the caller will charge at, so the search compares like with
+ * like instead of gating a local balance against an anchor price.
+ */
+export function maxAffordableCampaignStrengthClicks(params: {
+  currentStrength: number | null | undefined;
+  strengthPerClick: number;
+  availableFunds: number;
+  availableActions: number;
+  /** Anchor→local conversion applied to the quoted cost. 1 when forex is off. */
+  fundsRate?: number;
+  maxClicks?: number;
+}): number {
+  const {
+    currentStrength,
+    strengthPerClick,
+    availableFunds,
+    availableActions,
+    fundsRate = 1,
+    maxClicks = CAMPAIGN_STRENGTH_MAX_BATCH_CLICKS,
+  } = params;
+
+  const perClick = Math.max(0, strengthPerClick);
+  if (perClick <= 0) return 0;
+
+  const actionsPerClick = campaignStrengthContributionActions(perClick);
+  if (actionsPerClick <= 0) return 0;
+
+  // The action gate is linear, so it gives an exact upper bound for free and
+  // keeps the funds search to a handful of steps.
+  const ceiling = Math.min(
+    Math.max(0, Math.floor(maxClicks)),
+    Math.floor(Math.max(0, availableActions) / actionsPerClick)
+  );
+  if (ceiling <= 0) return 0;
+
+  const affordable = (clicks: number) =>
+    campaignStrengthBatchQuote(currentStrength, perClick, clicks).costFunds * fundsRate <=
+    availableFunds;
+
+  if (affordable(ceiling)) return ceiling;
+
+  let lo = 0;
+  let hi = ceiling;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (affordable(mid)) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
+}

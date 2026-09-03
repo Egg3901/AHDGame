@@ -82,6 +82,7 @@ import { bankEquity, cashBackedDeposits, getCashReserves } from "@/lib/banking/b
 import { applyMoneyMove, type MoneyMoveLeg } from "@/lib/banking/moneyMove";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import type { FederalBudget } from "@/lib/db/types";
+import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 
 /** Budget spending line a deposit insurance backstop is booked against. */
 export const DEPOSIT_INSURANCE_SPENDING_KEY = "depositInsurance";
@@ -416,7 +417,7 @@ export async function returnDepositBook(
 
   await clearDepositAggregates(db, corporationId, options.turn, options.cause);
 
-  return {
+  const result: DepositBookReturnResult = {
     returned: true,
     depositorsFlipped,
     npcReturned: npc,
@@ -429,6 +430,34 @@ export async function returnDepositBook(
     interbankRepaid: interbankPaid,
     interbankWrittenOff: Math.max(0, interbankOwed - interbankPaid),
   };
+  emitBankingAuditEvent(
+    {
+      kind: "bank.resolved",
+      command: `bank.resolve.${options.cause}`,
+      turn: options.turn,
+      outcome: "ok",
+      currency,
+      bankId: bankIdHex,
+      statusBefore: charter.status,
+      statusAfter: "resolved",
+      settlementId: depositBookReturnKey(corporationId, options.cause, options.turn),
+      amount: npc,
+      meta: {
+        cause: options.cause,
+        depositorsFlipped,
+        fromBankCash,
+        fromInsuranceFund,
+        fromTreasury,
+        ownerResidual,
+        centralBankRepaid: centralBankPaid,
+        centralBankWrittenOff: result.centralBankWrittenOff,
+        interbankRepaid: interbankPaid,
+        interbankWrittenOff: result.interbankWrittenOff,
+      },
+    },
+    db
+  );
+  return result;
 }
 
 /**

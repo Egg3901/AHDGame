@@ -6,13 +6,14 @@ import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { getRateCorridors, isOffsetInCorridor } from "@/lib/banking/regulationQ";
-import { isDepositTakingCharter } from "./charterKinds";
+import { charterMay } from "@/lib/banking/rules/capabilities";
 
-/** Floor on effective deposit rate (percent). Provisional - flagged for user review. */
-export const MIN_DEPOSIT_RATE_PERCENT = 0.05;
-
-/** Floor on effective lending rate (percent). Provisional - flagged for user review. */
-export const MIN_LENDING_RATE_PERCENT = 0.1;
+export {
+  MIN_DEPOSIT_RATE_PERCENT,
+  MIN_LENDING_RATE_PERCENT,
+  effectiveBankRatesFromPrime,
+} from "@/lib/banking/rules/rates";
+import { effectiveBankRatesFromPrime } from "@/lib/banking/rules/rates";
 
 export type SetBankRatesResult =
   { ok: true; depositOffset: number; lendingOffset: number } | { ok: false; error: string };
@@ -47,14 +48,14 @@ export async function setBankRates(
   if (!charter || charter.status !== "active") {
     return { ok: false, error: "Corporation has no active bank charter" };
   }
-  if (charter.type === "investment") {
+  if (!charterMay(charter, "setRates")) {
     return {
       ok: false,
-      error: "Investment banks take no deposits and cannot set deposit rates",
+      error:
+        charter.type === "investment"
+          ? "Investment banks take no deposits and cannot set deposit rates"
+          : "Only retail or universal charters can set bank rates",
     };
-  }
-  if (!isDepositTakingCharter(charter)) {
-    return { ok: false, error: "Only retail or universal charters can set bank rates" };
   }
 
   const countryId = getCountryIdForCurrency(charter.currency);
@@ -109,20 +110,4 @@ export async function getEffectiveBankRates(
     .collection<CentralBank>("centralBanks")
     .findOne({ _id: bankId }, { projection: { primeRate: 1 } });
   return effectiveBankRatesFromPrime(charter, bank?.primeRate);
-}
-
-/**
- * Pure counterpart for callers that already hold the CB doc (the banking turn
- * bulk-loads every central bank anyway) — no per-charter findOne.
- */
-export function effectiveBankRatesFromPrime(
-  charter: BankCharter,
-  primeRateRaw: number | undefined | null
-): { depositRatePercent: number; lendingRatePercent: number } {
-  const primeRate =
-    typeof primeRateRaw === "number" && Number.isFinite(primeRateRaw) ? primeRateRaw : 0;
-  return {
-    depositRatePercent: Math.max(MIN_DEPOSIT_RATE_PERCENT, primeRate + charter.depositOffset),
-    lendingRatePercent: Math.max(MIN_LENDING_RATE_PERCENT, primeRate + charter.lendingOffset),
-  };
 }
