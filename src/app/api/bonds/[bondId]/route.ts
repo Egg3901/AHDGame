@@ -9,6 +9,7 @@ import type { Character } from "@/lib/db/types/character";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { bulkFetchCharacterNames } from "@/lib/db/characterLookup";
 import { BOND_UNIT_FACE_VALUE, BOND_MATURITY_LABELS } from "@/lib/db/types/bond";
+import { loadBondQuote } from "@/lib/bonds/marketPool";
 import type { BondMaturityTurns } from "@/lib/db/types/bond";
 import { getGameState } from "@/lib/gameState";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
@@ -346,6 +347,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const latestHistory = priceHistory.length > 0 ? priceHistory[priceHistory.length - 1] : null;
     const totalInterestPaid = latestHistory?.totalInterestPaid ?? 0;
 
+    const quote = await loadBondQuote(db, bond);
+
     return NextResponse.json({
       bond: {
         _id: bond._id.toString(),
@@ -377,6 +380,11 @@ export async function GET(_request: Request, { params }: RouteParams) {
         publicFloat: bond.publicFloat,
         heldUnits,
         publicFloatPercentage: totalUnits > 0 ? (bond.publicFloat / totalUnits) * 100 : 0,
+        // The market pool's live quote. Buys settle at the ask, sells at the
+        // bid, and the pool can only buy `marketDepthUnits` right now.
+        bidPricePerUnit: quote.bidPerUnit,
+        askPricePerUnit: quote.askPerUnit,
+        marketDepthUnits: quote.depthUnitsAtBid,
         defaulted: bond.defaulted,
         defaultedAtTurn: bond.defaultedAtTurn,
         defaultCure: bond.defaultCure ?? null,

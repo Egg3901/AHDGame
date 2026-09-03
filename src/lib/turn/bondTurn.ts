@@ -49,6 +49,7 @@ import { emitBondTurnLedger, snapshotBondHistory, type PartialTxEntry } from "./
 import { autoResolveLingeringDefaults } from "./bondTurnAutoResolve";
 import { applyQePriceSupport } from "@/lib/moneySupply/quantitativeEasing";
 import { bondPoolCurrency, creditBondPool } from "@/lib/bonds/marketPool";
+import { processBondMarketPoolTurn } from "@/lib/bonds/marketPoolTurn";
 
 export interface BondTurnResult {
   bondsProcessed: number;
@@ -87,6 +88,9 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
     );
 
   await issueScheduledSovereignBondSeries(db, turn, now);
+  // Size each currency's bond market pool, let savings flow toward its target,
+  // and refresh its appetite for each sovereign issuer before anyone trades.
+  await processBondMarketPoolTurn(db, turn, now);
   await processSovereignImfFacilityPayments(db, turn);
   await processSovereignRecoveryTurn(db, turn);
   // Auto-repudiate countries whose executive decision window has expired

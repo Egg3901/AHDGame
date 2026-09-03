@@ -1,13 +1,12 @@
 import type { Db, ObjectId } from "mongodb";
 import type { Bond, IndexFund } from "@/lib/db/types";
-import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { corpCapitalToAnchor, loadFxRatesRecord } from "@/lib/currency/corporationCapital";
 import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
 import { insertFundTransaction } from "@/lib/indexFunds/fundQueries";
 import { sovereignBondCapError } from "@/lib/bonds/holderCap";
-import { creditBondPool } from "@/lib/bonds/marketPool";
+import { creditBondPool, loadBondQuote } from "@/lib/bonds/marketPool";
 
 export type PurchaseBondUnitsForFundResult =
   { ok: true; units: number; costAnchor: number; bondId: ObjectId } | { ok: false; reason: string };
@@ -67,7 +66,8 @@ export async function purchaseBondUnitsForFund(
   const fxRates = await loadFxRatesRecord(db);
   const bondFxRate =
     fxRates[bondCurrency] && fxRates[bondCurrency]! > 0 ? fxRates[bondCurrency]! : 1;
-  const costLocal = wholeUnits * BOND_UNIT_FACE_VALUE * bond.marketPrice;
+  const quote = await loadBondQuote(db, bond);
+  const costLocal = wholeUnits * quote.askPerUnit;
   const costAnchor =
     Math.round(corpCapitalToAnchor(costLocal, bondCurrency, bondFxRate) * 100) / 100;
   if (costAnchor <= 0) return { ok: false, reason: "zero_cost" };
@@ -76,7 +76,7 @@ export async function purchaseBondUnitsForFund(
   if (!debit.ok) return { ok: false, reason: "insufficient_fund_cash" };
 
   const now = new Date();
-  const pricePerUnit = BOND_UNIT_FACE_VALUE * bond.marketPrice;
+  const pricePerUnit = quote.askPerUnit;
   try {
     const reserved = await reserveBondUnitsForHolder(
       db,

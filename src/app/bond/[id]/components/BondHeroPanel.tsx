@@ -98,6 +98,12 @@ export function BondHeroPanel({
               {bond.matured ? "Matured" : `${bond.turnsRemaining} turns remaining`}
               <span className="mx-1.5 text-card-border">·</span>
               {bond.publicFloat.toLocaleString("en-US")} units anyone can buy
+              {bond.marketDepthUnits != null && (
+                <>
+                  <span className="mx-1.5 text-card-border">·</span>
+                  market will buy up to {bond.marketDepthUnits.toLocaleString("en-US")} units
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -129,6 +135,15 @@ export function BondHeroPanel({
             { label: "Face Value", value: fmtBondPrice(bond.faceValue) },
             { label: "Coupon Rate", value: `${bond.couponRate.toFixed(2)}%` },
             { label: "Market Price", value: fmtBondPrice(bond.pricePerUnit) },
+            ...(bond.bidPricePerUnit != null && bond.askPricePerUnit != null
+              ? [
+                  {
+                    label: "Bid / Ask",
+                    value: `${fmtBondPrice(bond.bidPricePerUnit)} / ${fmtBondPrice(bond.askPricePerUnit)}`,
+                    hint: "What the market pays you for a unit, and what it charges. The gap is the dealer's spread; both move down when the market is short of cash or wary of the issuer.",
+                  },
+                ]
+              : []),
             { label: "Maturity", value: bond.matured ? "Matured" : `${bond.turnsRemaining} turns` },
             { label: "Total Units", value: bond.totalUnits.toLocaleString("en-US") },
             {
