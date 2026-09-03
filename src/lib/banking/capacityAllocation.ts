@@ -8,6 +8,7 @@ import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { getStrategy } from "@/lib/constants/sectorStrategies";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
+import { charterMay } from "@/lib/banking/rules/capabilities";
 
 /**
  * Default share of financial-sector capacity allocated to the branch network
@@ -137,7 +138,7 @@ export function commodityProductionCapacityScale(
   // commodity output to branches that are legally barred from taking a deposit.
   // It was a pure loss with no corresponding business, and the single cheapest
   // thing making the charter unviable.
-  if (!isDepositTakingCharter(charter)) return 1;
+  if (!charterMay(charter, "branchNetwork")) return 1;
   return Math.max(0, 1 - getBranchCapacityShare(charter));
 }
 

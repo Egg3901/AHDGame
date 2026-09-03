@@ -30,6 +30,7 @@ import { roundSavingsAmount, savingsApyPercent } from "@/lib/currency/savingsInt
 import { discountWindowRatePercent } from "@/lib/banking/discountWindow";
 import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { isDepositTakingCharter, isNamedLendingCharter } from "@/lib/banking/charterKinds";
+import { charterMay } from "@/lib/banking/rules/capabilities";
 import { getCashReserves, bankEquity } from "@/lib/banking/bankCash";
 import { processDeadBankLoans } from "@/lib/banking/deadBankLoans";
 import {
@@ -171,9 +172,9 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   const loanBookOnly: LoanBookOnlyBank[] = [];
   for (const corp of corps) {
     const charter = corp.bankCharter;
-    if (!isNamedLendingCharter(charter)) continue;
+    if (!charter || !charterMay(charter, "serviceLoanBook")) continue;
     if (charter.lastBankingTurn === turn) continue;
-    if (isDepositTakingCharter(charter)) {
+    if (charterMay(charter, "acceptNpcFunding")) {
       const cb = cbById.get(getBankId(getCountryIdForCurrency(charter.currency)));
       const rates = effectiveBankRatesFromPrime(charter, cb?.primeRate);
       depositTakers.push({ corp, charter, rates });

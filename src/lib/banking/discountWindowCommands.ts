@@ -15,6 +15,7 @@ import { getBankId } from "@/lib/centralBank/helpers";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { canDraw, discountWindowRatePercent, quoteDiscountWindow } from "./discountWindow";
+import { charterMay } from "@/lib/banking/rules/capabilities";
 
 export type WindowResult =
   | { ok: false; error: string; status: number }
@@ -192,7 +193,7 @@ export async function quoteWindowForCorp(
   corp: Pick<Corporation, "bankCharter">
 ): Promise<{ capAnchor: number; headroomAnchor: number; ratePercent: number } | null> {
   const charter = corp.bankCharter;
-  if (!charter || charter.status !== "active" || charter.type === "investment") return null;
+  if (!charterMay(charter, "discountWindow")) return null;
   const prime = await primeRateFor(db, charter.currency as CurrencyCode);
   return quoteDiscountWindow(charter, prime);
 }

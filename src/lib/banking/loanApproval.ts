@@ -3,10 +3,14 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { BankLoan } from "@/lib/db/types/bank";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { Character } from "@/lib/db/types/character";
-import { disburseNamedLoan, buildFundConstituentResolver } from "@/lib/banking/lending";
+import {
+  disburseNamedLoan,
+  buildFundConstituentResolver,
+  namedLoanHeadroom,
+} from "@/lib/banking/lending";
 import { isBlockedBorrower } from "@/lib/banking/blacklist";
 import { isNamedLendingCharter } from "@/lib/banking/charterKinds";
-import { getReserveRequirement, getLendableHeadroom } from "@/lib/banking/reserves";
+import { getReserveRequirement } from "@/lib/banking/reserves";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { sendSystemMail } from "@/lib/mail/systemMail";
 
@@ -113,7 +117,7 @@ export async function acceptLoan(
 
   // Re-check headroom and blacklist at decision time.
   const reserveRatio = await getReserveRequirement(db, charter.currency as CurrencyCode);
-  const headroom = getLendableHeadroom(charter, reserveRatio);
+  const headroom = namedLoanHeadroom(charter, reserveRatio);
   if (loan.outstanding > headroom) {
     return { ok: false, error: "Insufficient lendable headroom to fund this loan now" };
   }

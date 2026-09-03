@@ -5,7 +5,7 @@ import type { SavingsHolder } from "@/lib/db/types/bank";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { isBlockedDepositor } from "@/lib/banking/blacklist";
 import { getBankDepositCeiling } from "@/lib/banking/capacityAllocation";
-import { isDepositTakingCharter } from "./charterKinds";
+import { charterMay } from "@/lib/banking/rules/capabilities";
 
 export type MoveCharacterSavingsResult =
   { ok: true; holder: SavingsHolder } | { ok: false; error: string };
@@ -140,7 +140,7 @@ export async function moveCharacterSavings(
     if (!targetBank) {
       return { ok: false, error: "Bank corporation not found" };
     }
-    if (!isDepositTakingCharter(targetBank.bankCharter)) {
+    if (!charterMay(targetBank.bankCharter, "acceptPlayerDeposits")) {
       return {
         ok: false,
         error: "Target bank must have an active retail or universal charter",

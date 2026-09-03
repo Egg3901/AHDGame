@@ -29,6 +29,7 @@
 
 import type { BankCharter } from "@/lib/db/types/bank";
 import { cashBackedDeposits } from "@/lib/banking/balanceSheet";
+import { charterTypeMay } from "@/lib/banking/rules/capabilities";
 
 /**
  * Penalty over prime, in percentage points. Deliberately above the CB margin
@@ -93,7 +94,9 @@ export function canDraw(
   primeRate: number
 ): { ok: true; quote: DiscountWindowQuote } | { ok: false; reason: DiscountWindowDenial } {
   if (charter.status !== "active") return { ok: false, reason: "charter_inactive" };
-  if (charter.type === "investment") return { ok: false, reason: "not_deposit_taking" };
+  if (!charterTypeMay(charter.type, "discountWindow")) {
+    return { ok: false, reason: "not_deposit_taking" };
+  }
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, reason: "invalid_amount" };
 
   const quote = quoteDiscountWindow(charter, primeRate);

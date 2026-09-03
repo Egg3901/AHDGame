@@ -18,6 +18,7 @@ import { returnDepositBook } from "@/lib/banking/depositBookReturn";
 import { clampOffsets, getRateCorridors } from "@/lib/banking/regulationQ";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { getCurrentTurn } from "@/lib/currentTurn";
+import { charterTypeMay } from "@/lib/banking/rules/capabilities";
 
 /**
  * Charter capital as a multiple of the corporation founding cost.
@@ -422,11 +423,11 @@ const SWITCH_BLOCKER_MESSAGE: Record<CharterSwitchBlocker, string> = {
 };
 
 function takesDeposits(type: BankCharterType): boolean {
-  return type === "retail" || type === "universal";
+  return charterTypeMay(type, "acceptPlayerDeposits");
 }
 
 function mayBorrowOnMargin(type: BankCharterType): boolean {
-  return type === "investment" || type === "universal";
+  return charterTypeMay(type, "centralBankMargin");
 }
 
 /**

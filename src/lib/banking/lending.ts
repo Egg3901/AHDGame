@@ -27,7 +27,8 @@ import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import { estimatePerTurnCurrencyIncomeHomeFace } from "@/lib/lineOfCredit/currencyIncomeEstimate";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { getCurrentTurn } from "@/lib/currentTurn";
-import { isLendingCharter, isNamedLendingCharter } from "./charterKinds";
+import { isNamedLendingCharter } from "./charterKinds";
+import { charterMay } from "@/lib/banking/rules/capabilities";
 
 export { CHARACTER_LOAN_SPREAD_PP };
 
@@ -212,6 +213,26 @@ export async function characterIncomeInLoanCurrency(
 }
 
 /**
+ * Cash a bank may put behind a NEW named loan.
+ *
+ * A bank funded by deposits lends the lendable share of its deposit base after
+ * the reserve requirement and the loans already out. A bank with no deposit
+ * base (an investment charter) lends its own cash less what it has lent. One
+ * rule, read by origination and by the CEO's later approval alike: the
+ * approval path used to apply the deposit rule to every charter, so a loan an
+ * investment bank had been allowed to park as pending could never be accepted.
+ */
+export function namedLoanHeadroom(
+  charter: Pick<BankCharter, "type" | "status" | "npcDeposits" | "totalLoans" | "cashReserves">,
+  reserveRatio: number
+): number {
+  if (charterMay(charter, "acceptNpcFunding")) {
+    return getLendableHeadroom(charter, reserveRatio);
+  }
+  return Math.max(0, getCashReserves(charter) - Math.max(0, charter.totalLoans ?? 0));
+}
+
+/**
  * Originate a named player loan. Objective auto-approval (no seat).
  *
  * Writes the BankLoan doc first, then $inc's charter.totalLoans and credits
@@ -260,7 +281,7 @@ export async function originateLoan(
   if (!isNamedLendingCharter(charter)) {
     return { ok: false, error: "Corporation has no active bank charter" };
   }
-  if (borrower.type === "character" && !isLendingCharter(charter)) {
+  if (borrower.type === "character" && !charterMay(charter, "namedCharacterLending")) {
     return {
       ok: false,
       error: "An investment charter lends to corporations, not to individuals",
@@ -313,10 +334,7 @@ export async function originateLoan(
 
   const reserveRatio = await getReserveRequirement(db, currency);
   const cashReserves = getCashReserves(charter);
-  const headroom =
-    charter.type === "investment"
-      ? Math.max(0, cashReserves - (charter.totalLoans ?? 0))
-      : getLendableHeadroom(charter, reserveRatio);
+  const headroom = namedLoanHeadroom(charter, reserveRatio);
   const committedPaymentPerTurn = await committedNamedLoanPaymentPerTurn(
     db,
     borrower,

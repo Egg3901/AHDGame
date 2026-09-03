@@ -1,4 +1,5 @@
 import type { BankCharter } from "@/lib/db/types/bank";
+import { charterMay } from "@/lib/banking/rules/capabilities";
 
 /**
  * What a bank charter is allowed to do.
@@ -23,11 +24,10 @@ import type { BankCharter } from "@/lib/db/types/bank";
  * are checking.
  */
 export function isDepositTakingCharter(charter: BankCharter | undefined): charter is BankCharter {
-  return (
-    charter != null &&
-    charter.status === "active" &&
-    (charter.type === "retail" || charter.type === "universal")
-  );
+  // Structural answer only: the kill switches are checked by the caller, as
+  // they always were. The table in `rules/capabilities.ts` is the one place
+  // the charter types are named.
+  return charterMay(charter, "acceptPlayerDeposits");
 }
 
 /**
@@ -38,7 +38,7 @@ export function isDepositTakingCharter(charter: BankCharter | undefined): charte
  * no deposits has nothing to lend households.
  */
 export function isLendingCharter(charter: BankCharter | undefined): charter is BankCharter {
-  return isDepositTakingCharter(charter);
+  return charterMay(charter, "householdLending");
 }
 
 /**
@@ -57,5 +57,5 @@ export function isLendingCharter(charter: BankCharter | undefined): charter is B
  * loan is funded from the bank's own capital, which they do have.
  */
 export function isNamedLendingCharter(charter: BankCharter | undefined): charter is BankCharter {
-  return charter != null && charter.status === "active";
+  return charterMay(charter, "serviceLoanBook");
 }

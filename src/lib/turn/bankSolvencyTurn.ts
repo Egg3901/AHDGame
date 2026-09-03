@@ -23,6 +23,7 @@ import {
 import { getReserveRequirement } from "@/lib/banking/reserves";
 import { discountWindowStigma } from "@/lib/banking/discountWindow";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
+import { charterMay } from "@/lib/banking/rules/capabilities";
 
 /**
  * Provisional - fraction of npcDeposits that flee per solvency turn by band.
@@ -71,11 +72,7 @@ const ZERO_SUMMARY: BankSolvencyTurnSummary = {
 };
 
 function isPropRunningCharter(charter: BankCharter | undefined): charter is BankCharter {
-  return (
-    charter != null &&
-    charter.status === "active" &&
-    (charter.type === "investment" || charter.type === "universal")
-  );
+  return charterMay(charter, "proprietaryTrading");
 }
 
 type EvalResult = {
