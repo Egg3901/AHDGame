@@ -37,6 +37,7 @@ interface CurrencyRow {
   centralBankUnits: number;
   held: Record<HolderKind, number>;
   neverBought: number;
+  unsoldUnits: number;
   poolCouponPerTurnLocal: number;
   poolCash: number | null;
   poolTarget: number | null;
@@ -117,6 +118,7 @@ async function main() {
         centralBankUnits: 0,
         held: { character: 0, imperial: 0, corporation: 0, fund: 0, npp: 0 },
         neverBought: 0,
+        unsoldUnits: 0,
         poolCouponPerTurnLocal: 0,
         poolCash: pool ? pool.cashLocal : null,
         poolTarget: pool ? pool.targetCashLocal : null,
@@ -138,6 +140,7 @@ async function main() {
       if (kind) row.held[kind] += h.units ?? 0;
     }
     if (heldUnits === 0) row.neverBought++;
+    row.unsoldUnits += bond.unsoldUnits ?? 0;
     if (!bond.defaulted) {
       row.poolCouponPerTurnLocal +=
         (((bond.couponRate ?? 0) / 100) * BOND_UNIT_FACE_VALUE * (bond.publicFloat ?? 0)) /
@@ -194,7 +197,7 @@ async function main() {
     const fmt = (n: number | null) => (n == null ? "-" : Math.round(n).toLocaleString("en-US"));
     console.log(`Bond market audit, turn ${report.turn}`);
     console.log(
-      "ccy      series(def)  units          pool%   pool units     char      corp       fund      npp    never  coupon/turn->pool  pool cash        target          drift"
+      "ccy      series(def)  units          pool%   pool units     char      corp       fund      npp    never   unsold  coupon/turn->pool  pool cash        target          drift"
     );
     for (const r of report.currencies) {
       const drift =
@@ -211,6 +214,7 @@ async function main() {
           fmt(r.held.fund).padStart(10),
           fmt(r.held.npp).padStart(8),
           String(r.neverBought).padStart(6),
+          fmt(r.unsoldUnits).padStart(8),
           fmt(r.poolCouponPerTurnLocal).padStart(18),
           fmt(r.poolCash).padStart(16),
           fmt(r.poolTarget).padStart(15),

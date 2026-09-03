@@ -38,6 +38,8 @@
     "migrate:npp-avatars": "npx tsx scripts/migrations/backfill-npp-avatars.ts",
     "migrate:fix-character-userid-index": "npx tsx scripts/migrations/fix-characters-userid-index.ts",
     "migrate:sovereign-crises": "npx tsx scripts/migrations/migrate-sovereign-crises.ts",
+    "migrate:savings-accounts:dry-run": "npx tsx scripts/migrations/savings-accounts-dry-run.ts",
+    "migrate:savings-accounts": "npx tsx scripts/migrations/savings-accounts-migrate.ts",
     "migrate:perf-indexes": "npx tsx scripts/migrations/add-perf-indexes.ts",
     "migrate:archetype-buckets:dry": "npx tsx scripts/migrations/2026-08-19-archetype-values-to-buckets.ts",
     "migrate:archetype-buckets": "npx tsx scripts/migrations/2026-08-19-archetype-values-to-buckets.ts --apply",

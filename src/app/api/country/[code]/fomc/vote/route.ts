@@ -12,7 +12,7 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError, badRequest, forbidden, notFound } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
-import { getCentralBankScope } from "@/lib/centralBank/helpers";
+import { resolveJurisdiction } from "@/lib/monetaryGovernance/jurisdiction";
 import { getGameState } from "@/lib/gameState";
 import { castFomcBallot } from "@/lib/turn/fomcMeetingTurn";
 
@@ -41,7 +41,7 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
 
     const db = await getDb();
-    const { bankId } = await getCentralBankScope(db, countryId);
+    const { institutionId: bankId } = await resolveJurisdiction(db, countryId);
     const gameState = await getGameState();
     const currentTurn = gameState?.currentTurn ?? 0;
 

@@ -553,6 +553,13 @@ export interface FederalBudget {
   // Trigger tracking
   failedAuctionConsecutiveCount?: number;
   lastAuctionDemandRatio?: number;
+  /**
+   * Latest quarterly primary auction: placed / requested units, and the turn
+   * it ran. The crisis classifier takes the lower of this and the synthetic
+   * demand ratio, so a market that could not absorb the paper counts.
+   */
+  lastPrimaryFillRatio?: number;
+  lastPrimaryAuctionTurn?: number;
 
   // Crisis lifecycle
   crisisFiredAt?: TurnAndRealtime | null;

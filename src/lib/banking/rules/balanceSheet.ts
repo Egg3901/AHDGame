@@ -93,7 +93,24 @@ type BorrowingCharter = Pick<
  * liability field is added in one place and every line picks it up.
  */
 export type BalanceSheetCharter = BorrowingCharter &
-  Pick<BankCharter, "npcDeposits" | "cashReserves" | "totalLoans" | "propBookMarkValue">;
+  Pick<
+    BankCharter,
+    "npcDeposits" | "playerDeposits" | "cashReserves" | "totalLoans" | "propBookMarkValue"
+  >;
+
+/**
+ * Whether player savings held at the bank count as cash-backed liabilities.
+ *
+ * False is the legacy pointer model: no cash arrived, so no liability. True
+ * is the account model, where the backing cash was transferred into the vault
+ * when the holder changed and the bank genuinely owes the balance. The switch
+ * is per currency (see the banking policy's read cohort) and every line below
+ * honours it, so a bank's reserve requirement, equity, ceiling and run line
+ * all move together the turn a currency switches.
+ */
+export interface BalanceSheetOptions {
+  playerDepositsAreLiabilities?: boolean;
+}
 
 function finite(value: number | null | undefined): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -138,9 +155,13 @@ export function getCashReserves(
  * pointer balances are excluded because no cash ever arrived for them.
  */
 export function cashBackedDeposits(
-  charter: Pick<BankCharter, "npcDeposits"> | null | undefined
+  charter: Pick<BankCharter, "npcDeposits" | "playerDeposits"> | null | undefined,
+  options: BalanceSheetOptions = {}
 ): number {
-  return nonNegative(charter?.npcDeposits);
+  return (
+    nonNegative(charter?.npcDeposits) +
+    (options.playerDepositsAreLiabilities ? nonNegative(charter?.playerDeposits) : 0)
+  );
 }
 
 /**
@@ -158,10 +179,11 @@ export function pointerDeposits(
 
 /** Reserves the bank must retain: `cashBackedDeposits x reserveRatio`. */
 export function requiredReserves(
-  charter: Pick<BankCharter, "npcDeposits"> | null | undefined,
-  reserveRatio: number
+  charter: Pick<BankCharter, "npcDeposits" | "playerDeposits"> | null | undefined,
+  reserveRatio: number,
+  options: BalanceSheetOptions = {}
 ): number {
-  return cashBackedDeposits(charter) * nonNegative(reserveRatio);
+  return cashBackedDeposits(charter, options) * nonNegative(reserveRatio);
 }
 
 /**
@@ -176,9 +198,13 @@ export function requiredReserves(
  * leaving it out was equity overstated by exactly the amount the bank could not
  * afford to pay.
  */
-export function bankEquity(charter: BalanceSheetCharter | null | undefined): number {
+export function bankEquity(
+  charter: BalanceSheetCharter | null | undefined,
+  options: BalanceSheetOptions = {}
+): number {
   const assets = getCashReserves(charter) + nonNegative(charter?.totalLoans);
-  const liabilities = cashBackedDeposits(charter) + totalBorrowings(borrowingsFromCharter(charter));
+  const liabilities =
+    cashBackedDeposits(charter, options) + totalBorrowings(borrowingsFromCharter(charter));
   return assets - liabilities;
 }
 
@@ -207,7 +233,7 @@ export const NPC_DEPOSIT_MAX_EQUITY_LEVERAGE = 12;
 /** Cash below this share of required reserves fails a red-banded bank. */
 export const RUN_FAILURE_COVER_FRACTION = 0.5;
 
-export interface BankBalanceSheetInput {
+export interface BankBalanceSheetInput extends BalanceSheetOptions {
   charter: BalanceSheetCharter & Pick<BankCharter, "totalDeposits" | "capitalStanding">;
   /** Reserve requirement for the charter currency, 0..1. */
   reserveRatio: number;
@@ -226,9 +252,11 @@ export interface BankBalanceSheetInput {
  */
 export interface BankBalanceSheet {
   cashReserves: number;
-  /** NPC household deposits: real cash, real liability. */
+  /** Cash-backed deposits: household, plus player once the currency's accounts are live. */
   cashBackedDeposits: number;
-  /** Player savings pointed at this bank: no cash, no liability. */
+  /** Player savings the bank owes as real liabilities (0 under the pointer model). */
+  playerDeposits: number;
+  /** Player savings pointed at this bank under the pointer model: no cash, no liability. */
   pointerDeposits: number;
   totalLoans: number;
   propBookMarkValue: number;
@@ -261,13 +289,16 @@ export interface BankBalanceSheet {
 
 export function bankBalanceSheet(input: BankBalanceSheetInput): BankBalanceSheet {
   const charter = input.charter;
+  const options: BalanceSheetOptions = {
+    playerDepositsAreLiabilities: input.playerDepositsAreLiabilities === true,
+  };
   const cash = getCashReserves(charter);
-  const npc = cashBackedDeposits(charter);
+  const npc = cashBackedDeposits(charter, options);
   const loans = nonNegative(charter?.totalLoans);
   const borrowings = borrowingsFromCharter(charter);
   const borrowed = totalBorrowings(borrowings);
-  const equity = bankEquity(charter);
-  const required = requiredReserves(charter, input.reserveRatio);
+  const equity = bankEquity(charter, options);
+  const required = requiredReserves(charter, input.reserveRatio, options);
   const reserveSurplus = cash - required;
 
   const capacityCeiling = nonNegative(input.capacityCeiling);
@@ -288,7 +319,8 @@ export function bankBalanceSheet(input: BankBalanceSheetInput): BankBalanceSheet
   return {
     cashReserves: cash,
     cashBackedDeposits: npc,
-    pointerDeposits: pointerDeposits(charter),
+    playerDeposits: options.playerDepositsAreLiabilities ? nonNegative(charter?.playerDeposits) : 0,
+    pointerDeposits: options.playerDepositsAreLiabilities ? 0 : pointerDeposits(charter),
     totalLoans: loans,
     propBookMarkValue: nonNegative(charter?.propBookMarkValue),
     borrowings,

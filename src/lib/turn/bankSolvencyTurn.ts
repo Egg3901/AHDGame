@@ -4,7 +4,8 @@ import type { BankCharter, BankLoan, InterbankLoan } from "@/lib/db/types/bank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
-import { loadBankingPolicy } from "@/lib/banking/policy";
+import { loadBankingPolicy, type BankingPolicySnapshot } from "@/lib/banking/policy";
+import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 import { recordBankingStage } from "@/lib/banking/telemetry";
 import { archiveCharter } from "@/lib/banking/charterHistory";
@@ -131,7 +132,7 @@ export async function processBankSolvencyTurn(
 
     const solvencyStarted = Date.now();
     for (const corp of candidates) {
-      const result = await evaluateOneBank(db, turn, corp, reserveByCurrency, propEnabled);
+      const result = await evaluateOneBank(db, turn, corp, reserveByCurrency, policy);
       if (!result) continue;
       evals.push(result.row);
       summary.banksEvaluated += 1;
@@ -258,8 +259,9 @@ async function evaluateOneBank(
   turn: number,
   corp: Corporation,
   reserveByCurrency: Map<CurrencyCode, number>,
-  propEnabled: boolean
+  policy: BankingPolicySnapshot
 ): Promise<{ row: EvalResult; forcedLiquidation: boolean } | null> {
+  const propEnabled = policy.propTrading;
   const live = await db
     .collection<Corporation>("corporations")
     .findOne({ _id: corp._id }, { projection: { liquidCapital: 1, bankCharter: 1 } });
@@ -332,15 +334,21 @@ async function evaluateOneBank(
     cashReserves,
     postedCapital,
     // The cash-backed base. Player pointer deposits are excluded for the same
-    // reason they are excluded from the reserve requirement.
-    cashBackedDeposits: Math.max(0, npcDeposits),
+    // reason they are excluded from the reserve requirement; once the
+    // currency's savings accounts are authoritative they are cash the bank
+    // holds and a liability it owes, and they count.
+    cashBackedDeposits:
+      Math.max(0, npcDeposits) +
+      (savingsReadsAuthoritative(policy, currency) ? Math.max(0, charter.playerDeposits ?? 0) : 0),
     totalLoans,
     reserveRatioRequired,
     arrearsOutstanding,
     defaultsLastTurn,
     panicTurns: panicTurnsBefore,
     forcedLiquidation,
-    discountWindowStigma: discountWindowStigma(charter),
+    discountWindowStigma: discountWindowStigma(charter, {
+      playerDepositsAreLiabilities: savingsReadsAuthoritative(policy, currency),
+    }),
   });
 
   let fled = 0;
@@ -420,7 +428,12 @@ async function evaluateOneBank(
     fails = depositTakerFails({
       priorBand,
       cashReserves,
-      requiredLiquidity: reserveRatioRequired * npcDeposits,
+      requiredLiquidity:
+        reserveRatioRequired *
+        (npcDeposits +
+          (savingsReadsAuthoritative(policy, currency)
+            ? Math.max(0, charter.playerDeposits ?? 0)
+            : 0)),
     });
   } else if (propRunning) {
     // Investment banks: red band + insolvent equity base.

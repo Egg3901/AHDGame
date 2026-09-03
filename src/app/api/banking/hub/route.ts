@@ -13,8 +13,10 @@ import {
 import { currencyCentralBankUrl } from "@/lib/urls";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { loadBankingPolicy } from "@/lib/banking/policy";
+import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
+import { lifecycleStage } from "@/lib/banking/rules/lifecycle";
 import { getEffectiveBankRates } from "@/lib/banking/rates";
-import { getCashReserves } from "@/lib/banking/bankCash";
+import { cashBackedDeposits, getCashReserves } from "@/lib/banking/bankCash";
 import { getLendableHeadroom, getReserveRequirement } from "@/lib/banking/reserves";
 import {
   averageCorpIncomePerTurn,
@@ -213,13 +215,18 @@ async function handleGET() {
             currency: charter.currency,
             operatorType: corp.ceoType === "npp" ? "npp" : "player",
             charterType: charter.type,
+            stage: lifecycleStage(charter),
             depositRatePercent: rates.depositRatePercent,
             lendingRatePercent: rates.lendingRatePercent,
             warningBand: charter.warningBand ?? null,
             confidence: typeof charter.confidence === "number" ? charter.confidence : null,
-            totalDeposits: charter.totalDeposits ?? 0,
+            totalDeposits: savingsReadsAuthoritative(policy, charter.currency)
+              ? cashBackedDeposits(charter, { playerDepositsAreLiabilities: true })
+              : (charter.totalDeposits ?? 0),
             cashReserves: getCashReserves(charter),
-            lendableHeadroom: getLendableHeadroom(charter, reserveRatio),
+            lendableHeadroom: getLendableHeadroom(charter, reserveRatio, {
+              playerDepositsAreLiabilities: savingsReadsAuthoritative(policy, charter.currency),
+            }),
             href: `/corporation/${corporationPathIdFromDoc({
               _id: corp._id as ObjectId,
               sequentialId: corp.sequentialId,

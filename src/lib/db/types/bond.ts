@@ -58,8 +58,18 @@ export interface Bond {
   marketPrice: number;
   /** Total amount still outstanding (face value × number of units issued) */
   totalIssued: number;
-  /** Units available for purchase from the AI market maker */
+  /** Units held by the currency's bond market pool (see `BondMarketPool`). */
   publicFloat: number;
+  /**
+   * Primary market (phase 3). `requestedUnits` is what the issuer asked for at
+   * issuance; `unsoldUnits` is the part the pool could not underwrite and that
+   * is still placing turn by turn. Unsold units are NOT debt: they are outside
+   * `totalIssued`, earn no coupon, and do not count toward the unit invariant.
+   * `primaryFillRatio` is placed / requested at issuance, kept for the record.
+   */
+  requestedUnits?: number;
+  unsoldUnits?: number;
+  primaryFillRatio?: number;
   /** Units held off-market by the issuing currency's central bank through QE. */
   centralBankHoldings?: number;
   /** Central-bank share of outstanding units, used as persistent price support. */

@@ -23,6 +23,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { BOND_POOL_M2_SHARE, creditBondPool, debitBondPoolGated } from "@/lib/bonds/marketPool";
 import { loadCountrySovereignSnapshot } from "@/lib/sovereignDefault/snapshotLoader";
 import { computeMarketDemand } from "@/lib/sovereignDefault/marketDemand";
+import { SOVEREIGN_ISSUANCE_INTERVAL_TURNS } from "@/lib/bonds/sovereign";
 
 /** Share of the shortfall against target that flows in per turn. */
 export const BOND_POOL_INFLOW_RATE = 0.02;
@@ -64,6 +65,28 @@ export function countriesForCurrency(currency: CurrencyCode): CountryId[] {
     .map(([countryId]) => countryId);
 }
 
+/** Face of live sovereign paper in `currency` maturing within the next issuance interval. */
+export async function sovereignFaceMaturingSoon(
+  db: Db,
+  currency: CurrencyCode,
+  turn: number
+): Promise<number> {
+  const rows = await db
+    .collection<{ totalIssued?: number }>("bonds")
+    .find(
+      {
+        issuerType: "sovereign",
+        currencyCode: currency,
+        matured: false,
+        defaulted: false,
+        maturityTurn: { $gte: turn, $lt: turn + SOVEREIGN_ISSUANCE_INTERVAL_TURNS },
+      },
+      { projection: { totalIssued: 1 } }
+    )
+    .toArray();
+  return rows.reduce((sum, row) => sum + Math.max(0, row.totalIssued ?? 0), 0);
+}
+
 export async function processBondMarketPoolTurn(
   db: Db,
   turn: number,
@@ -91,10 +114,13 @@ export async function processBondMarketPoolTurn(
       )
       .toArray();
     const m2 = latest[0]?.m2;
-    const targetCashLocal =
-      Number.isFinite(m2) && m2! > 0
-        ? Math.round(m2! * BOND_POOL_M2_SHARE * 100) / 100
-        : pool.targetCashLocal;
+    // Working balance: the pool re-buys every quarter's rollover before the
+    // maturing series pays it back, so it must hold one quarter of maturing
+    // sovereign face on top of its secondary-liquidity share of M2.
+    const rolloverLocal = await sovereignFaceMaturingSoon(db, currency, turn);
+    const liquidityTarget =
+      Number.isFinite(m2) && m2! > 0 ? m2! * BOND_POOL_M2_SHARE : pool.targetCashLocal;
+    const targetCashLocal = Math.round(Math.max(liquidityTarget, rolloverLocal) * 100) / 100;
 
     const moves = planPoolCashMoves({ cashLocal: pool.cashLocal, targetCashLocal });
     if (moves.inflow > 0) {
@@ -116,12 +142,18 @@ export async function processBondMarketPoolTurn(
       }
     }
 
-    await db
-      .collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION)
-      .updateOne(
-        { _id: currency },
-        { $set: { targetCashLocal, appetiteByCountry, lastTurn: turn, updatedAt: now } }
-      );
+    await db.collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION).updateOne(
+      { _id: currency },
+      {
+        $set: {
+          targetCashLocal,
+          appetiteByCountry,
+          lastTurn: turn,
+          updatedAt: now,
+          ...(Number.isFinite(m2) && m2! > 0 ? { m2Local: m2 } : {}),
+        },
+      }
+    );
     result.poolsProcessed++;
   }
   return result;

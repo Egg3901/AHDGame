@@ -678,6 +678,11 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
                 currentTurn={data.currentTurn}
                 bankApiBasePath={bankApiBasePath}
                 onChanged={fetchData}
+                governanceEndpoint={
+                  data.committeeSeated || data.committeeDead
+                    ? `/api/country/${countryId.toLowerCase()}/fomc`
+                    : undefined
+                }
               />
               <NominationsPanel
                 nominations={data.nominations}

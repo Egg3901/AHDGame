@@ -103,6 +103,7 @@ import { recomputeSharePricesAfterBondTurn } from "@/lib/turn/corporation/recomp
 import { processSavingsInterestTurn } from "@/lib/turn/savingsInterestTurn";
 import { processNpcBankPolicyTurn } from "@/lib/banking/npcBanks";
 import { processBankingTurn } from "@/lib/turn/bankingTurn";
+import { processSavingsShadowTurn } from "@/lib/savings/shadow";
 import { runPensionTurn } from "@/lib/pensions/pensionTurn";
 import { processBankSolvencyTurn } from "@/lib/turn/bankSolvencyTurn";
 import { processBankSupervision } from "@/lib/banking/supervision";
@@ -394,6 +395,22 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
             defaultsWrittenOff: Math.round(bankingResult.defaultsWrittenOff * 100) / 100,
             npcDepositDelta: Math.round(bankingResult.npcDepositDelta * 100) / 100,
             unfinishedSettlements: bankingResult.unfinishedSettlements,
+          };
+        }
+
+        // Shadow savings accounts: materialize the account representation from
+        // the legacy character fields and compare every projection, AFTER the
+        // banking turn so the comparison sees this turn's interest and flows.
+        // No live behaviour changes while the mode is shadow.
+        const savingsShadowResult = await runtime.runPhase("savingsShadowTurn", () =>
+          processSavingsShadowTurn(context.db, newTurn)
+        );
+        if (savingsShadowResult) {
+          phaseResults.savingsShadowTurn = {
+            mode: savingsShadowResult.mode,
+            accountsRefreshed: savingsShadowResult.accountsRefreshed,
+            currenciesCompared: savingsShadowResult.comparison.currencies.length,
+            discrepancies: savingsShadowResult.comparison.totalDiscrepancies,
           };
         }
 

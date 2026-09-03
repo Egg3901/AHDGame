@@ -64,6 +64,7 @@ export const NOTIFICATION_TYPES = [
   "corp_bond_repaid",
   "corp_bond_auto_refinanced",
   "corp_bond_auto_restructured",
+  "cb_auction_shortfall",
   "corp_inactive_ceo_share_release_warning",
   "wire_received",
   "coalition_invite_received",

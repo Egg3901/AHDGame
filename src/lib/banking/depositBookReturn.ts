@@ -71,7 +71,7 @@
  * discount window was not mentioned in the failure path in any form.
  */
 
-import type { Db, ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { Character } from "@/lib/db/types/character";
 import type { DepositInsuranceFund, InterbankLoan } from "@/lib/db/types/bank";
@@ -79,10 +79,15 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { bankEquity, cashBackedDeposits, getCashReserves } from "@/lib/banking/balanceSheet";
-import { applyMoneyMove, type MoneyMoveLeg } from "@/lib/banking/moneyMove";
+import { settleTransition } from "@/lib/banking/settlementJournal";
+import { oid, type TransitionLeg, type TransitionProjection } from "@/lib/banking/rules/boundary";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import type { FederalBudget } from "@/lib/db/types";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
+import type { SavingsAccount } from "@/lib/db/types/savingsAccount";
+import { CENTRAL_BANK_HOLDER } from "@/lib/savings/rules/accounts";
 
 /** Budget spending line a deposit insurance backstop is booked against. */
 export const DEPOSIT_INSURANCE_SPENDING_KEY = "depositInsurance";
@@ -134,6 +139,14 @@ const EMPTY: DepositBookReturnResult = {
   interbankWrittenOff: 0,
 };
 
+function toCents(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function floorCents(value: number): number {
+  return Math.floor(value * 100 + 1e-9) / 100;
+}
+
 export function depositBookReturnKey(
   corporationId: ObjectId | string,
   cause: DepositBookReturnCause,
@@ -170,21 +183,43 @@ export async function returnDepositBook(
   const holderPath = `currencyBalances.savingsHolder.${currency}`;
   const now = new Date();
 
-  // Pointer flip first, and outside the money move: it is not a money movement
-  // at all, it is a label, and it is idempotent by construction (a second run
-  // matches nothing). Doing it first means a crash mid-way leaves depositors
-  // free of a dead bank rather than trapped in one.
-  const flip = await db
-    .collection<Character>("characters")
-    .updateMany(
-      { [holderPath]: bankIdHex },
-      { $set: { [holderPath]: "centralBank", updatedAt: now } }
-    );
-  const depositorsFlipped = flip.modifiedCount ?? 0;
+  const policy = await loadBankingPolicy(db);
+  const playerDepositsAreLiabilities = savingsReadsAuthoritative(policy, currency);
+  const sheetOptions = { playerDepositsAreLiabilities };
 
-  const npc = cashBackedDeposits(charter);
+  // Under the pointer model the pointer flips first, outside the money move:
+  // it is not a money movement at all, it is a label, idempotent by
+  // construction, and doing it first means a crash mid-way leaves depositors
+  // free of a dead bank rather than trapped in one.
+  //
+  // Under the account model the player balances the bank held are part of
+  // the book it must return (their backing came into the vault with the
+  // holder change, so it leaves with the household deposits, through the same
+  // waterfall, insured the same way), the pointer is a projection of the
+  // account, and both move AFTER the money has: the accounts were frozen by
+  // the caller before the waterfall started (see `freezeAccountsAt`) and are
+  // released to the central bank, open again, together with their pointers,
+  // only once the backing and the liability have both landed there. A crash
+  // in between leaves them frozen at the dead bank, which recovery finishes;
+  // it never leaves them open at a bank that no longer holds their cash, and
+  // never leaves the pointer saying one thing and the account another.
+  let depositorsFlipped = 0;
+  if (!playerDepositsAreLiabilities) {
+    const flip = await db
+      .collection<Character>("characters")
+      .updateMany(
+        { [holderPath]: bankIdHex },
+        { $set: { [holderPath]: "centralBank", updatedAt: now } }
+      );
+    depositorsFlipped = flip.modifiedCount ?? 0;
+  }
+  const playerBookReturned = playerDepositsAreLiabilities
+    ? Math.max(0, charter.playerDeposits ?? 0)
+    : 0;
+
+  const npc = cashBackedDeposits(charter, sheetOptions);
   const cash = getCashReserves(charter);
-  const equity = bankEquity(charter);
+  const equity = bankEquity(charter, sheetOptions);
 
   // (1) Secured central bank facilities, senior to everything else.
   const windowOwed =
@@ -224,15 +259,49 @@ export async function returnDepositBook(
     (sum, loan) => sum + Math.max(0, loan.outstanding ?? 0),
     0
   );
-  const interbankPaid = Math.min(cashAfterDeposits, interbankOwed);
+  // Paid to the cent, and split to the cent: a pro-rata share left as a raw
+  // fraction can sum to a hair more than the cash, and the last guarded debit
+  // then fails against a vault that is short by a rounding error.
+  const interbankPaid = toCents(Math.min(cashAfterDeposits, interbankOwed));
   const interbankShare = interbankOwed > 0 ? interbankPaid / interbankOwed : 0;
+  // Where each lender's recovery lands. A live lender takes it into its vault.
+  // A lender that has itself failed and not yet been resolved takes it into
+  // its estate, where its own waterfall will distribute it. A lender whose
+  // estate is already closed (revoked, or failed and resolved) may NOT be
+  // credited: its owner has already been paid out and its depositors made
+  // whole by the insurer, so the recovery belongs to the insurer. Crediting a
+  // dead charter's vault would strand the cash or hand a windfall to a
+  // shareholder who has already collected.
+  const lenderIds = [...new Set(interbankLoans.map((loan) => loan.lenderCorporationId.toString()))];
+  const lenders = lenderIds.length
+    ? await db
+        .collection<Corporation>("corporations")
+        .find({ _id: { $in: lenderIds.map((id) => new ObjectId(id)) } })
+        .project<Pick<Corporation, "_id" | "name" | "bankCharter">>({ name: 1, bankCharter: 1 })
+        .toArray()
+    : [];
+  const lenderById = new Map(lenders.map((row) => [row._id.toString(), row]));
   const interbankPayouts = interbankLoans
     .map((loan) => ({
       loan,
       outstanding: Math.max(0, loan.outstanding ?? 0),
-      paid: Math.max(0, loan.outstanding ?? 0) * interbankShare,
+      paid: floorCents(Math.max(0, loan.outstanding ?? 0) * interbankShare),
+      target: interbankRecoveryTarget(
+        lenderById.get(loan.lenderCorporationId.toString()),
+        currency
+      ),
     }))
     .filter((row) => row.outstanding > 0);
+  // Whatever the floors left over goes to the largest claim, so the shares
+  // add up to exactly what was paid and no cent is stranded on the estate.
+  const floorsTotal = interbankPayouts.reduce((sum, row) => sum + row.paid, 0);
+  const remainder = toCents(interbankPaid - floorsTotal);
+  if (remainder > 0 && interbankPayouts.length > 0) {
+    const largest = interbankPayouts.reduce((best, row) =>
+      row.outstanding > best.outstanding ? row : best
+    );
+    largest.paid = toCents(largest.paid + remainder);
+  }
 
   // (4) Cash left after every creditor belongs to the owner, but only as far as
   // book equity: anything above that is still owed to somebody, and paying it
@@ -242,14 +311,14 @@ export async function returnDepositBook(
   const ownerResidual = options.releaseResidualToOwner ? Math.max(0, Math.min(surplus, equity)) : 0;
 
   const cbDocId = getBankId(getCountryIdForCurrency(currency));
-  const legs: MoneyMoveLeg[] = [];
+  const legs: TransitionLeg[] = [];
 
   if (centralBankPaid > 0) {
     legs.push({
       kind: "debit",
       amount: centralBankPaid,
       collection: "corporations",
-      filter: { _id: corporationId },
+      filter: { _id: oid(bankIdHex) },
       path: "bankCharter.cashReserves",
       note: "secured central bank facilities repaid first",
     });
@@ -269,7 +338,7 @@ export async function returnDepositBook(
         kind: "debit",
         amount: fromBankCash,
         collection: "corporations",
-        filter: { _id: corporationId },
+        filter: { _id: oid(bankIdHex) },
         path: "bankCharter.cashReserves",
         note: "household deposits returned from the bank's own cash",
       });
@@ -306,7 +375,7 @@ export async function returnDepositBook(
       kind: "debit",
       amount: ownerResidual,
       collection: "corporations",
-      filter: { _id: corporationId },
+      filter: { _id: oid(bankIdHex) },
       path: "bankCharter.cashReserves",
       note: "residual bank equity released to the parent",
     });
@@ -314,7 +383,7 @@ export async function returnDepositBook(
       kind: "credit",
       amount: ownerResidual,
       collection: "corporations",
-      filter: { _id: corporationId },
+      filter: { _id: oid(bankIdHex) },
       path: "liquidCapital",
       note: "residual bank equity received by the parent",
     });
@@ -326,96 +395,115 @@ export async function returnDepositBook(
       kind: "debit",
       amount: row.paid,
       collection: "corporations",
-      filter: { _id: corporationId },
+      filter: { _id: oid(bankIdHex) },
       path: "bankCharter.cashReserves",
       note: "interbank creditor paid pro rata",
     });
     legs.push({
       kind: "credit",
       amount: row.paid,
-      collection: "corporations",
-      filter: { _id: row.loan.lenderCorporationId },
-      path: "bankCharter.cashReserves",
-      note: "lending bank recovers part of its interbank claim",
+      collection: row.target.collection,
+      filter: row.target.filter,
+      path: row.target.path,
+      note: row.target.note,
     });
   }
 
-  if (legs.length === 0) {
-    // Nothing to move, but the claims still have to be settled and the book
-    // still has to be cleared. A bank that fails holding no cash pays nobody,
-    // and "pays nobody" is a resolution outcome, not a reason to leave live
-    // debts and a live deposit book on a dead charter. This is the case a
-    // pointer-only deposit book hits, and the case an insolvent investment
-    // bank hits.
-    await settleCreditorClaims(db, corporationId, cbDocId, options.turn, {
-      centralBankOwed,
-      centralBankPaid: 0,
-      interbankPayouts,
-      interbankOwed,
+  // Everything that used to be written by hand after the money moved, as
+  // journaled projections: the fiscal record of the backstop, the fund's
+  // lifetime counters, the settlement of every creditor claim, and the
+  // clearing of the deposit aggregates. Each is stamped, so a retry after the
+  // money landed can neither omit one nor apply it twice. A bank that fails
+  // holding no cash pays nobody, and "pays nobody" is still a resolution: the
+  // claims are settled and the book cleared through the same projections.
+  const projections: TransitionProjection[] = [];
+  if (playerBookReturned > 0) {
+    // The player balances now sit with the central bank again: the pool just
+    // received their backing in the credit above, so the liability follows.
+    projections.push({
+      collection: "centralBanks",
+      filter: { _id: cbDocId },
+      update: { $inc: { householdSavingsLiability: playerBookReturned }, $set: { updatedAt: now } },
+      note: "player savings liability returns to the central bank",
     });
-    await clearDepositAggregates(db, corporationId, options.turn, options.cause);
-    return {
-      ...EMPTY,
-      returned: depositorsFlipped > 0 || centralBankOwed > 0 || interbankOwed > 0,
-      depositorsFlipped,
-      centralBankWrittenOff: centralBankOwed,
-      interbankWrittenOff: interbankOwed,
-    };
   }
-
-  const move = await applyMoneyMove(db, {
-    key: depositBookReturnKey(corporationId, options.cause, options.turn),
-    kind: "deposit_book_return",
-    turn: options.turn,
-    legs,
-  });
-
-  if (move.status === "replayed") {
-    // The cash already moved on a previous attempt, but that attempt may have
-    // crashed before it settled the claims and cleared the book. Both steps
-    // are idempotent, so re-running them here costs nothing on a clean replay
-    // and heals the crashed one; skipping them left `npcDeposits` live on a
-    // dead charter, and a later-turn retry (fresh key, cash already gone)
-    // would have paid the household book a second time.
-    await settleCreditorClaims(db, corporationId, cbDocId, options.turn, {
-      centralBankOwed,
-      centralBankPaid,
-      interbankPayouts,
-      interbankOwed,
-    });
-    await clearDepositAggregates(db, corporationId, options.turn, options.cause);
-    return { ...EMPTY, depositorsFlipped };
-  }
-  if (move.status === "rejected" || move.status === "partial") {
-    return { ...EMPTY, depositorsFlipped, error: move.error };
-  }
-
   if (fromTreasury > 0) {
-    // Fiscal bookkeeping for money the `mint` leg already created: this records
-    // who is on the hook for it.
-    await debitTreasuryDepositInsurance(db, currency, fromTreasury);
+    projections.push({
+      collection: "federalBudget",
+      filter: { _id: getNationalBudgetId(getCountryIdForCurrency(currency)) },
+      update: {
+        $inc: {
+          treasuryBalance: -fromTreasury,
+          [`spending.byCategory.${DEPOSIT_INSURANCE_SPENDING_KEY}`]: fromTreasury,
+          "spending.total": fromTreasury,
+          surplus: -fromTreasury,
+        },
+        $set: { updatedAt: now },
+      },
+      note: "treasury books the deposit insurance backstop",
+    });
   }
-
   if (fromInsuranceFund > 0 || fromTreasury > 0) {
-    await db.collection<DepositInsuranceFund>("depositInsuranceFunds").updateOne(
-      { _id: currency },
-      {
+    projections.push({
+      collection: "depositInsuranceFunds",
+      filter: { _id: currency },
+      update: {
         $inc: {
           payoutsLifetime: fromInsuranceFund + fromTreasury,
           treasuryBackstopLifetime: fromTreasury,
         },
-      }
-    );
+      },
+      note: "fund lifetime payout counters",
+    });
   }
+  projections.push(
+    ...creditorClaimProjections(bankIdHex, cbDocId, options.turn, {
+      centralBankOwed,
+      centralBankPaid,
+      interbankPayouts,
+      interbankOwed,
+    }),
+    depositAggregateClearProjection(bankIdHex, options.turn, options.cause, now)
+  );
 
-  await settleCreditorClaims(db, corporationId, cbDocId, options.turn, {
-    centralBankOwed,
-    centralBankPaid,
-    interbankPayouts,
-    interbankOwed,
+  const key = depositBookReturnKey(corporationId, options.cause, options.turn);
+  const settled = await settleTransition(db, {
+    key,
+    kind: "deposit_book_return",
+    turn: options.turn,
+    currency,
+    legs,
+    projections,
+    event: {
+      kind: "bank.resolved",
+      command: `bank.resolve.${options.cause}`,
+      statusBefore: charter.status,
+      statusAfter: "resolved",
+      amount: npc,
+    },
   });
 
-  await clearDepositAggregates(db, corporationId, options.turn, options.cause);
+  if (settled.status === "rejected" || settled.status === "partial") {
+    return { ...EMPTY, depositorsFlipped, error: settled.error };
+  }
+  if (playerDepositsAreLiabilities) {
+    depositorsFlipped = Math.max(
+      depositorsFlipped,
+      await releaseAccountsFrom(db, bankIdHex, currency, now)
+    );
+    await db
+      .collection<Character>("characters")
+      .updateMany(
+        { [holderPath]: bankIdHex },
+        { $set: { [holderPath]: "centralBank", updatedAt: now } }
+      );
+  }
+  if (settled.status === "replayed") {
+    // The cash moved on an earlier attempt and any projections that attempt
+    // did not reach have just been finished. Nothing more to report: the
+    // amounts belong to the attempt that moved them.
+    return { ...EMPTY, depositorsFlipped };
+  }
 
   const result: DepositBookReturnResult = {
     returned: true,
@@ -440,7 +528,7 @@ export async function returnDepositBook(
       bankId: bankIdHex,
       statusBefore: charter.status,
       statusAfter: "resolved",
-      settlementId: depositBookReturnKey(corporationId, options.cause, options.turn),
+      settlementId: key,
       amount: npc,
       meta: {
         cause: options.cause,
@@ -461,16 +549,91 @@ export async function returnDepositBook(
 }
 
 /**
- * Extinguish what the estate owed, once it has paid what it could.
+ * Freeze every savings account held at a bank whose estate is about to be
+ * resolved. Nothing moves on a frozen account: the savings commands refuse
+ * with the account's status, so a deposit, withdrawal or transfer racing the
+ * waterfall cannot change the book the waterfall is returning. Idempotent.
+ */
+export async function freezeAccountsAt(
+  db: Db,
+  bankIdHex: string,
+  currency: CurrencyCode,
+  now: Date
+): Promise<number> {
+  const frozen = await db
+    .collection<SavingsAccount>("savingsAccounts")
+    .updateMany(
+      { currency, holder: bankIdHex, status: "open" },
+      { $set: { status: "frozen", updatedAt: now } }
+    );
+  return frozen.modifiedCount ?? 0;
+}
+
+/**
+ * Release the accounts a resolved bank held: back to the central bank, open
+ * again. Runs only after the waterfall settled, so the central bank holds both
+ * the backing and the liability by the time an owner can move the balance.
+ * Idempotent: a second run matches nothing.
+ */
+export async function releaseAccountsFrom(
+  db: Db,
+  bankIdHex: string,
+  currency: CurrencyCode,
+  now: Date
+): Promise<number> {
+  const released = await db
+    .collection<SavingsAccount>("savingsAccounts")
+    .updateMany(
+      { currency, holder: bankIdHex },
+      { $set: { holder: CENTRAL_BANK_HOLDER, status: "open", updatedAt: now } }
+    );
+  return released.modifiedCount ?? 0;
+}
+
+/**
+ * Where an interbank recovery lands for one lender. See the note at the call
+ * site: a live or unresolved lender is credited; a closed estate is not, and
+ * the insurer that stood behind it takes the recovery instead.
+ */
+export function interbankRecoveryTarget(
+  lender: Pick<Corporation, "_id" | "name" | "bankCharter"> | undefined,
+  currency: CurrencyCode
+): { collection: string; filter: Record<string, unknown>; path: string; note: string } {
+  const charter = lender?.bankCharter;
+  const eligible =
+    charter !== undefined &&
+    (charter.status === "active" ||
+      (charter.status === "failed" && typeof charter.depositorsResolvedTurn !== "number"));
+  if (lender && eligible) {
+    return {
+      collection: "corporations",
+      filter: { _id: oid(lender._id.toString()) },
+      path: "bankCharter.cashReserves",
+      note:
+        charter.status === "active"
+          ? "lending bank recovers part of its interbank claim"
+          : `recovery into ${lender.name}'s estate, before it is distributed`,
+    };
+  }
+  return {
+    collection: "depositInsuranceFunds",
+    filter: { _id: currency },
+    path: "balance",
+    note: "recovery to the insurer that stood behind a resolved lender",
+  };
+}
+
+/**
+ * Extinguish what the estate owed, once it has paid what it could, as
+ * projections of the resolution transition.
  *
  * Runs even when nothing was paid. A claim that outlives the bank it was
  * against is a number nobody can collect and nobody can clear, which is how a
  * failed charter used to sit forever carrying debts to counterparties who had
  * already written them off.
  */
-async function settleCreditorClaims(
-  db: Db,
-  corporationId: ObjectId,
+function creditorClaimProjections(
+  bankIdHex: string,
   cbDocId: string,
   turn: number,
   claims: {
@@ -479,54 +642,58 @@ async function settleCreditorClaims(
     interbankPayouts: { loan: InterbankLoan; outstanding: number; paid: number }[];
     interbankOwed: number;
   }
-): Promise<void> {
+): TransitionProjection[] {
+  const out: TransitionProjection[] = [];
   if (claims.centralBankOwed > 0) {
-    await db.collection<Corporation>("corporations").updateOne(
-      { _id: corporationId },
-      {
+    out.push({
+      collection: "corporations",
+      filter: { _id: oid(bankIdHex) },
+      update: {
         $set: {
           "bankCharter.discountWindowDebt": 0,
           "bankCharter.discountWindowArrears": 0,
           "bankCharter.cbMarginDebt": 0,
           "bankCharter.cbMarginArrears": 0,
-          updatedAt: new Date(),
         },
-      }
-    );
+      },
+      note: "central bank claims extinguished",
+    });
     // What was repaid is money retired; what was not is money the central bank
     // created and will not get back, which is what being the lender of last
     // resort costs. Only the repaid part comes off the creation counter.
     if (claims.centralBankPaid > 0) {
-      await db
-        .collection("centralBanks")
-        .updateOne(
-          { _id: cbDocId as never },
-          { $inc: { netMoneyCreatedLifetime: -claims.centralBankPaid } }
-        );
+      out.push({
+        collection: "centralBanks",
+        filter: { _id: cbDocId },
+        update: { $inc: { netMoneyCreatedLifetime: -claims.centralBankPaid } },
+        note: "repaid central bank liquidity comes off the creation counter",
+      });
     }
   }
-
   for (const row of claims.interbankPayouts) {
     const unrecovered = Math.max(0, row.outstanding - row.paid);
-    await db.collection<InterbankLoan>("interbankLoans").updateOne(
-      { _id: row.loan._id },
-      {
+    out.push({
+      collection: "interbankLoans",
+      filter: { _id: oid(row.loan._id.toString()) },
+      update: {
         $set: {
           outstanding: unrecovered,
           status: unrecovered > 0 ? "defaulted" : "repaid",
           lastProcessedTurn: turn,
         },
-      }
-    );
+      },
+      note: "interbank claim settled against the estate",
+    });
   }
   if (claims.interbankOwed > 0) {
-    await db
-      .collection<Corporation>("corporations")
-      .updateOne(
-        { _id: corporationId },
-        { $set: { "bankCharter.interbankDebt": 0, updatedAt: new Date() } }
-      );
+    out.push({
+      collection: "corporations",
+      filter: { _id: oid(bankIdHex) },
+      update: { $set: { "bankCharter.interbankDebt": 0 } },
+      note: "interbank debt extinguished",
+    });
   }
+  return out;
 }
 
 /**
@@ -534,28 +701,32 @@ async function settleCreditorClaims(
  *
  * Order matters and used to be the other way round: `adminUnwind` cleared the
  * aggregates so that `revokeCharter` would see an empty book and refund the
- * owner, which is how a shareholder ended up with the depositors' cash.
+ * owner, which is how a shareholder ended up with the depositors' cash. As
+ * the last projection of the transition, it cannot run before the legs.
  */
-async function clearDepositAggregates(
-  db: Db,
-  corporationId: ObjectId,
+function depositAggregateClearProjection(
+  bankIdHex: string,
   turn: number,
-  cause: DepositBookReturnCause
-): Promise<void> {
-  await db.collection<Corporation>("corporations").updateOne(
-    { _id: corporationId },
-    {
+  cause: DepositBookReturnCause,
+  now: Date
+): TransitionProjection {
+  return {
+    collection: "corporations",
+    filter: { _id: oid(bankIdHex) },
+    update: {
       $set: {
         "bankCharter.npcDeposits": 0,
+        "bankCharter.playerDeposits": 0,
         "bankCharter.totalDeposits": 0,
         // The floor follows the deposits out, otherwise the corp stays locked
         // out of its own cash until the next banking turn recomputes it.
         "bankCharter.reserveFloor": 0,
         ...(cause === "failure" ? { "bankCharter.depositorsResolvedTurn": turn } : {}),
-        updatedAt: new Date(),
+        updatedAt: now,
       },
-    }
-  );
+    },
+    note: "deposit aggregates cleared after the cash moved",
+  };
 }
 
 /**
