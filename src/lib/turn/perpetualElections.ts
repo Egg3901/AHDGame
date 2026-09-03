@@ -1943,6 +1943,50 @@ function seatsFromRegionField(
 }
 
 /**
+ * Heal `totalSeats` on a regional delegate race already in flight when its
+ * chamber was resized (#1262).
+ *
+ * The spawn-time force below only reaches the NEXT cycle. A race running when
+ * the region changed size is never corrected, and for these families that is not
+ * cosmetic: `allocateSeats` overrides `totalSeats` from a live map for the US
+ * House and the Commons ONLY, so every other family allocates over the number on
+ * the Election doc. Sachsen's Landtag race carried the 1953 seed's 24 into a
+ * chamber the region doc sizes at 161 — `rescaleRegionDelegations` had already
+ * reseated the sitting delegation to 161, so resolving that race would have cut
+ * it back to 24.
+ *
+ * Exactly the shape and the reason of {@link buildHouseSeatHealOps} (#1190) and
+ * the Commons heal in {@link ensureUKElections}; this is the same repair for the
+ * families the shared delegate spawner owns.
+ */
+export function buildDelegateSeatHealOps(
+  liveElections: Pick<Election, "_id" | "state" | "totalSeats">[],
+  seatMap: Record<string, number>,
+  now: Date
+): AnyBulkWriteOperation<Election>[] {
+  return liveElections.flatMap((e) => {
+    if (!e.state) return [];
+    const expected = seatMap[e.state];
+    // Absent or not a positive number means the region cannot size this chamber,
+    // so there is nothing authoritative to heal towards — leave the race as it is
+    // rather than zeroing it. Written as `!(expected > 0)` rather than
+    // `expected <= 0` so a NaN seat count is REJECTED: every comparison against
+    // NaN is false, so the `<= 0` form would fall through both guards and write
+    // NaN over a perfectly good seat count. Same test the spawn-time force uses.
+    if (!(typeof expected === "number" && expected > 0)) return [];
+    if (e.totalSeats === expected) return [];
+    return [
+      {
+        updateOne: {
+          filter: { _id: e._id },
+          update: { $set: { totalSeats: expected, updatedAt: now } },
+        },
+      },
+    ];
+  });
+}
+
+/**
  * Ensure every region of `spec.countryId` has an active/upcoming election of
  * `spec.electionType`. Canonical LARP scheduling via `buildCanonicalSpawn` —
  * no snap elections, no staggered classes. Extracted from the formerly-
@@ -1979,6 +2023,17 @@ async function ensureRegionalDelegateElections(
     })
     .toArray();
   const liveStates = new Set(liveElections.map((e) => e.state));
+
+  // Carry a resize onto the race that is already running, before deciding what
+  // to spawn — a region present in `liveStates` gets no new doc, so without this
+  // its correction would wait a whole cycle.
+  const healOps = buildDelegateSeatHealOps(liveElections, seatMap, now);
+  if (healOps.length > 0) {
+    await db.collection<Election>("elections").bulkWrite(healOps);
+    console.log(
+      `[Turn] ensureRegionalDelegateElections(${spec.countryId}/${spec.electionType}): healed ${healOps.length} in-flight ${spec.label} seat count(s)`
+    );
+  }
 
   const completedElections = await db
     .collection<Election>("elections")
