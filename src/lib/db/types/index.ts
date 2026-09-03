@@ -239,6 +239,8 @@ export {
   SOVEREIGN_BOND_MATURITY_ADMIN_OPTIONS,
 } from "./bond";
 export type { BondHistory } from "./bondHistory";
+export type { BondMarketPool, BondMarketPoolFlowKind } from "./bondMarketPool";
+export { BOND_MARKET_POOLS_COLLECTION } from "./bondMarketPool";
 export type { StockExchangeSnapshot, StockExchangeListing } from "./stockExchangeSnapshot";
 export type { InvestorRankingSnapshot, InvestorRanking } from "./investorRankingSnapshot";
 export type { WealthListSnapshot, WealthListEntry } from "./wealthListSnapshot";

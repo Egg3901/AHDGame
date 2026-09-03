@@ -4,6 +4,7 @@ import Link from "next/link";
 import { regionPartyUrl, regionPartyApiUrl } from "@/lib/urls";
 import { useActionPreview } from "./orgActions/useActionPreview";
 import { EstimateLine } from "./orgActions/EstimateLine";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 
 /**
  * Quick Actions hub for the State Politics tab.
@@ -132,7 +133,15 @@ function DeepLinkButton({
   );
 }
 
-type OrgBuildPreview = { ok: true; effectiveCost: number; projectedGain: number } | { ok: false };
+type OrgBuildPreview =
+  | {
+      ok: true;
+      effectiveCost: number;
+      projectedGain: number;
+      /** Cash price of the next click. Absent on a pre-2026-09-02 response. */
+      cashPrice?: number;
+    }
+  | { ok: false };
 
 /**
  * Compact estimate line for the Quick Actions Org Building shortcut — a
@@ -155,6 +164,17 @@ function OrgBuildEstimate({
     <span className="mt-0.5">
       <EstimateLine
         costPS={preview.effectiveCost}
+        costCash={
+          preview.cashPrice !== undefined
+            ? {
+                amount: preview.cashPrice,
+                currencyCode:
+                  COUNTRY_CURRENCY_MAP[
+                    countryCode.toUpperCase() as keyof typeof COUNTRY_CURRENCY_MAP
+                  ] ?? "USD",
+              }
+            : undefined
+        }
         gain={{ sign: "+", value: preview.projectedGain, unit: "Org" }}
       />
     </span>

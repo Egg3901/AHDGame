@@ -19,6 +19,7 @@ import {
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { distributeConversionSpread } from "@/lib/currency/marketMaker";
+import { creditBondPool, loadBondQuote } from "@/lib/bonds/marketPool";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
@@ -89,9 +90,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Defaulted bonds: buyback at full face value (no discount exploit).
     // Non-defaulted: buyback at current market price. Both expressions produce
     // LOCAL in `bondCurrency`.
-    const pricePerUnit = bond.defaulted
-      ? BOND_UNIT_FACE_VALUE
-      : BOND_UNIT_FACE_VALUE * bond.marketPrice;
+    // Live bonds are bought back from the pool at its ask.
+    const quote = await loadBondQuote(db, bond);
+    const pricePerUnit = bond.defaulted ? BOND_UNIT_FACE_VALUE : quote.askPerUnit;
     const costLocal = units * pricePerUnit;
 
     // Normalize bond cost through ₳ before comparing / deducting against the
@@ -196,6 +197,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         { status: 400 }
       );
     }
+
+    // The retired units were the pool's; the issuer's cash is the pool's now.
+    await creditBondPool(db, bondCurrency, costLocal, "retiredIn", now);
 
     const refreshedBond = await db.collection<Bond>("bonds").findOne({ _id: bond._id });
     const remainingPublicFloat =

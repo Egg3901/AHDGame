@@ -1,10 +1,25 @@
 import { getDb } from "@/lib/mongodb";
 import type { GameConfig } from "@/lib/db/types";
+import {
+  BANKING_POLICY_PROJECTION,
+  resolveBankingPolicy,
+  type BankingPolicyConfig,
+} from "@/lib/banking/rules/policy";
 
 type BankingFlags = Pick<
   GameConfig,
-  "privateBankingEnabled" | "bankPropTradingEnabled" | "bankContagionEnabled"
+  | "privateBankingEnabled"
+  | "bankPropTradingEnabled"
+  | "bankContagionEnabled"
+  | "playerAdvancedBankChartersEnabled"
 >;
+
+/**
+ * Per-flag readers kept for the call sites that ask one question. Every one of
+ * them is the policy snapshot's answer (`rules/policy.ts`), so a route and a
+ * turn phase reading the same config document cannot interpret it differently.
+ * Prefer `loadBankingPolicy` when more than one question is asked.
+ */
 
 /**
  * Whether private banking is enabled (admin toggle on gameConfig).
@@ -15,39 +30,31 @@ type BankingFlags = Pick<
 export async function isPrivateBankingEnabled(
   preloadedConfig?: BankingFlags | null
 ): Promise<boolean> {
-  const config = await loadFlags(preloadedConfig);
-  return config?.privateBankingEnabled === true;
+  return resolveBankingPolicy(await loadFlags(preloadedConfig)).privateBanking;
 }
 
 /** Kill switch: prop trading. Requires banking on; absent means on. */
 export async function isBankPropTradingEnabled(
   preloadedConfig?: BankingFlags | null
 ): Promise<boolean> {
-  const config = await loadFlags(preloadedConfig);
-  return config?.privateBankingEnabled === true && config?.bankPropTradingEnabled !== false;
+  return resolveBankingPolicy(await loadFlags(preloadedConfig)).propTrading;
 }
 
 /** Kill switch: failure contagion. Requires banking on; absent means on. */
 export async function isBankContagionEnabled(
   preloadedConfig?: BankingFlags | null
 ): Promise<boolean> {
-  const config = await loadFlags(preloadedConfig);
-  return config?.privateBankingEnabled === true && config?.bankContagionEnabled !== false;
+  return resolveBankingPolicy(await loadFlags(preloadedConfig)).contagion;
 }
 
-async function loadFlags(preloadedConfig?: BankingFlags | null): Promise<BankingFlags | null> {
+async function loadFlags(
+  preloadedConfig?: BankingFlags | null
+): Promise<BankingPolicyConfig | null> {
   if (preloadedConfig !== undefined) {
     return preloadedConfig;
   }
   const db = await getDb();
-  return db.collection<GameConfig>("gameConfig").findOne(
-    { _id: "default" },
-    {
-      projection: {
-        privateBankingEnabled: 1,
-        bankPropTradingEnabled: 1,
-        bankContagionEnabled: 1,
-      },
-    }
-  );
+  return db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { ...BANKING_POLICY_PROJECTION } });
 }

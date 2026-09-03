@@ -16,7 +16,6 @@ import type { Corporation } from "@/lib/db/types";
 import type { DepositInsuranceFund } from "@/lib/db/types/bank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
-import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { returnDepositBook } from "@/lib/banking/depositBookReturn";
 import {
@@ -25,11 +24,14 @@ import {
   loadWorldPreset,
 } from "@/lib/currency/gdpAnchorRate";
 
-/** Modern-era USD reference insured cap. Era/FX scaled at call time. */
-export const INSURED_CAP_REFERENCE_USD = 5_000_000;
-
-/** Provisional annual premium rate on insured deposits (before risk weight). */
-export const BASE_PREMIUM_ANNUAL = 0.004;
+export {
+  INSURED_CAP_REFERENCE_USD,
+  BASE_PREMIUM_ANNUAL,
+  computeInsurancePremium,
+  sumInsuredPlayerDeposits,
+  computeReserveRatioActual,
+} from "@/lib/banking/rules/insurance";
+import { INSURED_CAP_REFERENCE_USD } from "@/lib/banking/rules/insurance";
 
 /** Federal budget spending.byCategory key for Treasury insurance backstop. */
 export { DEPOSIT_INSURANCE_SPENDING_KEY } from "@/lib/banking/depositBookReturn";
@@ -50,10 +52,6 @@ export type ResolveFailedBankDepositorsResult = {
   npcReturned: number;
 };
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
 /**
  * Insured deposit cap in `currency` face value.
  *
@@ -72,37 +70,6 @@ export async function getInsuredCap(db: Db, currency: CurrencyCode): Promise<num
   const safeRate = rate > 0 && Number.isFinite(rate) ? rate : 1;
   const anchor = INSURED_CAP_REFERENCE_USD / scale;
   return Math.max(1, Math.round(anchor / safeRate));
-}
-
-/**
- * Pure per-turn premium on insured deposits, risk-weighted by reserve cover.
- *
- *   riskWeight = clamp(2 - actual / max(required, 0.01), 0.5, 3)
- *   premium = insuredDeposits * BASE_PREMIUM_ANNUAL / TURNS_PER_YEAR * riskWeight
- *
- * Thin reserves (actual << required) pay more; well-reserved banks pay less.
- */
-export function computeInsurancePremium(
-  insuredDeposits: number,
-  reserveRatioActual: number,
-  reserveRatioRequired: number
-): number {
-  const deposits =
-    typeof insuredDeposits === "number" && Number.isFinite(insuredDeposits)
-      ? Math.max(0, insuredDeposits)
-      : 0;
-  if (!(deposits > 0)) return 0;
-
-  const actual =
-    typeof reserveRatioActual === "number" && Number.isFinite(reserveRatioActual)
-      ? Math.max(0, reserveRatioActual)
-      : 0;
-  const required =
-    typeof reserveRatioRequired === "number" && Number.isFinite(reserveRatioRequired)
-      ? reserveRatioRequired
-      : 0;
-  const riskWeight = clamp(2 - actual / Math.max(required, 0.01), 0.5, 3);
-  return (deposits * BASE_PREMIUM_ANNUAL * riskWeight) / TURNS_PER_YEAR;
 }
 
 /**
@@ -232,22 +199,4 @@ export async function resolveFailedBankDepositors(
     treasuryBackstop: result.fromTreasury,
     npcReturned: result.npcReturned,
   };
-}
-
-/** Helper for bankingTurn: sum of min(balance, cap) over player depositors. */
-export function sumInsuredPlayerDeposits(balances: readonly number[], insuredCap: number): number {
-  const cap = Math.max(0, insuredCap);
-  let total = 0;
-  for (const bal of balances) {
-    if (!(bal > 0)) continue;
-    total += Math.min(bal, cap);
-  }
-  return total;
-}
-
-/** Actual reserve ratio used for premium risk weight (liquid / deposits). */
-export function computeReserveRatioActual(liquidCapital: number, totalDeposits: number): number {
-  const deposits = Math.max(0, totalDeposits);
-  if (!(deposits > 0)) return 1;
-  return Math.max(0, liquidCapital) / deposits;
 }

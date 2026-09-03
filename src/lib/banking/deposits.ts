@@ -5,113 +5,26 @@ import type { SavingsHolder } from "@/lib/db/types/bank";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { isBlockedDepositor } from "@/lib/banking/blacklist";
 import { getBankDepositCeiling } from "@/lib/banking/capacityAllocation";
-import { isDepositTakingCharter } from "./charterKinds";
+import { charterMay } from "@/lib/banking/rules/capabilities";
+import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
+import { getCurrentTurn } from "@/lib/currentTurn";
 
 export type MoveCharacterSavingsResult =
   { ok: true; holder: SavingsHolder } | { ok: false; error: string };
 
-/**
- * Provisional NPC household deposit-capture math - flagged for user review.
- * Base share of externalBroadMoney each deposit-taking bank attracts at the
- * central-bank savings APY (zero premium).
- */
-export const NPC_DEPOSIT_BASE_SHARE = 0.08;
-
-/** Provisional - per-bank cap on NPC deposit share of externalBroadMoney. */
-export const NPC_DEPOSIT_MAX_SHARE_PER_BANK = 0.25;
-
-/** Provisional - total NPC share captured by all private banks combined. */
-export const NPC_DEPOSIT_MAX_TOTAL_SHARE = 0.6;
-
-/**
- * Provisional - APY floor (percent) used in the premium ratio so a near-zero
- * CB savings APY cannot explode the share multiplier.
- */
-export const NPC_DEPOSIT_APY_COMPARISON_FLOOR = 0.5;
-
-/**
- * Leverage cap on the NPC deposit base: a bank may anchor at most this multiple
- * of its book equity in NPC deposits. Capacity alone used to size the ceiling,
- * so a bank with a large financial sector but little or no capital (equity) could
- * anchor billions it did not stand behind — the deposit side of the same hole
- * that let a zero-capital bank upstream depositor money. Book equity, not posted
- * capital, is the metric: a bank whose capital is retained earnings rather than
- * posted contributions is genuinely solvent and must not be squeezed. 12x sits
- * comfortably above the live solvent banks (~3-5x) and drives a negative-equity
- * bank's ceiling to zero, so the normal per-turn NPC outflow unwinds it.
- */
-export const NPC_DEPOSIT_MAX_EQUITY_LEVERAGE = 12;
-
-/**
- * Lower the capacity-derived NPC deposit ceiling to what the bank's equity can
- * stand behind. Returns the capacity ceiling unchanged for a well-capitalized
- * bank and 0 for a bank with non-positive equity.
- */
-export function equityCappedDepositCeiling(capacityCeiling: number, bankEquity: number): number {
-  const capacity =
-    typeof capacityCeiling === "number" && Number.isFinite(capacityCeiling)
-      ? Math.max(0, capacityCeiling)
-      : 0;
-  const equity = typeof bankEquity === "number" && Number.isFinite(bankEquity) ? bankEquity : 0;
-  return Math.min(capacity, Math.max(0, equity) * NPC_DEPOSIT_MAX_EQUITY_LEVERAGE);
-}
-
-export type NpcDepositBankInput = {
-  bankId: string;
-  effectiveDepositRatePercent: number;
-};
-
-export type NpcDepositShare = {
-  bankId: string;
-  /** Fraction of externalBroadMoney captured by this bank (0..MAX_SHARE_PER_BANK). */
-  share: number;
-};
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-/**
- * Pure NPC household deposit-share math. Each bank's raw share scales with its
- * deposit-rate premium over the CB savings APY:
- *
- *   share = clamp(0.08 * (1 + (depositRate - cbApy) / max(cbApy, 0.5)), 0, 0.25)
- *
- * When the sum across banks exceeds {@link NPC_DEPOSIT_MAX_TOTAL_SHARE}, every
- * share is scaled down proportionally. Actual per-turn movement of
- * externalBroadMoney is wired in bankingTurn - this function is math only.
- */
-export function computeNpcDepositShare(
-  banks: readonly NpcDepositBankInput[],
-  centralBankSavingsApyPercent: number
-): NpcDepositShare[] {
-  const cbApy = Number.isFinite(centralBankSavingsApyPercent) ? centralBankSavingsApyPercent : 0;
-  const denom = Math.max(cbApy, NPC_DEPOSIT_APY_COMPARISON_FLOOR);
-
-  const raw: NpcDepositShare[] = banks.map((bank) => {
-    const rate = Number.isFinite(bank.effectiveDepositRatePercent)
-      ? bank.effectiveDepositRatePercent
-      : 0;
-    const premiumRatio = (rate - cbApy) / denom;
-    const share = clamp(
-      NPC_DEPOSIT_BASE_SHARE * (1 + premiumRatio),
-      0,
-      NPC_DEPOSIT_MAX_SHARE_PER_BANK
-    );
-    return { bankId: bank.bankId, share };
-  });
-
-  const total = raw.reduce((sum, row) => sum + row.share, 0);
-  if (total <= NPC_DEPOSIT_MAX_TOTAL_SHARE || total <= 0) {
-    return raw;
-  }
-
-  const scale = NPC_DEPOSIT_MAX_TOTAL_SHARE / total;
-  return raw.map((row) => ({
-    bankId: row.bankId,
-    share: row.share * scale,
-  }));
-}
+export {
+  NPC_DEPOSIT_BASE_SHARE,
+  NPC_DEPOSIT_MAX_SHARE_PER_BANK,
+  NPC_DEPOSIT_MAX_TOTAL_SHARE,
+  NPC_DEPOSIT_APY_COMPARISON_FLOOR,
+  computeNpcDepositShare,
+  type NpcDepositBankInput,
+  type NpcDepositShare,
+} from "@/lib/banking/rules/deposits";
+export {
+  NPC_DEPOSIT_MAX_EQUITY_LEVERAGE,
+  equityCappedDepositCeiling,
+} from "@/lib/banking/rules/balanceSheet";
 
 /**
  * Move a character's whole savings balance for `currency` between the central
@@ -124,6 +37,33 @@ export async function moveCharacterSavings(
   currency: CurrencyCode,
   holder: SavingsHolder
 ): Promise<MoveCharacterSavingsResult> {
+  const result = await moveCharacterSavingsInner(db, characterId, currency, holder);
+  emitBankingAuditEvent(
+    {
+      kind: "account.holder_changed",
+      command: "savings.holder.change",
+      turn: await getCurrentTurn(db),
+      outcome: result.ok ? "ok" : "rejected",
+      ...(result.ok ? {} : { reason: result.error }),
+      currency,
+      ...(holder !== "centralBank" ? { bankId: holder } : {}),
+      subjectType: "character",
+      subjectId: characterId.toString(),
+      ...(result.ok ? { statusBefore: result.previousHolder, statusAfter: holder } : {}),
+    },
+    db
+  );
+  return result.ok ? { ok: true, holder: result.holder } : result;
+}
+
+async function moveCharacterSavingsInner(
+  db: Db,
+  characterId: ObjectId,
+  currency: CurrencyCode,
+  holder: SavingsHolder
+): Promise<
+  { ok: true; holder: SavingsHolder; previousHolder: string } | { ok: false; error: string }
+> {
   if (!(await isPrivateBankingEnabled())) {
     return { ok: false, error: "Private banking is not enabled" };
   }
@@ -140,19 +80,20 @@ export async function moveCharacterSavings(
     if (!targetBank) {
       return { ok: false, error: "Bank corporation not found" };
     }
-    if (!isDepositTakingCharter(targetBank.bankCharter)) {
+    const targetCharter = targetBank.bankCharter;
+    if (!targetCharter || !charterMay(targetCharter, "acceptPlayerDeposits")) {
       return {
         ok: false,
         error: "Target bank must have an active retail or universal charter",
       };
     }
-    if (targetBank.bankCharter.currency !== currency) {
+    if (targetCharter.currency !== currency) {
       return {
         ok: false,
-        error: `Bank charter currency is ${targetBank.bankCharter.currency}, not ${currency}`,
+        error: `Bank charter currency is ${targetCharter.currency}, not ${currency}`,
       };
     }
-    if (isBlockedDepositor(targetBank.bankCharter, characterId.toString())) {
+    if (isBlockedDepositor(targetCharter, characterId.toString())) {
       return { ok: false, error: "Character is blacklisted by this bank" };
     }
   }
@@ -212,6 +153,7 @@ export async function moveCharacterSavings(
 
   // Pointer-only: never touch currencyBalances.savings.<CODE>.
   const holderPath = `currencyBalances.savingsHolder.${currency}`;
+  const previousHolder = character.currencyBalances?.savingsHolder?.[currency] ?? "centralBank";
   await db.collection<Character>("characters").updateOne(
     { _id: characterId },
     {
@@ -222,5 +164,5 @@ export async function moveCharacterSavings(
     }
   );
 
-  return { ok: true, holder };
+  return { ok: true, holder, previousHolder };
 }

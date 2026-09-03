@@ -369,19 +369,39 @@ export async function calculateSovereignRolloverAmount(
   countryId: CountryId,
   turn: number
 ): Promise<number> {
-  const bonds = await db
+  const activeBonds = await db
     .collection<Bond>("bonds")
     .find({
       issuerType: "sovereign",
       countryId,
       matured: false,
       defaulted: false,
-      maturityTurn: { $gte: turn, $lt: turn + SOVEREIGN_ISSUANCE_INTERVAL_TURNS },
     })
     .toArray();
+  const maturingSoon = activeBonds.filter(
+    (bond) =>
+      bond.maturityTurn >= turn && bond.maturityTurn < turn + SOVEREIGN_ISSUANCE_INTERVAL_TURNS
+  );
 
-  const total = bonds.reduce((sum, bond) => sum + (bond.totalIssued ?? 0), 0);
-  return Math.floor(total / BOND_UNIT_FACE_VALUE) * BOND_UNIT_FACE_VALUE;
+  const maturingFace = maturingSoon.reduce((sum, bond) => sum + (bond.totalIssued ?? 0), 0);
+  const activeFace = activeBonds.reduce((sum, bond) => sum + (bond.totalIssued ?? 0), 0);
+
+  // Rollover refinances debt that still exists. A country that has paid its
+  // debt down (or never owed it) must not keep reissuing paper just because an
+  // old series is maturing: FR carried 4.2T FRF of bonds against a principal of
+  // zero that way, and with a real market pool that paper would have drawn
+  // coupons from nothing. Cap the rollover so bonds outstanding after this
+  // quarter never exceed the budget's principal. A missing budget keeps the
+  // old behaviour (roll everything) so seeds and tests without one still work.
+  const budget = await db
+    .collection<Pick<FederalBudget, "_id" | "debt">>("federalBudget")
+    .findOne({ _id: getNationalBudgetId(countryId) }, { projection: { debt: 1 } });
+  const principal = budget?.debt?.principal;
+  const rollover =
+    typeof principal === "number" && Number.isFinite(principal)
+      ? Math.min(maturingFace, Math.max(0, principal - (activeFace - maturingFace)))
+      : maturingFace;
+  return Math.floor(rollover / BOND_UNIT_FACE_VALUE) * BOND_UNIT_FACE_VALUE;
 }
 
 export async function issueScheduledSovereignBondSeries(

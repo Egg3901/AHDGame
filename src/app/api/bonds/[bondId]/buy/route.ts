@@ -9,7 +9,6 @@ import { handleRouteError } from "@/lib/api/errors";
 import { refundOrCapture } from "@/lib/observability/context";
 import type { Bond, Character, Corporation, User } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
-import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import {
@@ -37,6 +36,7 @@ import { wasCeoWithinTurns } from "@/lib/corporations/ceoHistory";
 import { EX_CEO_BOND_PURCHASE_BLOCK_TURNS } from "@/lib/constants/bonds";
 import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
 import { sovereignBondCapError } from "@/lib/bonds/holderCap";
+import { creditBondPool, loadBondQuote } from "@/lib/bonds/marketPool";
 import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 
 interface RouteParams {
@@ -107,7 +107,10 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     // Cost in the bond's LOCAL currency (`units × face × marketPrice` produces
     // `bond.currencyCode` post-Task-18B).
-    const costLocal = units * BOND_UNIT_FACE_VALUE * bond.marketPrice;
+    // The pool sells at its ask: the rate-derived mid plus the dealer half
+    // spread, shifted by the pool's cash position and sovereign appetite.
+    const quote = await loadBondQuote(db, bond);
+    const costLocal = units * quote.askPerUnit;
 
     // Check if buying as character or as corporation CEO (query param)
     const url = new URL(request.url);
@@ -209,6 +212,12 @@ export async function POST(request: Request, { params }: RouteParams) {
           );
         }
 
+        // The float has a counterparty now: the units came out of the currency's
+
+        // bond market pool, so the cash goes into it instead of vanishing.
+
+        await creditBondPool(db, bondCurrency, costLocal, "purchasesIn", now);
+
         await emitTx(db, {
           type: "bond_purchase",
           turn: currentTurn,
@@ -224,7 +233,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           meta: {
             bondId: bond._id.toString(),
             units,
-            pricePerUnit: bond.marketPrice,
+            pricePerUnit: quote.ask,
             // `currencyCode`/`amount` reflect the corp's actual lc movement
             // (corp's home currency, FX-converted from the bond's price).
             // `bondCurrency`/`bondAmount` carry the bond-side magnitude in
@@ -260,7 +269,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         unitsBought: units,
         cost: Math.round(costLocal * 100) / 100,
         costCurrency: bondCurrency,
-        pricePerUnit: Math.round(BOND_UNIT_FACE_VALUE * bond.marketPrice * 100) / 100,
+        pricePerUnit: quote.askPerUnit,
         buyer: "corporation",
         // Surface the FX spread the corp paid so the cash movement is explained
         // (no "money disappeared"). Zero for same-currency buys.
@@ -401,6 +410,12 @@ export async function POST(request: Request, { params }: RouteParams) {
             );
           }
 
+          // The float has a counterparty now: the units came out of the currency's
+
+          // bond market pool, so the cash goes into it instead of vanishing.
+
+          await creditBondPool(db, bondCurrency, costLocal, "purchasesIn", now);
+
           await emitTx(db, {
             type: "bond_purchase",
             turn: currentTurn,
@@ -416,7 +431,7 @@ export async function POST(request: Request, { params }: RouteParams) {
             meta: {
               bondId: bond._id.toString(),
               units,
-              pricePerUnit: bond.marketPrice,
+              pricePerUnit: quote.ask,
               imperial: true,
             },
           });
@@ -436,7 +451,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           unitsBought: units,
           cost: Math.round(costLocal * 100) / 100,
           costCurrency: bondCurrency,
-          pricePerUnit: Math.round(BOND_UNIT_FACE_VALUE * bond.marketPrice * 100) / 100,
+          pricePerUnit: quote.askPerUnit,
           buyer: "character",
         });
       }
@@ -556,6 +571,12 @@ export async function POST(request: Request, { params }: RouteParams) {
           );
         }
 
+        // The float has a counterparty now: the units came out of the currency's
+
+        // bond market pool, so the cash goes into it instead of vanishing.
+
+        await creditBondPool(db, bondCurrency, costLocal, "purchasesIn", now);
+
         await emitTx(db, {
           type: "bond_purchase",
           turn: currentTurn,
@@ -588,7 +609,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         unitsBought: units,
         cost: Math.round(costLocal * 100) / 100,
         costCurrency: bondCurrency,
-        pricePerUnit: Math.round(BOND_UNIT_FACE_VALUE * bond.marketPrice * 100) / 100,
+        pricePerUnit: quote.askPerUnit,
         buyer: "character",
         // FX spread already included in the cost when paying in a foreign
         // currency, surfaced so the player sees it wasn't lost.

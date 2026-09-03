@@ -16,6 +16,7 @@ import {
 import { isBankPropTradingEnabled } from "@/lib/banking/featureFlag";
 import { mayDistribute } from "./capitalAdequacy";
 import { getCashReserves } from "./bankCash";
+import { charterMay } from "@/lib/banking/rules/capabilities";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { escapeRegex } from "@/lib/utils/escapeRegex";
@@ -70,11 +71,7 @@ function finiteOrZero(value: number): number {
 }
 
 function isPropCharter(charter: BankCharter | undefined): charter is BankCharter {
-  return (
-    charter != null &&
-    charter.status === "active" &&
-    (charter.type === "investment" || charter.type === "universal")
-  );
+  return charterMay(charter, "proprietaryTrading");
 }
 
 /**

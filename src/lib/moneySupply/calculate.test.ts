@@ -23,6 +23,7 @@ describe("money supply aggregates", () => {
       creditOutstanding: 125,
       sovereignBondsOutstanding: 600,
       centralBankBondHoldings: 100,
+      bondPoolCash: 0,
     });
 
     expect(result.m1).toBe(430);
@@ -79,6 +80,7 @@ describe("bank deposits in M2", () => {
     creditOutstanding: 0,
     sovereignBondsOutstanding: 0,
     centralBankBondHoldings: 0,
+    bondPoolCash: 0,
   };
 
   it("keeps M2 flat when a deposit moves from the external pool onto a bank book", () => {

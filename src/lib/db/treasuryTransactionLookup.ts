@@ -13,17 +13,26 @@ export interface ListTransactionsOptions {
   direction?: "credit" | "debit";
 }
 
+/**
+ * Categories rolled up to one row per (turn, category, direction) on the party
+ * treasury log. These are the high-frequency streams: GOTV and suppression fire
+ * per state per turn, and `org_building` bills once per Build Org CLICK — the
+ * busiest party logged over 4,000 of those in a single week — so left unbundled
+ * they bury every other row in the log.
+ */
 const BUNDLED_PARTY_TREASURY_CATEGORIES = new Set<TreasuryTransactionCategory>([
   "gotv",
   "suppression",
+  "org_building",
 ]);
 
 const BUNDLED_PARTY_TREASURY_MEMO: Record<
-  Extract<TreasuryTransactionCategory, "gotv" | "suppression">,
+  Extract<TreasuryTransactionCategory, "gotv" | "suppression" | "org_building">,
   string
 > = {
   gotv: "GOTV operations",
   suppression: "Suppression operations",
+  org_building: "Org building",
 };
 
 export function bundlePartyTreasuryTransactions(
@@ -48,7 +57,10 @@ export function bundlePartyTreasuryTransactions(
         holderId: partyId,
         amount: row.amount,
         memo: BUNDLED_PARTY_TREASURY_MEMO[
-          row.category as Extract<TreasuryTransactionCategory, "gotv" | "suppression">
+          row.category as Extract<
+            TreasuryTransactionCategory,
+            "gotv" | "suppression" | "org_building"
+          >
         ],
         counterparty: undefined,
         initiatedBy: undefined,

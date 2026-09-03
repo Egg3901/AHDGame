@@ -393,6 +393,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
             loanPrincipalRepaid: Math.round(bankingResult.loanPrincipalRepaid * 100) / 100,
             defaultsWrittenOff: Math.round(bankingResult.defaultsWrittenOff * 100) / 100,
             npcDepositDelta: Math.round(bankingResult.npcDepositDelta * 100) / 100,
+            unfinishedSettlements: bankingResult.unfinishedSettlements,
           };
         }
 

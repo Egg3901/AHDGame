@@ -572,6 +572,9 @@ export async function processNppCorporationDecisions(
       }
     }
 
+    // Gated inside the builder, not on `updates` alone: the cash leg no longer
+    // lives in `updates`, so a decision whose only effect is a spend would be
+    // dropped by an `Object.keys(updates).length > 0` check (ticket #1260).
     const corpUpdateOp = buildNppCorpUpdateOp(decision);
     if (corpUpdateOp) corpUpdates.push(corpUpdateOp);
 
@@ -1918,6 +1921,13 @@ export function makeNppCorpDecision(
   return {
     corpId: corp._id,
     updates,
+    // Ticket #1260: the cash leg travels as a DELTA, never as an absolute write.
+    // These ops are appended to the corporation bulkWrite AFTER this turn's
+    // income `$inc`, so a `$set` of the balance overwrote the credit and the
+    // whole turn's operating income vanished. `cashLocal` starts at the opening
+    // `liquidCapital` and every path above adjusts it — a market-entry credit
+    // up, a founding cost or growth capex down — so this one subtraction is the
+    // net movement whichever path ran. See `nppCashWrite.ts`.
     liquidCapitalDelta: cashLocal - liquidCapital,
     sectorUpdates,
     newSectors: newSectors.length > 0 ? newSectors : undefined,

@@ -26,6 +26,7 @@ import ActionsHero from "./components/ActionsHero";
 import PlayerEventCard from "./components/PlayerEventCard";
 import DebateCard from "./components/DebateCard";
 import CrisisActionCard from "./components/CrisisActionCard";
+import EndorsePresidentCard from "./components/EndorsePresidentCard";
 import CategoryFilter from "./components/CategoryFilter";
 import ViewToggle from "./components/ViewToggle";
 import DonorNetworkStats from "./components/DonorNetworkStats";
@@ -572,6 +573,10 @@ export default function ActionsPage() {
 
         {/* Active crises — renders nothing when there are none */}
         <CrisisActionCard />
+
+        {/* Presidential endorsement nudge: renders nothing when the player has
+            no live presidential race at home or has already endorsed someone */}
+        <EndorsePresidentCard />
 
         {/* Filter Tabs + View Toggle */}
         <div className="flex items-center justify-between gap-4">

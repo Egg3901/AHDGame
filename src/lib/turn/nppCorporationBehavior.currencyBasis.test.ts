@@ -196,6 +196,8 @@ describe("NPP decisions in a non-anchor currency", () => {
     const decision = decide(c, JPY_RATE, plantsCtx);
 
     expect(decision.newSectors).toHaveLength(1);
+    // Ticket #1260: the spend is carried as a delta now, not as an absolute
+    // `updates.liquidCapital`, so read it straight off `liquidCapitalDelta`.
     const spentLocal = -decision.liquidCapitalDelta;
     expect(spentLocal).toBeCloseTo(FOUNDING_COST_ANCHOR * JPY_RATE, 2);
     // The bug: the anchor figure charged verbatim, i.e. a 360x discount.
