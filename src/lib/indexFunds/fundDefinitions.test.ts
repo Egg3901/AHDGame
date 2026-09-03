@@ -113,9 +113,9 @@ describe("fundDefinitions", () => {
   });
 
   describe("getAllFundDefinitions", () => {
-    it("returns the correct total: 8×2 country broad + 1 global broad + 17 sector = 34", () => {
+    it("returns the correct total: 8×2 country broad + 1 global broad + 17 sector + 12 bond = 46", () => {
       const all = getAllFundDefinitions();
-      expect(all).toHaveLength(34);
+      expect(all).toHaveLength(46);
     });
 
     it("returns unique slugs for all funds", () => {
@@ -130,13 +130,14 @@ describe("fundDefinitions", () => {
       expect(new Set(tickers).size).toBe(tickers.length);
     });
 
-    it("country funds have countryId and topN", () => {
+    it("country funds have countryId, and equity ones a topN", () => {
       const all = getAllFundDefinitions();
       const countryFunds = all.filter((f) => f.scope === "country");
-      expect(countryFunds.length).toBe(16); // 8 countries × 2
+      expect(countryFunds.length).toBe(24); // 8 countries × 2 equity + 8 bond
       for (const f of countryFunds) {
         expect(f.countryId).toBeTruthy();
-        expect(f.topN).toBeTruthy();
+        if (f.kind === "bond") expect(f.bondUniverse).toBeTruthy();
+        else expect(f.topN).toBeTruthy();
       }
     });
 
