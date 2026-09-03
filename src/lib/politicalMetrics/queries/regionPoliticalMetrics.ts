@@ -30,7 +30,7 @@ import {
 } from "@/lib/governanceStyle/score";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getCatalog } from "@/lib/politicalLegislation/catalog";
-import { lawTargets } from "@/lib/politicalLegislation/dynamics";
+import { lawTargets, structuralResidual } from "@/lib/politicalLegislation/dynamics";
 import { getEnactedLevels } from "@/lib/politicalLegislation/enactedLevels";
 import { regionalDefaultLevel } from "@/lib/politicalLegislation/regionalDefaults";
 import { aggregateNationalPoliticalMetrics, categoryScore, overallScore } from "../aggregate";
@@ -238,12 +238,19 @@ export async function loadRegionPoliticalMetrics(
 
   const buildMetricModifiers = (metricId: PoliticalMetricId): MetricModifiersInfo => {
     const cabinet = cabinetContributionsFor(regionDoc, metricId);
-    // Mirrors the turn phase's lazy self-heal: a doc written before residuals
-    // existed derives its structural gap from the composed law target, so the
-    // panel agrees with what the engine would compute on its next touch.
+    // Mirrors the turn phase's lazy self-heal: a doc without residuals derives
+    // its structural gap from the composed law target, so the panel agrees with
+    // what the engine would compute on its next touch. Shared derivation, so
+    // that stays true — this used to omit the region's own supplement and read
+    // 0.5 x supplement high for the turn after a region changed country, which
+    // is exactly when a board has no residuals to show.
     const residual =
       regionDoc.residuals?.[metricId] ??
-      (regionDoc.values[metricId] ?? 0) - nationalPoints[metricId];
+      structuralResidual(
+        regionDoc.values[metricId] ?? 0,
+        nationalPoints[metricId],
+        regionalPoints[metricId] ?? 0
+      );
     return buildModifiers({
       countryId,
       metricId,

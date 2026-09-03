@@ -35,6 +35,13 @@ export type RegionKey =
 export interface RegionScope {
   collection: string;
   key: RegionKey;
+  /**
+   * Fields DROPPED as the region crosses the border, because they were derived
+   * against the old country and would be read as if they had been derived
+   * against the new one. Only for state a downstream phase re-derives when it
+   * finds the field absent — dropping anything else just loses data.
+   */
+  unsetOnRescope?: string[];
 }
 
 export const REGION_SCOPED_COLLECTIONS: RegionScope[] = [
@@ -68,7 +75,20 @@ export const REGION_SCOPED_COLLECTIONS: RegionScope[] = [
   // region whose board still names its old country would be driven by the wrong
   // law catalog and scored against the wrong approval intercept.
   { collection: "macroMetrics", key: "idIsState" },
-  { collection: "politicalMetrics", key: "idIsState" },
+  // ⚠️ `residuals` DOES NOT CROSS THE BORDER. It is the structural gap between
+  // the region's scores and what its country's law book explains, fixed once at
+  // reset — so it is calibrated to the catalogue named on the line above, the
+  // one the region is leaving. `politicalMetricsDynamics` re-derives it ONLY
+  // when the field is absent (its §4 lazy self-heal), so a residual carried
+  // across is never recalibrated: the region is then credited with the new
+  // country's law points AND the old country's leftover, stacked. German
+  // reunification is what exposed this — the acceded FRG Laender arrived
+  // carrying a residual sized against a thin FRG book, met the GDR's fully
+  // enacted one, and their targets went to the 100 ceiling on 49 of 63 metric
+  // families. Dropping the field hands the next turn's heal a clean
+  // recalibration, and because that heal adopts the CURRENT values as
+  // equilibrium the transfer itself moves nothing.
+  { collection: "politicalMetrics", key: "idIsState", unsetOnRescope: ["residuals"] },
   { collection: "regionDemographics", key: "idIsState" },
   { collection: "stateDemographicTurnout", key: "idIsState" },
   { collection: "regionalBudgets", key: "idIsState" },
@@ -126,8 +146,10 @@ function filterFor(scope: RegionScope, regionId: string): Record<string, string>
  * by `$set`-ting `countryId`. `_id`-keyed metric collections that don't reliably
  * carry a `countryId` still get it set (harmless denormalization the read paths
  * tolerate). `homeState` / `stateId` / `state` keys are NOT changed — the region
- * keeps its identity under the new country. Returns a matched-count report for
- * the conservation audit.
+ * keeps its identity under the new country. A scope declaring `unsetOnRescope`
+ * also has those fields dropped in the same write — state derived against the
+ * country the region is leaving, which its owning phase re-derives once it is
+ * gone. Returns a matched-count report for the conservation audit.
  */
 export async function rescopeRegionToCountry(
   db: Db,
@@ -184,9 +206,15 @@ export async function rescopeRegionToCountry(
       report.push({ collection: scope.collection, matched });
       continue;
     }
-    const res = await db.collection(scope.collection).updateMany(filterFor(scope, regionId), {
+    const update: Record<string, unknown> = {
       $set: { countryId: toCountryId, updatedAt: now },
-    });
+    };
+    if (scope.unsetOnRescope?.length) {
+      update.$unset = Object.fromEntries(scope.unsetOnRescope.map((field) => [field, ""]));
+    }
+    const res = await db
+      .collection(scope.collection)
+      .updateMany(filterFor(scope, regionId), update);
     report.push({ collection: scope.collection, matched: res.matchedCount ?? 0 });
   }
   return report;

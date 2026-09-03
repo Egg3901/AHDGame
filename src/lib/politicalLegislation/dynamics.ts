@@ -57,6 +57,30 @@ export function lawTargets(
   return out;
 }
 
+/**
+ * §4: the structural gap — the part of a region's score its law book does not
+ * explain. The exact inverse of `composeTarget` before the clamp, so a board
+ * given this residual composes back to the value it was measured from.
+ *
+ * ONE definition because it had three, and two of them dropped the supplement
+ * term. That is not a rounding difference: a residual derived without the
+ * supplement composes to `value + 0.5 × supplement`, so the target sits above
+ * the value every turn and the board creeps upward for as long as the region
+ * holds any regional law. Deriving it here keeps the inverse honest.
+ *
+ * The NATIONAL scope is the deliberate exception and does not call this: it
+ * reports one population-weighted residual across regions whose supplements
+ * differ, and folds the supplement into that number rather than double-counting
+ * it — see `countryPoliticalMetrics`.
+ */
+export function structuralResidual(
+  value: number,
+  nationalPoints: number,
+  regionalSupplementPoints: number
+): number {
+  return value - (nationalPoints + REGIONAL_SUPPLEMENT_FACTOR * regionalSupplementPoints);
+}
+
 /** §2: clamp(national + 0.5 × supplement + residual, 0, 100). */
 export function composeTarget(
   nationalPoints: number,
