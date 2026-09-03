@@ -468,10 +468,11 @@ export async function accumulateVoteTurn(
     isGeneralElection && !isSingleSeatLegislativeRace(election)
       ? getIncumbentSeatShareByParty(election, db)
       : undefined,
-    // A2 — money driver. Aggregate per-party spend-this-turn across all
-    // campaigns in the race. Per the design doc the driver reads "active
-    // pacing" rather than treasury balance; `spendThisTurn` is reset every
-    // turn-tick by the `campaignSpendReset` phase after this accumulator runs.
+    // Money driver. Aggregate per-party recent spend across all campaigns
+    // in the race (carried stock plus this turn's accumulator). Reads
+    // spend persistence, not treasury balance; the `campaignSpendReset`
+    // phase folds the accumulator into the decaying stock after this
+    // accumulator runs.
     isGeneralElection ? getFundsByPartyForElection(electionId, db) : undefined,
     // Presidential coattail: the sitting President's party gets an
     // approval-driven nominal-share nudge in every down-ballot general

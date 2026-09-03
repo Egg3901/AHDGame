@@ -508,8 +508,11 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const result: SplitResolution = resolution;
     const sectorLabel = CORPORATION_TYPE_LABELS[result.sectorType] ?? result.sectorType;
+    // Suggestion #324: say what moved in value terms too, so the defender can
+    // tell plants seized from cash, revenue, or profit. The $ below is the
+    // transferred plants' book value, not revenue or profit.
     const outcomeText = result.succeeded
-      ? `${attacker.name} seized ${result.plantsTransferred.toLocaleString("en-US")} whole plants from ${result.defenderCorporationName}'s ${sectorLabel} sector in ${state.name}.`
+      ? `${attacker.name} seized ${result.plantsTransferred.toLocaleString("en-US")} whole plants (~$${Math.round(result.bookValueTransferredAnchor).toLocaleString("en-US")} book value) from ${result.defenderCorporationName}'s ${sectorLabel} sector in ${state.name}.`
       : `${attacker.name} failed to split ${result.defenderCorporationName}'s ${sectorLabel} sector in ${state.name}.`;
     logWireEvent("sector_attack", outcomeText, {
       href: `${regionUrl(countryId, stateId)}?tab=economy&sector=${result.sectorType}`,
@@ -568,9 +571,13 @@ export async function POST(request: Request, { params }: RouteParams) {
           attackerCorporationName: attacker.name,
           attackerCorporationId: attacker._id.toString(),
           sectorType: result.sectorType,
+          sectorLabel,
           stateId,
           stateName: state.name,
+          countryId,
           plantsLost: result.plantsTransferred,
+          bookValueTransferredAnchor: result.bookValueTransferredAnchor,
+          captureKind: "capacity",
           splitSucceeded: result.succeeded,
         },
       });

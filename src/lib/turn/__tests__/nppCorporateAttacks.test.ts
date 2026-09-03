@@ -6,6 +6,7 @@ import {
   selectAttackTarget,
   canAttack,
   runNppCorporateAttacks,
+  formatNppSectorAttackDefenderMessage,
   ATTACK_COOLDOWN_TURNS,
   type AttackCandidate,
 } from "../nppCorporateAttacks";
@@ -119,6 +120,53 @@ describe("canAttack (pure aggression/cooldown/affordability gate)", () => {
 
   it("blocks when MS would drop below the reserve", () => {
     expect(canAttack({ ...base, marketingStrength: 5, msCost: 4 })).toBe(false);
+  });
+});
+
+describe("formatNppSectorAttackDefenderMessage (suggestion #324)", () => {
+  it("names attacker, amount, sector, and state, and says the $ is revenue", () => {
+    const message = formatNppSectorAttackDefenderMessage({
+      attackerName: "Attacker Corp",
+      capturedAnchor: 123456,
+      sectorLabel: "Technology",
+      stateLabel: "California",
+      plantsEnabled: false,
+      capacityUnitsTaken: 0,
+    });
+    expect(message).toContain("Attacker Corp");
+    expect(message).toContain("$123,456");
+    expect(message).toContain("Technology");
+    expect(message).toContain("California");
+    expect(message).toContain("revenue");
+  });
+
+  it("clarifies the $ is NOT profit or sector value", () => {
+    const message = formatNppSectorAttackDefenderMessage({
+      attackerName: "Attacker Corp",
+      capturedAnchor: 5000,
+      sectorLabel: "Steel",
+      stateLabel: "Ohio",
+      plantsEnabled: false,
+      capacityUnitsTaken: 0,
+    });
+    expect(message).toMatch(/not profit/i);
+  });
+
+  it("under plants reports capacity units with book value instead of revenue", () => {
+    const message = formatNppSectorAttackDefenderMessage({
+      attackerName: "Attacker Corp",
+      capturedAnchor: 8000,
+      sectorLabel: "Steel",
+      stateLabel: "Ohio",
+      plantsEnabled: true,
+      capacityUnitsTaken: 12.5,
+    });
+    expect(message).toContain("12.5");
+    expect(message).toContain("capacity units");
+    expect(message).toContain("book value");
+    expect(message).toContain("Steel");
+    expect(message).toContain("Ohio");
+    expect(message).not.toMatch(/of revenue/);
   });
 });
 

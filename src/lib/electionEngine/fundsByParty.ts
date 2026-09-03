@@ -1,23 +1,26 @@
 /**
  * Per-party spend aggregator for the swing-flow engine's money driver.
  *
- * Implements A2 from `2026-05-22-swing-flow-driver-activation.md`. The
- * money driver reads "active pacing" (spend-this-turn) rather than
- * "treasury sitting balance" - see the log-ratio shape in
- * `moneyDriver` in `persuasionDrivers.ts`.
+ * Ticket #1261 follow-up: the driver used to read raw "active pacing"
+ * (spend-this-turn only), which forgot everything every turn — an idler
+ * read exactly like a side that never spent, and any-spend vs ~nothing
+ * saturated the log-ratio bar over pocket change. It now reads a decaying
+ * stock of recent spend: the carried `spendStock` plus the live
+ * `spendThisTurn` accumulator (this turn's spend counts at full weight at
+ * tally time; the reset sweep folds it into the stock afterwards).
+ * Hoarded treasuries still score zero — the stock only grows through
+ * actual spend — and the stock dies with the campaign row on resolution,
+ * so nothing carries across elections.
  *
- * `spendThisTurn` is $inc'd at every campaign spend write (upgrade
- * purchases in `campaignCommands.ts`, maintenance ticks in
- * `campaignTurn.ts`) and reset to 0 via `campaignSpendReset.ts` after
- * each turn's voteAccumulation phase. Missing / undefined values
- * degrade to 0 — backward-compat with pre-A2 rows.
+ * Missing / undefined values degrade to 0 — backward-compat with old rows.
  */
 
 import type { Db, ObjectId } from "mongodb";
 import type { Campaign } from "@/lib/db/types";
 
 /**
- * Aggregate `Campaign.spendThisTurn` by party for a single election.
+ * Aggregate `Campaign.spendStock` + `Campaign.spendThisTurn` by party for
+ * a single election.
  *
  * Sums every campaign in the race by their party, returning a Map keyed
  * by party ID with the per-party spend total. Parties with zero spend
@@ -25,7 +28,7 @@ import type { Campaign } from "@/lib/db/types";
  *
  * Returns an empty Map when:
  *   - no campaigns exist for the election (early-cycle NPP races, etc.)
- *   - every campaign has `spendThisTurn` undefined or zero
+ *   - every campaign has no spend recorded
  *
  * Either case is fine — the money driver returns 0 when fundsJ and
  * fundsI are both 0.
@@ -37,12 +40,18 @@ export async function getFundsByPartyForElection(
   const campaigns = await db
     .collection<Campaign>("campaigns")
     .find({ electionId })
-    .project<{ party: string; spendThisTurn?: number }>({ party: 1, spendThisTurn: 1 })
+    .project<{ party: string; spendStock?: number; spendThisTurn?: number }>({
+      party: 1,
+      spendStock: 1,
+      spendThisTurn: 1,
+    })
     .toArray();
 
   const fundsByParty = new Map<string, number>();
   for (const c of campaigns) {
-    const spend = typeof c.spendThisTurn === "number" ? c.spendThisTurn : 0;
+    const stock = typeof c.spendStock === "number" ? c.spendStock : 0;
+    const fresh = typeof c.spendThisTurn === "number" ? c.spendThisTurn : 0;
+    const spend = stock + fresh;
     if (spend <= 0) continue;
     fundsByParty.set(c.party, (fundsByParty.get(c.party) ?? 0) + spend);
   }
