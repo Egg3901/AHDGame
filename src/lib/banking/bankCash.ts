@@ -36,14 +36,17 @@
  * drops below its reserve requirement.
  */
 
-import type { Db, ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
+import { loadBankingSnapshot } from "@/lib/banking/snapshot";
+import { decideBankCommand } from "@/lib/banking/rules/decide";
+import type { BankCommand } from "@/lib/banking/rules/boundary";
+import { settleTransition } from "@/lib/banking/settlementJournal";
+import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 import type { BankCharter } from "@/lib/db/types/bank";
 import {
   bankBalanceSheet,
   getCashReserves as readCashReserves,
-  mayDistribute,
-  requiredReserves as computeRequiredReserves,
   type BalanceSheetCharter,
 } from "@/lib/banking/balanceSheet";
 
@@ -80,8 +83,86 @@ export function upstreamCapacity(
   return bankBalanceSheet({ charter, reserveRatio }).distributable;
 }
 
+async function readBankCash(
+  db: Db,
+  corporationId: ObjectId
+): Promise<{ cashReserves: number; liquidCapital: number }> {
+  const corp = await db
+    .collection<Corporation>("corporations")
+    .findOne({ _id: corporationId }, { projection: { liquidCapital: 1, bankCharter: 1 } });
+  return {
+    cashReserves: readCashReserves(corp?.bankCharter),
+    liquidCapital: corp?.liquidCapital ?? 0,
+  };
+}
+
 /**
- * Corporation → bank. Capped only by the corporation's own cash.
+ * Run one capital command through the boundary and the journal.
+ *
+ * The rules decide (capability, caps, the distributable line); the journal
+ * lands the two legs and the posted-capital memo exactly once; the event is
+ * published with the outcome. The shell's only job is to load the snapshot
+ * and to report the balances the caller wants to show.
+ */
+async function runCapitalCommand(
+  db: Db,
+  corporationId: ObjectId,
+  command: BankCommand,
+  commandId: string
+): Promise<BankCashResult> {
+  const loaded = await loadBankingSnapshot(db, corporationId);
+  if (!loaded) return { ok: false, error: "This corporation has no active bank charter." };
+  const decision = decideBankCommand(loaded.snapshot, command, { commandId });
+  if (!decision.allowed) {
+    emitBankingAuditEvent(
+      {
+        kind: "charter.issued",
+        command:
+          command.type === "inject_capital" ? "bank.capital.inject" : "bank.capital.upstream",
+        turn: loaded.snapshot.turn,
+        outcome: "rejected",
+        reason: decision.message,
+        currency: loaded.snapshot.currency,
+        bankId: corporationId.toString(),
+      },
+      db
+    );
+    return { ok: false, error: decision.message };
+  }
+  const settled = await settleTransition(db, decision.transition);
+  if (settled.status === "rejected" || settled.status === "partial" || settled.error) {
+    emitBankingAuditEvent(
+      {
+        ...decision.transition.event,
+        turn: loaded.snapshot.turn,
+        outcome: "rejected",
+        reason: settled.error ?? "The bank's reserves moved while that was in flight. Try again.",
+        currency: loaded.snapshot.currency,
+        bankId: corporationId.toString(),
+        settlementId: decision.transition.key,
+      },
+      db
+    );
+    return { ok: false, error: "The bank's reserves moved while that was in flight. Try again." };
+  }
+  emitBankingAuditEvent(
+    {
+      ...decision.transition.event,
+      turn: loaded.snapshot.turn,
+      outcome: "ok",
+      currency: loaded.snapshot.currency,
+      bankId: corporationId.toString(),
+      settlementId: decision.transition.key,
+    },
+    db
+  );
+  const after = await readBankCash(db, corporationId);
+  const moved = decision.transition.legs[0]?.amount ?? 0;
+  return { ok: true, amount: moved, ...after };
+}
+
+/**
+ * Corporation -> bank. Capped only by the corporation's own cash.
  *
  * Increments `postedCapital` alongside the cash, because that is what posted
  * capital has always meant: the cumulative shareholder money standing behind
@@ -91,158 +172,33 @@ export function upstreamCapacity(
 export async function injectBankCapital(
   db: Db,
   corporationId: ObjectId,
-  amount: number
+  amount: number,
+  commandId: string = new ObjectId().toHexString()
 ): Promise<BankCashResult> {
   if (!Number.isFinite(amount) || amount <= 0) {
     return { ok: false, error: "Amount must be a positive number." };
   }
-  const move = Math.round(amount);
-
-  // One atomic write across both balances: the corporation's cash and the
-  // bank's are fields of the same document, so the transfer cannot half-apply
-  // even without transactions (standalone Mongo has none).
-  const updated = await db.collection<Corporation>("corporations").findOneAndUpdate(
-    {
-      _id: corporationId,
-      "bankCharter.status": "active",
-      liquidCapital: { $gte: move },
-    },
-    {
-      $inc: {
-        liquidCapital: -move,
-        "bankCharter.cashReserves": move,
-        "bankCharter.postedCapital": move,
-      },
-      $set: { updatedAt: new Date() },
-    },
-    { returnDocument: "after", projection: { liquidCapital: 1, bankCharter: 1 } }
-  );
-
-  if (!updated) {
-    return { ok: false, error: "Insufficient corporate funds, or no active charter." };
-  }
-  return {
-    ok: true,
-    amount: move,
-    cashReserves: readCashReserves(updated.bankCharter),
-    liquidCapital: updated.liquidCapital ?? 0,
-  };
+  return runCapitalCommand(db, corporationId, { type: "inject_capital", amount }, commandId);
 }
 
 /**
- * Bank → corporation. Only surplus reserves, only from an adequate bank.
+ * Bank -> corporation. Only surplus reserves, only from an adequate bank.
  *
  * `postedCapital` comes down with the cash but never below zero: a bank that
  * has earned more than its shareholders put in may upstream those earnings
- * without booking negative contributed capital.
+ * without booking negative contributed capital. The reserve floor and the
+ * equity ceiling are re-gated inside the journal's guarded debit, so a
+ * concurrent turn cannot leave the bank short.
  */
 export async function upstreamBankCash(
   db: Db,
   corporationId: ObjectId,
   amount: number,
-  reserveRatio: number
+  _reserveRatio?: number,
+  commandId: string = new ObjectId().toHexString()
 ): Promise<BankCashResult> {
   if (!Number.isFinite(amount) || amount <= 0) {
     return { ok: false, error: "Amount must be a positive number." };
   }
-
-  const corp = await db
-    .collection<Corporation>("corporations")
-    .findOne({ _id: corporationId }, { projection: { liquidCapital: 1, bankCharter: 1 } });
-  const charter = corp?.bankCharter;
-  if (!charter || charter.status !== "active") {
-    return { ok: false, error: "This corporation has no active bank charter." };
-  }
-
-  if (charter.capitalStanding && !mayDistribute(charter.capitalStanding)) {
-    return {
-      ok: false,
-      error:
-        charter.capitalStanding === "undercapitalized"
-          ? "The bank is undercapitalized. Post capital rather than taking it out."
-          : "The bank failed its stress test, so it may not pay out until it clears.",
-    };
-  }
-
-  const capacity = upstreamCapacity(charter, reserveRatio);
-  const move = Math.round(Math.min(amount, capacity));
-  if (move <= 0) {
-    return {
-      ok: false,
-      error:
-        "The bank has no distributable capital. Its reserves are required against deposits, or it holds no equity above its deposit liabilities to pay out.",
-    };
-  }
-
-  const required = computeRequiredReserves(charter, reserveRatio);
-  const postedDown = Math.min(move, Math.max(0, charter.postedCapital ?? 0));
-
-  // Re-gate both ceilings inside the write. The read above can go stale against
-  // a concurrent injection or a banking turn moving deposits/loans, and the one
-  // thing this must never do is leave the bank short of reserves OR pay the
-  // owner out of depositor money (post-move book equity must stay non-negative).
-  const updated = await db.collection<Corporation>("corporations").findOneAndUpdate(
-    {
-      _id: corporationId,
-      "bankCharter.status": "active",
-      $expr: {
-        $and: [
-          {
-            $gte: [{ $subtract: [{ $ifNull: ["$bankCharter.cashReserves", 0] }, move] }, required],
-          },
-          {
-            $gte: [
-              {
-                $subtract: [
-                  {
-                    $add: [
-                      { $ifNull: ["$bankCharter.cashReserves", 0] },
-                      { $max: [0, { $ifNull: ["$bankCharter.totalLoans", 0] }] },
-                    ],
-                  },
-                  {
-                    $add: [
-                      { $max: [0, { $ifNull: ["$bankCharter.npcDeposits", 0] }] },
-                      { $max: [0, { $ifNull: ["$bankCharter.interbankDebt", 0] }] },
-                      { $max: [0, { $ifNull: ["$bankCharter.cbMarginDebt", 0] }] },
-                      { $max: [0, { $ifNull: ["$bankCharter.discountWindowDebt", 0] }] },
-                      // Arrears are borrowings too: unpaid interest is still
-                      // owed, and leaving it out of the guard let an owner
-                      // upstream exactly the money the bank could not pay.
-                      { $max: [0, { $ifNull: ["$bankCharter.discountWindowArrears", 0] }] },
-                      { $max: [0, { $ifNull: ["$bankCharter.cbMarginArrears", 0] }] },
-                      move,
-                    ],
-                  },
-                ],
-              },
-              0,
-            ],
-          },
-        ],
-      },
-    },
-    {
-      $inc: {
-        liquidCapital: move,
-        "bankCharter.cashReserves": -move,
-        ...(postedDown > 0 ? { "bankCharter.postedCapital": -postedDown } : {}),
-      },
-      $set: { updatedAt: new Date() },
-    },
-    { returnDocument: "after", projection: { liquidCapital: 1, bankCharter: 1 } }
-  );
-
-  if (!updated) {
-    return {
-      ok: false,
-      error: "The bank's reserves moved while that was in flight. Try again.",
-    };
-  }
-  return {
-    ok: true,
-    amount: move,
-    cashReserves: readCashReserves(updated.bankCharter),
-    liquidCapital: updated.liquidCapital ?? 0,
-  };
+  return runCapitalCommand(db, corporationId, { type: "upstream_cash", amount }, commandId);
 }

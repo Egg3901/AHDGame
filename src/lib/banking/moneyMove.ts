@@ -279,6 +279,13 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
       break;
     }
     applied.push(i);
+    // Stamp the leg the moment it lands. Recording applied legs only at
+    // completion meant a crash between two legs left a record saying nothing
+    // had moved when the debit already had, and the repair queue is only worth
+    // having if it says exactly which half landed.
+    await db
+      .collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION)
+      .updateOne({ _id: move.key }, { $set: { [`legs.${i}.applied`]: true } });
   }
 
   const status: MoneyMoveStatus = failure ? "partial" : "applied";

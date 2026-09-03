@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { BankCharter, InterbankLoan } from "@/lib/db/types/bank";
 import type { Corporation } from "@/lib/db/types";
 import { ARREARS_DEFAULT_TURNS, processBankingTurn } from "@/lib/turn/bankingTurn";
@@ -15,6 +16,7 @@ import {
 } from "../interbank";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+vi.mock("@/lib/audit/recordAudit", () => ({ recordAudit: vi.fn(), recordAuditBulk: vi.fn() }));
 vi.mock("@/lib/currentTurn", () => ({ getCurrentTurn: vi.fn().mockResolvedValue(50) }));
 vi.mock("@/lib/financialTxLog/emit", () => ({
   emitTx: vi.fn().mockResolvedValue(undefined),
@@ -236,130 +238,99 @@ describe("interbank lend/repay", () => {
 });
 
 describe("CB margin draw/repay", () => {
-  let db: MockDb;
+  let memory: InMemoryDb;
   let corpId: ObjectId;
-  let live: Corporation;
+
+  function live() {
+    return memory.collection("corporations").docs[0] as unknown as Corporation;
+  }
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    db = createMockDb();
+    memory = createInMemoryDb();
     const { getDb } = await import("@/lib/mongodb");
-    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
-
-    db.collection("gameConfig");
-    db.collection("corporations");
-    db.collection("centralBanks");
+    vi.mocked(getDb).mockResolvedValue(memory as unknown as Db);
 
     corpId = new ObjectId();
-    live = {
-      _id: corpId,
-      name: "IB",
-      liquidCapital: 0,
-      bankCharter: makeCharter("investment", {
-        propBookMarkValue: 100_000,
-        cbMarginDebt: 0,
-        cashReserves: 10_000,
-      }),
-    } as unknown as Corporation;
-
-    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
-      _id: "default",
-      privateBankingEnabled: true,
-      bankPropTradingEnabled: true,
-    });
-    db.collectionMocks.centralBanks!.findOne.mockResolvedValue({
-      _id: "US-FED",
-      primeRate: 4,
-    });
-    db.collectionMocks.corporations!.findOne.mockImplementation(async () => ({
-      ...live,
-      bankCharter: live.bankCharter ? { ...live.bankCharter } : undefined,
-    }));
-    db.collectionMocks.corporations!.updateOne.mockImplementation(
-      async (
-        filter: {
-          _id?: ObjectId;
-          "bankCharter.cashReserves"?: { $gte?: number };
-          "bankCharter.cbMarginDebt"?: { $gte?: number };
-        },
-        update: { $inc?: Record<string, number> }
-      ) => {
-        if (
-          filter["bankCharter.cashReserves"]?.$gte != null &&
-          (live.bankCharter?.cashReserves ?? 0) < filter["bankCharter.cashReserves"]!.$gte!
-        ) {
-          return { matchedCount: 0, modifiedCount: 0 };
-        }
-        if (
-          filter["bankCharter.cbMarginDebt"]?.$gte != null &&
-          (live.bankCharter?.cbMarginDebt ?? 0) < filter["bankCharter.cbMarginDebt"].$gte
-        ) {
-          return { matchedCount: 0, modifiedCount: 0 };
-        }
-        if (update.$inc) {
-          if (update.$inc["bankCharter.cashReserves"] && live.bankCharter) {
-            live.bankCharter.cashReserves =
-              (live.bankCharter.cashReserves ?? 0) + update.$inc["bankCharter.cashReserves"];
-          }
-          if (update.$inc.liquidCapital) {
-            live.bankCharter!.cashReserves =
-              (live.bankCharter!.cashReserves ?? 0) + update.$inc.liquidCapital;
-          }
-          if (update.$inc["bankCharter.cbMarginDebt"] && live.bankCharter) {
-            live.bankCharter.cbMarginDebt =
-              (live.bankCharter.cbMarginDebt ?? 0) + update.$inc["bankCharter.cbMarginDebt"];
-          }
-        }
-        return { matchedCount: 1, modifiedCount: 1 };
-      }
-    );
+    memory.seed("gameConfig", [
+      { _id: "default", privateBankingEnabled: true, bankPropTradingEnabled: true },
+    ]);
+    memory.seed("gameState", [{ _id: "current", currentTurn: 50, preset: "2019-default" }]);
+    memory.seed("centralBanks", [
+      { _id: "US", countryId: "US", primeRate: 4, bankReserveRequirement: 0.1 },
+    ]);
+    memory.seed("corporations", [
+      {
+        _id: corpId,
+        name: "IB",
+        countryId: "US",
+        liquidCapital: 0,
+        liquidCurrencyCode: "USD",
+        bankCharter: makeCharter("investment", {
+          propBookMarkValue: 100_000,
+          cbMarginDebt: 0,
+          cashReserves: 10_000,
+        }),
+      },
+    ]);
   });
 
   it("caps draw at CB_MARGIN_COLLATERAL_FRACTION × prop mark", async () => {
     // max debt = 0.5 * 100_000 = 50_000
-    const over = await drawCbMargin(db as unknown as Db, corpId, 50_001);
+    const over = await drawCbMargin(memory as unknown as Db, corpId, 50_001);
     expect(over.ok).toBe(false);
-    const ok = await drawCbMargin(db as unknown as Db, corpId, 50_000);
+    const ok = await drawCbMargin(memory as unknown as Db, corpId, 50_000);
     expect(ok.ok).toBe(true);
     if (!ok.ok) return;
     // Creation: liquid rises, debt rises (no CB pool debit).
-    expect(live.bankCharter!.cashReserves).toBe(60_000);
-    expect(live.bankCharter!.cbMarginDebt).toBe(50_000);
+    expect(live().bankCharter!.cashReserves).toBe(60_000);
+    expect(live().bankCharter!.cbMarginDebt).toBe(50_000);
+    expect(ok).toMatchObject({ amount: 50_000, cbMarginDebt: 50_000, cashReserves: 60_000 });
   });
 
   it("destroys cash on repay (creation/destruction symmetry)", async () => {
-    await drawCbMargin(db as unknown as Db, corpId, 40_000);
-    const before = live.bankCharter!.cashReserves!;
-    const repaid = await repayCbMargin(db as unknown as Db, corpId, 15_000);
+    await drawCbMargin(memory as unknown as Db, corpId, 40_000);
+    const before = live().bankCharter!.cashReserves!;
+    const repaid = await repayCbMargin(memory as unknown as Db, corpId, 15_000);
     expect(repaid.ok).toBe(true);
-    expect(live.bankCharter!.cashReserves).toBe(before - 15_000);
-    expect(live.bankCharter!.cbMarginDebt).toBe(25_000);
+    expect(live().bankCharter!.cashReserves).toBe(before - 15_000);
+    expect(live().bankCharter!.cbMarginDebt).toBe(25_000);
   });
 
   it("ledgers draw/repay and mirrors netMoneyCreatedLifetime on the CB", async () => {
     const { emitTx } = await import("@/lib/financialTxLog/emit");
     vi.mocked(emitTx).mockClear();
-    db.collectionMocks.centralBanks!.updateOne.mockClear();
-    await drawCbMargin(db as unknown as Db, corpId, 40_000);
+    await drawCbMargin(memory as unknown as Db, corpId, 40_000);
     expect(emitTx).toHaveBeenCalledTimes(1);
     expect(vi.mocked(emitTx).mock.calls[0]![1]).toMatchObject({
       type: "bank_cb_margin_draw",
       amount: 40_000,
     });
-    expect(db.collectionMocks.centralBanks!.updateOne).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ $inc: { netMoneyCreatedLifetime: 40_000 } })
-    );
-    await repayCbMargin(db as unknown as Db, corpId, 15_000);
+    expect(memory.collection("centralBanks").docs[0]).toMatchObject({
+      netMoneyCreatedLifetime: 40_000,
+    });
+    await repayCbMargin(memory as unknown as Db, corpId, 15_000);
     expect(emitTx).toHaveBeenCalledTimes(2);
     expect(vi.mocked(emitTx).mock.calls[1]![1]).toMatchObject({
       type: "bank_cb_margin_repay",
       amount: -15_000,
     });
-    expect(db.collectionMocks.centralBanks!.updateOne).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ $inc: { netMoneyCreatedLifetime: -15_000 } })
-    );
+    expect(memory.collection("centralBanks").docs[0]).toMatchObject({
+      netMoneyCreatedLifetime: 25_000,
+    });
+  });
+
+  it("refuses a retail charter and a switched-off margin line with the old wording", async () => {
+    live().bankCharter!.type = "retail";
+    const retail = await drawCbMargin(memory as unknown as Db, corpId, 1);
+    expect(retail).toEqual({
+      ok: false,
+      error: "Only active investment or universal charters may draw CB margin",
+    });
+    live().bankCharter!.type = "investment";
+    memory.collection("gameConfig").docs[0].bankPropTradingEnabled = false;
+    const off = await drawCbMargin(memory as unknown as Db, corpId, 1);
+    expect(off).toEqual({ ok: false, error: "CB margin line is not enabled" });
   });
 
   it("exports provisional constants", () => {

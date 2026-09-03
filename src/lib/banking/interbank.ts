@@ -1,26 +1,24 @@
 import { ObjectId, type Db } from "mongodb";
 import type { BankCharter, InterbankLoan } from "@/lib/db/types/bank";
-import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { Corporation } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
-import { getBankId } from "@/lib/centralBank/helpers";
 import { getCashReserves } from "@/lib/banking/bankCash";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { isBankPropTradingEnabled, isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { getLendableHeadroom, getReserveRequirement } from "@/lib/banking/reserves";
-import { computePropEquityBase, sumPositionMarks } from "@/lib/banking/propTrading";
+import { computePropEquityBase } from "@/lib/banking/propTrading";
 import { charterMay } from "@/lib/banking/rules/capabilities";
+import { loadBankingSnapshot } from "@/lib/banking/snapshot";
+import { cbMarginRatePercent, decideBankCommand } from "@/lib/banking/rules/decide";
+import { settleTransition } from "@/lib/banking/settlementJournal";
+import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 
-/** Provisional - max share of lendable headroom a retail bank may place on interbank. */
-export const INTERBANK_MAX_SHARE_OF_LENDABLE = 0.5;
+export { INTERBANK_MAX_SHARE_OF_LENDABLE } from "@/lib/banking/rules/decide";
+import { INTERBANK_MAX_SHARE_OF_LENDABLE } from "@/lib/banking/rules/decide";
 
-/** Provisional - CB margin rate = prime + this spread (pp). */
-export const CB_MARGIN_SPREAD_PP = 1.5;
-
-/** Provisional - cbMarginDebt may not exceed this × propBookMarkValue. */
-export const CB_MARGIN_COLLATERAL_FRACTION = 0.5;
+export { CB_MARGIN_SPREAD_PP, CB_MARGIN_COLLATERAL_FRACTION } from "@/lib/banking/rules/decide";
 
 export type LendInterbankResult = { ok: true; loan: InterbankLoan } | { ok: false; error: string };
 
@@ -307,8 +305,113 @@ export async function repayInterbank(
   return { ok: true, repaid: repay, outstanding: nextOutstanding };
 }
 
-export function cbMarginRatePercent(primeRate: number): number {
-  return Math.max(0, primeRate + CB_MARGIN_SPREAD_PP);
+export { cbMarginRatePercent };
+
+async function runMarginCommand(
+  db: Db,
+  corpId: ObjectId,
+  command: { type: "draw_cb_margin" | "repay_cb_margin"; amount: number }
+): Promise<CbMarginResult> {
+  const loaded = await loadBankingSnapshot(db, corpId);
+  if (!loaded) return { ok: false, error: "Corporation not found" };
+  const { snapshot, corporation } = loaded;
+  const commandName =
+    command.type === "draw_cb_margin" ? "bank.cbMargin.draw" : "bank.cbMargin.repay";
+
+  const decision = decideBankCommand(snapshot, command, {
+    commandId: new ObjectId().toHexString(),
+  });
+  if (!decision.allowed) {
+    emitBankingAuditEvent(
+      {
+        kind: "charter.issued",
+        command: commandName,
+        turn: snapshot.turn,
+        outcome: "rejected",
+        reason: decision.message,
+        currency: snapshot.currency,
+        bankId: corpId.toString(),
+        meta: { amount: command.amount },
+      },
+      db
+    );
+    // The margin line used to answer the "no charter" case with its own
+    // wording; keep those sentences for the console.
+    const message =
+      decision.refusal.code === "capability" && decision.refusal.denial === "charter_type"
+        ? command.type === "draw_cb_margin"
+          ? "Only active investment or universal charters may draw CB margin"
+          : "No active prop-trading charter"
+        : decision.refusal.code === "capability" &&
+            decision.refusal.denial === "prop_trading_disabled"
+          ? "CB margin line is not enabled"
+          : decision.refusal.code === "capability" && decision.refusal.denial === "banking_disabled"
+            ? "CB margin line is not enabled"
+            : decision.message;
+    return { ok: false, error: message };
+  }
+
+  const settled = await settleTransition(db, decision.transition);
+  if (settled.status === "rejected" || settled.status === "partial" || settled.error) {
+    emitBankingAuditEvent(
+      {
+        ...decision.transition.event,
+        turn: snapshot.turn,
+        outcome: "rejected",
+        reason: settled.error ?? "settlement did not complete",
+        currency: snapshot.currency,
+        bankId: corpId.toString(),
+        settlementId: decision.transition.key,
+      },
+      db
+    );
+    return {
+      ok: false,
+      error:
+        command.type === "draw_cb_margin"
+          ? "Failed to draw CB margin"
+          : "Failed to repay CB margin",
+    };
+  }
+
+  const moved =
+    decision.transition.legs.find((l) => l.kind === "credit" || l.kind === "debit")?.amount ?? 0;
+  const currency = snapshot.currency as CurrencyCode;
+  await emitTx(db, {
+    type: command.type === "draw_cb_margin" ? "bank_cb_margin_draw" : "bank_cb_margin_repay",
+    turn: snapshot.turn,
+    createdAt: new Date(),
+    subjectType: "corporation",
+    subjectId: corpId,
+    subjectName: corporation.name,
+    amount: command.type === "draw_cb_margin" ? moved : -moved,
+    currencyCode: currency,
+    counterpartyType: "government",
+    counterpartyName: `${getCountryIdForCurrency(currency)} central bank`,
+    meta: { kind: command.type === "draw_cb_margin" ? "cb_margin_draw" : "cb_margin_repay" },
+  });
+  emitBankingAuditEvent(
+    {
+      ...decision.transition.event,
+      turn: snapshot.turn,
+      outcome: "ok",
+      currency,
+      bankId: corpId.toString(),
+      settlementId: decision.transition.key,
+    },
+    db
+  );
+
+  const debtBefore = Math.max(0, snapshot.charter?.cbMarginDebt ?? 0);
+  const cashBefore = getCashReserves(snapshot.charter ?? undefined);
+  return {
+    ok: true,
+    amount: moved,
+    cbMarginDebt:
+      command.type === "draw_cb_margin" ? debtBefore + moved : Math.max(0, debtBefore - moved),
+    cashReserves:
+      command.type === "draw_cb_margin" ? cashBefore + moved : Math.max(0, cashBefore - moved),
+  };
 }
 
 /**
@@ -321,77 +424,10 @@ export async function drawCbMargin(
   corpId: ObjectId,
   amount: number
 ): Promise<CbMarginResult> {
-  if (!(await isPrivateBankingEnabled()) || !(await isBankPropTradingEnabled())) {
-    return { ok: false, error: "CB margin line is not enabled" };
-  }
   if (!Number.isFinite(amount) || !(amount > 0)) {
     return { ok: false, error: "Amount must be a positive number" };
   }
-
-  const corp = await db.collection<Corporation>("corporations").findOne({ _id: corpId });
-  if (!corp) return { ok: false, error: "Corporation not found" };
-  const charter = corp.bankCharter;
-  if (!isPropBorrowerCharter(charter)) {
-    return {
-      ok: false,
-      error: "Only active investment or universal charters may draw CB margin",
-    };
-  }
-
-  const mark =
-    charter.propBookMarkValue !== undefined
-      ? Math.max(0, charter.propBookMarkValue)
-      : sumPositionMarks(charter.propBook);
-  // Unpaid interest counts against the line. A bank that cannot service the
-  // margin loses headroom instead of quietly borrowing its own arrears.
-  const debt = Math.max(0, charter.cbMarginDebt ?? 0) + Math.max(0, charter.cbMarginArrears ?? 0);
-  const maxDebt = CB_MARGIN_COLLATERAL_FRACTION * mark;
-  if (debt + amount > maxDebt + 1e-9) {
-    return { ok: false, error: "Draw would exceed CB margin collateral cap" };
-  }
-
-  const nextDebt = debt + amount;
-  const nextLiquid = Math.max(0, getCashReserves(charter) + amount);
-  const updated = await db.collection<Corporation>("corporations").updateOne(
-    {
-      _id: corpId,
-      "bankCharter.status": "active",
-    },
-    {
-      $inc: {
-        "bankCharter.cashReserves": amount,
-        "bankCharter.cbMarginDebt": amount,
-      },
-      $set: { updatedAt: new Date() },
-    }
-  );
-  if (updated.matchedCount !== 1) {
-    return { ok: false, error: "Failed to draw CB margin" };
-  }
-
-  const currency = charter.currency as CurrencyCode;
-  // Money created at the central bank, mirroring the discount window.
-  await db
-    .collection<CentralBank>("centralBanks")
-    .updateOne(
-      { _id: getBankId(getCountryIdForCurrency(currency)) },
-      { $inc: { netMoneyCreatedLifetime: amount }, $set: { updatedAt: new Date() } }
-    );
-  await emitTx(db, {
-    type: "bank_cb_margin_draw",
-    turn: await getCurrentTurn(db),
-    createdAt: new Date(),
-    subjectType: "corporation",
-    subjectId: corpId,
-    subjectName: corp.name,
-    amount,
-    currencyCode: currency,
-    counterpartyType: "government",
-    counterpartyName: `${getCountryIdForCurrency(currency)} central bank`,
-    meta: { kind: "cb_margin_draw" },
-  });
-
-  return { ok: true, amount, cbMarginDebt: nextDebt, cashReserves: nextLiquid };
+  return runMarginCommand(db, corpId, { type: "draw_cb_margin", amount });
 }
 
 /**
@@ -403,70 +439,10 @@ export async function repayCbMargin(
   corpId: ObjectId,
   amount: number
 ): Promise<CbMarginResult> {
-  if (!(await isPrivateBankingEnabled()) || !(await isBankPropTradingEnabled())) {
-    return { ok: false, error: "CB margin line is not enabled" };
-  }
   if (!Number.isFinite(amount) || !(amount > 0)) {
     return { ok: false, error: "Amount must be a positive number" };
   }
-
-  const corp = await db.collection<Corporation>("corporations").findOne({ _id: corpId });
-  if (!corp) return { ok: false, error: "Corporation not found" };
-  const charter = corp.bankCharter;
-  if (!isPropBorrowerCharter(charter)) {
-    return { ok: false, error: "No active prop-trading charter" };
-  }
-
-  const debt = Math.max(0, charter.cbMarginDebt ?? 0);
-  const repay = Math.min(amount, debt, getCashReserves(corp.bankCharter));
-  if (!(repay > 0)) {
-    return { ok: false, error: "Nothing to repay or insufficient liquid capital" };
-  }
-
-  const nextDebt = Math.max(0, debt - repay);
-  const nextLiquid = Math.max(0, getCashReserves(corp.bankCharter) - repay);
-  const updated = await db.collection<Corporation>("corporations").updateOne(
-    {
-      _id: corpId,
-      "bankCharter.status": "active",
-      "bankCharter.cashReserves": { $gte: repay },
-      "bankCharter.cbMarginDebt": { $gte: repay },
-    },
-    {
-      $inc: {
-        "bankCharter.cashReserves": -repay,
-        "bankCharter.cbMarginDebt": -repay,
-      },
-      $set: { updatedAt: new Date() },
-    }
-  );
-  if (updated.matchedCount !== 1) {
-    return { ok: false, error: "Failed to repay CB margin" };
-  }
-
-  const currency = charter.currency as CurrencyCode;
-  // Repayment destroys the money the draw created.
-  await db
-    .collection<CentralBank>("centralBanks")
-    .updateOne(
-      { _id: getBankId(getCountryIdForCurrency(currency)) },
-      { $inc: { netMoneyCreatedLifetime: -repay }, $set: { updatedAt: new Date() } }
-    );
-  await emitTx(db, {
-    type: "bank_cb_margin_repay",
-    turn: await getCurrentTurn(db),
-    createdAt: new Date(),
-    subjectType: "corporation",
-    subjectId: corpId,
-    subjectName: corp.name,
-    amount: -repay,
-    currencyCode: currency,
-    counterpartyType: "government",
-    counterpartyName: `${getCountryIdForCurrency(currency)} central bank`,
-    meta: { kind: "cb_margin_repay" },
-  });
-
-  return { ok: true, amount: repay, cbMarginDebt: nextDebt, cashReserves: nextLiquid };
+  return runMarginCommand(db, corpId, { type: "repay_cb_margin", amount });
 }
 
 /** Exposed for tests / solvency equity checks. */

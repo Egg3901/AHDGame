@@ -228,7 +228,17 @@ function applyUpdate(doc: Doc, update: Update): void {
     } else if (op === "$push") {
       for (const [path, value] of Object.entries(fields as Doc)) {
         const current = getPath(doc, path);
-        setPath(doc, path, Array.isArray(current) ? [...current, value] : [value]);
+        const base = Array.isArray(current) ? [...current] : [];
+        if (isPlainObject(value) && "$each" in value) {
+          const spec = value as { $each: unknown[]; $slice?: number };
+          let next = [...base, ...spec.$each];
+          if (typeof spec.$slice === "number") {
+            next = spec.$slice < 0 ? next.slice(spec.$slice) : next.slice(0, spec.$slice);
+          }
+          setPath(doc, path, next);
+        } else {
+          setPath(doc, path, [...base, value]);
+        }
       }
     } else {
       throw new Error(`inMemoryDb: unsupported update operator ${op}`);

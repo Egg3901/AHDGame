@@ -63,13 +63,12 @@ interface JournalProjectionRecord {
 }
 
 /**
- * A projection that was claimed but never marked applied sits in the gap
- * between "the settler crashed before writing" and "the settler crashed
- * after writing". An insert can be retried blind (it is idempotent by id);
- * an update cannot, so it is reported for an operator rather than replayed.
+ * Every projection can be retried blind: an insert is idempotent by id, and
+ * an update carries its stamp (see `projectionStamp`), so a re-run of a
+ * write that already landed matches nothing and reads as applied.
  */
-function safeToRetryBlind(projection: TransitionProjection): boolean {
-  return projection.insert !== undefined;
+function safeToRetryBlind(_projection: TransitionProjection): boolean {
+  return true;
 }
 
 /**
@@ -77,10 +76,26 @@ function safeToRetryBlind(projection: TransitionProjection): boolean {
  * collection, same `_id`, extra fields. One queue for operators, one index.
  */
 interface JournalExtension {
+  status?: string;
+  legs?: { applied: boolean }[];
   transitionKind?: string;
   currency?: string;
   projections?: JournalProjectionRecord[];
   projectionsCompletedAt?: Date;
+}
+
+/**
+ * Update projections stamp the document they touch with `settledKeys`, so a
+ * re-run of the same projection matches nothing and is read as already
+ * applied. That is what makes a claimed-but-unfinished update safe to retry:
+ * the stamp, not the journal, is the witness that the write landed. Capped so
+ * a long-lived document does not carry every key it ever saw.
+ */
+const SETTLED_KEYS_FIELD = "settledKeys";
+const SETTLED_KEYS_CAP = 200;
+
+export function projectionStamp(key: string, index: number): string {
+  return `${key}#${index}`;
 }
 
 /** `{ $oid: hex }` markers become driver ObjectIds; everything else is copied. */
@@ -120,7 +135,8 @@ function toMoneyLeg(leg: TransitionLeg): MoneyMoveLeg {
  */
 export async function applyProjection(
   db: Db,
-  projection: TransitionProjection
+  projection: TransitionProjection,
+  stamp?: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const collection = db.collection(projection.collection);
   if (projection.insert) {
@@ -137,14 +153,35 @@ export async function applyProjection(
     }
   }
   if (projection.filter && projection.update) {
+    const filter = reviveObjectIds(projection.filter) as Record<string, unknown>;
+    const update = reviveObjectIds(projection.update) as Record<string, unknown>;
+    const stampedFilter = stamp ? { ...filter, [SETTLED_KEYS_FIELD]: { $ne: stamp } } : filter;
+    const stampedUpdate = stamp
+      ? {
+          ...update,
+          $push: {
+            ...((update.$push as Record<string, unknown> | undefined) ?? {}),
+            [SETTLED_KEYS_FIELD]: { $each: [stamp], $slice: -SETTLED_KEYS_CAP },
+          },
+        }
+      : update;
     const res = await collection.updateOne(
-      reviveObjectIds(projection.filter) as Filter<Document>,
-      reviveObjectIds(projection.update) as UpdateFilter<Document>
+      stampedFilter as Filter<Document>,
+      stampedUpdate as UpdateFilter<Document>
     );
-    if (res.matchedCount !== 1) {
-      return { ok: false, error: `projection "${projection.note}" matched no document` };
+    if (res.matchedCount === 1) return { ok: true };
+    if (stamp) {
+      // No match with the stamp excluded. Either the document carries the
+      // stamp already (the write landed on an earlier attempt) or it is
+      // genuinely not there. Distinguish, so a replay is a no-op and a bad
+      // target is still an error.
+      const already = await collection.findOne(
+        { ...filter, [SETTLED_KEYS_FIELD]: stamp } as Filter<Document>,
+        { projection: { _id: 1 } }
+      );
+      if (already) return { ok: true };
     }
-    return { ok: true };
+    return { ok: false, error: `projection "${projection.note}" matched no document` };
   }
   return { ok: false, error: `projection "${projection.note}" has neither insert nor update` };
 }
@@ -197,6 +234,26 @@ export async function settleTransition(
     // Nothing else is written: a half-delivered move with a booked loan on
     // top would be the "money created between two correct writes" hole.
     return { ...result, status: "partial", appliedLegs: move.applied, error: move.error };
+  }
+
+  if (move.status === "replayed" && transition.legs.length > 0) {
+    // The key is owned by another attempt. Only once that attempt has landed
+    // every leg may this one go on to the projections. Otherwise the other
+    // attempt is either still running or crashed mid-way: either way nothing
+    // further may be written on top of undelivered money. The result is still
+    // `replayed` (this caller owns nothing), with `error` saying the key is
+    // not settled; the claim record itself is what the repair queue lists.
+    const owned = await journal.findOne({ _id: transition.key });
+    const legsOutstanding =
+      !owned || owned.status !== "applied" || (owned.legs ?? []).some((leg) => !leg.applied);
+    if (legsOutstanding) {
+      return {
+        ...result,
+        status: "replayed",
+        appliedLegs: (owned?.legs ?? []).flatMap((leg, i) => (leg.applied ? [i] : [])),
+        error: "another attempt owns this key and has not landed every leg",
+      };
+    }
   }
 
   result.appliedLegs = move.status === "applied" ? move.applied : [];
@@ -309,7 +366,7 @@ async function finishProjections(
       continue;
     }
 
-    const outcome = await applyProjection(db, projection);
+    const outcome = await applyProjection(db, projection, projectionStamp(transition.key, i));
     if (!outcome.ok) {
       // A refused write is a KNOWN non-application, so the claim is released:
       // recovery may retry it once the cause is fixed. Only a crash between
