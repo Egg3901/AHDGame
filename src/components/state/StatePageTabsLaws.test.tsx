@@ -91,8 +91,13 @@ describe("LawsTab domain labelling", () => {
 
     // The masthead names the region, and titles are numbered, which is the
     // whole point of sharing the national renderer.
+    //
+    // BOTH awaited: the masthead and the statute body do not land in the same
+    // paint, so awaiting only the masthead and then reading the title
+    // synchronously is a race. It held on a fast machine and lost on CI, where
+    // the assertion ran against the skeleton loaders.
     expect(await screen.findByText(/Code of State Law · Georgia/)).toBeTruthy();
-    expect(screen.getByText(/Title I — Education/)).toBeTruthy();
+    expect(await screen.findByText(/Title I — Education/)).toBeTruthy();
   });
 });
 
