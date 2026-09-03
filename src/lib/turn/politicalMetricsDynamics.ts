@@ -31,7 +31,7 @@ import {
   composeTarget,
   driftStep,
   lawTargets,
-  REGIONAL_SUPPLEMENT_FACTOR,
+  structuralResidual,
 } from "@/lib/politicalLegislation/dynamics";
 import { getEnactedLevels } from "@/lib/politicalLegislation/enactedLevels";
 import { getPoliticalCabinetContribution } from "@/lib/db/collections/politicalCabinetContribution";
@@ -338,17 +338,20 @@ export async function processPoliticalMetricsDynamics(
         if (!residuals) {
           residuals = {} as Record<PoliticalMetricId, number>;
           for (const [metricId, points] of Object.entries(national)) {
-            const supplementPoints = supplement?.[metricId as PoliticalMetricId] ?? 0;
-            residuals[metricId as PoliticalMetricId] =
-              (doc.values[metricId as PoliticalMetricId] ?? 0) -
-              (points + REGIONAL_SUPPLEMENT_FACTOR * supplementPoints);
+            const id = metricId as PoliticalMetricId;
+            residuals[id] = structuralResidual(doc.values[id] ?? 0, points, supplement?.[id] ?? 0);
           }
           healed = true;
         } else {
           for (const [metricId, points] of Object.entries(national)) {
             const id = metricId as PoliticalMetricId;
             const value = doc.values[id] ?? 0;
-            const structural = residuals[id] ?? value - points;
+            // A map that predates a family (or any partial map) falls back to the
+            // SAME derivation the heal above uses. It used to drop the supplement
+            // here, which composed to `value + 0.5 x supplement` and walked the
+            // board up a little every turn for any region holding regional law.
+            const structural =
+              residuals[id] ?? structuralResidual(value, points, supplement?.[id] ?? 0);
             // Bridge B: macro reality bends the equilibrium, bounded so the law
             // ladder still dominates. NOT persisted — `residuals` stays structural.
             const lawTarget = composeTarget(points, supplement?.[id] ?? 0, structural);

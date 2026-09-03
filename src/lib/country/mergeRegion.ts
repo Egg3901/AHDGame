@@ -392,6 +392,35 @@ export async function mergeRegion(db: Db, args: MergeRegionArgs): Promise<MergeR
       $set: { updatedAt: now },
     });
 
+  // FORCE THE SURVIVOR'S DERIVED-AGAINST-THE-OLD-SHAPE FIELDS TO BE RE-DERIVED,
+  // for exactly the reason the tax base above is.
+  //
+  // The source's own `idIsState` documents were DELETED by the loop, so the
+  // survivor keeps its own board -- measured before it absorbed the source's
+  // regional law book. Those laws did move: `statePolicies` is re-pointed by
+  // `stateId`, so the survivor's supplement grows while its residual still
+  // reflects the half it started with, and the absorbed laws get counted twice
+  // (once in the larger supplement, once inside the stale residual). East
+  // Berlin's programmes fusing into Berlin is the live instance.
+  //
+  // The FIELDS come from the shared scope table rather than a list here, so a
+  // collection that declares something as derived-against-its-country is
+  // recalibrated on a region fuse and on a border move alike.
+  for (const scope of REGION_SCOPED_COLLECTIONS) {
+    if (!scope.unsetOnRescope?.length) continue;
+    // Addressed by `_id`, so this only holds for the one-doc-per-region shape.
+    // A `stateIdField` scope would have MANY rows per region and needs a
+    // different filter; skipping is the safe half of that, and leaving the
+    // recalibration undone is visible, where updating the wrong row would not be.
+    if (scope.key !== "idIsState") continue;
+    await db
+      .collection<Record<string, unknown>>(scope.collection)
+      .updateOne({ _id: toRegionId } as Record<string, unknown>, {
+        $unset: Object.fromEntries(scope.unsetOnRescope.map((field) => [field, ""])),
+        $set: { updatedAt: now },
+      });
+  }
+
   // DELETE THE REGION, do not merely flag it.
   //
   // ⚠️ This is the opposite of what `mergeCountry` does to a country shell, and

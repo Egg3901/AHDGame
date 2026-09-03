@@ -10,6 +10,20 @@ const clampMetric = (value: number): number => Math.max(0, Math.min(100, value))
  * Apply a civil-liberties change to the complete Democratic Health basket.
  * Residuals receive the same delta so the political-metrics engine preserves
  * the structural cost instead of erasing it on the following turn.
+ *
+ * ⚠️ A BOARD WITH NO RESIDUALS KEEPS NONE — the same rule `applyBoardDelta`
+ * follows, and for a sharper reason here. `politicalMetricsDynamics` heals a
+ * board by deriving the whole residual map at once, and it fires only on the
+ * field being ABSENT. This write covers one basket, so seeding the field from it
+ * would leave a doc that looks healed and never is: every family outside the
+ * basket would fall through to a per-turn fallback that is never persisted.
+ * A board is unhealed for the turn after it changes country (the transfer drops
+ * the field so the heal can recalibrate it against the new law book), and this
+ * runs from war-emergency and world-event effects that can land in exactly that
+ * window, across every region of the country at once.
+ *
+ * The structural cost is not lost by waiting: the heal derives the baseline from
+ * the CURRENT value, which this has already moved.
  */
 export async function applyCivilLibertiesDelta(
   db: Db,
@@ -26,6 +40,7 @@ export async function applyCivilLibertiesDelta(
   const now = new Date();
   const operations = docs.map((doc) => {
     const values = { ...doc.values };
+    const healed = doc.residuals != null;
     const residuals = { ...(doc.residuals ?? {}) } as Record<PoliticalMetricId, number>;
     for (const metricId of DEMOCRATIC_HEALTH_METRIC_IDS) {
       const previous = values[metricId];
@@ -38,7 +53,7 @@ export async function applyCivilLibertiesDelta(
     return {
       updateOne: {
         filter: { _id: doc._id },
-        update: { $set: { values, residuals, lastUpdated: now } },
+        update: { $set: { values, ...(healed ? { residuals } : {}), lastUpdated: now } },
       },
     };
   });
