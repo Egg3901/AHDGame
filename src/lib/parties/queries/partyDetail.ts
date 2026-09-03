@@ -27,6 +27,7 @@ import {
 import { campaignAnchorToLocal, campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { isUserActive } from "@/lib/players/playerActivity";
+import { DEFAULT_LEGACY_COUNTRY_ID } from "@/lib/constants/countries";
 
 async function resolveLeader(
   db: Db,
@@ -214,6 +215,20 @@ export async function getPartyDetail(db: Db, party: PoliticalParty): Promise<Par
     partyId: String(party.sequentialId),
     scope: "national",
   });
+  // Region count backing the national GOTV/suppression/registration per-state
+  // estimates. Must match the turn engine's divisor: turnout docs for this
+  // country, counting legacy docs without a countryId as US (ticket #1265).
+  const regionCount = await db.collection("stateDemographicTurnout").countDocuments(
+    partyCountry === DEFAULT_LEGACY_COUNTRY_ID
+      ? {
+          $or: [
+            { countryId: partyCountry },
+            { countryId: null },
+            { countryId: { $exists: false } },
+          ],
+        }
+      : { countryId: partyCountry }
+  );
   const effectiveBudget = getEffectivePartyBudgetSpending(nationalBudget, party.treasury);
   const gotvBudgetPercent = effectiveBudget.gotvBudgetPercent;
   const gotvEstimatedSpend =
@@ -328,6 +343,7 @@ export async function getPartyDetail(db: Db, party: PoliticalParty): Promise<Par
     majorDemotionWarning: party.majorDemotionWarning ?? null,
     regimeStatus: party.regimeStatus ?? null,
     countryId: party.countryId ?? "US",
+    regionCount,
     createdAt: party.createdAt.toISOString(),
     members: memberList,
     logoUrl: party.logoUrl,
