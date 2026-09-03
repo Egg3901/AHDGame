@@ -65,6 +65,7 @@ import { migration as retireOrphanSovereignFloat } from "./entries/2026-09-03-re
 import { migration as bondMarketPools } from "./entries/2026-09-03-bond-market-pools";
 import { migration as bondMarketPoolWorkingBalance } from "./entries/2026-09-03-bond-market-pool-working-balance";
 import { migration as bondFundSeed } from "./entries/2026-09-03-bond-fund-seed";
+import { migration as repairOrphanIndexFundState } from "./entries/2026-09-03-repair-orphan-index-fund-state";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -204,6 +205,9 @@ export const MIGRATIONS: Migration[] = [
   bondMarketPoolWorkingBalance,
   // Phase 4: bond index funds, the player-facing leg of the bond market.
   bondFundSeed,
+  // indexFunds survived resets while corporations and fund positions were
+  // wiped. Remove those old-world references and reconcile live claims.
+  repairOrphanIndexFundState,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.

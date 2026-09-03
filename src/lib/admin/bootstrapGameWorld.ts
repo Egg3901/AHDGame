@@ -808,9 +808,15 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   // idempotent fund-definition bootstrap migrations so the fund docs exist to
   // back that flag on a fresh world. Mirrors the on-demand run in the admin
   // index-funds enable route.
+  const forceIndexFundBootstrap =
+    (await db.collection("indexFunds").countDocuments({}, { limit: 1 })) === 0;
   const indexFundBootstrap = await runMigrations(db, {
     migrations: MIGRATIONS,
     dryRun: false,
+    // resetGameWorld drops indexFunds and indexFundPositions together. Their
+    // historical migration markers deliberately survive, so force these
+    // idempotent bootstraps to recreate a clean definition + reserve ledger.
+    force: forceIndexFundBootstrap,
     only: [
       "2026-06-01-index-fund-foundation",
       "2026-06-01-index-fund-seed",
