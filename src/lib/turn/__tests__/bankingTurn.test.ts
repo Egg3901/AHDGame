@@ -372,8 +372,23 @@ describe("processBankingTurn", () => {
       deadBankLoansServiced: 0,
       deadBankRecoveredToEstate: 0,
       deadBankRecoveredToInsurer: 0,
+      unfinishedSettlements: 0,
     });
     expect(db.collectionMocks.corporations!.find).not.toHaveBeenCalled();
+  });
+
+  it("reads the feature policy exactly once per turn", async () => {
+    await processBankingTurn(db as unknown as Db, TURN);
+    // Other readers (the ledger shadow flag, tx-log settings) share the
+    // document; only the banking policy projection is counted here.
+    const policyReads = db.collectionMocks.gameConfig!.findOne.mock.calls.filter(
+      (call: unknown[]) =>
+        typeof call[1] === "object" &&
+        call[1] !== null &&
+        "privateBankingEnabled" in
+          ((call[1] as { projection?: Record<string, unknown> }).projection ?? {})
+    );
+    expect(policyReads).toHaveLength(1);
   });
 
   it("is idempotent: second call same turn is a no-op", async () => {

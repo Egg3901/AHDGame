@@ -11,7 +11,7 @@ import { emitTx } from "@/lib/financialTxLog/emit";
 import { isBankPropTradingEnabled, isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { getLendableHeadroom, getReserveRequirement } from "@/lib/banking/reserves";
 import { computePropEquityBase, sumPositionMarks } from "@/lib/banking/propTrading";
-import { isDepositTakingCharter } from "./charterKinds";
+import { charterMay } from "@/lib/banking/rules/capabilities";
 
 /** Provisional - max share of lendable headroom a retail bank may place on interbank. */
 export const INTERBANK_MAX_SHARE_OF_LENDABLE = 0.5;
@@ -32,11 +32,11 @@ export type CbMarginResult =
   | { ok: false; error: string };
 
 function isPropBorrowerCharter(charter: BankCharter | undefined): charter is BankCharter {
-  return (
-    charter != null &&
-    charter.status === "active" &&
-    (charter.type === "investment" || charter.type === "universal")
-  );
+  return charterMay(charter, "interbankBorrowing");
+}
+
+function isInterbankLenderCharter(charter: BankCharter | undefined): charter is BankCharter {
+  return charterMay(charter, "interbankLending");
 }
 
 async function sumLenderInterbankOutstanding(
@@ -92,7 +92,7 @@ export async function lendInterbank(
   if (!borrower) return { ok: false, error: "Borrower corporation not found" };
 
   const lenderCharter = lender.bankCharter;
-  if (!isDepositTakingCharter(lenderCharter)) {
+  if (!isInterbankLenderCharter(lenderCharter)) {
     return {
       ok: false,
       error: "Only active retail or universal charters may lend on the interbank market",

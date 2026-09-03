@@ -18,6 +18,8 @@ import { INTERFERENCE_SCRUTINY } from "@/lib/centralBank/credibility";
 import { boardCanCarryMotions } from "@/lib/centralBank/fomc";
 import type { ExchangeRate } from "@/lib/db/types/exchangeRate";
 import { rateChangeRefusal, type FxRegime } from "@/lib/currency/exchangeRateRegime";
+import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 
 type PrimeRateActor = {
   userId: string;
@@ -30,6 +32,53 @@ type PrimeRateActor = {
 };
 
 export async function updatePrimeRate(params: {
+  db: Db;
+  countryId: CountryId;
+  actor: PrimeRateActor;
+  rate: number;
+  reason?: string;
+  currentTurn: number;
+}) {
+  const result = await updatePrimeRateInner(params);
+  const bankId = getBankId(params.countryId);
+  emitBankingAuditEvent(
+    {
+      kind: "policy.rate_changed",
+      command: "monetary.rate.set",
+      turn: params.currentTurn,
+      outcome: result.ok ? "ok" : "rejected",
+      ...(result.ok ? {} : { reason: describeError(result.error) }),
+      actorClass: params.actor.isAdmin ? "admin" : "player",
+      currency: COUNTRY_CURRENCY_MAP[params.countryId],
+      bankId,
+      subjectType: "centralBank",
+      subjectId: bankId,
+      ...(result.ok
+        ? { statusBefore: String(result.previousRate), statusAfter: String(result.primeRate) }
+        : { statusAfter: String(params.rate) }),
+      meta: result.ok
+        ? {
+            previousRate: result.previousRate,
+            newRate: result.primeRate,
+            scrutinyApplied: result.scrutinyApplied,
+            interferenceApplied: result.interferenceApplied,
+          }
+        : { requestedRate: params.rate, status: result.status },
+    },
+    params.db
+  );
+  return result;
+}
+
+function describeError(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object" && "message" in error) {
+    return String((error as { message: unknown }).message);
+  }
+  return String(error);
+}
+
+async function updatePrimeRateInner(params: {
   db: Db;
   countryId: CountryId;
   actor: PrimeRateActor;

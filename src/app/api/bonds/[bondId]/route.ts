@@ -1,3 +1,4 @@
+import { charterMay } from "@/lib/banking/rules/capabilities";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -141,8 +142,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
             };
             if (
               bankPropTradingEnabled &&
-              myCorp.bankCharter?.status === "active" &&
-              (myCorp.bankCharter.type === "investment" || myCorp.bankCharter.type === "universal")
+              myCorp.bankCharter !== undefined &&
+              charterMay(myCorp.bankCharter, "proprietaryTrading")
             ) {
               investmentBank = {
                 id: myCorp._id.toString(),
@@ -201,8 +202,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
             };
             if (
               bankPropTradingEnabled &&
-              myCorp.bankCharter?.status === "active" &&
-              (myCorp.bankCharter.type === "investment" || myCorp.bankCharter.type === "universal")
+              myCorp.bankCharter !== undefined &&
+              charterMay(myCorp.bankCharter, "proprietaryTrading")
             ) {
               investmentBank = {
                 id: myCorp._id.toString(),

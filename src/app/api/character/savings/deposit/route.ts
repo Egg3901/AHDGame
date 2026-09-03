@@ -21,6 +21,7 @@ import { emitTx } from "@/lib/financialTxLog/emit";
 import { normalizeSavingsMutationAmount } from "@/lib/api/savings/savingsAmount";
 import { ZOD_ACTIVE_CURRENCY_ENUM } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 
 const depositSchema = z.object({
   currency: z.enum(ZOD_ACTIVE_CURRENCY_ENUM),
@@ -136,6 +137,23 @@ export async function POST(request: Request) {
         turn,
       });
     }
+
+    emitBankingAuditEvent(
+      {
+        kind: "account.deposited",
+        command: "savings.deposit",
+        turn,
+        outcome: "ok",
+        currency: c,
+        subjectType: "character",
+        subjectId: character._id.toString(),
+        statusAfter:
+          (after?.currencyBalances?.savingsHolder?.[c] as string | undefined) ?? "centralBank",
+        amount: normalized,
+        meta: { holderRequested: holder?.trim() ? true : false },
+      },
+      db
+    );
 
     void emitTx(db, {
       type: "savings_deposit",

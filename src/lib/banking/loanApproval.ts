@@ -3,12 +3,17 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { BankLoan } from "@/lib/db/types/bank";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { Character } from "@/lib/db/types/character";
-import { disburseNamedLoan, buildFundConstituentResolver } from "@/lib/banking/lending";
+import {
+  disburseNamedLoan,
+  buildFundConstituentResolver,
+  namedLoanHeadroom,
+} from "@/lib/banking/lending";
 import { isBlockedBorrower } from "@/lib/banking/blacklist";
 import { isNamedLendingCharter } from "@/lib/banking/charterKinds";
-import { getReserveRequirement, getLendableHeadroom } from "@/lib/banking/reserves";
+import { getReserveRequirement } from "@/lib/banking/reserves";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { sendSystemMail } from "@/lib/mail/systemMail";
+import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 
 export type LoanDecisionResult = { ok: true; loan: BankLoan } | { ok: false; error: string };
 
@@ -95,6 +100,31 @@ export async function acceptLoan(
   bankCorporationId: ObjectId,
   loanId: ObjectId
 ): Promise<LoanDecisionResult> {
+  const result = await acceptLoanInner(db, bankCorporationId, loanId);
+  emitBankingAuditEvent(
+    {
+      kind: "loan.approved",
+      command: "bank.loan.approve",
+      turn: result.ok ? (result.loan.decisionTurn ?? 0) : await getCurrentTurn(db),
+      outcome: result.ok ? "ok" : "rejected",
+      ...(result.ok ? {} : { reason: result.error }),
+      ...(result.ok ? { currency: result.loan.currency, amount: result.loan.principal } : {}),
+      bankId: bankCorporationId.toString(),
+      subjectType: "loan",
+      subjectId: loanId.toString(),
+      statusBefore: "pending",
+      ...(result.ok ? { statusAfter: "current" } : {}),
+    },
+    db
+  );
+  return result;
+}
+
+async function acceptLoanInner(
+  db: Db,
+  bankCorporationId: ObjectId,
+  loanId: ObjectId
+): Promise<LoanDecisionResult> {
   const loan = await db.collection<BankLoan>("bankLoans").findOne({
     _id: loanId,
     bankCorporationId,
@@ -113,7 +143,7 @@ export async function acceptLoan(
 
   // Re-check headroom and blacklist at decision time.
   const reserveRatio = await getReserveRequirement(db, charter.currency as CurrencyCode);
-  const headroom = getLendableHeadroom(charter, reserveRatio);
+  const headroom = namedLoanHeadroom(charter, reserveRatio);
   if (loan.outstanding > headroom) {
     return { ok: false, error: "Insufficient lendable headroom to fund this loan now" };
   }
@@ -174,6 +204,32 @@ export async function acceptLoan(
  * `pending` for idempotency. The borrower is notified with the optional reason.
  */
 export async function rejectLoan(
+  db: Db,
+  bankCorporationId: ObjectId,
+  loanId: ObjectId,
+  reason?: string
+): Promise<LoanDecisionResult> {
+  const result = await rejectLoanInner(db, bankCorporationId, loanId, reason);
+  emitBankingAuditEvent(
+    {
+      kind: "loan.rejected",
+      command: "bank.loan.reject",
+      turn: result.ok ? (result.loan.decisionTurn ?? 0) : await getCurrentTurn(db),
+      outcome: result.ok ? "ok" : "rejected",
+      ...(result.ok ? {} : { reason: result.error }),
+      ...(result.ok ? { currency: result.loan.currency, amount: result.loan.principal } : {}),
+      bankId: bankCorporationId.toString(),
+      subjectType: "loan",
+      subjectId: loanId.toString(),
+      statusBefore: "pending",
+      ...(result.ok ? { statusAfter: "rejected" } : {}),
+    },
+    db
+  );
+  return result;
+}
+
+async function rejectLoanInner(
   db: Db,
   bankCorporationId: ObjectId,
   loanId: ObjectId,
