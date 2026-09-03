@@ -44,6 +44,7 @@ import {
   INDEX_FUND_INITIAL_NAV,
   calculateBackingRatio,
   quoteCashOnlyRedemption,
+  proRataRedemptionCashShare,
 } from "@/lib/indexFunds/unitAccounting";
 import {
   buildIndexFundTargetConstituents,
@@ -103,7 +104,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ShareOrder } from "@/lib/db/types";
 import {
   loadOpenOrdersEscrowByFundId,
-  loadQueuedRedemptionLiabilityByFundId,
+  loadQueuedRedemptionUnitsByFundId,
 } from "@/lib/indexFunds/fundValuation";
 import { refreshEquityLiquidityFacility } from "@/lib/indexFunds/equityLiquidityFacility";
 import { loadEquityQuote } from "@/lib/equities/marketPool";
@@ -306,20 +307,24 @@ export function recomputeNav(
   options?: {
     bondPrincipalAnchor?: number;
     openOrdersEscrowAnchor?: number;
-    queuedRedemptionLiabilityAnchor?: number;
+    /**
+     * Units queued for redemption whose supply was already burned. They belong
+     * in the DENOMINATOR: a queued holder is still a holder with a pro-rata
+     * claim, not a creditor owed a fixed sum. Subtracting a cash liability
+     * struck at the NAV locked when the redemption was requested is what
+     * drained GLB50 - assets fell, the liability did not, and the entire
+     * decline was pushed onto the holders who stayed until NAV hit zero.
+     */
+    queuedRedemptionUnits?: number;
   }
 ): number | null {
   const holdingsValueAnchor = computeHoldingsValueAnchor(fund);
   const bondPrincipalAnchor = options?.bondPrincipalAnchor ?? 0;
   const openOrdersEscrowAnchor = options?.openOrdersEscrowAnchor ?? 0;
-  const queuedRedemptionLiabilityAnchor = options?.queuedRedemptionLiabilityAnchor ?? 0;
+  const queuedRedemptionUnits = Math.max(0, options?.queuedRedemptionUnits ?? 0);
   const totalBacking =
-    fund.cashAnchor +
-    holdingsValueAnchor +
-    bondPrincipalAnchor +
-    openOrdersEscrowAnchor -
-    queuedRedemptionLiabilityAnchor;
-  const totalUnits = fund.unitSupply;
+    fund.cashAnchor + holdingsValueAnchor + bondPrincipalAnchor + openOrdersEscrowAnchor;
+  const totalUnits = fund.unitSupply + queuedRedemptionUnits;
   if (totalUnits <= 0) return INDEX_FUND_INITIAL_NAV;
 
   const nav = totalBacking / totalUnits;
@@ -774,6 +779,10 @@ export async function processQueuedRedemptions(
   let fundState = fund;
   let availableCash = fund.cashAnchor;
 
+  // Units still unserved in this pass. Decremented as each entry is handled so
+  // the share is measured against who is still waiting, not the original queue.
+  let unservedUnits = pending.reduce((sum, e) => sum + Math.max(0, e.units ?? 0), 0);
+
   for (const pendingEntry of pending) {
     // Claim before any fund debit or holder credit. If a later write fails, a
     // processing row is quarantined for manual reconciliation instead of being
@@ -818,10 +827,20 @@ export async function processQueuedRedemptions(
       continue;
     }
 
-    const redemptionNav =
-      Number.isFinite(entry.requestedNavAnchor) && entry.requestedNavAnchor > 0
-        ? entry.requestedNavAnchor
-        : fundState.quotedNav;
+    // Forward pricing. The payout is struck at the fund's CURRENT NAV, never at
+    // `requestedNavAnchor` (kept only as the record of what was quoted at
+    // request). Honouring a locked price across many turns is what let one
+    // GLB50 holder draw 2.46B out of a fund whose assets were falling under
+    // them, because their claim stayed fixed in cash terms while everyone
+    // else's shrank. A real open-end fund forward-prices for exactly this
+    // reason: a redemption spanning several valuation points gets each point's
+    // NAV, so the redeemer carries the market like every other holder.
+    const redemptionNav = fundState.quotedNav;
+    if (!Number.isFinite(redemptionNav) || redemptionNav <= 0) {
+      await restoreQueueClaim();
+      break;
+    }
+
     const entryObligation = unitsRemaining * redemptionNav;
     if (availableCash < entryObligation && fundState.holdings.length > 0) {
       await sellFundHoldingsForRedemptionCash(db, fundState, entryObligation - availableCash, {
@@ -850,15 +869,27 @@ export async function processQueuedRedemptions(
       break;
     }
 
+    // Pro-rata gate: never let one entry consume the book while others wait.
+    // Measured against cash available now, after any liquidation above.
+    const cashForThisEntry = proRataRedemptionCashShare({
+      entryUnits: unitsRemaining,
+      unservedUnits,
+      availableCashAnchor: availableCash,
+    });
+    unservedUnits = Math.max(0, unservedUnits - unitsRemaining);
+
     const quote = quoteCashOnlyRedemption({
       quotedNav: redemptionNav,
       requestedUnits: unitsRemaining,
-      cashAnchor: availableCash,
+      cashAnchor: cashForThisEntry,
     });
 
     if (quote.redeemableUnits <= 0) {
+      // This entry's pro-rata slice will not buy a whole unit. That says
+      // nothing about the next entry, and the genuinely-out-of-cash case
+      // already broke out above, so move on rather than starving the queue.
       await restoreQueueClaim();
-      break;
+      continue;
     }
 
     const paidAmount = quote.paidAmountAnchor;
@@ -1114,10 +1145,10 @@ export async function runIndexFundCron(
   let funds = await listServiceableFunds(db);
   const redemptionServiceFundIds = funds.map((fund) => fund._id);
   // Load valuation side ledgers once before Pass 1 so NAV includes committed
-  // bid escrow and subtracts queued redemption payables.
+  // bid escrow and counts queued redemption units as the claims they are.
   const fundIds = funds.map((fund) => fund._id);
   const openOrdersEscrowByFundId = await loadOpenOrdersEscrowByFundId(db, fundIds);
-  const queuedLiabilityByFundId = await loadQueuedRedemptionLiabilityByFundId(db, fundIds);
+  const queuedUnitsByFundId = await loadQueuedRedemptionUnitsByFundId(db, fundIds);
 
   // Pass 1: mark holdings, recompute NAV, deploy bond reserve.
   const navReadyFundIds: IndexFund["_id"][] = [];
@@ -1131,29 +1162,26 @@ export async function runIndexFundCron(
         exchangeRates
       );
       const openOrdersEscrowAnchor = openOrdersEscrowByFundId.get(workingFund._id.toString()) ?? 0;
-      const queuedRedemptionLiabilityAnchor =
-        queuedLiabilityByFundId.get(workingFund._id.toString()) ?? 0;
+      const queuedRedemptionUnits = queuedUnitsByFundId.get(workingFund._id.toString()) ?? 0;
 
       const newNav = recomputeNav(workingFund, {
         bondPrincipalAnchor,
         openOrdersEscrowAnchor,
-        queuedRedemptionLiabilityAnchor,
+        queuedRedemptionUnits,
       });
 
       if (newNav === null || !Number.isFinite(newNav) || newNav <= 0) {
-        // Backing has collapsed (total assets minus queued liabilities went negative).
-        // Freeze immediately so no new subscriptions deepen the hole. Write the true
-        // backing ratio (≤ 0) so dashboards show the real state.
+        // Genuinely no assets left. Freeze so no new subscriptions deepen the
+        // hole. With queued units in the denominator this can only fire when
+        // the fund really is empty, not merely when a large redemption is
+        // outstanding against a falling book.
         const holdingsValue = computeHoldingsValueAnchor(workingFund);
         const actualBacking = Math.max(
           0,
-          workingFund.cashAnchor +
-            holdingsValue +
-            bondPrincipalAnchor +
-            openOrdersEscrowAnchor -
-            queuedRedemptionLiabilityAnchor
+          workingFund.cashAnchor + holdingsValue + bondPrincipalAnchor + openOrdersEscrowAnchor
         );
-        const quotedLiability = workingFund.quotedNav * workingFund.unitSupply;
+        const quotedLiability =
+          workingFund.quotedNav * (workingFund.unitSupply + queuedRedemptionUnits);
         await updateFundNav(db, workingFund._id, {
           quotedNav: workingFund.quotedNav,
           backingRatio: quotedLiability > 0 ? actualBacking / quotedLiability : 0,
@@ -1172,7 +1200,7 @@ export async function runIndexFundCron(
         holdingsValueAnchor: holdingsValue,
         bondPrincipalAnchor,
         openOrdersEscrowAnchor,
-        queuedRedemptionLiabilityAnchor,
+        queuedRedemptionUnits,
         quotedNav: newNav,
         unitSupply: workingFund.unitSupply,
       });
@@ -1201,7 +1229,7 @@ export async function runIndexFundCron(
         refreshedFund,
         exchangeRates
       );
-      if (queuedRedemptionLiabilityAnchor <= 0) {
+      if (queuedRedemptionUnits <= 0) {
         const bondDeploy = await deployBondReserveFromCash(
           db,
           refreshedFund,
@@ -1229,7 +1257,7 @@ export async function runIndexFundCron(
   funds = (await listActiveFunds(db)).filter(
     (fund) =>
       navReadyFundIds.some((id) => id.toString() === fund._id.toString()) &&
-      !queuedLiabilityByFundId.has(fund._id.toString())
+      !queuedUnitsByFundId.has(fund._id.toString())
   );
   const rebalancedFundIds = new Set<string>();
 
@@ -1288,7 +1316,7 @@ export async function runIndexFundCron(
   funds = (await listActiveFunds(db)).filter(
     (fund) =>
       navReadyFundIds.some((id) => id.toString() === fund._id.toString()) &&
-      !queuedLiabilityByFundId.has(fund._id.toString())
+      !queuedUnitsByFundId.has(fund._id.toString())
   );
   const capRemainingByCorpId = new Map(absorptionRemainingByCorpId); // fresh per-pass copy
   if (rebalancedFundIds.size > 0) {
@@ -1321,7 +1349,7 @@ export async function runIndexFundCron(
         (fund) =>
           fund.kind !== "bond" &&
           navReadyFundIds.some((id) => id.toString() === fund._id.toString()) &&
-          !queuedLiabilityByFundId.has(fund._id.toString())
+          !queuedUnitsByFundId.has(fund._id.toString())
       );
       const bondPrincipalByFundId = new Map<string, number>();
       for (const fund of rebalFunds) {
@@ -1450,7 +1478,7 @@ export async function runIndexFundCron(
   // the same pass, providing an immediate rollback path.
   try {
     const quoteFunds = (await listActiveFunds(db)).filter(
-      (fund) => !queuedLiabilityByFundId.has(fund._id.toString())
+      (fund) => !queuedUnitsByFundId.has(fund._id.toString())
     );
     const fxByCurrency = new Map<CurrencyCode, number>(
       Object.entries(exchangeRates)
