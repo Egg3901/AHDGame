@@ -539,10 +539,36 @@ export async function emitCorporationTurnTx(args: {
       govTaxAnchorByCountry.set(countryId, (govTaxAnchorByCountry.get(countryId) ?? 0) + taxAnchor);
     }
 
-    // Emit corp_revenue only when there's actual income this turn — same
-    // gate as pre-fix.
-    if (snap.income > 0) {
-      const incomeLocal = anchorToCorpCapital(snap.income, resolved, fx);
+    const totalTaxAnchor = (snap.federalTaxPaid ?? 0) + (snap.stateTaxPaid ?? 0);
+
+    // Emit corp_revenue at the PRE-TAX operating inflow (ticket #1260).
+    //
+    // `snap.income` is ALREADY net of corporate tax — the chain in
+    // sectorCalculations is `incomePreDividends − tax − dividends = income`.
+    // Crediting that net figure here and then debiting the full tax again in
+    // the `corp_tax_paid` row below booked the tax TWICE on the corp's own
+    // ledger, so its rows netted to `income − tax` instead of `income`. On
+    // live Value Mart (IT #80) that read as −₤1.9M/turn for a corp whose cash
+    // actually moved +₤70, and any corp whose tax exceeded its post-tax income
+    // — 154 of 305 NPP corps and 24 of 47 player-run corps at turn 581 —
+    // showed as loss-making on a turn it genuinely earned money.
+    //
+    // The corp side of this phase emits ONLY these two rows: `corp_salary` and
+    // `corp_dividend` are character-side credits with no corp-side debit (see
+    // emitCharRecipientTx below). So the pair must net to the cash the corp
+    // actually keeps, which means crediting gross and letting the tax row take
+    // it back out once. That also keeps `corp_revenue` an honest
+    // `sector_revenue` mint and `corp_tax_paid` an honest transfer to
+    // `gov_tax_revenue`, which is what the money-supply reconciler in
+    // `deriveFromTx` assumes of the pair.
+    //
+    // Gate on the gross inflow, not on `snap.income`: a corp whose tax wiped
+    // out its whole post-tax income still received that income, and the old
+    // `income > 0` gate suppressed the credit while still emitting the debit,
+    // leaving a lone tax row that understated cash by the full tax.
+    const revenueAnchorPreTax = snap.income + Math.max(0, totalTaxAnchor);
+    if (revenueAnchorPreTax > 0) {
+      const incomeLocal = anchorToCorpCapital(revenueAnchorPreTax, resolved, fx);
       if (incomeLocal > 0) {
         txEntries.push({
           type: "corp_revenue",
@@ -557,6 +583,9 @@ export async function emitCorporationTurnTx(args: {
             revenue: Math.round(snap.revenue),
             federalTaxPaid: Math.round(snap.federalTaxPaid),
             stateTaxPaid: Math.round(snap.stateTaxPaid),
+            // The post-tax figure the credit is grossed up from, so forensics
+            // can still see retained cash without re-deriving it from the pair.
+            netIncomeAfterTax: Math.round(snap.income),
           },
         });
       }
@@ -565,7 +594,6 @@ export async function emitCorporationTurnTx(args: {
     // Emit corp_tax_paid as a NEGATIVE-amount debit on the corp, in the
     // corp's home currency. Combines federal + state into one row so admin
     // queries can sum cleanly; meta carries the breakdown for forensics.
-    const totalTaxAnchor = (snap.federalTaxPaid ?? 0) + (snap.stateTaxPaid ?? 0);
     if (totalTaxAnchor > 0) {
       const taxLocal = anchorToCorpCapital(totalTaxAnchor, resolved, fx);
       if (taxLocal > 0) {
