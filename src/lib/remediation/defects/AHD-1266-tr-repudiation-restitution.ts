@@ -578,10 +578,12 @@ export const defect: Defect = {
   title: "Turn-568 TR repudiation double-charged bondholders' cash on top of the paper loss",
   severity: "P1",
   codeFix: {
-    // Paper-loss cascade writer; requiredCommit gets pinned to its merge SHA
-    // before apply (registry step 4) so the code gate can refuse envs the
-    // fix has not reached. Until then heal_status warns "unpinned code fix".
-    mergedTo: "development",
+    pr: 1381,
+    mergedTo: "main",
+    // 9c8bca5440 is the squash-merge of the paper-loss cascade writer fix
+    // onto development, carried to main via the staging waypoint. The code
+    // gate requires it as an ancestor of whatever is deployed to prod.
+    requiredCommit: "9c8bca5440305c9ef855d1133b3fad62c5bd1436",
   },
   seedFix: {
     status: "not-needed",
