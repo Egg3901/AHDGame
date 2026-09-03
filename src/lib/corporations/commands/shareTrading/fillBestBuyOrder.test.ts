@@ -30,7 +30,7 @@ function corporation(id: ObjectId): Corporation {
     totalShares: 10_000,
     publicFloat: 1_000,
     shareholders: [],
-  } as Corporation;
+  } as unknown as Corporation;
 }
 
 describe("fillBestBuyOrderForMarketSell", () => {
