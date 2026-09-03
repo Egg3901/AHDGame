@@ -105,6 +105,7 @@ import {
   loadQueuedRedemptionLiabilityByFundId,
 } from "@/lib/indexFunds/fundValuation";
 import { refreshEquityLiquidityFacility } from "@/lib/indexFunds/equityLiquidityFacility";
+import { loadEquityQuote } from "@/lib/equities/marketPool";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -324,11 +325,16 @@ export async function executeFundShareBuy(
   fund: IndexFund,
   corp: EligibleCorpRow,
   shares: number,
-  sharePriceAnchor: number,
+  referencePriceAnchor: number,
   currentTurn: number
 ): Promise<{ ok: boolean; sharesBought: number; anchorSpent: number }> {
-  const executionPrice = resolveShareExecutionPrice(corp);
-  const actualCost = shares * sharePriceAnchor;
+  const quote = await loadEquityQuote(db, corp);
+  const executionPrice = quote.askPriceLocal;
+  // The caller already loaded the fund's anchor-currency reference price in a
+  // batch. Preserve that FX conversion and apply only the market-maker spread.
+  const executionPriceAnchor =
+    quote.mid > 0 ? referencePriceAnchor * (executionPrice / quote.mid) : referencePriceAnchor;
+  const actualCost = shares * executionPriceAnchor;
   const actualIssuerCreditLocal = shares * executionPrice;
   const orderFlowEligible = isOrderFlowPriceEligible(corp.publicFloat ?? 0, corp.totalShares);
 
@@ -370,7 +376,7 @@ export async function executeFundShareBuy(
       debitedFund.holdings ?? [],
       corp._id,
       shares,
-      sharePriceAnchor
+      executionPriceAnchor
     );
     await updateFundHoldings(db, fund._id, updatedHoldings, sessionOpts);
 
@@ -381,7 +387,7 @@ export async function executeFundShareBuy(
         kind: "public_float_buy",
         corporationId: corp._id,
         shares,
-        navAnchor: sharePriceAnchor,
+        navAnchor: executionPriceAnchor,
         amountAnchor: actualCost,
         createdAt: new Date(),
       },
@@ -405,7 +411,7 @@ export async function executeFundShareBuy(
     kind: "market_buy",
     turn: currentTurn,
     shares,
-    pricePerShareAnchor: sharePriceAnchor,
+    pricePerShareAnchor: executionPriceAnchor,
     from: null,
     to: { name: `${fund.name} (index fund)` },
     corpCurrencyCode: resolveCorpLiquidCurrencyCode(corp) ?? undefined,

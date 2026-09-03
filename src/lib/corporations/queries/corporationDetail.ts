@@ -118,6 +118,7 @@ import { resolveSectorMandate } from "@/lib/nationalization/soeMandates";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getRoundedPublicMarketCap, getPublicShareQuote } from "@/lib/corporations/marketQuote";
 import { roundMarketingStrength } from "@/lib/utils/formatters";
+import { loadEquityQuote } from "@/lib/equities/marketPool";
 import { findImfFacilityReceivablesForLender } from "@/lib/corporations/imfPortfolioReceivables";
 import {
   employerPensionCostForTurn,
@@ -448,6 +449,7 @@ export async function loadCorporationDetailView(args: {
   const { db, corporation, currentTurn, viewerUserId } = args;
 
   const refDataPromise = getTurnReferenceData(db, currentTurn);
+  const equityQuotePromise = loadEquityQuote(db, corporation);
 
   const [openListingsForInvariant, openSellOrdersForInvariant] = await Promise.all([
     db
@@ -2228,6 +2230,8 @@ export async function loadCorporationDetailView(args: {
       }
     : null;
 
+  const equityQuote = await equityQuotePromise;
+
   return {
     corporation: {
       ...brandLoyaltyFields,
@@ -2276,6 +2280,10 @@ export async function loadCorporationDetailView(args: {
       logoUrl: corporation.logoUrl,
       headerImageUrl: corporation.headerImageUrl,
       sharePrice: currentSharePrice,
+      equityMarketPoolActive: equityQuote.active,
+      marketBidPrice: equityQuote.bidPriceLocal,
+      marketAskPrice: equityQuote.askPriceLocal,
+      marketDepthShares: equityQuote.bidDepthShares,
       totalShares,
       publicFloat: corporation.publicFloat ?? 0,
       shareholders,

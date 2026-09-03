@@ -4,6 +4,13 @@ import { computeIpoIssuance } from "../../ipoIssuance";
 import { IPO_COOLDOWN_TURNS } from "@/lib/constants/corporations";
 import { hasSuperShares, isValidSuperShareMultiplier } from "../../superShares";
 import { recordAudit } from "@/lib/audit/recordAudit";
+import { issuanceDilutionFactorExpr } from "@/lib/corporations/shareConsolidation";
+import {
+  prepareEquityPrimaryPlacement,
+  refundPreparedEquityPlacement,
+} from "@/lib/equities/primaryMarket";
+import { emitTx } from "@/lib/financialTxLog/emit";
+import { equityPoolCurrency } from "@/lib/equities/marketPool";
 
 /**
  * True when the corp has any non-CEO character or corporation shareholder
@@ -35,7 +42,14 @@ export interface GoPublicInput {
 
 export type GoPublicResult =
   | { ok: false; error: string; status: number }
-  | { ok: true; newShares: number; proceeds: number; totalSharesAfter: number };
+  | {
+      ok: true;
+      newShares: number;
+      requestedShares: number;
+      pendingShares: number;
+      proceeds: number;
+      totalSharesAfter: number;
+    };
 
 /**
  * Convert a private corp to public by issuing new shares to the public float at
@@ -109,33 +123,127 @@ export async function goPublic(input: GoPublicInput): Promise<GoPublicResult> {
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Invalid IPO terms", status: 400 };
   }
-  const proceeds = Math.round(ipo.proceeds);
-
-  const updateRes = await db.collection<Corporation>("corporations").updateOne(
-    { _id: corporation._id, isPrivate: true },
-    {
-      $set: {
-        isPrivate: false,
-        // Auction-created shells are hidden until they have an owner. A later
-        // IPO must clear that flag or the now-public corporation stays absent
-        // from every exchange snapshot indefinitely.
-        hiddenFromExchange: false,
-        lastIpoTurn: currentTurn,
-        updatedAt: new Date(),
-      },
-      // Issuance only creates float inventory; it does NOT credit cash. The corp
-      // realizes proceeds as the float is actually bought (treasury-backed market
-      // maker in the share-buy paths). Pre-fix this $inc'd liquidCapital here AND
-      // the buy path credited again — double-paying the issuer (Bug #0624).
-      $inc: {
-        totalShares: ipo.newShares,
-        publicFloat: ipo.newShares,
-      },
-    }
+  const now = new Date();
+  const placement = await prepareEquityPrimaryPlacement(
+    db,
+    corporation,
+    ipo.newShares,
+    corporation.sharePrice,
+    now
   );
+  const proceeds = Math.round(placement.poolActive ? placement.paidLocal : ipo.proceeds);
+
+  let updateRes;
+  try {
+    if (!placement.poolActive) {
+      updateRes = await db.collection<Corporation>("corporations").updateOne(
+        { _id: corporation._id, isPrivate: true },
+        {
+          $set: {
+            isPrivate: false,
+            hiddenFromExchange: false,
+            lastIpoTurn: currentTurn,
+            updatedAt: now,
+          },
+          $inc: {
+            totalShares: placement.placedShares,
+            publicFloat: placement.placedShares,
+          },
+        }
+      );
+    } else {
+      updateRes = await db
+        .collection<Corporation>("corporations")
+        .updateOne({ _id: corporation._id, isPrivate: true }, [
+          {
+            $set: {
+              isPrivate: false,
+              // Auction-created shells are hidden until they have an owner. A later
+              // IPO must clear that flag or the now-public corporation stays absent
+              // from every exchange snapshot indefinitely.
+              hiddenFromExchange: false,
+              lastIpoTurn: currentTurn,
+              totalShares: {
+                $add: [{ $ifNull: ["$totalShares", 0] }, placement.placedShares],
+              },
+              publicFloat: {
+                $add: [{ $ifNull: ["$publicFloat", 0] }, placement.placedShares],
+              },
+              ...(placement.poolActive
+                ? {
+                    liquidCapital: {
+                      $add: [{ $ifNull: ["$liquidCapital", 0] }, placement.paidLocal],
+                    },
+                    shareIssuanceProceeds: {
+                      $add: [{ $ifNull: ["$shareIssuanceProceeds", 0] }, placement.paidLocal],
+                    },
+                  }
+                : {}),
+              sharePrice: {
+                $round: [
+                  {
+                    $multiply: [
+                      { $ifNull: ["$sharePrice", 0] },
+                      issuanceDilutionFactorExpr(placement.placedShares),
+                    ],
+                  },
+                  4,
+                ],
+              },
+              fundamentalSharePrice: {
+                $round: [
+                  {
+                    $multiply: [
+                      { $ifNull: ["$fundamentalSharePrice", { $ifNull: ["$sharePrice", 0] }] },
+                      issuanceDilutionFactorExpr(placement.placedShares),
+                    ],
+                  },
+                  4,
+                ],
+              },
+              ...(placement.unsoldShares > 0
+                ? {
+                    pendingShareIssuance: {
+                      remainingShares: placement.unsoldShares,
+                      requestedShares: ipo.newShares,
+                      source: "ipo",
+                      createdAtTurn: currentTurn,
+                      initialPriceLocal: corporation.sharePrice,
+                    },
+                  }
+                : {}),
+              updatedAt: now,
+            },
+          },
+        ]);
+    }
+  } catch (error) {
+    await refundPreparedEquityPlacement(db, placement, now);
+    throw error;
+  }
 
   if (updateRes.matchedCount === 0) {
+    await refundPreparedEquityPlacement(db, placement, now);
     return { ok: false, error: "Corporation state changed; retry", status: 409 };
+  }
+
+  if (placement.poolActive && placement.paidLocal > 0) {
+    void emitTx(db, {
+      type: "ipo_proceeds",
+      turn: currentTurn,
+      createdAt: now,
+      subjectType: "corporation",
+      subjectId: corporation._id,
+      subjectName: corporation.name,
+      amount: placement.paidLocal,
+      currencyCode: equityPoolCurrency(corporation),
+      meta: {
+        sharesPlaced: placement.placedShares,
+        sharesRequested: placement.requestedShares,
+        sharesPending: placement.unsoldShares,
+        counterparty: "equity_market_pool",
+      },
+    });
   }
 
   if (superShareMultiplier !== undefined) {
@@ -176,13 +284,21 @@ export async function goPublic(input: GoPublicInput): Promise<GoPublicResult> {
     amount: proceeds,
     refs: { corporationId: corporation._id },
     outcome: "ok",
-    meta: { floatPct, newShares: ipo.newShares, superShareMultiplier },
+    meta: {
+      floatPct,
+      requestedShares: ipo.newShares,
+      newShares: placement.placedShares,
+      pendingShares: placement.unsoldShares,
+      superShareMultiplier,
+    },
   });
 
   return {
     ok: true,
-    newShares: ipo.newShares,
+    newShares: placement.placedShares,
+    requestedShares: ipo.newShares,
+    pendingShares: placement.unsoldShares,
     proceeds,
-    totalSharesAfter: ipo.totalSharesAfter,
+    totalSharesAfter: corporation.totalShares + placement.placedShares,
   };
 }

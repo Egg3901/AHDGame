@@ -21,6 +21,7 @@ describe("runRequiredStartupMigrations", () => {
     await runRequiredStartupMigrations(db);
 
     expect(REQUIRED_STARTUP_MIGRATIONS.map((migration) => migration.id)).toEqual([
+      "2026-09-03-equity-market-pools",
       "2026-09-03-repair-orphan-index-fund-state",
     ]);
     expect(REQUIRED_STARTUP_MIGRATIONS.every((migration) => migration.idempotent)).toBe(true);

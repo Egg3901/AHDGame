@@ -22,6 +22,55 @@ describe("shareEscrowSettlement", () => {
     db = createMockDb();
   });
 
+  describe("finite equity pool", () => {
+    beforeEach(() => {
+      db.collection("equityMarketPools");
+      db.collectionMocks.equityMarketPools.findOne.mockResolvedValue({
+        _id: "USD",
+        cashLocal: 5_000,
+        targetCashLocal: 5_000,
+      });
+    });
+
+    it("routes float purchases to pool cash, never the issuer", async () => {
+      await applyFloatBuyCredit(db as unknown as Db, INSTANT, 1_000);
+      expect(db.collectionMocks.equityMarketPools.updateOne).toHaveBeenCalledWith(
+        { _id: "USD" },
+        expect.objectContaining({
+          $inc: { cashLocal: 1_000, "lifetime.purchasesIn": 1_000 },
+        }),
+        expect.anything()
+      );
+      expect(db.collectionMocks.corporations?.findOneAndUpdate).toBeUndefined();
+    });
+
+    it("routes float sales through the pool's atomic cash gate", async () => {
+      db.collectionMocks.equityMarketPools.findOneAndUpdate.mockResolvedValue({ cashLocal: 4_000 });
+      const result = await settleFloatSellDebit(db as unknown as Db, INSTANT, 1_000);
+      expect(result).toEqual({ ok: true });
+      expect(db.collectionMocks.equityMarketPools.findOneAndUpdate).toHaveBeenCalledWith(
+        { _id: "USD", cashLocal: { $gte: 1_000 } },
+        expect.objectContaining({
+          $inc: { cashLocal: -1_000, "lifetime.salesOut": 1_000 },
+        }),
+        expect.anything()
+      );
+    });
+
+    it("refunds the pool and leaves legacy issuance accounting untouched", async () => {
+      await reverseFloatSellDebit(db as unknown as Db, INSTANT, 1_000);
+      await onFloatSellCommitted(db as unknown as Db, INSTANT, 1_000);
+      expect(db.collectionMocks.equityMarketPools.updateOne).toHaveBeenCalledWith(
+        { _id: "USD" },
+        expect.objectContaining({
+          $inc: { cashLocal: 1_000, "lifetime.salesOut": -1_000 },
+        }),
+        undefined
+      );
+      expect(db.collectionMocks.corporations?.updateOne).toBeUndefined();
+    });
+  });
+
   describe("applyFloatBuyCredit", () => {
     it("escrow mode credits shareEscrowBalance via updateOne", async () => {
       await applyFloatBuyCredit(db as unknown as Db, ESCROW, 1000);
