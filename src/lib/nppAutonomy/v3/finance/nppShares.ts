@@ -25,10 +25,8 @@
 import type { Db, ObjectId } from "mongodb";
 import type { Corporation, NPP } from "@/lib/db/types";
 import { creditSharesToNpp, debitSharesFromNpp } from "@/lib/corporations/shareholderOps";
-import {
-  isOrderFlowPriceEligible,
-  resolveShareExecutionPrice,
-} from "@/lib/corporations/marketExecution";
+import { isOrderFlowPriceEligible } from "@/lib/corporations/marketExecution";
+import { loadEquityQuote } from "@/lib/equities/marketPool";
 import {
   applyFloatBuyCredit,
   onFloatSellCommitted,
@@ -80,7 +78,7 @@ export async function nppBuyShares(
     return { ok: false, reason: "NPPs only buy shares in their home currency." };
   }
 
-  const executionPrice = resolveShareExecutionPrice(corp);
+  const executionPrice = (await loadEquityQuote(db, corp)).askPriceLocal;
   const orderFlowEligible = isOrderFlowPriceEligible(corp.publicFloat, corp.totalShares);
   const cost = Math.round(shares * executionPrice * 100) / 100;
   // Share price is LOCAL; the economic account is ₳ — convert at the FX boundary.
@@ -200,7 +198,14 @@ export async function nppSellShares(
     return { ok: false, reason: `Only ${ownedShares} shares owned.` };
   }
 
-  const executionPrice = resolveShareExecutionPrice(corp);
+  const marketQuote = await loadEquityQuote(db, corp);
+  const executionPrice = marketQuote.bidPriceLocal;
+  if (marketQuote.active && shares > marketQuote.bidDepthShares) {
+    return {
+      ok: false,
+      reason: `The ${marketQuote.currency} equity market can currently absorb ${marketQuote.bidDepthShares.toLocaleString("en-US")} shares.`,
+    };
+  }
   const orderFlowEligible = isOrderFlowPriceEligible(corp.publicFloat, corp.totalShares);
   const proceeds = Math.round(shares * executionPrice * 100) / 100;
   const rate = homeRate ?? (await nppHomeFxRate(db, npp.countryId));
@@ -211,7 +216,7 @@ export async function nppSellShares(
   // matching the player sell route's ordering.
   const settled = await settleFloatSellDebit(db, corp, proceeds);
   if (!settled.ok) {
-    return { ok: false, reason: "Issuer treasury can't cover this sale." };
+    return { ok: false, reason: "The equity market does not have enough cash for this sale." };
   }
 
   const shouldVacateCeo = corp.ceoId?.equals(npp._id) && ownedShares === shares;

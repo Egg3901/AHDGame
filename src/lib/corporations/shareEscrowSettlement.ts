@@ -10,19 +10,34 @@ import {
   debitCorpShareEscrowFloored,
   type EscrowDebitSplit,
 } from "@/lib/financialTxLog/atomicCashGuard";
+import {
+  creditEquityPool,
+  debitEquityPoolGated,
+  equityPoolCurrency,
+  readEquityPool,
+  refundEquityPoolDebit,
+} from "@/lib/equities/marketPool";
 
 /**
- * Centralized routing for issuer-as-counterparty float trades. The issuer's
- * `shareBuybackMode` decides whether float buy/sell cash flows through the
- * market-making escrow (escrow mode) or the treasury (instant mode). Used by
- * the market buy/sell routes, limit-order immediate fills, and index-fund
- * float absorption so the routing lives in exactly one place.
+ * Centralized routing for public-float cash settlement. When a currency has an
+ * equity market pool, it is the counterparty: buys pay into the pool and sells
+ * draw from its finite cash. The old issuer escrow/treasury path remains only
+ * as a compatibility fallback for seed worlds and tests without a pool.
  *
  * `amountLocal` is always in the issuer's liquidCurrencyCode units
  * (= shares × executionPrice).
  */
-type EscrowCorp = { _id: ObjectId; shareBuybackMode?: string };
-type EscrowSettlementOptions = { session?: ClientSession };
+type EscrowCorp = {
+  _id: ObjectId;
+  shareBuybackMode?: string;
+  countryId?: string;
+  liquidCurrencyCode?: string | null;
+};
+type EscrowSettlementOptions = {
+  session?: ClientSession;
+  /** Explicit corporate buyouts remain issuer-funded, not ordinary market trades. */
+  counterparty?: "market" | "issuer";
+};
 
 /**
  * Credit the issuer for a float BUY.
@@ -39,6 +54,14 @@ export async function applyFloatBuyCredit(
   amountLocal: number,
   options?: EscrowSettlementOptions
 ): Promise<void> {
+  const currency = equityPoolCurrency({
+    countryId: corp.countryId,
+    liquidCurrencyCode: corp.liquidCurrencyCode ?? undefined,
+  });
+  if (options?.counterparty !== "issuer" && (await readEquityPool(db, currency, options))) {
+    await creditEquityPool(db, currency, amountLocal, "purchasesIn", new Date(), options);
+    return;
+  }
   if (getShareBuybackMode(corp) === "escrow") {
     await creditCorpShareEscrow(db, corp._id, amountLocal, options);
   } else {
@@ -69,6 +92,21 @@ export async function settleFloatSellDebit(
   amountLocal: number,
   options?: EscrowSettlementOptions
 ): Promise<FloatSellSettlement> {
+  const currency = equityPoolCurrency({
+    countryId: corp.countryId,
+    liquidCurrencyCode: corp.liquidCurrencyCode ?? undefined,
+  });
+  if (options?.counterparty !== "issuer" && (await readEquityPool(db, currency, options))) {
+    const debit = await debitEquityPoolGated(
+      db,
+      currency,
+      amountLocal,
+      "salesOut",
+      new Date(),
+      options
+    );
+    return { ok: debit.ok };
+  }
   if (getShareBuybackMode(corp) === "escrow") {
     const split = await debitCorpShareEscrowFloored(db, corp._id, amountLocal, options);
     return { ok: true, split };
@@ -89,6 +127,14 @@ export async function reverseFloatSellDebit(
   amountLocal: number,
   options?: EscrowSettlementOptions & { split?: EscrowDebitSplit }
 ): Promise<void> {
+  const currency = equityPoolCurrency({
+    countryId: corp.countryId,
+    liquidCurrencyCode: corp.liquidCurrencyCode ?? undefined,
+  });
+  if (options?.counterparty !== "issuer" && (await readEquityPool(db, currency, options))) {
+    await refundEquityPoolDebit(db, currency, amountLocal, "salesOut", new Date(), options);
+    return;
+  }
   if (getShareBuybackMode(corp) === "escrow") {
     const split = options?.split;
     if (split) {
@@ -119,6 +165,11 @@ export async function onFloatSellCommitted(
   amountLocal: number,
   options?: EscrowSettlementOptions
 ): Promise<void> {
+  const currency = equityPoolCurrency({
+    countryId: corp.countryId,
+    liquidCurrencyCode: corp.liquidCurrencyCode ?? undefined,
+  });
+  if (options?.counterparty !== "issuer" && (await readEquityPool(db, currency, options))) return;
   if (getShareBuybackMode(corp) === "escrow") return;
   // Self-contained capture: this is invoked fire-and-forget (`void
   // onFloatSellCommitted(...)`) from the trade paths, so a rejection here would

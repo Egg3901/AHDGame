@@ -45,6 +45,21 @@ vi.mock("@/lib/corporations/shareEscrowSettlement", () => ({
   applyFloatBuyCredit: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/equities/marketPool", () => ({
+  loadEquityQuote: vi.fn().mockImplementation((_db, corp: { sharePrice: number }) =>
+    Promise.resolve({
+      active: false,
+      currency: "USD",
+      midPriceLocal: corp.sharePrice,
+      bidPriceLocal: corp.sharePrice,
+      askPriceLocal: corp.sharePrice,
+      bidDepthShares: Number.MAX_SAFE_INTEGER,
+      poolCash: 0,
+      targetCash: 0,
+    })
+  ),
+}));
+
 vi.mock("@/lib/corporations/shareTradeHistory", () => ({
   recordShareTrade: vi.fn().mockResolvedValue(undefined),
 }));

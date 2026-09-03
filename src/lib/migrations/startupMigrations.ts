@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import { migration as repairOrphanIndexFundState } from "./entries/2026-09-03-repair-orphan-index-fund-state";
+import { migration as equityMarketPools } from "./entries/2026-09-03-equity-market-pools";
 import { runMigrations, type RunSummary } from "./runner";
 import type { Migration } from "./types";
 
@@ -12,7 +13,10 @@ import type { Migration } from "./types";
  * this list limited to idempotent repairs whose code and data change cannot be
  * safely separated during a deploy.
  */
-export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [repairOrphanIndexFundState];
+export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
+  equityMarketPools,
+  repairOrphanIndexFundState,
+];
 
 export async function runRequiredStartupMigrations(db: Db): Promise<RunSummary> {
   const unsafe = REQUIRED_STARTUP_MIGRATIONS.find((migration) => !migration.idempotent);

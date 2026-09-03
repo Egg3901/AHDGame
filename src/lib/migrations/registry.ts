@@ -66,6 +66,7 @@ import { migration as bondMarketPools } from "./entries/2026-09-03-bond-market-p
 import { migration as bondMarketPoolWorkingBalance } from "./entries/2026-09-03-bond-market-pool-working-balance";
 import { migration as bondFundSeed } from "./entries/2026-09-03-bond-fund-seed";
 import { migration as repairOrphanIndexFundState } from "./entries/2026-09-03-repair-orphan-index-fund-state";
+import { migration as equityMarketPools } from "./entries/2026-09-03-equity-market-pools";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -205,6 +206,8 @@ export const MIGRATIONS: Migration[] = [
   bondMarketPoolWorkingBalance,
   // Phase 4: bond index funds, the player-facing leg of the bond market.
   bondFundSeed,
+  // Equity public float gets the same finite cash counterparty as bonds.
+  equityMarketPools,
   // indexFunds survived resets while corporations and fund positions were
   // wiped. Remove those old-world references and reconcile live claims.
   repairOrphanIndexFundState,

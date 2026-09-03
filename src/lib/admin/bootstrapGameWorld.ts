@@ -821,6 +821,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
       "2026-06-01-index-fund-foundation",
       "2026-06-01-index-fund-seed",
       "2026-06-02-index-fund-real-bonds",
+      "2026-09-03-equity-market-pools",
       // Derived headroomUnits on every unowned pool. seedUnownedSectors (above)
       // now writes the field inline, so on a clean bootstrap this is a no-op;
       // it stays here to cover pools created by paths that do not go through

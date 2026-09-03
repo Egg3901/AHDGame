@@ -81,6 +81,7 @@ export async function executeFundOnlyBuyout(
     const wanted = Math.floor(holder.shares);
     const res = await sellFundHoldingShares(db, fund, corporation._id, wanted, {
       note: "Take-private buyout of index-fund holding (#71)",
+      settlementCounterparty: "issuer",
     });
     boughtBack += res.sharesSold;
     cashPaidAnchor += res.cashRaisedAnchor;

@@ -188,6 +188,13 @@ export interface CorporationDetail {
   headerImageUrl?: string;
   /** Share price (single source of truth for all contexts). */
   sharePrice: number;
+  /** True when at-market float trades settle against the finite currency pool. */
+  equityMarketPoolActive?: boolean;
+  /** Executable per-share bid and ask, in this corporation's local currency. */
+  marketBidPrice?: number;
+  marketAskPrice?: number;
+  /** Shares the currency pool can buy immediately at marketBidPrice. */
+  marketDepthShares?: number;
   totalShares: number;
   publicFloat: number;
   shareholders: ShareholderInfo[];
