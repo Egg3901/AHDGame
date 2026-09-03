@@ -199,7 +199,7 @@ export async function processNppCorporationDecisions(
   corpUpdates: Array<{
     filter: { _id: ObjectId; unlockedTechNodeIds?: { $ne: string } };
     update: {
-      $set: Record<string, unknown>;
+      $set?: Record<string, unknown>;
       $inc?: Record<string, number>;
       $addToSet?: { unlockedTechNodeIds: string };
     };
@@ -219,7 +219,7 @@ export async function processNppCorporationDecisions(
   const corpUpdates: Array<{
     filter: { _id: ObjectId; unlockedTechNodeIds?: { $ne: string } };
     update: {
-      $set: Record<string, unknown>;
+      $set?: Record<string, unknown>;
       $inc?: Record<string, number>;
       $addToSet?: { unlockedTechNodeIds: string };
     };

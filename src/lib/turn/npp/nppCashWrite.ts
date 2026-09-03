@@ -35,7 +35,8 @@ import type { NppCorpDecision } from "./corpDecisionTypes";
 export type NppCorpUpdateOp = {
   filter: { _id: ObjectId; unlockedTechNodeIds?: { $ne: string } };
   update: {
-    $set: Record<string, unknown>;
+    /** Omitted entirely when there is nothing to set — Mongo rejects `$set: {}`. */
+    $set?: Record<string, unknown>;
     $inc?: Record<string, number>;
     $addToSet?: { unlockedTechNodeIds: string };
   };
@@ -53,14 +54,23 @@ export function buildNppCorpUpdateOp(decision: NppCorpDecision): NppCorpUpdateOp
   // A non-finite `$inc` sets the field to NaN and poisons every later read of
   // it, so drop it rather than corrupt the balance — `sectorCalculations`
   // carries a guard comment about this exact class of write.
-  const cashDelta = Number.isFinite(delta) ? Math.round(delta) : 0;
+  //
+  // NOT rounded: the balance is fractional throughout (sectorCalculations
+  // `$inc`s the raw `incomeForBalance`), and the `corp_capacity_build` ledger
+  // row records the exact `costLocal`. Rounding here would put the cash a
+  // fraction out of step with its own ledger row every build — the precise
+  // kind of drift this ticket exists to remove.
+  const cashDelta = Number.isFinite(delta) ? delta : 0;
   const hasSet = Object.keys(decision.updates).length > 0;
   if (!hasSet && cashDelta === 0) return null;
 
   return {
     filter: { _id: decision.corpId },
     update: {
-      $set: decision.updates,
+      // Mongo rejects an empty update operator ("'$set' is empty"), which
+      // inside the corporation bulkWrite would throw and abort the turn. A
+      // spend-only decision carries no field writes, so omit `$set` entirely.
+      ...(hasSet ? { $set: decision.updates } : {}),
       ...(cashDelta !== 0 ? { $inc: { liquidCapital: cashDelta } } : {}),
     },
   };

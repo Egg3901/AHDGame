@@ -75,14 +75,40 @@ describe("buildNppCorpUpdateOp — the NPP cash write is relative, never absolut
     expect(op!.update.$inc).toEqual({ liquidCapital: -1200 });
   });
 
+  it("omits $set entirely on a spend-only decision, because Mongo rejects an empty one", () => {
+    // `{ $set: {} }` is a server-side parse error ("'$set' is empty"), and this
+    // op goes into the corporation bulkWrite — it would throw and abort the turn.
+    const op = buildNppCorpUpdateOp(decision({ updates: {}, liquidCapitalDelta: -1200 }));
+
+    expect(op!.update).not.toHaveProperty("$set");
+    expect(Object.keys(op!.update)).toEqual(["$inc"]);
+  });
+
+  it("never emits an update document with no operators at all", () => {
+    // Every op this returns must carry at least one operator, or the bulkWrite
+    // rejects it. The null return is the only representation of "nothing to do".
+    for (const d of [
+      decision({ updates: {}, liquidCapitalDelta: -5 }),
+      decision({ updates: { marketingBudget: 1 }, liquidCapitalDelta: 0 }),
+      decision({ updates: { marketingBudget: 1 }, liquidCapitalDelta: -5 }),
+    ]) {
+      const op = buildNppCorpUpdateOp(d);
+      expect(Object.keys(op!.update).length).toBeGreaterThan(0);
+    }
+  });
+
   it("returns null when there is genuinely nothing to write", () => {
     expect(buildNppCorpUpdateOp(decision({ updates: {}, liquidCapitalDelta: 0 }))).toBeNull();
   });
 
-  it("rounds the delta so it cannot write a fractional currency amount", () => {
+  it("carries the delta at full precision, matching the capex ledger row exactly", () => {
+    // The balance is fractional throughout (sectorCalculations `$inc`s the raw
+    // `incomeForBalance`) and `corp_capacity_build` logs the exact `costLocal`.
+    // Rounding here would put cash a fraction out of step with its own ledger
+    // row on every build.
     const op = buildNppCorpUpdateOp(decision({ liquidCapitalDelta: -1200.6 }));
 
-    expect(op!.update.$inc).toEqual({ liquidCapital: -1201 });
+    expect(op!.update.$inc).toEqual({ liquidCapital: -1200.6 });
   });
 
   it("ignores a non-finite delta rather than corrupting the balance", () => {
