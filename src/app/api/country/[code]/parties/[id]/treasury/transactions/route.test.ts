@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { TREASURY_TRANSACTION_CATEGORIES } from "@/lib/db/types/treasuryTransaction";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireAuth: vi.fn() }));
@@ -81,6 +82,32 @@ describe("GET /api/country/[code]/parties/[id]/treasury/transactions", () => {
       holderType: "party",
       holderId: "2",
       amount: 756145,
+    });
+  });
+
+  // The accepted-category list is hand-maintained and had silently fallen behind
+  // the type: an unrecognised `category` is dropped rather than rejected, so a
+  // missing entry turns a filter the UI offers into "show me everything".
+  describe("category filter", () => {
+    async function get(category: string) {
+      const { listHolderTreasuryTransactions } = await import("@/lib/db/treasuryTransactionLookup");
+      vi.mocked(listHolderTreasuryTransactions).mockResolvedValue([] as never);
+      const { GET } = await import("./route");
+      await GET(
+        new Request(
+          `http://localhost/api/country/us/parties/2/treasury/transactions?category=${category}`
+        ),
+        { params: Promise.resolve({ code: "us", id: "2" }) }
+      );
+      return vi.mocked(listHolderTreasuryTransactions).mock.calls.at(-1)?.[1]?.options?.category;
+    }
+
+    it.each(TREASURY_TRANSACTION_CATEGORIES)("passes %s through to the query", async (category) => {
+      expect(await get(category)).toBe(category);
+    });
+
+    it("ignores a category that is not a real one", async () => {
+      expect(await get("not_a_category")).toBeUndefined();
     });
   });
 });
