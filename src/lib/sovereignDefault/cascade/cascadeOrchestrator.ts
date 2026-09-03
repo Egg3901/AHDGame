@@ -1,9 +1,13 @@
 /**
  * Sovereign-default cascade orchestrator — runs at crisis-fire time.
  *
- * Per-level pipeline:
- *   1. apply write-downs to the level's bond batch
- *   2. reload affected corps; detect insolvency
+ * Write-downs are PAPER losses (holder cash moved at purchase; the bond
+ * marketPrice stamp already encodes the loss), so this pipeline records
+ * exposure without moving balances:
+ *   1. record paper-loss write-downs for the level's bond batch
+ *   2. reload affected corps; detect insolvency (only corps that were
+ *      already insolvent from operations can trip this — paper losses
+ *      cannot make a holder insolvent)
  *   3. for each insolvent corp: flag its still-active corp bonds defaulted
  *   4. recurse with next-level batch (reason "corp-default") if any insolvent
  *
@@ -28,7 +32,6 @@ export interface CascadeInput {
   /** Defaulting country code, threaded into per-corp news context (phase 9a). */
   countryCode: string;
   maxDepth?: number;
-  forexEnabled?: boolean;
 }
 
 export interface CascadeResult {
@@ -41,7 +44,6 @@ export interface CascadeResult {
 
 export async function runCascade(db: Db, input: CascadeInput): Promise<CascadeResult> {
   const maxDepth = input.maxDepth ?? CASCADE_MAX_LEVELS;
-  const forexEnabled = input.forexEnabled ?? false;
 
   const result: CascadeResult = {
     levels: 0,
@@ -56,7 +58,7 @@ export async function runCascade(db: Db, input: CascadeInput): Promise<CascadeRe
 
   while (levelBonds.length > 0 && result.levels < maxDepth) {
     const severity = computeBondWriteDownSeverity(levelReason);
-    const report = await applyBondHolderWriteDowns(db, levelBonds, severity, forexEnabled);
+    const report = await applyBondHolderWriteDowns(db, levelBonds, severity);
     result.perLevelReports.push(report);
     result.totalBondsCascaded += levelBonds.length;
     result.levels += 1;
