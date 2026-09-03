@@ -28,14 +28,19 @@ const DD_REGIONS = [
   { _id: "MV", houseDistricts: 58, stateSenateSeats: 9 },
 ];
 
-function makeDDMockDb(currentTurn: number, gameState: Record<string, unknown> = {}) {
+function makeDDMockDb(
+  currentTurn: number,
+  gameState: Record<string, unknown> = {},
+  completed: Array<Partial<Election>> = [],
+  regions: Array<Record<string, unknown>> = DD_REGIONS
+) {
   const insertCalls: Omit<Election, "_id">[][] = [];
   const db = {
     collection: vi.fn().mockImplementation((name: string) => {
       if (name === "states") {
         return {
           find: vi.fn().mockReturnValue({
-            toArray: vi.fn().mockResolvedValue(DD_REGIONS),
+            toArray: vi.fn().mockResolvedValue(regions),
           }),
         };
       }
@@ -53,7 +58,11 @@ function makeDDMockDb(currentTurn: number, gameState: Record<string, unknown> = 
         return {
           find: vi.fn().mockImplementation((filter: Record<string, unknown>) => {
             if (filter.$or) return { toArray: vi.fn().mockResolvedValue([]) };
-            return { sort: vi.fn().mockReturnThis(), toArray: vi.fn().mockResolvedValue([]) };
+            // Two status-scoped reads share this mock: the live races (none) and
+            // the resolved history the next cycle is scheduled from.
+            const wanted = (filter.status as { $in?: string[] } | undefined)?.$in ?? [];
+            const rows = wanted.includes("resolved") ? completed : [];
+            return { sort: vi.fn().mockReturnThis(), toArray: vi.fn().mockResolvedValue(rows) };
           }),
           insertMany: vi.fn().mockImplementation((docs: Omit<Election, "_id">[]) => {
             insertCalls.push(docs);
@@ -151,5 +160,67 @@ describe("ensureDDLandAssemblyElections (Landtage)", () => {
     const { ensureDDLandAssemblyElections } = await import("./perpetualElections");
     await ensureDDLandAssemblyElections(new Date("2026-04-01T00:00:00Z"));
     expect(mock.insertCalls.flat()).toHaveLength(0);
+  });
+});
+
+describe("regional delegate seat sizing (#1262)", () => {
+  // Reunification rescaled the GDR's Laender: Sachsen's Volkskammer delegation
+  // went from the 1953 seed's 151 to 55 once the acceded western Laender were
+  // apportioned alongside it. The chamber's live size is the sum of the region
+  // docs' `houseDistricts`, so a new cycle that copies the resolved 1953 race
+  // advertises a delegation the chamber does not have -- which is exactly what
+  // the map and the elections page disagreed about.
+  const RESCALED = [
+    { _id: "SN", houseDistricts: 55, stateSenateSeats: 161 },
+    { _id: "MV", houseDistricts: 21, stateSenateSeats: 63 },
+  ];
+  const stale = (electionType: string, seatsByState: Record<string, number>) =>
+    Object.entries(seatsByState).map(
+      ([state, totalSeats]) =>
+        ({
+          state,
+          electionType,
+          countryId: "DD",
+          status: "resolved",
+          totalSeats,
+          cycle: 0,
+          endTurn: -200,
+        }) as unknown as Partial<Election>
+    );
+
+  it("sizes a new Volkskammer cycle from the live region, not the resolved one", async () => {
+    const mock = makeDDMockDb(1, {}, stale("volkskammerDeputy", { SN: 151, MV: 58 }), RESCALED);
+    await mountDD(mock);
+    const { ensureDDVolkskammerElections } = await import("./perpetualElections");
+    await ensureDDVolkskammerElections(new Date("2026-04-01T00:00:00Z"));
+
+    const byState = new Map(mock.insertCalls.flat().map((d) => [d.state, d.totalSeats]));
+    expect(byState.get("SN")).toBe(55);
+    expect(byState.get("MV")).toBe(21);
+  });
+
+  it("sizes a new Landtag cycle from the live region too", async () => {
+    const mock = makeDDMockDb(1, {}, stale("landAssembly", { SN: 24 }), RESCALED);
+    await mountDD(mock);
+    const { ensureDDLandAssemblyElections } = await import("./perpetualElections");
+    await ensureDDLandAssemblyElections(new Date("2026-04-01T00:00:00Z"));
+
+    const byState = new Map(mock.insertCalls.flat().map((d) => [d.state, d.totalSeats]));
+    expect(byState.get("SN")).toBe(161);
+  });
+
+  it("keeps the inherited count when the region doc does not size the chamber", async () => {
+    // A region with no `houseDistricts` contributes nothing to the live chamber
+    // sum, so there is no authoritative number to force and the previous cycle's
+    // count is the best available answer. Forcing a 1 here would be a regression.
+    const mock = makeDDMockDb(1, {}, stale("volkskammerDeputy", { SN: 151 }), [
+      { _id: "SN", stateSenateSeats: 161 },
+    ]);
+    await mountDD(mock);
+    const { ensureDDVolkskammerElections } = await import("./perpetualElections");
+    await ensureDDVolkskammerElections(new Date("2026-04-01T00:00:00Z"));
+
+    const byState = new Map(mock.insertCalls.flat().map((d) => [d.state, d.totalSeats]));
+    expect(byState.get("SN")).toBe(151);
   });
 });

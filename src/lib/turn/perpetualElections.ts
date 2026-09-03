@@ -1886,10 +1886,16 @@ interface RegionalDelegateSpec {
   /** electionType === officeType key (the CN convention). */
   electionType: string;
   /**
-   * Per-region seat map computed from the full region list, so families that
-   * apportion across regions can see every region at once. Simple families
-   * return a constant map (CN, RU Nationalities) or derive per-doc
-   * (RU Union: houseDistricts; RU republic soviets: stateSenateSeats).
+   * The AUTHORITATIVE per-region seat count, computed from the full region list
+   * so families that apportion across regions can see every region at once.
+   * Simple families return a constant map (CN, RU Nationalities) or derive
+   * per-doc (RU Union: houseDistricts; RU republic soviets: stateSenateSeats).
+   *
+   * Authoritative, not advisory: a region present here has its spawned race
+   * sized from this map even when a previous cycle said otherwise, because the
+   * chamber's live size is the region docs and a race is a delegation to it.
+   * OMIT a region the map cannot size — an absent entry means "no authoritative
+   * number", and the spawn falls back to the previous cycle's count.
    *
    * `preset` is the ACTIVE world preset (`ctx.preset`) so era-apportioned
    * families can size the race the way the seed and the country config do —
@@ -1912,6 +1918,28 @@ interface RegionalDelegateSpec {
   electionsLiveGate?: (db: Db, countryId: CountryId) => Promise<boolean>;
   /** Human label for the log line + announcements, e.g. "NPC Delegate", "Câmara". */
   label: string;
+}
+
+/**
+ * Seat map from the region field that sizes this chamber, OMITTING any region
+ * the field does not size.
+ *
+ * The omission is the point. Substituting 1 for a missing field would make "this
+ * region seats one deputy" indistinguishable from "this region doc cannot say",
+ * and the caller treats a present entry as authoritative enough to overrule the
+ * previous cycle — so a region that lost its field would have its delegation
+ * forced to 1 rather than left alone.
+ */
+function seatsFromRegionField(
+  regions: State[],
+  field: "houseDistricts" | "stateSenateSeats"
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const region of regions) {
+    const seats = region[field];
+    if (typeof seats === "number" && seats > 0) out[region._id as string] = seats;
+  }
+  return out;
 }
 
 /**
@@ -1987,6 +2015,20 @@ async function ensureRegionalDelegateElections(
       openPrimaryImmediately: spec.openPrimaryImmediately,
     });
     if (!doc) continue;
+
+    // buildCanonicalSpawn inherits `prev?.totalSeats`, which freezes a region's
+    // delegation at whatever its FIRST cycle said and never consults the region
+    // doc again. That is wrong wherever a chamber can be resized mid-game: after
+    // German reunification the six pre-accession Laender still advertised their
+    // 1953 Volkskammer allocation (Sachsen 151) while the live chamber sized
+    // them from `houseDistricts` (Sachsen 55), so the elections page and the map
+    // disagreed on every one of them (#1262). NG hit the same inheritance with
+    // its buggy `totalSeats: 1` (#901) and forces the value in its own spawner;
+    // this is that fix, in the shared helper, for every family routed through it.
+    const authoritativeSeats = seatMap[regionId];
+    if (typeof authoritativeSeats === "number" && authoritativeSeats > 0) {
+      doc.totalSeats = authoritativeSeats;
+    }
 
     toInsert.push(doc);
   }
@@ -2081,10 +2123,7 @@ export async function ensureBRSenateElections(now: Date): Promise<void> {
     {
       countryId: "BR",
       electionType: "senate",
-      seatsForRegions: (regions) =>
-        Object.fromEntries(
-          regions.map((r) => [r._id as string, (r as State).stateSenateSeats ?? 1])
-        ),
+      seatsForRegions: (regions) => seatsFromRegionField(regions, "stateSenateSeats"),
       openPrimaryImmediately: true,
       label: "Senate",
     },
@@ -2108,8 +2147,7 @@ export async function ensureRUSupremeSovietElections(now: Date): Promise<void> {
     {
       countryId: "RU",
       electionType: "supremeSovietDeputy",
-      seatsForRegions: (regions) =>
-        Object.fromEntries(regions.map((r) => [r._id as string, r.houseDistricts ?? 1])),
+      seatsForRegions: (regions) => seatsFromRegionField(regions, "houseDistricts"),
       openPrimaryImmediately: true,
       statusGated: true,
       electionsLiveGate: ruElectionsLive,
@@ -2147,8 +2185,7 @@ export async function ensureRURepublicSovietElections(now: Date): Promise<void> 
     {
       countryId: "RU",
       electionType: "republicSupremeSoviet",
-      seatsForRegions: (regions) =>
-        Object.fromEntries(regions.map((r) => [r._id as string, r.stateSenateSeats ?? 1])),
+      seatsForRegions: (regions) => seatsFromRegionField(regions, "stateSenateSeats"),
       openPrimaryImmediately: true,
       statusGated: true,
       electionsLiveGate: ruElectionsLive,
@@ -2174,16 +2211,21 @@ export async function ensureRUGovernorElections(now: Date): Promise<void> {
 /**
  * DD Volkskammer — the GDR's unicameral chamber, elected as a single National
  * Front list per macro-region (1953) / Land (1979). One multi-seat regional
- * delegate election per region, seats from the live `houseDistricts` (sum = 500).
- * Mirrors `ensureRUSupremeSovietElections` — the sibling one-party command state.
+ * delegate election per region, seats from the live `houseDistricts`.
+ *
+ * The seed sums to 500, but the LIVE sum is whatever the region docs say now —
+ * reunification carried ten more Laender in and the chamber grew to 693. Sizing
+ * from the live docs rather than the seed total is the whole point: the shared
+ * spawner forces this map onto each new cycle so a resized chamber cannot go on
+ * electing to its old magnitude (#1262). Mirrors `ensureRUSupremeSovietElections`
+ * — the sibling one-party command state.
  */
 export async function ensureDDVolkskammerElections(now: Date): Promise<void> {
   await ensureRegionalDelegateElections(
     {
       countryId: "DD",
       electionType: "volkskammerDeputy",
-      seatsForRegions: (regions) =>
-        Object.fromEntries(regions.map((r) => [r._id as string, r.houseDistricts ?? 1])),
+      seatsForRegions: (regions) => seatsFromRegionField(regions, "houseDistricts"),
       openPrimaryImmediately: true,
       statusGated: true,
       label: "Volkskammer",
@@ -2226,8 +2268,7 @@ export async function ensureDDLandAssemblyElections(now: Date): Promise<void> {
     {
       countryId: "DD",
       electionType: "landAssembly",
-      seatsForRegions: (regions) =>
-        Object.fromEntries(regions.map((r) => [r._id as string, r.stateSenateSeats ?? 1])),
+      seatsForRegions: (regions) => seatsFromRegionField(regions, "stateSenateSeats"),
       openPrimaryImmediately: true,
       statusGated: true,
       electionsLiveGate: ddElectionsLive,
@@ -2258,8 +2299,7 @@ async function ensureEasternBlocAssemblyElections(
     {
       countryId,
       electionType,
-      seatsForRegions: (regions) =>
-        Object.fromEntries(regions.map((r) => [r._id as string, r.houseDistricts ?? 1])),
+      seatsForRegions: (regions) => seatsFromRegionField(regions, "houseDistricts"),
       openPrimaryImmediately: true,
       statusGated: true,
       electionsLiveGate: easternBlocElectionsLive,
