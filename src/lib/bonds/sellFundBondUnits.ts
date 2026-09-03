@@ -84,11 +84,9 @@ export async function sellFundBondHoldingsForCash(
       await refundBondPoolDebit(db, currency, proceedsLocal, "salesOut", now);
       continue;
     }
-    await db
-      .collection<Bond>("bonds")
-      .updateOne({ _id: bond._id }, {
-        $pull: { holders: { fundId: fund._id, units: { $lte: 0 } } },
-      } as unknown as UpdateFilter<Bond>);
+    await db.collection<Bond>("bonds").updateOne({ _id: bond._id }, {
+      $pull: { holders: { fundId: fund._id, units: { $lte: 0 } } },
+    } as unknown as UpdateFilter<Bond>);
 
     const proceedsAnchor =
       Math.round(corpCapitalToAnchor(proceedsLocal, currency, rate) * 100) / 100;
