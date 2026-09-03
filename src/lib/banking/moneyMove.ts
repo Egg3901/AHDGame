@@ -34,19 +34,19 @@
  */
 
 import type { Db, Filter, UpdateFilter, Document } from "mongodb";
+import { NET_TOLERANCE, legsNet, type ValueLegKind } from "@/lib/banking/rules/invariants";
 
 /** Collection holding the claim records. Also the repair queue. */
 export const MONEY_MOVE_COLLECTION = "bankMoneyMoves";
 
-export type MoneyMoveLegKind =
-  /** Money leaves a balance. Always guarded by a sufficiency filter. */
-  | "debit"
-  /** Money arrives at a balance. */
-  | "credit"
-  /** Money enters the world (deposit insurance backstop, CB liquidity). */
-  | "mint"
-  /** Money leaves the world (loan write-off, uninsured loss). */
-  | "burn";
+/**
+ * Money leaves a balance (`debit`, always guarded by a sufficiency filter),
+ * arrives at one (`credit`), enters the world (`mint`: deposit insurance
+ * backstop, central-bank liquidity) or leaves it (`burn`: write-off, uninsured
+ * loss). The kinds and their signs are defined once, in the invariant catalog,
+ * so the primitive and the checks that audit it cannot disagree.
+ */
+export type MoneyMoveLegKind = ValueLegKind;
 
 export interface MoneyMoveLeg {
   kind: MoneyMoveLegKind;
@@ -115,20 +115,8 @@ interface MoneyMoveRecord {
   error?: string;
 }
 
-function signOf(kind: MoneyMoveLegKind): number {
-  // Mint and burn are the outside world's side of the move, so they carry the
-  // OPPOSITE sign to the balance they pair with: `mint X + credit X` nets to
-  // zero, and so does `debit X + burn X`. That is what makes the net-zero check
-  // a check on a closed system with two explicit doors in it.
-  return kind === "debit" || kind === "mint" ? -1 : 1;
-}
-
-/** Legs must net to zero: every credit is somebody's debit, mint, or burn. */
-export function legsNet(legs: readonly MoneyMoveLeg[]): number {
-  return legs.reduce((sum, leg) => sum + signOf(leg.kind) * Math.max(0, leg.amount), 0);
-}
-
-const NET_TOLERANCE = 1e-6;
+/** Re-exported so existing callers keep one import for the primitive. */
+export { legsNet };
 
 export type MoneyMoveClaim =
   | { status: "claimed"; legs: MoneyMoveLeg[] }
