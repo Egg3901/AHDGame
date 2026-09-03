@@ -443,4 +443,118 @@ describe("getPartyDetail", () => {
     expect(result.tier).toBe("minor");
     expect(result.effectivePsCap).toBe(120);
   });
+
+  // Ticket #1265: the treasury controls divide national spend estimates by
+  // the country's own region count, so partyDetail must supply it (matching
+  // the turn engine's divisor, including legacy country-less docs as US).
+  it("exposes the country turnout region count for per-region estimates", async () => {
+    const db: MockDb = createMockDb();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+
+    const party = {
+      _id: new ObjectId(),
+      sequentialId: 1,
+      countryId: "UK",
+      name: "Labour Party",
+      abbreviation: "LAB",
+      color: "#ff0000",
+      economicPosition: -2,
+      socialPosition: -1,
+      chairId: null,
+      viceChairId: null,
+      treasurerId: null,
+      committeeIds: [],
+      treasury: 1_000_000,
+      nationalTaxRate: 0,
+      politicalStrength: 0,
+      isDefault: true,
+      createdAt: new Date(),
+      logoUrl: null,
+    } as unknown as PoliticalParty;
+
+    db.collection("characters");
+    db.collection("users");
+    db.collection("npps");
+    db.collection("states");
+    db.collection("partyBudget");
+    db.collection("gameConfig");
+    db.collection("stateDemographicTurnout");
+    db.collectionMocks["characters"]!.find.mockReturnValue({
+      sort: () => ({ toArray: async () => [] }),
+    });
+    db.collectionMocks["users"]!.find.mockReturnValue({
+      project: () => ({ toArray: async () => [] }),
+    });
+    db.collectionMocks["npps"]!.find.mockReturnValue({
+      sort: () => ({ toArray: async () => [] }),
+    });
+    db.collectionMocks["states"]!.find.mockReturnValue({ toArray: async () => [] });
+    db.collectionMocks["partyBudget"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["gameConfig"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["stateDemographicTurnout"]!.countDocuments.mockResolvedValue(12);
+
+    const result = await getPartyDetail(db as unknown as Db, party);
+
+    expect(result.regionCount).toBe(12);
+    // Non-US countries query their own docs only (no legacy $or).
+    expect(db.collectionMocks["stateDemographicTurnout"]!.countDocuments).toHaveBeenCalledWith({
+      countryId: "UK",
+    });
+  });
+
+  it("counts legacy country-less turnout docs as US regions", async () => {
+    const db: MockDb = createMockDb();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+
+    const party = {
+      _id: new ObjectId(),
+      sequentialId: 1,
+      countryId: "US",
+      name: "DEM",
+      abbreviation: "DEM",
+      color: "#0000ff",
+      economicPosition: 0,
+      socialPosition: 0,
+      chairId: null,
+      viceChairId: null,
+      treasurerId: null,
+      committeeIds: [],
+      treasury: 0,
+      nationalTaxRate: 0,
+      politicalStrength: 0,
+      isDefault: true,
+      createdAt: new Date(),
+      logoUrl: null,
+    } as unknown as PoliticalParty;
+
+    db.collection("characters");
+    db.collection("users");
+    db.collection("npps");
+    db.collection("states");
+    db.collection("partyBudget");
+    db.collection("gameConfig");
+    db.collection("stateDemographicTurnout");
+    db.collectionMocks["characters"]!.find.mockReturnValue({
+      sort: () => ({ toArray: async () => [] }),
+    });
+    db.collectionMocks["users"]!.find.mockReturnValue({
+      project: () => ({ toArray: async () => [] }),
+    });
+    db.collectionMocks["npps"]!.find.mockReturnValue({
+      sort: () => ({ toArray: async () => [] }),
+    });
+    db.collectionMocks["states"]!.find.mockReturnValue({ toArray: async () => [] });
+    db.collectionMocks["partyBudget"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["gameConfig"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["stateDemographicTurnout"]!.countDocuments.mockResolvedValue(51);
+
+    const result = await getPartyDetail(db as unknown as Db, party);
+
+    expect(result.regionCount).toBe(51);
+    expect(db.collectionMocks["stateDemographicTurnout"]!.countDocuments).toHaveBeenCalledWith({
+      $or: [{ countryId: "US" }, { countryId: null }, { countryId: { $exists: false } }],
+    });
+  });
 });

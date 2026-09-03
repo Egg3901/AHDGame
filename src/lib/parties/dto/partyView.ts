@@ -103,6 +103,13 @@ export interface PartyData {
    */
   regimeStatus?: "ruling" | "approved" | "banned" | null;
   countryId: CountryId;
+  /**
+   * Number of turnout regions national GOTV/suppression/registration spend is
+   * divided across (turnout docs for this country; legacy docs without a
+   * countryId count as US). Backs the per-region estimates in the treasury
+   * controls. Optional for backward compatibility with cached responses.
+   */
+  regionCount?: number;
   createdAt: string;
   members: PartyMember[];
   logoUrl?: string;
