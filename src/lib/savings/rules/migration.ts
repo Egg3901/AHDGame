@@ -99,6 +99,22 @@ function finite(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : Number.NaN;
 }
 
+/**
+ * Float residue below half a cent, in either direction.
+ *
+ * The legacy pointer model credited interest as raw floats, so a balance that
+ * has been paid and withdrawn a few hundred times lands on values like
+ * -5.3e-8: not a debt, not a claim, and below the smallest unit any currency
+ * can settle. Refusing the whole migration over one of those blocks the
+ * rollout on arithmetic nobody can act on, so dust is read as zero. A genuine
+ * negative, anything a player could actually be owed or owe, still refuses.
+ */
+export const MIGRATION_DUST = 0.005;
+
+function clampDust(value: number): number {
+  return Math.abs(value) < MIGRATION_DUST ? 0 : value;
+}
+
 export function planSavingsMigration(input: MigrationInput): SavingsMigrationPlan {
   const failures: string[] = [];
   const currencies = new Set<string>(input.rows.map((r) => r.currency));
@@ -119,7 +135,7 @@ export function planSavingsMigration(input: MigrationInput): SavingsMigrationPla
 
     for (const row of rows) {
       const key = `${row.ownerId}:${currency}`;
-      const balance = finite(row.savings);
+      const balance = clampDust(finite(row.savings));
       const holder = row.savingsHolder ?? CENTRAL_BANK_HOLDER;
       if (seen.has(key)) {
         unmappable.push({
