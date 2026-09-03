@@ -312,6 +312,7 @@
       "viewDocs": "View API documentation →",
       "personalTitle": "Personal API Keys",
       "personalHint": "Keys tied to your account. Public keys can only read public data. Private keys can also send campaign funds and trade forex on your behalf, so treat them like a password.",
+      "rateLimitHint": "Read endpoints are rate limited per key. Supporter+ keys get 1.5x the standard allowance and Supporter++ keys 3x. Every response carries your live allowance in the X-RateLimit-Limit header.",
       "keyNamePlaceholder": "Key name",
       "readOnly": "Read only",
       "readSend": "Read + send funds",

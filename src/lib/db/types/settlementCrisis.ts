@@ -214,6 +214,24 @@ export interface SettlementCrisisDoc {
    * pass locked nineteen real accounts out of the country they had just won.
    */
   absorbedWasPlayable?: boolean | null;
+  /**
+   * Both sides' fiscal bases (Σ state.gdp, Σ state.population, income band)
+   * captured the FIRST time actuation looked, BEFORE the region transfers moved.
+   *
+   * Durable for the same reason as `absorbedWasPlayable`: the law re-base in
+   * `mergeNationalFisc` needs each country's pre-merge pricing base, and a
+   * resume arrives after every region has been re-keyed — a live read there
+   * would find the absorbed side at zero and re-scale its whole law book to
+   * nothing. See `MergeFiscalBases`.
+   */
+  mergeBases?: {
+    fromGdp: number;
+    fromPopulation: number;
+    fromIncomeBand: number;
+    toGdp: number;
+    toPopulation: number;
+    toIncomeBand: number;
+  } | null;
   createdAt: Date;
   updatedAt: Date;
 }

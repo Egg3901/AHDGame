@@ -4,6 +4,7 @@ import { validateUserApiKey } from "@/lib/api/userApiAuth";
 import { rateLimitResponse, rateLimitHeaders, BOT_READ_LIMITS } from "@/lib/api/rateLimit";
 import { durableRateLimit } from "@/lib/api/rateLimit.mongo";
 import { logApiAccess } from "@/lib/api/accessLog";
+import { publicApiMaxRequests, resolvePublicApiTier } from "./tierLimits";
 import { publicError } from "./errors";
 
 // Public API responses are read-only game state — safe to cache at the edge.
@@ -34,6 +35,10 @@ export type PublicApiGuardResult =
  * - X-API-Key header with a valid user API key (public or private scope)
  * - X-Bot-Token header with the server's PUBLIC_BOT_API_KEY (existing behavior)
  *
+ * User keys are charged against a per-owner allowance that scales with the
+ * owner's active supporter tier (see {@link publicApiMaxRequests}). The bot
+ * token is a server-wide credential, so it keeps the flat base allowance.
+ *
  * On success returns the `X-RateLimit-*` headers to attach to the response.
  */
 export async function publicApiGuard(
@@ -43,9 +48,10 @@ export async function publicApiGuard(
   // Try user API key first (X-API-Key header)
   const userKeyResult = await validateUserApiKey(request);
   if (userKeyResult.valid) {
+    const supporterTier = await resolvePublicApiTier(userKeyResult.ownerUserId);
     const rl = await durableRateLimit(
       `user-api:${bucket}:${userKeyResult.ownerUserId}`,
-      BOT_READ_LIMITS.maxRequests,
+      publicApiMaxRequests(supporterTier),
       BOT_READ_LIMITS.windowMs
     );
     logApiAccess(request, {
