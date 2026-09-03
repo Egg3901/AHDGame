@@ -1694,6 +1694,11 @@ export function processSector(
     // in-flight paid ramp. Zeroing the target lets `currentGrowthRate` trend to
     // 0 over the following turns (no cliff — this turn's growth cost is still
     // charged in full, so the flip turn itself is unchanged).
+    // The policy computation above is NOT dead, only its revenue leg: the
+    // trended rate still bills the decaying `hourlyGrowthCost` through the
+    // physical PnL, seeds next turn's trend, and seeds `legacyRevenueShadow`
+    // on the flip turn. Do not "clean up" the compute-then-zero into a skip
+    // without rehoming all three.
     sectorUpdate.targetGrowthRate = 0;
     sectorUpdate.currentGrowthCost = 0;
     // NOT written back: `mothballed` is derived here purely from the stored

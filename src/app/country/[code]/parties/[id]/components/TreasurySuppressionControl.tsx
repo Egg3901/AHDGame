@@ -10,6 +10,7 @@ import {
 import type { PartyData } from "./types";
 import type { TreasuryAction } from "./treasuryReducer";
 import { fmt } from "./helpers";
+import { DEFAULT_LEGACY_COUNTRY_ID } from "@/lib/constants/countries";
 
 interface TreasurySuppressionControlProps {
   party: PartyData;
@@ -46,7 +47,12 @@ export function TreasurySuppressionControl({
         selectedSupDemo.socialLean
       )
     : 0;
-  const supRawPerState = supSpend / 51;
+  // National spend is divided across this country's regions only (ticket
+  // #1265); falls back to 51 for cached responses predating regionCount.
+  const regionCount = party.regionCount || 51;
+  const isUs = countryId === DEFAULT_LEGACY_COUNTRY_ID;
+  const regionWord = isUs ? "state parties" : "regions";
+  const supRawPerState = supSpend / regionCount;
   const supEstBoost = selectedSupDemo
     ? (supRawPerState / DOLLARS_PER_TURNOUT_POINT) * supAlignMult
     : 0;
@@ -79,7 +85,7 @@ export function TreasurySuppressionControl({
         </div>
       </div>
       <p className="text-[11px] text-muted/60 mb-3 ml-6">
-        Nationwide dirty tricks. Suppress opponent turnout across all 51 state parties.
+        Nationwide dirty tricks. Suppress opponent turnout across all {regionCount} {regionWord}.
       </p>
 
       <div className="flex items-center gap-4">
@@ -175,7 +181,9 @@ export function TreasurySuppressionControl({
             </span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-muted">Per state (51)</span>
+            <span className="text-muted">
+              Per {isUs ? "state" : "region"} ({regionCount})
+            </span>
             <span className="font-medium tabular-nums text-muted">
               {fmt(supRawPerState, party.countryId)} / hr
             </span>

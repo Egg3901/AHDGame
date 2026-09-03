@@ -630,7 +630,9 @@ export async function processNppCorporationDecisions(
           countryId: ns.countryId as CountryId,
           stateId: ns.stateId,
           sectorType: ns.sectorType,
-          targetGrowthRate: 2,
+          // Plants births grow via build orders, never via the growth slider:
+          // stamp 0 (the turn zeroes it anyway) rather than the legacy default.
+          targetGrowthRate: ns.starterOrder ? 0 : 2,
           currentGrowthRate: 0,
           currentGrowthCost: 0,
           revenue: ns.revenue,
@@ -976,6 +978,10 @@ export function makeNppCorpDecision(
     // A mothballed plant is deliberately idle (section 2c): growth targets are
     // meaningless while it's cold, and its stale margin would only add noise.
     if (sp.sector.mothballed === true) continue;
+    // Plants: growth targets are vestigial — sectorTurn zeroes them every
+    // turn, so adjusting them here is write churn with no reader. The AI
+    // grows via section 6 reinvestment build orders instead.
+    if (plants?.enabled) continue;
 
     // Fill-awareness (t899): lagged soldFraction is only set under clearing
     // mode. A sector that sold < CHRONIC_LOW_FILL_THRESHOLD of its output last

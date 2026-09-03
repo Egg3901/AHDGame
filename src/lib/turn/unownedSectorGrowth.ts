@@ -79,14 +79,19 @@ export async function processUnownedSectorGrowth(db: Db): Promise<number> {
   // Build avg growth rate map: "stateId:sectorType" → avgGrowthRate.
   // Guard against missing/NaN growthRate on legacy docs (treat as 0 contribution)
   // so a single bad sector can't poison the average into NaN.
+  // Skipped under plants: the plants branch prices off state GDP, and corporate
+  // growth targets there are vestigial (sectorTurn zeroes them), so averaging
+  // them would only launder zeros into the demand signal.
   const growthAccum = new Map<string, { sum: number; count: number }>();
-  for (const sector of corpSectors) {
-    const rate = Number.isFinite(sector.currentGrowthRate) ? sector.currentGrowthRate : 0;
-    const key = `${sector.stateId}:${sector.sectorType}`;
-    const acc = growthAccum.get(key) ?? { sum: 0, count: 0 };
-    acc.sum += rate;
-    acc.count += 1;
-    growthAccum.set(key, acc);
+  if (!plantsEnabled) {
+    for (const sector of corpSectors) {
+      const rate = Number.isFinite(sector.currentGrowthRate) ? sector.currentGrowthRate : 0;
+      const key = `${sector.stateId}:${sector.sectorType}`;
+      const acc = growthAccum.get(key) ?? { sum: 0, count: 0 };
+      acc.sum += rate;
+      acc.count += 1;
+      growthAccum.set(key, acc);
+    }
   }
 
   // Per-state annual GDP growth (%), the plants demand signal. One projected
