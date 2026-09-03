@@ -143,6 +143,29 @@ describe("emitCorporationTurnTx — corporate tax is booked once (ticket #1260)"
     expect((revenue?.amount ?? 0) + (tax?.amount ?? 0)).toBe(0);
   });
 
+  it("emits no zero-amount rows when the grossed-up inflow rounds away", async () => {
+    // A sub-half-unit inflow clears a bare `> 0` gate but rounds to 0, which is
+    // noise the reconciler has to read past. Suppressing it is correct as well
+    // as tidy: when the gross rounds away, income ~= -tax, so the lone tax
+    // debit already nets to the right figure.
+    await run(
+      "USD",
+      1,
+      makeSnapshot({
+        incomePreDividends: 0.2,
+        income: -0.1,
+        federalTaxPaid: 0.3,
+        stateTaxPaid: 0,
+        taxPaidByCountry: new Map([["IT", 0.3]]),
+        taxPaidByState: new Map(),
+      })
+    );
+
+    for (const row of corpRows()) {
+      expect(row.amount, `${row.type} must never be a zero-amount row`).not.toBe(0);
+    }
+  });
+
   it("leaves a genuinely loss-making, untaxed corp with no revenue row", async () => {
     await run(
       "USD",

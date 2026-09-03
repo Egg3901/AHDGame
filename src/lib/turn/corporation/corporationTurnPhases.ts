@@ -569,7 +569,13 @@ export async function emitCorporationTurnTx(args: {
     const revenueAnchorPreTax = snap.income + Math.max(0, totalTaxAnchor);
     if (revenueAnchorPreTax > 0) {
       const incomeLocal = anchorToCorpCapital(revenueAnchorPreTax, resolved, fx);
-      if (incomeLocal > 0) {
+      // Gate on the ROUNDED amount: a sub-half-unit inflow passes `> 0` but
+      // rounds to a zero-amount row, which is noise the reconciler then has to
+      // read past. Suppressing it is also correct rather than merely tidy —
+      // when the grossed-up inflow rounds away, `income ≈ -tax`, so the lone
+      // tax debit already nets to the right figure.
+      const amountLocal = Math.round(incomeLocal);
+      if (amountLocal > 0) {
         txEntries.push({
           type: "corp_revenue",
           turn: turn ?? 0,
@@ -577,7 +583,7 @@ export async function emitCorporationTurnTx(args: {
           subjectType: "corporation",
           subjectId: corp._id,
           subjectName: corp.name,
-          amount: Math.round(incomeLocal),
+          amount: amountLocal,
           currencyCode: resolved,
           meta: {
             revenue: Math.round(snap.revenue),
@@ -596,7 +602,10 @@ export async function emitCorporationTurnTx(args: {
     // queries can sum cleanly; meta carries the breakdown for forensics.
     if (totalTaxAnchor > 0) {
       const taxLocal = anchorToCorpCapital(totalTaxAnchor, resolved, fx);
-      if (taxLocal > 0) {
+      // Rounded gate, same reason as the credit above: a sub-half-unit tax
+      // would otherwise emit a `-0` row.
+      const taxAmountLocal = Math.round(taxLocal);
+      if (taxAmountLocal > 0) {
         txEntries.push({
           type: "corp_tax_paid",
           turn: turn ?? 0,
@@ -604,7 +613,7 @@ export async function emitCorporationTurnTx(args: {
           subjectType: "corporation",
           subjectId: corp._id,
           subjectName: corp.name,
-          amount: -Math.round(taxLocal),
+          amount: -taxAmountLocal,
           currencyCode: resolved,
           counterpartyType: "government",
           meta: {
