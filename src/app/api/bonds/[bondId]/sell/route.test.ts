@@ -65,7 +65,8 @@ describe("POST /api/bonds/[bondId]/sell", () => {
       currencyCode: "USD",
       holders: [{ characterId, units: 50 }],
     });
-    // 2,500 of cash buys two units at 1,000 each; the player asks for ten.
+    // Bid is 980 per unit (mid 1,000 less the 2% corporate half spread);
+    // 2,500 of cash buys two units and the player asks for ten.
     db.collectionMocks.bondMarketPools.findOne.mockResolvedValue({ _id: "USD", cashLocal: 2_500 });
 
     const { POST } = await import("./route");
@@ -134,15 +135,15 @@ describe("POST /api/bonds/[bondId]/sell", () => {
     );
 
     expect(response.status).toBe(404);
-    // Debited 3,000 from the pool, then put it back.
+    // Three units at the 980 bid: debited 2,940 from the pool, then put it back.
     expect(db.collectionMocks.bondMarketPools.findOneAndUpdate).toHaveBeenCalledWith(
-      { _id: "USD", cashLocal: { $gte: 3000 } },
-      expect.objectContaining({ $inc: { cashLocal: -3000, "lifetime.salesOut": 3000 } }),
+      { _id: "USD", cashLocal: { $gte: 2940 } },
+      expect.objectContaining({ $inc: { cashLocal: -2940, "lifetime.salesOut": 2940 } }),
       expect.anything()
     );
     expect(db.collectionMocks.bondMarketPools.updateOne).toHaveBeenCalledWith(
       { _id: "USD" },
-      expect.objectContaining({ $inc: { cashLocal: 3000, "lifetime.salesOut": -3000 } })
+      expect.objectContaining({ $inc: { cashLocal: 2940, "lifetime.salesOut": -2940 } })
     );
   });
 
@@ -271,14 +272,14 @@ describe("POST /api/bonds/[bondId]/sell", () => {
         subjectType: "character",
         subjectId: characterId,
         subjectName: "Seller",
-        amount: 3600,
+        amount: 3528,
         currencyCode: "USD",
         counterpartyType: "system",
         counterpartyName: "Japan",
         meta: expect.objectContaining({
           bondId: bondId.toString(),
           units: 3,
-          pricePerUnit: 1.2,
+          pricePerUnit: 1.176,
         }),
       })
     );

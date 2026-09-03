@@ -8,7 +8,6 @@ import { sellBondSchema } from "@/lib/api/schemas/bonds";
 import { badRequest, handleRouteError, notFound } from "@/lib/api/errors";
 import type { Bond, Character, Corporation, ExchangeRate, User } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
-import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
@@ -27,6 +26,7 @@ import {
   bondPoolDepthMessage,
   bondPoolFillableUnits,
   debitBondPoolGated,
+  loadBondQuote,
   readBondPoolCash,
   refundBondPoolDebit,
 } from "@/lib/bonds/marketPool";
@@ -127,7 +127,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     const url = new URL(request.url);
     const sellAsCorp = url.searchParams.get("corporationId");
     const now = new Date();
-    const proceedsLocal = units * BOND_UNIT_FACE_VALUE * bond.marketPrice;
+    // The pool buys at its bid: the rate-derived mid less the dealer half
+    // spread, shifted down when the pool is short of cash or has little
+    // appetite for the issuer.
+    const quote = await loadBondQuote(db, bond);
+    const proceedsLocal = units * quote.bidPerUnit;
     const turnDoc = await db
       .collection<{ _id: string; currentTurn?: number }>("gameState")
       .findOne({ _id: "current" }, { projection: { currentTurn: 1 } });
@@ -136,9 +140,8 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Depth check before any holder-side write. The gated debit inside each
     // settlement path is the real guard; this read just turns a race-free
     // refusal into a message that says how much the market can take.
-    const pricePerUnitLocal = BOND_UNIT_FACE_VALUE * bond.marketPrice;
-    const poolCashLocal = await readBondPoolCash(db, bondCurrency);
-    const fillableUnits = bondPoolFillableUnits(poolCashLocal, pricePerUnitLocal, units);
+    const pricePerUnitLocal = quote.bidPerUnit;
+    const fillableUnits = bondPoolFillableUnits(quote.poolCashLocal, pricePerUnitLocal, units);
     if (fillableUnits < units) {
       return NextResponse.json(
         {
@@ -307,7 +310,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         meta: {
           bondId: bond._id.toString(),
           units,
-          pricePerUnit: bond.marketPrice,
+          pricePerUnit: quote.bid,
           bondCurrency,
           bondAmount: Math.round(proceedsLocal * 100) / 100,
         },
@@ -318,7 +321,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         unitsSold: units,
         proceeds: Math.round(proceedsLocal * 100) / 100,
         proceedsCurrency: bondCurrency,
-        pricePerUnit: Math.round(BOND_UNIT_FACE_VALUE * bond.marketPrice * 100) / 100,
+        pricePerUnit: quote.bidPerUnit,
         seller: "corporation",
       });
     }
@@ -464,7 +467,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         meta: {
           bondId: bond._id.toString(),
           units,
-          pricePerUnit: bond.marketPrice,
+          pricePerUnit: quote.bid,
           imperial: true,
         },
       });
@@ -474,7 +477,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         unitsSold: units,
         proceeds: Math.round(proceedsLocal * 100) / 100,
         proceedsCurrency: bondCurrency,
-        pricePerUnit: Math.round(BOND_UNIT_FACE_VALUE * bond.marketPrice * 100) / 100,
+        pricePerUnit: quote.bidPerUnit,
         seller: "character",
       });
     }
@@ -613,7 +616,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       meta: {
         bondId: bond._id.toString(),
         units,
-        pricePerUnit: bond.marketPrice,
+        pricePerUnit: quote.bid,
       },
     });
 
@@ -622,7 +625,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       unitsSold: units,
       proceeds: Math.round(proceedsLocal * 100) / 100,
       proceedsCurrency: bondCurrency,
-      pricePerUnit: Math.round(BOND_UNIT_FACE_VALUE * bond.marketPrice * 100) / 100,
+      pricePerUnit: quote.bidPerUnit,
       seller: "character",
     });
   } catch (error) {

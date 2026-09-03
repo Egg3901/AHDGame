@@ -1,4 +1,5 @@
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import type { CountryId } from "@/lib/constants/countries";
 
 export const BOND_MARKET_POOLS_COLLECTION = "bondMarketPools";
 
@@ -18,7 +19,9 @@ export type BondMarketPoolFlowKind =
   | "qtOut"
   | "retiredIn"
   | "estateOut"
-  | "recoveriesIn";
+  | "recoveriesIn"
+  | "inflowIn"
+  | "sweepOut";
 
 /**
  * The counterparty for every bond trade that used to hit an infinite "AI
@@ -43,6 +46,12 @@ export interface BondMarketPool {
    */
   targetCashLocal: number;
   lastTurn?: number;
+  /**
+   * Sovereign demand ratio per issuer country whose paper trades in this
+   * currency, refreshed each turn from the sovereign-default demand model.
+   * 1 is neutral; below 1 the pool discounts that country's bonds.
+   */
+  appetiteByCountry?: Partial<Record<CountryId, number>>;
   lifetime: Partial<Record<BondMarketPoolFlowKind, number>>;
   createdAt: Date;
   updatedAt: Date;

@@ -15,7 +15,9 @@
 import type { ClientSession, Db } from "mongodb";
 import type { Bond, BondMarketPool, BondMarketPoolFlowKind } from "@/lib/db/types";
 import { BOND_MARKET_POOLS_COLLECTION } from "@/lib/db/types/bondMarketPool";
+import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
+import { quoteBondPrices, type BondPoolQuote } from "@/lib/bonds/marketPoolQuotes";
 
 /** Share of a currency's broad money (M2) the pool is seeded with and steered toward. */
 export const BOND_POOL_M2_SHARE = 0.05;
@@ -165,4 +167,64 @@ export function bondPoolDepthMessage(fillableUnits: number, currency: CurrencyCo
     return `The ${currency} bond market has no cash to buy right now. Try again after the next turn, when coupon income has replenished it.`;
   }
   return `The ${currency} bond market can only absorb ${fillableUnits.toLocaleString("en-US")} units at this price right now. Sell that many, or wait for the next turn.`;
+}
+
+export interface LoadedBondQuote extends BondPoolQuote {
+  currency: CurrencyCode;
+  poolCashLocal: number;
+  targetCashLocal: number;
+  appetite: number | undefined;
+  /** LOCAL price of one unit at the pool's bid / ask. */
+  bidPerUnit: number;
+  askPerUnit: number;
+  /** Whole units the pool can buy at its bid with the cash it has now. */
+  depthUnitsAtBid: number;
+}
+
+/**
+ * The pool's live quote for a bond: mid from `marketPrice`, bid and ask from
+ * the pool's cash position and (for sovereigns) its appetite for the issuer.
+ * One read of the pool document; a missing pool quotes as empty (zero cash,
+ * neutral appetite), so the depth is zero and the spread is the base spread.
+ */
+export async function loadBondQuote(
+  db: Db,
+  bond: Pick<Bond, "currencyCode" | "countryId" | "marketPrice" | "issuerType" | "defaulted">
+): Promise<LoadedBondQuote> {
+  const currency = bondPoolCurrency(bond);
+  const pool = await db
+    .collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION)
+    .findOne(
+      { _id: currency },
+      { projection: { cashLocal: 1, targetCashLocal: 1, appetiteByCountry: 1 } }
+    );
+  const poolCashLocal =
+    Number.isFinite(pool?.cashLocal) && pool!.cashLocal > 0 ? pool!.cashLocal : 0;
+  const targetCashLocal =
+    Number.isFinite(pool?.targetCashLocal) && pool!.targetCashLocal > 0 ? pool!.targetCashLocal : 0;
+  const issuerType = bond.issuerType ?? "corporation";
+  const appetite =
+    issuerType === "sovereign" && bond.countryId
+      ? pool?.appetiteByCountry?.[bond.countryId]
+      : undefined;
+  const quote = quoteBondPrices({
+    marketPrice: bond.marketPrice,
+    issuerType,
+    cashLocal: poolCashLocal,
+    targetCashLocal,
+    appetite,
+    defaulted: bond.defaulted,
+  });
+  const bidPerUnit = Math.round(BOND_UNIT_FACE_VALUE * quote.bid * 100) / 100;
+  const askPerUnit = Math.round(BOND_UNIT_FACE_VALUE * quote.ask * 100) / 100;
+  return {
+    ...quote,
+    currency,
+    poolCashLocal,
+    targetCashLocal,
+    appetite,
+    bidPerUnit,
+    askPerUnit,
+    depthUnitsAtBid: bidPerUnit > 0 ? Math.floor(poolCashLocal / bidPerUnit) : 0,
+  };
 }

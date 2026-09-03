@@ -171,7 +171,7 @@ describe("Bond transactional routes — cross-currency regression (A19-A21, A25)
     const res = await POST(req, { params: Promise.resolve({ bondId: bondId.toString() }) });
     expect(res.status).toBe(200);
 
-    // Post-fix: costLocal (USD) = 10 × 1000 × 1.0 = 10,000 USD.
+    // Post-fix: costLocal (USD) = 10 × 1000 × 1.02 ask (mid 1.0 + 2% corporate half spread) = 10,200 USD.
     //          costAnchor = 10,000 / 1.04 ≈ 9,615.38 ₳.
     //          JPY deduction = 9,615.38 × 113.88 ≈ 1,094,799.90 JPY.
     // Deduction now goes through findOneAndUpdate (atomic guard), not updateOne.
@@ -181,7 +181,7 @@ describe("Bond transactional routes — cross-currency regression (A19-A21, A25)
     expect(guardCalls.length).toBeGreaterThanOrEqual(1);
     const update = guardCalls[0][1] as { $inc: { liquidCapital: number } };
     const actualDeduction = -update.$inc.liquidCapital;
-    const expectedDeduction = 10_000 / ((1 - MARKET_MAKER_SPREAD) * (FX_USD / FX_JPY));
+    const expectedDeduction = 10_200 / ((1 - MARKET_MAKER_SPREAD) * (FX_USD / FX_JPY));
     expect(actualDeduction).toBeCloseTo(expectedDeduction, 0);
     // Explicitly reject the pre-fix value (10,000 × 113.88 = 1,138,800).
     expect(actualDeduction).not.toBeCloseTo(10_000 * FX_JPY, -1);
@@ -251,9 +251,9 @@ describe("Bond transactional routes — cross-currency regression (A19-A21, A25)
     expect(entry.currencyCode).toBe("JPY");
     expect(entry.amount).toBeLessThan(0);
     // The new field — bond-side cost in the bond's denomination.
-    // costLocal (USD) = 10 units × $1000 face × 1.0 marketPrice = $10,000 USD.
+    // costLocal (USD) = 10 units × $1000 face × 1.02 ask = $10,200 USD.
     expect(entry.meta?.bondCurrency).toBe("USD");
-    expect(entry.meta?.bondAmount).toBe(-10_000);
+    expect(entry.meta?.bondAmount).toBe(-10_200);
   });
 
   // ── SELL corp path (A20) ───────────────────────────────────────────────────
@@ -293,7 +293,7 @@ describe("Bond transactional routes — cross-currency regression (A19-A21, A25)
     const res = await POST(req, { params: Promise.resolve({ bondId: bondId.toString() }) });
     expect(res.status).toBe(200);
 
-    // Post-fix: proceedsLocal (USD) = 5 × 1000 × 1.02 = 5,100 USD.
+    // Post-fix: proceedsLocal (USD) = 5 × 1000 × 1.02 mid × 0.98 bid factor = 4,998 USD.
     //           proceedsAnchor = 5,100 / 1.04 ≈ 4,903.85 ₳.
     //           JPY credit = 4,903.85 × 113.88 ≈ 558,410 JPY.
     // Pre-fix (A20): anchorToCorpLiquidCapital(5100 LOCAL, JPY, 113.88) = 5100 × 113.88
@@ -304,7 +304,7 @@ describe("Bond transactional routes — cross-currency regression (A19-A21, A25)
     );
     expect(creditCall).toBeDefined();
     const actualCredit = (creditCall![1] as { $inc: { liquidCapital: number } }).$inc.liquidCapital;
-    const expectedCredit = (5_100 / FX_USD) * FX_JPY;
+    const expectedCredit = ((5_100 * 0.98) / FX_USD) * FX_JPY;
     expect(actualCredit).toBeCloseTo(expectedCredit, 0);
     expect(actualCredit).not.toBeCloseTo(5_100 * FX_JPY, -1);
   });
@@ -355,7 +355,7 @@ describe("Bond transactional routes — cross-currency regression (A19-A21, A25)
     const res = await POST(req, { params: Promise.resolve({ bondId: bondId.toString() }) });
     expect(res.status).toBe(200);
 
-    // Post-fix: costLocal (USD) = 5 × 1000 × 0.95 = 4,750 USD.
+    // Post-fix: costLocal (USD) = 5 × 1000 × 0.95 mid × 1.02 ask factor = 4,845 USD.
     //           With FX spread, required JPY = 4,750 / ((1 - spread) � USD/JPY).
     // Pre-fix (A21): anchorToCorpLiquidCapital(4750 LOCAL, JPY, 113.88) = 4,750 × 113.88
     //           = 540,930 JPY.
@@ -366,7 +366,7 @@ describe("Bond transactional routes — cross-currency regression (A19-A21, A25)
     expect(deductCall).toBeDefined();
     const actualDeduction = -(deductCall![1] as { $inc: { liquidCapital: number } }).$inc
       .liquidCapital;
-    const expectedDeduction = 4_750 / ((1 - MARKET_MAKER_SPREAD) * (FX_USD / FX_JPY));
+    const expectedDeduction = (4_750 * 1.02) / ((1 - MARKET_MAKER_SPREAD) * (FX_USD / FX_JPY));
     expect(actualDeduction).toBeCloseTo(expectedDeduction, 0);
     expect(actualDeduction).not.toBeCloseTo(4_750 * FX_JPY, -1);
   });
@@ -444,12 +444,12 @@ describe("Bond transactional routes — cross-currency regression (A19-A21, A25)
     const guardCalls = db.collectionMocks["characters"]!.findOneAndUpdate.mock.calls;
     expect(guardCalls.length).toBeGreaterThanOrEqual(1);
     const filter = guardCalls[0][0] as Record<string, unknown>;
-    expect(filter["currencyBalances.personal.JPY"]).toEqual({ $gte: 10_000 });
+    expect(filter["currencyBalances.personal.JPY"]).toEqual({ $gte: 10_200 });
     // Pre-A25 would have gated USD instead — explicitly absent.
     expect(filter["currencyBalances.personal.USD"]).toBeUndefined();
 
     const update = guardCalls[0][1] as { $inc: Record<string, number> };
-    expect(update.$inc["currencyBalances.personal.JPY"]).toBe(-10_000);
+    expect(update.$inc["currencyBalances.personal.JPY"]).toBe(-10_200);
   });
 
   // ── SELL character path (A25-ext canonical bond.currencyCode) ──────────────
@@ -509,8 +509,8 @@ describe("Bond transactional routes — cross-currency regression (A19-A21, A25)
     );
     expect(charUpdateCall).toBeDefined();
     const incUpdate = (charUpdateCall![1] as { $inc: Record<string, number> }).$inc;
-    // Post-A25-ext: credit key targets USD, value = 7 × 1000 × 1.0 = 7,000 USD.
-    expect(incUpdate["currencyBalances.personal.USD"]).toBe(7_000);
+    // Post-A25-ext: credit key targets USD, value = 7 × 1000 × 0.98 bid = 6,860 USD.
+    expect(incUpdate["currencyBalances.personal.USD"]).toBe(6_860);
     // Pre-A25-ext would have targeted JPY (corp.countryId) — explicitly absent.
     expect(incUpdate["currencyBalances.personal.JPY"]).toBeUndefined();
   });

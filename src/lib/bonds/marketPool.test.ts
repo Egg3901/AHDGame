@@ -8,6 +8,7 @@ import {
   creditBondPool,
   debitBondPoolGated,
   debitBondPoolUpTo,
+  loadBondQuote,
   readBondPoolCash,
   refundBondPoolDebit,
 } from "./marketPool";
@@ -126,5 +127,39 @@ describe("bondPoolDepthMessage", () => {
 describe("mock sanity", () => {
   it("uses the bondMarketPools collection", () => {
     expect(vi.isMockFunction(db.collection)).toBe(true);
+  });
+});
+
+describe("loadBondQuote", () => {
+  it("quotes from the pool's cash position and its appetite for the issuer", async () => {
+    db.collectionMocks.bondMarketPools.findOne.mockResolvedValueOnce({
+      _id: "GBP",
+      cashLocal: 5_000,
+      targetCashLocal: 5_000,
+      appetiteByCountry: { UK: 1 },
+    });
+    const q = await loadBondQuote(db as unknown as Db, {
+      currencyCode: "GBP",
+      countryId: "UK",
+      issuerType: "sovereign",
+      marketPrice: 1,
+      defaulted: false,
+    });
+    expect(q.bidPerUnit).toBe(990);
+    expect(q.askPerUnit).toBe(1010);
+    expect(q.depthUnitsAtBid).toBe(5);
+    expect(q.currency).toBe("GBP");
+  });
+
+  it("quotes a missing pool as empty: base spread, zero depth", async () => {
+    db.collectionMocks.bondMarketPools.findOne.mockResolvedValueOnce(null);
+    const q = await loadBondQuote(db as unknown as Db, {
+      currencyCode: "USD",
+      marketPrice: 1,
+      defaulted: false,
+    });
+    expect(q.bidPerUnit).toBe(980);
+    expect(q.askPerUnit).toBe(1020);
+    expect(q.depthUnitsAtBid).toBe(0);
   });
 });
