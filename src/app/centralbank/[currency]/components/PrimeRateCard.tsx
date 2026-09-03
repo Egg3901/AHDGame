@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { fetchJson } from "@/lib/observability/fetchJson";
 import {
   MAX_RATE_CHANGE_DELTA,
   MAX_RATE_CUT_DELTA,
@@ -9,6 +10,11 @@ import {
   PRIME_RATE_STEP,
   snapToPrimeRateGrid,
 } from "@/lib/db/types/centralBank";
+
+export interface RateGovernance {
+  allowedActions: Array<{ action: string; allowed: boolean; reason?: string }>;
+  nextDeadline: { turn: number; kind: string } | null;
+}
 
 export function PrimeRateCard({
   primeRate,
@@ -23,6 +29,8 @@ export function PrimeRateCard({
   currentTurn,
   bankApiBasePath,
   onChanged,
+  governance,
+  governanceEndpoint,
 }: {
   primeRate: number;
   isChair: boolean;
@@ -41,11 +49,41 @@ export function PrimeRateCard({
   currentTurn: number;
   bankApiBasePath: string;
   onChanged: () => void;
+  /** Server-driven eligibility; when present it owns the control's disabled state. */
+  governance?: RateGovernance | null;
+  /** FOMC panel endpoint to load governance from when no prop is passed. */
+  governanceEndpoint?: string;
 }) {
   const [pendingRate, setPendingRate] = useState<number | null>(null);
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [rateError, setRateError] = useState<string | null>(null);
+  const [fetchedGovernance, setFetchedGovernance] = useState<RateGovernance | null>(null);
+
+  useEffect(() => {
+    if (governance !== undefined || !governanceEndpoint) return;
+    let cancelled = false;
+    fetchJson<{ governance?: RateGovernance }>(governanceEndpoint, {
+      feature: "prime-rate-governance",
+    })
+      .then((body) => {
+        if (!cancelled && body?.governance) setFetchedGovernance(body.governance);
+      })
+      .catch((_error: unknown) => {
+        // fetchJson already reports genuine faults; a rejection explicitly
+        // keeps the prop fallback below.
+        if (!cancelled) setFetchedGovernance(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [governance, governanceEndpoint]);
+
+  // Server-driven eligibility owns the control when available; the prop
+  // derivation below is only the fallback for banks without a committee.
+  const effectiveGovernance = governance ?? fetchedGovernance;
+  const setRateAction = effectiveGovernance?.allowedActions.find((a) => a.action === "set_rate");
+  const governedRefusal = setRateAction && !setRateAction.allowed ? setRateAction.reason : null;
 
   const currentRate = pendingRate ?? primeRate;
 
@@ -174,92 +212,114 @@ export function PrimeRateCard({
         </div>
       )}
 
-      {!committeeSeated &&
-        (governmentControlled ? viewerSetsRate : isChair && !chairControlsLocked) && (
-          <div className="mt-4 space-y-3 border-t border-card-border pt-4">
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <label className="shrink-0 text-xs font-medium text-muted">Adjust Rate</label>
-              <span className="text-[11px] leading-snug text-muted">
-                Hike max +{MAX_RATE_CHANGE_DELTA.toFixed(2)}% · Cut max -
-                {MAX_RATE_CUT_DELTA.toFixed(2)}% · one change per {RATE_CHANGE_COOLDOWN_TURNS} turns
-              </span>
-            </div>
-            {onCooldown && (
-              <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
-                On cooldown - {cooldownRemaining} more turn
-                {cooldownRemaining === 1 ? "" : "s"} before the next rate change.
-              </div>
-            )}
-            {isAggressiveCut && (
-              <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
-                Aggressive cut - this move exceeds the normal ±{MAX_RATE_CHANGE_DELTA.toFixed(2)}%
-                threshold and will add{" "}
-                <span className="font-semibold">+{AGGRESSIVE_CUT_SCRUTINY} scrutiny</span> to the
-                chair immediately.
-              </div>
-            )}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() =>
-                  setPendingRate(Math.max(rateFloor, (pendingRate ?? gridBase) - PRIME_RATE_STEP))
-                }
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-card-border bg-card-elevated text-foreground hover:bg-primary/10 hover:border-primary/30 transition-colors disabled:opacity-40"
-                disabled={
-                  submitting ||
-                  onCooldown ||
-                  (pendingRate ?? gridBase) - PRIME_RATE_STEP < rateFloor - 1e-9
-                }
-              >
-                -
-              </button>
-              <span className="min-w-[4rem] text-center text-lg font-semibold text-foreground">
-                {currentRate.toFixed(2)}%
-              </span>
-              <button
-                onClick={() =>
-                  setPendingRate(Math.min(rateCeiling, (pendingRate ?? gridBase) + PRIME_RATE_STEP))
-                }
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-card-border bg-card-elevated text-foreground hover:bg-primary/10 hover:border-primary/30 transition-colors disabled:opacity-40"
-                disabled={
-                  submitting ||
-                  onCooldown ||
-                  (pendingRate ?? gridBase) + PRIME_RATE_STEP > rateCeiling + 1e-9
-                }
-              >
-                +
-              </button>
-            </div>
-            <p className="text-[11px] text-muted">
-              Allowed range this change: {rateFloor.toFixed(2)}% - {rateCeiling.toFixed(2)}%
-              {aggressiveCutThreshold > rateFloor && (
-                <>
-                  {" "}
-                  · cuts below {aggressiveCutThreshold.toFixed(2)}% add {AGGRESSIVE_CUT_SCRUTINY}{" "}
-                  scrutiny
-                </>
-              )}
-            </p>
-            <input
-              type="text"
-              placeholder="Reason (optional)"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              maxLength={200}
-              disabled={onCooldown}
-              className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted/50 focus:border-primary/50 focus:outline-none disabled:opacity-60"
-            />
-            <button
-              onClick={handleSubmit}
-              disabled={
-                submitting || onCooldown || pendingRate === null || pendingRate === primeRate
-              }
-              className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
-            >
-              {submitting ? "Updating..." : "Confirm Rate Change"}
-            </button>
-            {rateError && <p className="text-xs text-error">{rateError}</p>}
+      {(setRateAction
+        ? true
+        : !committeeSeated &&
+          (governmentControlled ? viewerSetsRate : isChair && !chairControlsLocked)) && (
+        <div className="mt-4 space-y-3 border-t border-card-border pt-4">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <label className="shrink-0 text-xs font-medium text-muted">Adjust Rate</label>
+            <span className="text-[11px] leading-snug text-muted">
+              Hike max +{MAX_RATE_CHANGE_DELTA.toFixed(2)}% · Cut max -
+              {MAX_RATE_CUT_DELTA.toFixed(2)}% · one change per {RATE_CHANGE_COOLDOWN_TURNS} turns
+            </span>
           </div>
-        )}
+          {onCooldown && (
+            <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+              On cooldown - {cooldownRemaining} more turn
+              {cooldownRemaining === 1 ? "" : "s"} before the next rate change.
+            </div>
+          )}
+          {governedRefusal && (
+            <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+              {governedRefusal}
+            </div>
+          )}
+          {effectiveGovernance?.nextDeadline && (
+            <p className="text-[11px] text-muted">
+              Next deadline: turn {effectiveGovernance.nextDeadline.turn} (
+              {effectiveGovernance.nextDeadline.kind === "meeting_deadline"
+                ? "the vote closes"
+                : "next session opens"}
+              ).
+            </p>
+          )}
+          {isAggressiveCut && (
+            <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+              Aggressive cut - this move exceeds the normal ±{MAX_RATE_CHANGE_DELTA.toFixed(2)}%
+              threshold and will add{" "}
+              <span className="font-semibold">+{AGGRESSIVE_CUT_SCRUTINY} scrutiny</span> to the
+              chair immediately.
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() =>
+                setPendingRate(Math.max(rateFloor, (pendingRate ?? gridBase) - PRIME_RATE_STEP))
+              }
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-card-border bg-card-elevated text-foreground hover:bg-primary/10 hover:border-primary/30 transition-colors disabled:opacity-40"
+              disabled={
+                submitting ||
+                onCooldown ||
+                governedRefusal !== null ||
+                (pendingRate ?? gridBase) - PRIME_RATE_STEP < rateFloor - 1e-9
+              }
+            >
+              -
+            </button>
+            <span className="min-w-[4rem] text-center text-lg font-semibold text-foreground">
+              {currentRate.toFixed(2)}%
+            </span>
+            <button
+              onClick={() =>
+                setPendingRate(Math.min(rateCeiling, (pendingRate ?? gridBase) + PRIME_RATE_STEP))
+              }
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-card-border bg-card-elevated text-foreground hover:bg-primary/10 hover:border-primary/30 transition-colors disabled:opacity-40"
+              disabled={
+                submitting ||
+                onCooldown ||
+                governedRefusal !== null ||
+                (pendingRate ?? gridBase) + PRIME_RATE_STEP > rateCeiling + 1e-9
+              }
+            >
+              +
+            </button>
+          </div>
+          <p className="text-[11px] text-muted">
+            Allowed range this change: {rateFloor.toFixed(2)}% - {rateCeiling.toFixed(2)}%
+            {aggressiveCutThreshold > rateFloor && (
+              <>
+                {" "}
+                · cuts below {aggressiveCutThreshold.toFixed(2)}% add {AGGRESSIVE_CUT_SCRUTINY}{" "}
+                scrutiny
+              </>
+            )}
+          </p>
+          <input
+            type="text"
+            placeholder="Reason (optional)"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            maxLength={200}
+            disabled={onCooldown || governedRefusal !== null}
+            className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted/50 focus:border-primary/50 focus:outline-none disabled:opacity-60"
+          />
+          <button
+            onClick={handleSubmit}
+            disabled={
+              submitting ||
+              onCooldown ||
+              governedRefusal !== null ||
+              pendingRate === null ||
+              pendingRate === primeRate
+            }
+            className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+          >
+            {submitting ? "Updating..." : "Confirm Rate Change"}
+          </button>
+          {rateError && <p className="text-xs text-error">{rateError}</p>}
+        </div>
+      )}
     </div>
   );
 }
