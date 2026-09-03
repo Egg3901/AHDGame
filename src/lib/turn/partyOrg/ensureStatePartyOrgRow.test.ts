@@ -23,7 +23,12 @@ describe("ensureStatePartyOrgRow", () => {
       politicalStrength: 5,
       hasPresence: true,
     };
-    db.collectionMocks["statePartyOrg"]!.findOne.mockResolvedValue(existing);
+    db.collectionMocks["statePartyOrg"]!.findOne.mockImplementation(
+      async (filter: Record<string, unknown>) => {
+        if (filter.partyId === "2") return existing;
+        return null;
+      }
+    );
 
     const row = await ensureStatePartyOrgRow(db as unknown as Db, {
       countryId: "DE",
@@ -49,7 +54,12 @@ describe("ensureStatePartyOrgRow", () => {
       chairId: "abc",
       // countryId intentionally absent
     };
-    db.collectionMocks["statePartyOrg"]!.findOne.mockResolvedValue(malformed);
+    db.collectionMocks["statePartyOrg"]!.findOne.mockImplementation(
+      async (filter: Record<string, unknown>) => {
+        if (filter.partyId === "2") return malformed;
+        return filter._id === "BY_2" ? malformed : null;
+      }
+    );
 
     const row = await ensureStatePartyOrgRow(db as unknown as Db, {
       countryId: "DE",
@@ -66,6 +76,80 @@ describe("ensureStatePartyOrgRow", () => {
       { _id: "BY_2" },
       { $set: expect.objectContaining({ countryId: "DE" }) }
     );
+  });
+
+  it("re-keys a drifted _id back to the canonical key, preserving the row's org", async () => {
+    // Ticket #1256: a party renumber (country merge) rewrote partyId but not
+    // the compound _id. The helper must move the row back onto
+    // `{stateId}_{partyId}` or the next Build Org poaches the wrong balance.
+    const drifted = {
+      _id: "NW_7",
+      countryId: "DD",
+      stateId: "NW",
+      partyId: "1",
+      organization: 36.76,
+      politicalStrength: 12,
+      treasury: 500,
+    };
+    db.collectionMocks["statePartyOrg"]!.findOne.mockImplementation(
+      async (filter: Record<string, unknown>) => {
+        if (filter.partyId === "1") return drifted;
+        return null;
+      }
+    );
+
+    const row = await ensureStatePartyOrgRow(db as unknown as Db, {
+      countryId: "DD",
+      stateId: "NW",
+      party: { sequentialId: 1 } as never,
+      hasPresence: true,
+    });
+
+    expect(row._id).toBe("NW_1");
+    expect(row.organization).toBe(36.76);
+    expect(row.treasury).toBe(500);
+    // Re-key is delete-then-insert (_id is immutable in MongoDB).
+    expect(db.collectionMocks["statePartyOrg"]!.deleteOne).toHaveBeenCalledWith({ _id: "NW_7" });
+    expect(db.collectionMocks["statePartyOrg"]!.insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: "NW_1", organization: 36.76, partyId: "1" })
+    );
+  });
+
+  it("removes a squatter holding the canonical key before re-keying", async () => {
+    // Two drifted rows can compete for one canonical key: the live row (stale
+    // _id, right fields) and a squatter (canonical _id, wrong fields). The live
+    // row wins the key; the squatter is the misattributed remnant.
+    const drifted = {
+      _id: "NW_7",
+      countryId: "DD",
+      stateId: "NW",
+      partyId: "1",
+      organization: 36.76,
+    };
+    db.collectionMocks["statePartyOrg"]!.findOne.mockImplementation(
+      async (filter: Record<string, unknown>) => {
+        if (filter.partyId === "1") return drifted;
+        return null;
+      }
+    );
+    db.collectionMocks["statePartyOrg"]!.deleteOne.mockResolvedValue({ deletedCount: 1 });
+
+    await ensureStatePartyOrgRow(db as unknown as Db, {
+      countryId: "DD",
+      stateId: "NW",
+      party: { sequentialId: 1 } as never,
+      hasPresence: true,
+    });
+
+    // First delete targets the squatter on the canonical key (only when its
+    // partyId differs), second the drifted row's stale key.
+    expect(db.collectionMocks["statePartyOrg"]!.deleteOne).toHaveBeenNthCalledWith(1, {
+      _id: "NW_1",
+      partyId: { $ne: "1" },
+    });
+    expect(db.collectionMocks["statePartyOrg"]!.deleteOne).toHaveBeenNthCalledWith(2, {
+      _id: "NW_7",
+    });
   });
 
   it("bootstraps a 0% row via upsert when none exists", async () => {

@@ -13,7 +13,7 @@ import type {
   PoliticalParty,
   PartyStrengthPressure,
 } from "@/lib/db/types";
-import { findPartyBySequentialId } from "@/lib/db/partyLookup";
+import { findPartyBySequentialId, findStatePartyOrgRow } from "@/lib/db/partyLookup";
 import { checkPartyPresence } from "@/lib/turn/partyOrg/presence";
 import { ensureStatePartyOrgRow } from "@/lib/turn/partyOrg/ensureStatePartyOrgRow";
 import { getGameState } from "@/lib/gameState";
@@ -131,11 +131,12 @@ export async function POST(request: Request, { params }: RouteParams) {
   // on a missing row here; we bootstrap it below once presence + auth pass.
   const spenderParty = await findPartyBySequentialId(db, partyId, countryId);
   if (!spenderParty) return NextResponse.json({ error: "Party not found" }, { status: 404 });
-  let spenderRow = await db.collection<StatePartyOrg>("statePartyOrg").findOne({
-    countryId,
-    stateId: upperRegionId,
-    partyId: String(spenderParty.sequentialId),
-  });
+  // Resolve by the `{countryId, stateId, partyId}` triple with a compound-`_id`
+  // fallback. A field-triple-only read here is what let Build Org poach a
+  // drifted row's org from the WRONG party's balance (ticket #1256): the row
+  // the party page displayed (`_id NW_1`, partyId "6" = SPD) counted as a
+  // rival while SED's own numbers sat on a stale `_id NW_7`.
+  let spenderRow = await findStatePartyOrgRow(db, countryId, upperRegionId, spenderParty);
 
   // Organizational Foothold rule (plan §"Glossary"): a party may only
   // grow Org in a state once it has at least one player or NPP / elected
