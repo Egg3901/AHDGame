@@ -8,7 +8,7 @@
  * nothing and the redemption waits.
  */
 
-import type { Db } from "mongodb";
+import type { Db, UpdateFilter } from "mongodb";
 import type { Bond, IndexFund } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { corpCapitalToAnchor, loadFxRatesRecord } from "@/lib/currency/corporationCapital";
@@ -86,10 +86,9 @@ export async function sellFundBondHoldingsForCash(
     }
     await db
       .collection<Bond>("bonds")
-      .updateOne(
-        { _id: bond._id },
-        { $pull: { holders: { fundId: fund._id, units: { $lte: 0 } } } }
-      );
+      .updateOne({ _id: bond._id }, {
+        $pull: { holders: { fundId: fund._id, units: { $lte: 0 } } },
+      } as unknown as UpdateFilter<Bond>);
 
     const proceedsAnchor =
       Math.round(corpCapitalToAnchor(proceedsLocal, currency, rate) * 100) / 100;
