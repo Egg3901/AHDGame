@@ -520,7 +520,9 @@ describe("GET /api/country/[code]/fomc and POST /vote", () => {
       proposedDelta: 0.25,
       status: "voting",
       ballots: [],
-      playerVoteDeadline: new Date(Date.UTC(2026, 0, 2)),
+      // Far-future wall-clock deadline: the machine refuses ballots past the
+      // player window, so the fixture must stay inside it to ballot.
+      playerVoteDeadline: new Date(Date.UTC(2030, 0, 2)),
       resolvesOnTurn: 120,
     };
   }

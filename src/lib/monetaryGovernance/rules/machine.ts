@@ -28,6 +28,7 @@ import {
   snapToPrimeRateGrid,
 } from "@/lib/db/types/centralBank";
 import { INTERFERENCE_SCRUTINY } from "@/lib/centralBank/credibility";
+import { rateChangeRefusal } from "@/lib/currency/exchangeRateRegime";
 import {
   boardCanCarryMotions as boardCanCarryMotionsLib,
   proposeChairMotion,
@@ -127,11 +128,7 @@ function checkCommitteeBank(state: JurisdictionState): GovernanceDecision | null
 
 function rateChangeRefusalFor(fx: JurisdictionState["fxCommitment"]): string | null {
   if (!fx) return null;
-  if (fx.regime === "float") return null;
-  if (fx.capitalControls) return null;
-  return fx.regime === "peg"
-    ? "The currency is pegged and the capital account is open, so the policy rate is set by defending the peg."
-    : "The currency is committed to an intervention band and the capital account is open, so the policy rate is not independent.";
+  return rateChangeRefusal(fx.regime, fx.capitalControls);
 }
 
 interface ResolveOutcome {
@@ -282,12 +279,14 @@ function buildMeeting(
         seatId: seat.seatId,
         vote: seatPreferredVote(seat.alignment, ctx),
         auto: true,
+        castAtMs: clock.now,
       });
     }
   }
   return {
     meetingId: `${state.institutionId}-m${clock.turn}`,
     openedAtTurn: clock.turn,
+    openedAtMs: clock.now,
     motion,
     proposedDelta,
     status: "voting",
@@ -315,6 +314,7 @@ function openMeetingInto(
     command: "monetary.meeting.open",
     turn: clock.turn,
     outcome: "ok",
+    currency: state.currency,
     bankId: state.institutionId,
     subjectType: "meeting",
     subjectId: meeting.meetingId,
@@ -342,10 +342,17 @@ function expireSeats(
     if (seat.termExpiresAtTurn != null && seat.termExpiresAtTurn <= clock.turn) {
       replaced++;
       if (seat.isChair) chairRefreshed = true;
+      // Left empty, never restocked: the committee is staffed by nomination
+      // and confirmation, so a vacant seat carries no occupant fields.
       return {
         ...seat,
         occupantType: "vacant" as const,
         characterId: null,
+        characterName: null,
+        nppId: null,
+        appointedByPresidentId: null,
+        appointedAtTurn: clock.turn,
+        // No term on a vacant seat, it stays open until a nominee is confirmed.
         termExpiresAtTurn: null,
       };
     }
@@ -373,6 +380,7 @@ function mirrorChair(
     next.chairCharacterId = chair.characterId;
     transition.set.chairMode = "character";
     transition.set.chairCharacterId = chair.characterId;
+    transition.set.chairCharacterName = chair.characterName ?? null;
     transition.set.chairNppId = null;
   } else if (chair.occupantType === "vacant") {
     next.chairCharacterId = null;
@@ -386,6 +394,7 @@ function mirrorChair(
   } else {
     next.chairCharacterId = null;
     transition.set.chairMode = "npp";
+    transition.set.chairNppId = chair.nppId ?? null;
     transition.set.chairCharacterId = null;
     transition.set.chairCharacterName = null;
   }
@@ -573,7 +582,10 @@ function handleCastBallot(
   const transition = blankTransition();
   const updated: MeetingState = {
     ...meeting,
-    ballots: [...meeting.ballots, { seatId: seat.seatId, vote: command.vote, auto: false }],
+    ballots: [
+      ...meeting.ballots,
+      { seatId: seat.seatId, vote: command.vote, auto: false, castAtMs: clock.now },
+    ],
   };
   next.activeMeeting = updated;
   const outcome = resolveMeetingInto(state, next, transition, updated, clock, false);
@@ -779,7 +791,15 @@ function handleVacateSeat(
   const transition = blankTransition();
   next.board = next.board.map((s) =>
     s.seatId === command.seatId
-      ? { ...s, occupantType: "vacant" as const, characterId: null, termExpiresAtTurn: null }
+      ? {
+          ...s,
+          occupantType: "vacant" as const,
+          characterId: null,
+          characterName: null,
+          nppId: null,
+          appointedByPresidentId: null,
+          termExpiresAtTurn: null,
+        }
       : s
   );
   transition.set.fomcBoard = next.board;

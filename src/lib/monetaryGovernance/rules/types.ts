@@ -25,7 +25,11 @@ export interface SeatState {
   isChair: boolean;
   occupantType: SeatOccupant;
   characterId: string | null;
+  characterName?: string | null;
+  nppId?: string | null;
   alignment: "hawk" | "dove";
+  appointedByPresidentId?: string | null;
+  appointedAtTurn?: number | null;
   termExpiresAtTurn: number | null;
 }
 
@@ -35,11 +39,13 @@ export interface BallotState {
   seatId: string;
   vote: VoteDirection;
   auto: boolean;
+  castAtMs?: number;
 }
 
 export interface MeetingState {
   meetingId: string;
   openedAtTurn: number;
+  openedAtMs?: number;
   motion: VoteDirection;
   proposedDelta: number;
   status: "voting" | "resolved";
@@ -139,6 +145,7 @@ export interface GovernanceAuditEvent {
   turn: number;
   outcome: "ok" | "rejected";
   reason?: string;
+  currency?: string;
   bankId?: string;
   subjectType?: string;
   subjectId?: string;
