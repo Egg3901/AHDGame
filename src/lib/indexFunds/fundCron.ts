@@ -85,6 +85,7 @@ import {
   type CrossRebalanceResult,
 } from "@/lib/indexFunds/fundCrossRebalancing";
 import { findRemovedConstituentHoldings } from "@/lib/indexFunds/fundConstituentLifecycle";
+import { writeOffDeadConstituentHoldings } from "@/lib/indexFunds/fundHoldingWriteOff";
 import {
   redemptionEntryStatusAfterPayout,
   remainingRedemptionUnits,
@@ -128,7 +129,27 @@ export type FundCronResult = {
   windDownsCompleted: number;
   equityLiquidityQuotePairs: number;
   equityLiquidityDepthAnchor: number;
+  /** Holdings in dissolved corporations removed at zero this pass. */
+  deadHoldingsWrittenOff: number;
+  deadHoldingsWrittenOffAnchor: number;
+  /** Flagged holdings still unsold whose corporation is alive (illiquid, not dead). */
+  unsellableHoldings: number;
   errors: string[];
+};
+
+/** What one fund's constituent rebalance did, for turn telemetry. */
+export type RebalanceOutcome = {
+  rebalanced: boolean;
+  writtenOffCount: number;
+  writtenOffValueAnchor: number;
+  unsellableCount: number;
+};
+
+const NO_REBALANCE: RebalanceOutcome = {
+  rebalanced: false,
+  writtenOffCount: 0,
+  writtenOffValueAnchor: 0,
+  unsellableCount: 0,
 };
 
 // ── Helper: Load exchange rates ───────────────────────────────────────
@@ -605,8 +626,9 @@ export async function rebalanceConstituents(
   _currentTurn: number,
   /** A7 part 2: corporations holding a committee waiver this turn. */
   waivedIds?: Set<string>
-): Promise<boolean> {
+): Promise<RebalanceOutcome> {
   const removed = findRemovedConstituentHoldings(fund, corps);
+  let writeOff = { writtenOffCount: 0, writtenOffValueAnchor: 0, unsellableCount: 0 };
   if (removed.length > 0) {
     const removalValue = computeHoldingsValueAnchor({ holdings: removed });
     if (removalValue > 0) {
@@ -617,10 +639,19 @@ export async function rebalanceConstituents(
     }
 
     fund = (await getFundById(db, fund._id)) ?? fund;
+
+    // The sale cannot touch a holding whose corporation is gone: there is no
+    // document to price and no counterparty to sell to, so it returns quietly
+    // and the position stays in the book at its last mark. Left alone it is
+    // re-flagged and re-refused every rebalance forever, inflating NAV by
+    // exactly the value of every corp that has ever died under this fund.
+    const wo = await writeOffDeadConstituentHoldings(db, fund, removed);
+    writeOff = wo;
+    if (wo.writtenOffCount > 0) fund = (await getFundById(db, fund._id)) ?? fund;
   }
 
   const definition = getAllFundDefinitions().find((d) => d.slug === fund.slug);
-  if (!definition) return false;
+  if (!definition) return { ...NO_REBALANCE, ...writeOff };
 
   // A7 listing standards: an incumbent gets a grace period before it is sold,
   // so noise around the bar does not churn the position every turn. Incumbency
@@ -704,7 +735,12 @@ export async function rebalanceConstituents(
     createdAt: new Date(),
   });
 
-  return true;
+  return {
+    rebalanced: true,
+    writtenOffCount: writeOff.writtenOffCount,
+    writtenOffValueAnchor: writeOff.writtenOffValueAnchor,
+    unsellableCount: writeOff.unsellableCount,
+  };
 }
 
 // ── Pass 3c: Process queued redemptions ───────────────────────────────
@@ -1014,6 +1050,9 @@ export async function runIndexFundCron(
     windDownsCompleted: 0,
     equityLiquidityQuotePairs: 0,
     equityLiquidityDepthAnchor: 0,
+    deadHoldingsWrittenOff: 0,
+    deadHoldingsWrittenOffAnchor: 0,
+    unsellableHoldings: 0,
     errors: [],
   };
   const currentTurn = options?.currentTurn ?? 0;
@@ -1213,7 +1252,7 @@ export async function runIndexFundCron(
     }
 
     try {
-      const rebalanced = await rebalanceConstituents(
+      const outcome = await rebalanceConstituents(
         db,
         fund,
         candidateCorps,
@@ -1221,9 +1260,20 @@ export async function runIndexFundCron(
         currentTurn,
         waivedIds
       );
-      if (rebalanced) {
+      if (outcome.rebalanced) {
         result.rebalances++;
         rebalancedFundIds.add(fund._id.toString());
+      }
+      result.deadHoldingsWrittenOff += outcome.writtenOffCount;
+      result.deadHoldingsWrittenOffAnchor += outcome.writtenOffValueAnchor;
+      result.unsellableHoldings += outcome.unsellableCount;
+      if (outcome.writtenOffCount > 0) {
+        // Loud on purpose. A write-off is backing leaving the fund, and holders
+        // see it as a NAV drop with no sale behind it.
+        result.errors.push(
+          `Fund ${fund.slug}: wrote off ${outcome.writtenOffCount} holding(s) in ` +
+            `dissolved corporations, ${Math.round(outcome.writtenOffValueAnchor)} anchor removed`
+        );
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
