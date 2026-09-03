@@ -30,6 +30,7 @@ import { isIndexFundsEnabled, INDEX_FUNDS_DISABLED_MESSAGE } from "@/lib/indexFu
 import {
   getFundById,
   listActiveFunds,
+  listServiceableFunds,
   updateFundNav,
   updateFundConstituents,
   updateFundHoldings,
@@ -1050,7 +1051,8 @@ export async function runIndexFundCron(
       }),
     ])
   );
-  let funds = await listActiveFunds(db);
+  let funds = await listServiceableFunds(db);
+  const redemptionServiceFundIds = funds.map((fund) => fund._id);
   // Load valuation side ledgers once before Pass 1 so NAV includes committed
   // bid escrow and subtracts queued redemption payables.
   const fundIds = funds.map((fund) => fund._id);
@@ -1125,6 +1127,8 @@ export async function runIndexFundCron(
         result.errors.push(
           `Fund ${workingFund.slug} auto-paused: backing ratio ${backing.backingRatio.toFixed(4)}`
         );
+      } else if (workingFund.status === "paused" && workingFund.pauseReason === "backing_ratio") {
+        await setFundStatus(db, workingFund._id, "active");
       }
 
       result.navUpdates++;
@@ -1137,11 +1141,18 @@ export async function runIndexFundCron(
         refreshedFund,
         exchangeRates
       );
-      const bondDeploy = await deployBondReserveFromCash(db, refreshedFund, bondPrincipalAfterNav, {
-        liquidityTargetEnabled: bondLiquidityEnabled,
-      });
-      if (bondDeploy.deployedAnchor > 0) {
-        result.bondDeployments++;
+      if (queuedRedemptionLiabilityAnchor <= 0) {
+        const bondDeploy = await deployBondReserveFromCash(
+          db,
+          refreshedFund,
+          bondPrincipalAfterNav,
+          {
+            liquidityTargetEnabled: bondLiquidityEnabled,
+          }
+        );
+        if (bondDeploy.deployedAnchor > 0) {
+          result.bondDeployments++;
+        }
       }
 
       navReadyFundIds.push(workingFund._id);
@@ -1155,8 +1166,10 @@ export async function runIndexFundCron(
   mark("pass1-nav");
   // Pass 2: recompute target weights before float absorption so buys use the
   // current basket. Runs every financial day (24 turns) or on first init.
-  funds = (await listActiveFunds(db)).filter((fund) =>
-    navReadyFundIds.some((id) => id.toString() === fund._id.toString())
+  funds = (await listActiveFunds(db)).filter(
+    (fund) =>
+      navReadyFundIds.some((id) => id.toString() === fund._id.toString()) &&
+      !queuedLiabilityByFundId.has(fund._id.toString())
   );
   const rebalancedFundIds = new Set<string>();
 
@@ -1199,8 +1212,10 @@ export async function runIndexFundCron(
   // Pass 3: two-sided rebalance toward target weights (sell overweight, buy underweight).
   // This only runs after target weights are recomputed; otherwise funds can churn
   // the same holdings every turn and repeatedly hit short-window order flow.
-  funds = (await listActiveFunds(db)).filter((fund) =>
-    navReadyFundIds.some((id) => id.toString() === fund._id.toString())
+  funds = (await listActiveFunds(db)).filter(
+    (fund) =>
+      navReadyFundIds.some((id) => id.toString() === fund._id.toString()) &&
+      !queuedLiabilityByFundId.has(fund._id.toString())
   );
   const capRemainingByCorpId = new Map(absorptionRemainingByCorpId); // fresh per-pass copy
   if (rebalancedFundIds.size > 0) {
@@ -1229,8 +1244,10 @@ export async function runIndexFundCron(
   // funds can sell directly to underweight fund buyers.
   if (shouldRunCrossFundRebalancing(currentTurn)) {
     try {
-      const rebalFunds = (await listActiveFunds(db)).filter((fund) =>
-        navReadyFundIds.some((id) => id.toString() === fund._id.toString())
+      const rebalFunds = (await listActiveFunds(db)).filter(
+        (fund) =>
+          navReadyFundIds.some((id) => id.toString() === fund._id.toString()) &&
+          !queuedLiabilityByFundId.has(fund._id.toString())
       );
       const bondPrincipalByFundId = new Map<string, number>();
       for (const fund of rebalFunds) {
@@ -1264,9 +1281,9 @@ export async function runIndexFundCron(
 
   mark("pass3b-crossFund");
   // Pass 3c: pay redemptions and snapshot after cross-fund market settles.
-  funds = (await listActiveFunds(db)).filter((fund) =>
-    navReadyFundIds.some((id) => id.toString() === fund._id.toString())
-  );
+  funds = (
+    await Promise.all(redemptionServiceFundIds.map((fundId) => getFundById(db, fundId)))
+  ).filter((fund): fund is IndexFund => fund !== null);
   for (const fund of funds) {
     try {
       const refreshedFund = (await getFundById(db, fund._id)) ?? fund;
@@ -1358,7 +1375,9 @@ export async function runIndexFundCron(
   // mutation has settled. Disabling the gate cancels and refunds prior bids in
   // the same pass, providing an immediate rollback path.
   try {
-    const quoteFunds = await listActiveFunds(db);
+    const quoteFunds = (await listActiveFunds(db)).filter(
+      (fund) => !queuedLiabilityByFundId.has(fund._id.toString())
+    );
     const fxByCurrency = new Map<CurrencyCode, number>(
       Object.entries(exchangeRates)
         .filter(([, rate]) => typeof rate === "number" && rate > 0)
@@ -1377,6 +1396,8 @@ export async function runIndexFundCron(
           referencePriceAnchor,
           totalShares: corp.totalShares,
           fxRate,
+          type: corp.type,
+          secondaryType: corp.secondaryType,
           corporation: corp,
         },
       ];

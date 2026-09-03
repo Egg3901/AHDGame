@@ -8,6 +8,7 @@ import {
   FUND_SNAPSHOT_COLLECTION,
   creditFundPosition,
   debitFundHoldingShares,
+  listServiceableFunds,
 } from "./fundQueries";
 
 describe("fundQueries constants", () => {
@@ -17,6 +18,22 @@ describe("fundQueries constants", () => {
     expect(FUND_TRANSACTION_COLLECTION).toBe("indexFundTransactions");
     expect(FUND_REDEMPTION_QUEUE_COLLECTION).toBe("indexFundRedemptionQueue");
     expect(FUND_SNAPSHOT_COLLECTION).toBe("indexFundSnapshots");
+  });
+});
+
+describe("listServiceableFunds", () => {
+  it("includes active and backing-paused funds but not manual pauses", async () => {
+    const toArray = vi.fn().mockResolvedValue([]);
+    const sort = vi.fn().mockReturnValue({ toArray });
+    const find = vi.fn().mockReturnValue({ sort });
+    const db = { collection: vi.fn().mockReturnValue({ find }) } as never;
+
+    await listServiceableFunds(db);
+
+    expect(find).toHaveBeenCalledWith({
+      $or: [{ status: "active" }, { status: "paused", pauseReason: "backing_ratio" }],
+    });
+    expect(toArray).toHaveBeenCalledOnce();
   });
 });
 

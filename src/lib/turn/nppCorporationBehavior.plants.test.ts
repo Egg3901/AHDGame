@@ -186,11 +186,11 @@ describe("NPP expansion under plants — price parity", () => {
     expect(decision.newSectors).toBeUndefined();
   });
 
-  it("retains earnings on a turn that commits new productive investment", () => {
+  it("keeps a shareholder return while funding productive investment", () => {
     const decision = decide(corp({ dividendRate: 8 }), [sector()], [unownedPool()], plantsCtx);
 
     expect(decision.newSectors).toHaveLength(1);
-    expect(decision.updates.dividendRate).toBe(0);
+    expect(decision.updates.dividendRate as number).toBeGreaterThan(0);
   });
 
   it("charges the entry fee plus a real founding build, not a flat 500k", () => {
