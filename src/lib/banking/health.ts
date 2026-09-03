@@ -17,6 +17,9 @@ import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import { bankBalanceSheet } from "@/lib/banking/rules/balanceSheet";
 import { getReserveRequirement } from "@/lib/banking/reserves";
 import { loadBankingTelemetry, type BankingTelemetryDoc } from "@/lib/banking/telemetry";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { buildSavingsComparison, type SavingsComparison } from "@/lib/savings/shadow";
+import { getCurrentTurn } from "@/lib/currentTurn";
 
 export interface CurrencyBankingHealth {
   currency: CurrencyCode;
@@ -51,6 +54,12 @@ export interface BankingHealthReport {
   unfinishedSettlements: UnfinishedSettlementsHealth;
   /** Newest first. */
   telemetry: BankingTelemetryDoc[];
+  /** Savings account rollout stage and the projection comparison, when on. */
+  savingsAccounts: {
+    mode: "off" | "shadow" | "authoritative";
+    readCurrencies: string[];
+    comparison: SavingsComparison | null;
+  };
 }
 
 function finite(value: unknown): number {
@@ -139,6 +148,12 @@ export async function buildBankingHealth(db: Db, now = new Date()): Promise<Bank
   for (const row of unfinished) byKind[row.kind] = (byKind[row.kind] ?? 0) + 1;
   const oldest = unfinished[0];
 
+  const policy = await loadBankingPolicy(db);
+  const comparison =
+    policy.savingsAccounts === "off"
+      ? null
+      : await buildSavingsComparison(db, await getCurrentTurn(db));
+
   return {
     generatedAt: now,
     currencies,
@@ -149,5 +164,10 @@ export async function buildBankingHealth(db: Db, now = new Date()): Promise<Bank
       byKind,
     },
     telemetry: await loadBankingTelemetry(db),
+    savingsAccounts: {
+      mode: policy.savingsAccounts,
+      readCurrencies: [...policy.savingsReadCurrencies],
+      comparison,
+    },
   };
 }

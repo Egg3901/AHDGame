@@ -292,6 +292,13 @@ export interface TurnLog {
       charactersProcessed: number;
       totalInterest: number;
     } | null;
+    /** Shadow savings accounts materialized and compared this turn. */
+    savingsShadowTurn?: {
+      mode: "off" | "shadow" | "authoritative";
+      accountsRefreshed: number;
+      currenciesCompared: number;
+      discrepancies: number;
+    } | null;
 
     npcBankPolicyTurn: {
       banksChecked: number;

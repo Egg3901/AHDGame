@@ -322,6 +322,9 @@ class InMemoryCollection {
         for (const [key, condition] of Object.entries(filter)) {
           if (!key.startsWith("$") && !isPlainObject(condition)) setPath(seed, key, condition);
         }
+        // The server assigns an ObjectId to an upserted document that named
+        // none; readers that key on `_id` must see the same here.
+        if (seed._id === undefined) seed._id = new ObjectId();
         applyUpdate(seed, {
           ...update,
           ...((update.$setOnInsert as Doc)
