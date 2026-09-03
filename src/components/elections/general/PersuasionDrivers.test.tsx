@@ -182,6 +182,21 @@ describe("PersuasionDrivers", () => {
     expect(screen.getByText(/\+?4\.5%/)).toBeTruthy();
   });
 
+  it("explains the Money row's recent-spend semantics on hover (ticket #1261)", () => {
+    render(
+      <PersuasionDrivers
+        stateId="OH"
+        stateName="Ohio"
+        candidates={THREE_WAY}
+        inputs={{ fundsByParty: { dem: 10_000_000, rep: 500_000 } }}
+      />
+    );
+    const label = screen.getByText("Money");
+    expect(label.getAttribute("title")).toMatch(
+      /recent campaign spending.*fades.*treasuries do not count/
+    );
+  });
+
   it("states the persuadable-slice ceiling for the selected pair (ticket #1131)", () => {
     render(
       <PersuasionDrivers

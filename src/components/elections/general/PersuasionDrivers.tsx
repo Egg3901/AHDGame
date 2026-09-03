@@ -76,14 +76,29 @@ function CandidateSelect({
   );
 }
 
-function DriverBarRow({ driver: d, maxAbs }: { driver: PersuasionDriver; maxAbs: number }) {
+function DriverBarRow({
+  driver: d,
+  maxAbs,
+  hint,
+}: {
+  driver: PersuasionDriver;
+  maxAbs: number;
+  hint?: string;
+}) {
   const t = useTranslations("elections");
   const isPositive = d.contributionPct >= 0;
   const widthPct = maxAbs > 0 ? (Math.abs(d.contributionPct) / maxAbs) * 50 : 0; // 50% per side of midline
   return (
     <div className="flex flex-col gap-0.5">
       <div className="flex items-baseline justify-between text-xs">
-        <span className="font-semibold">{d.label}</span>
+        <span
+          className={
+            hint ? "font-semibold underline decoration-dotted cursor-help" : "font-semibold"
+          }
+          title={hint}
+        >
+          {d.label}
+        </span>
         <span
           className="tabular-nums font-bold"
           style={{ color: isPositive ? d.color : "#ef4444" }}
@@ -226,9 +241,20 @@ export function PersuasionDrivers({
           <div className="text-[10px] uppercase tracking-wider text-muted">
             {t("persuasion.driversGroup")}
           </div>
-          {driverRows.map((d) => (
-            <DriverBarRow key={d.label} driver={d} maxAbs={maxAbs} />
-          ))}
+          {driverRows.map((d) => {
+            // Ticket #1261: players mistook the Money row for treasury or
+            // lifetime spend. It reads recent spend (this turn full weight,
+            // earlier spend fading), so explain that on hover.
+            const isMoney = d.label === "Money";
+            return (
+              <DriverBarRow
+                key={d.label}
+                driver={d}
+                maxAbs={maxAbs}
+                hint={isMoney ? t("persuasion.moneyHint") : undefined}
+              />
+            );
+          })}
           {slice && focus && opponent ? (
             <p className="mt-1 rounded border border-card-border bg-background px-2 py-1.5 text-[11px] leading-snug text-muted">
               {t("persuasion.ceiling", {

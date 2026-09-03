@@ -184,7 +184,10 @@ export async function upgradeCampaign(params: {
     funds: -adjustedFundsLocal + lumpFundsLocal,
     actions: -adjustedActions,
     totalFundsSpent: adjustedFundsLocal,
-    // A2 — money driver reads per-turn spend, not lifetime balance.
+    // Money driver reads decaying recent spend (spendStock + this turn's
+    // accumulator), not lifetime balance and not the treasury. This turn's
+    // spend accrues here; the reset sweep folds it into the stock after
+    // voteAccumulation, so it must NOT $inc spendStock directly here.
     spendThisTurn: adjustedFundsLocal,
     totalActionsSpent: adjustedActions,
   };

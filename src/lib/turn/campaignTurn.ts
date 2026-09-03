@@ -549,11 +549,13 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
                 actions: actions,
                 totalFundsGenerated: incomeLocal,
                 totalActionsGenerated: actions,
-                // A2 — money driver reads per-turn spend, not lifetime
-                // balance. Maintenance is the "passive" portion of per-turn
+                // Money driver reads decaying recent spend (spendStock + this
+                // turn's accumulator), not lifetime balance and not the
+                // treasury. Maintenance is the "passive" portion of per-turn
                 // spend; upgrade purchases (via campaignCommands.ts) add the
-                // "active" portion. Reset to 0 each turn happens in the
-                // resetCampaignSpendThisTurn turn-phase, after voteAccumulation.
+                // "active" portion. The reset sweep folds spendThisTurn into
+                // spendStock after voteAccumulation, so only the accumulator
+                // grows here.
                 spendThisTurn: maintenanceLocal,
               },
               $set: campaignSet,
