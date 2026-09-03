@@ -112,6 +112,18 @@ describe("mergeRegion", () => {
     expect(call?.[1].$unset).toHaveProperty("taxBases");
   });
 
+  it("clears the survivor's structural residual so it re-derives on the fused law book", async () => {
+    await run();
+    const call = db.collectionMocks["politicalMetrics"].updateOne.mock.calls.find(
+      (c) => c[0]._id === "BE"
+    );
+    // The absorbed half's `statePolicies` are re-pointed onto the survivor by
+    // `stateId`, so its regional supplement grows. Its residual was measured
+    // without those laws, so leaving it counts them twice: once in the bigger
+    // supplement and once inside the stale baseline.
+    expect(call?.[1].$unset).toHaveProperty("residuals");
+  });
+
   it("RE-KEYS the absorbed half's party organisations onto the survivor", async () => {
     // Ticket #1256. `statePartyOrg._id` is `${stateId}_${partyId}`, so moving
     // the field with `$set` leaves the row disagreeing with its own key. The

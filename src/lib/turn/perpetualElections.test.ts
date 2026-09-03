@@ -817,6 +817,9 @@ describe("perpetualElections", () => {
           insertCalls.push(docs);
           return Promise.resolve({ insertedIds: {} });
         }),
+        // The in-flight seat heal writes here. These fixtures build live races
+        // without a `totalSeats`, which is exactly the shape the heal fills in.
+        bulkWrite: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
       };
       const statesCollection = {
         find: vi.fn().mockReturnValue({
@@ -970,6 +973,9 @@ describe("perpetualElections", () => {
           insertCalls.push(docs);
           return Promise.resolve({ insertedIds: {} });
         }),
+        // The in-flight seat heal writes here. These fixtures build live races
+        // without a `totalSeats`, which is exactly the shape the heal fills in.
+        bulkWrite: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
       };
       const statesCollection = {
         find: vi.fn().mockReturnValue({
@@ -1114,6 +1120,9 @@ describe("perpetualElections", () => {
           insertCalls.push(docs);
           return Promise.resolve({ insertedIds: {} });
         }),
+        // The in-flight seat heal writes here. These fixtures build live races
+        // without a `totalSeats`, which is exactly the shape the heal fills in.
+        bulkWrite: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
       };
       const statesCollection = {
         find: vi.fn().mockReturnValue({

@@ -198,4 +198,36 @@ describe("rescopeRegionToCountry", () => {
     expect(by("slateCandidates")).toBe("homeStateField");
     expect(by("prospectingSurveys")).toBe("stateIdField");
   });
+  it("drops the political board's structural residuals when a region changes country", async () => {
+    // `residuals` is the gap between a region's scores and what its country's
+    // law book explains, fixed once at reset. It is therefore calibrated to the
+    // OLD country's catalogue, and the dynamics phase only re-derives it when
+    // the field is absent -- so carrying it across the border credits the region
+    // with the new country's law points AND the old country's leftover, both at
+    // once. Dropping it here hands the next turn's lazy self-heal the job of
+    // re-deriving it against the catalogue the region now lives under.
+    await rescopeRegionToCountry(db as unknown as Db, "BY", "DE", "DD", [
+      { collection: "politicalMetrics", key: "idIsState", unsetOnRescope: ["residuals"] },
+    ]);
+    const call = db.collectionMocks["politicalMetrics"].updateMany.mock.calls[0];
+    expect(call[0]).toEqual({ _id: "BY" });
+    expect(call[1].$set.countryId).toBe("DD");
+    expect(call[1].$unset).toEqual({ residuals: "" });
+  });
+
+  it("leaves $unset off a collection that declares no dropped fields", async () => {
+    await rescopeRegionToCountry(db as unknown as Db, "NIR", "UK", "IE", [
+      { collection: "macroMetrics", key: "idIsState" },
+    ]);
+    const call = db.collectionMocks["macroMetrics"].updateMany.mock.calls[0];
+    expect(call[1].$unset).toBeUndefined();
+  });
+
+  it("the shipped table drops residuals on politicalMetrics and on nothing else", () => {
+    // A second entry here would silently discard live state on every transfer,
+    // so the list is pinned rather than merely spot-checked.
+    const dropping = REGION_SCOPED_COLLECTIONS.filter((s) => s.unsetOnRescope?.length);
+    expect(dropping.map((s) => s.collection)).toEqual(["politicalMetrics"]);
+    expect(dropping[0].unsetOnRescope).toEqual(["residuals"]);
+  });
 });
