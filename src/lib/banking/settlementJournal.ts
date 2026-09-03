@@ -40,8 +40,15 @@ export interface SettlementResult {
   key: string;
   /** Indexes into `transition.legs` that landed. */
   appliedLegs: number[];
-  /** Indexes into `transition.projections` that landed. */
+  /** Indexes into `transition.projections` that have landed, ever. */
   appliedProjections: number[];
+  /**
+   * Indexes into `transition.projections` that landed IN THIS CALL. A turn
+   * pass that keeps in-memory aggregates adjusts them for these and only
+   * these: a projection that landed on an earlier attempt is already in the
+   * document the pass read at its start.
+   */
+  newlyAppliedProjections: number[];
   error?: string;
 }
 
@@ -200,6 +207,7 @@ export async function settleTransition(
     key: transition.key,
     appliedLegs: [],
     appliedProjections: [],
+    newlyAppliedProjections: [],
   };
 
   // Refuse before claiming: an unbalanced or malformed transition must never
@@ -220,11 +228,26 @@ export async function settleTransition(
     }
   }
 
+  const records: JournalProjectionRecord[] = transition.projections.map((projection) => ({
+    collection: projection.collection,
+    note: projection.note,
+    claimedAt: null,
+    appliedAt: null,
+    applied: false,
+    projection,
+  }));
+  const extension: JournalExtension = {
+    transitionKind: transition.kind,
+    currency: transition.currency,
+    projections: records,
+  };
+
   const move = await applyMoneyMove(db, {
     key: transition.key,
     kind: transition.kind,
     turn: transition.turn,
     legs: transition.legs.map(toMoneyLeg),
+    record: extension as Record<string, unknown>,
   });
 
   if (move.status === "rejected") {
@@ -248,10 +271,7 @@ export async function settleTransition(
     // `partial` because a PROJECTION failed after every leg landed, and that
     // is exactly the case a replay must go on to finish.
     const ownedLegs = owned?.legs ?? [];
-    const legsOutstanding =
-      !owned ||
-      ownedLegs.length !== transition.legs.length ||
-      ownedLegs.some((leg) => !leg.applied);
+    const legsOutstanding = !owned || ownedLegs.some((leg) => !leg.applied);
     if (legsOutstanding) {
       return {
         ...result,
@@ -270,6 +290,7 @@ export async function settleTransition(
   if (transition.legs.length === 0 && move.status === "applied") {
     try {
       await journal.insertOne({
+        ...extension,
         _id: transition.key,
         kind: transition.kind,
         turn: transition.turn,
@@ -320,11 +341,16 @@ async function finishProjections(
   options: FinishOptions = {}
 ): Promise<SettlementResult> {
   const journal = db.collection<{ _id: string } & JournalExtension>(MONEY_MOVE_COLLECTION);
-  if (transition.projections.length === 0) return result;
 
+  // The record is the authority on what remains to do. A caller replaying
+  // after a crash may have recomputed its transition from state the first
+  // attempt already changed (a resolution retried after the cash moved sees a
+  // different shortfall); the projections that were claimed with the key are
+  // the ones that finish, never the recomputed ones. Records without a
+  // projection list (written by the primitive alone) fall back to the caller.
   const existing = await journal.findOne({ _id: transition.key });
   let records: JournalProjectionRecord[] = existing?.projections ?? [];
-  if (records.length !== transition.projections.length) {
+  if (records.length === 0) {
     records = transition.projections.map((projection) => ({
       collection: projection.collection,
       note: projection.note,
@@ -345,14 +371,16 @@ async function finishProjections(
     );
   }
 
+  if (records.length === 0) return result;
+
   let stuck: string | undefined;
-  for (let i = 0; i < transition.projections.length; i += 1) {
+  for (let i = 0; i < records.length; i += 1) {
     const record = records[i];
     if (record?.appliedAt || record?.applied) {
       result.appliedProjections.push(i);
       continue;
     }
-    const projection = transition.projections[i];
+    const projection = record.projection;
     if (record?.claimedAt && !safeToRetryBlind(projection) && !options.force) {
       stuck = `projection "${projection.note}" was claimed by an earlier attempt and cannot be retried blind`;
       continue;
@@ -395,6 +423,7 @@ async function finishProjections(
       return result;
     }
     result.appliedProjections.push(i);
+    result.newlyAppliedProjections.push(i);
     await journal.updateOne(
       { _id: transition.key },
       {
@@ -413,7 +442,7 @@ async function finishProjections(
     return result;
   }
 
-  if (result.appliedProjections.length === transition.projections.length) {
+  if (result.appliedProjections.length === records.length) {
     await journal.updateOne(
       { _id: transition.key },
       { $set: { projectionsCompletedAt: new Date(), status: "applied" }, $unset: { error: "" } }
@@ -465,6 +494,7 @@ export async function recoverProjections(
     key,
     appliedLegs: [],
     appliedProjections: [],
+    newlyAppliedProjections: [],
   };
   if (!record || !record.projections) {
     return { ...result, status: "rejected", error: "no journal record with projections" };

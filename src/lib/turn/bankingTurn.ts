@@ -1,11 +1,6 @@
 import { ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
 import type { Character, Corporation } from "@/lib/db/types";
-import type {
-  BankCharter,
-  BankLoan,
-  DepositInsuranceFund,
-  InterbankLoan,
-} from "@/lib/db/types/bank";
+import type { BankCharter, BankLoan, InterbankLoan } from "@/lib/db/types/bank";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
@@ -33,6 +28,7 @@ import {
 } from "@/lib/banking/rules/loans";
 import { loanServiceTransition } from "@/lib/banking/rules/loanServicing";
 import { settleTransition } from "@/lib/banking/settlementJournal";
+import { oid } from "@/lib/banking/rules/boundary";
 import { cbMarginRatePercent } from "@/lib/banking/interbank";
 import { effectiveBankRatesFromPrime } from "@/lib/banking/rates";
 import { getReserveRequirement } from "@/lib/banking/reserves";
@@ -410,10 +406,12 @@ async function processOneBank(
     // nothing tying them together, so a crash between them left the money
     // supply and the vault disagreeing by the size of the flow.
     const inflow = delta > 0;
-    const flowMove = await applyMoneyMove(db, {
-      key: turnMoveKey(inflow ? "npc-deposit-in" : "npc-deposit-out", bankIdHex, turn),
+    const flowKey = turnMoveKey(inflow ? "npc-deposit-in" : "npc-deposit-out", bankIdHex, turn);
+    const flow = await settleTransition(db, {
+      key: flowKey,
       kind: "npc_deposit_flow",
       turn,
+      currency,
       legs: [
         {
           kind: inflow ? "debit" : "credit",
@@ -427,43 +425,39 @@ async function processOneBank(
           kind: inflow ? "credit" : "debit",
           amount: Math.abs(delta),
           collection: "corporations",
-          filter: { _id: corp._id },
+          filter: { _id: oid(bankIdHex), "bankCharter.status": "active" },
           path: "bankCharter.cashReserves",
           note: inflow ? "deposit arrives as vault cash" : "withdrawal leaves the vault",
         },
       ],
-    });
-    // The deposit aggregate may only claim cash the move actually delivered.
-    // On `partial`/`rejected` (guard failure, stale pool) the claim record
-    // carries what needs repairing; booking the aggregate anyway would put
-    // phantom cash-backed deposits on the sheet and every downstream line
-    // (reserves, equity, ceiling) would be computed on the phantom.
-    if (flowMove.status === "applied" || flowMove.status === "replayed") {
-      npcDeposits = Math.max(0, npcDeposits + delta);
-      cashReserves = Math.max(0, cashReserves + delta);
-      await db.collection<Corporation>("corporations").updateOne(
+      // The deposit aggregate is a projection of the cash that moved: written
+      // as an increment carrying the settlement's stamp, so a retried turn can
+      // neither skip it nor apply it twice.
+      projections: [
         {
-          _id: corp._id,
-          "bankCharter.status": "active",
-          $or: [
-            { "bankCharter.lastBankingTurn": { $ne: turn } },
-            { "bankCharter.lastBankingTurn": { $exists: false } },
-          ],
+          collection: "corporations",
+          filter: { _id: oid(bankIdHex), "bankCharter.status": "active" },
+          update: { $inc: { "bankCharter.npcDeposits": delta } },
+          note: "household deposit aggregate follows the cash",
         },
-        {
-          $set: {
-            // Cash is moved by the money move above; only the deposit AGGREGATE
-            // is written here, so the two cannot be applied twice.
-            "bankCharter.npcDeposits": npcDeposits,
-            updatedAt: new Date(),
-          },
-        }
-      );
+      ],
+      event: {
+        kind: "account.deposited",
+        command: "bank.household.flow",
+        amount: delta,
+        meta: { targetNpc, share },
+      },
+    });
+    // Only what landed IN THIS PASS adjusts the figures the rest of the pass
+    // decides on. A leg or projection that landed on an earlier attempt is
+    // already in the document this pass read.
+    if (flow.status === "applied" && flow.appliedLegs.length === 2) {
+      cashReserves = Math.max(0, cashReserves + delta);
+      if (cb) cb.externalBroadMoney = Math.max(0, externalBroadMoney - delta);
       result.npcDepositDelta += delta;
-      // Keep in-memory CB stock coherent for later banks in the same currency.
-      if (cb) {
-        cb.externalBroadMoney = Math.max(0, externalBroadMoney - delta);
-      }
+    }
+    if (flow.newlyAppliedProjections.includes(0)) {
+      npcDeposits = Math.max(0, npcDeposits + delta);
     }
   }
 
@@ -651,16 +645,17 @@ async function processOneBank(
     if (shortfall > 0) result.premiumShortfall += shortfall;
     if (premiumPaid > 0) {
       await ensureFund(db, currency);
-      const premiumMove = await applyMoneyMove(db, {
+      const premium = await settleTransition(db, {
         key: turnMoveKey("insurance-premium", bankIdHex, turn),
         kind: "insurance_premium",
         turn,
+        currency,
         legs: [
           {
             kind: "debit",
             amount: premiumPaid,
             collection: "corporations",
-            filter: { _id: corp._id },
+            filter: { _id: oid(bankIdHex), "bankCharter.status": "active" },
             path: "bankCharter.cashReserves",
             note: "insurance premium leaves the bank",
           },
@@ -673,13 +668,23 @@ async function processOneBank(
             note: "premium into the currency's insurance fund",
           },
         ],
+        projections: [
+          {
+            collection: "depositInsuranceFunds",
+            filter: { _id: currency },
+            update: { $inc: { premiumsCollectedLifetime: premiumPaid } },
+            note: "lifetime premium counter follows the cash",
+          },
+        ],
+        event: {
+          kind: "account.withdrawn",
+          command: "bank.insurance.premium",
+          amount: premiumPaid,
+          meta: { insuredDeposits, reserveRatioActual, reserveRatioRequired },
+        },
       });
-      if (premiumMove.status === "applied") {
+      if (premium.status === "applied" && premium.appliedLegs.length === 2) {
         cashReserves = Math.max(0, cashReserves - premiumPaid);
-        // Lifetime counter, not a balance, so it is not a leg of the move.
-        await db
-          .collection<DepositInsuranceFund>("depositInsuranceFunds")
-          .updateOne({ _id: currency }, { $inc: { premiumsCollectedLifetime: premiumPaid } });
       }
     }
   }
@@ -1253,13 +1258,13 @@ async function serviceNpcBulkBook(
   // and then stamps, and a crash after the moves leaves claim records the
   // repair queue can see.
   const bankIdHex = bankCorporationId.toString();
-  const bankVault: MoneyTarget = {
+  const bankVault = {
     collection: "corporations",
-    filter: { _id: bankCorporationId },
+    filter: { _id: oid(bankIdHex) },
     path: "bankCharter.cashReserves",
     note: "the lending bank's vault",
   };
-  const householdPool: MoneyTarget = {
+  const householdPool = {
     collection: "centralBanks",
     filter: { _id: state.cbDocId },
     path: "externalBroadMoney",
@@ -1267,28 +1272,44 @@ async function serviceNpcBulkBook(
   };
 
   if (interestFromPool > 0) {
-    await applyMoneyMove(db, {
+    await settleTransition(db, {
       key: turnMoveKey("npc-book-interest", bankIdHex, turn),
       kind: "npc_book_interest",
       turn,
+      currency,
       legs: [
         { kind: "debit", amount: interestFromPool, ...householdPool },
         { kind: "credit", amount: interestFromPool, ...bankVault },
       ],
+      projections: [],
+      event: {
+        kind: "loan.paid",
+        command: "bank.household.interest",
+        amount: interestFromPool,
+        meta: { tranches: work.length },
+      },
     });
   }
 
   if (creditedToPool !== 0) {
     const lendingOut = creditedToPool > 0;
     const amount = Math.abs(creditedToPool);
-    await applyMoneyMove(db, {
+    await settleTransition(db, {
       key: turnMoveKey("npc-book-principal", bankIdHex, turn),
       kind: "npc_book_principal",
       turn,
+      currency,
       legs: [
         { kind: lendingOut ? "debit" : "credit", amount, ...bankVault },
         { kind: lendingOut ? "credit" : "debit", amount, ...householdPool },
       ],
+      projections: [],
+      event: {
+        kind: lendingOut ? "loan.disbursed" : "loan.paid",
+        command: "bank.household.principal",
+        amount: lendingOut ? amount : -amount,
+        meta: { tranches: work.length },
+      },
     });
     if (state.cb) {
       state.cb.externalBroadMoney = Math.max(

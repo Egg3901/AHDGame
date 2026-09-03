@@ -93,6 +93,12 @@ export interface MoneyMove {
   kind: string;
   turn?: number;
   legs: MoneyMoveLeg[];
+  /**
+   * Extra fields stored on the claim record in the same insert as the claim.
+   * The settlement journal keeps its projections here, so a crash anywhere
+   * after the claim leaves a record that already says what remains to do.
+   */
+  record?: Record<string, unknown>;
 }
 
 export type MoneyMoveStatus = "applied" | "partial" | "replayed" | "rejected";
@@ -156,6 +162,7 @@ export async function claimMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
   }
 
   const record: MoneyMoveRecord = {
+    ...(move.record ?? {}),
     _id: move.key,
     kind: move.kind,
     turn: move.turn,
