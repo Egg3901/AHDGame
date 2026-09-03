@@ -1,5 +1,6 @@
 import { ObjectId, type Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import { applyTensionEvent } from "@/lib/coldwar/tension";
 import {
   getIntelligenceAgenciesCollection,
   getIntelligenceCoverageCollection,
@@ -22,10 +23,12 @@ import {
   COLLECTION_GAIN,
   COLLECTION_MIN_NETWORK_LEVEL,
   OP_SLOTS_PER_TURN,
+  STRATEGIC_ATTRIBUTION_TENSION,
 } from "./config";
 import { clampCoverage, currentCoverage } from "./coverage";
 import { applyOperationToNetwork, isNetworkUsable } from "./network";
 import { resolveOperation } from "./resolveOperation";
+import { applyStrategicAction } from "./strategicAction";
 
 export type OperationKind = "collect" | "action";
 
@@ -188,6 +191,13 @@ export async function runOperation(args: RunOperationArgs): Promise<RunOperation
     );
   }
 
+  // A successful strategic ACTION is the only thing in phase 2 that changes the
+  // world. Reaching it required exact-tier coverage through the action gate, so
+  // the operator has genuinely found the programme rather than guessed at it.
+  if (domain === "strategic" && kind === "action" && resolution.outcome === "success") {
+    await applyStrategicAction(db, agency.countryId, targetCountryId, turn);
+  }
+
   // ── Compromise costs after ────────────────────────────────────────────────
   const networkAfter = applyOperationToNetwork(network, resolution.compromise, turn);
   await networks.updateOne(
@@ -234,6 +244,19 @@ export async function runOperation(args: RunOperationArgs): Promise<RunOperation
     turn,
     createdAt: new Date(),
   });
+
+  // An ATTRIBUTED strategic operation is a world event, not a private one: the
+  // target and everyone else can name whose service it was. Additive to a capped
+  // ledger, so existing rows need no migration.
+  if (domain === "strategic" && resolution.compromise === "attributed") {
+    await applyTensionEvent(
+      db,
+      turn,
+      "espionage",
+      `${agency.countryId} caught running an operation against ${targetCountryId}`,
+      STRATEGIC_ATTRIBUTION_TENSION
+    );
+  }
 
   return {
     ok: true,

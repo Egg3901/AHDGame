@@ -38,6 +38,23 @@ interface IncidentView {
   turn: number;
 }
 
+interface AssessmentView {
+  tier: "none" | "existence" | "estimate" | "exact";
+  hasProgramme: boolean | null;
+  warheads: number | null;
+  warheadsAreEstimate: boolean;
+  adoptedNodeCount: number | null;
+  covertSuspected: boolean;
+  covertStage: number | null;
+  covertStageCount: number | null;
+}
+
+interface AssessmentResponse {
+  targetCountryId: string;
+  coverage: number;
+  assessment: AssessmentView;
+}
+
 interface ServiceView {
   agency: AgencyView;
   turn: number;
@@ -51,6 +68,13 @@ const DOMAIN_LABEL: Record<string, string> = {
   strategic: "Strategic",
   military: "Military",
   economic: "Economic",
+};
+
+const TIER_LABEL: Record<string, string> = {
+  none: "No assessment",
+  existence: "Existence only",
+  estimate: "Estimate",
+  exact: "Confirmed",
 };
 
 const COMPROMISE_LABEL: Record<string, string> = {
@@ -77,6 +101,7 @@ export default function IntelligenceTab({
   positionId: string;
 }) {
   const [view, setView] = useState<ServiceView | null>(null);
+  const [assessments, setAssessments] = useState<AssessmentResponse[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -89,6 +114,31 @@ export default function IntelligenceTab({
   }, [countryId, positionId]);
 
   useEffect(load, [load]);
+
+  // Assessments are fetched per target rather than folded into the console read,
+  // so the console route stays one job and the assessment route stays testable
+  // on its own. Only targets with strategic coverage are worth asking about.
+  useEffect(() => {
+    const targets = (view?.coverage ?? [])
+      .filter((c) => c.domain === "strategic" && c.value > 0)
+      .map((c) => c.targetCountryId);
+    // No early return with a synchronous setState: an empty target list flows
+    // through the same promise below, so every state write lands in a callback.
+    let cancelled = false;
+    Promise.all(
+      targets.map((target) =>
+        fetchJson<AssessmentResponse>(
+          `/api/country/${countryId}/executive/cabinet/${positionId}/intelligence/assessment?target=${target}`,
+          { feature: "country-intelligence-assessment" }
+        ).catch(() => null)
+      )
+    ).then((rows) => {
+      if (!cancelled) setAssessments(rows.filter((r): r is AssessmentResponse => r !== null));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, countryId, positionId]);
 
   if (error) {
     return (
@@ -192,7 +242,55 @@ export default function IntelligenceTab({
         )}
       </section>
 
-      <section className="rounded-xl border border-card-border bg-card p-4 shadow-card">
+      <section className="min-w-0 rounded-xl border border-card-border bg-card p-4 shadow-card">
+        <h2 className="font-serif text-lg text-foreground">Nuclear Assessments</h2>
+        <p className="mt-0.5 max-w-2xl text-sm text-muted">
+          What strategic coverage currently buys you. Estimates carry real error and are stable
+          while the coverage is, so re-reading the page will not sharpen them. Only sustained
+          coverage confirms a figure.
+        </p>
+        {assessments.length === 0 ? (
+          <p className="mt-2 text-sm text-muted">
+            No strategic coverage anywhere. Run a collection operation in the strategic domain to
+            begin an assessment.
+          </p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {assessments.map((a) => (
+              <li
+                key={a.targetCountryId}
+                className="rounded-lg border border-card-border bg-background p-3 text-sm"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-foreground">{a.targetCountryId}</span>
+                  <span className="text-muted">
+                    {TIER_LABEL[a.assessment.tier] ?? a.assessment.tier}
+                  </span>
+                  <span className="ml-auto text-xs text-muted">
+                    Coverage {Math.round(a.coverage)}
+                  </span>
+                </div>
+                <p className="mt-1 text-muted">
+                  {a.assessment.hasProgramme === null
+                    ? "Nothing usable yet."
+                    : a.assessment.hasProgramme === false
+                      ? "No nuclear weapons programme."
+                      : a.assessment.warheads === null
+                        ? "A nuclear weapons programme exists. Size unknown."
+                        : `${a.assessment.warheadsAreEstimate ? "Estimated" : "Confirmed"} ${a.assessment.warheads} warheads.`}
+                  {a.assessment.covertStage !== null
+                    ? ` An undeclared programme stands at stage ${a.assessment.covertStage} of ${a.assessment.covertStageCount}.`
+                    : a.assessment.covertSuspected
+                      ? " Something undeclared is running. Depth unknown."
+                      : ""}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="min-w-0 rounded-xl border border-card-border bg-card p-4 shadow-card">
         <h2 className="font-serif text-lg text-foreground">Recent Operations</h2>
         {view.incidents.length === 0 ? (
           <p className="mt-2 text-sm text-muted">The service has run nothing yet.</p>

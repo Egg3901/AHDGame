@@ -17,6 +17,7 @@ const state = {
   logRows: [] as Record<string, unknown>[],
 };
 
+vi.mock("@/lib/coldwar/tension", () => ({ applyTensionEvent: vi.fn() }));
 vi.mock("@/lib/db/collections/intelligence", () => ({
   getIntelligenceNetworksCollection: async () => ({
     findOne: async () => state.network,
@@ -46,6 +47,8 @@ vi.mock("@/lib/db/collections/intelligence", () => ({
     },
   }),
 }));
+
+const { applyTensionEvent } = await import("@/lib/coldwar/tension");
 
 const db = {} as Db;
 
@@ -99,6 +102,9 @@ async function run(args: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
+  // Clears call records, not implementations. Without it the tension
+  // assertions below count calls from earlier tests.
+  vi.clearAllMocks();
   state.network = network();
   state.coverage = null;
   state.targetAgency = { counterIntel: 20 };
@@ -244,5 +250,35 @@ describe("runOperation effects", () => {
     state.coverage = { valueAtCollection: 100, lastCollectedTurn: 0 };
     const r = await run({ kind: "action", turn: 40 });
     expect(r).toMatchObject({ ok: false, status: 409 });
+  });
+});
+
+describe("strategic attribution and world tension", () => {
+  it("spikes tension when a STRATEGIC operation is attributed", async () => {
+    state.targetAgency = { counterIntel: 100 };
+    await run({ domain: "strategic", rolls: { success: 0, compromise: 0 } });
+    expect(applyTensionEvent).toHaveBeenCalledTimes(1);
+    const [, , kind, label] = vi.mocked(applyTensionEvent).mock.calls[0];
+    expect(kind).toBe("espionage");
+    expect(label).toContain("RU");
+  });
+
+  it("stays quiet when a strategic operation is merely detected", async () => {
+    // Detected means the target knows an operation happened, not whose. There is
+    // nothing for the world to react to.
+    state.targetAgency = { counterIntel: 0 };
+    await run({
+      agency: agency({ tradecraft: 1 }),
+      domain: "strategic",
+      rolls: { success: 0, compromise: 0.05 },
+    });
+    const calls = vi.mocked(applyTensionEvent).mock.calls;
+    expect(calls.length).toBe(0);
+  });
+
+  it("stays quiet for an attributed operation in another domain", async () => {
+    state.targetAgency = { counterIntel: 100 };
+    await run({ domain: "military", rolls: { success: 0, compromise: 0 } });
+    expect(applyTensionEvent).not.toHaveBeenCalled();
   });
 });
