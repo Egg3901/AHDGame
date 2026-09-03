@@ -1,4 +1,4 @@
-import { BOND_FUND_DEFINITIONS, describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   getAllFundDefinitions,
   BROAD_FUND_DEFINITIONS,
