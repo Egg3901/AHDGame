@@ -27,6 +27,7 @@ import {
   perTurnInterest,
 } from "@/lib/banking/rules/loans";
 import { loanServiceTransition } from "@/lib/banking/rules/loanServicing";
+import { interbankServiceTransition } from "@/lib/banking/rules/interbankServicing";
 import { settleTransition } from "@/lib/banking/settlementJournal";
 import { oid } from "@/lib/banking/rules/boundary";
 import { cbMarginRatePercent } from "@/lib/banking/interbank";
@@ -1563,51 +1564,14 @@ async function serviceInterbankAndCbMargin(
   }
 }
 
-/**
- * Interbank interest: one guarded pair, not two hopeful writes.
- *
- * Both sides are banks, so both legs are real cash. The old version debited the
- * borrower with a sufficiency guard and then credited the lender
- * unconditionally, without checking whether the debit had matched, so a
- * borrower whose balance had moved produced a lender credit with no debit
- * behind it. That is money created by a race, in the subsystem whose entire
- * problem is money that appears from nowhere.
- */
-async function payInterbankInterest(
-  db: Db,
-  turn: number,
-  loan: InterbankLoan,
-  amount: number
-): Promise<number> {
-  if (!(amount > 0)) return 0;
-  const move = await applyMoneyMove(db, {
-    key: `interbank-interest:${loan._id.toString()}:${turn}`,
-    kind: "interbank_interest",
-    turn,
-    legs: [
-      {
-        kind: "debit",
-        amount,
-        collection: "corporations",
-        filter: { _id: loan.borrowerCorporationId },
-        path: "bankCharter.cashReserves",
-        note: "borrowing bank pays interbank interest",
-      },
-      {
-        kind: "credit",
-        amount,
-        collection: "corporations",
-        filter: { _id: loan.lenderCorporationId },
-        path: "bankCharter.cashReserves",
-        note: "lending bank receives interbank interest",
-      },
-    ],
-  });
-  return move.status === "applied" ? amount : 0;
-}
-
 type InterbankServiceResult = { interestPaid: number; writtenOff: number };
 
+/**
+ * One turn of interbank interest, decided by the rules and landed by the
+ * journal as one transition: borrower vault debit, lender vault credit and
+ * the loan record's advance (or its default and the borrower's debt clear),
+ * under the per-loan-per-turn key.
+ */
 async function serviceOneInterbankLoan(
   db: Db,
   turn: number,
@@ -1616,76 +1580,34 @@ async function serviceOneInterbankLoan(
   const empty: InterbankServiceResult = { interestPaid: 0, writtenOff: 0 };
   if (loan.lastProcessedTurn === turn) return empty;
 
-  const outstanding = Math.max(0, loan.outstanding ?? 0);
-  if (outstanding <= 0) {
-    await db
-      .collection<InterbankLoan>("interbankLoans")
-      .updateOne(
-        { _id: loan._id, lastProcessedTurn: { $ne: turn } },
-        { $set: { status: "repaid", outstanding: 0, lastProcessedTurn: turn, arrearsTurns: 0 } }
-      );
-    return empty;
-  }
-
-  // Interest-only service (principal repaid via repayInterbank). Same shortfall /
-  // ARREARS_DEFAULT_TURNS path as player loans.
-  const interestDue = (outstanding * (loan.ratePercent / 100)) / TURNS_PER_YEAR;
   const borrower = await db
     .collection<Corporation>("corporations")
     .findOne({ _id: loan.borrowerCorporationId }, { projection: { bankCharter: 1 } });
-  // Both sides of an interbank loan are banks, so both legs move bank cash.
-  const available = getCashReserves(borrower?.bankCharter);
-  const payment = Math.min(interestDue, available);
-
-  if (payment < interestDue - 1e-9) {
-    const arrearsTurns = (loan.arrearsTurns ?? 0) + 1;
-    const partialPaid = await payInterbankInterest(db, turn, loan, payment);
-
-    if (arrearsTurns >= ARREARS_DEFAULT_TURNS) {
-      // Write off: no cash moves for the remaining principal; clear borrower debt.
-      await db.collection<Corporation>("corporations").updateOne(
-        { _id: loan.borrowerCorporationId },
-        {
-          $inc: { "bankCharter.interbankDebt": -outstanding },
-          $set: { updatedAt: new Date() },
-        }
-      );
-      await db.collection<InterbankLoan>("interbankLoans").updateOne(
-        { _id: loan._id, lastProcessedTurn: { $ne: turn } },
-        {
-          $set: {
-            status: "defaulted",
-            outstanding,
-            arrearsTurns,
-            lastProcessedTurn: turn,
-          },
-        }
-      );
-      return { interestPaid: partialPaid, writtenOff: outstanding };
-    }
-
-    await db.collection<InterbankLoan>("interbankLoans").updateOne(
-      { _id: loan._id, lastProcessedTurn: { $ne: turn } },
+  const { decision, transition } = interbankServiceTransition({
+    loan,
+    borrowerCash: getCashReserves(borrower?.bankCharter),
+    turn,
+  });
+  const settled = await settleTransition(db, transition);
+  if (settled.status === "rejected") return empty;
+  const moneyLanded =
+    transition.legs.length === 0 || settled.appliedLegs.length === transition.legs.length;
+  const advanced = settled.appliedProjections.length === transition.projections.length;
+  if (settled.status === "applied" && advanced) {
+    emitBankingAuditEvent(
       {
-        $set: {
-          arrearsTurns,
-          lastProcessedTurn: turn,
-        },
-      }
-    );
-    return { interestPaid: partialPaid, writtenOff: 0 };
-  }
-
-  // Full interest
-  const fullPaid = await payInterbankInterest(db, turn, loan, payment);
-  await db.collection<InterbankLoan>("interbankLoans").updateOne(
-    { _id: loan._id, lastProcessedTurn: { $ne: turn } },
-    {
-      $set: {
-        arrearsTurns: 0,
-        lastProcessedTurn: turn,
+        ...transition.event,
+        turn,
+        outcome: "ok",
+        currency: loan.currency,
+        bankId: loan.borrowerCorporationId.toString(),
+        settlementId: transition.key,
       },
-    }
-  );
-  return { interestPaid: fullPaid, writtenOff: 0 };
+      db
+    );
+  }
+  return {
+    interestPaid: moneyLanded && settled.status === "applied" ? decision.interestPaid : 0,
+    writtenOff: advanced && settled.status === "applied" ? decision.writtenOff : 0,
+  };
 }

@@ -71,7 +71,7 @@
  * discount window was not mentioned in the failure path in any form.
  */
 
-import type { Db, ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { Character } from "@/lib/db/types/character";
 import type { DepositInsuranceFund, InterbankLoan } from "@/lib/db/types/bank";
@@ -134,6 +134,14 @@ const EMPTY: DepositBookReturnResult = {
   interbankRepaid: 0,
   interbankWrittenOff: 0,
 };
+
+function toCents(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function floorCents(value: number): number {
+  return Math.floor(value * 100 + 1e-9) / 100;
+}
 
 export function depositBookReturnKey(
   corporationId: ObjectId | string,
@@ -225,15 +233,49 @@ export async function returnDepositBook(
     (sum, loan) => sum + Math.max(0, loan.outstanding ?? 0),
     0
   );
-  const interbankPaid = Math.min(cashAfterDeposits, interbankOwed);
+  // Paid to the cent, and split to the cent: a pro-rata share left as a raw
+  // fraction can sum to a hair more than the cash, and the last guarded debit
+  // then fails against a vault that is short by a rounding error.
+  const interbankPaid = toCents(Math.min(cashAfterDeposits, interbankOwed));
   const interbankShare = interbankOwed > 0 ? interbankPaid / interbankOwed : 0;
+  // Where each lender's recovery lands. A live lender takes it into its vault.
+  // A lender that has itself failed and not yet been resolved takes it into
+  // its estate, where its own waterfall will distribute it. A lender whose
+  // estate is already closed (revoked, or failed and resolved) may NOT be
+  // credited: its owner has already been paid out and its depositors made
+  // whole by the insurer, so the recovery belongs to the insurer. Crediting a
+  // dead charter's vault would strand the cash or hand a windfall to a
+  // shareholder who has already collected.
+  const lenderIds = [...new Set(interbankLoans.map((loan) => loan.lenderCorporationId.toString()))];
+  const lenders = lenderIds.length
+    ? await db
+        .collection<Corporation>("corporations")
+        .find({ _id: { $in: lenderIds.map((id) => new ObjectId(id)) } })
+        .project<Pick<Corporation, "_id" | "name" | "bankCharter">>({ name: 1, bankCharter: 1 })
+        .toArray()
+    : [];
+  const lenderById = new Map(lenders.map((row) => [row._id.toString(), row]));
   const interbankPayouts = interbankLoans
     .map((loan) => ({
       loan,
       outstanding: Math.max(0, loan.outstanding ?? 0),
-      paid: Math.max(0, loan.outstanding ?? 0) * interbankShare,
+      paid: floorCents(Math.max(0, loan.outstanding ?? 0) * interbankShare),
+      target: interbankRecoveryTarget(
+        lenderById.get(loan.lenderCorporationId.toString()),
+        currency
+      ),
     }))
     .filter((row) => row.outstanding > 0);
+  // Whatever the floors left over goes to the largest claim, so the shares
+  // add up to exactly what was paid and no cent is stranded on the estate.
+  const floorsTotal = interbankPayouts.reduce((sum, row) => sum + row.paid, 0);
+  const remainder = toCents(interbankPaid - floorsTotal);
+  if (remainder > 0 && interbankPayouts.length > 0) {
+    const largest = interbankPayouts.reduce((best, row) =>
+      row.outstanding > best.outstanding ? row : best
+    );
+    largest.paid = toCents(largest.paid + remainder);
+  }
 
   // (4) Cash left after every creditor belongs to the owner, but only as far as
   // book equity: anything above that is still owed to somebody, and paying it
@@ -334,10 +376,10 @@ export async function returnDepositBook(
     legs.push({
       kind: "credit",
       amount: row.paid,
-      collection: "corporations",
-      filter: { _id: oid(row.loan.lenderCorporationId.toString()) },
-      path: "bankCharter.cashReserves",
-      note: "lending bank recovers part of its interbank claim",
+      collection: row.target.collection,
+      filter: row.target.filter,
+      path: row.target.path,
+      note: row.target.note,
     });
   }
 
@@ -456,6 +498,39 @@ export async function returnDepositBook(
     db
   );
   return result;
+}
+
+/**
+ * Where an interbank recovery lands for one lender. See the note at the call
+ * site: a live or unresolved lender is credited; a closed estate is not, and
+ * the insurer that stood behind it takes the recovery instead.
+ */
+export function interbankRecoveryTarget(
+  lender: Pick<Corporation, "_id" | "name" | "bankCharter"> | undefined,
+  currency: CurrencyCode
+): { collection: string; filter: Record<string, unknown>; path: string; note: string } {
+  const charter = lender?.bankCharter;
+  const eligible =
+    charter !== undefined &&
+    (charter.status === "active" ||
+      (charter.status === "failed" && typeof charter.depositorsResolvedTurn !== "number"));
+  if (lender && eligible) {
+    return {
+      collection: "corporations",
+      filter: { _id: oid(lender._id.toString()) },
+      path: "bankCharter.cashReserves",
+      note:
+        charter.status === "active"
+          ? "lending bank recovers part of its interbank claim"
+          : `recovery into ${lender.name}'s estate, before it is distributed`,
+    };
+  }
+  return {
+    collection: "depositInsuranceFunds",
+    filter: { _id: currency },
+    path: "balance",
+    note: "recovery to the insurer that stood behind a resolved lender",
+  };
 }
 
 /**
