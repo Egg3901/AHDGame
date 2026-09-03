@@ -90,6 +90,7 @@ import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import { emitBuildCapexTxBulk } from "@/lib/corporations/capexTxLog";
+import { buildNppCorpUpdateOp } from "@/lib/turn/npp/nppCashWrite";
 import { getLogisticsSupportedSectorCount, TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { sumStrengthGrants } from "@/lib/constants/techTree";
 import {
@@ -198,7 +199,7 @@ export async function processNppCorporationDecisions(
   corpUpdates: Array<{
     filter: { _id: ObjectId; unlockedTechNodeIds?: { $ne: string } };
     update: {
-      $set: Record<string, unknown>;
+      $set?: Record<string, unknown>;
       $inc?: Record<string, number>;
       $addToSet?: { unlockedTechNodeIds: string };
     };
@@ -218,7 +219,7 @@ export async function processNppCorporationDecisions(
   const corpUpdates: Array<{
     filter: { _id: ObjectId; unlockedTechNodeIds?: { $ne: string } };
     update: {
-      $set: Record<string, unknown>;
+      $set?: Record<string, unknown>;
       $inc?: Record<string, number>;
       $addToSet?: { unlockedTechNodeIds: string };
     };
@@ -571,12 +572,11 @@ export async function processNppCorporationDecisions(
       }
     }
 
-    if (Object.keys(decision.updates).length > 0) {
-      corpUpdates.push({
-        filter: { _id: decision.corpId },
-        update: { $set: decision.updates },
-      });
-    }
+    // Gated inside the builder, not on `updates` alone: the cash leg no longer
+    // lives in `updates`, so a decision whose only effect is a spend would be
+    // dropped by an `Object.keys(updates).length > 0` check (ticket #1260).
+    const corpUpdateOp = buildNppCorpUpdateOp(decision);
+    if (corpUpdateOp) corpUpdates.push(corpUpdateOp);
 
     // Sector tech tree: auto-unlock one node per turn when affordable. Separate
     // op from the budget decision above (same _id) — bulkWrite applies both.
@@ -748,10 +748,6 @@ export function makeNppCorpDecision(
   const divestedSectorIds: ObjectId[] = [];
   const unownedDraws: NonNullable<NppCorpDecision["unownedDraws"]> = [];
   const reinvestments: NonNullable<NppCorpDecision["reinvestments"]> = [];
-  // A growth-capex build no longer draws the unowned pool, so `unownedDraws`
-  // can't stand in for "made a discretionary investment this turn" any more.
-  // Track it directly so retained earnings still get first claim over dividends.
-  let placedGrowthCapex = false;
   let shortageCreditRequest: NppCorpDecision["shortageCreditRequest"];
   let entryDiagnostic: NppCorpDecision["entryDiagnostic"];
 
@@ -1502,7 +1498,6 @@ export function makeNppCorpDecision(
           countryId: expansion.countryId,
         });
         cashLocal = entryCapital - foundingCost;
-        updates.liquidCapital = cashLocal;
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "entered");
       } else if (
         exceptionalShortageEntry &&
@@ -1535,7 +1530,6 @@ export function makeNppCorpDecision(
           profitMargin: 35,
         });
         cashLocal = entryCapital - foundingCost;
-        updates.liquidCapital = cashLocal;
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "entered");
       } else if (exceptionalShortageEntry && !isStateOwned(corp) && !corp.imfBailoutActive) {
         shortageCreditRequest = {
@@ -1905,8 +1899,6 @@ export function makeNppCorpDecision(
       // for it. (Market share stays well-defined: owned capacity rises, so the
       // owner's share of owned+headroom rises, without touching the pool.)
       cashLocal -= costLocal;
-      updates.liquidCapital = cashLocal;
-      if (candidate.growthUnits > 0) placedGrowthCapex = true;
       reinvestments.push({
         sectorId: sector._id,
         sectorType: sector.sectorType,
@@ -1919,16 +1911,24 @@ export function makeNppCorpDecision(
     }
   }
 
-  // Productive investment gets first claim on retained earnings. Without this
-  // override the same decision could queue a factory and raise its dividend,
-  // leaking the cash buffer the next investment turn depends on.
-  if (plants?.enabled && (unownedDraws.length > 0 || placedGrowthCapex)) {
-    updates.dividendRate = 0;
-  }
+  // Expansion and shareholder returns can coexist. The build paths above have
+  // already paid capex and preserved the effective cash floor; forcing the
+  // dividend rate to zero here made continuously-growing NPP corporations
+  // retain every future profitable turn as well. The margin-based rate from
+  // section 4 applies only to positive after-tax income at settlement time, so
+  // it cannot spend the operating reserve or distribute a loss.
 
   return {
     corpId: corp._id,
     updates,
+    // Ticket #1260: the cash leg travels as a DELTA, never as an absolute write.
+    // These ops are appended to the corporation bulkWrite AFTER this turn's
+    // income `$inc`, so a `$set` of the balance overwrote the credit and the
+    // whole turn's operating income vanished. `cashLocal` starts at the opening
+    // `liquidCapital` and every path above adjusts it — a market-entry credit
+    // up, a founding cost or growth capex down — so this one subtraction is the
+    // net movement whichever path ran. See `nppCashWrite.ts`.
+    liquidCapitalDelta: cashLocal - liquidCapital,
     sectorUpdates,
     newSectors: newSectors.length > 0 ? newSectors : undefined,
     divestedSectorIds: divestedSectorIds.length > 0 ? divestedSectorIds : undefined,

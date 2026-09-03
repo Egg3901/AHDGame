@@ -27,6 +27,7 @@ vi.mock("@/lib/indexFunds/fundQueries", () => ({
   // other exports used by the file but not by executeFundShareBuy
   getFundById: vi.fn(),
   listActiveFunds: vi.fn(),
+  listServiceableFunds: vi.fn(),
   updateFundNav: vi.fn(),
   updateFundConstituents: vi.fn(),
   setFundStatus: vi.fn(),

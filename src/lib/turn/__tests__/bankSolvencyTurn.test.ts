@@ -343,6 +343,20 @@ describe("processBankSolvencyTurn", () => {
     });
   });
 
+  it("reads the feature policy exactly once per turn", async () => {
+    await processBankSolvencyTurn(db as unknown as Db, TURN);
+    // Other readers (the ledger shadow flag, tx-log settings) share the
+    // document; only the banking policy projection is counted here.
+    const policyReads = db.collectionMocks.gameConfig!.findOne.mock.calls.filter(
+      (call: unknown[]) =>
+        typeof call[1] === "object" &&
+        call[1] !== null &&
+        "privateBankingEnabled" in
+          ((call[1] as { projection?: Record<string, unknown> }).projection ?? {})
+    );
+    expect(policyReads).toHaveLength(1);
+  });
+
   it("is a no-op when private banking is disabled", async () => {
     db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
       _id: "default",

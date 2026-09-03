@@ -12,7 +12,7 @@ import {
 } from "@/lib/constants/currencies";
 import { currencyCentralBankUrl } from "@/lib/urls";
 import { getBankId } from "@/lib/centralBank/helpers";
-import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
+import { loadBankingPolicy } from "@/lib/banking/policy";
 import { getEffectiveBankRates } from "@/lib/banking/rates";
 import { getCashReserves } from "@/lib/banking/bankCash";
 import { getLendableHeadroom, getReserveRequirement } from "@/lib/banking/reserves";
@@ -26,7 +26,7 @@ import { getGameState } from "@/lib/gameState";
 import { loadCountryNameOverrides } from "@/lib/country/countryIdentity";
 import { corporationPathIdFromDoc } from "@/lib/api/corporations/resolveQuery";
 import type { CentralBank } from "@/lib/db/types/centralBank";
-import type { Corporation, GameConfig } from "@/lib/db/types";
+import type { Corporation } from "@/lib/db/types";
 import type { Character } from "@/lib/db/types";
 import type { BankCharterType } from "@/lib/db/types/bank";
 import { savingsApyPercent } from "@/lib/currency/savingsInterest";
@@ -85,17 +85,8 @@ async function handleGET() {
     if (!auth.ok) return auth.response;
 
     const db = await getDb();
-    const [config, registered, gameState, banks] = await Promise.all([
-      db.collection<GameConfig>("gameConfig").findOne(
-        { _id: "default" },
-        {
-          projection: {
-            privateBankingEnabled: 1,
-            bankPropTradingEnabled: 1,
-            bankContagionEnabled: 1,
-          },
-        }
-      ),
+    const [policy, registered, gameState, banks] = await Promise.all([
+      loadBankingPolicy(db),
       getRegisteredCountryIds(db),
       getGameState(db),
       db
@@ -118,7 +109,7 @@ async function handleGET() {
     const countryName = (id: CountryId) =>
       nameOverrides[id] ?? getCountryDisplayName(id, gameState?.preset);
 
-    const privateEnabled = await isPrivateBankingEnabled(config);
+    const privateEnabled = policy.privateBanking;
     const character = auth.user.character as Character | null | undefined;
     const primaryCountryId = (character?.countryId ?? "US") as CountryId;
     const primaryCurrency = COUNTRY_CURRENCY_MAP[primaryCountryId] ?? "USD";

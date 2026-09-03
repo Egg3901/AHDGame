@@ -305,6 +305,8 @@ export interface TurnLog {
       loanPrincipalRepaid: number;
       defaultsWrittenOff: number;
       npcDepositDelta: number;
+      /** Settlements that started and never finished, as of the end of the pass. */
+      unfinishedSettlements?: number;
     } | null;
 
     /** A8: employer pension contributions into union schemes. */

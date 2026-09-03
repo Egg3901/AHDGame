@@ -7,7 +7,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { isBlockedBorrower, type ResolveFundConstituents } from "@/lib/banking/blacklist";
 import { getEffectiveBankRates } from "@/lib/banking/rates";
-import { getLendableHeadroom, getReserveRequirement } from "@/lib/banking/reserves";
+import { getReserveRequirement } from "@/lib/banking/reserves";
 import { getCashReserves } from "@/lib/banking/bankCash";
 import {
   CHARACTER_LOAN_SPREAD_PP,
@@ -27,36 +27,29 @@ import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import { estimatePerTurnCurrencyIncomeHomeFace } from "@/lib/lineOfCredit/currencyIncomeEstimate";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { getCurrentTurn } from "@/lib/currentTurn";
-import { isLendingCharter, isNamedLendingCharter } from "./charterKinds";
+import { isNamedLendingCharter } from "./charterKinds";
+import { charterMay } from "@/lib/banking/rules/capabilities";
+import { namedLoanHeadroom } from "@/lib/banking/rules/loans";
+import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 
 export { CHARACTER_LOAN_SPREAD_PP };
 
-/** Provisional - each pp of lending rate above this reference shrinks NPC volume. */
-export const NPC_LOAN_BOOK_RATE_REFERENCE_PERCENT = 4;
-
-/** Provisional - volume sensitivity per pp above the rate reference. */
-export const NPC_LOAN_BOOK_RATE_SENSITIVITY = 0.08;
-
-/** Provisional - floor on the NPC volume rate factor. */
-export const NPC_LOAN_BOOK_VOLUME_FACTOR_MIN = 0.2;
-
-/** NPC household borrowing cannot exceed the bank's lendable deposits. */
-export const NPC_LOAN_BOOK_VOLUME_FACTOR_MAX = 1;
-
-/** Provisional - base expected default rate (percent) at the default reference rate. */
-export const NPC_LOAN_BOOK_DEFAULT_BASE_PERCENT = 1.0;
-
-/** Provisional - each pp of lending rate above this reference raises expected defaults. */
-export const NPC_LOAN_BOOK_DEFAULT_RATE_REFERENCE_PERCENT = 6;
-
-/** Provisional - default-rate sensitivity per pp above the default reference. */
-export const NPC_LOAN_BOOK_DEFAULT_SENSITIVITY = 0.5;
-
-/** Provisional - floor on expected NPC default rate (percent). */
-export const NPC_LOAN_BOOK_DEFAULT_MIN_PERCENT = 0.5;
-
-/** Provisional - ceiling on expected NPC default rate (percent). */
-export const NPC_LOAN_BOOK_DEFAULT_MAX_PERCENT = 12;
+export {
+  NPC_LOAN_BOOK_RATE_REFERENCE_PERCENT,
+  NPC_LOAN_BOOK_RATE_SENSITIVITY,
+  NPC_LOAN_BOOK_VOLUME_FACTOR_MIN,
+  NPC_LOAN_BOOK_VOLUME_FACTOR_MAX,
+  NPC_LOAN_BOOK_DEFAULT_BASE_PERCENT,
+  NPC_LOAN_BOOK_DEFAULT_RATE_REFERENCE_PERCENT,
+  NPC_LOAN_BOOK_DEFAULT_SENSITIVITY,
+  NPC_LOAN_BOOK_DEFAULT_MIN_PERCENT,
+  NPC_LOAN_BOOK_DEFAULT_MAX_PERCENT,
+  computeNpcLoanBook,
+  applyLoanPayment,
+  markLoanDefaulted,
+  namedLoanHeadroom,
+  type NpcLoanBook,
+} from "@/lib/banking/rules/loans";
 
 export type LoanBorrower = {
   type: "corporation" | "character";
@@ -92,15 +85,6 @@ export type BorrowerFacingLoan = {
   termTurns: number;
   status: BankLoan["status"];
 };
-
-export type NpcLoanBook = {
-  volume: number;
-  expectedDefaultRatePercent: number;
-};
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
 
 export async function buildFundConstituentResolver(
   db: Db,
@@ -229,6 +213,48 @@ export async function originateLoan(
   principal: number,
   termTurns: number
 ): Promise<OriginateLoanResult> {
+  const result = await originateLoanInner(db, bankCorporationId, borrower, principal, termTurns);
+  emitBankingAuditEvent(
+    result.ok
+      ? {
+          kind: "loan.originated",
+          command: "bank.loan.originate",
+          turn: result.loan.originatedTurn,
+          outcome: "ok",
+          currency: result.loan.currency,
+          bankId: bankCorporationId.toString(),
+          subjectType: "loan",
+          subjectId: result.loan._id.toString(),
+          statusAfter: result.loan.status,
+          amount: result.loan.principal,
+          meta: {
+            borrowerType: borrower.type,
+            termTurns: result.loan.termTurns,
+            ratePercent: result.loan.ratePercent,
+          },
+        }
+      : {
+          kind: "loan.originated",
+          command: "bank.loan.originate",
+          turn: await getCurrentTurn(db),
+          outcome: "rejected",
+          reason: result.error,
+          bankId: bankCorporationId.toString(),
+          amount: principal,
+          meta: { borrowerType: borrower.type, termTurns },
+        },
+    db
+  );
+  return result;
+}
+
+async function originateLoanInner(
+  db: Db,
+  bankCorporationId: ObjectId,
+  borrower: LoanBorrower,
+  principal: number,
+  termTurns: number
+): Promise<OriginateLoanResult> {
   if (!(await isPrivateBankingEnabled())) {
     return { ok: false, error: "Private banking is not enabled" };
   }
@@ -260,7 +286,7 @@ export async function originateLoan(
   if (!isNamedLendingCharter(charter)) {
     return { ok: false, error: "Corporation has no active bank charter" };
   }
-  if (borrower.type === "character" && !isLendingCharter(charter)) {
+  if (borrower.type === "character" && !charterMay(charter, "namedCharacterLending")) {
     return {
       ok: false,
       error: "An investment charter lends to corporations, not to individuals",
@@ -313,10 +339,7 @@ export async function originateLoan(
 
   const reserveRatio = await getReserveRequirement(db, currency);
   const cashReserves = getCashReserves(charter);
-  const headroom =
-    charter.type === "investment"
-      ? Math.max(0, cashReserves - (charter.totalLoans ?? 0))
-      : getLendableHeadroom(charter, reserveRatio);
+  const headroom = namedLoanHeadroom(charter, reserveRatio);
   const committedPaymentPerTurn = await committedNamedLoanPaymentPerTurn(
     db,
     borrower,
@@ -486,6 +509,22 @@ export async function disburseNamedLoan(
   }
 
   const originatedTurn = await getCurrentTurn(db);
+  emitBankingAuditEvent(
+    {
+      kind: "loan.disbursed",
+      command: "bank.loan.disburse",
+      turn: originatedTurn,
+      outcome: "ok",
+      currency,
+      bankId: bankCorporationId.toString(),
+      subjectType: "loan",
+      subjectId: loan._id.toString(),
+      statusAfter: "current",
+      amount: principal,
+      meta: { borrowerType: loan.borrowerType },
+    },
+    db
+  );
   // The release review's P1: origination moved money with zero ledger legs. On
   // transactionless Mongo the log IS the journal, so the compensating-write
   // strategy the rollback above implements had nothing to compensate against.
@@ -592,63 +631,4 @@ export async function listBorrowerFacingLoans(
       status: loan.status,
     };
   });
-}
-
-/**
- * Pure NPC household loan-book math. Wired from bankingTurn.
- *
- * volume = lendableDeposits * clamp(1 - (rate - RATE_REF) * SENS, VOL_MIN, VOL_MAX)
- * expectedDefaultRatePercent = clamp(BASE + max(0, rate - DEF_REF) * DEF_SENS, DEF_MIN, DEF_MAX)
- */
-export function computeNpcLoanBook(
-  lendableDeposits: number,
-  lendingRatePercent: number
-): NpcLoanBook {
-  const funding = Number.isFinite(lendableDeposits) && lendableDeposits > 0 ? lendableDeposits : 0;
-  const rate = Number.isFinite(lendingRatePercent) ? lendingRatePercent : 0;
-
-  const volumeFactor = clamp(
-    1 - (rate - NPC_LOAN_BOOK_RATE_REFERENCE_PERCENT) * NPC_LOAN_BOOK_RATE_SENSITIVITY,
-    NPC_LOAN_BOOK_VOLUME_FACTOR_MIN,
-    NPC_LOAN_BOOK_VOLUME_FACTOR_MAX
-  );
-  const volume = funding * volumeFactor;
-
-  const expectedDefaultRatePercent = clamp(
-    NPC_LOAN_BOOK_DEFAULT_BASE_PERCENT +
-      Math.max(0, rate - NPC_LOAN_BOOK_DEFAULT_RATE_REFERENCE_PERCENT) *
-        NPC_LOAN_BOOK_DEFAULT_SENSITIVITY,
-    NPC_LOAN_BOOK_DEFAULT_MIN_PERCENT,
-    NPC_LOAN_BOOK_DEFAULT_MAX_PERCENT
-  );
-
-  return { volume, expectedDefaultRatePercent };
-}
-
-/**
- * Pure helper: apply a payment against outstanding. Returns the field set to
- * $set / merge onto the loan doc (used by bankingTurn).
- */
-export function applyLoanPayment(
-  loan: Pick<BankLoan, "outstanding" | "status">,
-  payment: number
-): Pick<BankLoan, "outstanding" | "status"> {
-  const pay = Number.isFinite(payment) && payment > 0 ? payment : 0;
-  const nextOutstanding = Math.max(0, (loan.outstanding ?? 0) - pay);
-  return {
-    outstanding: nextOutstanding,
-    status: nextOutstanding <= 0 ? "repaid" : loan.status === "arrears" ? "current" : loan.status,
-  };
-}
-
-/**
- * Pure helper: mark a loan defaulted. Returns the field set for the loan doc.
- */
-export function markLoanDefaulted(
-  loan: Pick<BankLoan, "outstanding" | "status">
-): Pick<BankLoan, "outstanding" | "status"> {
-  return {
-    outstanding: loan.outstanding,
-    status: "defaulted",
-  };
 }
