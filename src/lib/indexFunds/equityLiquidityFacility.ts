@@ -87,24 +87,27 @@ export function planEquityLiquidityQuotes(input: {
   const plans: EquityLiquidityRuleQuotePlan[] = planEquityLiquidityQuoteRules({
     turn: input.turn,
     totalListings: input.totalListings,
-    funds: input.funds.map((fund) => ({
-      id: fund._id.toString(),
-      scope: fund.scope,
-      kind: fund.kind,
-      countryId: fund.countryId,
-      sectorType: fund.sectorType,
-      cashAnchor: fund.cashAnchor,
-      quotedNav: fund.quotedNav,
-      unitSupply: fund.unitSupply,
-      holdingValueAnchor: computeHoldingsValueAnchor(fund),
-      holdings: fund.holdings.map((holding) => ({
-        corporationId: holding.corporationId.toString(),
-        shares: holding.shares,
+    // Bond funds hold no equities and never quote on the equity book.
+    funds: input.funds
+      .filter((fund) => fund.kind !== "bond")
+      .map((fund) => ({
+        id: fund._id.toString(),
+        scope: fund.scope,
+        kind: fund.kind as "broad" | "sector",
+        countryId: fund.countryId,
+        sectorType: fund.sectorType,
+        cashAnchor: fund.cashAnchor,
+        quotedNav: fund.quotedNav,
+        unitSupply: fund.unitSupply,
+        holdingValueAnchor: computeHoldingsValueAnchor(fund),
+        holdings: fund.holdings.map((holding) => ({
+          corporationId: holding.corporationId.toString(),
+          shares: holding.shares,
+        })),
+        targetCorporationIds: fund.targetConstituents.map((target) =>
+          target.corporationId.toString()
+        ),
       })),
-      targetCorporationIds: fund.targetConstituents.map((target) =>
-        target.corporationId.toString()
-      ),
-    })),
     listings: input.listings.map((listing) => ({
       corporationId: listing.corporationId.toString(),
       countryId: listing.corporation.countryId,
