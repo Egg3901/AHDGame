@@ -438,7 +438,8 @@ export async function spawnNppCorporation(
     countryId,
     stateId: headquartersState,
     sectorType: type,
-    targetGrowthRate: 3, // Moderate growth
+    // Plants births grow via build orders, never via the growth slider.
+    targetGrowthRate: plantsEnabled ? 0 : 3, // Moderate growth
     currentGrowthRate: 0,
     currentGrowthCost: 0,
     // HOST-currency, converted from the ₳ `startingRevenue` above.
