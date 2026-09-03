@@ -69,7 +69,12 @@ export async function GET(_request: Request, { params }: RouteParams) {
     // the primary's sectors of that type into a new corp, so types already split
     // off — or never nationalized — are naturally excluded (the primary holds
     // none of them). Ordered by CORPORATION_TYPES for a stable dropdown.
-    const primaryId = corps.find((c) => c.isPrimaryNationalCorporation)?._id;
+    // Sorted on _id so a data bug carrying two flagged primaries (ticket #1254)
+    // still yields one deterministic answer; `mergeNationalCorporations` is the
+    // real collapse.
+    const primaryId = corps
+      .filter((c) => c.isPrimaryNationalCorporation)
+      .sort((a, b) => a._id.toString().localeCompare(b._id.toString()))[0]?._id;
     const primaryHeldTypes = new Set<string>();
     if (primaryId) {
       for (const s of sectors) {

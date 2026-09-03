@@ -44,6 +44,7 @@ import {
 import { mergePartiesIntoCountry } from "@/lib/country/mergePartiesIntoCountry";
 import { mergeRegion } from "@/lib/country/mergeRegion";
 import { mergeNationalFisc } from "@/lib/country/mergeNationalFisc";
+import { mergeNationalCorporations } from "@/lib/country/mergeNationalCorporations";
 import { mergeMilitary } from "@/lib/country/mergeMilitary";
 import { mergeEconomicRegime } from "@/lib/country/mergeEconomicRegime";
 import { rescopeLegislationCatalogue } from "@/lib/country/rescopeLegislationCatalogue";
@@ -336,6 +337,18 @@ export async function actuateSettlementOutcome(
     fromCountryId: absorbed,
     toCountryId: survivor,
     carryStance: false,
+  });
+
+  // 3d-bis. The National Corporation tree. State enterprises are country-keyed
+  //     (`countryOwnerId`), so the region sweep never sees them: without this
+  //     the absorbed side's primary NatCorp and split-offs survive as a second,
+  //     ghost NatCorp family under the survivor — still flagged primary, still
+  //     holding sectors, still the corporationId on its sovereign bonds. The
+  //     live German reunification left two primaries and coupon money flowing
+  //     to a corp of a country that no longer existed (ticket #1254).
+  await mergeNationalCorporations(db, {
+    fromCountryId: absorbed,
+    toCountryId: survivor,
   });
 
   // 3e. The ECONOMIC regime. `installOnePartyState` below converts the political

@@ -80,14 +80,15 @@ export async function ensurePrimaryNationalCorporation(
 ): Promise<Corporation> {
   const corps = db.collection<Corporation>("corporations");
 
-  const primary = await corps.findOne({
-    countryOwnerId: countryId,
-    isPrimaryNationalCorporation: true,
-  });
+  const primary = await corps
+    .find({ countryOwnerId: countryId, isPrimaryNationalCorporation: true })
+    .sort({ _id: 1 })
+    .limit(1)
+    .next();
   if (primary) return primary;
 
   // Pre-backfill fallback: an existing seeded NatCorp not yet flagged primary.
-  const legacy = await corps.findOne({ countryOwnerId: countryId });
+  const legacy = await corps.find({ countryOwnerId: countryId }).sort({ _id: 1 }).limit(1).next();
   if (legacy) return legacy;
 
   const doc = buildNationalCorporationDoc(countryId, {

@@ -115,6 +115,8 @@ export function getNationalBudgetId(countryId: CountryId): string {
  * National Corporation (spec §24.1). Prefers the `isPrimaryNationalCorporation`
  * flag; falls back to any `{ countryOwnerId }` for pre-backfill safety so a
  * country whose NatCorp hasn't been flagged yet still resolves its issuer.
+ * Sorted on `_id` so a data bug carrying two flagged primaries (ticket #1254)
+ * resolves deterministically — the same corp every caller in the turn sees.
  */
 async function findPrimaryNationalCorporation(
   db: Db,
@@ -122,8 +124,11 @@ async function findPrimaryNationalCorporation(
 ): Promise<Pick<Corporation, "_id" | "name"> | null> {
   const corps = db.collection<Corporation>("corporations");
   return (
-    (await corps.findOne({ countryOwnerId: countryId, isPrimaryNationalCorporation: true })) ??
-    (await corps.findOne({ countryOwnerId: countryId }))
+    (await corps
+      .find({ countryOwnerId: countryId, isPrimaryNationalCorporation: true })
+      .sort({ _id: 1 })
+      .limit(1)
+      .next()) ?? (await corps.find({ countryOwnerId: countryId }).sort({ _id: 1 }).limit(1).next())
   );
 }
 
