@@ -64,6 +64,7 @@ import { migration as regionalDefaultLawsNewgen } from "./entries/2026-08-31-reg
 import { migration as retireOrphanSovereignFloat } from "./entries/2026-09-03-retire-orphan-sovereign-float";
 import { migration as bondMarketPools } from "./entries/2026-09-03-bond-market-pools";
 import { migration as bondMarketPoolWorkingBalance } from "./entries/2026-09-03-bond-market-pool-working-balance";
+import { migration as bondFundSeed } from "./entries/2026-09-03-bond-fund-seed";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -201,6 +202,8 @@ export const MIGRATIONS: Migration[] = [
   // Phase 3 primary market: the pool re-buys each quarter's sovereign rollover
   // before the maturing series pays it back, so it needs that face in cash.
   bondMarketPoolWorkingBalance,
+  // Phase 4: bond index funds, the player-facing leg of the bond market.
+  bondFundSeed,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.

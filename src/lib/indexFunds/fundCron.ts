@@ -65,6 +65,7 @@ import {
 import { computeHoldingsValueAnchor } from "@/lib/indexFunds/fundAllocation";
 import { deployBondReserveFromCash } from "@/lib/indexFunds/fundBondReserve";
 import { sumFundBondHoldingsValueAnchor } from "@/lib/bonds/fundBondHoldings";
+import { sellFundBondHoldingsForCash } from "@/lib/bonds/sellFundBondUnits";
 import { getAllFundDefinitions } from "@/lib/indexFunds/fundDefinitions";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { buildPersonalBalanceInc, loadCharacterFxRate } from "@/lib/currency/characterFunds";
@@ -787,6 +788,20 @@ export async function processQueuedRedemptions(
       fundState = (await getFundById(db, fund._id)) ?? fundState;
       availableCash = fundState.cashAnchor;
     }
+    // Bonds are the next line of liquidity: sold to the market pool at its
+    // bid, as far as the pool can pay. The only line for a bond fund.
+    if (availableCash < entryObligation) {
+      const bondSale = await sellFundBondHoldingsForCash(
+        db,
+        fundState,
+        entryObligation - availableCash,
+        new Date()
+      );
+      if (bondSale.proceedsAnchor > 0) {
+        fundState = (await getFundById(db, fund._id)) ?? fundState;
+        availableCash = fundState.cashAnchor;
+      }
+    }
 
     if (availableCash <= 0) {
       await restoreQueueClaim();
@@ -1185,6 +1200,8 @@ export async function runIndexFundCron(
   const waivedIds = await loadActiveWaiverIds(db, currentTurn);
 
   for (const fund of funds) {
+    // Bond funds hold no equities: nothing to select or rebalance here.
+    if (fund.kind === "bond") continue;
     if (!shouldRebalanceIndexFundConstituents(currentTurn, fund.targetConstituents.length)) {
       continue;
     }
@@ -1246,6 +1263,7 @@ export async function runIndexFundCron(
     try {
       const rebalFunds = (await listActiveFunds(db)).filter(
         (fund) =>
+          fund.kind !== "bond" &&
           navReadyFundIds.some((id) => id.toString() === fund._id.toString()) &&
           !queuedLiabilityByFundId.has(fund._id.toString())
       );

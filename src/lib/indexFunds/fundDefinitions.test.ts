@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { BOND_FUND_DEFINITIONS, describe, it, expect } from "vitest";
 import {
   getAllFundDefinitions,
   BROAD_FUND_DEFINITIONS,
@@ -6,6 +6,7 @@ import {
   GLOBAL_BROAD_FUND,
   SECTOR_FUND_PRIMARY_TYPES,
   BROAD_FUND_COUNTRIES,
+  BOND_FUND_DEFINITIONS,
 } from "./fundDefinitions";
 
 describe("fundDefinitions", () => {
@@ -155,5 +156,28 @@ describe("fundDefinitions", () => {
       expect(globalBroad!.countryId).toBeUndefined();
       expect(globalBroad!.sectorType).toBeUndefined();
     });
+  });
+});
+
+describe("BOND_FUND_DEFINITIONS", () => {
+  it("has one home sovereign fund per broad-fund country plus four global funds", () => {
+    const home = BOND_FUND_DEFINITIONS.filter((d) => d.scope === "country");
+    const global = BOND_FUND_DEFINITIONS.filter((d) => d.scope === "global");
+    expect(home).toHaveLength(8);
+    expect(global.map((d) => d.slug).sort()).toEqual([
+      "global_corporate_ig",
+      "global_emerging_sovereign",
+      "global_high_yield",
+      "global_sovereign_ig",
+    ]);
+    for (const def of home)
+      expect(def.bondUniverse).toEqual({ issuerType: "sovereign", homeOnly: true });
+  });
+
+  it("keeps slugs and tickers unique across every fund kind", () => {
+    const all = getAllFundDefinitions();
+    expect(new Set(all.map((f) => f.slug)).size).toBe(all.length);
+    expect(new Set(all.map((f) => f.ticker)).size).toBe(all.length);
+    expect(all.filter((f) => f.kind === "bond")).toHaveLength(BOND_FUND_DEFINITIONS.length);
   });
 });

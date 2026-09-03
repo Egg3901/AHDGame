@@ -1,6 +1,7 @@
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import type { CreditRating } from "@/lib/db/types/centralBank";
 
 /**
  * Sector fund mapping: every CorporationType gets its own standalone sector fund.
@@ -169,17 +170,94 @@ export const SECTOR_FUND_DEFINITIONS: readonly {
  * Complete inventory of all fund definitions to seed.
  * Used by the seed/migration to upsert fund definitions into `indexFunds`.
  */
+/**
+ * What a bond fund may hold. Ratings are inclusive bounds on the issuer's
+ * credit rating: `minRating` is the worst grade allowed (investment grade
+ * funds set BBB), `maxRating` the best (high yield funds set BB). A sovereign
+ * issuer's rating is its budget's `creditRating`; a corporate issuer's is its
+ * `creditRatingSnapshot`, read as BBB when it has never been rated.
+ */
+export type BondFundUniverse = {
+  issuerType: "sovereign" | "corporation";
+  minRating?: CreditRating;
+  maxRating?: CreditRating;
+  /** Country-scoped funds hold only their own sovereign's paper. */
+  homeOnly?: boolean;
+};
+
+export type BondFundDefinition = {
+  kind: "bond";
+  scope: "country" | "global";
+  slug: string;
+  name: string;
+  ticker: string;
+  countryId?: CountryId;
+  anchorCurrencyCode: CurrencyCode;
+  bondUniverse: BondFundUniverse;
+};
+
+/** One home-sovereign bond fund per broad-fund country, plus four global ones. */
+export const BOND_FUND_DEFINITIONS: readonly BondFundDefinition[] = [
+  ...BROAD_FUND_COUNTRIES.map(({ countryId, currencyCode }) => ({
+    kind: "bond" as const,
+    scope: "country" as const,
+    slug: `${countryId.toLowerCase()}_sovereign_bonds`,
+    name: `${countryId} Government Bond Fund`,
+    ticker: `${countryId}GOV`,
+    countryId,
+    anchorCurrencyCode: currencyCode,
+    bondUniverse: { issuerType: "sovereign" as const, homeOnly: true },
+  })),
+  {
+    kind: "bond",
+    scope: "global",
+    slug: "global_sovereign_ig",
+    name: "Global Investment Grade Sovereign Bond Fund",
+    ticker: "GLBGOV",
+    anchorCurrencyCode: "USD",
+    bondUniverse: { issuerType: "sovereign", minRating: "BBB" },
+  },
+  {
+    kind: "bond",
+    scope: "global",
+    slug: "global_emerging_sovereign",
+    name: "Emerging Markets Sovereign Bond Fund",
+    ticker: "GLBEMB",
+    anchorCurrencyCode: "USD",
+    bondUniverse: { issuerType: "sovereign", maxRating: "BB" },
+  },
+  {
+    kind: "bond",
+    scope: "global",
+    slug: "global_corporate_ig",
+    name: "Global Investment Grade Corporate Bond Fund",
+    ticker: "GLBCRP",
+    anchorCurrencyCode: "USD",
+    bondUniverse: { issuerType: "corporation", minRating: "BBB" },
+  },
+  {
+    kind: "bond",
+    scope: "global",
+    slug: "global_high_yield",
+    name: "Global High Yield Bond Fund",
+    ticker: "GLBHYB",
+    anchorCurrencyCode: "USD",
+    bondUniverse: { issuerType: "corporation", maxRating: "BB" },
+  },
+];
+
 export function getAllFundDefinitions() {
   const funds: {
     slug: string;
     name: string;
     ticker: string;
     scope: "country" | "global";
-    kind: "broad" | "sector";
+    kind: "broad" | "sector" | "bond";
     countryId?: CountryId;
     topN?: number;
     sectorType?: CorporationType;
     anchorCurrencyCode: CurrencyCode;
+    bondUniverse?: BondFundUniverse;
   }[] = [];
 
   for (const def of BROAD_FUND_DEFINITIONS) {
@@ -216,6 +294,19 @@ export function getAllFundDefinitions() {
       kind: sector.kind,
       sectorType: sector.sectorType,
       anchorCurrencyCode: sector.anchorCurrencyCode,
+    });
+  }
+
+  for (const bondFund of BOND_FUND_DEFINITIONS) {
+    funds.push({
+      slug: bondFund.slug,
+      name: bondFund.name,
+      ticker: bondFund.ticker,
+      scope: bondFund.scope,
+      kind: bondFund.kind,
+      countryId: bondFund.countryId,
+      anchorCurrencyCode: bondFund.anchorCurrencyCode,
+      bondUniverse: bondFund.bondUniverse,
     });
   }
 
