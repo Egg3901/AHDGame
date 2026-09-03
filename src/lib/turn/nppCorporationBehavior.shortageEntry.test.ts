@@ -286,7 +286,10 @@ describe("NPP shortage-responsive market entry", () => {
     });
     const bond = inserted[0];
     const order = funded.newSectors?.[0].starterOrder;
-    const endingCash = funded.updates.liquidCapital as number;
+    // Ticket #1260: the decision carries a cash DELTA, so rebuild the closing
+    // balance from the opening one. The credit still lands exactly once - it
+    // is part of the same delta as the founding spend.
+    const endingCash = (corporation.liquidCapital ?? 0) + funded.liquidCapitalDelta;
     const foundingSpend = sectorEntryFeeAnchor(plants.preset) + (order?.costPaidAnchor ?? 0);
 
     expect(funded.newSectors).toHaveLength(1);
