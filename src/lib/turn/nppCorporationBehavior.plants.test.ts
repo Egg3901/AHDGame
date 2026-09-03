@@ -287,6 +287,33 @@ describe("NPP expansion under plants — price parity", () => {
   });
 });
 
+describe("NPP growth targets under plants — retired", () => {
+  const growthWritesOf = (d: ReturnType<typeof decide>) =>
+    d.sectorUpdates.filter((u) => "targetGrowthRate" in (u.update.$set ?? {}));
+
+  it("emits no targetGrowthRate updates under plants, even for a loss-making sector", () => {
+    // Loss margin forces a write without plants (2 → 0), so silence here
+    // proves the section-2 skip rather than a quiet governor.
+    const losing = sector({
+      targetGrowthRate: 2,
+      profitMargin: -5,
+      effectiveProfitMargin: -5,
+    });
+    const decision = decide(corp(), [losing], [unownedPool()], plantsCtx);
+    expect(growthWritesOf(decision)).toHaveLength(0);
+  });
+
+  it("still governs growth targets without plants", () => {
+    const losing = sector({
+      targetGrowthRate: 2,
+      profitMargin: -5,
+      effectiveProfitMargin: -5,
+    });
+    const decision = decide(corp(), [losing], [unownedPool()]);
+    expect(growthWritesOf(decision).length).toBeGreaterThan(0);
+  });
+});
+
 describe("NPP expansion without plants — unchanged", () => {
   it("still pays the flat 500k and receives free revenue", () => {
     const c = corp();
