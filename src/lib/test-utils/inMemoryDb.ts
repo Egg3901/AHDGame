@@ -113,7 +113,22 @@ function sameValue(a: unknown, b: unknown): boolean {
   if (a instanceof ObjectId && typeof b === "string") return a.toString() === b;
   if (b instanceof ObjectId && typeof a === "string") return b.toString() === a;
   if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime();
-  return a === b;
+  if (a === b) return true;
+  // Mongo matches an embedded document or array by VALUE, which is what a
+  // compare-and-swap filter (`{ lineOfCredit: <the doc we read> }`) relies on.
+  // Reference equality here silently matched nothing and made every such
+  // guarded write look like a lost race.
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((item, i) => sameValue(item, b[i]));
+  }
+  if (isPlainObject(a) && isPlainObject(b)) {
+    const ak = Object.keys(a);
+    const bk = Object.keys(b);
+    if (ak.length !== bk.length) return false;
+    return ak.every((k) => k in b && sameValue(a[k], (b as Doc)[k]));
+  }
+  return false;
 }
 
 /**
