@@ -44,6 +44,7 @@ import {
 import { mergePartiesIntoCountry } from "@/lib/country/mergePartiesIntoCountry";
 import { mergeRegion } from "@/lib/country/mergeRegion";
 import { mergeNationalFisc } from "@/lib/country/mergeNationalFisc";
+import { mergeNationalCorporations } from "@/lib/country/mergeNationalCorporations";
 import { mergeMilitary } from "@/lib/country/mergeMilitary";
 import { mergeEconomicRegime } from "@/lib/country/mergeEconomicRegime";
 import { rescopeLegislationCatalogue } from "@/lib/country/rescopeLegislationCatalogue";
@@ -52,6 +53,7 @@ import { remapOffice } from "@/lib/country/dissolvingOfficeRemap";
 import { getSettlementCrisesCollection } from "@/lib/db/collections";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
 import { mergeCountry } from "@/lib/country/mergeCountry";
+import { countryFiscalBase } from "@/lib/politicalLegislation/fiscalBase";
 import { getCountryState, updateCountryState } from "@/lib/countryState";
 import { adjustLeaderConfidence, REUNIFICATION_BUMP } from "@/lib/turn/rulingPartyConfidence";
 import { getCountryLeaderStatesCollection } from "@/lib/db/collections/countryLeaderState";
@@ -240,6 +242,33 @@ export async function actuateSettlementOutcome(
     return release(partiesMerged.error ?? "The party migration did not complete.");
   }
 
+  // 2b. Capture BOTH sides' fiscal bases BEFORE any region moves. The law
+  //     re-base in `mergeNationalFisc` needs each country's pre-merge Σ-gdp /
+  //     population and income band: after step 3 every region is re-keyed and
+  //     a live read would find the absorbed side empty.
+  //     ⚠️ PERSISTED ON FIRST LOOK, same reason as `absorbedWasPlayable`: a
+  //     resume arrives after the regions have moved and would capture a zero
+  //     absorbed base — re-scaling every carried law by 0.
+  let mergeBases = crisis.mergeBases ?? null;
+  if (!mergeBases) {
+    const [fromBase, toBase] = await Promise.all([
+      countryFiscalBase(db, target),
+      countryFiscalBase(db, challenger),
+    ]);
+    const gs = await db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { incomeBandIndexByCountry: 1 } });
+    mergeBases = {
+      fromGdp: fromBase.gdp,
+      fromPopulation: fromBase.population,
+      fromIncomeBand: gs?.incomeBandIndexByCountry?.[target] ?? 1,
+      toGdp: toBase.gdp,
+      toPopulation: toBase.population,
+      toIncomeBand: gs?.incomeBandIndexByCountry?.[challenger] ?? 1,
+    };
+    await crises.updateOne({ _id: crisis._id }, { $set: { mergeBases } });
+  }
+
   // 3. The regions and everyone seated in them.
   const merged = await mergeCountry(db, {
     fromCountryId: absorbed,
@@ -289,6 +318,10 @@ export async function actuateSettlementOutcome(
     toCountryId: survivor,
     currentTurn,
     carryLegislatedLevers: false,
+    // Both law books re-base onto the merged economy at their pre-merge
+    // absolute sizes — see the capture at 2b and the argument in
+    // `mergeNationalFisc`.
+    mergeBases,
   });
 
   // 3d. The armed forces. The military collections are country-keyed, not
@@ -304,6 +337,18 @@ export async function actuateSettlementOutcome(
     fromCountryId: absorbed,
     toCountryId: survivor,
     carryStance: false,
+  });
+
+  // 3d-bis. The National Corporation tree. State enterprises are country-keyed
+  //     (`countryOwnerId`), so the region sweep never sees them: without this
+  //     the absorbed side's primary NatCorp and split-offs survive as a second,
+  //     ghost NatCorp family under the survivor — still flagged primary, still
+  //     holding sectors, still the corporationId on its sovereign bonds. The
+  //     live German reunification left two primaries and coupon money flowing
+  //     to a corp of a country that no longer existed (ticket #1254).
+  await mergeNationalCorporations(db, {
+    fromCountryId: absorbed,
+    toCountryId: survivor,
   });
 
   // 3e. The ECONOMIC regime. `installOnePartyState` below converts the political

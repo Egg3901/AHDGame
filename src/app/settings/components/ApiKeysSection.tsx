@@ -105,6 +105,7 @@ export function ApiKeysSection() {
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-foreground">{t("apiKeys.personalTitle")}</h3>
         <p className="text-xs text-muted">{t("apiKeys.personalHint")}</p>
+        <p className="text-xs text-muted">{t("apiKeys.rateLimitHint")}</p>
         <div className="flex gap-2">
           <input
             value={userKeyName}

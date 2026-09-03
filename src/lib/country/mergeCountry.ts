@@ -25,6 +25,7 @@ import type { Corporation, State } from "@/lib/db/types";
 import type { BillStatus } from "@/lib/db/types/legislation";
 import type { CountryGameState } from "@/lib/db/types/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { officeRemapFor } from "@/lib/country/dissolvingOfficeRemap";
 import { transferRegion } from "@/lib/referendum/transfer/transferRegion";
 import { computeNationalMetrics } from "@/lib/nationalMetrics";
 import { reseedJoinedRegionElections } from "@/lib/referendum/transfer/reseedJoinedRegionElections";
@@ -66,6 +67,8 @@ export interface MergeCountryResult {
   regionsTransferred: number;
   regionsSkipped: number;
   retired: boolean;
+  /** In-flight races of the absorbed country cancelled with it. */
+  electionsCancelled?: number;
 }
 
 export async function mergeCountry(db: Db, args: MergeCountryArgs): Promise<MergeCountryResult> {
@@ -162,6 +165,7 @@ export async function mergeCountry(db: Db, args: MergeCountryArgs): Promise<Merg
   // source rather than a retired country with dangling rows.
   await transferOrRetireOrgMemberships(db, fromCountryId, toCountryId, currentTurn);
   await sweepNationalStrays(db, fromCountryId, toCountryId, absorbedTariffsWin);
+  const electionsCancelled = await cancelAbsorbedElections(db, fromCountryId, toCountryId);
 
   // Retire the shell. Not deletion — the documents stay for history and the
   // wiki; the country simply stops being enumerated, simulated, or joinable.
@@ -184,10 +188,16 @@ export async function mergeCountry(db: Db, args: MergeCountryArgs): Promise<Merg
     turn: currentTurn,
     eventType: "region_transferred",
     title: `${fromName} was absorbed into ${toName}.`,
-    details: { fromCountryId, toCountryId, regionsTransferred, merge: true },
+    details: {
+      fromCountryId,
+      toCountryId,
+      regionsTransferred,
+      electionsCancelled,
+      merge: true,
+    },
   });
 
-  return { ok: true, regionsTransferred, regionsSkipped, retired: true };
+  return { ok: true, regionsTransferred, regionsSkipped, retired: true, electionsCancelled };
 }
 
 /**
@@ -578,4 +588,88 @@ async function repointShareholderEntries(
       { $set: { shareholders: [...kept, merged], updatedAt: now } }
     );
   }
+}
+
+/**
+ * Cancel the absorbed country's in-flight races instead of handing them to the
+ * survivor.
+ *
+ * WHY THIS EXISTS. The region sweep deletes each transferred region's
+ * source-country races as it goes, but only those still keyed to the SOURCE.
+ * A race that arrives under the SURVIVOR's id with the absorbed side's
+ * electionType is invisible to that filter: `rescopeRegionToCountry` re-keys
+ * `elections` by region, and a race whose `electionType` belongs to the
+ * dissolved constitution (East Germany's `bundestag` / `landtag` /
+ * `ministerPresident` when the GDR is the shell that survives) crosses the
+ * border as an active race the survivor never scheduled. The turn's
+ * resolution machinery seats its winners into offices the survivor's
+ * constitution does not define, and the player sees BOTH parliaments
+ * campaigning at once — the reunified Germany running Bundestag and
+ * Volkskammer races side by side (ticket #1252).
+ *
+ * So the merge CANCELS them, exactly as `evacuateRegionPolitics` cancels the
+ * per-region races: the race belongs to an office the settlement ends, its
+ * candidates were standing for a country that stops existing, and the design
+ * is that the carried chamber keeps sitting rather than being re-elected —
+ * no election is called post-merge. Deleting the in-flight race (and its
+ * candidates, so nobody stays filed for a phantom contest) is what leaves
+ * the survivor running only its own election families.
+ *
+ * TWO CATCHES, both covering races that escaped the per-region sweep:
+ *  - still keyed to the DISSOLVED country (a region the sweep has not
+ *    reached, or a doc the re-key never matched);
+ *  - keyed to the SURVIVOR but carrying an electionType that belonged to the
+ *    dissolved constitution — the re-keyed race whose office name crossed the
+ *    border while the constitution it belonged to did not.
+ *
+ * The second filter reads `officeRemapFor` so it only fires for pairs with a
+ * declared mapping (a genuine merge of two constitutions). Any other pair
+ * falls through to the first catch alone, and generic region transfers —
+ * where the source SURVIVES — are untouched: this runs only inside a merge.
+ *
+ * Idempotent by construction: a re-run finds nothing left to cancel.
+ */
+async function cancelAbsorbedElections(
+  db: Db,
+  fromCountryId: CountryId,
+  toCountryId: CountryId
+): Promise<number> {
+  const live = { status: { $in: ["active", "upcoming"] as const } };
+
+  // 1. Every live race still keyed to the country being absorbed.
+  const strays = (await db
+    .collection<{ _id: import("mongodb").ObjectId }>("elections")
+    .find({ countryId: fromCountryId, ...live })
+    .project({ _id: 1 })
+    .toArray()) as unknown as Array<{ _id: import("mongodb").ObjectId }>;
+
+  // 2. Live races on the SURVIVOR whose electionType belongs to the dissolved
+  //    constitution — they arrived through the region re-key. The office remap
+  //    table tells us which types were the absorbed side's (mapped or retiring,
+  //    both end with the country); a type it does not name is some third
+  //    constitution's business and is left alone. The survivor never scheduled
+  //    these races itself — its own spawners only ever create its declared
+  //    office families — so cancelling loses no contest the survivor's own
+  //    machinery would not re-run.
+  const table = officeRemapFor(fromCountryId, toCountryId);
+  const absorbedTypes = new Set(table ? Object.keys(table) : []);
+  const survivorLive = (await db
+    .collection<{ _id: import("mongodb").ObjectId; electionType: string }>("elections")
+    .find({ countryId: toCountryId, ...live })
+    .project({ _id: 1, electionType: 1 })
+    .toArray()) as unknown as Array<{ _id: import("mongodb").ObjectId; electionType: string }>;
+  const foreign = survivorLive.filter((e) => absorbedTypes.has(e.electionType));
+
+  const ids = [...strays, ...foreign].map((e) => e._id);
+  if (ids.length === 0) return 0;
+
+  await db.collection("electionCandidates").deleteMany({ electionId: { $in: ids } });
+  const res = await db.collection("elections").deleteMany({ _id: { $in: ids } });
+  if ((res?.deletedCount ?? 0) > 0) {
+    console.log(
+      `[mergeCountry] ${fromCountryId}->${toCountryId}: cancelled ${res.deletedCount} in-flight ` +
+        `election(s) of the absorbed country`
+    );
+  }
+  return res?.deletedCount ?? 0;
 }

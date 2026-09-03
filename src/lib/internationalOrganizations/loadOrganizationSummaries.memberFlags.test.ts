@@ -78,6 +78,7 @@ describe("loadOrganizationSummaries — member vote and country flags", () => {
     });
     db.collection("governmentFormations").find.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([{ _id: "TR", countryId: "TR" }]),
+      project: vi.fn().mockReturnThis(),
     });
 
     const members = await nato();

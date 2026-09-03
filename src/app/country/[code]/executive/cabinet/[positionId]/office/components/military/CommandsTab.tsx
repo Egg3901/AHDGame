@@ -1,17 +1,21 @@
 "use client";
 
-import Link from "next/link";
 import type { MilitaryCommand, CommanderRef, ThreatLevel } from "@/lib/military/types";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import type { ConflictAssignment } from "@/lib/military/assignments";
 import { CommandsBuilder } from "./commands/CommandsBuilder";
 import { GeneralCorps } from "./GeneralCorps";
+import { NavairCommandLink } from "./NavairCommandLink";
 import type { CorpsMember } from "@/lib/db/collections/characterGenerals";
 
 /**
  * Commands tab for the Secretary of Defense Office — the national command builder
  * (create commands, assign regions/commanders/forces), inline. Persistence and pure
  * logic live in the shared military state; this tab is the cabinet-styled home for it.
+ *
+ * The tab opens with the Naval and air command door (ticket #1243): support's own
+ * navigation names this tab as where fleet orders live, so the way in has to be
+ * here, not only on the country lander's directory.
  */
 export function CommandsTab({
   commands,
@@ -49,23 +53,7 @@ export function CommandsTab({
 }) {
   return (
     <div className="space-y-4">
-      <section className="rounded-lg border border-card-border bg-card p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="text-[13px] font-semibold text-foreground">Naval and air command</h3>
-            <p className="mt-1 text-[12px] text-muted">
-              Station fleets and air wings, then set standing orders such as Blockade, Combat Air
-              Patrol, and Close Air Support.
-            </p>
-          </div>
-          <Link
-            href={`/country/${countryCode}/navair`}
-            className="shrink-0 rounded-lg bg-[var(--gov)] px-3 py-2 text-center text-[12px] font-bold text-[#1a1200]"
-          >
-            Open naval and air command
-          </Link>
-        </div>
-      </section>
+      <NavairCommandLink countryCode={countryCode} />
       <GeneralCorps
         corps={corps}
         candidates={commissionCandidates}

@@ -24,6 +24,7 @@ import { getPartyHex } from "@/lib/utils/politics";
 import { getPartyBudgetCollection } from "@/lib/db/collections";
 import {
   findPartyBySequentialId,
+  findStatePartyOrgRow,
   getPartyIdString,
   getStatePartyOrgDocumentId,
 } from "@/lib/db/partyLookup";
@@ -98,10 +99,12 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     const partyKey = getPartyIdString(party);
 
-    // Fetch state party org record (may not exist)
-    const statePartyOrg = await db.collection<StatePartyOrg>("statePartyOrg").findOne({
-      _id: getStatePartyOrgDocumentId(stateId, party),
-    });
+    // Fetch state party org record (may not exist). `findStatePartyOrgRow`
+    // resolves the row by its `{countryId, stateId, partyId}` triple first and
+    // falls back to the compound `_id`, so a row whose `_id` drifted (party
+    // renumber / region fuse, ticket #1256) still reads back here instead of
+    // showing 0 while the state's org breakdown shows the party's real number.
+    const statePartyOrg = await findStatePartyOrgRow(db, countryId, stateId, party);
 
     // Get state lean for display
     const { getStateLean } = await import("@/lib/utils/demographics");

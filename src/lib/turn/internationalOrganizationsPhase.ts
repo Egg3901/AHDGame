@@ -12,6 +12,7 @@ import {
   recordOrgHistoryEvent,
 } from "@/lib/internationalOrganizations/service";
 import { votingMembers } from "@/lib/internationalOrganizations/orgMembership";
+import { fillSilentBallots } from "@/lib/internationalOrganizations/closeTimeBallots";
 import { chargeOrganizationTribute } from "@/lib/internationalOrganizations/tribute";
 import {
   ORG_TRIBUTE_RATES_ANNUAL,
@@ -19,7 +20,10 @@ import {
 } from "@/lib/constants/internationalOrganizations";
 import { getAllCountryAccess } from "@/lib/countryAccess";
 import type { OrgMemberId } from "@/lib/db/types/internationalOrganization";
-import { dedupeOrganizationVotes } from "@/lib/internationalOrganizations/voteWrite";
+import {
+  dedupeOrganizationVotes,
+  upsertPendingOrganizationVote,
+} from "@/lib/internationalOrganizations/voteWrite";
 import {
   ballotIsPlayerOnly,
   ballotPasses,
@@ -187,6 +191,7 @@ export async function processInternationalOrganizationsTurn(
   duesCharged: number;
   tributeCharged: number;
   autonomousVotesCast: number;
+  closeTimeBallotsCast?: number;
 }> {
   // Auto-found orgs whose founding year has arrived BEFORE any vote/proposal
   // handling, so a newly founded org exists for this turn's steps.
@@ -464,6 +469,18 @@ async function resolveExpiredMembershipProposals(db: Db, currentTurn: number): P
     const voters = (
       await ballotVotingMembers(db, proposal.organizationId, "membership_proposal")
     ).filter((m: string) => m !== proposingCountryId);
+
+    // Close-time ballots (active mode): a silent autonomy-active voter is the
+    // planner having never reached this item, not a deliberate nay. Cast its
+    // ballot before the tally, or one busy six-hour cycle vetoes the bloc.
+    await fillSilentBallots(
+      db,
+      [proposal],
+      () => voters,
+      () => proposingCountryId,
+      async (item, vote) => upsertPendingOrganizationVote(col, item._id, vote),
+      currentTurn
+    );
     const uniqueVotes = dedupeOrganizationVotes(proposal.votes as ProposalVoteRecord[]);
 
     // Unanimous current members must vote "yes". Abstain or no-vote counts as
@@ -575,6 +592,17 @@ async function resolveExpiredOrganizationLegislation(db: Db, currentTurn: number
     const members = await ballotVotingMembers(db, item.organizationId, item.type);
     const voterSet = new Set<string>(members);
     const votingParties = parties.filter((p): p is CountryId => voterSet.has(p));
+    // Close-time ballots (active mode): fill a silent autonomy-active voter
+    // before the tally. An FTA is voted by its parties, any other resolution by
+    // the whole voting roll — the same split resolutionPasses applies.
+    await fillSilentBallots(
+      db,
+      [item],
+      () => (item.type === "free_trade_agreement" ? votingParties : members),
+      () => null,
+      async (doc, vote) => upsertPendingOrganizationVote(col, doc._id, vote),
+      currentTurn
+    );
     const uniqueVotes = dedupeOrganizationVotes(item.votes as ProposalVoteRecord[]);
     // The UN's founding members hold a permanent-member veto; no other org does.
     const permanentMembers =
@@ -698,6 +726,16 @@ async function resolveExpiredLeadershipElections(db: Db, currentTurn: number): P
     // This also keeps the quorum honest: a silent client state would otherwise
     // count toward turnout it can never supply.
     const members = await ballotVotingMembers(db, election.organizationId, "leadership_election");
+    // Close-time ballots (active mode): fill a silent autonomy-active voter
+    // before the tally; a candidate does not vote on its own election.
+    await fillSilentBallots(
+      db,
+      [election],
+      () => members,
+      (doc) => doc.candidateCountryId,
+      async (doc, vote) => upsertPendingOrganizationVote(electionsCol, doc._id, vote),
+      currentTurn
+    );
     const uniqueVotes = dedupeOrganizationVotes(election.votes as ProposalVoteRecord[]);
     // Only an active "yes" counts. A member who abstains or never votes withholds
     // consent exactly as a "no" does, so the denominator is the roll rather than
