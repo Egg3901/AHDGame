@@ -34,6 +34,11 @@ The runner skips any migration whose marker already exists (unless
 `--force` is passed alongside `--only`). Schema is formalized in
 `src/lib/migrations/types.ts` (`MigrationMarker`).
 
+The web process does not run this entire historical registry at startup.
+Repairs that must deploy atomically with application code need an explicit,
+idempotent entry in `src/lib/migrations/startupMigrations.ts`; that audited
+allowlist runs during `instrumentation.ts` boot and uses the same markers.
+
 ### Adding a new migration
 
 1. Create `scripts/migrations/<id>.ts` with the migration body. Export
