@@ -24,6 +24,13 @@ vi.mock("@/lib/api/accessLog", () => ({
   logApiAccess: vi.fn(),
 }));
 
+vi.mock("./tierLimits", () => ({
+  resolvePublicApiTier: vi.fn().mockResolvedValue(null),
+  publicApiMaxRequests: vi.fn((tier: string | null) =>
+    tier === "supporter-plus" ? 90 : tier === "supporter-plus-plus" ? 180 : 60
+  ),
+}));
+
 describe("publicApiGuard", () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -46,10 +53,12 @@ describe("publicApiGuard", () => {
   it("returns ok with rate-limit headers when user API key is valid", async () => {
     const { validateUserApiKey } = await import("@/lib/api/userApiAuth");
     const { durableRateLimit } = await import("@/lib/api/rateLimit.mongo");
+    const { resolvePublicApiTier } = await import("./tierLimits");
     vi.mocked(validateUserApiKey).mockResolvedValue({
       valid: true,
       ownerUserId: "user123",
     } as never);
+    vi.mocked(resolvePublicApiTier).mockResolvedValue(null);
     vi.mocked(durableRateLimit).mockResolvedValue({
       ok: true,
       limit: 60,
@@ -64,6 +73,73 @@ describe("publicApiGuard", () => {
     if (!result.ok) throw new Error("expected guard success");
     expect(result.headers["X-RateLimit-Limit"]).toBe("60");
     expect(durableRateLimit).toHaveBeenCalledWith("user-api:test:user123", 60, 60_000);
+  });
+
+  it("multiplies the user allowance for an active Supporter+ owner", async () => {
+    const { validateUserApiKey } = await import("@/lib/api/userApiAuth");
+    const { durableRateLimit } = await import("@/lib/api/rateLimit.mongo");
+    const { resolvePublicApiTier } = await import("./tierLimits");
+    vi.mocked(validateUserApiKey).mockResolvedValue({
+      valid: true,
+      ownerUserId: "plus-user",
+    } as never);
+    vi.mocked(resolvePublicApiTier).mockResolvedValue("supporter-plus");
+    vi.mocked(durableRateLimit).mockResolvedValue({
+      ok: true,
+      limit: 90,
+      remaining: 89,
+      resetAt: 1_700_000_000_000,
+    });
+
+    const { publicApiGuard } = await import("./middleware");
+    const result = await publicApiGuard(new Request("http://localhost"), "test");
+
+    expect(result.ok).toBe(true);
+    expect(durableRateLimit).toHaveBeenCalledWith("user-api:test:plus-user", 90, 60_000);
+  });
+
+  it("multiplies the user allowance for an active Supporter++ owner", async () => {
+    const { validateUserApiKey } = await import("@/lib/api/userApiAuth");
+    const { durableRateLimit } = await import("@/lib/api/rateLimit.mongo");
+    const { resolvePublicApiTier } = await import("./tierLimits");
+    vi.mocked(validateUserApiKey).mockResolvedValue({
+      valid: true,
+      ownerUserId: "plusplus-user",
+    } as never);
+    vi.mocked(resolvePublicApiTier).mockResolvedValue("supporter-plus-plus");
+    vi.mocked(durableRateLimit).mockResolvedValue({
+      ok: true,
+      limit: 180,
+      remaining: 179,
+      resetAt: 1_700_000_000_000,
+    });
+
+    const { publicApiGuard } = await import("./middleware");
+    const result = await publicApiGuard(new Request("http://localhost"), "test");
+
+    expect(result.ok).toBe(true);
+    expect(durableRateLimit).toHaveBeenCalledWith("user-api:test:plusplus-user", 180, 60_000);
+  });
+
+  it("keeps the bot token on the flat base allowance regardless of tier", async () => {
+    const { requirePublicBotToken } = await import("@/lib/api/requireBotToken");
+    const { validateUserApiKey } = await import("@/lib/api/userApiAuth");
+    const { durableRateLimit } = await import("@/lib/api/rateLimit.mongo");
+    const { resolvePublicApiTier } = await import("./tierLimits");
+    vi.mocked(validateUserApiKey).mockResolvedValue({ valid: false } as never);
+    vi.mocked(requirePublicBotToken).mockReturnValue(true);
+    vi.mocked(durableRateLimit).mockResolvedValue({
+      ok: true,
+      limit: 60,
+      remaining: 59,
+      resetAt: 1_700_000_000_000,
+    });
+
+    const { publicApiGuard } = await import("./middleware");
+    await publicApiGuard(new Request("http://localhost"), "test");
+
+    expect(resolvePublicApiTier).not.toHaveBeenCalled();
+    expect(durableRateLimit).toHaveBeenCalledWith("public:v1:test", 60, 60_000);
   });
 
   it("falls back to bot token when no user API key", async () => {

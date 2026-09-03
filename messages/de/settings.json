@@ -324,6 +324,7 @@
       "viewDocs": "API-Dokumentation ansehen →",
       "personalTitle": "Persönliche API-Schlüssel",
       "personalHint": "Schlüssel, die an dein Konto gebunden sind. Öffentliche Schlüssel können nur öffentliche Daten lesen. Private Schlüssel können außerdem Wahlkampfgelder senden und Devisen in deinem Namen handeln, behandle sie also wie ein Passwort.",
+      "rateLimitHint": "Für Lese-Endpunkte gilt ein Ratenlimit pro Schlüssel. Supporter+-Schlüssel erhalten das 1,5-Fache des Standardkontingents, Supporter++-Schlüssel das 3-Fache. Jede Antwort enthält dein aktuelles Kontingent im Header X-RateLimit-Limit.",
       "keyNamePlaceholder": "Schlüsselname",
       "readOnly": "Nur lesen",
       "readSend": "Lesen + Geld senden",
