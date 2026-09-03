@@ -6,6 +6,7 @@ import {
   GLOBAL_BROAD_FUND,
   SECTOR_FUND_PRIMARY_TYPES,
   BROAD_FUND_COUNTRIES,
+  BOND_FUND_DEFINITIONS,
 } from "./fundDefinitions";
 
 describe("fundDefinitions", () => {
@@ -112,9 +113,9 @@ describe("fundDefinitions", () => {
   });
 
   describe("getAllFundDefinitions", () => {
-    it("returns the correct total: 8×2 country broad + 1 global broad + 17 sector = 34", () => {
+    it("returns the correct total: 8×2 country broad + 1 global broad + 17 sector + 12 bond = 46", () => {
       const all = getAllFundDefinitions();
-      expect(all).toHaveLength(34);
+      expect(all).toHaveLength(46);
     });
 
     it("returns unique slugs for all funds", () => {
@@ -129,13 +130,14 @@ describe("fundDefinitions", () => {
       expect(new Set(tickers).size).toBe(tickers.length);
     });
 
-    it("country funds have countryId and topN", () => {
+    it("country funds have countryId, and equity ones a topN", () => {
       const all = getAllFundDefinitions();
       const countryFunds = all.filter((f) => f.scope === "country");
-      expect(countryFunds.length).toBe(16); // 8 countries × 2
+      expect(countryFunds.length).toBe(24); // 8 countries × 2 equity + 8 bond
       for (const f of countryFunds) {
         expect(f.countryId).toBeTruthy();
-        expect(f.topN).toBeTruthy();
+        if (f.kind === "bond") expect(f.bondUniverse).toBeTruthy();
+        else expect(f.topN).toBeTruthy();
       }
     });
 
@@ -155,5 +157,28 @@ describe("fundDefinitions", () => {
       expect(globalBroad!.countryId).toBeUndefined();
       expect(globalBroad!.sectorType).toBeUndefined();
     });
+  });
+});
+
+describe("BOND_FUND_DEFINITIONS", () => {
+  it("has one home sovereign fund per broad-fund country plus four global funds", () => {
+    const home = BOND_FUND_DEFINITIONS.filter((d) => d.scope === "country");
+    const global = BOND_FUND_DEFINITIONS.filter((d) => d.scope === "global");
+    expect(home).toHaveLength(8);
+    expect(global.map((d) => d.slug).sort()).toEqual([
+      "global_corporate_ig",
+      "global_emerging_sovereign",
+      "global_high_yield",
+      "global_sovereign_ig",
+    ]);
+    for (const def of home)
+      expect(def.bondUniverse).toEqual({ issuerType: "sovereign", homeOnly: true });
+  });
+
+  it("keeps slugs and tickers unique across every fund kind", () => {
+    const all = getAllFundDefinitions();
+    expect(new Set(all.map((f) => f.slug)).size).toBe(all.length);
+    expect(new Set(all.map((f) => f.ticker)).size).toBe(all.length);
+    expect(all.filter((f) => f.kind === "bond")).toHaveLength(BOND_FUND_DEFINITIONS.length);
   });
 });
