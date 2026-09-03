@@ -54,6 +54,7 @@ import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import { closeCeoTenure } from "@/lib/corporations/ceoHistory";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
+import { fillBestBuyOrderForMarketSell } from "@/lib/corporations/commands/shareTrading/fillBestBuyOrder";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -463,6 +464,49 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
         };
       }
 
+      // Proceeds are in ₳; convert to imperial character's home currency before crediting.
+      const imperialHomeCurrency = getHomeCurrency(imperial);
+      let imperialFxRate = 1.0;
+      if (forexEnabled) {
+        const fxResult = await loadCharacterFxRate(db, imperialHomeCurrency);
+        if (!fxResult.ok) {
+          return NextResponse.json(
+            { error: "Exchange rate unavailable, try again shortly" },
+            { status: 503 }
+          );
+        }
+        imperialFxRate = fxResult.rate;
+      }
+      const proceedsInImperialHome = forexEnabled ? proceeds * imperialFxRate : proceeds;
+
+      if (!shouldVacateCeo) {
+        const orderFill = await fillBestBuyOrderForMarketSell({
+          db,
+          corporation,
+          seller: {
+            id: imperial._id,
+            name: imperial.name,
+            collectionName: "imperialCharacters",
+            homeCurrency: imperialHomeCurrency,
+            isImperial: true,
+          },
+          shares,
+          forexEnabled,
+          sellerFxRate: imperialFxRate,
+          now,
+          turn: await getCurrentTurn(db),
+        });
+        if (orderFill.filled) {
+          return NextResponse.json({
+            success: true,
+            sharesSold: orderFill.shares,
+            proceeds: Math.round(orderFill.proceedsAnchor * 100) / 100,
+            pricePerShare: orderFill.pricePerShareLocal,
+            execution: "order_book",
+          });
+        }
+      }
+
       const buybackGate = await gateIssuerBuyback();
       if (buybackGate) return buybackGate;
 
@@ -481,21 +525,6 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
           { status: 409 }
         );
       }
-
-      // Proceeds are in ₳; convert to imperial character's home currency before crediting.
-      const imperialHomeCurrency = getHomeCurrency(imperial);
-      let imperialFxRate = 1.0;
-      if (forexEnabled) {
-        const fxResult = await loadCharacterFxRate(db, imperialHomeCurrency);
-        if (!fxResult.ok) {
-          return NextResponse.json(
-            { error: "Exchange rate unavailable, try again shortly" },
-            { status: 503 }
-          );
-        }
-        imperialFxRate = fxResult.rate;
-      }
-      const proceedsInImperialHome = forexEnabled ? proceeds * imperialFxRate : proceeds;
 
       const sellerCredit = await db.collection<ImperialCharacter>("imperialCharacters").updateOne(
         { _id: imperial._id },
@@ -742,6 +771,34 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
       charFxRate = fxResult.rate;
     }
     const proceedsInHome = forexEnabled ? proceeds * charFxRate : proceeds;
+
+    if (!shouldVacateCeo) {
+      const orderFill = await fillBestBuyOrderForMarketSell({
+        db,
+        corporation,
+        seller: {
+          id: charDoc._id,
+          name: charDoc.name,
+          collectionName: "characters",
+          homeCurrency,
+          isImperial: false,
+        },
+        shares,
+        forexEnabled,
+        sellerFxRate: charFxRate,
+        now,
+        turn: await getCurrentTurn(db),
+      });
+      if (orderFill.filled) {
+        return NextResponse.json({
+          success: true,
+          sharesSold: orderFill.shares,
+          proceeds: Math.round(orderFill.proceedsAnchor * 100) / 100,
+          pricePerShare: orderFill.pricePerShareLocal,
+          execution: "order_book",
+        });
+      }
+    }
 
     const buybackGate = await gateIssuerBuyback();
     if (buybackGate) return buybackGate;

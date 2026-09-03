@@ -7,16 +7,16 @@ import { insertFundTransaction } from "@/lib/indexFunds/fundQueries";
  * Index-fund-owned order-book buy orders.
  *
  * Funds may place limit *buy* orders against a corporation's public float that
- * rest on the order book and fill in the turn matcher (`fillPendingShareOrders`)
- * when the market price falls to/under the limit. Sells are handled by the
- * existing float-sell / redemption paths, so only buy placement + cancel live
- * here.
+ * rest on the order book. They fill either when the turn matcher sees the
+ * market price at or below the limit, or when a shareholder submits a market
+ * sell that the quote can cover. Sell quote placement and cancellation live
+ * here as well.
  *
  * Money conservation: at placement the fund's `cashAnchor` is debited (atomic,
  * balance-gated) by the full anchor escrow. On fill the matcher refunds the
- * unused portion (`escrow − actualCost`) back to `cashAnchor` and routes the
- * actual cost into the issuer treasury — exactly mirroring a character buy. On
- * cancel the remaining (un-filled) escrow is refunded to `cashAnchor`.
+ * unused portion (`escrow − actualCost`) back to `cashAnchor`. A float fill
+ * routes cost to the issuer; a shareholder market sell routes escrow to that
+ * seller. On cancel the remaining unfilled escrow returns to `cashAnchor`.
  */
 
 /**

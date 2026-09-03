@@ -100,6 +100,23 @@ export async function listActiveFunds(db: Db): Promise<IndexFund[]> {
 }
 
 /**
+ * Funds the turn engine must continue servicing. A fund paused automatically
+ * for backing can become solvent again as prices, coupons, and maturities move,
+ * so excluding it from NAV and redemption work would make the pause permanent.
+ * Manual and listing pauses remain inert until their owning workflow resumes
+ * them.
+ */
+export async function listServiceableFunds(db: Db): Promise<IndexFund[]> {
+  return db
+    .collection<IndexFund>(FUND_COLLECTION)
+    .find({
+      $or: [{ status: "active" }, { status: "paused", pauseReason: "backing_ratio" }],
+    })
+    .sort({ scope: 1, kind: 1, countryId: 1, sectorType: 1 })
+    .toArray();
+}
+
+/**
  * Funds a corporation sponsors, newest first, excluding delisted. Powers the
  * owner-facing "funds this corp sponsors" surface — there was previously no way
  * to list a corp's own funds after the session that chartered them (ticket 1088).

@@ -748,10 +748,6 @@ export function makeNppCorpDecision(
   const divestedSectorIds: ObjectId[] = [];
   const unownedDraws: NonNullable<NppCorpDecision["unownedDraws"]> = [];
   const reinvestments: NonNullable<NppCorpDecision["reinvestments"]> = [];
-  // A growth-capex build no longer draws the unowned pool, so `unownedDraws`
-  // can't stand in for "made a discretionary investment this turn" any more.
-  // Track it directly so retained earnings still get first claim over dividends.
-  let placedGrowthCapex = false;
   let shortageCreditRequest: NppCorpDecision["shortageCreditRequest"];
   let entryDiagnostic: NppCorpDecision["entryDiagnostic"];
 
@@ -1906,7 +1902,6 @@ export function makeNppCorpDecision(
       // owner's share of owned+headroom rises, without touching the pool.)
       cashLocal -= costLocal;
       updates.liquidCapital = cashLocal;
-      if (candidate.growthUnits > 0) placedGrowthCapex = true;
       reinvestments.push({
         sectorId: sector._id,
         sectorType: sector.sectorType,
@@ -1919,12 +1914,12 @@ export function makeNppCorpDecision(
     }
   }
 
-  // Productive investment gets first claim on retained earnings. Without this
-  // override the same decision could queue a factory and raise its dividend,
-  // leaking the cash buffer the next investment turn depends on.
-  if (plants?.enabled && (unownedDraws.length > 0 || placedGrowthCapex)) {
-    updates.dividendRate = 0;
-  }
+  // Expansion and shareholder returns can coexist. The build paths above have
+  // already paid capex and preserved the effective cash floor; forcing the
+  // dividend rate to zero here made continuously-growing NPP corporations
+  // retain every future profitable turn as well. The margin-based rate from
+  // section 4 applies only to positive after-tax income at settlement time, so
+  // it cannot spend the operating reserve or distribute a loss.
 
   return {
     corpId: corp._id,
