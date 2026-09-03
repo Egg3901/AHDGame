@@ -51,6 +51,7 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
     vi.mocked(findPartyBySequentialId).mockResolvedValue({
       _id: new ObjectId(),
       sequentialId: 1,
+      treasury: 50_000_000,
       countryId: "US",
       name: "Test Party",
       chairId: new ObjectId(),
@@ -68,6 +69,7 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
       countryId: "US",
       organization: 20,
       politicalStrength: 10,
+      treasury: 10_000_000,
       hasPresence: true,
       chairId: stateChairId,
       viceChairId: new ObjectId(),
@@ -81,6 +83,7 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
           countryId: "US",
           organization: 20,
           politicalStrength: 10,
+          treasury: 10_000_000,
         },
         {
           _id: `${stateId}_2`,
@@ -89,6 +92,7 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
           countryId: "US",
           organization: 30,
           politicalStrength: 8,
+          treasury: 10_000_000,
         },
       ],
     } as never);
@@ -133,6 +137,7 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
       countryId: "US",
       organization: 60,
       politicalStrength: 29,
+      treasury: 10_000_000,
       hasPresence: true,
       chairId: stateChairId,
     });
@@ -145,6 +150,7 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
           countryId: "US",
           organization: 60,
           politicalStrength: 29,
+          treasury: 10_000_000,
         },
         {
           _id: `${stateId}_2`,
@@ -153,6 +159,7 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
           countryId: "US",
           organization: 20,
           politicalStrength: 6,
+          treasury: 10_000_000,
         },
         {
           _id: `${stateId}_3`,
@@ -161,6 +168,7 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
           countryId: "US",
           organization: 20,
           politicalStrength: 4,
+          treasury: 10_000_000,
         },
       ],
     } as never);
@@ -183,6 +191,7 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
       countryId: "US",
       organization: 0,
       politicalStrength: 10,
+      treasury: 10_000_000,
       hasPresence: false,
       chairId: stateChairId,
     });
@@ -232,6 +241,7 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
           countryId: "US",
           organization: 30,
           politicalStrength: 8,
+          treasury: 10_000_000,
         },
       ],
     } as never);
@@ -240,6 +250,7 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
     vi.mocked(findPartyBySequentialId).mockResolvedValue({
       _id: new ObjectId(),
       sequentialId: 1,
+      treasury: 50_000_000,
       countryId: "US",
       name: "Test Party",
       chairId: nationalChairId,
@@ -283,6 +294,7 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
           countryId: "US",
           organization: 100,
           politicalStrength: 10,
+          treasury: 10_000_000,
         },
         {
           _id: `${stateId}_2`,
@@ -291,6 +303,7 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
           countryId: "US",
           organization: 0, // no Org → not a poachable rival
           politicalStrength: 10,
+          treasury: 10_000_000,
         },
       ],
     } as never);
@@ -301,6 +314,7 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
       countryId: "US",
       organization: 100,
       politicalStrength: 10,
+      treasury: 10_000_000,
       hasPresence: true,
       chairId: stateChairId,
     });
@@ -319,6 +333,7 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
     vi.mocked(findPartyBySequentialId).mockResolvedValue({
       _id: new ObjectId(),
       sequentialId: 1,
+      treasury: 50_000_000,
       countryId: "US",
       name: "Test Party",
       chairId: nationalChairId,
@@ -341,6 +356,37 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
     const body = await response.json();
     expect(body.ok).toBe(true);
     expect(body.scope).toBe("national-targeted");
+  });
+
+  // The national HQ's bulk tool prices with `?psPool=national` because that is
+  // the pool its run will spend; the tier sets the cash rate and which treasury
+  // is checked, so the param has to reach the projection.
+  it("honors ?psPool=national for a spender eligible for that pool", async () => {
+    // Dual-role: the same character chairs the party nationally AND this state.
+    // Default precedence would pick "state" and quote the half-rate price.
+    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+    vi.mocked(findPartyBySequentialId).mockResolvedValue({
+      _id: new ObjectId(),
+      sequentialId: 1,
+      treasury: 50_000_000,
+      countryId: "US",
+      name: "Test Party",
+      chairId: stateChairId,
+      viceChairId: new ObjectId(),
+    } as never);
+
+    const request = new Request(
+      "http://localhost/api/country/us/region/CA/party/1/build-org/preview?psPool=national"
+    );
+    const { GET } = await import("./route");
+    const response = await GET(request, {
+      params: Promise.resolve({ code: "us", id: stateId, partyId }),
+    });
+    const body = await response.json();
+
+    expect(body.ok).toBe(true);
+    expect(body.scope).toBe("national-targeted");
+    expect(body.cashPrice).toBe(Math.round(75_000 * 0.075 * body.effectiveCost));
   });
 
   it("does NOT mutate any collection (no-mutation invariant)", async () => {

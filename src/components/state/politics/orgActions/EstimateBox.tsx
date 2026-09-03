@@ -17,8 +17,12 @@ export interface EstimateBoxProps {
     /** Ladder escalation on top of base (0 when no pressure). */
     ladderPS: number;
   };
-  /** Optional funds cost. Rendered only when present — PS-only today. */
-  funds?: { amount: number; currencyCode: string };
+  /**
+   * Optional funds cost. Build Org charges treasury alongside PS from
+   * 2026-09-02; `fundedFraction` below 1 means the treasury can only part-fund
+   * the click, and the Org gain shown has already been scaled down to match.
+   */
+  funds?: { amount: number; currencyCode: string; fundedFraction?: number };
   gain: {
     /** Row label, e.g. "Estimated Gain" (Build) or "Estimated Effect" (Contest). */
     label: string;
@@ -54,7 +58,7 @@ export function EstimateBox({ variant, tone, cost, funds, gain, factors }: Estim
             {costLabel}
             <Tooltip
               label="About Build Org cost"
-              content="Base Political Strength (PS) cost plus a per-state pressure ladder that rises after each spend in this state. Higher pressure = more PS per click."
+              content="Base Political Strength (PS) cost plus a per-state pressure ladder that rises after each spend in this state. Higher pressure = more PS per click, and more money: the cash price scales with the PS cost and is billed to the same treasury tier that pays the Strength."
             />
           </div>
           <div className="mt-1 text-lg font-bold tabular-nums leading-none">
@@ -92,14 +96,22 @@ export function EstimateBox({ variant, tone, cost, funds, gain, factors }: Estim
       </div>
 
       {funds ? (
-        <div className="flex items-center justify-between gap-3 text-xs">
-          <span className="text-muted">
-            {variant === "projection" ? "Estimated Funds" : "Funds"}
-          </span>
-          <span className="font-bold tabular-nums">
-            {fundsSymbol}
-            {funds.amount.toLocaleString("en-US")}
-          </span>
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-3 text-xs">
+            <span className="text-muted">
+              {variant === "projection" ? "Estimated Funds" : "Funds"}
+            </span>
+            <span className="font-bold tabular-nums">
+              {fundsSymbol}
+              {Math.round(funds.amount).toLocaleString("en-US")}
+            </span>
+          </div>
+          {funds.fundedFraction !== undefined && funds.fundedFraction < 1 ? (
+            <div className="text-[10px] text-warning">
+              Partly funded: the treasury covers {Math.round(funds.fundedFraction * 100)}% of this
+              click, so the Org gain above is reduced to match.
+            </div>
+          ) : null}
         </div>
       ) : null}
 

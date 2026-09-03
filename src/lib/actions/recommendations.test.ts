@@ -2,6 +2,8 @@
 import { describe, it, expect } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Character, PartyBudget, PoliticalParty, StatePartyOrg } from "@/lib/db/types";
+import { orgBuildCashPrice } from "@/lib/politicalStrength/buildOrgFunding";
+import { BUILD_ORG_BASE_PS_COST } from "@/lib/politicalStrength/strengthConstants";
 import {
   checkStatThresholds,
   findUnownedOpportunities,
@@ -371,6 +373,36 @@ describe("checkPartyActions", () => {
     const orgRec = recs.find((r) => r.action.type === "build-org");
     expect(orgRec).toBeDefined();
     expect(orgRec?.priority).toBe("high");
+  });
+
+  // Build Org charges the treasury as well as PS from 2026-09-02. A card that
+  // states `funds: 0` tells the player the action is free.
+  it("quotes the cash cost of Build Org rather than claiming it is free", () => {
+    const character = createCharacter({ party: "democrats" });
+    const statePartyOrg: StatePartyOrg = {
+      _id: "GA_democrats",
+      countryId: "US",
+      stateId: "GA",
+      partyId: "democrats",
+      organization: 30,
+      politicalStrength: 12,
+      treasury: 5_000_000,
+      stateTaxRate: 0,
+      chairId: null,
+      viceChairId: null,
+      treasurerId: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      hasPresence: true,
+    };
+
+    const recs = checkPartyActions(null, null, statePartyOrg, character);
+    const orgRec = recs.find((r) => r.action.type === "build-org");
+
+    expect(orgRec?.action.estimatedCost.funds).toBe(
+      orgBuildCashPrice("US", "state", BUILD_ORG_BASE_PS_COST)
+    );
+    expect(orgRec?.why).toMatch(/money|funds|treasury/i);
   });
 
   it("does not suggest Build Org when PS is zero (nothing to spend)", () => {

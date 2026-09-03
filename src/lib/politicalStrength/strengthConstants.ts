@@ -350,6 +350,49 @@ export function psInvestmentRate(countryId: CountryId, scope: "national" | "stat
 export const BUILD_ORG_BASE_PS_COST = 1 as const;
 
 /**
+ * Share of the country's per-`+1 PS` treasury rate charged in CASH for one
+ * Build Org click, per point of EFFECTIVE PS cost. Price is therefore
+ * `TREASURY_PS_RATE_BY_COUNTRY[country][scope] × this × effectivePsCost`, which
+ * (a) normalizes across currencies via the same table the PS streams use and
+ * (b) makes the pressure ladder bite in cash as well as in PS — a party
+ * grinding one state at the ladder's cap pays 8× per click.
+ *
+ * Calibrated 2026-09-02 against the live ledger rather than against a
+ * plausible-looking sticker price: the 168-turn window before the change saw
+ * 23,451 build-org spends totalling ~10k PS for the busiest party alone, so a
+ * rate that reads cheap per click is not cheap in aggregate. At `0.075` that
+ * window's building would have cost each of the top twelve builders between
+ * 17% and 124% of its 168-turn treasury inflow (median ~60%), making org
+ * building the largest discretionary spend line in the game without shutting
+ * anyone out. The single party over 100% (US MON) averaged 6.0 PS/click — i.e.
+ * it built almost exclusively at a saturated pressure ladder, which is exactly
+ * the pattern the ×`effectivePsCost` term is meant to price.
+ *
+ * Those figures assume behaviour unchanged, so they are an upper bound; real
+ * spend settles lower as parties spread clicks to let pressure decay.
+ */
+export const ORG_BUILD_TREASURY_FRACTION = 0.075 as const;
+
+/**
+ * Floor on the funded fraction of a Build Org click (see `buildOrgFunding`).
+ *
+ * Build Org SOFT-fails on money: a party that cannot cover the full price pays
+ * what it has and gets proportionally less Org, rather than being refused. That
+ * matters because the parties least able to pay are the ones with the most
+ * ground to make up — 115 of 304 US state-party rows sat at ≤ 0 treasury when
+ * this shipped — and a hard gate would lock them out of the one action that
+ * fixes their position, undoing `BUILD_ORG_CATCHUP_BONUS`.
+ *
+ * The floor bounds that in both directions. Below it the click is REFUSED
+ * before any PS is spent, so nobody buys a near-worthless click; at or above
+ * it the click lands at the funded fraction. After PS has been committed the
+ * fraction is clamped UP to this floor (`clampFundedFraction`), so a
+ * concurrent debit that drains the treasury mid-click can never turn committed
+ * PS into zero Org.
+ */
+export const ORG_BUILD_MIN_FUNDED_FRACTION = 0.25 as const;
+
+/**
  * Base Org% gain at ideal conditions (full headroom, fresh own Org, full
  * PS reserve relative to rivals, behind in this state). The actual gain
  * scales by the four factors in `calcUnifiedBuildOrg`.

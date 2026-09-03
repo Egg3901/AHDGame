@@ -1216,6 +1216,7 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
               canManage={canUsePartyInfluence}
               canSpendPs={canUsePartyInfluence}
               nationalPoliticalStrength={party.politicalStrength ?? 0}
+              nationalTreasury={party.treasury ?? 0}
               onNationalPsSpent={fetchParty}
             />
           )}

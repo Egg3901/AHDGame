@@ -15,6 +15,7 @@ export function StatePartyLinksTab({
   canManage = false,
   canSpendPs = false,
   nationalPoliticalStrength = 0,
+  nationalTreasury = 0,
   onNationalPsSpent,
 }: {
   partyId: string;
@@ -23,6 +24,7 @@ export function StatePartyLinksTab({
   canManage?: boolean;
   canSpendPs?: boolean;
   nationalPoliticalStrength?: number;
+  nationalTreasury?: number;
   onNationalPsSpent?: () => void;
 }) {
   return (
@@ -33,6 +35,7 @@ export function StatePartyLinksTab({
       canManage={canManage}
       canSpendPs={canSpendPs}
       nationalPoliticalStrength={nationalPoliticalStrength}
+      nationalTreasury={nationalTreasury}
       onNationalPsSpent={onNationalPsSpent}
     />
   );
