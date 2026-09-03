@@ -6,17 +6,25 @@ import {
   placeFundShareBuyOrder,
   placeFundShareSellOrder,
 } from "@/lib/indexFunds/fundShareOrders";
+import {
+  planEquityLiquidityQuoteRules,
+  type EquityLiquidityRuleQuotePlan,
+} from "@/lib/indexFunds/equityLiquidity/rules";
 
-export const EQUITY_LIQUIDITY_HALF_SPREAD = 0.02;
-export const EQUITY_LIQUIDITY_MAX_LISTING_SHARE = 0.4;
-export const EQUITY_LIQUIDITY_MAX_LISTINGS = 256;
-export const EQUITY_LIQUIDITY_MAX_QUOTES_PER_FUND = 24;
-export const EQUITY_LIQUIDITY_MAX_HOLDING_SHARE = 0.1;
-export const EQUITY_LIQUIDITY_MAX_ISSUED_SHARE = 0.001;
-export const EQUITY_LIQUIDITY_MAX_CASH_SHARE = 0.15;
-export const EQUITY_LIQUIDITY_STRESS_HAIRCUT = 0.1;
-export const EQUITY_LIQUIDITY_MAX_STRESS_LOSS_SHARE = 0.005;
-export const EQUITY_LIQUIDITY_MIN_NOTIONAL_ANCHOR = 100;
+export {
+  EQUITY_LIQUIDITY_HALF_SPREAD,
+  EQUITY_LIQUIDITY_MAX_LISTING_SHARE,
+  EQUITY_LIQUIDITY_MAX_LISTINGS,
+  EQUITY_LIQUIDITY_MAX_QUOTES_PER_FUND,
+  EQUITY_LIQUIDITY_MAX_HOLDING_SHARE,
+  EQUITY_LIQUIDITY_MAX_ISSUED_SHARE,
+  EQUITY_LIQUIDITY_MAX_CASH_SHARE,
+  EQUITY_LIQUIDITY_STRESS_HAIRCUT,
+  EQUITY_LIQUIDITY_MAX_STRESS_LOSS_SHARE,
+  EQUITY_LIQUIDITY_MIN_NOTIONAL_ANCHOR,
+  EQUITY_LIQUIDITY_TARGET_NOTIONAL_ANCHOR,
+  EQUITY_LIQUIDITY_TARGET_MARKET_CAP_SHARE,
+} from "@/lib/indexFunds/equityLiquidity/rules";
 
 export const EQUITY_LIQUIDITY_SNAPSHOTS_COLLECTION = "equityLiquidityFacilitySnapshots";
 
@@ -26,13 +34,16 @@ export interface EquityLiquidityListing {
   referencePriceAnchor: number;
   totalShares: number;
   fxRate: number;
+  type?: Corporation["type"];
+  secondaryType?: Corporation["secondaryType"];
   corporation: Pick<Corporation, "_id" | "countryId" | "liquidCurrencyCode">;
 }
 
 export interface EquityLiquidityQuotePlan {
   fundId: ObjectId;
   corporationId: ObjectId;
-  shares: number;
+  bidShares: number;
+  askShares: number;
   bidPriceLocal: number;
   askPriceLocal: number;
   referencePriceLocal: number;
@@ -51,21 +62,21 @@ export interface EquityLiquidityFacilitySnapshot {
   quotePairsPlanned: number;
   quotePairsPlaced: number;
   quotePairsFailed: number;
+  bidQuotesPlanned: number;
+  bidQuotesPlaced: number;
+  askQuotesPlanned: number;
+  askQuotesPlaced: number;
   bidDepthAnchor: number;
   askDepthAnchor: number;
   stressLossAtRiskAnchor: number;
   participatingFunds: number;
 }
 
-function positive(value: number | undefined): number {
-  return Number.isFinite(value) && (value ?? 0) > 0 ? value! : 0;
-}
-
 /**
  * Allocate one provider to each quoted listing. Cash-at-risk is capped by both
  * 15 percent of live cash and a 0.5 percent AUM loss under a 10 percent price
- * shock. Inventory is capped at 10 percent of a holding and 0.1 percent of the
- * issuer. No fund can quote more than 24 listings at once.
+ * shock. Bids may establish bounded inventory inside a fund's mandate; asks
+ * remain capped by inventory. No synthetic cash or short inventory is used.
  */
 export function planEquityLiquidityQuotes(input: {
   funds: IndexFund[];
@@ -73,97 +84,42 @@ export function planEquityLiquidityQuotes(input: {
   totalListings: number;
   turn: number;
 }): EquityLiquidityQuotePlan[] {
-  const fundById = new Map(input.funds.map((fund) => [fund._id.toString(), fund]));
-  const slotsByFund = new Map<string, number>();
-  const remainingCashRisk = new Map<string, number>();
-  for (const fund of input.funds) {
-    const holdingValue = computeHoldingsValueAnchor(fund);
-    const observedBacking = positive(fund.cashAnchor) + holdingValue;
-    const quotedBacking = positive(fund.quotedNav) * positive(fund.unitSupply);
-    const aum = Math.max(observedBacking, quotedBacking);
-    const stressBoundNotional =
-      aum > 0
-        ? (aum * EQUITY_LIQUIDITY_MAX_STRESS_LOSS_SHARE) / EQUITY_LIQUIDITY_STRESS_HAIRCUT
-        : 0;
-    remainingCashRisk.set(
-      fund._id.toString(),
-      Math.min(positive(fund.cashAnchor) * EQUITY_LIQUIDITY_MAX_CASH_SHARE, stressBoundNotional)
-    );
-  }
-
-  const maxListings = Math.min(
-    EQUITY_LIQUIDITY_MAX_LISTINGS,
-    Math.floor(Math.max(0, input.totalListings) * EQUITY_LIQUIDITY_MAX_LISTING_SHARE)
-  );
-  if (maxListings <= 0) return [];
-
-  const sortedListings = [...input.listings].sort((a, b) =>
-    a.corporationId.toString().localeCompare(b.corporationId.toString())
-  );
-  const rotationOffset = sortedListings.length > 0 ? input.turn % sortedListings.length : 0;
-  const rotated = [
-    ...sortedListings.slice(rotationOffset),
-    ...sortedListings.slice(0, rotationOffset),
-  ];
-  const plans: EquityLiquidityQuotePlan[] = [];
-
-  for (const listing of rotated) {
-    if (plans.length >= maxListings) break;
-    if (
-      listing.referencePriceLocal <= 0 ||
-      listing.referencePriceAnchor <= 0 ||
-      listing.totalShares <= 0
-    ) {
-      continue;
-    }
-
-    const providers = input.funds
-      .flatMap((fund) => {
-        const holding = fund.holdings.find(
-          (row) => row.corporationId.toString() === listing.corporationId.toString()
-        );
-        return holding && holding.shares > 0 ? [{ fund, shares: holding.shares }] : [];
-      })
-      .sort(
-        (a, b) => b.shares - a.shares || a.fund._id.toString().localeCompare(b.fund._id.toString())
-      );
-
-    for (const provider of providers) {
-      const fundId = provider.fund._id.toString();
-      if (!fundById.has(fundId)) continue;
-      if ((slotsByFund.get(fundId) ?? 0) >= EQUITY_LIQUIDITY_MAX_QUOTES_PER_FUND) continue;
-      const cashRisk = remainingCashRisk.get(fundId) ?? 0;
-      if (cashRisk < EQUITY_LIQUIDITY_MIN_NOTIONAL_ANCHOR) continue;
-
-      const inventoryShares = Math.floor(
-        Math.min(
-          provider.shares * EQUITY_LIQUIDITY_MAX_HOLDING_SHARE,
-          listing.totalShares * EQUITY_LIQUIDITY_MAX_ISSUED_SHARE,
-          cashRisk / listing.referencePriceAnchor
-        )
-      );
-      if (inventoryShares <= 0) continue;
-      const bidNotionalAnchor = inventoryShares * listing.referencePriceAnchor;
-      if (bidNotionalAnchor < EQUITY_LIQUIDITY_MIN_NOTIONAL_ANCHOR) continue;
-
-      plans.push({
-        fundId: provider.fund._id,
-        corporationId: listing.corporationId,
-        shares: inventoryShares,
-        bidPriceLocal: listing.referencePriceLocal * (1 - EQUITY_LIQUIDITY_HALF_SPREAD),
-        askPriceLocal: listing.referencePriceLocal * (1 + EQUITY_LIQUIDITY_HALF_SPREAD),
-        referencePriceLocal: listing.referencePriceLocal,
-        referencePriceAnchor: listing.referencePriceAnchor,
-        bidNotionalAnchor,
-        stressLossAnchor: bidNotionalAnchor * EQUITY_LIQUIDITY_STRESS_HAIRCUT,
-      });
-      slotsByFund.set(fundId, (slotsByFund.get(fundId) ?? 0) + 1);
-      remainingCashRisk.set(fundId, cashRisk - bidNotionalAnchor);
-      break;
-    }
-  }
-
-  return plans;
+  const plans: EquityLiquidityRuleQuotePlan[] = planEquityLiquidityQuoteRules({
+    turn: input.turn,
+    totalListings: input.totalListings,
+    funds: input.funds.map((fund) => ({
+      id: fund._id.toString(),
+      scope: fund.scope,
+      kind: fund.kind,
+      countryId: fund.countryId,
+      sectorType: fund.sectorType,
+      cashAnchor: fund.cashAnchor,
+      quotedNav: fund.quotedNav,
+      unitSupply: fund.unitSupply,
+      holdingValueAnchor: computeHoldingsValueAnchor(fund),
+      holdings: fund.holdings.map((holding) => ({
+        corporationId: holding.corporationId.toString(),
+        shares: holding.shares,
+      })),
+      targetCorporationIds: fund.targetConstituents.map((target) =>
+        target.corporationId.toString()
+      ),
+    })),
+    listings: input.listings.map((listing) => ({
+      corporationId: listing.corporationId.toString(),
+      countryId: listing.corporation.countryId,
+      type: listing.type,
+      secondaryType: listing.secondaryType ?? undefined,
+      referencePriceLocal: listing.referencePriceLocal,
+      referencePriceAnchor: listing.referencePriceAnchor,
+      totalShares: listing.totalShares,
+    })),
+  });
+  return plans.map((plan) => ({
+    ...plan,
+    fundId: new ObjectId(plan.fundId),
+    corporationId: new ObjectId(plan.corporationId),
+  }));
 }
 
 export async function refreshEquityLiquidityFacility(input: {
@@ -193,6 +149,10 @@ export async function refreshEquityLiquidityFacility(input: {
     quotePairsPlanned: 0,
     quotePairsPlaced: 0,
     quotePairsFailed: 0,
+    bidQuotesPlanned: 0,
+    bidQuotesPlaced: 0,
+    askQuotesPlanned: 0,
+    askQuotesPlaced: 0,
     bidDepthAnchor: 0,
     askDepthAnchor: 0,
     stressLossAtRiskAnchor: 0,
@@ -201,7 +161,9 @@ export async function refreshEquityLiquidityFacility(input: {
 
   if (input.enabled) {
     const plans = planEquityLiquidityQuotes(input);
-    snapshot.quotePairsPlanned = plans.length;
+    snapshot.bidQuotesPlanned = plans.length;
+    snapshot.askQuotesPlanned = plans.filter((plan) => plan.askShares > 0).length;
+    snapshot.quotePairsPlanned = snapshot.askQuotesPlanned;
     const fundById = new Map(input.funds.map((fund) => [fund._id.toString(), fund]));
     const listingById = new Map(
       input.listings.map((listing) => [listing.corporationId.toString(), listing])
@@ -219,7 +181,7 @@ export async function refreshEquityLiquidityFacility(input: {
       const bid = await placeFundShareBuyOrder(db, {
         fund,
         corp: listing.corporation,
-        shares: plan.shares,
+        shares: plan.bidShares,
         limitPriceLocal: plan.bidPriceLocal,
         fxRate: listing.fxRate,
         liquidityQuote,
@@ -228,22 +190,26 @@ export async function refreshEquityLiquidityFacility(input: {
         snapshot.quotePairsFailed++;
         continue;
       }
-      const ask = await placeFundShareSellOrder(db, {
-        fund,
-        corp: listing.corporation,
-        shares: plan.shares,
-        limitPriceLocal: plan.askPriceLocal,
-        liquidityQuote,
-      });
-      if (!ask.ok) {
-        await cancelFundShareOrder(db, bid.orderId);
-        snapshot.quotePairsFailed++;
-        continue;
+      snapshot.bidQuotesPlaced++;
+      snapshot.bidDepthAnchor += (plan.bidShares * plan.bidPriceLocal) / listing.fxRate;
+
+      if (plan.askShares > 0) {
+        const ask = await placeFundShareSellOrder(db, {
+          fund,
+          corp: listing.corporation,
+          shares: plan.askShares,
+          limitPriceLocal: plan.askPriceLocal,
+          liquidityQuote,
+        });
+        if (!ask.ok) {
+          snapshot.quotePairsFailed++;
+        } else {
+          snapshot.quotePairsPlaced++;
+          snapshot.askQuotesPlaced++;
+          snapshot.askDepthAnchor += (plan.askShares * plan.askPriceLocal) / listing.fxRate;
+        }
       }
 
-      snapshot.quotePairsPlaced++;
-      snapshot.bidDepthAnchor += (plan.shares * plan.bidPriceLocal) / listing.fxRate;
-      snapshot.askDepthAnchor += (plan.shares * plan.askPriceLocal) / listing.fxRate;
       snapshot.stressLossAtRiskAnchor += plan.stressLossAnchor;
       participatingFunds.add(plan.fundId.toString());
     }

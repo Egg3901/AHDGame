@@ -94,26 +94,30 @@ describe("planEquityLiquidityQuotes", () => {
       corporationId,
       bidPriceLocal: 98,
       askPriceLocal: 102,
+      bidShares: 500,
+      askShares: 500,
     });
-    expect(plans[0].shares).toBe(1_000);
-    expect(plans[0].stressLossAnchor).toBe(10_000);
+    expect(plans[0].stressLossAnchor).toBe(5_000);
   });
 
   it("caps participation per fund even when it holds every listing", () => {
-    const ids = Array.from({ length: 40 }, () => new ObjectId());
+    const ids = Array.from(
+      { length: EQUITY_LIQUIDITY_MAX_QUOTES_PER_FUND + 16 },
+      () => new ObjectId()
+    );
     const provider = fund(ids);
     provider.cashAnchor = 100_000_000;
     const plans = planEquityLiquidityQuotes({
       funds: [provider],
       listings: ids.map(listing),
-      totalListings: 100,
+      totalListings: ids.length,
       turn: 51,
     });
 
     expect(plans).toHaveLength(EQUITY_LIQUIDITY_MAX_QUOTES_PER_FUND);
   });
 
-  it("does not quote inventory the fund does not own", () => {
+  it("places a mandate-backed bid without inventing ask inventory", () => {
     const held = new ObjectId();
     const unheld = new ObjectId();
     const plans = planEquityLiquidityQuotes({
@@ -122,7 +126,8 @@ describe("planEquityLiquidityQuotes", () => {
       totalListings: 10,
       turn: 52,
     });
-    expect(plans).toEqual([]);
+    expect(plans).toHaveLength(1);
+    expect(plans[0]).toMatchObject({ bidShares: 500, askShares: 0 });
   });
 
   it("rotates capped listing coverage across turns", () => {
@@ -139,8 +144,8 @@ describe("planEquityLiquidityQuotes", () => {
     const first = planEquityLiquidityQuotes({ ...input, turn: 0 });
     const second = planEquityLiquidityQuotes({ ...input, turn: 1 });
 
-    expect(first).toHaveLength(2);
-    expect(second).toHaveLength(2);
+    expect(first).toHaveLength(5);
+    expect(second).toHaveLength(5);
     expect(first[0].corporationId).toEqual(ids[0]);
     expect(second[0].corporationId).toEqual(ids[1]);
   });
@@ -170,7 +175,7 @@ describe("refreshEquityLiquidityFacility", () => {
     expect(replaceOne).toHaveBeenCalledWith({ turn: 60 }, snapshot, { upsert: true });
   });
 
-  it("cancels bid escrow when the paired ask cannot be placed", async () => {
+  it("keeps a funded bid when the paired ask cannot be placed", async () => {
     const corporationId = new ObjectId();
     const provider = fund([corporationId]);
     const bidOrderId = new ObjectId();
@@ -187,12 +192,14 @@ describe("refreshEquityLiquidityFacility", () => {
       totalListings: 10,
     });
 
-    expect(orderMocks.cancelFundShareOrder).toHaveBeenCalledWith(db, bidOrderId);
+    expect(orderMocks.cancelFundShareOrder).not.toHaveBeenCalledWith(db, bidOrderId);
     expect(snapshot).toMatchObject({
       quotePairsPlanned: 1,
       quotePairsPlaced: 0,
       quotePairsFailed: 1,
-      bidDepthAnchor: 0,
+      bidQuotesPlaced: 1,
+      askQuotesPlaced: 0,
+      bidDepthAnchor: 49_000,
       askDepthAnchor: 0,
     });
   });
@@ -217,9 +224,11 @@ describe("refreshEquityLiquidityFacility", () => {
       quotePairsPlanned: 1,
       quotePairsPlaced: 1,
       quotePairsFailed: 0,
-      bidDepthAnchor: 98_000,
-      askDepthAnchor: 102_000,
-      stressLossAtRiskAnchor: 10_000,
+      bidQuotesPlaced: 1,
+      askQuotesPlaced: 1,
+      bidDepthAnchor: 49_000,
+      askDepthAnchor: 51_000,
+      stressLossAtRiskAnchor: 5_000,
       participatingFunds: 1,
     });
   });
