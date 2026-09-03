@@ -23,6 +23,7 @@ import { moveSectorToCorp } from "@/lib/corporations/moveSector";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { assertMergerClearance } from "@/lib/corporations/mergerReview/gate";
 import { attachMergerRemedy } from "@/lib/corporations/mergerReview/lifecycle";
+import { bankTransferConflict, transferBankCharterToAcquirer } from "@/lib/banking/transferCharter";
 
 export interface ExecuteAgreedAcquisitionParams {
   db: Db;
@@ -38,6 +39,7 @@ export type ExecuteAgreedAcquisitionResult =
       priceAnchor: number;
       acquirerName: string;
       targetName: string;
+      bankCharterTransferred: boolean;
     };
 
 /**
@@ -90,6 +92,13 @@ export async function executeAgreedAcquisition(
         "The target holds equity in other corporations; acquiring a corporate parent is not yet supported.",
       status: 400,
     };
+
+  // Banked target (ticket-1267): the charter is a sub-document on the target,
+  // so deleting the shell would delete its bank with it. Transferred below —
+  // unless the acquirer already operates a bank, which has no slot for a
+  // second charter. Blocked up front, before any money moves.
+  const bankConflict = bankTransferConflict(target, acquirer);
+  if (bankConflict) return { ok: false, error: bankConflict, status: 400 };
 
   // Merger review (C3). Runs BEFORE any money moves: a referral must leave the
   // two corporations exactly as it found them. A cleared review returns here
@@ -176,6 +185,14 @@ export async function executeAgreedAcquisition(
       now
     );
   }
+
+  // 4a. Move a bank charter with the shell (ticket-1267): the loan book,
+  //     interbank sides, savings accounts and depositor pointers are re-keyed
+  //     to the acquirer before the shell is torn down. The guard above
+  //     guarantees a free slot modulo a race; a failure aborts with the shell
+  //     (and its bank) still intact.
+  const bankTransfer = await transferBankCharterToAcquirer(db, target._id, acquirer._id, now);
+  if (!bankTransfer.ok) return { ok: false, error: bankTransfer.error, status: 500 };
 
   // 4b. Ledger the two corporate-side legs. The holder credits were emitted by
   //     `payShareholders`; these are the acquirer's outflow and the shell's cash
@@ -270,5 +287,6 @@ export async function executeAgreedAcquisition(
     priceAnchor: offer.priceAnchor,
     acquirerName: acquirer.name,
     targetName: target.name,
+    bankCharterTransferred: bankTransfer.transferred,
   };
 }

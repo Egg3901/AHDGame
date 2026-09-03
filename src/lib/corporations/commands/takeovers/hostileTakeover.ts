@@ -57,6 +57,7 @@ import { stampSubjectDeleted } from "@/lib/financialTxLog/stampDeleted";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { releaseCorporationHeldBondsToFloat } from "@/lib/corporations/releaseHeldBondsToFloat";
+import { bankTransferConflict, transferBankCharterToAcquirer } from "@/lib/banking/transferCharter";
 import { applyBrandFacilityLoss } from "@/lib/corporations/brandFacilityLoss";
 import { debitSharesFromFund } from "@/lib/corporations/shareholderOps";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
@@ -181,6 +182,17 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
       return NextResponse.json({ error: clearance.error }, { status: clearance.status });
     }
 
+    // Banked subsidiary (ticket-1267): the charter is a sub-document on the
+    // target, so absorbing the shell would delete its bank with it. The
+    // transfer inside the lock re-parents it — but a corporation holds a
+    // single charter, so when the parent already operates a bank there is
+    // nowhere to put the target's live bank. Refuse up front, before any
+    // money moves.
+    const bankConflict = bankTransferConflict(target, parent);
+    if (bankConflict) {
+      return NextResponse.json({ error: bankConflict }, { status: 400 });
+    }
+
     // Outstanding bonds transfer to the parent automatically (see bond
     // reassignment below). The parent assumes the debt; bondholders keep
     // their position with the new issuer. No blocker needed.
@@ -302,6 +314,16 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
       // below never leaves logged money that was actually reversed.
       const ledgerLegs: TakeoverTxInput[] = [];
       const parentLedgerCurrency = (resolveCorpLiquidCurrencyCode(parent) ?? "USD") as CurrencyCode;
+
+      // Banked subsidiary (ticket-1267): move the charter and re-key its loan
+      // book, interbank sides, savings accounts and depositor pointers to the
+      // parent BEFORE the shell is deleted below. Runs here — right after the
+      // debit, before any payout — so a conflict still unwinds cleanly through
+      // the catch refund (cashTransferApplied is still false).
+      const bankTransfer = await transferBankCharterToAcquirer(db, target._id, parent._id, now);
+      if (!bankTransfer.ok) {
+        return NextResponse.json({ error: bankTransfer.error }, { status: 400 });
+      }
 
       try {
         const takeoverTurn = await getCurrentTurn(db);
@@ -778,6 +800,8 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
           mergedTargetId: target._id.toString(),
           parentCorporationId: parent._id.toString(),
           subsidiarySharesRetired: parentShares,
+          bankCharterTransferred: bankTransfer.transferred,
+          bankCharterCurrency: bankTransfer.currency,
           minorityPayoutAnchorTotal: Math.round(totalAnchor * 100) / 100,
           premiumRate: HOSTILE_TAKEOVER_PREMIUM_RATE,
           spreadPaid: Math.round(
