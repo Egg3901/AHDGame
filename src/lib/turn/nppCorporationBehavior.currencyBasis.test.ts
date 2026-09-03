@@ -196,7 +196,9 @@ describe("NPP decisions in a non-anchor currency", () => {
     const decision = decide(c, JPY_RATE, plantsCtx);
 
     expect(decision.newSectors).toHaveLength(1);
-    const spentLocal = (c.liquidCapital ?? 0) - (decision.updates.liquidCapital as number);
+    // Ticket #1260: the spend is carried as a delta now, not as an absolute
+    // `updates.liquidCapital`, so read it straight off `liquidCapitalDelta`.
+    const spentLocal = -decision.liquidCapitalDelta;
     expect(spentLocal).toBeCloseTo(FOUNDING_COST_ANCHOR * JPY_RATE, 2);
     // The bug: the anchor figure charged verbatim, i.e. a 360x discount.
     expect(spentLocal / FOUNDING_COST_ANCHOR).toBeCloseTo(JPY_RATE, 6);
@@ -205,7 +207,7 @@ describe("NPP decisions in a non-anchor currency", () => {
   it("charges the legacy flat expansion cost in the corp's currency too", () => {
     const c = corp();
     const decision = decide(c, JPY_RATE, undefined);
-    const spentLocal = (c.liquidCapital ?? 0) - (decision.updates.liquidCapital as number);
+    const spentLocal = -decision.liquidCapitalDelta;
     expect(spentLocal).toBeCloseTo(500_000 * JPY_RATE, 2);
   });
 
@@ -240,11 +242,8 @@ describe("NPP decisions in a non-anchor currency", () => {
     const c = corp();
     const withRate = decide(c, 1, plantsCtx);
     const withoutRate = decide(c, undefined, plantsCtx);
-    expect(withoutRate.updates.liquidCapital).toBe(withRate.updates.liquidCapital);
+    expect(withoutRate.liquidCapitalDelta).toBe(withRate.liquidCapitalDelta);
     expect(withoutRate.newSectors![0].revenue).toBe(withRate.newSectors![0].revenue);
-    expect((c.liquidCapital ?? 0) - (withRate.updates.liquidCapital as number)).toBeCloseTo(
-      FOUNDING_COST_ANCHOR,
-      2
-    );
+    expect(-withRate.liquidCapitalDelta).toBeCloseTo(FOUNDING_COST_ANCHOR, 2);
   });
 });

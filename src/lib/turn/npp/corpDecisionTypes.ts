@@ -42,7 +42,19 @@ export type NppSectorUpdateDoc = {
 
 export interface NppCorpDecision {
   corpId: ObjectId;
+  /**
+   * Non-cash field writes only. `liquidCapital` MUST NOT appear here — the NPP
+   * ops are appended to the corporation bulkWrite AFTER this turn's income
+   * `$inc`, so an absolute write of the balance overwrites the credit. See
+   * `liquidCapitalDelta` and `nppCashWrite.ts` (ticket #1260).
+   */
   updates: Record<string, unknown>;
+  /**
+   * Net change to `liquidCapital` this decision causes, in the corp's own
+   * currency: negative for spending, 0 when the corp spent nothing. Emitted as
+   * `$inc` so it composes with the income credit instead of racing it.
+   */
+  liquidCapitalDelta: number;
   sectorUpdates: Array<{
     filter: { _id: ObjectId };
     update: NppSectorUpdateDoc;
