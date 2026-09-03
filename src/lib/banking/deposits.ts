@@ -6,6 +6,7 @@ import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { isBlockedDepositor } from "@/lib/banking/blacklist";
 import { getBankDepositCeiling } from "@/lib/banking/capacityAllocation";
 import { charterMay } from "@/lib/banking/rules/capabilities";
+import { lifecycleRefusal } from "@/lib/banking/rules/lifecycle";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { loadBankingPolicy } from "@/lib/banking/policy";
@@ -109,6 +110,8 @@ async function moveCharacterSavingsInner(
         error: "Target bank must have an active retail or universal charter",
       };
     }
+    const staged = lifecycleRefusal(targetCharter, "takeDeposits");
+    if (staged) return { ok: false, error: staged.message };
     if (targetCharter.currency !== currency) {
       return {
         ok: false,

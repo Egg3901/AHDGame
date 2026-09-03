@@ -120,6 +120,11 @@ export function lifecycleStage(charter: LifecycleCharter | null | undefined): Ba
     if (typeof charter.resolutionClaimedTurn === "number") return "resolving";
     return "failed";
   }
+  // A revocation in flight: the estate is claimed and frozen before the
+  // waterfall moves anything, and the charter reads as resolving until the
+  // status flips. A crash in between leaves it here for recovery, never
+  // back in service.
+  if (typeof charter.resolutionClaimedTurn === "number") return "resolving";
   if (charter.warningBand === "red") return "impaired";
   if (charter.capitalStanding && BREACHING.includes(charter.capitalStanding)) return "impaired";
   if (typeof charter.undercapitalizedSinceTurn === "number") return "impaired";
@@ -268,16 +273,26 @@ const TRANSITIONS: Record<
   Partial<Record<LifecycleEvent, BankLifecycleStage>>
 > = {
   unchartered: { chartered: "operating" },
-  operating: { warned: "watch", breached: "impaired", failed: "failed", revoked: "revoked" },
+  operating: {
+    warned: "watch",
+    breached: "impaired",
+    failed: "failed",
+    resolution_claimed: "resolving",
+  },
   watch: {
     recovered: "operating",
     breached: "impaired",
     failed: "failed",
-    revoked: "revoked",
+    resolution_claimed: "resolving",
   },
-  impaired: { recovered: "operating", warned: "watch", failed: "failed", revoked: "revoked" },
+  impaired: {
+    recovered: "operating",
+    warned: "watch",
+    failed: "failed",
+    resolution_claimed: "resolving",
+  },
   failed: { resolution_claimed: "resolving" },
-  resolving: { resolution_settled: "resolved" },
+  resolving: { resolution_settled: "resolved", revoked: "revoked" },
   resolved: { archived: "unchartered" },
   revoked: { archived: "unchartered" },
 };

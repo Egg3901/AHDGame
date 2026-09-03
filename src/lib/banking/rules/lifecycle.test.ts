@@ -45,6 +45,10 @@ describe("lifecycleStage", () => {
       "resolved"
     );
     expect(lifecycleStage({ ...base, status: "revoked", warningBand: "red" })).toBe("revoked");
+    // A revocation in flight is a resolution, whatever the band says.
+    expect(lifecycleStage({ ...base, warningBand: "amber", resolutionClaimedTurn: 9 })).toBe(
+      "resolving"
+    );
   });
 });
 
@@ -115,10 +119,13 @@ describe("nextStage", () => {
       ["failed", "resolution_claimed", "resolving"],
       ["resolving", "resolution_settled", "resolved"],
       ["resolved", "archived", "unchartered"],
-      ["watch", "revoked", "revoked"],
+      ["watch", "resolution_claimed", "resolving"],
+      ["resolving", "revoked", "revoked"],
       ["revoked", "archived", "unchartered"],
     ];
     for (const [from, event, to] of path) expect(nextStage(from, event)).toBe(to);
+    // Revocation is not a single step from service: the estate is claimed first.
+    expect(nextStage("watch", "revoked")).toBeNull();
     expect(nextStage("failed", "revoked")).toBeNull();
     expect(nextStage("resolved", "resolution_claimed")).toBeNull();
     expect(nextStage("operating", "resolution_settled")).toBeNull();

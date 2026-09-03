@@ -18,6 +18,7 @@ import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { loadBankingPolicy } from "@/lib/banking/policy";
 import { charterMay } from "@/lib/banking/rules/capabilities";
+import { lifecycleRefusal } from "@/lib/banking/rules/lifecycle";
 import { getBankDepositCeiling } from "@/lib/banking/capacityAllocation";
 import { getCashReserves } from "@/lib/banking/rules/balanceSheet";
 import { isBlockedDepositor } from "@/lib/banking/blacklist";
@@ -152,6 +153,8 @@ export async function loadHolderSnapshot(
   if (!charter || !charterMay(charter, "acceptPlayerDeposits")) {
     return { error: "Target bank must have an active retail or universal charter" };
   }
+  const staged = lifecycleRefusal(charter, "takeDeposits");
+  if (staged) return { error: staged.message };
   if (charter.currency !== currency) {
     return { error: `Bank charter currency is ${charter.currency}, not ${currency}` };
   }
@@ -185,6 +188,18 @@ export async function runSavingsCommand(
 ): Promise<SavingsCommandResult> {
   const [policy, turn] = await Promise.all([loadBankingPolicy(db), getCurrentTurn(db)]);
   const account = await ensureSavingsAccount(db, ownerId, currency, turn);
+  if (!account) return { ok: false, error: "Character not found" };
+  if (account.status !== "open") {
+    // Checked before the holder is even loaded: a frozen account's holder is
+    // an estate in resolution, and the answer is the account's, not the bank's.
+    return {
+      ok: false,
+      error:
+        account.status === "frozen"
+          ? "This savings account is frozen while its bank is resolved. It reopens with the central bank once the resolution settles."
+          : "This savings account is closed.",
+    };
+  }
   if (!account) return { ok: false, error: "Character not found" };
 
   const current = await loadHolderSnapshot(db, account.holder, currency, { ownerId });

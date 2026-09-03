@@ -202,17 +202,15 @@ export async function returnDepositBook(
   const policy = await loadBankingPolicy(db);
   const playerDepositsAreLiabilities = savingsReadsAuthoritative(policy, currency);
   const sheetOptions = { playerDepositsAreLiabilities };
-  let playerBookReturned = 0;
-  if (playerDepositsAreLiabilities) {
-    const accountFlip = await db
-      .collection<SavingsAccount>("savingsAccounts")
-      .updateMany(
-        { currency, holder: bankIdHex },
-        { $set: { holder: CENTRAL_BANK_HOLDER, updatedAt: now } }
-      );
-    depositorsFlipped = Math.max(depositorsFlipped, accountFlip.modifiedCount ?? 0);
-    playerBookReturned = Math.max(0, charter.playerDeposits ?? 0);
-  }
+  // Under the account model the accounts move AFTER the money has: they were
+  // frozen by the caller before the waterfall started (see `freezeAccountsAt`),
+  // and they are released to the central bank, open again, only once the
+  // backing and the liability have both landed there. A crash in between
+  // leaves them frozen at the dead bank, which recovery finishes; it never
+  // leaves them open at a bank that no longer holds their cash.
+  const playerBookReturned = playerDepositsAreLiabilities
+    ? Math.max(0, charter.playerDeposits ?? 0)
+    : 0;
 
   const npc = cashBackedDeposits(charter, sheetOptions);
   const cash = getCashReserves(charter);
@@ -483,6 +481,12 @@ export async function returnDepositBook(
   if (settled.status === "rejected" || settled.status === "partial") {
     return { ...EMPTY, depositorsFlipped, error: settled.error };
   }
+  if (playerDepositsAreLiabilities) {
+    depositorsFlipped = Math.max(
+      depositorsFlipped,
+      await releaseAccountsFrom(db, bankIdHex, currency, now)
+    );
+  }
   if (settled.status === "replayed") {
     // The cash moved on an earlier attempt and any projections that attempt
     // did not reach have just been finished. Nothing more to report: the
@@ -531,6 +535,48 @@ export async function returnDepositBook(
     db
   );
   return result;
+}
+
+/**
+ * Freeze every savings account held at a bank whose estate is about to be
+ * resolved. Nothing moves on a frozen account: the savings commands refuse
+ * with the account's status, so a deposit, withdrawal or transfer racing the
+ * waterfall cannot change the book the waterfall is returning. Idempotent.
+ */
+export async function freezeAccountsAt(
+  db: Db,
+  bankIdHex: string,
+  currency: CurrencyCode,
+  now: Date
+): Promise<number> {
+  const frozen = await db
+    .collection<SavingsAccount>("savingsAccounts")
+    .updateMany(
+      { currency, holder: bankIdHex, status: "open" },
+      { $set: { status: "frozen", updatedAt: now } }
+    );
+  return frozen.modifiedCount ?? 0;
+}
+
+/**
+ * Release the accounts a resolved bank held: back to the central bank, open
+ * again. Runs only after the waterfall settled, so the central bank holds both
+ * the backing and the liability by the time an owner can move the balance.
+ * Idempotent: a second run matches nothing.
+ */
+export async function releaseAccountsFrom(
+  db: Db,
+  bankIdHex: string,
+  currency: CurrencyCode,
+  now: Date
+): Promise<number> {
+  const released = await db
+    .collection<SavingsAccount>("savingsAccounts")
+    .updateMany(
+      { currency, holder: bankIdHex },
+      { $set: { holder: CENTRAL_BANK_HOLDER, status: "open", updatedAt: now } }
+    );
+  return released.modifiedCount ?? 0;
 }
 
 /**

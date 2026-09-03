@@ -14,7 +14,7 @@ import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { archiveCharter } from "@/lib/banking/charterHistory";
 import { getLegalCharterTypes } from "@/lib/banking/separationLaw";
-import { returnDepositBook } from "@/lib/banking/depositBookReturn";
+import { freezeAccountsAt, returnDepositBook } from "@/lib/banking/depositBookReturn";
 import { lifecycleRefusal } from "@/lib/banking/rules/lifecycle";
 import { clampOffsets, getRateCorridors } from "@/lib/banking/regulationQ";
 import { getBankId } from "@/lib/centralBank/helpers";
@@ -407,8 +407,31 @@ async function revokeCharterInner(
   }
 
   const charter = corporation.bankCharter;
-  const revokedTurn = await getCurrentTurn(db);
+  const currentTurn = await getCurrentTurn(db);
   const now = new Date();
+
+  // Claim the estate before anything moves. The claim puts the charter in the
+  // `resolving` stage, where deposits, loans, payouts and switches are all
+  // refused, and a second revocation racing this one matches nothing. A
+  // revocation that crashed after claiming is finished here as well, under
+  // the turn it was claimed on, so the waterfall's idempotency key is the
+  // same and the money moves once.
+  const claim = await db.collection<Corporation>("corporations").updateOne(
+    {
+      _id: corporationId,
+      "bankCharter.status": "active",
+      "bankCharter.resolutionClaimedTurn": { $exists: false },
+    },
+    { $set: { "bankCharter.resolutionClaimedTurn": currentTurn, updatedAt: now } }
+  );
+  let revokedTurn = currentTurn;
+  if (claim.modifiedCount !== 1) {
+    if (typeof charter.resolutionClaimedTurn !== "number") {
+      return { ok: false, error: "The charter is already being revoked." };
+    }
+    revokedTurn = charter.resolutionClaimedTurn;
+  }
+  await freezeAccountsAt(db, corporationId.toString(), charter.currency as CurrencyCode, now);
 
   // Depositors before shareholders, and the waterfall decides what is left
   // rather than a gate deciding whether anything is returned at all. The
@@ -421,6 +444,9 @@ async function revokeCharterInner(
     releaseResidualToOwner: true,
   });
   if (returned.error) {
+    // Claimed and frozen, not settled. The charter reads as `resolving` and the
+    // recovery worker finishes it; nothing here is undone, because undoing a
+    // half-moved waterfall is the one thing a retry must never do.
     return { ok: false, error: `Could not return the deposit book: ${returned.error}` };
   }
   const refund = returned.ownerResidual;

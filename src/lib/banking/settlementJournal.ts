@@ -24,7 +24,14 @@
  */
 
 import { ObjectId, type Db, type Document, type Filter, type UpdateFilter } from "mongodb";
-import { MONEY_MOVE_COLLECTION, applyMoneyMove, type MoneyMoveLeg } from "@/lib/banking/moneyMove";
+import {
+  MONEY_MOVE_COLLECTION,
+  applyMoneyMove,
+  type MoneyMoveLeg,
+  resumeMoneyMove,
+  SETTLED_KEYS_FIELD,
+  SETTLED_KEYS_CAP,
+} from "@/lib/banking/moneyMove";
 import type {
   BankingTransition,
   TransitionLeg,
@@ -98,8 +105,6 @@ interface JournalExtension {
  * the stamp, not the journal, is the witness that the write landed. Capped so
  * a long-lived document does not carry every key it ever saw.
  */
-const SETTLED_KEYS_FIELD = "settledKeys";
-const SETTLED_KEYS_CAP = 200;
 
 export function projectionStamp(key: string, index: number): string {
   return `${key}#${index}`;
@@ -197,6 +202,8 @@ export async function applyProjection(
  * Settle a transition. Safe to call again with the same transition: a replay
  * finishes any projections the first attempt did not reach and moves no money.
  */
+export { SETTLED_KEYS_FIELD, SETTLED_KEYS_CAP };
+
 export async function settleTransition(
   db: Db,
   transition: BankingTransition
@@ -473,6 +480,34 @@ export async function listUnfinishedProjections(
     turn: row.turn,
     pending: (row.projections ?? []).filter((p) => !p.appliedAt && !p.applied).length,
   }));
+}
+
+/**
+ * Finish a settlement that crashed anywhere after its claim: the legs that
+ * did not land are written from the record (guards included), then the
+ * projections that did not land are applied from the record. The one entry
+ * point for recovery, used by the resolution sweep and the recovery worker.
+ * Never called by a live settlement: a live attempt that finds the key owned
+ * reports a replay and leaves it to recovery, which runs alone.
+ */
+export async function resumeSettlement(
+  db: Db,
+  key: string,
+  options: FinishOptions = {}
+): Promise<SettlementResult> {
+  const moved = await resumeMoneyMove(db, key);
+  if (moved.status !== "applied") {
+    return {
+      status: moved.status === "rejected" ? "rejected" : "partial",
+      key,
+      appliedLegs: moved.applied,
+      appliedProjections: [],
+      newlyAppliedProjections: [],
+      error: moved.error,
+    };
+  }
+  const out = await recoverProjections(db, key, options);
+  return { ...out, appliedLegs: moved.applied };
 }
 
 /**

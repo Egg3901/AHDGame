@@ -31,7 +31,10 @@ export type BankingCounter =
   /** Projections found out of step with journal truth by a reconciliation pass. */
   | "unreconciledProjections"
   /** Projections a recovery pass brought back into step. */
-  | "recoveredProjections";
+  | "recoveredProjections"
+  | "resumedSettlements"
+  /** Estates (failed or revoking) the recovery worker finished. */
+  | "recoveredEstates";
 
 export type BankingStage =
   | "funding"
@@ -43,6 +46,8 @@ export type BankingStage =
   | "interbank"
   | "solvency"
   | "resolution"
+  /** The recovery worker at the start of the banking turn. */
+  | "recovery"
   | "supervision"
   | "shadowCompare";
 

@@ -116,6 +116,18 @@ function sameValue(a: unknown, b: unknown): boolean {
   return a === b;
 }
 
+/**
+ * Equality the way Mongo reads it against an array field: the whole array, or
+ * any one element. `{ tags: "x" }` matches `{ tags: ["x", "y"] }`, and
+ * `{ tags: { $ne: "x" } }` does not.
+ */
+function equalsAny(value: unknown, operand: unknown): boolean {
+  if (Array.isArray(value) && !Array.isArray(operand)) {
+    return value.some((item) => sameValue(item, operand));
+  }
+  return sameValue(value, operand);
+}
+
 function matchesCondition(value: unknown, condition: unknown): boolean {
   if (isPlainObject(condition)) {
     const keys = Object.keys(condition);
@@ -124,9 +136,9 @@ function matchesCondition(value: unknown, condition: unknown): boolean {
         const operand = condition[op];
         switch (op) {
           case "$eq":
-            return sameValue(value, operand);
+            return equalsAny(value, operand);
           case "$ne":
-            return !sameValue(value, operand);
+            return !equalsAny(value, operand);
           case "$gte":
             return typeof value === "number" && value >= (operand as number);
           case "$gt":
@@ -136,9 +148,9 @@ function matchesCondition(value: unknown, condition: unknown): boolean {
           case "$lt":
             return typeof value === "number" && value < (operand as number);
           case "$in":
-            return (operand as unknown[]).some((o) => sameValue(value, o));
+            return (operand as unknown[]).some((o) => equalsAny(value, o));
           case "$nin":
-            return !(operand as unknown[]).some((o) => sameValue(value, o));
+            return !(operand as unknown[]).some((o) => equalsAny(value, o));
           case "$exists":
             return (value !== undefined) === Boolean(operand);
           default:
@@ -147,7 +159,7 @@ function matchesCondition(value: unknown, condition: unknown): boolean {
       });
     }
   }
-  return sameValue(value, condition);
+  return equalsAny(value, condition);
 }
 
 /** Tiny aggregation-expression evaluator, enough for the `$expr` guards. */
