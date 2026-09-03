@@ -94,6 +94,7 @@
       "driversGroup": "Persuasion drivers (pts of the persuadable slice)",
       "coattailsGroup": "Coattail tilts (direct % of vote share)",
       "pts": "pts",
+      "moneyHint": "Compares recent campaign spending: this turn counts fully, earlier spending fades over a few idle turns. Saved treasuries do not count.",
       "ceiling": "Ceiling this cycle: at most {opponentSlice}% of {opponent}'s vote can be persuaded across to {focus}, and {focusSlice}% of {focus}'s vote can be persuaded away. Registration lean sets the starting split and how hard a party is to move, not the final share. These drivers add up to {net} pts of that movable slice."
     },
     "nationalMood": {
