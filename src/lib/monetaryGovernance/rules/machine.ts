@@ -34,9 +34,8 @@ import {
   proposeChairMotion,
   seatPreferredVote,
   tallyMeeting,
-  type FomcBallot,
-  type FomcSeat,
 } from "@/lib/centralBank/fomc";
+import type { FomcBallot, FomcSeat } from "@/lib/db/types/centralBank";
 import type {
   BallotState,
   DeadlineEvent,

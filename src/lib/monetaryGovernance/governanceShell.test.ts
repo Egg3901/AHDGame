@@ -213,7 +213,7 @@ describe("ballot shell", () => {
 
   it("refuses a replayed ballot and persists nothing new", async () => {
     const bank = votingBank();
-    bank.activeFomcMeeting.ballots.push({
+    (bank.activeFomcMeeting as unknown as { ballots: unknown[] }).ballots.push({
       seatId: "seat-1",
       vote: "hike",
       auto: false,
