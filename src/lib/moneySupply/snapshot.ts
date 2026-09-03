@@ -65,6 +65,7 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
     indexFunds,
     exchangeRateRows,
     charteredBanks,
+    bondPools,
   ] = await Promise.all([
     db.collection("characters").find({}).toArray(),
     db.collection("npps").find({}).toArray(),
@@ -122,6 +123,10 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
           },
         }
       )
+      .toArray(),
+    db
+      .collection<{ _id: string; cashLocal?: number }>("bondMarketPools")
+      .find({}, { projection: { cashLocal: 1 } })
       .toArray(),
   ]);
   const byCurrency = new Map<CurrencyCode, MutableComponents>();
@@ -217,6 +222,8 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
       "organizationLiquid",
       fund.balanceLocal
     );
+  for (const pool of bondPools)
+    addComponent(byCurrency, pool._id as CurrencyCode, "bondPoolCash", pool.cashLocal ?? 0);
   for (const bond of bonds) {
     const currency = (bond.currencyCode ?? homeCurrency(bond.countryId!)) as CurrencyCode;
     addComponent(byCurrency, currency, "sovereignBondsOutstanding", bond.totalIssued);

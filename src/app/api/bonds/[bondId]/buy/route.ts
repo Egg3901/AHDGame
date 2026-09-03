@@ -37,6 +37,7 @@ import { wasCeoWithinTurns } from "@/lib/corporations/ceoHistory";
 import { EX_CEO_BOND_PURCHASE_BLOCK_TURNS } from "@/lib/constants/bonds";
 import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
 import { sovereignBondCapError } from "@/lib/bonds/holderCap";
+import { creditBondPool } from "@/lib/bonds/marketPool";
 import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 
 interface RouteParams {
@@ -208,6 +209,12 @@ export async function POST(request: Request, { params }: RouteParams) {
             { status: 409 }
           );
         }
+
+        // The float has a counterparty now: the units came out of the currency's
+
+        // bond market pool, so the cash goes into it instead of vanishing.
+
+        await creditBondPool(db, bondCurrency, costLocal, "purchasesIn", now);
 
         await emitTx(db, {
           type: "bond_purchase",
@@ -401,6 +408,12 @@ export async function POST(request: Request, { params }: RouteParams) {
             );
           }
 
+          // The float has a counterparty now: the units came out of the currency's
+
+          // bond market pool, so the cash goes into it instead of vanishing.
+
+          await creditBondPool(db, bondCurrency, costLocal, "purchasesIn", now);
+
           await emitTx(db, {
             type: "bond_purchase",
             turn: currentTurn,
@@ -555,6 +568,12 @@ export async function POST(request: Request, { params }: RouteParams) {
             { status: 409 }
           );
         }
+
+        // The float has a counterparty now: the units came out of the currency's
+
+        // bond market pool, so the cash goes into it instead of vanishing.
+
+        await creditBondPool(db, bondCurrency, costLocal, "purchasesIn", now);
 
         await emitTx(db, {
           type: "bond_purchase",

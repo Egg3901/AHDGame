@@ -61,6 +61,8 @@ import { migration as equityLiquidityIndexes } from "./entries/2026-08-28-equity
 import { migration as redistrictingAuthorityLegislative } from "./entries/2026-08-26-redistricting-authority-legislative";
 import { migration as purgeRetiredRuMetricRegions } from "./entries/2026-08-30-purge-retired-ru-metric-regions";
 import { migration as regionalDefaultLawsNewgen } from "./entries/2026-08-31-regional-default-laws-newgen";
+import { migration as retireOrphanSovereignFloat } from "./entries/2026-09-03-retire-orphan-sovereign-float";
+import { migration as bondMarketPools } from "./entries/2026-09-03-bond-market-pools";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -187,6 +189,14 @@ export const MIGRATIONS: Migration[] = [
   // and LawProvisionComparison drops the fiscal comparison and metric chips
   // with it. Backfill the level-0 regional default the engine already assumes.
   regionalDefaultLawsNewgen,
+  // Quarterly rollover reissued maturing sovereign series even when the budget
+  // owed nothing, so surplus countries carried paper against a principal of
+  // zero (FR: 4.2T FRF). Retire the pool-held units before the pool is seeded.
+  retireOrphanSovereignFloat,
+  // The bond float was a phantom counterparty that minted on sells and burned
+  // on buys. One pool per currency now holds that inventory and real cash,
+  // seeded at a share of broad money so it can buy from day one.
+  bondMarketPools,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.

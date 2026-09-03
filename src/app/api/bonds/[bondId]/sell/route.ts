@@ -23,6 +23,13 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
+import {
+  bondPoolDepthMessage,
+  bondPoolFillableUnits,
+  debitBondPoolGated,
+  readBondPoolCash,
+  refundBondPoolDebit,
+} from "@/lib/bonds/marketPool";
 
 interface RouteParams {
   params: Promise<{ bondId: string }>;
@@ -68,8 +75,9 @@ function buildHolderCleanupUpdate(
 
 /**
  * POST /api/bonds/[bondId]/sell
- * Sell bond units back to the AI market maker at current market price.
- * Cannot sell defaulted bonds.
+ * Sell bond units to the currency's bond market pool at current market price.
+ * The pool pays from its own cash, so a sale the pool cannot cover is refused
+ * with the size it can take. Cannot sell defaulted bonds.
  */
 export async function POST(request: Request, { params }: RouteParams) {
   try {
@@ -124,6 +132,28 @@ export async function POST(request: Request, { params }: RouteParams) {
       .collection<{ _id: string; currentTurn?: number }>("gameState")
       .findOne({ _id: "current" }, { projection: { currentTurn: 1 } });
     const currentTurn = turnDoc?.currentTurn ?? 0;
+
+    // Depth check before any holder-side write. The gated debit inside each
+    // settlement path is the real guard; this read just turns a race-free
+    // refusal into a message that says how much the market can take.
+    const pricePerUnitLocal = BOND_UNIT_FACE_VALUE * bond.marketPrice;
+    const poolCashLocal = await readBondPoolCash(db, bondCurrency);
+    const fillableUnits = bondPoolFillableUnits(poolCashLocal, pricePerUnitLocal, units);
+    if (fillableUnits < units) {
+      return NextResponse.json(
+        {
+          error: bondPoolDepthMessage(fillableUnits, bondCurrency),
+          marketDepthUnits: fillableUnits,
+        },
+        { status: 409 }
+      );
+    }
+    const poolDepthRefusal = async () => {
+      const cash = await readBondPoolCash(db, bondCurrency);
+      return badRequest(
+        bondPoolDepthMessage(bondPoolFillableUnits(cash, pricePerUnitLocal, units), bondCurrency)
+      );
+    };
 
     if (sellAsCorp) {
       const corp = await db
@@ -186,6 +216,15 @@ export async function POST(request: Request, { params }: RouteParams) {
           if (claimResult.modifiedCount === 0) {
             throw badRequest("Insufficient bond holdings");
           }
+          const poolDebit = await debitBondPoolGated(
+            db,
+            bondCurrency,
+            proceedsLocal,
+            "salesOut",
+            now,
+            { session }
+          );
+          if (!poolDebit.ok) throw await poolDepthRefusal();
 
           const payoutResult = await db
             .collection<Corporation>("corporations")
@@ -217,6 +256,17 @@ export async function POST(request: Request, { params }: RouteParams) {
               : 0;
             throw badRequest(`Insufficient bond holdings. You hold ${refreshedUnits} units`);
           }
+          const poolDebit = await debitBondPoolGated(
+            db,
+            bondCurrency,
+            proceedsLocal,
+            "salesOut",
+            now
+          );
+          if (!poolDebit.ok) {
+            await rollbackClaim();
+            throw await poolDepthRefusal();
+          }
 
           try {
             const payoutResult = await db
@@ -237,6 +287,7 @@ export async function POST(request: Request, { params }: RouteParams) {
               );
           } catch (error) {
             await rollbackClaim();
+            await refundBondPoolDebit(db, bondCurrency, proceedsLocal, "salesOut");
             throw error;
           }
         }
@@ -329,6 +380,15 @@ export async function POST(request: Request, { params }: RouteParams) {
           if (claimResult.modifiedCount === 0) {
             throw badRequest("Insufficient bond holdings");
           }
+          const poolDebit = await debitBondPoolGated(
+            db,
+            bondCurrency,
+            proceedsLocal,
+            "salesOut",
+            now,
+            { session }
+          );
+          if (!poolDebit.ok) throw await poolDepthRefusal();
 
           const payoutResult = await db
             .collection<ImperialCharacter>("imperialCharacters")
@@ -356,6 +416,17 @@ export async function POST(request: Request, { params }: RouteParams) {
               : 0;
             throw badRequest(`Insufficient bond holdings. You hold ${refreshedUnits} units`);
           }
+          const poolDebit = await debitBondPoolGated(
+            db,
+            bondCurrency,
+            proceedsLocal,
+            "salesOut",
+            now
+          );
+          if (!poolDebit.ok) {
+            await rollbackClaim();
+            throw await poolDepthRefusal();
+          }
 
           try {
             const payoutResult = await db
@@ -373,6 +444,7 @@ export async function POST(request: Request, { params }: RouteParams) {
               );
           } catch (error) {
             await rollbackClaim();
+            await refundBondPoolDebit(db, bondCurrency, proceedsLocal, "salesOut");
             throw error;
           }
         }
@@ -459,6 +531,15 @@ export async function POST(request: Request, { params }: RouteParams) {
         if (claimResult.modifiedCount === 0) {
           throw badRequest("Insufficient bond holdings");
         }
+        const poolDebit = await debitBondPoolGated(
+          db,
+          bondCurrency,
+          proceedsLocal,
+          "salesOut",
+          now,
+          { session }
+        );
+        if (!poolDebit.ok) throw await poolDepthRefusal();
 
         const payoutResult = await db
           .collection<Character>("characters")
@@ -484,6 +565,17 @@ export async function POST(request: Request, { params }: RouteParams) {
             : 0;
           throw badRequest(`Insufficient bond holdings. You hold ${refreshedUnits} units`);
         }
+        const poolDebit = await debitBondPoolGated(
+          db,
+          bondCurrency,
+          proceedsLocal,
+          "salesOut",
+          now
+        );
+        if (!poolDebit.ok) {
+          await rollbackClaim();
+          throw await poolDepthRefusal();
+        }
 
         try {
           const payoutResult = await db
@@ -501,6 +593,7 @@ export async function POST(request: Request, { params }: RouteParams) {
             );
         } catch (error) {
           await rollbackClaim();
+          await refundBondPoolDebit(db, bondCurrency, proceedsLocal, "salesOut");
           throw error;
         }
       }

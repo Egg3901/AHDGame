@@ -235,6 +235,41 @@ describe("calculateSovereignRolloverAmount", () => {
     expect(total).toBe(0);
   });
 
+  it("caps the rollover so bonds outstanding never exceed the budget principal", async () => {
+    const db = setBondsForQuery([
+      makeBond({ maturityTurn: ISSUANCE_TURN, totalIssued: 10_000_000_000 }),
+      makeBond({ maturityTurn: WINDOW_END + 48, totalIssued: 4_000_000_000 }),
+    ]);
+    // Principal 7B: after the 10B series matures, 4B stays outstanding, so
+    // only 3B may be rolled.
+    db.collection("federalBudget").findOne.mockResolvedValue({
+      _id: "federal",
+      debt: { principal: 7_000_000_000 },
+    });
+    const total = await calculateSovereignRolloverAmount(
+      db as unknown as Db,
+      COUNTRY_CONFIGS.US.id,
+      ISSUANCE_TURN
+    );
+    expect(total).toBe(3_000_000_000);
+  });
+
+  it("rolls nothing for a country with no debt left", async () => {
+    const db = setBondsForQuery([
+      makeBond({ maturityTurn: ISSUANCE_TURN, totalIssued: 10_000_000_000 }),
+    ]);
+    db.collection("federalBudget").findOne.mockResolvedValue({
+      _id: "federal",
+      debt: { principal: 0 },
+    });
+    const total = await calculateSovereignRolloverAmount(
+      db as unknown as Db,
+      COUNTRY_CONFIGS.US.id,
+      ISSUANCE_TURN
+    );
+    expect(total).toBe(0);
+  });
+
   it("rounds the rollover total down to whole bond units ($1,000 each)", async () => {
     const db = setBondsForQuery([
       makeBond({ maturityTurn: ISSUANCE_TURN, totalIssued: 1_234_567 }),

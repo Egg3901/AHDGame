@@ -20,6 +20,7 @@ import type { Db, ObjectId } from "mongodb";
 import type { Bond, NPP } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
+import { bondPoolCurrency, creditBondPool } from "@/lib/bonds/marketPool";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { nppHomeFxRate, localToAnchor } from "./nppEconomicAccount";
 
@@ -97,6 +98,8 @@ export async function nppBuyBond(
       );
     return { ok: false, reason: "Bond units no longer available; purchase refunded." };
   }
+
+  await creditBondPool(db, bondPoolCurrency(bond), cost, "purchasesIn", now);
 
   return {
     ok: true,

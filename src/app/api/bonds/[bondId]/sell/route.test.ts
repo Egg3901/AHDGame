@@ -38,9 +38,114 @@ beforeEach(() => {
   db.collection("bonds");
   db.collection("characters");
   db.collection("users");
+  // A flush market pool: every sale in these tests is small.
+  db.collection("bondMarketPools");
+  db.collectionMocks.bondMarketPools.findOne.mockResolvedValue({ _id: "USD", cashLocal: 1e9 });
+  db.collectionMocks.bondMarketPools.findOneAndUpdate.mockResolvedValue({ cashLocal: 1e9 });
 });
 
 describe("POST /api/bonds/[bondId]/sell", () => {
+  it("refuses a sale the market pool cannot pay for and says how much it can take", async () => {
+    const bondId = new ObjectId();
+    const characterId = new ObjectId();
+    const userId = new ObjectId();
+
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: userId.toString() },
+    } as never);
+
+    db.collectionMocks.bonds.findOne.mockResolvedValueOnce({
+      _id: bondId,
+      defaulted: false,
+      marketPrice: 1,
+      currencyCode: "USD",
+      holders: [{ characterId, units: 50 }],
+    });
+    // 2,500 of cash buys two units at 1,000 each; the player asks for ten.
+    db.collectionMocks.bondMarketPools.findOne.mockResolvedValue({ _id: "USD", cashLocal: 2_500 });
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/bonds/x/sell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ units: 10 }),
+      }),
+      { params: Promise.resolve({ bondId: bondId.toString() }) }
+    );
+
+    expect(response.status).toBe(409);
+    const body = (await response.json()) as { error: string; marketDepthUnits: number };
+    expect(body.marketDepthUnits).toBe(2);
+    expect(body.error).toContain("2 units");
+    // Nothing was claimed or paid.
+    expect(db.collectionMocks.bonds.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.bondMarketPools.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it("refunds the pool when the payout fails after the pool was debited", async () => {
+    const bondId = new ObjectId();
+    const characterId = new ObjectId();
+    const userId = new ObjectId();
+
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: userId.toString() },
+    } as never);
+
+    db.collectionMocks.bonds.findOne.mockResolvedValueOnce({
+      _id: bondId,
+      defaulted: false,
+      marketPrice: 1,
+      currencyCode: "USD",
+      holders: [{ characterId, units: 5 }],
+    });
+    db.collectionMocks.users.findOne.mockResolvedValue({
+      _id: userId,
+      activeCharacterId: characterId,
+    });
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: characterId,
+      userId,
+      name: "Seller",
+      countryId: "US",
+    });
+    db.collectionMocks.bonds.updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    db.collectionMocks.characters.updateOne.mockResolvedValue({
+      matchedCount: 0,
+      modifiedCount: 0,
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/bonds/x/sell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ units: 3 }),
+      }),
+      { params: Promise.resolve({ bondId: bondId.toString() }) }
+    );
+
+    expect(response.status).toBe(404);
+    // Debited 3,000 from the pool, then put it back.
+    expect(db.collectionMocks.bondMarketPools.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: "USD", cashLocal: { $gte: 3000 } },
+      expect.objectContaining({ $inc: { cashLocal: -3000, "lifetime.salesOut": 3000 } }),
+      expect.anything()
+    );
+    expect(db.collectionMocks.bondMarketPools.updateOne).toHaveBeenCalledWith(
+      { _id: "USD" },
+      expect.objectContaining({ $inc: { cashLocal: 3000, "lifetime.salesOut": -3000 } })
+    );
+  });
+
   it("rolls back the holder claim when the character payout disappears in fallback mode", async () => {
     const bondId = new ObjectId();
     const characterId = new ObjectId();
