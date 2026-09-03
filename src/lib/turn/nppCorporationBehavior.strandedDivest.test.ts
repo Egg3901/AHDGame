@@ -64,7 +64,10 @@ function decide(
   c: Corporation,
   sectors: CorporateSector[],
   priceRatioOf: CommodityPriceRatioFn = atBase,
-  signals?: PlacementSignals
+  signals?: PlacementSignals,
+  // Null opts OUT of plants (explicit undefined would just re-trigger the
+  // default). Divest coverage below always runs under plants.
+  plants: NppPlantsContext | null | undefined = plantsCtx
 ) {
   return makeNppCorpDecision(
     {
@@ -77,7 +80,7 @@ function decide(
     new Map<string, UnownedSector[]>(),
     noState,
     priceRatioOf,
-    plantsCtx,
+    plants ?? undefined,
     signals
   );
 }
@@ -142,9 +145,10 @@ describe("state-resolution growth tilt (section 2a via placement signals)", () =
         "targetGrowthRate" in ((u.update.$set ?? {}) as Record<string, unknown>)
     );
 
-  it("a glut in the sector's OWN state cuts growth even when the country reads balanced", () => {
-    // Thin margin (5) holds the ladder at the current target, so the only
-    // mover is the shortage tilt — the thing under test.
+  it("under plants a glut in the sector's OWN state writes no growth target — section 2a is retired", () => {
+    // Thin margin (5) holds the ladder at the current target, so without the
+    // plants skip the shortage tilt would be the only mover. Growth now flows
+    // through section 6 reinvestment sizing, never through targetGrowthRate.
     const inGlutState = sector({
       stateId: "TX",
       targetGrowthRate: 2,
@@ -155,6 +159,26 @@ describe("state-resolution growth tilt (section 2a via placement signals)", () =
       statePriceRatioOf: (_c, stateId) => (stateId === "TX" ? 0.6 : 1.0),
     };
     const withSignals = decide(corp(), [inGlutState, sector({ stateId: "NY" })], atBase, signals);
+    expect(growthSetFor(withSignals, inGlutState._id)).toBeUndefined();
+  });
+
+  it("without plants the same glut still cuts growth via the tilt", () => {
+    const inGlutState = sector({
+      stateId: "TX",
+      targetGrowthRate: 2,
+      profitMargin: 5,
+      effectiveProfitMargin: 5,
+    });
+    const signals: PlacementSignals = {
+      statePriceRatioOf: (_c, stateId) => (stateId === "TX" ? 0.6 : 1.0),
+    };
+    const withSignals = decide(
+      corp(),
+      [inGlutState, sector({ stateId: "NY" })],
+      atBase,
+      signals,
+      null
+    );
     const set = growthSetFor(withSignals, inGlutState._id);
     expect(set).toBeDefined();
     expect(
@@ -169,7 +193,13 @@ describe("state-resolution growth tilt (section 2a via placement signals)", () =
       profitMargin: 5,
       effectiveProfitMargin: 5,
     });
-    const noSignals = decide(corp(), [inGlutState, sector({ stateId: "NY" })], atBase);
+    const noSignals = decide(
+      corp(),
+      [inGlutState, sector({ stateId: "NY" })],
+      atBase,
+      undefined,
+      null
+    );
     const set = growthSetFor(noSignals, inGlutState._id);
     const target = set
       ? (((set.update.$set ?? {}) as Record<string, unknown>).targetGrowthRate as number)
