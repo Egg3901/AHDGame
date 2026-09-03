@@ -314,6 +314,12 @@ export interface TurnLog {
       npcDepositDelta: number;
       /** Settlements that started and never finished, as of the end of the pass. */
       unfinishedSettlements?: number;
+      recovery?: {
+        resumedSettlements: number;
+        stillPartial: number;
+        estatesRecovered: number;
+        estatesStillResolving: number;
+      };
     } | null;
 
     /** A8: employer pension contributions into union schemes. */

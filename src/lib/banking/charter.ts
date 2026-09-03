@@ -422,7 +422,13 @@ async function revokeCharterInner(
       "bankCharter.status": "active",
       "bankCharter.resolutionClaimedTurn": { $exists: false },
     },
-    { $set: { "bankCharter.resolutionClaimedTurn": currentTurn, updatedAt: now } }
+    {
+      $set: {
+        "bankCharter.resolutionClaimedTurn": currentTurn,
+        "bankCharter.pendingRevocationReason": reason,
+        updatedAt: now,
+      },
+    }
   );
   let revokedTurn = currentTurn;
   if (claim.modifiedCount !== 1) {
@@ -460,6 +466,7 @@ async function revokeCharterInner(
 
   const update: {
     $set: Record<string, unknown>;
+    $unset: Record<string, "">;
   } = {
     $set: {
       "bankCharter.status": "revoked",
@@ -467,6 +474,7 @@ async function revokeCharterInner(
       "bankCharter.revokedReason": reason,
       updatedAt: now,
     },
+    $unset: { "bankCharter.pendingRevocationReason": "" },
   };
   // No cash leg here: `returnDepositBook` already moved every currency unit it
   // was going to move, with a netting check on the legs. Writing a second

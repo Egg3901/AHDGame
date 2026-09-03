@@ -183,31 +183,36 @@ export async function returnDepositBook(
   const holderPath = `currencyBalances.savingsHolder.${currency}`;
   const now = new Date();
 
-  // Pointer flip first, and outside the money move: it is not a money movement
-  // at all, it is a label, and it is idempotent by construction (a second run
-  // matches nothing). Doing it first means a crash mid-way leaves depositors
-  // free of a dead bank rather than trapped in one.
-  const flip = await db
-    .collection<Character>("characters")
-    .updateMany(
-      { [holderPath]: bankIdHex },
-      { $set: { [holderPath]: "centralBank", updatedAt: now } }
-    );
-  let depositorsFlipped = flip.modifiedCount ?? 0;
-
-  // Under the account model the same flip runs on the accounts, and the
-  // player balances the bank held are part of the book it must return: their
-  // backing cash came into the vault with the holder change, so it leaves with
-  // the household deposits, through the same waterfall, insured the same way.
   const policy = await loadBankingPolicy(db);
   const playerDepositsAreLiabilities = savingsReadsAuthoritative(policy, currency);
   const sheetOptions = { playerDepositsAreLiabilities };
-  // Under the account model the accounts move AFTER the money has: they were
-  // frozen by the caller before the waterfall started (see `freezeAccountsAt`),
-  // and they are released to the central bank, open again, only once the
-  // backing and the liability have both landed there. A crash in between
-  // leaves them frozen at the dead bank, which recovery finishes; it never
-  // leaves them open at a bank that no longer holds their cash.
+
+  // Under the pointer model the pointer flips first, outside the money move:
+  // it is not a money movement at all, it is a label, idempotent by
+  // construction, and doing it first means a crash mid-way leaves depositors
+  // free of a dead bank rather than trapped in one.
+  //
+  // Under the account model the player balances the bank held are part of
+  // the book it must return (their backing came into the vault with the
+  // holder change, so it leaves with the household deposits, through the same
+  // waterfall, insured the same way), the pointer is a projection of the
+  // account, and both move AFTER the money has: the accounts were frozen by
+  // the caller before the waterfall started (see `freezeAccountsAt`) and are
+  // released to the central bank, open again, together with their pointers,
+  // only once the backing and the liability have both landed there. A crash
+  // in between leaves them frozen at the dead bank, which recovery finishes;
+  // it never leaves them open at a bank that no longer holds their cash, and
+  // never leaves the pointer saying one thing and the account another.
+  let depositorsFlipped = 0;
+  if (!playerDepositsAreLiabilities) {
+    const flip = await db
+      .collection<Character>("characters")
+      .updateMany(
+        { [holderPath]: bankIdHex },
+        { $set: { [holderPath]: "centralBank", updatedAt: now } }
+      );
+    depositorsFlipped = flip.modifiedCount ?? 0;
+  }
   const playerBookReturned = playerDepositsAreLiabilities
     ? Math.max(0, charter.playerDeposits ?? 0)
     : 0;
@@ -486,6 +491,12 @@ export async function returnDepositBook(
       depositorsFlipped,
       await releaseAccountsFrom(db, bankIdHex, currency, now)
     );
+    await db
+      .collection<Character>("characters")
+      .updateMany(
+        { [holderPath]: bankIdHex },
+        { $set: { [holderPath]: "centralBank", updatedAt: now } }
+      );
   }
   if (settled.status === "replayed") {
     // The cash moved on an earlier attempt and any projections that attempt

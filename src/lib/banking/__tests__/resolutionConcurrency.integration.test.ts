@@ -178,11 +178,12 @@ describe("resolution under contention", () => {
   it("refuses movements into or out of a frozen account and a resolving bank", async () => {
     await failBank(db);
     // Claim and freeze, then crash before the waterfall moves anything: the
-    // first write of the waterfall is the legacy pointer flip on characters.
+    // freeze is the last write before the settlement claims its key.
     const faulty = withInjectedCrash(db, {
-      collection: "characters",
+      collection: "savingsAccounts",
       op: "updateMany",
       onCall: 1,
+      afterWrite: true,
     }).db;
     await expect(resolveFailedBankDepositors(faulty, BANK, TURN)).rejects.toBeInstanceOf(
       InjectedCrash

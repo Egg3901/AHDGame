@@ -200,7 +200,6 @@ export async function runSavingsCommand(
           : "This savings account is closed.",
     };
   }
-  if (!account) return { ok: false, error: "Character not found" };
 
   const current = await loadHolderSnapshot(db, account.holder, currency, { ownerId });
   if ("error" in current) {

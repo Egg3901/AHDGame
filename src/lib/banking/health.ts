@@ -66,6 +66,15 @@ export interface BankingHealthReport {
     readCurrencies: string[];
     comparison: SavingsComparison | null;
   };
+  /** Estates claimed for resolution or revocation and not yet settled. */
+  resolvingEstates: Array<{ bankId: string; status: string; claimedTurn: number }>;
+  /**
+   * The activation gate. Widening the savings rollout (next currency into the
+   * read cohort, shadow to authoritative) is refused while this is false, and
+   * the reasons say what must be clean first: nothing unfinished from an
+   * earlier turn, no estate stuck in resolution, no projection drift.
+   */
+  gate: { ok: boolean; reasons: string[] };
 }
 
 function finite(value: unknown): number {
@@ -155,7 +164,7 @@ export async function buildBankingHealth(db: Db, now = new Date()): Promise<Bank
   }
 
   const unfinished = await db
-    .collection<{ _id: string; kind: string; createdAt: Date; status: string }>(
+    .collection<{ _id: string; kind: string; turn?: number; createdAt: Date; status: string }>(
       MONEY_MOVE_COLLECTION
     )
     .find({ status: "partial" })
@@ -166,12 +175,48 @@ export async function buildBankingHealth(db: Db, now = new Date()): Promise<Bank
   for (const row of unfinished) byKind[row.kind] = (byKind[row.kind] ?? 0) + 1;
   const oldest = unfinished[0];
 
+  const currentTurn = await getCurrentTurn(db);
   const comparison =
     policy.savingsAccounts === "off"
       ? null
-      : await buildSavingsComparison(db, await getCurrentTurn(db), {
+      : await buildSavingsComparison(db, currentTurn, {
           authoritativeCurrencies: readCohort(policy),
         });
+
+  const resolvingRows = await db
+    .collection<Corporation>("corporations")
+    .find({
+      "bankCharter.resolutionClaimedTurn": { $exists: true },
+      "bankCharter.depositorsResolvedTurn": { $exists: false },
+    })
+    .project<Pick<Corporation, "_id" | "bankCharter">>({ bankCharter: 1 })
+    .toArray();
+  const resolvingEstates = resolvingRows
+    .filter((row) => lifecycleStage(row.bankCharter) === "resolving")
+    .map((row) => ({
+      bankId: row._id.toString(),
+      status: row.bankCharter!.status,
+      claimedTurn: row.bankCharter!.resolutionClaimedTurn ?? 0,
+    }));
+
+  const reasons: string[] = [];
+  const staleUnfinished = unfinished.filter(
+    (row) => typeof row.turn === "number" && row.turn < currentTurn
+  );
+  if (staleUnfinished.length > 0) {
+    reasons.push(
+      `${staleUnfinished.length} settlement(s) from earlier turns are unfinished (oldest ${staleUnfinished[0]._id})`
+    );
+  }
+  const stuck = resolvingEstates.filter((estate) => estate.claimedTurn < currentTurn);
+  if (stuck.length > 0) {
+    reasons.push(`${stuck.length} estate(s) claimed on earlier turns are still in resolution`);
+  }
+  if (comparison && comparison.totalDiscrepancies > 0) {
+    reasons.push(
+      `${comparison.totalDiscrepancies} savings projection discrepancy(ies) in the last comparison`
+    );
+  }
 
   return {
     generatedAt: now,
@@ -188,5 +233,7 @@ export async function buildBankingHealth(db: Db, now = new Date()): Promise<Bank
       readCurrencies: [...policy.savingsReadCurrencies],
       comparison,
     },
+    resolvingEstates,
+    gate: { ok: reasons.length === 0, reasons },
   };
 }

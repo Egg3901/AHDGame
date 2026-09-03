@@ -8,6 +8,7 @@ import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { loadBankingPolicy, type BankingPolicySnapshot } from "@/lib/banking/policy";
 import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
+import { recoverBankingSettlements } from "@/lib/banking/recovery";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 import { recordBankingStage, timedBankingStage } from "@/lib/banking/telemetry";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
@@ -92,6 +93,13 @@ export type BankingTurnSummary = {
   deadBankRecoveredToInsurer: number;
   /** Settlements that started and never finished, as of the end of this pass. */
   unfinishedSettlements: number;
+  /** What the recovery worker finished, and did not, before this pass began. */
+  recovery: {
+    resumedSettlements: number;
+    stillPartial: number;
+    estatesRecovered: number;
+    estatesStillResolving: number;
+  };
 };
 
 const ZERO_SUMMARY: BankingTurnSummary = {
@@ -112,6 +120,12 @@ const ZERO_SUMMARY: BankingTurnSummary = {
   deadBankRecoveredToEstate: 0,
   deadBankRecoveredToInsurer: 0,
   unfinishedSettlements: 0,
+  recovery: {
+    resumedSettlements: 0,
+    stillPartial: 0,
+    estatesRecovered: 0,
+    estatesStillResolving: 0,
+  },
 };
 
 type DepositTaker = {
@@ -135,6 +149,17 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   if (!policy.privateBanking) {
     return { ...ZERO_SUMMARY };
   }
+
+  // Finish last turn's unfinished business before any new flow: a settlement
+  // that crashed between two legs, an estate claimed and never settled. Doing
+  // it first means nothing below builds on money still in flight.
+  const recovered = await recoverBankingSettlements(db, turn);
+  const recovery = {
+    resumedSettlements: recovered.resumedSettlements.length,
+    stillPartial: recovered.stillPartial.length,
+    estatesRecovered: recovered.estatesRecovered.length,
+    estatesStillResolving: recovered.estatesStillResolving.length,
+  };
 
   // CB docs load once up front — bank rates and the savings APY both key off
   // them, so the per-corp getEffectiveBankRates findOne is unnecessary.
@@ -215,7 +240,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
     }
   }
 
-  const summary: BankingTurnSummary = { ...ZERO_SUMMARY };
+  const summary: BankingTurnSummary = { ...ZERO_SUMMARY, recovery };
 
   for (const row of depositTakers) {
     const bankResult = await processOneBank(

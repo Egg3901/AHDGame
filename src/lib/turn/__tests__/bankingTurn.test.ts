@@ -373,6 +373,12 @@ describe("processBankingTurn", () => {
       deadBankRecoveredToEstate: 0,
       deadBankRecoveredToInsurer: 0,
       unfinishedSettlements: 0,
+      recovery: {
+        resumedSettlements: 0,
+        stillPartial: 0,
+        estatesRecovered: 0,
+        estatesStillResolving: 0,
+      },
     });
     expect(db.collectionMocks.corporations!.find).not.toHaveBeenCalled();
   });

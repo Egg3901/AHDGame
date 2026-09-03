@@ -127,6 +127,12 @@ export interface BankCharter {
    * and is finished by recovery rather than re-run from the start.
    */
   resolutionClaimedTurn?: number;
+  /**
+   * Reason given when a revocation claimed the estate, kept until the status
+   * flips so a revocation that crashed after claiming can be finished by the
+   * recovery worker with the reason it was started with.
+   */
+  pendingRevocationReason?: string;
   revokedTurn?: number;
   revokedReason?: string;
   failedTurn?: number;
