@@ -50,8 +50,28 @@ interface NominationState {
   viewerHasVoted: boolean;
 }
 
+interface GovernanceAction {
+  action: string;
+  allowed: boolean;
+  reason?: string;
+  deadlineTurn?: number;
+  nextDeadline?: number;
+}
+
+interface GovernanceState {
+  institutionId: string;
+  currency: string;
+  memberCountryIds: string[];
+  viewerRole: string;
+  allowedActions: GovernanceAction[];
+  nextDeadline: { turn: number; kind: string } | null;
+  normalizedRateChoices: number[];
+  primeRateOnGrid: number;
+}
+
 interface CommitteeState {
   hasCommittee: boolean;
+  governance?: GovernanceState | null;
   primeRate: number;
   rateChangesThisTerm: number;
   rateChangesPerTerm: number;
@@ -229,6 +249,13 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
         ? "The next session is due any turn now."
         : `The next session opens in ${turnsToNextSession} turn${turnsToNextSession === 1 ? "" : "s"} (one every 8 turns).`;
   const wallClockDeadline = meeting ? formatUtcDeadline(meeting.playerVoteDeadline) : null;
+  // Eligibility comes from the server's governance contract, not from
+  // re-deriving it client-side. Older payloads without governance fall back
+  // to the meeting's viewer flags.
+  const voteAction = state.governance?.allowedActions.find((a) => a.action === "cast_ballot");
+  const canVote = voteAction ? voteAction.allowed : (meeting?.viewerCanVote ?? false);
+  const voteReason = voteAction && !voteAction.allowed ? voteAction.reason : null;
+  const governanceDeadline = state.governance?.nextDeadline ?? null;
 
   return (
     <div className="space-y-6">
@@ -291,26 +318,43 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
                 {meeting.viewerHasVoted ? (
                   <p className="text-xs text-muted">Your ballot is recorded.</p>
                 ) : (
-                  <div className="flex gap-2">
-                    {(["hike", "cut", "hold"] as const).map((v) => (
-                      <button
-                        key={v}
-                        disabled={voting || !meeting.viewerCanVote}
-                        onClick={() => castVote(v)}
-                        className="rounded-lg border border-card-border px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-card-elevated/60 disabled:opacity-50"
-                      >
-                        {MOTION_LABEL[v]}
-                      </button>
-                    ))}
-                  </div>
+                  <>
+                    <div className="flex gap-2">
+                      {(["hike", "cut", "hold"] as const).map((v) => (
+                        <button
+                          key={v}
+                          disabled={voting || !canVote}
+                          onClick={() => castVote(v)}
+                          className="rounded-lg border border-card-border px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-card-elevated/60 disabled:opacity-50"
+                        >
+                          {MOTION_LABEL[v]}
+                        </button>
+                      ))}
+                    </div>
+                    {voteReason && <p className="mt-2 text-xs text-muted">{voteReason}</p>}
+                  </>
                 )}
               </div>
+            )}
+            {governanceDeadline && (
+              <p className="mt-2 text-xs text-muted">
+                Next deadline: turn {governanceDeadline.turn} (
+                {governanceDeadline.kind === "meeting_deadline"
+                  ? "this vote closes"
+                  : "next session opens"}
+                ).
+              </p>
             )}
           </div>
         ) : (
           <div className="px-5 py-4">
             <p className="text-sm text-muted">No meeting is currently in session.</p>
             {sessionLine && <p className="mt-1 text-xs text-muted">{sessionLine}</p>}
+            {governanceDeadline && (
+              <p className="mt-1 text-xs text-muted">
+                Next deadline: turn {governanceDeadline.turn} (next session opens).
+              </p>
+            )}
           </div>
         )}
       </div>

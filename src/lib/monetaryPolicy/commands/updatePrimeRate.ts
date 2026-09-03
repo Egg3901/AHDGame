@@ -107,7 +107,7 @@ async function updatePrimeRateInner(params: {
   const isGovernment =
     governmentControlled && !!myChar && (await isNationalIssuer(db, bankHomeCountryId, myChar._id));
 
-  // B6 — the impossible trinity feeds the machine as plain data. An active
+  // B6, the impossible trinity, feeds the machine as plain data. An active
   // intervention band counts as a commitment even when the regime field was
   // never set: the promise to defend a corridor is the commitment.
   let fxCommitment: { regime: "float" | "peg" | "band"; capitalControls: boolean } | null = null;

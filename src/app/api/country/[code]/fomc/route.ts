@@ -10,7 +10,11 @@ import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { handleRouteError, notFound } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { resolveJurisdiction } from "@/lib/monetaryGovernance/jurisdiction";
+import { bankToJurisdictionState } from "@/lib/monetaryGovernance/governanceShell";
+import { allowedActionsFor } from "@/lib/monetaryGovernance/rules/allowedActions";
+import { isBankGovernmentControlledLive } from "@/lib/centralBank/governance";
 import type { CentralBank, FomcNomination } from "@/lib/db/types/centralBank";
+import type { ExchangeRate } from "@/lib/db/types/exchangeRate";
 import {
   RATE_CHANGES_PER_TERM,
   FOMC_TERM_TURNS,
@@ -40,12 +44,10 @@ export async function GET(_request: Request, context: RouteContext) {
       return NextResponse.json(notFound("Country not found").toJson(), { status: 404 });
 
     const db = await getDb();
-    const { institutionId: bankId, memberCountryIds: memberCountries } = await resolveJurisdiction(
-      db,
-      countryId
-    );
+    const jurisdiction = await resolveJurisdiction(db, countryId);
+    const { institutionId: bankId, memberCountryIds: memberCountries } = jurisdiction;
     const bank = await db.collection<CentralBank>("centralBanks").findOne({ _id: bankId });
-    if (!bank?.fomcBoard) return NextResponse.json({ hasCommittee: false });
+    if (!bank?.fomcBoard) return NextResponse.json({ hasCommittee: false, governance: null });
 
     const board = bank.fomcBoard;
     const viewerId = auth.character._id;
@@ -123,6 +125,59 @@ export async function GET(_request: Request, context: RouteContext) {
       typeof bank.fomcTermStartedAtTurn === "number"
         ? bank.fomcTermStartedAtTurn + FOMC_TERM_TURNS
         : null;
+    // Machine-driven eligibility: what this viewer may do right now, why not,
+    // the next deadline, and the grid of rates a direct set may pick.
+    const fxDoc = await db
+      .collection<ExchangeRate>("exchangeRates")
+      .findOne({ countryId }, { projection: { fxRegime: 1, capitalControls: 1 } });
+    const gameConfig = await db
+      .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
+      .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } });
+    const governanceState = bankToJurisdictionState(bank, {
+      jurisdiction,
+      governmentControlled: await isBankGovernmentControlledLive(
+        bank,
+        jurisdiction.anchorCountryId
+      ),
+      fxCommitment: fxDoc
+        ? {
+            regime: fxDoc.fxRegime ?? "float",
+            capitalControls: fxDoc.capitalControls === true,
+          }
+        : null,
+      commandEconomy: gameConfig?.commandEconomyEnabled === true,
+    });
+    const isAdmin = (auth as { isAdmin?: boolean }).isAdmin === true;
+    const viewerRole = isAdmin
+      ? "admin"
+      : viewerSeat?.isChair
+        ? "chair"
+        : viewerSeat
+          ? "member"
+          : canNominate
+            ? "executive"
+            : "outsider";
+    const governanceView = allowedActionsFor(
+      governanceState,
+      {
+        kind: isAdmin ? "admin" : viewerSeat?.isChair ? "chair" : "governor",
+        ...(viewerSeat ? { seatId: viewerSeat.seatId } : {}),
+        characterId: viewerId.toString(),
+        countryId: callerCountryId,
+      },
+      { turn: currentTurn, now: Date.now(), currentYear: null }
+    );
+    const governance = {
+      institutionId: bankId,
+      currency: jurisdiction.currency,
+      memberCountryIds: memberCountries,
+      viewerRole,
+      allowedActions: governanceView.actions,
+      nextDeadline: governanceView.nextDeadline,
+      normalizedRateChoices: governanceView.normalizedRateChoices,
+      primeRateOnGrid: governanceView.primeRateOnGrid,
+    };
+
     const history = (bank.fomcMeetingHistory ?? []).slice(-MEETING_HISTORY_LIMIT).map((m) => {
       const t = tallyMeeting(m.ballots, m.motion, board.length);
       return {
@@ -139,6 +194,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
     return NextResponse.json({
       hasCommittee: true,
+      governance,
       primeRate: bank.primeRate,
       rateChangesThisTerm: bank.rateChangesThisTerm ?? 0,
       rateChangesPerTerm: RATE_CHANGES_PER_TERM,

@@ -561,6 +561,7 @@ describe("GET /api/country/[code]/fomc and POST /vote", () => {
       "board",
       "canNominate",
       "currentTurn",
+      "governance",
       "hasCommittee",
       "majorityNeeded",
       "meeting",
@@ -574,6 +575,25 @@ describe("GET /api/country/[code]/fomc and POST /vote", () => {
       "viewerIsSenator",
       "viewerSeatId",
     ]);
+    expect(sortedKeys(body.governance)).toEqual([
+      "allowedActions",
+      "currency",
+      "institutionId",
+      "memberCountryIds",
+      "nextDeadline",
+      "normalizedRateChoices",
+      "primeRateOnGrid",
+      "viewerRole",
+    ]);
+    for (const action of body.governance.allowedActions) {
+      expect(action.action).toBeTruthy();
+      expect(typeof action.allowed).toBe("boolean");
+    }
+    const ballot = body.governance.allowedActions.find(
+      (action: { action: string }) => action.action === "cast_ballot"
+    );
+    expect(sortedKeys(ballot)).toEqual(["action", "allowed", "deadlineTurn", "nextDeadline"]);
+    expect(sortedKeys(body.governance.nextDeadline)).toEqual(["kind", "turn"]);
     expect(sortedKeys(body.meeting)).toEqual([
       "agree",
       "disagree",
