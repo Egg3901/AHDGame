@@ -9,7 +9,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { handleRouteError, notFound } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { getCentralBankScope } from "@/lib/centralBank/helpers";
+import { resolveJurisdiction } from "@/lib/monetaryGovernance/jurisdiction";
 import type { CentralBank, FomcNomination } from "@/lib/db/types/centralBank";
 import {
   RATE_CHANGES_PER_TERM,
@@ -40,7 +40,10 @@ export async function GET(_request: Request, context: RouteContext) {
       return NextResponse.json(notFound("Country not found").toJson(), { status: 404 });
 
     const db = await getDb();
-    const { bankId, memberCountries } = await getCentralBankScope(db, countryId);
+    const { institutionId: bankId, memberCountryIds: memberCountries } = await resolveJurisdiction(
+      db,
+      countryId
+    );
     const bank = await db.collection<CentralBank>("centralBanks").findOne({ _id: bankId });
     if (!bank?.fomcBoard) return NextResponse.json({ hasCommittee: false });
 

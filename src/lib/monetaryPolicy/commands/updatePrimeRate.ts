@@ -9,9 +9,11 @@ import {
   RATE_CHANGES_PER_TERM,
   RATE_HISTORY_MAX,
 } from "@/lib/db/types";
+import { snapToPrimeRateGrid } from "@/lib/db/types/centralBank";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getBankId } from "@/lib/centralBank/helpers";
+import { resolveJurisdiction } from "@/lib/monetaryGovernance/jurisdiction";
 import { isBankGovernmentControlledLive } from "@/lib/centralBank/governance";
 import { isNationalIssuer } from "@/lib/extraction/contractIssuerAuth";
 import { INTERFERENCE_SCRUTINY } from "@/lib/centralBank/credibility";
@@ -87,9 +89,12 @@ async function updatePrimeRateInner(params: {
   currentTurn: number;
 }) {
   const { db, countryId, actor, rate, reason, currentTurn } = params;
+  // Canonical jurisdiction: a shared-currency bank has one authoritative
+  // document and the URL's country is only a viewpoint onto it.
+  const jurisdiction = await resolveJurisdiction(db, countryId);
   const bank = await db
     .collection<CentralBank>("centralBanks")
-    .findOne({ _id: getBankId(countryId) });
+    .findOne({ _id: jurisdiction.institutionId });
   if (!bank) {
     return { ok: false as const, status: 404, error: "Central bank not found" };
   }
@@ -102,10 +107,10 @@ async function updatePrimeRateInner(params: {
   // Government-controlled banks (the pre-1997 Bank of England): the rate is
   // set by the head of government or the finance seat, and the bank's own
   // chair has no rate authority. Independent banks: chair only, as before.
-  // Governance keys on the bank's HOME country (a sterlingized SCO reaches the
-  // same BoE doc through its own URL), and authority belongs to that home
-  // country's government too.
-  const bankHomeCountryId = (bank.countryId ?? countryId) as CountryId;
+  // Governance keys on the jurisdiction's ANCHOR country (a sterlingized SCO
+  // reaches the same BoE doc through its own URL), and authority belongs to
+  // that home country's government too.
+  const bankHomeCountryId = jurisdiction.anchorCountryId;
   const governmentControlled = await isBankGovernmentControlledLive(bank, bankHomeCountryId);
   if (governmentControlled) {
     const isGovernment = !!myChar && (await isNationalIssuer(db, bankHomeCountryId, myChar._id));
@@ -185,12 +190,17 @@ async function updatePrimeRateInner(params: {
     }
   }
 
+  // Normalize both sides onto the quarter-point grid before validating: a
+  // stored off-grid rate (from a continuous writer) must never lock out the
+  // next valid on-grid action.
   const previousRate = bank.primeRate;
-  if (rate === previousRate) {
+  const storedOnGrid = snapToPrimeRateGrid(previousRate);
+  const requestedOnGrid = snapToPrimeRateGrid(rate);
+  if (requestedOnGrid === storedOnGrid) {
     return { ok: false as const, status: 400, error: "New rate is the same as the current rate" };
   }
 
-  const rawDelta = rate - previousRate; // positive = hike, negative = cut
+  const rawDelta = requestedOnGrid - storedOnGrid; // positive = hike, negative = cut
 
   if (!isAdmin) {
     if (rawDelta > MAX_RATE_CHANGE_DELTA + 1e-9) {
@@ -248,7 +258,7 @@ async function updatePrimeRateInner(params: {
     { _id: bank._id },
     {
       $set: {
-        primeRate: rate,
+        primeRate: requestedOnGrid,
         updatedAt: now,
         lastRateChangeTurn: currentTurn,
         ...(newInfamy !== undefined ? { chairInfamy: newInfamy } : {}),
@@ -270,7 +280,7 @@ async function updatePrimeRateInner(params: {
           $each: [
             {
               previousRate,
-              newRate: rate,
+              newRate: requestedOnGrid,
               changedBy,
               changedByName,
               changedAt: now,
@@ -292,7 +302,7 @@ async function updatePrimeRateInner(params: {
     previousRate,
     changedByName,
     reason,
-    primeRate: rate,
+    primeRate: requestedOnGrid,
     scrutinyApplied,
     interferenceApplied,
   };

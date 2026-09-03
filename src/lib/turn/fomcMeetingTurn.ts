@@ -32,6 +32,7 @@ import {
   RATE_HISTORY_MAX,
   NPP_CHAIR_TARGET_GROWTH,
   COC_SMOOTHING_TURNS,
+  snapToPrimeRateGrid,
 } from "@/lib/db/types/centralBank";
 import {
   proposeChairMotion,
@@ -357,7 +358,9 @@ export function resolveMeetingInto(
 
   if (moved) {
     const previousRate = bank.primeRate;
-    const newRate = previousRate + meeting.proposedDelta;
+    // Snap onto the quarter-point grid: a stored off-grid rate plus a motion
+    // delta stays off-grid, and the next on-grid action would never validate.
+    const newRate = snapToPrimeRateGrid(snapToPrimeRateGrid(previousRate) + meeting.proposedDelta);
     const chair = chairSeat(board);
     const record: RateChangeRecord = {
       previousRate,
