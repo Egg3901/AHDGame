@@ -418,6 +418,30 @@ describe("NPP capacity reinvestment — conservation and pricing", () => {
     const charged = -decision.liquidCapitalDelta;
     expect(charged).toBeCloseTo(decision.reinvestments![0].costAnchor, 6);
   });
+
+  it("never puts liquidCapital in `updates`, on any path (ticket #1260 regression)", () => {
+    // The whole bug: these ops are appended to the corporation bulkWrite AFTER
+    // the turn's income `$inc`, so ANY absolute write of the balance from here
+    // overwrites the income. `updates` becomes `$set`, so a `liquidCapital` key
+    // reaching it silently reinstates the bug. The cash leg must travel only as
+    // `liquidCapitalDelta`. Covers spending, founding and no-op paths.
+    const spends = decide(corp(), [sector()], [pool()], plantsCtx);
+    const noop = decide(
+      corp({ liquidCapital: 0 }),
+      [sector()],
+      [pool({ headroomUnits: 0, revenue: 0 })]
+    );
+
+    for (const d of [spends, noop]) {
+      expect(d.updates).not.toHaveProperty("liquidCapital");
+      expect(typeof d.liquidCapitalDelta).toBe("number");
+      expect(Number.isFinite(d.liquidCapitalDelta)).toBe(true);
+    }
+    // And the spending path really did charge something, so this is not passing
+    // simply because nothing happened.
+    expect(spends.liquidCapitalDelta).toBeLessThan(0);
+    expect(noop.liquidCapitalDelta).toBe(0);
+  });
 });
 
 describe("NPP capacity reinvestment — a full bucket no longer blocks growth", () => {
