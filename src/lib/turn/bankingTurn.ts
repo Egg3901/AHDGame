@@ -27,13 +27,12 @@ import {
 import {
   ARREARS_DEFAULT_TURNS,
   MAX_NPC_FLOW_PER_TURN_FRACTION,
-  applyLoanPayment,
   computeNpcLoanBook,
-  markLoanDefaulted,
-  namedLoanInstalment,
   npcFlowDelta,
   perTurnInterest,
 } from "@/lib/banking/rules/loans";
+import { loanServiceTransition } from "@/lib/banking/rules/loanServicing";
+import { settleTransition } from "@/lib/banking/settlementJournal";
 import { cbMarginRatePercent } from "@/lib/banking/interbank";
 import { effectiveBankRatesFromPrime } from "@/lib/banking/rates";
 import { getReserveRequirement } from "@/lib/banking/reserves";
@@ -901,190 +900,76 @@ async function servicePlayerLoan(
   };
   if (loan.lastProcessedTurn === turn) return empty;
 
-  const outstanding = Math.max(0, loan.outstanding ?? 0);
-  if (outstanding <= 0) {
-    await db.collection<BankLoan>("bankLoans").updateOne(
-      { _id: loan._id, lastProcessedTurn: { $ne: turn } },
-      {
-        $set: {
-          status: "repaid",
-          outstanding: 0,
-          lastProcessedTurn: turn,
-          arrearsTurns: 0,
-        },
-      }
-    );
+  // The decision is pure; the transition carries the borrower's debit, the
+  // lender's credit and the loan-document update guarded on the turn stamp.
+  // The journal lands all of it exactly once under the per-loan-per-turn key,
+  // so a retried turn can neither charge the borrower twice nor advance the
+  // loan twice, and a crash between money and record is a visible partial.
+  const available = await readBorrowerAvailable(db, loan, currency);
+  const { decision, transition } = loanServiceTransition({
+    loan,
+    borrowerAvailable: available,
+    turn,
+    creditTarget: {
+      collection: creditTarget.collection,
+      filter: creditTarget.filter,
+      path: creditTarget.path,
+      note: creditTarget.note,
+    },
+    bankId: bankCorporationId.toString(),
+  });
+  if (decision.outcome === "closed") {
+    await settleTransition(db, transition);
     return empty;
   }
 
-  const { interestDue, principalDue, paymentDue } = namedLoanInstalment(loan, turn);
+  const settled = await settleTransition(db, transition);
+  if (settled.status === "rejected") return empty;
+  const moneyLanded =
+    transition.legs.length > 0 && settled.appliedLegs.length === transition.legs.length;
+  const advanced = settled.appliedProjections.length === transition.projections.length;
 
-  const borrowerName = await readBorrowerName(db, loan);
-  const ledger = { bankName, borrowerName };
-
-  const available = await readBorrowerAvailable(db, loan, currency);
-  const payment = Math.min(paymentDue, Math.max(0, available));
-
-  if (payment < paymentDue - 1e-9) {
-    // Partial or zero - arrears path
-    const interestPaid = Math.min(payment, interestDue);
-    const principalPaid = Math.max(0, payment - interestPaid);
-    const nextOutstanding = Math.max(0, outstanding - principalPaid);
-    const arrearsTurns = (loan.arrearsTurns ?? 0) + 1;
-
-    if (arrearsTurns >= ARREARS_DEFAULT_TURNS) {
-      const marked = markLoanDefaulted({ outstanding: nextOutstanding, status: "arrears" });
-      const collected = await collectLoanPayment(
-        db,
-        turn,
-        loan,
-        currency,
-        payment,
-        creditTarget,
-        ledger
-      );
-      await db.collection<BankLoan>("bankLoans").updateOne(
-        { _id: loan._id, lastProcessedTurn: { $ne: turn } },
-        {
-          $set: {
-            outstanding: marked.outstanding,
-            status: marked.status,
-            arrearsTurns,
-            lastProcessedTurn: turn,
-          },
-        }
-      );
-      emitLoanServiced(db, turn, loan, currency, bankCorporationId, {
-        kind: "loan.defaulted",
-        statusAfter: marked.status,
-        collected,
-        writtenOff: marked.outstanding,
-        arrearsTurns,
-      });
-      return {
-        interestCollected: interestPaid,
-        principalRepaid: principalPaid,
-        writtenOff: marked.outstanding,
-        bankCredit: collected,
-        totalLoansDelta: -(principalPaid + marked.outstanding),
-      };
-    }
-
-    const collectedPartial = await collectLoanPayment(
-      db,
+  if (settled.status === "applied" && moneyLanded && decision.payment > 0) {
+    const borrowerName = await readBorrowerName(db, loan);
+    await emitTx(db, {
+      type: "bank_loan_repayment",
       turn,
-      loan,
-      currency,
-      payment,
-      creditTarget,
-      ledger
-    );
-    await db.collection<BankLoan>("bankLoans").updateOne(
-      { _id: loan._id, lastProcessedTurn: { $ne: turn } },
-      {
-        $set: {
-          outstanding: nextOutstanding,
-          status: "arrears",
-          arrearsTurns,
-          lastProcessedTurn: turn,
-        },
-      }
-    );
-    emitLoanServiced(db, turn, loan, currency, bankCorporationId, {
-      kind: "loan.delinquent",
-      statusAfter: "arrears",
-      collected: collectedPartial,
-      writtenOff: 0,
-      arrearsTurns,
+      createdAt: new Date(),
+      subjectType: loan.borrowerType === "character" ? "character" : "corporation",
+      subjectId: loan.borrowerId,
+      subjectName: borrowerName,
+      amount: -decision.payment,
+      currencyCode: currency,
+      counterpartyType: "corporation",
+      counterpartyId: loan.bankCorporationId,
+      counterpartyName: bankName,
+      meta: { loanId: loan._id.toString(), settlementId: transition.key },
     });
-    return {
-      interestCollected: interestPaid,
-      principalRepaid: principalPaid,
-      writtenOff: 0,
-      bankCredit: collectedPartial,
-      totalLoansDelta: -principalPaid,
-    };
+  }
+  if (settled.status === "applied" && advanced) {
+    emitBankingAuditEvent(
+      {
+        ...transition.event,
+        turn,
+        outcome: "ok",
+        currency,
+        bankId: bankCorporationId.toString(),
+        settlementId: transition.key,
+      },
+      db
+    );
   }
 
-  // Full payment
-  const interestPaid = interestDue;
-  const principalPaid = Math.min(principalDue, outstanding);
-  const afterPay = applyLoanPayment({ outstanding, status: loan.status }, principalPaid);
-
-  const collectedFull = await collectLoanPayment(
-    db,
-    turn,
-    loan,
-    currency,
-    paymentDue,
-    creditTarget,
-    ledger
-  );
-  await db.collection<BankLoan>("bankLoans").updateOne(
-    { _id: loan._id, lastProcessedTurn: { $ne: turn } },
-    {
-      $set: {
-        outstanding: afterPay.outstanding,
-        status: afterPay.status,
-        arrearsTurns: 0,
-        lastProcessedTurn: turn,
-      },
-    }
-  );
-  emitLoanServiced(db, turn, loan, currency, bankCorporationId, {
-    kind: "loan.paid",
-    statusAfter: afterPay.status,
-    collected: collectedFull,
-    writtenOff: 0,
-    arrearsTurns: 0,
-  });
-
+  // What this pass may count: the money that actually landed, and the book
+  // movement only when the loan record advanced.
+  const collected = moneyLanded ? decision.payment : 0;
   return {
-    interestCollected: interestPaid,
-    principalRepaid: principalPaid,
-    writtenOff: 0,
-    bankCredit: collectedFull,
-    totalLoansDelta: -principalPaid,
+    interestCollected: advanced ? decision.interestPaid : 0,
+    principalRepaid: advanced ? decision.principalPaid : 0,
+    writtenOff: advanced ? decision.writtenOff : 0,
+    bankCredit: collected,
+    totalLoansDelta: advanced ? decision.totalLoansDelta : 0,
   };
-}
-
-/** One audit event per serviced loan per turn, whichever way it went. */
-function emitLoanServiced(
-  db: Db,
-  turn: number,
-  loan: BankLoan,
-  currency: CurrencyCode,
-  bankCorporationId: ObjectId,
-  outcome: {
-    kind: "loan.paid" | "loan.delinquent" | "loan.defaulted";
-    statusAfter: BankLoan["status"];
-    collected: number;
-    writtenOff: number;
-    arrearsTurns: number;
-  }
-): void {
-  emitBankingAuditEvent(
-    {
-      kind: outcome.kind,
-      command: "bank.loan.service",
-      turn,
-      outcome: "ok",
-      currency,
-      bankId: bankCorporationId.toString(),
-      subjectType: "loan",
-      subjectId: loan._id.toString(),
-      statusBefore: loan.status,
-      statusAfter: outcome.statusAfter,
-      settlementId: `loan-service:${loan._id.toString()}:${turn}`,
-      amount: outcome.collected,
-      meta: {
-        borrowerType: loan.borrowerType,
-        writtenOff: outcome.writtenOff,
-        arrearsTurns: outcome.arrearsTurns,
-      },
-    },
-    db
-  );
 }
 
 /** Borrower display name for the ledger leg. One read per serviced loan. */
@@ -1121,79 +1006,6 @@ async function readBorrowerAvailable(
     .collection<Corporation>("corporations")
     .findOne({ _id: loan.borrowerId }, { projection: { liquidCapital: 1 } });
   return Math.max(0, corp?.liquidCapital ?? 0);
-}
-
-/**
- * The single chokepoint every repayment path goes through: full payment,
- * partial/arrears, and the final debit before a default is written off.
- *
- * It now moves BOTH sides. It used to debit the borrower and leave the bank's
- * side as a number the caller added to an in-memory total that was flushed at
- * the end of the whole pass, so a crash anywhere in between destroyed the
- * payment: the borrower had paid and nobody had been paid. The two legs go
- * through the shared primitive under a per-loan key, which also makes a retried
- * turn unable to charge the same borrower twice for the same loan.
- *
- * Returns what actually moved, which is zero when the guard refused the debit.
- */
-async function collectLoanPayment(
-  db: Db,
-  turn: number,
-  loan: BankLoan,
-  currency: CurrencyCode,
-  amount: number,
-  creditTarget: MoneyTarget,
-  ledger?: { bankName: string; borrowerName: string }
-): Promise<number> {
-  if (!(amount > 0) || !loan.borrowerId) return 0;
-
-  const borrowerPath =
-    loan.borrowerType === "character" ? `currencyBalances.personal.${currency}` : "liquidCapital";
-  const borrowerCollection = loan.borrowerType === "character" ? "characters" : "corporations";
-
-  const move = await applyMoneyMove(db, {
-    key: `loan-service:${loan._id.toString()}:${turn}`,
-    kind: "loan_service",
-    turn,
-    legs: [
-      {
-        kind: "debit",
-        amount,
-        collection: borrowerCollection,
-        filter: { _id: loan.borrowerId },
-        path: borrowerPath,
-        note: "borrower pays the instalment",
-      },
-      {
-        kind: "credit",
-        amount,
-        collection: creditTarget.collection,
-        filter: creditTarget.filter,
-        path: creditTarget.path,
-        note: creditTarget.note,
-      },
-    ],
-  });
-
-  if (move.status !== "applied") return 0;
-
-  if (ledger) {
-    await emitTx(db, {
-      type: "bank_loan_repayment",
-      turn,
-      createdAt: new Date(),
-      subjectType: loan.borrowerType === "character" ? "character" : "corporation",
-      subjectId: loan.borrowerId,
-      subjectName: ledger.borrowerName,
-      amount: -amount,
-      currencyCode: currency,
-      counterpartyType: "corporation",
-      counterpartyId: loan.bankCorporationId,
-      counterpartyName: ledger.bankName,
-      meta: { loanId: loan._id.toString() },
-    });
-  }
-  return amount;
 }
 
 type NpcBulkState = {
