@@ -90,6 +90,7 @@ import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import { emitBuildCapexTxBulk } from "@/lib/corporations/capexTxLog";
+import { buildNppCorpUpdateOp } from "@/lib/turn/npp/nppCashWrite";
 import { getLogisticsSupportedSectorCount, TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { sumStrengthGrants } from "@/lib/constants/techTree";
 import {
@@ -198,7 +199,7 @@ export async function processNppCorporationDecisions(
   corpUpdates: Array<{
     filter: { _id: ObjectId; unlockedTechNodeIds?: { $ne: string } };
     update: {
-      $set: Record<string, unknown>;
+      $set?: Record<string, unknown>;
       $inc?: Record<string, number>;
       $addToSet?: { unlockedTechNodeIds: string };
     };
@@ -218,7 +219,7 @@ export async function processNppCorporationDecisions(
   const corpUpdates: Array<{
     filter: { _id: ObjectId; unlockedTechNodeIds?: { $ne: string } };
     update: {
-      $set: Record<string, unknown>;
+      $set?: Record<string, unknown>;
       $inc?: Record<string, number>;
       $addToSet?: { unlockedTechNodeIds: string };
     };
@@ -571,12 +572,8 @@ export async function processNppCorporationDecisions(
       }
     }
 
-    if (Object.keys(decision.updates).length > 0) {
-      corpUpdates.push({
-        filter: { _id: decision.corpId },
-        update: { $set: decision.updates },
-      });
-    }
+    const corpUpdateOp = buildNppCorpUpdateOp(decision);
+    if (corpUpdateOp) corpUpdates.push(corpUpdateOp);
 
     // Sector tech tree: auto-unlock one node per turn when affordable. Separate
     // op from the budget decision above (same _id) — bulkWrite applies both.
@@ -1498,7 +1495,6 @@ export function makeNppCorpDecision(
           countryId: expansion.countryId,
         });
         cashLocal = entryCapital - foundingCost;
-        updates.liquidCapital = cashLocal;
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "entered");
       } else if (
         exceptionalShortageEntry &&
@@ -1531,7 +1527,6 @@ export function makeNppCorpDecision(
           profitMargin: 35,
         });
         cashLocal = entryCapital - foundingCost;
-        updates.liquidCapital = cashLocal;
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "entered");
       } else if (exceptionalShortageEntry && !isStateOwned(corp) && !corp.imfBailoutActive) {
         shortageCreditRequest = {
@@ -1901,7 +1896,6 @@ export function makeNppCorpDecision(
       // for it. (Market share stays well-defined: owned capacity rises, so the
       // owner's share of owned+headroom rises, without touching the pool.)
       cashLocal -= costLocal;
-      updates.liquidCapital = cashLocal;
       reinvestments.push({
         sectorId: sector._id,
         sectorType: sector.sectorType,
@@ -1924,6 +1918,7 @@ export function makeNppCorpDecision(
   return {
     corpId: corp._id,
     updates,
+    liquidCapitalDelta: cashLocal - liquidCapital,
     sectorUpdates,
     newSectors: newSectors.length > 0 ? newSectors : undefined,
     divestedSectorIds: divestedSectorIds.length > 0 ? divestedSectorIds : undefined,

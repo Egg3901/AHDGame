@@ -42,7 +42,10 @@ export type NppSectorUpdateDoc = {
 
 export interface NppCorpDecision {
   corpId: ObjectId;
+  /** Non-cash field writes. Cash movement is always carried as a delta below. */
   updates: Record<string, unknown>;
+  /** Net change to liquidCapital in the corporation's local currency. */
+  liquidCapitalDelta: number;
   sectorUpdates: Array<{
     filter: { _id: ObjectId };
     update: NppSectorUpdateDoc;

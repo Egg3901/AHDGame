@@ -151,7 +151,7 @@ describe("NPP expansion under plants — price parity", () => {
     );
 
     expect(decision.newSectors).toHaveLength(1);
-    const spent = (c.liquidCapital ?? 0) - (decision.updates.liquidCapital as number);
+    const spent = -decision.liquidCapitalDelta;
     // Era-real pricing keeps a 1953 founding cheap. Deployment now scales to
     // capital, so a 10k treasury funds several facilities rather than one — but
     // it stays a bounded share of that treasury and nowhere near the old flat
@@ -198,7 +198,7 @@ describe("NPP expansion under plants — price parity", () => {
     const decision = decide(c, [sector()], [unownedPool()], plantsCtx);
 
     expect(decision.newSectors).toHaveLength(1);
-    const spent = (c.liquidCapital ?? 0) - (decision.updates.liquidCapital as number);
+    const spent = -decision.liquidCapitalDelta;
     expect(spent).toBeCloseTo(EXPECTED_FEE + EXPECTED_BUILD, 2);
     expect(spent).not.toBeCloseTo(500_000, 2);
   });
@@ -236,7 +236,7 @@ describe("NPP expansion under plants — price parity", () => {
       Math.floor(POOL_UNITS * NPP_FOUNDING_HEADROOM_SHARE)
     );
     // Never spent below the cash floor.
-    expect(decision.updates.liquidCapital as number).toBeGreaterThan(0);
+    expect((c.liquidCapital ?? 0) + decision.liquidCapitalDelta).toBeGreaterThan(0);
   });
 
   it("pays the same price a player's founding build pays for the same units", () => {
@@ -261,7 +261,7 @@ describe("NPP expansion under plants — price parity", () => {
 
     expect(decision.newSectors).toBeUndefined();
     expect(decision.unownedDraws).toBeUndefined();
-    expect(decision.updates.liquidCapital).toBeUndefined();
+    expect(decision.liquidCapitalDelta).toBe(0);
   });
 
   it("ranks candidate markets by headroom units, not by ₳ revenue", () => {
@@ -295,7 +295,7 @@ describe("NPP expansion without plants — unchanged", () => {
     expect(decision.newSectors).toHaveLength(1);
     expect(decision.newSectors![0].starterOrder).toBeUndefined();
     expect(decision.newSectors![0].revenue).toBe(Math.round(POOL_REVENUE * 0.25));
-    expect((c.liquidCapital ?? 0) - (decision.updates.liquidCapital as number)).toBe(500_000);
+    expect(-decision.liquidCapitalDelta).toBe(500_000);
     expect(decision.unownedDraws).toBeUndefined();
   });
 
