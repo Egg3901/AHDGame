@@ -62,3 +62,17 @@ export const TRADECRAFT_MAX = 10;
 export const TRADECRAFT_DEFAULT = 3;
 export const COUNTER_INTEL_MAX = 100;
 export const COUNTER_INTEL_DEFAULT = 20;
+
+// ── Strategic assessment (phase 2) ──────────────────────────────────────────
+/** Widest deviation a fogged intelligence figure can carry. */
+export const INTEL_FOG_MAX_DEVIATION = 0.2;
+/** Turns a fogged reading stays stable for. Stops refresh-until-it-averages. */
+export const INTEL_FOG_WINDOW_TURNS = 6;
+
+/** Live coverage each assessment tier needs. */
+export const ASSESS_EXISTENCE_COVERAGE = 25;
+export const ASSESS_ESTIMATE_COVERAGE = 55;
+export const ASSESS_EXACT_COVERAGE = 80;
+
+/** Tension a strategic operation adds when it is ATTRIBUTED. Under a test's. */
+export const STRATEGIC_ATTRIBUTION_TENSION = 6;
