@@ -28,7 +28,7 @@ import {
 import { clampCoverage, currentCoverage } from "./coverage";
 import { applyOperationToNetwork, isNetworkUsable } from "./network";
 import { resolveOperation } from "./resolveOperation";
-import { applyStrategicAction } from "./strategicAction";
+import { applyStrategicAction, type StrategicActionResult } from "./strategicAction";
 
 export type OperationKind = "collect" | "action";
 
@@ -194,8 +194,9 @@ export async function runOperation(args: RunOperationArgs): Promise<RunOperation
   // A successful strategic ACTION is the only thing in phase 2 that changes the
   // world. Reaching it required exact-tier coverage through the action gate, so
   // the operator has genuinely found the programme rather than guessed at it.
+  let strategicEffect: StrategicActionResult | null = null;
   if (domain === "strategic" && kind === "action" && resolution.outcome === "success") {
-    await applyStrategicAction(db, agency.countryId, targetCountryId, turn);
+    strategicEffect = await applyStrategicAction(db, agency.countryId, targetCountryId, turn);
   }
 
   // ── Compromise costs after ────────────────────────────────────────────────
@@ -214,7 +215,12 @@ export async function runOperation(args: RunOperationArgs): Promise<RunOperation
     }
   );
 
-  const message = describeOperation(kind, resolution.outcome, resolution.compromise);
+  const message = describeOperation(
+    kind,
+    resolution.outcome,
+    resolution.compromise,
+    strategicEffect
+  );
 
   const opLog = await getIntelligenceOpLogCollection(db);
   await opLog.insertOne({
@@ -288,13 +294,24 @@ async function readTargetCounterIntel(db: Db, targetCountryId: CountryId): Promi
 function describeOperation(
   kind: OperationKind,
   outcome: OperationOutcome,
-  compromise: OperationCompromise
+  compromise: OperationCompromise,
+  strategicEffect: StrategicActionResult | null
 ): string {
+  // A strategic action can succeed against a country that simply has nothing
+  // undeclared to break. Reporting that as "did what it was sent to do" would be
+  // a lie, and refusing it at the gate would leak whether a programme exists to
+  // an operator whose coverage has not earned that answer.
+  const emptyStrategic = strategicEffect !== null && !strategicEffect.sabotaged;
+
   const did =
     outcome === "success"
       ? kind === "collect"
         ? "The station filed a usable report."
-        : "The operation did what it was sent to do."
+        : emptyStrategic
+          ? "The team reached the site and found nothing worth breaking."
+          : strategicEffect?.crackdown === true
+            ? "The programme lost ground, and the raid was public."
+            : "The operation did what it was sent to do."
       : kind === "collect"
         ? "The station came back with nothing usable."
         : "The operation failed to achieve anything.";

@@ -18,6 +18,7 @@ const state = {
 };
 
 vi.mock("@/lib/coldwar/tension", () => ({ applyTensionEvent: vi.fn() }));
+vi.mock("./strategicAction", () => ({ applyStrategicAction: vi.fn() }));
 vi.mock("@/lib/db/collections/intelligence", () => ({
   getIntelligenceNetworksCollection: async () => ({
     findOne: async () => state.network,
@@ -49,6 +50,7 @@ vi.mock("@/lib/db/collections/intelligence", () => ({
 }));
 
 const { applyTensionEvent } = await import("@/lib/coldwar/tension");
+const { applyStrategicAction } = await import("./strategicAction");
 
 const db = {} as Db;
 
@@ -280,5 +282,57 @@ describe("strategic attribution and world tension", () => {
     state.targetAgency = { counterIntel: 100 };
     await run({ domain: "military", rolls: { success: 0, compromise: 0 } });
     expect(applyTensionEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe("strategic action reporting", () => {
+  it("says plainly when there was nothing to break", async () => {
+    // Refusing at the gate would leak whether a covert programme exists to an
+    // operator whose coverage has not earned that answer. Reporting success
+    // would be a lie. So it succeeds and says what actually happened.
+    vi.mocked(applyStrategicAction).mockResolvedValue({ sabotaged: false, crackdown: false });
+    state.coverage = { valueAtCollection: 100, lastCollectedTurn: 10 };
+    const r = await run({
+      domain: "strategic",
+      kind: "action",
+      rolls: { success: 0, compromise: 0.99 },
+    });
+    expect(r).toMatchObject({ ok: true, outcome: "success" });
+    expect((r as { message: string }).message).toContain("nothing worth breaking");
+  });
+
+  it("reports a patron's raid as public", async () => {
+    vi.mocked(applyStrategicAction).mockResolvedValue({ sabotaged: true, crackdown: true });
+    state.coverage = { valueAtCollection: 100, lastCollectedTurn: 10 };
+    const r = await run({
+      domain: "strategic",
+      kind: "action",
+      rolls: { success: 0, compromise: 0.99 },
+    });
+    expect((r as { message: string }).message).toContain("public");
+  });
+
+  it("reports an outsider's sabotage without announcing it", async () => {
+    vi.mocked(applyStrategicAction).mockResolvedValue({ sabotaged: true, crackdown: false });
+    state.coverage = { valueAtCollection: 100, lastCollectedTurn: 10 };
+    const r = await run({
+      domain: "strategic",
+      kind: "action",
+      rolls: { success: 0, compromise: 0.99 },
+    });
+    const message = (r as { message: string }).message;
+    expect(message).toContain("did what it was sent to do");
+    expect(message).not.toContain("public");
+  });
+
+  it("runs no strategic effect for a collection operation", async () => {
+    await run({ domain: "strategic", kind: "collect" });
+    expect(applyStrategicAction).not.toHaveBeenCalled();
+  });
+
+  it("runs no strategic effect when the action misses", async () => {
+    state.coverage = { valueAtCollection: 100, lastCollectedTurn: 10 };
+    await run({ domain: "strategic", kind: "action", rolls: { success: 0.999, compromise: 0.99 } });
+    expect(applyStrategicAction).not.toHaveBeenCalled();
   });
 });

@@ -16,7 +16,11 @@ import { getNuclearProgram } from "@/lib/db/collections/nuclearPrograms";
 import { getIntelligenceCoverageCollection } from "@/lib/db/collections/intelligence";
 import { COVERT_CAPABLE, COVERT_STAGES } from "@/lib/military/covertNuclear";
 import { currentCoverage } from "@/lib/intelligence/coverage";
-import { assessNuclear, type NuclearFacts } from "@/lib/intelligence/strategicAssessment";
+import {
+  assessNuclear,
+  assessmentTier,
+  type NuclearFacts,
+} from "@/lib/intelligence/strategicAssessment";
 import {
   loadCurrentTurn,
   requireIntelligenceHolder,
@@ -44,6 +48,23 @@ export async function GET(request: Request, { params }: IntelligenceRouteParams)
     const coverage = coverageRow
       ? currentCoverage(coverageRow.valueAtCollection, turn - coverageRow.lastCollectedTurn)
       : 0;
+
+    // Below the existence tier nothing is revealed, so do not read the target's
+    // programme at all. Cheaper, and it keeps facts the caller has not earned
+    // from ever entering the request.
+    if (assessmentTier(coverage) === "none") {
+      return NextResponse.json({
+        targetCountryId,
+        coverage,
+        turn,
+        assessment: assessNuclear(
+          { hasProgramme: false, warheads: 0, adoptedNodeCount: 0, covert: null },
+          coverage,
+          targetCountryId,
+          turn
+        ),
+      });
+    }
 
     const overt = await getNuclearProgram(db, targetCountryId);
     // A country that cannot run a covert programme has no covert facts at all,
