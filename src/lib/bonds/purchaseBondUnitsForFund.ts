@@ -7,6 +7,7 @@ import { corpCapitalToAnchor, loadFxRatesRecord } from "@/lib/currency/corporati
 import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
 import { insertFundTransaction } from "@/lib/indexFunds/fundQueries";
 import { sovereignBondCapError } from "@/lib/bonds/holderCap";
+import { creditBondPool } from "@/lib/bonds/marketPool";
 
 export type PurchaseBondUnitsForFundResult =
   { ok: true; units: number; costAnchor: number; bondId: ObjectId } | { ok: false; reason: string };
@@ -89,6 +90,8 @@ export async function purchaseBondUnitsForFund(
       await refundFundCashAnchor(db, fund._id, costAnchor);
       return { ok: false, reason: "reservation_failed" };
     }
+
+    await creditBondPool(db, bondCurrency, costLocal, "purchasesIn", now);
 
     await insertFundTransaction(db, {
       fundId: fund._id,

@@ -274,6 +274,12 @@ const RUNTIME: CollectionEntry[] = [
       "Short-lived Discord news delivery claims. Wiped with the game world and rebuilt on demand.",
   },
   {
+    name: "bondMarketPools",
+    category: "runtime",
+    notes:
+      "One bond market pool per currency: the cash side of every bond's publicFloat, with lifetime flow counters. Seeded by migration from a share of M2; wiped with the world.",
+  },
+  {
     name: "moneySupplySnapshots",
     category: "runtime",
     notes: "Per-turn M1/M2, credit, sovereign-debt, and central-bank holdings by issuing currency.",

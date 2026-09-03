@@ -31,6 +31,7 @@ import {
   refundCorpLiquidCapital,
 } from "@/lib/financialTxLog/atomicCashGuard";
 import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
+import { bondPoolCurrency, creditBondPool } from "@/lib/bonds/marketPool";
 import { sovereignBondCapError } from "@/lib/bonds/holderCap";
 import { emitTx } from "@/lib/financialTxLog/emit";
 
@@ -263,6 +264,7 @@ export async function processNppCorpTreasury(db: Db, turn: number, now: Date): P
         await refundCorpLiquidCapital(db, corp._id, pick.costLocal);
         continue;
       }
+      await creditBondPool(db, bondPoolCurrency(bond), pick.costLocal, "purchasesIn", now);
       await emitTx(db, {
         type: "bond_purchase",
         turn,
