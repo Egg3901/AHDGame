@@ -422,4 +422,186 @@ describe("mergeNationalFisc", () => {
     expect(res.lawsRescoped).toBe(0);
     expect(db.collection("federalBudget").updateOne).not.toHaveBeenCalled();
   });
+
+  it("re-bases the shell's own v2 fraction laws onto the merged base at their absolute cost", async () => {
+    // The live German case: the GDR's 5.93%-of-GDP army priced at 5.93% × 70bn
+    // pre-merge. Absorbing a country four times its size must not silently
+    // quadruple the programme — the unified treasury inherits both states'
+    // obligations at their authored sizes.
+    db.collection("federalBudget")
+      .findOne.mockResolvedValueOnce({
+        _id: "DE",
+        treasuryBalance: 0,
+        debt: { principal: 0 },
+      })
+      .mockResolvedValueOnce({
+        _id: "DD",
+        treasuryBalance: 0,
+        debt: { principal: 0 },
+      });
+    const shellLawId = new ObjectId();
+    // No carried laws; the shell's own v2 law is what re-bases.
+    db.collection("enactedLaws").find.mockImplementation((f: Record<string, unknown>) =>
+      cursorOf(
+        f.countryId === "DE"
+          ? []
+          : [
+              {
+                _id: shellLawId,
+                countryId: "DD",
+                scope: "national",
+                legislationTypeId: "dd.defense.armedForces.primary",
+                costModelV2: { gdpCostFraction: 0.0593 },
+              },
+            ]
+      )
+    );
+    // countryFiscalBase(DD) post-merge: both economies. state.gdp is in
+    // millions (× 1e6), so 50_000m + 30_000m = 80e9 merged against the 50e9
+    // pre-merge shell base.
+    db.collection("states").find.mockImplementation(() =>
+      cursorOf([
+        { gdp: 50_000, population: 2_000 },
+        { gdp: 30_000, population: 3_000 },
+      ])
+    );
+    db.collection("gameState").findOne.mockResolvedValue({ incomeBandIndexByCountry: {} });
+
+    await mergeNationalFisc(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 546,
+      carryLegislatedLevers: false,
+      mergeBases: {
+        fromGdp: 10_000_000_000,
+        fromPopulation: 1_000,
+        fromIncomeBand: 1,
+        toGdp: 50_000_000_000,
+        toPopulation: 5_000,
+        toIncomeBand: 1,
+      },
+    });
+
+    const ops = db.collectionMocks["enactedLaws"].bulkWrite.mock.calls[0][0];
+    const set = ops.find(
+      (op: { updateOne: { filter: { _id: unknown } } }) =>
+        String(op.updateOne.filter._id) === String(shellLawId)
+    ).updateOne.update.$set;
+    // 0.0593 × 50_000 / 80_000 = 0.0370625 — same absolute cost on the merged base.
+    expect(set["costModelV2.gdpCostFraction"]).toBeCloseTo(0.0593 * (50_000 / 80_000), 10);
+    expect(set.mergeRebased).toEqual({ from: "DE", to: "DD", turn: 546 });
+  });
+
+  it("re-bases the carried book by the absorbed country's own base, not the shell's", async () => {
+    db.collection("federalBudget")
+      .findOne.mockResolvedValueOnce({
+        _id: "DE",
+        treasuryBalance: 0,
+        debt: { principal: 0 },
+      })
+      .mockResolvedValueOnce({
+        _id: "DD",
+        treasuryBalance: 0,
+        debt: { principal: 0 },
+      });
+    const carriedLawId = new ObjectId();
+    db.collection("enactedLaws").find.mockImplementation((f: Record<string, unknown>) =>
+      cursorOf(
+        f.countryId === "DE"
+          ? [
+              {
+                _id: carriedLawId,
+                countryId: "DE",
+                scope: "national",
+                gdpPerCapitaMultiplier: 0.28,
+              },
+            ]
+          : []
+      )
+    );
+    db.collection("states").find.mockImplementation(() =>
+      cursorOf([{ gdp: 40_000, population: 4_000 }])
+    );
+
+    await mergeNationalFisc(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 546,
+      mergeBases: {
+        fromGdp: 21_000_000_000,
+        fromPopulation: 2_100,
+        fromIncomeBand: 1,
+        toGdp: 7_000_000_000,
+        toPopulation: 700,
+        toIncomeBand: 1,
+      },
+    });
+
+    // The carried law rides the rescope bulkWrite: re-keyed AND re-based in the
+    // same write, so a crash between them cannot strand either half.
+    const ops = db.collectionMocks["enactedLaws"].bulkWrite.mock.calls[0][0];
+    const set = ops[0].updateOne.update.$set;
+    expect(set.countryId).toBe("DD");
+    // 0.28 × 21_000 / 40_000 — the West German programme at its authored size.
+    expect(set.gdpPerCapitaMultiplier).toBeCloseTo(0.28 * (21_000 / 40_000), 10);
+  });
+
+  it("the v2 income term re-bases by the population-and-band ratio, not the gdp ratio", async () => {
+    db.collection("federalBudget")
+      .findOne.mockResolvedValueOnce({
+        _id: "DE",
+        treasuryBalance: 0,
+        debt: { principal: 0 },
+      })
+      .mockResolvedValueOnce({
+        _id: "DD",
+        treasuryBalance: 0,
+        debt: { principal: 0 },
+      });
+    const carriedIncomeLawId = new ObjectId();
+    db.collection("enactedLaws").find.mockImplementation((f: Record<string, unknown>) =>
+      cursorOf(
+        f.countryId === "DE"
+          ? [
+              {
+                _id: carriedIncomeLawId,
+                countryId: "DE",
+                scope: "national",
+                costModelV2: { incomeCostFraction: 0.01 },
+              },
+            ]
+          : []
+      )
+    );
+    db.collection("states").find.mockImplementation(() =>
+      cursorOf([{ gdp: 40_000, population: 8_000 }])
+    );
+    // The survivor's live band differs from the band the carried side priced at.
+    db.collection("gameState").findOne.mockResolvedValue({
+      incomeBandIndexByCountry: { DD: 1.25 },
+    });
+
+    await mergeNationalFisc(db as unknown as Db, {
+      fromCountryId: "DE",
+      toCountryId: "DD",
+      currentTurn: 546,
+      mergeBases: {
+        fromGdp: 20_000_000_000,
+        fromPopulation: 2_000,
+        fromIncomeBand: 1,
+        toGdp: 5_000_000_000,
+        toPopulation: 500,
+        toIncomeBand: 1,
+      },
+    });
+
+    const ops = db.collectionMocks["enactedLaws"].bulkWrite.mock.calls[0][0];
+    const set = ops[0].updateOne.update.$set;
+    // income term = frac × anchor × band × population. The anchor does not
+    // move; the population (2000 → 8000) and the band (1 → 1.25) both do.
+    expect(set["costModelV2.incomeCostFraction"]).toBeCloseTo(
+      0.01 * ((2_000 * 1) / (8_000 * 1.25)),
+      10
+    );
+  });
 });
