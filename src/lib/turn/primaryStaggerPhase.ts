@@ -75,6 +75,7 @@ const PRIMARY_TURNOUT_FACTOR = 0.13;
 import { allocateDelegates, type AllocationMethod } from "@/lib/primaryDelegateAllocation";
 import { projectPrimaryByState } from "@/lib/primaryProjection";
 import { logger } from "../observability/logger";
+import { emitPrimaryTierWire } from "@/lib/elections/raceWireEmit";
 
 const MS_PER_HOUR = 3_600_000;
 
@@ -968,6 +969,10 @@ export async function runPrimaryStaggerWaveIfDue(
   console.log(
     `[Primary Stagger] Election ${election._id} wave ${wavesRun + 1}/${schedule.waves.length} (${wave.label}) — ${wave.states.join(", ")}; delegates awarded: ${totalDelegatesAwarded}; momentum bumps: ${totalMomentumBumps}`
   );
+
+  // Per-race wire: the wave that just closed and what it awarded. Fire-and-
+  // forget after the tally write has committed, so it can never fail the wave.
+  void emitPrimaryTierWire(election._id, wavesRun + 1, totalDelegatesAwarded);
 
   return {
     electionId: election._id,

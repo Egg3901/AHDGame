@@ -46,6 +46,7 @@ import {
   campaignStrengthBatchQuote,
   maxAffordableCampaignStrengthClicks,
 } from "@/lib/campaigns/campaignStrength";
+import { emitOpsLevelWire, emitRallyWire } from "@/lib/elections/raceWireEmit";
 
 export async function upgradeCampaign(params: {
   db: Db;
@@ -260,6 +261,11 @@ export async function upgradeCampaign(params: {
   }
 
   const updated = await getCampaignOrThrow(db, campaignId);
+
+  // Per-race wire. Fire-and-forget: the emitter never throws, so a wire failure
+  // cannot undo the purchase that was just committed.
+  void emitOpsLevelWire(db, updated, category);
+
   return {
     funds: updated.funds,
     actions: updated.actions,
@@ -1354,6 +1360,9 @@ export async function fireRallyOneShot(params: {
       .updateOne({ _id: campaignId }, { $inc: { actions: actionCost } });
     throw new ApiError(409, "Rally state changed since page load. Please refresh.");
   }
+
+  // Per-race wire. Fire-and-forget, after both writes have committed.
+  void emitRallyWire(db, campaign, immediateBump);
 
   return {
     immediateBump,
