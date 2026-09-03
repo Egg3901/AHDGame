@@ -62,7 +62,7 @@ async function moveCharacterSavingsInner(
   currency: CurrencyCode,
   holder: SavingsHolder
 ): Promise<
-  MoveCharacterSavingsResult | { ok: true; holder: SavingsHolder; previousHolder: string }
+  { ok: true; holder: SavingsHolder; previousHolder: string } | { ok: false; error: string }
 > {
   if (!(await isPrivateBankingEnabled())) {
     return { ok: false, error: "Private banking is not enabled" };
@@ -80,19 +80,20 @@ async function moveCharacterSavingsInner(
     if (!targetBank) {
       return { ok: false, error: "Bank corporation not found" };
     }
-    if (!charterMay(targetBank.bankCharter, "acceptPlayerDeposits")) {
+    const targetCharter = targetBank.bankCharter;
+    if (!targetCharter || !charterMay(targetCharter, "acceptPlayerDeposits")) {
       return {
         ok: false,
         error: "Target bank must have an active retail or universal charter",
       };
     }
-    if (targetBank.bankCharter.currency !== currency) {
+    if (targetCharter.currency !== currency) {
       return {
         ok: false,
-        error: `Bank charter currency is ${targetBank.bankCharter.currency}, not ${currency}`,
+        error: `Bank charter currency is ${targetCharter.currency}, not ${currency}`,
       };
     }
-    if (isBlockedDepositor(targetBank.bankCharter, characterId.toString())) {
+    if (isBlockedDepositor(targetCharter, characterId.toString())) {
       return { ok: false, error: "Character is blacklisted by this bank" };
     }
   }

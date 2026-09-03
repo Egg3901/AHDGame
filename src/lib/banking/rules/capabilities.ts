@@ -170,7 +170,11 @@ export function charterCapabilities(
   });
 }
 
-/** Shorthand for the common one-question call. */
+/**
+ * Shorthand for the common one-question call. Deliberately not a type
+ * predicate: "may not do X" must not narrow a charter out of existence in the
+ * false branch, which is where the caller usually still wants to read it.
+ */
 export function charterMay(
   charter: CharterLike,
   key: CapabilityKey,

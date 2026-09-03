@@ -193,7 +193,7 @@ export async function quoteWindowForCorp(
   corp: Pick<Corporation, "bankCharter">
 ): Promise<{ capAnchor: number; headroomAnchor: number; ratePercent: number } | null> {
   const charter = corp.bankCharter;
-  if (!charterMay(charter, "discountWindow")) return null;
+  if (!charter || !charterMay(charter, "discountWindow")) return null;
   const prime = await primeRateFor(db, charter.currency as CurrencyCode);
   return quoteDiscountWindow(charter, prime);
 }

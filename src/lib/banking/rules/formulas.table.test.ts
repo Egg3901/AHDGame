@@ -356,16 +356,16 @@ describe("confidence, capital, window, solvency", () => {
         borrowings: { discountWindowDebt: 200_000, discountWindowArrears: 1_000 },
         propBookMarkValue: 0,
         bookTranches: [
-          { creditBand: "prime", outstanding: 3_000_000 },
-          { creditBand: "subprime", outstanding: 3_500_000 },
+          { creditBand: "AAA", outstanding: 3_000_000 },
+          { creditBand: "B", outstanding: 3_500_000 },
         ],
       })
     ).toEqual({
       capitalAnchor: 1_799_000,
       riskAssetsAnchor: 6_500_000,
       capitalRatio: expect.closeTo(0.27676923076923077, 12),
-      stressedCapitalRatio: expect.closeTo(0.23870445344129554, 12),
-      appliedStressLossFraction: 0.05,
+      stressedCapitalRatio: expect.closeTo(0.0727810650887574, 12),
+      appliedStressLossFraction: expect.closeTo(0.22, 12),
       standing: "adequate",
     });
   });

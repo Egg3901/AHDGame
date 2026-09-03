@@ -42,7 +42,7 @@ import { roundSavingsAmount, savingsApyPercent } from "@/lib/currency/savingsInt
 import { discountWindowRatePercent } from "@/lib/banking/discountWindow";
 import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { isDepositTakingCharter, isNamedLendingCharter } from "@/lib/banking/charterKinds";
-import { charterMay } from "@/lib/banking/rules/capabilities";
+import { charterCapabilities, charterMay } from "@/lib/banking/rules/capabilities";
 import { getCashReserves, bankEquity } from "@/lib/banking/bankCash";
 import { processDeadBankLoans } from "@/lib/banking/deadBankLoans";
 import {
@@ -840,7 +840,9 @@ async function processLoanBookOnlyBank(
     .findOne({ _id: corp._id }, { projection: { bankCharter: 1 } });
   const charter = live?.bankCharter;
   if (!isNamedLendingCharter(charter) || charter.lastBankingTurn === turn) return null;
-  if (isDepositTakingCharter(charter)) return null;
+  // Not the type guard: a deposit taker is handled by processOneBank, and the
+  // guard's else branch would narrow the charter to never.
+  if (charterCapabilities(charter).acceptNpcFunding.allowed) return null;
 
   const currency = charter.currency as CurrencyCode;
   const serviced = await timedBankingStage(db, turn, "loanServicing", () =>

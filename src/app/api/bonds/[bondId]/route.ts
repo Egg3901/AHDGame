@@ -140,7 +140,11 @@ export async function GET(_request: Request, { params }: RouteParams) {
               liquidCurrencyCode: corpCode ?? null,
               bondUnits: corpHolding?.units ?? 0,
             };
-            if (bankPropTradingEnabled && charterMay(myCorp.bankCharter, "proprietaryTrading")) {
+            if (
+              bankPropTradingEnabled &&
+              myCorp.bankCharter !== undefined &&
+              charterMay(myCorp.bankCharter, "proprietaryTrading")
+            ) {
               investmentBank = {
                 id: myCorp._id.toString(),
                 name: myCorp.name,
@@ -196,7 +200,11 @@ export async function GET(_request: Request, { params }: RouteParams) {
               liquidCurrencyCode: corpCode ?? null,
               bondUnits: corpHolding?.units ?? 0,
             };
-            if (bankPropTradingEnabled && charterMay(myCorp.bankCharter, "proprietaryTrading")) {
+            if (
+              bankPropTradingEnabled &&
+              myCorp.bankCharter !== undefined &&
+              charterMay(myCorp.bankCharter, "proprietaryTrading")
+            ) {
               investmentBank = {
                 id: myCorp._id.toString(),
                 name: myCorp.name,
