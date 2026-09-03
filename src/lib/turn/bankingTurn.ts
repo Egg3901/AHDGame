@@ -6,7 +6,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getBankId } from "@/lib/centralBank/helpers";
-import { loadBankingPolicy } from "@/lib/banking/policy";
+import { loadBankingPolicy, type BankingPolicySnapshot } from "@/lib/banking/policy";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 import { recordBankingStage, timedBankingStage } from "@/lib/banking/telemetry";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
@@ -217,10 +217,16 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   const summary: BankingTurnSummary = { ...ZERO_SUMMARY };
 
   for (const row of depositTakers) {
-    const bankResult = await processOneBank(db, turn, row, {
-      npcShareByBankId,
-      cbById,
-    });
+    const bankResult = await processOneBank(
+      db,
+      turn,
+      row,
+      {
+        npcShareByBankId,
+        cbById,
+      },
+      policy
+    );
     summary.banksProcessed += 1;
     summary.depositInterestPaid += bankResult.depositInterestPaid;
     summary.depositInterestShortfall += bankResult.depositInterestShortfall;
@@ -307,7 +313,8 @@ async function processOneBank(
   db: Db,
   turn: number,
   row: DepositTaker,
-  caches: BankPassCaches
+  caches: BankPassCaches,
+  policy: BankingPolicySnapshot
 ): Promise<BankPassResult> {
   const { corp, charter, rates } = row;
   const currency = charter.currency as CurrencyCode;
@@ -557,6 +564,39 @@ async function processOneBank(
         );
       } else {
         await db.collection("characters").bulkWrite(creditOps);
+        // Once accounts are authoritative the interest is a liability the
+        // bank now carries against each account, so the account records and
+        // the bank's player-deposit counter move with the same credit. The
+        // legacy character write above is the projection.
+        if (policy.savingsAccounts === "authoritative") {
+          await db.collection("savingsAccounts").bulkWrite(
+            playerCredits
+              .map((pc) => ({
+                pc,
+                paid: roundSavingsAmount(pc.interest * interestScale, currency),
+              }))
+              .filter(({ paid }) => paid > 0)
+              .map(({ pc, paid }) => ({
+                updateOne: {
+                  filter: { ownerType: "character", ownerId: pc.characterId, currency },
+                  update: {
+                    $inc: { balance: paid, interestEarned: paid, version: 1 },
+                    $set: {
+                      lastSettlementKey: interestMoveKey,
+                      lastSettledTurn: turn,
+                      updatedAt: new Date(),
+                    },
+                  },
+                },
+              }))
+          );
+          await db
+            .collection<Corporation>("corporations")
+            .updateOne(
+              { _id: corp._id },
+              { $inc: { "bankCharter.playerDeposits": playerInterestPaid } }
+            );
+        }
         await completeMoneyMove(db, interestMoveKey, [0, 1]);
         playerInterestSettled = playerInterestPaid;
 
