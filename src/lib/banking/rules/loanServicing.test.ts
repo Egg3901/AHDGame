@@ -14,7 +14,7 @@ function loan(overrides: Partial<Parameters<typeof loanServiceTransition>[0]["lo
     _id: LOAN_ID,
     borrowerType: "corporation" as const,
     borrowerId: BORROWER,
-    currency: "USD",
+    currency: "USD" as const,
     outstanding: 4_800,
     status: "current" as const,
     ratePercent: 4.8,

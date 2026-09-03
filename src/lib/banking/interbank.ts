@@ -122,7 +122,9 @@ export async function lendInterbank(
     };
   }
 
-  const loan = reviveObjectIds(decision.transition.projections[0].insert) as InterbankLoan;
+  const loan = reviveObjectIds(
+    decision.transition.projections[0].insert
+  ) as unknown as InterbankLoan;
   await emitTx(db, {
     type: "bank_interbank_lend",
     turn: snapshot.turn,

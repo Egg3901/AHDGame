@@ -44,7 +44,8 @@ async function runWindowCommand(
   txType: "bank_discount_window_draw" | "bank_discount_window_repay"
 ): Promise<WindowResult> {
   const loaded = await loadBankingSnapshot(db, corporationId, { turn: currentTurn });
-  if (!loaded?.snapshot.charter) return { ok: false, error: "No bank charter", status: 404 };
+  const charter = loaded?.snapshot.charter;
+  if (!loaded || !charter) return { ok: false, error: "No bank charter", status: 404 };
   const { snapshot, corporation } = loaded;
   const commandName =
     command.type === "draw_discount_window"
@@ -132,7 +133,7 @@ async function runWindowCommand(
     db
   );
 
-  const before = Math.max(0, snapshot.charter.discountWindowDebt ?? 0);
+  const before = Math.max(0, charter.discountWindowDebt ?? 0);
   return {
     ok: true,
     outstanding: command.type === "draw_discount_window" ? before + moved : before - moved,

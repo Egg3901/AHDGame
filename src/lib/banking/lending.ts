@@ -325,7 +325,7 @@ export async function originateLoan(
     );
   }
 
-  const loan = reviveObjectIds(decision.transition.projections[0].insert) as BankLoan;
+  const loan = reviveObjectIds(decision.transition.projections[0].insert) as unknown as BankLoan;
   const pending = loan.status === "pending";
 
   if (!pending) {

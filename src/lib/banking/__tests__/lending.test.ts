@@ -172,7 +172,7 @@ describe("banking lending", () => {
         { _id: "US", countryId: "US", primeRate: 5, bankReserveRequirement: 0.1 },
       ]);
       memory.seed("corporations", [
-        bank,
+        bank as unknown as Record<string, unknown>,
         {
           _id: BORROWER_CORP,
           name: "Borrower Corp",

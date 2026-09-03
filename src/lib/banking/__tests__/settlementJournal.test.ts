@@ -98,7 +98,10 @@ describe("reviveObjectIds", () => {
     const revived = reviveObjectIds({
       _id: oid(BANK.toHexString()),
       nested: { ids: [oid(LOAN.toHexString())], when: new Date(0), n: 1, s: "x" },
-    }) as { _id: ObjectId; nested: { ids: ObjectId[]; when: Date; n: number; s: string } };
+    }) as unknown as {
+      _id: ObjectId;
+      nested: { ids: ObjectId[]; when: Date; n: number; s: string };
+    };
     expect(revived._id).toBeInstanceOf(ObjectId);
     expect(revived._id.equals(BANK)).toBe(true);
     expect(revived.nested.ids[0].equals(LOAN)).toBe(true);
