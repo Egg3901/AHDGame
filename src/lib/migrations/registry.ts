@@ -210,8 +210,8 @@ export const MIGRATIONS: Migration[] = [
   repairOrphanIndexFundState,
 ];
 
-// D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.
-// `MIGRATIONS` is walked automatically on deploy; a plants→capital rollback is
+// D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
+// `MIGRATIONS` is walked by the no-flag migration runner; a plants→capital rollback is
 // an explicit human act, not something a deploy should ever perform. Kept here
 // (and typed) so it cannot rot, and so `--only` can target it by id —
 // scripts/run-migrations.ts widens its candidate list to include this array

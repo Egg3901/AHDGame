@@ -86,6 +86,37 @@ export async function register() {
         console.warn("[auto-seed] skipped:", err instanceof Error ? err.message : err);
       }
 
+    // Apply the small audited set of data repairs that must ship atomically
+    // with their runtime code. This is deliberately separate from auto-seed:
+    // an already-populated world returns early from runSeed, and a seed error
+    // must not silently prevent a required repair. The full migration registry
+    // remains an explicit operator action (`npm run migrate`).
+    if (!devBackgroundDisabled) {
+      try {
+        const { getDb } = await import("@/lib/mongodb");
+        const { runRequiredStartupMigrations } = await import("@/lib/migrations/startupMigrations");
+        const summary = await runRequiredStartupMigrations(await getDb());
+        console.log(
+          `[startup-migrations] ran=${summary.ranIds.join(",") || "none"} ` +
+            `skipped=${summary.skippedIds.join(",") || "none"}`
+        );
+        for (const id of summary.ranIds) {
+          for (const note of summary.results[id]?.notes ?? []) {
+            console.log(`[startup-migrations] ${id}: ${note}`);
+          }
+        }
+        logBootHeap("after required startup migrations");
+      } catch (err) {
+        console.error(
+          "[startup-migrations] failed:",
+          err instanceof Error ? (err.stack ?? err.message) : err
+        );
+        // A required repair failing is not a healthy deployment. Refuse to
+        // start cron and serve a world with a known inconsistent market.
+        throw err;
+      }
+    }
+
     // Check transaction support at boot
     try {
       const { assertTransactionSupportAtBoot } = await import("@/lib/db/transactionSupport");
