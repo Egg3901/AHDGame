@@ -126,6 +126,34 @@ describe("planSavingsMigration", () => {
     expect(renderMigrationPlan(plan)).toMatch(/PLAN BLOCKED/);
   });
 
+  it("reads float dust as zero and still refuses a real negative", () => {
+    const dust = planSavingsMigration({
+      rows: [
+        // The residue a few hundred float interest credits leave behind.
+        { ownerId: "p1", currency: "USD", savings: -5.300535121932626e-8, savingsHolder: null },
+        { ownerId: "p2", currency: "USD", savings: 8.039933163672686e-10, savingsHolder: null },
+        { ownerId: "p3", currency: "USD", savings: 250, savingsHolder: null },
+      ],
+      charters: [charter()],
+      poolByCurrency: new Map([["USD", 100_000]]),
+      reserveRatioByCurrency: new Map([["USD", 0.1]]),
+    });
+    expect(dust.ok).toBe(true);
+    expect(dust.currencies[0].unmappable).toEqual([]);
+    // The dust rows are still accounts; they are just worth nothing.
+    expect(dust.currencies[0].accountsToCreate).toBe(3);
+    expect(dust.currencies[0].ownerTotal).toBe(250);
+
+    const real = planSavingsMigration({
+      rows: [{ ownerId: "p1", currency: "USD", savings: -0.01, savingsHolder: null }],
+      charters: [charter()],
+      poolByCurrency: new Map([["USD", 100_000]]),
+      reserveRatioByCurrency: new Map([["USD", 0.1]]),
+    });
+    expect(real.ok).toBe(false);
+    expect(real.invariantFailures.join("\n")).toMatch(/negative/);
+  });
+
   it("counts accounts that already exist from an earlier partial run", () => {
     const plan = planSavingsMigration({
       rows: [
