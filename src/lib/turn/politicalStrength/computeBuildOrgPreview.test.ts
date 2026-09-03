@@ -6,6 +6,10 @@ vi.mock("@/lib/turn/partyOrg/presence", () => ({ checkPartyPresence: vi.fn() }))
 vi.mock("@/lib/parties/unmannedDefenseShield", () => ({
   resolveUnmannedDefaultCaptureMultiplier: vi.fn().mockResolvedValue(1),
 }));
+vi.mock("@/lib/politicalStrength/orgBuildStateSize", () => ({
+  resolveOrgBuildSizeMultiplier: vi.fn().mockResolvedValue(1),
+  clearOrgBuildSizeCache: vi.fn(),
+}));
 
 const countryId = "US";
 const upperRegionId = "CA";
@@ -401,6 +405,38 @@ describe("computeBuildOrgPreview", () => {
       expect(nationalQuote.cashPrice).toBe(Math.round(75_000 * 0.075));
       expect(nationalQuote.treasuryAvailable).toBe(9_000_000);
     }
+  });
+
+  // A point of Org is a share of ITS state, so organizing a big state buys more
+  // absolute electoral weight than the same point in a small one. The price
+  // follows the state's size so the two are not sold at one flat rate.
+  it("scales the quoted price by the state's size multiplier", async () => {
+    seedOpenState(db);
+    db.collectionMocks["partyStrengthPressure"]!.findOne.mockResolvedValue(null);
+    const { resolveOrgBuildSizeMultiplier } =
+      await import("@/lib/politicalStrength/orgBuildStateSize");
+    vi.mocked(resolveOrgBuildSizeMultiplier).mockResolvedValue(1.6);
+
+    const result = await preview(db);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.sizeMultiplier).toBeCloseTo(1.6, 6);
+      expect(result.cashPrice).toBe(Math.round(37_500 * 0.075 * 1.6));
+    }
+  });
+
+  it("quotes a smaller state below the flat rate", async () => {
+    seedOpenState(db);
+    db.collectionMocks["partyStrengthPressure"]!.findOne.mockResolvedValue(null);
+    const { resolveOrgBuildSizeMultiplier } =
+      await import("@/lib/politicalStrength/orgBuildStateSize");
+    vi.mocked(resolveOrgBuildSizeMultiplier).mockResolvedValue(0.5);
+
+    const result = await preview(db);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.cashPrice).toBe(Math.round(37_500 * 0.075 * 0.5));
   });
 
   it("refuses an empty treasury rather than quoting a free click", async () => {

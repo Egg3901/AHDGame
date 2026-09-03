@@ -52,6 +52,7 @@ import {
   resolveOrgBuildFunding,
 } from "@/lib/politicalStrength/buildOrgFunding";
 import { chargeOrgBuildFunds } from "@/lib/parties/commands/chargeOrgBuildFunds";
+import { resolveOrgBuildSizeMultiplier } from "@/lib/politicalStrength/orgBuildStateSize";
 import { calcUnifiedBuildOrg } from "@/lib/turn/politicalStrength/buildOrgGain";
 import { resolveUnmannedDefaultCaptureMultiplier } from "@/lib/parties/unmannedDefenseShield";
 
@@ -153,10 +154,12 @@ export async function nppBuildPartyOrg(
   const pressureRow = await db
     .collection<PartyStrengthPressure>("partyStrengthPressure")
     .findOne({ _id: `${countryId}_${partySequentialId}_${stateId}` });
+  const sizeMultiplier = await resolveOrgBuildSizeMultiplier(db, countryId, stateId);
   const quotedPrice = orgBuildCashPrice(
     countryId,
     "state",
-    effectivePsCost(BUILD_ORG_BASE_PS_COST, pressureRow?.value ?? 0)
+    effectivePsCost(BUILD_ORG_BASE_PS_COST, pressureRow?.value ?? 0),
+    sizeMultiplier
   );
   const funding = resolveOrgBuildFunding({
     price: quotedPrice,
@@ -189,7 +192,12 @@ export async function nppBuildPartyOrg(
   // Charge the cash, priced off the PS the spend actually paid. Never
   // overdraws; the realized share scales the gain, floored so committed PS
   // cannot buy nothing.
-  const chargePrice = orgBuildCashPrice(countryId, "state", spendResult.effectiveCost);
+  const chargePrice = orgBuildCashPrice(
+    countryId,
+    "state",
+    spendResult.effectiveCost,
+    sizeMultiplier
+  );
   const { charged } = await chargeOrgBuildFunds(
     {
       countryId,
