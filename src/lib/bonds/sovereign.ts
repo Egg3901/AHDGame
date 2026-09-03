@@ -31,6 +31,7 @@ import {
   getSovereignConfidencePremium,
 } from "@/lib/budget/debt";
 import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
+import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { sovereignCredibilitySpread } from "@/lib/centralBank/marketEffects";
 import {
   debitPoolForPrimary,
@@ -494,7 +495,8 @@ export async function issueScheduledSovereignBondSeries(
     // Primary market: the currency's pool underwrites each tranche at par with
     // the cash it has and the appetite the demand model gives this issuer.
     // No pool for the currency (seeds, pre-migration) keeps full placement.
-    const poolCurrency = resolveCountryCurrencyCode({ countryId });
+    const poolCurrency: CurrencyCode =
+      resolveCountryCurrencyCode({ countryId }) ?? COUNTRY_CURRENCY_MAP[countryId] ?? "USD";
     const pool = await readPoolForPrimary(db, poolCurrency);
     let poolCashRemaining = pool ? Math.max(0, pool.cashLocal) : Number.POSITIVE_INFINITY;
     const appetite = pool?.appetiteByCountry?.[countryId];
