@@ -84,9 +84,13 @@ const geistMono = Geist_Mono({
   preload: false,
 });
 
+// The Blend election/campaign screens set standfirsts and rail subtitles in
+// italic Lora, so the italic face is loaded rather than left to the browser's
+// synthetic oblique.
 const lora = Lora({
   variable: "--font-lora",
   subsets: ["latin"],
+  style: ["normal", "italic"],
   display: "swap",
 });
 
@@ -97,8 +101,9 @@ const fraunces = Fraunces({
   preload: false,
 });
 
-// Only used by the 1953 CRT command theme (globals.css) — never above the fold
-// on a default load.
+// Used by the 1953 CRT command theme (globals.css) and by the Blend campaign /
+// election screens, which set every numeric and label in it. Neither is the
+// default landing surface, so it stays out of the preload set.
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
   subsets: ["latin"],
