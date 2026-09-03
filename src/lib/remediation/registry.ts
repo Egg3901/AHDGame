@@ -20,6 +20,7 @@ import { defect as defenceProcurementOveraward } from "./defects/AHD-defence-pro
 import { defect as privateMarketCapHistory } from "./defects/AHD-private-market-cap-history";
 import { defect as ukVatRevenueGap } from "./defects/AHD-1102-uk-vat-revenue-gap";
 import { defect as brlForcedMaturityRestitution } from "./defects/AHD-1124-brl-forced-maturity-restitution";
+import { defect as trRepudiationRestitution } from "./defects/AHD-1266-tr-repudiation-restitution";
 import { defect as commandEconomyPrivateSectorOwnership } from "./defects/AHD-command-economy-private-sector-ownership";
 import { defect as tinkyStaleVoteExcess } from "./defects/AHD-tinky-stale-vote-excess";
 import { defect as usMarineLotProgress } from "./defects/AHD-1171-us-marine-lot-progress";
@@ -42,6 +43,9 @@ export const DEFECTS: Defect[] = [
   // rule chased 10% inflation and BRL ran away. Bond maturities are compulsory,
   // so holders were force-converted out of BRL at the corrupted rate.
   brlForcedMaturityRestitution,
+  // Ticket #1266: turn-568 TR repudiation double-charged holder cash on top
+  // of the paper loss. Repays the second charge to the 19 debited holders.
+  trRepudiationRestitution,
   commandEconomyPrivateSectorOwnership,
   tinkyStaleVoteExcess,
   usMarineLotProgress,
