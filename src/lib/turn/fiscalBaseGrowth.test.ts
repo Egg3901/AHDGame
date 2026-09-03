@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import { TAX_BASE_GROWTH_PREMIUM_CAP } from "@/lib/budget/revenue";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -127,6 +128,13 @@ describe("processFiscalBaseGrowth", () => {
     const ops = db.collectionMocks.stateBudgets!.bulkWrite.mock.calls[0]?.[0];
     const caBases = ops?.[0]?.updateOne?.update?.$set?.taxBases;
     // CA wageGrowth is 6 (its own), not the national 3.
+    //
+    // `TAX_BASE_GROWTH_PREMIUM_CAP` does NOT bind here, and that is the point of
+    // leaving this expectation at the raw 6: the ceiling is nominal GDP growth
+    // plus the premium — CA's gdpGrowth 3 + inflation 2 + 2 = 7 — so an ordinary
+    // wage rate passes through untouched. The cap is a guard against divergence,
+    // not a tax on normal growth (#1323).
+    expect(6).toBeLessThan(3 + 2 + TAX_BASE_GROWTH_PREMIUM_CAP);
     expect(caBases.taxableIncome).toBeCloseTo(100 * (1 + 6 / 100 / TURNS_PER_YEAR), 6);
     expect(out.statesProcessed).toBe(1);
     expect(out.countriesProcessed).toBe(1);

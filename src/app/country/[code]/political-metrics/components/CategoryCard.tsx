@@ -1,12 +1,13 @@
 "use client";
 
-import type { CountryPoliticalMetricsResponse } from "@/lib/politicalMetrics/queries/countryPoliticalMetrics";
 import { CategoryIcon } from "./categoryIcons";
 import { LeanStrip } from "./LeanStrip";
 import { StatusBadge } from "./StatusBadge";
 import { scoreTone } from "./tones";
+import type { PMCategory } from "./registryTypes";
 
-export type PMCategory = CountryPoliticalMetricsResponse["categories"][number];
+// Re-exported so the components that already import these from here keep working.
+export type { PMCategory, PMMetric } from "./registryTypes";
 
 const CATEGORY_ICONS: Record<string, string> = {
   economy: "currency",
@@ -30,7 +31,7 @@ export function CategoryCard({
   onOpenMetric: (categoryId: string, metricId: string) => void;
 }) {
   const tone = scoreTone(category.score);
-  const sorted = [...category.metrics].sort((a, b) => b.nationalValue - a.nationalValue);
+  const sorted = [...category.metrics].sort((a, b) => b.value - a.value);
   const best = sorted[0];
   const worst = sorted[sorted.length - 1];
   return (
@@ -65,16 +66,12 @@ export function CategoryCard({
         <div className="flex min-w-0 gap-1.5">
           <span className="flex-shrink-0 text-success">▲ best</span>
           <span className="truncate text-foreground">{best.displayName}</span>
-          <span className="flex-shrink-0 tabular-nums text-success">
-            {Math.round(best.nationalValue)}
-          </span>
+          <span className="flex-shrink-0 tabular-nums text-success">{Math.round(best.value)}</span>
         </div>
         <div className="flex min-w-0 gap-1.5">
           <span className="flex-shrink-0 text-error">▼ worst</span>
           <span className="truncate text-foreground">{worst.displayName}</span>
-          <span className="flex-shrink-0 tabular-nums text-error">
-            {Math.round(worst.nationalValue)}
-          </span>
+          <span className="flex-shrink-0 tabular-nums text-error">{Math.round(worst.value)}</span>
         </div>
       </div>
       <div className="flex items-center justify-between gap-2 border-t border-dashed border-card-border pt-2">

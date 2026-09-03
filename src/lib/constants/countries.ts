@@ -5194,6 +5194,28 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
     disallowPrivateCorporationFounding: true, // command economy: no private corp founding (mirrors USSR)
     popularMoodProfile: CN_POPULAR_MOOD_PROFILE, // one-party legitimacy drift (mirrors USSR/China)
 
+    /**
+     * DD funds its Länder the way the German model does — a share of the
+     * national income tax and VAT collected in-territory, the per-Land trade
+     * tax, and this equalization pool on top — NOT by the one-party central
+     * transfer CN uses.
+     *
+     * That is a structural constraint, not a preference. The one-party model's
+     * only regional revenue term is
+     * `localTaxRetentionShare x corporateProfitRatio x regionGdp x <primary tax
+     * rate>`, and DD's primary tax is `dd.tax.domesticCorporateTax`, authored at
+     * 0% because DD collects enterprise surplus through `otherRevenue` and the
+     * product levy instead. Zero times anything funds nothing: DD's Länder carry
+     * ~1390/capita of enacted programmes, so all eleven western Länder would
+     * have sat ~10x over budget permanently and the austerity path would have
+     * stripped a policy tier from each of them every single turn (#1323).
+     *
+     * 100/capita matches both the pool already sitting in the live data
+     * (DDM 8.0B across 81M people) and DE's own 1953-era override, so unfreezing
+     * the Länder does not silently re-scale the transfer at the same time.
+     */
+    federalEqualizationGrantPerCapita: 100,
+
     status: "coming-soon",
     tagline:
       "The other Germany - a hard-line SED state and Warsaw-Pact linchpin, its planned economy and Wall holding back the pull of the West.",

@@ -14,8 +14,11 @@ import { processMetricDecay } from "@/lib/turn/metricDecay";
 import { processSubsidyBudget } from "@/lib/turn/subsidyBudgetTurn";
 import { processRegionalBudgets } from "@/lib/turn/regionalBudget";
 import { processJPRegionalBudgets } from "@/lib/turn/jpRegionalBudget";
-import { processDERegionalBudgets } from "@/lib/turn/deRegionalBudget";
-import { processCNRegionalBudgets } from "@/lib/turn/cnRegionalBudget";
+import {
+  LAENDER_MODEL_COUNTRIES,
+  processLaenderRegionalBudgets,
+} from "@/lib/turn/deRegionalBudget";
+import { processAllOnePartyRegionalBudgets } from "@/lib/turn/cnRegionalBudget";
 import { processRURegionalBudgets } from "@/lib/turn/ruRegionalBudget";
 import { processPoliticalMetricsDynamics } from "@/lib/turn/politicalMetricsDynamics";
 import { syncAllPartyChairHeadsOfState } from "@/lib/turn/partyChairHeadOfState";
@@ -169,11 +172,28 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       runtime.runPhase("subsidyBudget", () => processSubsidyBudget(db)),
       runtime.runPhase("regionalBudgetProcessing", () => processRegionalBudgets(db, newTurn)),
       runtime.runPhase("jpRegionalBudgetProcessing", () => processJPRegionalBudgets(db, newTurn)),
-      runtime.runPhase("deRegionalBudgetProcessing", () =>
-        processDERegionalBudgets(db, newTurn, gameState.preset)
-      ),
+      // Covers every country on the Laender revenue-sharing model, not just DE.
+      // DD joined when the unified Germany was left with no processor at all:
+      // this step was scoped to DE, which has held zero states since the shell
+      // dissolved on turn 550 (#1323). The phase key keeps its original name for
+      // the same reason `cnPresidentSync` below does.
+      runtime.runPhase("deRegionalBudgetProcessing", async () => {
+        const results = await Promise.all(
+          LAENDER_MODEL_COUNTRIES.map((id) =>
+            processLaenderRegionalBudgets(db, id, newTurn, gameState.preset)
+          )
+        );
+        return { regionsProcessed: results.reduce((sum, r) => sum + r.regionsProcessed, 0) };
+      }),
+      // Covers every country carrying `onePartyRegionalBudget`, not just CN —
+      // DD joined when the unified Germany was left with no regional processor
+      // at all (#1323). The phase key deliberately keeps its original CN-only
+      // name, for the same reason `cnPresidentSync` below does: it is the
+      // identifier turn logs and phase-history diagnostics are keyed by, and
+      // renaming it would read as the phase disappearing and a new one
+      // appearing.
       runtime.runPhase("cnRegionalBudgetProcessing", () =>
-        processCNRegionalBudgets(db, newTurn, gameState.preset)
+        processAllOnePartyRegionalBudgets(db, newTurn, gameState.preset)
       ),
       runtime.runPhase("ruRegionalBudgetProcessing", () => processRURegionalBudgets(db, newTurn)),
       runtime.runPhase("politicalMetricsDynamics", () =>

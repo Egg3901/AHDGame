@@ -4,7 +4,8 @@ import { SuperTabNav, type NavSuperTabDef } from "@/components/nav/SuperTabNav";
 
 // ── Types ──
 
-export type SuperTabId = "overview" | "politics" | "economy" | "demographics" | "governance";
+export type SuperTabId =
+  "overview" | "politics" | "economy" | "metrics" | "demographics" | "governance";
 
 export type LegacyTabId =
   | "overview"
@@ -13,6 +14,7 @@ export type LegacyTabId =
   | "parties"
   | "demographics"
   | "metrics"
+  | "statistics"
   | "budget"
   | "laws"
   | "economy"
@@ -42,7 +44,13 @@ const LEGACY_MAP: Record<string, { super: SuperTabId; sub: string }> = {
   politics: { super: "politics", sub: "officials" },
   parties: { super: "politics", sub: "parties" },
   demographics: { super: "demographics", sub: "demographics" },
-  metrics: { super: "demographics", sub: "metrics" },
+  // The political registry moved out of Demographics into its own super-tab.
+  // `metrics` is now BOTH a legacy key and a current super-tab id, which is
+  // fine because resolveTabs checks super-tab ids first; the entry is kept so
+  // the intent of the move is legible here rather than implied by that ordering.
+  metrics: { super: "metrics", sub: "" },
+  // The legacy stateMetrics boards that used to sit under Demographics > Metrics.
+  statistics: { super: "demographics", sub: "statistics" },
   budget: { super: "economy", sub: "budget" },
   laws: { super: "governance", sub: "laws" },
   economy: { super: "economy", sub: "sectors" },
@@ -103,6 +111,16 @@ const ICONS = {
       />
     </svg>
   ),
+  metrics: (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 19v-6m4 6V5m4 14v-9M4 21h16"
+      />
+    </svg>
+  ),
 };
 
 // ── Super-tab definitions ──
@@ -135,12 +153,21 @@ const SUPER_TABS: SuperTabDef[] = [
     ],
   },
   {
+    id: "metrics",
+    label: "Metrics",
+    icon: ICONS.metrics,
+    // Single-panel: the political registry carries its own internal navigation
+    // (overview, category, metric, compare), so a sub-tab bar would duplicate it.
+  },
+  {
     id: "demographics",
     label: "Demographics",
     icon: ICONS.demographics,
     subTabs: [
       { id: "demographics", label: "Demographics & Turnout" },
-      { id: "metrics", label: "Metrics" },
+      // The legacy stateMetrics boards. Named "Statistics" so it reads as
+      // supporting data rather than as a rival to the registry above.
+      { id: "statistics", label: "Statistics" },
     ],
   },
   {
@@ -181,12 +208,22 @@ function isValidSuperTab(id: string, isAdmin: boolean): id is SuperTabId {
 function resolveTabs(
   tabParam: string | null,
   subParam: string | null,
-  isAdmin: boolean
+  isAdmin: boolean,
+  hasRegistry: boolean = true
 ): { superTab: SuperTabId; subTab: string } {
   // Default
   const DEFAULT = { superTab: "overview" as SuperTabId, subTab: "" };
 
   if (!tabParam) return DEFAULT;
+
+  // Only the countries with an authored political-metrics board have a
+  // registry to show. For the rest the Metrics tab does not exist, and an old
+  // `?tab=metrics` link belongs where their metrics actually live: the legacy
+  // statistics boards. Landing them on an empty registry that 404s would be
+  // strictly worse than the tab they had before.
+  if (!hasRegistry && tabParam === "metrics") {
+    return { superTab: "demographics", subTab: "statistics" };
+  }
 
   // Try new format first: ?tab=politics&sub=officials. This must run before
   // the legacy check below — "politics", "economy", and "demographics" are
@@ -227,6 +264,11 @@ function resolveTabs(
 export interface RegionTabNavProps {
   isAdmin: boolean;
   /**
+   * Whether this country has a political-metrics registry. False hides the
+   * Metrics super-tab entirely rather than showing one that cannot load.
+   */
+  hasRegistry?: boolean;
+  /**
    * Render the content for a given (superTabId, subTabId) pair.
    * For super-tabs with no sub-tabs (Overview), subTabId is "".
    */
@@ -235,10 +277,17 @@ export interface RegionTabNavProps {
   preTabContent?: React.ReactNode;
 }
 
-export function RegionTabNav({ isAdmin, renderContent, preTabContent }: RegionTabNavProps) {
+export function RegionTabNav({
+  isAdmin,
+  hasRegistry = true,
+  renderContent,
+  preTabContent,
+}: RegionTabNavProps) {
   // Hide admin-only sub-tabs before handing the definitions to the shared nav —
   // the shared component renders exactly what it is given.
-  const tabs: NavSuperTabDef[] = SUPER_TABS.map((tab) => ({
+  const tabs: NavSuperTabDef[] = SUPER_TABS.filter(
+    (tab) => hasRegistry || tab.id !== "metrics"
+  ).map((tab) => ({
     id: tab.id,
     label: tab.label,
     icon: tab.icon,
@@ -256,7 +305,7 @@ export function RegionTabNav({ isAdmin, renderContent, preTabContent }: RegionTa
       tabs={tabs}
       defaultSuperId="overview"
       preTabContent={preTabContent}
-      resolve={(tabParam, subParam) => resolveTabs(tabParam, subParam, isAdmin)}
+      resolve={(tabParam, subParam) => resolveTabs(tabParam, subParam, isAdmin, hasRegistry)}
       renderContent={(superId, subId) => renderContent(superId as SuperTabId, subId)}
     />
   );

@@ -26,6 +26,7 @@ export function PolicyMasthead({
   socialAxisPosition,
   view,
   onViewChange,
+  scopeLabel,
 }: {
   countryId: CountryId;
   statuteCount: number;
@@ -37,8 +38,22 @@ export function PolicyMasthead({
   socialAxisPosition?: number | null;
   view: PolicyView;
   onViewChange: (view: PolicyView) => void;
+  /**
+   * Region name at state scope. The national identity carries the country's
+   * own registry line and title, which would read as a lie above a state law
+   * book, so both are re-pointed at the region while the brand colours stay.
+   */
+  scopeLabel?: string;
 }) {
-  const identity = getPolicyIdentity(countryId);
+  const nationalIdentity = getPolicyIdentity(countryId);
+  const identity = scopeLabel
+    ? {
+        ...nationalIdentity,
+        registry: `Code of State Law · ${scopeLabel}`,
+        title: `${scopeLabel} Policy`,
+        titleEn: undefined,
+      }
+    : nationalIdentity;
   const socialValue = socialAxisPosition ?? axes?.social ?? null;
   return (
     <InstitutionMasthead
